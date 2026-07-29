@@ -1,7 +1,14 @@
 #ifdef BOX2D_ENABLED
 #include "catch/catch_amalgamated.hpp"
 #include <box2d/box2d.h>
+
+#include "coordinates.h"
+#include "map.h"
+#include "map_helpers.h"
+#include "state_helpers.h"
+#include "physics/terrain_body.h"
 #include <cmath>
+#include <array>
 #include <numbers>
 #include <utility>
 
@@ -476,3 +483,65 @@ TEST_CASE( "Box2D Phase10 Step5: sub-tile physics_pos rounds to zero, >=0.5 to o
 }
 
 #endif // BOX2D_ENABLED
+
+// encode_tile_pos must never produce 0, because the packed value is stored via
+// b2Body_SetUserData and every consumer treats a null userData as "this body has
+// no tile identity".  bub (0,0,0) is the bubble corner on the most common
+// z-level, so without a sentinel bit that live tile encodes to 0 and is skipped
+// by every `ud != nullptr` guard: it would keep stale userData across map shifts
+// and never be identified as terrain by contact-event routing.
+TEST_CASE( "encode_tile_pos is never null and round-trips", "[vehicle][box2d]" )
+{
+    using physics::encode_tile_pos;
+    using physics::decode_tile_pos;
+
+    const std::array<tripoint_bub_ms, 7> cases{ {
+            tripoint_bub_ms{ 0, 0, 0 },
+            tripoint_bub_ms{ 1, 0, 0 },
+            tripoint_bub_ms{ 0, 1, 0 },
+            tripoint_bub_ms{ 0, 0, 1 },
+            tripoint_bub_ms{ -1, -1, -1 },
+            tripoint_bub_ms{ 131, 97, -10 },
+            tripoint_bub_ms{ -32768, 32767, 10 },
+        } };
+
+    for( const auto &p : cases ) {
+        CAPTURE( p );
+        const auto enc = encode_tile_pos( p );
+        // Never zero: a zero encoding is indistinguishable from untagged.
+        CHECK( enc != 0 );
+        // And the coordinates survive the round trip.
+        CHECK( decode_tile_pos( enc ) == p );
+    }
+}
+
+// classify_tile decides which tiles get a Box2D collider.  It must gate on
+// PASSABILITY, not bashability: pavement, dirt and grass are all bashable in CBN,
+// so testing bashability first gave every road tile a collider and vehicles
+// ground to a halt on open ground (measured: 144 of 144 tiles in a pavement
+// submap classified as obstacles, and velocity collapsing 2000 -> 317 in one turn).
+//
+// The suite cannot catch that regression indirectly — build_test_map() never fires
+// on_submap_loaded, so no other test has terrain colliders at all — hence this
+// direct check on the pure function.
+TEST_CASE( "classify_tile only makes obstacles collide", "[vehicle][box2d]" )
+{
+    clear_all_state();
+    auto &here = get_map();
+    build_test_map( ter_id( "t_pavement" ) );
+
+    const auto at = tripoint_bub_ms( 60, 60, 0 );
+
+    for( const auto &open : { "t_pavement", "t_dirt", "t_grass", "t_floor" } ) {
+        here.ter_set( at, ter_id( open ) );
+        CAPTURE( open );
+        REQUIRE( here.passable( at ) );
+        CHECK( physics::classify_tile( here, at ) == physics::tile_body_class::passable );
+    }
+
+    // Impassable terrain must collide, and a bashable impassable is reported
+    // separately so it can take the softer restitution.
+    here.ter_set( at, ter_id( "t_wall_wood" ) );
+    REQUIRE_FALSE( here.passable( at ) );
+    CHECK( physics::classify_tile( here, at ) != physics::tile_body_class::passable );
+}

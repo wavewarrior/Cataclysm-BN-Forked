@@ -534,14 +534,27 @@ auto vehicle::part_collision( const vehicle_part_collision_options &options ) ->
 
     Creature *driver = pl_ctrl ? &player_character : nullptr;
 
-    // Only treat an in_vehicle creature at this tile as already-accounted-for
-    // if they're the registered passenger of THIS vehicle's own boardable
-    // part here — a stale/desynced in_vehicle flag (see the "Part/passenger
-    // position mismatch" case in map::displace_vehicle) must not suppress a
-    // real collision.
+    // Only treat an in_vehicle creature at this tile as already-accounted-for if
+    // they ride THIS vehicle.  A stale/desynced in_vehicle flag (see the
+    // "Part/passenger position mismatch" case in map::displace_vehicle) must not
+    // suppress a real collision — but the test is vehicle identity, NOT the
+    // specific part under the impact tile.
+    //
+    // Matching the part here was too strict and regressed [vehicle][ramp] by 26
+    // assertions on the shipping build: during a ramp z-transition a rider's part
+    // registration and position are transiently inconsistent (precalc[0]/[1] swap
+    // plus z_terrain, mid-displace_vehicle), so the vehicle stopped recognising its
+    // own passenger and collided with them.  Identity over any boardable part is
+    // stable across that window, and still leaves a creature riding a *different*
+    // vehicle as a valid collision target — the case this check exists for.
     if( ph != nullptr && ph->in_vehicle ) {
-        const int boarded_part = part_with_feature( bubble_to_mount( p ), "BOARDABLE", true );
-        if( boarded_part >= 0 && get_passenger( boarded_part ) == ph ) {
+        const auto rides_this_vehicle = [this, ph]() {
+            for( const vpart_reference &vp : get_avail_parts( VPFLAG_BOARDABLE ) ) {
+                if( get_passenger( static_cast<int>( vp.part_index() ) ) == ph ) { return true; }
+            }
+            return false;
+        };
+        if( rides_this_vehicle() ) {
             critter = nullptr;
             ph = nullptr;
         }

@@ -18,6 +18,7 @@
 #include "json.h"
 #include "map.h"
 #include "map_helpers.h"
+#include "mapbuffer.h"
 #include "mongroup.h"
 #include "monster.h"
 #include "overmapbuffer.h"
@@ -546,3 +547,294 @@ TEST_CASE( "broken_door_and_lock_can_be_removed", "[vehicle]" )
     CHECK( veh_ptr->can_unmount( door_idx, door_reason ) );
     CHECK( veh_ptr->can_unmount( lock_idx, lock_reason ) );
 }
+
+#ifdef BOX2D_ENABLED
+#include "physics/physics_world.h"
+#include "physics/terrain_body.h"
+
+// Box2D position authority is revoked when a vehicle's home submap leaves the
+// simulated set while staying resident, and re-granted when it returns.  The
+// discrimination that matters is that a vehicle which opted out *itself* must
+// never be re-granted: the flag alone cannot distinguish the two cases, so the
+// physics world records which revocations were its own.
+TEST_CASE( "box2d_position_authority_survives_resident_submap_unload", "[vehicle][box2d]" )
+{
+    clear_all_state();
+    auto &here = get_map();
+    auto *pw = here.get_physics_world();
+    REQUIRE( pw != nullptr );
+
+    build_test_map( ter_id( "t_pavement" ) );
+    auto *veh = here.add_vehicle( vproto_id( "car_test" ), tripoint_bub_ms( 60, 60, 0 ),
+                                  0_degrees, 100, 0 );
+    REQUIRE( veh != nullptr );
+    REQUIRE( veh->box2d_position_authority );
+
+    const auto home = veh->abs_sm_pos;
+
+    SECTION( "revoked while resident, then re-granted on return" ) {
+        pw->on_submap_unloaded( home, /*submap_still_resident=*/true );
+        CHECK_FALSE( veh->box2d_position_authority );
+
+        // Move the tile anchor while the tile-step mover owns the vehicle, so a
+        // stale physics_pos would be detectable after the re-grant.
+        REQUIRE( here.displace_vehicle( *veh, tripoint_rel_ms( 2, 0, 0 ) ) );
+        const auto anchor = veh->bub_ms_location();
+
+        pw->on_submap_loaded( here, veh->abs_sm_pos );
+        CHECK( veh->box2d_position_authority );
+        // physics_pos must be reseated to the anchor, or the first readback would
+        // walk the vehicle back to where it sat when authority was revoked.
+        CHECK( veh->physics_pos.x == Catch::Approx( static_cast<float>( anchor.x() ) ) );
+        CHECK( veh->physics_pos.y == Catch::Approx( static_cast<float>( anchor.y() ) ) );
+    }
+
+    SECTION( "a vehicle that opted out itself is never re-granted" ) {
+        veh->box2d_position_authority = false;
+        pw->on_submap_unloaded( home, /*submap_still_resident=*/true );
+        pw->on_submap_loaded( here, home );
+        CHECK_FALSE( veh->box2d_position_authority );
+    }
+}
+
+// A vehicle under Box2D position authority skips part_collision() via
+// act_on_map()'s early return, so the per-tile readback walk in map::vehmove()
+// routes each step through move_vehicle() to get collision consequences back.
+// This asserts the end result: drive into a bashable wall, the wall gives way.
+TEST_CASE( "box2d_authority_vehicle_bashes_terrain", "[vehicle][box2d]" )
+{
+    clear_all_state();
+    auto &here = get_map();
+    build_test_map( ter_id( "t_pavement" ) );
+
+    auto *veh = here.add_vehicle( vproto_id( "car_test" ), tripoint_bub_ms( 60, 60, 0 ),
+                                  0_degrees, 100, 0 );
+    REQUIRE( veh != nullptr );
+    REQUIRE( veh->box2d_position_authority );
+
+    veh->tags.insert( "IN_CONTROL_OVERRIDE" );
+    veh->engine_on = true;
+    veh->velocity = 2000;          // 20 m/s, well past any bash threshold
+    veh->cruise_velocity = 2000;
+
+    // Put the obstacle along the vehicle's actual heading rather than at a
+    // hard-coded tile: face_vec() decides which way 0_degrees points, and guessing
+    // wrong just drives away from the wall and proves nothing.
+    const auto fv = veh->face_vec();
+    const auto start = veh->bub_ms_location();
+    const auto obstacle = tripoint_bub_ms(
+                              start.x() + static_cast<int>( std::lround( fv.x * 6 ) ),
+                              start.y() + static_cast<int>( std::lround( fv.y * 6 ) ), 0 );
+    here.ter_set( obstacle, ter_id( "t_wall_wood" ) );
+    here.build_map_cache( 0, true );
+    REQUIRE( here.is_bashable_ter_furn( obstacle, false ) );
+    const auto before = here.ter( obstacle );
+
+    // Build colliders for the obstacle's submap only.  Doing the whole map creates
+    // ~176k bodies, including every non-pavement tile out to the map edge, and the
+    // vehicle is then wedged before it travels anywhere (measured: velocity
+    // collapsing 2000 -> 317 on the first turn).
+    auto *pw = here.get_physics_world();
+    REQUIRE( pw != nullptr );
+    const auto colliders_before = pw->terrain_body_count();
+    pw->on_submap_loaded( here, project_to<coords::sm>( here.bub_to_abs( obstacle ) ) );
+    REQUIRE( pw->terrain_body_count() > colliders_before );
+
+    for( int turn = 0; turn < 5 && here.ter( obstacle ) == before; ++turn ) {
+        here.vehmove();
+    }
+
+    CHECK( here.ter( obstacle ) != before );
+}
+#endif // BOX2D_ENABLED
+
+#ifdef BOX2D_ENABLED
+// Terrain colliders are what stop a vehicle driving through a wall, and several
+// code paths gate their creation on the player's z-level — so a silent zero here
+// is the difference between walls existing and not.  Two invariants:
+//
+//  - on_submap_loaded actually builds bodies for a submap containing obstacles,
+//    and is idempotent: it is now called from more than one place
+//    (game::place_player_overmap's destination-z rebuild as well as
+//    on_zlevel_changed), and terrain_bodies_[key] is a plain assignment, so a
+//    repeat call used to drop live b2BodyIds without destroying them.
+//  - on_zlevel_changed moves colliders to the new level.  This is the machinery
+//    the place_player_overmap fix relies on, so it needs its own coverage.
+TEST_CASE( "box2d_terrain_colliders_build_and_rebuild", "[vehicle][box2d]" )
+{
+    clear_all_state();
+    auto &here = get_map();
+    auto *pw = here.get_physics_world();
+    REQUIRE( pw != nullptr );
+
+    build_test_map( ter_id( "t_pavement" ) );
+
+    // PhysicsWorld is constructed once per binary and never reset between
+    // TEST_CASEs, so this cannot assume an empty world: earlier cases leave
+    // colliders behind.  Everything below is measured as a delta.
+
+    const auto wall_z0 = tripoint_bub_ms( 60, 60, 0 );
+    here.ter_set( wall_z0, ter_id( "t_wall_wood" ) );
+    REQUIRE_FALSE( here.passable( wall_z0 ) );
+
+    const auto sm_z0 = project_to<coords::sm>( here.bub_to_abs( wall_z0 ) );
+
+    // Clear this submap first so the assertion measures a real build rather than a
+    // replacement.  Another TEST_CASE may already have registered it — the bash spec
+    // does — and on_submap_loaded is idempotent, so loading an already-loaded submap
+    // leaves the global count unchanged and the check would fail for the wrong reason.
+    pw->on_submap_unloaded( sm_z0, /*submap_still_resident=*/false );
+    const auto cleared = pw->terrain_body_count();
+
+    pw->on_submap_loaded( here, sm_z0 );
+    const auto after_first = pw->terrain_body_count();
+    CHECK( after_first > cleared );
+
+    // Idempotent: a repeat call must replace, not stack.  Asserted against the
+    // Box2D world's own body count, NOT the registry: terrain_bodies_[key] is an
+    // assignment, so without the guard the old b2BodyIds are dropped from the
+    // registry while still living in the world — the registry count is unchanged
+    // and would report success.  (Verified: with the guard removed, the registry
+    // assertion still passed and only this one fails.)
+    const auto world_after_first = pw->world_body_count();
+    pw->on_submap_loaded( here, sm_z0 );
+    CHECK( pw->terrain_body_count() == after_first );
+    CHECK( pw->world_body_count() == world_after_first );
+
+    SECTION( "on_zlevel_changed moves colliders to the new level" ) {
+        const auto wall_z1 = tripoint_bub_ms( 60, 60, 1 );
+        here.ter_set( wall_z1, ter_id( "t_wall_wood" ) );
+        REQUIRE_FALSE( here.passable( wall_z1 ) );
+
+        pw->on_zlevel_changed( here, 0, 1 );
+        // z=0's bodies are gone and z=1 now has its own, so colliders still exist.
+        // Zero would mean a z-change leaves the player on a level with no
+        // collision at all.
+        CHECK( pw->terrain_body_count() > 0 );
+    }
+}
+#endif // BOX2D_ENABLED
+
+#ifdef BOX2D_ENABLED
+// Terrain colliders must not survive a world teardown.
+//
+// PhysicsWorld is constructed once, in the map constructor (map.cpp:256), and map is
+// a pimpl<map> built once in game::game() — so it lives for the whole process.
+// terrain_bodies_ is keyed by tripoint_abs_sm and nothing frees it except the
+// destructor, which never runs mid-session.
+//
+// Returning to the main menu and loading a different world calls MAPBUFFER.clear()
+// (main_menu.cpp:1054/1237/1247/1289, game_setup.cpp:725/742) without touching the
+// map, so colliders built from world A would stay registered at absolute submap
+// coordinates that in world B hold entirely different terrain: invisible walls where
+// A had walls, and no collider where B has one.
+//
+// This covers the reset itself.  The wiring into mapbuffer::clear() is NOT tested:
+// MAPBUFFER.clear() frees every submap while map::grid still points at them, so a
+// test that calls it leaves the map holding dangling pointers and cannot recover —
+// clear_all_state() crashes afterwards.  The game only clears the buffer with no
+// world loaded.  The hook is three lines at the single choke point.
+TEST_CASE( "box2d_world_teardown_drops_all_terrain_colliders", "[vehicle][box2d]" )
+{
+    clear_all_state();
+    auto &here = get_map();
+    auto *pw = here.get_physics_world();
+    REQUIRE( pw != nullptr );
+
+    const auto obstacle = tripoint_bub_ms( 60, 60, 0 );
+    here.ter_set( obstacle, ter_id( "t_wall_wood" ) );
+    REQUIRE( here.impassable_ter_furn( obstacle ) );
+
+    const auto sm = project_to<coords::sm>( here.bub_to_abs( obstacle ) );
+    pw->on_submap_unloaded( sm, /*submap_still_resident=*/false );
+    pw->on_submap_loaded( here, sm );
+    REQUIRE( pw->terrain_body_count() > 0 );
+
+    pw->clear_world_bodies();
+    CHECK( pw->terrain_body_count() == 0 );
+
+    // Idempotent, and a rebuild after teardown still works — a stale registry would
+    // otherwise make the next world's submaps look already-loaded.
+    pw->clear_world_bodies();
+    CHECK( pw->terrain_body_count() == 0 );
+
+    pw->on_submap_loaded( here, sm );
+    CHECK( pw->terrain_body_count() > 0 );
+}
+#endif // BOX2D_ENABLED
+
+#ifdef BOX2D_ENABLED
+// Ramp z-transition for a vehicle that KEEPS Box2D position authority.
+//
+// vehicle_ramp_test.cpp sets box2d_position_authority = false for every vehicle it
+// builds (lines 109 and 159), so its 83 failing assertions all exercise the legacy
+// tile-step path.  Under BOX2D=ON that is not the path players drive on: real
+// vehicles keep authority and move via the readback walk in map::vehmove(), which
+// steps move_vehicle() one tile at a time.  Nothing covered the ramp on that path.
+//
+// Terrain layout mirrors vehicle_ramp_test's `up` case: the west half (x < 60) sits
+// at z=1, the east half (x >= 62) at z=0, joined by ramp tiles at x=60/61.  The
+// vehicle starts east at z=0 heading west and must end up at z=1.
+TEST_CASE( "box2d_authority_vehicle_climbs_ramp", "[vehicle][box2d][ramp]" )
+{
+    clear_all_state();
+    clear_vehicles();
+    auto &here = get_map();
+
+    constexpr int transit_x = 60;
+    constexpr int highx = transit_x;      // 60
+    constexpr int lowx = transit_x + 1;   // 61
+
+    for( int y = 0; y < SEEY * MAPSIZE; y++ ) {
+        for( int x = 0; x < transit_x; x++ ) {
+            here.ter_set( tripoint_bub_ms( x, y, -1 ), ter_id( "t_rock" ) );
+            here.ter_set( tripoint_bub_ms( x, y, 0 ), ter_id( "t_rock" ) );
+            here.ter_set( tripoint_bub_ms( x, y, 1 ), ter_id( "t_pavement" ) );
+        }
+        here.ter_set( tripoint_bub_ms( lowx, y, 0 ), ter_id( "t_ramp_up_low" ) );
+        here.ter_set( tripoint_bub_ms( highx, y, 0 ), ter_id( "t_ramp_up_high" ) );
+        here.ter_set( tripoint_bub_ms( lowx, y, 1 ), ter_id( "t_ramp_down_low" ) );
+        here.ter_set( tripoint_bub_ms( highx, y, 1 ), ter_id( "t_ramp_down_high" ) );
+        for( int x = transit_x + 2; x < SEEX * MAPSIZE; x++ ) {
+            here.ter_set( tripoint_bub_ms( x, y, 1 ), ter_id( "t_open_air" ) );
+            here.ter_set( tripoint_bub_ms( x, y, 0 ), ter_id( "t_pavement" ) );
+            here.ter_set( tripoint_bub_ms( x, y, -1 ), ter_id( "t_rock" ) );
+        }
+    }
+    for( const auto z : std::array{ -1, 0, 1 } ) {
+        here.invalidate_map_cache( z );
+        here.build_map_cache( z, true );
+    }
+
+    // Heading west: 0 degrees is +x (east) and rotation is clockwise, so 180 is -x.
+    auto *veh_ptr = here.add_vehicle( vproto_id( "car_test" ), tripoint_bub_ms( 75, 60, 0 ),
+                                      180_degrees, 100, 0 );
+    REQUIRE( veh_ptr != nullptr );
+    vehicle &veh = *veh_ptr;
+    REQUIRE( veh.box2d_position_authority );
+
+    veh.tags.insert( "IN_CONTROL_OVERRIDE" );
+    veh.engine_on = true;
+    veh.velocity = 800;
+    veh.cruise_velocity = 800;
+
+    int reached_z = veh.bub_ms_location().z();
+    int min_velocity = veh.velocity;
+    for( int turn = 0; turn < 30 && reached_z == 0; ++turn ) {
+        here.vehmove();
+        if( veh.skidding ) { break; }
+        reached_z = veh.bub_ms_location().z();
+        min_velocity = std::min( min_velocity, veh.velocity );
+    }
+
+    CAPTURE( veh.bub_ms_location().to_string() );
+    CAPTURE( reached_z );
+    CAPTURE( min_velocity );
+    CAPTURE( veh.skidding );
+
+    // The vehicle must actually climb, and must not be brought to a dead stop doing
+    // it: a halt on a ramp is the player-visible symptom.
+    CHECK( reached_z == 1 );
+    CHECK( min_velocity > 0 );
+}
+#endif // BOX2D_ENABLED

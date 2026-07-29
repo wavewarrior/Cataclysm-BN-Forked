@@ -8,6 +8,7 @@
 #include "map.h"            // map::abs_to_bub, impassable_ter_furn, is_bashable_ter_furn
 #include "game_constants.h" // SEEX, SEEY
 #include "units_mass.h"     // units::to_kilogram
+#include <algorithm>
 #include <cmath>
 #include "physics_debug_draw.h"
 
@@ -96,25 +97,62 @@ void PhysicsWorld::on_vehicle_added( vehicle &v )
                                  static_cast<float>( bpos.y() ) };
     // Mark the vehicle as Box2D-controlled: act_on_map() will skip move_vehicle()
     // and map::vehmove() will apply physics_pos to the tile grid.
-    v.box2d_position_authority = true;
+    //
+    // Rail vehicles are excluded.  Rail motion is a kinematic constraint — the
+    // vehicle MUST follow the track — implemented by
+    // vehicle_movement::process_movement_on_rails(), which act_on_map() reaches only
+    // *after* the authority early-return (vehicle_move.cpp:1599 vs 1606).  Under
+    // authority a rail vehicle therefore never has its heading corrected to the
+    // track: it turns to whatever the driver asked for, derails, and then skids,
+    // because is_on_rails() goes false and the skid guard at vehicle_move.cpp:1574
+    // stops suppressing it.  A free rigid-body integrator cannot express the
+    // constraint, so the tile-step mover keeps ownership.  The body is still built,
+    // so other vehicles and terrain collide with it normally.
+    v.box2d_position_authority = !v.can_use_rails();
 }
 
 void PhysicsWorld::on_vehicle_moved( vehicle &v )
 {
     const auto it = vehicle_bodies_.find( &v );
     if( it == vehicle_bodies_.end() ) { return; }
-    // Box2D owns position for this vehicle: the readback in vehmove() moves the tile
-    // anchor to match the body, NOT the other way around.  Teleporting the body here
-    // would snap it back to integer-tile-centre metres every tick, defeating sub-tile
-    // integration and creating a staircase feedback loop.
-    if( v.box2d_position_authority ) { return; }
 
+    // Physics-driven move (vehmove()'s readback): the body already holds the
+    // authoritative sub-tile position and the tile anchor was just snapped to
+    // match it.  Writing the body here would slam it to the new tile's centre
+    // every turn, destroying sub-tile integration and creating a staircase
+    // feedback loop.
+    if( applying_readback_ ) { return; }
 
+    // Anything else moved the vehicle (debug teleport, tow, test reset, rail
+    // shift, z-change).  The body MUST follow, and physics_pos must be reseated
+    // with it: leaving physics_pos stale makes the next readback compute a
+    // bogus delta from a position the vehicle no longer occupies.  That was the
+    // defect which let vehicle_efficiency_test's per-turn "teleport back to
+    // start" measure a reset-vs-stale-physics_pos artifact instead of the real
+    // per-turn distance, masking the movement-rate bug entirely.
     const auto bpos = v.bub_ms_location();
     const auto fv   = v.face_vec();
+
+    // Carry the sub-tile fraction across the move instead of snapping to the tile
+    // centre.  An external move is a whole-tile displacement, so the vehicle's
+    // position *within* its tile is unchanged by it; discarding that fraction threw
+    // away up to one tile of integration progress every time.
+    //
+    // The tile-step mover has no equivalent loss because its remainder lives in
+    // vehicle::of_turn_carry, a field a displacement does not touch.  That
+    // asymmetry is measurable: vehicle_efficiency_test teleports the vehicle back to
+    // its start every cycle, and under authority the road roller covered 1116 tiles
+    // against the tile-step path's 1248 for identical fuel and cycle count.
+    const auto frac = rl_vec2d{ v.physics_pos.x - std::round( v.physics_pos.x ),
+                                v.physics_pos.y - std::round( v.physics_pos.y ) };
+    const auto nx = static_cast<float>( bpos.x() );
+    const auto ny = static_cast<float>( bpos.y() );
+    if( v.box2d_position_authority ) {
+        v.physics_pos = rl_vec2d{ nx + frac.x, ny + frac.y };
+    }
     b2Body_SetTransform(
         it->second,
-        { static_cast<float>( bpos.x() ) * TILE_M, static_cast<float>( bpos.y() ) * TILE_M },
+        { ( nx + frac.x ) * TILE_M, ( ny + frac.y ) * TILE_M },
         b2Rot{ static_cast<float>( fv.x ), static_cast<float>( fv.y ) } );
 }
 
@@ -137,6 +175,7 @@ void PhysicsWorld::clamp_body_to_tile( vehicle &v )
 
 void PhysicsWorld::on_vehicle_removed( vehicle *v )
 {
+    authority_revoked_by_unload_.erase( v );
     v->box2d_position_authority = false;  // always clear, even if body is missing
     v->render_offset_x = 0.f;
     v->render_offset_y = 0.f;
@@ -233,6 +272,42 @@ void PhysicsWorld::clear_creature_bodies()
     creature_bodies_.clear();
 }
 
+void PhysicsWorld::clear_world_bodies()
+{
+    if( !B2_IS_NON_NULL( world_ ) || !b2World_IsValid( world_ ) ) {
+        terrain_bodies_.clear();
+        bashable_tiles_.clear();
+        bashable_tile_bodies_.clear();
+        vehicle_bodies_.clear();
+        authority_revoked_by_unload_.clear();
+        return;
+    }
+
+    // b2Body_IsValid before every destroy: this runs on wholesale teardown, where
+    // some bodies may already be gone.  bashable_tiles_ and bashable_tile_bodies_
+    // alias the same b2BodyIds held in terrain_bodies_, so they are cleared without
+    // a second destroy pass.
+    const auto destroy = []( const b2BodyId bid ) {
+        if( B2_IS_NON_NULL( bid ) && b2Body_IsValid( bid ) ) { b2DestroyBody( bid ); }
+    };
+
+    for( auto &[abs_sm, bodies] : terrain_bodies_ ) {
+        std::ranges::for_each( bodies, destroy );
+    }
+    terrain_bodies_.clear();
+    bashable_tiles_.clear();
+    bashable_tile_bodies_.clear();
+
+    // The vehicles themselves are owned by the submaps being dropped, so every
+    // vehicle* key is about to dangle.  Destroy the bodies and forget the keys
+    // rather than waiting for on_vehicle_removed, which will never come.
+    for( const auto &[veh, bid] : vehicle_bodies_ ) {
+        destroy( bid );
+    }
+    vehicle_bodies_.clear();
+    authority_revoked_by_unload_.clear();
+}
+
 // ── Terrain lifecycle ─────────────────────────────────────────────────────────
 
 void PhysicsWorld::on_submap_loaded( const map &m, const tripoint_abs_sm &abs_sm_pos )
@@ -242,6 +317,37 @@ void PhysicsWorld::on_submap_loaded( const map &m, const tripoint_abs_sm &abs_sm
                                        abs_sm_pos.y() * SEEY,
                                        abs_sm_pos.z() };
     const auto bub_origin = m.abs_to_bub( abs_corner );
+
+    // Idempotency guard.  terrain_bodies_[key] below is a plain assignment, so a
+    // second call for a key that already holds bodies would drop those b2BodyIds
+    // without destroying them — leaving live duplicate colliders stacked on the
+    // same tiles and leaking them for the lifetime of the world.  Previously
+    // unreachable because on_zlevel_changed always ran its removal loop first, but
+    // that is a fragile invariant now that other callers exist (e.g. the
+    // destination-z rebuild in game::place_player_overmap).
+    //
+    // The bashable_tile_bodies_ keys come from bashable_tiles_, NOT from decoding
+    // each body's userData: on_map_shifted() re-bases the bub keys stored in
+    // bashable_tiles_ but does not rewrite the bodies' encoded userData, so after
+    // any shift decode_tile_pos() yields the pre-shift tile.  Erasing by that would
+    // remove the wrong entry and leave the real one holding a destroyed b2BodyId,
+    // which the next on_tile_bashed() at that tile would try to destroy again.
+    if( const auto prev = terrain_bodies_.find( abs_sm_pos ); prev != terrain_bodies_.end() ) {
+        if( const auto tl = bashable_tiles_.find( abs_sm_pos ); tl != bashable_tiles_.end() ) {
+            for( const auto &[bub, bid] : tl->second ) {
+                if( const auto e = bashable_tile_bodies_.find( bub );
+                    e != bashable_tile_bodies_.end() && B2_ID_EQUALS( e->second, bid ) ) {
+                    bashable_tile_bodies_.erase( e );
+                }
+            }
+            bashable_tiles_.erase( tl );
+        }
+        for( const auto bid : prev->second ) {
+            b2DestroyBody( bid );
+        }
+        terrain_bodies_.erase( prev );
+    }
+
 
     auto bodies = build_submap_terrain_bodies( world_, m, bub_origin );
 
@@ -260,9 +366,32 @@ void PhysicsWorld::on_submap_loaded( const map &m, const tripoint_abs_sm &abs_sm
     }
 
     terrain_bodies_[abs_sm_pos] = std::move( bodies );
+
+    // Re-grant position authority to vehicles whose home submap just re-entered
+    // the simulated set, undoing the revocation on on_submap_unloaded's
+    // still-resident path.  Without this, each bubble excursion would permanently
+    // convert more vehicles to the tile-step mover and Box2D would decay away
+    // over a long session.
+    //
+    // physics_pos has to be reseated to the current anchor first: while the
+    // tile-step mover owned the vehicle that field went stale (on_vehicle_moved()
+    // only resyncs it under authority), and handing authority back with a stale
+    // value would make the very next readback walk the vehicle back to wherever
+    // it was when authority was revoked.
+    for( auto &[veh, bid] : vehicle_bodies_ ) {
+        if( veh->abs_sm_pos != abs_sm_pos ) { continue; }
+        // Only re-grant what this class revoked.  A vehicle that opted out itself
+        // must stay opted out, and the flag alone cannot tell the two apart.
+        if( authority_revoked_by_unload_.erase( veh ) == 0 ) { continue; }
+        const auto bpos  = veh->bub_ms_location();
+        veh->physics_pos = rl_vec2d{ static_cast<float>( bpos.x() ),
+                                     static_cast<float>( bpos.y() ) };
+        veh->box2d_position_authority = true;
+    }
 }
 
-void PhysicsWorld::on_submap_unloaded( const tripoint_abs_sm &abs_sm_pos )
+void PhysicsWorld::on_submap_unloaded( const tripoint_abs_sm &abs_sm_pos,
+                                       bool submap_still_resident )
 {
     // Remove bashable tile entries before destroying the bodies.
     const auto bash_it = bashable_tiles_.find( abs_sm_pos );
@@ -279,11 +408,52 @@ void PhysicsWorld::on_submap_unloaded( const tripoint_abs_sm &abs_sm_pos )
         terrain_bodies_.erase( it );
     }
 
-    // Destroy vehicle bodies whose home submap is being unloaded.
-    // map::on_submap_unloaded already erases these vehicles from loaded_vehicles;
-    // without this sweep the b2BodyIds would leak in the Box2D world.
+    // Vehicle bodies for the submap leaving the simulated set.
+    //
+    // This callback tracks *simulation* membership, not memory residency (see
+    // src/submap_load_manager.h), so it fires on simulated -> lazy_border while
+    // the submap and every vehicle in it are still alive.  The two cases need
+    // different handling.
+    //
+    // Still resident: keep the body, but revoke authority.  map::on_submap_unloaded
+    // has already dropped these vehicles from loaded_vehicles, so nothing walks
+    // their tile anchor any more — left under authority they would keep being
+    // integrated by step_turn() while sync_game_from_bodies() rewrote their facing
+    // and precalc[] every turn, and physics_pos would drift far from the anchor
+    // until re-entering the simulated set teleported them.  Revoking hands them
+    // back to the tile-step mover, which the authority guards in
+    // sync_game_from_bodies() and the vehmove() readback both honour, while
+    // on_vehicle_moved() keeps the body tracking the anchor.  The body is kept
+    // because nothing ever re-registers one (on_vehicle_added has exactly one
+    // caller, map::add_vehicle), so destroying it here would be permanent.
+    if( submap_still_resident ) {
+        for( auto &[veh, bid] : vehicle_bodies_ ) {
+            if( veh->abs_sm_pos != abs_sm_pos ) { continue; }
+            // Only record vehicles that actually held authority.  Recording an
+            // already-opted-out vehicle would make the re-grant hand it authority
+            // when the submap returns, which is precisely what the set exists to
+            // prevent.
+            if( !veh->box2d_position_authority ) { continue; }
+            authority_revoked_by_unload_.insert( veh );
+            veh->box2d_position_authority = false;
+            veh->render_offset_x = 0.f;
+            veh->render_offset_y = 0.f;
+        }
+        return;
+    }
+
+    // Genuinely gone: destroy the body and clear authority, mirroring
+    // on_vehicle_removed().  Leaving the flag set would strand the vehicle with
+    // authority but no body, and the readback would keep driving it from a
+    // physics_pos that can never be updated again.
     std::erase_if( vehicle_bodies_, [&]( const auto &kv ) {
         if( kv.first->abs_sm_pos == abs_sm_pos ) {
+            // Drop any revocation record too — the vehicle is going away, and a
+            // stale entry here would be a dangling pointer.
+            authority_revoked_by_unload_.erase( kv.first );
+            kv.first->box2d_position_authority = false;
+            kv.first->render_offset_x = 0.f;
+            kv.first->render_offset_y = 0.f;
             b2DestroyBody( kv.second );
             return true;
         }
@@ -305,12 +475,26 @@ void PhysicsWorld::on_map_shifted( point delta_tiles )
         b2Body_SetTransform( bid, { p.x + delta.x, p.y + delta.y }, rot );
     }
 
-    // Translate terrain bodies.
+    // Translate terrain bodies, and re-encode their userData tile alongside.
+    //
+    // The userData is an encoded bub_ms tile, and bub coordinates are
+    // bubble-relative, so a shift invalidates it just as it invalidates the
+    // transform.  Updating only the transform left every terrain body advertising
+    // its pre-shift tile, which any consumer that identifies a tile by userData
+    // would then get wrong — including the contact-event routing that still has to
+    // be written, where it would bash the wrong tile once the bubble had moved.
     for( const auto &[abs_sm, body_list] : terrain_bodies_ ) {
         for( const auto bid : body_list ) {
             const auto p   = b2Body_GetPosition( bid );
             const auto rot = b2Body_GetRotation( bid );
             b2Body_SetTransform( bid, { p.x + delta.x, p.y + delta.y }, rot );
+            if( auto *ud = b2Body_GetUserData( bid ); ud != nullptr ) {
+                const auto old_bub = decode_tile_pos( reinterpret_cast<std::uintptr_t>( ud ) );
+                const auto new_bub = tripoint_bub_ms{ old_bub.x() + delta_tiles.x,
+                                                      old_bub.y() + delta_tiles.y,
+                                                      old_bub.z() };
+                b2Body_SetUserData( bid, reinterpret_cast<void *>( encode_tile_pos( new_bub ) ) );
+            }
         }
     }
 
@@ -330,6 +514,24 @@ void PhysicsWorld::on_map_shifted( point delta_tiles )
     rebuild_bashable_lookup();
 }
 
+auto PhysicsWorld::terrain_body_count() const -> size_t
+{
+    size_t n = 0;
+    for( const auto &[abs_sm, body_list] : terrain_bodies_ ) {
+        n += body_list.size();
+    }
+    return n;
+}
+
+auto PhysicsWorld::world_body_count() const -> size_t
+{
+    // Counts bodies as Box2D sees them, which is deliberately NOT the same as
+    // terrain_body_count(): terrain_bodies_[key] is an assignment, so a body that
+    // was dropped from the registry without b2DestroyBody is invisible to that
+    // count while still colliding in the world.  Leak-style bugs only show up here.
+    return static_cast<size_t>( b2World_GetCounters( world_ ).bodyCount );
+}
+
 void PhysicsWorld::on_zlevel_changed( const map &m, int old_z, int new_z )
 {
     if( old_z == new_z ) { return; }
@@ -342,7 +544,10 @@ void PhysicsWorld::on_zlevel_changed( const map &m, int old_z, int new_z )
         }
     }
     for( const auto &abs_sm : to_remove ) {
-        on_submap_unloaded( abs_sm );
+        // Still resident: only the z-level focus changed, so these submaps and any
+        // vehicles in them are alive.  Passing false would strip the body of every
+        // vehicle on the old z-level, permanently, on each z change.
+        on_submap_unloaded( abs_sm, /*submap_still_resident=*/true );
     }
 
     // Create terrain bodies for the new z-level (all in-bubble submaps).
@@ -379,33 +584,116 @@ void PhysicsWorld::on_tile_bashed( tripoint_bub_ms pos )
 
 // ── Game-loop interface ───────────────────────────────────────────────────────
 
-void PhysicsWorld::step( float dt, int substeps )
+void PhysicsWorld::sync_bodies_from_game()
 {
-    // ── Pre-step: sync game velocity into Box2D bodies so contact impulses are
-    // physically meaningful.  Tile-step still owns position (on_vehicle_moved()
-    // teleports bodies via b2Body_SetTransform after each tile move).  Direct
-    // velocity set is used here; force-driven movement is wired in Step 5 when
-    // Box2D becomes the position authority.
+    // Push the game's velocity model into the bodies.  Done once per turn, not
+    // per sub-step: a per-sub-step re-sync would overwrite whatever the contact
+    // solver produced, so collisions could never actually change velocity.
     for( auto &[veh, bid] : vehicle_bodies_ ) {
         const auto fv      = veh->face_vec();
         const auto spd_mps = static_cast<float>( veh->velocity ) / 100.0f;
         b2Body_SetLinearVelocity( bid, { static_cast<float>( fv.x ) * spd_mps,
                                          static_cast<float>( fv.y ) * spd_mps } );
         b2Body_SetAngularVelocity( bid, veh->angular_velocity_rads );
+        // Continuous collision for anything fast enough to cross a whole tile
+        // within one turn; without this a fast body can still skip a 1-tile
+        // static terrain body between sub-steps.
+        b2Body_SetBullet( bid, std::abs( veh->velocity ) > 2000 );
     }
+}
 
-    b2World_Step( world_, dt, substeps );
-
-    // ── Post-step: read back physics state → vehicle fields ──────────────────
+void PhysicsWorld::sync_game_from_bodies()
+{
     for( auto &[veh, bid] : vehicle_bodies_ ) {
-        const auto pos             = b2Body_GetPosition( bid );
-        veh->physics_pos           = rl_vec2d{ pos.x / TILE_M, pos.y / TILE_M };
-        const auto rot             = b2Body_GetRotation( bid );
-        veh->physics_angle         = std::atan2( rot.s, rot.c );
+        // Angular velocity is a genuine round-trip for every registered vehicle:
+        // sync_bodies_from_game() pushes veh->angular_velocity_rads into the body
+        // each turn, and Box2D's damping is what decays it.  Reading it back
+        // unconditionally keeps that loop closed — gating it would leave the
+        // field write-only, so a legacy vehicle spun up by part_collision() or
+        // solve_vv_cluster() would keep that spin forever.
         veh->angular_velocity_rads = b2Body_GetAngularVelocity( bid );
-        veh->refresh_precalc( veh->physics_angle );
-    }
 
+        // Position, facing and the precalc[] layout derived from facing are only
+        // taken from the body for vehicles under physics authority.  For the rest
+        // the tile-step mover owns them and the body is a passive mirror kept in
+        // step by on_vehicle_moved(); re-deriving precalc[] from a body the game
+        // is not driving corrupts that vehicle's part layout.
+        //
+        // This guard matters because opting out is a real, used pattern: e.g.
+        // tests/vehicle_ramp_test.cpp clears box2d_position_authority for every
+        // vehicle it sets up.  Without the guard those vehicles kept their tile
+        // position but had their facing overwritten from Box2D anyway, which is
+        // why toggling authority globally changed that suite's results even
+        // though it had already opted out.
+        if( !veh->box2d_position_authority ) { continue; }
+        const auto pos     = b2Body_GetPosition( bid );
+        veh->physics_pos   = rl_vec2d{ pos.x / TILE_M, pos.y / TILE_M };
+        const auto rot     = b2Body_GetRotation( bid );
+        veh->physics_angle = std::atan2( rot.s, rot.c );
+        veh->refresh_precalc( veh->physics_angle );
+
+        // Keep `move` (the travel-direction tileray) in step with reality.
+        //
+        // Under authority act_on_map() returns early and never reaches
+        // `veh.move = facing` in map::move_vehicle(), so `move` kept whatever
+        // heading it was constructed with — 0 degrees — while `face` tracked the
+        // vehicle.  vehicle::slowdown() then multiplies rolling drag by
+        // `1 + 24 * |sin( face.dir() - move.dir() )|`, so a vehicle driving due
+        // west (face 270, move 0) was charged the FULL 25x skid penalty every
+        // turn while going perfectly straight.  Measured on car_test at cruise:
+        // slowdown 362 cm/s per turn against 67 on the tile-step path, which held
+        // the vehicle 362 cm/s below its cruise target permanently and made
+        // cruise-control thrust burn load 533 instead of 114 — about 7x the fuel
+        // over a run.
+        //
+        // Derive it from the body's linear velocity rather than from `face`: that
+        // is the actual travel vector, so a genuine sideways slide still registers
+        // as a skid.  Below a small speed the direction is numerical noise, so
+        // fall back to `face` — otherwise a stationary or just-starting vehicle
+        // would get a random heading and a random drag penalty.
+        const auto lv = b2Body_GetLinearVelocity( bid );
+        constexpr auto min_dir_mps = 0.05f;
+        if( std::hypot( lv.x, lv.y ) >= min_dir_mps ) {
+            veh->move.init( units::atan2( lv.y, lv.x ) );
+        } else {
+            veh->move = veh->face;
+        }
+    }
+}
+
+auto PhysicsWorld::substeps_for_turn( float turn_seconds ) const -> int
+{
+    // Keep per-step translation under half a tile so a body cannot pass through
+    // a 1-tile-wide static terrain body between steps.
+    constexpr auto max_tiles_per_step = 0.5f;
+    auto max_mps = 0.0f;
+    for( const auto &[veh, bid] : vehicle_bodies_ ) {
+        max_mps = std::max( max_mps, std::abs( static_cast<float>( veh->velocity ) ) / 100.0f );
+    }
+    if( max_mps <= 0.0f ) { return 1; }
+    const auto travel_m   = max_mps * turn_seconds;
+    const auto step_limit = max_tiles_per_step * TILE_M;
+    return std::clamp( static_cast<int>( std::ceil( travel_m / step_limit ) ), 1, 240 );
+}
+
+void PhysicsWorld::step_turn( float turn_seconds )
+{
+    if( turn_seconds <= 0.0f ) { return; }
+    sync_bodies_from_game();
+    const auto steps = substeps_for_turn( turn_seconds );
+    const auto dt    = turn_seconds / static_cast<float>( steps );
+    for( int i = 0; i < steps; ++i ) {
+        b2World_Step( world_, dt, 4 );
+        dispatch_contact_events();
+    }
+    sync_game_from_bodies();
+}
+
+void PhysicsWorld::step( float dt, int substeps )
+{
+    sync_bodies_from_game();
+    b2World_Step( world_, dt, substeps );
+    sync_game_from_bodies();
     dispatch_contact_events();
 }
 

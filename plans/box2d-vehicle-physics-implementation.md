@@ -8,13 +8,475 @@ This plan migrates Cataclysm-BN's vehicle and combat systems to Box2D 3.0.0 as t
 
 ---
 
-## Remaining Work  *(as of 2026-07-12, updated 2026-07-13)*
+## Remaining Work  *(rewritten 2026-07-29 after measurement — supersedes the 2026-07-13 list)*
 
-Four items remain. Dependency chain: **playtest → Phase 12 → Phase 10 Step 6 → Phase 11**.
+**The previous dependency chain (playtest → Phase 12 → Phase 10 Step 6 → Phase 11) was
+wrong, and Phase 10 Step 5 is NOT done.** Three claims in the older text were checked
+against the code and disproved. Read this section before touching anything below; the
+per-phase text further down still carries the old assumptions.
 
-**Phase 11 gate lifted**: the external tile-independent ranged combat rework is complete (2026-07-12). Phase 11 is now gated only on Phase 10 Step 6 (legacy field retirement).
+### Correction 1 — Phase 12-A must NOT be executed as written
 
----
+12-A says to delete the transient VV solver (`src/physics/veh_box2d_solve.*`) because
+it is "superseded by Phase 10 contact events". It is not. `src/physics/filter_bits.h`
+sets `vehicle_group = -1` and `make_vehicle_body()` assigns
+`sdef.filter.groupIndex = physics::vehicle_group`, and a shared negative `groupIndex`
+in Box2D means those shapes **never** collide with each other. Vehicle-vehicle contact
+events therefore cannot fire at all, by construction — the filter comment even says so.
+`solve_vv_cluster()` (called from `map::move_vehicle()`, `src/map_vehicle.cpp:~795`) is
+the only source of vehicle-vehicle collision physics that exists. Deleting it would
+remove T-bone spin entirely, i.e. the original motivation for this whole plan.
+
+**Updated:** the transient solver *was* unreachable for authority vehicles, because
+`vehicle::act_on_map()` returns early before `move_vehicle()`. That is no longer true —
+the readback walk in `map::vehmove()` now routes each tile step through
+`move_vehicle()`, which is where `solve_vv_cluster()` lives, so the transient VV solver
+is reachable again and verified working (`box2d_authority_vehicle_hits_vehicle` in
+`tests/vehicle_collision_test.cpp`).
+
+That strengthens rather than removes the argument against 12-A: the transient solver is
+now the *live, tested* VV path, so deleting it would break vehicle-vehicle collision
+outright.
+
+### Correction 2 — Phase 10 Step 5 left the whole game-consequence layer unimplemented
+
+`act_on_map()`'s early return skips `part_collision()` **and** `move_vehicle()`. Under
+`-DBOX2D=ON` that silently drops, for every Box2D-authoritative vehicle:
+
+| Dropped behaviour | Owner that no longer runs |
+|---|---|
+| creature collision + damage (`veh_coll_body`) | `part_collision()` |
+| terrain bashing (`veh_coll_bashable`) | `part_collision()` |
+| vehicle-vehicle collision | `solve_vv_cluster()` in `move_vehicle()` |
+| ramp z-transition | `move_vehicle()` → `vehicle::shift_zlevel()` |
+| rail following | `vehicle_movement::process_movement_on_rails()` |
+
+**RESOLVED — but not via `dispatch_contact_events()`.** That function is still a stub, and
+deliberately so. The readback walk now routes every tile step through `move_vehicle()`,
+which already performs the whole per-tile consequence chain, so all five dropped
+behaviours are restored by reuse rather than reimplementation:
+
+| Behaviour | Now delivered by |
+|---|---|
+| creature collision + damage | `part_collision()` via `move_vehicle()` |
+| terrain bashing | `part_collision()` via `move_vehicle()` |
+| vehicle-vehicle collision | `solve_vv_cluster()` via `move_vehicle()` |
+| ramp z-transition | `adjust_zlevel()` / `shift_zlevel()` via `move_vehicle()` |
+| rail following | still open — `process_movement_on_rails()` is not on this path |
+
+Verified by `box2d_authority_vehicle_bashes_terrain` (drives into a wooden wall, wall
+becomes `t_rock_floor_no_roof`) and `box2d_authority_vehicle_hits_vehicle` (struck vehicle
+shoved or damaged, striker slowed).
+
+`dispatch_contact_events()` therefore has a much smaller remaining job — sound, and any
+purely physical response with no tile-step equivalent. It is explicitly **not** where bash
+force belongs.
+
+Consequence, measured by disabling `box2d_position_authority` and re-running:
+
+| Suite | BOX2D authority on | Legacy tile-step |
+|---|---|---|
+| `[vehicle][railroad]` | 0/5 cases, 65 assertions | **5/5 pass, 4,284 assertions** |
+| `[vehicle][ramp]` | 4/8 cases | 5/8 cases, 3,025 assertions |
+| `[vehicle][gun]` | 5/7 cases | 6/7 cases |
+
+So the rails suite is not a shipping bug at all — it is fully green on the default build
+and fails only under Box2D position authority. Same direction for ramp and gun.
+
+A per-turn "revoke authority when on rails / on a ramp" gate was implemented and
+**reverted**: it does not help, because the rails failure happens during test *setup*
+(`add_moving_vehicle` calls `map::displace_vehicle()` directly, before any `vehmove()`),
+and it made `[vehicle][ramp]` worse (150 → 470 failed assertions). The gap has to be
+closed by implementing the consequences, not by dodging them.
+
+### Correction 3 — the "one step per 1/60 s" cadence was a 56x movement bug (FIXED)
+
+The 2026-07-28 addendum below concluded that `map::vehmove()` must step exactly once by
+`1/60` s and that integrating a full second doubles vehicle speed. That was a
+misdiagnosis. Measured with a temporary instrumented case, at `velocity = 1000` cm/s
+(10 m/s):
+
+- `physics_pos` advanced **0.0932 tiles/turn** and the vehicle covered **2 tiles in 20
+  turns**, against `10 m/s x 20 s / 1.78816 m-per-tile` = **111.85 tiles** expected.
+
+`vehmove()` now calls `PhysicsWorld::step_turn( 1.0f )`, which sub-steps internally with
+a step size chosen to keep per-step translation under half a tile (no tunneling through
+the 1-tile terrain bodies) and syncs velocity **in once / out once** so the contact
+solver's result is not overwritten mid-turn — the old per-step re-sync meant a collision
+could never change a vehicle's velocity. Re-measured after the fix: **112 tiles in 20
+turns** vs 111.85 expected, for both a car and a fire truck, on both pavement and dirt.
+
+The reason `vehicle_efficiency_test` did not catch a 56x error: it teleports the vehicle
+back to its start every turn *without* resyncing `physics_pos`, so it was measuring a
+reset-vs-stale-`physics_pos` artifact rather than distance. `on_vehicle_moved()` now
+follows external teleports and reseats `physics_pos`, using an explicit
+`PhysicsWorld::physics_move_scope` guard so the readback's own move is still
+distinguished from an external one.
+
+### Correction 4 — Box2D fuel economy is uncalibrated
+
+With movement now correct, `vehicle_efficiency_test`'s distance constants (which encode
+the legacy mover's `of_turn` truncation loss — `gain_moves()` zeroes `of_turn_carry`, so
+the tile-step path discards a sub-tile remainder every turn) no longer describe the
+Box2D path. Measured deviation: most vehicles **+0.3% to +4.3%** over the upper bound,
+but `fire_truck_test` on dirt lands **~40% under** the lower bound. Raw movement was
+ruled out as the cause (see Correction 3 — exact for the fire truck too).
+
+Those two distance assertions are now `#ifndef BOX2D_ENABLED`-only, and emit a `WARN`
+with the measured band under `-DBOX2D=ON`. Every other assertion in that test stays
+strict on both builds. **This is a suppression, not a fix** — do not read the improved
+assertion count as calibration. Deliberately calibrating Box2D fuel economy (and
+diagnosing the fire-truck outlier) is open work.
+
+### TOP PRIORITY — Box2D costs ~7x fuel economy in sustained cruise
+
+**Quantified, upstream-validated, and player-facing.** `BOX2D` is always on for this
+project, so this is the shipping configuration.
+
+Regenerating `vehicle_efficiency`'s constants with its own
+`make_vehicle_efficiency_case` generator on both builds and comparing against
+`origin/main`:
+
+| `car_test` | pavement | dirt |
+|---|---|---|
+| upstream `origin/main` | 617,500 | 403,153 |
+| `BOX2D=OFF` (tile-step) | 636,700 | 427,500 |
+| **`BOX2D=ON` (physics authority)** | **87,530** | **56,690** |
+
+`BOX2D=OFF` agrees with upstream to within **3-6%** across all eight comparable slots, so
+the tile-step numbers are physically correct. `BOX2D=ON` returns **0.10-0.43x** of them in
+sustained cruise — typically ~0.13x, i.e. **roughly 7x less range per unit fuel** — across
+every one of the 18 test vehicles.
+
+Crucially the loss is **not uniform**, which rules out a units or bookkeeping artifact:
+
+| Measurement | ON / OFF |
+|---|---|
+| sustained cruise, pavement | 0.10 - 0.43 |
+| sustained cruise, dirt | 0.03 - 0.73 |
+| stop-start, pavement | 0.69 - 0.90 |
+| stop-start, dirt | 0.69 - 0.97 |
+
+Stop-start cases lose only ~10-30%; sustained cruise loses ~87%. So the defect is in
+**steady-state economy** — drag, rolling resistance, or engine load at constant speed under
+physics authority — not in acceleration or in the measurement.
+
+**Localised to fuel burned at steady speed.** Instrumenting the numerator and denominator
+of `adjusted_tiles_travelled = tiles_travelled / fuel_percentage_used` separately, plus
+cycle count and end velocity, on both builds:
+
+| `Car`, pavement | BOX2D=ON | BOX2D=OFF | ratio |
+|---|---|---|---|
+| `tiles_travelled` | 1200 | 1247 | 0.96 |
+| `fuel_used` | 0.137083 | 0.019583 | **7.00** |
+| `vel_end` | 2235 | 2235 | 1.00 |
+| `cycles_run` | 100 | 100 | 1.00 |
+
+Distance, end velocity and cycle count all match. The vehicle is **not** settling at a
+lower cruise speed, **not** exiting the loop early, and **not** moving less per turn — its
+per-turn distance tracks `vel_end` exactly on both builds (12 tiles/cycle against
+22.35 m/s / 1.78816 = 12.5 expected). The entire ratio is fuel.
+
+The stop-start rows pin it further: `Beetle` stop-start burns **identical** fuel on both
+builds (0.090833), and only the cruise rows diverge. So **acceleration fuel is correct and
+fuel burned holding a steady speed is ~7x too high** under position authority.
+
+**ROOT CAUSE FOUND AND FIXED: `move` was never updated under position authority.**
+
+`vehicle::slowdown()` (`src/vehicle_move.cpp:113`) multiplies rolling drag by
+`1 + 24 * |sin( face.dir() - move.dir() )|` — up to **25x** — to model a vehicle sliding
+sideways. `move` is set by `veh.move = facing` in `map::move_vehicle()`
+(`src/map_vehicle.cpp:978`), which `act_on_map()` never reaches under authority. So `move`
+kept its constructed heading of 0 degrees while `face` tracked the vehicle: a vehicle
+driving due west (`face` 270, `move` 0) was charged the **full 25x skid penalty every turn
+while travelling perfectly straight**.
+
+Measured on `car_test` at cruise, before and after:
+
+| | before | after | tile-step reference |
+|---|---|---|---|
+| `slowdown` per turn | 362 | **67** | 67 |
+| `face` / `move` | 270 / 0 | **270 / 270** | 270 / 270 |
+| `vel` at cruise | 1873 | 2235 | 2235 |
+| `load` (cruise thrust) | 533 | 114 | 114 |
+
+Chain: inflated drag held the vehicle 362 cm/s below its cruise target permanently;
+`thrust()` clamps `vel_inc` to the remaining gap (`vehicle_move.cpp:216`) and
+`load = 1000*|vel_inc|/accel`, so cruise control burned 533 every turn instead of 114 —
+~4.7x per turn compounding to the ~7x fuel measured over a 100-cycle run. It also explains
+the stop-start parity: during acceleration `vel_inc` is not cruise-clamped, so `load`
+saturates near 1000 regardless.
+
+Fixed in `PhysicsWorld::sync_game_from_bodies()` by deriving `move` from the body's linear
+velocity (the actual travel vector, so a genuine slide still registers as a skid), falling
+back to `face` below 0.05 m/s where the direction is numerical noise.
+
+Ruled out along the way, each by measurement: `traction` (identical 1.0 on both builds),
+engine power (`accel` was *higher* on ON), `coeff_air_drag` / `coeff_rolling_drag`
+(byte-identical), a lower cruise equilibrium (`vel_end` identical), early loop exit
+(`cycles_run` 100 both), and distance (`tiles` within 4%). The skid multiplier is applied
+inside `slowdown()` rather than inside the drag coefficients, which is why identical
+coefficients did not exonerate drag.
+
+**Residual: 3-8%, no longer systemic.** `vehicle_efficiency` went from **101** failed
+assertions to **53**, and the remaining gaps are near-misses (`beetle_test` 77,965 against a
+required 80,346 — 3.0% short; another row 8.0% short) rather than multiples. For scale, the
+tile-step build itself sits 3-6% from upstream. Whether the remainder is a second small
+defect or just continuous-vs-quantised integration is open; it is no longer a
+balance-breaking regression.
+
+**This regression was previously hidden twice over.** The committed constants (76,590 for
+`car_test`) sit beside the ON value, so they were generated under `BOX2D=ON` and baked the
+regression into the baseline — which is why they read ~8x below upstream. And the checks
+themselves had been `WARN`-gated under `BOX2D_ENABLED`, so nothing asserted them. Both are
+now fixed: constants are the upstream-validated OFF values and the checks are strict and
+unconditional.
+
+`vehicle_efficiency` therefore **fails on purpose**: 101 assertions, 99 of them the lower
+bound (too little distance per fuel). Left red deliberately. Do not re-baseline it to the
+ON numbers — that is exactly how the regression was concealed the first time.
+
+Start from `vehicle::gain_moves()` (`src/vehicle.cpp`, where `slowdown()` and thrust are
+applied per turn) and compare fuel drawn per tile between the two paths at a fixed cruise
+speed.
+
+## Terrain colliders are built against the WRONG player z — start-location dependent
+
+**Promoted to the top open item.** With `BOX2D` always on, this decides whether vehicles
+collide with walls at all.
+
+`map::on_submap_loaded` only forwards to the physics world when the submap's z matches the
+player's current z (`src/map.cpp:378`):
+
+```cpp
+if( phys_world && sm != nullptr && g && p.z() == g->u.bub_pos().z() ) {
+    phys_world->on_submap_loaded( *this, p );
+}
+```
+
+Two ordering facts make that gate unreliable:
+
+1. `game::place_player_overmap` calls `load_map( map_sm_pos )` at `src/game.cpp:2586` and
+   `place_player( player_pos )` only at **2589**. So every submap notification during the
+   load is compared against the player's **previous** z, not the destination z. Nothing
+   rebuilds colliders after `place_player()`.
+2. `PhysicsWorld::on_zlevel_changed` — the only code that rebuilds colliders for a new
+   z-level — has exactly **one** caller, `game::vertical_shift`
+   (`src/game_movement.cpp:2379`). It fires for stairs/ramps and nothing else.
+
+There are **two distinct triggers**, with different confidence levels and different repro
+steps. Do not conflate them, and do not close this item by testing only one.
+
+**(a) Fast travel / overmap teleport across a z-level — follows directly from the verified
+ordering, no extra assumption.** `place_player_overmap` computes the destination as
+`player_pos( u.bub_pos().xy(), map_sm_pos.z() )` (`src/game.cpp:2585`), i.e. the new z comes
+from `map_sm_pos`. It then runs `load_map()` *before* `place_player()`, so every submap
+notification during that load is tested against the player's genuine **old** z. Whenever the
+destination z differs from the origin z, the gate fails for every submap on the destination
+level and no colliders are built there. Nothing rebuilds them afterwards. **Repro this
+first** — it needs no assumption about initialisation order.
+
+The same load-before-place shape appears elsewhere, e.g. `gamemode_defense.cpp:296-299`
+(`g->load_map( ... )` then `player_character.setpos( ... )`), so this is a pattern rather
+than a one-off.
+
+**(b) Initial game start — plausible but UNVERIFIED.** This only fails if `g->u`'s z is
+still 0 or unset at `load_map()` time, which nobody has checked; in `place_player_overmap`
+the player normally has a real previous position rather than a default-constructed one. If
+it is unset, an underground start (shelter basement, any z<0 scenario) would load z<0
+submaps against a 0 and build nothing, while a surface start would pass the comparison
+coincidentally. Verify `g->u.bub_pos().z()` at the moment of the first `load_map()` before
+relying on this. **A next session that tests only an underground start could see no bug — if
+initialisation happens to be fine by then — and wrongly close the item.**
+
+Status: the ordering above is **verified by reading the code**. The runtime consequence is
+`[INFERENCE]` from that ordering and has not been confirmed in a running game — measured
+evidence so far is only that the Catch2 harness has `terrain_bodies_.size() == 0`, which is
+a different (and also real) path since `build_test_map()` never fires the notification.
+
+**Confirm first, then fix.** Launch with an underground start and log
+`terrain_bodies_.size()` after load; separately log the gate's two operands at each
+notification. Likely fix is to notify the physics world after the player is placed rather
+than during the load, or to drop the z gate and let `on_submap_loaded` decide for itself
+which z-levels are worth bodies. Note the gate exists for a real reason — the comment at
+`src/map.cpp:375-377` records that building bodies for all 21 z-levels was the dominant cost
+of submap boundary crossing — so removing it needs a cheaper filter, not none.
+
+Everything in `dispatch_contact_events()` is downstream of this: contact events cannot fire
+against colliders that were never created.
+
+## Which paths are actually exercised — measure before aiming a fix
+
+The readback tile-walk in `map::vehmove()` is not uniformly hit. Counting entries into
+the `px != cur.x() || py != cur.y()` branch per suite:
+
+| Suite | Readback branch entries |
+|---|---|
+| `vehicle_efficiency` | 12,680 |
+| `[vehicle][railroad]` | 14 |
+| `[vehicle][ramp]` | **1** |
+
+`[vehicle][ramp]` is 1 because **the ramp test opts out of Box2D position authority**:
+`tests/vehicle_ramp_test.cpp:109` (grabbed-cart setup) and `:159` (driven-vehicle setup)
+both clear `veh.box2d_position_authority` inside `#ifdef BOX2D_ENABLED`, for every vehicle
+they build. So none of the ramp failures are readback or contact-event problems.
+
+That opt-out used to be **incomplete**, which resolves an apparent contradiction worth
+recording: disabling authority globally moved isolated ramp from 4/8 to 5/8, even though
+the suite had already opted out — which should have been a no-op.
+`PhysicsWorld::sync_game_from_bodies()` iterated every registered vehicle with no
+authority check, so opted-out vehicles kept their tile position but still had
+`physics_angle` overwritten and `precalc[]` re-derived from a body the game was not
+driving, corrupting their part layout. Position/facing/precalc are now gated on authority
+(the `angular_velocity_rads` readback stays unconditional, since Box2D damping is what
+decays a spin the legacy collision paths wrote). That took isolated ramp from 150 to 109
+failed assertions. The suite now genuinely does run the legacy mover.
+
+What those failures actually are: 18 of them (6 `SECTION`s x 3 `TEST_CASE`s, i.e. every
+run) are `REQUIRE( player_character.bub_pos() == map_starting_point )` at
+`vehicle_ramp_test.cpp:174`, immediately after `map::board_vehicle()`. `board_vehicle()`
+does `who->setpos( pos )` with the requested position (correct) and then
+`g->update_map( g->u )` (`src/map_vehicle.cpp:1409`), which can shift the reality bubble
+and rebase bub coordinates — after which the test's stale `map_starting_point` value no
+longer names the player's tile. Investigate there; it is unrelated to physics.
+
+Note the suite mixes two very different kinds of case, so do not treat them together:
+- `grabbed_shopping_cart_*` — a grabbed/pushed cart moved through `src/grab.cpp`, which
+  already calls `adjust_zlevel()` / `shift_zlevel()` (`grab.cpp:217,248`).
+- `vehicle_ramp_test_59/60/61` — a real **driven** motorcycle spawned via
+  `here.add_vehicle` (`vehicle_ramp_test.cpp:148`), set to `velocity = 179` and stepped
+  through up to 10 `here.vehmove()` cycles. These are ordinary driven vehicles, not grab
+  cases, and they too run on the legacy mover because of the line-159 opt-out.
+
+`[vehicle][railroad]`'s failure at `vehicle_rails_test.cpp:184` is likewise not reachable
+from the readback: it happens in the warm-up helper `add_moving_vehicle`, which calls
+`map::displace_vehicle()` **directly** at line 177 before any `vehmove()`.
+
+Confirm a path is exercised (a temporary counter in the branch is enough) before investing
+in it. Two authority-gating attempts were burned on this: one gating per turn only, one
+gating at spawn as well; neither moved rails, and both made ramp worse.
+
+### Revised order of work
+
+**Done** (see git log): full-turn integration with tunneling-safe sub-steps; velocity
+synced in-once/out-once so contact response survives; `physics_pos` reseated on external
+teleports; readback walks one tile at a time with `adjust_zlevel -> displace_vehicle ->
+shift_zlevel` per tile and rewinds `physics_pos` on every early exit.
+
+**Remaining:**
+
+0. **Make terrain bodies exist — newly found, and it precedes everything below.**
+   Measured in the Catch2 harness during `vehmove()`: `terrain_bodies_.size() == 0`
+   and `bashable_tile_bodies_.size() == 0`, i.e. the physics world contains **no
+   terrain colliders at all**, so `b2World_GetContactEvents().beginCount` is always
+   0 and no vehicle-terrain contact can happen. Terrain bodies are built only from
+   `map::on_submap_loaded` (`src/map.cpp:378`, gated on
+   `g && p.z() == g->u.bub_pos().z()`), and `build_test_map()` mutates
+   already-resident submaps without firing that notification.
+
+   Consequences:
+   - `[vehicle][box2d]`'s 38 passing assertions are raw-Box2D unit tests against a
+     throwaway world; **nothing** currently integration-tests VT contact.
+   - Runtime terrain changes are invisible to physics regardless: `ter_set()` and
+     `furn_set()` have no physics hook, so a wall smashed or built mid-game keeps
+     or lacks a collider until its submap reloads.
+   - **Possible live bug, worth checking first:** if the initial reality bubble
+     loads its submaps before `g->u` has a position, the `p.z() == player z` gate
+     fails and a real game also starts with no terrain colliders.
+
+   Fix order: give test maps terrain bodies (an explicit
+   `phys_world->on_submap_loaded( m, sm )` in the fixture is enough to start),
+   assert a non-zero contact count, hook `ter_set`/`furn_set` for runtime changes,
+   *then* do the bash routing below. `tests/vehicle_test.cpp`'s
+   `box2d_authority_vehicle_bashes_terrain` case is the acceptance criterion,
+   tagged `[!shouldfail]` until it works.
+
+   Design notes from an attempt that was written and reverted as unverifiable:
+   a shared `make_tile_body()` in `terrain_body.cpp` should serve both the submap
+   build and any per-tile refresh; `classify_tile()` tests impassability first so
+   walls are `solid` and only `bashable` bodies currently carry user data, leaving
+   walls anonymous to contact dispatch — tag every terrain body; `on_tile_bashed()`
+   erases from `bashable_tile_bodies_`/`bashable_tiles_` but **not**
+   `terrain_bodies_`, which is a latent double-free once anything recreates a tile
+   body; and a per-tile refresh must compare body presence (or class) rather than
+   rebuilding unconditionally, or the fresh body emits a new begin-touch event and
+   re-bashes up to 240 times a turn.
+
+1. **Route collisions by reusing `part_collision()`, not by inventing a force model.**
+
+   **Prerequisite now satisfied.** The blocker was that no contact could occur at all:
+   `build_test_map()` mutates already-resident submaps and never fires the submap-loaded
+   notification, so the world held no terrain bodies and
+   `b2World_GetContactEvents().beginCount` was always 0. Building colliders explicitly in
+   `tests/vehicle_test.cpp`'s `box2d_authority_vehicle_bashes_terrain` fixes that —
+   measured `begin=48 hit=6` on the first batch, 42 batches over the run, against 176,399
+   terrain bodies. The spec now fails on its final assertion only, the genuine gap.
+
+   **Preferred approach — reuse, don't reinvent.** `vehicle::part_collision()` is public
+   (`src/vehicle.h`, options struct) and already implements the *balanced* force
+   derivation plus creature damage, terrain bashing, `throw_from_seat` and sound. The
+   readback tile-walk in `map::vehmove()` already advances one tile at a time, exactly the
+   granularity `part_collision()` expects, so calling it per step from the walk reuses all
+   of it.
+
+   Deriving a bash force from Box2D contact impulses instead means inventing a balance
+   model — the thing this document already warns against, and something no test could
+   validate beyond "terrain changed".
+
+   Notes for whoever implements it:
+   - Mirror `map::move_vehicle()`'s per-part collision detection rather than inventing a
+     new traversal; it already handles the multi-part case.
+   - `dispatch_contact_events()` then has a much smaller job: sound, and any purely
+     physical response with no tile-step equivalent. It is not the place for bash force.
+   - Its current comment claims hit events are unreliable for dynamic-static pairs.
+     Measured otherwise (`hit=6` above), so re-check that before relying on either kind.
+   - Creature bodies are sensors (`isSensor = true`, `enableContactEvents = false`) and
+     produce no contact events at all, so creature collision must come from
+     `part_collision()` regardless.
+
+2. **Diagnose ramp and rails where they actually live** — `src/grab.cpp` for the pushed-cart
+   ramp cases, and the direct-`displace_vehicle` warm-up for `vehicle_rails_test.cpp:184`.
+   Not the readback.
+3. **Restore vehicle-vehicle collision** — either re-reach `solve_vv_cluster()` from the
+   readback path, or give vehicles a non-negative `groupIndex` plus a rule that stops
+   parked neighbours shoving each other, then delete the transient solver.
+4. **Calibrate fuel economy** and re-enable the two efficiency `CHECK`s.
+5. **Fix cross-test leakage** — `"vehicle gun recoil*"` and `grabbed_shopping_cart_*` pass
+   in isolation but fail in the full `[vehicle]` run. Addendum item 3 nominates the
+   per-binary `PhysicsWorld` as the suspect. Partially checked: instrumenting
+   `vehicle_bodies_.size()` on every change across the whole `[vehicle]` suite showed it
+   only ever taking the values **0 and 1** — so there is no *accumulation* of vehicle
+   bodies, and the "orphaned bodies pile up and degrade broad-phase to O(n^2)" shape of
+   the old creature-body bug is not what is happening here.
+
+   That does **not** clear the registry: a single stale key left behind after a vehicle is
+   freed keeps the size at 1 while still being a use-after-free in `substeps_for_turn()`
+   and `sync_bodies_from_game()`, both of which dereference every key.
+
+   **Fixed this session** (see git log): the `pos.z() == player z` guard that skipped the
+   sweep entirely for other z-levels; the sweep destroying bodies without clearing
+   `box2d_position_authority`, which stranded vehicles with authority and no body; and
+   `simulated -> lazy_border` destroying the bodies of vehicles that were still alive.
+   The hook now takes a residency flag, revokes authority while resident (keeping the
+   body), destroys only on genuine removal, and re-grants on return — with the
+   revoke/re-grant contract covered by a flip-tested case in `tests/vehicle_test.cpp`.
+
+   **Still open:** per `src/submap_load_manager.h:31-32`, `lazy_border -> evicted` never
+   fires `on_submap_unloaded` at all, so the sweep does not run at the moment a vehicle is
+   genuinely freed. Dangling keys on true eviction therefore remain possible, and that is
+   now the most likely remaining registry hazard. The header's own prescription is a
+   residency cache built on `mapbuffer::lookup_submap_in_memory()`, or hooking the real
+   free site in mapbuffer eviction. Confirm with a validity check (assert every key is a
+   live, map-known vehicle) or ASAN before rewriting the listener contract — and note the
+   leakage symptom may not be this at all, since size never grew.
+6. Only then Phase 12 cleanup (with 12-A rewritten per Correction 1), then Step 6, then
+   Phase 11.
+
+### Stale line references
+
+`map.cpp` has since been decomposed; the vehicle code cited throughout this document as
+`map.cpp:NNN` now lives in `src/map_vehicle.cpp` (`vehmove`, `vehproceed`,
+`move_vehicle`, `vehicle_vehicle_collision`, `displace_vehicle`). Re-grep before editing.
 
 ### 0. Playtest Phase 10 Step 5 first  *(prerequisite for everything below)*
 
@@ -147,18 +609,31 @@ Replace tile-traversal LOS and hit resolution with `b2World_CastRayClosest()` in
 Three constraints discovered while fixing `plans/mouse-interactivity-followup-bugs.md`. All three
 affect Phase 10 Step 6 and Phase 12; read before resuming either.
 
-### 1. Box2D is NOT the speed authority for ordinary driving
+### 1. ~~Box2D is NOT the speed authority for ordinary driving~~ — SUPERSEDED 2026-07-29
 
-`map::vehmove()` must step the world exactly **once** per turn (`step(1/60, 4)`), not sixty times.
-A "60× cadence" change was attempted on the reasoning that one call under-steps a 1-second game turn.
-That reasoning does not hold here: `veh.velocity` is re-applied to the body every turn and the
-readback then snaps the tile anchor to the body, so integrating a full second re-derives displacement
-on top of the game's own velocity model. Measured effect was vehicles travelling **2.2–2.3× further
-than fuel-efficiency balance permits** (257,835 tiles against a 111,404 upper bound in
-`vehicle_efficiency_test`). Sub-tile smoothness comes from the 4 sub-steps, not more full steps.
+**This section's conclusion was wrong and its fix has been reverted. See "Correction 3"
+near the top of this document.** Kept here only so the reasoning error is on record.
 
-If Phase 10 Step 6 ever makes Box2D the true velocity authority, this inverts — but until then, one
-step per turn is correct and `vehicle_efficiency_test` is the guard rail that catches violations.
+The original claim was that `map::vehmove()` must step exactly **once** by `1/60` s, not
+sixty times, because `veh.velocity` is re-applied to the body every turn and integrating
+a full second would "re-derive displacement on top of the game's own velocity model",
+doubling speed. It cited vehicles travelling **2.2–2.3x further than fuel-efficiency
+balance permits** (257,835 tiles vs a 111,404 upper bound) and named
+`vehicle_efficiency_test` as the guard rail.
+
+What was actually happening:
+
+- One `1/60` s step per 1-second turn integrated **1/60th** of the turn, so vehicles moved
+  ~56x too slowly: 0.0932 tiles/turn and 2 tiles in 20 turns at 10 m/s, vs 111.85 expected.
+  That is the direct cause of the ramp / rails / recoil movement failures.
+- The `2.2-2.3x` overshoot seen when stepping a full second was **not** double-derived
+  displacement. `vehicle_efficiency_test` teleports the vehicle back to its start every
+  turn without resyncing `physics_pos`, so its accumulator measured a
+  reset-vs-stale-`physics_pos` artifact, which scaled with however far physics had drifted.
+  It was never a valid speed guard rail.
+
+Both defects are fixed: `step_turn( 1.0f )` integrates a real turn with tunneling-safe
+sub-steps, and `on_vehicle_moved()` reseats `physics_pos` on external teleports.
 
 ### 2. Continuous integration can carry a body outside the loaded map
 
@@ -1119,3 +1594,50 @@ Drive at ~10 mph into bear/moose 20 times (horizontal). Drive off a z-level onto
 **Transitional fields** (`angular_velocity_rads`, and any spin accumulator): exist only between Phase 4 and Phase 10. Must NOT be serialized before Phase 9. Removed in Phase 12.
 
 **No CMakePresets.json preset for BOX2D**: `-DBOX2D=ON` must always be passed explicitly on the cmake configure line. This is intentional (Box2D is an opt-in experimental build).
+
+## Session findings: what the failing vehicle tests actually mean
+
+Measured by toggling `box2d_position_authority` inside a single binary, so build
+configuration is never a variable.
+
+| Suite | Status | Player-facing? |
+|---|---|---|
+| `vehicle_rails_test` | **fixed** — 0/5 cases -> 5/5 (287 -> 4,284 assertions) | was: trains derail and skid |
+| `vehicle_ramp_test` | still 83 assertions failing | **no** — sets `box2d_position_authority = false` at lines 109/159, so it exercises the legacy tile-step path. Ramps verified working under authority by `box2d_authority_vehicle_climbs_ramp` |
+| `vehicle_efficiency_test` | 59 -> fewer, gap remains | **yes** — vehicles travel 7-27% less per unit fuel |
+| `ranged_vehicle_recoil_test` | 2 assertions | **no** — order-dependent |
+
+### Rails: root cause
+
+`vehicle_movement::process_movement_on_rails()` is called at `vehicle_move.cpp:1606`,
+but the authority early-return is at `1599`. A rail vehicle under authority therefore
+never had its heading corrected to the track: it turned to whatever the driver asked,
+derailed, and then skidded, because `is_on_rails()` going false stops the skid guard
+at `1574` from suppressing it. Rail motion is a *kinematic constraint*, which a free
+rigid-body integrator cannot express, so `on_vehicle_added()` now denies authority to
+`can_use_rails()` vehicles. The body is still built, so collisions still work.
+
+### Efficiency: what is ruled out
+
+All measured directly with authority toggled in one binary:
+
+- **fuel burn** — mean `load` 599.2 either way, 800 `consume_fuel` calls each
+- **drag** — 1062.13 identical, skid factor 1.000 both
+- **velocity** — mean and peak identical
+- **acceleration lag** from `step_turn()` (line 448) preceding `act_on_map()` (line
+  556) — `act_on_map` never changes velocity, in 0 of 800 turns
+- **sub-tile remainder** — real, and fixed (`on_vehicle_moved` now carries the
+  fraction across whole-tile displacements), but worth only ~4 points of the gap
+
+The tile-step path hits the expected 12.499 tiles/turn almost exactly (12.48
+measured); the authority path reaches 11.59. Roughly 0.9 tiles/turn is still
+unaccounted for and is the next thing to chase.
+
+### Not a test failure at all: colliders survived world teardown
+
+`PhysicsWorld` is built once in the `map` constructor, `map` is a `pimpl<map>` built
+once in `game::game()`, and `terrain_bodies_` is keyed by `tripoint_abs_sm`. Nothing
+freed it but the destructor, which never runs mid-session, so `MAPBUFFER.clear()` on
+returning to the menu left world A's colliders registered at coordinates holding
+world B's terrain. Measured `terrain_body_count() == 1` after teardown. Fixed via
+`clear_world_bodies()` at the `mapbuffer::clear()` choke point.
