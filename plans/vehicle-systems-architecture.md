@@ -358,7 +358,31 @@ correlational. A competing explanation — forward-slot values accidentally take
 reverse-test slot — was considered and looks weak (only 1 of `car_test`'s 4 values is
 close to its reverse counterpart) but is not ruled out.
 
-**Remediation, ready to apply.** Regenerate on a `BOX2D=OFF` build:
+**FIXED.** The constants were regenerated with this file's own
+`make_vehicle_efficiency_case` generator against a `BOX2D=OFF` build and applied verbatim
+(vehicle order and count checked against the existing 18 forward + 18 reverse blocks).
+
+Result on `BOX2D=OFF`: `vehicle_efficiency` passes all **357,445** assertions, on seeds 1,
+7 and 13; full `[vehicle]~[.]` went from **172 to 28** failed assertions and 10 to 9 failed
+cases. `BOX2D=ON` still passes via the WARN-gated path.
+
+Scope of the safety argument, stated plainly: upstream covers only **two** vehicles
+(`car_test`, `electric_car_test`). For those, regenerated values land **+3% to +6%** of
+`origin/main` across all eight target slots — so shipping fuel economy genuinely agrees
+with upstream and the stored constants were the anomaly. The other **16** vehicles were
+added on this branch and have no upstream counterpart, so regeneration is the only
+available reference for them; nothing contradicts the new values, but they are not
+cross-validated the way the first two are.
+
+Origin of the bad values is now well supported rather than merely plausible: the committed
+numbers track the `BOX2D=ON` build (beetle's stored 98,240 against 112,280 measured there)
+not `BOX2D=OFF` (440,471), and they were set in `a38a56a6a3`, which postdates both Box2D
+position authority (2026-07-12) and the 1/60 s cadence bug (2026-07-11). The
+reset-vs-stale-`physics_pos` artifact that build suffered under-reports distance, which is
+the mechanism. Still an inference, not a proof — the commit message says nothing about
+rebalancing.
+
+To regenerate again after any deliberate vehicle-physics change:
 
 ```sh
 cmake --preset osx-arm-slim -DBOX2D=OFF -B out/build/nobox2d
@@ -366,50 +390,6 @@ cmake --build out/build/nobox2d --target cata_test-tiles
 out/build/nobox2d/tests/cata_test-tiles "make_vehicle_efficiency_case" --rng-seed 1 --user-dir=/tmp/gen/
 ```
 
-Not applied here, deliberately: it is a balance-visible data change that deserves its own
-commit, and the forward/reverse slot split needs checking against the call sites before
-36 generated lines are pasted in. Output captured below so it is not lost. **Until someone
-applies it, `vehicle_efficiency` is red on the default build.**
-
-```cpp
-    test_vehicle( "beetle_test", 713837, 440400, 386400, 111300, 91930 );
-    test_vehicle( "car_test", 1020629, 636700, 427500, 59860, 30240 );
-    test_vehicle( "car_sports_test", 1052382, 354400, 287900, 39820, 27380 );
-    test_vehicle( "electric_car_test", 774098, 196900, 154300, 15430, 11860 );
-    test_vehicle( "suv_test", 1220297, 1209000, 695900, 93430, 37220 );
-    test_vehicle( "motorcycle_test", 163085, 120200, 100800, 63320, 51130 );
-    test_vehicle( "quad_bike_test", 264465, 116000, 116000, 46770, 46770 );
-    test_vehicle( "scooter_test", 57587, 233500, 233500, 167900, 167900 );
-    test_vehicle( "superbike_test", 244085, 109700, 64830, 41780, 23930 );
-    test_vehicle( "ambulance_test", 1722821, 622500, 538300, 83190, 69760 );
-    test_vehicle( "fire_engine_test", 2125865, 1974000, 1944000, 419200, 415300 );
-    test_vehicle( "fire_truck_test", 6188273, 415000, 88290, 19750, 4700 );
-    test_vehicle( "truck_swat_test", 5736551, 679000, 149800, 31040, 7604 );
-    test_vehicle( "tractor_plow_test", 725658, 680700, 680700, 132400, 132400 );
-    test_vehicle( "apc_test", 5763771, 2091000, 2091000, 110600, 110600 );
-    test_vehicle( "humvee_test", 5346601, 762400, 572700, 26510, 18280 );
-    test_vehicle( "road_roller_test", 8648054, 587200, 155700, 22760, 6925 );
-    test_vehicle( "golf_cart_test", 319630, 50040, 47650, 22920, 12860 );
-
-    test_vehicle( "beetle_test", 713837, 58720, 58720, 45980, 44560, 0, 0, true );
-    test_vehicle( "car_test", 1020629, 76180, 76310, 48250, 29030, 0, 0, true );
-    test_vehicle( "car_sports_test", 1052382, 355000, 288400, 38800, 24870, 0, 0, true );
-    test_vehicle( "electric_car_test", 774098, 197600, 154800, 15460, 11890, 0, 0, true );
-    test_vehicle( "suv_test", 1220297, 114900, 112400, 70400, 35200, 0, 0, true );
-    test_vehicle( "motorcycle_test", 163085, 20070, 19030, 15490, 14890, 0, 0, true );
-    test_vehicle( "quad_bike_test", 264465, 19650, 19650, 15440, 15440, 0, 0, true );
-    test_vehicle( "scooter_test", 57587, 62440, 62440, 47990, 47990, 0, 0, true );
-    test_vehicle( "superbike_test", 244085, 18270, 10550, 13070, 8497, 0, 0, true );
-    test_vehicle( "ambulance_test", 1722821, 58600, 58030, 42480, 40370, 0, 0, true );
-    test_vehicle( "fire_engine_test", 2125865, 255600, 255400, 191700, 191700, 0, 0, true );
-    test_vehicle( "fire_truck_test", 6188273, 58340, 58830, 19630, 4486, 0, 0, true );
-    test_vehicle( "truck_swat_test", 5736551, 128900, 130100, 29440, 7668, 0, 0, true );
-    test_vehicle( "tractor_plow_test", 725658, 72240, 72240, 53610, 53610, 0, 0, true );
-    test_vehicle( "apc_test", 5763771, 417900, 417900, 107100, 107100, 0, 0, true );
-    test_vehicle( "humvee_test", 5346601, 89940, 89770, 25780, 18120, 0, 0, true );
-    test_vehicle( "road_roller_test", 8648054, 96790, 97500, 22800, 6683, 0, 0, true );
-    test_vehicle( "golf_cart_test", 319630, 50120, 18830, 22970, 9087, 0, 0, true );
-```
 
 ## Verification commands used this session
 
