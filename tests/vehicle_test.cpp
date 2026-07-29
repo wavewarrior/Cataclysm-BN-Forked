@@ -676,10 +676,13 @@ TEST_CASE( "box2d_terrain_colliders_build_and_rebuild", "[vehicle][box2d]" )
 
     build_test_map( ter_id( "t_pavement" ) );
 
-    // The Catch2 harness mutates already-resident submaps, so it never fires the
-    // submap-loaded notification and the world starts with no colliders at all.
-    // That is itself a known gap; here it just gives a clean baseline.
-    REQUIRE( pw->terrain_body_count() == 0 );
+    // Measure against whatever is already registered rather than asserting an
+    // empty world.  PhysicsWorld is constructed once per binary and never reset
+    // between TEST_CASEs, so any earlier case that called on_submap_loaded (the
+    // authority-lifecycle case above does) leaves colliders behind.  An
+    // == 0 baseline here passed alone and failed in-suite — the same
+    // order-dependence this file documents elsewhere.
+    const auto baseline = pw->terrain_body_count();
 
     const auto wall_z0 = tripoint_bub_ms( 60, 60, 0 );
     here.ter_set( wall_z0, ter_id( "t_wall_wood" ) );
@@ -689,7 +692,7 @@ TEST_CASE( "box2d_terrain_colliders_build_and_rebuild", "[vehicle][box2d]" )
 
     pw->on_submap_loaded( here, sm_z0 );
     const auto after_first = pw->terrain_body_count();
-    CHECK( after_first > 0 );
+    CHECK( after_first > baseline );
 
     // Idempotent: a repeat call must replace, not stack.  Asserted against the
     // Box2D world's own body count, NOT the registry: terrain_bodies_[key] is an
@@ -708,9 +711,9 @@ TEST_CASE( "box2d_terrain_colliders_build_and_rebuild", "[vehicle][box2d]" )
         REQUIRE_FALSE( here.passable( wall_z1 ) );
 
         pw->on_zlevel_changed( here, 0, 1 );
-        // z=0's bodies are gone and z=1 now has its own, so the count stays
-        // non-zero.  A zero here would mean a z-change leaves the player on a
-        // level with no collision at all.
+        // z=0's bodies are gone and z=1 now has its own, so colliders still exist.
+        // Zero would mean a z-change leaves the player on a level with no
+        // collision at all.
         CHECK( pw->terrain_body_count() > 0 );
     }
 }
