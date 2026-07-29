@@ -594,4 +594,63 @@ TEST_CASE( "box2d_position_authority_survives_resident_submap_unload", "[vehicle
         CHECK_FALSE( veh->box2d_position_authority );
     }
 }
+
+// PENDING SPEC — tagged [!shouldfail]: Catch2 treats the failure as the
+// expected result, so the suite stays green.  When the routing below is
+// implemented this case starts *passing*, which Catch2 then reports as a failure
+// ("expected to fail") — that is the prompt to delete this tag.
+//
+// A vehicle under Box2D position authority skips part_collision() entirely
+// (vehicle::act_on_map returns early at src/vehicle_move.cpp:~1586), so terrain
+// bashing must be routed from Box2D contact events instead.  It is not:
+// PhysicsWorld::dispatch_contact_events() is a stub.  This case is the executable
+// acceptance criterion for that work.
+//
+// It cannot yet fail for the *intended* reason, because a prior gap swallows it:
+// measured during vehmove() here, the physics world holds ZERO terrain bodies
+// (terrain_bodies_.size() == 0, bashable_tile_bodies_.size() == 0), so
+// b2World_GetContactEvents().beginCount is always 0 and no vehicle-terrain contact
+// can occur at all.  Terrain bodies are only built from map::on_submap_loaded
+// (src/map.cpp:378, itself gated on `g && p.z() == g->u.bub_pos().z()`), and
+// build_test_map() mutates already-resident submaps without triggering that
+// notification.
+//
+// To make this test meaningful, after placing the wall call
+//   phys_world->on_submap_loaded( here, project_to<coords::sm>( here.bub_to_abs( pos ) ) )
+// for the submaps under test, and assert a non-zero contact count before asserting
+// the bash.  Then implement the routing and drop the [!shouldfail] tag.
+//
+// Worth checking separately, because it may be a live bug rather than a harness
+// artifact: whether the initial reality bubble also loads its submaps before
+// g->u has a position, which would leave real games with no terrain colliders too.
+//
+// See plans/box2d-vehicle-physics-implementation.md.
+TEST_CASE( "box2d_authority_vehicle_bashes_terrain", "[!shouldfail][vehicle][box2d]" )
+{
+    clear_all_state();
+    auto &here = get_map();
+    build_test_map( ter_id( "t_pavement" ) );
+
+    const auto obstacle = tripoint_bub_ms( 72, 60, 0 );
+    here.ter_set( obstacle, ter_id( "t_wall_wood" ) );
+    here.build_map_cache( 0, true );
+    REQUIRE( here.is_bashable_ter_furn( obstacle, false ) );
+    const auto before = here.ter( obstacle );
+
+    auto *veh = here.add_vehicle( vproto_id( "car_test" ), tripoint_bub_ms( 60, 60, 0 ),
+                                  0_degrees, 100, 0 );
+    REQUIRE( veh != nullptr );
+    REQUIRE( veh->box2d_position_authority );
+
+    veh->tags.insert( "IN_CONTROL_OVERRIDE" );
+    veh->engine_on = true;
+    veh->velocity = 2000;          // 20 m/s, well past any bash threshold
+    veh->cruise_velocity = 2000;
+
+    for( int turn = 0; turn < 5 && here.ter( obstacle ) == before; ++turn ) {
+        here.vehmove();
+    }
+
+    CHECK( here.ter( obstacle ) != before );
+}
 #endif // BOX2D_ENABLED
