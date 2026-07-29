@@ -3,6 +3,7 @@
 #define CATA_SRC_LIGHTING_RMLUI_LAYER_H
 
 #include <string>
+#include <vector>
 
 // RmlUi UI layer — sibling of imgui_layer, bolted beside the SDL_GPU renderer.
 // Own RenderInterface (its own pipeline + premult blend), own input handling,
@@ -106,6 +107,24 @@ Rml::ElementDocument* open_document(const std::string& rml_path, bool passive = 
 // Hide, unload and untrack a document opened with open_document(). Safe with
 // nullptr or an already-closed document.
 void close_document(Rml::ElementDocument* doc);
+
+// Temporarily hide every open document for this guard's lifetime, then re-show
+// exactly the ones it hid. Context::Render() draws every SHOWN document on top
+// of whatever curses painted this frame, so a curses-rendered modal opened while
+// a document is live is invisible — that is the debugmsg error prompt during data
+// loading, drowned by the still-open gui/mainmenu.rml + gui/loading.rml (the
+// player can only blind-press space/i). Documents closed while hidden stay
+// closed. No-op when !ready() or nothing is open.
+class scoped_documents_hidden {
+public:
+    scoped_documents_hidden();
+    ~scoped_documents_hidden();
+    scoped_documents_hidden(const scoped_documents_hidden&) = delete;
+    auto operator=(const scoped_documents_hidden&) -> scoped_documents_hidden& = delete;
+
+private:
+    std::vector<Rml::ElementDocument*> hidden_;
+};
 
 // Translate one SDL event into RmlUi input. Returns true if RmlUi consumed it
 // (so the game should ignore it). Mouse only — keyboard falls through to the

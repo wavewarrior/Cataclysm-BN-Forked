@@ -1017,8 +1017,13 @@ bool main_menu::new_character_tab()
 
     if( world == nullptr ) { return false; }
     world_generator->set_active_world( world );
-    // Join pre-warm thread before any DDL work (load_world_modfiles)
+    // Join pre-warm thread before any DDL work (load_world_modfiles), then flush
+    // the prompts it queued: a worker thread cannot drive the UI, so every
+    // debugmsg it raised is sitting in g_worker_thread_prompts waiting for the
+    // main thread.  Every other join_prewarm() caller drains here; this one
+    // didn't, so a mod-heavy load silently swallowed thousands of them.
     init::join_prewarm();
+    drain_worker_thread_debugmsgs();
     try {
         g->setup();
     } catch( const std::exception& err ) {

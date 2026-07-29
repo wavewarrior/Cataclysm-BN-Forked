@@ -1,0 +1,19 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="error_prompt.rcss"/>
+</head>
+<body data-model="error_prompt">
+    <!-- debugmsg error report (debug_error_prompt). Opened LAST, so it stacks on top
+         of whatever document the error interrupted — the whole point: the curses
+         version painted underneath any open document and could only be dismissed
+         blind. The model is filled once before the document loads and never changes;
+         the keyboard (raw inp_mngr events, no input_context) owns space/i/c and
+         scrolls #err-report from C++, while the mouse wheel scrolls it natively. -->
+    <div class="panel err-panel">
+        <div class="err-title" data-rml="title_rml"></div>
+        <div id="err-report" class="err-report" data-rml="report_rml"></div>
+        <div class="err-hints" data-rml="hints_rml"></div>
+    </div>
+</body>
+</rml>

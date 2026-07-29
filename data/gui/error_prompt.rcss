@@ -1,0 +1,54 @@
+/* Layout for the debugmsg error report (debug_error_prompt). Palette/border/.panel
+   come from theme.rcss (linked first). A centered box, red-framed to read as an
+   error: title, the scrolling report, then the key hints. The report keeps its own
+   scroll pane (overflow-y) — unlike the curses version, a report taller than the
+   screen is no longer truncated. Monospace + pre-wrap preserve the aligned
+   DEBUG/FUNCTION/FILE/LINE block. Lengths in dp. */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.err-panel {
+    width: 80%;
+    max-height: 85%;
+    display: flex;
+    flex-direction: column;
+    /* Do NOT narrow .panel's 20dp border: that band is where rmlui_layer draws the
+       runic frame glyph strips (FRAME_INSET), and a 1dp border pulls the content
+       under them — the title and the first character of every hint line get
+       overpainted. The error reads red through its title + rules instead. */
+}
+
+.err-title {
+    flex: 0 0 auto;
+    text-align: center;
+    color: {{red}};
+    padding-bottom: 4dp;
+    margin-bottom: 4dp;
+    border-bottom: 1dp {{red}};
+}
+
+.err-report {
+    /* basis auto + shrink-only: a short report keeps the panel compact, a long one
+       shrinks against the panel's max-height and scrolls inside it. `flex: 1`
+       (basis 0) collapses to nothing here — the panel's height is content-derived,
+       so there is no free space to grow into. */
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    white-space: pre-wrap;
+}
+
+.err-hints {
+    flex: 0 0 auto;
+    padding-top: 4dp;
+    margin-top: 4dp;
+    border-top: 1dp {{bg4}};
+    color: {{fg4}};
+    white-space: pre-wrap;
+}

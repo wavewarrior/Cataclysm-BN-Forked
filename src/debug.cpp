@@ -12,17 +12,23 @@
 #include "get_version.h"
 #include "input.h"
 #include "language.h"
+#include "lighting/rmlui_layer.h"
 #include "mod_manager.h"
 #include "options.h"
 #include "output.h"
 #include "path_info.h"
 #include "point.h"
+#include "rml_screen.h"
+#include "rml_util.h"
 #include "string_utils.h"
 #include "thread_pool.h"
 #include "translations.h"
 #include "type_id.h"
 #include "ui_manager.h"
+
 #include "worldfactory.h"
+
+#include <RmlUi/Core.h>
 
 #include <algorithm>
 #include <atomic>
@@ -216,7 +222,22 @@ namespace
 
 std::set<std::string> ignored_messages;
 
+// RmlUi model for the debugmsg error report. Filled once before the document
+// loads and never dirtied: the report text cannot change while the prompt is up,
+// and scrolling is an element property, not model data.
+struct err_session {
+    Rml::String title_rml;
+    Rml::String report_rml;
+    Rml::String hints_rml;
+};
+
 } // namespace
+
+bool &error_prompt_rmlui_enabled()
+{
+    static bool enabled = true;
+    return enabled;
+}
 
 // debugmsg prompts that could not be shown immediately are buffered and replayed when
 // catacurses::stdscr is available need to use method here to ensure `buffered_prompts` vector is
@@ -240,6 +261,11 @@ static void debug_error_prompt(
     msg_key += line;
 
     if( !force && ignored_messages.contains( msg_key ) ) { return; }
+
+    // --dont-debugmsg: the loop below would run zero iterations, so everything this
+    // function does — formatting the report, the debug_message_ui adaptor, opening
+    // the RmlUi document — is pure cost. A mod-heavy load raises thousands of these.
+    if( dont_debugmsg ) { return; }
 
     std::string formatted_report = [&]() {
         const char *repetition_string = _( "Excessive error repetition detected.  Please file a bug "
@@ -271,6 +297,14 @@ static void debug_error_prompt(
     const auto init_window = []( ui_adaptor & ui ) { ui.position_from_window( catacurses::stdscr ); };
     init_window( ui );
     ui.on_screen_resize( init_window );
+    const std::string hint_continue =
+        _( "Press <color_white>space bar</color> to continue the game." );
+    const std::string hint_ignore =
+        _( "Press <color_white>I</color> (or <color_white>i</color>) to also ignore this particular "
+           "message in the future." );
+    const std::string hint_copy =
+        _( "Press <color_white>C</color> (or <color_white>c</color>) to copy this message to the "
+           "clipboard." );
     const std::string message = string_format(
                                     "\n\n"  // Looks nicer with some space
                                     " %s\n" // translated user string: error notification
@@ -288,12 +322,32 @@ static void debug_error_prompt(
 #if defined(BACKTRACE)
                                     backtrace_instructions,
 #endif
-                                    _( "Press <color_white>space bar</color> to continue the game." ),
-                                    _( "Press <color_white>I</color> (or <color_white>i</color>) to also ignore this particular "
-                                       "message in the future." ),
-                                    _( "Press <color_white>C</color> (or <color_white>c</color>) to copy this message to the "
-                                       "clipboard." ) );
+                                    hint_continue, hint_ignore, hint_copy );
+
+    // The RmlUi report carries the same three blocks the curses message folds
+    // together, but as separate model fields so the stylesheet can frame them (red
+    // title, scrolling report, muted hints). err_data MUST outlive err_rml: RmlUi
+    // holds raw pointers into the bound members until the model is removed.
+    err_session err_data;
+    err_data.title_rml = cata_text_to_rml( colorize(
+            _( "An error has occurred!  Written below is the error report:" ), c_light_red ) );
+    err_data.report_rml = cata_text_to_rml( colorize( formatted_report, c_light_red ) );
+    err_data.hints_rml = cata_text_to_rml( string_format(
+#if defined(BACKTRACE)
+            "%s\n"
+#endif
+            "%s\n%s\n%s\n%s",
+#if defined(BACKTRACE)
+            backtrace_instructions,
+#endif
+            hint_continue, hint_ignore, hint_copy,
+            _( "Press <color_white>arrow keys</color> or <color_white>page up</color>/"
+               "<color_white>page down</color> to scroll the report." ) ) );
+    rml_doc err_rml;
     ui.on_redraw( [&]( const ui_adaptor & ) {
+        // Nothing to do on the RmlUi path: the document paints itself every frame
+        // from the layer's composite pass, and its model is immutable here.
+        if( err_rml ) { return; }
         catacurses::erase();
         const auto lines = foldstring( message, getmaxx( catacurses::stdscr ) );
         for( int y = 0; y < static_cast<int>( lines.size() ) && y < getmaxy( catacurses::stdscr );
@@ -304,12 +358,62 @@ static void debug_error_prompt(
         wnoutrefresh( catacurses::stdscr );
     } );
 
-    for( bool stop = false; !stop && !dont_debugmsg; ) {
+    // Opened AFTER every other document, so it stacks on top of the screen the
+    // error interrupted. `err_ctxt` exists only to satisfy rml_doc::open (it sets
+    // the 16ms hover tick on it); input stays on raw inp_mngr events below, so no
+    // action is registered and handle_input is never called — the keybinding layer
+    // is itself a debugmsg source and must not be re-entered from here.
+    input_context err_ctxt( "DEBUG_MSG" );
+    err_rml.open(
+        error_prompt_rmlui_enabled(), "error_prompt", err_ctxt,
+    [&]( Rml::DataModelConstructor & c ) {
+        c.Bind( "title_rml", &err_data.title_rml );
+        c.Bind( "report_rml", &err_data.report_rml );
+        c.Bind( "hints_rml", &err_data.hints_rml );
+    } );
+
+    // Curses paints UNDER every shown RmlUi document, so the fallback report is
+    // invisible while the interrupted screen's document is still up (mainmenu.rml
+    // stays open for the whole world load, gui/loading.rml above it) — that is how
+    // this presented: a report the player could only blind-press space/i past.
+    // Hide them for the duration; the guard re-shows exactly what it hid. Not
+    // needed on the RmlUi path, which wins the z-order by opening last.
+    std::optional<rmlui_layer::scoped_documents_hidden> rml_hidden;
+    if( !err_rml ) { rml_hidden.emplace(); }
+
+    // Scroll the report pane by a fraction of its visible height. Only the RmlUi
+    // path scrolls; the curses fallback truncates at the screen edge as before.
+    const auto scroll_report = [&]( float pages ) {
+        if( !err_rml ) { return; }
+        Rml::Element *report = err_rml.document()->GetElementById( "err-report" );
+        if( report == nullptr ) { return; }
+        const float view = report->GetClientHeight();
+        const float max_top = std::max( 0.0f, report->GetScrollHeight() - view );
+        report->SetScrollTop( std::clamp( report->GetScrollTop() + pages * view, 0.0f, max_top ) );
+    };
+    // One "line" is a fixed slice of the viewport: the document owns its own font
+    // metrics, and this keeps arrow-key paging honest at any font size.
+    constexpr float scroll_line = 0.15f;
+    constexpr float scroll_page = 0.9f;
+
+    for( bool stop = false; !stop; ) {
         ui_manager::redraw();
         switch( inp_mngr.get_input_event().get_first_input() ) {
             case 'c':
             case 'C':
                 SDL_SetClipboardText( formatted_report.c_str() );
+                break;
+            case KEY_UP:
+                scroll_report( -scroll_line );
+                break;
+            case KEY_DOWN:
+                scroll_report( scroll_line );
+                break;
+            case KEY_PPAGE:
+                scroll_report( -scroll_page );
+                break;
+            case KEY_NPAGE:
+                scroll_report( scroll_page );
                 break;
             case 'i':
             case 'I':
@@ -338,17 +442,26 @@ void replay_buffered_debugmsg_prompts()
 
 void drain_worker_thread_debugmsgs()
 {
-    if( !catacurses::stdscr ) { return; }
     std::vector<buffered_prompt_info> pending;
     {
         std::lock_guard<std::mutex> lock( g_worker_prompts_mutex );
         pending = std::move( g_worker_thread_prompts );
     }
-    for( const auto& prompt : pending ) {
-        debug_error_prompt(
-            prompt.filename.c_str(), prompt.line.c_str(), prompt.funcname.c_str(),
-            prompt.text.c_str(), prompt.force );
+    if( pending.empty() ) {
+        return;
     }
+    // Log-only, deliberately: realDebugmsg already wrote every one of these to the
+    // log before queueing it, so the queue exists purely to replay the modal prompt
+    // on the main thread.  Replaying it is wrong here on two counts.  A mod-heavy
+    // load queues THOUSANDS of JSON deprecation warnings from the prewarm thread,
+    // and debug_error_prompt is modal — so the player owed thousands of keypresses.
+    // Worse, curses draws that dialog UNDERNEATH any open RmlUi document, so the
+    // keypresses go to a dialog nobody can see: the game looks frozen on the main
+    // menu with dead input, which is exactly how this presented.  A background
+    // loader's report is not an interaction to acknowledge; the log is the record.
+    DebugLog( DL::Warn, DC::Main )
+            << "drained " << pending.size()
+            << " debugmsg(s) queued by background loading — see the ERROR lines above";
 }
 
 struct time_info {

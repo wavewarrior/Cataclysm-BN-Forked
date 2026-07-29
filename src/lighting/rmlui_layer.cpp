@@ -565,6 +565,25 @@ void close_document(Rml::ElementDocument* doc) {
     g_context->UnloadDocument(doc);
 }
 
+scoped_documents_hidden::scoped_documents_hidden() {
+    if (!g_ready) { return; }
+    for (Rml::ElementDocument* doc : g_open_docs) {
+        if (doc != nullptr && doc->IsVisible()) {
+            doc->Hide();
+            hidden_.push_back(doc);
+        }
+    }
+}
+
+scoped_documents_hidden::~scoped_documents_hidden() {
+    for (Rml::ElementDocument* doc : hidden_) {
+        // Skip anything closed while hidden — close_document() already unloaded it.
+        if (std::find(g_open_docs.begin(), g_open_docs.end(), doc) != g_open_docs.end()) {
+            doc->Show();
+        }
+    }
+}
+
 namespace {
 int mod_state() {
     const SDL_Keymod m = SDL_GetModState();

@@ -381,4 +381,12 @@ bool &string_editor_rmlui_enabled();
 // Default ON.
 bool &lua_console_rmlui_enabled();
 
+// debug_error_prompt() RmlUi path (the debugmsg error report — title + the
+// scrolling report block + key hints). Opened last so it stacks ON TOP of the
+// document the error interrupted, which the curses version could not do.
+// Default ON — but unlike every other screen the curses fallback here is NOT
+// just a toggle-off path: an error must stay readable when RmlUi itself is what
+// failed, so it also runs whenever the layer is not ready.
+bool &error_prompt_rmlui_enabled();
+
 #endif // CATA_SRC_RML_SCREEN_H
