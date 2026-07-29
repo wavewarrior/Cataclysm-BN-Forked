@@ -151,3 +151,70 @@ TEST_CASE( "vehicle_collision_hits_occupant_with_stale_in_vehicle_flag", "[vehic
 
     CHECK( ret.type == veh_coll_body );
 }
+
+#ifdef BOX2D_ENABLED
+#include "vehicle_part.h"
+#include "physics/physics_world.h"
+#include "physics/terrain_body.h"
+
+// Vehicle-vehicle collision under Box2D position authority.
+//
+// Box2D itself cannot deliver this: filter_bits.h gives every vehicle shape
+// groupIndex = vehicle_group (-1), and a shared negative groupIndex means those
+// shapes never collide, so no VV contact event is ever generated.  It reaches the
+// game only because the readback walk in map::vehmove() routes each tile step
+// through move_vehicle(), which calls vehicle_vehicle_collision().
+TEST_CASE( "box2d_authority_vehicle_hits_vehicle", "[vehicle][collision][box2d]" )
+{
+    clear_all_state();
+    clear_vehicles();
+    auto &here = get_map();
+    build_test_map( ter_id( "t_pavement" ) );
+
+    auto *mover = here.add_vehicle( vproto_id( "car_test" ), tripoint_bub_ms( 60, 60, 0 ),
+                                    0_degrees, 100, 0 );
+    REQUIRE( mover != nullptr );
+    REQUIRE( mover->box2d_position_authority );
+
+    mover->tags.insert( "IN_CONTROL_OVERRIDE" );
+    mover->engine_on = true;
+    mover->velocity = 2000;
+    mover->cruise_velocity = 2000;
+
+    // Park a target squarely in the mover's path, derived from its heading rather
+    // than a guessed tile.
+    const auto fv = mover->face_vec();
+    const auto start = mover->bub_ms_location();
+    const auto target_pos = tripoint_bub_ms(
+                                start.x() + static_cast<int>( std::lround( fv.x * 8 ) ),
+                                start.y() + static_cast<int>( std::lround( fv.y * 8 ) ), 0 );
+    auto *parked = here.add_vehicle( vproto_id( "car_test" ), target_pos, 0_degrees, 0, 0 );
+    REQUIRE( parked != nullptr );
+    REQUIRE( parked->velocity == 0 );
+
+    const int mover_hp_before = mover->part( 0 ).hp();
+    const int mover_vel_before = mover->velocity;
+
+    for( int turn = 0; turn < 8; ++turn ) {
+        here.vehmove();
+    }
+
+    // Assert specific collision consequences, not merely "something changed":
+    // a position difference alone would also be satisfied by the two vehicles
+    // driving straight through each other, which is the failure being tested.
+    //
+    //  - the struck vehicle must be shoved (gains velocity), and/or
+    //  - one of them must take part damage,
+    // and the striking vehicle must have lost speed.
+    const bool parked_shoved = parked->velocity != 0;
+    const bool damage_dealt = mover->part( 0 ).hp() < mover_hp_before;
+    const bool mover_slowed = mover->velocity < mover_vel_before;
+    CAPTURE( parked_shoved );
+    CAPTURE( damage_dealt );
+    CAPTURE( mover_slowed );
+    CAPTURE( mover->velocity );
+    CAPTURE( parked->velocity );
+    CHECK( ( parked_shoved || damage_dealt ) );
+    CHECK( mover_slowed );
+}
+#endif // BOX2D_ENABLED

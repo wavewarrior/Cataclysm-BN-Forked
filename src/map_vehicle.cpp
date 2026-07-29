@@ -653,6 +653,17 @@ void map::vehmove()
                     for( int walked = 0; walked < max_walk_tiles; ++walked ) {
                         const auto at = veh.bub_ms_location();
                         if( at.x() == px && at.y() == py ) { break; }
+                        // A collision on an earlier step can bring the vehicle to a
+                        // stop, and move_vehicle() rejects a horizontal move with no
+                        // velocity — emitting "tried to move horizontally with no
+                        // velocity", a debugmsg players see.  Physics still wants the
+                        // remaining tiles, but the game has decided the vehicle is
+                        // stopped, so end the walk and let the rewind below resync
+                        // physics_pos to where it actually came to rest.
+                        if( veh.velocity == 0 ) {
+                            blocked = true;
+                            break;
+                        }
                         const auto step = tripoint_rel_ms{
                             std::clamp( px - at.x(), -1, 1 ),
                             std::clamp( py - at.y(), -1, 1 ),
