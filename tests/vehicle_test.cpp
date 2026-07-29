@@ -762,3 +762,79 @@ TEST_CASE( "box2d_world_teardown_drops_all_terrain_colliders", "[vehicle][box2d]
     CHECK( pw->terrain_body_count() > 0 );
 }
 #endif // BOX2D_ENABLED
+
+#ifdef BOX2D_ENABLED
+// Ramp z-transition for a vehicle that KEEPS Box2D position authority.
+//
+// vehicle_ramp_test.cpp sets box2d_position_authority = false for every vehicle it
+// builds (lines 109 and 159), so its 83 failing assertions all exercise the legacy
+// tile-step path.  Under BOX2D=ON that is not the path players drive on: real
+// vehicles keep authority and move via the readback walk in map::vehmove(), which
+// steps move_vehicle() one tile at a time.  Nothing covered the ramp on that path.
+//
+// Terrain layout mirrors vehicle_ramp_test's `up` case: the west half (x < 60) sits
+// at z=1, the east half (x >= 62) at z=0, joined by ramp tiles at x=60/61.  The
+// vehicle starts east at z=0 heading west and must end up at z=1.
+TEST_CASE( "box2d_authority_vehicle_climbs_ramp", "[vehicle][box2d][ramp]" )
+{
+    clear_all_state();
+    clear_vehicles();
+    auto &here = get_map();
+
+    constexpr int transit_x = 60;
+    constexpr int highx = transit_x;      // 60
+    constexpr int lowx = transit_x + 1;   // 61
+
+    for( int y = 0; y < SEEY * MAPSIZE; y++ ) {
+        for( int x = 0; x < transit_x; x++ ) {
+            here.ter_set( tripoint_bub_ms( x, y, -1 ), ter_id( "t_rock" ) );
+            here.ter_set( tripoint_bub_ms( x, y, 0 ), ter_id( "t_rock" ) );
+            here.ter_set( tripoint_bub_ms( x, y, 1 ), ter_id( "t_pavement" ) );
+        }
+        here.ter_set( tripoint_bub_ms( lowx, y, 0 ), ter_id( "t_ramp_up_low" ) );
+        here.ter_set( tripoint_bub_ms( highx, y, 0 ), ter_id( "t_ramp_up_high" ) );
+        here.ter_set( tripoint_bub_ms( lowx, y, 1 ), ter_id( "t_ramp_down_low" ) );
+        here.ter_set( tripoint_bub_ms( highx, y, 1 ), ter_id( "t_ramp_down_high" ) );
+        for( int x = transit_x + 2; x < SEEX * MAPSIZE; x++ ) {
+            here.ter_set( tripoint_bub_ms( x, y, 1 ), ter_id( "t_open_air" ) );
+            here.ter_set( tripoint_bub_ms( x, y, 0 ), ter_id( "t_pavement" ) );
+            here.ter_set( tripoint_bub_ms( x, y, -1 ), ter_id( "t_rock" ) );
+        }
+    }
+    for( const auto z : std::array{ -1, 0, 1 } ) {
+        here.invalidate_map_cache( z );
+        here.build_map_cache( z, true );
+    }
+
+    // Heading west: 0 degrees is +x (east) and rotation is clockwise, so 180 is -x.
+    auto *veh_ptr = here.add_vehicle( vproto_id( "car_test" ), tripoint_bub_ms( 75, 60, 0 ),
+                                      180_degrees, 100, 0 );
+    REQUIRE( veh_ptr != nullptr );
+    vehicle &veh = *veh_ptr;
+    REQUIRE( veh.box2d_position_authority );
+
+    veh.tags.insert( "IN_CONTROL_OVERRIDE" );
+    veh.engine_on = true;
+    veh.velocity = 800;
+    veh.cruise_velocity = 800;
+
+    int reached_z = veh.bub_ms_location().z();
+    int min_velocity = veh.velocity;
+    for( int turn = 0; turn < 30 && reached_z == 0; ++turn ) {
+        here.vehmove();
+        if( veh.skidding ) { break; }
+        reached_z = veh.bub_ms_location().z();
+        min_velocity = std::min( min_velocity, veh.velocity );
+    }
+
+    CAPTURE( veh.bub_ms_location().to_string() );
+    CAPTURE( reached_z );
+    CAPTURE( min_velocity );
+    CAPTURE( veh.skidding );
+
+    // The vehicle must actually climb, and must not be brought to a dead stop doing
+    // it: a halt on a ramp is the player-visible symptom.
+    CHECK( reached_z == 1 );
+    CHECK( min_velocity > 0 );
+}
+#endif // BOX2D_ENABLED
