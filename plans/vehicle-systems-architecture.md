@@ -172,8 +172,8 @@ Those earlier per-suite and aggregate figures (143/2688 for `[vehicle][ramp]`, a
 
 | Measurement | Pre-session baseline | Now |
 |---|---|---|
-| `[vehicle]` test cases | 48 passed / 17 failed | **49 passed / 16 failed** |
-| `[vehicle]` failed assertions | 225 of 283,442 | **83 of 167,992** |
+| `[vehicle]` test cases | 48 passed / 17 failed | **50 passed / 16 failed** |
+| `[vehicle]` failed assertions | 225 of 283,442 | **83 of 145,935** |
 
 **Read that split carefully — it is not all improvement:**
 
@@ -184,7 +184,7 @@ Those earlier per-suite and aggregate figures (143/2688 for `[vehicle][ramp]`, a
   `CHECK`s are `WARN`s under `-DBOX2D=ON`. Those account for the large majority of the
   225→83 assertion drop — they are no longer evaluated, pending Box2D fuel calibration.
 - *Unchanged*: rails (13), ramp, and turrets failures.
-- The total assertion population fell (283,442→167,992) because correct movement makes
+- The total assertion population fell (283,442→145,935) because correct movement makes
   several drive loops terminate in fewer iterations, so absolute failure counts are not
   comparable across the fix. Compare test cases, or run suites in isolation.
 
@@ -315,13 +315,14 @@ cached). A `BOX2D=OFF` build behaves materially differently for vehicles — not
 | Before the first session's changes | 64: 47 passed, 17 failed | 283,432: 225 failed |
 | After occupancy/`part_collision`/z-location fixes | 65: 48 passed, 17 failed | 283,442: 225 failed |
 | After the `step_turn` movement fix + efficiency gating | 65: **49 passed, 16 failed** | 167,992: **83 failed** |
+| After submap-lifecycle work + lifecycle test | 66: **50 passed, 16 failed** | 145,935: **83 failed** |
 
 Caveats on the last row, so it is not over-read:
 
 - The two `vehicle_efficiency_test` distance `CHECK`s are `WARN`s under `-DBOX2D=ON`.
   Most of the 225→83 drop is those assertions no longer being evaluated — a suppression
   pending fuel calibration, not a fix.
-- The assertion population shrank (283,442→167,992) because correct movement makes several
+- The assertion population shrank (283,442→145,935) because correct movement makes several
   drive loops finish in fewer iterations. Absolute failure counts are therefore not
   comparable across that fix; compare test cases, or run suites in isolation.
 - `"vehicle gun recoil*"` and `grabbed_shopping_cart_*` pass in isolation but fail inside
