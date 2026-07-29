@@ -444,7 +444,7 @@ class mapgen_factory
         void setup() {
             for( std::pair<const std::string, mapgen_basic_container> &omw : mapgens_ ) {
                 omw.second.setup();
-                if( !is_pool_worker_thread() ) { inp_mngr.pump_events(); }
+                inp_mngr.pump_events();
             }
             // Dummy entry, overmap terrain null should never appear and is
             // therefore never generated.
@@ -673,16 +673,16 @@ void calculate_mapgen_weights() // TODO: rename as it runs jsonfunction setup to
         pr.second.precalc();
         for( weighted_object<int, std::shared_ptr<mapgen_function_json_nested>> &ptr : pr.second ) {
             ptr.obj->setup();
-            if( !is_pool_worker_thread() ) { inp_mngr.pump_events(); }
+            inp_mngr.pump_events();
         }
     }
     for( auto& pr : update_mapgen ) {
         for( auto& ptr : pr.second ) {
             ptr->setup();
-            if( !is_pool_worker_thread() ) { inp_mngr.pump_events(); }
+            inp_mngr.pump_events();
         }
     }
-    if( !is_pool_worker_thread() ) { inp_mngr.pump_events(); }
+    inp_mngr.pump_events();
 
     // Release pre-flattened cache memory.
     s_flat_palettes.clear();
@@ -692,13 +692,13 @@ void calculate_mapgen_weights() // TODO: rename as it runs jsonfunction setup to
     for( auto& pr : nested_mapgen ) {
         for( weighted_object<int, std::shared_ptr<mapgen_function_json_nested>> &ptr : pr.second ) {
             ptr.obj->finalize_parameters();
-            if( !is_pool_worker_thread() ) { inp_mngr.pump_events(); }
+            inp_mngr.pump_events();
         }
     }
     for( auto& pr : update_mapgen ) {
         for( auto& ptr : pr.second ) {
             ptr->finalize_parameters();
-            if( !is_pool_worker_thread() ) { inp_mngr.pump_events(); }
+            inp_mngr.pump_events();
         }
     }
 

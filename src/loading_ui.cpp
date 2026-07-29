@@ -10,6 +10,7 @@
 #include "input.h"
 #include "output.h"
 #include "path_info.h"
+#include "rml_length.h"
 #include "rml_util.h"
 #include "sdltiles.h"
 #include "translations.h"
@@ -129,7 +130,7 @@ void loading_doc_sync( const uilist &menu )
     if( Rml::Element *fill = g_loading_doc->GetElementById( "loading-bar-fill" ) ) {
         const float pct = g_loading_data->total > 0
                           ? 100.0f * done / g_loading_data->total : 0.0f;
-        fill->SetProperty( "width", string_format( "%.2f%%", pct ) );
+        fill->SetProperty( "width", rml::pct( pct ) );
     }
 }
 
@@ -174,6 +175,9 @@ void loading_ui::new_context( const std::string &desc )
         menu->reset();
         menu->settext( desc );
         ui = nullptr;
+        // A new phase should appear immediately, however recently the previous one
+        // drew: reset the rate limit so the next show() presents.
+        last_draw_ = {};
     }
 }
 
@@ -216,11 +220,31 @@ void loading_ui::proceed()
 
 void loading_ui::show()
 {
+    draw( false );
+}
+
+void loading_ui::draw( const bool force )
+{
     init();
 
-    if( menu != nullptr ) {
-        ui_manager::redraw();
-        refresh_display();
-        inp_mngr.pump_events();
+    if( menu == nullptr ) {
+        return;
     }
+    // Presenting costs 20-35ms per frame here (whole lighting + composite pipeline,
+    // plus an RmlUi relayout of this document), and the loaders call show()/proceed()
+    // thousands of times per world load: a measured 77% of a 228s world load was
+    // spent inside refresh_display, against ~3.5s of actual JSON scanning, with only
+    // ~1ms of loading work between consecutive frames. Rate-limit the PRESENTATION
+    // to ~10fps; menu state is still updated on every call, so the progress list and
+    // the RmlUi model stay correct — they are just shown a few ms later.
+    constexpr auto min_interval = std::chrono::milliseconds( 100 );
+    const auto now = std::chrono::steady_clock::now();
+    if( !force && now - last_draw_ < min_interval ) {
+        return;
+    }
+    last_draw_ = now;
+
+    ui_manager::redraw();
+    refresh_display();
+    inp_mngr.pump_events();
 }

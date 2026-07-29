@@ -159,6 +159,17 @@ struct json_perf_load_metrics {
     size_t bytes = 0;
     int64_t parse_scan_us = 0;
     int64_t parse_handler_us = 0;
+    /// Directory walk (get_files_from_path) — also paid on the pack-hit path by
+    /// compute_pack_hash, so it is measured separately from the reads.
+    int64_t enumerate_us = 0;
+    /// Reading every file into memory (parallel_for) or unpacking data.jsonpack.
+    int64_t read_us = 0;
+    /// Copying the contents into preloaded_content_ for deferred re-reads.
+    int64_t preload_us = 0;
+    /// Constructing the istringstream + JsonIn for each file.
+    int64_t stream_us = 0;
+    /// load_all_from_json for each file (scan + handler are subsets of this).
+    int64_t dispatch_us = 0;
 };
 
 struct json_perf_deferred_stats {
@@ -669,7 +680,7 @@ void DynamicDataLoader::load_deferred( deferred_json& data )
                     load_object( jo, it->second );
                 } catch( const JsonError& err ) { debugmsg( "(json-error)\n%s", err.what() ); }
             }
-            if( !is_pool_worker_thread() ) { inp_mngr.pump_events(); }
+            inp_mngr.pump_events();
         }
         auto it = data.begin();
         std::advance( it, n );
@@ -689,7 +700,7 @@ void DynamicDataLoader::load_deferred( deferred_json& data )
                             "this object is discarded" );
                     } catch( const JsonError& err ) { debugmsg( "(json-error)\n%s", err.what() ); }
                 }
-                if( !is_pool_worker_thread() ) { inp_mngr.pump_events(); }
+                inp_mngr.pump_events();
             }
             data.clear();
             return; // made no progress on this cycle so abort
@@ -961,11 +972,17 @@ void DynamicDataLoader::load_data_from_path(
 {
     assert( !finalized && "Can't load additional data after finalization.  Must be unloaded first." );
 
+    namespace ch = std::chrono;
+    const auto t_begin = ch::steady_clock::now();
     str_vec files;
     std::vector<std::string> file_contents;
+    auto t_enumerated = t_begin;
 
     // ── TRY ARCHIVE BLOB FIRST ─────────────────────────────────────────────────
     if( try_load_pack( path ) ) {
+        // try_load_pack walks the directory itself (compute_pack_hash) before it
+        // trusts the blob, so the enumeration cost is charged either way.
+        t_enumerated = ch::steady_clock::now();
         // Pack loaded successfully — reconstruct files and file_contents from pack entries
         files.reserve( m_pack_entries.size() );
         file_contents.reserve( m_pack_entries.size() );
@@ -988,12 +1005,14 @@ void DynamicDataLoader::load_data_from_path(
             std::ifstream tmp( path.c_str(), std::ios::in );
             if( tmp ) { files.push_back( path ); }
         }
+        t_enumerated = ch::steady_clock::now();
 
         file_contents.resize( files.size() );
         parallel_for( 0, static_cast<int>( files.size() ), [&]( int i ) {
             file_contents[i] = read_entire_file( files[i] );
         } );
     }
+    const auto t_read = ch::steady_clock::now();
 
     // ── PHASE BOUNDARY ─────────────────────────────────────────────────────────
     // All file content is in memory.  No load_object has been called.
@@ -1006,15 +1025,27 @@ void DynamicDataLoader::load_data_from_path(
         // try_emplace: first mod to load a path wins (mod-override semantics).
         preloaded_content_.try_emplace( files[i], file_contents[i] );
     }
+    const auto t_preloaded = ch::steady_clock::now();
+    g_last_load_metrics.enumerate_us =
+        ch::duration_cast<ch::microseconds>( t_enumerated - t_begin ).count();
+    g_last_load_metrics.read_us = ch::duration_cast<ch::microseconds>( t_read - t_enumerated ).count();
+    g_last_load_metrics.preload_us =
+        ch::duration_cast<ch::microseconds>( t_preloaded - t_read ).count();
 
     // ── PHASE B (main thread): serial dispatch — original proven path ──────────
     // Uses std::istringstream + load_all_from_json, identical to the original
     // serial baseline.  std::move avoids a copy into the istringstream.
     for( size_t i = 0; i < files.size(); ++i ) {
+        const auto t_stream_0 = ch::steady_clock::now();
         std::istringstream iss( std::move( file_contents[i] ) );
         try {
             JsonIn jsin( iss, files[i] );
+            const auto t_stream_1 = ch::steady_clock::now();
+            g_last_load_metrics.stream_us +=
+                ch::duration_cast<ch::microseconds>( t_stream_1 - t_stream_0 ).count();
             load_all_from_json( jsin, src, ui, path, files[i] );
+            g_last_load_metrics.dispatch_us +=
+                ch::duration_cast<ch::microseconds>( ch::steady_clock::now() - t_stream_1 ).count();
         } catch( const JsonError& err ) { throw std::runtime_error( err.what() ); }
     }
 }
@@ -1060,7 +1091,20 @@ void DynamicDataLoader::load_all_from_json(
     } else {
         jsin.error( "expected object or array" );
     }
-    if( !is_pool_worker_thread() ) { inp_mngr.pump_events(); }
+    // Keep the window responsive during a long load — but NOT once per file.
+    // pump_events() presents a FULL frame whenever an RmlUi document is open
+    // (sdl_input.cpp forces needupdate for the loading doc), i.e. ~16ms on a 60Hz
+    // display. Measured on the 1890 core JSON files: 28.2s of this function's 30s
+    // was this single call, against 0.3s of tokenizing and 1.2s of load handlers.
+    // 100ms is two orders of magnitude inside Windows' "not responding" threshold.
+    // thread_local: the pre-warm worker also runs this path (its pump is a no-op),
+    // so a shared static would be a data race.
+    thread_local auto last_pump = std::chrono::steady_clock::time_point{};
+    const auto pump_now = std::chrono::steady_clock::now();
+    if( pump_now - last_pump >= std::chrono::milliseconds( 100 ) ) {
+        last_pump = pump_now;
+        inp_mngr.pump_events();
+    }
 }
 
 void DynamicDataLoader::unload_data()
@@ -1356,6 +1400,11 @@ static void load_and_finalize_packs(
         int64_t parse_us = 0;
         int64_t parse_scan_us = 0;
         int64_t parse_handler_us = 0;
+        int64_t enumerate_us = 0;
+        int64_t read_us = 0;
+        int64_t preload_us = 0;
+        int64_t stream_us = 0;
+        int64_t dispatch_us = 0;
     };
     std::vector<mod_timing> mod_timings;
     mod_timings.reserve( available.size() );
@@ -1374,6 +1423,11 @@ static void load_and_finalize_packs(
             .parse_us = std::chrono::duration_cast<std::chrono::microseconds>( t1 - t0 ).count(),
             .parse_scan_us = g_last_load_metrics.parse_scan_us,
             .parse_handler_us = g_last_load_metrics.parse_handler_us,
+            .enumerate_us = g_last_load_metrics.enumerate_us,
+            .read_us = g_last_load_metrics.read_us,
+            .preload_us = g_last_load_metrics.preload_us,
+            .stream_us = g_last_load_metrics.stream_us,
+            .dispatch_us = g_last_load_metrics.dispatch_us,
         } );
         ui.proceed();
     }
@@ -1410,12 +1464,17 @@ static void load_and_finalize_packs(
             fprintf(
                 stderr,
                 "[JSON_PERF] mod=%s  files=%d  bytes=%llu  parse_ms=%lld  "
-                "scan_ms=%lld  handler_ms=%lld  scan_frac=%.1f%%\n",
+                "enum_ms=%lld  read_ms=%lld  pre_ms=%lld  stream_ms=%lld  disp_ms=%lld  "
+                "scan_ms=%lld  handler_ms=%lld\n",
                 m.id.c_str(), m.files, static_cast<unsigned long long>( m.bytes ),
                 static_cast<long long>( m.parse_us / 1000 ),
+                static_cast<long long>( m.enumerate_us / 1000 ),
+                static_cast<long long>( m.read_us / 1000 ),
+                static_cast<long long>( m.preload_us / 1000 ),
+                static_cast<long long>( m.stream_us / 1000 ),
+                static_cast<long long>( m.dispatch_us / 1000 ),
                 static_cast<long long>( m.parse_scan_us / 1000 ),
-                static_cast<long long>( m.parse_handler_us / 1000 ),
-                m.parse_us > 0 ? ( double )m.parse_scan_us / m.parse_us * 100.0 : 0.0 );
+                static_cast<long long>( m.parse_handler_us / 1000 ) );
         }
         // NOLINTNEXTLINE(cata-text-style)
         fprintf( stderr, "[JSON_PERF] deferred_rounds=%d  deferred_reparsed=%d  deferred_ms=%lld\n",
@@ -1607,14 +1666,15 @@ void init::start_prewarm()
     world_generator->init();
 
     const std::string last_world = world_generator->last_world_name;
-    if( last_world.empty() ) {
+    // A stale config/lastworld.json (world deleted or renamed) is normal, not an
+    // error: skip the pre-warm silently. get_world() debugmsgs on a miss, and a
+    // modal error prompt here — before the main menu exists — leaves the player
+    // staring at a blocking prompt on an otherwise empty screen.
+    if( last_world.empty() || !world_generator->has_world( last_world ) ) {
         return;
     }
 
-    WORLDINFO* world = world_generator->get_world( last_world );
-    if( !world ) {
-        return;
-    }
+    const WORLDINFO *world = world_generator->get_world( last_world );
 
     // Snapshot mod IDs by value (never pass live world* to worker)
     auto mod_ids = normalize_mod_load_order( world->active_mod_order );
