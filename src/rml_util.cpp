@@ -80,6 +80,15 @@ std::string cata_text_to_rml( const std::string& s )
     // together, e.g. "<color_white>Save"). Mirror print_colored_text: parse the
     // leading tag, emit the span markup, then strip the tag (rm_prefix) and emit
     // the remaining text. Dropping that trailing text is what blanked the rows.
+    // Span depth is tracked rather than mirrored 1:1 from the tags.  Game strings
+    // routinely open a colour and never close it (print_colored_text resets per
+    // line, so nothing forced them to), and foldstring() splits a coloured run
+    // across lines, leaving each line individually unbalanced.  A stray </span>
+    // or an unclosed <span> makes RmlUi reject the WHOLE document with
+    // "Closing tag 'body' mismatched ... was expecting 'span'", which blanks the
+    // screen rather than just mis-colouring it.  So: ignore unmatched closes and
+    // close whatever is still open at the end.
+    int open_spans = 0;
     for( const auto& seg : segs ) {
         if( seg.empty() ) { continue; }
         if( seg[0] == '<' ) {
@@ -93,14 +102,17 @@ std::string cata_text_to_rml( const std::string& s )
                 result += "<span style=\"color:";
                 result += nc_color_to_hex( tag.color );
                 result += "\">";
-            } else if( tag.type == color_tag_parse_result::close_color_tag ) {
+                ++open_spans;
+            } else if( tag.type == color_tag_parse_result::close_color_tag && open_spans > 0 ) {
                 result += "</span>";
+                --open_spans;
             }
             result += rml_escape( rest );
         } else {
             result += rml_escape( seg );
         }
     }
+    while( open_spans-- > 0 ) { result += "</span>"; }
     return result;
 }
 
