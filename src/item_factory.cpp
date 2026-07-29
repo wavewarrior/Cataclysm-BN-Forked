@@ -180,7 +180,12 @@ static bool assign_coverage_from_json( const JsonObject &jo, const std::string &
 }
 
 // TODO: add explicit action field to gun definitions
-auto defmode_name( itype &obj )
+// The trailing return type is REQUIRED, not stylistic: item_factory_finalize.cpp
+// forward-declares this as `-> const char *`, and MSVC mangles a DEDUCED return
+// type as a placeholder, so a bare `auto` here emits a different symbol than the
+// declaration and fails to link (LNK2019). GCC/Clang mangle the resolved type,
+// which is why CI never caught it.
+auto defmode_name( itype &obj ) -> const char *
 {
     if( obj.mod ) {
         return translate_marker( "gunmod" ); // grenade launchers
@@ -191,7 +196,7 @@ auto defmode_name( itype &obj )
     } else {
         return translate_marker( "semi" );
     }
-};
+}
 
 void Item_factory::load_item_blacklist( const JsonObject &json )
 {

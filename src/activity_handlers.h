@@ -14,7 +14,7 @@
 class Character;
 class inventory;
 class item;
-class mtype;
+struct mtype; // `struct` to match mtype.h:253 — MSVC mangles class/struct apart
 class player;
 class player_activity;
 // TODO (https://github.com/cataclysmbn/Cataclysm-BN/issues/1612):

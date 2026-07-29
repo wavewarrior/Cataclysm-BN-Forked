@@ -9,7 +9,14 @@
 namespace lighting { class debug_line_pass; } // forward-declare GPU line buffer
 
 class Creature;
-struct vehicle;
+// MUST be `class`, matching vehicle.h:375 and every other forward declaration in
+// the tree (map.h:69 et al). MSVC mangles `class` and `struct` differently, so a
+// `struct vehicle;` here makes every TU that includes this header emit/expect a
+// different symbol for any map:: member taking a vehicle pointer — LNK2019 on
+// map::move_cost / map::bash / map::detach_vehicle. Only reachable with
+// BOX2D_ENABLED, which is why it stayed latent while BOX2D defaulted OFF.
+// GCC/Clang do not distinguish the two, so CI never caught it.
+class vehicle;
 class map;
 
 namespace physics {
