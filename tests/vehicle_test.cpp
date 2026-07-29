@@ -637,6 +637,21 @@ TEST_CASE( "box2d_authority_vehicle_bashes_terrain", "[!shouldfail][vehicle][box
     REQUIRE( here.is_bashable_ter_furn( obstacle, false ) );
     const auto before = here.ter( obstacle );
 
+    // Give the obstacle an actual Box2D collider.  build_test_map() mutates
+    // already-resident submaps and never fires the submap-loaded notification, so
+    // without this the world holds no terrain bodies at all and no vehicle-terrain
+    // contact can occur — the test would then fail for the wrong reason.
+    auto *pw = here.get_physics_world();
+    REQUIRE( pw != nullptr );
+    const auto colliders_before = pw->terrain_body_count();
+    const auto sub = here.get_abs_sub();
+    for( int sx = 0; sx < here.getmapsize(); ++sx ) {
+        for( int sy = 0; sy < here.getmapsize(); ++sy ) {
+            pw->on_submap_loaded( here, tripoint_abs_sm{ sub.x() + sx, sub.y() + sy, 0 } );
+        }
+    }
+    REQUIRE( pw->terrain_body_count() > colliders_before );
+
     auto *veh = here.add_vehicle( vproto_id( "car_test" ), tripoint_bub_ms( 60, 60, 0 ),
                                   0_degrees, 100, 0 );
     REQUIRE( veh != nullptr );
