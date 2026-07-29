@@ -1,5 +1,8 @@
 if (BUILD_TESTING)
-    file(GLOB CATACLYSM_BN_TEST_SOURCES
+    # CONFIGURE_DEPENDS mirrors the .cpp glob in src/CMakeLists.txt: without it a
+    # newly added tests/*.cpp is silently absent from the binary until someone
+    # re-runs cmake by hand, and the missing test looks like a filter typo.
+    file(GLOB CATACLYSM_BN_TEST_SOURCES CONFIGURE_DEPENDS
             ${CMAKE_SOURCE_DIR}/tests/*.cpp)
 
     # coop_integration_test.cpp talks raw BSD sockets (arpa/inet.h, netinet/in.h,
