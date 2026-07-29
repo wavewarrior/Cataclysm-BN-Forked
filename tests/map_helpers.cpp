@@ -132,7 +132,26 @@ void clear_overmap()
 
 void clear_map()
 {
-    g->m.set_abs_sub( tripoint_abs_sm( g->m.get_abs_sub().xy(), 0 ) );
+    // Re-anchor the reality bubble to a canonical position, not just z=0.
+    //
+    // This previously reset only the z, inheriting abs_sub's xy from whatever the
+    // previous TEST_CASE happened to leave behind.  Anything that triggers
+    // map::update_map() mid-test — map::board_vehicle() does, via the avatar move
+    // path — shifts that anchor, and it was never wound back, so the bub<->abs
+    // relationship differed per test depending on execution order.  Tests that lay
+    // terrain at fixed bub coordinates and then assert bub positions were therefore
+    // order-dependent: vehicle_ramp_test:174, ranged_vehicle_recoil_test and the
+    // Box2D bash spec all pass alone and fail in-suite for this reason.
+    //
+    // load() rather than set_abs_sub() when the anchor actually moved: set_abs_sub
+    // alone would leave grid[] pointing at the previous anchor's submaps.
+    static const point_abs_sm canonical_xy = g->m.get_abs_sub().xy();
+    const tripoint_abs_sm canonical{ canonical_xy, 0 };
+    if( g->m.get_abs_sub() == canonical ) {
+        g->m.set_abs_sub( canonical );
+    } else {
+        g->m.load( canonical, true );
+    }
 
     // Clearing all z-levels is rather slow, so just clear the ones I know the
     // tests use for now.
