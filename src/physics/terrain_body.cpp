@@ -11,9 +11,22 @@ namespace physics {
 auto classify_tile( const map &m, tripoint_bub_ms bub ) -> tile_body_class
 {
     if( !m.inbounds( bub ) ) { return tile_body_class::passable; }
-    if( m.impassable_ter_furn( bub ) ) { return tile_body_class::solid; }
+
+    // Passability decides whether a tile gets a collider at all; bashability only
+    // decides how bouncy it is once it has one.
+    //
+    // The previous order tested is_bashable_ter_furn() before passability, so any
+    // tile that could be smashed got a body even when it was open ground you drive
+    // on.  t_pavement is bashable — measured 144 of 144 tiles in a pavement submap
+    // classified `bashable` — so every road tile became a collider and vehicles
+    // ground to a halt on the road surface (measured: velocity 2000 -> 317 in a
+    // single turn once colliders existed).
+    if( !m.impassable_ter_furn( bub ) ) { return tile_body_class::passable; }
+
+    // Impassable, so it needs a body.  Bashable impassables (windows, fences) get
+    // the softer restitution; solid ones (walls) get the hard value.
     if( m.is_bashable_ter_furn( bub, false ) ) { return tile_body_class::bashable; }
-    return tile_body_class::passable;
+    return tile_body_class::solid;
 }
 
 auto build_submap_terrain_bodies( b2WorldId         world,

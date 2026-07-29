@@ -3,6 +3,9 @@
 #include <box2d/box2d.h>
 
 #include "coordinates.h"
+#include "map.h"
+#include "map_helpers.h"
+#include "state_helpers.h"
 #include "physics/terrain_body.h"
 #include <cmath>
 #include <array>
@@ -510,4 +513,35 @@ TEST_CASE( "encode_tile_pos is never null and round-trips", "[vehicle][box2d]" )
         // And the coordinates survive the round trip.
         CHECK( decode_tile_pos( enc ) == p );
     }
+}
+
+// classify_tile decides which tiles get a Box2D collider.  It must gate on
+// PASSABILITY, not bashability: pavement, dirt and grass are all bashable in CBN,
+// so testing bashability first gave every road tile a collider and vehicles
+// ground to a halt on open ground (measured: 144 of 144 tiles in a pavement
+// submap classified as obstacles, and velocity collapsing 2000 -> 317 in one turn).
+//
+// The suite cannot catch that regression indirectly — build_test_map() never fires
+// on_submap_loaded, so no other test has terrain colliders at all — hence this
+// direct check on the pure function.
+TEST_CASE( "classify_tile only makes obstacles collide", "[vehicle][box2d]" )
+{
+    clear_all_state();
+    auto &here = get_map();
+    build_test_map( ter_id( "t_pavement" ) );
+
+    const auto at = tripoint_bub_ms( 60, 60, 0 );
+
+    for( const auto &open : { "t_pavement", "t_dirt", "t_grass", "t_floor" } ) {
+        here.ter_set( at, ter_id( open ) );
+        CAPTURE( open );
+        REQUIRE( here.passable( at ) );
+        CHECK( physics::classify_tile( here, at ) == physics::tile_body_class::passable );
+    }
+
+    // Impassable terrain must collide, and a bashable impassable is reported
+    // separately so it can take the softer restitution.
+    here.ter_set( at, ter_id( "t_wall_wood" ) );
+    REQUIRE_FALSE( here.passable( at ) );
+    CHECK( physics::classify_tile( here, at ) != physics::tile_body_class::passable );
 }
