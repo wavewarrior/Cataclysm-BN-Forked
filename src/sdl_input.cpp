@@ -1,6 +1,7 @@
 #include "sdl_input.h"
 
 #include <algorithm>
+#include <cassert>
 #include <climits>
 #include <cstdint>
 #include <cstring>
@@ -762,6 +763,16 @@ void input_manager::pump_events()
         return;
     }
 
+    // SDL3 asserts that the event queue is only pumped from the main thread
+    // (SDL_PumpEventsInternal -> SDL_IsMainThread_REAL).  Many finalization
+    // routines call this to keep the window responsive while loading, and some
+    // of them also run on the prewarm/worker threads, where driving SDL and the
+    // UI is both illegal and pointless.  Make the pump a no-op off the main
+    // thread so callers never have to know which thread they are on.
+    if( !SDL_IsMainThread() ) {
+        return;
+    }
+
     // Handle all events, but ignore any keypress
     sdl_input::CheckMessages( g_display );
 
@@ -771,6 +782,13 @@ void input_manager::pump_events()
 
 input_event input_manager::get_input_event()
 {
+    // Unlike pump_events(), this one cannot degrade to a no-op off the main
+    // thread: the inputdelay < 0 branch below spins until a real event arrives,
+    // so a silent guard would hang instead of crash.  Blocking on user input
+    // from a worker is a design error — fail loudly.
+    assert( SDL_IsMainThread() &&
+            "get_input_event() must be called from the main thread" );
+
     previously_pressed_key = 0;
 
     // standards note: getch is sometimes required to call refresh

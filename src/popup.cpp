@@ -422,6 +422,11 @@ throbber_popup::~throbber_popup() { rml_close(); }
 
 void throbber_popup::refresh()
 {
+    // The whole body drives SDL and the UI, which is main-thread-only; callers
+    // poll this from worker-fed wait loops, so bail out anywhere else.
+    if( !SDL_IsMainThread() ) {
+        return;
+    }
     static constexpr std::chrono::milliseconds update_interval( 500 );
     auto now = std::chrono::steady_clock::now();
     if( last_update + update_interval < now ) {
