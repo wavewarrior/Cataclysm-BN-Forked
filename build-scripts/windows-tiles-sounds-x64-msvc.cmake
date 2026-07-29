@@ -16,6 +16,23 @@ Pre-load script for Windows builds with Ninja Multi-Config and MSVC.
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /bigobj")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /bigobj")
 
+# --- Box2D physics: ON by default for this preset -------------------------
+# The root CMakeLists declares `option(BOX2D "..." OFF)`, a global default that
+# also covers Linux/macOS. This file is CMAKE_PROJECT_INCLUDE_BEFORE, so it runs
+# at the top-level project() call — well before that option() — and option()
+# never overwrites an existing cache entry. Seeding it here therefore flips the
+# default for the Windows MSVC preset ONLY, leaving other platforms untouched.
+#
+# Deliberately NOT forced: if the entry already exists (a `-DBOX2D=OFF` on the
+# command line, or a previously configured tree) this set() is a no-op, so the
+# override still wins.
+#
+# NOTE: this configure preset is Ninja Multi-Config (Debug;RelWithDebInfo;Release)
+# and a CMake cache is per-tree, not per-configuration — so BOX2D is on for all
+# three build presets, not just windows-msvc-relwithdebinfo. There is no
+# per-config way to express this.
+set(BOX2D ON CACHE BOOL "Enable Box2D physics for vehicle VV collision")
+
 # Speed up Debug linking: incremental link + fast PDB generation.
 # /INCREMENTAL updates the binary incrementally using an .ilk file.
 # /DEBUG:FASTLINK avoids merging all type info into one large PDB.
