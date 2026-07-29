@@ -13,10 +13,10 @@ them also had the wrong root cause recorded:
 
 | Item | Originally recorded | Actually |
 |---|---|---|
-| `vehicle_rails_test.cpp:184` | XY pivot/`coord_translate` desync in shipping code | Box2D-path only; legacy tile-step passes 5/5 (4,284 assertions) |
+| `vehicle_rails_test.cpp:184` | XY pivot/`coord_translate` desync in shipping code | Box2D-path only; legacy tile-step passes 5/5 (4,284 assertions). Fails in the warm-up helper `add_moving_vehicle`, which calls `map::displace_vehicle()` directly before any `vehmove()` — still open |
 | `vehicle_efficiency_test` leak | overmap/`MAPBUFFER` state never cleared | field residue on the vehicle footprint; `clear_overmap()` is dead *and* unsafe — **fixed** |
-| `ranged_vehicle_recoil_test` | Box2D thrust/impulse integration issue, out of scope | `vehmove()` stepped 1/60 s per 1 s turn → 56x too slow — **fixed** |
-| ramp rider desync | passenger-drag index mismatch | no mismatch found in the drag path; likely the missing `shift_zlevel()` on the readback path — still open |
+| `ranged_vehicle_recoil_test` | Box2D thrust/impulse integration issue, out of scope | `vehmove()` stepped 1/60 s per 1 s turn → 56x too slow — **fixed** (passes in isolation; still fails in the full run via cross-test leakage) |
+| ramp rider desync | passenger-drag index mismatch, then "missing `shift_zlevel()` on the readback path" | **both wrong.** No mismatch exists in the drag path, and the readback is irrelevant: the ramp test clears `box2d_position_authority` for every vehicle it builds (`tests/vehicle_ramp_test.cpp:109,159`) and the readback branch fires **once** across the whole suite. 18 of the failures are `REQUIRE( player_character.bub_pos() == map_starting_point )` at `:174`, right after `map::board_vehicle()` → `g->update_map()`, which can shift the reality bubble and rebase bub coordinates so the test's stale `map_starting_point` no longer names the player's tile — still open |
 
 The in-flight Box2D physics-authority migration
 (`plans/box2d-vehicle-physics-implementation.md`) remains the authoritative plan for the
@@ -213,15 +213,36 @@ Caveat: those same cases still fail inside the full `[vehicle]` run, as do
 which is a separate unresolved problem — the movement fix is verified, the suite-ordering
 sensitivity is not fixed.
 
-**Ramp rider desync: still open.** A read-only trace of the whole passenger-drag path
-(`map::displace_vehicle`'s `psg->setpos()` loop, `advance_precalc_mounts()`,
-`vehicle::shift_zlevel()`, `map::shift_vehicle_z()`) found **no computational mismatch**:
-the passenger target uses `precalc[1]`/`z_terrain[1]` and the index swap happens after,
-so `vp.pos()` reads the same offsets the loop used, and `map::shift_vehicle_z()` is
-algebraically neutral for `bub_part_location`. Given the legacy-vs-Box2D table above
-(ramp is 5/8 on legacy, 4/8 under authority), the remaining ramp failures are most likely
-the missing `shift_zlevel()` call on the Box2D readback path rather than a defect in the
-drag loop. Start there, not in the passenger maths.
+**Ramp rider desync: still open, and the earlier hypotheses here were both wrong.**
+
+A read-only trace of the whole passenger-drag path (`map::displace_vehicle`'s
+`psg->setpos()` loop, `advance_precalc_mounts()`, `vehicle::shift_zlevel()`,
+`map::shift_vehicle_z()`) found **no computational mismatch**: the passenger target uses
+`precalc[1]`/`z_terrain[1]` and the index swap happens after, so `vp.pos()` reads the same
+offsets the loop used, and `map::shift_vehicle_z()` is algebraically neutral for
+`bub_part_location`. That much still holds.
+
+This document previously went on to guess "most likely the missing `shift_zlevel()` call
+on the Box2D readback path". **That is disproved.** The readback now performs the full
+`adjust_zlevel -> displace_vehicle -> shift_zlevel` sequence per tile, and it changed ramp
+by exactly zero — because the ramp suite does not use that path: it clears
+`box2d_position_authority` for every vehicle it builds
+(`tests/vehicle_ramp_test.cpp:109,159`), and instrumenting the readback branch showed it
+firing **once** across the entire suite (against 14 for railroad and 12,680 for
+`vehicle_efficiency`).
+
+Where the failures actually are: 18 of them — 6 `SECTION`s x 3 `TEST_CASE`s, i.e. every
+run — are `REQUIRE( player_character.bub_pos() == map_starting_point )` at
+`vehicle_ramp_test.cpp:174`, immediately after `map::board_vehicle()`. That function sets
+`who->setpos( pos )` with the requested tile (correct) and then calls
+`g->update_map( g->u )` (`src/map_vehicle.cpp:1409`), which can shift the reality bubble
+and rebase bub coordinates — after which the test's stale `map_starting_point` value no
+longer names the player's tile. Start there.
+
+Note the suite mixes two unrelated case kinds, so do not treat them as one problem:
+`grabbed_shopping_cart_*` move through `src/grab.cpp`, while `vehicle_ramp_test_59/60/61`
+drive a real motorcycle spawned via `here.add_vehicle` (`:148`) at velocity 179 for up to
+10 `vehmove()` cycles.
 
 ### `vehicle_efficiency_test.cpp` cross-test leakage — root cause CORRECTED, fix applied
 
