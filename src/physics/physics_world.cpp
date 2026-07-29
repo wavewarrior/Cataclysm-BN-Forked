@@ -413,11 +413,31 @@ void PhysicsWorld::sync_bodies_from_game()
 void PhysicsWorld::sync_game_from_bodies()
 {
     for( auto &[veh, bid] : vehicle_bodies_ ) {
-        const auto pos             = b2Body_GetPosition( bid );
-        veh->physics_pos           = rl_vec2d{ pos.x / TILE_M, pos.y / TILE_M };
-        const auto rot             = b2Body_GetRotation( bid );
-        veh->physics_angle         = std::atan2( rot.s, rot.c );
+        // Angular velocity is a genuine round-trip for every registered vehicle:
+        // sync_bodies_from_game() pushes veh->angular_velocity_rads into the body
+        // each turn, and Box2D's damping is what decays it.  Reading it back
+        // unconditionally keeps that loop closed — gating it would leave the
+        // field write-only, so a legacy vehicle spun up by part_collision() or
+        // solve_vv_cluster() would keep that spin forever.
         veh->angular_velocity_rads = b2Body_GetAngularVelocity( bid );
+
+        // Position, facing and the precalc[] layout derived from facing are only
+        // taken from the body for vehicles under physics authority.  For the rest
+        // the tile-step mover owns them and the body is a passive mirror kept in
+        // step by on_vehicle_moved(); re-deriving precalc[] from a body the game
+        // is not driving corrupts that vehicle's part layout.
+        //
+        // This guard matters because opting out is a real, used pattern: e.g.
+        // tests/vehicle_ramp_test.cpp clears box2d_position_authority for every
+        // vehicle it sets up.  Without the guard those vehicles kept their tile
+        // position but had their facing overwritten from Box2D anyway, which is
+        // why toggling authority globally changed that suite's results even
+        // though it had already opted out.
+        if( !veh->box2d_position_authority ) { continue; }
+        const auto pos     = b2Body_GetPosition( bid );
+        veh->physics_pos   = rl_vec2d{ pos.x / TILE_M, pos.y / TILE_M };
+        const auto rot     = b2Body_GetRotation( bid );
+        veh->physics_angle = std::atan2( rot.s, rot.c );
         veh->refresh_precalc( veh->physics_angle );
     }
 }
