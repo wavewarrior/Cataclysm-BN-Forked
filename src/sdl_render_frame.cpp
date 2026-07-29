@@ -28,6 +28,7 @@
 #include "sdl_render_frame.h"
 #include "hud_shake.h"
 #include "sdl_wrappers.h"
+#include "splatmap_stamps.h" // splatmap::active
 #include "lighting/dev_test_lights.h"
 #include "lighting/frame_build.h"
 #include "lighting/rmlui_layer.h"
@@ -740,6 +741,27 @@ auto render_world_pass_w( lighting::render_state &rs,
                              static_cast<std::uint32_t>( proj_w ),
                              static_cast<std::uint32_t>( proj_h ) );
 
+    // Stamp any queued decals into their per-submap splatmap textures. MUST be
+    // before Pass W opens — a render pass cannot nest.
+    rs.splatmap().flush_stamps( ctx.cmd_buffer );
+
+    // Pass W splits at the terrain/entity boundary that cata_tiles::draw()
+    // recorded, so the splatmap composite lands over the terrain and under every
+    // creature, item and vehicle sprite. SIZE_MAX means no cut was recorded this
+    // frame (no tiles drawn, or cata_tiles::draw did not run), in which case the
+    // pass stays single-shot exactly as before.
+    //
+    // `cut == tile_sprite_count()` is legal and must still composite: it just
+    // means nothing was queued after the terrain (no entities on the player's
+    // z-level this frame). Gating the composite on a NON-EMPTY second half would
+    // silently drop every decal on such a frame, so the composite and Pass W-b
+    // are gated separately.
+    const std::size_t queued = rs.tile_sprite_count();
+    const std::size_t cut = rs.splat_cut();
+    const bool composite = have_tiles && cut != static_cast<std::size_t>( -1 )
+                           && cut <= queued && splatmap::active()
+                           && !rs.splat_quads().empty();
+
     rs.tile_batcher().begin_pass( ctx.cmd_buffer, wt->texture(),
                                   wt->width(), wt->height(),
                                   clear_black,
@@ -747,9 +769,33 @@ auto render_world_pass_w( lighting::render_state &rs,
                                   static_cast<std::uint32_t>( proj_h ),
                                   wt->format() );
     if( have_tiles ) {
-        rs.flush_tile_sprites( rs.tile_batcher(), rs.gpu_sampler() );
+        rs.flush_tile_sprites( rs.tile_batcher(), rs.gpu_sampler(),
+                               0, composite ? cut : queued );
     }
     rs.tile_batcher().end_pass();
+
+    if( composite ) {
+        rs.splatmap().composite( ctx.cmd_buffer, wt->texture(),
+                                 static_cast<std::uint32_t>( proj_w ),
+                                 static_cast<std::uint32_t>( proj_h ),
+                                 rs.splat_quads(),
+                                 lighting::splat_colors{
+                                     .blood_strength = g_splat_blood_strength } );
+
+        // Pass W-b: the entity half, only when there IS one. A null clear colour
+        // yields SDL_GPU_LOADOP_LOAD (sprite_batcher.cpp:599), preserving W-a
+        // plus the composite.
+        if( cut < queued ) {
+            rs.tile_batcher().begin_pass( ctx.cmd_buffer, wt->texture(),
+                                          wt->width(), wt->height(),
+                                          /*clear=*/nullptr,
+                                          static_cast<std::uint32_t>( proj_w ),
+                                          static_cast<std::uint32_t>( proj_h ),
+                                          wt->format() );
+            rs.flush_tile_sprites( rs.tile_batcher(), rs.gpu_sampler(), cut, queued );
+            rs.tile_batcher().end_pass();
+        }
+    }
 
     // Box2D debug overlay — coloured wireframes over the world.  Lines were
     // populated earlier in cata_tiles::draw() → PhysicsWorld::draw_debug().

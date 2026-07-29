@@ -20,6 +20,7 @@
 #include "options.h"
 #include "player.h"
 #include "mod_tileset.h"
+#include "splatmap_stamps.h"
 #include "trap.h"
 #include "type_id.h"
 #include "vehicle.h"
@@ -408,7 +409,14 @@ bool cata_tiles::draw_field_or_item(
 
     bool ret_draw_field = false;
     bool ret_draw_items = false;
-    if( ( fld_overridden || !invisible[0] ) && fld.obj().display_field ) {
+    // The splatmap draws these field types as sub-tile decals, so their
+    // grid-locked 32x32 tile sprite must not also render — otherwise every
+    // splatter is double-drawn. splatmap::active() is the SHARED gate with the
+    // composite in render_world_pass_w: if these two ever disagree the sprite is
+    // hidden with nothing drawn in its place and blood goes invisible. Field
+    // gameplay is untouched either way because mod_field_intensity still runs.
+    if( ( fld_overridden || !invisible[0] ) && fld.obj().display_field
+        && !( splatmap::active() && splatmap::covers_field( fld ) ) ) {
         const lit_level lit = fld_overridden ? lit_level::LIT : ll;
         const bool nv = !fld_overridden;
 

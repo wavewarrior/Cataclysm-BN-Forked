@@ -80,6 +80,8 @@ float g_vol_reach = 8.0f;
 bool g_rain_enable = true;
 float g_rain_intensity = 0.5f;
 float g_spec_strength = 0.0f; // wet specular glint (0=off); × rain intensity per-frame
+bool g_splatmap_enable = true;
+float g_splat_blood_strength = 0.85f;
 bool g_shadow_debug = false;
 uint32_t g_current_dbg_mode = 0u;
 float g_skylight_bleed = 0.5f;
@@ -469,6 +471,8 @@ void devui_rml_open()
     c.Bind( "rain_enable", &g_rain_enable );
     c.Bind( "rain_intensity", &g_rain_intensity );
     c.Bind( "spec_strength", &g_spec_strength );
+    c.Bind( "splatmap_enable", &g_splatmap_enable );
+    c.Bind( "splat_blood_strength", &g_splat_blood_strength );
     c.Bind( "shadow_debug", &g_shadow_debug );
     c.Bind( "shadow_mask_str", &g_dbg_params.shadow_mask_str );
     c.Bind( "mem_dim", &g_dbg_params.mem_dim );

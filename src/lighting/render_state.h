@@ -28,6 +28,7 @@
 #include "hud_particle_effect.h"
 #include "sdf_pass.h"
 #include "sound_wave_pass.h"
+#include "splatmap_pass.h"
 #include "sky_sun_pass.h"
 #include "sprite_batcher.h"
 #include "tonemap_pass.h"
@@ -169,6 +170,12 @@ public:
     void set_unlit_overlay_route(bool on) noexcept { unlit_overlay_route_ = on; }
     bool tile_sprites_empty() const noexcept { return tile_sprite_queue_.empty(); }
     void flush_tile_sprites(sprite_batcher& dst, SDL_GPUSampler* sampler);
+    // Ranged drain of [begin, end) — used to split Pass W at the
+    // terrain/entity boundary so the splatmap composite can land between the
+    // halves. Same "drain WITHOUT clearing" contract and set_texture dedupe as
+    // the whole-queue overload above.
+    void flush_tile_sprites(
+        sprite_batcher& dst, SDL_GPUSampler* sampler, std::size_t begin, std::size_t end);
 
     // Hover-outline (HOVER_OUTLINE_PLAN.md). Number of tile sprites queued so
     // far — cata_tiles records this before/after a creature's sprites to mark
@@ -343,6 +350,18 @@ public:
     // refresh_display between world pass and tonemap; draws droplets onto
     // world_target then runs a fullscreen splat fade/accumulate pass.
     rain_effect& rain() noexcept { return rain_; }
+
+    // World-locked sub-tile decal splatmap (persistent per-submap textures).
+    // Stamps are flushed before Pass W opens; the composite lands between the
+    // terrain and entity halves of the split Pass W.
+    splatmap_pass& splatmap() noexcept { return splatmap_; }
+    // Per-frame splatmap state recorded by cata_tiles::draw(): `cut` is the
+    // tile_sprite_queue_ index of the terrain/entity boundary (SIZE_MAX = no
+    // cut this frame → Pass W stays single-pass), `quads` are the visible
+    // submaps' composite rects in logical projection px.
+    void set_splat_frame(std::size_t cut, std::vector<splat_quad> quads);
+    std::size_t splat_cut() const noexcept { return splat_cut_; }
+    const std::vector<splat_quad>& splat_quads() const noexcept { return splat_quads_; }
     // GPU shader-based sound wave visualization (expanding ring wavefronts).
     // Driven from refresh_display inside the world pass, after tiles.
     sound_wave_pass& sound_waves() noexcept { return sound_waves_; }
@@ -458,6 +477,13 @@ private:
     hud_particle_effect hud_particles_;
     volumetric_pass volumetric_;
     rain_effect rain_;
+    splatmap_pass splatmap_;
+
+    // Per-frame splatmap state (see set_splat_frame). Reset by
+    // clear_frame_queues() / clear_tile_queue() so a frame where cata_tiles
+    // does not draw falls back to the single-pass Pass W.
+    std::size_t splat_cut_ = static_cast<std::size_t>( -1 );
+    std::vector<splat_quad> splat_quads_;
     sound_wave_pass sound_waves_;
     ui_post_pass ui_post_;
     gpu_sdf_pass gpu_sdf_;

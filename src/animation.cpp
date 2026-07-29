@@ -6,6 +6,7 @@
 #include "coordinates.h"
 #include "cursesdef.h"
 #include "enums.h"
+#include "field_type.h" // fd_blood
 #include "game_constants.h"
 #include "game.h"
 #include "line.h"
@@ -27,6 +28,7 @@
 
 #include "cata_tiles.h" // all animation functions will be pushed out to a cata_tiles function in some manner
 #include "sdltiles.h"
+#include "splatmap_stamps.h"
 
 #include <algorithm>
 #include <list>
@@ -600,6 +602,11 @@ void emit_impact_particle( const tripoint_bub_ms &pos, const bool blood )
         .start_wall = static_cast<double>( SDL_GetTicks() ) / 1000.0,
         .duration = 0.3f,
     } );
+    // The transient particle above is the impact flash; this adds the permanent
+    // sub-tile decal underneath it.
+    if( blood ) {
+        splatmap::queue_splatter( pos, fd_blood, 1 );
+    }
 }
 void game::draw_line( const tripoint_bub_ms &p, const std::vector<tripoint_bub_ms> &points )
 {

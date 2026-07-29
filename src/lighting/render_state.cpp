@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <span>
 
 #define dbg(x) DebugLogFL((x), DC::SDL)
 
@@ -202,6 +203,11 @@ void render_state::init(SDL_Window* host_window) {
         // High-fidelity rain effect: world-targeted falling droplets + splashes.
         rain_.init(device_, world_fmt, static_cast<std::uint32_t>(pw),
                    static_cast<std::uint32_t>(ph));
+        // World-locked sub-tile decal splatmap: persistent per-submap textures
+        // composited into world_target between the terrain and entity halves of
+        // Pass W. No-ops (ready() == false) when gfx/splatmap/stamps.json is
+        // missing or lists no loadable stamps.
+        splatmap_.init( device_, world_fmt );
         // GPU sound wave visualization pass (expanding ring wavefronts).
         sound_waves_.init(device_, world_fmt);
         // Box2D debug overlay line pass (world-target format, line-list topology).
@@ -241,6 +247,7 @@ void render_state::shutdown() noexcept {
     bloom_.shutdown();
     volumetric_.shutdown();
     rain_.shutdown();
+    splatmap_.shutdown();
     sound_waves_.shutdown();
     hud_particles_.shutdown();
     ui_post_.shutdown();
@@ -417,7 +424,14 @@ void render_state::clear_ui_queues() noexcept {
     if (ui_target_) { ui_target_->invalidate(); }
 }
 
-void render_state::clear_tile_queue() noexcept { tile_sprite_queue_.clear(); }
+void render_state::clear_tile_queue() noexcept {
+    tile_sprite_queue_.clear();
+    // The cut index and quad list index into the queue we just dropped, so they
+    // must go with it: a frame where cata_tiles::draw() does not re-record them
+    // falls back to the single-pass Pass W.
+    splat_cut_ = static_cast<std::size_t>( -1 );
+    splat_quads_.clear();
+}
 
 void render_state::clear_frame_queues() noexcept {
     clear_ui_queues();
@@ -730,11 +744,18 @@ void render_state::build_outline_ring(
 }
 
 void render_state::flush_tile_sprites(sprite_batcher& dst, SDL_GPUSampler* sampler) {
+    flush_tile_sprites(dst, sampler, 0, tile_sprite_queue_.size());
+}
+
+void render_state::flush_tile_sprites(
+    sprite_batcher& dst, SDL_GPUSampler* sampler, std::size_t begin, std::size_t end) {
     if (tile_sprite_queue_.empty()) { return; }
     if (!sampler) {
         tile_sprite_queue_.clear();
         return;
     }
+    end = std::min(end, tile_sprite_queue_.size());
+    if (begin >= end) { return; }
     // Group consecutive same-texture draws under a single set_texture
     // call. set_texture is a no-op when the requested texture is
     // already bound, so atlas-packed runs naturally batch into one
@@ -742,13 +763,18 @@ void render_state::flush_tile_sprites(sprite_batcher& dst, SDL_GPUSampler* sampl
     // Drain WITHOUT clearing — clear_frame_queues() handles reset at
     // the top of each redraw cycle.
     SDL_GPUTexture* bound = nullptr;
-    for (const tile_sprite_draw& s : tile_sprite_queue_) {
+    for (const tile_sprite_draw& s : std::span(tile_sprite_queue_).subspan(begin, end - begin)) {
         if (s.texture != bound) {
             dst.set_texture(s.texture, sampler);
             bound = s.texture;
         }
         dst.draw(s.inst);
     }
+}
+
+void render_state::set_splat_frame(std::size_t cut, std::vector<splat_quad> quads) {
+    splat_cut_ = cut;
+    splat_quads_ = std::move(quads);
 }
 
 void render_state::flush_shadow_casters(

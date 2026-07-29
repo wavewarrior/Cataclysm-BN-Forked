@@ -84,6 +84,13 @@ extern bool g_rain_enable;
 extern float g_rain_intensity;
 // Wet specular glint strength (max; folded with rain intensity per-frame). 0 = off.
 extern float g_spec_strength;
+// World-locked sub-tile decal splatmap. Off restores the grid-locked fd_blood
+// tile sprite and the single-pass Pass W exactly as they were.
+extern bool g_splatmap_enable;
+// Blood channel strength for the splatmap composite. Deliberately strong: the
+// composite lands in the HDR world target BEFORE the AgX tonemap + exposure
+// 0.35, which crushes subtle darkening.
+extern float g_splat_blood_strength;
 // Silhouette sun-shadow mask kill-gate.
 extern bool g_shadow_debug;
 // Current debug mode display (0-7, cycles through modes).

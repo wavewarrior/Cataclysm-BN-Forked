@@ -87,6 +87,7 @@
 #include "safe_reference.h"
 #include "scent_map.h"
 #include "sounds.h"
+#include "splatmap_stamps.h"
 #include "string_formatter.h"
 #include "string_id.h"
 #include "submap.h"
@@ -572,6 +573,11 @@ void map::add_splatter( const field_type_id& type, const tripoint_bub_ms& where,
         }
     }
     mod_field_intensity( where, type, intensity );
+    // Queue sub-tile decal stamps for the GPU splatmap. NOT on the vehicle-blood
+    // early return above — that blood goes onto the vehicle part, not the ground.
+    // add_splatter_trail / add_splash route through here, so the trail's
+    // decreasing intensity already produces a fading spray for free.
+    splatmap::queue_splatter( where, type, intensity );
 }
 
 void map::add_splatter_trail(

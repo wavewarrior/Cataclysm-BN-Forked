@@ -1,0 +1,27 @@
+{
+  "cell_size": 32,
+  "groups": {
+    "blood": [
+      "blood_01.png",
+      "blood_02.png",
+      "blood_03.png",
+      "blood_04.png",
+      "blood_05.png",
+      "blood_06.png",
+      "blood_07.png",
+      "blood_08.png",
+      "blood_09.png",
+      "blood_10.png",
+      "blood_11.png",
+      "blood_12.png"
+    ],
+    "gibs": [
+      "gibs_01.png",
+      "gibs_02.png",
+      "gibs_03.png",
+      "gibs_04.png",
+      "gibs_05.png",
+      "gibs_06.png"
+    ]
+  }
+}

@@ -55,6 +55,7 @@
 #include "sdltiles.h"
 #include "shadowcasting.h"
 #include "sounds.h"
+#include "splatmap_stamps.h"
 #include "string_formatter.h"
 #include "string_id.h"
 #include "string_utils.h"
@@ -235,6 +236,60 @@ struct tile_render_info {
         std::copy( invisible, invisible + 5, this->invisible );
     }
 };
+
+namespace
+{
+
+/// Record this frame's splatmap state: the tile_sprite_queue_ cut index (already
+/// taken by the caller) plus one composite quad per visible submap on z-level
+/// `z`. Freshly cached submaps are seeded from current field data so a reload
+/// regenerates equivalent decals.
+///
+/// `to_screen` MUST be cata_tiles::player_to_screen — deriving the projection
+/// any other way is what makes the composite drift off the tile sprites by a
+/// sub-tile offset.
+template <typename ToScreen>
+auto record_splat_frame(
+    const std::vector<tile_render_info> &draw_points, int z, const tripoint_abs_sm &abs_sub,
+    int tile_w, int tile_h, std::size_t cut, const ToScreen &to_screen ) -> void
+{
+    lighting::render_state &rs = lighting::get_render_state();
+
+    // Distinct submap indices covered by this z-level's draw points. A screen
+    // holds a handful of submaps, so a flat vector beats a hash set here.
+    std::vector<point> seen;
+    std::vector<lighting::splat_quad> quads;
+    for( const tile_render_info &p : draw_points ) {
+        if( p.pos.z() != z ) {
+            continue;
+        }
+        const point idx( p.pos.x() / SEEX, p.pos.y() / SEEY );
+        if( std::ranges::contains( seen, idx ) ) {
+            continue;
+        }
+        seen.push_back( idx );
+
+        const point_bub_ms origin( idx.x * SEEX, idx.y * SEEY );
+        const point tl = to_screen( origin );
+        const std::uint64_t key =
+            splatmap::key_of( tripoint_abs_sm( abs_sub.x() + idx.x, abs_sub.y() + idx.y, z ) );
+        quads.push_back( {
+            .dst_x = static_cast<float>( tl.x ),
+            .dst_y = static_cast<float>( tl.y ),
+            .dst_w = static_cast<float>( SEEX * tile_w ),
+            .dst_h = static_cast<float>( SEEY * tile_h ),
+            .key = key} );
+
+        // touch() returns false only for a FRESHLY created entry, which is
+        // exactly when its decal history has to be rebuilt from the fields.
+        if( !rs.splatmap().touch( key ) ) {
+            splatmap::seed_submap( tripoint_bub_ms( origin.x(), origin.y(), z ), key );
+        }
+    }
+    rs.set_splat_frame( cut, std::move( quads ) );
+}
+
+} // namespace
 
 cata_tiles::cata_tiles( const SDL_Renderer_Ptr& renderer, const GeometryRenderer_Ptr& geometry )
     : renderer( renderer ),
@@ -1127,6 +1182,19 @@ void cata_tiles::draw(
                     }
                 }
                 row_begin = row_end;
+            }
+
+            // ---- Splatmap cut: the terrain→entity boundary --------------------
+            // Pass 1 (terrain + base layers) has just finished for this z, and
+            // Pass 2 below queues every ground entity, so this is the only clean
+            // seam at which the decal composite can land over terrain and under
+            // entities. Only the player's z composites, and the z loop ascends to
+            // center.z(), so the last iteration wins and the index is unambiguous.
+            if( z == center.z() && splatmap::active() ) {
+                record_splat_frame(
+                    draw_points, z, here.get_abs_sub(), tile_width, tile_height,
+                    lighting::get_render_state().tile_sprite_count(),
+                    [this]( point_bub_ms p ) { return player_to_screen( p ); } );
             }
             // ---- Pass 2: ground entities (field_or_item, vpart, in row order) + creature
             // collection ----
