@@ -104,7 +104,62 @@ strict on both builds. **This is a suppression, not a fix** — do not read the 
 assertion count as calibration. Deliberately calibrating Box2D fuel economy (and
 diagnosing the fire-truck outlier) is open work.
 
-### Which paths are actually exercised — measure before aiming a fix
+### TOP PRIORITY — Box2D costs ~7x fuel economy in sustained cruise
+
+**Quantified, upstream-validated, and player-facing.** `BOX2D` is always on for this
+project, so this is the shipping configuration.
+
+Regenerating `vehicle_efficiency`'s constants with its own
+`make_vehicle_efficiency_case` generator on both builds and comparing against
+`origin/main`:
+
+| `car_test` | pavement | dirt |
+|---|---|---|
+| upstream `origin/main` | 617,500 | 403,153 |
+| `BOX2D=OFF` (tile-step) | 636,700 | 427,500 |
+| **`BOX2D=ON` (physics authority)** | **87,530** | **56,690** |
+
+`BOX2D=OFF` agrees with upstream to within **3-6%** across all eight comparable slots, so
+the tile-step numbers are physically correct. `BOX2D=ON` returns **0.10-0.43x** of them in
+sustained cruise — typically ~0.13x, i.e. **roughly 7x less range per unit fuel** — across
+every one of the 18 test vehicles.
+
+Crucially the loss is **not uniform**, which rules out a units or bookkeeping artifact:
+
+| Measurement | ON / OFF |
+|---|---|
+| sustained cruise, pavement | 0.10 - 0.43 |
+| sustained cruise, dirt | 0.03 - 0.73 |
+| stop-start, pavement | 0.69 - 0.90 |
+| stop-start, dirt | 0.69 - 0.97 |
+
+Stop-start cases lose only ~10-30%; sustained cruise loses ~87%. So the defect is in
+**steady-state economy** — drag, rolling resistance, or engine load at constant speed under
+physics authority — not in acceleration or in the measurement.
+
+**Raw distance is NOT the cause.** Movement was verified exact after the `step_turn` fix: a
+car and a fire truck each advance 56 tiles in 10 turns at 1000 cm/s on both pavement and
+dirt, against `10 m/s / 1.78816 m-per-tile = 55.9` expected. Since
+`adjusted_tiles_travelled = tiles_travelled / fuel_percentage_used` and the numerator is
+right, the denominator is wrong: **Box2D-authority vehicles burn roughly 7x more fuel for
+the same distance at cruise.** That is the thing to investigate.
+
+**This regression was previously hidden twice over.** The committed constants (76,590 for
+`car_test`) sit beside the ON value, so they were generated under `BOX2D=ON` and baked the
+regression into the baseline — which is why they read ~8x below upstream. And the checks
+themselves had been `WARN`-gated under `BOX2D_ENABLED`, so nothing asserted them. Both are
+now fixed: constants are the upstream-validated OFF values and the checks are strict and
+unconditional.
+
+`vehicle_efficiency` therefore **fails on purpose**: 101 assertions, 99 of them the lower
+bound (too little distance per fuel). Left red deliberately. Do not re-baseline it to the
+ON numbers — that is exactly how the regression was concealed the first time.
+
+Start from `vehicle::gain_moves()` (`src/vehicle.cpp`, where `slowdown()` and thrust are
+applied per turn) and compare fuel drawn per tile between the two paths at a fixed cruise
+speed.
+
+## Which paths are actually exercised — measure before aiming a fix
 
 The readback tile-walk in `map::vehmove()` is not uniformly hit. Counting entries into
 the `px != cur.x() || py != cur.y()` branch per suite:
