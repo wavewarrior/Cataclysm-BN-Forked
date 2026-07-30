@@ -1641,3 +1641,73 @@ freed it but the destructor, which never runs mid-session, so `MAPBUFFER.clear()
 returning to the menu left world A's colliders registered at coordinates holding
 world B's terrain. Measured `terrain_body_count() == 1` after teardown. Fixed via
 `clear_world_bodies()` at the `mapbuffer::clear()` choke point.
+
+### Efficiency: resolved, and the residue
+
+Two real defects, both found by decomposing `vehicle_efficiency`'s **per-cycle**
+distance instead of its totals. Totals hid both; the histogram made them obvious.
+
+1. **A declined tile step zeroed velocity.** The readback rewind called `veh.stop()`
+   whenever the walk missed its physics target. But `move_vehicle()` already applies
+   collision speed loss inside `part_collision()`, and `blocked` does not mean "hit
+   something" — it also covers the first turn after a vehicle is placed or displaced,
+   before `of_turn` is funded. Measured: velocity 2235 zeroed on turn 1 with the
+   target 12 tiles away and nothing in between, then 14 turns to recover. In
+   gameplay, one declined step halted the vehicle.
+
+2. **The world was stepped before game logic settled velocity.** `step_turn()` sat at
+   the top of `map::vehmove()`, before vehicles were even given movement points, so
+   integration used the *previous* turn's velocity. Invisible at cruise, which is why
+   it survived; but every speed change cost a full turn on the stale value, and after
+   a stop the first turn produced no movement at all. Now stepped immediately before
+   the readback: `act_on_map()` settles velocity -> step -> apply positions.
+
+`vehicle_efficiency` 59 -> 15 failed assertions; full `[vehicle]` 101 -> 44.
+
+**The residue is an overshoot, and is deliberately left red.** The 15 remaining
+failures are all on the *upper* bound: vehicles now travel slightly too far.
+Regenerating the constants on the shipping build gives ±5% for 85 of 144 slots, but
+up to **1.25x for light, fast-accelerating vehicles** (scooter, motorcycle,
+superbike, quad bike) concentrated in the stop-start conditions.
+
+That is the mirror image of defect 2: stepping a whole turn at *end-of-turn* velocity
+over-credits acceleration exactly as stepping at start-of-turn under-credited it. The
+honest fix is to integrate the acceleration phase properly — sub-step it, or use the
+mean velocity across the turn — not to adopt constants that bake the overshoot into
+the baseline. Doing that would repeat this plan's own recorded mistake of trusting "a
+number that looks authoritative because a test went green".
+
+It is also a balance decision: it changes how quickly vehicles pull away.
+
+### Collider lifecycle: second leak, at `map::load()`
+
+`map::load()` drops every submap with a bare
+`std::fill( grid.begin(), grid.end(), nullptr )` and never routes through
+`on_submap_unloaded`, then `loadn()` builds fresh bodies for the new bubble. Terrain
+colliders therefore accumulated across every fast travel and every game start.
+
+Worse than the leak: terrain bodies are keyed by absolute submap but *positioned* in
+bubble coordinates, and a distant load carries no shift delta, so `on_map_shifted`
+never corrected them either. Stranded bodies sat wherever those tiles used to appear
+on screen. Fixed by reusing `clear_world_bodies()` — the same invariant as the
+world-teardown fix, at a second call site.
+
+**The test for it is an explicit `[!shouldfail]` pending spec, not a passing test.**
+The harness cannot build terrain colliders at all: `on_submap_loaded()` fires only
+from `map::loadn()` for the player's z-level, `on_tile_changed()` only refreshes
+submaps that are *already* registered, and a fresh test world is open field where no
+tile earns a collider. `count_home` comes out 0 and the invariant then holds
+trivially. A `REQUIRE( count_home > 0 )` guard makes that vacuity fail loudly — I
+wrote two silently-vacuous versions of this test before adding it.
+
+### Cross-test leakage: root cause found
+
+`clear_map()` reset only `abs_sub`'s z, inheriting its xy from whatever the previous
+`TEST_CASE` left behind. Anything triggering `map::update_map()` mid-test shifts that
+anchor — `map::board_vehicle()` does, via the avatar move path — and it was never
+wound back, so the bub<->abs relationship differed per test by execution order.
+
+Re-anchoring canonically fixes `ranged_vehicle_recoil_test` (both sites) and the
+Box2D bash spec. `vehicle_ramp_test:174` survives it and has a different cause; note
+that its in-suite abort is what *masks* the ramp suite's 83 real assertions, so the
+suite total understates that file.

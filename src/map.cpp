@@ -1215,6 +1215,16 @@ std::vector<tripoint_bub_ms> map::get_dir_circle(
 
 void map::load( const tripoint_abs_sm& w, const bool update_vehicle, const bool pump_events )
 {
+#ifdef BOX2D_ENABLED
+    // Re-anchoring the whole bubble invalidates every body in it.  The grid fill
+    // below drops all submaps without routing through on_submap_unloaded, and
+    // loadn() then builds fresh bodies, so without this the old ones both accumulate
+    // and keep bubble-relative positions that no longer mean anything — a distant
+    // load carries no shift delta, so on_map_shifted never corrects them either.
+    // Vehicle bodies go too: loaded_vehicles is cleared just below and rebuilt by
+    // reset_vehicle_cache().
+    if( phys_world ) { phys_world->clear_world_bodies(); }
+#endif
     std::fill( grid.begin(), grid.end(), nullptr );
     submaps_with_active_items.clear();
     loaded_vehicles.clear();

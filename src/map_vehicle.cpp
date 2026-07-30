@@ -445,7 +445,8 @@ void map::vehmove()
     // step_turn() sub-steps internally with a step size small enough that no
     // body can tunnel through the 1-tile terrain bodies, and syncs velocity in
     // once / out once so contact response is not overwritten mid-turn.
-    if( phys_world ) { phys_world->step_turn( 1.0f ); }
+    // Stepped further down, immediately before the readback, so the integration
+    // uses the velocity the game has already settled for this turn.  See there.
 #endif
 
 
@@ -582,6 +583,19 @@ void map::vehmove()
     // falling, traction, skidding) but returned early before move_vehicle().
     // physics_pos was written by step() at line 784 before the tile-step loop.
     if( phys_world ) {
+        // Step the world HERE, not at the top of vehmove().
+        //
+        // sync_bodies_from_game() pushes veh->velocity into the bodies, so stepping
+        // before act_on_map() integrated a whole turn using the PREVIOUS turn's
+        // velocity.  At steady cruise that is invisible, but every time the game
+        // changes speed the body spent a full turn on the stale value: after any
+        // stop the first turn produced no movement at all, because the body was
+        // still stepping at zero while the game had already restored cruise.
+        //
+        // Measured on the road roller in vehicle_efficiency_test, which resets
+        // velocity every 5 turns: one dead turn per reset, ~20 of 100 cycles.
+        phys_world->step_turn( 1.0f );
+
         // move_vehicle() below can destroy vehicles — it bashes terrain, damages
         // creatures, and reaches vehicle_vehicle_collision(), which can wreck the
         // OTHER vehicle.  So a raw walk over the snapshot is unsafe twice over: an
@@ -737,10 +751,18 @@ void map::vehmove()
                 // stopped it.
                 const auto reached = veh.bub_ms_location();
                 if( reached.x() != px || reached.y() != py ) {
-                    // Blocked moves shed speed, as the tile-step mover's collision
-                    // handling did; the iteration bound alone is not a collision,
-                    // so it only resyncs.
-                    if( blocked ) { veh.stop(); }
+                    // Deliberately does NOT touch velocity.  move_vehicle() already
+                    // applies whatever speed loss a real collision causes, inside
+                    // part_collision(); zeroing it here double-penalised that, and
+                    // fired even when nothing was hit.  `blocked` only means "the
+                    // tile-step mover declined to advance", which includes entirely
+                    // benign cases — the very first turn after a vehicle is placed
+                    // or displaced, when its of_turn budget is not yet funded.  That
+                    // cost a full stop from cruise: measured on the road roller,
+                    // velocity 2235 was zeroed on turn 1 with the target 12 tiles
+                    // away and nothing in between, then took 14 turns to accelerate
+                    // back.  In gameplay it meant a single declined step brought the
+                    // vehicle to a dead halt.
                     veh.physics_pos = rl_vec2d{ static_cast<float>( reached.x() ),
                                                 static_cast<float>( reached.y() ) };
                     phys_world->clamp_body_to_tile( veh );
