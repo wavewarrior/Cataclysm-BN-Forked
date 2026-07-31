@@ -744,13 +744,14 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
     if( do_animation && do_draw_line && traj_len > 2 ) {
         trajectory.erase( trajectory.begin() );
         trajectory.resize( traj_len-- );
-        auto should_rotate = is_thrown && thrown_item &&
-                             !thrown_item->has_flag( flag_FLY_STRAIGHT );
+        const auto should_rotate = is_thrown && thrown_item &&
+                                   !thrown_item->has_flag( flag_FLY_STRAIGHT );
         draw_line_of( {
             .p = tp,
             .points = trajectory,
             .sprite = custom_bullet_sprite,
             .rotate = should_rotate,
+            .thrown = is_thrown,
         } );
     }
 

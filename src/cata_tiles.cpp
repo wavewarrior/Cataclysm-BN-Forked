@@ -1,8 +1,7 @@
 #include "cata_tiles.h"
 #include "cata_tiles_internal.h"
-#ifdef BOX2D_ENABLED
+#include "lighting/solid_overlay.h"
 #include "physics/physics_world.h"
-#endif
 
 #include "action.h"
 #include "avatar.h"
@@ -117,7 +116,6 @@ std::string get_ascii_tile_id( const uint32_t sym, const int FG, const int BG )
 
 
 struct draw_zone_overlay_options {
-    const SDL_Renderer_Ptr &renderer;
     SDL_Rect rect;
     SDL_Color color;
     std::multimap<point, formatted_text> &overlay_strings;
@@ -128,21 +126,10 @@ struct draw_zone_overlay_options {
 
 void draw_zone_overlay( const draw_zone_overlay_options& opt )
 {
-    SDL_Color color = opt.color;
-    color.a = static_cast<Uint8>( opt.alpha );
-
-    constexpr auto flags = sdl_render_state_flags::draw_color | sdl_render_state_flags::blend_mode;
-    const auto state = sdl_save_render_state<flags>( opt.renderer.get() );
-
-    SetRenderDrawBlendMode( opt.renderer, SDL_BLENDMODE_BLEND );
-    SetRenderDrawColor( opt.renderer, color.r, color.g, color.b, color.a );
-    {
-        const SDL_FRect
-        frect{float( opt.rect.x ), float( opt.rect.y ), float( opt.rect.w ), float( opt.rect.h )};
-        RenderFillRect( opt.renderer, &frect );
-    }
-
-    sdl_restore_render_state( opt.renderer.get(), state );
+    lighting::overlay_rect(
+    { static_cast<float>( opt.rect.x ), static_cast<float>( opt.rect.y ),
+      static_cast<float>( opt.rect.w ), static_cast<float>( opt.rect.h ) },
+    lighting::overlay_color_from_bytes( opt.color.r, opt.color.g, opt.color.b, opt.alpha ) );
 
     if( opt.draw_label && !opt.name.empty() ) {
         const point center( opt.rect.x + opt.rect.w / 2, opt.rect.y + opt.rect.h / 2 );
@@ -1136,7 +1123,6 @@ void cata_tiles::draw(
             for( const zone_render_data& zone : zones_to_draw ) {
                 if( !zone.tiles.contains( p.pos.xy() ) ) { continue; }
                 draw_zone_overlay( {
-                    .renderer = renderer,
                     .rect = tile_rect,
                     .color = zone.color,
                     .overlay_strings = overlay_strings,
@@ -1147,7 +1133,6 @@ void cata_tiles::draw(
         }
         if( in_selected_zone && !selected_drawn ) {
             draw_zone_overlay( {
-                .renderer = renderer,
                 .rect = tile_rect,
                 .color = curses_color_to_SDL( c_light_green ),
                 .overlay_strings = overlay_strings,
@@ -1486,6 +1471,10 @@ void cata_tiles::draw(
         if( !particles_.idle() ) {
             particles_.update( anim_wall_now_ );
             for( const auto &p : particles_.active() ) {
+                if( p.style != particle_style::sprite ) {
+                    draw_particle_overlay( p );
+                    continue;
+                }
                 if( !tile_iso ) {
                     active_anim_xform_ = sprite_xform{
                         .off_x = p.off_x * static_cast<float>( tile_width ),
@@ -1635,7 +1624,6 @@ void cata_tiles::draw(
         }
     }
 
-#ifdef BOX2D_ENABLED
     // Box2D debug overlay — populates the GPU debug_line_pass with collision
     // shapes, contact manifolds, and body transforms.  The actual GPU draw
     // happens later in render_world_pass_w.  Skip in iso mode (projection differs).
@@ -1647,7 +1635,6 @@ void cata_tiles::draw(
             pw->draw_debug( dl );
         }
     }
-#endif
     lighting::get_render_state().clear_tile_scissor();
 }
 
@@ -2362,18 +2349,12 @@ bool cata_tiles::draw_tile_at(
     return true;
 }
 
-bool cata_tiles::draw_color_at( const SDL_Color& color, point_bub_ms pos,
-                                SDL_BlendMode blend_mode )
+auto cata_tiles::draw_color_at( const SDL_Color& color, point_bub_ms pos ) -> void
 {
-    SDL_FRect rect{float( pos.x() ), float( pos.y() ), float( tile_width ), float( tile_height )};
-
-    SDL_BlendMode old_blend_mode;
-    GetRenderDrawBlendMode( renderer, old_blend_mode );
-    SetRenderDrawBlendMode( renderer, blend_mode );
-    SetRenderDrawColor( renderer, color.r, color.g, color.b, color.a );
-    RenderFillRect( renderer, &rect );
-    SetRenderDrawBlendMode( renderer, old_blend_mode );
-    return true;
+    lighting::overlay_rect(
+    { static_cast<float>( pos.x() ), static_cast<float>( pos.y() ),
+      static_cast<float>( tile_width ), static_cast<float>( tile_height ) },
+    lighting::overlay_color_from_bytes( color.r, color.g, color.b, color.a ) );
 }
 
 bool cata_tiles::would_apply_vision_effects( const visibility_type visibility ) const

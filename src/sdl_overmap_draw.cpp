@@ -392,7 +392,7 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
                     SDL_Color c = curses_color_to_SDL( c_pink );
                     c.a = c.a >> 1;
                     auto p = player_to_screen( omp.reinterpret_as<tripoint_bub_ms>().xy() );
-                    draw_color_at( c, point_bub_ms( p ), SDL_BLENDMODE_BLEND );
+                    draw_color_at( c, point_bub_ms( p ) );
                 }
             }
 

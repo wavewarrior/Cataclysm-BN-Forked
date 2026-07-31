@@ -68,7 +68,13 @@ struct draw_sprite_line_options {
     const std::vector<tripoint_bub_ms> &points;
     /// Sprite for 0 degree angle (↑)
     std::string sprite;
+    /// Tumble end-over-end in flight. Only meaningful together with `thrown`.
     bool rotate = false;
+    /// The projectile is a thrown object rather than a fired one. Drives the
+    /// in-flight look: thrown objects render as a shard, fired ones as a tracer.
+    /// Independent of `rotate`, which only says whether the shard spins —
+    /// FLY_STRAIGHT throws (arrows, spears) are thrown but do not tumble.
+    bool thrown = false;
 };
 /// Draw a line of sprites along the given points
 void draw_line_of( const draw_sprite_line_options &options );

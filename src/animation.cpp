@@ -327,21 +327,32 @@ void explosion_handler::draw_custom_explosion( const tripoint_bub_ms &,
 namespace
 {
 
-auto get_bullet_sprite( const char bullet, const std::string &custom_sprite ) -> std::string
+/// In-flight look for a projectile, as tile-independent pixel geometry.
+///
+/// A custom sprite is authored art for a specific projectile, so it keeps the
+/// sprite path; everything else becomes a tracer whose tint follows the legacy
+/// ASCII glyph. Note that plain bullets used to map to an EMPTY sprite id and so
+/// drew nothing at all — as a tracer they are finally visible.
+auto make_projectile_particle( const char bullet, const std::string &custom_sprite )
+-> particle
 {
     if( !custom_sprite.empty() ) {
-    return custom_sprite;
-}
-if( bullet == '*' ) {
-    return "animation_bullet_normal_0deg";
-}
-if( bullet == '#' ) {
-    return "animation_bullet_flame";
-}
-if( bullet == '`' ) {
-    return "animation_bullet_shrapnel";
-}
-return {};
+        return particle{ .style = particle_style::sprite, .sprite = custom_sprite };
+    }
+    switch( bullet ) {
+        case '#': // flame
+            return particle{ .style = particle_style::tracer,
+                             .tint_r = 1.5f, .tint_g = 0.45f, .tint_b = 0.08f,
+                             .size_px = 4.0f, .length_px = 26.0f };
+        case '`': // shrapnel
+            return particle{ .style = particle_style::tracer,
+                             .tint_r = 0.9f, .tint_g = 0.95f, .tint_b = 1.0f,
+                             .size_px = 2.0f, .length_px = 12.0f };
+        default: // ordinary bullet
+            return particle{ .style = particle_style::tracer,
+                             .tint_r = 1.4f, .tint_g = 1.15f, .tint_b = 0.55f,
+                             .size_px = 3.0f, .length_px = 22.0f };
+    }
 }
 
 } // namespace
@@ -354,20 +365,16 @@ void game::draw_bullet( const tripoint_bub_ms &t, const int i,
         return;
     }
 
-    const auto sprite = get_bullet_sprite( bullet, custom_sprite );
-    const auto rotation = get_bullet_rotation( get_bullet_dir( trajectory, static_cast<size_t>( i ) ) );
-
     // Previous tile for interpolation; first tile (muzzle) snaps.
     const tripoint_bub_ms &prev = ( i > 0 ) ? trajectory[i - 1] : t;
 
     const auto delay_ms = get_option<int>( "ANIMATION_DELAY" );
-    tilecontext->particles().emit( particle{
-        .sprite = sprite,
-        .rotation = rotation,
-        .path = { prev, t },
-        .start_wall = static_cast<double>( SDL_GetTicks() ) / 1000.0,
-        .duration = static_cast<float>( delay_ms ) / 1000.f
-    } );
+    auto p = make_projectile_particle( bullet, custom_sprite );
+    p.rotation = get_bullet_rotation( get_bullet_dir( trajectory, static_cast<size_t>( i ) ) );
+    p.path = { prev, t };
+    p.start_wall = static_cast<double>( SDL_GetTicks() ) / 1000.0;
+    p.duration = static_cast<float>( delay_ms ) / 1000.f;
+    tilecontext->particles().emit( std::move( p ) );
 
     static_popup popup;
     popup.wait_message( "%s", _( "Hang on a bit…" ) ).on_top( true );
@@ -410,7 +417,7 @@ void draw_bullet_trajectories( const draw_bullet_trajectories_options &options )
         return;
     }
 
-    const auto sprite = get_bullet_sprite( options.bullet, options.custom_sprite );
+    const auto proto = make_projectile_particle( options.bullet, options.custom_sprite );
     const auto delay_ms = get_option<int>( "ANIMATION_DELAY" );
     const auto tile_dur = static_cast<float>( delay_ms ) / 1000.f;
     const auto wall_start = static_cast<double>( SDL_GetTicks() ) / 1000.0;
@@ -429,15 +436,12 @@ void draw_bullet_trajectories( const draw_bullet_trajectories_options &options )
                 continue;
             }
             longest = std::max( longest, flight.size() );
-            const auto rotation = get_bullet_rotation(
-                                      get_bullet_dir( flight, flight.size() - 1 ) );
-            tilecontext->particles().emit( particle{
-                .sprite = sprite,
-                .rotation = rotation,
-                .path = std::move( flight ),
-                .start_wall = wall_start,
-                .duration = static_cast<float>( trajectory.size() - 1 ) * tile_dur,
-            } );
+            auto p = proto;
+            p.rotation = get_bullet_rotation( get_bullet_dir( flight, flight.size() - 1 ) );
+            p.duration = static_cast<float>( trajectory.size() - 1 ) * tile_dur;
+            p.path = std::move( flight );
+            p.start_wall = wall_start;
+            tilecontext->particles().emit( std::move( p ) );
         }
         if( longest < 2 ) {
             return;
@@ -468,15 +472,12 @@ void draw_bullet_trajectories( const draw_bullet_trajectories_options &options )
         if( trajectory.size() < 2 ) {
             continue;
         }
-        const auto rotation = get_bullet_rotation(
-                                  get_bullet_dir( trajectory, trajectory.size() - 1 ) );
-        tilecontext->particles().emit( particle{
-            .sprite = sprite,
-            .rotation = rotation,
-            .path = trajectory,
-            .start_wall = wall_start,
-            .duration = static_cast<float>( trajectory.size() - 1 ) * tile_dur
-        } );
+        auto p = proto;
+        p.rotation = get_bullet_rotation( get_bullet_dir( trajectory, trajectory.size() - 1 ) );
+        p.path = trajectory;
+        p.start_wall = wall_start;
+        p.duration = static_cast<float>( trajectory.size() - 1 ) * tile_dur;
+        tilecontext->particles().emit( std::move( p ) );
     }
 
     if( longest_trajectory_size < 2 ) {
@@ -555,17 +556,26 @@ void draw_line_of( const draw_sprite_line_options &options )
 
     const auto delay_ms = get_option<int>( "ANIMATION_DELAY" );
     const auto tile_dur = static_cast<float>( delay_ms ) / 1000.f;
-    const auto rotation = options.rotate ? 0 :
-                          get_bullet_rotation( get_bullet_dir( path, path.size() - 1 ) );
 
-    tilecontext->particles().emit( particle{
-        .sprite = options.sprite,
-        .rotation = rotation,
-        .path = path,
-        .start_wall = static_cast<double>( SDL_GetTicks() ) / 1000.0,
-        .duration = static_cast<float>( path.size() - 1 ) * tile_dur,
-        .tumble = options.rotate,
-    } );
+    // A thrown object is a shard in flight; a fired one is a tracer streak. Authored
+    // art (a custom sprite) always wins, since somebody drew it on purpose.
+    // `rotate` only decides whether the shard tumbles: FLY_STRAIGHT throws (arrows,
+    // bolts, spears) are thrown but must fly point-first, so they get a shard
+    // aligned to the flight direction instead of a cartwheel.
+    auto p = options.sprite.empty() && options.thrown
+             ? particle{ .style = particle_style::debris,
+                         .tint_r = 0.85f, .tint_g = 0.80f, .tint_b = 0.72f,
+                         .size_px = 5.0f,
+                         .tumble = options.rotate }
+             : make_projectile_particle( '*', options.sprite );
+    if( p.style == particle_style::sprite ) {
+        p.rotation = get_bullet_rotation( get_bullet_dir( path, path.size() - 1 ) );
+        p.tumble = options.rotate;
+    }
+    p.path = path;
+    p.start_wall = static_cast<double>( SDL_GetTicks() ) / 1000.0;
+    p.duration = static_cast<float>( path.size() - 1 ) * tile_dur;
+    tilecontext->particles().emit( std::move( p ) );
 
     static_popup popup;
     popup.wait_message( "%s", _( "Hang on a bit…" ) ).on_top( true );

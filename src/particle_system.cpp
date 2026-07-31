@@ -8,6 +8,7 @@ void particle_system::emit( particle p )
     // Seed initial render state from the first waypoint.
     if( !p.path.empty() ) {
         p.tile = p.path.front();
+        p.tile_prev = p.tile;
     }
     p.alive = true;
     particles_.push_back( std::move( p ) );
@@ -31,6 +32,8 @@ void particle_system::update( const double wall_now )
 
         // Stationary particle (impact effect): hold position, fade alpha.
         if( p.path.size() < 2 ) {
+            p.tile_prev = p.tile;
+            p.frac = 0.f;
             p.alpha = 1.f - static_cast<float>( progress );
             continue;
         }
@@ -45,6 +48,8 @@ void particle_system::update( const double wall_now )
         const auto &from = p.path[idx];
         const auto &to = p.path[idx + 1];
         p.tile = to;
+        p.tile_prev = from;
+        p.frac = frac;
         p.off_x = -static_cast<float>( to.x() - from.x() ) * ( 1.f - frac );
         p.off_y = -static_cast<float>( to.y() - from.y() ) * ( 1.f - frac );
 

@@ -1,6 +1,7 @@
 #include "cata_tiles.h"
 #include "cata_tiles_internal.h"
 #include "sdl_lighting_devui.h"
+#include "lighting/solid_overlay.h"
 
 #include "cata_utility.h"
 #include "avatar.h"
@@ -23,6 +24,7 @@
 #include <array>
 #include <cmath>
 #include <map>
+#include <numbers>
 #include <optional>
 #include <ranges>
 #include <string>
@@ -73,7 +75,6 @@ namespace
 {
 
 struct draw_zone_overlay_options {
-    const SDL_Renderer_Ptr &renderer;
     SDL_Rect rect;
     SDL_Color color;
     std::multimap<point, formatted_text> &overlay_strings;
@@ -84,21 +85,10 @@ struct draw_zone_overlay_options {
 
 void draw_zone_overlay( const draw_zone_overlay_options& opt )
 {
-    SDL_Color color = opt.color;
-    color.a = static_cast<Uint8>( opt.alpha );
-
-    constexpr auto flags = sdl_render_state_flags::draw_color | sdl_render_state_flags::blend_mode;
-    const auto state = sdl_save_render_state<flags>( opt.renderer.get() );
-
-    SetRenderDrawBlendMode( opt.renderer, SDL_BLENDMODE_BLEND );
-    SetRenderDrawColor( opt.renderer, color.r, color.g, color.b, color.a );
-    {
-        const SDL_FRect
-        frect{float( opt.rect.x ), float( opt.rect.y ), float( opt.rect.w ), float( opt.rect.h )};
-        RenderFillRect( opt.renderer, &frect );
-    }
-
-    sdl_restore_render_state( opt.renderer.get(), state );
+    lighting::overlay_rect(
+    { static_cast<float>( opt.rect.x ), static_cast<float>( opt.rect.y ),
+      static_cast<float>( opt.rect.w ), static_cast<float>( opt.rect.h ) },
+    lighting::overlay_color_from_bytes( opt.color.r, opt.color.g, opt.color.b, opt.alpha ) );
 
     if( opt.draw_label && !opt.name.empty() ) {
         const point center( opt.rect.x + opt.rect.w / 2, opt.rect.y + opt.rect.h / 2 );
@@ -302,20 +292,22 @@ auto cata_tiles::void_aim_crosshair() -> void
 auto cata_tiles::draw_aim_crosshair() -> void
 {
     if( !do_draw_aim_crosshair || !aim_crosshair_pixel_.has_value() ) { return; }
-void_aim_crosshair();
-const auto c = *aim_crosshair_pixel_;
-constexpr auto arm = 6;
-SDL_SetRenderDrawColor( renderer.get(), 255, 80, 0, 220 );
-const std::array<SDL_FPoint, 2> h = {
-    SDL_FPoint{ static_cast<float>( c.x - arm ), static_cast<float>( c.y ) },
-    SDL_FPoint{ static_cast<float>( c.x + arm ), static_cast<float>( c.y ) }
-};
-const std::array<SDL_FPoint, 2> v = {
-    SDL_FPoint{ static_cast<float>( c.x ), static_cast<float>( c.y - arm ) },
-    SDL_FPoint{ static_cast<float>( c.x ), static_cast<float>( c.y + arm ) }
-};
-SDL_RenderLines( renderer.get(), h.data(), 2 );
-SDL_RenderLines( renderer.get(), v.data(), 2 );
+    // Read the position BEFORE voiding: void_aim_crosshair() disengages the
+    // optional, so dereferencing it afterwards was undefined behaviour.
+    const auto c = *aim_crosshair_pixel_;
+    void_aim_crosshair();
+    // Belt-and-braces guard: the caller (ranged_target_ui.cpp) now falls back to
+    // the input layer's tracked mouse position when SDL_GetMouseState reports no
+    // mouse focus, but a genuine (0, 0) would still stamp a crosshair in the
+    // map's top-left corner, which is never what the player means.
+    if( c == point_zero ) { return; }
+    constexpr auto arm = 6.0f;
+    constexpr auto thickness = 2.0f;
+    const auto col = lighting::overlay_color_from_bytes( 255, 80, 0, 220 );
+    const auto cx = static_cast<float>( c.x );
+    const auto cy = static_cast<float>( c.y );
+    lighting::overlay_rect( { cx - arm, cy, 2.0f * arm, thickness }, col );
+    lighting::overlay_rect( { cx, cy - arm, thickness, 2.0f * arm }, col );
 }
 auto cata_tiles::init_draw_aim_cone( const point_bub_ms &src, float aim_rad,
                                      float spread_half_rad, int max_range, int z ) -> void
@@ -331,107 +323,232 @@ auto cata_tiles::void_aim_cone() -> void { do_draw_aim_cone = false; }
 auto cata_tiles::draw_aim_cone() -> void
 {
     if( !do_draw_aim_cone ) { return; }
-do_draw_aim_cone = false;
-// ponytail: SDL screen-space overlay, not Vulkan world-space. At current
-// alpha levels (7% fill / 31% edge / 55-100% laser) the difference is
-// negligible. A Vulkan triangle pass would need new shaders for marginal gain.
-const auto origin = player_to_screen( aim_cone_src_ );
-// Apply avatar slide offset so cone tracks the sprite during movement lerp.
-const auto xf = compute_anim_xform( get_avatar() );
-    const auto ox = static_cast<float>( origin.x ) + xf.off_x;
-    const auto oy = static_cast<float>( origin.y ) + xf.off_y;
-    const auto half = aim_cone_spread_;
+    do_draw_aim_cone = false;
+    // Screen-space overlay quads queued into the world pass (lighting::solid_overlay)
+    // rather than a dedicated triangle pipeline: the wedge fill is a stack of
+    // rotated quads, which at these alpha levels is indistinguishable from a
+    // triangle fan once the sector count is high enough to hide the chords.
+    const auto origin = player_to_screen( aim_cone_src_ );
+    const auto xf = compute_anim_xform( get_avatar() );
     const auto tw = static_cast<float>( tile_width );
+    const auto th = static_cast<float>( tile_height );
+    // Apex on the tile CENTRE. player_to_screen returns the tile's top-left, but
+    // every ray below starts from the tile centre, so using the corner put the
+    // whole cone half a tile up-left of the muzzle.
+    const auto ox = static_cast<float>( origin.x ) + xf.off_x + tw * 0.5f;
+    const auto oy = static_cast<float>( origin.y ) + xf.off_y + th * 0.5f;
+    const auto half = aim_cone_spread_;
 
-    // --- Wall-clipped ray length helper ---
-    // Walk the DDA ray and return Euclidean tile distance to first impassable,
-    // or max_range if none found.
     const auto src3d = tripoint_bub_ms( aim_cone_src_, aim_cone_z_ );
     const auto &here = get_map();
-    const auto clipped_range = [&]( float angle ) -> float {
-        const auto tiles = here.ray_cast_angle( src3d, angle, aim_cone_range_ );
-        for( const auto &t : tiles )
-        {
-            if( here.impassable( t ) ) {
-                const auto ddx = static_cast<float>( t.x() - src3d.x() );
-                const auto ddy = static_cast<float>( t.y() - src3d.y() );
-                return std::sqrt( ddx * ddx + ddy * ddy );
-            }
+
+    // One ray's stop distance, in tiles from the source tile's centre.
+    struct cone_ray {
+        float stop = 0.0f;  //< where the wedge ends: the wall's NEAR face, or max range
+        bool blocked = false;
+    };
+    struct slab_range {
+        float lo = 0.0f;
+        float hi = 0.0f;
+    };
+    // Ray/AABB slab overlap along one axis of a unit tile whose low edge is `lo`.
+    const auto axis_slab = []( float p, float d, float lo ) -> slab_range {
+        constexpr auto eps = 1e-6f;
+        const auto inf = std::numeric_limits<float>::infinity();
+        if( std::abs( d ) < eps ) {
+            // Parallel to this axis: either always within the slab, or never.
+            return ( p >= lo && p <= lo + 1.0f ) ? slab_range{ -inf, inf } : slab_range{ inf, -inf };
         }
-        return static_cast<float>( aim_cone_range_ );
+        const auto t1 = ( lo - p ) / d;
+        const auto t2 = ( lo + 1.0f - p ) / d;
+        return { std::min( t1, t2 ), std::max( t1, t2 ) };
+    };
+    const auto cast_ray = [&]( float angle ) -> cone_ray {
+        const auto max_len = static_cast<float>( aim_cone_range_ );
+        const auto dx = std::cos( angle );
+        const auto dy = std::sin( angle );
+        const auto p0x = static_cast<float>( src3d.x() ) + 0.5f;
+        const auto p0y = static_cast<float>( src3d.y() ) + 0.5f;
+        for( const tripoint_bub_ms &t : here.ray_cast_angle( src3d, angle, aim_cone_range_ ) ) {
+            // The shooter's own tile can be impassable (firing from inside a
+            // vehicle, mid-bash), and stopping on it would collapse the cone.
+            if( t.xy() == src3d.xy() || !here.impassable( t ) ) { continue; }
+            // Stop on the wall's NEAR face: the point where the ray first crosses
+            // into the blocking tile, which is the intersection the player reads
+            // as "the shot stops here". `exit_at` is computed only to validate
+            // that the intersection is real - a ray parallel to one axis can miss
+            // the slab entirely, which the slab_range sentinels encode as an
+            // empty (lo > hi) range.
+            const auto sx = axis_slab( p0x, dx, static_cast<float>( t.x() ) );
+            const auto sy = axis_slab( p0y, dy, static_cast<float>( t.y() ) );
+            const auto entry = std::max( { sx.lo, sy.lo, 0.0f } );
+            const auto exit_at = std::min( sx.hi, sy.hi );
+            if( !std::isfinite( exit_at ) || exit_at <= 0.0f || entry > exit_at ) { break; }
+            return { .stop = std::min( entry, max_len ), .blocked = entry <= max_len };
+        }
+        return { .stop = max_len, .blocked = false };
     };
 
     const auto left_angle  = aim_cone_angle_ - half;
     const auto right_angle = aim_cone_angle_ + half;
 
-    // Pre-compute clipped ray length for each fan vertex (fan_segs + 1 angles).
-    // Edges reuse seg_lens[0] / seg_lens[fan_segs]; center reuses seg_lens[fan_segs/2].
-    constexpr auto fan_segs = 12;
-    std::array<float, 13> seg_lens{};
+    // Sector count drives how closely the fill's outer boundary follows the arc:
+    // each sector contributes one flat chord, so too few reads as a sawtooth.
+    constexpr auto fan_segs = 24;
+    std::array<cone_ray, fan_segs + 1> rays{};
     for( auto i = 0; i <= fan_segs; ++i ) {
-    const auto t = static_cast<float>( i ) / fan_segs;
-        const auto a = left_angle + ( right_angle - left_angle ) * t;
-        seg_lens[i] = clipped_range( a ) * tw;
+        const auto t = static_cast<float>( i ) / fan_segs;
+        rays[i] = cast_ray( left_angle + ( right_angle - left_angle ) * t );
     }
-    const auto center_len = seg_lens[fan_segs / 2];
+    const auto center_len = rays[fan_segs / 2].stop * tw;
+    const auto sector = ( right_angle - left_angle ) / fan_segs;
 
-    SDL_SetRenderDrawBlendMode( renderer.get(), SDL_BLENDMODE_BLEND );
-
-    // Filled wedge: triangle fan with per-segment wall clipping.
     if( half > 0.005f ) {
-    const SDL_FColor fill_col{ 1.f, 0.314f, 0.f, 0.07f };
-    const auto origin_vtx = SDL_Vertex{ { ox, oy }, fill_col, { 0.f, 0.f } };
-    for( auto i = 0; i < fan_segs; ++i ) {
-            const auto a0 = left_angle + ( right_angle - left_angle )
-                            * static_cast<float>( i ) / fan_segs;
-            const auto a1 = left_angle + ( right_angle - left_angle )
-                            * static_cast<float>( i + 1 ) / fan_segs;
-            const std::array<SDL_Vertex, 3> verts = {
-                origin_vtx,
-                SDL_Vertex{ {
-                        ox + seg_lens[i] *std::cos( a0 ),
-                        oy + seg_lens[i] *std::sin( a0 )
-                    },
-                    fill_col, { 0.f, 0.f } },
-                SDL_Vertex{ {
-                        ox + seg_lens[i + 1] *std::cos( a1 ),
-                        oy + seg_lens[i + 1] *std::sin( a1 )
-                    },
-                    fill_col, { 0.f, 0.f } }
+        const auto fill_col =
+            lighting::overlay_color{ .r = 1.0f, .g = 0.314f, .b = 0.0f, .a = 0.07f };
+        for( auto i = 0; i < fan_segs; ++i ) {
+            // Sectors are disjoint in angle, so the translucent fill never
+            // double-blends. Each spans the SHORTER of its two bounding rays so
+            // the fill cannot leak past a wall that only one edge sees.
+            lighting::overlay_wedge( {
+                .apex = { ox, oy },
+                .angle = left_angle + sector * ( static_cast<float>( i ) + 0.5f ),
+                .half_angle = sector * 0.5f,
+                .radius = std::min( rays[i].stop, rays[i + 1].stop ) * tw,
+                .slabs = 14,
+                .color = fill_col } );
+        }
+
+        // Impact glow on the wall face wherever the cone is cut short. The world
+        // target is RGBA16F and bloom thresholds at 1.0 (sdl_lighting_devui.cpp),
+        // so these tints deliberately exceed 1.0 — that is what makes the bloom
+        // pass pick them up and produce a real halo instead of a flat blob.
+        for( auto i = 0; i < fan_segs; ++i ) {
+            if( !rays[i].blocked || !rays[i + 1].blocked ) { continue; }
+            const auto ang = left_angle + sector * ( static_cast<float>( i ) + 0.5f );
+            const auto d = std::min( rays[i].stop, rays[i + 1].stop ) * tw;
+            const auto hx = ox + d * std::cos( ang );
+            const auto hy = oy + d * std::sin( ang );
+            const std::array<float, 3> sizes = { tw * 0.85f, tw * 0.50f, tw * 0.26f };
+            const std::array<lighting::overlay_color, 3> cols = {
+                lighting::overlay_color{ .r = 1.6f, .g = 0.45f, .b = 0.05f, .a = 0.10f },
+                lighting::overlay_color{ .r = 2.2f, .g = 0.70f, .b = 0.15f, .a = 0.16f },
+                lighting::overlay_color{ .r = 3.0f, .g = 1.20f, .b = 0.40f, .a = 0.28f }
             };
-            SDL_RenderGeometry( renderer.get(), nullptr, verts.data(), 3, nullptr, 0 );
+            for( std::size_t k = 0; k < sizes.size(); ++k ) {
+                const auto s = sizes[k];
+                lighting::overlay_rect( { hx - s * 0.5f, hy - s * 0.5f, s, s }, cols[k] );
+            }
         }
     }
 
-    // Edge lines (dim orange) — reuse seg_lens[0] and seg_lens[fan_segs].
+    // Diagonal strokes are rotated quads, so they use a 2px thickness: a 1px
+    // quad at an arbitrary angle straddles two pixel rows and blends to half
+    // brightness instead of reading as a crisp line.
+    constexpr auto stroke_px = 2.0f;
+
     if( half > 0.005f ) {
-    SDL_SetRenderDrawColor( renderer.get(), 255, 120, 0, 80 );
-        const std::array<SDL_FPoint, 2> el = {
-            SDL_FPoint{ ox, oy },
-            SDL_FPoint{
-                ox + seg_lens[0] *std::cos( left_angle ),
-                oy + seg_lens[0] *std::sin( left_angle ) }
-        };
-        const std::array<SDL_FPoint, 2> er = {
-            SDL_FPoint{ ox, oy },
-            SDL_FPoint{
-                ox + seg_lens[fan_segs] *std::cos( right_angle ),
-                oy + seg_lens[fan_segs] *std::sin( right_angle ) }
-        };
-        SDL_RenderLines( renderer.get(), el.data(), 2 );
-        SDL_RenderLines( renderer.get(), er.data(), 2 );
+        const auto edge_col = lighting::overlay_color_from_bytes( 255, 120, 0, 80 );
+        const auto edge_len_l = rays[0].stop * tw;
+        const auto edge_len_r = rays[fan_segs].stop * tw;
+        lighting::overlay_line( {
+            .from = { ox, oy },
+            .to = { ox + edge_len_l * std::cos( left_angle ),
+                    oy + edge_len_l * std::sin( left_angle ) },
+            .thickness = stroke_px,
+            .color = edge_col } );
+        lighting::overlay_line( {
+            .from = { ox, oy },
+            .to = { ox + edge_len_r * std::cos( right_angle ),
+                    oy + edge_len_r * std::sin( right_angle ) },
+            .thickness = stroke_px,
+            .color = edge_col } );
     }
 
     // Center laser line (bright, always visible)
-    const auto cx = ox + center_len * std::cos( aim_cone_angle_ );
-    const auto cy = oy + center_len * std::sin( aim_cone_angle_ );
-    const auto laser_alpha = static_cast<Uint8>(
+    const auto laser_alpha = static_cast<int>(
                                  std::min( 255.f, 140.f + 115.f * ( 1.f - std::min( half / 0.3f, 1.f ) ) ) );
-    SDL_SetRenderDrawColor( renderer.get(), 255, 60, 0, laser_alpha );
-    const std::array<SDL_FPoint, 2> cl = {
-        SDL_FPoint{ ox, oy }, SDL_FPoint{ cx, cy }
+    lighting::overlay_line( {
+        .from = { ox, oy },
+        .to = { ox + center_len * std::cos( aim_cone_angle_ ),
+                oy + center_len * std::sin( aim_cone_angle_ ) },
+        .thickness = stroke_px,
+        .color = lighting::overlay_color_from_bytes( 255, 60, 0, laser_alpha ) } );
+}
+auto cata_tiles::draw_particle_overlay( const particle &p ) -> void
+{
+    const auto tw = static_cast<float>( tile_width );
+    const auto th = static_cast<float>( tile_height );
+
+    // Both endpoints go through player_to_screen so the segment is correct under
+    // the iso shear too; the sprite path has to special-case tile_iso precisely
+    // because it cannot do this. player_to_screen returns the tile's TOP-LEFT, so
+    // half a tile is added to ride the tile centre.
+    const auto a = player_to_screen( p.tile_prev.xy() );
+    const auto b = player_to_screen( p.tile.xy() );
+    const auto ax = static_cast<float>( a.x ) + tw * 0.5f;
+    const auto ay = static_cast<float>( a.y ) + th * 0.5f;
+    const auto bx = static_cast<float>( b.x ) + tw * 0.5f;
+    const auto by = static_cast<float>( b.y ) + th * 0.5f;
+    const auto cx = ax + ( bx - ax ) * p.frac;
+    const auto cy = ay + ( by - ay ) * p.frac;
+
+    const auto alpha = std::clamp( p.alpha, 0.0f, 1.0f );
+    // Emissive: the tint is deliberately allowed above 1.0 so the RGBA16F world
+    // target hands the head to the bloom pass (threshold 1.0) as a real glow.
+    const auto tinted = [&]( float gain, float a ) {
+        return lighting::overlay_color{ .r = p.tint_r * gain,
+                                        .g = p.tint_g * gain,
+                                        .b = p.tint_b * gain,
+                                        .a = a * alpha };
     };
-    SDL_RenderLines( renderer.get(), cl.data(), 2 );
+
+    if( p.style == particle_style::debris ) {
+        // Thrown object. A tumbling one spins on its own wall clock so the rotation
+        // reads even across a single-tile flight; a FLY_STRAIGHT one (arrow, spear)
+        // holds its long axis along travel so it flies point-first.
+        const auto s = std::max( 2.0f, p.size_px );
+        const auto spin = p.tumble
+                          ? static_cast<float>( anim_wall_now_ ) * 9.0f
+                          : std::atan2( by - ay, bx - ax );
+        lighting::overlay_quad( { .centre = { cx, cy },
+                                  .w = s * 1.9f,
+                                  .h = s * 0.7f,
+                                  .rotation = spin,
+                                  .color = tinted( 1.0f, 0.85f ) } );
+        lighting::overlay_quad( { .centre = { cx, cy },
+                                  .w = p.tumble ? s * 0.7f : s * 0.5f,
+                                  .h = p.tumble ? s * 1.9f : s * 0.5f,
+                                  .rotation = spin,
+                                  .color = tinted( 1.4f, 0.55f ) } );
+        return;
+    }
+
+    // Tracer: a dim tail, a brighter core stub and a hot head, all along travel.
+    const auto dx = bx - ax;
+    const auto dy = by - ay;
+    const auto len = std::hypot( dx, dy );
+    const auto head = std::max( 2.0f, p.size_px );
+    if( len >= 0.001f ) {
+        const auto ux = dx / len;
+        const auto uy = dy / len;
+        // Clamp the tail to the distance actually flown, so a tracer never trails
+        // out behind the muzzle on the first frame of flight.
+        const auto tail = std::min( p.length_px, len * p.frac + tw * 0.5f );
+        lighting::overlay_line( { .from = { cx - ux * tail, cy - uy * tail },
+                                  .to = { cx, cy },
+                                  .thickness = std::max( 1.0f, head * 0.45f ),
+                                  .color = tinted( 0.55f, 0.40f ) } );
+        lighting::overlay_line( { .from = { cx - ux * tail * 0.35f, cy - uy * tail * 0.35f },
+                                  .to = { cx, cy },
+                                  .thickness = std::max( 1.0f, head * 0.9f ),
+                                  .color = tinted( 1.3f, 0.85f ) } );
+    }
+    // Hot head: two concentric rects, the inner one well over the bloom threshold.
+    lighting::overlay_rect( { cx - head, cy - head, head * 2.0f, head * 2.0f },
+                            tinted( 1.5f, 0.30f ) );
+    lighting::overlay_rect( { cx - head * 0.5f, cy - head * 0.5f, head, head },
+                            tinted( 3.0f, 0.95f ) );
 }
 auto cata_tiles::init_draw_throw_arc( const tripoint_bub_ms &src,
                                       const tripoint_bub_ms &dst,
@@ -465,9 +582,10 @@ const auto p1   = player_to_screen( throw_arc_src.xy() );
             u *u * float( p1.y ) + 2.0f * u * t * mid.y + t * t * float( p2.y )
         };
     }
-    const auto alpha = static_cast<Uint8>( 120 + static_cast<int>( 135.0f * throw_arc_charge ) );
-    SDL_SetRenderDrawColor( renderer.get(), 255, 140, 0, alpha );
-    SDL_RenderLines( renderer.get(), pts.data(), N );
+    const auto alpha = 120 + static_cast<int>( 135.0f * throw_arc_charge );
+    lighting::overlay_polyline( {
+        .points = pts,
+        .color = lighting::overlay_color_from_bytes( 255, 140, 0, alpha ) } );
 }
 auto cata_tiles::init_draw_throw_impact( const tripoint_bub_ms &dst,
         float max_radius_tiles ) -> void
@@ -484,19 +602,13 @@ const auto c      = player_to_screen( throw_impact_dst.xy() );
     const auto tile_w = static_cast<float>( tile_width );
     const auto max_r  = throw_impact_max_r_tiles * tile_w;
     const bool explosive = ( throw_impact_max_r_tiles > 0.6f );
-    const auto r_ch = static_cast<Uint8>( explosive ? 60 : 130 );
-    const auto draw_ring = [&]( float radius, Uint8 alpha ) {
-        if( radius < 1.0f ) { return; }
-        constexpr auto N = 28;
-        std::array < SDL_FPoint, N + 1 > pts;
-        for( auto i = 0; i <= N; ++i ) {
-            const auto ang = float( i ) * 2.0f * float( M_PI ) / float( N );
-            pts[i] = { float( c.x ) + radius * std::cos( ang ),
-                       float( c.y ) + radius * std::sin( ang )
-                     };
-        }
-        SDL_SetRenderDrawColor( renderer.get(), 255, r_ch, 0, alpha );
-        SDL_RenderLines( renderer.get(), pts.data(), N + 1 );
+    const auto r_ch = explosive ? 60 : 130;
+    const auto draw_ring = [&]( float radius, int alpha ) {
+        lighting::overlay_ring( {
+            .centre = { static_cast<float>( c.x ), static_cast<float>( c.y ) },
+            .radius = radius,
+            .segments = 28,
+            .color = lighting::overlay_color_from_bytes( 255, r_ch, 0, alpha ) } );
     };
     draw_ring( 4.0f, 230 );
     constexpr auto period_ms = 1200.0f;
@@ -505,174 +617,91 @@ const auto c      = player_to_screen( throw_impact_dst.xy() );
     for( auto i = 0; i < n_rings; ++i ) {
     const auto offset = float( i ) / float( n_rings );
         const auto t = std::fmod( t_now / period_ms + offset, 1.0f );
-        draw_ring( t * max_r, static_cast<Uint8>( ( 1.0f - t ) * 200.0f ) );
+        draw_ring( t * max_r, static_cast<int>( ( 1.0f - t ) * 200.0f ) );
     }
 }
 auto cata_tiles::draw_hover_effect() -> void
 {
+    if( !hover_tile_.has_value() ) { return; }
+
+    // Shared pulse: recomputed from wall-clock animation time, so both the
+    // brackets and the dot trail breathe together.
+    const auto pulse_mult = static_cast<float>(
+                                g_hover_highlight_pulse
+                                ? 0.7f + 0.3f * std::sin( anim_wall_now_ * g_hover_highlight_pulse_speed * 2.0f *
+                                        std::numbers::pi_v<float> )
+                                : 1.0f );
+
+    const auto tw = static_cast<float>( tile_width );
+    const auto th = static_cast<float>( tile_height );
+
     // --- Tile highlight: corner brackets ---
-    if( g_hover_highlight_enable && hover_tile_.has_value() ) {
-    const auto screen = player_to_screen( hover_tile_->xy() );
-        const auto tw = static_cast<float>( tile_width );
-        const auto th = static_cast<float>( tile_height );
-
-        // Compute pulsing alpha if enabled.
-        float pulse_mult = 1.0f;
-        if( g_hover_highlight_pulse ) {
-            pulse_mult = 0.7f + 0.3f * std::sin( anim_wall_now_ * g_hover_highlight_pulse_speed * 2.0f *
-                                                 static_cast<float>( M_PI ) );
-        }
-
-        SDL_SetRenderDrawBlendMode( renderer.get(), SDL_BLENDMODE_BLEND );
-
-        // Set draw color: multiply base alpha by pulse.
-        const auto base_a = static_cast<Uint8>( g_hover_highlight_color[3] * 255.0f );
-        const auto pulsed_a = static_cast<Uint8>( base_a * pulse_mult );
-        SDL_SetRenderDrawColor(
-            renderer.get(),
-            static_cast<Uint8>( g_hover_highlight_color[0] * 255.0f ),
-            static_cast<Uint8>( g_hover_highlight_color[1] * 255.0f ),
-            static_cast<Uint8>( g_hover_highlight_color[2] * 255.0f ),
-            pulsed_a
-        );
-
+    if( g_hover_highlight_enable ) {
+        const auto screen = player_to_screen( hover_tile_->xy() );
         const auto x = static_cast<float>( screen.x );
         const auto y = static_cast<float>( screen.y );
-        const auto arm_len = std::min( g_hover_highlight_corner_len * tw, tw * 0.5f );
-        const auto thickness = static_cast<int>( std::ceil( g_hover_highlight_thickness ) );
+        const auto arm = std::min( g_hover_highlight_corner_len * tw, tw * 0.5f );
+        const auto t = std::max( 1.0f, g_hover_highlight_thickness );
+        const auto col = lighting::overlay_color{
+            .r = g_hover_highlight_color[0],
+            .g = g_hover_highlight_color[1],
+            .b = g_hover_highlight_color[2],
+            .a = g_hover_highlight_color[3] * pulse_mult };
 
-        // Draw corner brackets as perpendicular lines with proper thickness offset.
-        // Top-left corner: horizontal offset in Y, vertical offset in X.
-        for( int off = 0; off < thickness; ++off ) {
-            const auto off_f = static_cast<float>( off );
-            const std::array<SDL_FPoint, 2> h = {
-                SDL_FPoint{ x, y + off_f },
-                SDL_FPoint{ x + arm_len, y + off_f }
-            };
-            const std::array<SDL_FPoint, 2> v = {
-                SDL_FPoint{ x + off_f, y },
-                SDL_FPoint{ x + off_f, y + arm_len }
-            };
-            SDL_RenderLines( renderer.get(), h.data(), 2 );
-            SDL_RenderLines( renderer.get(), v.data(), 2 );
-        }
-
-        // Top-right corner: horizontal offset in Y, vertical offset in X.
-        for( int off = 0; off < thickness; ++off ) {
-            const auto off_f = static_cast<float>( off );
-            const std::array<SDL_FPoint, 2> h = {
-                SDL_FPoint{ x + tw, y + off_f },
-                SDL_FPoint{ x + tw - arm_len, y + off_f }
-            };
-            const std::array<SDL_FPoint, 2> v = {
-                SDL_FPoint{ x + tw - off_f, y },
-                SDL_FPoint{ x + tw - off_f, y + arm_len }
-            };
-            SDL_RenderLines( renderer.get(), h.data(), 2 );
-            SDL_RenderLines( renderer.get(), v.data(), 2 );
-        }
-
-        // Bottom-left corner: horizontal offset in Y, vertical offset in X.
-        for( int off = 0; off < thickness; ++off ) {
-            const auto off_f = static_cast<float>( off );
-            const std::array<SDL_FPoint, 2> h = {
-                SDL_FPoint{ x, y + th - off_f },
-                SDL_FPoint{ x + arm_len, y + th - off_f }
-            };
-            const std::array<SDL_FPoint, 2> v = {
-                SDL_FPoint{ x + off_f, y + th },
-                SDL_FPoint{ x + off_f, y + th - arm_len }
-            };
-            SDL_RenderLines( renderer.get(), h.data(), 2 );
-            SDL_RenderLines( renderer.get(), v.data(), 2 );
-        }
-
-        // Bottom-right corner: horizontal offset in Y, vertical offset in X.
-        for( int off = 0; off < thickness; ++off ) {
-            const auto off_f = static_cast<float>( off );
-            const std::array<SDL_FPoint, 2> h = {
-                SDL_FPoint{ x + tw, y + th - off_f },
-                SDL_FPoint{ x + tw - arm_len, y + th - off_f }
-            };
-            const std::array<SDL_FPoint, 2> v = {
-                SDL_FPoint{ x + tw - off_f, y + th },
-                SDL_FPoint{ x + tw - off_f, y + th - arm_len }
-            };
-            SDL_RenderLines( renderer.get(), h.data(), 2 );
-            SDL_RenderLines( renderer.get(), v.data(), 2 );
+        // Two rects per corner (one along each edge), inset by the line
+        // thickness so the arms meet flush instead of overhanging the tile.
+        const std::array<SDL_FRect, 8> arms = {
+            SDL_FRect{ x, y, arm, t },                     // top-left, horizontal
+            SDL_FRect{ x, y, t, arm },                     // top-left, vertical
+            SDL_FRect{ x + tw - arm, y, arm, t },          // top-right, horizontal
+            SDL_FRect{ x + tw - t, y, t, arm },            // top-right, vertical
+            SDL_FRect{ x, y + th - t, arm, t },            // bottom-left, horizontal
+            SDL_FRect{ x, y + th - arm, t, arm },          // bottom-left, vertical
+            SDL_FRect{ x + tw - arm, y + th - t, arm, t }, // bottom-right, horizontal
+            SDL_FRect{ x + tw - t, y + th - arm, t, arm }  // bottom-right, vertical
+        };
+        for( const SDL_FRect &arm_rect : arms ) {
+            lighting::overlay_rect( arm_rect, col );
         }
     }
 
-    // --- Dotted line: player center to hover tile center ---
-    if( g_hover_line_enable && hover_tile_.has_value() ) {
+    // --- Dotted line: player centre to hover tile centre ---
+    if( !g_hover_line_enable || g->u.bub_pos().xy() == hover_tile_->xy() ) { return; }
+
     const auto player_screen = player_to_screen( g->u.bub_pos().xy() );
-        const auto xf = compute_anim_xform( get_avatar() );
-        const auto tw = static_cast<float>( tile_width );
-        const auto th = static_cast<float>( tile_height );
+    const auto xf = compute_anim_xform( get_avatar() );
+    const auto px = static_cast<float>( player_screen.x ) + xf.off_x + tw * 0.5f;
+    const auto py = static_cast<float>( player_screen.y ) + xf.off_y + th * 0.5f;
 
-        const auto px = player_screen.x + xf.off_x + tw * 0.5f;
-        const auto py = player_screen.y + xf.off_y + th * 0.5f;
+    const auto hover_screen = player_to_screen( hover_tile_->xy() );
+    const auto hx = static_cast<float>( hover_screen.x ) + tw * 0.5f;
+    const auto hy = static_cast<float>( hover_screen.y ) + th * 0.5f;
 
-        const auto hover_screen = player_to_screen( hover_tile_->xy() );
-        const auto hx = hover_screen.x + tw * 0.5f;
-        const auto hy = hover_screen.y + th * 0.5f;
+    const auto dx = hx - px;
+    const auto dy = hy - py;
+    const auto dist = std::sqrt( dx * dx + dy * dy );
+    const auto spacing = std::max( 1.0f, g_hover_line_dot_spacing );
+    if( dist < spacing ) { return; }
 
-        // Skip if player IS the hover tile.
-        if( g->u.bub_pos().xy() == hover_tile_->xy() ) {
-            return;
-        }
+    const auto nx = dx / dist;
+    const auto ny = dy / dist;
+    const auto size = std::max( 1.0f, g_hover_line_dot_size );
+    const auto half_size = size * 0.5f;
+    const auto half_spacing = spacing * 0.5f;
 
-        // Compute distance and direction.
-        const auto dx = hx - px;
-        const auto dy = hy - py;
-        const auto dist = std::sqrt( dx * dx + dy * dy );
-
-        // Skip if too close.
-        if( dist < g_hover_line_dot_spacing ) {
-            return;
-        }
-
-        const auto nx = dx / dist;
-        const auto ny = dy / dist;
-        const auto half_size = g_hover_line_dot_size * 0.5f;
-
-        // Compute pulsing alpha (shared with highlight).
-        float pulse_mult = 1.0f;
-        if( g_hover_highlight_pulse ) {
-            pulse_mult = 0.7f + 0.3f * std::sin( anim_wall_now_ * g_hover_highlight_pulse_speed * 2.0f *
-                                                 static_cast<float>( M_PI ) );
-        }
-
-        SDL_SetRenderDrawBlendMode( renderer.get(), SDL_BLENDMODE_BLEND );
-
-        // Walk from player center to hover center in steps.
-        const auto half_spacing = g_hover_line_dot_spacing * 0.5f;
-        const auto start_offset = half_spacing;
-        const auto end_offset = half_spacing;
-
-        for( float step = start_offset; step < dist - end_offset; step += g_hover_line_dot_spacing ) {
-            const auto sx = px + nx * step;
-            const auto sy = py + ny * step;
-            const auto t = step / dist;  // progress along line [0, 1]
-
-            // Compute fade (ramp up over first 25%, down over last 25%).
-            float fade = 1.0f;
-            if( g_hover_line_fade_ends ) {
-                fade = std::min( t * 4.0f, 1.0f ) * std::min( ( 1.0f - t ) * 4.0f, 1.0f );
-            }
-
-            const auto line_a = static_cast<Uint8>( g_hover_line_color[3] * 255.0f * fade * pulse_mult );
-            SDL_SetRenderDrawColor(
-                renderer.get(),
-                static_cast<Uint8>( g_hover_line_color[0] * 255.0f ),
-                static_cast<Uint8>( g_hover_line_color[1] * 255.0f ),
-                static_cast<Uint8>( g_hover_line_color[2] * 255.0f ),
-                line_a
-            );
-
-            const SDL_FRect dot{ sx - half_size, sy - half_size, g_hover_line_dot_size, g_hover_line_dot_size };
-            SDL_RenderFillRect( renderer.get(), &dot );
-        }
+    for( auto step = half_spacing; step < dist - half_spacing; step += spacing ) {
+        const auto t = step / dist; // progress along the line, 0..1
+        // Ramp up over the first quarter, down over the last quarter.
+        const auto fade =
+            g_hover_line_fade_ends
+            ? std::min( t * 4.0f, 1.0f ) * std::min( ( 1.0f - t ) * 4.0f, 1.0f )
+            : 1.0f;
+        lighting::overlay_rect(
+        { px + nx * step - half_size, py + ny * step - half_size, size, size },
+        { .r = g_hover_line_color[0],
+          .g = g_hover_line_color[1],
+          .b = g_hover_line_color[2],
+          .a = g_hover_line_color[3] * fade * pulse_mult } );
     }
 }
 void cata_tiles::void_highlight()
@@ -1009,7 +1038,6 @@ void cata_tiles::draw_zones_frame( std::multimap<point, formatted_text> &overlay
     const point screen_br = player_to_screen( max_local ) + point( tile_width, tile_height );
 
     draw_zone_overlay( {
-        .renderer = renderer,
         .rect = {screen_tl.x, screen_tl.y, screen_br.x - screen_tl.x, screen_br.y - screen_tl.y},
         .color = zone ? curses_color_to_SDL( zone->get_type().obj().color() )
         : curses_color_to_SDL( c_light_green ),

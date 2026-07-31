@@ -953,15 +953,12 @@ class cata_tiles
             float sway = 0.0f );
 
         /**
-         * @brief Draws a colored solid color tile at position, with optional blending
+         * @brief Draws an alpha-blended solid colour tile at a screen position.
          *
-         * @param color Color to draw.
-         * @param p Point to draw the tile at.
-         * @param blend_mode Blend mode to draw the tile with
-         * @return always true.
+         * @param color Colour to draw (its alpha is honoured).
+         * @param p Screen-pixel position to draw the tile at.
          */
-        bool draw_color_at(
-            const SDL_Color& color, point_bub_ms p, SDL_BlendMode blend_mode = SDL_BLENDMODE_NONE );
+        auto draw_color_at( const SDL_Color& color, point_bub_ms p ) -> void;
 
         /** Tile Picking */
         void get_tile_values( int t, const int* tn, int &subtile, int &rotation );
@@ -1097,6 +1094,11 @@ class cata_tiles
         void void_cone_aoe();
 
         auto particles() -> particle_system & { return particles_; } // *NOPAD*
+
+        /// Rasterise one `tracer`/`debris` particle as tile-independent pixel-space
+        /// overlay geometry (lighting::solid_overlay), rather than a tileset sprite
+        /// snapped to the waypoint grid.
+        auto draw_particle_overlay( const particle &p ) -> void;
 
 
         void draw_footsteps_frame( const tripoint_bub_ms& center );

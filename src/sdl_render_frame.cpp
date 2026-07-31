@@ -804,8 +804,16 @@ auto render_world_pass_w( lighting::render_state &rs,
         // cam = tile-space camera origin so that:
         //   pixel = (tile - cam) * tile_px
         //   ndc   = pixel / (target * 0.5) - 1
-        const float cam_x = -s_emo.cam_off_x - s_emo.op_x / tp;
-        const float cam_y = -s_emo.cam_off_y - s_emo.op_y / tp;
+        //
+        // camera_off is DEFINED as `op / tile_width - o` (cata_tiles.h:1331), so
+        // -camera_off is already the effective origin
+        // cata_tiles::player_to_screen uses: (p - o) * tile + op == (p - (o - op/tile)) * tile.
+        // Subtracting op/tp again here double-counted it and drew every Box2D
+        // wireframe op_y/tile_px tiles too LOW (1.5 tiles at op=(0,48), tile 32)
+        // — the "colliders sit below the walls" report. X was unaffected only
+        // because op_x is 0 in non-iso mode, which hid the same error there.
+        const float cam_x = -s_emo.cam_off_x;
+        const float cam_y = -s_emo.cam_off_y;
         rs.debug_lines().record( ctx.cmd_buffer, wt->texture(),
                                  wt->width(), wt->height(),
                                  cam_x, cam_y, tp, tp );
