@@ -46,12 +46,10 @@
 #include "units.h"
 #include "visitable.h"
 #include "vpart_position.h"
-#ifdef BOX2D_ENABLED
 #include <box2d/box2d.h>
 #include "physics/physics_world.h"
 #include "physics/filter_bits.h"
 #include "physics/vehicle_shape.h" // TILE_M
-#endif
 
 static const ammo_effect_str_id ammo_effect_ACT_ON_RANGED_HIT( "ACT_ON_RANGED_HIT" );
 static const ammo_effect_str_id ammo_effect_BOUNCE( "BOUNCE" );
@@ -496,7 +494,6 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
     int projectile_skip_current_frame = rng( 0, projectile_skip_calculation );
     bool has_momentum = true;
 
-#ifdef BOX2D_ENABLED
     // ── Box2D raycast: collect creature hits along the trajectory ──────────
     struct ray_creature_hit {
         Creature *critter;
@@ -547,7 +544,6 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
         }
     }
     size_t ray_hit_idx = 0;
-#endif
     // Penalize damage and/or range on overpenetration. Hoisted above the
     // per-tile loop so the closure is materialised once, not per iteration.
     auto apply_overpenetration_penalty = [&]( bool modify_damage ) {
@@ -614,7 +610,6 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
             }
         }
 
-#ifdef BOX2D_ENABLED
         // ── Box2D raycast creature detection ──────────────────────────────────
         // Pop all creature hits whose ray fraction falls within this DDA step.
         Creature *critter = nullptr;
@@ -657,45 +652,8 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
                 break; // process one creature per DDA step
             }
         }
-#else
-        Creature *critter = g->critter_at( tp );
-        if( origin == critter ) {
-            critter = nullptr;
-        }
 
-        // Skip friendly creatures within 1 tile of shooter to prevent adjacent friendly fire
-        if( critter != nullptr && origin != nullptr &&
-            origin->attitude_to( *critter ) == Attitude::A_FRIENDLY &&
-            rl_dist( source, tp ) <= 1 ) {
-            critter = nullptr;
-        }
-
-        auto *mon = dynamic_cast<monster *>( critter );
-        if( mon != nullptr && mon->digging() &&
-            rl_dist( source, tp ) > 1 ) {
-            critter = nullptr;
-            mon = nullptr;
-        }
-
-        // Geometric perpendicular distance from DDA ray to creature centre.
-        const auto cur_missed_by = [&]() -> double {
-            if( critter == nullptr ) { return aim.missed_by; }
-            const auto range_to_critter = static_cast<double>( rl_dist( source, tp ) );
-            const auto angle_to_critter = units::atan2(
-                static_cast<double>( tp.y() - source.y() ),
-                static_cast<double>( tp.x() - source.x() ) );
-            auto diff = std::fmod( units::to_radians( actual_angle ) -
-                                   units::to_radians( angle_to_critter ), 2 * M_PI );
-            if( diff < 0.0 ) { diff += 2 * M_PI; }
-            if( diff > M_PI ) { diff = 2 * M_PI - diff; }
-            const auto perp_dist = iso_tangent( range_to_critter,
-                                                units::from_radians( diff ) );
-            const auto sz = critter->ranged_target_size();
-            return sz > 0.0 ? std::min( 1.0, perp_dist / sz ) : 1.0;
-        }();
-#endif
-
-        // Reset hit critter from the last iteration (shared by both Box2D and tile paths).
+        // Reset hit critter from the last iteration.
         attack.hit_critter = nullptr;
         if( here.obstructed_by_vehicle_rotation( prev_point, tp ) ) {
             //We're firing through an impassible gap in a rotated vehicle, randomly hit one of the two walls

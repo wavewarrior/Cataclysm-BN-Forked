@@ -1,4 +1,3 @@
-#ifdef BOX2D_ENABLED
 #include "catch/catch_amalgamated.hpp"
 #include <box2d/box2d.h>
 
@@ -482,7 +481,6 @@ TEST_CASE( "Box2D Phase10 Step5: sub-tile physics_pos rounds to zero, >=0.5 to o
     CHECK( rounded_delta( 9.51f ) == 0 );   // nearer 10 — no move
 }
 
-#endif // BOX2D_ENABLED
 
 // encode_tile_pos must never produce 0, because the packed value is stored via
 // b2Body_SetUserData and every consumer treats a null userData as "this body has

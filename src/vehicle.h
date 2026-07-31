@@ -848,11 +848,9 @@ class vehicle
         // Pre-calculate mount points for (idir=0) - current direction or (idir=1) - next turn direction
         void precalc_mounts( int idir, units::angle dir, const tripoint_mnt_veh& pivot );
 
-#ifdef BOX2D_ENABLED
         /// Repopulate `precalc[0]` for every non-removed part using continuous physics angle.
         /// Called by `PhysicsWorld::step()` after Box2D position readback (Phase 7).
         void refresh_precalc( float physics_angle );
-#endif
 
         // get a list of part indices where is a passenger inside
         std::vector<int> boarded_parts() const;
@@ -1764,17 +1762,15 @@ class vehicle
         /// Box2D heading angle in radians (Phase 6); 0 = +x, CCW positive.
         float physics_angle = 0.0f;
         /// Render-only sub-tile offset: fractional residual of physics_pos after
-        /// integer snap. Tile units. Zero when BOX2D_ENABLED is off or vehicle
-        /// is not under physics authority. Not serialized.
+        /// integer snap. Tile units. Zero while the vehicle is not under physics
+        /// authority. Not serialized.
         float render_offset_x = 0.f;
         float render_offset_y = 0.f;
-#ifdef BOX2D_ENABLED
         /// True while PhysicsWorld owns this vehicle's horizontal position.
         /// act_on_map() skips part_collision() + move_vehicle(); map::vehmove()
         /// applies physics_pos to the tile grid (Phase 10 Step 5).
         /// Set by on_vehicle_added(), cleared by on_vehicle_removed().
         bool box2d_position_authority = false;
-#endif
         int extra_drag = 0;
         // last time point the fluid was inside tanks was checked for processing
         time_point last_fluid_check = calendar::turn_zero;

@@ -1,4 +1,3 @@
-#ifdef BOX2D_ENABLED
 #include "veh_box2d_solve.h"
 #include "vehicle_shape.h"
 #include "units_mass.h"
@@ -120,4 +119,3 @@ auto solve_vv_cluster( vehicle &veh,
     b2DestroyWorld( world );
     return result;
 }
-#endif // BOX2D_ENABLED

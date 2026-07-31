@@ -1,4 +1,3 @@
-#ifdef BOX2D_ENABLED
 #include "physics_world.h"
 #include "terrain_body.h"
 #include "filter_bits.h"
@@ -835,4 +834,3 @@ auto PhysicsWorld::draw_debug( lighting::debug_line_pass &pass ) const -> void
     b2World_Draw( world_, &dd );
 }
 } // namespace physics
-#endif // BOX2D_ENABLED

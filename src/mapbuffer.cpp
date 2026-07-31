@@ -84,7 +84,6 @@ mapbuffer::~mapbuffer() = default;
 
 void mapbuffer::clear()
 {
-#ifdef BOX2D_ENABLED
     // Dropping every submap invalidates every terrain collider and every vehicle
     // body: PhysicsWorld outlives the world (it is owned by map, which is a
     // pimpl<map> built once in game::game()), and terrain_bodies_ is keyed by
@@ -95,7 +94,6 @@ void mapbuffer::clear()
     if( g ) {
         if( auto *pw = g->m.get_physics_world() ) { pw->clear_world_bodies(); }
     }
-#endif
     submaps.clear();
     std::lock_guard<std::mutex> pw_lk( pending_writes_mutex_ );
     pending_writes_.clear();

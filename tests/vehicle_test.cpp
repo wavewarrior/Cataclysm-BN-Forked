@@ -548,7 +548,6 @@ TEST_CASE( "broken_door_and_lock_can_be_removed", "[vehicle]" )
     CHECK( veh_ptr->can_unmount( lock_idx, lock_reason ) );
 }
 
-#ifdef BOX2D_ENABLED
 #include "physics/physics_world.h"
 #include "physics/terrain_body.h"
 
@@ -646,9 +645,7 @@ TEST_CASE( "box2d_authority_vehicle_bashes_terrain", "[vehicle][box2d]" )
 
     CHECK( here.ter( obstacle ) != before );
 }
-#endif // BOX2D_ENABLED
 
-#ifdef BOX2D_ENABLED
 // Terrain colliders are what stop a vehicle driving through a wall, and several
 // code paths gate their creation on the player's z-level — so a silent zero here
 // is the difference between walls existing and not.  Two invariants:
@@ -713,9 +710,7 @@ TEST_CASE( "box2d_terrain_colliders_build_and_rebuild", "[vehicle][box2d]" )
         CHECK( pw->terrain_body_count() > 0 );
     }
 }
-#endif // BOX2D_ENABLED
 
-#ifdef BOX2D_ENABLED
 // Terrain colliders must not survive a world teardown.
 //
 // PhysicsWorld is constructed once, in the map constructor (map.cpp:256), and map is
@@ -761,9 +756,7 @@ TEST_CASE( "box2d_world_teardown_drops_all_terrain_colliders", "[vehicle][box2d]
     pw->on_submap_loaded( here, sm );
     CHECK( pw->terrain_body_count() > 0 );
 }
-#endif // BOX2D_ENABLED
 
-#ifdef BOX2D_ENABLED
 // Ramp z-transition for a vehicle that KEEPS Box2D position authority.
 //
 // vehicle_ramp_test.cpp sets box2d_position_authority = false for every vehicle it
@@ -837,9 +830,7 @@ TEST_CASE( "box2d_authority_vehicle_climbs_ramp", "[vehicle][box2d][ramp]" )
     CHECK( reached_z == 1 );
     CHECK( min_velocity > 0 );
 }
-#endif // BOX2D_ENABLED
 
-#ifdef BOX2D_ENABLED
 // map::load() re-anchors the whole reality bubble.  It must not leave the previous
 // bubble's terrain colliders behind.
 //
@@ -909,4 +900,3 @@ TEST_CASE( "box2d_map_load_does_not_accumulate_colliders", "[!shouldfail][vehicl
     // Revisiting must reproduce the original count, not add to it.
     CHECK( count_home_again == count_home );
 }
-#endif // BOX2D_ENABLED

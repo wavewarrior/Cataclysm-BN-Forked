@@ -224,10 +224,9 @@ target_link_libraries(cataclysm-bn-tiles-common PUBLIC SDL3_shadercross::SDL3_sh
 # FreeType — declare-without-link would build green and prove nothing.
 target_link_libraries(cataclysm-bn-tiles-common PUBLIC rmlui)
 
-if( BOX2D )
-    target_link_libraries( cataclysm-bn-tiles-common PUBLIC box2d )
-    target_compile_definitions( cataclysm-bn-tiles-common PUBLIC BOX2D_ENABLED )
-endif()
+# Box2D physics. Unconditional: there is no build without it, so no
+# BOX2D_ENABLED define and no #ifdef guards in the sources.
+target_link_libraries( cataclysm-bn-tiles-common PUBLIC box2d )
 
 # Ship the runtime DLLs next to the executable so a fresh-checkout dev build
 # on Windows 11 (NVIDIA RTX 4090 target) has the shadercross DLL + DXC

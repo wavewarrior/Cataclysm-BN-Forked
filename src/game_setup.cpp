@@ -133,9 +133,7 @@
 #include "npc.h"
 #include "magic.h"
 #include "map.h"
-#ifdef BOX2D_ENABLED
 #include "physics/physics_world.h"
-#endif
 #include "map_functions.h"
 #include "map_item_stack.h"
 #include "map_iterator.h"
@@ -997,11 +995,9 @@ void game::load_npcs()
         } else {
             active_npc.push_back( temp );
             just_added.push_back( temp );
-#ifdef BOX2D_ENABLED
             if( auto *pw = m.get_physics_world() ) {
                 pw->on_creature_added( *temp );
             }
-#endif
             ++g_npc_friends_dirty_version;
         }
     }
@@ -1044,11 +1040,9 @@ void game::load_npcs()
                 } else {
                     active_npc.push_back( temp );
                     just_added.push_back( temp );
-#ifdef BOX2D_ENABLED
                     if( auto *pw = m.get_physics_world() ) {
                         pw->on_creature_added( *temp );
                     }
-#endif
                     ++g_npc_friends_dirty_version;
                 }
             }
@@ -1066,11 +1060,9 @@ void game::unload_npcs()
 {
     for( const auto &npc : active_npc ) {
         npc->on_unload();
-#ifdef BOX2D_ENABLED
         if( auto *pw = get_map().get_physics_world() ) {
             pw->on_creature_removed( npc.get() );
         }
-#endif
     }
 
     active_npc.clear();

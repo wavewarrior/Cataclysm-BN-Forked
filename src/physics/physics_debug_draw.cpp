@@ -1,4 +1,3 @@
-#ifdef BOX2D_ENABLED
 #include "physics_debug_draw.h"
 
 #include "lighting/debug_line_pass.h"
@@ -11,11 +10,24 @@ namespace {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/// Convert Box2D metres to world-tile coordinates.
+/// Convert Box2D metres to world-tile coordinates as the renderer means them.
+///
+/// The physics world anchors a tile at its INTEGER coordinate: every body is
+/// placed at `tile * TILE_M` (terrain_body.cpp, PhysicsWorld::on_vehicle_added,
+/// creature bodies) and every shape is CENTRED on that origin, so tile (x,y)'s
+/// collider spans [x-0.5, x+0.5]. That is self-consistent for simulation - all
+/// bodies share it, and only relative geometry decides contacts - but the
+/// renderer treats (x,y) as the tile's TOP-LEFT (`player_to_screen` returns
+/// `screen_tl`), centre (x+0.5, y+0.5).
+///
+/// Drawing physics coordinates raw therefore puts every outline half a tile up
+/// and left of the terrain it belongs to. The +0.5 converts from "centred on the
+/// integer coordinate" to the renderer's corner-anchored grid. Positions only:
+/// radii and axis lengths are scaled with `m2t` separately and must not shift.
 auto to_tile( const DebugDrawContext &ctx, float bx, float by )
     -> std::pair<float, float>
 {
-    return { bx * ctx.m2t, by * ctx.m2t };
+    return { bx * ctx.m2t + 0.5f, by * ctx.m2t + 0.5f };
 }
 
 auto to_tile( const DebugDrawContext &ctx, b2Vec2 v )
@@ -195,4 +207,3 @@ auto make_debug_draw( DebugDrawContext *ctx ) -> b2DebugDraw
 }
 
 } // namespace physics
-#endif // BOX2D_ENABLED

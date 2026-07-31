@@ -13,10 +13,8 @@
 #include "point.h"
 #include "string_formatter.h"
 #include "type_id.h"
-#ifdef BOX2D_ENABLED
 #include "map.h"
 #include "physics/physics_world.h"
-#endif
 
 #define dbg(x) DebugLogFL((x),DC::Game)
 
@@ -92,11 +90,9 @@ bool Creature_tracker::add( const shared_ptr_fast<monster> &critter_ptr )
     monsters_list.emplace_back( critter_ptr );
     monsters_by_location[critter.bub_pos()] = critter_ptr;
     add_to_faction_map( critter_ptr );
-#ifdef BOX2D_ENABLED
     if( auto *pw = get_map().get_physics_world() ) {
         pw->on_creature_added( critter );
     }
-#endif
     return true;
 }
 
@@ -228,11 +224,9 @@ void Creature_tracker::remove( const monster &critter )
             break;
         }
     }
-#ifdef BOX2D_ENABLED
     if( auto *pw = get_map().get_physics_world() ) {
         pw->on_creature_removed( &critter );
     }
-#endif
     remove_from_location_map( critter );
     removed_.push_back( *iter );
     monsters_list.erase( iter );
@@ -240,11 +234,9 @@ void Creature_tracker::remove( const monster &critter )
 
 void Creature_tracker::clear()
 {
-#ifdef BOX2D_ENABLED
     if( auto *pw = get_map().get_physics_world() ) {
         pw->clear_creature_bodies();
     }
-#endif
     monsters_list.clear();
     monsters_by_location.clear();
     monster_faction_map_.clear();
@@ -328,11 +320,9 @@ void Creature_tracker::remove_dead()
     for( auto iter = monsters_list.begin(); iter != monsters_list.end(); ) {
         const monster &critter = **iter;
         if( critter.is_dead() ) {
-#ifdef BOX2D_ENABLED
             if( auto *pw = get_map().get_physics_world() ) {
                 pw->on_creature_removed( &critter );
             }
-#endif
             remove_from_location_map( critter );
             iter = monsters_list.erase( iter );
         } else {

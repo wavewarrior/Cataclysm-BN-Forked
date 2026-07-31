@@ -797,28 +797,29 @@ foreach (_rml_tgt rmlui_core rmlui_debugger)
     endif ()
 endforeach ()
 # --- Box2D physics (vehicle VV collision torque and multi-target) ---
-option(BOX2D "Enable Box2D physics for vehicle VV collision" OFF)
-if (BOX2D)
-    set(_cata_saved_build_shared "${BUILD_SHARED_LIBS}")
-    set(BUILD_SHARED_LIBS OFF)
-    set(BOX2D_SAMPLES    OFF CACHE BOOL "" FORCE)
-    set(BOX2D_UNIT_TESTS OFF CACHE BOOL "" FORCE)
-    FetchContent_Declare(
-        box2d
-        GIT_REPOSITORY https://github.com/erincatto/box2d.git
-        GIT_TAG        v3.0.0
-        GIT_SHALLOW    TRUE
-        EXCLUDE_FROM_ALL
-    )
-    FetchContent_MakeAvailable(box2d)
-    set(BUILD_SHARED_LIBS "${_cata_saved_build_shared}")
-    unset(_cata_saved_build_shared)
-    if (TARGET box2d)
-        if (MSVC)
-            target_compile_options(box2d PRIVATE /w)
-        else ()
-            target_compile_options(box2d PRIVATE -w)
-        endif ()
+# Always compiled: Box2D is the supported path for vehicle collision and all
+# future physics work, so there is no build without it. Same treatment as co-op
+# below - the dependency is unconditional and behaviour is gated at runtime
+# (physics_world existence, debug_draw toggle), never by the preprocessor.
+set(_cata_saved_build_shared "${BUILD_SHARED_LIBS}")
+set(BUILD_SHARED_LIBS OFF)
+set(BOX2D_SAMPLES    OFF CACHE BOOL "" FORCE)
+set(BOX2D_UNIT_TESTS OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    box2d
+    GIT_REPOSITORY https://github.com/erincatto/box2d.git
+    GIT_TAG        v3.0.0
+    GIT_SHALLOW    TRUE
+    EXCLUDE_FROM_ALL
+)
+FetchContent_MakeAvailable(box2d)
+set(BUILD_SHARED_LIBS "${_cata_saved_build_shared}")
+unset(_cata_saved_build_shared)
+if (TARGET box2d)
+    if (MSVC)
+        target_compile_options(box2d PRIVATE /w)
+    else ()
+        target_compile_options(box2d PRIVATE -w)
     endif ()
 endif ()
 

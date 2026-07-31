@@ -152,7 +152,6 @@ TEST_CASE( "vehicle_collision_hits_occupant_with_stale_in_vehicle_flag", "[vehic
     CHECK( ret.type == veh_coll_body );
 }
 
-#ifdef BOX2D_ENABLED
 #include "vehicle_part.h"
 #include "physics/physics_world.h"
 #include "physics/terrain_body.h"
@@ -217,4 +216,3 @@ TEST_CASE( "box2d_authority_vehicle_hits_vehicle", "[vehicle][collision][box2d]"
     CHECK( ( parked_shoved || damage_dealt ) );
     CHECK( mover_slowed );
 }
-#endif // BOX2D_ENABLED

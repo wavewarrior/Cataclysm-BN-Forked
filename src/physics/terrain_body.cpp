@@ -1,4 +1,3 @@
-#ifdef BOX2D_ENABLED
 #include "terrain_body.h"
 #include "vehicle_shape.h"   // TILE_M
 #include "filter_bits.h"
@@ -48,7 +47,14 @@ auto build_submap_terrain_bodies( b2WorldId         world,
             const auto cls = classify_tile( m, bub );
             if( cls == tile_body_class::passable ) { continue; }
 
-            // Place body at tile centre in Box2D world space.
+            // Anchor the body at the tile's INTEGER coordinate, with the box shape
+            // centred on it below - so this collider spans [x-0.5, x+0.5] in tile
+            // units. That is NOT the renderer's convention (there (x,y) is the
+            // tile's top-left), but every physics body uses this same anchor -
+            // vehicles, creatures, the per-turn syncs and the readback - and only
+            // relative geometry decides contacts, so simulation is unaffected.
+            // Anything that draws or compares these against render coordinates
+            // must add the half-tile (see physics_debug_draw.cpp::to_tile).
             const auto cx = static_cast<float>( bub.x() ) * TILE_M;
             const auto cy = static_cast<float>( bub.y() ) * TILE_M;
 
@@ -83,4 +89,3 @@ auto build_submap_terrain_bodies( b2WorldId         world,
 }
 
 } // namespace physics
-#endif // BOX2D_ENABLED

@@ -103,11 +103,9 @@ static auto setup_grabbed_shopping_cart( const tripoint_bub_ms &player_pos,
     auto *veh_ptr = here.add_vehicle( vproto_id( "shopping_cart" ), cart_pos, 0_degrees, 0, 0 );
     REQUIRE( veh_ptr != nullptr );
 
-#ifdef BOX2D_ENABLED
     // Grab-drag is legacy tile-stepped code (map::displace_vehicle), not
     // Box2D physics — same rationale as ramp_transition_angled().
     veh_ptr->box2d_position_authority = false;
-#endif
 
     for( const auto vp : veh_ptr->get_all_parts() ) {
         veh_ptr->get_items( vp.part_index() ).clear();
@@ -154,10 +152,8 @@ static void ramp_transition_angled( const vproto_id &veh_id, const units::angle 
 
     vehicle &veh = *veh_ptr;
     veh.check_falling_or_floating();
-#ifdef BOX2D_ENABLED
     // Ramp tests require tile-step movement (move_vehicle), not Box2D physics.
     veh.box2d_position_authority = false;
-#endif
 
     REQUIRE( !veh.is_in_water() );
 

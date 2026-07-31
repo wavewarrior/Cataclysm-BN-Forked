@@ -65,9 +65,7 @@
 #include "vehicle_part.h"
 #include "ui_manager.h"
 
-#ifdef BOX2D_ENABLED
 #include "physics/physics_world.h"
-#endif
 #include "coop_client.h"
 #include "coop_overmap.h"
 #include "coop_server.h"
@@ -2374,11 +2372,9 @@ auto game::vertical_shift( const int z_after, const bool keep_grab ) -> void
         // All z-levels are loaded simultaneously in z-level builds; no map load
         // or unload is required for vertical movement.
         m.set_abs_sub( tripoint_abs_sm( m.get_abs_sub().xy(), z_after ) );
-#ifdef BOX2D_ENABLED
         if( auto *pw = m.get_physics_world(); pw && z_before != z_after ) {
             pw->on_zlevel_changed( m, z_before, z_after );
         }
-#endif
     }
 
     m.spawn_monsters( true );

@@ -950,7 +950,6 @@ void vehicle::precalc_mounts( int idir, units::angle dir, const tripoint_mnt_veh
     pivot_rotation[idir] = dir;
 }
 
-#ifdef BOX2D_ENABLED
 void vehicle::refresh_precalc( float physics_angle )
 {
     const float c = std::cos( physics_angle );
@@ -965,7 +964,6 @@ void vehicle::refresh_precalc( float physics_angle )
         };
     }
 }
-#endif
 
 bool vehicle::check_rotated_intervening( const tripoint_mnt_veh &from, const tripoint_mnt_veh &to,
         bool( *check )( const vehicle *, const tripoint_mnt_veh & ) ) const

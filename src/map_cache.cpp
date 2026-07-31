@@ -1,10 +1,8 @@
 #include "map.h"
 #include "coop_mutation_log.h"
 
-#ifdef BOX2D_ENABLED
 #include "physics/physics_world.h"
 #include "physics/veh_box2d_solve.h"
-#endif
 
 #include "active_item_cache.h"
 #include "ammo.h"

@@ -18,10 +18,8 @@ struct vv_cluster_result {
     float total_impulse_ns;
 };
 
-#ifdef BOX2D_ENABLED
 /// Solve all vehicles in veh_collisions simultaneously in a transient b2World.
 /// Returns post-collision velocities and impulse magnitudes for each participant.
 auto solve_vv_cluster( vehicle &veh,
                        const std::map<vehicle *, std::vector<veh_collision>> &veh_collisions )
     -> vv_cluster_result;
-#endif

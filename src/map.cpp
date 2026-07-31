@@ -1,10 +1,8 @@
 #include "map.h"
 #include "coop_mutation_log.h"
 
-#ifdef BOX2D_ENABLED
 #include "physics/physics_world.h"
 #include "physics/veh_box2d_solve.h"
-#endif
 
 #include "active_item_cache.h"
 #include "ammo.h"
@@ -253,9 +251,7 @@ map::map( int mapsize, bool zlev )
     dbg( DL::Info ) << "map::map(): my_MAPSIZE: " << my_MAPSIZE << " z-levels enabled:" << zlevels;
     skew_vision_cache_mutex = std::make_unique<std::shared_mutex>();
     skew_vision_cache.resize( vision_cache_slots );
-#ifdef BOX2D_ENABLED
     phys_world = std::make_unique<physics::PhysicsWorld>();
-#endif
 }
 
 // Defined out-of-line so we can use g_mapsize (runtime) rather than the
@@ -372,14 +368,12 @@ void map::on_submap_loaded( const tripoint_abs_sm& p, const std::string& dim_id 
         // If sm is still null the submap is not yet in memory; leave the grid slot
         // as set by loadn() (which may already hold a valid pointer).
     }
-#ifdef BOX2D_ENABLED
     // Vehicle physics bodies only matter on the player's z-level.  Creating
     // bodies for all 21 z-levels (315 submaps per shift × 144 tiles each)
     // was the dominant cost of submap boundary crossing.
     if( phys_world && sm != nullptr && g && p.z() == g->u.bub_pos().z() ) {
         phys_world->on_submap_loaded( *this, p );
     }
-#endif
 }
 
 void map::on_submap_unloaded( const tripoint_abs_sm& pos, const std::string& dim_id )
@@ -399,7 +393,6 @@ void map::on_submap_unloaded( const tripoint_abs_sm& pos, const std::string& dim
     {
         std::erase_if( loaded_vehicles, [&]( vehicle * veh ) { return veh->abs_sm_pos == pos; } );
     }
-#ifdef BOX2D_ENABLED
     // Deliberately NOT gated on pos.z() == player z, unlike on_submap_loaded().
     // Terrain bodies are only built for the player's z-level, but vehicle bodies
     // are created by on_vehicle_added() for a vehicle at ANY z.  Gating the sweep
@@ -417,7 +410,6 @@ void map::on_submap_unloaded( const tripoint_abs_sm& pos, const std::string& dim
             MAPBUFFER_REGISTRY.get( dim_id ).lookup_submap_in_memory( pos ) != nullptr;
         phys_world->on_submap_unloaded( pos, still_resident );
     }
-#endif
 
     // Stop tracking active items for this submap.
     submaps_with_active_items.erase( pos );
@@ -1215,7 +1207,6 @@ std::vector<tripoint_bub_ms> map::get_dir_circle(
 
 void map::load( const tripoint_abs_sm& w, const bool update_vehicle, const bool pump_events )
 {
-#ifdef BOX2D_ENABLED
     // Re-anchoring the whole bubble invalidates every body in it.  The grid fill
     // below drops all submaps without routing through on_submap_unloaded, and
     // loadn() then builds fresh bodies, so without this the old ones both accumulate
@@ -1224,7 +1215,6 @@ void map::load( const tripoint_abs_sm& w, const bool update_vehicle, const bool 
     // Vehicle bodies go too: loaded_vehicles is cleared just below and rebuilt by
     // reset_vehicle_cache().
     if( phys_world ) { phys_world->clear_world_bodies(); }
-#endif
     std::fill( grid.begin(), grid.end(), nullptr );
     submaps_with_active_items.clear();
     loaded_vehicles.clear();
@@ -1575,9 +1565,7 @@ void map::shift( const point_rel_sm& sp )
     // submaps are marked dirty by loadn(incremental=true).  No blanket
     // invalidate_lightmap_caches() needed — retained submaps stay clean.
     // Entity lights are applied unconditionally in build_map_cache Phase 4.
-#ifdef BOX2D_ENABLED
     if( phys_world ) { phys_world->on_map_shifted( point { shift_offset_pt.x(), shift_offset_pt.y() } ); }
-#endif
 }
 
 auto map::apply_boundary_overlay( submap &sm, const tripoint_abs_sm &pos ) -> void

@@ -135,9 +135,7 @@
 #include "npc.h"
 #include "magic.h"
 #include "map.h"
-#ifdef BOX2D_ENABLED
 #include "physics/physics_world.h"
-#endif
 #include "map_functions.h"
 #include "map_item_stack.h"
 #include "map_iterator.h"
@@ -2410,11 +2408,9 @@ void game::erase_npc( character_id id )
         debugmsg( "game::erase_npc: NPC (%d) not found in active_npc.", id.get_value() );
         return;
     }
-#ifdef BOX2D_ENABLED
     if( auto *pw = get_map().get_physics_world() ) {
         pw->on_creature_removed( it->get() );
     }
-#endif
     active_npc.erase( it );
 }
 
@@ -2588,7 +2584,6 @@ void game::place_player_overmap( const tripoint_abs_omt &om_dest )
     // update weather now as it could be different on the new location
     get_weather().nextweather = calendar::turn;
     place_player( player_pos );
-#ifdef BOX2D_ENABLED
     // Rebuild terrain colliders for the destination z-level.
     //
     // map::on_submap_loaded only notifies the physics world for submaps whose z
@@ -2605,7 +2600,6 @@ void game::place_player_overmap( const tripoint_abs_omt &om_dest )
             pw->on_zlevel_changed( m, z_before, z_after );
         }
     }
-#endif
     m.spawn_monsters( true ); // Static monsters
     update_overmap_seen();
     // load_npcs() scans around the player's absolute position, updated by place_player().
@@ -2838,8 +2832,6 @@ void game::debug_hour_timer::toggle()
     add_msg( string_format( "debug timer %s", enabled ? "enabled" : "disabled" ) );
 }
 
-#ifdef BOX2D_ENABLED
-#endif
 
 void game::debug_hour_timer::print_time()
 {

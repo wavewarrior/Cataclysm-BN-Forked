@@ -1,5 +1,4 @@
 #pragma once
-#ifdef BOX2D_ENABLED
 #include <box2d/box2d.h>
 #include "coordinates.h"
 #include <cstdint>
@@ -64,4 +63,3 @@ constexpr auto decode_tile_pos( std::uintptr_t enc ) -> tripoint_bub_ms
 }
 
 } // namespace physics
-#endif // BOX2D_ENABLED

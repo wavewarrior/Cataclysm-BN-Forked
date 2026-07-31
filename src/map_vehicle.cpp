@@ -1,10 +1,8 @@
 #include "map.h"
 #include "coop_mutation_log.h"
 
-#ifdef BOX2D_ENABLED
 #include "physics/physics_world.h"
 #include "physics/veh_box2d_solve.h"
-#endif
 
 #include "active_item_cache.h"
 #include "ammo.h"
@@ -300,11 +298,9 @@ std::unique_ptr<vehicle> map::detach_vehicle( vehicle* veh )
         return std::unique_ptr<vehicle>();
     }
 
-#ifdef BOX2D_ENABLED
     if( auto *pw = get_physics_world(); pw ) {
         pw->on_vehicle_removed( veh );
     }
-#endif
 
     int z = veh->abs_sm_pos.z();
     if( z < -OVERMAP_DEPTH || z > OVERMAP_HEIGHT ) {
@@ -426,7 +422,6 @@ void map::on_vehicle_moved(
 void map::vehmove()
 {
     ZoneScoped;
-#ifdef BOX2D_ENABLED
     // Advance the persistent physics world one full game turn (1 s).
     //
     // A prior revision deliberately stepped only 1/60 s here, on the theory that
@@ -447,7 +442,6 @@ void map::vehmove()
     // once / out once so contact response is not overwritten mid-turn.
     // Stepped further down, immediately before the readback, so the integration
     // uses the velocity the game has already settled for this turn.  See there.
-#endif
 
 
     // Give vehicles movement points.  Use per-z-level vehicle_list caches
@@ -577,7 +571,6 @@ void map::vehmove()
 
     // A map shift can occur mid-loop when the player is a vehicle passenger:
     if( last_full_vehicle_list_dirty ) { vehicle_list = get_vehicles(); }
-#ifdef BOX2D_ENABLED
     // Box2D position readback: apply physics_pos to the tile grid for vehicles
     // under physics authority.  act_on_map() above ran all game logic (sinking,
     // falling, traction, skidding) but returned early before move_vehicle().
@@ -790,7 +783,6 @@ void map::vehmove()
                                   std::lround( veh.physics_pos.y ) );
         }
     }
-#endif
 
 
     // Process item removal on the vehicles that were modified this turn.
@@ -954,7 +946,6 @@ vehicle *map::move_vehicle( vehicle& veh, const tripoint_rel_ms& dp, const tiler
             veh_collisions[static_cast<vehicle *>( coll.target )].push_back( coll );
         }
 
-#ifdef BOX2D_ENABLED
         if( phys_world && !veh_collisions.empty() ) {
             const auto cluster = solve_vv_cluster( veh, veh_collisions );
             // bodies[0] is always &veh; bodies[1..N] are the targets in veh_collisions order.
@@ -990,13 +981,10 @@ vehicle *map::move_vehicle( vehicle& veh, const tripoint_rel_ms& dp, const tiler
                 } );
             }
         } else {
-#endif
             for( auto &pair : veh_collisions ) {
                 impulse += vehicle_vehicle_collision( veh, *pair.first, pair.second );
             }
-#ifdef BOX2D_ENABLED
         }
-#endif
 
         // Non-vehicle collisions
         for( const auto& coll : collisions ) {
@@ -1202,7 +1190,6 @@ auto map::vehicle_vehicle_collision(
     float dmg_veh2 = 0;
     // Vertical collisions will be simpler for a while (1D)
     if( !vertical ) {
-#ifdef BOX2D_ENABLED
         if( opts.veh1_impulse_ns != 0.0f ) {
             // Box2D dispatch already applied final velocities, move direction, and
             // angular_velocity_rads.  Populate impulse/delta_vel for the damage section.
@@ -1213,7 +1200,6 @@ auto map::vehicle_vehicle_collision(
             veh.of_turn  = avg * 0.9f;
             veh2.of_turn = std::max( 1.0f, avg * 1.1f );
         } else {
-#endif
             // For reference, a cargo truck weighs ~25300, a bicycle 690,
             //  and 38mph is 3800 'velocity'
             // Converting away from 100*mph, because mixing unit systems is bad.
@@ -1295,9 +1281,7 @@ auto map::vehicle_vehicle_collision(
             // Remember that the impulse on vehicle 1 is techncally negative, slowing it
             veh1_impulse = std::abs( m1 * ( vel1_y_a - vel1_y ) );
             veh2_impulse = std::abs( m2 * ( vel2_y_a - vel2_y ) );
-#ifdef BOX2D_ENABLED
-        } // end: analytic elastic formula (BOX2D_ENABLED else)
-#endif
+        } // end: analytic elastic formula (non-Box2D impulse path)
     } else {
         const float m1 = to_kilogram( veh.total_mass() );
         // Collision is perfectly inelastic for simplicity
@@ -1791,12 +1775,9 @@ bool map::displace_vehicle( vehicle& veh, const tripoint_rel_ms& dp )
     std::ranges::for_each( smzs, [&]( const int vsmz ) {
         on_vehicle_moved( veh_sm_min, veh_sm_max, dest.z() + vsmz );
     } );
-#ifdef BOX2D_ENABLED
     if( phys_world ) { phys_world->on_vehicle_moved( veh ); }
-#endif
     return true;
 }
-#ifdef BOX2D_ENABLED
 auto map::resolve_vehicle_terrain_impulse( vehicle &v, tripoint_bub_ms tile_pos,
         float tile_mass_kg, float restitution )
 -> physics::terrain_impulse_result
@@ -1804,11 +1785,8 @@ auto map::resolve_vehicle_terrain_impulse( vehicle &v, tripoint_bub_ms tile_pos,
     if( !phys_world ) { return {}; }
 return phys_world->resolve_terrain_impulse( v, tile_pos, tile_mass_kg, restitution );
 }
-#endif
 
-#ifdef BOX2D_ENABLED
 auto map::get_physics_world() const -> physics::PhysicsWorld *
 {
     return phys_world.get();
 }
-#endif

@@ -1,5 +1,4 @@
 #pragma once
-#ifdef BOX2D_ENABLED
 #include <box2d/box2d.h>
 
 namespace lighting { class debug_line_pass; } // forward-declare GPU line buffer
@@ -20,4 +19,3 @@ struct DebugDrawContext {
 auto make_debug_draw( DebugDrawContext *ctx ) -> b2DebugDraw;
 
 } // namespace physics
-#endif // BOX2D_ENABLED

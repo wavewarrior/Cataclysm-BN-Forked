@@ -133,9 +133,7 @@
 #include "npc.h"
 #include "magic.h"
 #include "map.h"
-#ifdef BOX2D_ENABLED
 #include "physics/physics_world.h"
-#endif
 #include "map_functions.h"
 #include "map_item_stack.h"
 #include "map_iterator.h"

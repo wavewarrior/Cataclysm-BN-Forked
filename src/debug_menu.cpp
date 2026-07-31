@@ -203,9 +203,7 @@ enum debug_menu_index {
     DEBUG_VEHICLE_EXPORT_JSON,
     DEBUG_HOUR_TIMER,
     DEBUG_FPS,
-#ifdef BOX2D_ENABLED
     DEBUG_BOX2D_SHAPES,
-#endif
     DEBUG_NESTED_MAPGEN,
     DEBUG_RESET_IGNORED_MESSAGES,
     DEBUG_RELOAD_TILES,
@@ -265,9 +263,7 @@ static int info_uilist( bool display_all_entries = true )
             { uilist_entry( DEBUG_BENCHMARK_FPS, true, 'B', _( "FPS benchmark" ) ) },
             { uilist_entry( DEBUG_HOUR_TIMER, true, 'E', _( "Toggle hour timer" ) ) },
             { uilist_entry( DEBUG_FPS, true, 'F', _( "Toggle FPS counter" ) ) },
-#ifdef BOX2D_ENABLED
             { uilist_entry( DEBUG_BOX2D_SHAPES, true, 'P', _( "Toggle Box2D physics overlay" ) ) },
-#endif
             { uilist_entry( DEBUG_TRAIT_GROUP, true, 't', _( "Test trait group" ) ) },
             { uilist_entry( DEBUG_SHOW_MSG, true, 'd', _( "Show debug message" ) ) },
             { uilist_entry( DEBUG_CRASH_GAME, true, 'C', _( "Crash game (test crash handling)" ) ) },
@@ -1975,11 +1971,9 @@ void debug()
         case DEBUG_FPS:
             g->toggle_debug_fps();
             break;
-#ifdef BOX2D_ENABLED
         case DEBUG_BOX2D_SHAPES:
             g->toggle_box2d_debug_draw();
             break;
-#endif
         case DEBUG_SWAP_CHAR:
             control_npc_menu();
             break;

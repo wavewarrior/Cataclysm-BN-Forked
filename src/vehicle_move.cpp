@@ -2,9 +2,7 @@
 #include "vehicle_part.h" // IWYU pragma: associated
 #include "vehicle_move.h" // IWYU pragma: associated
 
-#ifdef BOX2D_ENABLED
 #include "physics/physics_world.h"  // physics::terrain_impulse_result
-#endif
 
 #include <cassert>
 #include <algorithm>
@@ -941,7 +939,6 @@ auto vehicle::part_collision( const vehicle_part_collision_options &options ) ->
         }
         // Stop processing when sign inverts, not when we reach 0
     } while( !smashed && sgn( coll_velocity ) == vel_sign );
-#ifdef BOX2D_ENABLED
     // Phase 5: derive angular spin from Box2D transient terrain-impulse solve.
     // Linear velocity is kept from the 1-D elastic formula (tile-step remains authoritative);
     // angular velocity (spin from glancing blow) is the new contribution Box2D provides.
@@ -949,7 +946,6 @@ auto vehicle::part_collision( const vehicle_part_collision_options &options ) ->
         const auto ti = here.resolve_vehicle_terrain_impulse( *this, p, mass2, e );
         angular_velocity_rads = ti.angular_vel_rads;
     }
-#endif
 
     // Apply special effects from collision.
     if( critter != nullptr ) {
@@ -1587,7 +1583,6 @@ vehicle *vehicle::act_on_map()
         skidding = true;
     }
 
-#ifdef BOX2D_ENABLED
     // Box2D owns horizontal position.  All game logic above has run:
     //   - sinking check (line ~1438)
     //   - falling / vertical_velocity integration (line ~1477)
@@ -1599,7 +1594,6 @@ vehicle *vehicle::act_on_map()
     if( box2d_position_authority && !should_fall && requested_z_change == 0 ) {
         return this;
     }
-#endif
 
     vehicle_movement::rail_processing_result rpres;
     if( can_use_rails && !falling_only ) {

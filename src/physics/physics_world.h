@@ -1,5 +1,4 @@
 #pragma once
-#ifdef BOX2D_ENABLED
 #include <box2d/box2d.h>
 #include "coordinates.h"
 #include "point_float.h"  // rl_vec2d
@@ -14,8 +13,8 @@ class Creature;
 // the tree (map.h:69 et al). MSVC mangles `class` and `struct` differently, so a
 // `struct vehicle;` here makes every TU that includes this header emit/expect a
 // different symbol for any map:: member taking a vehicle pointer — LNK2019 on
-// map::move_cost / map::bash / map::detach_vehicle. Only reachable with
-// BOX2D_ENABLED, which is why it stayed latent while BOX2D defaulted OFF.
+// map::move_cost / map::bash / map::detach_vehicle. It stayed latent for a long
+// time because Box2D used to be an opt-in build; it is now always compiled.
 // GCC/Clang do not distinguish the two, so CI never caught it.
 class vehicle;
 class map;
@@ -213,4 +212,3 @@ private:
 };
 
 } // namespace physics
-#endif // BOX2D_ENABLED
