@@ -8,6 +8,7 @@
 
 #include "ballistics.h"
 #include "dispersion.h"
+#include "flag.h"
 #include "shape.h"
 #include "shape_impl.h"
 #include "map.h"
@@ -54,6 +55,15 @@ for( const auto &armor_id : armor_ids ) {
 
     detached_ptr<item> gun = item::spawn( itype_id( "m1014" ) );
     gun->ammo_set( ammo_id );
+    // This test measures pellet damage through armor, so a mechanical malfunction is
+    // pure noise: handle_gun_damage() rolls one_in( ( 2 << durability ) * 3 ) = 1/3072
+    // per shot and, on failure, breaks fire_gun's loop early. That made the
+    // shots_fired precondition below depend on where the seeded RNG stream happened to
+    // land rather than on anything this test is asserting - any unrelated change to how
+    // many rng() draws a shot performs could flip it. NEVER_JAMS removes the roll so
+    // both the armored and unarmored runs always sample the same number of shots.
+    gun->set_flag( flag_NEVER_JAMS );
+    REQUIRE( gun->has_flag( flag_NEVER_JAMS ) );
 
     REQUIRE( gun->ammo_data() != nullptr );
     REQUIRE( gun->ammo_data()->ammo != nullptr );
