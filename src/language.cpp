@@ -40,6 +40,44 @@ void update_global_locale();
 static std::string sys_c_locale;
 static std::string sys_cpp_locale;
 
+namespace
+{
+/// Force LC_NUMERIC (and the C++ numeric facet) to the classic locale, leaving
+/// messages, collation, ctype and time localized.
+///
+/// Every number we author in a data file is written with a '.', while the parsers
+/// that read them back are locale-aware. RmlUi in particular converts String->float
+/// with atof() (TypeConverter.inl STRING_FLOAT_CONVERTER), so on a comma-decimal
+/// locale (en_BE, de_DE, fr_FR, ...) atof( "0.05" ) stops at the '.' and returns 0 —
+/// every fractional literal in every .rml/.rcss silently became its integer part.
+///
+/// The F4 dev panel showed this at its worst: `<input type="range" step="0.05">`
+/// parsed to 0, WidgetSlider::SetStep rejects a zero step and keeps its constructor
+/// default of 1, so every slider snapped to whole units regardless of its authored
+/// step (and min="0.5"/max="1.5" degraded to 0/1 the same way).
+///
+/// Must be re-applied after ANY locale change, since setlocale( LC_ALL, ... ) and
+/// std::locale::global() both reset the numeric category. Anything that genuinely
+/// wants a localized decimal separator has to format it explicitly.
+auto pin_numeric_locale() -> void
+{
+    if( setlocale( LC_NUMERIC, "C" ) == nullptr ) {
+        dbg( DL::Warn ) << "Error while setlocale(LC_NUMERIC, 'C').";
+    }
+    // Same for the C++ side: a global std::locale installed from a name carries a
+    // numpunct that would otherwise put a comma into every iostream-formatted
+    // float. Rebuild the current global taking only the numeric category from the
+    // classic locale.
+    try {
+        std::locale::global( std::locale( std::locale(), std::locale::classic(),
+                                          std::locale::numeric ) );
+    } catch( const std::runtime_error &e ) {
+        dbg( DL::Warn ) << "Error while pinning C++ numeric facet: " << e.what();
+    }
+}
+
+} // namespace
+
 // System user preferred UI language (nullptr if failed to detect)
 static language_info const *system_language = nullptr;
 
@@ -279,6 +317,13 @@ bool init_language_system()
     dbg( DL::Info ) << "C locale on startup: '" << sys_c_locale << "'";
     dbg( DL::Info ) << "C++ locale on startup: '" << sys_cpp_locale << "'";
 
+    // The captured sys_* strings above are the user's real locale, kept for
+    // restoration; from here on the numeric category is ours. Tests only ever call
+    // init_language_system(), never set_language(), so pinning in
+    // update_global_locale() alone left every test binary on a comma-decimal
+    // locale — item-info DPS readouts came out as "5,20" against a "5.20" reference.
+    pin_numeric_locale();
+
     lang_options = load_languages( PATH_INFO::language_defs_file() );
     if( lang_options.empty() ) {
         lang_options = { fallback_language };
@@ -372,6 +417,8 @@ void update_global_locale()
     }
 
 #endif // _WIN32
+
+    pin_numeric_locale();
 
     dbg( DL::Info ) << "C locale set to '" << setlocale( LC_ALL, nullptr ) << "'";
     dbg( DL::Info ) << "C++ locale set to '" << std::locale().name() << "'";
