@@ -1407,7 +1407,7 @@ bool game::handle_mouseview( input_context &ctxt, std::string &action )
             // action.h's can_examine_at(), the closest existing equivalent
             // (same predicate the action-menu greys ACTION_EXAMINE with) —
             // else the plain arrow.
-            if( !rmlui_layer::active() ) {
+            if( !rmlui_layer::capturing_input() ) {
                 if( !mouse_pos ) {
                     set_game_cursor( cursor_kind::arrow );
                 } else if( const monster *mon = critter_at<monster>( *mouse_pos ); mon && u.sees( *mon ) ) {
@@ -1437,7 +1437,7 @@ bool game::handle_mouseview( input_context &ctxt, std::string &action )
         if( tilecontext ) {
             tilecontext->set_hover_tile( std::nullopt );
         }
-        if( !rmlui_layer::active() ) {
+        if( !rmlui_layer::capturing_input() ) {
             set_game_cursor( cursor_kind::arrow );
         }
         return false;
@@ -1594,6 +1594,10 @@ input_context get_default_mode_input_context()
     ctxt.register_action( "throw" );
     ctxt.register_action( "THROW_QUICKSLOT" );
     ctxt.register_action( "fire" );
+    // RMB press-to-aim. action_ident( ACTION_AIM_HOLD ) is "aim_hold"; without this
+    // registration the DEFAULTMODE context cannot resolve MOUSE_RIGHT_DOWN to it and
+    // right-click aiming never starts.
+    ctxt.register_action( "aim_hold" );
     ctxt.register_action( "cast_spell" );
     ctxt.register_action( "cast_last_spell" );
     ctxt.register_action( "fire_burst" );

@@ -340,7 +340,16 @@ target_handler::trajectory target_ui::run()
 
         // Wait for user input (or use value retrieved from activity)
         if( action.empty() ) {
-            int timeout = get_option<int>( "EDGE_SCROLL" );
+            // The loop needs a steady tick even when the player disabled edge
+            // scrolling (EDGE_SCROLL == -1), because handle_input only arms a
+            // timeout for non-negative values. Without one there is no TIMEOUT
+            // action, which starves the throw-charge meter below AND the
+            // hold-to-aim release backstop — the latter is precisely what made
+            // right-click aiming behave like a toggle.
+            constexpr int aim_tick_ms = 50;
+            const int edge_scroll = get_option<int>( "EDGE_SCROLL" );
+            const int timeout = edge_scroll >= 0 ? std::min( edge_scroll, aim_tick_ms )
+                                : aim_tick_ms;
             action = ctxt.handle_input( timeout );
         }
         // After a fiber yield the world may have ticked; dst_critter and targets
@@ -374,7 +383,15 @@ target_handler::trajectory target_ui::run()
             }
         }
 
-        // Hold-to-aim: RMB held → reduce recoil each tick; RMB released → cancel
+        // Hold-to-aim: SEC_SELECT is the RMB *release* (keybindings.json binds it to
+        // MOUSE_RIGHT, which sdl_input emits on SDL_EVENT_MOUSE_BUTTON_UP), so it ends
+        // the hold the instant the button comes up instead of waiting for the next
+        // poll. The TIMEOUT poll below stays as a backstop for the release that lands
+        // between the AIM_HOLD press and this loop taking over input.
+        if( opened_by_rmb && action == "SEC_SELECT" ) {
+            loop_exit_code = ExitCode::Abort;
+            break;
+        }
         if( opened_by_rmb && action == "TIMEOUT" ) {
             if( !is_rmb_held() ) {
                 loop_exit_code = ExitCode::Abort;
@@ -518,6 +535,8 @@ void target_ui::init_window_and_input()
     ctxt.register_directions();
     ctxt.register_action( "COORDINATE" );
     ctxt.register_action( "SELECT" );
+    // RMB release — hold-to-aim ends on this; see the loop's SEC_SELECT branch.
+    ctxt.register_action( "SEC_SELECT" );
     ctxt.register_action( "FIRE" );
     ctxt.register_action( "NEXT_TARGET" );
     ctxt.register_action( "PREV_TARGET" );
@@ -1354,7 +1373,21 @@ void target_ui::draw_terrain_overlay()
         const auto half = calc_spread_half_angle();
         g->draw_aim_cone( src.xy(), static_cast<float>( units::to_radians( aim_angle ) ),
                           static_cast<float>( units::to_radians( half ) ), range, src.z() );
-        g->draw_aim_crosshair( get_sdl_mouse_pos() );
+        // SDL_GetMouseState returns (0, 0) from inside this modal input loop (it
+        // reports window-relative coordinates only while a window holds mouse
+        // focus), which pinned the crosshair to the map's top-left corner. Fall
+        // back to the persistent record sdl_input keeps of the last motion event.
+        //
+        // KNOWN OPEN: both operands were additionally hard-zero because
+        // sdl_window_dims.cpp still tested `#ifdef TILES`, which this build never
+        // defines, so every accessor there compiled to its stub branch (see the note
+        // in that file). With that fixed the crosshair is still not observed on
+        // screen, so at least one more cause remains. Everything else up to the draw
+        // checks out: do_draw_cursor and the pixel are both set (instrumented, logged
+        // "flag=1 has_px=1") and the sibling draw_aim_cone on the same overlay pass
+        // renders correctly.
+        const auto live_mouse = get_sdl_mouse_pos();
+        g->draw_aim_crosshair( live_mouse != point_zero ? live_mouse : get_tracked_mouse_pos() );
     }
 
     // Throw arc and impact indicator

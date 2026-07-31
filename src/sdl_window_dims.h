@@ -14,14 +14,22 @@
 ///
 /// sdl_window_dims.cpp is the single definition site for all of the above.
 
-/// Returns true when the right mouse button is physically held down.
-/// In curses builds (no SDL) always returns false.
+/// Returns true when the right mouse button is physically held down, as tracked
+/// from the SDL event stream by sdl_input.
 auto is_rmb_held() -> bool;
 
-/// Returns SDL_GetTicks() in tiles builds; returns 0 in curses builds.
+/// SDL_GetTicks(), in milliseconds.
 auto get_sdl_ticks() -> uint64_t;
 
 /// Returns the current mouse pixel position via SDL_GetMouseState (live, not last-event).
-/// In curses builds returns point_zero.
+///
+/// CAUTION: SDL only reports this while a window holds mouse focus. Inside the
+/// ranged-targeting input loop it comes back (0, 0) — pair it with
+/// get_tracked_mouse_pos() there.
 struct point;
 auto get_sdl_mouse_pos() -> point;
+
+/// The mouse pixel position input_manager recorded from the last real mouse event.
+/// Survives input loops where SDL reports no mouse focus, at the cost of being a
+/// frame or two stale.
+auto get_tracked_mouse_pos() -> point;

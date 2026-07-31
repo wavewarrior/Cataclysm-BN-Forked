@@ -15,6 +15,9 @@
 #include "cuboid_rectangle.h" // inclusive_rectangle
 #include "sdl_font.h"        // Font::width/height
 #include "sdl_display.h"     // display_context g_display, fontwidth, fontheight
+#include "sdl_input.h"       // sdl_input::last_mouse_px
+
+#include <SDL3/SDL.h> // SDL_GetTicks, SDL_GetMouseState (used unguarded below)
 
 //***********************************
 // Projected window dimensions      *
@@ -193,33 +196,41 @@ const auto tw = std::max( 1, tilecontext->get_tile_width() );
     return units::atan2( dy, dx );
 }
 
+// These four were wrapped in `#ifdef TILES` and so compiled to their stub branches:
+// the build never defines TILES (it was dropped with add_definitions(-DTILES) — see
+// the note at the top of cursesport.cpp, which stripped its own guard for the same
+// reason), and this was the last file still testing it. The consequences were all
+// silent: is_rmb_held() was hard-false, so RMB hold-to-aim could never observe the
+// press and the targeting UI behaved like a toggle; get_sdl_ticks() was hard-zero,
+// so the throw charge meter never advanced; and get_tracked_mouse_pos() was
+// hard-(0,0), which is why the aim crosshair was never seen on screen.
+
 auto is_rmb_held() -> bool
 {
-#ifdef TILES
-    float mx = 0.0f, my = 0.0f;
-    const auto buttons = SDL_GetMouseState( &mx, &my );
-    return ( buttons & SDL_BUTTON_RMASK ) != 0;
-#else
-    return false;
-#endif
+    // NOT SDL_GetMouseState: its button mask is only populated while a window holds
+    // mouse focus, and inside the ranged-targeting modal loop it reads as "no buttons
+    // down". sdl_input tracks the physical state from the event stream instead.
+    return sdl_input::rmb_down();
 }
 
 auto get_sdl_ticks() -> uint64_t
 {
-#ifdef TILES
     return static_cast<uint64_t>( SDL_GetTicks() );
-#else
-    return 0;
-#endif
 }
 
 auto get_sdl_mouse_pos() -> point
 {
-#ifdef TILES
     float mx = 0.0f, my = 0.0f;
     SDL_GetMouseState( &mx, &my );
     return point( static_cast<int>( mx ), static_cast<int>( my ) );
-#else
-    return point_zero;
-#endif
+}
+
+auto get_tracked_mouse_pos() -> point
+{
+    // The persistent record sdl_input keeps of the last SDL motion event. NOT
+    // g_display.last_input.mouse_pos: CheckMessages resets last_input at the top of
+    // every call and every keyboard event reassigns it, so that field reads (0, 0)
+    // as soon as the player touches a key — useless inside a keyboard-driven loop,
+    // which is exactly where the aim crosshair needs it.
+    return sdl_input::last_mouse_px();
 }

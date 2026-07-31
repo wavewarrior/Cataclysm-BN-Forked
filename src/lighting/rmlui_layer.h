@@ -48,9 +48,16 @@ void shutdown();
 // True once init succeeded.
 bool ready();
 
-// Whether the layer should consume this frame's input/draw: ready && at least
-// one document is currently open.
+// Whether the layer should DRAW this frame: ready && at least one document is
+// currently open. This counts always-open PASSIVE documents (the sidebar HUD),
+// so it MUST NOT gate input — use capturing_input() for that.
 bool active();
+
+// Whether the layer owns this frame's mouse input: ready && at least one
+// INTERACTIVE document is open. A passive document paints every frame without
+// capturing input, so gating input on active() silently kills every world mouse
+// binding the moment the sidebar HUD (passive, defaults ON) is enabled.
+bool capturing_input();
 
 // The shared context (nullptr until ready()). Callers use it to create
 // data-models (context()->CreateDataModel) for their documents.

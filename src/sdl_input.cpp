@@ -399,6 +399,31 @@ static void try_sdl_update( display_context &d )
 // dependency are acceptable for now; a future extraction could introduce a
 // callback-based hook for the ~30 lines of F-key logic.
 // ---------------------------------------------------------------------------
+// Last cursor position seen in an SDL motion event, in window pixels. Persistent
+// on purpose: display_context::last_input is wiped at the top of CheckMessages and
+// overwritten by every keyboard event, so it cannot answer "where is the cursor"
+// inside a keyboard-driven modal loop. Read via get_tracked_mouse_pos().
+namespace
+{
+point s_last_mouse_px = point_zero;
+// Right mouse button down/up, tracked from the SDL event stream for the same
+// reason as the cursor position above: SDL_GetMouseState() only reports state
+// while a window holds mouse focus, and inside the ranged-targeting modal loop it
+// comes back empty — which made hold-to-aim never observe the release and behave
+// like a toggle. The event stream is authoritative regardless of focus.
+bool s_rmb_down = false;
+} // namespace
+
+auto last_mouse_px() -> point
+{
+    return s_last_mouse_px;
+}
+
+auto rmb_down() -> bool
+{
+    return s_rmb_down;
+}
+
 void CheckMessages( display_context &d )
 {
     static int frame = 0;
@@ -423,8 +448,15 @@ void CheckMessages( display_context &d )
         if( ++event_count % 60 == 0 ) {
             dbg( DL::Info ) << "[input] SDL_PollEvent processed " << event_count << " events";
         }
-        if( ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN ) {
-            dbg( DL::Info ) << "[input] MOUSE_BUTTON_DOWN button=" << ev.button.button;
+        // Physical right-button state, recorded BEFORE any capture gate: the RmlUi
+        // layer and the dev-panel click handlers below all `continue` past the switch,
+        // so a release consumed by an open document would otherwise leave this latched
+        // on and hold-to-aim could never end. Buttons are hardware state, not an
+        // action — whoever handles the event, the button really did move.
+        if( ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN && ev.button.button == SDL_BUTTON_RIGHT ) {
+            s_rmb_down = true;
+        } else if( ev.type == SDL_EVENT_MOUSE_BUTTON_UP && ev.button.button == SDL_BUTTON_RIGHT ) {
+            s_rmb_down = false;
         }
         // RmlUi layer sees events first; captures mouse (only) while a menu is open.
         const bool rmlui_capture = rmlui_layer::process_event( ev );
@@ -665,6 +697,15 @@ void CheckMessages( display_context &d )
                 // TODO: somehow get the "digipad" values from the axes
                 break;
             case SDL_EVENT_MOUSE_MOTION:
+                // Record the position unconditionally, BEFORE the HIDE_CURSOR gate
+                // and independently of last_input: CheckMessages resets last_input
+                // at the top of every call (line 416) and every keyboard event
+                // reassigns it, so last_input.mouse_pos is (0, 0) the moment the
+                // player touches a key. Consumers that need "where is the cursor"
+                // during a keyboard-driven loop (the ranged-targeting crosshair)
+                // read this instead — see get_tracked_mouse_pos().
+                s_last_mouse_px = point( static_cast<int>( ev.motion.x ),
+                                         static_cast<int>( ev.motion.y ) );
                 if( get_option<std::string>( "HIDE_CURSOR" ) == "show" ||
                     get_option<std::string>( "HIDE_CURSOR" ) == "hidekb" ) {
                     if( !SDL_CursorVisible() ) {
@@ -688,9 +729,15 @@ void CheckMessages( display_context &d )
                 break;
 
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
-                if( ev.button.button == SDL_BUTTON_RIGHT && !rmlui_layer::active() ) {
+                // capturing_input(), NOT active(): the sidebar HUD is a PASSIVE
+                // RmlUi document that stays open for the whole game and defaults ON,
+                // so active() is permanently true and gating on it swallowed every
+                // right/middle click — including the MOUSE_RIGHT_DOWN that AIM_HOLD
+                // is bound to, which disabled right-click-to-aim outright.
+                if( ev.button.button == SDL_BUTTON_RIGHT && !rmlui_layer::capturing_input() ) {
                     d.last_input = input_event( MOUSE_BUTTON_RIGHT_DOWN, input_event_t::mouse );
-                } else if( ev.button.button == SDL_BUTTON_MIDDLE && !rmlui_layer::active() ) {
+                } else if( ev.button.button == SDL_BUTTON_MIDDLE
+                           && !rmlui_layer::capturing_input() ) {
                     d.last_input = input_event( MOUSE_BUTTON_MIDDLE, input_event_t::mouse );
                 }
                 break;

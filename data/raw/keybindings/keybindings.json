@@ -1184,7 +1184,8 @@
   },
   {
     "type": "keybinding",
-    "id": "AIM_HOLD",
+    "id": "aim_hold",
+    "category": "DEFAULTMODE",
     "name": "Hold to Aim",
     "bindings": [ { "input_method": "mouse", "key": "MOUSE_RIGHT_DOWN" } ]
   },

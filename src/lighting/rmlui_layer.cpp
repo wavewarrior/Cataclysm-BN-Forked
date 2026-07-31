@@ -522,6 +522,8 @@ bool ready() { return g_ready; }
 
 bool active() { return g_ready && any_open(); }
 
+bool capturing_input() { return g_ready && any_interactive_open(); }
+
 Rml::Context* context() { return g_ready ? g_context : nullptr; }
 
 float density_ratio() { return g_density_ratio; }

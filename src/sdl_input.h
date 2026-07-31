@@ -42,4 +42,15 @@ auto gamepad_available( const display_context &d ) -> bool;
 /// pipeline below.  Callers always pass g_display.
 void CheckMessages( display_context &d );
 
+/// Last cursor position seen in an SDL mouse-motion event, in window pixels.
+/// Unlike display_context::last_input.mouse_pos this is NOT reset per event, so it
+/// still answers "where is the cursor" inside a keyboard-driven modal loop.
+auto last_mouse_px() -> point;
+
+/// Physical right-mouse-button state, tracked from the SDL event stream. Use this
+/// instead of SDL_GetMouseState's button mask, which reports nothing unless a
+/// window currently holds mouse focus — inside the ranged-targeting modal loop it
+/// always came back empty, so hold-to-aim never saw the release.
+auto rmb_down() -> bool;
+
 } // namespace sdl_input
