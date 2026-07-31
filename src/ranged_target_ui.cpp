@@ -1341,8 +1341,15 @@ void target_ui::draw_terrain_overlay()
         g->draw_line( src, center, l, true );
     }
 
-    // Draw trajectory
-    if( mode != TargetMode::Turrets && dst != src ) {
+    // Draw trajectory as a tile path. Fire and Throw are excluded: they each have a
+    // pixel-accurate, tile-independent overlay below (the spread cone + laser line,
+    // and the ballistic arc + impact ring). Drawing both put a discrete tile ladder
+    // underneath a continuous cone, which reads as two disagreeing aim indicators.
+    // Spell / Shape / TurretManual have no such replacement, so they keep the path.
+    const bool has_pixel_aim_overlay = mode == TargetMode::Fire
+                                       || mode == TargetMode::Throw
+                                       || mode == TargetMode::ThrowBlind;
+    if( mode != TargetMode::Turrets && !has_pixel_aim_overlay && dst != src ) {
         std::vector<tripoint_bub_ms> this_z = filter_this_z( traj );
 
         // Draw a highlighted trajectory only if we can see the endpoint.
