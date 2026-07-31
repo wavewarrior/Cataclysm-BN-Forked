@@ -434,6 +434,67 @@ void picker_init()
     pk_rgb_to_hsv( c[0], c[1], c[2], g_pk_h, g_pk_s, g_pk_v );
 }
 
+// ── Exact slider stepping via the mouse wheel ───────────────────────────────
+//
+// RmlUi's range input only moves on drag, and its resolution is the track's
+// pixel width: `input.range` is 160px wide with a 12px thumb, so a drag can
+// resolve at best 148 distinct positions. Knobs whose (max-min)/step exceeds
+// that (tonemap exposure at 0..2/0.01, the runic pixel knobs, every 0..255
+// colour channel) simply cannot reach most of their authored values, which is
+// what made the panel feel like it snapped to whole units. The wheel gives an
+// exact ±step regardless of geometry, matching the ImGui sliders this panel
+// replaced.
+//
+// The wheel is already forwarded to RmlUi (rmlui_layer::process_event feeds
+// SDL_EVENT_MOUSE_WHEEL to Context::ProcessMouseWheel); keyboard input is NOT,
+// so arrow-key stepping and text entry are not options here.
+class slider_wheel_listener : public Rml::EventListener
+{
+    public:
+        void ProcessEvent( Rml::Event &ev ) override {
+            Rml::Element *el = ev.GetCurrentElement();
+            if( el == nullptr ) { return; }
+            // Positive wheel_delta_y is a scroll DOWN, which should lower the value.
+            const float notches = -ev.GetParameter<float>( "wheel_delta_y", 0.0f );
+            if( notches == 0.0f ) { return; }
+            const float step = el->GetAttribute( "step", 1.0f );
+            const float lo   = el->GetAttribute( "min", 0.0f );
+            const float hi   = el->GetAttribute( "max", 100.0f );
+            const float cur  = el->GetAttribute( "value", lo );
+            // Ctrl coarsens to 10 steps per notch; the fine case is the default.
+            const float mult = ev.GetParameter<int>( "ctrl_key", 0 ) != 0 ? 10.0f : 1.0f;
+            const float next = std::clamp( cur + notches * step * mult,
+                                           std::min( lo, hi ), std::max( lo, hi ) );
+            if( next == cur ) { return; }
+            // Drive the data model rather than the widget: writing the "value"
+            // attribute directly makes WidgetSlider::SetValueInternal see an
+            // unchanged attribute and skip its Change event, so the bound C++
+            // global would never learn about the edit. Dispatching Change with a
+            // float Variant is exactly what a real drag does, and it carries the
+            // full float (no %.3f string round-trip). DataControllerValue then
+            // dirties the variable, which pushes the new value back into the
+            // widget so the thumb follows.
+            Rml::Dictionary params;
+            params["value"] = next;
+            el->DispatchEvent( Rml::EventId::Change, params );
+            ev.StopPropagation(); // don't also scroll the panel body
+        }
+};
+
+slider_wheel_listener g_slider_wheel;
+
+/// Attach the wheel stepper to every range input in the freshly opened doc.
+void attach_slider_wheel( Rml::ElementDocument &doc )
+{
+    Rml::ElementList inputs;
+    doc.GetElementsByTagName( inputs, "input" );
+    for( Rml::Element *el : inputs ) {
+        if( el->GetAttribute<Rml::String>( "type", "" ) == "range" ) {
+            el->AddEventListener( Rml::EventId::Mousescroll, &g_slider_wheel );
+        }
+    }
+}
+
 void devui_rml_open()
 {
     if( g_devui_doc != nullptr || !rmlui_layer::ready() ) { return; }
@@ -848,6 +909,7 @@ void devui_rml_open()
         return;
     }
     g_devui_doc = doc;
+    attach_slider_wheel( *doc );
     // Seed the picker from the current cursor-light colour + paint the initial visuals.
     picker_init();
     picker_apply();

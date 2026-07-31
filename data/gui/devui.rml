@@ -263,7 +263,11 @@
                 <div class="devui-section">Post FX</div>
                 <div class="devui-row">vignette <input type="range" min="0" max="1" step="0.01" data-value="grade_vignette"/> <span class="devui-val">{{grade_vignette}}</span></div>
                 <div class="devui-row">film grain <input type="range" min="0" max="0.1" step="0.001" data-value="grade_grain"/> <span class="devui-val">{{grade_grain}}</span></div>
-                <div class="devui-row">chromatic aberration <input type="range" min="0" max="0.01" step="0.0001" data-value="grade_ca"/> <span class="devui-val">{{grade_ca}}</span></div>
+                <!-- step is floored at 0.001: RmlUi transports a range input's value
+                     through its "value" attribute as a string formatted "%.3f"
+                     (TypeConverter<float,String>), so anything finer is truncated away
+                     the moment rml_tick pushes the model back into the DOM. -->
+                <div class="devui-row">chromatic aberration <input type="range" min="0" max="0.01" step="0.001" data-value="grade_ca"/> <span class="devui-val">{{grade_ca}}</span></div>
 
                 <div class="devui-section">Height depth (DitW)</div>
                 <div class="devui-row">lean mul <input type="range" min="0" max="3" step="0.05" data-value="depth_lean_str"/> <span class="devui-val">{{depth_lean_str}}</span></div>
