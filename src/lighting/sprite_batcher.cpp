@@ -66,15 +66,25 @@ namespace {
 struct sun_lut_key {
     float hr, si, sr, sg, sb, sky_i, sky_r, sky_g, sky_b, elev;
 };
+// Daytime intensities are radiometric drivers, not a look preference: the shader
+// multiplies sun_intensity by a Lambert term that is only sin_elev/sqrt(1+sin_elev^2)
+// (0.45 at hour 8), so the old si=0.60 / sky_i=0.50 pair summed to just
+//   sky(0.55,0.65,0.85)*0.50 + sun(1.0,0.80,0.50)*0.60*0.45 ~= 0.54
+// i.e. a sunlit outdoor tile rendered at ~54% of its own albedo before the AgX
+// tonemap — which is why mid-morning outdoors looked as dark as an interior.
+// Daylight rows below are scaled so an open tile lands near 1.0 at hour 8 and
+// slightly above 1.0 at noon (the HDR target + tonemap absorb the overshoot).
+// Night rows (0, 5, 21, 24) are untouched, so nights stay as dark as before and
+// the indoor/outdoor contrast the ambient floor provides is preserved.
 static const sun_lut_key k_sun[] = {
     //  hr    si     sr     sg     sb    sky_i  sky_r  sky_g  sky_b  elev
     {0, 0.00f, 0.f, 0.f, 0.f, 0.03f, 0.05f, 0.05f, 0.15f, 0.f},
     {5, 0.00f, 0.f, 0.f, 0.f, 0.05f, 0.05f, 0.10f, 0.25f, 0.f},
-    {6, 0.10f, 0.90f, 0.50f, 0.20f, 0.15f, 0.60f, 0.40f, 0.30f, 0.15f},
-    {8, 0.60f, 1.00f, 0.80f, 0.50f, 0.50f, 0.55f, 0.65f, 0.85f, 0.50f},
-    {12, 1.00f, 1.00f, 0.95f, 0.80f, 0.80f, 0.50f, 0.60f, 0.90f, 0.87f},
-    {16, 0.80f, 1.00f, 0.90f, 0.60f, 0.60f, 0.50f, 0.60f, 0.85f, 0.70f},
-    {19, 0.20f, 1.00f, 0.40f, 0.10f, 0.20f, 0.70f, 0.40f, 0.30f, 0.20f},
+    {6, 0.18f, 0.90f, 0.50f, 0.20f, 0.25f, 0.60f, 0.40f, 0.30f, 0.15f},
+    {8, 0.95f, 1.00f, 0.80f, 0.50f, 0.85f, 0.55f, 0.65f, 0.85f, 0.50f},
+    {12, 1.25f, 1.00f, 0.95f, 0.80f, 1.05f, 0.50f, 0.60f, 0.90f, 0.87f},
+    {16, 1.10f, 1.00f, 0.90f, 0.60f, 0.95f, 0.50f, 0.60f, 0.85f, 0.70f},
+    {19, 0.30f, 1.00f, 0.40f, 0.10f, 0.32f, 0.70f, 0.40f, 0.30f, 0.20f},
     {21, 0.00f, 0.f, 0.f, 0.f, 0.05f, 0.10f, 0.08f, 0.15f, 0.f},
     {24, 0.00f, 0.f, 0.f, 0.f, 0.03f, 0.05f, 0.05f, 0.15f, 0.f},
 };

@@ -54,7 +54,7 @@ cbuffer VolParams : register(b0, space3) {
 };
 
 // MUST match lighting::SDF_SUPERSAMPLE (sdf_pass.h) and sprite.frag's SDF_SS.
-static const int SDF_SS = 4;
+static const int SDF_SS = 8;
 
 // SDF helpers — VERBATIM from the current (supersampled) sprite.frag so the
 // shaft occlusion march samples the exact same field the surface shadows do.

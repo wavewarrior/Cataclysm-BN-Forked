@@ -1982,6 +1982,21 @@ void map::apply_light_source( const tripoint_bub_ms &p, float luminance,
         sssSsss
            sy
     */
+    // The four neighbour probes below index light_source_buffer with no bounds
+    // check of their own — the `p2.y() != 0` / `!= sy - 1` tests only stop the ±1
+    // step from leaving a row, they say nothing about `p` itself being inside the
+    // cache. The lm/sm writes above are guarded by inbounds(p) precisely because
+    // `p` can be outside it (an on-fire or lamp-carrying character reaching here
+    // from build_map_cache while the caches are still being allocated), and in
+    // that case lsb_data[] reads off the end — or off nullptr when the vector is
+    // still empty. That is an EXCEPTION_ACCESS_VIOLATION on new-character start.
+    //
+    // Bail instead: for an out-of-bounds source every probe would be false, so
+    // the octant mask would be empty and the ray cast below a no-op anyway.
+    if( !inbounds( p ) ||
+        cache.light_source_buffer.size() < static_cast<std::size_t>( sx ) * static_cast<std::size_t>( sy ) ) {
+        return;
+    }
     bool north = ( p2.y() != 0       &&
                    lsb_data[p2.x() * sy + p2.y() - 1].luminance       < luminance );
     bool south = ( p2.y() != sy - 1  &&

@@ -157,7 +157,7 @@ struct VS_OUT {
 // SdfBuf is the SS-finer grid: dims (sdf_map_w*SDF_SS) x (sdf_map_h*SDF_SS),
 // x-major (stride = sdf_map_h*SDF_SS). Stored distances are already in TILE
 // units (the CPU ÷SS), so the cone trace below is unchanged.
-static const int SDF_SS = 4;
+static const int SDF_SS = 8;
 // P1: contribution epsilon — skip shadow march when atten*lambert is negligible.
 // Edge-of-radius overlapping emitters dominate count but add ~0 brightness.
 static const float LIGHT_EPS_DEFAULT = 0.004;

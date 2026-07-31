@@ -56,7 +56,7 @@ static const float LIGHT_EPS = 0.004;
 static const uint  RC_K = 8u;
 // SDF supersample factor — MUST match lighting::SDF_SUPERSAMPLE (sdf_pass.h)
 // and the SDF_SS in sprite.frag.hlsl. SdfBuf is the SS-finer grid.
-static const int   SDF_SS = 4;
+static const int   SDF_SS = 8;
 
 // --- SDF helpers (SS-finer grid, identical math to sprite.frag) --------------
 float sdf_texel( int x, int y )

@@ -39,7 +39,7 @@ static const int   RC_STEPS = 20;   // max march steps per ray
 static const float RC_STEP  = 0.75; // tile units per step
 static const float RC_START = 0.70; // skip the tile's own cell
 static const float RC_WALL  = 0.10; // SDF distance treated as "blocked"
-static const int   SDF_SS   = 4;    // MUST match sdf_pass.h / sprite.frag
+static const int   SDF_SS   = 8;    // MUST match sdf_pass.h / sprite.frag
 
 // FieldBuf is tile-res, x-major field[(x*map_h+y)*4 + c].
 float3 field_at( int x, int y )

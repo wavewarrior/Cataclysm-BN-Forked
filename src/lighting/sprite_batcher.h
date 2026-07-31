@@ -138,8 +138,19 @@ struct debug_params {
     float shadow_k = 8.0f;
     uint32_t shadow_steps = 16u;
     float dither_amt = 1.0f;
-    float dither_bands = 12.0f;
-    float gi_strength = 0.60f; // 1-bounce indirect multiplier (0=off); Alt+F8/F9 to tune
+    // The ordered dither quantises the dynamic light into this many bands. At 12
+    // bands each step is 1/12 of the light range, which over a scene whose total
+    // dynamic light sat near 0.5 left only ~6 usable levels — coarse enough to
+    // read as blotching rather than as dither. 32 keeps the mean-preserving
+    // stipple while dropping the step below visual threshold.
+    float dither_bands = 32.0f;
+    // 1-bounce indirect multiplier (0=off); Alt+F8/F9 to tune. GI is computed at
+    // ONE VALUE PER MAP TILE and bilinearly upsampled (gi_bounce.comp.hlsl +
+    // sprite.frag's indirect_bilinear), so its error is tile-scale soft blobs.
+    // 0.60 made those blobs the dominant large-scale structure in the image;
+    // 0.35 keeps colour bleed without letting the low-res term drive the look.
+    // The real fix is a higher-resolution / temporally-filtered GI pass.
+    float gi_strength = 0.35f;
     // Vision rework knobs (Stoneshard-style). All default ON so the effect ships;
     // set any to its off-value to bisect live. Wire-stable with DebugParams cbuffer.
     float vis_curve = 1.0f;    // vision-edge falloff exponent (0=off → no falloff)

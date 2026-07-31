@@ -7,6 +7,7 @@
 #include "lighting/render_state.h"
 #include "lighting/sdf_pass.h"
 #include "lighting/snapshot.h"
+#include "lightmap.h"
 #include "map.h"
 #include "profile.h"
 #include "worldfactory.h"
@@ -139,12 +140,28 @@ frame_lighting_result build_and_submit_lighting(
             dbg(DL::Debug) << "[lighting] structure_rebuild: trans=" << mc.transparency_cache.size()
                            << " out=" << mc.outside_cache.size() << " total=" << total;
 
-            // Pack float transparency_cache → uint8 (0=opaque, 255=transparent).
+            // Pack transparency_cache → uint8 occluder mask (0=opaque, 255=open).
+            //
+            // The cache is an ATTENUATION COEFFICIENT, not a 0..1 fraction:
+            // LIGHT_TRANSPARENCY_SOLID is the exact 0.0 sentinel for opaque and
+            // open air is only LIGHT_TRANSPARENCY_OPEN_AIR = 0.0384. The old
+            // `t * 255` therefore spanned 0..9, not 0..255 — so after sdf_pass's
+            // /255 the JFA seed saw 0.035 for OPEN AIR and its `trans < 0.5`
+            // opaque test matched EVERY tile. Every subcell seeded, the JFA
+            // resolved distance 0 everywhere, and the whole SDF collapsed to
+            // zero: debug mode 6 rendered uniform red, trace_shadow's
+            // self-shadow guard fired on every fragment, and point lights
+            // stopped respecting walls entirely.
+            //
+            // Emit a BINARY mask against the same `> LIGHT_TRANSPARENCY_SOLID`
+            // test the rest of the engine uses (lightmap.cpp) and that the
+            // sun/sky occluder height gate below already uses — so the point-light
+            // SDF and the sun shadow agree on what a wall is: anything that
+            // transmits any light at all (glass, bars, chain-link) does not occlude.
             transparency.resize(total);
             for (int i = 0; i < total; ++i) {
-                const float t = mc.transparency_cache[i];
-                transparency[i] = static_cast<uint8_t>(
-                    std::min(255.0f, std::max(0.0f, t * 255.0f)));
+                transparency[i] =
+                    mc.transparency_cache[i] > LIGHT_TRANSPARENCY_SOLID ? uint8_t{255} : uint8_t{0};
             }
 
             // P3.3: SDF is now computed on GPU via JFA (gpu_sdf_pass). The CPU no
@@ -193,6 +210,26 @@ frame_lighting_result build_and_submit_lighting(
                             m.ter(tp).is_valid()
                                 ? std::clamp(static_cast<float>(m.coverage(tp)) / 100.0f, 0.0f, 1.0f)
                                 : 0.0f;
+                        // map::coverage() is the ranged-COVER gameplay stat, not a
+                        // light-transmission value: a window has coverage 60 (stops
+                        // bullets, blocks a sightline through the frame) yet is
+                        // TRANSPARENT to light. Because coverage 60 lands exactly on
+                        // sky_sun.comp's SKY_WALL_H = 0.60 blocking threshold, every
+                        // window read as a solid wall and no daylight reached any
+                        // interior — sprite.frag's own comment ("a roofed tile lit
+                        // only through window directions gets partial sky FROM the
+                        // opening") describes behaviour this silently prevented.
+                        //
+                        // Coverage supplies the occluder's HEIGHT (full wall ~1,
+                        // half-wall ~0.5); the transparency cache — the same field
+                        // the game's own LOS/vision trusts, and which already
+                        // discounts glass, bars and chain-link — decides whether it
+                        // blocks LIGHT at all. Anything that transmits (> SOLID)
+                        // stops casting a sun/sky shadow.
+                        if (static_cast<int>(mc.transparency_cache.size()) > idx &&
+                            mc.transparency_cache[idx] > LIGHT_TRANSPARENCY_SOLID) {
+                            h = 0.0f;
+                        }
                         // P6b: parked vehicles are solid occluders for shadowing.
                         if (const auto vpart = m.veh_at(tp); vpart && vpart->obstacle_at_part()) {
                             h = std::max(h, 1.0f);

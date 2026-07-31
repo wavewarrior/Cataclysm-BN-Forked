@@ -21,7 +21,7 @@ class gpu_device;
 // units (÷SDF_SUPERSAMPLE) at build so the shader's cone trace is unchanged.
 // MUST match the SDF_SS constant in sprite.frag.hlsl. (This is the resolution
 // fix; it is orthogonal to JFA, which is only a faster way to COMPUTE a DT.)
-inline constexpr int SDF_SUPERSAMPLE = 4;
+inline constexpr int SDF_SUPERSAMPLE = 8;
 
 // Manages per-z-level transparency, SDF (signed-distance-field) GPU storage buffers.
 //

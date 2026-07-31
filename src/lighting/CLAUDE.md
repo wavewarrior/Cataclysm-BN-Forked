@@ -166,7 +166,7 @@ Win11/D3D12. The older CPU diffusion path was already deleted in Phase 4.
 - **Dev oracle**: F4 readback (`g_rc_readback`) → `gi().debug_log_stats()`
   synchronous GPU→CPU readback of `gi_buf_` (plain float32 now, no half decode),
   logging sum/max/nonzero/centroid to DC::Main.
-- **vs old RC**: SDF read is now SS-correct (matches sprite.frag's `SDF_SS=4`
+- **vs old RC**: SDF read is now SS-correct (matches sprite.frag's `SDF_SS`, now 8)
   grid) where rc.frag mis-indexed the SS buffer as tile-res — so occlusion is
   more accurate, not bug-for-bug identical to the Metal RC.
 - **Future (Stage 2)**: add the directional cascade hierarchy for sun/sky on this
