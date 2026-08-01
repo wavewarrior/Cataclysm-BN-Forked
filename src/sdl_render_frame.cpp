@@ -963,7 +963,17 @@ auto tonemap_pass_t( lighting::render_state &rs,
         grade.contrast         = g_grade_contrast;
         grade.vignette_amount  = g_grade_vignette;
         grade.grain_amount     = g_grade_grain;
-        grade.ca_amount        = g_grade_ca;
+        // Chromatic aberration: the static grade value plus the damage punch.
+        //
+        // The damage-driven term used to live in `ui_post_pass`, a fullscreen pass
+        // that ran AFTER the HUD was composited and therefore smeared the HUD's own
+        // glyphs on every hit. It belongs here instead: this pass reads the HDR world
+        // target and writes the LDR world layer, so by construction it can only ever
+        // touch the game, never the UI. The scale is chosen so a full-intensity hit
+        // lands around 0.0075 of UV offset — clearly felt against the ~0.0015
+        // "subtle" static default, without tearing the tiles apart.
+        constexpr float damage_ca_scale = 0.006f;
+        grade.ca_amount        = g_grade_ca + hud_shake::intensity() * damage_ca_scale;
         rs.tonemap().record( ctx.cmd_buffer, wt->texture(), rs.gpu_sampler(),
                              wldr->texture(), wldr->width(), wldr->height(),
                              g_tonemap_exposure, g_tonemap_min_ev, g_tonemap_max_ev, grade );
@@ -1056,13 +1066,21 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
         rmlui_layer::prepare( ctx.cmd_buffer );
     }
 
-    // Determine render target: use intermediate for post-processing (Phase 9),
-    // otherwise render directly to swapchain.
-    const bool use_post_process = rs.ui_post().ready() && rs.ui_post_target()
-                                  && rs.ui_post_target()->texture();
-    SDL_GPUTexture *render_target = use_post_process
-                                    ? rs.ui_post_target()->texture()
-                                    : ctx.swapchain_tex;
+    // Composite straight into the swapchain. There used to be an intermediate
+    // target here so `ui_post_pass` could run a second bloom plus chromatic
+    // aberration over the finished frame — but that pass ran AFTER the world, the UI
+    // layer AND the RmlUi HUD had all been composited, so it applied both effects to
+    // the HUD's own glyphs. Post-processing belongs to the game, not the interface.
+    //
+    // Nothing is lost by dropping it. The world already carries a full multi-scale
+    // Kawase bloom (`bloom_pass`, composited into the HDR world target before the
+    // resolve) and its own chromatic aberration, film grain and vignette inside
+    // `tonemap_pass` — all three of which read the world texture and therefore
+    // cannot reach the UI. The one thing `ui_post_pass` contributed that those did
+    // not was the damage-driven CA punch, and that now rides on the tonemap's
+    // `ca_amount` (see tonemap_pass_t). The removal also saves a fullscreen pass and
+    // a full-size intermediate render target every frame.
+    SDL_GPUTexture *render_target = ctx.swapchain_tex;
 
     // Atmospheric HUD particles (Phase 8): environment-driven ambient particles.
     // Screen-space (not world-locked) — they drift independently of camera movement.
@@ -1200,37 +1218,29 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
     }
     blit_layer( rs.ui_target() );
     // RmlUi (player menus + dev panel + world text) draws into the single swapchain
-    // pass (D3D12 single-pass rule) — and the HUD particles ride along after it, in
-    // the same pass, for the same reason.
+    // pass (D3D12 single-pass rule) — and the HUD particles ride along in the same
+    // pass, for the same reason.
+    //
+    // Particles are drawn BEFORE RmlUi so the HUD occludes them. They used to be
+    // drawn after, i.e. on top of it. `mask_play_area` already keeps them inside the
+    // map viewport, but the phosphor HUD's SOMA / DOCK / LOG panels FLOAT over that
+    // viewport rather than being carved out of it, so motes inside the play rect were
+    // landing on top of translucent HUD panels and reading as grain over the
+    // interface. Ambient atmosphere belongs to the world; the HUD is not weather.
     rs.tile_batcher().end_pass(
           ( rmlui_active || particle_count > 0 )
           ? lighting::sprite_batcher::pass_overlay_fn(
     [&rs, rmlui_active, part_draw](
                   SDL_GPURenderPass * rp, SDL_GPUCommandBuffer * cb ) {
-        if( rmlui_active ) {
-            rmlui_layer::render_in_pass( rp, cb );
-        }
         lighting::hud_particle_draw d = part_draw;
         d.rp = rp;
         d.cb = cb;
         rs.hud_particles().draw_in_pass( d );
+        if( rmlui_active ) {
+            rmlui_layer::render_in_pass( rp, cb );
+        }
     } )
     : lighting::sprite_batcher::pass_overlay_fn{} );
-    // UI post-processing (Phase 9): bloom + chromatic aberration.
-    // Reads from intermediate target, writes to swapchain.
-    if( use_post_process ) {
-        const auto bloom_strength = 0.3f; // subtle, tunable
-        rs.ui_post().record( {
-            .cb = ctx.cmd_buffer,
-            .src_tex = rs.ui_post_target()->texture(),
-            .dst_tex = ctx.swapchain_tex,
-            .width = ctx.swapchain_w,
-            .height = ctx.swapchain_h,
-            .ca_intensity = hud_shake::intensity(),
-            .bloom_strength = bloom_strength,
-        } );
-    }
-
     rs.device().submit_frame( ctx );
 }
 

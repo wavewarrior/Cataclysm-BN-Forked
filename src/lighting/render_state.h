@@ -34,7 +34,6 @@
 #include "tonemap_pass.h"
 #include "ui_adaptor_draw_slices.h"
 #include "ui_composite_target.h"
-#include "ui_post_pass.h"
 #include "volumetric_pass.h"
 
 #include <memory>
@@ -319,10 +318,6 @@ public:
     // the tonemap pass for display. Pass B blits this instead of the raw
     // HDR world. Swapchain format. nullptr until init() succeeds.
     ui_composite_target* world_ldr_target() noexcept { return world_ldr_target_.get(); }
-    // Intermediate UI composite target for post-processing (Phase 9).
-    // Renders world + UI into this, then ui_post_pass composites to swapchain.
-    ui_composite_target* ui_post_target() noexcept { return ui_post_target_.get(); }
-
     // Fullscreen tonemap pass (HDR world_target → world_ldr_target).
     tonemap_pass& tonemap() noexcept { return tonemap_; }
 
@@ -368,8 +363,6 @@ public:
     // Atmospheric HUD particle effects (embers, dust, pollen, snow).
     // Driven from composite_swapchain_pass_b after RmlUi renders.
     hud_particle_effect& hud_particles() noexcept { return hud_particles_; }
-    // UI post-processing: bloom + chromatic aberration (Phase 9).
-    ui_post_pass& ui_post() noexcept { return ui_post_; }
     // Box2D debug overlay line pass (coloured wireframes over the world target).
     // Driven from cata_tiles (populate) and render_world_pass_w (record).
     debug_line_pass& debug_lines() noexcept { return debug_lines_; }
@@ -466,9 +459,6 @@ private:
 
     // Tonemapped LDR resolve of world_target_ (swapchain format) + the
     // fullscreen tonemap pass that produces it.
-    // Intermediate UI composite target for post-processing (Phase 9).
-    // Renders world + UI into this, then ui_post_pass composites to swapchain.
-    std::unique_ptr<ui_composite_target> ui_post_target_;
     std::unique_ptr<ui_composite_target> world_ldr_target_;
     tonemap_pass tonemap_;
     gi_compute_pass gi_;
@@ -485,7 +475,6 @@ private:
     std::size_t splat_cut_ = static_cast<std::size_t>( -1 );
     std::vector<splat_quad> splat_quads_;
     sound_wave_pass sound_waves_;
-    ui_post_pass ui_post_;
     gpu_sdf_pass gpu_sdf_;
     debug_line_pass debug_lines_;
 };
