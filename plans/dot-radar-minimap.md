@@ -782,3 +782,21 @@ viewport: two populations at R≈44 and R≈96 separated by an empty gap — the
 `dead`→`rule` ladder step, 2.0x — where the plan's version produced one. With a
 building in view a third at R≈184 (`floor_in`) appears, at 91 cells against
 ~2 400 of open ground, so interiors stay subordinate to the walls around them.
+
+### Deep water was reading as stairs
+
+Found while auditing the split above. The classifier tested the level-change
+flags first, and deep water carries `GOES_UP`/`GOES_DOWN` so a swimmer can
+surface and dive — 19 terrains do, `t_lake_bed`, `t_ocean_bed` and `t_water_dp`
+among them. Every lake therefore painted as `stairs`, i.e. `ink::peak`: the
+brightest rung on the ladder, spent on the least structure on the map.
+
+The level-change test is now guarded with `!wet` rather than reordered, so a
+submerged wall still reads as a wall. An underwater staircase consequently reads
+as water; that is the right trade, one rare tile against every lake.
+
+Simulating the classifier over all 754 terrain definitions in `data/json`
+(resolving `copy-from`/`extend`/`delete`) gives: soil 302, opening 138,
+vegetation 87, wall 86, paved 79, water 40, stairs 17, air 5 — every water body
+in `water`, submerged walls in `wall`, and stairs/ladders/slopes still in
+`stairs`.

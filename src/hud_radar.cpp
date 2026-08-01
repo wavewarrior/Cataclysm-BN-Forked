@@ -118,7 +118,17 @@ auto terrain_class_of( const ter_t &t ) -> tclass
     if( t.is_null() ) {
         return tclass::empty;
     }
-    if( t.has_flag( TFLAG_GOES_UP ) || t.has_flag( TFLAG_GOES_DOWN ) || t.has_flag( TFLAG_RAMP ) ) {
+    const auto wet = t.has_flag( TFLAG_SWIMMABLE ) || t.has_flag( TFLAG_LIQUID ) ||
+                     t.has_flag( TFLAG_DEEP_WATER );
+    // Water is excluded from the level-change test rather than tested after it,
+    // because deep water carries GOES_UP/GOES_DOWN so a swimmer can surface and
+    // dive: 19 terrains do, `t_lake_bed`, `t_ocean_bed` and `t_water_dp` among
+    // them. Taking the flags at face value painted every lake as a staircase at
+    // `ink::peak` — the brightest rung on the ladder, for the least structure on
+    // the map. An underwater staircase consequently reads as water, which is the
+    // right trade: one rare tile loses its marker, every lake stops blazing.
+    if( !wet && ( t.has_flag( TFLAG_GOES_UP ) || t.has_flag( TFLAG_GOES_DOWN ) ||
+                  t.has_flag( TFLAG_RAMP ) ) ) {
         return tclass::stairs;
     }
     // No flag marks a door or a window; a door is exactly a terrain that has an
@@ -128,11 +138,11 @@ auto terrain_class_of( const ter_t &t ) -> tclass
         return tclass::opening;
     }
     if( t.has_flag( TFLAG_WALL ) ) {
-        // A wall you can see through IS a window.
+        // A wall you can see through IS a window. Checked before `wet` so a
+        // submerged wall still reads as the structure it is.
         return t.transparent ? tclass::opening : tclass::wall;
     }
-    if( t.has_flag( TFLAG_SWIMMABLE ) || t.has_flag( TFLAG_LIQUID ) ||
-        t.has_flag( TFLAG_DEEP_WATER ) ) {
+    if( wet ) {
         return tclass::water;
     }
     if( t.has_flag( TFLAG_TREE ) || t.has_flag( TFLAG_SHRUB ) ) {
