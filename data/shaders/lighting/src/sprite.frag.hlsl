@@ -324,8 +324,10 @@ static const float k_bayer4[16] = {
      3.0, 11.0,  1.0,  9.0,
     15.0,  7.0, 13.0,  5.0
 };
-// World-locked Bayer threshold in (0,1). Keyed to world PIXEL coords so the
-// pattern sticks to the terrain and does not shimmer when the camera pans.
+// Ordered Bayer threshold in (0,1). Keyed to world ART-TEXEL coords (shade_pos *
+// texels_per_tile) so the 4x4 cell is exactly 4 tileset texels wide at EVERY zoom
+// level and sticks to the terrain — it neither shimmers when the camera pans nor
+// changes size relative to the artwork when the view zooms.
 float dither_threshold(float2 world_px) {
     const int bx = ((int)floor(world_px.x)) & 3;
     const int by = ((int)floor(world_px.y)) & 3;
@@ -401,13 +403,22 @@ float4 main(VS_OUT i) : SV_Target0 {
     // (light_pos == world_pos) keeps the full tuned relief.
     const bool   frag_is_tall_n = ( i.light_pos.x != i.world_pos.x )
                                   || ( i.light_pos.y != i.world_pos.y );
+    // Art-texel light quantisation. Light is resolved once per TILESET texel rather
+    // than per screen pixel, so a zoomed sprite shades in its own pixel blocks
+    // instead of receiving a continuous gradient across them. 1/32 tile is 4x finer
+    // than the SDF subcell grid, so sub-tile shadow curvature is preserved.
+    // MUST be computed AFTER frag_is_tall_n, which compares the UNSNAPPED values.
+    float2 shade_pos = i.light_pos;
+    if(light_quant > 0.5 && texels_per_tile > 0.5) {
+        shade_pos = (floor(i.light_pos * texels_per_tile) + 0.5) / texels_per_tile;
+    }
     const float3 normal = frag_is_tall_n
                           ? lerp( float3( 0.0, 0.0, 1.0 ), surface_normal( i.uv ), nrm_entity_amount )
                           : surface_normal( i.uv );
     // Sky exposure (0 roofed .. 1 open), hoisted above the emitter loop so the
     // wet-specular term can gate on it (no indoor glint). SkyVisBuf is x-major
     // (skyvis[x*H+y]); bilinear so the indoor daylight-bleed gradient reads smooth.
-    const float sky_vis = (sdf_map_w > 0u) ? saturate(skyvis_bilinear(i.light_pos)) : 0.0;
+    const float sky_vis = (sdf_map_w > 0u) ? saturate(skyvis_bilinear(shade_pos)) : 0.0;
     // emitter_light accumulates GPU point-light contributions (starts at zero).
     // Combined with CPU tint ADDITIVELY so colored emitter glow is visible on
     // top of the CPU-shadowcasting result, not suppressed by max().
@@ -430,7 +441,7 @@ float4 main(VS_OUT i) : SV_Target0 {
         const float3 e_color  = e.color_falloff.xyz;
         const float  e_falloff= e.color_falloff.w;
         if(abs(e_pos.z - current_z) > 0.5) continue;
-        const float2 dv   = e_pos.xy - i.light_pos;
+        const float2 dv   = e_pos.xy - shade_pos;
         const float  dist = length(dv);
         if(dist < 0.01) continue;
         const float  atten = point_light_atten(dist, e_radius, e_falloff);
@@ -478,7 +489,7 @@ float4 main(VS_OUT i) : SV_Target0 {
         const float  e_cone_ha  = e.cone_shape.z;
         const uint   e_shape    = asuint(e.cone_shape.w);
 
-        const float2 dv   = e_pos.xy - i.light_pos;
+        const float2 dv   = e_pos.xy - shade_pos;
         const float  dist = length(dv);
         const float  atten = point_light_atten(dist, e_radius, e_falloff);
         const float2 sh_dir = dv / max(dist, 0.001);
@@ -491,7 +502,7 @@ float4 main(VS_OUT i) : SV_Target0 {
                            ? float3(1, 1, 1) : e_color;
         emitter_light -= rgb * atten * lambert;
 
-        const float  shadow = trace_shadow(i.light_pos, sh_dir, dist,
+        const float  shadow = trace_shadow(shade_pos, sh_dir, dist,
                                             shadow_k, (int)shadow_steps,
                                             /*directional=*/false);
 
@@ -513,7 +524,7 @@ float4 main(VS_OUT i) : SV_Target0 {
     // per-tile directional sky-access (rgb) + sun occlusion (a); sample it once
     // at the tile (light_pos, matching the GI read). The hoisted `sky_vis` is now
     // the RAW open/roofed field — only the sun's overhead gate still uses it.
-    const float4 sky_dir = sky_bilinear(i.light_pos);
+    const float4 sky_dir = sky_bilinear(shade_pos);
     // Sky ambient: directional sky-access REPLACES the old flat `* sky_vis`. An
     // open tile sees most of the hemisphere (~1); an alcove/overhang self-shades;
     // a roofed tile lit only through window directions gets partial sky FROM the
@@ -630,11 +641,11 @@ float4 main(VS_OUT i) : SV_Target0 {
     // open neighbours on the CPU, added here before dither so it bands with the
     // rest of the dynamic light.
     if(gi_strength > 0.001 && sdf_map_w > 0u) {
-        dyn += gi_strength * indirect_bilinear(i.light_pos) * ao;
+        dyn += gi_strength * indirect_bilinear(shade_pos) * ao;
     }
     if(dither_amt > 0.001) {
         const float  bands = max(dither_bands, 1.0);
-        const float  bthr  = dither_threshold(i.world_pos * tile_pixel_size);
+        const float  bthr  = dither_threshold(shade_pos * texels_per_tile);
         const float3 dithered = floor(dyn * bands + bthr) / bands;
         dyn = lerp(dyn, dithered, saturate(dither_amt));
     }
@@ -694,15 +705,15 @@ float4 main(VS_OUT i) : SV_Target0 {
             // Bilinear at light_pos — the SAME sample the shadow march uses, so
             // tall sprites (walls/trees) show their base-tile distance, not the
             // sprite's own s≈0 tile (frag_is_tall: light_pos != world_pos).
-            const float s = (sdf_map_w > 0u) ? sdf_bilinear(i.light_pos) : 0.0;
+            const float s = (sdf_map_w > 0u) ? sdf_bilinear(shade_pos) : 0.0;
             const float t = saturate(s / 8.0);
             vis = float3(1.0 - t, t, 0.0);
             replace = true;
         } else if(debug_mode == 7u) {
             // SkyVis view: grayscale 0..1. Sample at light_pos (base-tile centre
             // for tall sprites) to match the live sky-vis read, not world_pos.
-            const int sx = clamp((int)i.light_pos.x, 0, (int)sdf_map_w - 1);
-            const int sy = clamp((int)i.light_pos.y, 0, (int)sdf_map_h - 1);
+            const int sx = clamp((int)shade_pos.x, 0, (int)sdf_map_w - 1);
+            const int sy = clamp((int)shade_pos.y, 0, (int)sdf_map_h - 1);
             const float v = (sdf_map_w > 0u) ? SkyVisBuf[sx * (int)sdf_map_h + sy] : 0.0;
             vis = float3(v, v, v);
             replace = true;

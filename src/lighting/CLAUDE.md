@@ -117,13 +117,28 @@ Fragment shader (`SPRITE_FRAG_HLSL` in `sprite_batcher.cpp`):
   (directional reach) + the `shadow_k`/`shadow_steps` knobs, keeps its
   `sky_vis>0.01` gate (can't reach roofed tiles).
 - **Multi-band ordered (Bayer) dither**, world-locked. `dither_threshold()`
-  keys a 4×4 Bayer matrix to **world pixels** (`world_pos * tile_pixel_size`) so
-  the pattern sticks to terrain (no shimmer on scroll). Quantises ONLY the
-  dynamic light (emitter+sky+sun) into `dither_bands` levels; **ambient floor is
-  added AFTER** (dithering the floor makes dark areas sparkle). Mean-preserving.
-- **Knobs** in `debug_params` (**96 bytes** as of 2026-06-01 — grew from 48 when
-  vision + tone-grade knobs were added; `static_assert` enforces 96): `dither_amt`
-  (0=off), `dither_bands`. Widget: Shift+F8/F9 = strength, Ctrl+F8/F9 = bands.
+  keys a 4×4 Bayer matrix to **world ART TEXELS** (`shade_pos * texels_per_tile`,
+  where `texels_per_tile` is the tileset's NATIVE tile width — 32 for MSX++, fed
+  from `tileset::get_tile_width()`), so the pattern sticks to terrain (no shimmer
+  on scroll) AND the 4×4 cell stays exactly 4 art texels wide at every zoom. It
+  used to key to world *screen* pixels (`world_pos * tile_pixel_size`, the ZOOMED
+  width), which made the dither cell grow and shrink with the zoom level.
+  Quantises ONLY the dynamic light (emitter+sky+sun) into `dither_bands` levels;
+  **ambient floor is added AFTER** (dithering the floor makes dark areas sparkle).
+  Mean-preserving.
+- **Art-texel light quantisation.** `shade_pos` snaps `light_pos` to the tileset
+  texel lattice (`(floor(p * texels_per_tile) + 0.5) / texels_per_tile`) and is
+  the sample position for EVERY lighting read (sky-vis, emitters, `trace_shadow`,
+  sky/sun, GI, SDF debug views). Light is therefore constant across each art
+  texel instead of gradient-shaded across it at zoom > 1:1. 1/32 tile is 4× finer
+  than the 8-subcell SDF grid, so sub-tile shadow curvature survives. `light_quant`
+  = 0 restores per-screen-pixel evaluation. `i.uv`, `i.world_pos` and the AO taps
+  are deliberately NOT snapped.
+- **Knobs** in `debug_params` (**208 bytes** as of 2026-08-01 — grew from 176 when
+  the grid-decoupled lighting knobs were added; `static_assert` enforces 208):
+  `dither_amt` (0=off), `dither_bands`, `light_quant`, `occ_soft_gain`,
+  `self_eps_tall`, `ramp_enable`, `ramp_steps`, `ramp_chroma`.
+  Widget: Shift+F8/F9 = strength, Ctrl+F8/F9 = bands.
 
 ## Colored indirect light / GI — now GPU COMPUTE (Stage 1, supersedes RC fragment)
 
