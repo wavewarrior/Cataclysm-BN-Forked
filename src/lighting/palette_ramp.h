@@ -51,9 +51,14 @@ struct palette_ramp_data {
     std::uint32_t kept_min_count = 0; // frequency of the least-frequent KEPT row
 };
 
-/// Number of palette rows kept. 256 is enough for MSX++UnDeadPeopleEdition; the
-/// buffers are tiny either way (256*8 uints = 8 KB, plus 32^3 = 128 KB).
-inline constexpr int PALETTE_ROWS = 256;
+/// Number of palette rows kept. Measured on MSX++UnDeadPeopleEdition: at 256 rows the
+/// least-frequent kept colour still had ~4.4k pixels and 60% of opaque pixels fell
+/// outside the palette, which visibly pushed whole hue families (grass) onto the
+/// nearest surviving row. 512 halves that. The buffers are tiny either way
+/// (512*16 uints = 32 KB of ramp, plus a fixed 32^3 = 128 KB index), and
+/// render_state sizes ramp_buf_ from this constant, so raising it needs no other
+/// change. The index LUT resolution is a separate, more expensive axis — see below.
+inline constexpr int PALETTE_ROWS = 512;
 /// Index LUT side. 32^3 = 128 KB. Do not raise without measuring — 48^3 is 442 KB
 /// and the perceptual gain is small.
 inline constexpr int PALETTE_LUT_SIDE = 32;
