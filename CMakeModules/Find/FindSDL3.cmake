@@ -25,8 +25,16 @@ else()
   set(VC_LIB_PATH_SUFFIX lib/x86)
 endif()
 
+# `SDL3-static` is how vcpkg names the static import library; the shared name is
+# listed first so a dynamic build keeps resolving exactly as before and only falls
+# back to the static one. Without it this module reports
+# "Could NOT find SDL3 (missing: SDL3_LIBRARY)" against a perfectly good static
+# vcpkg tree — which it then would have handled fine, since the SDL3::SDL3-static
+# branch below exists precisely for that case. The project's own lookup prefers
+# SDL3Config.cmake and never noticed; FetchContent'd SDL3_net calls
+# find_package(SDL3) on its own and lands here, so it did.
 find_library(SDL3_LIBRARY_TEMP
-  NAMES SDL3
+  NAMES SDL3 SDL3-static
   HINTS
     ENV SDL3DIR
     ${CMAKE_SOURCE_DIR}/dep/
