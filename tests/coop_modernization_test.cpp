@@ -138,12 +138,15 @@ TEST_CASE( "skill sync: missing skills key returns empty", "[coop][packets]" )
 TEST_CASE( "world_seed: session_token survives round-trip", "[coop][packets]" )
 {
     const world_seed_data original{
-        42,
-        tripoint_abs_ms{ 10, 20, 0 },
-        "Alice",
-        "MyWorld",
-        12345u,
-        "1750000000-42"
+        .turn = 42,
+        .spawn_pos = tripoint_abs_ms{ 10, 20, 0 },
+        .player_name = "Alice",
+        .world_name = "MyWorld",
+        .rng_seed = 12345u,
+        // Above INT_MAX on purpose: the wire encoding is a string precisely because
+        // get_int() cannot carry these values.  game::seed is an unsigned int.
+        .world_seed = 4000000000u,
+        .session_token = "1750000000-42"
     };
     const std::string json = build_world_seed_packet( original );
     const auto parsed = parse_world_seed_packet( json );
@@ -153,16 +156,39 @@ TEST_CASE( "world_seed: session_token survives round-trip", "[coop][packets]" )
     // Other fields still intact
     CHECK( parsed->turn == 42 );
     CHECK( parsed->player_name == "Alice" );
+    CHECK( parsed->rng_seed == 12345u );
+    CHECK( parsed->world_seed == 4000000000u );
 }
 
 TEST_CASE( "world_seed: empty session_token defaults correctly", "[coop][packets]" )
 {
-    const world_seed_data original{ 1, tripoint_abs_ms{}, "Bob", "W2", 0u, "" };
+    const world_seed_data original{ .turn = 1, .spawn_pos = tripoint_abs_ms{},
+                                    .player_name = "Bob", .world_name = "W2",
+                                    .rng_seed = 0u, .session_token = "" };
     const std::string json = build_world_seed_packet( original );
     const auto parsed = parse_world_seed_packet( json );
 
     REQUIRE( parsed.has_value() );
     CHECK( parsed->session_token.empty() );
+    CHECK( parsed->world_seed == 0u );
+}
+
+TEST_CASE( "world_seed: a packet without world_seed parses as 0", "[coop][packets]" )
+{
+    // world_seed was added without a protocol version bump, so a host that predates it
+    // must still parse.  A missing field degrades the client to its own seed rather than
+    // failing the join.
+    const std::string legacy =
+        R"({"t":2,"d":{"turn":7,"spawn_x":1,"spawn_y":2,"spawn_z":0,)"
+        R"("player_name":"Old","world_name":"W","rng_seed":"5","session_token":"tok"}})";
+    const auto parsed = parse_world_seed_packet( legacy );
+
+    REQUIRE( parsed.has_value() );
+    CHECK( parsed->world_seed == 0u );
+    // ...and the fields the old host does send are unaffected.
+    CHECK( parsed->turn == 7 );
+    CHECK( parsed->rng_seed == 5u );
+    CHECK( parsed->session_token == "tok" );
 }
 
 // ── 4. Reconnect packet type exists ─────────────────────────────────────────

@@ -133,6 +133,8 @@ struct coop_client {
         int world_seed_turn_ = 0;
         tripoint_abs_ms world_seed_spawn_;
         std::string world_seed_partner_name_ = "Partner";
+        /// game::seed adopted from the host so the weather generator matches.
+        unsigned int world_seed_ = 0;
 
         // Rollback engine for hash-mismatch recovery
         coop_rollback_engine rollback_engine_;

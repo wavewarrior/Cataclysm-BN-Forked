@@ -19,6 +19,7 @@
  */
 
 #include "avatar.h"
+#include "calendar.h"
 #include "catch/catch_amalgamated.hpp"
 #include "coop_client.h"
 #include "coop_checksum.h"
@@ -368,3 +369,74 @@ TEST_CASE( "inproc: checksum converges after 10 ticks of movement",
     CHECK( cs_a == cs_b );
 }
 
+// ---------------------------------------------------------------------------
+// Client world-step parity
+// ---------------------------------------------------------------------------
+
+// Before the parity work the client ran only u.process_turn() per synced turn, which
+// leaves avatar biology frozen: no metabolism, no weather, no body temperature.  The
+// contract now is that a co-op client runs the avatar-local half of
+// post_action_world_step() via game::coop_client_turn_step().
+//
+// The control half of this case is what makes it discriminating: u.process_turn() alone
+// must NOT move stored kcal, so any movement in the second half is attributable to the
+// new step.  Character::update_stomach() only bills calories when a 5-minute boundary is
+// crossed (character_needs.cpp:811), hence the 400-turn spans.
+TEST_CASE( "inproc: client turn step runs avatar biology", "[coop][inproc][parity]" )
+{
+    constexpr int turns = 400;
+
+    inproc_harness h;
+    h.setup();
+    coop_mode_guard mcli( coop_mode::client );
+
+    // Control: the old client behaviour.
+    const int kcal_control_before = g->u.get_stored_kcal();
+    for( int i = 0; i < turns; ++i ) {
+        calendar::turn += 1_turns;
+        g->u.process_turn();
+    }
+    CHECK( g->u.get_stored_kcal() == kcal_control_before );
+
+    // New behaviour: metabolism runs, so stored calories are billed.
+    const int kcal_before = g->u.get_stored_kcal();
+    const time_point turn_before = calendar::turn;
+    for( int i = 0; i < turns; ++i ) {
+        calendar::turn += 1_turns;
+        g->coop_client_turn_step();
+    }
+    CHECK( calendar::turn > turn_before );
+    CHECK( g->u.get_stored_kcal() != kcal_before );
+}
+
+// The per-frame half must be safe to call unconditionally, including when a sync carried
+// no advanced turns — that is how the client's vision cache and monster info stay fresh.
+TEST_CASE( "inproc: client frame step is safe with no turns advanced",
+           "[coop][inproc][parity]" )
+{
+    inproc_harness h;
+    h.setup();
+    coop_mode_guard mcli( coop_mode::client );
+
+    const time_point turn_before = calendar::turn;
+    for( int i = 0; i < 5; ++i ) {
+        g->coop_client_frame_step();
+    }
+    // Purely local caches/UI/audio: no world time may pass.
+    CHECK( calendar::turn == turn_before );
+}
+
+// End-to-end: the new per-turn and per-frame calls in apply_sync() must not break the
+// relay, and world time must still advance across a long run.
+TEST_CASE( "inproc: turn advances across a long synced run", "[coop][inproc][parity]" )
+{
+    inproc_harness h;
+    h.setup();
+
+    const int turn_before = to_turn<int>( calendar::turn );
+    for( int i = 0; i < 60; ++i ) {
+        h.tick();
+    }
+    CHECK( to_turn<int>( calendar::turn ) > turn_before );
+    CHECK( h.proxy != nullptr );
+}

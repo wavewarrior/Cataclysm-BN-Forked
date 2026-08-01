@@ -68,6 +68,10 @@ void add_footstep( const tripoint_bub_ms &p, int volume, int distance, monster *
 /* Make sure the sounds are all reset when we start a new game. */
 void reset_sounds();
 void reset_markers();
+/// Clear the pending monster-AI sound list without touching player-visible markers.
+/// Co-op clients need this: they never run process_sounds() (host owns monster AI), so
+/// recent_sounds would otherwise grow for the whole session.
+auto clear_recent_sounds() -> void;
 
 // Methods for processing sound events, these
 // process_sounds() applies the sounds since the last turn to monster AI,

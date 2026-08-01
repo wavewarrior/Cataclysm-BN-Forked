@@ -3,6 +3,7 @@
 
 #include "avatar.h"
 #include "calendar.h"
+#include "character_functions.h"
 #include "coop_mutation_log.h" // COOP_FNV_OFFSET, coop_hash_event_fields
 #include "coop_overmap.h"
 #include "coop_net.h"
@@ -166,6 +167,7 @@ auto coop_client::receive_world_seed() -> bool
 
     // Store avatar data to apply after g->setup() completes
     world_seed_turn_ = data->turn;
+    world_seed_ = data->world_seed;
     world_seed_spawn_ = data->spawn_pos;
     world_seed_partner_name_ = data->player_name.empty() ? "Partner" : data->player_name;
     session_token_ = data->session_token;
@@ -181,6 +183,21 @@ auto coop_client::receive_world_seed() -> bool
 
 auto coop_client::apply_world_seed_to_avatar() -> void
 {
+    // A client joins straight from the main menu, so its avatar never goes through
+    // character creation and has neither anatomy nor body parts.  Every per-turn body
+    // path then divides by zero on an empty body — Character::hp_percentage(), built into
+    // the client_status packet each tick, is the first to fault.  Give the avatar the same
+    // default human body Character's own reset installs (character.cpp:455-456).
+    // Guarded on emptiness so a rejoining client with a loaded save keeps its real body.
+    if( g->u.get_body().empty() ) {
+        g->u.set_anatomy( anatomy_id( "human_anatomy" ) );
+        character_funcs::normalize( g->u );
+        DebugLog( DL::Info, DC::Main )
+                << "[coop] client avatar had no body — installed default human anatomy";
+    }
+    // Must precede everything else: weather_generator::get_weather() is a pure function of
+    // (position, turn, seed), so the client only reproduces the host's sky with its seed.
+    if( world_seed_ != 0 ) { g->set_seed( world_seed_ ); }
     if( world_seed_turn_ >= 0 ) { calendar::turn = time_point::from_turn( world_seed_turn_ ); }
     coop_session::get().partner_name = world_seed_partner_name_;
     // C6: skip position override if the client loaded a save (has a real saved position).
@@ -316,6 +333,9 @@ for( auto& act : pending_actions_ ) {
         status_jout.member( "az", cpos.z() );
         // Ping: echo the host's timestamp back for RTT measurement on host side.
         status_jout.member( "ping_echo", std::to_string( last_ping_ts_ ) );
+        // Input window sizing: tell the host how long our own world tick takes.
+        status_jout.member( "tick_ms",
+                            static_cast<int>( coop_session::get().local_tick_cost.value() ) );
         // Approximate local ping: time since host sent the sync to when we process it.
         if( last_ping_ts_ > 0 ) {
             const auto now_ms = static_cast<uint64_t>( SDL_GetTicks() );
@@ -870,6 +890,9 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
             }
         } else if( key == "ping_ts" ) {
             last_ping_ts_ = static_cast<uint64_t>( jin.get_int64() );
+        } else if( key == "tick_ms" ) {
+            // Input window sizing: the host's own measured world-tick cost.
+            coop_session::get().partner_tick_ms.store( static_cast<int>( jin.get_int() ) );
         } else {
             jin.skip_value();
         }
@@ -951,7 +974,13 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
     const int turns_advanced =
         std::max( 0, to_turn<int>( calendar::turn ) - to_turn<int>( turn_before ) );
     const int catch_up = std::min( turns_advanced, COOP_ACTIVITY_YIELD_INTERVAL );
-    for( int i = 0; i < catch_up; ++i ) { g->u.process_turn(); }
+    // Per-turn avatar simulation: the client's half of post_action_world_step().
+    // u.process_turn() is called inside coop_client_turn_step() — do NOT call it here too.
+    for( int i = 0; i < catch_up; ++i ) { g->coop_client_turn_step(); }
+    // Caches, monster info and audio are per-frame, not per-turn (matches single-player's
+    // activity fast-forward, game_activity.cpp:342-343).  Runs even when catch_up == 0 so a
+    // sync that carries only tile deltas still refreshes vision and monster info.
+    g->coop_client_frame_step();
 }
 
 auto coop_client::handle_disconnect() -> void

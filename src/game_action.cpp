@@ -2143,3 +2143,118 @@ for( const auto &dim_id : submap_loader.active_dimensions() ) {
         _perf_n = 0;
     }
 }
+
+auto game::coop_client_turn_step() -> void
+{
+    ZoneScopedN( "game::coop_client_turn_step" );
+    // The avatar-local half of post_action_world_step(), statement-for-statement.  The
+    // selection rule: keep anything that touches only this client's own avatar, its
+    // save-local bookkeeping, or local caches/UI/audio.  Map terrain, ground items,
+    // creatures, vehicles, fields, power grids and the overmap belong to the host and
+    // arrive through apply_sync() — running them here would fork the world.
+    cleanup_arenas();
+
+    // starting a new turn, clear out temperature cache
+    weather_manager &weather = get_weather();
+    weather.clear_temp_cache();
+
+    timed_events.process();
+    mission::process_all();
+
+    // If controlling a vehicle that is owned by someone else
+    if( u.in_vehicle && u.controlling_vehicle ) {
+        vehicle *veh = veh_pointer_or_null( m.veh_at( u.bub_pos() ) );
+        if( veh && !veh->handle_potential_theft( u, true ) ) {
+            veh->handle_potential_theft( u, false, false );
+        }
+    }
+    // If riding a horse - chance to spook
+    if( u.is_mounted() ) {
+        u.check_mount_is_spooked();
+    }
+
+    u.update_body();
+
+    // Auto-save if autosave is enabled
+    if( get_option<bool>( "AUTOSAVE" ) &&
+        calendar::once_every( 1_turns * get_option<int>( "AUTOSAVE_TURNS" ) ) &&
+        !u.is_dead_state() ) {
+        autosave();
+    }
+
+    // Reproduced, not synced: get_weather() is a pure function of (position, turn, seed)
+    // and the client adopted the host's seed in apply_world_seed_to_avatar().
+    weather.update_weather();
+    reset_light_level();
+
+    process_voluntary_act_interrupt();
+    process_activity();
+
+    // Reset sound overlay markers from the previous turn so stale sound
+    // indicators don't persist into the next world tick.
+    sounds::reset_markers();
+    sounds::process_sound_markers( &u );
+    if( u.is_deaf() ) {
+        sfx::do_hearing_loss();
+    }
+    // process_sounds() is host-only (it signals hordes and drives monster AI), so drain the
+    // monster-AI sound list by hand or it grows for the whole session.
+    sounds::clear_recent_sounds();
+
+    // No-scent debug mutation has to be processed here or else it takes time to start working
+    if( !u.has_active_bionic( bionic_id( "bio_scent_mask" ) ) &&
+        !u.has_trait( trait_id( "DEBUG_NOSCENT" ) ) ) {
+        scent.set( u.bub_pos(), u.scent, u.get_type_of_scent() );
+        get_overmapbuffer( current_dimension_id_ ).set_scent( u.abs_omt_pos(), u.scent );
+    }
+    scent.update( u.bub_pos(), m );
+
+    m.creature_in_field( u );
+
+    u.process_turn();
+
+    cata::run_on_every_x_hooks( *DynamicDataLoader::get_instance().lua );
+
+    explosion_handler::get_explosion_queue().execute();
+    cleanup_dead();
+
+    if( get_levz() >= 0 && !u.is_underwater() ) {
+        handle_weather_effects( weather.weather_id );
+    }
+
+    u.update_bodytemp( m, weather );
+    character_funcs::update_body_wetness( u, get_weather().get_precise() );
+    u.apply_wetness_morale( weather.temperature );
+
+    // reset player noise
+    u.volume = 0;
+}
+
+auto game::coop_client_frame_step() -> void
+{
+    ZoneScopedN( "game::coop_client_frame_step" );
+    // Mark all visibility caches dirty for this frame.  The first redraw will run
+    // update_visibility_cache; subsequent redraws within the same frame skip it.
+    m.invalidate_visibility_caches();
+
+    update_performance_bubble();
+
+    if( driving_view_offset.x != 0 || driving_view_offset.y != 0 ) {
+        vehicle *veh = veh_pointer_or_null( m.veh_at( u.bub_pos() ) );
+        calc_driving_offset( veh );
+    }
+
+    m.build_floor_caches();
+    m.build_map_cache( get_levz(), true );
+
+    mon_info_update();
+    handle_wait_activity_redraw();
+
+    if( !u.is_deaf() ) {
+        sfx::remove_hearing_loss();
+    }
+    sfx::do_danger_music();
+    sfx::do_vehicle_engine_sfx();
+    sfx::do_vehicle_exterior_engine_sfx();
+    sfx::do_fatigue();
+}

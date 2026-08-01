@@ -21,6 +21,8 @@ auto build_world_seed_packet( const world_seed_data& d ) -> std::string
     jout.member( "player_name", d.player_name );
     jout.member( "world_name", d.world_name );
     jout.member( "rng_seed", std::to_string( d.rng_seed ) );
+    // String-encoded like rng_seed: unsigned values above INT_MAX do not survive get_int().
+    jout.member( "world_seed", std::to_string( d.world_seed ) );
     jout.member( "session_token", d.session_token );
     jout.end_object();
     jout.end_object();
@@ -63,6 +65,8 @@ auto parse_world_seed_packet( const std::string& buf ) -> std::optional<world_se
         result.player_name = d.get_string( "player_name", "" );
         result.world_name = d.get_string( "world_name", "" );
         result.rng_seed = static_cast<unsigned int>( std::stoul( d.get_string( "rng_seed", "0" ) ) );
+        result.world_seed =
+            static_cast<unsigned int>( std::stoul( d.get_string( "world_seed", "0" ) ) );
         result.session_token = d.get_string( "session_token", "" );
         return result;
     } catch( const JsonError &e ) {

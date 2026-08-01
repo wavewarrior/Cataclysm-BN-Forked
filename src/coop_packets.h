@@ -20,6 +20,9 @@ struct world_seed_data {
     std::string player_name;
     std::string world_name;
     unsigned int rng_seed = 0;
+    /// game::seed — the per-save world seed the weather generator is derived from.
+    /// Distinct from rng_seed, which is the global RNG engine seed.
+    unsigned int world_seed = 0;
     std::string session_token;
 };
 

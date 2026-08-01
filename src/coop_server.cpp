@@ -22,6 +22,7 @@
 #include "npc.h"
 #include "overmapbuffer.h"
 #include "ranged.h"
+#include "scent_map.h"
 #include "submap.h"
 #include "skill.h"
 #include "type_id.h"
@@ -214,6 +215,7 @@ auto coop_server::send_world_seed( const std::string& player_name ) -> bool
         .player_name = player_name,
         .world_name = aw ? aw->info->world_name : std::string{},
         .rng_seed = g_main_rng_seed,
+        .world_seed = g->get_seed(),
         .session_token = std::to_string( std::time( nullptr ) ) + "-"
         + std::to_string( rng( 0, 999999 ) ),
     };
@@ -304,6 +306,8 @@ auto coop_server::dispatch_packet( const std::string& buf ) -> void
             d.allow_omitted_members();
             client_is_idle_.store( d.get_bool( "idle", false ) );
             client_hp_pct_.store( d.get_int( "hp_pct", 100 ) );
+            // Input window sizing: the client's own measured world-tick cost.
+            coop_session::get().partner_tick_ms.store( d.get_int( "tick_ms", 0 ) );
             const bool now_dead = d.get_bool( "dead", false );
             if( now_dead && !client_dead_.load() ) {
                 DebugLog( DL::Info, DC::Main )
@@ -644,6 +648,12 @@ if( phase == client_join_phase::listening ||
                     sess.shared_mark_label = std::move( mk.label );
                 }
             }
+        }
+
+        // Parity with post_action_world_step(): a player leaves a scent trail, so the
+        // client's proxy must too, or monsters can never track the client by smell.
+        if( !proxy->has_active_bionic( bionic_id( "bio_scent_mask" ) ) ) {
+            g->scent.set( proxy->bub_pos(), proxy->scent, proxy->get_type_of_scent() );
         }
 
         if( const auto act = try_pop_action() ) {
@@ -1544,6 +1554,8 @@ auto coop_server::build_and_send_sync( bool force_full ) -> void
     }
     // Ping measurement: embed current timestamp; client echoes it back in client_status.
     jout.member( "ping_ts", static_cast<int64_t>( SDL_GetTicks() ) );
+    // Input window sizing: tell the client how long our own world tick takes.
+    jout.member( "tick_ms", static_cast<int>( coop_session::get().local_tick_cost.value() ) );
 
     // F3: one-shot tap notification to client (set by send_tap_shoulder() caller)
     if( pending_tap_sent_to_client_ ) {
@@ -1660,6 +1672,7 @@ auto coop_server::process_pending_join() -> void
             pending_seed_player_name_ = g->u.get_name();
             pending_seed_world_name_ = aw ? aw->info->world_name : std::string{};
             pending_seed_rng_ = g_main_rng_seed;
+            pending_seed_world_seed_ = g->get_seed();
             handshake_result_.store( 0 );
             join_phase_.store( client_join_phase::handshaking );
             handshake_thread_ = std::jthread( [this]( std::stop_token ) {
@@ -1709,6 +1722,7 @@ auto coop_server::run_handshake_bg() -> void
             .player_name = pending_seed_player_name_,
             .world_name = pending_seed_world_name_,
             .rng_seed = pending_seed_rng_,
+            .world_seed = pending_seed_world_seed_,
             .session_token = session_token_,
         };
         if( !send_world_seed( data ) ) {

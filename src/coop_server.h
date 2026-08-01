@@ -329,5 +329,6 @@ struct coop_server {
         std::string pending_seed_player_name_;
         std::string pending_seed_world_name_;
         unsigned int pending_seed_rng_ = 0;
+        unsigned int pending_seed_world_seed_ = 0;
 };
 

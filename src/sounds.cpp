@@ -785,6 +785,11 @@ void sounds::reset_markers()
     sound_markers.clear();
 }
 
+auto sounds::clear_recent_sounds() -> void
+{
+    recent_sounds.clear();
+}
+
 std::vector<tripoint_bub_ms> sounds::get_footstep_markers()
 {
     // Optimization, make this static and clear it in reset_markers?
