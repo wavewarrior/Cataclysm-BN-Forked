@@ -2,7 +2,10 @@
    splash art: title + progress bar + step list with per-row done/current/pending
    state. body must be sized + centered (the missions/worldfinalize gotcha — else the
    panel shrink-wraps / collapses). Palette hexes are copied literally from theme.rcss
-   (RCSS has no var()); the {{token}} preprocessor substitutes them at load. */
+   (RCSS has no var()); the token preprocessor substitutes them at load. Do not
+   write a token in its doubled-brace form in a comment: ui_theme::substitute_tokens
+   treats the file as plain text and does not skip comments, so the example is
+   looked up as a real token and warns `unknown rcss token` on every launch. */
 
 body {
     display: flex;

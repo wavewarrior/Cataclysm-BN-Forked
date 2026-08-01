@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>04 — Terminal Phosphor</title><style>
+  html,body { margin:0; padding:0; background:#000; }
+  #screen {
+    position:relative; width:1920px; height:1080px; overflow:hidden;
+    background-image:url("_shared/world.png");
+    background-size:1920px 1080px;
+  }
+
+/* ===========================================================================
+   04 - TERMINAL PHOSPHOR                PHOSPHOR-D04-192x54-CELL-10x20
+   A 192 x 54 grid of 10 x 20 px character cells. Every element sits on a cell
+   boundary; nothing straddles one. Frames are real Unicode box-drawing glyphs
+   inside the text runs - there is not one CSS border in this file.
+
+   LUMINANCE LADDER - the entire palette. Six values, one hue (39-41 deg).
+     --ph-0 #0c0800  ground   Y .0025          phosphor off (opaque)
+     --ph-1 #3a2800  dead     Y .0242   1.4:1  unavailable slot number
+     --ph-2 #7a5400  rule     Y .1050   3.0:1  box frames, troughs, old log
+     --ph-3 #b87f00  label    Y .2510   5.7:1  chrome words, intact limbs
+     --ph-4 #ffb000  datum    Y .5231  10.9:1  P3 amber - live data
+     --ph-5 #ffebbf  peak     Y .8456  17.1:1  critical, newest, wielded
+     --ph-k #120c00  ink      Y .0039          glyphs inside inverted cells
+   No hue is ever load-bearing, so greyscale conversion is an identity
+   operation on the information. See the .md for the proof.
+   =========================================================================== */
+
+/* --- the character cell --------------------------------------------------
+   Consolas advance is 0.549809em; 18.19px measures 10.001px/cell, +0.19px of
+   drift across a full 192-cell row (0.01%, under one device pixel per 100
+   cells). The shipping font, Source Code Pro, is 0.6em exactly - the same
+   cell is font-size 16.667dp with zero drift. line-height is pinned to the
+   20px cell so U+2502 / U+253C stems abut across rows and corners close. */
+  .r {
+    position:absolute; height:20px; line-height:20px; white-space:pre;
+    font-family:Consolas,"Cascadia Mono","Lucida Console",monospace;
+    font-size:18.19px; letter-spacing:0;
+  }
+
+/* --- opaque phosphor ground, deliberately not a scrim ------------------- */
+  .g { position:absolute; background-color:#0c0800; }
+
+/* --- the ladder ---------------------------------------------------------- */
+  .s1 { color:#3a2800; }
+  .s2 { color:#7a5400; }
+  .s3 { color:#b87f00; }
+  .s4 { color:#ffb000; }
+  .s5 { color:#ffebbf; }
+/* inversion is the terminal's only way of shouting: dark glyphs on lit cells */
+  .inv5 { background-color:#ffebbf; color:#120c00; }
+  .inv4 { background-color:#ffb000; color:#120c00; }
+/* The cursor is SOLID here: the contract screenshots one static frame and a
+   blink phase that lands "off" would delete the newest-message marker.
+   Its 1.06s step-end blink lives in the .md Motion section instead. */
+  .cur  { color:#ffebbf; }
+
+/* --- halation: a duplicated glyph layer, blurred, beneath the crisp one ---
+   Real halation is light scattering inside the faceplate, so brighter cells
+   bleed further. The copy keeps its own ladder steps, which makes the bleed
+   proportional to emitted luminance for free: the two inverted CRITICAL rows
+   bloom hardest, which is exactly the intent. */
+  #halo { position:absolute; left:0; top:0; width:1920px; height:1080px;
+          filter:blur(2.6px); opacity:0.62; }
+  #ink  { position:absolute; left:0; top:0; width:1920px; height:1080px; }
+
+/* --- scanlines: 3px pitch, 2px lit / 1px gap ----------------------------
+   Strong over the phosphor, a whisper over the tilemap, so the game's own
+   art stays crisp. An unreadable CRT gag loses. */
+  #glass { position:absolute; left:0; top:0; width:1920px; height:1080px; }
+  .sl { position:absolute;
+        background-image:repeating-linear-gradient(180deg,
+          rgba(0,0,0,0) 0px, rgba(0,0,0,0) 2px,
+          rgba(0,0,0,0.30) 2px, rgba(0,0,0,0.30) 3px); }
+  #sl-all { position:absolute; left:0; top:0; width:1920px; height:1080px;
+        background-image:repeating-linear-gradient(180deg,
+          rgba(0,0,0,0) 0px, rgba(0,0,0,0) 2px,
+          rgba(0,0,0,0.075) 2px, rgba(0,0,0,0.075) 3px);
+        animation:roll 9s linear infinite; }
+  @keyframes roll { 0% { transform:translateY(0px); } 100% { transform:translateY(-3px); } }
+
+/* --- corner darkening: the faceplate curve ------------------------------- */
+  #vig { position:absolute; left:0; top:0; width:1920px; height:1080px;
+         background-image:radial-gradient(farthest-corner at 50% 50%,
+           rgba(0,0,0,0) 42%, rgba(0,0,0,0.18) 72%, rgba(0,0,0,0.46) 100%); }
+</style></head>
+<body><div id="screen">
+<div id="ground">
+<div class="g" style="left:0px;top:0px;width:1920px;height:60px"></div>
+<div class="g" style="left:0px;top:60px;width:340px;height:360px"></div>
+<div class="g" style="left:1570px;top:60px;width:350px;height:440px"></div>
+<div class="g" style="left:0px;top:900px;width:920px;height:140px"></div>
+<div class="g" style="left:0px;top:1040px;width:1920px;height:40px"></div>
+</div>
+<div id="halo">
+<div class="r" style="left:0px;top:0px"> <span class="s5">NIGEL ASHBY</span>  <span class="s3">SURVIVOR</span>           <span class="s2">│</span> <span class="s3">DAY</span><span class="s4"> 14</span>  <span class="s4">AUTUMN</span>  <span class="s5">21:47</span>   <span class="s4">CHESWICK — RESIDENTIAL</span>   <span class="s3">WX</span><span class="s4"> LIGHT DRIZZLE</span>  <span class="s4">8°C</span>  <span class="s4">NE 12KM/H</span>  <span class="s3">LUX</span><span class="s4"> 12%</span>  <span class="s3">LAMP</span><span class="s4"> 34%</span>                      <span class="s2">│</span> <span class="s3">SAFE MODE</span>                     <span class="s5">ON</span> </div>
+<div class="r" style="left:0px;top:20px"> <span class="s3">STR</span><span class="s4"> 10</span>  <span class="s3">DEX</span><span class="s4"> 12</span>  <span class="s3">INT</span><span class="s4"> 9</span>  <span class="s3">PER</span><span class="s4"> 11</span>   <span class="s2">│</span> <span class="s3">MOVE</span><span class="s4"> WALKING</span>  <span class="s3">SPD</span><span class="s4"> 96</span>  <span class="s3">NOISE</span><span class="s4"> 8</span>   <span class="s3">ENC</span><span class="s4"> TORSO 12</span>  <span class="s3">ARMS</span><span class="s4"> 4</span>   <span class="s3">HUNGER</span><span class="s4"> PECKISH</span>  <span class="s3">THIRST</span><span class="s4"> THIRSTY</span>  <span class="s3">FATIGUE</span><span class="s4"> TIRED</span>  <span class="s3">WARMTH</span><span class="s4"> CHILLY</span>       <span class="s2">│</span> <span class="s3">HOSTILE</span>          <span class="s4">3 VIS · 1 TRACK</span> </div>
+<div class="r" style="left:0px;top:40px"><span class="s2">─┤ </span><span class="s3">SOMA</span><span class="s2"> ├</span><span class="s2">────────────────────────</span><span class="s2">┼</span><span class="s2">───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span><span class="s2">┼</span><span class="s2">─┤ </span><span class="s3">OVERMAP</span><span class="s2"> ├</span><span class="s2">──────────────────────</span></div>
+<div class="r" style="left:0px;top:60px"> <span class="s3">HEAD  </span> <span class="s4">▄▄▄▄▄▄▄▄▄▄▄▄</span><span class="s2">░░░</span> <span class="s4">    20/24</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:80px"> <span class="s3">TORSO </span> <span class="s4">▄▄▄▄▄▄▄▄▄▄▄</span><span class="s2">░░░░</span> <span class="s4">    45/60</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:100px"><span class="inv5"> L ARM  ████░░░░░░░░░░░      8/30</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:120px"><span class="inv5"> !! CRITICAL · BLEEDING · BITTEN </span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:140px"> <span class="s3">R ARM </span> <span class="s3">▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄</span> <span class="s3">    30/30</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:160px"> <span class="s3">L LEG </span> <span class="s4">▄▄▄▄▄▄▄▄▄▄▄▄</span><span class="s2">░░░</span> <span class="s4">    22/28</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:180px"> <span class="s3">R LEG </span> <span class="s3">▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄</span> <span class="s3">    28/28</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:200px"><span class="s2">───┤ </span><span class="s3">POOLS</span><span class="s2"> ├</span><span class="s2">─────────────────────</span><span class="s2">┤</span></div>
+<div class="r" style="left:0px;top:220px"> <span class="s3">STAM  </span> <span class="s4">▄▄▄▄▄▄▄▄▄</span><span class="s2">░░░░░░</span> <span class="s4">5100/8700</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:240px"> <span class="s3">FOCUS </span> <span class="s4">▄▄▄▄▄▄▄▄▄▄▄▄▄</span><span class="s2">░░</span> <span class="s4">       84</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:260px"> <span class="s3">MORALE</span> <span class="s2">░░░░░░░</span><span class="s4">▌</span><span class="s2">░░░░░░░</span> <span class="s4">       -3</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:280px"><span class="s2">───┤ </span><span class="s3">EFFECTS</span><span class="s2"> ├</span><span class="s2">───────────────────</span><span class="s2">┤</span></div>
+<div class="r" style="left:0px;top:300px"> <span class="s5">!!</span> <span class="s5">BLEEDING            </span><span class="s5">    L ARM</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:320px"> <span class="s4">! </span> <span class="s4">BITTEN              </span><span class="s4">    L ARM</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:340px"> <span class="s4">! </span> <span class="s4">SOAKED              </span>         <span class="s2">│</span></div>
+<div class="r" style="left:0px;top:360px"> <span class="s3">· </span> <span class="s3">TIRED               </span>         <span class="s2">│</span></div>
+<div class="r" style="left:0px;top:380px"> <span class="s3">· </span> <span class="s3">PAIN                </span><span class="s3">       12</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:400px"><span class="s2">─────────────────────────────────┘</span></div>
+<div class="r" style="left:1570px;top:60px"><span class="s2">│</span>      <span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s3">F </span><span class="s3">F </span><span class="s3">F </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span>      </div>
+<div class="r" style="left:1570px;top:80px"><span class="s2">│</span>      <span class="s2">. </span><span class="s2">. </span><span class="s3">F </span><span class="s3">F </span><span class="s3">F </span><span class="s3">F </span><span class="s3">F </span><span class="s2">. </span><span class="s2">. </span><span class="inv4">^ </span><span class="s2">. </span>      </div>
+<div class="r" style="left:1570px;top:100px"><span class="s2">│</span>      <span class="s2">. </span><span class="s2">. </span><span class="s3">F </span><span class="s3">F </span><span class="s2">. </span><span class="s2">. </span><span class="s3">F </span><span class="s3">F </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span>      </div>
+<div class="r" style="left:1570px;top:120px"><span class="s2">│</span>      <span class="s2">. </span><span class="s5">^ </span><span class="s2">. </span><span class="s2">. </span><span class="s4">H </span><span class="s4">H </span><span class="s2">. </span><span class="s2">. </span><span class="s3">F </span><span class="s2">. </span><span class="s2">. </span>      </div>
+<div class="r" style="left:1570px;top:140px"><span class="s2">│</span>      <span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s4">H </span><span class="s4">H </span><span class="s4">H </span><span class="s4">H </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span>      </div>
+<div class="r" style="left:1570px;top:160px"><span class="s2">│</span>      <span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s4">H </span><span class="inv5">@ </span><span class="s4">H </span><span class="s4">H </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span>      </div>
+<div class="r" style="left:1570px;top:180px"><span class="s2">│</span>      <span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s4">H </span><span class="s4">H </span><span class="s4">H </span><span class="s2">. </span><span class="s2">. </span><span class="s3">F </span><span class="s3">F </span><span class="s2">. </span>      </div>
+<div class="r" style="left:1570px;top:200px"><span class="s2">│</span>      <span class="s2">. </span><span class="s2">. </span><span class="s3">F </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s3">F </span><span class="s3">F </span><span class="s2">. </span>      </div>
+<div class="r" style="left:1570px;top:220px"><span class="s2">│</span>      <span class="s2">. </span><span class="s3">F </span><span class="s3">F </span><span class="s2">. </span><span class="s5">^ </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s3">F </span><span class="s2">. </span>      </div>
+<div class="r" style="left:1570px;top:240px"><span class="s2">│</span>      <span class="s2">. </span><span class="s3">F </span><span class="s3">F </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span>      </div>
+<div class="r" style="left:1570px;top:260px"><span class="s2">│</span>      <span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span>      </div>
+<div class="r" style="left:1570px;top:280px"><span class="s2">│</span> <span class="s5">^</span> <span class="s3">MISSION MARKER</span>              <span class="s5">NE</span> </div>
+<div class="r" style="left:1570px;top:300px"><span class="s2">├─┤ </span><span class="s3">TARGET</span><span class="s2"> ├</span><span class="s2">───────────────────────</span></div>
+<div class="r" style="left:1570px;top:320px"><span class="s2">│</span> <span class="s5">ZOMBIE BRUTE</span>          <span class="s4">4 TILES NE</span> </div>
+<div class="r" style="left:1570px;top:340px"><span class="s2">│</span> <span class="s3">HP</span> <span class="s4">▄▄▄▄▄▄▄▄▄</span><span class="s2">░░░░░░</span>            <span class="s4">62</span> </div>
+<div class="r" style="left:1570px;top:360px"><span class="s2">│</span> <span class="s3">STATUS</span> <span class="s4">MOVING</span>                    </div>
+<div class="r" style="left:1570px;top:380px"><span class="s2">├─┤ </span><span class="s3">ARMS</span><span class="s2"> ├</span><span class="s2">─────────────────────────</span></div>
+<div class="r" style="left:1570px;top:400px"><span class="s2">│</span> <span class="s3">WIELD</span>  <span class="s5">FIRE AXE</span>                  </div>
+<div class="r" style="left:1570px;top:420px"><span class="s2">│</span>        <span class="s4">32</span><span class="s3"> BASH</span>  <span class="s4">0</span><span class="s3"> CUT</span>  <span class="s3">HIT</span><span class="s4"> +1</span>    </div>
+<div class="r" style="left:1570px;top:440px"><span class="s2">│</span> <span class="s3">ALT</span>    <span class="s4">GLOCK 19</span>   <span class="s4">12/17</span>          </div>
+<div class="r" style="left:1570px;top:460px"><span class="s2">│</span>        <span class="s3">9MM JHP</span>                   </div>
+<div class="r" style="left:1570px;top:480px"><span class="s2">└──────────────────────────────────</span></div>
+<div class="r" style="left:0px;top:900px"><span class="s2">───────</span><span class="s2">┬</span><span class="s2">─┤ </span><span class="s3">MESSAGE LOG</span><span class="s2"> ├</span><span class="s2">───────────────────────────────────────────────────────────────────</span><span class="s2">┐</span></div>
+<div class="r" style="left:0px;top:920px"><span class="s5"> </span><span class="s2">21:46</span> <span class="s2">│</span> <span class="s3">+ </span> <span class="s2">You hit the zombie brute with your fire axe.</span>                                   <span class="s2">│</span></div>
+<div class="r" style="left:0px;top:940px"><span class="s5"> </span><span class="s2">21:46</span> <span class="s2">│</span> <span class="s4">! </span> <span class="s2">The zombie brute claws your left arm!</span>                                          <span class="s2">│</span></div>
+<div class="r" style="left:0px;top:960px"><span class="s5"> </span><span class="s2">21:47</span> <span class="s2">│</span> <span class="s4">! </span> <span class="s3">Your left arm is bleeding.</span>                                                     <span class="s2">│</span></div>
+<div class="r" style="left:0px;top:980px"><span class="s5"> </span><span class="s2">21:47</span> <span class="s2">│</span> <span class="s3">· </span> <span class="s3">You feel a sharp pain.</span>                                                         <span class="s2">│</span></div>
+<div class="r" style="left:0px;top:1000px"><span class="s5"> </span><span class="s2">21:47</span> <span class="s2">│</span> <span class="s4">^ </span> <span class="s4">The zombie shambler groans nearby.</span>                                             <span class="s2">│</span></div>
+<div class="r" style="left:0px;top:1020px"><span class="s5">&gt;</span><span class="s4">21:47</span> <span class="s2">│</span> <span class="s5">^ </span> <span class="s5">You are getting thirsty.</span> <span class="cur">█</span>                                                     <span class="s2">│</span></div>
+<div class="r" style="left:0px;top:1040px"><span class="s2">───────</span><span class="s2">┴</span><span class="s2">───────────────────────────────────────────────────────────────────────────────────</span><span class="s2">┴</span><span class="s2">─┤ </span><span class="s3">FUNCTION KEYS</span><span class="s2"> ├</span><span class="s2">──────────────────────────────────────────────────────────────────────────────────</span></div>
+<div class="r" style="left:0px;top:1060px"> <span class="s1">[1]</span><span class="s2">-</span> <span class="s2">FIRE  NO GUN    </span><span class="s2">[</span><span class="s3">2</span><span class="s2">]</span><span class="s5">r</span> <span class="s4">RELOAD          </span><span class="s2">[</span><span class="s3">3</span><span class="s2">]</span><span class="s5">'</span> <span class="s4">RUN             </span><span class="s2">[</span><span class="s3">4</span><span class="s2">]</span><span class="s5">e</span> <span class="s4">EXAMINE         </span><span class="s2">[</span><span class="s3">5</span><span class="s2">]</span><span class="s5">p</span> <span class="s4">PICK UP         </span><span class="s2">[</span><span class="s3">6</span><span class="s2">]</span><span class="s5">c</span> <span class="s4">CRAFT           </span><span class="s2">[</span><span class="s3">7</span><span class="s2">]</span><span class="s5">i</span> <span class="s4">INVENTORY       </span><span class="s2">[</span><span class="s3">8</span><span class="s2">]</span><span class="s5">t</span> <span class="s4">THROW           </span><span class="s2">[</span><span class="s3">9</span><span class="s2">]</span><span class="s5">5</span> <span class="s4">WAIT            </span>  </div>
+</div>
+<div id="ink">
+<div class="r" style="left:0px;top:0px"> <span class="s5">NIGEL ASHBY</span>  <span class="s3">SURVIVOR</span>           <span class="s2">│</span> <span class="s3">DAY</span><span class="s4"> 14</span>  <span class="s4">AUTUMN</span>  <span class="s5">21:47</span>   <span class="s4">CHESWICK — RESIDENTIAL</span>   <span class="s3">WX</span><span class="s4"> LIGHT DRIZZLE</span>  <span class="s4">8°C</span>  <span class="s4">NE 12KM/H</span>  <span class="s3">LUX</span><span class="s4"> 12%</span>  <span class="s3">LAMP</span><span class="s4"> 34%</span>                      <span class="s2">│</span> <span class="s3">SAFE MODE</span>                     <span class="s5">ON</span> </div>
+<div class="r" style="left:0px;top:20px"> <span class="s3">STR</span><span class="s4"> 10</span>  <span class="s3">DEX</span><span class="s4"> 12</span>  <span class="s3">INT</span><span class="s4"> 9</span>  <span class="s3">PER</span><span class="s4"> 11</span>   <span class="s2">│</span> <span class="s3">MOVE</span><span class="s4"> WALKING</span>  <span class="s3">SPD</span><span class="s4"> 96</span>  <span class="s3">NOISE</span><span class="s4"> 8</span>   <span class="s3">ENC</span><span class="s4"> TORSO 12</span>  <span class="s3">ARMS</span><span class="s4"> 4</span>   <span class="s3">HUNGER</span><span class="s4"> PECKISH</span>  <span class="s3">THIRST</span><span class="s4"> THIRSTY</span>  <span class="s3">FATIGUE</span><span class="s4"> TIRED</span>  <span class="s3">WARMTH</span><span class="s4"> CHILLY</span>       <span class="s2">│</span> <span class="s3">HOSTILE</span>          <span class="s4">3 VIS · 1 TRACK</span> </div>
+<div class="r" style="left:0px;top:40px"><span class="s2">─┤ </span><span class="s3">SOMA</span><span class="s2"> ├</span><span class="s2">────────────────────────</span><span class="s2">┼</span><span class="s2">───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span><span class="s2">┼</span><span class="s2">─┤ </span><span class="s3">OVERMAP</span><span class="s2"> ├</span><span class="s2">──────────────────────</span></div>
+<div class="r" style="left:0px;top:60px"> <span class="s3">HEAD  </span> <span class="s4">▄▄▄▄▄▄▄▄▄▄▄▄</span><span class="s2">░░░</span> <span class="s4">    20/24</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:80px"> <span class="s3">TORSO </span> <span class="s4">▄▄▄▄▄▄▄▄▄▄▄</span><span class="s2">░░░░</span> <span class="s4">    45/60</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:100px"><span class="inv5"> L ARM  ████░░░░░░░░░░░      8/30</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:120px"><span class="inv5"> !! CRITICAL · BLEEDING · BITTEN </span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:140px"> <span class="s3">R ARM </span> <span class="s3">▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄</span> <span class="s3">    30/30</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:160px"> <span class="s3">L LEG </span> <span class="s4">▄▄▄▄▄▄▄▄▄▄▄▄</span><span class="s2">░░░</span> <span class="s4">    22/28</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:180px"> <span class="s3">R LEG </span> <span class="s3">▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄</span> <span class="s3">    28/28</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:200px"><span class="s2">───┤ </span><span class="s3">POOLS</span><span class="s2"> ├</span><span class="s2">─────────────────────</span><span class="s2">┤</span></div>
+<div class="r" style="left:0px;top:220px"> <span class="s3">STAM  </span> <span class="s4">▄▄▄▄▄▄▄▄▄</span><span class="s2">░░░░░░</span> <span class="s4">5100/8700</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:240px"> <span class="s3">FOCUS </span> <span class="s4">▄▄▄▄▄▄▄▄▄▄▄▄▄</span><span class="s2">░░</span> <span class="s4">       84</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:260px"> <span class="s3">MORALE</span> <span class="s2">░░░░░░░</span><span class="s4">▌</span><span class="s2">░░░░░░░</span> <span class="s4">       -3</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:280px"><span class="s2">───┤ </span><span class="s3">EFFECTS</span><span class="s2"> ├</span><span class="s2">───────────────────</span><span class="s2">┤</span></div>
+<div class="r" style="left:0px;top:300px"> <span class="s5">!!</span> <span class="s5">BLEEDING            </span><span class="s5">    L ARM</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:320px"> <span class="s4">! </span> <span class="s4">BITTEN              </span><span class="s4">    L ARM</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:340px"> <span class="s4">! </span> <span class="s4">SOAKED              </span>         <span class="s2">│</span></div>
+<div class="r" style="left:0px;top:360px"> <span class="s3">· </span> <span class="s3">TIRED               </span>         <span class="s2">│</span></div>
+<div class="r" style="left:0px;top:380px"> <span class="s3">· </span> <span class="s3">PAIN                </span><span class="s3">       12</span><span class="s2">│</span></div>
+<div class="r" style="left:0px;top:400px"><span class="s2">─────────────────────────────────┘</span></div>
+<div class="r" style="left:1570px;top:60px"><span class="s2">│</span>      <span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s3">F </span><span class="s3">F </span><span class="s3">F </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span>      </div>
+<div class="r" style="left:1570px;top:80px"><span class="s2">│</span>      <span class="s2">. </span><span class="s2">. </span><span class="s3">F </span><span class="s3">F </span><span class="s3">F </span><span class="s3">F </span><span class="s3">F </span><span class="s2">. </span><span class="s2">. </span><span class="inv4">^ </span><span class="s2">. </span>      </div>
+<div class="r" style="left:1570px;top:100px"><span class="s2">│</span>      <span class="s2">. </span><span class="s2">. </span><span class="s3">F </span><span class="s3">F </span><span class="s2">. </span><span class="s2">. </span><span class="s3">F </span><span class="s3">F </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span>      </div>
+<div class="r" style="left:1570px;top:120px"><span class="s2">│</span>      <span class="s2">. </span><span class="s5">^ </span><span class="s2">. </span><span class="s2">. </span><span class="s4">H </span><span class="s4">H </span><span class="s2">. </span><span class="s2">. </span><span class="s3">F </span><span class="s2">. </span><span class="s2">. </span>      </div>
+<div class="r" style="left:1570px;top:140px"><span class="s2">│</span>      <span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s4">H </span><span class="s4">H </span><span class="s4">H </span><span class="s4">H </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span>      </div>
+<div class="r" style="left:1570px;top:160px"><span class="s2">│</span>      <span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s4">H </span><span class="inv5">@ </span><span class="s4">H </span><span class="s4">H </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span>      </div>
+<div class="r" style="left:1570px;top:180px"><span class="s2">│</span>      <span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s4">H </span><span class="s4">H </span><span class="s4">H </span><span class="s2">. </span><span class="s2">. </span><span class="s3">F </span><span class="s3">F </span><span class="s2">. </span>      </div>
+<div class="r" style="left:1570px;top:200px"><span class="s2">│</span>      <span class="s2">. </span><span class="s2">. </span><span class="s3">F </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s3">F </span><span class="s3">F </span><span class="s2">. </span>      </div>
+<div class="r" style="left:1570px;top:220px"><span class="s2">│</span>      <span class="s2">. </span><span class="s3">F </span><span class="s3">F </span><span class="s2">. </span><span class="s5">^ </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s3">F </span><span class="s2">. </span>      </div>
+<div class="r" style="left:1570px;top:240px"><span class="s2">│</span>      <span class="s2">. </span><span class="s3">F </span><span class="s3">F </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span>      </div>
+<div class="r" style="left:1570px;top:260px"><span class="s2">│</span>      <span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span><span class="s2">. </span>      </div>
+<div class="r" style="left:1570px;top:280px"><span class="s2">│</span> <span class="s5">^</span> <span class="s3">MISSION MARKER</span>              <span class="s5">NE</span> </div>
+<div class="r" style="left:1570px;top:300px"><span class="s2">├─┤ </span><span class="s3">TARGET</span><span class="s2"> ├</span><span class="s2">───────────────────────</span></div>
+<div class="r" style="left:1570px;top:320px"><span class="s2">│</span> <span class="s5">ZOMBIE BRUTE</span>          <span class="s4">4 TILES NE</span> </div>
+<div class="r" style="left:1570px;top:340px"><span class="s2">│</span> <span class="s3">HP</span> <span class="s4">▄▄▄▄▄▄▄▄▄</span><span class="s2">░░░░░░</span>            <span class="s4">62</span> </div>
+<div class="r" style="left:1570px;top:360px"><span class="s2">│</span> <span class="s3">STATUS</span> <span class="s4">MOVING</span>                    </div>
+<div class="r" style="left:1570px;top:380px"><span class="s2">├─┤ </span><span class="s3">ARMS</span><span class="s2"> ├</span><span class="s2">─────────────────────────</span></div>
+<div class="r" style="left:1570px;top:400px"><span class="s2">│</span> <span class="s3">WIELD</span>  <span class="s5">FIRE AXE</span>                  </div>
+<div class="r" style="left:1570px;top:420px"><span class="s2">│</span>        <span class="s4">32</span><span class="s3"> BASH</span>  <span class="s4">0</span><span class="s3"> CUT</span>  <span class="s3">HIT</span><span class="s4"> +1</span>    </div>
+<div class="r" style="left:1570px;top:440px"><span class="s2">│</span> <span class="s3">ALT</span>    <span class="s4">GLOCK 19</span>   <span class="s4">12/17</span>          </div>
+<div class="r" style="left:1570px;top:460px"><span class="s2">│</span>        <span class="s3">9MM JHP</span>                   </div>
+<div class="r" style="left:1570px;top:480px"><span class="s2">└──────────────────────────────────</span></div>
+<div class="r" style="left:0px;top:900px"><span class="s2">───────</span><span class="s2">┬</span><span class="s2">─┤ </span><span class="s3">MESSAGE LOG</span><span class="s2"> ├</span><span class="s2">───────────────────────────────────────────────────────────────────</span><span class="s2">┐</span></div>
+<div class="r" style="left:0px;top:920px"><span class="s5"> </span><span class="s2">21:46</span> <span class="s2">│</span> <span class="s3">+ </span> <span class="s2">You hit the zombie brute with your fire axe.</span>                                   <span class="s2">│</span></div>
+<div class="r" style="left:0px;top:940px"><span class="s5"> </span><span class="s2">21:46</span> <span class="s2">│</span> <span class="s4">! </span> <span class="s2">The zombie brute claws your left arm!</span>                                          <span class="s2">│</span></div>
+<div class="r" style="left:0px;top:960px"><span class="s5"> </span><span class="s2">21:47</span> <span class="s2">│</span> <span class="s4">! </span> <span class="s3">Your left arm is bleeding.</span>                                                     <span class="s2">│</span></div>
+<div class="r" style="left:0px;top:980px"><span class="s5"> </span><span class="s2">21:47</span> <span class="s2">│</span> <span class="s3">· </span> <span class="s3">You feel a sharp pain.</span>                                                         <span class="s2">│</span></div>
+<div class="r" style="left:0px;top:1000px"><span class="s5"> </span><span class="s2">21:47</span> <span class="s2">│</span> <span class="s4">^ </span> <span class="s4">The zombie shambler groans nearby.</span>                                             <span class="s2">│</span></div>
+<div class="r" style="left:0px;top:1020px"><span class="s5">&gt;</span><span class="s4">21:47</span> <span class="s2">│</span> <span class="s5">^ </span> <span class="s5">You are getting thirsty.</span> <span class="cur">█</span>                                                     <span class="s2">│</span></div>
+<div class="r" style="left:0px;top:1040px"><span class="s2">───────</span><span class="s2">┴</span><span class="s2">───────────────────────────────────────────────────────────────────────────────────</span><span class="s2">┴</span><span class="s2">─┤ </span><span class="s3">FUNCTION KEYS</span><span class="s2"> ├</span><span class="s2">──────────────────────────────────────────────────────────────────────────────────</span></div>
+<div class="r" style="left:0px;top:1060px"> <span class="s1">[1]</span><span class="s2">-</span> <span class="s2">FIRE  NO GUN    </span><span class="s2">[</span><span class="s3">2</span><span class="s2">]</span><span class="s5">r</span> <span class="s4">RELOAD          </span><span class="s2">[</span><span class="s3">3</span><span class="s2">]</span><span class="s5">'</span> <span class="s4">RUN             </span><span class="s2">[</span><span class="s3">4</span><span class="s2">]</span><span class="s5">e</span> <span class="s4">EXAMINE         </span><span class="s2">[</span><span class="s3">5</span><span class="s2">]</span><span class="s5">p</span> <span class="s4">PICK UP         </span><span class="s2">[</span><span class="s3">6</span><span class="s2">]</span><span class="s5">c</span> <span class="s4">CRAFT           </span><span class="s2">[</span><span class="s3">7</span><span class="s2">]</span><span class="s5">i</span> <span class="s4">INVENTORY       </span><span class="s2">[</span><span class="s3">8</span><span class="s2">]</span><span class="s5">t</span> <span class="s4">THROW           </span><span class="s2">[</span><span class="s3">9</span><span class="s2">]</span><span class="s5">5</span> <span class="s4">WAIT            </span>  </div>
+</div>
+<div id="glass">
+<div class="sl" style="left:0px;top:0px;width:1920px;height:60px"></div>
+<div class="sl" style="left:0px;top:60px;width:340px;height:360px"></div>
+<div class="sl" style="left:1570px;top:60px;width:350px;height:440px"></div>
+<div class="sl" style="left:0px;top:900px;width:920px;height:140px"></div>
+<div class="sl" style="left:0px;top:1040px;width:1920px;height:40px"></div>
+<div id="sl-all"></div>
+<div id="vig"></div>
+</div>
+</div></body></html>

@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<!-- D07-BLUEPRINT-SENTINEL: design 07 blueprint-schematic, own stylesheet below -->
+<style>
+  html,body { margin:0; padding:0; background:#000; }
+  #screen {
+    position:relative; width:1920px; height:1080px; overflow:hidden;
+    background-image:url("_shared/world.png");
+    background-size:1920px 1080px;
+  }
+
+  /* ============ D07 palette ============================================
+     navy    #050C1E  drawing ground -- every wash and scrim, never opaque
+     cyan    #00FFFF  primary line, table rules, intact dimension
+     accent  #00FFCC  callout / critical annotation / current revision
+     dim     #35637C  secondary rule, field grid, minor tick
+     amber   #FFB000  caution value
+     red     #FF4B4B  harm value
+     paper   #DCE9F2  primary lettering
+     pale    #BFD6E4  log body, command labels
+     slate   #8FB2C6  schedule labels, callout sublines
+     tick    #7FA8BF  ruler numerals, dimension names, extension lines
+     faint   #5C87A0  captions, timestamps, title-block field labels
+     off     #4A6274  the one unavailable command (slot 1, no gun wielded)
+     plan    #2F4E5E / #2E6B4A / #3E7E96  key-plan field / forest / house
+     ==================================================================== */
+
+  /* ---- line work. every hairline carries a 1px black casing so a cyan
+          1px rule survives #a8b878 grass. ---- */
+  .bp07-hl { position:absolute; background:#35637C;
+             box-shadow:0 0 0 1px rgba(2,6,14,.78); }
+  .bp07-sig { border:1px solid #35637C; background:transparent;
+              box-shadow:0 0 0 1px rgba(2,6,14,.62), inset 0 0 0 1px rgba(2,6,14,.62); }
+
+  .bg-cyn { background:#00FFFF; }
+  .bg-amb { background:#FFB000; }
+  .bg-cal { background:#00FFCC; }
+  .bg-red { background:#FF4B4B; }
+  .bg-dim { background:#35637C; }
+
+  .fg-cyn { color:#00FFFF; }
+  .fg-amb { color:#FFB000; }
+  .fg-cal { color:#00FFCC; }
+  .fg-red { color:#FF4B4B; }
+  .fg-dim { color:#7FA8BF; }
+  .fg-pap { color:#DCE9F2; }
+
+  /* ---- drafting lettering. Consolas stands in for Source Code Pro,
+          which stands in for DIN 1451 stencil. ---- */
+  .t { position:absolute; font-family:Consolas,"Cascadia Mono","Lucida Console",monospace;
+       color:#DCE9F2; font-size:12px; line-height:14px; letter-spacing:1.1px;
+       white-space:nowrap;
+       filter:drop-shadow(0 1px 0 rgba(0,0,0,.92)) drop-shadow(1px 0 0 rgba(0,0,0,.78))
+              drop-shadow(-1px 0 0 rgba(0,0,0,.78)) drop-shadow(0 -1px 0 rgba(0,0,0,.78)); }
+
+  /* ---- grounds. cell interiors are washed, never boxed: this is a
+          drawing annotated onto the scene, not a stack of panels. NOTHING
+          in this sheet is opaque -- .72 is the heaviest ground on it, so
+          the terrain reads through every block of the drawing. ---- */
+  .fillA { position:absolute; background:rgba(5,12,30,.55); }
+  .fillC { position:absolute; background:rgba(5,12,30,.72); }
+  .scr   { position:absolute; background:rgba(5,12,30,.72); }
+
+  /* ---- trim + registration ---- */
+  .trim { position:absolute; background:#7FA8BF; opacity:.8; }
+
+  /* ---- measuring frame ---- */
+  .axis   { position:absolute; background:#00FFFF; opacity:.85;
+            box-shadow:0 0 0 1px rgba(2,6,14,.8); }
+  .tkmh   { position:absolute;
+            background:repeating-linear-gradient(to right,#7FA8BF 0px,#7FA8BF 1px,
+                       rgba(0,0,0,0) 1px,rgba(0,0,0,0) 32px); opacity:.75; }
+  .tkMh   { position:absolute;
+            background:repeating-linear-gradient(to right,#00FFFF 0px,#00FFFF 1px,
+                       rgba(0,0,0,0) 1px,rgba(0,0,0,0) 160px); }
+  .tkmv   { position:absolute;
+            background:repeating-linear-gradient(to bottom,#7FA8BF 0px,#7FA8BF 1px,
+                       rgba(0,0,0,0) 1px,rgba(0,0,0,0) 32px); opacity:.75; }
+  .tkMv   { position:absolute;
+            background:repeating-linear-gradient(to bottom,#00FFFF 0px,#00FFFF 1px,
+                       rgba(0,0,0,0) 1px,rgba(0,0,0,0) 160px); }
+  .gridv  { position:absolute;
+            background:repeating-linear-gradient(to right,#35637C 0px,#35637C 1px,
+                       rgba(0,0,0,0) 1px,rgba(0,0,0,0) 160px); opacity:.30; }
+  .gridh  { position:absolute;
+            background:repeating-linear-gradient(to bottom,#35637C 0px,#35637C 1px,
+                       rgba(0,0,0,0) 1px,rgba(0,0,0,0) 160px); opacity:.30; }
+  .num    { font-size:11px; letter-spacing:1.4px; color:#7FA8BF; text-align:center; }
+  .num.zero { color:#00FFFF; }
+  .note   { font-size:10px; letter-spacing:1.6px; color:#7FA8BF; }
+  .brkt   { position:absolute; border-left:1px solid #00FFCC; border-right:1px solid #00FFCC;
+            border-top:1px solid #00FFCC; box-shadow:0 0 0 1px rgba(2,6,14,.7); }
+  .brktcap{ font-size:10px; letter-spacing:1.6px; color:#00FFCC; text-align:center; }
+
+  /* ---- section lettering ---- */
+  .vtitle { font-size:14px; letter-spacing:3.2px; color:#DCE9F2; font-weight:700; }
+  .vtag   { font-size:11px; letter-spacing:1.6px; color:#00FFFF; }
+  .vsub   { font-size:10px; letter-spacing:1.5px; color:#7FA8BF; }
+  .caption{ font-size:10px; letter-spacing:1.5px; color:#5C87A0; }
+
+  /* ---- elevation 1 : the body ---- */
+  .fig      { position:absolute; box-sizing:border-box;
+              border:1px solid #00FFFF; background:rgba(5,12,30,.42);
+              box-shadow:0 0 0 1px rgba(2,6,14,.75); }
+  .fig.crit { border-color:#00FFCC; border-width:2px; }
+  .fig.thin { position:absolute; border:0; background:#35637C; box-shadow:none; }
+  .hatch    { position:absolute; opacity:.55; }
+  .hatch.amb{ background:repeating-linear-gradient(135deg,#FFB000 0px,#FFB000 1px,
+                         rgba(0,0,0,0) 1px,rgba(0,0,0,0) 7px); }
+  .hatch.red{ background:repeating-linear-gradient(135deg,#FF4B4B 0px,#FF4B4B 1px,
+                         rgba(0,0,0,0) 1px,rgba(0,0,0,0) 4px); opacity:.85; }
+  .figfoot  { position:absolute; background:#00FFFF; opacity:.7;
+              box-shadow:0 0 0 1px rgba(2,6,14,.8); }
+  .figaxis  { position:absolute;
+              background:repeating-linear-gradient(to bottom,#00FFCC 0px,#00FFCC 6px,
+                         rgba(0,0,0,0) 6px,rgba(0,0,0,0) 10px); opacity:.42; }
+
+  /* ---- dimension strings ---- */
+  .dimline { position:absolute; height:1px; box-shadow:0 0 0 1px rgba(2,6,14,.8); }
+  .dimfill { position:absolute; opacity:.92; box-shadow:0 0 0 1px rgba(2,6,14,.75); }
+  .wit     { position:absolute; width:1px; opacity:.9; box-shadow:0 0 0 1px rgba(2,6,14,.7); }
+  .ah      { position:absolute; transform:rotate(45deg);
+             box-shadow:0 0 0 1px rgba(2,6,14,.55); }
+  .ext     { position:absolute; height:1px;
+             background:repeating-linear-gradient(to right,#7FA8BF 0px,#7FA8BF 4px,
+                        rgba(0,0,0,0) 4px,rgba(0,0,0,0) 8px); opacity:.8; }
+  .valscr  { position:absolute; background:rgba(5,12,30,.76); }
+  .dimval  { font-size:15px; letter-spacing:1.2px; font-weight:700; }
+  .dimname { font-size:10px; letter-spacing:2.2px; color:#7FA8BF; }
+  .dimname.cal { color:#00FFCC; }
+
+  /* ---- note flags + hazard flag ---- */
+  .hazflag { position:absolute; border:1px solid #FF4B4B; background:rgba(5,12,30,.8);
+             box-shadow:0 0 0 1px rgba(2,6,14,.8); }
+  .nflag   { position:absolute; border:1px solid #00FFCC; border-radius:10px;
+             background:rgba(5,12,30,.8); box-shadow:0 0 0 1px rgba(2,6,14,.8); }
+  .hzg     { position:absolute; left:0; top:0; width:20px; height:20px; line-height:19px;
+             text-align:center; font-family:Consolas,monospace; font-size:13px;
+             font-weight:700; color:#FF4B4B; }
+  .nfg     { position:absolute; left:0; top:0; width:20px; height:20px; line-height:19px;
+             text-align:center; font-family:Consolas,monospace; font-size:11px;
+             color:#00FFCC; }
+  .flagcap { font-size:10px; letter-spacing:1.9px; color:#00FFCC; }
+
+  /* ---- tables / schedules ---- */
+  .thead   { font-size:10px; letter-spacing:2.6px; color:#00FFFF; }
+  .thead.r { color:#5C87A0; text-align:right; }
+  .cellab  { font-size:11px; letter-spacing:1.5px; color:#8FB2C6; }
+  .celval  { font-size:12px; letter-spacing:1.1px; font-weight:700; }
+  .vrule   { position:absolute; background:#35637C; opacity:.75;
+             box-shadow:0 0 0 1px rgba(2,6,14,.6); }
+  .gbar    { position:absolute; border:1px solid #35637C; background:rgba(5,12,30,.7); }
+  .gfill   { position:absolute; opacity:.9; }
+
+  /* ---- revision history ---- */
+  .revid   { font-size:11px; letter-spacing:1.6px; color:#7FA8BF; font-weight:700; }
+  .revid.cal { color:#00FFCC; }
+  .revtime { font-size:10px; letter-spacing:1.2px; color:#5C87A0; }
+  .revtxt  { font-size:11px; letter-spacing:.6px; }
+  .lg-ok   { color:#BFD6E4; }
+  .lg-bad  { color:#FF4B4B; }
+  .lg-bad2 { color:#C4645F; }
+  .lg-caut { color:#FFB000; }
+  .newbar  { position:absolute; background:#00FFCC; }
+
+  /* ---- key / legend ---- */
+  .kn      { font-size:9px; letter-spacing:1px; color:#5C87A0; }
+  .kn.na   { color:#4A6274; }
+  .kcap    { position:absolute; border:1px solid #00FFFF; background:rgba(5,12,30,.8); }
+  .kcap.na { border-color:#4A6274; }
+  .kg      { position:absolute; left:0; top:0; width:15px; height:15px; line-height:14px;
+             text-align:center; font-family:Consolas,monospace; font-size:10px;
+             color:#00FFFF; }
+  .kcap.na .kg { color:#4A6274; }
+  .kstrike { position:absolute; background:#FF4B4B; opacity:.85;
+             transform-origin:50% 50%; }
+  .klab    { font-size:10px; letter-spacing:1.6px; color:#BFD6E4; }
+  .klab.na { color:#4A6274; }
+  .knax    { font-size:10px; letter-spacing:1.2px; color:#FF4B4B; }
+
+  /* ---- field annotation ---- */
+  .marginline { position:absolute; width:1px; background:#00FFFF; opacity:.8;
+                box-shadow:0 0 0 1px rgba(2,6,14,.8); }
+  .landtick   { position:absolute; width:1px; background:#00FFCC;
+                box-shadow:0 0 0 1px rgba(2,6,14,.8); }
+  .lead       { position:absolute; height:1px; background:#00FFFF; opacity:.92;
+                box-shadow:0 0 0 1px rgba(2,6,14,.85); }
+  .lead.cal   { background:#00FFCC; }
+  .dcirc      { position:absolute; border:1px solid #00FFCC; border-radius:50%;
+                background:rgba(5,12,30,.18); box-shadow:0 0 0 1px rgba(2,6,14,.75); }
+  .dcross     { position:absolute; background:#00FFCC; opacity:.85;
+                box-shadow:0 0 0 1px rgba(2,6,14,.7); }
+  .dattri     { position:absolute; width:0; height:0;
+                border-left:7px solid transparent; border-right:7px solid transparent;
+                border-bottom:12px solid #00FFCC; opacity:.9; }
+  .datbox     { position:absolute; border:1px solid #00FFCC; background:rgba(5,12,30,.8);
+                box-shadow:0 0 0 1px rgba(2,6,14,.8); }
+  .dg         { position:absolute; left:0; top:0; width:18px; height:18px; line-height:17px;
+                text-align:center; font-family:Consolas,monospace; font-size:11px;
+                font-weight:700; color:#00FFCC; }
+  .datlab     { font-size:10px; letter-spacing:2px; color:#00FFCC; }
+  .rcirc      { position:absolute; border:1px solid #FF4B4B; border-radius:50%;
+                background:rgba(5,12,30,.12); box-shadow:0 0 0 1px rgba(2,6,14,.8); }
+  .rtick      { position:absolute; background:#FF4B4B;
+                box-shadow:0 0 0 1px rgba(2,6,14,.8); }
+  .odlab      { font-size:11px; letter-spacing:1.8px; color:#00FFFF; }
+  .calbar     { position:absolute; background:#00FFCC; }
+  .callab     { font-size:13px; letter-spacing:2.4px; color:#DCE9F2; font-weight:700; }
+  .calsub     { font-size:11px; letter-spacing:1.3px; color:#8FB2C6; }
+
+  /* ---- key plan ---- */
+  .mapbox  { position:absolute; border:1px solid #35637C;
+             box-shadow:0 0 0 1px rgba(2,6,14,.7); }
+  .mrow    { font-size:13px; line-height:16px; letter-spacing:5px;
+             font-family:Consolas,monospace; color:#2F4E5E; }
+  .mg-f    { color:#2E6B4A; }
+  .mg-h    { color:#3E7E96; }
+  .mg-p    { color:#00FFCC; font-weight:700; }
+  .mg-m    { color:#FFB000; }
+  .maplbl  { font-size:10px; letter-spacing:1.6px; color:#7FA8BF; }
+
+  /* ---- title block ---- */
+  .tbl     { font-size:9px; letter-spacing:1.9px; color:#5C87A0; }
+  .tbv     { font-size:12px; letter-spacing:1.5px; color:#DCE9F2; }
+  .tbbig   { font-size:20px; letter-spacing:3.4px; color:#DCE9F2; font-weight:700; }
+  .tbcyn   { font-size:12px; letter-spacing:1.5px; color:#00FFFF; }
+
+  /* ---- revision stamp ---- */
+  .stampbox{ position:absolute; border:2px solid #00FFCC; background:rgba(5,12,30,.45);
+             box-shadow:0 0 0 1px rgba(2,6,14,.6), inset 0 0 0 2px rgba(5,12,30,.35);
+             opacity:.9; }
+  .stampin { position:absolute; border:1px solid #00FFCC; opacity:.55; }
+  .stampt1 { font-size:9px; letter-spacing:3.4px; color:#00FFCC; text-align:center; }
+  .stampt2 { font-size:19px; letter-spacing:4.6px; color:#00FFCC; font-weight:700;
+             text-align:center; }
+  .stampt3 { font-size:9px; letter-spacing:2.6px; color:#00FFCC; text-align:center;
+             opacity:.85; }
+</style></head>
+<body><div id="screen">
+
+<!-- ============ SHEET : field grid, trim marks, border ============ -->
+<div class="gridv" style="left:144px;top:72px;width:1281px;height:928px"></div>
+<div class="gridh" style="left:72px;top:208px;width:1472px;height:641px"></div>
+<div class="bp07-sig" style="position:absolute;left:20px;top:20px;width:1876px;height:1036px"></div>
+<div class="trim" style="left:12px;top:12px;width:24px;height:1px"></div>
+<div class="trim" style="left:12px;top:12px;width:1px;height:24px"></div>
+<div class="trim" style="left:1884px;top:12px;width:24px;height:1px"></div>
+<div class="trim" style="left:1907px;top:12px;width:1px;height:24px"></div>
+<div class="trim" style="left:12px;top:1067px;width:24px;height:1px"></div>
+<div class="trim" style="left:12px;top:1044px;width:1px;height:24px"></div>
+<div class="trim" style="left:1884px;top:1067px;width:24px;height:1px"></div>
+<div class="trim" style="left:1907px;top:1044px;width:1px;height:24px"></div>
+
+<!-- ============ TOP RULER : the frame is a measuring instrument ====== -->
+<div class="axis" style="left:60px;top:52px;width:1836px;height:1px"></div>
+<div class="tkmh" style="left:144px;top:53px;width:1281px;height:6px"></div>
+<div class="tkMh" style="left:144px;top:53px;width:1441px;height:13px"></div>
+<div class="scr" style="left:120px;top:28px;width:48px;height:15px"></div>
+<div class="t num" style="left:124px;top:29px;width:40px">-25</div>
+<div class="scr" style="left:280px;top:28px;width:48px;height:15px"></div>
+<div class="t num" style="left:284px;top:29px;width:40px">-20</div>
+<div class="scr" style="left:440px;top:28px;width:48px;height:15px"></div>
+<div class="t num" style="left:444px;top:29px;width:40px">-15</div>
+<div class="scr" style="left:600px;top:28px;width:48px;height:15px"></div>
+<div class="t num" style="left:604px;top:29px;width:40px">-10</div>
+<div class="scr" style="left:760px;top:28px;width:48px;height:15px"></div>
+<div class="t num" style="left:764px;top:29px;width:40px">-5</div>
+<div class="scr" style="left:920px;top:28px;width:48px;height:15px"></div>
+<div class="t num zero" style="left:924px;top:29px;width:40px">0</div>
+<div class="scr" style="left:1080px;top:28px;width:48px;height:15px"></div>
+<div class="t num" style="left:1084px;top:29px;width:40px">+5</div>
+<div class="scr" style="left:1240px;top:28px;width:48px;height:15px"></div>
+<div class="t num" style="left:1244px;top:29px;width:40px">+10</div>
+<div class="scr" style="left:1400px;top:28px;width:48px;height:15px"></div>
+<div class="t num" style="left:1404px;top:29px;width:40px">+15</div>
+<div class="scr" style="left:1560px;top:28px;width:48px;height:15px"></div>
+<div class="t num" style="left:1564px;top:29px;width:40px">+20</div>
+<div class="scr" style="left:72px;top:12px;width:266px;height:14px"></div>
+<div class="t note" style="left:74px;top:13px">TILES &plusmn; FROM DATUM A &middot; FIRST ANGLE</div>
+<div class="scr" style="left:1598px;top:12px;width:298px;height:14px"></div>
+<div class="t note" style="left:1602px;top:13px">SCALE 1T = 32 PX &middot; GRID 5T = 160 PX</div>
+
+<!-- sight-range bracket, struck off the datum : light level as reach -->
+<div class="brkt" style="left:816px;top:62px;width:254px;height:8px"></div>
+<div class="scr" style="left:832px;top:70px;width:224px;height:13px"></div>
+<div class="t brktcap" style="left:832px;top:71px;width:224px">SIGHT R 4 T &middot; LIGHT 12% MOON</div>
+
+<!-- ============ LEFT RULER ============ -->
+<div class="axis" style="left:52px;top:60px;width:1px;height:992px"></div>
+<div class="tkmv" style="left:53px;top:208px;width:6px;height:641px"></div>
+<div class="tkMv" style="left:53px;top:208px;width:13px;height:801px"></div>
+<div class="scr" style="left:16px;top:194px;width:34px;height:15px"></div>
+<div class="t num" style="left:16px;top:195px;width:34px">-10</div>
+<div class="scr" style="left:16px;top:354px;width:34px;height:15px"></div>
+<div class="t num" style="left:16px;top:355px;width:34px">-5</div>
+<div class="scr" style="left:16px;top:514px;width:34px;height:15px"></div>
+<div class="t num zero" style="left:16px;top:515px;width:34px">0</div>
+<div class="scr" style="left:16px;top:674px;width:34px;height:15px"></div>
+<div class="t num" style="left:16px;top:675px;width:34px">+5</div>
+<div class="scr" style="left:16px;top:834px;width:34px;height:15px"></div>
+<div class="t num" style="left:16px;top:835px;width:34px">+10</div>
+<div class="scr" style="left:16px;top:994px;width:34px;height:15px"></div>
+<div class="t num" style="left:16px;top:995px;width:34px">+15</div>
+
+<!-- ================================================================== -->
+<!-- ELEVATION 1 : the body as a dimensioned elevation.                  -->
+<!-- Six parts, six independent dimension strings. The dimension VALUE   -->
+<!-- is the part's health; the line length is max, the solid is current.  -->
+<!-- ================================================================== -->
+<div class="scr" style="left:70px;top:74px;width:268px;height:20px"></div>
+<div class="t vtitle" style="left:74px;top:77px">ELEVATION 1 &mdash; SUBJECT</div>
+<div class="scr" style="left:466px;top:76px;width:56px;height:15px"></div>
+<div class="t vtag" style="left:466px;top:78px;width:54px;text-align:right">1:1</div>
+<div class="bp07-hl bg-cyn" style="left:72px;top:98px;width:448px;height:1px"></div>
+<div class="scr" style="left:70px;top:103px;width:432px;height:14px"></div>
+<div class="t vsub" style="left:74px;top:104px">REAR VIEW &middot; DIM VALUE = CUR/MAX &middot; SOLID = CUR</div>
+
+<!-- figure : anthropometric elevation, centreline x=288, crown y=124,
+     ground line y=458. REAR VIEW, so screen-left is the subject's LEFT.
+     Every limb is drawn as segments meeting at a joint marker so each
+     extension line can spring from the part it actually dimensions:
+       head    124..160   x 274..302
+       torso   172..296   x 262..314   (yoke + chest + waist + pelvis)
+       L arm   181..321   x 246..262   flagged CRITICAL
+       R arm   181..321   x 314..330
+       L leg   296..456   x 261..284
+       R leg   296..456   x 292..315                                  -->
+<div class="figaxis" style="left:288px;top:118px;width:1px;height:346px"></div>
+
+<!-- head, jaw, neck -->
+<div class="fig" style="left:274px;top:124px;width:28px;height:36px;border-radius:14px 14px 12px 12px"></div>
+<div class="hatch amb" style="left:276px;top:126px;width:24px;height:32px;border-radius:12px"></div>
+<div class="fig thin" style="left:278px;top:150px;width:20px;height:1px"></div>
+<div class="fig" style="left:283px;top:160px;width:10px;height:12px"></div>
+
+<!-- shoulder yoke : the arms hang off this, so they read as attached -->
+<div class="fig" style="left:248px;top:172px;width:80px;height:9px"></div>
+
+<!-- trunk : three plates, so it tapers chest -> waist -> pelvis -->
+<div class="fig" style="left:262px;top:181px;width:52px;height:57px"></div>
+<div class="hatch amb" style="left:264px;top:183px;width:48px;height:53px"></div>
+<div class="fig" style="left:270px;top:238px;width:36px;height:30px"></div>
+<div class="hatch amb" style="left:272px;top:240px;width:32px;height:26px"></div>
+<div class="fig" style="left:262px;top:268px;width:52px;height:28px"></div>
+<div class="hatch amb" style="left:264px;top:270px;width:48px;height:24px"></div>
+<div class="fig thin" style="left:266px;top:296px;width:44px;height:1px"></div>
+
+<!-- subject's LEFT arm (screen left) : 8/30 CRITICAL. heavier accent edge,
+     tighter red hatch, and the only limb whose joints are also accented. -->
+<div class="fig crit" style="left:246px;top:181px;width:16px;height:62px"></div>
+<div class="hatch red" style="left:249px;top:184px;width:10px;height:56px"></div>
+<div class="fig crit" style="left:245px;top:239px;width:18px;height:10px;border-radius:9px"></div>
+<div class="fig crit" style="left:247px;top:249px;width:14px;height:54px"></div>
+<div class="hatch red" style="left:250px;top:252px;width:8px;height:48px"></div>
+<div class="fig crit" style="left:246px;top:303px;width:16px;height:18px;border-radius:4px 4px 8px 8px"></div>
+<div class="hatch red" style="left:249px;top:306px;width:10px;height:12px"></div>
+
+<!-- subject's RIGHT arm (screen right) : 30/30, no hatch -->
+<div class="fig" style="left:316px;top:181px;width:12px;height:62px"></div>
+<div class="fig" style="left:315px;top:239px;width:14px;height:9px;border-radius:7px"></div>
+<div class="fig" style="left:317px;top:248px;width:10px;height:55px"></div>
+<div class="fig" style="left:314px;top:303px;width:16px;height:18px;border-radius:4px 4px 8px 8px"></div>
+
+<!-- subject's LEFT leg : 22/28 -->
+<div class="fig" style="left:266px;top:296px;width:17px;height:78px"></div>
+<div class="hatch amb" style="left:268px;top:298px;width:13px;height:74px"></div>
+<div class="fig" style="left:265px;top:370px;width:19px;height:9px;border-radius:9px"></div>
+<div class="fig" style="left:268px;top:379px;width:13px;height:65px"></div>
+<div class="hatch amb" style="left:270px;top:381px;width:9px;height:61px"></div>
+<div class="fig" style="left:261px;top:444px;width:23px;height:12px;border-radius:3px 3px 6px 6px"></div>
+
+<!-- subject's RIGHT leg : 28/28 -->
+<div class="fig" style="left:293px;top:296px;width:17px;height:78px"></div>
+<div class="fig" style="left:292px;top:370px;width:19px;height:9px;border-radius:9px"></div>
+<div class="fig" style="left:295px;top:379px;width:13px;height:65px"></div>
+<div class="fig" style="left:292px;top:444px;width:23px;height:12px;border-radius:3px 3px 6px 6px"></div>
+<div class="figfoot" style="left:252px;top:458px;width:72px;height:1px"></div>
+
+<!-- HEAD 20/24 -->
+<div class="ext" style="left:302px;top:140px;width:50px"></div>
+<div class="dimline bg-amb" style="left:352px;top:140px;width:160px"></div>
+<div class="dimfill bg-amb" style="left:352px;top:138px;width:133px;height:5px"></div>
+<div class="wit bg-amb" style="left:352px;top:131px;height:19px"></div>
+<div class="wit bg-amb" style="left:512px;top:131px;height:19px"></div>
+<div class="ah bg-amb" style="left:348px;top:136px;width:9px;height:9px"></div>
+<div class="ah bg-amb" style="left:508px;top:136px;width:9px;height:9px"></div>
+<div class="valscr" style="left:349px;top:115px;width:60px;height:19px"></div>
+<div class="t dimval fg-amb" style="left:352px;top:117px;width:160px">20/24</div>
+<div class="scr" style="left:350px;top:146px;width:44px;height:13px"></div>
+<div class="t dimname" style="left:352px;top:147px">HEAD</div>
+
+<!-- TORSO 45/60 -->
+<div class="ext" style="left:314px;top:196px;width:38px"></div>
+<div class="dimline bg-amb" style="left:352px;top:196px;width:160px"></div>
+<div class="dimfill bg-amb" style="left:352px;top:194px;width:120px;height:5px"></div>
+<div class="wit bg-amb" style="left:352px;top:187px;height:19px"></div>
+<div class="wit bg-amb" style="left:512px;top:187px;height:19px"></div>
+<div class="ah bg-amb" style="left:348px;top:192px;width:9px;height:9px"></div>
+<div class="ah bg-amb" style="left:508px;top:192px;width:9px;height:9px"></div>
+<div class="valscr" style="left:349px;top:171px;width:60px;height:19px"></div>
+<div class="t dimval fg-amb" style="left:352px;top:173px;width:160px">45/60</div>
+<div class="scr" style="left:350px;top:202px;width:52px;height:13px"></div>
+<div class="t dimname" style="left:352px;top:203px">TORSO</div>
+
+<!-- R ARM 30/30 -->
+<div class="ext" style="left:327px;top:252px;width:25px"></div>
+<div class="dimline bg-cyn" style="left:352px;top:252px;width:160px"></div>
+<div class="dimfill bg-cyn" style="left:352px;top:250px;width:160px;height:5px"></div>
+<div class="wit bg-cyn" style="left:352px;top:243px;height:19px"></div>
+<div class="wit bg-cyn" style="left:512px;top:243px;height:19px"></div>
+<div class="ah bg-cyn" style="left:348px;top:248px;width:9px;height:9px"></div>
+<div class="ah bg-cyn" style="left:508px;top:248px;width:9px;height:9px"></div>
+<div class="valscr" style="left:349px;top:227px;width:60px;height:19px"></div>
+<div class="t dimval fg-cyn" style="left:352px;top:229px;width:160px">30/30</div>
+<div class="scr" style="left:350px;top:258px;width:52px;height:13px"></div>
+<div class="t dimname" style="left:352px;top:259px">R ARM</div>
+
+<!-- R LEG 28/28 -->
+<div class="ext" style="left:308px;top:400px;width:44px"></div>
+<div class="dimline bg-cyn" style="left:352px;top:400px;width:160px"></div>
+<div class="dimfill bg-cyn" style="left:352px;top:398px;width:160px;height:5px"></div>
+<div class="wit bg-cyn" style="left:352px;top:391px;height:19px"></div>
+<div class="wit bg-cyn" style="left:512px;top:391px;height:19px"></div>
+<div class="ah bg-cyn" style="left:348px;top:396px;width:9px;height:9px"></div>
+<div class="ah bg-cyn" style="left:508px;top:396px;width:9px;height:9px"></div>
+<div class="valscr" style="left:349px;top:375px;width:60px;height:19px"></div>
+<div class="t dimval fg-cyn" style="left:352px;top:377px;width:160px">28/28</div>
+<div class="scr" style="left:350px;top:406px;width:52px;height:13px"></div>
+<div class="t dimname" style="left:352px;top:407px">R LEG</div>
+
+<!-- L ARM 8/30 : the one dimension drawn in the callout accent -->
+<div class="ext" style="left:232px;top:224px;width:14px"></div>
+<div class="dimline bg-cal" style="left:72px;top:224px;width:160px"></div>
+<div class="dimfill bg-cal" style="left:189px;top:222px;width:43px;height:5px"></div>
+<div class="wit bg-cal" style="left:72px;top:215px;height:19px"></div>
+<div class="wit bg-cal" style="left:232px;top:215px;height:19px"></div>
+<div class="ah bg-cal" style="left:68px;top:220px;width:9px;height:9px"></div>
+<div class="ah bg-cal" style="left:228px;top:220px;width:9px;height:9px"></div>
+<div class="valscr" style="left:184px;top:199px;width:52px;height:19px"></div>
+<div class="t dimval fg-cal" style="left:72px;top:201px;width:160px;text-align:right">8/30</div>
+<div class="scr" style="left:96px;top:230px;width:138px;height:13px"></div>
+<div class="t dimname cal" style="left:72px;top:231px;width:160px;text-align:right">L ARM &mdash; CRITICAL</div>
+
+<!-- L LEG 22/28 -->
+<div class="ext" style="left:232px;top:372px;width:33px"></div>
+<div class="dimline bg-amb" style="left:72px;top:372px;width:160px"></div>
+<div class="dimfill bg-amb" style="left:106px;top:370px;width:126px;height:5px"></div>
+<div class="wit bg-amb" style="left:72px;top:363px;height:19px"></div>
+<div class="wit bg-amb" style="left:232px;top:363px;height:19px"></div>
+<div class="ah bg-amb" style="left:68px;top:368px;width:9px;height:9px"></div>
+<div class="ah bg-amb" style="left:228px;top:368px;width:9px;height:9px"></div>
+<div class="valscr" style="left:180px;top:347px;width:56px;height:19px"></div>
+<div class="t dimval fg-amb" style="left:72px;top:349px;width:160px;text-align:right">22/28</div>
+<div class="scr" style="left:182px;top:378px;width:52px;height:13px"></div>
+<div class="t dimname" style="left:72px;top:379px;width:160px;text-align:right">L LEG</div>
+
+<!-- note-flag group, leadered to the L arm : hazard flag + drawing notes 1,2 -->
+<div class="lead cal" style="left:150px;top:156px;width:63px"></div>
+<div class="lead cal" style="left:213px;top:156px;width:50.91px;transform-origin:0 50%;transform:rotate(45deg)"></div>
+<div class="ah bg-cal" style="left:245px;top:188px;width:9px;height:9px"></div>
+<div class="hazflag" style="left:72px;top:146px;width:20px;height:20px"><span class="hzg">!</span></div>
+<div class="nflag" style="left:98px;top:146px;width:20px;height:20px"><span class="nfg">1</span></div>
+<div class="nflag" style="left:124px;top:146px;width:20px;height:20px"><span class="nfg">2</span></div>
+<div class="scr" style="left:70px;top:170px;width:150px;height:14px"></div>
+<div class="t flagcap" style="left:72px;top:171px">BLEEDING &middot; BITTEN</div>
+
+<div class="scr" style="left:70px;top:474px;width:446px;height:14px"></div>
+<div class="t caption" style="left:74px;top:475px">DIMENSIONED INDEPENDENTLY &mdash; NO AGGREGATE FIGURE IS DRAWN</div>
+
+<!-- ================================================================== -->
+<!-- TABLE 1 : SPECIFICATION. cell interiors are washed, not boxed.      -->
+<!-- ================================================================== -->
+<div class="fillA" style="left:72px;top:520px;width:448px;height:220px"></div>
+<div class="t thead" style="left:80px;top:525px">SPECIFICATION</div>
+<div class="t thead r" style="left:340px;top:525px;width:172px">TABLE 1</div>
+<div class="bp07-hl bg-cyn" style="left:72px;top:542px;width:448px;height:1px"></div>
+<div class="vrule" style="left:296px;top:542px;width:1px;height:198px"></div>
+<div class="bp07-hl" style="left:72px;top:564px;width:448px;height:1px"></div>
+<div class="bp07-hl" style="left:72px;top:586px;width:448px;height:1px"></div>
+<div class="bp07-hl" style="left:72px;top:608px;width:448px;height:1px"></div>
+<div class="bp07-hl" style="left:72px;top:630px;width:448px;height:1px"></div>
+<div class="bp07-hl" style="left:72px;top:652px;width:448px;height:1px"></div>
+<div class="bp07-hl" style="left:72px;top:674px;width:448px;height:1px"></div>
+<div class="bp07-hl" style="left:72px;top:696px;width:448px;height:1px"></div>
+<div class="bp07-hl" style="left:72px;top:718px;width:448px;height:1px"></div>
+<div class="bp07-hl bg-cyn" style="left:72px;top:740px;width:448px;height:1px"></div>
+
+<div class="t cellab" style="left:80px;top:547px">STR</div>
+<div class="t celval fg-cyn" style="left:176px;top:546px;width:112px;text-align:right">10</div>
+<div class="t cellab" style="left:304px;top:547px">DEX</div>
+<div class="t celval fg-cyn" style="left:400px;top:546px;width:112px;text-align:right">12</div>
+<div class="t cellab" style="left:80px;top:569px">INT</div>
+<div class="t celval fg-cyn" style="left:176px;top:568px;width:112px;text-align:right">9</div>
+<div class="t cellab" style="left:304px;top:569px">PER</div>
+<div class="t celval fg-cyn" style="left:400px;top:568px;width:112px;text-align:right">11</div>
+<div class="t cellab" style="left:80px;top:591px">SPEED</div>
+<div class="t celval fg-cyn" style="left:176px;top:590px;width:112px;text-align:right">96</div>
+<div class="t cellab" style="left:304px;top:591px">FOCUS</div>
+<div class="t celval fg-cyn" style="left:400px;top:590px;width:112px;text-align:right">84</div>
+<div class="t cellab" style="left:80px;top:613px">PAIN</div>
+<div class="t celval fg-amb" style="left:176px;top:612px;width:112px;text-align:right">12</div>
+<div class="t cellab" style="left:304px;top:613px">MORALE</div>
+<div class="t celval fg-amb" style="left:400px;top:612px;width:112px;text-align:right">&minus;3</div>
+<div class="t cellab" style="left:80px;top:635px">ENC TORSO</div>
+<div class="t celval fg-cyn" style="left:176px;top:634px;width:112px;text-align:right">12</div>
+<div class="t cellab" style="left:304px;top:635px">ENC ARMS</div>
+<div class="t celval fg-cyn" style="left:400px;top:634px;width:112px;text-align:right">4</div>
+<div class="t cellab" style="left:80px;top:657px">MOVE MODE</div>
+<div class="t celval fg-cyn" style="left:176px;top:656px;width:112px;text-align:right">WALKING</div>
+<div class="t cellab" style="left:304px;top:657px">NOISE</div>
+<div class="t celval fg-cyn" style="left:400px;top:656px;width:112px;text-align:right">8</div>
+
+<div class="t cellab" style="left:80px;top:679px">STAMINA</div>
+<div class="gbar" style="left:154px;top:682px;width:200px;height:8px"></div>
+<div class="gfill bg-amb" style="left:155px;top:683px;width:117px;height:6px"></div>
+<div class="t celval fg-amb" style="left:368px;top:678px;width:144px;text-align:right">5100 / 8700</div>
+
+<div class="t cellab" style="left:80px;top:701px">HUNGER</div>
+<div class="t celval fg-amb" style="left:176px;top:700px;width:112px;text-align:right">PECKISH</div>
+<div class="t cellab" style="left:304px;top:701px">THIRST</div>
+<div class="t celval fg-amb" style="left:400px;top:700px;width:112px;text-align:right">THIRSTY</div>
+<div class="t cellab" style="left:80px;top:723px">FATIGUE</div>
+<div class="t celval fg-amb" style="left:176px;top:722px;width:112px;text-align:right">TIRED</div>
+<div class="t cellab" style="left:304px;top:723px">WARMTH</div>
+<div class="t celval fg-amb" style="left:400px;top:722px;width:112px;text-align:right">CHILLY</div>
+
+<!-- ================================================================== -->
+<!-- REVISION HISTORY : the message log. Newest at the FOOT, which is    -->
+<!-- the drafting convention on a title-block revision table.            -->
+<!-- ================================================================== -->
+<div class="fillA" style="left:72px;top:796px;width:474px;height:154px"></div>
+<div class="t thead" style="left:80px;top:801px">REVISION HISTORY</div>
+<div class="t thead r" style="left:350px;top:801px;width:188px">LATEST AT FOOT</div>
+<div class="bp07-hl bg-cyn" style="left:72px;top:818px;width:474px;height:1px"></div>
+<div class="vrule" style="left:114px;top:818px;width:1px;height:132px"></div>
+<div class="vrule" style="left:170px;top:818px;width:1px;height:132px"></div>
+<div class="bp07-hl" style="left:72px;top:840px;width:474px;height:1px"></div>
+<div class="bp07-hl" style="left:72px;top:862px;width:474px;height:1px"></div>
+<div class="bp07-hl" style="left:72px;top:884px;width:474px;height:1px"></div>
+<div class="bp07-hl" style="left:72px;top:906px;width:474px;height:1px"></div>
+<div class="bp07-hl" style="left:72px;top:928px;width:474px;height:1px"></div>
+<div class="bp07-hl bg-cyn" style="left:72px;top:950px;width:474px;height:1px"></div>
+
+<div class="t revid" style="left:80px;top:823px;opacity:.60">A</div>
+<div class="t revtime" style="left:122px;top:824px;opacity:.60">21:46</div>
+<div class="t revtxt lg-ok" style="left:178px;top:823px;opacity:.60">You hit the zombie brute with your fire axe.</div>
+<div class="t revid" style="left:80px;top:845px;opacity:.72">B</div>
+<div class="t revtime" style="left:122px;top:846px;opacity:.72">21:46</div>
+<div class="t revtxt lg-bad" style="left:178px;top:845px;opacity:.72">The zombie brute claws your left arm!</div>
+<div class="t revid" style="left:80px;top:867px;opacity:.82">C</div>
+<div class="t revtime" style="left:122px;top:868px;opacity:.82">21:47</div>
+<div class="t revtxt lg-bad" style="left:178px;top:867px;opacity:.82">Your left arm is bleeding.</div>
+<div class="t revid" style="left:80px;top:889px;opacity:.88">D</div>
+<div class="t revtime" style="left:122px;top:890px;opacity:.88">21:47</div>
+<div class="t revtxt lg-bad2" style="left:178px;top:889px;opacity:.88">You feel a sharp pain.</div>
+<div class="t revid" style="left:80px;top:911px;opacity:.94">E</div>
+<div class="t revtime" style="left:122px;top:912px;opacity:.94">21:47</div>
+<div class="t revtxt lg-caut" style="left:178px;top:911px;opacity:.94">The zombie shambler groans nearby.</div>
+<div class="newbar" style="left:72px;top:928px;width:3px;height:22px"></div>
+<div class="t revid cal" style="left:80px;top:933px">F</div>
+<div class="t revtime" style="left:122px;top:934px">21:47</div>
+<div class="t revtxt lg-caut" style="left:178px;top:933px">You are getting thirsty.</div>
+<div class="scr" style="left:70px;top:954px;width:420px;height:14px"></div>
+<div class="t caption" style="left:74px;top:955px">REV F CURRENT &middot; ROWS FADE WITH AGE, NOT WITH IMPORTANCE</div>
+
+<!-- ================================================================== -->
+<!-- KEY : a drawing legend. nine symbols, each with its meaning.        -->
+<!-- ================================================================== -->
+<div class="fillC" style="left:72px;top:1000px;width:1324px;height:36px"></div>
+<div class="bp07-hl bg-cyn" style="left:72px;top:1000px;width:1324px;height:1px"></div>
+<div class="t thead" style="left:82px;top:1013px">KEY &mdash; COMMANDS</div>
+<div class="vrule" style="left:212px;top:1000px;width:1px;height:36px"></div>
+
+<div class="t kn na" style="left:218px;top:1012px">1</div>
+<div class="kcap na" style="left:230px;top:1010px;width:15px;height:15px"><span class="kg">f</span></div>
+<div class="kstrike" style="left:228px;top:1017px;width:19px;height:1px;transform:rotate(-42deg)"></div>
+<div class="t klab na" style="left:251px;top:1013px">FIRE</div>
+<div class="t knax" style="left:294px;top:1013px">N/A</div>
+<div class="vrule" style="left:343px;top:1000px;width:1px;height:36px"></div>
+
+<div class="t kn" style="left:349px;top:1012px">2</div>
+<div class="kcap" style="left:361px;top:1010px;width:15px;height:15px"><span class="kg">r</span></div>
+<div class="t klab" style="left:382px;top:1013px">RELOAD</div>
+<div class="vrule" style="left:474px;top:1000px;width:1px;height:36px"></div>
+
+<div class="t kn" style="left:480px;top:1012px">3</div>
+<div class="kcap" style="left:492px;top:1010px;width:15px;height:15px"><span class="kg">&#39;</span></div>
+<div class="t klab" style="left:513px;top:1013px">RUN</div>
+<div class="vrule" style="left:605px;top:1000px;width:1px;height:36px"></div>
+
+<div class="t kn" style="left:611px;top:1012px">4</div>
+<div class="kcap" style="left:623px;top:1010px;width:15px;height:15px"><span class="kg">e</span></div>
+<div class="t klab" style="left:644px;top:1013px">EXAMINE</div>
+<div class="vrule" style="left:736px;top:1000px;width:1px;height:36px"></div>
+
+<div class="t kn" style="left:742px;top:1012px">5</div>
+<div class="kcap" style="left:754px;top:1010px;width:15px;height:15px"><span class="kg">p</span></div>
+<div class="t klab" style="left:775px;top:1013px">PICK UP</div>
+<div class="vrule" style="left:867px;top:1000px;width:1px;height:36px"></div>
+
+<div class="t kn" style="left:873px;top:1012px">6</div>
+<div class="kcap" style="left:885px;top:1010px;width:15px;height:15px"><span class="kg">c</span></div>
+<div class="t klab" style="left:906px;top:1013px">CRAFT</div>
+<div class="vrule" style="left:998px;top:1000px;width:1px;height:36px"></div>
+
+<div class="t kn" style="left:1004px;top:1012px">7</div>
+<div class="kcap" style="left:1016px;top:1010px;width:15px;height:15px"><span class="kg">i</span></div>
+<div class="t klab" style="left:1037px;top:1013px">INVENTORY</div>
+<div class="vrule" style="left:1129px;top:1000px;width:1px;height:36px"></div>
+
+<div class="t kn" style="left:1135px;top:1012px">8</div>
+<div class="kcap" style="left:1147px;top:1010px;width:15px;height:15px"><span class="kg">t</span></div>
+<div class="t klab" style="left:1168px;top:1013px">THROW</div>
+<div class="vrule" style="left:1260px;top:1000px;width:1px;height:36px"></div>
+
+<div class="t kn" style="left:1266px;top:1012px">9</div>
+<div class="kcap" style="left:1278px;top:1010px;width:15px;height:15px"><span class="kg">5</span></div>
+<div class="t klab" style="left:1299px;top:1013px">WAIT</div>
+
+<!-- ================================================================== -->
+<!-- FIELD ANNOTATION : datum A on the avatar, reticle on the hostile,   -->
+<!-- ordinate dimensions between them, and two parallel 45-degree        -->
+<!-- leaders doglegging to a shared shoulder at x=1264 and landing on    -->
+<!-- the right margin line at x=1544.                                    -->
+<!-- ================================================================== -->
+
+<!-- datum A : the avatar at (944,528) -->
+<div class="dcirc" style="left:931px;top:515px;width:24px;height:24px"></div>
+<div class="dcross" style="left:906px;top:527px;width:25px;height:1px"></div>
+<div class="dcross" style="left:957px;top:527px;width:25px;height:1px"></div>
+<div class="dcross" style="left:943px;top:490px;width:1px;height:25px"></div>
+<div class="dcross" style="left:943px;top:541px;width:1px;height:25px"></div>
+<div class="ext" style="left:943px;top:590px;width:1px;height:1px"></div>
+<div class="dcross" style="left:943px;top:566px;width:1px;height:24px;opacity:.6"></div>
+<div class="dcross" style="left:880px;top:590px;width:64px;height:1px;opacity:.6"></div>
+<div class="dattri" style="left:873px;top:590px"></div>
+<div class="datbox" style="left:846px;top:582px;width:18px;height:18px"><span class="dg">A</span></div>
+<div class="scr" style="left:950px;top:582px;width:126px;height:14px"></div>
+<div class="t datlab" style="left:952px;top:583px">DATUM A &middot; 0,0</div>
+
+<!-- reticle : zombie brute -->
+<div class="rcirc" style="left:955px;top:379px;width:40px;height:40px"></div>
+<div class="rtick" style="left:975px;top:366px;width:1px;height:11px"></div>
+<div class="rtick" style="left:975px;top:423px;width:1px;height:11px"></div>
+<div class="rtick" style="left:942px;top:399px;width:11px;height:1px"></div>
+<div class="rtick" style="left:999px;top:399px;width:11px;height:1px"></div>
+
+<!-- ordinate dimension : 4 tiles north -->
+<div class="ext" style="left:905px;top:400px;width:50px"></div>
+<div class="ext" style="left:905px;top:528px;width:26px"></div>
+<div class="dimline bg-cyn" style="left:913px;top:400px;width:1px;height:128px"></div>
+<div class="ah bg-cyn" style="left:909px;top:396px;width:9px;height:9px"></div>
+<div class="ah bg-cyn" style="left:909px;top:524px;width:9px;height:9px"></div>
+<div class="scr" style="left:836px;top:456px;width:66px;height:15px"></div>
+<div class="t odlab" style="left:836px;top:457px;width:62px;text-align:right">4 T N</div>
+
+<!-- ordinate dimension : 1 tile east -->
+<div class="ext" style="left:944px;top:568px;width:1px;height:1px"></div>
+<div class="dcross" style="left:944px;top:542px;width:1px;height:26px;opacity:.45"></div>
+<div class="dcross" style="left:976px;top:421px;width:1px;height:147px;opacity:.45"></div>
+<div class="dimline bg-cyn" style="left:944px;top:568px;width:32px"></div>
+<div class="wit bg-cyn" style="left:944px;top:561px;height:15px"></div>
+<div class="wit bg-cyn" style="left:976px;top:561px;height:15px"></div>
+<div class="ah bg-cyn" style="left:930px;top:564px;width:9px;height:9px"></div>
+<div class="ah bg-cyn" style="left:982px;top:564px;width:9px;height:9px"></div>
+<div class="scr" style="left:994px;top:561px;width:62px;height:15px"></div>
+<div class="t odlab" style="left:996px;top:562px">1 T E</div>
+
+<!-- LEADER 1 : hostile -> right margin. 45 deg oblique, shoulder x=1264,
+     horizontal landing at y=112 which is the underline of its label. -->
+<div class="lead" style="left:991px;top:385px;width:386.08px;transform-origin:0 50%;transform:rotate(-45deg)"></div>
+<div class="lead" style="left:1264px;top:112px;width:292px"></div>
+<div class="ah bg-cyn" style="left:986px;top:380px;width:10px;height:10px"></div>
+<div class="landtick" style="left:1543px;top:104px;height:16px"></div>
+
+<!-- LEADER 2 : subject -> right margin. parallel to leader 1, same shoulder. -->
+<div class="lead" style="left:953px;top:517px;width:439.82px;transform-origin:0 50%;transform:rotate(-45deg)"></div>
+<div class="lead" style="left:1264px;top:206px;width:292px"></div>
+<div class="ah bg-cyn" style="left:948px;top:512px;width:10px;height:10px"></div>
+<div class="landtick" style="left:1543px;top:198px;height:16px"></div>
+<!-- ================================================================== -->
+<!-- CALLOUT 1 : where leader 1 lands. the contact, identified.          -->
+<!-- ================================================================== -->
+<div class="calbar" style="left:1556px;top:100px;width:3px;height:52px"></div>
+<div class="scr" style="left:1562px;top:99px;width:256px;height:17px"></div>
+<div class="t callab" style="left:1566px;top:101px">CONTACT 1 &mdash; zombie brute</div>
+<div class="scr" style="left:1562px;top:118px;width:236px;height:15px"></div>
+<div class="t calsub" style="left:1566px;top:119px">HP 62% &middot; moving &middot; 4 tiles NE</div>
+<div class="gbar" style="left:1566px;top:137px;width:180px;height:9px"></div>
+<div class="gfill bg-red" style="left:1567px;top:138px;width:110px;height:7px"></div>
+<div class="scr" style="left:1754px;top:135px;width:38px;height:15px"></div>
+<div class="t celval fg-red" style="left:1756px;top:135px">62%</div>
+
+<!-- ================================================================== -->
+<!-- CALLOUT 2 : where leader 2 lands. the subject, identified.          -->
+<!-- ================================================================== -->
+<div class="calbar" style="left:1556px;top:194px;width:3px;height:52px"></div>
+<div class="scr" style="left:1562px;top:193px;width:256px;height:17px"></div>
+<div class="t callab" style="left:1566px;top:195px">SUBJECT &mdash; Nigel Ashby</div>
+<div class="scr" style="left:1562px;top:212px;width:212px;height:15px"></div>
+<div class="t calsub" style="left:1566px;top:213px">Survivor &middot; day 14 &middot; 21:47</div>
+<div class="scr" style="left:1562px;top:228px;width:190px;height:15px"></div>
+<div class="t calsub" style="left:1566px;top:229px">Cheswick &mdash; residential</div>
+
+<!-- ================================================================== -->
+<!-- TABLE 2 : CONTACT &amp; HAZARD SCHEDULE                                -->
+<!-- ================================================================== -->
+<div class="fillA" style="left:1556px;top:268px;width:340px;height:132px"></div>
+<div class="t thead" style="left:1564px;top:273px">HAZARD SCHEDULE</div>
+<div class="t thead r" style="left:1740px;top:273px;width:148px">TABLE 2</div>
+<div class="bp07-hl bg-cyn" style="left:1556px;top:290px;width:340px;height:1px"></div>
+<div class="vrule" style="left:1716px;top:290px;width:1px;height:110px"></div>
+<div class="bp07-hl" style="left:1556px;top:312px;width:340px;height:1px"></div>
+<div class="bp07-hl" style="left:1556px;top:334px;width:340px;height:1px"></div>
+<div class="bp07-hl" style="left:1556px;top:356px;width:340px;height:1px"></div>
+<div class="bp07-hl" style="left:1556px;top:378px;width:340px;height:1px"></div>
+<div class="bp07-hl bg-cyn" style="left:1556px;top:400px;width:340px;height:1px"></div>
+<div class="t cellab" style="left:1564px;top:295px">HOSTILES VISIBLE</div>
+<div class="t celval fg-red" style="left:1724px;top:294px;width:164px;text-align:right">3</div>
+<div class="t cellab" style="left:1564px;top:317px">TRACKING SUBJECT</div>
+<div class="t celval fg-red" style="left:1724px;top:316px;width:164px;text-align:right">1</div>
+<div class="t cellab" style="left:1564px;top:339px">SAFETY INTERLOCK</div>
+<div class="t celval fg-cal" style="left:1724px;top:338px;width:164px;text-align:right">SAFE MODE ON</div>
+<div class="t cellab" style="left:1564px;top:361px">CONTACT 1</div>
+<div class="t celval fg-red" style="left:1724px;top:360px;width:164px;text-align:right">zombie brute</div>
+<div class="t cellab" style="left:1564px;top:383px">RANGE &middot; BEARING</div>
+<div class="t celval fg-cyn" style="left:1724px;top:382px;width:164px;text-align:right">4 tiles NE</div>
+
+<!-- ================================================================== -->
+<!-- TABLE 3 : ARMAMENT &amp; EQUIPMENT SCHEDULE                            -->
+<!-- ================================================================== -->
+<div class="fillA" style="left:1556px;top:412px;width:340px;height:154px"></div>
+<div class="t thead" style="left:1564px;top:417px">ARMAMENT SCHEDULE</div>
+<div class="t thead r" style="left:1740px;top:417px;width:148px">TABLE 3</div>
+<div class="bp07-hl bg-cyn" style="left:1556px;top:434px;width:340px;height:1px"></div>
+<div class="vrule" style="left:1716px;top:434px;width:1px;height:132px"></div>
+<div class="bp07-hl" style="left:1556px;top:456px;width:340px;height:1px"></div>
+<div class="bp07-hl" style="left:1556px;top:478px;width:340px;height:1px"></div>
+<div class="bp07-hl" style="left:1556px;top:500px;width:340px;height:1px"></div>
+<div class="bp07-hl" style="left:1556px;top:522px;width:340px;height:1px"></div>
+<div class="bp07-hl" style="left:1556px;top:544px;width:340px;height:1px"></div>
+<div class="bp07-hl bg-cyn" style="left:1556px;top:566px;width:340px;height:1px"></div>
+<div class="t cellab" style="left:1564px;top:439px">WIELDED</div>
+<div class="t celval fg-cal" style="left:1724px;top:438px;width:164px;text-align:right">fire axe</div>
+<div class="t cellab" style="left:1564px;top:461px">DAMAGE</div>
+<div class="t celval fg-cyn" style="left:1724px;top:460px;width:164px;text-align:right">32 bash / 0 cut</div>
+<div class="t cellab" style="left:1564px;top:483px">TO-HIT</div>
+<div class="t celval fg-cyn" style="left:1724px;top:482px;width:164px;text-align:right">+1</div>
+<div class="t cellab" style="left:1564px;top:505px">SIDEARM &middot; STOWED</div>
+<div class="t celval fg-cyn" style="left:1724px;top:504px;width:164px;text-align:right">Glock 19</div>
+<div class="t cellab" style="left:1564px;top:527px">MAGAZINE</div>
+<div class="t celval fg-amb" style="left:1724px;top:526px;width:164px;text-align:right">12/17 &middot; 9mm JHP</div>
+<div class="t cellab" style="left:1564px;top:549px">FLASHLIGHT &middot; LIT</div>
+<div class="t celval fg-amb" style="left:1724px;top:548px;width:164px;text-align:right">34%</div>
+<div class="gbar" style="left:1724px;top:552px;width:56px;height:8px"></div>
+<div class="gfill bg-amb" style="left:1725px;top:553px;width:18px;height:6px"></div>
+
+<!-- ================================================================== -->
+<!-- KEY PLAN : the overmap chunk, drawn as a location plan at 1:8.      -->
+<!-- ================================================================== -->
+<div class="fillA" style="left:1556px;top:578px;width:340px;height:222px"></div>
+<div class="t thead" style="left:1564px;top:583px">KEY PLAN</div>
+<div class="t thead r" style="left:1740px;top:583px;width:148px">1 CELL = 1 OMT</div>
+<div class="bp07-hl bg-cyn" style="left:1556px;top:600px;width:340px;height:1px"></div>
+<div class="mapbox" style="left:1564px;top:606px;width:152px;height:190px"></div>
+<div class="t mrow" style="left:1572px;top:610px">...<span class="mg-f">FFF</span>.....</div>
+<div class="t mrow" style="left:1572px;top:626px">..<span class="mg-f">FFFFF</span>..<span class="mg-m">^</span>.</div>
+<div class="t mrow" style="left:1572px;top:642px">..<span class="mg-f">FF</span>..<span class="mg-f">FF</span>...</div>
+<div class="t mrow" style="left:1572px;top:658px">.<span class="mg-m">^</span>..<span class="mg-h">HH</span>..<span class="mg-f">F</span>..</div>
+<div class="t mrow" style="left:1572px;top:674px">...<span class="mg-h">HHHH</span>....</div>
+<div class="t mrow" style="left:1572px;top:690px">...<span class="mg-h">H</span><span class="mg-p">@</span><span class="mg-h">HH</span>....</div>
+<div class="t mrow" style="left:1572px;top:706px">...<span class="mg-h">HHH</span>..<span class="mg-f">FF</span>.</div>
+<div class="t mrow" style="left:1572px;top:722px">..<span class="mg-f">F</span>.....<span class="mg-f">FF</span>.</div>
+<div class="t mrow" style="left:1572px;top:738px">.<span class="mg-f">FF</span>.<span class="mg-m">^</span>....<span class="mg-f">F</span>.</div>
+<div class="t mrow" style="left:1572px;top:754px">.<span class="mg-f">FF</span>........</div>
+<div class="t mrow" style="left:1572px;top:770px">...........</div>
+<div class="t maplbl" style="left:1732px;top:612px"><span class="mg-p">@</span>  SUBJECT</div>
+<div class="t maplbl" style="left:1732px;top:632px"><span class="mg-h">H</span>  HOUSE</div>
+<div class="t maplbl" style="left:1732px;top:652px"><span class="mg-f">F</span>  FOREST</div>
+<div class="t maplbl" style="left:1732px;top:672px"><span class="mg-m">^</span>  MISSION NE</div>
+<div class="t maplbl" style="left:1732px;top:692px">.  FIELD</div>
+<div class="t caption" style="left:1732px;top:716px">SETTING OUT FROM</div>
+<div class="t caption" style="left:1732px;top:730px">DATUM A &middot; SEE</div>
+<div class="t caption" style="left:1732px;top:744px">FIELD ANNOTATION</div>
+
+<!-- ================================================================== -->
+<!-- DRAWING NOTES : the five effects, in priority order. Flags 1 and 2  -->
+<!-- are the ones drawn on ELEVATION 1.                                  -->
+<!-- ================================================================== -->
+<div class="fillA" style="left:1556px;top:812px;width:340px;height:108px"></div>
+<div class="t thead" style="left:1564px;top:817px">DRAWING NOTES</div>
+<div class="t thead r" style="left:1740px;top:817px;width:148px">5 IN FORCE</div>
+<div class="bp07-hl bg-cyn" style="left:1556px;top:834px;width:340px;height:1px"></div>
+<div class="t dimname cal" style="left:1564px;top:840px">1</div>
+<div class="t revtxt lg-bad" style="left:1584px;top:839px">Bleeding &mdash; L arm, see ELEV 1</div>
+<div class="t dimname cal" style="left:1564px;top:856px">2</div>
+<div class="t revtxt lg-bad" style="left:1584px;top:855px">Bitten &mdash; L arm, see ELEV 1</div>
+<div class="t dimname" style="left:1564px;top:872px">3</div>
+<div class="t revtxt lg-caut" style="left:1584px;top:871px">Soaked &mdash; drizzle, exposed</div>
+<div class="t dimname" style="left:1564px;top:888px">4</div>
+<div class="t revtxt lg-caut" style="left:1584px;top:887px">Tired &mdash; see TABLE 1 FATIGUE</div>
+<div class="t dimname" style="left:1564px;top:904px">5</div>
+<div class="t revtxt lg-caut" style="left:1584px;top:903px">Pain 12 &mdash; see TABLE 1 PAIN</div>
+
+<!-- ================================================================== -->
+<!-- REVISION STAMP : the season and the current revision letter.        -->
+<!-- ================================================================== -->
+<div class="stampbox" style="left:1424px;top:826px;width:120px;height:94px"></div>
+<div class="stampin" style="left:1430px;top:832px;width:108px;height:82px"></div>
+<div class="t stampt1" style="left:1430px;top:842px;width:108px">REVISION</div>
+<div class="t stampt2" style="left:1430px;top:856px;width:108px;line-height:26px">F</div>
+<div class="t stampt3" style="left:1430px;top:888px;width:108px">Autumn</div>
+<div class="t stampt3" style="left:1430px;top:900px;width:108px">day 14 &middot; 21:47</div>
+
+<!-- ================================================================== -->
+<!-- TITLE BLOCK : bottom-right, drafting convention. All drawing         -->
+<!-- metadata lives here — who the sheet is of, where, when, under what   -->
+<!-- conditions, at what scale, at what revision.                         -->
+<!-- ================================================================== -->
+<div class="fillC" style="left:1424px;top:932px;width:472px;height:104px"></div>
+<div class="bp07-hl bg-cyn" style="left:1424px;top:932px;width:472px;height:1px"></div>
+<div class="vrule" style="left:1700px;top:933px;width:1px;height:39px"></div>
+<div class="bp07-hl" style="left:1424px;top:972px;width:472px;height:1px"></div>
+<div class="bp07-hl" style="left:1424px;top:1000px;width:472px;height:1px"></div>
+<div class="bp07-hl" style="left:1424px;top:1018px;width:472px;height:1px"></div>
+<div class="bp07-hl bg-cyn" style="left:1424px;top:1036px;width:472px;height:1px"></div>
+<div class="t tbl" style="left:1432px;top:936px">SUBJECT OF SHEET</div>
+<div class="t tbbig" style="left:1432px;top:947px;line-height:24px">Nigel Ashby</div>
+<div class="t tbl" style="left:1708px;top:936px">ROLE</div>
+<div class="t tbv" style="left:1708px;top:951px">Survivor</div>
+<div class="t tbl" style="left:1432px;top:979px">LOCATION</div>
+<div class="t tbv" style="left:1512px;top:979px">Cheswick &mdash; residential</div>
+<div class="t tbl" style="left:1712px;top:979px">DATE</div>
+<div class="t tbv" style="left:1770px;top:979px">day 14 &middot; 21:47</div>
+<div class="t tbl" style="left:1432px;top:1002px">CONDITIONS</div>
+<div class="t tbv" style="left:1512px;top:1002px">Light drizzle &middot; 8 &deg;C &middot; wind NE 12 km/h</div>
+<div class="t tbl" style="left:1432px;top:1020px">SCALE</div>
+<div class="t tbcyn" style="left:1480px;top:1020px">1:1 &middot; 1 TILE = 32 PX</div>
+<div class="t tbl" style="left:1666px;top:1020px">REV</div>
+<div class="t tbcyn" style="left:1700px;top:1020px">Autumn &middot; sheet 1 of 1</div>
+
+
+</div></body></html>

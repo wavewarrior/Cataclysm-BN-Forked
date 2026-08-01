@@ -48,7 +48,14 @@ std::string rml_escape( const std::string& s )
 // themed hex so RmlUi menus match the theme (the raw curses RGB is a harsh pure
 // green/red); everything else falls back to the curses RGB. Scoped to RmlUi text
 // only — the tile/world render path doesn't use this function.
+//
+// The HUD gets a second cache and a second override layer on top: its chrome is
+// a cool teal set, and the warm gruvbox game palette never sat right inside it.
+// hud_color_to_hex() consults "hud_colors" first and falls through to exactly the
+// menu path when a colour has no HUD-specific restatement, so the HUD can recolour
+// as much or as little of the palette as it likes.
 static std::unordered_map<int, std::string> g_hex_cache;
+static std::unordered_map<int, std::string> g_hud_hex_cache;
 
 std::string nc_color_to_hex( const nc_color& color )
 {
@@ -65,11 +72,31 @@ std::string nc_color_to_hex( const nc_color& color )
     return hex;
 }
 
-void clear_nc_color_cache() { g_hex_cache.clear(); }
+std::string hud_color_to_hex( const nc_color& color )
+{
+    const int key = color;
+    const auto it = g_hud_hex_cache.find( key );
+    if( it != g_hud_hex_cache.end() ) { return it->second; }
+    std::string hex;
+    if( !ui_theme::hud_color_hex( color, hex ) ) {
+        hex = nc_color_to_hex( color );
+    }
+    g_hud_hex_cache[key] = hex;
+    return hex;
+}
+
+void clear_nc_color_cache()
+{
+    g_hex_cache.clear();
+    g_hud_hex_cache.clear();
+}
 
 // Convert a game string with <color_xxx> tags to RML markup with
 // <span style="color:…"> spans. Plain text segments are HTML-escaped.
-std::string cata_text_to_rml( const std::string& s )
+// `resolve` picks which palette the tags map through — see cata_text_to_rml and
+// cata_text_to_rml_hud below.
+static std::string cata_text_to_rml_with( const std::string& s,
+        std::string( *resolve )( const nc_color& ) )
 {
     const std::vector<std::string> segs = split_by_color( s );
     std::string result;
@@ -100,7 +127,7 @@ std::string cata_text_to_rml( const std::string& s )
             }
             if( tag.type == color_tag_parse_result::open_color_tag ) {
                 result += "<span style=\"color:";
-                result += nc_color_to_hex( tag.color );
+                result += resolve( tag.color );
                 result += "\">";
                 ++open_spans;
             } else if( tag.type == color_tag_parse_result::close_color_tag && open_spans > 0 ) {
@@ -114,6 +141,16 @@ std::string cata_text_to_rml( const std::string& s )
     }
     while( open_spans-- > 0 ) { result += "</span>"; }
     return result;
+}
+
+std::string cata_text_to_rml( const std::string& s )
+{
+    return cata_text_to_rml_with( s, nc_color_to_hex );
+}
+
+std::string cata_text_to_rml_hud( const std::string& s )
+{
+    return cata_text_to_rml_with( s, hud_color_to_hex );
 }
 
 std::vector<std::string> item_info_rml_lines( item_info_data& data )

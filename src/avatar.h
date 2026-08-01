@@ -117,7 +117,7 @@ class avatar : public player
         void control_npc( npc & );
 
         void toggle_map_memory();
-        bool should_show_map_memory();
+        bool should_show_map_memory() const;
         void prepare_map_memory_region( const tripoint_abs_ms &p1, const tripoint_abs_ms &p2 );
         /** Memorizes an overlay tile (furniture, vpart, trap) in tiles mode */
         void memorize_tile( const tripoint_abs_ms &pos, const std::string &ter, int subtile,

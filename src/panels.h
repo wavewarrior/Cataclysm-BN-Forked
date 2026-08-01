@@ -39,15 +39,6 @@ auto moon_phase_display( moon_phase phase ) -> moon_phase_info;
 // 8-way sector icon bucket for a wind direction angle (RMLUI_HUD_PANEL_REFERENCE.md §3.12).
 auto wind_arrow_icon( int dirangle ) -> const char *;
 
-namespace overmap_ui
-{
-// Colored-text overmap minichunk (RmlUi HUD "map" panel): `height` rows of
-// colorize()-tagged single-glyph cells, `width` wide, centred on `global_omt`.
-// Curses-window-free successor to the removed draw_overmap_chunk.
-auto overmap_chunk_rows( const avatar &you, const tripoint_abs_omt &global_omt, int width,
-                         int height ) -> std::vector<std::string>;
-} // namespace overmap_ui
-
 bool default_render();
 
 class widget;
@@ -100,40 +91,39 @@ window_panel make_value_widget_panel( const widget &w, int width );
 // (hp/temp/encumb/status/wet — see bodygraph_bp_color in panels.cpp).
 window_panel make_bodygraph_widget_panel( const widget &w, int width );
 
-// ── Sidebar HUD → RmlUi (Tier 7, render-only, continuous) ────────────────────
-// The persistent HUD document that renders sidebar panels through RmlUi instead of
-// the curses cell renderer. Lives in panels.cpp so it can reuse the TU-static stat
-// colour helpers (str_string/etc.). Lifecycle is driven from game::draw_panels (NOT
-// the modal rml_doc harness — the HUD has no blocking input loop):
-//   open()  — lazily create the "sidebar_hud" data model + open the doc (no-op when
-//             disabled / RmlUi not ready / already open). Idempotent.
-//   sync()  — repopulate the bound model from the avatar each turn. No-op if closed.
-//   close() — close the doc + remove the model. Idempotent; call on toggle-off and
-//             on leaving gameplay (game::cleanup_at_end) so the HUD never lingers
-//             over the main menu.
-//   owns_panel(name) — true while the HUD is live AND has taken over the panel named
-//             `name`; draw_panels skips that panel's curses draw to avoid double-draw.
-//   position(name,left%,top%,width%) — place the named owned panel's HUD fragment at
-// Tier 7 sidebar HUD (slice 3 structural pivot): a persistent, render-only RmlUi
-// document = ONE flex column owning the WHOLE sidebar region. sidebar_hud_open() opens it
-// lazily; sidebar_hud_sync() rebuilds the row list (one per present panel — migrated
-// producer RML or a "[name]" placeholder) + repositions the container at the sidebar rect
-// every turn; sidebar_hud_close() tears it down. sidebar_hud_active() is true while the
-// doc is open → game::draw_panels suppresses the entire curses sidebar.
+// ── Sidebar HUD → RmlUi: the Terminal Phosphor chassis ───────────────────────
+// One persistent, render-only RmlUi document drawing the whole HUD as a
+// character-cell terminal (plans/phosphor-hud.md). panels.cpp owns only the
+// chassis — the nine-string data model, the document lifecycle, the per-turn
+// sync and the cell geometry; every producer lives in hud_phosphor_panels.cpp
+// (soma, dock) and hud_phosphor_strips.cpp (status, log, keys, vehicle), over
+// the primitives in hud_phosphor.h.
+//
+// Lifecycle is driven from game::draw_panels — NOT the modal rml_doc harness,
+// because the HUD has no blocking input loop:
+//   open()   — lazily create the "sidebar_hud" data model + open the doc (no-op
+//              when disabled / RmlUi not ready / already open). Idempotent.
+//   sync()   — rebuild the nine bound strings from the avatar and re-place every
+//              region on the cell grid. No-op if closed.
+//   close()  — close the doc + remove the model. Idempotent; call on toggle-off
+//              and on leaving gameplay (game::cleanup_at_end) so the HUD never
+//              lingers over the main menu.
+//   active() — true while the doc is open → game::draw_panels suppresses the
+//              entire curses sidebar.
 void sidebar_hud_open();
 void sidebar_hud_sync( avatar &u );
 void sidebar_hud_close();
 bool sidebar_hud_active();
-// True iff panel `name` has an RmlUi producer (else the HUD shows a [name] placeholder).
-bool sidebar_hud_has_producer( const std::string &name );
-// One-line audit: "sidebar HUD coverage: C/T panels [— uncovered: …]" over the active layout.
-// The mechanical Tier-10 rip-out gate ("every panel in my UI built?").
-std::string sidebar_hud_coverage_report();
-// Rows of standard-font cells reserved above/below the viewport for the Qud HUD
-// chrome strips. 0 whenever the RmlUi HUD can't render (curses fallback keeps the
-// full viewport).
-int sidebar_hud_top_rows();    // = 2 when the HUD can render, else 0
-int sidebar_hud_bottom_rows(); // = 1 when the HUD can render, else 0
+// Rows of standard-font (`fontheight`) cells reserved above and below the terrain
+// viewport for the HUD's two OPAQUE strips — the status strip and the function-key
+// strip. The translucent regions (soma, dock, log, vehicle) float over the terrain
+// and are deliberately NOT carved. 0 whenever the HUD can't render.
+//
+// The HUD measures in its own phosphor cells, so these convert:
+// `ceil( strip_rows * cell_h * dp_ratio / fontheight )`, rounded up so the carve
+// always covers the strip.
+int sidebar_hud_top_rows();
+int sidebar_hud_bottom_rows();
 
 // Tick HUD animations (advance tweens, apply CSS properties). Called each render frame.
 auto sidebar_hud_anim_tick() -> void;

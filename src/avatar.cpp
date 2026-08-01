@@ -214,7 +214,7 @@ void avatar::toggle_map_memory()
     show_map_memory = !show_map_memory;
 }
 
-bool avatar::should_show_map_memory()
+bool avatar::should_show_map_memory() const
 {
     return show_map_memory;
 }

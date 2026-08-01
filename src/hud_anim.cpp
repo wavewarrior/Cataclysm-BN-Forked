@@ -147,40 +147,53 @@ auto tick( Rml::ElementDocument *doc, std::uint32_t now ) -> void
         book.scale_y_val = transform.scale_y;
         book.rotation_val = transform.rotation;
 
-        bool any_transform = ( transform.scale != 1.0f
-                               || transform.scale_y != 1.0f
-                               || transform.rotation != 0.0f );
+        const bool any_transform = ( transform.scale != 1.0f
+                                     || transform.scale_y != 1.0f
+                                     || transform.rotation != 0.0f );
 
         if( any_transform ) {
+            // The whole string is rebuilt from the CURRENT sample every frame, so
+            // the *_set flags below record only "something is written" — they must
+            // not gate the individual terms. Setting them inside each `!= identity`
+            // branch (as this used to) left a channel's flag true after it settled
+            // while its term had already dropped out of the string, so the element
+            // kept a stale transform until every other channel settled too.
             std::string tf;
             if( transform.scale != 1.0f ) {
                 tf += std::format( "scale({}) ", transform.scale );
-                book.scale_set = true;
             }
             if( transform.scale_y != 1.0f ) {
                 tf += std::format( "scaleY({}) ", transform.scale_y );
-                book.scale_y_set = true;
             }
             if( transform.rotation != 0.0f ) {
                 tf += std::format( "rotate({}deg)", transform.rotation );
-                book.rotation_set = true;
             }
+            // pivot_y is what makes a squash read as a recoil from the struck side
+            // rather than a symmetric pinch about the centre. It was parsed and
+            // stored by sidebar_anim but never emitted, so every scale_y spec in
+            // icons.json (heart/droplet/food, six of them) has been squashing from
+            // the middle regardless of the pivot it asked for.
+            el->SetProperty( "transform-origin",
+                             std::format( "50% {}%", transform.pivot_y * 100.0f ) );
             el->SetProperty( "transform", tf );
+            book.scale_set = true;
+            book.scale_y_set = true;
+            book.rotation_set = true;
             book.was_animating = true;
-        } else {
-            if( book.scale_set || book.scale_y_set || book.rotation_set ) {
-                el->RemoveProperty( "transform" );
-                book.scale_set = false;
-                book.scale_y_set = false;
-                book.rotation_set = false;
-                book.was_animating = false;
-            }
+        } else if( book.scale_set || book.scale_y_set || book.rotation_set ) {
+            el->RemoveProperty( "transform" );
+            el->RemoveProperty( "transform-origin" );
+            book.scale_set = false;
+            book.scale_y_set = false;
+            book.rotation_set = false;
+            book.was_animating = false;
         }
         // color_blend (Phase 3): blend toward the spec's target color.
-        // nc_color has no RGB components — use nc_color_to_hex for the target,
-        // then adjust the alpha channel to the blend amount.
+        // nc_color has no RGB components — resolve the target through the HUD
+        // palette (this only ever runs on HUD elements), then override the alpha
+        // channel with the blend amount.
         if( transform.blend != 0.0f && transform.blend_color != c_white ) {
-            std::string hex = nc_color_to_hex( transform.blend_color );
+            std::string hex = hud_color_to_hex( transform.blend_color );
             // hex is "#RRGGBBAA" — replace alpha with blend amount
             if( hex.size() >= 9 ) {
                 const unsigned char a = static_cast<unsigned char>( transform.blend * 255 );

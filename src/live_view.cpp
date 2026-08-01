@@ -40,6 +40,38 @@ struct lv_rml_model {
 std::unique_ptr<lv_rml_model> g_lv_data;
 Rml::ElementDocument *g_lv_doc = nullptr;
 
+/// Place the box at the sidebar edge. Called from BOTH `lv_rml_open` and
+/// `lv_rml_sync`, and that is the whole point: `open` sets `title_rml` and hands the
+/// document to the layer, so the overlay can be rendered before any sync runs. With
+/// positioning only in `sync`, that first frame drew the box at its default — and
+/// `.lv-box` is `position: absolute` with `left`/`top`/`width` all unset, so `auto`
+/// resolved to the static position at the TOP-LEFT of the containing block at
+/// natural width. What that put on screen was the `< Mouse View >` title and the
+/// inner `.lv-info` scroll pane's unstyled grey scrollbar furniture, in the corner
+/// where the sidebar HUD draws its identity row, looking for all the world like a
+/// HUD defect. Position on open and the unpositioned frame cannot happen.
+void lv_rml_apply_rect()
+{
+    if( g_lv_doc == nullptr || TERMX <= 0 ) {
+        return;
+    }
+    auto &mgr = panel_manager::get_manager();
+    const bool sidebar_right = get_option<std::string>( "SIDEBAR_POSITION" ) == "right";
+    // Floor the column width: `update_offsets` zeroes the column opposite the
+    // configured sidebar, and the widget layout the other one comes from can be
+    // empty, so this can reach 0 — and a 0% width is a box the scroll furniture
+    // spills straight out of.
+    const int raw_wd = sidebar_right ? mgr.get_width_right() : mgr.get_width_left();
+    const int wd = raw_wd > 0 ? raw_wd : std::max( TERMX / 5, 1 );
+    const float width_pct = 100.0f * wd / TERMX;
+    const float left_pct = sidebar_right ? 100.0f - width_pct : 0.0f;
+    if( Rml::Element *el = g_lv_doc->GetElementById( "lv-box" ) ) {
+        el->SetProperty( "left", rml::pct( left_pct ) );
+        el->SetProperty( "top", "0%" );
+        el->SetProperty( "width", rml::pct( width_pct ) );
+    }
+}
+
 void lv_rml_open()
 {
     if( g_lv_doc != nullptr ) {
@@ -71,6 +103,9 @@ void lv_rml_open()
         return;
     }
     g_lv_doc = doc;
+    // Position BEFORE the layer can render this document, so the box is never
+    // painted at its unpositioned default. See lv_rml_apply_rect.
+    lv_rml_apply_rect();
 }
 
 void lv_rml_close()
@@ -96,20 +131,7 @@ void lv_rml_sync( const tripoint_bub_ms &mouse_position )
                               g->print_all_tile_info_text( mouse_position, std::string(), cache ) );
     g_lv_data->handle.DirtyVariable( "info_rml" );
 
-    // Anchor the box at the sidebar edge (sidebar-width, top), tracking resize.
-    if( TERMX <= 0 ) {
-        return;
-    }
-    auto &mgr = panel_manager::get_manager();
-    const bool sidebar_right = get_option<std::string>( "SIDEBAR_POSITION" ) == "right";
-    const int wd = sidebar_right ? mgr.get_width_right() : mgr.get_width_left();
-    const float width_pct = 100.0f * wd / TERMX;
-    const float left_pct = sidebar_right ? 100.0f - width_pct : 0.0f;
-    if( Rml::Element *el = g_lv_doc->GetElementById( "lv-box" ) ) {
-        el->SetProperty( "left", rml::pct( left_pct ) );
-        el->SetProperty( "top", "0%" );
-        el->SetProperty( "width", rml::pct( width_pct ) );
-    }
+    lv_rml_apply_rect();
 }
 
 } //namespace
@@ -119,8 +141,17 @@ live_view::~live_view() = default;
 
 bool &live_view_rmlui_enabled()
 {
-    // Default OFF — opt in via the F4 panel. See rml_screen.h.
-    static bool enabled = true;
+    // Default OFF, as this comment has always said and as the value did not: it read
+    // `true`, so the RmlUi hover tooltip was live for everyone rather than being the
+    // opt-in experiment it is documented as. That mattered once the sidebar HUD moved
+    // into the same corner — the overlay renders its `< Mouse View >` title and its
+    // scroll furniture over the HUD's identity row whenever the pointer is inside the
+    // window, and it is anchored to a `panel_manager` sidebar column that the phosphor
+    // HUD no longer defines the same way. Turning it off restores the curses tooltip
+    // path in `live_view::show`, which is unaffected, and leaves the RmlUi version
+    // reachable from the F4 panel for whoever finishes it. Its placement bug is
+    // recorded in plans/phosphor-hud.md.
+    static bool enabled = false;
     return enabled;
 }
 

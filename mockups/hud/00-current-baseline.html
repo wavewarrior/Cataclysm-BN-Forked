@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>00 — Current HUD (baseline)</title><style>
+  html,body { margin:0; padding:0; background:#000; }
+  #screen {
+    position:relative; width:1920px; height:1080px; overflow:hidden;
+    background-image:url("_shared/world.png");
+    background-size:1920px 1080px;
+  }
+
+/* ===========================================================================
+   BASELINE CONTROL SAMPLE — this is a translation of what ships today, not a
+   design. Every rule below is a line-for-line port of data/gui/sidebar_hud.rcss
+   with the {{token}} placeholders resolved against the `rcss` block of
+   data/gui/theme.json, and every dp resolved 1:1 to px (density_ratio 1.0 x
+   ui_scale 1.0 at 1080p non-HiDPI — rmlui_layer.cpp:64,69,1186).
+
+   Token resolution used throughout (theme.json `rcss`):
+     hud-fg          #80c0a8   hud-bg          #0a1a1ae0
+     hud-fg-bright   #d0f0e0   hud-bg-scrim    #040d0d99
+     hud-fg-muted    #6e8c84   hud-border      #2a5a50
+     hud-accent      #c8a820   hud-bar-bg      #123030
+     hud-accent-wash #c8a8201c hud-crit-bg     #401010
+     hud-ink         #0d0d0d   hud-red         #e05050
+     hud-scroll-thumb #2a5a50cc hud-red-bright #ff7a5a
+   Game text resolves through theme.json `hud_colors` exactly as
+   hud_color_to_hex() does (rml_util.cpp:75-86):
+     c_white #d0f0e0  c_light_gray #a8c8bc  c_dark_gray #5a7a70
+     c_light_green #7ad090  c_green #5a9c6a  c_yellow #d4b84a
+     c_brown #b08850  c_light_red #e05050  c_red #b83c3c  c_cyan #5aa89c
+   =========================================================================== */
+
+/* --- RmlUi's default display -------------------------------------------------
+   RmlUi 6.2 registers `display` with the default value "inline"
+   (StyleSheetSpecification.cpp:306) and CBN does NOT link the sample rml.rcss,
+   so a bare <div> flows inline — documented as a gotcha in theme.rcss:99-105.
+   Chrome's UA sheet says `div { display:block }`, which would make this mockup
+   render BETTER than the game. Re-assert RmlUi's default with a type selector
+   (specificity 0,0,1) so every ported class rule still wins, exactly as in the
+   real cascade. :where() keeps #screen out of the specificity sum. */
+:where(#screen) div, :where(#screen) span { display: inline; }
+
+/* --- sidebar_hud.rcss body (:9-18) + RmlUi's default line-height 1.2
+   (StyleSheetSpecification.cpp:330). #screen is the document body here. */
+#screen {
+    font-family: Consolas, "Cascadia Mono", "Lucida Console", monospace;
+    font-size: 18px;
+    line-height: 1.2;
+    color: #80c0a8;
+    text-align: left;
+}
+
+/* Base strip row styles (:34-39) */
+.hud-strip-row {
+    display: block;
+    white-space: pre;
+    color: #80c0a8;
+    padding: 4px 12px;
+}
+
+/* ========== TOP BAR (:49-77) ========== */
+#hud-topbar {
+    position: absolute;
+    background-color: #0a1a1ae0;
+    border-bottom: 1px solid #2a5a50;
+    padding: 4px 12px;
+}
+#hud-topbar .hud-strip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    align-items: baseline;
+}
+.hud-segment {
+    display: inline;
+    white-space: nowrap;
+}
+.hud-seg-cond {
+    border-left: 1px solid #2a5a50;
+    border-right: 1px solid #2a5a50;
+    padding: 0px 12px;
+}
+.seg-label {
+    display: inline;
+    color: #6e8c84;
+    font-size: 0.8em;
+    letter-spacing: 1px;
+    margin-right: 4px;
+}
+
+/* ========== BOTTOM BAR (:80-85) ========== */
+#hud-botbar {
+    position: absolute;
+    background-color: #0a1a1ae0;
+    border-top: 1px solid #2a5a50;
+    padding: 4px 12px;
+}
+
+/* ========== HOTBAR (:88-93) ========== */
+#hud-hotbar {
+    position: absolute;
+    background-color: #0a1a1ae0;
+    border-top: 1px solid #2a5a50;
+    padding: 4px 12px;
+}
+
+/* ========== VITALS OVERLAY (:100-177) ========== */
+#hud-vitals {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    box-sizing: border-box;
+    background-color: #0a1a1ae0;
+    border: 1px solid #2a5a50;
+    padding: 8px 12px;
+}
+.hud-vitals-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.vbar {
+    position: relative;
+    height: 18px;
+    width: 230px;
+    background-color: #123030;
+    margin-bottom: 4px;
+}
+.vbar-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: #d0f0e0;
+}
+.vbar-text {
+    position: absolute;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    color: #0d0d0d;
+    font-size: 0.85em;
+    line-height: 18px;
+}
+.vbar-tick {
+    position: absolute;
+    top: 0;
+    width: 1px;
+    height: 100%;
+    background-color: #0d0d0d;
+}
+.vbar.thin {
+    height: 16px;
+    width: 230px;
+}
+.vbar.thin .vbar-fill { height: 100%; }
+.vbar.thin .vbar-text {
+    font-size: 0.8em;
+    line-height: 16px;
+}
+/* Crit trough + fill. DEAD AT THIS FIXTURE — vbar_rml() only sets .crit when
+   `o.cur*100/o.max < 25`, and the left arm's 8/30 truncates to 26 (panels.cpp:
+   795-796). Kept verbatim so the port is complete; nothing selects it. */
+.vbar.crit { background-color: #401010; }
+.vbar.crit .vbar-fill { background-color: #ff7a5a; }
+.vbar.crit .vbar-text { color: #e05050; }
+
+/* Divider between body-part bars and resource bars (:180-184) */
+.vitals-divider {
+    height: 1px;
+    background-color: #2a5a50;
+    margin: 8px 0px;
+}
+
+/* ========== DOCK (:192-249) ========== */
+#hud-topbar, #hud-botbar, #hud-hotbar, #hud-dock, #hud-vehicle {
+    box-sizing: border-box;
+}
+#hud-dock {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    background-color: #0a1a1ae0;
+    border-left: 1px solid #2a5a50;
+    padding: 8px 12px 20px 12px;
+    overflow: hidden;
+}
+.dock-section {
+    display: block;
+    flex: 0 0 auto;
+    margin-bottom: 16px;
+}
+.dock-flex {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 0;
+    margin-bottom: 0px;
+}
+/* NOTE: no `display` declaration here in the source either. Inside the LOG
+   section (.dock-flex, a column flex container) this is a flex item and gets
+   blockified; inside the MINIMAP section (.dock-section, display:block) it does
+   NOT, and stays inline. That asymmetry is reproduced, not fixed. */
+.dock-header {
+    color: #c8a820;
+    letter-spacing: 2px;
+    font-size: 0.85em;
+    font-weight: bold;
+    border-bottom: 1px solid #2a5a50;
+    padding: 0px 4px 4px 4px;
+    margin-bottom: 4px;
+}
+
+/* ========== LOG ENTRIES (:258-298) ========== */
+.hud-log-entry {
+    display: block;
+    position: relative;
+}
+.hud-log-row {
+    display: block;
+    white-space: pre-wrap;
+    word-break: break-word;
+    padding: 2px 4px;
+    font-size: 1em;
+    line-height: 1.35;
+    border-left: 2px solid #00000000;
+}
+.hud-log-fresh .hud-log-row {
+    border-left: 2px solid #c8a820;
+    background-color: #c8a8201c;
+}
+.hud-log-symbol {
+    display: inline;
+    font-weight: bold;
+    margin-right: 2px;
+}
+.hud-log-time {
+    display: inline;
+    color: #6e8c84;
+    margin-right: 4px;
+    letter-spacing: 1px;
+    font-size: 0.8em;
+}
+.hud-log-text { display: inline; }
+
+.dock-body {
+    color: #80c0a8;
+    white-space: pre-wrap;
+    line-height: 1.4;
+}
+/* Also no `display` in the source. Child of the block .dock-section, so this
+   stays INLINE: min-height and the vertical half of `padding` do nothing, and
+   `text-align:center` cannot apply because alignment is decided by the nearest
+   block container (.dock-section, whose text-align is the inherited `left`). */
+.hud-map-body {
+    white-space: pre;
+    text-align: center;
+    padding: 8px;
+    line-height: 1.2;
+    min-height: 140px;
+}
+/* `.hud-map` is the div hud_map() emits (panels.cpp:989) and `sidebar_hud.rcss`
+   defines NO rule for it at any point in the sheet — only `.hud-map-body` exists
+   (rcss:306). That is a real property of the shipping stylesheet, not an omission
+   in this port: the element therefore takes RmlUi's default `display: inline` and
+   inherits its `white-space: pre` from the parent. Declared explicitly here so an
+   automated used-but-undefined check does not read the faithful non-definition as
+   a defect. Behaviourally identical to leaving it out. */
+.hud-map { display: inline; }
+
+/* (:315-343) */
+.log-well {
+    position: relative;
+    display: flex;
+    flex: 1 1 0;
+    min-height: 0;
+}
+.hud-scroll {
+    box-sizing: border-box;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 0;
+    background-color: #123030;
+    border: 1px solid #2a5a50;
+    padding: 4px 2px 4px 4px;
+}
+.hud-log-entry:first-child { margin-top: auto; }
+.hud-log-entry { flex: 0 0 auto; }
+
+/* (:363-373) */
+.log-fade {
+    position: absolute;
+    left: 1px;
+    right: 1px;
+    pointer-events: none;
+}
+.log-fade-top {
+    top: 1px;
+    height: 30px;
+    background-image: linear-gradient( 180deg, #123030ff, #12303000 );
+}
+
+/* Thin scrollbar (:377-387). Not instantiated: the six fixture rows are
+   ~290px inside a 754px well, so there is nothing to scroll. */
+#hud-log-body::-webkit-scrollbar { width: 4px; margin-left: 4px; }
+#hud-log-body::-webkit-scrollbar-thumb { background-color: #2a5a50cc; min-height: 16px; }
+
+/* ========== STRIP CHROME (:390-407) ========== */
+.strip-left { display: inline; }
+.strip-right { float: right; }
+/* .tbar-fill sets ONLY height:100% — no `display`. It is a <span>, so it stays
+   inline and width/height are ignored: the target HP bar paints an empty
+   trough and nothing else. Compare .veh-fuel-fill (rcss:489-492), the identical
+   construction, which does set display:block. Reproduced as shipped. */
+.tbar {
+    display: inline-block;
+    width: 40px;
+    height: 9px;
+    background-color: #123030;
+    vertical-align: middle;
+}
+.tbar-fill { height: 100%; }
+
+/* ========== DAMAGE VIGNETTE (:409-419) — present, at rest ========== */
+#hud-vignette {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 20;
+    opacity: 0;
+    background-image: radial-gradient( farthest-corner at 50% 50%, #00000000, #e0505099 );
+}
+
+/* ========== VEHICLE HUD (:422-435) — display:none, not driving ========== */
+#hud-vehicle {
+    position: absolute;
+    display: none;
+    background-color: #0a1a1ae0;
+    border: 1px solid #2a5a50;
+    padding: 8px 12px;
+    min-width: 180px;
+    max-width: 300px;
+}
+/* Ported for completeness: the RML instantiates .veh-panel-inner unconditionally
+   (sidebar_hud.rml:33) even when the panel is display:none, so the class is used
+   in the markup and must be defined here. The .veh-row / .veh-name / .veh-fuel-*
+   rules (rcss:436-496) are deliberately NOT ported: hud_vehicle() returns an empty
+   string when not driving, so no element ever carries them. */
+.veh-panel-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* ========== ENVIRONMENTAL TINTING (:511-531) ==========
+   sidebar_hud_sync() sets .env-night for hour >= 21; the fixture clock is
+   21:47, so .env-night IS live on all six regions (panels.cpp:1638-1640). */
+.env-night { opacity: 0.85; }
+.env-storm { opacity: 0.9; }
+#hud-topbar, #hud-botbar, #hud-hotbar, #hud-dock, #hud-vitals, #hud-vehicle {
+    transition: background-color 0.8s, opacity 0.8s;
+}
+
+/* Status effect animation targets (:535-537) */
+#status-poison, #status-fire, #status-bleed, #status-rad { display: inline; }
+</style></head>
+<body><div id="screen">
+
+<!-- ===================================================================== -->
+<!-- Rects below are what sidebar_hud_apply_rect() (panels.cpp:1509-1595)   -->
+<!-- writes, verbatim, at TERMX=240 TERMY=67 (1920/8, 1080/16 — FONT_WIDTH  -->
+<!-- default 8 at options_registration.cpp:1076, FONT_HEIGHT default 16 at  -->
+<!-- :1090, scaling_factor 1), SIDEBAR_POSITION="right" (:658), layout      -->
+<!-- "custom" width 44 (sidebar.json:612, panels.cpp:2125/2182).            -->
+<!--   dock_width_pct = 100*44/240 = 18.3333%  ->  352px                    -->
+<!--   bar_width_pct  = 81.6667%               -> 1568px                    -->
+<!--   botbar top     = 100 - 100*4/67  = 94.0299%  -> 1015.5px             -->
+<!--   hotbar top     = 100 - 100*2/67  = 97.0149%  -> 1047.8px             -->
+<!--   overlay top    = 100*(68.2+8)/1080 = 7.0556% ->   76.2px             -->
+<!-- ===================================================================== -->
+
+<div id="hud-topbar" class="env-night"
+     style="left:0%; top:0%; width:81.6667%; height:auto;">
+  <!-- data-rml="topbar_rml"  <- hud_topbar()  panels.cpp:993-1109 -->
+  <div class="hud-strip-row"><div class="hud-segment"><span class="seg-label">ID</span> <span style="color:#d0f0e0ff">Nigel Ashby</span>  <span style="color:#5aa89cff">T:8&#176;C</span></div><div class="hud-segment hud-seg-cond"><span class="seg-label">COND</span> <span style="color:#d4b84aff">Peckish</span>  <span style="color:#d4b84aff">Thirsty</span>  <span style="color:#d4b84aff">Tired</span>  <span style="color:#d4b84aff">Mild pain</span></div></div>
+  <!-- data-rml="topbar_row2_rml"  <- hud_topbar_row2()  panels.cpp:1112-1148 -->
+  <div class="hud-strip-row"><div class="hud-segment"><span class="seg-label">STAT</span> <span style="color:#a8c8bcff">STR:</span><span style="color:#d0f0e0ff">10</span> <span style="color:#a8c8bcff">DEX:</span><span style="color:#d0f0e0ff">12</span> <span style="color:#a8c8bcff">INT:</span><span style="color:#d0f0e0ff">9</span> <span style="color:#a8c8bcff">PER:</span><span style="color:#d0f0e0ff">11</span>  <span style="color:#a8c8bcff">SPD:</span><span style="color:#5a9c6aff">96</span>  <span style="color:#a8c8bcff">FOC:</span><span style="color:#a8c8bcff">84</span></div><div class="hud-segment"><span class="seg-label">TIME</span> <span style="color:#a8c8bcff">21:47</span>, day 14 of Autumn :: <span style="color:#d0f0e0ff">Cheswick &#8212; residential</span></div></div>
+</div>
+
+<!-- hud_vitals()  panels.cpp:846-912.  left = width_left_pct = 0% (the sidebar
+     is on the right, so panel_manager::width_left is 0 — panels.cpp:2308-2309),
+     which is why the vitals panel is flush against the screen's left edge. -->
+<div id="hud-vitals" class="env-night" style="left:0%; top:7.0556%;">
+  <div class="hud-vitals-inner">
+    <!-- 3-stop gradient fills, computed by vbar_rml() from hud_colors:
+         hi=c_light_green(122,208,144) mid=c_yellow(212,184,74) lo=c_light_red(224,80,80) -->
+    <div id="vbar_head" class="vbar"><div class="vbar-fill" style="width:83%;background-color:#a7c46dff;"></div><div class="vbar-tick" style="left:25%;"></div><div class="vbar-tick" style="left:50%;"></div><div class="vbar-tick" style="left:75%;"></div><div class="vbar-text">HEAD 20/24</div></div>
+    <div id="vbar_torso" class="vbar"><div class="vbar-fill" style="width:75%;background-color:#bcbe5cff;"></div><div class="vbar-tick" style="left:25%;"></div><div class="vbar-tick" style="left:50%;"></div><div class="vbar-tick" style="left:75%;"></div><div class="vbar-text">TORSO 45/60</div></div>
+    <!-- L ARM: pct = 8*100/30 = 26 (integer), so `crit = pct < 25` is FALSE.
+         No .crit class, no dark trough, no " !!" suffix. Bleeding and bitten
+         are invisible here: hud_vitals computes limb_color into `label_hex`
+         (panels.cpp:872) and then never uses it. -->
+    <div id="vbar_arm_l" class="vbar"><div class="vbar-fill" style="width:26%;background-color:#e05050ff;"></div><div class="vbar-tick" style="left:25%;"></div><div class="vbar-tick" style="left:50%;"></div><div class="vbar-tick" style="left:75%;"></div><div class="vbar-text">L ARM 8/30</div></div>
+    <div id="vbar_arm_r" class="vbar"><div class="vbar-fill" style="width:100%;background-color:#7ad090ff;"></div><div class="vbar-tick" style="left:25%;"></div><div class="vbar-tick" style="left:50%;"></div><div class="vbar-tick" style="left:75%;"></div><div class="vbar-text">R ARM 30/30</div></div>
+    <div id="vbar_leg_l" class="vbar"><div class="vbar-fill" style="width:78%;background-color:#b4c062ff;"></div><div class="vbar-tick" style="left:25%;"></div><div class="vbar-tick" style="left:50%;"></div><div class="vbar-tick" style="left:75%;"></div><div class="vbar-text">L LEG 22/28</div></div>
+    <div id="vbar_leg_r" class="vbar"><div class="vbar-fill" style="width:100%;background-color:#7ad090ff;"></div><div class="vbar-tick" style="left:25%;"></div><div class="vbar-tick" style="left:50%;"></div><div class="vbar-tick" style="left:75%;"></div><div class="vbar-text">R LEG 28/28</div></div>
+    <div class="vitals-divider"></div>
+    <!-- STA is thin + use_gradient=false, so its fill takes the flat
+         get_hp_bar() colour: 5100/8700 -> idx int((1-0.586)*5)=2 -> c_yellow -->
+    <div id="vbar_sta" class="vbar thin"><div class="vbar-fill" style="width:58%;background-color:#d4b84aff;"></div><div class="vbar-tick" style="left:25%;"></div><div class="vbar-tick" style="left:50%;"></div><div class="vbar-tick" style="left:75%;"></div><div class="vbar-text">STA 5100/8700</div></div>
+  </div>
+</div>
+
+<!-- hud_vehicle() returns "" and sidebar_hud_sync sets display:none (panels.cpp:1766) -->
+<div id="hud-vehicle" class="env-night" style="right:18.3333%; top:7.0556%;">
+  <div class="veh-panel-inner"></div>
+</div>
+
+<div id="hud-dock" class="env-night"
+     style="left:81.6667%; top:0%; width:18.3333%; height:100%;">
+  <div class="dock-section">
+    <!-- minimap_title = to_upper_case(_("Minimap")) (panels.cpp:1486).
+         This header and the map body below are BOTH inline, so they share one
+         line box: "MINIMAP" and the map's top row land on the same line and
+         the header's border-bottom paints across the middle of it. -->
+    <div class="dock-header">MINIMAP</div><div class="dock-body hud-map-body"><div class="hud-map"><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#5a9c6aff">F</span><span style="color:#5a9c6aff">F</span><span style="color:#5a9c6aff">F</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span>
+<span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#5a9c6aff">F</span><span style="color:#5a9c6aff">F</span><span style="color:#5a9c6aff">F</span><span style="color:#5a9c6aff">F</span><span style="color:#5a9c6aff">F</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="background-color:#b83c3cff;"><span style="color:#d4b84aff">^</span></span><span style="color:#b08850ff">.</span>
+<span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#5a9c6aff">F</span><span style="color:#5a9c6aff">F</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#5a9c6aff">F</span><span style="color:#5a9c6aff">F</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span>
+<span style="color:#b08850ff">.</span><span style="color:#d4b84aff">^</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#7ad090ff">H</span><span style="color:#7ad090ff">H</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#5a9c6aff">F</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span>
+<span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#7ad090ff">H</span><span style="color:#7ad090ff">H</span><span style="color:#7ad090ff">H</span><span style="color:#7ad090ff">H</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span>
+<span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#7ad090ff">H</span><span style="background-color:#7ad090ff;color:#ffffffff;">H</span><span style="color:#7ad090ff">H</span><span style="color:#7ad090ff">H</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span>
+<span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#7ad090ff">H</span><span style="color:#7ad090ff">H</span><span style="color:#7ad090ff">H</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#5a9c6aff">F</span><span style="color:#5a9c6aff">F</span><span style="color:#b08850ff">.</span>
+<span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#5a9c6aff">F</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#5a9c6aff">F</span><span style="color:#5a9c6aff">F</span><span style="color:#b08850ff">.</span>
+<span style="color:#b08850ff">.</span><span style="color:#5a9c6aff">F</span><span style="color:#5a9c6aff">F</span><span style="color:#b08850ff">.</span><span style="color:#d4b84aff">^</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#5a9c6aff">F</span><span style="color:#b08850ff">.</span>
+<span style="color:#b08850ff">.</span><span style="color:#5a9c6aff">F</span><span style="color:#5a9c6aff">F</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span>
+<span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span><span style="color:#b08850ff">.</span></div></div>
+  </div>
+  <div class="vitals-divider"></div>
+  <div class="dock-section dock-flex">
+    <div class="dock-header">LOG</div>
+    <div class="log-well">
+      <!-- hud_log()  panels.cpp:932-975.  Per-row opacity = 1 - min(rows_back/14,1)*0.58.
+           Six rows => 0.79 / 0.83 / 0.88 / 0.92 / 0.96 / 1.00; the documented
+           0.42 floor needs 14 rows and is never reached here.
+           Row colour is msg.get_color(now) (messages.cpp:89-101), NOT the plain
+           type colour: <= now => bright, within 5 turns => dim variant,
+           older => c_dark_gray. Assumed stamps: T-70, T-64, T-5, T-3, T-1, T. -->
+      <div id="hud-log-body" class="dock-body hud-scroll">
+        <div class="hud-log-entry" id="log-141"><div class="hud-log-row" style="color:#5a7a70ff;opacity:0.79"><span class="hud-log-symbol">+</span><span class="hud-log-time">21:46</span><span class="hud-log-text">You hit the zombie brute with your fire axe.</span></div></div>
+        <div class="hud-log-entry" id="log-142"><div class="hud-log-row" style="color:#5a7a70ff;opacity:0.83"><span class="hud-log-symbol">!</span><span class="hud-log-time">21:46</span><span class="hud-log-text">The zombie brute claws your left arm!</span></div></div>
+        <div class="hud-log-entry" id="log-143"><div class="hud-log-row" style="color:#b83c3cff;opacity:0.88"><span class="hud-log-symbol">!</span><span class="hud-log-time">21:47</span><span class="hud-log-text">Your left arm is bleeding.</span></div></div>
+        <div class="hud-log-entry" id="log-144"><div class="hud-log-row" style="color:#b83c3cff;opacity:0.92"><span class="hud-log-symbol">!</span><span class="hud-log-time">21:47</span><span class="hud-log-text">You feel a sharp pain.</span></div></div>
+        <div class="hud-log-entry" id="log-145"><div class="hud-log-row" style="color:#b08850ff;opacity:0.96"><span class="hud-log-symbol">^</span><span class="hud-log-time">21:47</span><span class="hud-log-text">The zombie shambler groans nearby.</span></div></div>
+        <div class="hud-log-entry hud-log-fresh" id="log-146"><div class="hud-log-row" style="color:#d4b84aff;opacity:1.00"><span class="hud-log-symbol">^</span><span class="hud-log-time">21:47</span><span class="hud-log-text">You are getting thirsty.</span></div></div>
+      </div>
+      <div class="log-fade log-fade-top"></div>
+    </div>
+  </div>
+</div>
+
+<!-- hud_botbar()  panels.cpp:1152-1279.  .hud-strip-row here is NOT flexed
+     (only `#hud-topbar .hud-strip-row` is), so it is one white-space:pre line
+     with .strip-right floated out to the far edge. -->
+<div id="hud-botbar" class="env-night"
+     style="left:0%; top:94.0299%; width:81.6667%; height:auto;">
+  <div class="hud-strip-row"><span class="strip-left">EFFECTS: <span style="color:#a8c8bcff;"><span id="status-bleed">Bleeding (L arm)</span> :: Bitten (L arm) :: Soaked :: Tired :: Pain 12</span></span> <span style="color:#a8c8bcff">TARGET:</span> <span style="color:#b83c3cff">zombie brute</span> [<span style="color:#b83c3cff">Hostile</span>] <span class="tbar"><span class="tbar-fill" style="width:62%;background-color:#7ad090ff;"></span></span> 75<span class="strip-right"><span style="color:#a8c8bcff">fire axe</span>  <span style="color:#a8c8bcff">W</span>  <span style="color:#5a9c6aff">SAFE</span>: <span style="color:#b83c3cff">3</span></span></div>
+</div>
+
+<!-- hud_hotbar()  panels.cpp:1282-1307.  Fixed nine-action list; the key text
+     is whatever input_context::get_desc() returns, including the literal
+     "Unbound globally!" string (input.cpp:769) for any action with no binding.
+     toggle_crouch has none in data/raw/keybindings/keybindings.json:2617-2619. -->
+<div id="hud-hotbar" class="env-night"
+     style="left:0%; top:97.0149%; width:81.6667%; height:auto;">
+  <div class="hud-strip-row">[<span style="color:#d4b84aff">f</span>] <span style="color:#a8c8bcff"> Fire </span> [<span style="color:#d4b84aff">r</span>] <span style="color:#a8c8bcff"> Reload </span> [<span style="color:#d4b84aff">'</span>] <span style="color:#a8c8bcff"> Run </span> [<span style="color:#d4b84aff">Unbound globally!</span>] <span style="color:#a8c8bcff"> Crouch </span> [<span style="color:#d4b84aff">5</span>] <span style="color:#a8c8bcff"> Wait </span> [<span style="color:#d4b84aff">p</span>] <span style="color:#a8c8bcff"> Pick Up </span> [<span style="color:#d4b84aff">c</span>] <span style="color:#a8c8bcff"> Craft </span> [<span style="color:#d4b84aff">i</span>] <span style="color:#a8c8bcff"> Inventory </span> [<span style="color:#d4b84aff">m</span>] <span style="color:#a8c8bcff"> Map </span></div>
+</div>
+
+<div id="hud-vignette"></div>
+
+</div></body></html>

@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>05 — Field Manual</title><style>
+  html,body { margin:0; padding:0; background:#000; }
+  #screen {
+    position:relative; width:1920px; height:1080px; overflow:hidden;
+    background-image:url("_shared/world.png");
+    background-size:1920px 1080px;
+  }
+
+  /* ============================================================
+     PALETTE — three marking media only.
+       ink    : typewriter / press ink (near-black warm brown)
+       red    : correction + rubber-stamp ink (oxidised red)
+       pencil : graphite annotation
+     Everything else is the paper substrate itself.
+     ============================================================ */
+  #screen {
+    --paper-hi:#efe3c4;
+    --paper:#e3d7b8;
+    --paper-mid:#d8c9a4;
+
+    --ink:#221a11;
+    --ink-80:rgba(34,26,17,.80);
+    --ink-62:rgba(34,26,17,.62);
+    --ink-44:rgba(34,26,17,.44);
+    --ink-rule:rgba(34,26,17,.30);
+    --ink-faint:rgba(34,26,17,.13);
+
+    --red:#9c2a1c;
+    --red-70:rgba(156,42,28,.70);
+    --red-50:rgba(156,42,28,.50);
+
+    --pencil:#4e5450;
+    --pencil-70:rgba(78,84,80,.70);
+    --pencil-45:rgba(78,84,80,.45);
+
+    --mono:"Courier New","Consolas","Lucida Console",monospace;
+    --stencil:"Franklin Gothic Medium","Segoe UI",Tahoma,sans-serif;
+    --hand:"Segoe Script","Ink Free","Gabriola","Comic Sans MS",cursive;
+  }
+
+  /* ============================================================
+     OBJECT 1 — the field-manual page, pinned along the left edge
+     ============================================================ */
+  .sheet{
+    position:absolute; left:-16px; top:8px; width:416px; height:1064px;
+    padding:18px 14px 14px 42px; box-sizing:border-box;
+    transform:rotate(-0.28deg);
+    background-color:var(--paper);
+    /* stock: two broad tonal washes so the sheet is never a flat fill */
+    background-image:
+      linear-gradient(101deg, var(--paper-hi) 0%, var(--paper) 34%, var(--paper) 66%, var(--paper-mid) 100%),
+      linear-gradient(to bottom, rgba(239,227,196,.55) 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 74%, rgba(160,132,88,.22) 100%);
+    box-shadow:
+      0 0 0 1px rgba(52,38,22,.55),
+      16px 4px 34px -8px rgba(0,0,0,.62),
+      3px 0 2px rgba(0,0,0,.30),
+      0 -7px 18px -8px rgba(0,0,0,.45),
+      0 11px 22px -10px rgba(0,0,0,.50),
+      inset -20px 0 26px -20px rgba(120,90,50,.55),
+      inset 0 -14px 20px -16px rgba(120,90,50,.40),
+      inset 0 14px 18px -16px rgba(255,248,230,.45);
+  }
+  /* fibre — four low-opacity rulings at odd angles */
+  .grain{
+    position:absolute; left:0; top:0; right:0; bottom:0;
+    background-image:
+      repeating-linear-gradient(93deg,  rgba(122,96,58,.050) 0 1px, rgba(0,0,0,0) 1px 3px),
+      repeating-linear-gradient(4deg,   rgba(122,96,58,.038) 0 1px, rgba(0,0,0,0) 1px 4px),
+      repeating-linear-gradient(51deg,  rgba(92,70,40,.026) 0 2px, rgba(0,0,0,0) 2px 7px),
+      repeating-linear-gradient(139deg, rgba(255,250,236,.055) 0 1px, rgba(0,0,0,0) 1px 5px);
+  }
+  /* water damage — soft blooms, each with a darker tide ring */
+  .stains{
+    position:absolute; left:0; top:0; right:0; bottom:0;
+    background-image:
+      radial-gradient(150px 108px at 82% 4%,  rgba(185,154,104,.30) 0 52%, rgba(150,116,68,.36) 62%, rgba(185,154,104,0) 74%),
+      radial-gradient(104px 132px at 6% 34%,  rgba(185,154,104,.24) 0 48%, rgba(150,116,68,.30) 60%, rgba(185,154,104,0) 73%),
+      radial-gradient(126px 84px at 84% 78%,  rgba(185,154,104,.16) 0 50%, rgba(148,114,66,.20) 61%, rgba(185,154,104,0) 75%),
+      radial-gradient(58px 46px at 34% 60%,   rgba(160,124,74,.20) 0 46%, rgba(160,124,74,0) 72%),
+      radial-gradient(9px 9px at 21% 71%,   rgba(120,88,48,.30) 0 60%, rgba(120,88,48,0) 100%),
+      radial-gradient(7px 7px at 74% 43%,   rgba(120,88,48,.26) 0 60%, rgba(120,88,48,0) 100%),
+      radial-gradient(6px 6px at 47% 18%,   rgba(120,88,48,.22) 0 60%, rgba(120,88,48,0) 100%),
+      radial-gradient(11px 11px at 90% 62%, rgba(120,88,48,.20) 0 60%, rgba(120,88,48,0) 100%);
+  }
+  /* folded in a pocket: two horizontal creases at the thirds */
+  .crease{position:absolute; left:0; right:0; height:2px;}
+  .crease.a{top:352px;}
+  .crease.b{top:706px;}
+  .crease i{display:block; height:1px;}
+  .crease i.lo{background:rgba(120,90,50,.18);}
+  .crease i.hi{background:rgba(255,250,235,.38);}
+  /* thumb smudge, low on the page */
+  .smudge{
+    position:absolute; left:296px; top:960px; width:78px; height:56px;
+    transform:rotate(18deg);
+    background-image:
+      radial-gradient(39px 28px at 50% 50%, rgba(96,86,66,.13) 0 46%, rgba(96,86,66,0) 76%),
+      repeating-radial-gradient(34px 25px at 50% 50%, rgba(78,72,58,.08) 0 2px, rgba(0,0,0,0) 2px 5px);
+  }
+  /* three-ring punch holes: the world shows through them */
+  .hole{
+    position:absolute; left:22px; width:17px; height:17px; border-radius:50%;
+    background-image:url("_shared/world.png"); background-size:1920px 1080px;
+    box-shadow:
+      inset 0 0 0 1px rgba(30,20,10,.45),
+      inset 2px 3px 5px rgba(0,0,0,.50),
+      0 1px 0 rgba(255,250,235,.5);
+  }
+  .hole.h1{top:186px; background-position:-6px -194px;}
+  .hole.h2{top:526px; background-position:-6px -534px;}
+  .hole.h3{top:866px; background-position:-6px -874px;}
+
+  .body{position:relative; height:100%;}
+
+  /* ---------- shared type ---------- */
+  .sec{display:flex; align-items:center; gap:8px; height:14px; margin-top:10px;}
+  .sec-t{font:400 10px/14px var(--stencil); letter-spacing:2.2px; color:var(--ink-80); white-space:nowrap;}
+  .sec-r{flex:1 1 auto; height:0; border-top:1px solid var(--ink-rule);}
+  .tw{font:400 11.5px/17px var(--mono); color:var(--ink);}
+  .hand{font:400 12.5px/17px var(--hand); color:var(--pencil);}
+
+  /* ---------- masthead ---------- */
+  .mast{height:38px;}
+  .mast .l1{display:flex; justify-content:space-between; font:400 8.5px/11px var(--stencil); letter-spacing:1.6px; color:var(--ink-62);}
+  .mast .l2{font:400 15.5px/19px var(--stencil); letter-spacing:3px; color:var(--ink);}
+  .mast .dbl{margin-top:3px; border-top:2px solid var(--ink-80); padding-top:2px;}
+  .mast .dbl i{display:block; height:0; border-top:1px solid var(--ink-rule);}
+
+  /* ---------- identity ---------- */
+  .idb{margin-top:7px; position:relative; width:270px;}
+  .idb .r{display:flex; align-items:baseline; height:17px;}
+  .idb .k{width:46px; flex:0 0 46px; font:700 9.5px/17px var(--mono); letter-spacing:1.2px; color:var(--ink-62);}
+  .idb .d{flex:1 1 auto; height:0; margin:0 6px 4px 0; border-top:1px dotted rgba(34,26,17,.35);}
+  .idb .v{flex:0 0 auto; font:400 12.5px/17px var(--hand); color:var(--pencil); max-width:178px; white-space:nowrap;}
+  .idb .v em{font-style:normal; color:var(--ink); font-family:var(--mono); font-size:11px; letter-spacing:.5px;}
+
+  /* round rubber date stamp */
+  .dstamp{
+    position:absolute; left:282px; top:1px; width:76px; height:76px; border-radius:50%;
+    border:2.5px solid var(--red-70); transform:rotate(-11deg); opacity:.78;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+  }
+  .dstamp .ring{position:absolute; left:5px; top:5px; right:5px; bottom:5px; border:1px solid var(--red-50); border-radius:50%;}
+  .dstamp .a{font:400 7.5px/9px var(--stencil); letter-spacing:2.4px; color:var(--red);}
+  .dstamp .b{font:400 20px/22px var(--stencil); letter-spacing:1.5px; color:var(--red);}
+  .dstamp .c{font:400 7px/9px var(--stencil); letter-spacing:1.6px; color:var(--red-70);}
+  /* ink dropout: paper-coloured streaks over the stamp */
+  .dry{
+    position:absolute; left:0; top:0; right:0; bottom:0;
+    background-image:
+      repeating-linear-gradient(76deg, rgba(227,215,184,0) 0 5px, rgba(227,215,184,.50) 5px 7px),
+      repeating-linear-gradient(14deg, rgba(227,215,184,0) 0 9px, rgba(227,215,184,.32) 9px 11px);
+  }
+  .dry.rd{border-radius:50%;}
+
+  /* ---------- conditions ---------- */
+  .cond{margin-top:7px;}
+  .cond .r{display:flex; align-items:baseline; height:17px;}
+  .cond .k{width:26px; flex:0 0 26px; font:700 9.5px/17px var(--mono); letter-spacing:1px; color:var(--ink-62);}
+
+  /* ---------- SECTION 1 : triage form ---------- */
+  .triage{position:relative;}
+  .th{display:flex; align-items:flex-end; height:18px; border-bottom:1px solid var(--ink-rule);}
+  .th .c1{width:62px; flex:0 0 62px;}
+  .th .c2{width:131px; flex:0 0 131px; display:flex;}
+  .th .c2 span{width:25px; flex:0 0 25px; text-align:center;}
+  .th .c3{width:60px; flex:0 0 60px; text-align:right;}
+  .th .c4{width:36px; flex:0 0 36px; text-align:center;}
+  .th, .th span{font:400 7.5px/11px var(--stencil); letter-spacing:1.3px; color:var(--ink-62);}
+
+  .tr{display:flex; align-items:center; height:25px; border-bottom:1px solid var(--ink-faint);}
+  .tr.last{border-bottom:1px solid var(--ink-rule);}
+  .tr .c1{width:62px; flex:0 0 62px; font:700 10.5px/25px var(--mono); letter-spacing:1.4px; color:var(--ink);}
+  .tr .c2{width:131px; flex:0 0 131px; display:flex; align-items:center;}
+  .tr .c2 .bx{width:25px; flex:0 0 25px; display:flex; justify-content:center;}
+  .tr .c3{width:60px; flex:0 0 60px; text-align:right; font:400 12px/25px var(--mono); color:var(--ink); letter-spacing:.4px;}
+  .tr .c4{width:36px; flex:0 0 36px; text-align:center; font:700 13px/25px var(--mono); color:var(--red);}
+  .box{width:14px; height:14px; border:1px solid var(--ink-44); background:rgba(255,252,240,.22); position:relative;}
+  .box.hard{border-color:var(--ink-80);}
+
+  /* hand tick — two strokes, never a font glyph */
+  .tick{position:absolute; left:0; top:0; width:14px; height:14px;}
+  .tick span{position:absolute; display:block; background:var(--pencil); border-radius:1px; transform-origin:0 50%;}
+  .tick .s1{left:2.5px; top:8.2px; width:4.6px; height:1.7px; transform:rotate(45deg);}
+  .tick .s2{left:5.2px; top:11px;  width:11.6px; height:1.7px; transform:rotate(-53deg);}
+  .tick.j1{transform:rotate(-4deg) translate(0,-1px);}
+  .tick.j2{transform:rotate(3deg);}
+  .tick.j3{transform:rotate(-2deg) translate(1px,0);}
+  .tick.j4{transform:rotate(5deg) translate(-1px,0);}
+  .tick.red span{background:var(--red); height:2.1px;}
+  .tick.red{transform:rotate(-6deg) scale(1.12);}
+
+  /* the two hand-drawn rings around the critical row */
+  .ring2{position:absolute; border:2px solid var(--red-70); border-radius:50%/58%;}
+  .ring2.r1{left:2px;  top:66px; width:260px; height:29px; transform:rotate(-1.1deg);}
+  .ring2.r2{left:6px;  top:69px; width:254px; height:24px; transform:rotate(1.3deg); border-width:1.4px; border-color:var(--red-50);}
+
+  /* the inserted annotation line beneath the critical row */
+  .anno{display:flex; align-items:center; height:17px; padding-left:14px; gap:6px;}
+  .anno .hook{width:12px; height:9px; border-left:1.5px solid var(--red-50); border-bottom:1.5px solid var(--red-50); margin-bottom:5px;}
+  .anno .t{font:400 13px/17px var(--hand); color:var(--red); letter-spacing:.2px;}
+  .anno .t2{font:400 12px/17px var(--hand); color:var(--pencil-70);}
+
+  .foot{margin-top:3px; font:400 8px/11px var(--mono); color:var(--ink-44); letter-spacing:.3px;}
+
+  /* PRIORITY rubber stamp, struck beside the critical row */
+  .pstamp{
+    position:absolute; left:270px; top:64px; width:98px; height:32px;
+    transform:rotate(-8deg); opacity:.74;
+    border:2px solid var(--red-70);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .pstamp .in{position:absolute; left:3px; top:3px; right:3px; bottom:3px; border:1px solid var(--red-50);}
+  .pstamp .t{font:400 11.5px/14px var(--stencil); letter-spacing:3.2px; color:var(--red); padding-left:3px;}
+
+  /* ---------- SECTION 2 : effects ---------- */
+  .eff .l{font:400 11px/17px var(--mono); color:var(--ink); letter-spacing:.2px;}
+  .eff .l b{font-weight:700; color:var(--red); letter-spacing:.6px;}
+  .eff .n{color:var(--ink-44); font-weight:700;}
+
+  /* ---------- SECTION 3 : capacity ---------- */
+  .cap .l{font:400 11px/17px var(--mono); color:var(--ink); letter-spacing:.3px;}
+  .cap .l .d{color:var(--ink-62); font-weight:700;}
+  .cap .l .neg{color:var(--red); font-weight:700;}
+
+  /* ---------- SECTION 4 : reserves ---------- */
+  .res .r{display:flex; align-items:center; height:18px;}
+  .res .k{width:66px; flex:0 0 66px; font:700 9.5px/18px var(--mono); letter-spacing:1.1px; color:var(--ink-62);}
+  .struck{position:relative; font:400 11.5px/18px var(--mono); color:var(--ink-62);}
+  .struck .x{position:absolute; left:-2px; top:9px; width:34px; height:1.8px; background:var(--red); transform:rotate(-4deg); border-radius:1px;}
+  .newv{font:400 14px/18px var(--hand); color:var(--pencil); margin-left:9px;}
+  .frac{font:400 9px/18px var(--mono); color:var(--ink-44); margin-left:8px; letter-spacing:.3px;}
+  .chk{display:flex; align-items:center; gap:4px; margin-right:11px;}
+  .chk .box{width:12px; height:12px;}
+  .chk .tick{width:12px; height:12px;}
+  .chk .tick .s1{left:2px; top:7px; width:4px; height:1.6px;}
+  .chk .tick .s2{left:4.4px; top:9.4px; width:9.8px; height:1.6px;}
+  .chk .t{font:400 9.5px/18px var(--mono); letter-spacing:.9px; color:var(--ink);}
+
+  /* ---------- SECTION 5 : armament ---------- */
+  .arm .r{display:flex; align-items:center; height:17px;}
+  .arm .k{width:66px; flex:0 0 66px; font:700 9.5px/17px var(--mono); letter-spacing:1.1px; color:var(--ink-62);}
+  .arm .v{font:400 11.5px/17px var(--mono); color:var(--ink);}
+  .arm .v .q{color:var(--ink-62); font-size:10.5px;}
+  /* five-bar-gate tally, drawn */
+  .tally{display:flex; align-items:center; height:17px;}
+  .gate{position:relative; display:flex; gap:3px; height:13px; margin-right:10px;}
+  .gate b{display:block; width:1.6px; height:13px; background:var(--pencil); border-radius:1px; font-weight:400;}
+  .gate b:nth-child(1){transform:rotate(2deg);}
+  .gate b:nth-child(2){transform:rotate(-1.5deg);}
+  .gate b:nth-child(3){transform:rotate(1deg);}
+  .gate b:nth-child(4){transform:rotate(-2.5deg);}
+  .gate i{position:absolute; left:-3px; top:6px; width:21px; height:1.6px; background:var(--pencil); transform:rotate(-23deg); border-radius:1px;}
+  .gate.part{margin-right:8px;}
+  .tally .eq{font:400 11px/17px var(--mono); color:var(--ink); margin-left:2px; letter-spacing:.3px;}
+  .tally .eq strong{font:400 14px/17px var(--hand); color:var(--pencil);}
+
+  /* ---------- SECTION 6 : contact ---------- */
+  .con .r{display:flex; align-items:center; height:17px;}
+  .con .k{width:66px; flex:0 0 66px; font:700 9.5px/17px var(--mono); letter-spacing:1.1px; color:var(--ink-62);}
+  .con .v{font:400 11.5px/17px var(--mono); color:var(--ink);}
+  .con .pn{font:400 13px/17px var(--hand); color:var(--pencil); margin-left:8px;}
+  .uline{position:relative;}
+  .uline .u{position:absolute; left:-1px; bottom:2px; width:104%; height:1.4px; background:var(--pencil-70); transform:rotate(-.7deg); border-radius:1px;}
+  .safebox{
+    position:relative; margin-left:auto; padding:1px 8px 2px 8px;
+    border:1.5px solid var(--ink-80); transform:rotate(-1.4deg);
+    font:400 8.5px/12px var(--stencil); letter-spacing:2px; color:var(--ink);
+  }
+  .safebox .in{position:absolute; left:2px; top:2px; right:2px; bottom:2px; border:1px solid var(--ink-faint);}
+
+  /* ---------- SECTION 7 : pencil sketch map ---------- */
+  .sk .wrap{display:flex; gap:14px; margin-top:2px;}
+  .mapg{
+    position:relative; width:121px; height:121px; flex:0 0 121px;
+    background-color:rgba(255,252,240,.20);
+    background-image:
+      repeating-linear-gradient(to right,  rgba(78,84,80,.20) 0 1px, rgba(0,0,0,0) 1px 11px),
+      repeating-linear-gradient(to bottom, rgba(78,84,80,.20) 0 1px, rgba(0,0,0,0) 1px 11px);
+    box-shadow:inset 0 0 0 1px var(--pencil-45);
+  }
+  .mrow{display:flex; height:11px;}
+  .mc{width:11px; flex:0 0 11px; text-align:center; font:400 8px/11px var(--mono); color:var(--pencil-45);}
+  .mc.f{color:var(--pencil); font-weight:700;}
+  .mc.h{color:var(--ink-80); font-weight:700;}
+  .mc.me{color:var(--red); font-weight:700; font-size:10px;}
+  .mc.poi{color:var(--pencil); font-weight:700;}
+  .xc{position:relative; width:11px; height:11px; flex:0 0 11px;}
+  .xc i{position:absolute; left:-1px; top:5px; width:13px; height:1.8px; background:var(--red); border-radius:1px;}
+  .xc i.a{transform:rotate(43deg);}
+  .xc i.b{transform:rotate(-46deg);}
+  .leader{position:absolute; left:106px; top:6px; width:42px; height:1.3px; background:var(--pencil-70); transform:rotate(-20deg); border-radius:1px;}
+  .lg{flex:1 1 auto;}
+  .lg .r{display:flex; align-items:center; height:14px; gap:6px;}
+  .lg .g{width:13px; flex:0 0 13px; text-align:center; font:700 9px/14px var(--mono); color:var(--pencil);}
+  .lg .g.red{color:var(--red);}
+  .lg .g.ink{color:var(--ink-80);}
+  .lg .t{font:400 9px/14px var(--mono); letter-spacing:.8px; color:var(--ink-62);}
+  .lg .note{margin-top:5px; font:400 12.5px/15px var(--hand); color:var(--pencil);}
+  .lg .note b{color:var(--red); font-weight:400;}
+
+  /* ---------- SECTION 8 : running log ---------- */
+  .lgb{margin-top:4px;}
+  .entries{background-image:repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0 19px, rgba(34,26,17,.15) 19px 20px);}
+  .en{position:relative; display:flex; align-items:baseline; height:20px;}
+  .en .ts{width:44px; flex:0 0 44px; font:400 11.5px/20px var(--hand); color:var(--pencil-70); letter-spacing:.2px;}
+  .en .tx{font:400 11px/20px var(--mono); color:var(--ink);}
+  .en.bad .tx{color:var(--red);}
+  /* the fixture's fourth tier, "bad (dimmer)": the SAME red ink applied more
+     weakly, so it stays independent of the age-fade ladder below. */
+  .en.dim .tx{color:var(--red-70);}
+  /* "caution" has no ink of its own in a two-ink system, so it is a pencil
+     margin bar — the mark you make beside a line you mean to come back to.
+     Positional, not chromatic, so it survives any colour-vision variant. */
+  .en.mark .bar{position:absolute; left:37px; top:3px; width:1.6px; height:14px; background:var(--pencil); border-radius:1px; transform:rotate(2deg);}
+  .en.a1{opacity:.56;} .en.a2{opacity:.66;} .en.a3{opacity:.74;}
+  .en.a4{opacity:.80;} .en.a5{opacity:.90;}
+  .en.now{position:relative;}
+  .en.now .tx{color:var(--ink); font-weight:700;}
+  .en.now .ts{color:var(--pencil);}
+  .en.now .nib {position:absolute; left:-14px; top:6px;  width:10px; height:1.6px; background:var(--pencil); transform:rotate(32deg); border-radius:1px;}
+  .en.now .nib2{position:absolute; left:-14px; top:12px; width:10px; height:1.6px; background:var(--pencil); transform:rotate(-32deg); border-radius:1px;}
+  .en.now .ul  {position:absolute; left:44px; top:17px; width:172px; height:1.4px; background:var(--pencil-70); transform:rotate(-.5deg); border-radius:1px;}
+
+  /* ============================================================
+     TAPE — holds the free edge down. This is the depth cue that
+     says "object resting on the world", not "wash over the world"
+     ============================================================ */
+  .tape{
+    position:absolute;
+    background-color:rgba(236,232,214,.34);
+    background-image:
+      linear-gradient(to bottom, rgba(255,255,255,.30) 0%, rgba(255,255,255,.06) 26%, rgba(255,255,255,.04) 74%, rgba(255,255,255,.26) 100%),
+      repeating-linear-gradient(97deg, rgba(255,255,255,.10) 0 2px, rgba(0,0,0,0) 2px 6px);
+    box-shadow:
+      0 1px 3px rgba(0,0,0,.32),
+      inset 0 1px 0 rgba(255,255,255,.34),
+      inset 0 -1px 0 rgba(255,255,255,.22);
+    backdrop-filter:blur(1.2px) brightness(1.06) saturate(.72);
+  }
+  .tape.s1{left:366px; top:126px; width:74px; height:29px; transform:rotate(-3.4deg);}
+  .tape.s2{left:362px; top:536px; width:74px; height:29px; transform:rotate(2.6deg);}
+  .tape.s3{left:366px; top:944px; width:74px; height:29px; transform:rotate(-2.2deg);}
+
+  /* ============================================================
+     OBJECT 2 — index card, taped along the bottom edge
+     ============================================================ */
+  .card{
+    position:absolute; left:686px; top:998px; width:584px; height:58px;
+    padding:5px 13px; box-sizing:border-box;
+    transform:rotate(-0.5deg);
+    background-color:#ded2b2;
+    background-image:
+      linear-gradient(96deg, #e9dec0 0%, #ded2b2 46%, #d4c6a2 100%),
+      repeating-linear-gradient(88deg, rgba(122,96,58,.045) 0 1px, rgba(0,0,0,0) 1px 3px),
+      repeating-linear-gradient(11deg, rgba(122,96,58,.032) 0 1px, rgba(0,0,0,0) 1px 4px),
+      radial-gradient(120px 60px at 88% 108%, rgba(185,154,104,.28) 0 55%, rgba(150,116,68,.30) 66%, rgba(185,154,104,0) 80%);
+    box-shadow:
+      0 0 0 1px rgba(52,38,22,.55),
+      0 9px 22px -6px rgba(0,0,0,.62),
+      inset 0 1px 0 rgba(255,250,235,.55),
+      inset 0 -10px 14px -12px rgba(120,90,50,.45);
+  }
+  .card .hd{display:flex; align-items:center; justify-content:space-between; height:13px; border-bottom:1.5px solid var(--red-50);}
+  .card .hd .a{font:400 8px/12px var(--stencil); letter-spacing:2.2px; color:var(--ink-80);}
+  .card .hd .b{font:400 8px/12px var(--stencil); letter-spacing:1.4px; color:var(--red);}
+  .cells{display:flex; margin-top:4px;}
+  .cell{width:62px; flex:0 0 62px; position:relative; display:flex; flex-direction:column; align-items:center;}
+  .cell .n{position:absolute; left:2px; top:-1px; font:400 7px/8px var(--mono); color:var(--ink-44);}
+  .cell .kb{width:22px; height:18px; border:1px solid var(--ink-62); background:rgba(255,252,240,.26);
+            font:700 12.5px/16px var(--mono); color:var(--ink); text-align:center;}
+  .cell .lb2{margin-top:2px; font:400 8px/11px var(--stencil); letter-spacing:.7px; color:var(--ink-80);}
+  .cell.void .kb{border-color:var(--red-50); color:var(--ink-44);}
+  .cell.void .lb2{color:var(--red);}
+  .cell.void .strike {position:absolute; left:5px; top:15px; width:52px; height:1.8px; background:var(--red); transform:rotate(-18deg); border-radius:1px;}
+  .cell.void .strike2{position:absolute; left:5px; top:16px; width:52px; height:1.3px; background:var(--red-50); transform:rotate(-24deg); border-radius:1px;}
+
+  .tape.k1{left:672px;  top:986px;  width:46px; height:26px; transform:rotate(-8deg);}
+  .tape.k2{left:1240px; top:1044px; width:46px; height:26px; transform:rotate(-7deg);}
+</style></head>
+<body><div id="screen">
+
+  <!-- ========================= OBJECT 1 ========================= -->
+  <div class="sheet">
+    <div class="body">
+
+      <!-- masthead -->
+      <div class="mast">
+        <div class="l1"><span>DEPT. OF THE ARMY &nbsp;·&nbsp; FM 21-76</span><span>SHEET 1 OF 1</span></div>
+        <div class="l2">FIELD RECORD</div>
+        <div class="dbl"><i></i></div>
+      </div>
+
+      <!-- identity -->
+      <div class="idb">
+        <div class="r"><span class="k">NAME</span><span class="d"></span><span class="v">Nigel Ashby</span></div>
+        <div class="r"><span class="k">ROLE</span><span class="d"></span><span class="v">Survivor</span></div>
+        <div class="r"><span class="k">TIME</span><span class="d"></span><span class="v"><em>21:47</em> &nbsp;autumn</span></div>
+        <div class="r"><span class="k">POSN</span><span class="d"></span><span class="v">Cheswick &mdash; resid&#8217;l</span></div>
+      </div>
+      <div class="dstamp">
+        <div class="ring"></div>
+        <div class="a">DAY</div>
+        <div class="b">014</div>
+        <div class="c">FILED</div>
+        <div class="dry rd"></div>
+      </div>
+
+      <!-- conditions -->
+      <div class="cond">
+        <div class="r"><span class="k">WX</span><span class="tw">Light drizzle &nbsp;8&nbsp;&deg;C &nbsp;wind NE 12 km/h</span></div>
+        <div class="r"><span class="k">LT</span><span class="tw">12% moonlight &nbsp;torch</span><span class="hand" style="margin-left:7px">34% chg</span></div>
+      </div>
+
+      <!-- SECTION 1 — triage -->
+      <div class="sec"><span class="sec-t">SECTION 1 &mdash; TRIAGE</span><span class="sec-r"></span></div>
+      <div class="triage">
+        <div class="th">
+          <span class="c1">PART</span>
+          <span class="c2"><span>FIT</span><span>MIN</span><span>MOD</span><span>SEV</span><span>CRT</span></span>
+          <span class="c3">CUR/MAX</span>
+          <span class="c4">FLAG</span>
+        </div>
+
+        <div class="tr">
+          <span class="c1">HEAD</span>
+          <span class="c2">
+            <span class="bx"><span class="box"></span></span>
+            <span class="bx"><span class="box hard"><span class="tick j1"><span class="s1"></span><span class="s2"></span></span></span></span>
+            <span class="bx"><span class="box"></span></span>
+            <span class="bx"><span class="box"></span></span>
+            <span class="bx"><span class="box"></span></span>
+          </span>
+          <span class="c3">20/24</span><span class="c4"></span>
+        </div>
+
+        <div class="tr">
+          <span class="c1">TORSO</span>
+          <span class="c2">
+            <span class="bx"><span class="box"></span></span>
+            <span class="bx"><span class="box"></span></span>
+            <span class="bx"><span class="box hard"><span class="tick j2"><span class="s1"></span><span class="s2"></span></span></span></span>
+            <span class="bx"><span class="box"></span></span>
+            <span class="bx"><span class="box"></span></span>
+          </span>
+          <span class="c3">45/60</span><span class="c4"></span>
+        </div>
+
+        <div class="tr">
+          <span class="c1">L ARM</span>
+          <span class="c2">
+            <span class="bx"><span class="box"></span></span>
+            <span class="bx"><span class="box"></span></span>
+            <span class="bx"><span class="box"></span></span>
+            <span class="bx"><span class="box"></span></span>
+            <span class="bx"><span class="box hard"><span class="tick red"><span class="s1"></span><span class="s2"></span></span></span></span>
+          </span>
+          <span class="c3">8/30</span><span class="c4">!</span>
+        </div>
+        <div class="anno">
+          <span class="hook"></span>
+          <span class="t">bleeding &middot; bitten</span>
+          <span class="t2">&mdash; tourniquet, then bandage</span>
+        </div>
+
+        <div class="tr">
+          <span class="c1">R ARM</span>
+          <span class="c2">
+            <span class="bx"><span class="box hard"><span class="tick j3"><span class="s1"></span><span class="s2"></span></span></span></span>
+            <span class="bx"><span class="box"></span></span>
+            <span class="bx"><span class="box"></span></span>
+            <span class="bx"><span class="box"></span></span>
+            <span class="bx"><span class="box"></span></span>
+          </span>
+          <span class="c3">30/30</span><span class="c4"></span>
+        </div>
+
+        <div class="tr">
+          <span class="c1">L LEG</span>
+          <span class="c2">
+            <span class="bx"><span class="box"></span></span>
+            <span class="bx"><span class="box"></span></span>
+            <span class="bx"><span class="box hard"><span class="tick j4"><span class="s1"></span><span class="s2"></span></span></span></span>
+            <span class="bx"><span class="box"></span></span>
+            <span class="bx"><span class="box"></span></span>
+          </span>
+          <span class="c3">22/28</span><span class="c4"></span>
+        </div>
+
+        <div class="tr last">
+          <span class="c1">R LEG</span>
+          <span class="c2">
+            <span class="bx"><span class="box hard"><span class="tick j1"><span class="s1"></span><span class="s2"></span></span></span></span>
+            <span class="bx"><span class="box"></span></span>
+            <span class="bx"><span class="box"></span></span>
+            <span class="bx"><span class="box"></span></span>
+            <span class="bx"><span class="box"></span></span>
+          </span>
+          <span class="c3">28/28</span><span class="c4"></span>
+        </div>
+
+        <div class="ring2 r1"></div>
+        <div class="ring2 r2"></div>
+        <div class="pstamp"><span class="in"></span><span class="t">PRIORITY</span><span class="dry"></span></div>
+        <div class="foot">BAND, % OF MAX &nbsp;FIT 95+ &nbsp;MIN 80-94 &nbsp;MOD 60-79 &nbsp;SEV 30-59 &nbsp;CRT &lt;30</div>
+      </div>
+
+      <!-- SECTION 2 — effects -->
+      <div class="sec"><span class="sec-t">SECTION 2 &mdash; EFFECTS NOTED</span><span class="sec-r"></span></div>
+      <div class="eff">
+        <div class="l"><span class="n">1</span> <b>BLEEDING (L ARM)</b> &nbsp;&nbsp;<span class="n">2</span> <b>BITTEN (L ARM)</b></div>
+        <div class="l"><span class="n">3</span> SOAKED &nbsp;&nbsp;<span class="n">4</span> TIRED &nbsp;&nbsp;<span class="n">5</span> PAIN 12</div>
+      </div>
+
+      <!-- SECTION 3 — capacity -->
+      <div class="sec"><span class="sec-t">SECTION 3 &mdash; CAPACITY</span><span class="sec-r"></span></div>
+      <div class="cap">
+        <div class="l">STR 10 &nbsp; DEX 12 &nbsp; INT 9 &nbsp; PER 11</div>
+        <div class="l">SPD 96 &nbsp; FOC 84 &nbsp; PAIN 12 &nbsp; MORALE <span class="neg">-3</span></div>
+        <div class="l"><span class="d">ENC</span> torso 12 &middot; arms 4 &nbsp;<span class="d">GAIT</span> walking &nbsp;<span class="d">NOISE</span> 8</div>
+      </div>
+
+      <!-- SECTION 4 — reserves -->
+      <div class="sec"><span class="sec-t">SECTION 4 &mdash; RESERVES</span><span class="sec-r"></span></div>
+      <div class="res">
+        <div class="r">
+          <span class="k">STAMINA</span>
+          <span class="struck">8700<span class="x"></span></span>
+          <span class="newv">5100</span>
+          <span class="frac">OF 8700</span>
+        </div>
+        <div class="r">
+          <span class="k">NEEDS</span>
+          <span class="chk"><span class="box"><span class="tick j2"><span class="s1"></span><span class="s2"></span></span></span><span class="t">PECKISH</span></span>
+          <span class="chk"><span class="box"><span class="tick j3"><span class="s1"></span><span class="s2"></span></span></span><span class="t">THIRSTY</span></span>
+          <span class="chk"><span class="box"><span class="tick j1"><span class="s1"></span><span class="s2"></span></span></span><span class="t">TIRED</span></span>
+          <span class="chk"><span class="box"><span class="tick j4"><span class="s1"></span><span class="s2"></span></span></span><span class="t">CHILLY</span></span>
+        </div>
+      </div>
+
+      <!-- SECTION 5 — armament -->
+      <div class="sec"><span class="sec-t">SECTION 5 &mdash; ARMAMENT</span><span class="sec-r"></span></div>
+      <div class="arm">
+        <div class="r"><span class="k">IN HAND</span><span class="v">fire axe &nbsp;<span class="q">bash 32 &middot; cut 0 &middot; hit +1</span></span></div>
+        <div class="r"><span class="k">STOWED</span><span class="v">Glock 19 &nbsp;<span class="q">9mm JHP</span></span></div>
+        <div class="r"><span class="k">ROUNDS</span>
+          <span class="tally">
+            <span class="gate"><b></b><b></b><b></b><b></b><i></i></span>
+            <span class="gate"><b></b><b></b><b></b><b></b><i></i></span>
+            <span class="gate part"><b></b><b></b></span>
+            <span class="eq">= <strong>12</strong> of 17</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- SECTION 6 — contact -->
+      <div class="sec"><span class="sec-t">SECTION 6 &mdash; CONTACT</span><span class="sec-r"></span></div>
+      <div class="con">
+        <div class="r"><span class="k">HOSTILE</span><span class="v uline">zombie brute<span class="u"></span></span><span class="pn">4 tiles NE, moving</span></div>
+        <div class="r"><span class="k">CONDITION</span><span class="pn" style="margin-left:0">abt. 62%</span><span class="safebox"><span class="in"></span>SAFE MODE ON</span></div>
+        <div class="r"><span class="k">TALLY</span><span class="v">3 visible &nbsp;&middot;&nbsp; 1 tracking me</span></div>
+      </div>
+
+      <!-- SECTION 7 — sketch -->
+      <div class="sec"><span class="sec-t">SECTION 7 &mdash; SKETCH, 11&times;11</span><span class="sec-r"></span></div>
+      <div class="sk">
+        <div class="wrap">
+          <div class="mapg">
+            <div class="mrow"><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc f">F</span><span class="mc f">F</span><span class="mc f">F</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span></div>
+            <div class="mrow"><span class="mc">.</span><span class="mc">.</span><span class="mc f">F</span><span class="mc f">F</span><span class="mc f">F</span><span class="mc f">F</span><span class="mc f">F</span><span class="mc">.</span><span class="mc">.</span><span class="xc"><i class="a"></i><i class="b"></i></span><span class="mc">.</span></div>
+            <div class="mrow"><span class="mc">.</span><span class="mc">.</span><span class="mc f">F</span><span class="mc f">F</span><span class="mc">.</span><span class="mc">.</span><span class="mc f">F</span><span class="mc f">F</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span></div>
+            <div class="mrow"><span class="mc">.</span><span class="mc poi">x</span><span class="mc">.</span><span class="mc">.</span><span class="mc h">H</span><span class="mc h">H</span><span class="mc">.</span><span class="mc">.</span><span class="mc f">F</span><span class="mc">.</span><span class="mc">.</span></div>
+            <div class="mrow"><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc h">H</span><span class="mc h">H</span><span class="mc h">H</span><span class="mc h">H</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span></div>
+            <div class="mrow"><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc h">H</span><span class="mc me">@</span><span class="mc h">H</span><span class="mc h">H</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span></div>
+            <div class="mrow"><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc h">H</span><span class="mc h">H</span><span class="mc h">H</span><span class="mc">.</span><span class="mc">.</span><span class="mc f">F</span><span class="mc f">F</span><span class="mc">.</span></div>
+            <div class="mrow"><span class="mc">.</span><span class="mc">.</span><span class="mc f">F</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc f">F</span><span class="mc f">F</span><span class="mc">.</span></div>
+            <div class="mrow"><span class="mc">.</span><span class="mc f">F</span><span class="mc f">F</span><span class="mc">.</span><span class="mc poi">x</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc f">F</span><span class="mc">.</span></div>
+            <div class="mrow"><span class="mc">.</span><span class="mc f">F</span><span class="mc f">F</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span></div>
+            <div class="mrow"><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span><span class="mc">.</span></div>
+            <div class="leader"></div>
+          </div>
+          <div class="lg">
+            <div class="r"><span class="g red">&times;</span><span class="t">OBJECTIVE</span></div>
+            <div class="r"><span class="g red">@</span><span class="t">ME</span></div>
+            <div class="r"><span class="g ink">H</span><span class="t">HOUSE</span></div>
+            <div class="r"><span class="g">F</span><span class="t">WOOD</span></div>
+            <div class="r"><span class="g">x</span><span class="t">POI, UNSEEN</span></div>
+            <div class="note">4 blocks NE &mdash;<br><b>brute in the way</b></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 8 — running log -->
+      <div class="sec"><span class="sec-t">SECTION 8 &mdash; RUNNING LOG</span><span class="sec-r"></span></div>
+      <div class="lgb">
+        <div class="entries">
+          <div class="en a1"><span class="ts">21.46</span><span class="tx">You hit the zombie brute with your fire axe.</span></div>
+          <div class="en a2 bad"><span class="ts">21.46</span><span class="tx">The zombie brute claws your left arm!</span></div>
+          <div class="en a3 bad"><span class="ts">21.47</span><span class="tx">Your left arm is bleeding.</span></div>
+          <div class="en a4 bad dim"><span class="ts">21.47</span><span class="tx">You feel a sharp pain.</span></div>
+          <div class="en a5 mark"><span class="bar"></span><span class="ts">21.47</span><span class="tx">The zombie shambler groans nearby.</span></div>
+          <div class="en now mark"><span class="bar"></span><span class="nib"></span><span class="nib2"></span><span class="ts">21.47</span><span class="tx">You are getting thirsty.</span><span class="ul"></span></div>
+        </div>
+      </div>
+
+    </div><!-- /.body -->
+
+    <div class="grain"></div>
+    <div class="stains"></div>
+    <div class="crease a"><i class="hi"></i><i class="lo"></i></div>
+    <div class="crease b"><i class="hi"></i><i class="lo"></i></div>
+    <div class="smudge"></div>
+    <div class="hole h1"></div>
+    <div class="hole h2"></div>
+    <div class="hole h3"></div>
+  </div>
+
+  <div class="tape s1"></div>
+  <div class="tape s2"></div>
+  <div class="tape s3"></div>
+
+  <!-- ========================= OBJECT 2 ========================= -->
+  <div class="card">
+    <div class="hd">
+      <span class="a">QUICK REFERENCE &mdash; KEYS</span>
+      <span class="b">SLOT 1 VOID &mdash; NO FIREARM WIELDED</span>
+    </div>
+    <div class="cells">
+      <div class="cell void"><span class="n">1</span><span class="kb">f</span><span class="lb2">FIRE</span><span class="strike"></span><span class="strike2"></span></div>
+      <div class="cell"><span class="n">2</span><span class="kb">r</span><span class="lb2">RELOAD</span></div>
+      <div class="cell"><span class="n">3</span><span class="kb">&#39;</span><span class="lb2">RUN</span></div>
+      <div class="cell"><span class="n">4</span><span class="kb">e</span><span class="lb2">EXAMINE</span></div>
+      <div class="cell"><span class="n">5</span><span class="kb">p</span><span class="lb2">PICK UP</span></div>
+      <div class="cell"><span class="n">6</span><span class="kb">c</span><span class="lb2">CRAFT</span></div>
+      <div class="cell"><span class="n">7</span><span class="kb">i</span><span class="lb2">INVENTORY</span></div>
+      <div class="cell"><span class="n">8</span><span class="kb">t</span><span class="lb2">THROW</span></div>
+      <div class="cell"><span class="n">9</span><span class="kb">5</span><span class="lb2">WAIT</span></div>
+    </div>
+  </div>
+  <div class="tape k1"></div>
+  <div class="tape k2"></div>
+
+</div></body></html>

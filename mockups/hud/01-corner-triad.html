@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>01 &mdash; Corner Triad</title><style>
+  html,body { margin:0; padding:0; background:#000; }
+  #screen {
+    position:relative; width:1920px; height:1080px; overflow:hidden;
+    background-image:url("_shared/world.png");
+    background-size:1920px 1080px;
+  }
+
+  /* =================================================================
+     01 - CORNER TRIAD          [sentinel: d01-corner-triad-sentinel]
+     Four peripheral typographic clusters, each anchored to a screen
+     corner. No panels, no plates, no boxes, no frame around anything.
+     Every rectangle in this file is <=2px in its minor dimension:
+     rails 1px, registration ticks 1px, sparklines 2px, recency rules
+     2px, the critical flag 2px.
+     Contrast is built in two layers that are both edgeless:
+       1. a per-glyph dark casing (1px hard ring + 2 soft black glows)
+          - the mockup's stand-in for RCSS
+          font-effect: outline(1dp #000), blur(3dp #000);
+       2. six soft elliptical POOLS. Each is a radial-gradient that
+          reaches alpha 0 exactly at its own ellipse boundary, so it
+          has no edge anywhere and is not a panel. Pools exist only
+          under the six blocks that casing alone cannot carry.
+     The centre band x=443..1548 carries no pool and no ink: the
+     player tile (928,512)-(960,544) is bit-for-bit un-HUDded.
+     ================================================================= */
+
+  /* ---- type ------------------------------------------------------
+     Label tier is 11px, the floor named in research-infodesign.md
+     ("0.8em monospace = ~11px"), and bold. The old 9px label tier
+     was below the floor and is gone from this file. -------------- */
+  .d01t   { font-family:Consolas,"Cascadia Mono","Lucida Console",monospace;
+            font-weight:400;
+            /* per-glyph dark casing. RCSS equivalent:
+               font-effect: outline(1dp #000), blur(3dp #000e); */
+            text-shadow: 0 0 3px rgba(0,0,0,.95), 0 0 7px rgba(0,0,0,.80),
+                         1px 0 0 #000, -1px 0 0 #000,
+                         0 1px 0 #000, 0 -1px 0 #000,
+                         1px 1px 0 #000, -1px 1px 0 #000,
+                         1px -1px 0 #000, -1px -1px 0 #000; }
+  .d01row { position:absolute; white-space:nowrap; }
+
+  .d01u   { font-size:11px; line-height:13px; letter-spacing:1.8px;
+            font-weight:700; }   /* label / cluster header       */
+  .d01u2  { font-size:11px; line-height:13px; letter-spacing:0.4px;
+            font-weight:700; }   /* dense numeric label, /max    */
+  .d01l   { font-size:12px; line-height:15px; letter-spacing:0.6px; }
+  .d01b   { font-size:13px; line-height:17px; letter-spacing:0.15px; }
+  .d01m   { font-size:17px; line-height:20px; letter-spacing:1.2px; }
+  .d01v   { font-size:23px; line-height:26px; letter-spacing:0.5px; }
+  .d01xl  { font-size:38px; line-height:42px; letter-spacing:2px; }
+
+  /* ---- luminance ladder + ONE accent hue (20deg).
+          Every step is >=30 L apart so the ladder survives grayscale.
+          The whole ladder was lifted ~40 L off the old one, which sat
+          at or below the lit-grass luminance in world.png. -------- */
+  .d01n0 { color:#f4f8f6; }   /* L246  primary value            */
+  .d01n1 { color:#dfe6e2; }   /* L228  secondary value          */
+  .d01n2 { color:#b8c3be; }   /* L193  label / header           */
+  .d01n3 { color:#8e9c96; }   /* L154  ambient / disabled       */
+  .d01a1 { color:#f2bf9a; }   /* L195  hue20 s55  caution       */
+  .d01a2 { color:#e08a5c; }   /* L154  hue20 s65  harm, aged    */
+  .d01a0 { color:#ff8347; }   /* L154  hue20 s100 harm, fresh   */
+
+  /* ---- clusters: soft ambient lift, never a plate ---------------- */
+  .d01c { position:absolute; filter: drop-shadow(0 1px 2px rgba(0,0,0,.60)); }
+
+  /* ---- POOLS -----------------------------------------------------
+     radial-gradient sized to exactly half the box on both axes, so
+     the last stop (alpha 0) lands on the ellipse and the box corners
+     are never painted. There is no edge to see, at any alpha.
+     RCSS: decorator: radial-gradient(ellipse closest-side at 50% 50%,
+                        #030605cc 0%, #030605bd 42%, #0306058a 70%,
+                        #03060542 86%, #03060500 100%);
+     closest-side on a rect == 50% 50%.
+     Mean alpha over the ellipse = 0.464, i.e. below the half weight
+     this design is charged for in the occlusion budget. --------- */
+  .d01pool { position:absolute;
+             background-image: radial-gradient(ellipse 50% 50% at 50% 50%,
+               rgba(3,6,5,.80) 0%, rgba(3,6,5,.74) 42%,
+               rgba(3,6,5,.54) 70%, rgba(3,6,5,.26) 86%,
+               rgba(3,6,5,0) 100%); }
+
+  /* ---- hairline rails, faded at both ends. Segmented, so the rail
+          is itself an index of where the clusters are. ------------ */
+  .d01rail  { position:absolute; width:1px;
+              background:linear-gradient(to bottom,
+                rgba(244,248,246,0) 0%, rgba(244,248,246,.26) 14%,
+                rgba(244,248,246,.26) 86%, rgba(244,248,246,0) 100%); }
+  .d01notch { position:absolute; width:1px; height:16px;
+              background:rgba(244,248,246,.85); }
+  .d01tk    { position:absolute; background:rgba(244,248,246,.30); }
+
+  /* ---- sparkline: the only quantity glyph in the design. 2px tall.
+          track = capacity, fill = value, hue = severity ------------ */
+  .d01trk  { position:relative; height:2px; background:rgba(3,6,5,.72); }
+  .d01fil  { position:absolute; left:0; top:0; height:2px; }
+  .d01fn1  { background:#dfe6e2; }
+  .d01fa1  { background:#f2bf9a; }
+  .d01fa0  { background:#ff8347; }
+
+  .d01fx  { display:flex; align-items:baseline; }
+  .d01fxe { display:flex; align-items:flex-end; }
+  .d01fxc { display:flex; align-items:center; }
+  .d01ctr { align-self:center; }
+
+  /* ---- right clusters: claw back the trailing letter-spacing so the
+          optical right edge lands exactly on x=1864 --------------- */
+  .d01ra .d01u  { margin-right:-1.8px; }
+  .d01ra .d01u2 { margin-right:-0.4px; }
+  .d01ra .d01l  { margin-right:-0.6px; }
+  .d01ra .d01b  { margin-right:-0.15px; }
+  .d01ra .d01m  { margin-right:-1.2px; }
+
+  /* ---- critical flag: a 2px hairline beside the failing part ----- */
+  .d01crit { position:absolute; width:2px; background:#ff8347;
+             animation: d01flag 1.9s ease-in-out infinite; }
+  @keyframes d01flag { 0% {opacity:1} 50% {opacity:.45} 100% {opacity:1} }
+
+  /* ---- log recency: a 2px rule, brightening toward the newest row.
+          Recency is position + rule luminance. The text itself is
+          never faded - the old opacity ramp (0.28 -> 1.0) is what
+          made five of six rows unreadable and it is gone. -------- */
+  .d01age { position:absolute; left:-12px; width:2px; height:15px;
+            background:#f4f8f6; }
+
+  /* ---- overmap: 11x11 glyph matrix, unframed, 13px cells -------- */
+  .d01grw { height:13px; white-space:nowrap; }
+  .d01gc  { display:inline-block; width:13px; font-size:13px;
+            line-height:13px; text-align:center; }
+  .d01gf  { color:#b0bdb7; }              /* field   */
+  .d01gw  { color:#c8d2cd; }              /* forest  */
+  .d01gh  { color:#e8eeeb; }              /* built   */
+  .d01gp  { color:#f2bf9a; }              /* POI     */
+  .d01gm  { color:#ff8347; font-weight:700; }  /* mission */
+  .d01ga  { color:#ffffff; font-weight:700; }  /* self    */
+
+  /* ---- bearing rosette: direction by position, not by hue ------- */
+  .d01ros { position:relative; width:30px; height:30px; }
+  .d01rd  { position:absolute; width:2px; height:2px; border-radius:50%;
+            background:#8e9c96; }
+  .d01rd.d01hot { width:4px; height:4px; background:#ff8347; }
+  .d01rd.d01hub { background:#dfe6e2; }
+
+  /* ---- hotbar --------------------------------------------------- */
+  .d01slot   { position:absolute; white-space:nowrap; }
+  .d01strike { position:absolute; left:0; top:8px; height:1px;
+               background:#8e9c96; }
+</style></head>
+<body><div id="screen">
+
+  <!-- ===== POOLS: six soft ellipses, painted first so all type sits
+       on top of them. Each fades to alpha 0 on its own ellipse, so
+       none of them has an edge and none of them is a panel. ======= -->
+  <div class="d01pool" style="left:28px;top:178px;width:199px;height:215px"></div>
+  <div class="d01pool" style="left:1625px;top:22px;width:255px;height:181px"></div>
+  <div class="d01pool" style="left:38px;top:578px;width:278px;height:223px"></div>
+  <div class="d01pool" style="left:38px;top:785px;width:276px;height:150px"></div>
+  <div class="d01pool" style="left:38px;top:918px;width:399px;height:158px"></div>
+  <div class="d01pool" style="left:1548px;top:874px;width:336px;height:200px"></div>
+
+  <!-- ===== hairline rails: 1px, faded ends, segmented so the rail is
+       itself an index of where the clusters sit =================== -->
+  <div class="d01rail" style="left:40px;top:36px;height:360px"></div>
+  <div class="d01rail" style="left:40px;top:566px;height:369px"></div>
+  <div class="d01rail" style="left:40px;top:940px;height:136px"></div>
+  <div class="d01rail" style="left:1880px;top:36px;height:164px"></div>
+  <div class="d01rail" style="left:1880px;top:880px;height:194px"></div>
+  <!-- playhead: the rail brightens beside the newest message -->
+  <div class="d01notch" style="left:40px;top:1046px"></div>
+
+  <!-- ===== corner registration ticks, 24px inset =================== -->
+  <div class="d01tk" style="left:24px;top:24px;width:14px;height:1px"></div>
+  <div class="d01tk" style="left:24px;top:24px;width:1px;height:14px"></div>
+  <div class="d01tk" style="left:1882px;top:24px;width:14px;height:1px"></div>
+  <div class="d01tk" style="left:1895px;top:24px;width:1px;height:14px"></div>
+  <div class="d01tk" style="left:24px;top:1055px;width:14px;height:1px"></div>
+  <div class="d01tk" style="left:24px;top:1042px;width:1px;height:14px"></div>
+  <div class="d01tk" style="left:1882px;top:1055px;width:14px;height:1px"></div>
+  <div class="d01tk" style="left:1895px;top:1042px;width:1px;height:14px"></div>
+
+  <!-- ===== TOP-LEFT :: SITUATION =================================== -->
+  <div class="d01c" style="left:56px;top:40px">
+    <div class="d01row d01t d01u d01n2" style="left:0;top:0">SITUATION</div>
+
+    <div class="d01row d01t d01fx" style="left:0;top:20px">
+      <span class="d01m d01n1">NIGEL ASHBY</span>
+      <span class="d01u d01n2" style="margin-left:18px">SURVIVOR</span>
+    </div>
+
+    <div class="d01row d01t d01fxe" style="left:0;top:46px">
+      <span class="d01xl d01n0">21:47</span>
+      <div style="margin-left:20px">
+        <div class="d01t d01u d01n2">DAY&nbsp;<span class="d01n0">14</span>
+          &nbsp;&middot;&nbsp; AUTUMN</div>
+        <div class="d01t d01l d01n1" style="margin-top:6px">CHESWICK &mdash;
+          RESIDENTIAL</div>
+      </div>
+    </div>
+
+    <div class="d01row d01t d01u2 d01n2" style="left:0;top:96px">STR&nbsp;<span
+      class="d01n0">10</span>&nbsp;&nbsp;DEX&nbsp;<span
+      class="d01n0">12</span>&nbsp;&nbsp;INT&nbsp;<span
+      class="d01n0">9</span>&nbsp;&nbsp;PER&nbsp;<span
+      class="d01n0">11</span></div>
+
+    <div class="d01row d01t d01l d01n2" style="left:0;top:116px">LIGHT
+      DRIZZLE &nbsp;&middot;&nbsp; <span class="d01n0">8&nbsp;&deg;C</span>
+      &nbsp;&middot;&nbsp; WIND <span class="d01n0">NE 12 KM/H</span></div>
+
+    <div class="d01row d01t d01fx" style="left:0;top:136px">
+      <span class="d01l d01n2">MOONLIGHT <span class="d01n0">12%</span>
+        &nbsp;&middot;&nbsp; FLASHLIGHT <span class="d01a1">34%</span></span>
+      <div class="d01trk d01ctr" style="width:44px;margin-left:9px"><div
+        class="d01fil d01fa1" style="width:15px"></div></div>
+    </div>
+
+    <div style="position:absolute;left:0;top:164px">
+        <div class="d01grw"><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gw">F</span><span class="d01gc d01gw">F</span><span class="d01gc d01gw">F</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span></div>
+        <div class="d01grw"><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gw">F</span><span class="d01gc d01gw">F</span><span class="d01gc d01gw">F</span><span class="d01gc d01gw">F</span><span class="d01gc d01gw">F</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gm">^</span><span class="d01gc d01gf">&middot;</span></div>
+        <div class="d01grw"><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gw">F</span><span class="d01gc d01gw">F</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gw">F</span><span class="d01gc d01gw">F</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span></div>
+        <div class="d01grw"><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gp">^</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gh">H</span><span class="d01gc d01gh">H</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gw">F</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span></div>
+        <div class="d01grw"><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gh">H</span><span class="d01gc d01gh">H</span><span class="d01gc d01gh">H</span><span class="d01gc d01gh">H</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span></div>
+        <div class="d01grw"><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gh">H</span><span class="d01gc d01ga">@</span><span class="d01gc d01gh">H</span><span class="d01gc d01gh">H</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span></div>
+        <div class="d01grw"><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gh">H</span><span class="d01gc d01gh">H</span><span class="d01gc d01gh">H</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gw">F</span><span class="d01gc d01gw">F</span><span class="d01gc d01gf">&middot;</span></div>
+        <div class="d01grw"><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gw">F</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gw">F</span><span class="d01gc d01gw">F</span><span class="d01gc d01gf">&middot;</span></div>
+        <div class="d01grw"><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gw">F</span><span class="d01gc d01gw">F</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gp">^</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gw">F</span><span class="d01gc d01gf">&middot;</span></div>
+        <div class="d01grw"><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gw">F</span><span class="d01gc d01gw">F</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span></div>
+        <div class="d01grw"><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span><span class="d01gc d01gf">&middot;</span></div>
+    </div>
+    <div class="d01row d01t d01u d01n2" style="left:0;top:314px">MISSION
+      <span class="d01a0">NE</span></div>
+  </div>
+
+  <!-- ===== TOP-RIGHT :: CONTACT ==================================== -->
+  <div class="d01c d01ra" style="left:1520px;top:40px;width:344px">
+    <div class="d01row d01t d01u d01n2" style="right:0;top:0">CONTACT</div>
+
+    <div class="d01row d01t d01fxc" style="right:0;top:18px">
+      <div class="d01ros"><div class="d01rd" style="left:14px;top:1px"></div><div class="d01rd d01hot" style="left:22px;top:4px"></div><div class="d01rd" style="left:27px;top:14px"></div><div class="d01rd" style="left:23px;top:23px"></div><div class="d01rd" style="left:14px;top:27px"></div><div class="d01rd" style="left:5px;top:23px"></div><div class="d01rd" style="left:1px;top:14px"></div><div class="d01rd" style="left:5px;top:5px"></div><div class="d01rd d01hub" style="left:14px;top:14px"></div></div>
+      <span class="d01m d01a0" style="margin-left:16px">ZOMBIE BRUTE</span>
+    </div>
+
+    <div class="d01row d01t d01fx" style="right:0;top:56px">
+      <span class="d01u d01n2">HP</span>
+      <div class="d01trk d01ctr" style="width:96px;margin-left:9px"><div
+        class="d01fil d01fa0" style="width:60px"></div></div>
+      <span class="d01b d01n0" style="margin-left:10px">62%</span>
+    </div>
+
+    <div class="d01row d01t d01l d01n2" style="right:0;top:82px"><span
+      class="d01n0">4</span> TILES <span class="d01n0">NE</span>
+      &nbsp;&middot;&nbsp; MOVING</div>
+
+    <div class="d01row d01t d01l d01n2" style="right:0;top:102px"><span
+      class="d01n0">3</span> HOSTILES VISIBLE &nbsp;&middot;&nbsp; <span
+      class="d01a0">1 TRACKING</span></div>
+
+    <div class="d01row d01t d01u d01n0" style="right:0;top:130px">SAFE MODE
+      ON</div>
+  </div>
+
+  <!-- ===== BOTTOM-LEFT :: CONDITION + LOG ========================== -->
+  <div class="d01c" style="left:56px;top:596px">
+    <div class="d01row d01t d01u d01n2" style="left:0;top:-22px">CONDITION</div>
+
+    <!-- 2px critical flag beside the failing part -->
+    <div class="d01crit" style="left:-12px;top:70px;height:64px"></div>
+
+      <div style="position:absolute;left:88px;top:0px">
+        <div class="d01row d01t d01u d01n2" style="left:0;top:0">HEAD</div>
+        <div class="d01row d01t d01fx" style="left:0;top:15px"><span class="d01v d01n0">20</span><span class="d01u2 d01n2" style="margin-left:3px">/24</span></div>
+        <div class="d01trk" style="position:absolute;left:0;top:47px;width:66px"><div class="d01fil d01fa1" style="width:55px"></div></div>
+      </div>
+
+      <div style="position:absolute;left:0px;top:70px">
+        <div class="d01row d01t d01u d01a0" style="left:0;top:0">L&middot;ARM&nbsp;!!</div>
+        <div class="d01row d01t d01fx" style="left:0;top:15px"><span class="d01v d01a0">8</span><span class="d01u2 d01a1" style="margin-left:3px">/30</span></div>
+        <div class="d01trk" style="position:absolute;left:0;top:47px;width:66px"><div class="d01fil d01fa0" style="width:18px"></div></div>
+        <div class="d01row d01t d01u2 d01a0" style="left:0;top:53px">BLEED &middot; BITE</div>
+      </div>
+
+      <div style="position:absolute;left:88px;top:70px">
+        <div class="d01row d01t d01u d01n2" style="left:0;top:0">TORSO</div>
+        <div class="d01row d01t d01fx" style="left:0;top:15px"><span class="d01v d01n0">45</span><span class="d01u2 d01n2" style="margin-left:3px">/60</span></div>
+        <div class="d01trk" style="position:absolute;left:0;top:47px;width:66px"><div class="d01fil d01fa1" style="width:50px"></div></div>
+      </div>
+
+      <div style="position:absolute;left:176px;top:70px">
+        <div class="d01row d01t d01u d01n2" style="left:0;top:0">R&middot;ARM</div>
+        <div class="d01row d01t d01fx" style="left:0;top:15px"><span class="d01v d01n0">30</span><span class="d01u2 d01n2" style="margin-left:3px">/30</span></div>
+        <div class="d01trk" style="position:absolute;left:0;top:47px;width:66px"><div class="d01fil d01fn1" style="width:66px"></div></div>
+      </div>
+
+      <div style="position:absolute;left:0px;top:140px">
+        <div class="d01row d01t d01u d01n2" style="left:0;top:0">L&middot;LEG</div>
+        <div class="d01row d01t d01fx" style="left:0;top:15px"><span class="d01v d01n0">22</span><span class="d01u2 d01n2" style="margin-left:3px">/28</span></div>
+        <div class="d01trk" style="position:absolute;left:0;top:47px;width:66px"><div class="d01fil d01fa1" style="width:52px"></div></div>
+      </div>
+
+      <div style="position:absolute;left:176px;top:140px">
+        <div class="d01row d01t d01u d01n2" style="left:0;top:0">R&middot;LEG</div>
+        <div class="d01row d01t d01fx" style="left:0;top:15px"><span class="d01v d01n0">28</span><span class="d01u2 d01n2" style="margin-left:3px">/28</span></div>
+        <div class="d01trk" style="position:absolute;left:0;top:47px;width:66px"><div class="d01fil d01fn1" style="width:66px"></div></div>
+      </div>
+
+    <div class="d01row d01t d01l d01a0" style="left:0;top:207px">BLEEDING
+      L&middot;ARM &nbsp;&middot;&nbsp; BITTEN L&middot;ARM</div>
+    <div class="d01row d01t d01l d01n2" style="left:0;top:227px">SOAKED
+      &nbsp;&middot;&nbsp; TIRED &nbsp;&middot;&nbsp; PAIN <span
+      class="d01a1">12</span></div>
+    <div class="d01row d01t d01u d01a1" style="left:0;top:249px">PECKISH
+      &nbsp;&middot;&nbsp; THIRSTY &nbsp;&middot;&nbsp; CHILLY</div>
+
+    <div class="d01row d01t d01fx" style="left:0;top:268px">
+      <span class="d01u d01n2">STAM</span>
+      <div class="d01trk d01ctr" style="width:120px;margin-left:9px"><div
+        class="d01fil d01fn1" style="width:70px"></div></div>
+      <span class="d01u2 d01n0" style="margin-left:9px">5100 / 8700</span>
+    </div>
+
+    <div class="d01row d01t d01u2 d01n2" style="left:0;top:290px">SPD <span
+      class="d01n0">96</span> &nbsp;&middot;&nbsp; FOC <span
+      class="d01n0">84</span> &nbsp;&middot;&nbsp; MRL <span
+      class="d01n0">-3</span></div>
+    <div class="d01row d01t d01u2 d01n2" style="left:0;top:308px">WALK
+      &nbsp;&middot;&nbsp; NOISE <span class="d01n0">8</span>
+      &nbsp;&middot;&nbsp; ENC <span class="d01n0">12</span>&nbsp;T
+      &nbsp;&middot;&nbsp; <span class="d01n0">4</span>&nbsp;A</div>
+
+    <div class="d01row d01t d01u d01n2" style="left:0;top:338px">LOG</div>
+
+    <div class="d01row d01t" style="left:0;top:358px"><div class="d01age" style="top:1px;opacity:.20"></div><span class="d01u2 d01n3">21:46</span><span class="d01b d01n2" style="margin-left:10px">You hit the zombie brute with your fire axe.</span></div>
+    <div class="d01row d01t" style="left:0;top:378px"><div class="d01age" style="top:1px;opacity:.34"></div><span class="d01u2 d01n3">21:46</span><span class="d01b d01a2" style="margin-left:10px">The zombie brute claws your left arm!</span></div>
+    <div class="d01row d01t" style="left:0;top:398px"><div class="d01age" style="top:1px;opacity:.50"></div><span class="d01u2 d01n3">21:47</span><span class="d01b d01a0" style="margin-left:10px">Your left arm is bleeding.</span></div>
+    <div class="d01row d01t" style="left:0;top:418px"><div class="d01age" style="top:1px;opacity:.66"></div><span class="d01u2 d01n3">21:47</span><span class="d01b d01a2" style="margin-left:10px">You feel a sharp pain.</span></div>
+    <div class="d01row d01t" style="left:0;top:438px"><div class="d01age" style="top:1px;opacity:.82"></div><span class="d01u2 d01n3">21:47</span><span class="d01b d01a1" style="margin-left:10px">The zombie shambler groans nearby.</span></div>
+    <div class="d01row d01t" style="left:0;top:458px"><div class="d01age" style="top:1px;opacity:1"></div><span class="d01u2 d01n2">21:47</span><span class="d01b d01a1" style="margin-left:10px;font-weight:700">You are getting thirsty.</span></div>
+  </div>
+
+  <!-- ===== BOTTOM-RIGHT :: LOADOUT ================================= -->
+  <div class="d01c d01ra" style="left:1520px;top:893px;width:344px">
+    <div class="d01row d01t d01u d01n2" style="right:0;top:0">LOADOUT</div>
+    <div class="d01row d01t d01m d01n0" style="right:0;top:20px">FIRE AXE</div>
+    <div class="d01row d01t d01l d01n2" style="right:0;top:48px"><span
+      class="d01n0">32</span> BASH &nbsp;&middot;&nbsp; <span
+      class="d01n0">0</span> CUT &nbsp;&middot;&nbsp; TO-HIT <span
+      class="d01n0">+1</span></div>
+    <div class="d01row d01t d01l d01n2" style="right:0;top:68px">GLOCK 19
+      &nbsp;&middot;&nbsp; <span class="d01n0">12/17</span>
+      &nbsp;&middot;&nbsp; 9MM JHP</div>
+
+    <div style="position:absolute;left:50px;top:96px">
+        <div class="d01slot" style="left:0px;top:0px"><div class="d01strike" style="width:48px"></div><span class="d01t d01b d01n3">f</span><span class="d01t d01u d01n3" style="margin-left:7px">FIRE</span></div>
+        <div class="d01slot" style="left:105px;top:0px"><span class="d01t d01b d01n0">r</span><span class="d01t d01u d01n2" style="margin-left:7px">RELOAD</span></div>
+        <div class="d01slot" style="left:210px;top:0px"><span class="d01t d01b d01n0">&#39;</span><span class="d01t d01u d01n2" style="margin-left:7px">RUN</span></div>
+        <div class="d01slot" style="left:0px;top:26px"><span class="d01t d01b d01n0">e</span><span class="d01t d01u d01n2" style="margin-left:7px">EXAMINE</span></div>
+        <div class="d01slot" style="left:105px;top:26px"><span class="d01t d01b d01n0">p</span><span class="d01t d01u d01n2" style="margin-left:7px">PICK UP</span></div>
+        <div class="d01slot" style="left:210px;top:26px"><span class="d01t d01b d01n0">c</span><span class="d01t d01u d01n2" style="margin-left:7px">CRAFT</span></div>
+        <div class="d01slot" style="left:0px;top:52px"><span class="d01t d01b d01n0">i</span><span class="d01t d01u d01n2" style="margin-left:7px">INVENTORY</span></div>
+        <div class="d01slot" style="left:105px;top:52px"><span class="d01t d01b d01n0">t</span><span class="d01t d01u d01n2" style="margin-left:7px">THROW</span></div>
+        <div class="d01slot" style="left:210px;top:52px"><span class="d01t d01b d01n0">5</span><span class="d01t d01u d01n2" style="margin-left:7px">WAIT</span></div>
+    </div>
+  </div>
+
+</div></body></html>

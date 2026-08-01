@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>06 — Radial Orbit</title><style>
+  /* d06-radial-orbit-sentinel : this stylesheet belongs to 06-radial-orbit.html */
+  html,body { margin:0; padding:0; background:#000; }
+  #screen {
+    position:relative; width:1920px; height:1080px; overflow:hidden;
+    background-image:url("_shared/world.png");
+    background-size:1920px 1080px;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * 06 RADIAL ORBIT — everything orbits the avatar at (944,528).
+   * Ring stack, inner -> outer:
+   *   r 0-68    CLEAR. Nothing drawn. Player tile + all 8 adjacent.
+   *   r 72-86   band A  torso, L leg, R leg          (core)
+   *   r 90-104  band B  head, L arm, R arm           (extremities)
+   *   r 95-101  needs quartet, inset in band B's gaps
+   *   r 117     numeric tag annulus
+   *   r 126-135 stamina
+   *   r 148     threat bearing ring (hairline + ticks + pips)
+   *   r 166-178 overmap directional band (16 sectors)
+   *   r 200-244 hotbar wheel (hold-revealed; drawn revealed)
+   * ------------------------------------------------------------------ */
+
+  #screen {
+    --d06-void:#04080a; --d06-casing:#010405;
+    --d06-hair:#63797f; --d06-chrome:#8ea3a9;
+    --d06-txt:#e4ecee; --d06-txt2:#a6b8be; --d06-txt3:#6d8087;
+    --d06-ok:#35d6a0; --d06-okf:#4ae8b0; --d06-warn:#f0c33c; --d06-crit:#ff5a4e;
+    --d06-stam:#4fc3f7; --d06-need:#e9973f; --d06-cold:#78b6e8;
+    --d06-hostile:#ff3b30; --d06-track:#ffb300; --d06-mission:#b98cff;
+    --d06-good:#9bd46a; --d06-bad:#ff6b5e; --d06-baddim:#c9564d; --d06-caution:#f2c14e;
+    --d06-empty:#182226; --d06-emptycrit:#41120f;
+    font-family:Consolas,"Cascadia Mono","Lucida Console",monospace;
+  }
+
+  /* every glyph carries a 1px dark casing -> RCSS font-effect: outline */
+  .d06-o { text-shadow:1px 0 0 #04080a,-1px 0 0 #04080a,0 1px 0 #04080a,0 -1px 0 #04080a,
+                       1px 1px 0 #04080a,-1px 1px 0 #04080a,1px -1px 0 #04080a,-1px -1px 0 #04080a,
+                       0 0 4px rgba(4,8,10,.95); }
+  .d06-abs { position:absolute; }
+
+  /* ---------- annular scrim: no visible edge, clear core ------------- */
+  #d06-scrim { position:absolute; left:709px; top:293px; width:470px; height:470px;
+    background-image:radial-gradient(closest-side,
+      rgba(3,7,9,0)   0%,
+      rgba(3,7,9,0)   28.9%,
+      rgba(3,7,9,.34) 36%,
+      rgba(3,7,9,.40) 50%,
+      rgba(3,7,9,.40) 66%,
+      rgba(3,7,9,.20) 84%,
+      rgba(3,7,9,0)   100%); }
+
+  /* ---------- inner clear-radius boundary (r=68) --------------------- */
+  #d06-clear { position:absolute; left:875px; top:459px; width:136px; height:136px;
+    border:1px dotted rgba(142,163,169,.26); border-radius:50%; }
+
+  /* ---------- ring shells: box = 2R. The mask punches the inner radius AND
+   * terminates at 100%, otherwise `closest-side` leaves the four box corners
+   * (which lie outside the inscribed circle) fully opaque and every full ring
+   * paints a square. RCSS equivalent: mask-image with a radial-gradient
+   * decorator using the same two hard stops. ------------------------------- */
+  .d06-ring { position:absolute; }
+  .d06-Ac { left:856px;   top:440px;   width:176px; height:176px;
+        -webkit-mask-image:radial-gradient(closest-side,transparent 0 79.545%,#000 79.545% 100%,transparent 100%);
+                mask-image:radial-gradient(closest-side,transparent 0 79.545%,#000 79.545% 100%,transparent 100%); }
+  .d06-Ai { left:858px;   top:442px;   width:172px; height:172px;
+        -webkit-mask-image:radial-gradient(closest-side,transparent 0 83.721%,#000 83.721% 100%,transparent 100%);
+                mask-image:radial-gradient(closest-side,transparent 0 83.721%,#000 83.721% 100%,transparent 100%); }
+  .d06-Bc { left:838px;   top:422px;   width:212px; height:212px;
+        -webkit-mask-image:radial-gradient(closest-side,transparent 0 83.019%,#000 83.019% 100%,transparent 100%);
+                mask-image:radial-gradient(closest-side,transparent 0 83.019%,#000 83.019% 100%,transparent 100%); }
+  .d06-Bi { left:840px;   top:424px;   width:208px; height:208px;
+        -webkit-mask-image:radial-gradient(closest-side,transparent 0 86.538%,#000 86.538% 100%,transparent 100%);
+                mask-image:radial-gradient(closest-side,transparent 0 86.538%,#000 86.538% 100%,transparent 100%); }
+  .d06-Nc { left:841px;   top:425px;   width:206px; height:206px;
+        -webkit-mask-image:radial-gradient(closest-side,transparent 0 90.291%,#000 90.291% 100%,transparent 100%);
+                mask-image:radial-gradient(closest-side,transparent 0 90.291%,#000 90.291% 100%,transparent 100%); }
+  .d06-Ni { left:843px;   top:427px;   width:202px; height:202px;
+        -webkit-mask-image:radial-gradient(closest-side,transparent 0 94.059%,#000 94.059% 100%,transparent 100%);
+                mask-image:radial-gradient(closest-side,transparent 0 94.059%,#000 94.059% 100%,transparent 100%); }
+  .d06-Sc { left:807px;   top:391px;   width:274px; height:274px;
+        -webkit-mask-image:radial-gradient(closest-side,transparent 0 90.511%,#000 90.511% 100%,transparent 100%);
+                mask-image:radial-gradient(closest-side,transparent 0 90.511%,#000 90.511% 100%,transparent 100%); }
+  .d06-Si { left:809px;   top:393px;   width:270px; height:270px;
+        -webkit-mask-image:radial-gradient(closest-side,transparent 0 93.333%,#000 93.333% 100%,transparent 100%);
+                mask-image:radial-gradient(closest-side,transparent 0 93.333%,#000 93.333% 100%,transparent 100%); }
+  .d06-Tc { left:793px;   top:377px;   width:302px; height:302px;
+        -webkit-mask-image:radial-gradient(closest-side,transparent 0 96.026%,#000 96.026% 100%,transparent 100%);
+                mask-image:radial-gradient(closest-side,transparent 0 96.026%,#000 96.026% 100%,transparent 100%); }
+  .d06-Ti { left:794.5px; top:378.5px; width:299px; height:299px;
+        -webkit-mask-image:radial-gradient(closest-side,transparent 0 97.993%,#000 97.993% 100%,transparent 100%);
+                mask-image:radial-gradient(closest-side,transparent 0 97.993%,#000 97.993% 100%,transparent 100%); }
+  .d06-Mc { left:764px;   top:348px;   width:360px; height:360px;
+        -webkit-mask-image:radial-gradient(closest-side,transparent 0 91.111%,#000 91.111% 100%,transparent 100%);
+                mask-image:radial-gradient(closest-side,transparent 0 91.111%,#000 91.111% 100%,transparent 100%); }
+  .d06-Mi { left:766px;   top:350px;   width:356px; height:356px;
+        -webkit-mask-image:radial-gradient(closest-side,transparent 0 93.258%,#000 93.258% 100%,transparent 100%);
+                mask-image:radial-gradient(closest-side,transparent 0 93.258%,#000 93.258% 100%,transparent 100%); }
+  .d06-Wc { left:718.5px; top:302.5px; width:451px; height:451px;
+        -webkit-mask-image:radial-gradient(closest-side,transparent 0 96.896%,#000 96.896% 100%,transparent 100%);
+                mask-image:radial-gradient(closest-side,transparent 0 96.896%,#000 96.896% 100%,transparent 100%); }
+  .d06-Wi { left:720px;   top:304px;   width:448px; height:448px;
+        -webkit-mask-image:radial-gradient(closest-side,transparent 0 98.214%,#000 98.214% 100%,transparent 100%);
+                mask-image:radial-gradient(closest-side,transparent 0 98.214%,#000 98.214% 100%,transparent 100%); }
+
+  /* critical-limb bloom, sits under band B */
+  #d06-critglow { filter:blur(9px); opacity:.62; }
+
+  /* ---------- radial spinner: rotate about (944,528) ----------------- */
+  .d06-spin { position:absolute; left:944px; top:528px; width:0; height:0; }
+  .d06-tickL { position:absolute; left:-1.5px; top:-158px; width:3px; height:18px;
+           background:var(--d06-chrome); box-shadow:0 0 0 1px rgba(1,4,5,.95); }
+  .d06-tickS { position:absolute; left:-1px;   top:-154px; width:2px; height:10px;
+           background:rgba(142,163,169,.62); box-shadow:0 0 0 1px rgba(1,4,5,.9); }
+  .d06-pip   { position:absolute; left:-5px; top:-153px; width:10px; height:10px;
+           background:var(--d06-hostile); transform:rotate(45deg);
+           box-shadow:0 0 0 1.5px rgba(1,4,5,.95),0 0 7px rgba(255,59,48,.7); }
+  .d06-pipT  { position:absolute; left:-7px; top:-155px; width:14px; height:14px;
+           background:var(--d06-track); transform:rotate(45deg);
+           box-shadow:0 0 0 2px rgba(1,4,5,.95),0 0 12px rgba(255,179,0,.85); }
+  .d06-pipTc { position:absolute; left:-2.5px; top:-150.5px; width:5px; height:5px;
+           background:#fff6dd; transform:rotate(45deg); }
+  .d06-stamEnd { position:absolute; left:-1.5px; top:-140px; width:3px; height:16px;
+             background:#d9f2ff; box-shadow:0 0 0 1px rgba(1,4,5,.95),0 0 6px rgba(79,195,247,.8); }
+  .d06-breach { position:absolute; left:-1px; top:-108px; width:2px; height:20px;
+            background:var(--d06-crit); box-shadow:0 0 0 1px rgba(1,4,5,.95); }
+
+  /* leaders: radial stub + horizontal jog, each with a dark casing */
+  .d06-lead  { position:absolute; background:rgba(255,179,0,.85);
+           box-shadow:0 0 0 1px rgba(1,4,5,.95); }
+  .d06-leadC { position:absolute; background:rgba(142,163,169,.66);
+           box-shadow:0 0 0 1px rgba(1,4,5,.95); }
+  .d06-leadR { position:absolute; background:rgba(255,90,78,.85);
+           box-shadow:0 0 0 1px rgba(1,4,5,.95); }
+  .d06-jog   { position:absolute; height:2px; }
+
+  /* ---------- micro labels ------------------------------------------ */
+  .d06-tag { position:absolute; width:34px; height:13px; line-height:13px; font-size:10px;
+         text-align:center; color:var(--d06-txt); letter-spacing:.2px; }
+  .d06-tagn{ position:absolute; height:11px; line-height:11px; font-size:9px;
+         letter-spacing:.9px; color:var(--d06-need); text-align:center; }
+  .d06-card8{ position:absolute; height:14px; line-height:14px; width:14px; text-align:center;
+          font-size:9px; font-weight:bold; letter-spacing:0; color:var(--d06-txt2);
+          background:rgba(3,7,9,.72); border-radius:2px; }
+
+  /* ---------- hotbar wheel ------------------------------------------ */
+  .d06-slot { position:absolute; width:46px; height:46px; box-sizing:border-box;
+          background:rgba(6,12,15,.86); border:1px solid rgba(142,163,169,.50);
+          border-radius:4px; backdrop-filter:blur(2px); }
+  .d06-slot .d06-k { position:absolute; left:0; top:9px; width:44px; text-align:center;
+             font-size:17px; font-weight:bold; color:var(--d06-txt); line-height:17px; }
+  .d06-slot .d06-a { position:absolute; left:0; bottom:4px; width:44px; text-align:center;
+             font-size:8px; letter-spacing:.2px; color:var(--d06-txt3); line-height:8px; }
+  .d06-slot .d06-n { position:absolute; left:3px; top:2px; font-size:7px; line-height:7px;
+             color:rgba(142,163,169,.55); }
+  .d06-slot.d06-off { background:rgba(6,12,15,.62); border-color:rgba(142,163,169,.18); }
+  .d06-slot.d06-off .d06-k { color:#3a464a; }
+  .d06-slot.d06-off .d06-a { color:#33403f; }
+  .d06-strike { position:absolute; left:-2px; top:22px; width:50px; height:1px;
+                background:rgba(255,90,78,.55); transform:rotate(-45deg); }
+  .d06-why { position:absolute; left:0; bottom:-11px; width:44px; text-align:center;
+             font-size:7px; letter-spacing:.4px; color:rgba(255,90,78,.72); }
+
+  /* ---------- peripheral: soft washes, no hard edge ------------------ */
+  .d06-wash { position:absolute; }
+  .d06-plate{ position:absolute; box-sizing:border-box; background:rgba(10,19,23,.92);
+          backdrop-filter:blur(3px); border:1px solid rgba(142,163,169,.34); }
+
+  .d06-lb  { font-size:9px;  letter-spacing:1.2px; color:var(--d06-txt3); }
+  .d06-hd  { font-size:11px; font-weight:bold; letter-spacing:1.6px; color:var(--d06-txt3); }
+  .d06-bdh { font-size:12px; letter-spacing:.2px;  color:var(--d06-txt); }
+  .d06-rule{ position:absolute; height:1px; background:rgba(142,163,169,.24); }
+
+  .d06-chip{ display:inline-block; font-size:9px; letter-spacing:.9px; padding:2px 5px 2px 4px;
+         border:1px solid rgba(255,90,78,.55); color:#ffc0b8; border-radius:2px;
+         background:rgba(60,14,11,.55); margin-right:5px; }
+
+  .d06-bar  { position:absolute; height:5px; background:var(--d06-empty);
+          box-shadow:0 0 0 1px rgba(1,4,5,.9); }
+  .d06-bar > i { position:absolute; left:0; top:0; height:5px; display:block; }
+
+  /* ---------- motion (resting state is what the screenshot shows) ---- */
+  @keyframes d06-critpulse { 0%,100% { opacity:.62; } 50% { opacity:.94; } }
+  #d06-critglow { animation:d06-critpulse 1400ms ease-in-out infinite; }
+  @keyframes d06-trackpulse { 0%,100% { opacity:1; } 50% { opacity:.55; } }
+  .d06-pipT { animation:d06-trackpulse 900ms ease-out infinite; }
+</style></head>
+<body><div id="screen">
+
+  <!-- ============ CONTRAST LAYER ==================================== -->
+  <div id="d06-scrim"></div>
+  <div id="d06-clear"></div>
+
+  <!-- ============ BAND A — core: torso, L leg, R leg ================ -->
+  <div class="d06-ring d06-Ac" style="background-image:conic-gradient(from 300deg,var(--d06-casing) 0deg 120deg,transparent 120deg 360deg)"></div>
+  <div class="d06-ring d06-Ac" style="background-image:conic-gradient(from 125deg,var(--d06-casing) 0deg 45deg,transparent 45deg 360deg)"></div>
+  <div class="d06-ring d06-Ac" style="background-image:conic-gradient(from 190deg,var(--d06-casing) 0deg 45deg,transparent 45deg 360deg)"></div>
+  <!-- TORSO 45/60 = 75%   span 300->60 (120deg), centred fill 90deg -->
+  <div class="d06-ring d06-Ai" style="background-image:conic-gradient(from 300deg,var(--d06-empty) 0deg 15deg,var(--d06-ok) 15deg 105deg,var(--d06-empty) 105deg 120deg,transparent 120deg 360deg)"></div>
+  <!-- R LEG 28/28 = 100%  span 125->170 (45deg) -->
+  <div class="d06-ring d06-Ai" style="background-image:conic-gradient(from 125deg,var(--d06-okf) 0deg 45deg,transparent 45deg 360deg)"></div>
+  <!-- L LEG 22/28 = 78.6% span 190->235 (45deg), centred fill 35.36deg -->
+  <div class="d06-ring d06-Ai" style="background-image:conic-gradient(from 190deg,var(--d06-empty) 0deg 4.82deg,var(--d06-ok) 4.82deg 40.18deg,var(--d06-empty) 40.18deg 45deg,transparent 45deg 360deg)"></div>
+
+  <!-- ============ BAND B — extremities: head, L arm, R arm ========== -->
+  <div class="d06-ring d06-Bi" id="d06-critglow" style="background-image:conic-gradient(from 244deg,var(--d06-crit) 0deg 60deg,transparent 60deg 360deg)"></div>
+  <div class="d06-ring d06-Bc" style="background-image:conic-gradient(from 344deg,var(--d06-casing) 0deg 32deg,transparent 32deg 360deg)"></div>
+  <div class="d06-ring d06-Bc" style="background-image:conic-gradient(from 55deg,var(--d06-casing) 0deg 60deg,transparent 60deg 360deg)"></div>
+  <div class="d06-ring d06-Bc" style="background-image:conic-gradient(from 244deg,var(--d06-casing) 0deg 60deg,transparent 60deg 360deg)"></div>
+  <!-- HEAD 20/24 = 83.3%  span 344->16 (32deg), centred fill 26.67deg -->
+  <div class="d06-ring d06-Bi" style="background-image:conic-gradient(from 344deg,var(--d06-empty) 0deg 2.67deg,var(--d06-ok) 2.67deg 29.33deg,var(--d06-empty) 29.33deg 32deg,transparent 32deg 360deg)"></div>
+  <!-- R ARM 30/30 = 100%  span 55->115 (60deg) -->
+  <div class="d06-ring d06-Bi" style="background-image:conic-gradient(from 55deg,var(--d06-okf) 0deg 60deg,transparent 60deg 360deg)"></div>
+  <!-- L ARM 8/30 = 26.7%  span 244->304 (60deg), centred fill 16deg, wounded track -->
+  <div class="d06-ring d06-Bi" style="background-image:conic-gradient(from 244deg,var(--d06-emptycrit) 0deg 22deg,var(--d06-crit) 22deg 38deg,var(--d06-emptycrit) 38deg 60deg,transparent 60deg 360deg)"></div>
+  <div class="d06-spin" style="transform:rotate(244deg)"><div class="d06-breach"></div></div>
+  <div class="d06-spin" style="transform:rotate(304deg)"><div class="d06-breach"></div></div>
+
+  <!-- ============ NEEDS QUARTET — inset in band B's gaps ============ -->
+  <div class="d06-ring d06-Nc" style="background-image:conic-gradient(from 20deg,var(--d06-casing) 0deg 32deg,transparent 32deg 360deg)"></div>
+  <div class="d06-ring d06-Nc" style="background-image:conic-gradient(from 120deg,var(--d06-casing) 0deg 32deg,transparent 32deg 360deg)"></div>
+  <div class="d06-ring d06-Nc" style="background-image:conic-gradient(from 208deg,var(--d06-casing) 0deg 32deg,transparent 32deg 360deg)"></div>
+  <div class="d06-ring d06-Nc" style="background-image:conic-gradient(from 308deg,var(--d06-casing) 0deg 32deg,transparent 32deg 360deg)"></div>
+  <!-- HUNGER Peckish -> .30 -->
+  <div class="d06-ring d06-Ni" style="background-image:conic-gradient(from 20deg,var(--d06-need) 0deg 9.6deg,var(--d06-empty) 9.6deg 32deg,transparent 32deg 360deg)"></div>
+  <!-- THIRST Thirsty -> .55 -->
+  <div class="d06-ring d06-Ni" style="background-image:conic-gradient(from 120deg,var(--d06-need) 0deg 17.6deg,var(--d06-empty) 17.6deg 32deg,transparent 32deg 360deg)"></div>
+  <!-- FATIGUE Tired -> .55 -->
+  <div class="d06-ring d06-Ni" style="background-image:conic-gradient(from 208deg,var(--d06-need) 0deg 17.6deg,var(--d06-empty) 17.6deg 32deg,transparent 32deg 360deg)"></div>
+  <!-- WARMTH Chilly -> .40 (cold hue) -->
+  <div class="d06-ring d06-Ni" style="background-image:conic-gradient(from 308deg,var(--d06-cold) 0deg 12.8deg,var(--d06-empty) 12.8deg 32deg,transparent 32deg 360deg)"></div>
+
+  <!-- ============ STAMINA 5100/8700 = 58.6% -> 211.03deg ============ -->
+  <div class="d06-ring d06-Sc" style="background-image:conic-gradient(from 0deg,var(--d06-casing) 0deg 360deg)"></div>
+  <div class="d06-ring d06-Si" style="background-image:conic-gradient(from 0deg,var(--d06-stam) 0deg 211.03deg,var(--d06-empty) 211.03deg 360deg)"></div>
+  <div class="d06-spin" style="transform:rotate(211deg)"><div class="d06-stamEnd"></div></div>
+
+  <!-- ============ THREAT BEARING RING =============================== -->
+  <div class="d06-ring d06-Tc" style="background-image:conic-gradient(from 0deg,var(--d06-casing) 0deg 360deg)"></div>
+  <div class="d06-ring d06-Ti" style="background-image:conic-gradient(from 0deg,rgba(142,163,169,.55) 0deg 360deg)"></div>
+  <div class="d06-spin" style="transform:rotate(0deg)"><div class="d06-tickL"></div></div>
+  <div class="d06-spin" style="transform:rotate(90deg)"><div class="d06-tickL"></div></div>
+  <div class="d06-spin" style="transform:rotate(180deg)"><div class="d06-tickL"></div></div>
+  <div class="d06-spin" style="transform:rotate(270deg)"><div class="d06-tickL"></div></div>
+  <div class="d06-spin" style="transform:rotate(45deg)"><div class="d06-tickS"></div></div>
+  <div class="d06-spin" style="transform:rotate(135deg)"><div class="d06-tickS"></div></div>
+  <div class="d06-spin" style="transform:rotate(225deg)"><div class="d06-tickS"></div></div>
+  <div class="d06-spin" style="transform:rotate(315deg)"><div class="d06-tickS"></div></div>
+  <!-- 3 hostiles visible, 1 tracking. Bearings measured off world.png sprites:
+       (976,394) ENE-of-N 13deg is out of view range at light 12%; the three lit
+       contacts are 91deg (1227,524), 180.5deg (943,653) and the tracked brute NE. -->
+  <div class="d06-spin" style="transform:rotate(91deg)"><div class="d06-pip"></div></div>
+  <div class="d06-spin" style="transform:rotate(180.5deg)"><div class="d06-pip"></div></div>
+  <div class="d06-spin" style="transform:rotate(45deg)"><div class="d06-pipT"></div><div class="d06-pipTc"></div></div>
+
+  <!-- ============ OVERMAP DIRECTIONAL BAND (16 sectors) ============= -->
+  <div class="d06-ring d06-Mc" style="background-image:conic-gradient(from 0deg,var(--d06-casing) 0deg 360deg)"></div>
+  <div class="d06-ring d06-Mi" style="background-image:conic-gradient(from -11.25deg,
+      #5b6166 0deg 22.5deg,     #2f4a34 22.5deg 45deg,
+      #3c4033 45deg 67.5deg,    #3c4033 67.5deg 90deg,
+      #5b6166 90deg 112.5deg,   #2f4a34 112.5deg 135deg,
+      #3c4033 135deg 157.5deg,  #3c4033 157.5deg 180deg,
+      #5b6166 180deg 202.5deg,  #3c4033 202.5deg 225deg,
+      #2f4a34 225deg 247.5deg,  #3c4033 247.5deg 270deg,
+      #5b6166 270deg 292.5deg,  #3c4033 292.5deg 315deg,
+      #3c4033 315deg 337.5deg,  #2f4a34 337.5deg 360deg)"></div>
+  <div class="d06-card8 d06-o" style="left:937px;  top:349px;">N</div>
+  <div class="d06-card8 d06-o" style="left:1109px; top:521px;">E</div>
+  <div class="d06-card8 d06-o" style="left:937px;  top:693px;">S</div>
+  <div class="d06-card8 d06-o" style="left:765px;  top:521px;">W</div>
+  <!-- mission marker: overmap cell (+5,-4) -> bearing 51.3deg, 6.4 cells -->
+  <div class="d06-abs" style="left:1085px; top:402px; width:15px; height:15px;
+       background:var(--d06-mission); transform:rotate(45deg);
+       box-shadow:0 0 0 1.5px rgba(1,4,5,.95),0 0 10px rgba(185,140,255,.8);"></div>
+  <div class="d06-abs d06-o" style="left:1105px; top:392px; font-size:9px; letter-spacing:1.1px; color:#d3b8ff;">MISSION</div>
+  <!-- the two further overmap POIs, dimmer: (-3,-2) 303.7deg and (0,+3) 180deg -->
+  <div class="d06-abs" style="left:781px; top:417px; width:9px; height:9px;
+       border:1.5px solid rgba(185,140,255,.62); transform:rotate(45deg);
+       box-shadow:0 0 0 1px rgba(1,4,5,.9);"></div>
+  <div class="d06-abs" style="left:939px; top:713px; width:9px; height:9px;
+       border:1.5px solid rgba(185,140,255,.62); transform:rotate(45deg);
+       box-shadow:0 0 0 1px rgba(1,4,5,.9);"></div>
+
+  <!-- ============ NUMERIC TAG ANNULUS (r=117) ======================= -->
+  <div class="d06-tag d06-o" style="left:927px;    top:404.5px;">20/24</div>
+  <div class="d06-tag d06-o" style="left:967px;    top:411.6px;">45/60</div>
+  <div class="d06-tag d06-o" style="left:1043.6px; top:511.3px;">30/30</div>
+  <div class="d06-tag d06-o" style="left:957.3px;  top:634.5px;">28/28</div>
+  <div class="d06-tag d06-o" style="left:896.7px;  top:634.5px;">22/28</div>
+  <div class="d06-tag d06-o" style="left:810.4px;  top:511.3px; color:#ff8c82; font-weight:bold;">8/30</div>
+
+  <div class="d06-tagn d06-o" style="left:990px;  top:427px; width:46px;">PECKISH</div>
+  <div class="d06-tagn d06-o" style="left:1003px; top:607px; width:46px;">THIRSTY</div>
+  <div class="d06-tagn d06-o" style="left:839px;  top:607px; width:46px;">TIRED</div>
+  <div class="d06-tagn d06-o" style="left:851px;  top:427px; width:46px; color:var(--d06-cold);">CHILLY</div>
+
+  <div class="d06-abs d06-o" style="left:768px; top:556px; width:78px; text-align:center;">
+    <div style="font-size:9px; letter-spacing:1.2px; color:var(--d06-txt3);">STAMINA</div>
+    <div style="font-size:10px; line-height:12px; color:#bfe6fa;">5100/8700</div>
+  </div>
+
+  <!-- ============ LEADERS ========================================== -->
+  <div class="d06-spin" style="transform:rotate(45deg)">
+    <div class="d06-lead" style="left:-1px; top:-258px; width:2px; height:102px;"></div>
+  </div>
+  <div class="d06-lead d06-jog" style="left:1126px; top:345px; width:70px;"></div>
+
+  <div class="d06-spin" style="transform:rotate(275deg)">
+    <div class="d06-leadR" style="left:-1px; top:-150px; width:2px; height:44px;"></div>
+  </div>
+  <div class="d06-leadR d06-jog" style="left:700px; top:540px; width:95px;"></div>
+
+  <div class="d06-spin" style="transform:rotate(103deg)">
+    <div class="d06-leadC" style="left:-1px; top:-150px; width:2px; height:44px;"></div>
+  </div>
+  <div class="d06-leadC d06-jog" style="left:1090px; top:561px; width:106px;"></div>
+
+  <div class="d06-spin" style="transform:rotate(310deg)">
+    <div class="d06-leadC" style="left:-1px; top:-190px; width:2px; height:51px;"></div>
+  </div>
+  <div class="d06-leadC d06-jog" style="left:682px; top:405px; width:117px;"></div>
+
+  <!-- ============ HOTBAR WHEEL (hold TAB — drawn revealed) ========== -->
+  <div class="d06-ring d06-Wc" style="background-image:conic-gradient(from 0deg,var(--d06-casing) 0deg 240deg,transparent 240deg 360deg)"></div>
+  <div class="d06-ring d06-Wi" style="background-image:conic-gradient(from 0deg,rgba(142,163,169,.30) 0deg 240deg,transparent 240deg 360deg)"></div>
+
+  <div class="d06-slot d06-off" style="left:921px; top:283px;"><div class="d06-n">1</div><div class="d06-k d06-o">f</div><div class="d06-a d06-o">FIRE</div><div class="d06-strike"></div><div class="d06-why d06-o">NO GUN</div></div>
+  <div class="d06-slot" style="left:1032px;   top:312.7px;"><div class="d06-n">2</div><div class="d06-k d06-o">r</div><div class="d06-a d06-o">RELOAD</div></div>
+  <div class="d06-slot" style="left:1113.3px; top:394px;"><div class="d06-n">3</div><div class="d06-k d06-o">'</div><div class="d06-a d06-o">RUN</div></div>
+  <div class="d06-slot" style="left:1143px;   top:505px;"><div class="d06-n">4</div><div class="d06-k d06-o">e</div><div class="d06-a d06-o">EXAMINE</div></div>
+  <div class="d06-slot" style="left:1113.3px; top:616px;"><div class="d06-n">5</div><div class="d06-k d06-o">p</div><div class="d06-a d06-o">PICK UP</div></div>
+  <div class="d06-slot" style="left:1032px;   top:697.3px;"><div class="d06-n">6</div><div class="d06-k d06-o">c</div><div class="d06-a d06-o">CRAFT</div></div>
+  <div class="d06-slot" style="left:921px;    top:727px;"><div class="d06-n">7</div><div class="d06-k d06-o">i</div><div class="d06-a d06-o">INVENTORY</div></div>
+  <div class="d06-slot" style="left:810px;    top:697.3px;"><div class="d06-n">8</div><div class="d06-k d06-o">t</div><div class="d06-a d06-o">THROW</div></div>
+  <div class="d06-slot" style="left:728.7px;  top:616px;"><div class="d06-n">9</div><div class="d06-k d06-o">5</div><div class="d06-a d06-o">WAIT</div></div>
+
+  <!-- ============ LEFT RAIL — condition callouts, wheel's open window = -->
+  <!-- systemic effects: deliberately no leader, because they are not localised -->
+  <div class="d06-wash" style="left:452px; top:288px; width:280px; height:40px;
+       background-image:linear-gradient(to right,rgba(4,8,10,.86) 0%,rgba(4,8,10,.62) 62%,rgba(4,8,10,0) 100%);"></div>
+  <div class="d06-abs d06-lb d06-o" style="left:456px; top:291px;">SYSTEMIC</div>
+  <div class="d06-abs d06-o" style="left:456px; top:306px;">
+    <span class="d06-chip">SOAKED</span><span class="d06-chip">TIRED</span><span class="d06-chip">PAIN 12</span>
+  </div>
+
+  <!-- mobility, leadered to the stamina ring -->
+  <div class="d06-wash" style="left:452px; top:386px; width:230px; height:40px;
+       background-image:linear-gradient(to right,rgba(4,8,10,.86) 0%,rgba(4,8,10,.60) 62%,rgba(4,8,10,0) 100%);"></div>
+  <div class="d06-abs d06-lb d06-o" style="left:456px; top:389px;">MOBILITY</div>
+  <div class="d06-abs d06-bdh d06-o" style="left:456px; top:403px;">WALK<span style="color:var(--d06-txt3)"> &middot; </span>NOISE 8</div>
+
+  <!-- the critical limb gets the only real plate on this side -->
+  <div class="d06-plate" style="left:452px; top:474px; width:248px; height:96px;
+       border-color:rgba(255,90,78,.62);">
+    <div class="d06-abs d06-hd d06-o" style="left:11px; top:9px; color:#ff8c82;">L ARM</div>
+    <div class="d06-abs d06-o" style="right:10px; top:8px; font-size:9px; letter-spacing:1.5px;
+         color:#04080a; background:var(--d06-crit); padding:2px 5px; border-radius:2px; font-weight:bold;">CRITICAL</div>
+    <div class="d06-abs d06-o" style="left:10px; top:26px; font-size:26px; line-height:26px;
+         font-weight:bold; color:var(--d06-crit);">8<span style="font-size:15px; color:#c9564d;">/30</span></div>
+    <div class="d06-abs d06-o" style="left:96px; top:31px; font-size:10px; letter-spacing:1px; color:var(--d06-txt3);">27% &middot; ENC 4</div>
+    <div class="d06-bar" style="left:96px; top:46px; width:140px; background:var(--d06-emptycrit);">
+      <i style="width:37px; background:var(--d06-crit);"></i></div>
+    <div class="d06-rule" style="left:10px; top:64px; width:226px; background:rgba(255,90,78,.28);"></div>
+    <div class="d06-abs d06-o" style="left:10px; top:72px;">
+      <span class="d06-chip">BLEEDING</span><span class="d06-chip">BITTEN</span>
+    </div>
+  </div>
+
+  <!-- ============ RIGHT COLUMN — contacts, target, hands ============ -->
+  <div class="d06-wash" style="left:1196px; top:268px; width:320px; height:38px;
+       background-image:linear-gradient(to right,rgba(4,8,10,.86) 0%,rgba(4,8,10,.60) 64%,rgba(4,8,10,0) 100%);"></div>
+  <div class="d06-abs d06-lb d06-o" style="left:1200px; top:271px;">CONTACTS</div>
+  <div class="d06-abs d06-o" style="left:1200px; top:285px; font-size:12px; color:var(--d06-txt2);">
+    <span style="color:var(--d06-hostile); font-weight:bold;">3</span> VISIBLE
+    <span style="color:var(--d06-txt3)">&middot;</span>
+    <span style="color:var(--d06-track); font-weight:bold;">1</span> TRACKED
+    <span style="margin-left:10px; font-size:9px; letter-spacing:1.2px; color:#8fdcc0;
+          border:1px solid rgba(53,214,160,.5); padding:1px 4px; border-radius:2px;">SAFE MODE ON</span>
+  </div>
+
+  <div class="d06-plate" style="left:1196px; top:316px; width:260px; height:66px;
+       border-color:rgba(255,179,0,.55);">
+    <div class="d06-abs d06-o" style="left:10px; top:8px; font-size:14px; font-weight:bold;
+         letter-spacing:.6px; color:var(--d06-track);">ZOMBIE BRUTE</div>
+    <div class="d06-abs d06-o" style="right:10px; top:10px; font-size:9px; letter-spacing:1.4px; color:var(--d06-txt3);">TRACKED</div>
+    <div class="d06-bar" style="left:10px; top:30px; width:160px;">
+      <i style="width:99px; background:var(--d06-track);"></i></div>
+    <div class="d06-abs d06-o" style="left:178px; top:26px; font-size:12px; color:var(--d06-txt);">62%</div>
+    <div class="d06-abs d06-o" style="left:10px; top:44px; font-size:11px; letter-spacing:.6px; color:var(--d06-txt2);">
+      4 TILES <span style="color:var(--d06-track); font-weight:bold;">NE</span>
+      <span style="color:var(--d06-txt3)">&middot;</span> MOVING</div>
+  </div>
+
+  <div class="d06-wash" style="left:1196px; top:512px; width:320px; height:98px;
+       background-image:linear-gradient(to right,rgba(4,8,10,.86) 0%,rgba(4,8,10,.60) 64%,rgba(4,8,10,0) 100%);"></div>
+  <div class="d06-abs d06-lb d06-o" style="left:1200px; top:515px;">HANDS</div>
+  <div class="d06-abs d06-o" style="left:1200px; top:531px; font-size:13px; color:var(--d06-txt); font-weight:bold;">FIRE AXE</div>
+  <div class="d06-abs d06-o" style="left:1200px; top:547px; font-size:11px; color:var(--d06-txt2);">32 BASH
+    <span style="color:var(--d06-txt3)">&middot;</span> 0 CUT
+    <span style="color:var(--d06-txt3)">&middot;</span> HIT +1</div>
+  <div class="d06-abs d06-o" style="left:1200px; top:566px; font-size:11px; color:var(--d06-warn);">FLASHLIGHT
+    <span style="color:var(--d06-txt3)">LIT</span> 34%</div>
+  <div class="d06-bar" style="left:1296px; top:569px; width:52px; height:4px;">
+    <i style="width:18px; height:4px; background:var(--d06-warn);"></i></div>
+  <div class="d06-abs d06-o" style="left:1200px; top:584px; font-size:11px; color:var(--d06-txt3);">GLOCK 19 STOWED
+    <span style="color:var(--d06-txt2)">12/17</span> 9MM JHP</div>
+
+  <!-- ============ TOP LEFT — identity + world ======================= -->
+  <div class="d06-wash" style="left:28px; top:26px; width:480px; height:158px;
+       background-image:radial-gradient(130% 165% at 0% 0%,rgba(4,8,10,.90) 0%,rgba(4,8,10,.74) 40%,rgba(4,8,10,0) 100%);"></div>
+  <div class="d06-abs d06-o" style="left:36px; top:34px; font-size:20px; font-weight:bold;
+       letter-spacing:1.4px; color:var(--d06-txt);">NIGEL ASHBY</div>
+  <div class="d06-abs d06-o" style="left:36px; top:60px; font-size:10px; letter-spacing:2.2px;
+       color:var(--d06-txt3);">SURVIVOR</div>
+  <div class="d06-abs d06-o" style="left:36px; top:78px; font-size:13px; letter-spacing:.6px;
+       color:var(--d06-txt2);">CHESWICK &mdash; RESIDENTIAL</div>
+  <div class="d06-rule" style="left:36px; top:100px; width:300px;
+       background-image:linear-gradient(to right,rgba(142,163,169,.34),rgba(142,163,169,0));"></div>
+  <div class="d06-abs d06-o" style="left:36px; top:108px; font-size:12px; color:var(--d06-txt2);">
+    DAY <span style="color:var(--d06-txt)">14</span>
+    <span style="color:var(--d06-txt3)">&middot;</span> <span style="color:var(--d06-txt)">21:47</span>
+    <span style="color:var(--d06-txt3)">&middot;</span> AUTUMN</div>
+  <div class="d06-abs d06-o" style="left:36px; top:127px; font-size:12px; color:var(--d06-txt2);">
+    LIGHT DRIZZLE <span style="color:var(--d06-txt3)">&middot;</span>
+    <span style="color:var(--d06-cold)">8 &deg;C</span>
+    <span style="color:var(--d06-txt3)">&middot;</span> WIND NE 12 KM/H</div>
+  <div class="d06-abs d06-o" style="left:36px; top:146px; font-size:12px; color:var(--d06-txt2);">
+    LIGHT <span style="color:var(--d06-txt)">12%</span>
+    <span style="color:var(--d06-txt3)">MOONLIGHT</span></div>
+  <div class="d06-bar" style="left:212px; top:151px; width:60px; height:4px;">
+    <i style="width:7px; height:4px; background:#8ea3a9;"></i></div>
+
+  <!-- ============ TOP RIGHT — between-turn data ===================== -->
+  <div class="d06-wash" style="left:1532px; top:26px; width:360px; height:186px;
+       background-image:radial-gradient(140% 165% at 100% 0%,rgba(4,8,10,.90) 0%,rgba(4,8,10,.72) 42%,rgba(4,8,10,0) 100%);"></div>
+  <div class="d06-abs d06-lb d06-o" style="left:1592px; top:36px; width:292px; text-align:right;">BETWEEN-TURN &mdash; NOT ORBITED</div>
+  <div class="d06-rule" style="left:1652px; top:54px; width:232px;
+       background-image:linear-gradient(to left,rgba(142,163,169,.34),rgba(142,163,169,0));"></div>
+  <div class="d06-abs d06-o" style="left:1584px; top:64px; width:300px; text-align:right; font-size:13px; color:var(--d06-txt2);">
+    STR <span style="color:var(--d06-txt)">10</span>&nbsp;&nbsp;
+    DEX <span style="color:var(--d06-txt)">12</span>&nbsp;&nbsp;
+    INT <span style="color:var(--d06-txt)">&nbsp;9</span>&nbsp;&nbsp;
+    PER <span style="color:var(--d06-txt)">11</span></div>
+  <div class="d06-abs d06-o" style="left:1584px; top:92px; width:300px; text-align:right; font-size:12px; color:var(--d06-txt2);">
+    SPEED <span style="color:var(--d06-txt)">96</span>
+    <span style="color:var(--d06-txt3)">&middot;</span>
+    FOCUS <span style="color:var(--d06-txt)">84</span></div>
+  <div class="d06-abs d06-o" style="left:1584px; top:113px; width:300px; text-align:right; font-size:12px; color:var(--d06-txt2);">
+    PAIN <span style="color:var(--d06-warn)">12</span>
+    <span style="color:var(--d06-txt3)">&middot;</span>
+    MORALE <span style="color:var(--d06-warn)">&minus;3</span></div>
+  <div class="d06-abs d06-o" style="left:1584px; top:134px; width:300px; text-align:right; font-size:12px; color:var(--d06-txt2);">
+    ENC TORSO <span style="color:var(--d06-txt)">12</span>
+    <span style="color:var(--d06-txt3)">&middot;</span>
+    ARMS <span style="color:var(--d06-txt)">4</span></div>
+  <div class="d06-rule" style="left:1712px; top:160px; width:172px;
+       background-image:linear-gradient(to left,rgba(142,163,169,.22),rgba(142,163,169,0));"></div>
+  <div class="d06-abs d06-o" style="left:1584px; top:168px; width:300px; text-align:right; font-size:9px;
+       letter-spacing:1.1px; line-height:16px; color:var(--d06-txt3);">HOLD TAB &mdash; ACTION WHEEL<br>M &mdash; FULL OVERMAP</div>
+
+  <!-- ============ BOTTOM LEFT — message log ======================== -->
+  <div class="d06-wash" style="left:28px; top:876px; width:520px; height:166px;
+       background-image:linear-gradient(to right,rgba(4,8,10,.90) 0%,rgba(4,8,10,.70) 58%,rgba(4,8,10,0) 100%),
+                        linear-gradient(to top,rgba(4,8,10,.42) 0%,rgba(4,8,10,0) 74%);"></div>
+  <div class="d06-abs d06-lb d06-o" style="left:36px; top:880px;">LOG &mdash; OLDEST FIRST</div>
+  <div class="d06-abs d06-o" style="left:36px; top:900px; font-size:13px; line-height:22px; letter-spacing:.1px;">
+    <div style="opacity:.45; color:var(--d06-good);"><span style="font-size:10px; color:var(--d06-txt3);">21:46</span>&nbsp; You hit the zombie brute with your fire axe.</div>
+    <div style="opacity:.58; color:var(--d06-bad);"><span style="font-size:10px; color:var(--d06-txt3);">21:46</span>&nbsp; The zombie brute claws your left arm!</div>
+    <div style="opacity:.72; color:var(--d06-bad);"><span style="font-size:10px; color:var(--d06-txt3);">21:47</span>&nbsp; Your left arm is bleeding.</div>
+    <div style="opacity:.82; color:var(--d06-baddim);"><span style="font-size:10px; color:var(--d06-txt3);">21:47</span>&nbsp; You feel a sharp pain.</div>
+    <div style="opacity:.91; color:var(--d06-caution);"><span style="font-size:10px; color:var(--d06-txt3);">21:47</span>&nbsp; The zombie shambler groans nearby.</div>
+    <div style="opacity:1; color:var(--d06-caution);"><span style="font-size:10px; color:var(--d06-txt3);">21:47</span>&nbsp; You are getting thirsty.</div>
+  </div>
+  <div class="d06-abs" style="left:29px; top:1010px; width:2px; height:20px; background:var(--d06-caution);
+       box-shadow:0 0 6px rgba(242,193,78,.55);"></div>
+
+</div></body></html>

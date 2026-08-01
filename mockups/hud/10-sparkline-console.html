@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>10 &mdash; Sparkline Console</title><style>
+  /* == D10-SPARKLINE-CONSOLE-SENTINEL =======================================
+     10 - Sparkline Console. Maximum data-ink: no frames, no panels, two
+     translucent scrims, one hairline grammar, and history on every metric.
+     ====================================================================== */
+  html,body { margin:0; padding:0; background:#000; }
+  #screen {
+    position:relative; width:1920px; height:1080px; overflow:hidden;
+    background-image:url("_shared/world.png");
+    background-size:1920px 1080px;
+  }
+
+  /* ---------------------------------------------------------- palette ----
+     Neutral luminance ramp + exactly three hues.
+       red   #f65a45  L*59   harm you must act on now
+       amber #f2b134  L*76   a need/resource outside its desired band
+       cyan  #74e2f0  L*87   "now" and "self" - never a value
+     Green is deliberately absent: healthy == bright neutral, which also
+     removes every red/green pair from the design.                        */
+  .hud {
+    position:absolute; left:0; top:0; width:1920px; height:1080px;
+    font-family:Consolas,"Cascadia Mono","Lucida Console",monospace;
+    font-size:12px; color:#cfdae0; letter-spacing:0;
+    /* contrast without plates: a 1px dark casing welded to every glyph */
+    text-shadow:0 0 3px rgba(0,0,0,.92), 0 1px 0 rgba(0,0,0,.85),
+                1px 0 0 rgba(0,0,0,.55), -1px 0 0 rgba(0,0,0,.55);
+  }
+
+  /* ----------------------------------------------------------- scrims ----
+     The only two backgrounds in the design. Both translucent, both fade to
+     nothing at the edge that faces the play area. No panel, no box.       */
+  .ledger {
+    position:absolute; left:0; top:0; width:1920px; height:42px;
+    background:linear-gradient(to bottom,
+      rgba(5,8,10,.66) 0%, rgba(5,8,10,.60) 62%, rgba(5,8,10,0) 100%);
+    backdrop-filter:blur(2px) saturate(.72);
+    -webkit-mask-image:linear-gradient(to bottom,#000 0%,#000 62%,transparent 100%);
+            mask-image:linear-gradient(to bottom,#000 0%,#000 62%,transparent 100%);
+  }
+  .console {
+    position:absolute; left:0; top:796px; width:1920px; height:284px;
+    background:rgba(5,8,10,.60);
+    backdrop-filter:blur(2.5px) saturate(.72) brightness(.94);
+    -webkit-mask-image:linear-gradient(to bottom,transparent 0px,#000 32px);
+            mask-image:linear-gradient(to bottom,transparent 0px,#000 32px);
+  }
+
+  /* ------------------------------------------------------------ rules ----
+     Hairlines only, every one fading out at both ends. Nothing is boxed.  */
+  .rule { position:absolute; height:1px; }
+  .r-ledger  { left:0; top:30px; width:1920px;
+    background:linear-gradient(to right, rgba(157,173,180,0) 0%,
+      rgba(157,173,180,.26) 2%, rgba(157,173,180,.26) 98%, rgba(157,173,180,0) 100%); }
+  .r-console { left:0; top:828px; width:1920px;
+    background:linear-gradient(to right, rgba(157,173,180,0) 0%,
+      rgba(157,173,180,.34) 2%, rgba(157,173,180,.34) 98%, rgba(157,173,180,0) 100%); }
+  .r-head { left:28px; top:858px; width:1864px; background:rgba(157,173,180,.18); }
+  .r-foot { left:28px; top:1036px; width:1864px; background:rgba(157,173,180,.13); }
+  .vrule { position:absolute; top:836px; width:1px; height:198px;
+    background:linear-gradient(to bottom, rgba(157,173,180,0) 0%,
+      rgba(157,173,180,.17) 9%, rgba(157,173,180,.17) 91%, rgba(157,173,180,0) 100%); }
+
+  /* -------------------------------------------------- table / type ------
+     One face, four sizes: 11 / 12 / 13 / 15px. 11px is the floor
+     (research-infodesign.md: 0.8em monospace ~= 11px at 96dpi).           */
+  .col   { position:absolute; top:836px; height:198px; }
+  .chead { display:flex; align-items:flex-end; height:22px; }
+  .cbody { margin-top:8px; }
+  .ct  { font-size:11px; font-weight:600; letter-spacing:2px; color:#9dadb4; }
+  .chd { font-size:11px; letter-spacing:1.3px; color:#5d6b71; }
+
+  .row  { display:flex; align-items:center; }
+  .r25 { height:25px; } .r24 { height:24px; } .r18 { height:18px; }
+  .r16 { height:16px; } .r15 { height:15px; } .r14 { height:14px; }
+  .pad4 { margin-top:4px; } .pad6 { margin-top:6px; } .pad8 { margin-top:8px; }
+  .inl  { column-gap:15px; }
+  .pair { display:flex; align-items:baseline; column-gap:5px; }
+  .push { margin-left:auto; }
+
+  .lab  { font-size:11px; letter-spacing:.9px; color:#9dadb4; flex:0 0 auto;
+          white-space:nowrap; }
+  .sub  { font-size:11px; letter-spacing:.5px; color:#6d7c83; }
+  .val  { font-size:12px; color:#cfdae0; flex:0 0 auto; }
+  .num  { font-size:12px; color:#cfdae0; flex:0 0 auto; }
+  .big  { font-size:13px; font-weight:600; color:#eef4f6; }
+  .name { font-size:13px; color:#eef4f6; letter-spacing:.3px; }
+  .flag { font-size:11px; letter-spacing:1.4px; color:#f65a45; }
+  .eff  { font-size:11px; letter-spacing:.9px; margin-right:13px; }
+  .dim  { color:#6d7c83; }
+  .amb  { color:#f2b134; }
+  .crit { color:#f65a45; }
+  .crit2 { color:#c2554a; }
+
+  /* -------------------------------------------------------- sparkline ----
+     Identical geometry everywhere: 49x22px, twelve 3px bars, 1px gutter, so
+     any two charts in the HUD are directly comparable. The plate is a dark
+     casing plus a faint band marking the DESIRED range for that metric.
+     History bars sit at 50% neutral; the newest bar carries the state
+     colour; a 3x2 cyan foot under the newest column is the reading head.  */
+  .spark {
+    position:relative; display:flex; align-items:flex-end; column-gap:1px;
+    width:49px; height:22px; padding:1px; box-sizing:border-box; flex:0 0 auto;
+  }
+  .spark span { width:3px; background:rgba(157,173,180,.50); }
+  /* the newest sample is the only bar at full strength; its hue is the datum
+     (neutral = inside its desired band, amber = outside, red = critical) and
+     is therefore written inline by the producer, overriding this default. */
+  .spark span.now { background:#eef4f6; }
+  .spark span.head {
+    position:absolute; right:1px; bottom:-3px; width:3px; height:2px;
+    background:#74e2f0;
+  }
+  .sp-sta { background:linear-gradient(to top, rgba(11,17,20,0.80) 0px, rgba(11,17,20,0.80) 14px, rgba(157,173,180,0.155) 14px, rgba(157,173,180,0.155) 21px, rgba(11,17,20,0.80) 21px, rgba(11,17,20,0.80) 22px); }
+  .sp-pain { background:linear-gradient(to top, rgba(11,17,20,0.80) 0px, rgba(11,17,20,0.80) 1px, rgba(157,173,180,0.155) 1px, rgba(157,173,180,0.155) 7px, rgba(11,17,20,0.80) 7px, rgba(11,17,20,0.80) 22px); }
+  .sp-mor { background:linear-gradient(to top, rgba(11,17,20,0.80) 0px, rgba(11,17,20,0.80) 5px, rgba(157,173,180,0.155) 5px, rgba(157,173,180,0.155) 10px, rgba(157,173,180,0.36) 10px, rgba(157,173,180,0.36) 11px, rgba(157,173,180,0.155) 11px, rgba(157,173,180,0.155) 17px, rgba(11,17,20,0.80) 17px, rgba(11,17,20,0.80) 22px); }
+  .sp-focus { background:linear-gradient(to top, rgba(11,17,20,0.80) 0px, rgba(11,17,20,0.80) 11px, rgba(157,173,180,0.155) 11px, rgba(157,173,180,0.155) 21px, rgba(11,17,20,0.80) 21px, rgba(11,17,20,0.80) 22px); }
+  .sp-light { background:linear-gradient(to top, rgba(11,17,20,0.80) 0px, rgba(11,17,20,0.80) 17px, rgba(157,173,180,0.155) 17px, rgba(157,173,180,0.155) 21px, rgba(11,17,20,0.80) 21px, rgba(11,17,20,0.80) 22px); }
+  .sp-temp { background:linear-gradient(to top, rgba(11,17,20,0.80) 0px, rgba(11,17,20,0.80) 16px, rgba(157,173,180,0.155) 16px, rgba(157,173,180,0.155) 21px, rgba(11,17,20,0.80) 21px, rgba(11,17,20,0.80) 22px); }
+  .sp-noise { background:linear-gradient(to top, rgba(11,17,20,0.80) 0px, rgba(11,17,20,0.80) 1px, rgba(157,173,180,0.155) 1px, rgba(157,173,180,0.155) 8px, rgba(11,17,20,0.80) 8px, rgba(11,17,20,0.80) 22px); }
+  .sp-lamp { background:linear-gradient(to top, rgba(11,17,20,0.80) 0px, rgba(11,17,20,0.80) 8px, rgba(157,173,180,0.155) 8px, rgba(157,173,180,0.155) 21px, rgba(11,17,20,0.80) 21px, rgba(11,17,20,0.80) 22px); }
+  .sp-tgt { background:linear-gradient(to top, rgba(11,17,20,0.80) 0px, rgba(11,17,20,0.80) 1px, rgba(157,173,180,0.155) 1px, rgba(157,173,180,0.155) 7px, rgba(11,17,20,0.80) 7px, rgba(11,17,20,0.80) 22px); }
+  .sp-body { background:linear-gradient(to top, rgba(11,17,20,0.80) 0px, rgba(11,17,20,0.80) 14px, rgba(157,173,180,0.155) 14px, rgba(157,173,180,0.155) 21px, rgba(11,17,20,0.80) 21px, rgba(11,17,20,0.80) 22px); }
+
+  /* -------------------------------------------------------------- log ----
+     Timestamp printed only when the minute changes. Age is encoded twice,
+     by opacity ramp and by hue. The cyan rail marks the newest line.      */
+  .logline { display:flex; align-items:center; height:24px; }
+  .tick  { width:2px; height:15px; background:transparent; flex:0 0 auto; }
+  .tick.on { background:#74e2f0; }
+  .stamp { width:40px; margin-left:6px; text-align:right; font-size:11px;
+           letter-spacing:.8px; color:#6d7c83; flex:0 0 auto; }
+  .msg   { margin-left:10px; font-size:13px; letter-spacing:.2px; color:#cfdae0; }
+
+  /* -------------------------------------------------------------- map ---- */
+  .map { width:143px; height:143px; background:rgba(6,10,12,.80); }
+  .maprow { display:flex; height:13px; }
+  .maprow span { width:13px; height:13px; font-size:12px; line-height:13px;
+                 text-align:center; }
+  .g-dot { color:#3d4a4f; } .g-for { color:#6d7c83; } .g-hou { color:#9dadb4; }
+  .g-poi { color:rgba(242,177,52,.42); } .g-poi.mission { color:#f2b134; }
+  .g-you { color:#74e2f0; font-weight:600; }
+
+  /* ----------------------------------------------------------- ledger ---- */
+  .ledger-in { position:absolute; left:28px; top:4px; width:1864px; height:22px;
+               display:flex; align-items:baseline; }
+  .lg-l, .lg-r { display:flex; align-items:baseline; column-gap:12px; }
+  .lg-r { margin-left:auto; column-gap:14px; }
+  .who   { font-size:13px; font-weight:600; letter-spacing:1.8px; color:#eef4f6; }
+  .clock { font-size:15px; font-weight:600; letter-spacing:.6px; color:#eef4f6; }
+  .sep   { font-size:12px; color:#343f44; }
+  .dotnow { width:5px; height:5px; border-radius:3px; background:#74e2f0;
+            align-self:center; }
+
+  /* ----------------------------------------------------------- hotbar ---- */
+  .foot { position:absolute; left:28px; top:1044px; width:1864px; height:22px;
+          display:flex; align-items:center; }
+  .slot { display:flex; align-items:center; width:96px; column-gap:6px; flex:0 0 auto; }
+  .slot.off { width:120px; }
+  .cap  { width:18px; height:18px; border-radius:2px; flex:0 0 auto;
+          background:rgba(157,173,180,.15); color:#eef4f6;
+          font-size:12px; line-height:18px; text-align:center; }
+  .slot.off .cap { background:rgba(157,173,180,.05); color:#46545a; }
+  .slot.off .lab { color:#46545a; }
+  .legend { margin-left:auto; display:flex; align-items:center; column-gap:8px; }
+  .sw-bar  { width:3px; height:11px; background:rgba(157,173,180,.50); }
+  .sw-band { width:13px; height:11px;
+             background:linear-gradient(to top, rgba(11,17,20,.80) 0px,
+               rgba(11,17,20,.80) 3px, rgba(157,173,180,.22) 3px,
+               rgba(157,173,180,.22) 11px); }
+  .sw-now  { width:3px; height:11px;
+             background:linear-gradient(to top, #74e2f0 0px, #74e2f0 2px,
+               #eef4f6 2px, #eef4f6 11px); }
+</style></head>
+<body><div id="screen">
+
+  <div class="hud">
+
+    <!-- ===== LEDGER: who / when / where / how dangerous ================= -->
+    <div class="ledger"></div>
+    <div class="rule r-ledger"></div>
+    <div class="ledger-in">
+      <div class="lg-l"><span class="who">NIGEL ASHBY</span><span class="lab">SURVIVOR</span><span class="sep">&middot;</span><span class="val">DAY 14</span><span class="clock">21:47</span><span class="lab">AUTUMN</span><span class="sep">&middot;</span><span class="val">CHESWICK &mdash; RESIDENTIAL</span></div>
+      <div class="lg-r"><span class="num big crit">3 HOSTILE</span><span class="lab amb">1 TRACKING</span><span class="sep">&middot;</span><span class="dotnow"></span><span class="val">SAFE MODE ON</span></div>
+    </div>
+
+    <!-- ===== CONSOLE: one table, six columns, fifteen sparklines ======== -->
+    <div class="console"></div>
+    <div class="rule r-console"></div>
+    <div class="rule r-head"></div>
+    <div class="vrule" style="left:302px;"></div>
+    <div class="vrule" style="left:635px;"></div>
+    <div class="vrule" style="left:930px;"></div>
+    <div class="vrule" style="left:1271px;"></div>
+    <div class="vrule" style="left:1712px;"></div>
+
+    <div class="col" style="left:28px;width:254px;">
+      <div class="chead"><span class="ct" style="width:42px;">BODY</span><span class="chd" style="width:49px;">12T</span><span class="chd" style="width:46px;text-align:right;margin-left:8px;">HP</span><span class="chd" style="width:40px;text-align:right;margin-left:6px;">%</span><span class="chd" style="width:44px;text-align:right;margin-left:4px;"></span></div>
+      <div class="cbody">
+      <div class="row r25"><span class="lab" style="width:42px;">HEAD</span><div class="spark sp-body"><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span style="height:19px"></span><span style="height:19px"></span><span style="height:18px"></span><span style="height:18px"></span><span style="height:18px"></span><span style="height:17px"></span><span style="height:17px"></span><span class="now" style="height:17px;background:#eef4f6"></span><span class="head"></span></div><span class="num" style="width:46px;text-align:right;margin-left:8px;">20/24</span><span class="num big" style="width:40px;text-align:right;margin-left:6px;">83%</span><span class="flag" style="width:44px;text-align:right;margin-left:4px;"></span></div>
+      <div class="row r25"><span class="lab" style="width:42px;">TORSO</span><div class="spark sp-body"><span style="height:20px"></span><span style="height:20px"></span><span style="height:19px"></span><span style="height:19px"></span><span style="height:18px"></span><span style="height:18px"></span><span style="height:17px"></span><span style="height:17px"></span><span style="height:16px"></span><span style="height:16px"></span><span style="height:15px"></span><span class="now" style="height:15px;background:#eef4f6"></span><span class="head"></span></div><span class="num" style="width:46px;text-align:right;margin-left:8px;">45/60</span><span class="num big" style="width:40px;text-align:right;margin-left:6px;">75%</span><span class="flag" style="width:44px;text-align:right;margin-left:4px;"></span></div>
+      <div class="row r25"><span class="lab" style="width:42px;">L&middot;ARM</span><div class="spark sp-body"><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span style="height:19px"></span><span style="height:19px"></span><span style="height:17px"></span><span style="height:17px"></span><span style="height:16px"></span><span style="height:15px"></span><span style="height:9px"></span><span class="now" style="height:5px;background:#f65a45"></span><span class="head"></span></div><span class="num crit" style="width:46px;text-align:right;margin-left:8px;">8/30</span><span class="num big crit" style="width:40px;text-align:right;margin-left:6px;">27%</span><span class="flag" style="width:44px;text-align:right;margin-left:4px;">CRIT</span></div>
+      <div class="row r14 sub crit" style="padding-left:50px;">bleeding &middot; bitten &middot; &minus;6/t</div>
+      <div class="row r25"><span class="lab" style="width:42px;">R&middot;ARM</span><div class="spark sp-body"><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span class="now" style="height:20px;background:#eef4f6"></span><span class="head"></span></div><span class="num" style="width:46px;text-align:right;margin-left:8px;">30/30</span><span class="num big" style="width:40px;text-align:right;margin-left:6px;">100%</span><span class="flag" style="width:44px;text-align:right;margin-left:4px;"></span></div>
+      <div class="row r25"><span class="lab" style="width:42px;">L&middot;LEG</span><div class="spark sp-body"><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span style="height:19px"></span><span style="height:19px"></span><span style="height:19px"></span><span style="height:18px"></span><span style="height:17px"></span><span style="height:17px"></span><span style="height:16px"></span><span style="height:16px"></span><span class="now" style="height:16px;background:#eef4f6"></span><span class="head"></span></div><span class="num" style="width:46px;text-align:right;margin-left:8px;">22/28</span><span class="num big" style="width:40px;text-align:right;margin-left:6px;">79%</span><span class="flag" style="width:44px;text-align:right;margin-left:4px;"></span></div>
+      <div class="row r25"><span class="lab" style="width:42px;">R&middot;LEG</span><div class="spark sp-body"><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span class="now" style="height:20px;background:#eef4f6"></span><span class="head"></span></div><span class="num" style="width:46px;text-align:right;margin-left:8px;">28/28</span><span class="num big" style="width:40px;text-align:right;margin-left:6px;">100%</span><span class="flag" style="width:44px;text-align:right;margin-left:4px;"></span></div>
+      </div>
+    </div>
+
+    <div class="col" style="left:323px;width:292px;">
+      <div class="chead"><span class="ct" style="width:52px;">LOAD</span><span class="chd" style="width:49px;">12T</span><span class="chd" style="width:62px;text-align:right;margin-left:4px;">NOW</span><span class="chd" style="width:28px;text-align:right;margin-left:4px;">%</span><span class="chd" style="width:38px;text-align:right;margin-left:4px;">&Delta;12T</span><span class="chd" style="width:44px;text-align:right;margin-left:4px;">RATE</span></div>
+      <div class="cbody">
+      <div class="row r24"><span class="lab" style="width:52px;">STAMINA</span><div class="spark sp-sta"><span style="height:20px"></span><span style="height:20px"></span><span style="height:19px"></span><span style="height:18px"></span><span style="height:17px"></span><span style="height:17px"></span><span style="height:16px"></span><span style="height:15px"></span><span style="height:14px"></span><span style="height:13px"></span><span style="height:12px"></span><span class="now" style="height:12px;background:#f2b134"></span><span class="head"></span></div><span class="num amb" style="width:62px;text-align:right;margin-left:4px;">5100/8700</span><span class="num big amb" style="width:28px;text-align:right;margin-left:4px;">59%</span><span class="num dim" style="width:38px;text-align:right;margin-left:4px;">&minus;3600</span><span class="lab dim" style="width:44px;text-align:right;margin-left:4px;">&minus;300/t</span></div>
+      <div class="row r24"><span class="lab" style="width:52px;">PAIN</span><div class="spark sp-pain"><span style="height:1px"></span><span style="height:1px"></span><span style="height:1px"></span><span style="height:1px"></span><span style="height:2px"></span><span style="height:4px"></span><span style="height:4px"></span><span style="height:6px"></span><span style="height:9px"></span><span style="height:11px"></span><span style="height:14px"></span><span class="now" style="height:15px;background:#f2b134"></span><span class="head"></span></div><span class="num amb" style="width:62px;text-align:right;margin-left:4px;">12</span><span class="num big amb" style="width:28px;text-align:right;margin-left:4px;"></span><span class="num dim" style="width:38px;text-align:right;margin-left:4px;">+12</span><span class="lab dim" style="width:44px;text-align:right;margin-left:4px;">+1/t</span></div>
+      <div class="row r24"><span class="lab" style="width:52px;">MORALE</span><div class="spark sp-mor"><span style="height:5px;margin-bottom:10px"></span><span style="height:5px;margin-bottom:10px"></span><span style="height:4px;margin-bottom:10px"></span><span style="height:4px;margin-bottom:10px"></span><span style="height:3px;margin-bottom:10px"></span><span style="height:1px;margin-bottom:10px"></span><span style="height:1px;margin-bottom:10px"></span><span style="height:1px;margin-bottom:10px"></span><span style="height:1px;margin-bottom:9px"></span><span style="height:3px;margin-bottom:7px"></span><span style="height:3px;margin-bottom:7px"></span><span class="now" style="height:4px;margin-bottom:6px;background:#eef4f6"></span><span class="head"></span></div><span class="num" style="width:62px;text-align:right;margin-left:4px;">&minus;3</span><span class="num big" style="width:28px;text-align:right;margin-left:4px;"></span><span class="num dim" style="width:38px;text-align:right;margin-left:4px;">&minus;7</span><span class="lab dim" style="width:44px;text-align:right;margin-left:4px;">&minus;1/t</span></div>
+      <div class="row r24"><span class="lab" style="width:52px;">FOCUS</span><div class="spark sp-focus"><span style="height:13px"></span><span style="height:13px"></span><span style="height:13px"></span><span style="height:12px"></span><span style="height:12px"></span><span style="height:11px"></span><span style="height:11px"></span><span style="height:10px"></span><span style="height:9px"></span><span style="height:9px"></span><span style="height:8px"></span><span class="now" style="height:8px;background:#eef4f6"></span><span class="head"></span></div><span class="num" style="width:62px;text-align:right;margin-left:4px;">84</span><span class="num big" style="width:28px;text-align:right;margin-left:4px;"></span><span class="num dim" style="width:38px;text-align:right;margin-left:4px;">&minus;16</span><span class="lab dim" style="width:44px;text-align:right;margin-left:4px;">&minus;1/t</span></div>
+      <div class="row r16 inl pad4"><span class="pair"><span class="lab">HUNGER</span><span class="val ">peckish</span></span><span class="pair"><span class="lab">THIRST</span><span class="val amb">thirsty</span></span><span class="pair"><span class="lab">&rarr;DEHYD</span><span class="val dim">&asymp;38t</span></span></div>
+      <div class="row r16 inl"><span class="pair"><span class="lab">FATIGUE</span><span class="val amb">tired</span></span><span class="pair"><span class="lab">WARMTH</span><span class="val amb">chilly</span></span><span class="pair"><span class="lab">MOVE</span><span class="val ">walking</span></span></div>
+      <div class="row r16 inl pad4"><span class="pair"><span class="lab">ENCUM</span><span class="val ">torso 12 &middot; arms 4</span></span><span class="pair"><span class="lab">SPEED</span><span class="val ">96</span></span></div>
+      <div class="row r16 inl"><span class="pair"><span class="lab">STR</span><span class="val ">10</span></span><span class="pair"><span class="lab">DEX</span><span class="val ">12</span></span><span class="pair"><span class="lab">INT</span><span class="val ">9</span></span><span class="pair"><span class="lab">PER</span><span class="val ">11</span></span></div>
+      </div>
+    </div>
+
+    <div class="col" style="left:656px;width:254px;">
+      <div class="chead"><span class="ct" style="width:50px;">SENSE</span><span class="chd" style="width:49px;">12T</span><span class="chd" style="width:36px;text-align:right;margin-left:4px;">NOW</span><span class="chd" style="width:34px;text-align:right;margin-left:4px;">&Delta;12T</span><span class="chd" style="width:58px;margin-left:10px;">NOTE</span></div>
+      <div class="cbody">
+      <div class="row r24"><span class="lab" style="width:50px;">LIGHT</span><div class="spark sp-light"><span style="height:10px"></span><span style="height:10px"></span><span style="height:9px"></span><span style="height:8px"></span><span style="height:8px"></span><span style="height:7px"></span><span style="height:7px"></span><span style="height:6px"></span><span style="height:6px"></span><span style="height:6px"></span><span style="height:5px"></span><span class="now" style="height:5px;background:#eef4f6"></span><span class="head"></span></div><span class="num big" style="width:36px;text-align:right;margin-left:4px;">12%</span><span class="num dim" style="width:34px;text-align:right;margin-left:4px;">&minus;14</span><span class="lab dim" style="width:58px;margin-left:10px;">moonlit</span></div>
+      <div class="row r24"><span class="lab" style="width:50px;">TEMP</span><div class="spark sp-temp"><span style="height:12px"></span><span style="height:12px"></span><span style="height:11px"></span><span style="height:11px"></span><span style="height:10px"></span><span style="height:10px"></span><span style="height:9px"></span><span style="height:9px"></span><span style="height:9px"></span><span style="height:8px"></span><span style="height:8px"></span><span class="now" style="height:8px;background:#eef4f6"></span><span class="head"></span></div><span class="num big" style="width:36px;text-align:right;margin-left:4px;">8&deg;C</span><span class="num dim" style="width:34px;text-align:right;margin-left:4px;">&minus;4</span><span class="lab dim" style="width:58px;margin-left:10px;">drizzle</span></div>
+      <div class="row r24"><span class="lab" style="width:50px;">NOISE</span><div class="spark sp-noise"><span style="height:3px"></span><span style="height:3px"></span><span style="height:2px"></span><span style="height:3px"></span><span style="height:3px"></span><span style="height:5px"></span><span style="height:3px"></span><span style="height:7px"></span><span style="height:10px"></span><span style="height:12px"></span><span style="height:13px"></span><span class="now" style="height:13px;background:#f2b134"></span><span class="head"></span></div><span class="num big amb" style="width:36px;text-align:right;margin-left:4px;">8</span><span class="num dim" style="width:34px;text-align:right;margin-left:4px;">+6</span><span class="lab dim" style="width:58px;margin-left:10px;">you</span></div>
+      <div class="row r24"><span class="lab" style="width:50px;">FLASHLT</span><div class="spark sp-lamp"><span style="height:15px"></span><span style="height:15px"></span><span style="height:14px"></span><span style="height:14px"></span><span style="height:14px"></span><span style="height:13px"></span><span style="height:13px"></span><span style="height:13px"></span><span style="height:12px"></span><span style="height:12px"></span><span style="height:12px"></span><span class="now" style="height:11px;background:#eef4f6"></span><span class="head"></span></div><span class="num big" style="width:36px;text-align:right;margin-left:4px;">34%</span><span class="num dim" style="width:34px;text-align:right;margin-left:4px;">&minus;11</span><span class="lab dim" style="width:58px;margin-left:10px;">lit &asymp;37t</span></div>
+      <div class="row r16 inl pad8"><span class="pair"><span class="lab">WIND</span><span class="val ">NE 12 km/h</span></span></div>
+      <div class="row r16 inl"><span class="pair"><span class="lab">SKY</span><span class="val ">light drizzle</span></span></div>
+      </div>
+    </div>
+
+    <div class="col" style="left:951px;width:300px;">
+      <div class="chead"><span class="ct">CONTACT</span><span class="chd push">ARMS &middot; TARGET &middot; STATE</span></div>
+      <div class="cbody">
+      <div class="row r18"><span class="lab" style="width:46px;">WIELD</span><span class="name">fire axe</span><span class="lab dim push">+1 hit</span></div>
+      <div class="row r14 sub" style="padding-left:46px;">32 bash &middot; 0 cut</div>
+      <div class="row r18 pad6"><span class="lab" style="width:46px;">STOW</span><span class="name">Glock 19</span><span class="num push">12/17</span></div>
+      <div class="row r14 sub" style="padding-left:46px;">9mm JHP</div>
+      <div class="row r24 pad8"><span class="lab" style="width:46px;">TARGET</span><div class="spark sp-tgt"><span style="height:20px"></span><span style="height:20px"></span><span style="height:20px"></span><span style="height:19px"></span><span style="height:19px"></span><span style="height:18px"></span><span style="height:18px"></span><span style="height:16px"></span><span style="height:15px"></span><span style="height:15px"></span><span style="height:14px"></span><span class="now" style="height:12px;background:#eef4f6"></span><span class="head"></span></div><span class="num big" style="width:40px;text-align:right;margin-left:4px;">62%</span><span class="num dim" style="width:40px;text-align:right;margin-left:4px;">&minus;38</span><span class="lab dim" style="width:74px;margin-left:12px;">4 tiles NE</span></div>
+      <div class="row r14 sub" style="padding-left:46px;">zombie brute &middot; moving</div>
+      <div class="row r15 pad8"><span class="lab" style="width:46px;">STATE</span><span class="eff crit">1 BLEEDING l&middot;arm</span><span class="eff crit">2 BITTEN l&middot;arm</span></div>
+      <div class="row r15" style="padding-left:46px;"><span class="eff amb">3 SOAKED</span><span class="eff amb">4 TIRED</span><span class="eff amb">5 PAIN 12</span></div>
+      </div>
+    </div>
+
+    <div class="col" style="left:1292px;width:400px;">
+      <div class="chead"><span class="ct">LOG</span><span class="chd push">NEWEST LAST</span></div>
+      <div class="cbody">
+      <div class="logline" style="opacity:0.52"><span class="tick"></span><span class="stamp">21:46</span><span class="msg ">You hit the zombie brute with your fire axe.</span></div>
+      <div class="logline" style="opacity:0.64"><span class="tick"></span><span class="stamp"></span><span class="msg crit">The zombie brute claws your left arm!</span></div>
+      <div class="logline" style="opacity:0.78"><span class="tick"></span><span class="stamp">21:47</span><span class="msg crit">Your left arm is bleeding.</span></div>
+      <div class="logline" style="opacity:0.86"><span class="tick"></span><span class="stamp"></span><span class="msg crit2">You feel a sharp pain.</span></div>
+      <div class="logline" style="opacity:0.93"><span class="tick"></span><span class="stamp"></span><span class="msg amb">The zombie shambler groans nearby.</span></div>
+      <div class="logline" style="opacity:1"><span class="tick on"></span><span class="stamp"></span><span class="msg amb">You are getting thirsty.</span></div>
+      </div>
+    </div>
+
+    <div class="col" style="left:1733px;width:159px;">
+      <div class="chead"><span class="ct">MAP</span><span class="chd push">11&times;11</span></div>
+      <div class="cbody">
+      <div class="map">
+        <div class="maprow"><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-for">F</span><span class="g-for">F</span><span class="g-for">F</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span></div>
+        <div class="maprow"><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-for">F</span><span class="g-for">F</span><span class="g-for">F</span><span class="g-for">F</span><span class="g-for">F</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-poi mission">^</span><span class="g-dot">.</span></div>
+        <div class="maprow"><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-for">F</span><span class="g-for">F</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-for">F</span><span class="g-for">F</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span></div>
+        <div class="maprow"><span class="g-dot">.</span><span class="g-poi">^</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-hou">H</span><span class="g-hou">H</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-for">F</span><span class="g-dot">.</span><span class="g-dot">.</span></div>
+        <div class="maprow"><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-hou">H</span><span class="g-hou">H</span><span class="g-hou">H</span><span class="g-hou">H</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span></div>
+        <div class="maprow"><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-hou">H</span><span class="g-you">@</span><span class="g-hou">H</span><span class="g-hou">H</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span></div>
+        <div class="maprow"><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-hou">H</span><span class="g-hou">H</span><span class="g-hou">H</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-for">F</span><span class="g-for">F</span><span class="g-dot">.</span></div>
+        <div class="maprow"><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-for">F</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-for">F</span><span class="g-for">F</span><span class="g-dot">.</span></div>
+        <div class="maprow"><span class="g-dot">.</span><span class="g-for">F</span><span class="g-for">F</span><span class="g-dot">.</span><span class="g-poi">^</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-for">F</span><span class="g-dot">.</span></div>
+        <div class="maprow"><span class="g-dot">.</span><span class="g-for">F</span><span class="g-for">F</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span></div>
+        <div class="maprow"><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span><span class="g-dot">.</span></div>
+      </div>
+      <div class="row r16 inl pad6"><span class="pair"><span class="lab">&#94; MISSION</span><span class="val ">NE</span></span></div>
+      </div>
+    </div>
+
+    <div class="rule r-foot"></div>
+    <div class="foot">
+      <div class="slot off"><span class="cap">f</span><span class="lab">FIRE</span><span class="lab crit2">no gun</span></div>
+      <div class="slot"><span class="cap">r</span><span class="lab">RELOAD</span></div>
+      <div class="slot"><span class="cap">&#39;</span><span class="lab">RUN</span></div>
+      <div class="slot"><span class="cap">e</span><span class="lab">EXAMINE</span></div>
+      <div class="slot"><span class="cap">p</span><span class="lab">PICK UP</span></div>
+      <div class="slot"><span class="cap">c</span><span class="lab">CRAFT</span></div>
+      <div class="slot"><span class="cap">i</span><span class="lab">INVENTORY</span></div>
+      <div class="slot"><span class="cap">t</span><span class="lab">THROW</span></div>
+      <div class="slot"><span class="cap">5</span><span class="lab">WAIT</span></div>
+      <div class="legend"><span class="sw-bar"></span><span class="lab dim">12-TURN HISTORY</span><span class="sw-band"></span><span class="lab dim">DESIRED BAND</span><span class="sw-now"></span><span class="lab dim">NOW</span><span class="lab dim">&Delta;12T = CHANGE OVER 12 TURNS</span></div>
+    </div>
+
+  </div>
+</div></body></html>

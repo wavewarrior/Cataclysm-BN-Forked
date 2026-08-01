@@ -27,18 +27,27 @@ void substitute_tokens( std::string &rcss );
 // true; otherwise return false (caller falls back to the curses RGB).
 bool game_color_hex( const nc_color &c, std::string &out_hex );
 
+// Same, for the HUD-scoped "hud_colors" override layer. The sidebar HUD's chrome
+// is a cool teal set while the menus are warm gruvbox, so the shared game palette
+// never sat right inside it; this lets the HUD restate those colours in its own
+// register without touching any menu. Consulted only by hud_color_to_hex().
+bool hud_color_hex( const nc_color &c, std::string &out_hex );
+
 // ── Live editor support (F4 Theme tab) ────────────────────────────────────
 // Ordered token / game-colour names (JSON order) for building the editor UI.
 const std::vector<std::string> &rcss_names();
 const std::vector<std::string> &game_color_names();
+const std::vector<std::string> &hud_color_names();
 // Get/set a colour as RGBA floats (0..1). get returns false if the name is
 // unknown. set updates the in-memory theme; call rmlui_layer::reload_theme()
-// after rcss edits to re-apply, and game-colour edits take effect on next screen
-// open (set_game_rgba clears the resolved cache).
+// after rcss edits to re-apply, and colour edits take effect on next screen
+// open (the setters clear the resolved cache).
 bool get_rcss_rgba( const std::string &name, float out[4] );
 void set_rcss_rgba( const std::string &name, const float in[4] );
 bool get_game_rgba( const std::string &name, float out[4] );
 void set_game_rgba( const std::string &name, const float in[4] );
+bool get_hud_rgba( const std::string &name, float out[4] );
+void set_hud_rgba( const std::string &name, const float in[4] );
 // Persist the current theme back to data/gui/theme.json.
 void save();
 } // namespace ui_theme

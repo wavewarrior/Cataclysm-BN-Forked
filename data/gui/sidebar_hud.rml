@@ -4,50 +4,205 @@
     <link type="text/rcss" href="sidebar_hud.rcss"/>
 </head>
 <body data-model="sidebar_hud">
-    <!-- Full Qud-inspired layout: top bar (1 row), vitals overlay (top-left),
-         dock (minimap + log, right edge), bottom strips (botbar + hotbar, 2 rows).
-         All regions are absolutely positioned; the sidebar width is carved from
-         the viewport edge. No dynamic row iteration — fixed data-model strings. -->
+    <!-- ==================================================================
+         TERMINAL PHOSPHOR SIDEBAR HUD
+         ==================================================================
 
-    <!-- Top bar: full viewport width, 2 rows -->
-    <div id="hud-topbar" class="runic-edge-bottom runic-no-top">
-        <div class="hud-strip-row" data-rml="topbar_rml"></div>
-        <div class="hud-strip-row" data-rml="topbar_row2_rml"></div>
+         THIS DOCUMENT IS A TERMINAL, NOT A SET OF BOXES.
+
+         The HUD is a character-cell grid: one font, one size, one weight, one
+         line-height, and every region a whole number of cells in both axes.
+         That is a discipline rather than a style. Because nothing straddles a
+         cell, columns authored by two different producers still line up, a
+         frame drawn as text still closes at its corners, and a producer cannot
+         emit a string that silently shifts everything to its right by half a
+         character. `hud_phosphor::layout_for` snaps every rect to the grid;
+         `hud_phosphor::pad` guarantees each row is exactly its region's width.
+
+         The consequence for this file is that there is no structural markup to
+         write. Every frame stroke — `─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼` — is a real
+         Unicode box-drawing glyph inside a text run emitted by a producer, so
+         junctions can be the correct member of the set and a section title can
+         interrupt its own rule (`──┤ SOMA ├──`) for zero extra rows. A CSS
+         border cannot do either: it cannot pick a junction glyph and it cannot
+         be interrupted. There is therefore not one `border` property anywhere
+         in the phosphor stylesheet, and nothing here nests a wrapper whose only
+         job would be to carry one. Each region is a positioned div holding one
+         bound child, and THAT CHILD IS DELIBERATELY CLASS-LESS — a plain
+         `<div data-rml="…">`. The producer emits its own row elements: one
+         `.ph-row` per text row. It has to be that way round, because only
+         the producer knows its row count — the message log emits a variable
+         number of rows, and each needs its own `id="log-N"` for `hud_anim` to
+         target — and it is uniform across all nine bindings so that nobody has
+         to remember which fields arrive pre-wrapped and which do not. Do not
+         "helpfully" add a `ph-*` class to a bound element here: `data-rml` sets
+         INNER RML, so a classed container would nest a one-cell-tall
+         `white-space: pre` box inside another one and clip it — which presents
+         as a font or layout bug a long way from its actual cause.
+
+         WHY EXACTLY TWO REGIONS ARE OPAQUE.
+
+         The register spends its entire colour budget on one hue, so every
+         distinction on screen — chrome vs. datum, intact vs. damaged, old log
+         line vs. new — is carried by luminance alone. A luminance-only encoding
+         is only readable over a background whose luminance is controlled: lay
+         the same seven-rung ladder over daylight grass and then over a night
+         basement and the middle rungs swap places against their ground. So the
+         two regions that hold state a player must never misread carry an opaque
+         ground: `#hud-status` (safe mode, hostiles, stats, needs) and
+         `#hud-keys` (which action is on which key, and which are unavailable —
+         encoded as a luminance step down to `ink::dead`, which is precisely the
+         distinction an uncontrolled backdrop would eat).
+
+         Everything else — `#hud-soma`, `#hud-dock`, `#hud-log`,
+         `#hud-vehicle` — floats over live terrain behind `.ph-veil`: a
+         translucent amber-black ground plus a `backdrop-filter` that blurs and
+         desaturates what is underneath, borrowed from design 10. The blur is
+         not decoration; it is what makes the backdrop's luminance locally
+         uniform enough for the ladder to hold, and the desaturation is what
+         keeps a green field or a red fire from reading as a second hue in a
+         single-hue interface.
+
+         AND WHY THAT IS AN OCCLUSION SAVING, NOT A COSMETIC CHOICE.
+
+         Floating means floating: the four veiled panels are drawn on top of the
+         map, they are NOT carved out of the terrain viewport. Only the two
+         opaque strips are (`sidebar_hud_top_rows` / `_bottom_rows`), because
+         only they hide what is under them. The shipping HUD reserved an
+         edge-to-edge sidebar column and then spent 45% of that column's height
+         on empty log trough; here the log is sized to its line count and the
+         body/overmap panels cost the viewport nothing at all. The panels can be
+         generous precisely because they are translucent and unreserved.
+
+         TYPE METRICS ARE DELIBERATELY ABSENT FROM THIS FILE AND FROM THE RCSS.
+
+         `font-size` and `line-height` are written onto the document from C++ by
+         `sidebar_hud_apply_rect`, out of `hud_phosphor::metrics`. They have to
+         be: the cell size is derived from the context's dp dimensions so the
+         grid tiles the viewport with no remainder, and RCSS cannot see those
+         dimensions. Anything that sets a font size here or in the stylesheet
+         would desynchronise the glyphs from the geometry that was computed for
+         them — box stems would stop abutting between rows and every region
+         would drift from its snapped rect. If text looks wrong, the bug is in
+         `metrics_for`, not in this document.
+
+         TREE ORDER IS PAINT ORDER. The three overlays come last so the CRT
+         glass and the damage flash sit over the HUD as well as over the map. -->
+
+    <!-- STATUS — full width, top edge, opaque. Two rows of world and character
+         state, then the rule.
+
+         The rule is the THIRD ROW OF THIS REGION, not a region of its own, and
+         that is deliberate. It spans the whole viewport and breaks at the same
+         two columns where the SOMA and DOCK panels below it have their
+         verticals. `hud_status_rule` receives the whole `hud_phosphor::layout`
+         rather than a bare width for exactly that reason: it reads the panels'
+         own column stops off it, drops a `┼` at each, and stamps BOTH section
+         titles — `┤ SOMA ├` and `┤ OVERMAP ├` — into this one row. Read
+         together, the strip is the header row of the panels hanging beneath it
+         and the three objects form one continuous L of frame; split into its own
+         element it would read as an unrelated horizontal line that happens to be
+         near them. The load-bearing consequence is that SOMA and DOCK draw
+         neither a top edge nor a title of their own — their first emitted row is
+         content — so one screen-wide stroke does the work of three that would
+         otherwise have to be kept in agreement. -->
+    <div id="hud-status">
+        <div data-rml="status_row1_rml"></div>
+        <div data-rml="status_row2_rml"></div>
+        <div data-rml="status_rule_rml"></div>
     </div>
 
-    <!-- Vitals overlay: chunky HP bars floating over the map, top-left -->
-    <div id="hud-vitals">
-        <div class="hud-vitals-inner" data-rml="vitals_rml"></div>
+    <!-- SOMA — left column under the status rule, translucent. Body parts with
+         their bars, the pools, and the per-part effect state. Left-hand because
+         a critical limb is the first thing a left-to-right reader must hit, and
+         its effect words sit on the row directly under the bar they describe
+         rather than in a strip at the far side of the screen. Its title and its
+         top edge belong to the status rule above; the sub-rules it does own
+         (`POOLS`, `EFFECTS`) terminate in `┤`, because this panel's only
+         vertical is on its right — the side facing the play area. -->
+    <div id="hud-soma" class="ph-veil">
+        <div data-rml="soma_rml"></div>
     </div>
 
-    <!-- Vehicle HUD: driving info panel, top-right, visible only when controlling -->
-    <div id="hud-vehicle">
-        <div class="veh-panel-inner" data-rml="veh_rml"></div>
+    <!-- RADAR — right column under the status rule, and the one region that is
+         NOT veiled. Its content is the dot minimap, drawn as GPU quads on the UI
+         compositing layer, which sits UNDER this document; a translucent veil over
+         it would multiply the two dimmest rungs of the ladder into the ground and
+         delete every open-terrain dot. `hud_radar::draw` therefore paints its own
+         `ink::ground` fill first, and all this element contributes is the vertical
+         that closes the panel's play-area-facing edge. Titled by the status rule
+         above, as SOMA and DOCK are. -->
+    <div id="hud-radar">
+        <div data-rml="radar_rml"></div>
     </div>
 
-    <!-- Dock: minimap + log stacked vertically at the sidebar edge -->
-    <div id="hud-dock" class="runic-region runic-no-right">
-        <div class="dock-section">
-            <div class="dock-header" data-rml="minimap_title"></div>
-            <div class="dock-body hud-map-body" data-rml="minimap_rml"></div>
-        </div>
-        <div class="vitals-divider"/>
-        <div class="dock-section dock-flex">
-            <div class="dock-header" data-rml="log_title"></div>
-            <div id="hud-log-body" class="dock-body hud-scroll" data-rml="log_rml"></div>
-        </div>
+    <!-- DOCK — right column under the RADAR region, translucent. Mission marker,
+         target, arms. Mirrors to the left column with SIDEBAR_POSITION, which
+         is handled by `layout_for`'s `sidebar_right`; this document holds no
+         side-specific markup. Titled by the status rule, as SOMA is, and
+         mirrored in frame as well as in position: its sub-rules (`TARGET`,
+         `ARMS`) open with `├` because its vertical is on its left. Each panel
+         draws only the edge that faces the play area, because the screen edge is
+         already the fourth wall and a second stroke inside the bezel would be a
+         redundant frame. -->
+    <div id="hud-dock" class="ph-veil">
+        <div data-rml="dock_rml"></div>
     </div>
 
-    <!-- Bottom bar: effects/target/weapon info -->
-    <div id="hud-botbar" class="runic-edge-top runic-no-bottom">
-        <div class="hud-strip-row" data-rml="botbar_rml"></div>
+    <!-- LOG — bottom-left above the keys strip, translucent, and sized to
+         exactly the number of message rows it is showing. No scroller and no
+         well: a fixed-height trough is what let the shipping HUD hold 267 dp of
+         message in 752 dp of reserved column. Recency is the luminance ramp
+         across the rows, so the newest line is the brightest thing here and
+         needs no separate highlight. Unlike SOMA and DOCK this panel does draw
+         its own titled top rule as its first row — it does not touch the status
+         strip, so it has nothing above it to borrow a frame from. -->
+    <div id="hud-log" class="ph-veil">
+        <div data-rml="log_rml"></div>
     </div>
 
-    <!-- Hotbar: keybind slots -->
-    <div id="hud-hotbar">
-        <div class="hud-strip-row" data-rml="hotbar_rml"></div>
+    <!-- KEYS — full width, bottom edge, opaque. The DOS function-key line,
+         where DOS put it.
+
+         `keys_rule_rml` is the FIRST ROW OF THIS REGION and it is also the
+         bottom edge of the log panel above — one row doing two jobs. That is
+         why `hud_keys_rule` reads the log's rect off the layout: it drops a `┴`
+         at each of the log's two column stops — the counterparts of the `┬` and
+         the `┐` in the log's own top rule — while continuing as a plain
+         rule to both screen edges. Giving the log its own closing row and this
+         strip its own opening row would cost a screen-wide row to draw the same
+         line twice, one cell apart, and the two lines would then disagree at
+         any column where the log's frame did not line up. Keeping the rule here
+         rather than in `#hud-log` also keeps it on the opaque ground, so the
+         one stroke that touches both regions has a single, stable colour. -->
+    <div id="hud-keys">
+        <div data-rml="keys_rule_rml"></div>
+        <div data-rml="keys_rml"></div>
     </div>
-    <!-- Damage vignette overlay: radial red gradient at edges, fades in/out -->
+
+    <!-- VEHICLE — right column under the dock, translucent. `display: none`
+         unless the avatar is controlling a vehicle; the chassis toggles it. -->
+    <div id="hud-vehicle" class="ph-veil">
+        <div data-rml="veh_rml"></div>
+    </div>
+
+    <!-- CRT scanline glass — full-screen, no content. A repeating gradient at
+         cell-locked pitch, weak enough (mean ~2.5% darkening) that the tilemap
+         stays crisp. Its job is to make the HUD and the world share one
+         emissive surface instead of looking like text pasted onto a game. -->
+    <div id="hud-crt-scan"></div>
+
+    <!-- CRT faceplate vignette — full-screen, no content. Radial darkening
+         towards the corners, the honest half of a curved-glass tube: barrel
+         distortion needs a shader, corner falloff does not. Above the scanline
+         layer so the falloff dims the scanlines too, which is what a real
+         faceplate does. -->
+    <div id="hud-crt-curve"></div>
+
+    <!-- Damage flash — full-screen, no content. Pre-existing behaviour, driven
+         by `hud_anim` on total-HP loss. Last of all, so a hit is legible over
+         the CRT glass; it is the one element in the HUD permitted a hue,
+         because it is an event and not a reading. -->
     <div id="hud-vignette"></div>
 </body>
 </rml>

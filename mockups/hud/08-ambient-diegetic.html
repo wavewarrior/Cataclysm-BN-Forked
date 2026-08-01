@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>08 &mdash; Proprioception</title><style>
+  html,body { margin:0; padding:0; background:#000; }
+  #screen {
+    position:relative; width:1920px; height:1080px; overflow:hidden;
+    background-image:url("_shared/world.png");
+    background-size:1920px 1080px;
+    font-family:Consolas,"Cascadia Mono","Lucida Console",monospace;
+    -webkit-font-smoothing:antialiased;
+  }
+  .lyr { position:absolute; left:0px; top:0px; width:1920px; height:1080px; }
+  #grade { backdrop-filter:saturate(.86) brightness(.94) contrast(1.03);
+           -webkit-backdrop-filter:saturate(.86) brightness(.94) contrast(1.03); }
+  #night { background:radial-gradient(circle 1140px at 944px 528px,
+             rgba(0,0,0,0) 0px, rgba(0,0,0,0) 400px,
+             rgba(9,12,24,.06) 520px, rgba(19,10,15,.15) 700px,
+             rgba(23,9,13,.25) 900px, rgba(25,8,11,.34) 1140px); }
+  #pool { background:radial-gradient(circle 352px at 944px 528px,
+            rgba(255,216,154,.22) 0px, rgba(255,206,140,.16) 96px,
+            rgba(248,182,104,.095) 208px, rgba(228,150,74,.038) 300px,
+            rgba(210,130,60,0) 352px); }
+  #poolrain { background:repeating-linear-gradient(101deg,
+                rgba(226,238,247,0) 0px, rgba(226,238,247,0) 15px,
+                rgba(234,244,252,.22) 15px, rgba(234,244,252,.22) 16px);
+              mask-image:radial-gradient(circle 330px at 944px 528px,
+                rgba(0,0,0,.85) 0px, rgba(0,0,0,.45) 200px, rgba(0,0,0,0) 330px);
+              -webkit-mask-image:radial-gradient(circle 330px at 944px 528px,
+                rgba(0,0,0,.85) 0px, rgba(0,0,0,.45) 200px, rgba(0,0,0,0) 330px); }
+  #rain { background:repeating-linear-gradient(101deg,
+            rgba(199,214,224,0) 0px, rgba(199,214,224,0) 21px,
+            rgba(199,214,224,.075) 21px, rgba(199,214,224,.075) 22px,
+            rgba(199,214,224,0) 22px, rgba(199,214,224,0) 47px,
+            rgba(199,214,224,.045) 47px, rgba(199,214,224,.045) 48px); }
+  #periph { backdrop-filter:saturate(.40) brightness(.85);
+            -webkit-backdrop-filter:saturate(.40) brightness(.85);
+            mask-image:radial-gradient(circle 1130px at 944px 528px,
+              rgba(0,0,0,0) 0px, rgba(0,0,0,0) 470px, rgba(0,0,0,.30) 690px,
+              rgba(0,0,0,.72) 900px, rgba(0,0,0,1) 1130px);
+            -webkit-mask-image:radial-gradient(circle 1130px at 944px 528px,
+              rgba(0,0,0,0) 0px, rgba(0,0,0,0) 470px, rgba(0,0,0,.30) 690px,
+              rgba(0,0,0,.72) 900px, rgba(0,0,0,1) 1130px);
+            opacity:.93; animation:d08breathe 5.2s ease-in-out infinite; }
+  @keyframes d08breathe { 0%,100% { opacity:.86 } 50% { opacity:1 } }
+  #w-larm { width:206px;
+    background:linear-gradient(90deg, rgba(133,16,20,.66) 0px, rgba(124,20,25,.44) 34px,
+      rgba(115,20,24,.21) 96px, rgba(108,20,24,.07) 152px, rgba(108,20,24,0) 206px); }
+  #w-larm-tear { width:152px;
+    background:repeating-linear-gradient(7deg,
+      rgba(38,3,5,0) 0px, rgba(38,3,5,0) 9px,
+      rgba(48,4,7,.52) 9px, rgba(48,4,7,.52) 13px,
+      rgba(38,3,5,0) 13px, rgba(38,3,5,0) 31px,
+      rgba(28,2,4,.36) 31px, rgba(28,2,4,.36) 34px);
+    mask-image:linear-gradient(90deg, rgba(0,0,0,1) 0px, rgba(0,0,0,.55) 46px, rgba(0,0,0,0) 152px);
+    -webkit-mask-image:linear-gradient(90deg, rgba(0,0,0,1) 0px, rgba(0,0,0,.55) 46px, rgba(0,0,0,0) 152px); }
+  .shard { position:absolute; left:0px; background:rgba(24,2,4,.66);
+           transform-origin:0% 50%; border-radius:0px 3px 3px 0px; }
+  .glint-rim { position:absolute; left:0px; width:2px;
+               background:linear-gradient(180deg, rgba(194,50,58,0), rgba(216,78,78,.60), rgba(194,50,58,0)); }
+  .drip { position:absolute; left:0px; width:3px; border-radius:0px 0px 3px 3px;
+          background:linear-gradient(180deg, rgba(142,26,30,.88), rgba(168,32,36,.74) 62%, rgba(198,54,60,.92)); }
+  .bead { position:absolute; width:6px; height:7px; border-radius:50% 50% 60% 60%;
+          background:radial-gradient(circle at 40% 32%, rgba(216,90,90,.95), rgba(126,20,23,.92)); }
+  #w-head { height:60px;
+    background:linear-gradient(180deg, rgba(128,26,28,.19) 0px, rgba(120,26,28,.08) 26px, rgba(120,26,28,0) 60px); }
+  #w-lleg { top:auto; bottom:0px; width:912px; height:54px;
+    background:linear-gradient(0deg, rgba(128,26,28,.21) 0px, rgba(120,26,28,.07) 24px, rgba(120,26,28,0) 54px); }
+  #chill { box-shadow:inset 0px 1px 0px rgba(133,188,222,.34), inset 0px -1px 0px rgba(133,188,222,.24),
+                      inset -1px 0px 0px rgba(133,188,222,.30), inset 0px 0px 38px rgba(96,152,196,.12);
+    mask-image:linear-gradient(90deg, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 210px, rgba(0,0,0,1) 380px);
+    -webkit-mask-image:linear-gradient(90deg, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 210px, rgba(0,0,0,1) 380px); }
+  #frost { height:22px;
+    background:repeating-linear-gradient(90deg,
+      rgba(127,182,217,0) 0px, rgba(127,182,217,0) 7px,
+      rgba(156,204,232,.32) 7px, rgba(156,204,232,.32) 9px,
+      rgba(127,182,217,0) 9px, rgba(127,182,217,0) 15px,
+      rgba(156,204,232,.17) 15px, rgba(156,204,232,.17) 16px);
+    mask-image:linear-gradient(180deg, rgba(0,0,0,1), rgba(0,0,0,0));
+    -webkit-mask-image:linear-gradient(180deg, rgba(0,0,0,1), rgba(0,0,0,0)); }
+  #noise { position:absolute; left:688px; top:272px; width:510px; height:510px;
+           border:1px solid rgba(204,220,234,.15); border-radius:50%;
+           box-shadow:inset 0px 0px 46px rgba(176,200,220,.04); }
+  #batt { position:absolute; left:640px; top:224px; width:606px; height:606px; border-radius:50%;
+          background:conic-gradient(from -61.2deg,
+            rgba(255,210,144,.88) 0deg, rgba(255,210,144,.88) 122.4deg,
+            rgba(120,110,96,.28) 122.4deg, rgba(120,110,96,.28) 360deg);
+          mask-image:radial-gradient(circle closest-side,
+            rgba(0,0,0,0) 0px, rgba(0,0,0,0) 298px, rgba(0,0,0,1) 300px,
+            rgba(0,0,0,1) 302px, rgba(0,0,0,0) 304px);
+          -webkit-mask-image:radial-gradient(circle closest-side,
+            rgba(0,0,0,0) 0px, rgba(0,0,0,0) 298px, rgba(0,0,0,1) 300px,
+            rgba(0,0,0,1) 302px, rgba(0,0,0,0) 304px); }
+  #collar { position:absolute; left:824px; top:408px; width:238px; height:238px;
+            border:1px solid rgba(232,228,216,.10); border-radius:50%; }
+  #bearing { position:absolute; left:824px; top:408px; width:240px; height:240px; border-radius:50%;
+             background:conic-gradient(from -8.7deg,
+               rgba(255,112,67,0) 0deg, rgba(255,112,67,.94) 2deg,
+               rgba(255,112,67,.94) 15deg, rgba(255,112,67,0) 17deg, rgba(255,112,67,0) 360deg);
+             mask-image:radial-gradient(circle closest-side,
+               rgba(0,0,0,0) 0px, rgba(0,0,0,0) 111px, rgba(0,0,0,1) 114px,
+               rgba(0,0,0,1) 119px, rgba(0,0,0,0) 120px);
+             -webkit-mask-image:radial-gradient(circle closest-side,
+               rgba(0,0,0,0) 0px, rgba(0,0,0,0) 111px, rgba(0,0,0,1) 114px,
+               rgba(0,0,0,1) 119px, rgba(0,0,0,0) 120px); }
+  #tether { position:absolute; left:953px; top:412px; width:1px; height:92px;
+            background:linear-gradient(180deg, rgba(255,112,67,.60), rgba(255,112,67,.06));
+            transform:rotate(4deg); transform-origin:50% 100%; }
+  .glint { position:absolute; width:9px; height:9px; transform:rotate(45deg);
+           background:rgba(255,196,80,.88); box-shadow:0px 0px 8px 2px rgba(255,180,60,.34); }
+  #trk-hp { position:absolute; left:928px; top:352px; width:64px; height:64px; border-radius:50%;
+            background:conic-gradient(from 0deg,
+              rgba(255,112,67,.92) 0deg, rgba(255,112,67,.92) 223.2deg,
+              rgba(80,36,28,.60) 223.2deg, rgba(80,36,28,.60) 360deg);
+            mask-image:radial-gradient(circle closest-side,
+              rgba(0,0,0,0) 0px, rgba(0,0,0,0) 19px, rgba(0,0,0,1) 21px,
+              rgba(0,0,0,1) 23px, rgba(0,0,0,0) 25px);
+            -webkit-mask-image:radial-gradient(circle closest-side,
+              rgba(0,0,0,0) 0px, rgba(0,0,0,0) 19px, rgba(0,0,0,1) 21px,
+              rgba(0,0,0,1) 23px, rgba(0,0,0,0) 25px); }
+  .tick { position:absolute; background:rgba(255,112,67,.94); }
+  .tick.safe { background:rgba(210,228,236,.46); }
+  .tail { position:absolute; height:2px; border-radius:1px;
+          background:linear-gradient(90deg, rgba(255,112,67,.40), rgba(255,112,67,0)); }
+  #float { position:absolute; left:1004px; top:552px; width:340px;
+           filter:drop-shadow(0px 0px 1px rgba(0,0,0,.98)) drop-shadow(0px 1px 2px rgba(0,0,0,.88)); }
+  #float div { font-size:14px; line-height:20px; letter-spacing:.2px; }
+  #float .prev { color:#c8a23e; opacity:.44; }
+  #float .now  { color:#eebd4c; opacity:.97; }
+  #needs { position:absolute; left:866px; top:994px; width:156px; height:22px;
+           display:flex; justify-content:space-between; align-items:center;
+           filter:drop-shadow(0px 0px 2px rgba(0,0,0,.92)); }
+  #needs i { font-size:16px; line-height:22px; font-style:normal; }
+  #needs .n-hun { color:#e8e4d8; opacity:.38; }
+  #needs .n-thi { color:#eebd4c; opacity:.88; }
+  #needs .n-fat { color:#e0a341; opacity:.80; }
+  #needs .n-cld { color:#95c9ea; opacity:.88; }
+  #leader { position:absolute; left:1294px; top:527px; width:106px; height:1px;
+            background:linear-gradient(90deg, rgba(255,210,144,0), rgba(255,210,144,.45)); }
+  #leader-dot { position:absolute; left:1291px; top:525px; width:5px; height:5px;
+                border-radius:50%; background:rgba(255,210,144,.58); }
+  #reveal { position:absolute; left:1400px; top:40px; width:496px; height:1004px;
+    box-sizing:border-box; padding:22px 24px 20px 24px; overflow:hidden;
+    background:linear-gradient(180deg, rgba(9,12,17,.85) 0%, rgba(7,10,15,.78) 52%, rgba(9,12,17,.87) 100%);
+    backdrop-filter:blur(11px) brightness(.40) saturate(.42);
+    -webkit-backdrop-filter:blur(11px) brightness(.40) saturate(.42);
+    box-shadow:inset 1px 0px 0px rgba(232,228,216,.12), inset -1px 0px 0px rgba(232,228,216,.05),
+               -22px 0px 54px rgba(0,0,0,.52);
+    color:#e8e4d8; }
+  #notch { position:absolute; left:0px; top:472px; width:2px; height:38px;
+           background:linear-gradient(180deg, rgba(255,210,144,0), rgba(255,210,144,.82), rgba(255,210,144,0)); }
+  .hdr-name { font-size:19px; letter-spacing:5.5px; color:#f2eee2; }
+  .hdr-sub  { font-size:11px; letter-spacing:1.4px; color:#7d7a72; margin-top:5px; }
+  .hdr-line { font-size:11.5px; letter-spacing:.7px; color:#9a9689; margin-top:3px; }
+  .hdr-line .cold { color:#95c9ea; }
+  .hdr-line .warm { color:#dda862; }
+  .rule { height:1px; margin:13px 0px 11px 0px;
+          background:linear-gradient(90deg, rgba(232,228,216,.22), rgba(232,228,216,.05) 72%, rgba(232,228,216,0)); }
+  .lab { font-size:9.5px; letter-spacing:3.4px; color:#6e6b64; margin-bottom:7px; }
+  .brow { display:flex; align-items:center; height:18px; font-size:11.5px; letter-spacing:.4px; }
+  .brow .bp { width:60px; color:#bcb8ab; }
+  .brow .bv { width:64px; text-align:right; color:#e8e4d8; }
+  .brow .seg { display:flex; width:104px; margin-left:10px; }
+  .brow .sg { width:4px; height:8px; margin-right:1px; }
+  .sg { display:block; }
+  .sg.off { background:rgba(232,228,216,.10); }
+  .sg.on.ok { background:#8fbf6a; }
+  .sg.on.warn { background:#e0b341; }
+  .sg.on.hurt { background:#d9663a; }
+  .sg.on.crit { background:#c8323c; }
+  .sg.on.cold { background:#7fb6d9; }
+  .brow .bedge { width:16px; margin-left:10px; text-align:center; font-size:11px; }
+  .brow .bedge.lit { color:#cd8f5c; }
+  .brow .bedge.ghost { color:#3f3d38; }
+  .brow.crit .bp { color:#e38186; }
+  .brow.crit .bv { color:#f0a0a4; }
+  .brow.crit .bedge.lit { color:#e0454f; }
+  .brow .bnote { flex:1 1 auto; margin-left:10px; font-size:10.5px; color:#7d7a72; }
+  .brow.crit .bnote { color:#c8323c; }
+  .brow.stam { height:20px; }
+  .brow.stam .bv { color:#e0b341; }
+  .brow.ok .bp { color:#a8a49a; }
+  .brow.warn .bp { color:#bcb8ab; }
+  .brow.hurt .bp { color:#d59b7a; }
+  .erow { display:flex; align-items:center; height:17px; font-size:11px; letter-spacing:.3px; }
+  .erow .en { width:80px; }
+  .erow .en.crit { color:#c8323c; }
+  .erow .en.warn { color:#d9b25e; }
+  .erow .en.cold { color:#95c9ea; }
+  .erow .el { width:58px; color:#7d7a72; font-size:10.5px; }
+  .erow .seg { display:flex; width:44px; }
+  .erow .sg { width:5px; height:6px; margin-right:1px; }
+  .erow .ed { flex:1 1 auto; text-align:right; color:#8a8780; font-size:10.5px; }
+  .srow { display:flex; height:17px; font-size:11.5px; letter-spacing:.5px; color:#d2cdbf; }
+  .srow i { display:block; width:104px; font-style:normal; }
+  .srow i b { color:#6e6b64; font-weight:normal; margin-right:7px; }
+  .srow .bad { color:#dd8060; }
+  .srow.wide i { width:auto; }
+  .sp { flex:1 1 auto; }
+  .srow.wide i.sp { flex:1 1 auto; }
+  .grow { display:flex; height:18px; font-size:11.5px; letter-spacing:.4px; }
+  .grow .gk { width:52px; color:#6e6b64; font-size:9.5px; letter-spacing:2.2px; padding-top:3px; }
+  .grow .gn { width:104px; color:#e8e4d8; }
+  .grow .gd { flex:1 1 auto; color:#9a9689; font-size:10.5px; padding-top:1px; }
+  .grow.idle .gn { color:#9a9689; }
+  .grow.idle .gd { color:#7d7a72; }
+  .split { display:flex; }
+  .split .colL { width:244px; }
+  .split .colR { flex:1 1 auto; padding-left:20px; }
+  .crow { display:flex; align-items:center; height:17px; font-size:11px; letter-spacing:.3px; color:#9a9689; }
+  .crow i { font-style:normal; display:block; }
+  .crow .cm { width:12px; color:#ff7043; font-size:9px; }
+  .crow .cn { width:104px; }
+  .crow .ch { width:32px; text-align:right; }
+  .crow .cd { width:40px; text-align:right; }
+  .crow .cs { flex:1 1 auto; text-align:right; font-size:10px; color:#6e6b64; }
+  .crow.trk { color:#f2eee2; }
+  .crow.trk .ch { color:#ff7043; }
+  .cmeta { font-size:10px; letter-spacing:.8px; color:#7d7a72; margin-bottom:6px; }
+  .cmeta b { color:#8fbf6a; font-weight:normal; }
+  .mr { display:flex; }
+  .mc { display:block; width:10px; height:10px; margin:0px 1px 1px 0px; font-style:normal;
+        font-size:8px; line-height:10px; text-align:center; }
+  .mc.f { background:#23271d; }
+  .mc.w { background:#33482c; }
+  .mc.h { background:#4e4c46; }
+  .mc.m { background:rgba(224,179,65,.22); color:#e0b341; }
+  .mc.p { background:rgba(242,238,226,.18); color:#f2eee2; }
+  .mcap { font-size:9px; letter-spacing:1.6px; color:#6e6b64; margin-top:7px; }
+  .lrow { display:flex; height:16px; font-size:11px; letter-spacing:.25px; }
+  .lrow i { font-style:normal; display:block; }
+  .lrow .lt { width:42px; color:#5a5750; font-size:10px; }
+  .lrow .lx { flex:1 1 auto; }
+  .lrow.good .lx { color:#bcb8ab; }
+  .lrow.bad .lx { color:#c8323c; }
+  .lrow.dim .lx { color:#9c544e; }
+  .lrow.caut .lx { color:#d9b25e; }
+  .lrow.a5 { opacity:.42 }
+  .lrow.a4 { opacity:.54 }
+  .lrow.a3 { opacity:.68 }
+  .lrow.a2 { opacity:.80 }
+  .lrow.a1 { opacity:.90 }
+  .lrow.a0 { opacity:1 }
+  #hot { display:flex; flex-wrap:wrap; }
+  .chip { width:144px; height:21px; display:flex; align-items:center; font-size:11px; }
+  .chip i { font-style:normal; display:block; }
+  .chip .k { width:18px; height:15px; line-height:15px; text-align:center; color:#0b0f14;
+             background:#bcb8ab; font-size:10px; }
+  .chip .a { margin-left:8px; color:#bcb8ab; letter-spacing:.4px; }
+  .chip.dead { opacity:.6; }
+  .chip.dead .k { background:rgba(232,228,216,.14); color:#5a5750; }
+  .chip.dead .a { color:#4c4a45; }
+  .deadnote { font-size:9.5px; color:#5a5750; letter-spacing:.6px; margin-top:6px; }
+</style></head>
+<body><div id="screen">
+
+  <div class="lyr" id="grade"></div>
+  <div class="lyr" id="night"></div>
+  <div class="lyr" id="pool"></div>
+  <div class="lyr" id="poolrain"></div>
+  <div class="lyr" id="rain"></div>
+  <div class="lyr" id="periph"></div>
+
+  <div class="lyr" id="w-larm"></div>
+  <div class="lyr" id="w-larm-tear"></div>
+  <div class="shard" style="top:96px;width:118px;height:5px;transform:rotate(3deg)"></div><div class="shard" style="top:214px;width:78px;height:4px;transform:rotate(-5deg)"></div><div class="shard" style="top:352px;width:146px;height:7px;transform:rotate(2deg)"></div><div class="shard" style="top:468px;width:96px;height:4px;transform:rotate(6deg)"></div><div class="shard" style="top:588px;width:132px;height:6px;transform:rotate(-3deg)"></div><div class="shard" style="top:726px;width:68px;height:4px;transform:rotate(4deg)"></div><div class="shard" style="top:858px;width:108px;height:5px;transform:rotate(-2deg)"></div><div class="shard" style="top:972px;width:84px;height:4px;transform:rotate(3deg)"></div>
+  <div class="glint-rim" style="top:60px;height:120px"></div><div class="glint-rim" style="top:300px;height:180px"></div><div class="glint-rim" style="top:540px;height:140px"></div><div class="glint-rim" style="top:760px;height:110px"></div><div class="glint-rim" style="top:930px;height:120px"></div>
+  <div class="drip" style="left:4px;top:359px;height:152px"></div><div class="bead" style="left:2px;top:508px"></div><div class="drip" style="left:20px;top:596px;height:96px"></div><div class="bead" style="left:18px;top:689px"></div><div class="drip" style="left:34px;top:222px;height:112px"></div><div class="bead" style="left:32px;top:331px"></div>
+  <div class="lyr" id="w-head"></div>
+  <div class="lyr" id="w-lleg"></div>
+
+  <div class="lyr" id="chill"></div>
+  <div class="lyr" id="frost"></div>
+
+  <div id="noise"></div>
+  <div id="batt"></div>
+  <div id="collar"></div>
+  <div id="bearing"></div>
+  <div id="tether"></div>
+
+  <div id="trk-hp"></div>
+  <div class="tick " style="left:938px;top:362px;width:12px;height:2px"></div><div class="tick " style="left:938px;top:362px;width:2px;height:12px"></div><div class="tick " style="left:970px;top:362px;width:12px;height:2px"></div><div class="tick " style="left:980px;top:362px;width:2px;height:12px"></div><div class="tick " style="left:938px;top:404px;width:12px;height:2px"></div><div class="tick " style="left:938px;top:394px;width:2px;height:12px"></div><div class="tick " style="left:970px;top:404px;width:12px;height:2px"></div><div class="tick " style="left:980px;top:394px;width:2px;height:12px"></div><div class="tick safe" style="left:928px;top:352px;width:10px;height:1px"></div><div class="tick safe" style="left:928px;top:352px;width:1px;height:10px"></div><div class="tick safe" style="left:982px;top:352px;width:10px;height:1px"></div><div class="tick safe" style="left:991px;top:352px;width:1px;height:10px"></div><div class="tick safe" style="left:928px;top:415px;width:10px;height:1px"></div><div class="tick safe" style="left:928px;top:406px;width:1px;height:10px"></div><div class="tick safe" style="left:982px;top:415px;width:10px;height:1px"></div><div class="tick safe" style="left:991px;top:406px;width:1px;height:10px"></div>
+  <div class="tail" style="left:994px;top:366px;width:26px;transform:rotate(-30deg);transform-origin:0% 50%"></div>
+  <div class="tail" style="left:990px;top:355px;width:17px;transform:rotate(-30deg);transform-origin:0% 50%"></div>
+  <div class="glint" style="left:923px;top:635px"></div>
+  <div class="glint" style="left:1211px;top:507px"></div>
+
+  <div id="float">
+    <div class="prev">The zombie shambler groans nearby.</div>
+    <div class="now">You are getting thirsty.</div>
+  </div>
+
+  <div id="needs">
+    <i class="n-hun">&#9675;</i><i class="n-thi">&#8776;</i><i class="n-fat">&#9660;</i><i class="n-cld">&#42;</i>
+  </div>
+
+  <div id="leader"></div>
+  <div id="leader-dot"></div>
+  <div id="reveal">
+    <div id="notch"></div>
+
+    <div class="hdr-name">NIGEL ASHBY</div>
+    <div class="hdr-sub">survivor &middot; cheswick &mdash; residential</div>
+    <div class="hdr-line">day 14 &middot; autumn &middot; 21:47</div>
+    <div class="hdr-line"><span class="cold">light drizzle &middot; 8 &deg;C &middot; wind ne 12 km/h</span></div>
+    <div class="hdr-line"><span class="warm">moonlight 12% &middot; torch 34%</span></div>
+
+    <div class="rule"></div>
+    <div class="lab">B O D Y</div>
+      <div class="brow warn"><div class="bp">head</div><div class="bv">20/24</div><div class="seg"><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i></div><div class="bedge lit">&#8593;</div><div class="bnote"></div></div>
+      <div class="brow warn"><div class="bp">torso</div><div class="bv">45/60</div><div class="seg"><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i></div><div class="bedge lit">&#9633;</div><div class="bnote">enc 12</div></div>
+      <div class="brow crit"><div class="bp">l arm</div><div class="bv">8/30</div><div class="seg"><i class="sg on crit"></i><i class="sg on crit"></i><i class="sg on crit"></i><i class="sg on crit"></i><i class="sg on crit"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i></div><div class="bedge lit">&#8592;</div><div class="bnote">bleeding &middot; bitten</div></div>
+      <div class="brow ok"><div class="bp">r arm</div><div class="bv">30/30</div><div class="seg"><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i></div><div class="bedge ghost">&#8594;</div><div class="bnote">enc 4</div></div>
+      <div class="brow warn"><div class="bp">l leg</div><div class="bv">22/28</div><div class="seg"><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i></div><div class="bedge lit">&#8595;</div><div class="bnote"></div></div>
+      <div class="brow ok"><div class="bp">r leg</div><div class="bv">28/28</div><div class="seg"><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i><i class="sg on ok"></i></div><div class="bedge ghost">&#8595;</div><div class="bnote"></div></div>
+
+    <div class="rule"></div>
+      <div class="brow warn stam"><div class="bp">stamina</div><div class="bv">5100/8700</div><div class="seg"><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i></div><div class="bedge ghost">&#9633;</div><div class="bnote">59% &middot; winded below 25%</div></div>
+
+    <div class="rule"></div>
+    <div class="lab">S T A T E</div>
+    <div class="srow"><i><b>str</b>10</i><i><b>dex</b>12</i><i><b>int</b>&nbsp;9</i><i><b>per</b>11</i></div>
+    <div class="srow"><i><b>spd</b>96</i><i><b>foc</b>84</i><i><b>pain</b>12</i><i><b>moral</b><span class="bad">-3</span></i></div>
+    <div class="srow wide"><i><b>enc</b>torso 12 &middot; arms 4</i><i class="sp"></i><i><b>gait</b>walking &middot; noise 8</i></div>
+
+    <div class="rule"></div>
+    <div class="lab">E F F E C T S</div>
+      <div class="erow"><div class="en crit">bleeding</div><div class="el">l arm</div><div class="seg"><i class="sg on crit"></i><i class="sg on crit"></i><i class="sg on crit"></i><i class="sg on crit"></i><i class="sg on crit"></i><i class="sg off"></i><i class="sg off"></i></div><div class="ed">~14 t</div></div>
+      <div class="erow"><div class="en crit">bitten</div><div class="el">l arm</div><div class="seg"><i class="sg on crit"></i><i class="sg on crit"></i><i class="sg on crit"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i></div><div class="ed">~38 t</div></div>
+      <div class="erow"><div class="en cold">soaked</div><div class="el">body</div><div class="seg"><i class="sg on cold"></i><i class="sg on cold"></i><i class="sg on cold"></i><i class="sg on cold"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i></div><div class="ed">&mdash;</div></div>
+      <div class="erow"><div class="en warn">tired</div><div class="el">&mdash;</div><div class="seg"><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg off"></i><i class="sg off"></i></div><div class="ed">&mdash;</div></div>
+      <div class="erow"><div class="en warn">pain 12</div><div class="el">&mdash;</div><div class="seg"><i class="sg on warn"></i><i class="sg on warn"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i><i class="sg off"></i></div><div class="ed">~6 t</div></div>
+
+    <div class="rule"></div>
+    <div class="grow"><div class="gk">HANDS</div><div class="gn">fire axe</div><div class="gd">32 bash &middot; 0 cut &middot; to-hit +1</div></div>
+    <div class="grow idle"><div class="gk">PACK</div><div class="gn">glock 19</div><div class="gd">12/17 &middot; 9mm jhp</div></div>
+
+    <div class="rule"></div>
+    <div class="split">
+      <div class="colL">
+        <div class="lab">C O N T A C T S</div>
+        <div class="cmeta">3 visible &middot; 1 tracked &middot; <b>safe mode on</b></div>
+        <div class="crow trk"><i class="cm">&#9658;</i><i class="cn">zombie brute</i><i class="ch">62%</i><i class="cd">4 NE</i><i class="cs">moving</i></div>
+        <div class="crow "><i class="cm"></i><i class="cn">zombie shambler</i><i class="ch">&middot;</i><i class="cd">3 S</i><i class="cs">&middot;</i></div>
+        <div class="crow "><i class="cm"></i><i class="cn">zombie</i><i class="ch">&middot;</i><i class="cd">9 E</i><i class="cs">&middot;</i></div>
+      </div>
+      <div class="colR">
+        <div class="mr"><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc w"></i><i class="mc w"></i><i class="mc w"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i></div>
+        <div class="mr"><i class="mc f"></i><i class="mc f"></i><i class="mc w"></i><i class="mc w"></i><i class="mc w"></i><i class="mc w"></i><i class="mc w"></i><i class="mc f"></i><i class="mc f"></i><i class="mc m">&#9650;</i><i class="mc f"></i></div>
+        <div class="mr"><i class="mc f"></i><i class="mc f"></i><i class="mc w"></i><i class="mc w"></i><i class="mc f"></i><i class="mc f"></i><i class="mc w"></i><i class="mc w"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i></div>
+        <div class="mr"><i class="mc f"></i><i class="mc m">&#9650;</i><i class="mc f"></i><i class="mc f"></i><i class="mc h"></i><i class="mc h"></i><i class="mc f"></i><i class="mc f"></i><i class="mc w"></i><i class="mc f"></i><i class="mc f"></i></div>
+        <div class="mr"><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc h"></i><i class="mc h"></i><i class="mc h"></i><i class="mc h"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i></div>
+        <div class="mr"><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc h"></i><i class="mc p">&#9632;</i><i class="mc h"></i><i class="mc h"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i></div>
+        <div class="mr"><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc h"></i><i class="mc h"></i><i class="mc h"></i><i class="mc f"></i><i class="mc f"></i><i class="mc w"></i><i class="mc w"></i><i class="mc f"></i></div>
+        <div class="mr"><i class="mc f"></i><i class="mc f"></i><i class="mc w"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc w"></i><i class="mc w"></i><i class="mc f"></i></div>
+        <div class="mr"><i class="mc f"></i><i class="mc w"></i><i class="mc w"></i><i class="mc f"></i><i class="mc m">&#9650;</i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc w"></i><i class="mc f"></i></div>
+        <div class="mr"><i class="mc f"></i><i class="mc w"></i><i class="mc w"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i></div>
+        <div class="mr"><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i><i class="mc f"></i></div>
+        <div class="mcap">OVERMAP &middot; MISSION NE</div>
+      </div>
+    </div>
+
+    <div class="rule"></div>
+    <div class="lab">L O G</div>
+        <div class="lrow good a5"><i class="lt">21:46</i><i class="lx">You hit the zombie brute with your fire axe.</i></div>
+        <div class="lrow bad a4"><i class="lt">21:46</i><i class="lx">The zombie brute claws your left arm!</i></div>
+        <div class="lrow bad a3"><i class="lt">21:47</i><i class="lx">Your left arm is bleeding.</i></div>
+        <div class="lrow dim a2"><i class="lt">21:47</i><i class="lx">You feel a sharp pain.</i></div>
+        <div class="lrow caut a1"><i class="lt">21:47</i><i class="lx">The zombie shambler groans nearby.</i></div>
+        <div class="lrow caut a0"><i class="lt">21:47</i><i class="lx">You are getting thirsty.</i></div>
+
+    <div class="rule"></div>
+    <div id="hot"><div class="chip dead"><i class="k">f</i><i class="a">fire</i></div><div class="chip "><i class="k">r</i><i class="a">reload</i></div><div class="chip "><i class="k">&#39;</i><i class="a">run</i></div><div class="chip "><i class="k">e</i><i class="a">examine</i></div><div class="chip "><i class="k">p</i><i class="a">pick up</i></div><div class="chip "><i class="k">c</i><i class="a">craft</i></div><div class="chip "><i class="k">i</i><i class="a">inventory</i></div><div class="chip "><i class="k">t</i><i class="a">throw</i></div><div class="chip "><i class="k">5</i><i class="a">wait</i></div></div>
+    <div class="deadnote">fire unavailable &mdash; no firearm wielded</div>
+  </div>
+
+</div></body></html>

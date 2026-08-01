@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>02 — Anatomical Triage</title><style>
+  html,body { margin:0; padding:0; background:#000; }
+  #screen {
+    position:relative; width:1920px; height:1080px; overflow:hidden;
+    background-image:url("_shared/world.png");
+    background-size:1920px 1080px;
+  }
+
+  /* ============================================================
+     02 — ANATOMICAL TRIAGE / CLINICAL INSTRUMENT
+     One opaque monitor plate on the right edge: 1536..1920 x 0..1080.
+     Nothing is drawn over the play area except the plate's own bezel
+     shadow, so no HUD text ever sits on tile noise.
+     ============================================================ */
+
+  #screen * { box-sizing:border-box; }
+
+  /* bezel shadow cast into the play area — the only translucent element */
+  .bezel-shade { position:absolute; left:1518px; top:0; width:18px; height:1080px;
+    background:linear-gradient(to right, rgba(0,0,0,0), rgba(0,0,0,0.55)); }
+
+  #mon { position:absolute; left:1536px; top:0; width:384px; height:1080px;
+    font-family:Consolas,"Cascadia Mono","Lucida Console",monospace;
+    font-size:11px; color:#dce8ec; letter-spacing:0.2px;
+    background:
+      repeating-linear-gradient(to bottom, rgba(190,225,235,0.022) 0 1px, rgba(0,0,0,0) 1px 3px),
+      linear-gradient(to bottom, rgba(22,38,45,0.60) 0, rgba(5,8,10,0) 240px),
+      linear-gradient(to right, rgba(0,0,0,0.40) 0, rgba(0,0,0,0) 44px),
+      rgba(5,8,10,0.965);
+  }
+
+  /* machined left rail + section index ticks */
+  .rail { position:absolute; left:0; top:0; width:2px; height:1080px;
+    background:linear-gradient(to bottom,#4a7a84 0,#2e4a54 18%,#2e4a54 82%,#4a7a84 100%); }
+  .rtick { position:absolute; left:2px; width:5px; height:1px; background:#4a7a84; opacity:0.75; }
+
+  /* top alarm bezel — patient triage category, readable from peripheral vision */
+  .alarmbar { position:absolute; left:0; top:0; width:384px; height:6px;
+    background:linear-gradient(to bottom,#ffe8e4 0,#ffe8e4 1px,#ff3b30 1px,#d42a22 100%);
+    box-shadow:0 3px 16px rgba(255,59,48,0.45); }
+
+  .sec { position:absolute; left:14px; width:356px; }
+
+  /* silkscreened section label + hairline + right-hand readout */
+  .k { display:flex; align-items:center; height:14px; }
+  .k .t { font:600 9px "Franklin Gothic Medium","Segoe UI",Tahoma,sans-serif;
+    letter-spacing:1.7px; color:#7e969e; text-transform:uppercase; white-space:nowrap; }
+  .k .h { flex:1 1 auto; height:1px; background:#1e3038; margin:0 8px; min-width:8px; }
+  .k .v { font:11px Consolas,monospace; color:#9fb6bc; letter-spacing:0.2px; white-space:nowrap; }
+  .k .v b { font-weight:400; color:#38e0c0; }
+  .k .v i { font-style:normal; color:#4e656d; }
+
+  /* ---------- PATIENT ---------- */
+  #patient { top:6px; height:86px; padding-top:8px; }
+  .pname { display:flex; align-items:baseline; height:26px; }
+  .pname .nm { font:700 18px Consolas,monospace; letter-spacing:0.6px; color:#f0f6f8; }
+  .pname .sp { flex:1 1 auto; }
+  .pname .chip { font:600 9px "Franklin Gothic Medium",Tahoma,sans-serif; letter-spacing:1.6px;
+    color:#ffe8e4; background:#6e1410; border:1px solid #ff3b30; padding:2px 6px 2px 7px;
+    border-radius:2px; box-shadow:0 0 10px rgba(255,59,48,0.40); }
+  .prow { font-size:10.5px; line-height:16px; color:#9fb6bc; letter-spacing:0.3px; }
+  .prow i { font-style:normal; color:#4e656d; }
+  .prow.ward { color:#7e969e; }
+  .attr { height:18px; line-height:18px; font-size:10.5px; color:#4e656d; letter-spacing:0.4px; }
+  .attr b { font-weight:700; color:#c7d8dd; letter-spacing:0.2px; }
+
+  /* ---------- ENVIRONMENT / ACTIVITY ---------- */
+  #env { top:92px; height:40px; }
+  .erow { display:flex; align-items:center; height:20px; font-size:9.5px;
+    color:#7e969e; letter-spacing:0.35px; }
+  .erow .lb { width:26px; flex:0 0 26px; font:600 8px "Franklin Gothic Medium",Tahoma,sans-serif;
+    letter-spacing:1.3px; color:#3f545c; }
+  .erow i { font-style:normal; color:#31454c; padding:0 5px; }
+  .erow b { font-weight:400; color:#bcd0d6; }
+  .lampbar { display:inline-block; width:24px; height:3px; margin-left:6px; position:relative;
+    top:-1px; background:linear-gradient(to right,#c8a02a 0,#c8a02a 34%,#152026 34%,#152026 100%);
+    border:1px solid #2b3f47; }
+
+  /* ---------- TRAUMA SURVEY ---------- */
+  #trauma { top:132px; height:386px; }
+  .plate { position:relative; width:356px; height:318px;
+    background:
+      repeating-linear-gradient(to bottom, rgba(120,170,185,0.030) 0 1px, rgba(0,0,0,0) 1px 4px),
+      radial-gradient(circle at 50% 42%, rgba(38,74,86,0.34) 0, rgba(5,8,10,0) 66%),
+      #070c0f;
+    border:1px solid #1e3038; }
+  /* radiographic orientation lead markers */
+  .lead { position:absolute; font:700 11px Consolas,monospace; color:#3f545c; }
+  .lead.r { left:6px; top:4px; }
+  .lead.l { left:338px; top:4px; }
+  .leadnote { position:absolute; left:6px; top:298px; font-size:8px; color:#2f4249;
+    letter-spacing:1.1px; }
+
+  /* body segments — shape from border-radius, fill level from a gradient stop */
+  .bp { position:absolute; border:1px solid; }
+  .lm { transform-origin:50% 0; }                                  /* limb: pivot at joint */
+  .st { background:#1f6e4a; border-color:#35946a; }                /* stable tier, 100% */
+  .mo { border-color:#8a6f1e; }                                    /* monitor tier */
+  .im { border-color:#ff6b60;
+        box-shadow:0 0 0 1.5px #ffe8e4, 0 0 18px 4px rgba(255,59,48,0.42); }
+  .neck { background:#1e3138; border-color:#2e4a54; }
+  .tagk { font:600 8px "Franklin Gothic Medium",Tahoma,sans-serif; letter-spacing:1.4px;
+    color:#5d7880; line-height:10px; }
+  .tagn { font:700 13px Consolas,monospace; line-height:15px; color:#dce8ec; }
+  .tagn s { text-decoration:none; font:400 9px Consolas,monospace; color:#5d7880; }
+  .ldr { position:absolute; height:1px; background:#2e4a54; }
+  .ldd { position:absolute; width:5px; height:5px; background:#4a7a84; transform:rotate(45deg); }
+  .wring { position:absolute; left:237px; top:136px; width:17px; height:17px; border-radius:50%;
+    border:1.5px solid #ff6b60; box-shadow:0 0 10px rgba(255,59,48,0.55); }
+  .wlead { position:absolute; left:254px; top:144px; width:18px; height:1px; background:#ff6b60; }
+  .tag { position:absolute; }
+  .tag.rgt { text-align:right; }
+
+  /* alarm callout under the plate */
+  .callout { margin-top:6px; height:44px; display:flex;
+    background:linear-gradient(to right, rgba(255,59,48,0.20) 0, rgba(255,59,48,0.04) 100%);
+    border:1px solid rgba(255,59,48,0.45); }
+  .callout .cbar { width:3px; flex:0 0 3px; background:#ff3b30;
+    box-shadow:0 0 10px rgba(255,59,48,0.7); }
+  .callout .cbody { flex:1 1 auto; padding:4px 7px 0 8px; }
+  .callout .crow { display:flex; align-items:baseline; height:20px; }
+  .callout .cimm { font:600 10px "Franklin Gothic Medium",Tahoma,sans-serif; letter-spacing:1.7px;
+    color:#ff5045; }
+  .callout .cgap { flex:1 1 auto; }
+  .callout .cpart { font:400 10px Consolas,monospace; color:#c79a94; letter-spacing:0.6px; }
+  .callout .cnum { font:700 16px Consolas,monospace; color:#ffe8e4; letter-spacing:0.3px;
+    padding-left:8px; }
+  .callout .cmgmt { font-size:9.5px; line-height:14px; color:#ff9a90; letter-spacing:0.4px; }
+  .callout .cmgmt i { font-style:normal; color:#7d5b57; }
+
+  /* ---------- stamina trace ---------- */
+  #stam { top:518px; height:88px; }
+  .scope { position:relative; width:356px; height:72px; overflow:hidden;
+    background:
+      repeating-linear-gradient(to right, rgba(46,74,84,0.55) 0 1px, rgba(0,0,0,0) 1px 32px),
+      repeating-linear-gradient(to bottom, rgba(46,74,84,0.55) 0 1px, rgba(0,0,0,0) 1px 24px),
+      repeating-linear-gradient(to right, rgba(46,74,84,0.20) 0 1px, rgba(0,0,0,0) 1px 8px),
+      repeating-linear-gradient(to bottom, rgba(46,74,84,0.20) 0 1px, rgba(0,0,0,0) 1px 8px),
+      #060d0f;
+    border:1px solid #1e3038; }
+  .scope i { position:absolute; display:block; height:2px; background:#38e0c0;
+    transform-origin:0 50%; border-radius:1px; }
+  .scope .mean { position:absolute; left:0; top:29px; width:354px; height:1px;
+    background:rgba(56,224,192,0.28); }
+  .scope .swhead { position:absolute; left:349px; top:26px; width:7px; height:7px;
+    border-radius:50%; background:#c8fff2; box-shadow:0 0 12px 4px rgba(56,224,192,0.70); }
+  .scope .cap { position:absolute; left:6px; top:4px; font-size:8px; letter-spacing:1.2px;
+    color:#2f5a58; }
+  .scope .lvl { position:absolute; left:298px; top:35px; font:700 11px Consolas,monospace;
+    color:#38e0c0; letter-spacing:0.4px; }
+
+  /* ---------- observation chart ---------- */
+  #obs { top:606px; height:76px; }
+  .obs { display:flex; column-gap:4px; height:62px; }
+  .oc { width:56px; flex:0 0 56px; }
+  .oc .ol { height:10px; font:600 8px "Franklin Gothic Medium",Tahoma,sans-serif;
+    letter-spacing:1.2px; color:#5d7880; }
+  .well { position:relative; height:36px; border:1px solid #152227;
+    background:
+      repeating-linear-gradient(to bottom, rgba(46,74,84,0.30) 0 1px, rgba(0,0,0,0) 1px 6px),
+      #0a1216; }
+  .well .band { position:absolute; left:0; top:9px; width:54px; height:6px;
+    background:rgba(56,224,192,0.10); }
+  .well .base { position:absolute; left:0; top:12px; width:54px; height:1px; background:#2e4a54; }
+  .well .bar  { position:absolute; left:20px; width:14px; background:#c8a02a; }
+  .well .bar.cold { background:#7ab6c8; }
+  .oc .ov { height:16px; line-height:16px; font-size:9px; letter-spacing:0.3px; color:#c8a02a; }
+  .oc .ov.cold { color:#7ab6c8; }
+  .oc .ov s { text-decoration:none; color:#5d7880; }
+
+  /* ---------- wound & medication chart ---------- */
+  #wound { top:682px; height:104px; }
+  .wr { display:flex; align-items:center; height:18px; font-size:10px; letter-spacing:0.25px;
+    border-bottom:1px solid rgba(30,48,56,0.55); }
+  .wr:last-child { border-bottom:0; }
+  .wr .sv { width:3px; flex:0 0 3px; height:11px; margin-right:7px; }
+  .wr .nm { width:74px; flex:0 0 74px; font-weight:700; }
+  .wr .si { width:66px; flex:0 0 66px; color:#7e969e; }
+  .wr .on { width:40px; flex:0 0 40px; color:#4e656d; }
+  .wr .no { flex:1 1 auto; color:#6d868d; }
+  .lv1 .sv { background:#ff3b30; box-shadow:0 0 7px rgba(255,59,48,0.6); } .lv1 .nm { color:#ff8078; }
+  .lv2 .sv { background:#c8a02a; } .lv2 .nm { color:#d4ae3c; }
+  .lv3 .sv { background:#6d7a3a; } .lv3 .nm { color:#96a06a; }
+
+  /* ---------- position & armament ---------- */
+  #pos { top:786px; height:140px; }
+  .posbody { position:relative; height:126px; }
+  .scan { position:absolute; left:0; top:0; width:123px; height:123px; border:1px solid #1e3038;
+    background:#070d10; }
+  .scan .g { position:absolute; left:0; top:0; width:121px; height:121px; }
+  .scan s { display:block; float:left; width:11px; height:11px; position:relative;
+    text-decoration:none; }
+  .scan s.f { background:#101a17; }
+  .scan s.w { background:#26402c; }
+  .scan s.h { background:#333a42; }
+  .scan s.p { background:#141c1a; }
+  .scan s.p b { position:absolute; left:3px; top:3px; width:5px; height:5px; background:#c8a02a;
+    transform:rotate(45deg); }
+  .scan s.mis { background:#241d0c; box-shadow:inset 0 0 0 1px #c8a02a; }
+  .scan s.mis b { background:#ffdc72; box-shadow:0 0 8px 2px rgba(200,160,42,0.75); }
+  .scan s.me { background:#1a1114; }
+  .scan s.me u { position:absolute; left:2px; top:2px; width:7px; height:7px; border-radius:50%;
+    background:#ff3b30; box-shadow:0 0 0 1.5px #ffe8e4, 0 0 9px 2px rgba(255,59,48,0.6); }
+  .ct { position:absolute; width:6px; height:6px; border:1px solid #4a7a84; }
+  .ctl { left:-1px; top:-1px; border-right:0; border-bottom:0; }
+  .ctr { left:118px; top:-1px; border-left:0; border-bottom:0; }
+  .cbl { left:-1px; top:118px; border-right:0; border-top:0; }
+  .cbr { left:118px; top:118px; border-left:0; border-top:0; }
+  .scan .sweep { position:absolute; left:0; top:74px; width:121px; height:1px;
+    background:rgba(56,224,192,0.30); }
+  .scan .cap { position:absolute; left:3px; top:110px; font-size:7.5px; letter-spacing:0.9px;
+    color:#2f4a50; }
+
+  .arm { position:absolute; left:135px; top:0; width:221px; }
+  .ab { border-bottom:1px solid rgba(30,48,56,0.55); }
+  .ab.a1 { height:44px; }
+  .ab.a2 { height:30px; padding-top:3px; }
+  .ab.a3 { height:52px; padding-top:4px; border-bottom:0; }
+  .ak { display:flex; height:10px; font:600 8px "Franklin Gothic Medium",Tahoma,sans-serif;
+    letter-spacing:1.3px; color:#5d7880; }
+  .ak span { flex:1 1 auto; } .ak em { font-style:normal; color:#7e969e; letter-spacing:1px; }
+  .aw { font:700 13px Consolas,monospace; line-height:16px; color:#e4eef0; letter-spacing:0.3px; }
+  .as { font-size:9px; line-height:12px; color:#6d868d; letter-spacing:0.3px; }
+  .as.lit { color:#9fb6bc; }
+  .asd { font-size:10.5px; line-height:13px; color:#9fb6bc; letter-spacing:0.3px; }
+  .asd i { font-style:normal; color:#4e656d; }
+  .tg { font:12px Consolas,monospace; line-height:15px; color:#ff9a90; letter-spacing:0.4px; }
+  .thp { position:relative; height:5px; margin:1px 0; background:#1a1114; border:1px solid #3a1f1d; }
+  .thp u { position:absolute; left:0; top:0; height:3px; width:62%; background:#ff3b30; }
+  .thp b { position:absolute; left:0; top:0; height:3px; width:100%;
+    background:repeating-linear-gradient(to right, rgba(255,232,228,0.30) 0 1px, rgba(0,0,0,0) 1px 20px); }
+
+  /* ---------- chart notes (message log) ---------- */
+  #notes { top:926px; height:98px; }
+  .ln { display:flex; align-items:baseline; height:14px; }
+  .ln .gut { width:2px; flex:0 0 2px; height:11px; background:rgba(0,0,0,0); margin-right:5px; }
+  .ln .tm { width:30px; flex:0 0 30px; font-size:9px; color:#3f545c; letter-spacing:0.2px; }
+  .ln .tx { flex:1 1 auto; font-size:11px; letter-spacing:0.2px; white-space:nowrap; }
+  .ln .tx.good { color:#6fc79a; }
+  .ln .tx.bad  { color:#ff6b60; }
+  .ln .tx.baddim { color:#c25a52; }
+  .ln .tx.caut { color:#c8a02a; }
+  .ln .tx.cautlit { color:#d4ae3c; }
+  .ln.a1 { opacity:0.50; } .ln.a2 { opacity:0.62; } .ln.a3 { opacity:0.74; }
+  .ln.a4 { opacity:0.84; } .ln.a5 { opacity:0.92; }
+  .ln.new .gut { background:#e4eef0; }
+  .ln.new .tm { color:#7e969e; }
+
+  /* ---------- orders (hotbar) ---------- */
+  #orders { top:1024px; height:56px; }
+  .hb { display:flex; column-gap:4px; height:42px; }
+  .sl { width:36px; flex:0 0 36px; height:42px; border:1px solid #22383f; border-radius:2px;
+    padding-top:3px; text-align:center; position:relative;
+    background:linear-gradient(to bottom, rgba(38,66,76,0.40) 0, rgba(8,14,17,0.90) 100%); }
+  .sl .ky { font:700 15px Consolas,monospace; line-height:20px; color:#e4eef0; }
+  .sl .lb { font:600 8px "Franklin Gothic Medium",Tahoma,sans-serif; line-height:10px;
+    letter-spacing:0.9px; color:#7e969e; }
+  .sl.off { border-color:#16222a; background:#0a1013; }
+  .sl.off .ky { color:#31454c; }
+  .sl.off .strike { position:absolute; left:-3px; top:20px; width:42px; height:1px;
+    background:#4a2622; transform:rotate(-49deg); }
+  .sl.off .nx { font-size:7px; line-height:9px; letter-spacing:0.4px; color:#8a4a42; }
+</style></head>
+<body><div id="screen">
+
+  <div class="bezel-shade"></div>
+
+  <div id="mon">
+    <div class="rail"></div>
+    <div class="rtick" style="top:92px"></div>
+    <div class="rtick" style="top:132px"></div>
+    <div class="rtick" style="top:518px"></div>
+    <div class="rtick" style="top:606px"></div>
+    <div class="rtick" style="top:682px"></div>
+    <div class="rtick" style="top:786px"></div>
+    <div class="rtick" style="top:926px"></div>
+    <div class="rtick" style="top:1024px"></div>
+    <div class="alarmbar"></div>
+
+    <!-- ============ PATIENT ============ -->
+    <div class="sec" id="patient">
+      <div class="pname">
+        <span class="nm">ASHBY, NIGEL</span>
+        <span class="sp"></span>
+        <span class="chip">IMMEDIATE</span>
+      </div>
+      <div class="prow">SURVIVOR <i>&middot;</i> DAY 14 <i>&middot;</i> 21:47 <i>&middot;</i> AUTUMN</div>
+      <div class="prow ward">CHESWICK &mdash; RESIDENTIAL</div>
+      <div class="attr">STR&nbsp;<b>10</b> &nbsp; DEX&nbsp;<b>12</b> &nbsp; INT&nbsp;<b>9</b> &nbsp; PER&nbsp;<b>11</b></div>
+    </div>
+
+    <!-- ============ ENVIRONMENT / ACTIVITY ============ -->
+    <div class="sec" id="env">
+      <div class="erow"><span class="lb">ENV</span>LIGHT DRIZZLE<i>&middot;</i><b>8 &deg;C</b><i>&middot;</i>NE 12 km/h<i>&middot;</i>LUX <b>12%</b><i>&middot;</i>LAMP <b>34%</b><span class="lampbar"></span></div>
+      <div class="erow"><span class="lb">ACT</span>WALKING<i>&middot;</i>NOISE <b>8</b><i>&middot;</i>ENC T<b>12</b>/A<b>4</b><i>&middot;</i>SPEED <b>96</b><i>&middot;</i>FOCUS <b>84</b></div>
+    </div>
+
+    <!-- ============ TRAUMA SURVEY ============ -->
+    <div class="sec" id="trauma">
+      <div class="k"><span class="t">Trauma survey</span><span class="h"></span><span class="v"><i>triage</i> IMMEDIATE</span></div>
+
+      <div class="plate">
+        <span class="lead r">R</span><span class="lead l">L</span>
+        <span class="leadnote">ANTERIOR &middot; 6 REGIONS</span>
+
+        <!-- HEAD 20/24 = 83.3% monitor tier; region spans y4..50, fill boundary y=11.7 -->
+        <div class="bp mo" style="left:158px;top:4px;width:40px;height:38px;
+          border-radius:20px 20px 16px 16px;
+          background:repeating-linear-gradient(135deg, rgba(200,160,42,0.13) 0 2px, rgba(0,0,0,0) 2px 6px),
+            linear-gradient(to bottom,#151f24 0,#151f24 20.2%,#c8a02a 20.2%,#c8a02a 100%);"></div>
+        <div class="bp mo" style="left:165px;top:34px;width:26px;height:16px;
+          border-radius:6px 6px 13px 13px;background:#c8a02a;"></div>
+
+        <!-- neck: structural, not a tracked region -->
+        <div class="bp neck" style="left:170px;top:45px;width:16px;height:12px;border-radius:4px;"></div>
+
+        <!-- TORSO 45/60 = 75.0%; region spans y56..184, fill boundary y=88 -->
+        <div class="bp mo" style="left:124px;top:56px;width:108px;height:42px;
+          border-radius:18px 18px 10px 10px;
+          background:repeating-linear-gradient(135deg, rgba(200,160,42,0.13) 0 2px, rgba(0,0,0,0) 2px 6px),
+            linear-gradient(to bottom,#151f24 0,#151f24 76.2%,#c8a02a 76.2%,#c8a02a 100%);"></div>
+        <div class="bp mo" style="left:130px;top:96px;width:96px;height:46px;
+          border-radius:10px 10px 20px 20px;background:#c8a02a;"></div>
+        <div class="bp mo" style="left:140px;top:140px;width:76px;height:44px;
+          border-radius:16px 16px 32px 32px;background:#c8a02a;text-align:center;padding-top:4px;
+          font:600 8px 'Franklin Gothic Medium',Tahoma,sans-serif;letter-spacing:1.3px;color:#3a2c05;">TORSO
+          <div style="font:700 15px Consolas,monospace;letter-spacing:0.2px;line-height:16px;color:#241a02;">45/60</div>
+          <div style="font:400 8px Consolas,monospace;letter-spacing:0.6px;color:#4c3a06;">75%</div>
+        </div>
+
+        <!-- R ARM 30/30 = 100% stable; shoulder pivot at (122,64) -->
+        <div class="bp st lm" style="left:111px;top:64px;width:22px;height:62px;
+          border-radius:11px;transform:rotate(9deg);"></div>
+        <div class="bp st lm" style="left:103px;top:123px;width:19px;height:60px;
+          border-radius:10px;transform:rotate(6deg);"></div>
+        <div class="bp st lm" style="left:97px;top:180px;width:18px;height:24px;
+          border-radius:9px 9px 7px 7px;transform:rotate(6deg);"></div>
+
+        <!-- L ARM 8/30 = 26.7% IMMEDIATE; region spans y64..204, fill boundary y=166.7 -->
+        <div class="bp im lm" style="left:223px;top:64px;width:22px;height:62px;
+          border-radius:11px;transform:rotate(-9deg);
+          background:repeating-linear-gradient(135deg, rgba(255,59,48,0.34) 0 3px, rgba(0,0,0,0) 3px 8px),
+            #1a1114;"></div>
+        <div class="bp im lm" style="left:234px;top:123px;width:19px;height:60px;
+          border-radius:10px;transform:rotate(-6deg);
+          background:repeating-linear-gradient(135deg, rgba(255,59,48,0.34) 0 3px, rgba(0,0,0,0) 3px 8px),
+            linear-gradient(to bottom,#1a1114 0,#1a1114 72.8%,#ff3b30 72.8%,#ff3b30 100%);"></div>
+        <div class="bp im lm" style="left:241px;top:180px;width:18px;height:24px;
+          border-radius:9px 9px 7px 7px;transform:rotate(-6deg);background:#ff3b30;"></div>
+
+        <!-- R LEG 28/28 = 100% stable -->
+        <div class="bp st" style="left:143px;top:178px;width:34px;height:74px;
+          border-radius:16px 16px 13px 13px;"></div>
+        <div class="bp st" style="left:148px;top:246px;width:27px;height:62px;border-radius:13px;"></div>
+        <div class="bp st" style="left:140px;top:302px;width:30px;height:14px;
+          border-radius:7px 7px 6px 6px;"></div>
+
+        <!-- L LEG 22/28 = 78.6%; region spans y178..316, fill boundary y=207.6 -->
+        <div class="bp mo" style="left:179px;top:178px;width:34px;height:74px;
+          border-radius:16px 16px 13px 13px;
+          background:repeating-linear-gradient(135deg, rgba(200,160,42,0.13) 0 2px, rgba(0,0,0,0) 2px 6px),
+            linear-gradient(to bottom,#151f24 0,#151f24 40%,#c8a02a 40%,#c8a02a 100%);"></div>
+        <div class="bp mo" style="left:181px;top:246px;width:27px;height:62px;border-radius:13px;
+          background:#c8a02a;"></div>
+        <div class="bp mo" style="left:186px;top:302px;width:30px;height:14px;
+          border-radius:7px 7px 6px 6px;background:#c8a02a;"></div>
+
+        <!-- annotation leaders -->
+        <div class="ldr" style="left:82px;top:23px;width:74px;"></div>
+        <div class="ldd" style="left:152px;top:20px;"></div>
+        <div class="ldr" style="left:80px;top:192px;width:15px;"></div>
+        <div class="ldd" style="left:90px;top:189px;"></div>
+        <div class="ldr" style="left:94px;top:275px;width:54px;"></div>
+        <div class="ldd" style="left:143px;top:272px;"></div>
+        <div class="ldr" style="left:208px;top:275px;width:54px;"></div>
+        <div class="ldd" style="left:204px;top:272px;"></div>
+
+        <!-- wound ring on the left forearm + red leader across to the alarm tag -->
+        <div class="wring"></div>
+        <div class="wlead"></div>
+
+        <!-- region tags: PART / cur-max / percent -->
+        <div class="tag rgt" style="left:2px;top:10px;width:78px;">
+          <div class="tagk">HEAD</div><div class="tagn">20/24 <s>83%</s></div></div>
+        <div class="tag rgt" style="left:0;top:179px;width:78px;">
+          <div class="tagk">R ARM</div>
+          <div class="tagn" style="color:#8fc0a6;">30/30 <s style="color:#4e7361;">100%</s></div></div>
+        <div class="tag rgt" style="left:14px;top:262px;width:78px;">
+          <div class="tagk">R LEG</div>
+          <div class="tagn" style="color:#8fc0a6;">28/28 <s style="color:#4e7361;">100%</s></div></div>
+        <div class="tag" style="left:262px;top:262px;width:80px;">
+          <div class="tagk">L LEG</div><div class="tagn">22/28 <s>79%</s></div></div>
+        <div class="tag" style="left:272px;top:130px;width:82px;">
+          <div class="tagk" style="color:#ff8078;">L ARM</div>
+          <div class="tagn" style="color:#ffe8e4;line-height:16px;">8/30 <s style="color:#ff8078;">27%</s></div></div>
+      </div>
+
+      <!-- alarm callout, bound to the wound ring by the red leader above -->
+      <div class="callout">
+        <div class="cbar"></div>
+        <div class="cbody">
+          <div class="crow">
+            <span class="cimm">&#9650; IMMEDIATE</span>
+            <span class="cgap"></span>
+            <span class="cpart">LEFT ARM</span>
+            <span class="cnum">8&thinsp;/&thinsp;30</span>
+          </div>
+          <div class="cmgmt">BLEEDING + BITTEN <i>&middot;</i> CONTROL HAEMORRHAGE, THEN DISINFECT</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ STAMINA TRACE ============ -->
+    <div class="sec" id="stam">
+      <div class="k"><span class="t">Stamina trace</span><span class="h"></span><span class="v">5100 <i>/</i> 8700 <i>&middot;</i> <b>59%</b></span></div>
+      <div class="scope">
+        <div class="mean"></div>
+        <i style="left:0.0px;top:34.0px;width:31.3px;transform:rotate(-82.6deg);opacity:0.28"></i>
+        <i style="left:4.0px;top:3.0px;width:35.2px;transform:rotate(83.5deg);opacity:0.28"></i>
+        <i style="left:8.0px;top:38.0px;width:9.8px;transform:rotate(-66.0deg);opacity:0.28"></i>
+        <i style="left:12.0px;top:29.0px;width:13.0px;transform:rotate(0.0deg);opacity:0.28"></i>
+        <i style="left:25.0px;top:29.0px;width:13.6px;transform:rotate(-54.0deg);opacity:0.29"></i>
+        <i style="left:33.0px;top:18.0px;width:13.6px;transform:rotate(54.0deg);opacity:0.29"></i>
+        <i style="left:41.0px;top:29.0px;width:23.0px;transform:rotate(0.0deg);opacity:0.29"></i>
+        <i style="left:64.0px;top:29.0px;width:14.0px;transform:rotate(0.0deg);opacity:0.31"></i>
+        <i style="left:78.0px;top:29.0px;width:9.2px;transform:rotate(-49.4deg);opacity:0.33"></i>
+        <i style="left:84.0px;top:22.0px;width:9.2px;transform:rotate(49.4deg);opacity:0.33"></i>
+        <i style="left:90.0px;top:29.0px;width:8.0px;transform:rotate(0.0deg);opacity:0.34"></i>
+        <i style="left:98.0px;top:29.0px;width:5.8px;transform:rotate(59.0deg);opacity:0.35"></i>
+        <i style="left:101.0px;top:34.0px;width:31.3px;transform:rotate(-82.6deg);opacity:0.36"></i>
+        <i style="left:105.0px;top:3.0px;width:35.2px;transform:rotate(83.5deg);opacity:0.36"></i>
+        <i style="left:109.0px;top:38.0px;width:9.8px;transform:rotate(-66.0deg);opacity:0.37"></i>
+        <i style="left:113.0px;top:29.0px;width:13.0px;transform:rotate(0.0deg);opacity:0.37"></i>
+        <i style="left:126.0px;top:29.0px;width:13.6px;transform:rotate(-54.0deg);opacity:0.39"></i>
+        <i style="left:134.0px;top:18.0px;width:13.6px;transform:rotate(54.0deg);opacity:0.41"></i>
+        <i style="left:142.0px;top:29.0px;width:23.0px;transform:rotate(0.0deg);opacity:0.42"></i>
+        <i style="left:165.0px;top:29.0px;width:14.0px;transform:rotate(0.0deg);opacity:0.46"></i>
+        <i style="left:179.0px;top:29.0px;width:9.2px;transform:rotate(-49.4deg);opacity:0.49"></i>
+        <i style="left:185.0px;top:22.0px;width:9.2px;transform:rotate(49.4deg);opacity:0.50"></i>
+        <i style="left:191.0px;top:29.0px;width:8.0px;transform:rotate(0.0deg);opacity:0.52"></i>
+        <i style="left:199.0px;top:29.0px;width:5.8px;transform:rotate(59.0deg);opacity:0.54"></i>
+        <i style="left:202.0px;top:34.0px;width:31.3px;transform:rotate(-82.6deg);opacity:0.54"></i>
+        <i style="left:206.0px;top:3.0px;width:35.2px;transform:rotate(83.5deg);opacity:0.55"></i>
+        <i style="left:210.0px;top:38.0px;width:9.8px;transform:rotate(-66.0deg);opacity:0.56"></i>
+        <i style="left:214.0px;top:29.0px;width:13.0px;transform:rotate(0.0deg);opacity:0.57"></i>
+        <i style="left:227.0px;top:29.0px;width:13.6px;transform:rotate(-54.0deg);opacity:0.60"></i>
+        <i style="left:235.0px;top:18.0px;width:13.6px;transform:rotate(54.0deg);opacity:0.62"></i>
+        <i style="left:243.0px;top:29.0px;width:23.0px;transform:rotate(0.0deg);opacity:0.65"></i>
+        <i style="left:266.0px;top:29.0px;width:14.0px;transform:rotate(0.0deg);opacity:0.71"></i>
+        <i style="left:280.0px;top:29.0px;width:9.2px;transform:rotate(-49.4deg);opacity:0.75"></i>
+        <i style="left:286.0px;top:22.0px;width:9.2px;transform:rotate(49.4deg);opacity:0.77"></i>
+        <i style="left:292.0px;top:29.0px;width:8.0px;transform:rotate(0.0deg);opacity:0.79"></i>
+        <i style="left:300.0px;top:29.0px;width:5.8px;transform:rotate(59.0deg);opacity:0.81"></i>
+        <i style="left:303.0px;top:34.0px;width:31.3px;transform:rotate(-82.6deg);opacity:0.82"></i>
+        <i style="left:307.0px;top:3.0px;width:35.2px;transform:rotate(83.5deg);opacity:0.84"></i>
+        <i style="left:311.0px;top:38.0px;width:9.8px;transform:rotate(-66.0deg);opacity:0.85"></i>
+        <i style="left:315.0px;top:29.0px;width:13.0px;transform:rotate(0.0deg);opacity:0.86"></i>
+        <i style="left:328.0px;top:29.0px;width:13.6px;transform:rotate(-54.0deg);opacity:0.91"></i>
+        <i style="left:336.0px;top:18.0px;width:13.6px;transform:rotate(54.0deg);opacity:0.94"></i>
+        <i style="left:344.0px;top:29.0px;width:10.0px;transform:rotate(0.0deg);opacity:0.96"></i>
+        <div class="swhead"></div>
+        <div class="cap">SWEEP 25 mm/s</div>
+        <div class="lvl">59%</div>
+      </div>
+    </div>
+
+    <!-- ============ OBSERVATIONS ============ -->
+    <div class="sec" id="obs">
+      <div class="k"><span class="t">Observations</span><span class="h"></span><span class="v"><i>rec</i> 21:47</span></div>
+      <div class="obs">
+        <div class="oc"><div class="ol">NUTR</div>
+          <div class="well"><div class="band"></div><div class="base"></div>
+            <div class="bar" style="top:13px;height:8px;"></div></div>
+          <div class="ov">PECKISH<s>&darr;</s></div></div>
+        <div class="oc"><div class="ol">HYDR</div>
+          <div class="well"><div class="band"></div><div class="base"></div>
+            <div class="bar" style="top:13px;height:12px;"></div></div>
+          <div class="ov">THIRSTY<s>&darr;</s></div></div>
+        <div class="oc"><div class="ol">REST</div>
+          <div class="well"><div class="band"></div><div class="base"></div>
+            <div class="bar" style="top:13px;height:12px;"></div></div>
+          <div class="ov">TIRED <s>&darr;</s></div></div>
+        <div class="oc"><div class="ol">TEMP</div>
+          <div class="well"><div class="band"></div><div class="base"></div>
+            <div class="bar cold" style="top:13px;height:8px;"></div></div>
+          <div class="ov cold">CHILLY <s>&darr;</s></div></div>
+        <div class="oc"><div class="ol">PAIN</div>
+          <div class="well"><div class="band"></div><div class="base"></div>
+            <div class="bar" style="top:3px;height:9px;"></div></div>
+          <div class="ov">12 <s>&uarr;</s></div></div>
+        <div class="oc"><div class="ol">MOOD</div>
+          <div class="well"><div class="band"></div><div class="base"></div>
+            <div class="bar" style="top:13px;height:5px;"></div></div>
+          <div class="ov">&minus;3 <s>&darr;</s></div></div>
+      </div>
+    </div>
+
+    <!-- ============ WOUND & MEDICATION ============ -->
+    <div class="sec" id="wound">
+      <div class="k"><span class="t">Wound &amp; medication</span><span class="h"></span><span class="v"><i>active</i> 5</span></div>
+      <div class="wr lv1"><span class="sv"></span><span class="nm">BLEEDING</span><span class="si">L ARM</span><span class="on">21:47</span><span class="no">ARTERIAL &mdash; UNTREATED</span></div>
+      <div class="wr lv1"><span class="sv"></span><span class="nm">BITTEN</span><span class="si">L ARM</span><span class="on">21:44</span><span class="no">INFECTION RISK</span></div>
+      <div class="wr lv2"><span class="sv"></span><span class="nm">SOAKED</span><span class="si">WHOLE BODY</span><span class="on">21:38</span><span class="no">WARMTH &darr;</span></div>
+      <div class="wr lv2"><span class="sv"></span><span class="nm">TIRED</span><span class="si">SYSTEMIC</span><span class="on">20:12</span><span class="no">STAMINA REGEN &darr;</span></div>
+      <div class="wr lv3"><span class="sv"></span><span class="nm">PAIN 12</span><span class="si">SYSTEMIC</span><span class="on">21:47</span><span class="no">SPEED &darr; &middot; ACCURACY &darr;</span></div>
+    </div>
+
+    <!-- ============ POSITION & ARMAMENT ============ -->
+    <div class="sec" id="pos">
+      <div class="k"><span class="t">Position &amp; armament</span><span class="h"></span><span class="v">3 HOSTILE <i>&middot;</i> 1 TRK <i>&middot;</i> <b>SAFE</b></span></div>
+      <div class="posbody">
+
+        <div class="scan">
+          <div class="g"><s class="f"></s><s class="f"></s><s class="f"></s><s class="w"></s><s class="w"></s><s class="w"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="w"></s><s class="w"></s><s class="w"></s><s class="w"></s><s class="w"></s><s class="f"></s><s class="f"></s><s class="p mis"><b></b></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="w"></s><s class="w"></s><s class="f"></s><s class="f"></s><s class="w"></s><s class="w"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="p"><b></b></s><s class="f"></s><s class="f"></s><s class="h"></s><s class="h"></s><s class="f"></s><s class="f"></s><s class="w"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="h"></s><s class="h"></s><s class="h"></s><s class="h"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="h"></s><s class="me"><u></u></s><s class="h"></s><s class="h"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="h"></s><s class="h"></s><s class="h"></s><s class="f"></s><s class="f"></s><s class="w"></s><s class="w"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="w"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="w"></s><s class="w"></s><s class="f"></s><s class="f"></s><s class="w"></s><s class="w"></s><s class="f"></s><s class="p"><b></b></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="w"></s><s class="f"></s><s class="f"></s><s class="w"></s><s class="w"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s><s class="f"></s></div>
+          <div class="sweep"></div>
+          <div class="ct ctl"></div><div class="ct ctr"></div>
+          <div class="ct cbl"></div><div class="ct cbr"></div>
+          <div class="cap">11&times;11 &middot; MISSION NE</div>
+        </div>
+
+        <div class="arm">
+          <div class="ab a1">
+            <div class="ak"><span>WIELDED</span><em>ENC A4</em></div>
+            <div class="aw">FIRE AXE</div>
+            <div class="as">32 BASH &middot; 0 CUT &middot; TO-HIT +1</div>
+          </div>
+          <div class="ab a2">
+            <div class="ak"><span>SIDEARM</span><em>STOWED</em></div>
+            <div class="asd">GLOCK 19 <i>&middot;</i> 12/17 <i>&middot;</i> 9mm JHP</div>
+          </div>
+          <div class="ab a3">
+            <div class="ak"><span>SUBJECT</span><em>4 TILES NE</em></div>
+            <div class="tg">ZOMBIE BRUTE</div>
+            <div class="thp"><u></u><b></b></div>
+            <div class="as lit">62% INTACT &middot; MOVING</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ CHART NOTES ============ -->
+    <div class="sec" id="notes">
+      <div class="k"><span class="t">Chart notes</span><span class="h"></span><span class="v"><i>last</i> 6</span></div>
+      <div class="ln a1"><span class="gut"></span><span class="tm">21:46</span><span class="tx good">You hit the zombie brute with your fire axe.</span></div>
+      <div class="ln a2"><span class="gut"></span><span class="tm">21:46</span><span class="tx bad">The zombie brute claws your left arm!</span></div>
+      <div class="ln a3"><span class="gut"></span><span class="tm">21:47</span><span class="tx bad">Your left arm is bleeding.</span></div>
+      <div class="ln a4"><span class="gut"></span><span class="tm">21:47</span><span class="tx baddim">You feel a sharp pain.</span></div>
+      <div class="ln a5"><span class="gut"></span><span class="tm">21:47</span><span class="tx caut">The zombie shambler groans nearby.</span></div>
+      <div class="ln new"><span class="gut"></span><span class="tm">21:47</span><span class="tx cautlit">You are getting thirsty.</span></div>
+    </div>
+
+    <!-- ============ ORDERS ============ -->
+    <div class="sec" id="orders">
+      <div class="k"><span class="t">Orders</span><span class="h"></span><span class="v"><i>slot 1 unavailable</i></span></div>
+      <div class="hb">
+        <div class="sl off"><div class="ky">f</div><div class="nx">NO GUN</div><div class="strike"></div></div>
+        <div class="sl"><div class="ky">r</div><div class="lb">RELD</div></div>
+        <div class="sl"><div class="ky">'</div><div class="lb">RUN</div></div>
+        <div class="sl"><div class="ky">e</div><div class="lb">EXAM</div></div>
+        <div class="sl"><div class="ky">p</div><div class="lb">PICK</div></div>
+        <div class="sl"><div class="ky">c</div><div class="lb">CRFT</div></div>
+        <div class="sl"><div class="ky">i</div><div class="lb">INVN</div></div>
+        <div class="sl"><div class="ky">t</div><div class="lb">THRW</div></div>
+        <div class="sl"><div class="ky">5</div><div class="lb">WAIT</div></div>
+      </div>
+    </div>
+
+  </div>
+</div></body></html>

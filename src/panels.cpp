@@ -5,12 +5,14 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
+#include <format>
 #include <iosfwd>
 #include <iterator>
 #include <list>
 #include <memory>
 #include <optional>
 #include <ranges>
+#include <set>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -40,6 +42,10 @@
 #include "widget_icon.h"
 #include "sidebar_anim.h"
 #include "hud_anim.h"
+#include "hud_phosphor.h"
+#include "hud_phosphor_panels.h"
+#include "hud_phosphor_strips.h"
+#include "hud_radar.h"
 #include "effect.h"
 #include "fstream_utils.h"
 #include "game.h"
@@ -68,6 +74,7 @@
 #include "lighting/rmlui_layer.h"
 #include "pldata.h"
 #include "point.h"
+#include "sdl_display.h"   // fontheight — the GAME terminal's cell height, in physical px
 #include "string_formatter.h"
 #include "string_id.h"
 #include "string_utils.h"
@@ -442,93 +449,6 @@ std::string window_panel::get_name() const
     return name;
 }
 
-// Colored-text overmap minichunk for the RmlUi HUD "map" panel. Reuses the terrain/
-// note/vehicle cell lookup draw_overmap_chunk (now removed; had zero remaining callers
-// after the Tier-10 curses rip-out) fed into its w_minimap window. MVP simplification
-// (locked design decision): the mission-arrow-past-the-grid-edge and border horde
-// markers were graphical bonuses layered on the physical pixel minimap — dropped here,
-// not portable to an arbitrary text row count. The mission-target and player-position
-// cells were curses "reverse video" (red_background()/mvwputch_hi background swaps),
-// not representable through cata_text_to_rml's foreground-only colour tags, so both
-// are emitted as explicit inline background spans instead.
-auto overmap_ui::overmap_chunk_rows( const avatar &you, const tripoint_abs_omt &global_omt,
-                                     const int width, const int height ) -> std::vector<std::string>
-{
-    auto &player_character = get_avatar();
-    const point_abs_omt curs = global_omt.xy();
-    const auto custom_targ = player_character.get_custom_mission_target();
-    const auto mission_targ = you.get_active_mission_target();
-    const auto targ = custom_targ != overmap::invalid_tripoint ? custom_targ : mission_targ;
-    const bool has_mission = targ != overmap::invalid_tripoint;
-
-    std::vector<std::string> rows;
-    rows.reserve( height );
-    for( int j = -( height / 2 ); j <= height - ( height / 2 ) - 1; ++j ) {
-        std::string row;
-        for( int i = -( width / 2 ); i <= width - ( width / 2 ) - 1; ++i ) {
-            const tripoint_abs_omt omp( curs + point( i, j ), g->get_levz() );
-            nc_color ter_color;
-            std::string ter_sym;
-            const bool vehicle_here = ACTIVE_OVERMAP_BUFFER.has_vehicle( omp );
-            if( ACTIVE_OVERMAP_BUFFER.has_note( omp ) ) {
-                const std::string &note_text = ACTIVE_OVERMAP_BUFFER.note( omp );
-                const auto note_info = overmap_ui::get_note_display_info( note_text );
-                ter_color = std::get<1>( note_info );
-                ter_sym = std::string( 1, std::get<0>( note_info ) );
-            } else if( !ACTIVE_OVERMAP_BUFFER.seen( omp ) ) {
-                ter_sym = " ";
-                ter_color = c_black;
-            } else if( vehicle_here ) {
-                ter_color = c_cyan;
-                ter_sym = "c";
-            } else {
-                const oter_id &cur_ter = ACTIVE_OVERMAP_BUFFER.ter( omp );
-                ter_sym = cur_ter->get_symbol();
-                ter_color = ACTIVE_OVERMAP_BUFFER.is_explored( omp ) ? c_dark_gray : cur_ter->get_color();
-            }
-            if( i == 0 && j == 0 ) {
-                row += string_format(
-                           R"(<span style="background-color:%s;color:#ffffffff;">%s</span>)",
-                           nc_color_to_hex( ter_color ), rml_escape( ter_sym ) );
-            } else if( has_mission && targ.xy() == omp.xy() ) {
-                row += string_format(
-                           R"(<span style="background-color:%s;">%s</span>)",
-                           nc_color_to_hex( c_red ), cata_text_to_rml( colorize( ter_sym, ter_color ) ) );
-            } else {
-                row += cata_text_to_rml( colorize( ter_sym, ter_color ) );
-            }
-        }
-        rows.push_back( std::move( row ) );
-    }
-    return rows;
-}
-
-
-static std::string time_approx()
-{
-    const int iHour = hour_of_day<int>( calendar::turn );
-    if( iHour >= 23 || iHour <= 1 ) {
-        return _( "Around midnight" );
-    } else if( iHour <= 4 ) {
-        return _( "Dead of night" );
-    } else if( iHour <= 6 ) {
-        return _( "Around dawn" );
-    } else if( iHour <= 8 ) {
-        return _( "Early morning" );
-    } else if( iHour <= 10 ) {
-        return _( "Morning" );
-    } else if( iHour <= 13 ) {
-        return _( "Around noon" );
-    } else if( iHour <= 16 ) {
-        return _( "Afternoon" );
-    } else if( iHour <= 18 ) {
-        return _( "Early evening" );
-    } else if( iHour <= 20 ) {
-        return _( "Around dusk" );
-    }
-    return _( "Night" );
-}
-
 static nc_color value_color( int stat )
 {
     nc_color valuecolor = c_light_gray;
@@ -576,54 +496,9 @@ static std::pair<nc_color, std::string> mana_stat( const player &u )
     return std::make_pair( c_mana, s_mana );
 }
 
-static nc_color safe_color()
-{
-    nc_color s_color = g->safe_mode ? c_green : c_red;
-    if( g->safe_mode == SAFE_MODE_OFF && get_option<bool>( "AUTOSAFEMODE" ) ) {
-        int s_return = get_option<int>( "AUTOSAFEMODETURNS" );
-        int iPercent = g->turnssincelastmon * 100 / s_return;
-        if( iPercent >= 100 ) {
-            s_color = c_green;
-        } else if( iPercent >= 75 ) {
-            s_color = c_yellow;
-        } else if( iPercent >= 50 ) {
-            s_color = c_light_red;
-        } else if( iPercent >= 25 ) {
-            s_color = c_red;
-        }
-    }
-    return s_color;
-}
-
 // ===============================
 // panels code
 // ===============================
-
-static nc_color move_mode_color( avatar &u )
-{
-    if( u.movement_mode_is( CMM_RUN ) ) {
-        return c_red;
-    } else if( u.movement_mode_is( CMM_STEALTH ) ) {
-        return c_cyan;
-    } else if( u.movement_mode_is( CMM_CROUCH ) ) {
-        return c_light_blue;
-    } else {
-        return c_light_gray;
-    }
-}
-
-static std::string move_mode_string( avatar &u )
-{
-    if( u.movement_mode_is( CMM_RUN ) ) {
-        return pgettext( "movement-type", "R" );
-    } else if( u.movement_mode_is( CMM_STEALTH ) ) {
-        return pgettext( "movement-type", "S" );
-    } else if( u.movement_mode_is( CMM_CROUCH ) ) {
-        return pgettext( "movement-type", "C" );
-    } else {
-        return pgettext( "movement-type", "W" );
-    }
-}
 
 
 // Phase-accurate moon icon name for the current time. Maps the 8 moon_phase
@@ -694,675 +569,143 @@ static const std::map<std::string, std::function<bool()>> &render_predicate_regi
     return reg;
 }
 
-// ── Sidebar HUD → RmlUi (Tier 7, render-only, continuous) ────────────────────
-// Persistent HUD document (see panels.h). Lives in this TU so it can reuse the
-// file-static stat colour helpers (str_string/etc.). NOT the modal rml_doc harness:
-// the HUD has no blocking input loop, so there is NO 16ms input tick — the main game
-// loop ticks the RmlUi context every frame, and open order keeps modal screens
-// stacked above the HUD. Lifecycle is driven from game::draw_panels + cleanup_at_end.
+// ── Sidebar HUD → RmlUi: the Terminal Phosphor chassis ───────────────────────
+// This TU owns the HUD's data model, document lifecycle, per-turn sync and
+// geometry ONLY. Every producer lives in hud_phosphor_panels.cpp (soma, dock) or
+// hud_phosphor_strips.cpp (status, log, keys, vehicle), built on the primitives
+// in hud_phosphor.h. NOT the modal rml_doc harness: the HUD has no blocking
+// input loop, so there is NO 16ms input tick — the main game loop ticks the
+// RmlUi context every frame, and open order keeps modal screens stacked above
+// the HUD. Lifecycle is driven from game::draw_panels + cleanup_at_end.
 namespace
 {
-// Fixed-region Qud layout data model. Each region is a pre-rendered RML string
-// filled by sidebar_hud_sync each turn. The RML document binds these directly
-// via data-rml attributes — no layout iteration.
+// Fixed-region phosphor data model. Each region is one pre-rendered RML string
+// filled by sidebar_hud_sync each turn; data/gui/sidebar_hud.rml binds these nine
+// directly via data-rml, so there is no layout iteration and no per-panel
+// dispatch. Section titles are deliberately NOT fields: the producers bake them
+// into their rules DOS-style (`──┤ SOMA ├──`), which is what makes a section
+// header cost zero rows.
 struct hud_rml_model {
-    Rml::String topbar_rml;
-    Rml::String topbar_row2_rml;
-    Rml::String vitals_rml;
-    Rml::String minimap_rml;
-    Rml::String minimap_title;
+    Rml::String status_row1_rml;
+    Rml::String status_row2_rml;
+    Rml::String status_rule_rml;
+    Rml::String soma_rml;
+    Rml::String radar_rml;
+    Rml::String dock_rml;
     Rml::String log_rml;
-    Rml::String log_title;
-    Rml::String botbar_rml;
-    Rml::String hotbar_rml;
+    Rml::String keys_rule_rml;
+    Rml::String keys_rml;
     Rml::String veh_rml;
     Rml::DataModelHandle handle;
 };
 std::unique_ptr<hud_rml_model> g_hud_data;
 Rml::ElementDocument *g_hud_doc = nullptr;
 
+// Previous log window seq range, for pruning stale animation keys.
+std::pair<unsigned, unsigned> g_hud_log_prev_seq = { 0, 0 };
+// Newest row's text at the last rebuild. A repeated message coalesces into the
+// existing entry (Messages::add_msg bumps its count and leaves its seq alone), so
+// the seq range alone would never notice the "x N" suffix that get_with_count()
+// bakes into the text — the HUD would show "You feel pain" once and never update
+// it while the count climbed.
+std::string g_hud_log_prev_tail;
+// Log region width in cells at the last rebuild. Every phosphor row is padded to
+// exactly its region's width, so a resize invalidates the markup even on a frame
+// where not one message changed.
+int g_hud_log_prev_cols = 0;
+// Total HP at the previous sync, for the damage shake/vignette trigger. At file
+// scope rather than a function-local static so sidebar_hud_close() can reset it:
+// as a local it outlived the HUD, and loading a character with less total HP than
+// the last one read as damage and fired a shake on the first frame.
+int g_hud_prev_total_hp = -1;
 
+/// Most rows the message log will ever show.
+///
+/// A ceiling, not a height: the region is sized to the messages actually present,
+/// so two messages cost two rows. The shipping well was 752dp holding 267dp of
+/// message, and closing that gap is where this design's occlusion saving comes
+/// from (mockups/hud/04-terminal-phosphor.md, region D).
+constexpr int hud_log_max_rows = 6;
 
-
-
-// Temperature hue ladder for the top bar.
-auto temp_color( units::temperature t ) -> nc_color
+/// Physical pixels per dp for the RmlUi context.
+///
+/// THE UNIT TRAP, documented at context_menu.cpp:165-172: two different divisors
+/// convert to dp, and mixing them is invisible at scale 1.0 and half a screen out
+/// on HiDPI. `Rml::Context::GetDimensions()` reports PHYSICAL pixels
+/// (rmlui_layer.cpp:1177), so it divides by density_ratio * ui_scale — this
+/// value. A raw SDL mouse point divides by ui_scale ALONE, because RmlUi's own
+/// input path has already multiplied by the density ratio.
+auto hud_dp_ratio() -> float
 {
-    const double f = units::to_fahrenheit( t );
-    if( f < 32 ) {
-        return c_light_blue;
-    } else if( f < 50 ) {
-        return c_cyan;
-    } else if( f < 77 ) {
-        return c_light_gray;
-    } else if( f < 95 ) {
-        return c_yellow;
-    } else {
-        return c_red;
-    }
+    const auto ratio = rmlui_layer::density_ratio() * rmlui_layer::ui_scale();
+    return ratio > 0.0f ? ratio : 1.0f;
 }
 
-// Options struct for vbar_rml.
-struct vbar_options {
-    int cur = 0;
-    int max = 0;
-    nc_color fill = c_white;
-    bool thin = false;
-    bool allow_crit = true;
-    bool use_gradient = false; // HP bars use green→yellow→red gradient
-    std::string text;
-    std::string id; // element id for animation targeting
-};
-
-// Chunky Qud-style HP bar RML (raw, not through cata_text_to_rml).
-// Ticks at 25/50/75% quarter marks. Crit (<25%) triple-encoded: bright-red fill,
-// dark-red trough, text suffix " !!".
-auto vbar_rml( const vbar_options &o ) -> std::string
+/// The cell grid the HUD resolves to right now, or nullopt when there is nothing
+/// to measure (toggle off, RmlUi not ready, degenerate context).
+auto hud_metrics_now() -> std::optional<hud_phosphor::metrics>
 {
-    const int pct = o.max > 0 ? std::clamp( o.cur * 100 / o.max, 0, 100 ) : 0;
-    const bool crit = o.allow_crit && o.max > 0 && pct < 25;
-    const std::string fill_hex = [&]() -> std::string {
-        if( crit )
-    {
-        return "#e04040ff";
+    if( !sidebar_hud_rmlui_enabled() || !rmlui_layer::ready() ) {
+        return std::nullopt;
     }
-    if( !o.use_gradient )
-    {
-        return nc_color_to_hex( o.fill );
-        }
-        // 3-stop HP gradient: green (#40c040) above 66%, yellow (#c0c040) at 33-66%,
-        // red (#e05050) below 33%. Interpolate between stops for smooth transitions.
-        unsigned char r = 0, g = 0, b = 0;
-        if( pct >= 66 )
-    {
-        const float t = static_cast<float>( pct - 66 ) / 34.f;
-            r = static_cast<unsigned char>( std::lerp( 0xc0, 0x40, t ) );
-            g = static_cast<unsigned char>( std::lerp( 0xc0, 0xc0, t ) );
-            b = static_cast<unsigned char>( std::lerp( 0x40, 0x40, t ) );
-        } else if( pct >= 33 )
-    {
-        const float t = static_cast<float>( pct - 33 ) / 33.f;
-            r = static_cast<unsigned char>( std::lerp( 0xe0, 0xc0, t ) );
-            g = static_cast<unsigned char>( std::lerp( 0x50, 0xc0, t ) );
-            b = static_cast<unsigned char>( std::lerp( 0x50, 0x40, t ) );
-        } else
-        {
-            r = 0xe0;
-            g = 0x50;
-            b = 0x50;
-        }
-        return std::format( "#{:02x}{:02x}{:02x}ff", r, g, b );
-    }();
-    const std::string text_suffix = crit ? " !!" : "";
-    const std::string thin_class = o.thin ? " thin" : "";
-    const std::string crit_class = crit ? " crit" : "";
-
-    return string_format(
-               R"(<div id="%s" class="vbar%s%s"><div class="vbar-fill" style="width:%d%%;background-color:%s;"></div>)"
-               R"(<div class="vbar-tick" style="left:25%%;"></div>)"
-               R"(<div class="vbar-tick" style="left:50%%;"></div>)"
-               R"(<div class="vbar-tick" style="left:75%%;"></div>)"
-               R"(<div class="vbar-text">%s</div>)"
-               R"(</div>)",
-               o.id, thin_class, crit_class, pct, fill_hex,
-               o.text + text_suffix );
+    Rml::Context *ctx = rmlui_layer::context();
+    if( ctx == nullptr ) {
+        return std::nullopt;
+    }
+    const auto dims = ctx->GetDimensions();
+    if( dims.x <= 0 || dims.y <= 0 ) {
+        return std::nullopt;
+    }
+    const auto ratio = hud_dp_ratio();
+    return hud_phosphor::metrics_for( dims.x / ratio, dims.y / ratio );
 }
 
-// Qud vitals overlay: chunky HP bars per body part + thin STA/MANA bars.
-auto hud_vitals( avatar &u ) -> std::string
+/// Where every region sits this frame.
+///
+/// Compute this ONCE per sync and hand the same object to every producer and to
+/// sidebar_hud_apply_rect. Three producers place box-glyph junctions at columns
+/// read off it — the status rule's two `┼`, the log rule's `┬`/`┐`, the keys
+/// rule's two `┴` — and they close into a single frame only because they all read
+/// the same layout. Recomputing per call reintroduces the disagreement by another
+/// route.
+auto hud_layout_now( int log_lines, bool show_vehicle ) -> std::optional<hud_phosphor::layout>
 {
-    std::string out;
-    for( const bodypart_id &bp : u.get_all_body_parts( true ) ) {
-        const auto hp_cur = u.get_part_hp_cur( bp );
-        const auto hp_max = u.get_part_hp_max( bp );
-        const bool broken = u.is_limb_broken( bp.id() ) && !bp->essential;
-
-        nc_color fill = c_white;
-        bool allow_crit = true;
-        std::string label;
-
-        if( broken ) {
-            // Mend bar: gray/blue, no crit
-            const bool splinted = u.worn_with_flag( json_flag_SPLINT, bp ) ||
-                                  ( u.mutation_value( "mending_modifier" ) >= 1.0f );
-            fill = splinted ? c_blue : c_dark_gray;
-            allow_crit = false;
-            const int mend_pct = hp_max > 0 ? 100 * hp_cur / hp_max : 0;
-            label = string_format( "%s %d%%", body_part_hp_bar_ui_text( bp.id() ), mend_pct );
-        } else {
-            const auto hp = get_hp_bar( hp_cur, hp_max );
-            fill = hp.second;
-            label = string_format( "%s %d/%d", body_part_hp_bar_ui_text( bp.id() ), hp_cur, hp_max );
-        }
-
-        const std::string label_hex = nc_color_to_hex( u.limb_color( bp.id(), true, true, true ) );
-        const std::string bar_id = "vbar_" + bp.id().str();
-        out += vbar_rml( { .cur = hp_cur, .max = hp_max, .fill = fill, .thin = false,
-                           .allow_crit = allow_crit, .use_gradient = true, .text = label, .id = bar_id } );
-
-        // Feed animation: HP percentage normalized 0-1, critical when <25%
-        const double norm = hp_max > 0 ? static_cast<double>( hp_cur ) / hp_max : 0.0;
-        hud_anim::feed( { .element_id = bar_id, .spec_icon = "hud_vbar",
-                          .value = norm, .is_critical = allow_crit && norm < 0.25 } );
-
+    const auto m = hud_metrics_now();
+    if( !m ) {
+        return std::nullopt;
     }
-
-    // Visual divider between body-part bars and resource bars.
-    out += "<div class=\"vitals-divider\"></div>";
-    // Stamina thin bar
-    {
-        const auto sta_cur = u.get_stamina();
-        const auto sta_max = u.get_stamina_max();
-        const auto hp = get_hp_bar( sta_cur, sta_max );
-        out += vbar_rml( { .cur = sta_cur, .max = sta_max, .fill = hp.second, .thin = true,
-                           .allow_crit = false, .text = string_format( "STA %d/%d", sta_cur, sta_max ),
-                           .id = "vbar_sta" } );
-        const double sta_norm = sta_max > 0 ? static_cast<double>( sta_cur ) / sta_max : 0.0;
-        hud_anim::feed( { .element_id = "vbar_sta", .spec_icon = "hud_vbar",
-                          .value = sta_norm, .is_critical = false } );
-    }
-
-    // Mana thin bar (only when magic is active)
-    if( u.magic->max_mana( u ) > 0 ) {
-        const auto mana_cur = u.magic->available_mana();
-        const auto mana_max = u.magic->max_mana( u );
-        out += vbar_rml( { .cur = mana_cur, .max = mana_max, .fill = mana_stat( u ).first, .thin = true,
-                           .allow_crit = false, .text = string_format( "MANA %d/%d", mana_cur, mana_max ),
-                           .id = "vbar_mana" } );
-        const double mana_norm = static_cast<double>( mana_cur ) / mana_max;
-        hud_anim::feed( { .element_id = "vbar_mana", .spec_icon = "hud_vbar",
-                          .value = mana_norm, .is_critical = false } );
-    }
-
-    return out;
+    return hud_phosphor::layout_for( {
+        .m = *m,
+        .sidebar_right = get_option<std::string>( "SIDEBAR_POSITION" ) == "right",
+        .log_lines = log_lines,
+        .show_vehicle = show_vehicle } );
 }
 
-
-/// Rich animated log: consumes recent_messages_rich(100), emits per-message
-/// RML rows with symbol + timestamp prefix, color attributes, and stable IDs
-/// for the animation system to target. Newest message last (chronological).
-auto hud_log( avatar & ) -> std::string
+/// GAME terminal rows covering `phosphor_rows` of the HUD's own cell grid.
+///
+/// The terrain viewport is carved in TERMY rows of `fontheight` PHYSICAL pixels;
+/// the HUD chose its cell from the RmlUi context in dp. The two grids are
+/// unrelated, so converting honestly means going back through the same dp ratio
+/// sidebar_hud_apply_rect divides by, then rounding UP — the carve must cover the
+/// strip, never merely approach it. Rounding down is the shipping bug this
+/// replaces: `TERMY * fontheight == 67 * 16 == 1072 != 1080` left an 8px sliver
+/// carved to black and painted by nobody.
+auto terminal_rows_for( const hud_phosphor::metrics &m, int phosphor_rows ) -> int
 {
-    std::string out;
-    const auto msgs = Messages::recent_messages_rich( 100 );
-    for( const Messages::rich_message &m : msgs ) {
-        // Symbol based on message type
-        const char *sym = "-";
-        switch( m.type ) {
-            case m_bad:
-                sym = "!";
-                break;
-            case m_good:
-                sym = "+";
-                break;
-            case m_warning:
-                sym = "^";
-                break;
-            default:
-                sym = "-";
-                break;
-        }
-
-        const std::string hex_color = nc_color_to_hex( m.color );
-        const std::string row_id = "log-" + std::to_string( m.seq );
-
-        out += "<div class=\"hud-log-entry\" id=\"" + row_id + "\" style=\"color:" + hex_color + "\">";
-        out += "<span class=\"hud-log-symbol\">" + std::string( sym ) + "</span>";
-        out += "<span class=\"hud-log-time\">" + rml_escape( m.time ) + "</span>";
-        out += "<span class=\"hud-log-text\">" + rml_escape( m.text ) + "</span>";
-        out += "</div>";
+    if( fontheight <= 0 ) {
+        return 0;
     }
-    return out;
+    const auto strip_px = phosphor_rows * m.cell_h * hud_dp_ratio();
+    return static_cast<int>( std::ceil( strip_px / fontheight ) );
 }
-
 } // namespace
-
-
-namespace
-{
-
-// Map chunk: 11×11 colored-text overmap minichunk centred on the avatar.
-// Square dimensions keep the avatar dead-centre and give a balanced view.
-// Rows are joined with "\n" inside a white-space:pre div.
-auto hud_map( avatar &u ) -> std::string
-{
-    const auto rows = overmap_ui::overmap_chunk_rows( u, u.abs_omt_pos(), 11, 11 );
-    return "<div class=\"hud-map\">" + join( rows, "\n" ) + "</div>";
-}
-
-// Qud top bar row 1: identity + conditions.
-auto hud_topbar( avatar &u ) -> std::string
-{
-    auto seg_id = colorize( u.get_name(), c_white );
-    const units::temperature temp = get_weather().get_temperature( u.abs_pos() );
-    seg_id += "  " + colorize( string_format( "T:%s", print_temperature( temp ) ),
-                               temp_color( temp ) );
-
-    auto seg_cond = std::string();
-    const auto append_cond = [&]( const std::pair<std::string, nc_color> &p ) {
-        if( !p.first.empty() ) {
-            if( !seg_cond.empty() ) {
-                seg_cond += "  ";
-            }
-            seg_cond += colorize( p.first, p.second );
-        }
-    };
-    append_cond( u.get_hunger_description() );
-    append_cond( u.get_thirst_description() );
-    append_cond( u.get_fatigue_description() );
-    append_cond( u.get_pain_description() );
-    if( u.weight_carried() > u.weight_capacity() ) {
-        if( !seg_cond.empty() ) {
-            seg_cond += "  ";
-        }
-        seg_cond += colorize( _( "Overburdened" ), c_red );
-    }
-
-    std::string result = "<div class=\"hud-segment\"><span class=\"seg-label\">ID</span> "
-                         + cata_text_to_rml( seg_id ) + "</div>"
-                         + "<div class=\"hud-segment hud-seg-cond\"><span class=\"seg-label\">COND</span> "
-                         + cata_text_to_rml( seg_cond ) + "</div>";
-
-    const auto &sess = coop_session::get();
-    if( sess.is_coop() ) {
-        std::string seg_coop;
-        const bool has_partner = !sess.is_host() ||
-                                 ( g->coop_server_ && g->coop_server_->has_client() );
-        if( !has_partner ) {
-            // Host is listening — no client connected yet
-            seg_coop = colorize( _( "[WAITING FOR PARTNER]" ), c_light_gray );
-        } else {
-            seg_coop = colorize( sess.partner_name, c_cyan );
-            // HP color: green > 66%, yellow > 33%, red <= 33%
-            const nc_color hp_col = sess.partner_hp_pct > 66 ? c_green
-                                    : sess.partner_hp_pct > 33 ? c_yellow : c_red;
-            seg_coop += " " + colorize( string_format( "HP:%d%%", sess.partner_hp_pct ), hp_col );
-            // Stamina
-            const nc_color sta_col = sess.partner_stamina_pct > 50 ? c_light_green : c_yellow;
-            seg_coop += " " + colorize( string_format( "STA:%d%%", sess.partner_stamina_pct ), sta_col );
-            // Activity
-            if( !sess.partner_activity_str.empty() ) {
-                seg_coop += " " + colorize( sess.partner_activity_str, c_light_blue );
-            }
-            // Ping
-            const int ping = sess.partner_ping_ms.load();
-            if( ping > 0 ) {
-                const nc_color ping_col = ping < 100 ? c_green : ping < 300 ? c_yellow : c_red;
-                seg_coop += " " + colorize( string_format( "%dms", ping ), ping_col );
-            }
-            // Direction arrow to partner when offscreen
-            const auto partner_delta = sess.partner_abs_pos - u.abs_pos();
-            const int dx = partner_delta.x();
-            const int dy = partner_delta.y();
-            if( std::abs( dx ) > 30 || std::abs( dy ) > 15 ) {
-                const char *arrow = "?";
-                if( std::abs( dx ) > std::abs( dy ) * 2 ) {
-                    arrow = dx > 0 ? "→" : "←";
-                } else if( std::abs( dy ) > std::abs( dx ) * 2 ) {
-                    arrow = dy > 0 ? "↓" : "↑";
-                } else if( dx > 0 ) {
-                    arrow = dy > 0 ? "↘" : "↗";
-                } else {
-                    arrow = dy > 0 ? "↙" : "↖";
-                }
-                seg_coop += " " + colorize( arrow, c_white );
-            }
-            // Reconnecting indicator
-            if( sess.is_host() && g->coop_server_ && g->coop_server_->awaiting_reconnect() ) {
-                seg_coop += " " + colorize( _( "[RECONNECTING]" ), c_yellow );
-            }
-        }
-        // Build RML
-        result += "<div class=\"hud-segment\"><span class=\"seg-label\">CO-OP</span> "
-                  + cata_text_to_rml( seg_coop ) + "</div>";
-    }
-
-    // Throw quick-slots
-    bool has_throw_slots = false;
-    for( int i = 0; i < avatar::MAX_THROW_SLOTS; ++i ) {
-        if( !u.is_throw_slot_empty( i ) ) {
-            has_throw_slots = true;
-            break;
-        }
-    }
-    if( has_throw_slots ) {
-        std::string seg_throw;
-        for( int i = 0; i < avatar::MAX_THROW_SLOTS; ++i ) {
-            const bool active = ( i == u.get_active_throw_slot() );
-            const bool empty = u.is_throw_slot_empty( i );
-            std::string slot_str;
-            if( empty ) {
-                slot_str = colorize( string_format( "[%d]---", i + 1 ), c_dark_gray );
-            } else {
-                const auto &type = u.get_throw_slot( i );
-                const int count = u.count_throwable( i );
-                const auto name = type->nname( 1 );
-                const nc_color col = active ? c_yellow : c_light_gray;
-                slot_str = colorize( string_format( "[%d]%s\u00d7%d", i + 1, name, count ), col );
-            }
-            seg_throw += ( i > 0 ? " " : "" ) + slot_str;
-        }
-        result += "<div class=\"hud-segment\"><span class=\"seg-label\">THROW</span> "
-                  + cata_text_to_rml( seg_throw ) + "</div>";
-    }
-
-    return result;
-}
-
-// Qud top bar row 2: stats + time/place.
-auto hud_topbar_row2( avatar &u ) -> std::string
-{
-    auto seg_stats = colorize( "STR:", c_light_gray ) +
-                     colorize( std::to_string( u.get_str() ), str_string( u ).first );
-    seg_stats += " " + colorize( "DEX:", c_light_gray ) +
-                 colorize( std::to_string( u.get_dex() ), dex_string( u ).first );
-    seg_stats += " " + colorize( "INT:", c_light_gray ) +
-                 colorize( std::to_string( u.get_int() ), int_string( u ).first );
-    seg_stats += " " + colorize( "PER:", c_light_gray ) +
-                 colorize( std::to_string( u.get_per() ), per_string( u ).first );
-    seg_stats += "  " + colorize( "SPD:", c_light_gray ) +
-                 colorize( std::to_string( u.get_speed() ), value_color( u.get_speed() ) );
-    seg_stats += "  " + colorize( "FOC:", c_light_gray ) +
-                 colorize( std::to_string( u.focus_pool ), focus_color( u.focus_pool ) );
-
-    auto seg_time = std::string();
-    if( u.has_watch() ) {
-        seg_time += colorize( to_string_time_of_day( calendar::turn ), c_light_gray );
-    } else if( g->get_levz() >= 0 ) {
-        seg_time += colorize( time_approx(), c_light_gray );
-    } else {
-        seg_time += colorize( "???", c_light_gray );
-    }
-    seg_time += string_format( ", day %d of %s",
-                               day_of_season<int>( calendar::turn ) + 1,
-                               calendar::name_season( season_of_year( calendar::turn ) ) );
-    seg_time += " :: " +
-                colorize( ACTIVE_OVERMAP_BUFFER.ter( u.abs_omt_pos() )->get_name(), c_white );
-    if( g->get_levz() < 0 ) {
-        seg_time += colorize( string_format( " %dd deep", -g->get_levz() ), c_dark_gray );
-    }
-
-    return "<div class=\"hud-segment\"><span class=\"seg-label\">STAT</span> "
-           + cata_text_to_rml( seg_stats ) + "</div>"
-           + "<div class=\"hud-segment\"><span class=\"seg-label\">TIME</span> "
-           + cata_text_to_rml( seg_time ) + "</div>";
-}
-
-
-// Qud bottom bar: EFFECTS (left) + TARGET with inline HP bar + weapon + SAFE/HOSTILES (right).
-auto hud_botbar( avatar &u ) -> std::string
-{
-    // --- Left: EFFECTS list ---
-    const auto effects = character_display::effect_name_and_text( u );
-    auto left = std::string( _( "EFFECTS:" ) ) + " ";
-    auto effects_rml = std::string(); // raw RML appended after cata_text_to_rml(left)
-    if( effects.empty() ) {
-        left += colorize( _( "none" ), c_dark_gray );
-    } else {
-        constexpr size_t max_shown = 8;
-        // Build raw RML directly — inner <span id="status-*"> wrappers for
-        // Phase 7 animation targets would be escaped by colorize/cata_text_to_rml.
-        const auto gray_hex = nc_color_to_hex( c_light_gray );
-        auto joined = std::string();
-        auto first = true;
-        for( const auto &effect : effects | std::views::take( max_shown ) ) {
-            if( !first ) {
-                joined += " :: ";
-            }
-            first = false;
-            std::string spec_key;
-            if( effect.first.find( _( "Poison" ) ) != std::string::npos ) {
-                spec_key = "poison";
-            } else if( effect.first.find( _( "On Fire" ) ) != std::string::npos
-                       || effect.first.find( _( "Burning" ) ) != std::string::npos ) {
-                spec_key = "fire";
-            } else if( effect.first.find( _( "Bleeding" ) ) != std::string::npos ) {
-                spec_key = "bleed";
-            } else if( effect.first.find( _( "Irradiated" ) ) != std::string::npos
-                       || effect.first.find( _( "Radiation" ) ) != std::string::npos ) {
-                spec_key = "rad";
-            }
-            if( !spec_key.empty() ) {
-                joined += "<span id=\"status-" + spec_key + "\">"
-                          + rml_escape( effect.first ) + "</span>";
-            } else {
-                joined += rml_escape( effect.first );
-            }
-        }
-        if( effects.size() > max_shown ) {
-            joined += rml_escape(
-                          string_format( " (+%d)", static_cast<int>( effects.size() - max_shown ) ) );
-        }
-        effects_rml = "<span style=\"color:" + gray_hex + ";\">" + joined + "</span>";
-    }
-    // Feed status effect animations (Phase 7): map effect names to animation specs.
-    {
-        const auto feed_status_anim = [&]( const std::string & spec ) {
-            hud_anim::feed( { .element_id = "status-" + spec, .spec_icon = "status_" + spec,
-                              .value = 1.0, .is_critical = false } );
-        };
-        for( const auto &[nm, desc] : effects ) {
-            if( nm.find( _( "Poison" ) ) != std::string::npos ) {
-                feed_status_anim( "poison" );
-            }
-            if( nm.find( _( "On Fire" ) ) != std::string::npos ||
-                nm.find( _( "Burning" ) ) != std::string::npos ) {
-                feed_status_anim( "fire" );
-            }
-            if( nm.find( _( "Bleeding" ) ) != std::string::npos ) {
-                feed_status_anim( "bleed" );
-            }
-            if( nm.find( _( "Radiation" ) ) != std::string::npos ||
-                nm.find( _( "Irradiated" ) ) != std::string::npos ) {
-                feed_status_anim( "rad" );
-            }
-        }
-    }
-
-    // --- Middle: TARGET with inline HP bar ---
-    auto middle_text = std::string();
-    auto middle_rml = std::string();
-    const auto target_ptr = u.last_target.lock();
-    if( const Creature *t = target_ptr.get() ) {
-        const std::string disp_name = t->disp_name();
-        const auto &att = Creature::get_attitude_ui_data( t->attitude_to( u ) );
-        const int t_hp = t->get_hp();
-        const int t_hp_max = std::max( t->get_hp_max(), 1 );
-        const int pct = std::clamp( t_hp * 100 / t_hp_max, 0, 100 );
-        const std::string hp_hex = nc_color_to_hex( get_hp_bar( t_hp, t_hp_max ).second );
-
-        middle_text += colorize( "TARGET:", c_light_gray ) + " " +
-                       colorize( disp_name, t->basic_symbol_color() ) + " [" +
-                       colorize( att.first.translated(), att.second ) + "] ";
-        // Inline HP bar: raw RML kept separate from colorize() output
-        middle_rml += string_format(
-                          R"(<span class="tbar"><span class="tbar-fill" style="width:%d%%;background-color:%s;"></span></span>)",
-                          pct, hp_hex );
-        middle_rml += " " + std::to_string( t_hp );
-    }
-
-    // --- Right: weapon + SAFE + HOSTILES ---
-    auto right = std::string();
-    right += colorize( character_funcs::fmt_wielded_weapon( u ), c_light_gray ) + "  ";
-    right += colorize( move_mode_string( u ), move_mode_color( u ) ) + "  ";
-    const auto hostiles = u.get_mon_visible().nearby_hostile_count;
-    right += colorize( _( "SAFE" ), safe_color() ) + ": " +
-             colorize( std::to_string( hostiles ),
-                       hostiles > 0 ? c_red : c_dark_gray );
-
-    // Assemble: left span (via cata_text_to_rml) + middle text (via cata_text_to_rml) +
-    // middle raw RML (tbar) + right span (via cata_text_to_rml)
-    std::string out = "<span class=\"strip-left\">" + cata_text_to_rml( left ) + effects_rml +
-                      "</span>";
-    if( !middle_text.empty() ) {
-        out += " " + cata_text_to_rml( middle_text ) + " " + middle_rml;
-    }
-    out += "<span class=\"strip-right\">" + cata_text_to_rml( right ) + "</span>";
-    return out;
-}
-
-// Qud ability-bar hotbar: real CBN keybinds, one slot per bound action.
-auto hud_hotbar( avatar & ) -> std::string
-{
-    constexpr std::array<action_id, 9> acts = {
-        ACTION_FIRE, ACTION_RELOAD_WIELDED, ACTION_TOGGLE_RUN,
-        ACTION_TOGGLE_CROUCH, ACTION_WAIT, ACTION_PICKUP,
-        ACTION_CRAFT, ACTION_INVENTORY, ACTION_MAP,
-    };
-    constexpr std::array<const char *, 9> labels = {
-        "Fire", "Reload", "Run", "Crouch", "Wait", "Pick Up", "Craft", "Inventory", "Map",
-    };
-
-    input_context ctxt = get_default_mode_input_context();
-    std::string out;
-    for( int i = 0; i < 9; ++i ) {
-        const std::string key = ctxt.get_desc( action_ident( acts[i] ), true );
-        if( key.empty() ) {
-            continue;
-        }
-        if( !out.empty() ) {
-            out += " ";
-        }
-        out += "[" + colorize( key, c_yellow ) + "] " +
-               colorize( std::string( " " ) + _( labels[i] ) + " ", c_light_gray );
-    }
-    return out;
-}
-
-// Vehicle HUD panel: compact driving info shown when controlling a vehicle.
-// Positioned top-right below the topbar, adjacent to the dock/side panel.
-// *INDENT-OFF*
-auto hud_vehicle( avatar &u ) -> std::string
-{
-    if( !u.controlling_vehicle ) {
-        return std::string();
-    }
-    vehicle *veh = veh_pointer_or_null( get_map().veh_at( u.bub_pos() ) );
-    if( veh == nullptr ) {
-        return std::string();
-    }
-
-    // --- Row 1: Vehicle name + heading ---
-    // Compass direction from face tileray (dir8: 0=E,1=SE,2=S,3=SW,4=W,5=NW,6=N,7=NE)
-    static constexpr std::array<const char *, 8> compass = { "E", "SE", "S", "SW", "W", "NW", "N", "NE" };
-    const int d8 = veh->face.dir8();
-    const char *heading = ( d8 >= 0 && d8 < 8 ) ? compass[d8] : "?";
-
-    std::string out = "<div class=\"veh-row\">";
-    out += "<span class=\"veh-name\">" + rml_escape( veh->name ) + "</span>";
-    out += "<span class=\"veh-heading\">" + cata_text_to_rml(
-               colorize( heading, c_white ) ) + "</span>";
-    out += "</div>";
-
-    // --- Row 2: Speed ---
-    const int cur_vel = veh->velocity;             // cm/s
-    const int safe_vel = veh->safe_velocity();     // cm/s
-    const int max_vel = veh->max_velocity();       // cm/s
-    const int abs_vel = std::abs( cur_vel );
-
-    const auto vel_to_display = []( int v ) -> int {
-        return static_cast<int>( convert_velocity( std::abs( v ), VU_VEHICLE ) );
-    };
-
-    // Color: green if under safe, yellow if safe..max, red if over max
-    nc_color spd_color = c_dark_gray;
-    if( abs_vel > 0 ) {
-        if( abs_vel <= safe_vel ) {
-            spd_color = c_green;
-        } else if( abs_vel <= max_vel ) {
-            spd_color = c_yellow;
-        } else {
-            spd_color = c_red;
-        }
-    }
-
-    const std::string vel_units = velocity_units( VU_VEHICLE );
-    const std::string spd_str = string_format( "%d", vel_to_display( cur_vel ) );
-    const std::string max_str = string_format( "%d", vel_to_display( max_vel ) );
-
-    out += "<div class=\"veh-row\">";
-    out += cata_text_to_rml(
-               colorize( _( "SPD" ), c_dark_gray ) + " " +
-               colorize( spd_str, spd_color ) +
-               colorize( "/" + max_str + " " + vel_units, c_dark_gray ) );
-
-    // Cruise control
-    if( veh->cruise_on && veh->cruise_velocity != 0 ) {
-        const std::string cruise_str = string_format( "%d", vel_to_display( veh->cruise_velocity ) );
-        out += " " + cata_text_to_rml(
-                   colorize( _( "CRU" ), c_dark_gray ) + " " +
-                   colorize( cruise_str, c_cyan ) );
-    }
-    out += "</div>";
-
-    // --- Row 3: Engine + status flags ---
-    out += "<div class=\"veh-row\">";
-    out += cata_text_to_rml(
-               colorize( _( "ENG" ), c_dark_gray ) + " " +
-               colorize( veh->engine_on ? _( "ON" ) : _( "OFF" ),
-                         veh->engine_on ? c_green : c_red ) );
-
-    if( veh->velocity != 0 && std::abs( veh->velocity ) > veh->safe_velocity() ) {
-        out += " " + cata_text_to_rml( colorize( _( "!UNSAFE!" ), c_red ) );
-    }
-    if( veh->cruise_on ) {
-        out += " " + cata_text_to_rml( colorize( _( "CRUISE" ), c_cyan ) );
-    }
-    if( veh->autopilot_on ) {
-        out += " " + cata_text_to_rml( colorize( _( "AUTO" ), c_yellow ) );
-    }
-    if( veh->is_alarm_on ) {
-        out += " " + cata_text_to_rml( colorize( _( "ALARM" ), c_red ) );
-    }
-    if( veh->camera_on ) {
-        out += " " + cata_text_to_rml( colorize( _( "CAM" ), c_light_green ) );
-    }
-    out += "</div>";
-
-    // --- Row 4+: Fuel gauges ---
-    const auto fuels = veh->fuels_left();
-    if( fuels.empty() ) {
-        return out;
-    }
-    out += "<div class=\"veh-fuels\">";
-    for( const auto &[fuel_id, amount] : fuels ) {
-        const int capacity = veh->fuel_capacity( fuel_id );
-        if( capacity <= 0 ) {
-            continue;
-        }
-        const int pct = std::clamp( amount * 100 / capacity, 0, 100 );
-        const std::string fuel_name = item::nname( fuel_id, 1 );
-        const nc_color fuel_color = pct > 50 ? c_green
-                                    : pct > 20 ? c_yellow : c_red;
-        const std::string fuel_hex = nc_color_to_hex( fuel_color );
-
-        out += "<div class=\"veh-fuel-row\">";
-        out += "<span class=\"veh-fuel-label\">" + rml_escape( fuel_name ) + "</span>";
-        out += string_format(
-                   R"(<span class="veh-fuel-bar"><span class="veh-fuel-fill" style="width:%d%%;background-color:%s;"></span></span>)",
-                   pct, fuel_hex );
-        out += "<span class=\"veh-fuel-pct\">" + cata_text_to_rml(
-                   colorize( string_format( "%d%%", pct ), fuel_color ) ) + "</span>";
-        out += "</div>";
-    }
-    out += "</div>";
-    return out;
-}
-// *INDENT-ON*
-
-} // namespace
-
-// Sticky autoscroll: true = snap to bottom on new messages.
-static bool g_hud_log_sticky = true;
-// Previous log window seq range for pruning stale animation keys.
-static std::pair<unsigned, unsigned> g_hud_log_prev_seq = { 0, 0 };
 
 
 bool &sidebar_hud_rmlui_enabled()
 {
-    // Default ON (Tier 7 Phase-1 MVP flip, 2026-06-20): the flex-column HUD covers every
-    // text panel; remaining slots (minimap/bodygraph/full-compass/val_*) show visible
-    // [name] placeholders until phase 2. Toggle via the F4 panel for an A/B vs curses.
+    // Default ON. The phosphor HUD is the only sidebar renderer — the curses panel
+    // loop is gone — so this toggle is an A/B for the RmlUi layer itself, not a
+    // fallback to a second implementation. Flipped from the F4 panel.
     static bool enabled = true;
     return enabled;
 }
@@ -1383,22 +726,21 @@ void sidebar_hud_open()
     if( !c ) {
         return;
     }
-    // Fixed-region model: bind each string directly.
+    // Fixed-region model: bind each string directly. Nine fields and no others —
+    // the two static titles the old model carried are gone, because the producers
+    // now interrupt their own rules with them.
     g_hud_data = std::make_unique<hud_rml_model>();
-    c.Bind( "topbar_rml", &g_hud_data->topbar_rml );
-    c.Bind( "topbar_row2_rml", &g_hud_data->topbar_row2_rml );
-    c.Bind( "vitals_rml", &g_hud_data->vitals_rml );
-    c.Bind( "minimap_rml", &g_hud_data->minimap_rml );
-    c.Bind( "minimap_title", &g_hud_data->minimap_title );
+    c.Bind( "status_row1_rml", &g_hud_data->status_row1_rml );
+    c.Bind( "status_row2_rml", &g_hud_data->status_row2_rml );
+    c.Bind( "status_rule_rml", &g_hud_data->status_rule_rml );
+    c.Bind( "soma_rml", &g_hud_data->soma_rml );
+    c.Bind( "radar_rml", &g_hud_data->radar_rml );
+    c.Bind( "dock_rml", &g_hud_data->dock_rml );
     c.Bind( "log_rml", &g_hud_data->log_rml );
-    c.Bind( "log_title", &g_hud_data->log_title );
-    c.Bind( "botbar_rml", &g_hud_data->botbar_rml );
-    c.Bind( "hotbar_rml", &g_hud_data->hotbar_rml );
+    c.Bind( "keys_rule_rml", &g_hud_data->keys_rule_rml );
+    c.Bind( "keys_rml", &g_hud_data->keys_rml );
     c.Bind( "veh_rml", &g_hud_data->veh_rml );
     g_hud_data->handle = c.GetModelHandle();
-    // Static dock headers — set once, no DirtyVariable needed.
-    g_hud_data->minimap_title = Rml::String( to_upper_case( _( "Minimap" ) ) );
-    g_hud_data->log_title = Rml::String( to_upper_case( _( "Log" ) ) );
     // passive=true: render-only HUD — it must not capture in-game world mouse
     // (look/examine). See rmlui_layer::any_interactive_open / process_event.
     Rml::ElementDocument *doc =
@@ -1415,216 +757,191 @@ void sidebar_hud_open()
     g->mark_main_ui_adaptor_resize();
 }
 
-// Position all HUD regions absolutely. Called every sync so it tracks resize.
-// The dock owns the whole sidebar column, edge to edge vertically: the strips are
-// narrowed to clear it, so anything the dock does NOT cover on its own column is
-// bare cleared black — which is exactly what the top-right and bottom-right
-// corners used to be (with the ambient HUD particles drifting across them).
-static void sidebar_hud_apply_rect()
+namespace
 {
-    if( g_hud_doc == nullptr || TERMX <= 0 || TERMY <= 0 ) {
+
+/// Place every region on the phosphor cell grid, and pin the document's cell size.
+///
+/// Takes the frame's layout rather than recomputing one, so a region's rect and
+/// the glyph rows inside it can never come from different grids.
+///
+/// There is not one percentage and not one pixel constant below: every value
+/// flows from `layout_for` through `hud_phosphor::to_dp` and out via `rml::dp`.
+/// Mixing percentage and cell geometry is exactly what put the shipping hotbar
+/// 6.34dp off the bottom of the screen with a 6.36dp overlap onto the bar above
+/// it.
+auto sidebar_hud_apply_rect( const hud_phosphor::layout &l ) -> void
+{
+    if( g_hud_doc == nullptr ) {
         return;
     }
+    const auto place = [&l]( const char *id, const hud_phosphor::cell_rect &c ) {
+        Rml::Element *el = g_hud_doc->GetElementById( id );
+        if( el == nullptr ) {
+            return;
+        }
+        const auto r = hud_phosphor::to_dp( l.m, c );
+        el->SetProperty( "left", rml::dp( r.x ) );
+        el->SetProperty( "top", rml::dp( r.y ) );
+        el->SetProperty( "width", rml::dp( r.w ) );
+        el->SetProperty( "height", rml::dp( r.h ) );
+    };
+    place( "hud-status", l.status );
+    place( "hud-soma", l.soma );
+    place( "hud-radar", l.radar );
+    place( "hud-dock", l.dock );
+    place( "hud-log", l.log );
+    place( "hud-keys", l.keys );
+    place( "hud-vehicle", l.vehicle );
 
-    // Sidebar column width — needed first so topbar/botbar/hotbar can be narrowed.
-    // panel_manager is the single source: update_offsets() feeds it the active
-    // layout's sidebar width, and the map viewport is carved with the same value.
-    const bool sidebar_right = get_option<std::string>( "SIDEBAR_POSITION" ) == "right";
-    const int width_left = panel_manager::get_manager().get_width_left();
-    const int width_right = panel_manager::get_manager().get_width_right();
-    const float width_left_pct = 100.0f * width_left / TERMX;
-    const float width_right_pct = 100.0f * width_right / TERMX;
-    const float dock_width_pct = sidebar_right ? width_right_pct : width_left_pct;
-    const float bar_width_pct = 100.0f - dock_width_pct;
-    const std::string bar_left = sidebar_right
-                                 ? "0%"
-                                 : rml::pct( dock_width_pct );
-
-    const float top_rows_pct = 100.0f * sidebar_hud_top_rows() / TERMY;
-    // Top bar: auto height, narrowed to avoid dock.
-    if( Rml::Element *el = g_hud_doc->GetElementById( "hud-topbar" ) ) {
-        el->SetProperty( "left", bar_left );
-        el->SetProperty( "top", "0%" );
-        el->SetProperty( "width", rml::pct( bar_width_pct ) );
-        el->SetProperty( "height", "auto" );
-    }
-
-    // Bottom rows: botbar + hotbar, narrowed to avoid dock.
-    const float bottom_rows_pct = 100.0f * sidebar_hud_bottom_rows() / TERMY;
-    const float half_bottom_pct = bottom_rows_pct / 2.0f;
-    if( Rml::Element *el = g_hud_doc->GetElementById( "hud-botbar" ) ) {
-        el->SetProperty( "left", bar_left );
-        el->SetProperty( "top", rml::pct( 100.0f - bottom_rows_pct ) );
-        el->SetProperty( "width", rml::pct( bar_width_pct ) );
-        el->SetProperty( "height", "auto" );
-    }
-    if( Rml::Element *el = g_hud_doc->GetElementById( "hud-hotbar" ) ) {
-        el->SetProperty( "left", bar_left );
-        el->SetProperty( "top", rml::pct( 100.0f - half_bottom_pct ) );
-        el->SetProperty( "width", rml::pct( bar_width_pct ) );
-        el->SetProperty( "height", "auto" );
-    }
-
-    // Vitals overlay: top-left of the viewport area.
-    if( Rml::Element *el = g_hud_doc->GetElementById( "hud-vitals" ) ) {
-        el->SetProperty( "left", rml::pct( width_left_pct ) );
-        el->SetProperty( "top", rml::pct( top_rows_pct + 1.0f ) );
-    }
-
-    // Vehicle HUD: top-right of the viewport, just below the topbar, next to the dock.
-    if( Rml::Element *el = g_hud_doc->GetElementById( "hud-vehicle" ) ) {
-        // Position it on the viewport side adjacent to the dock, just inside the
-        // viewport edge. Mirror vitals: vitals is top-left, vehicle is top-right
-        // (or the opposite when sidebar is on the left).
-        const float veh_right_pct = sidebar_right ? dock_width_pct : 0.0f;
-        el->SetProperty( "right", rml::pct( veh_right_pct ) );
-        el->SetProperty( "top", rml::pct( top_rows_pct + 1.0f ) );
-    }
-
-    // Dock: the full-height sidebar column, pinned to the sidebar edge. Its width
-    // comes from panel_manager (the same value the map viewport is carved with and
-    // the value the strips are narrowed by), so column and strips always meet.
-    if( Rml::Element *el = g_hud_doc->GetElementById( "hud-dock" ) ) {
-        el->SetProperty( "left", rml::pct( sidebar_right ? 100.0f - dock_width_pct : 0.0f ) );
-        el->SetProperty( "top", "0%" );
-        el->SetProperty( "width", rml::pct( dock_width_pct ) );
-        el->SetProperty( "height", "100%" );
-    }
+    // The cell size is only knowable here — RCSS cannot see the context, and both
+    // the stylesheet and the document deliberately omit a font size so this stays
+    // the single source. line-height is pinned to the cell height so box-drawing
+    // stems abut between rows and the frame corners actually close.
+    g_hud_doc->SetProperty( "font-size", rml::dp( l.m.font_size ) );
+    g_hud_doc->SetProperty( "line-height", rml::dp( l.m.cell_h ) );
 }
+
+} // namespace
 
 void sidebar_hud_sync( avatar &u )
 {
     if( g_hud_doc == nullptr || !g_hud_data ) {
         return;
     }
-    // Fixed-region Qud layout: fill each region string from its producer,
-    // dirty the variable, and reposition rects.
-    g_hud_data->topbar_rml = hud_topbar( u );
-    g_hud_data->handle.DirtyVariable( "topbar_rml" );
-    g_hud_data->topbar_row2_rml = hud_topbar_row2( u );
-    g_hud_data->handle.DirtyVariable( "topbar_row2_rml" );
 
-    g_hud_data->vitals_rml = hud_vitals( u );
-    g_hud_data->handle.DirtyVariable( "vitals_rml" );
-
-    g_hud_data->minimap_rml = hud_map( u );
-    // Detect HP decrease for screen shake (Phase 4).
+    // Screen shake + damage vignette on an HP decrease, sampled before anything is
+    // built so a hit registers on the frame it lands.
     {
         int total_hp = 0;
         for( const bodypart_id &bp : u.get_all_body_parts( true ) ) {
             total_hp += u.get_part_hp_cur( bp );
         }
-        static int prev_total_hp = -1;
-        if( prev_total_hp >= 0 && total_hp < prev_total_hp ) {
-            const int dmg = prev_total_hp - total_hp;
-            const int max_hp = u.get_hp_max();
-            const float intensity = std::clamp( static_cast<float>( dmg ) / max_hp, 0.0f, 1.0f );
+        // `g_hud_prev_total_hp` lives at file scope, not as a function-local static,
+        // precisely so `sidebar_hud_close()` can reset it alongside the log state.
+        // As a local static it survived the HUD closing, so loading a character with
+        // less total HP than the previous one read as damage and fired a spurious
+        // screen shake and damage vignette on the first synced frame.
+        if( g_hud_prev_total_hp >= 0 && total_hp < g_hud_prev_total_hp ) {
+            const auto dmg = g_hud_prev_total_hp - total_hp;
+            const auto max_hp = u.get_hp_max();
+            const auto intensity = std::clamp( static_cast<float>( dmg ) / max_hp, 0.0f, 1.0f );
             hud_shake::trigger( intensity );
             hud_anim::feed( { .element_id = "hud-vignette", .spec_icon = "hud_vignette",
                               .value = intensity, .is_critical = false } );
         }
-        prev_total_hp = total_hp;
-    }
-    // Environmental HUD tinting (Phase 6): apply CSS classes based on conditions.
-    {
-        const auto apply_env_classes = [&]( const char *id ) {
-            Rml::Element *el = g_hud_doc->GetElementById( id );
-            if( el == nullptr ) {
-                return;
-            }
-            // Night: desaturate HUD (21:00 - 06:00)
-            const int hour = hour_of_day<int>( calendar::turn );
-            const bool is_night = hour >= 21 || hour < 6;
-            el->SetClass( "env-night", is_night );
-
-            // Radiation: green tint
-            const bool irradiated = u.get_rad() > 0.0f;
-            el->SetClass( "env-rad", irradiated );
-
-            // Cold: blue tint (< 0°C)
-            const units::temperature temp = get_weather().get_temperature( u.abs_pos() );
-            const bool cold = units::to_celsius( temp ) < 0.0f;
-            el->SetClass( "env-cold", cold );
-
-            // Fire proximity: warm tint (radius 3 matches warmth radius)
-            const bool near_fire = get_map().has_nearby_fire( u.bub_pos(), 3 );
-            el->SetClass( "env-fire", near_fire );
-
-            // Storm: shake/vignette modulation
-            const auto &wid = get_weather().weather_id;
-            const bool is_storm = wid == weather_type_id( "thunder" )
-                                  || wid == weather_type_id( "lightning" );
-            el->SetClass( "env-storm", is_storm );
-        };
-        apply_env_classes( "hud-topbar" );
-        apply_env_classes( "hud-botbar" );
-        apply_env_classes( "hud-dock" );
-        apply_env_classes( "hud-vitals" );
-        apply_env_classes( "hud-vehicle" );
-    }
-    g_hud_data->handle.DirtyVariable( "minimap_rml" );
-
-    // Sticky autoscroll: check if user is at bottom BEFORE rebuilding content.
-    {
-        Rml::Element* lb = g_hud_doc->GetElementById( "hud-log-body" );
-        if( lb != nullptr ) {
-            const float st = lb->GetScrollTop();
-            const float ch = lb->GetClientHeight();
-            const float sh = lb->GetScrollHeight();
-            g_hud_log_sticky = ( st + ch >= sh - 4.0f );
-        }
+        g_hud_prev_total_hp = total_hp;
     }
 
-    // Feed log row animations and prune stale keys.
-    const auto prev_log_seq = g_hud_log_prev_seq;
-    {
-        const auto msgs = Messages::recent_messages_rich( 100 );
-        unsigned cur_min = 0, cur_max = 0;
-        if( !msgs.empty() ) {
-            cur_min = msgs.front().seq;
-            cur_max = msgs.back().seq;
-        }
-        // Forget keys that dropped out of the window.
-        if( g_hud_log_prev_seq.first > 0 ) {
-            for( unsigned s = g_hud_log_prev_seq.first; s < g_hud_log_prev_seq.second; ++s ) {
-                if( s < cur_min || s > cur_max ) {
-                    hud_anim::forget( "log-" + std::to_string( s ) );
-                }
+    // The log window drives both the row animations and the log region's height,
+    // so it is read before the layout is built.
+    auto msgs = Messages::recent_messages_rich( hud_log_max_rows );
+
+    // ONE layout per frame, shared by every producer and by the rect writer. The
+    // status rule's `┼` crossings, the log rule's `┬`/`┐` and the keys rule's two
+    // `┴` are all placed from l.soma / l.dock / l.log, and they only meet if
+    // nobody recomputes the grid underneath them.
+    //
+    // Bail BEFORE any log tracking state moves. A degenerate context (minimised
+    // window, RmlUi mid-resize) fails here, and advancing the seq window on such a
+    // frame would leave the next successful frame with a matching range, a matching
+    // tail and a matching width — so the messages that arrived meanwhile would
+    // never be drawn at all.
+    const auto frame_layout = hud_layout_now( static_cast<int>( msgs.size() ),
+                              u.controlling_vehicle );
+    if( !frame_layout ) {
+        return;
+    }
+    const hud_phosphor::layout &l = *frame_layout;
+
+    // `log_lines` is a REQUEST, not a grant. On a short viewport layout_for makes
+    // the log give up rows before any other region, so the well can come back
+    // narrower than it was asked for — and its first row is the titled rule, not a
+    // message. Clip to what was actually granted before anything reads the window,
+    // so the animation keys, the rebuild guard and the rendered rows all describe
+    // the same set of messages and the log cannot overrun its region.
+    const auto granted = static_cast<std::size_t>( std::max( 0, l.log.rows - 1 ) );
+    if( msgs.size() > granted ) {
+        // Drop the OLDEST: recent_messages_rich yields chronologically, so the
+        // newest message is at the back and must always survive the clip.
+        msgs.erase( msgs.begin(),
+                    msgs.begin() + static_cast<std::ptrdiff_t>( msgs.size() - granted ) );
+    }
+
+    const auto prev_seq = g_hud_log_prev_seq;
+    const unsigned cur_min = msgs.empty() ? 0u : msgs.front().seq;
+    const unsigned cur_max = msgs.empty() ? 0u : msgs.back().seq;
+    // Forget keys that dropped out of the window.
+    if( prev_seq.first > 0 ) {
+        for( unsigned s = prev_seq.first; s < prev_seq.second; ++s ) {
+            if( s < cur_min || s > cur_max ) {
+                hud_anim::forget( "log-" + std::to_string( s ) );
             }
         }
-        // Feed current rows.
+    }
+    // Feed only rows we have not seen before. hud_log_entry is an `ambient` spec,
+    // which sidebar_anim starts exactly once per key, so feeding the whole window
+    // would slide-and-fade every row the first time the HUD opens.
+    // `prev_seq.second == 0` is that first sync: prime the range, animate nothing.
+    if( prev_seq.second != 0 ) {
         for( const Messages::rich_message &m : msgs ) {
-            hud_anim::feed( { .element_id = "log-" + std::to_string( m.seq ), .spec_icon = "hud_log_entry" } );
+            if( m.seq > prev_seq.second ) {
+                hud_anim::feed( { .element_id = "log-" + std::to_string( m.seq ),
+                                  .spec_icon = "hud_log_entry" } );
+            }
         }
-        g_hud_log_prev_seq = { cur_min, cur_max };
     }
+    g_hud_log_prev_seq = { cur_min, cur_max };
 
-    if( g_hud_log_prev_seq != prev_log_seq ) {
-        g_hud_data->log_rml = hud_log( u );
+    g_hud_data->status_row1_rml = hud_status_row1( u, l );
+    g_hud_data->handle.DirtyVariable( "status_row1_rml" );
+    g_hud_data->status_row2_rml = hud_status_row2( u, l );
+    g_hud_data->handle.DirtyVariable( "status_row2_rml" );
+    g_hud_data->status_rule_rml = hud_status_rule( l );
+    g_hud_data->handle.DirtyVariable( "status_rule_rml" );
+
+    g_hud_data->soma_rml = hud_soma( u, l );
+    g_hud_data->handle.DirtyVariable( "soma_rml" );
+    g_hud_data->dock_rml = hud_dock( u, l );
+    g_hud_data->handle.DirtyVariable( "dock_rml" );
+    g_hud_data->radar_rml = hud_radar_frame( l );
+    g_hud_data->handle.DirtyVariable( "radar_rml" );
+
+    g_hud_data->keys_rule_rml = hud_keys_rule( l );
+    g_hud_data->handle.DirtyVariable( "keys_rule_rml" );
+    g_hud_data->keys_rml = hud_keys( u, l );
+    g_hud_data->handle.DirtyVariable( "keys_rml" );
+
+    // The log is the one region worth guarding, because it is the one rebuilt from
+    // a snapshot rather than from live state. Rebuild when the window moved, when
+    // the newest row's TEXT changed (a repeated message coalesces into the existing
+    // entry, so the seq range never notices the "x N" suffix get_with_count() bakes
+    // in), or when a resize changed the width every row is padded to.
+    const auto tail = msgs.empty() ? std::string() : msgs.back().text;
+    if( g_hud_log_prev_seq != prev_seq || tail != g_hud_log_prev_tail
+        || l.log.cols != g_hud_log_prev_cols ) {
+        g_hud_log_prev_tail = tail;
+        g_hud_log_prev_cols = l.log.cols;
+        g_hud_data->log_rml = hud_log_rows( msgs, l );
         g_hud_data->handle.DirtyVariable( "log_rml" );
     }
 
-    // Snap scroll to bottom if sticky.
-    if( g_hud_log_sticky && g_hud_doc != nullptr ) {
-        if( Rml::Element * lb = g_hud_doc->GetElementById( "hud-log-body" ) ) {
-            lb->SetScrollTop( lb->GetScrollHeight() );
-        }
-    }
-
-    g_hud_data->botbar_rml = hud_botbar( u );
-    g_hud_data->handle.DirtyVariable( "botbar_rml" );
-
-    g_hud_data->hotbar_rml = hud_hotbar( u );
-    g_hud_data->handle.DirtyVariable( "hotbar_rml" );
-
-    // Vehicle HUD: only visible when controlling a vehicle.
-    g_hud_data->veh_rml = hud_vehicle( u );
+    // Vehicle panel: content every frame, visibility toggled here. layout_for
+    // already hands it an empty rect when not driving, but `display` is what keeps
+    // its translucent ground off the terrain.
+    g_hud_data->veh_rml = hud_veh_panel( u, l );
     g_hud_data->handle.DirtyVariable( "veh_rml" );
     if( Rml::Element *el = g_hud_doc->GetElementById( "hud-vehicle" ) ) {
         el->SetProperty( "display", u.controlling_vehicle ? "block" : "none" );
     }
 
-    sidebar_hud_apply_rect();
+    sidebar_hud_apply_rect( l );
+
+    // The dot layer, queued into the main adaptor's UI slice. It must run after
+    // the rect writer so the region it draws into is the one the document just
+    // moved to, and it must run from here rather than from game::draw so that the
+    // layout it reads is the same object every producer above read.
+    hud_radar::draw( u, l );
 }
 
 void sidebar_hud_close()
@@ -1638,6 +955,14 @@ void sidebar_hud_close()
     }
     g_hud_doc = nullptr;
     hud_anim::clear();
+    // Reset alongside hud_anim: the seq range is what tells the next sync which
+    // rows are new. Messages::deserialize re-stamps every loaded message from the
+    // still-monotonic global counter, so a stale range left here would make the
+    // whole window look new after a save load and fire an entry tween per row.
+    g_hud_log_prev_seq = { 0, 0 };
+    g_hud_log_prev_tail.clear();
+    g_hud_log_prev_cols = 0;
+    g_hud_prev_total_hp = -1;
     g_hud_data.reset();
     // Closing the HUD releases the carved top/bottom chrome strips — the terrain
     // viewport must reclaim the full height.
@@ -1647,17 +972,37 @@ void sidebar_hud_close()
 bool sidebar_hud_active()
 {
     // True iff the HUD doc is open → game::draw_panels suppresses the WHOLE curses
-    // sidebar (the column owns the entire region). Replaces the per-panel owns_panel gate.
+    // sidebar. Replaces the per-panel owns_panel gate.
     return g_hud_doc != nullptr;
 }
 int sidebar_hud_top_rows()
 {
-    return sidebar_hud_rmlui_enabled() && rmlui_layer::ready() ? 3 : 0;
+    // The two strips are the only OPAQUE regions, so they are the only ones carved
+    // out of the terrain viewport. soma / dock / log / vehicle are translucent and
+    // float over the map deliberately — not carving them is where this design's
+    // occlusion saving comes from.
+    //
+    // KNOWN FOLLOW-UP — the sidebar COLUMN is still carved, and should not be.
+    // game::draw_panels (game_misc.cpp:383-389) derives the terrain width from
+    // panel_manager::get_width_left/right(), and the phosphor HUD ought to
+    // contribute zero there. Zeroing those two accessors is a one-line change in
+    // THIS file, but they are also read by live_view.cpp:105/146 — which sizes the
+    // hover tile-info box to the column and would collapse it to zero width — plus
+    // pickup.cpp:750-752, advanced_inv.cpp:1316 and game_ui_extra.cpp:1162/1577.
+    // The correct cutover gives the terrain carve its own accessor at the
+    // game_misc.cpp call site and leaves every other consumer's column intact;
+    // that is a file outside this slice, so the column stays carved rather than
+    // half-changed and left inconsistent with the viewport.
+    const auto l = hud_layout_now( hud_log_max_rows, false );
+    return l ? terminal_rows_for( l->m, l->status.rows ) : 0;
 }
 
 int sidebar_hud_bottom_rows()
 {
-    return sidebar_hud_rmlui_enabled() && rmlui_layer::ready() ? 4 : 0;
+    // log_lines and show_vehicle cannot move the keys strip — it is pinned to the
+    // bottom edge at a fixed row count — so any value gives the same answer.
+    const auto l = hud_layout_now( hud_log_max_rows, false );
+    return l ? terminal_rows_for( l->m, l->keys.rows ) : 0;
 }
 
 auto sidebar_hud_anim_tick() -> void
@@ -1693,10 +1038,10 @@ auto sidebar_hud_anim_tick() -> void
             el->RemoveProperty( "margin-top" );
         }
     };
-    apply_shake( "hud-topbar" );
-    apply_shake( "hud-botbar" );
+    apply_shake( "hud-status" );
+    apply_shake( "hud-keys" );
     apply_shake( "hud-dock" );
-    apply_shake( "hud-vitals" );
+    apply_shake( "hud-soma" );
 }
 
 

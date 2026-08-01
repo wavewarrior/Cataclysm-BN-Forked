@@ -1,260 +1,575 @@
-/* Full Qud-inspired HUD layout — fixed regions, absolute positioning.
-   Regions: #hud-topbar (1 row, full width), #hud-vitals (overlay, top-left),
-   #hud-dock (minimap+log, right edge), #hud-botbar (effects/target, bottom),
-   #hud-hotbar (keybinds, bottom-1).
+/* ═══ TERMINAL PHOSPHOR — the sidebar HUD stylesheet ══════════════════════════
+   A character-cell amber terminal. See plans/phosphor-hud.md (the binding
+   contract) and mockups/hud/04-terminal-phosphor.{html,md} (the visual target).
 
-   All regions are positioned absolutely by C++ (sidebar_hud_apply_rect) each
-   sync. The sidebar width is carved from the viewport edge. */
+   Three invariants govern this whole file. Break any one of them and the design
+   stops being this design:
+
+   1. THERE IS NOT ONE `border` DECLARATION HERE, and there must never be. Every
+      frame stroke on screen — `─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼` — is a real Unicode
+      box-drawing glyph emitted inside a text run by a producer in
+      src/hud_phosphor_{panels,strips}.cpp, on the cell grid, so junctions
+      actually close and a section title can interrupt its own rule
+      (`──┤ SOMA ├──`) for zero extra rows. A CSS border cannot do either, and a
+      1dp hairline beside a 1-cell glyph stroke reads as two different grammars.
+      The audit is `^\s*border` on the declarations, not a bare `grep border`:
+      the region block below legitimately sets `box-sizing: border-box`, which
+      is the box model and not a stroke. Verified zero on this file.
+
+   2. HIERARCHY IS LUMINANCE, NEVER A SECOND HUE. One hue (DEC P3 amber
+      #ffb000) as the seven-rung `ph-*` ladder in data/gui/theme.json. Every
+      colour below is a `ph-*` token; the only non-token values are the
+      zero-alpha gradient stops, which use the `ph-veil-0` token because token
+      substitution is textual and a stop cannot derive an alpha from a token.
+      (Do NOT write a token in its doubled-brace form inside a comment here:
+      `ui_theme::substitute_tokens` rewrites the file as plain text and does not
+      skip comments, so an example spelling is looked up like a real token, warns
+      `unknown rcss token`, and lights RmlUi's beacon in the corner of the screen.
+      That is a real 20x20px yellow badge this file put on screen for a while.)
+      Desaturating this document must be a no-op on the information — that is
+      what makes the register colourblind-proof by construction instead of by
+      audit, and it only holds if nothing here introduces a hue.
+
+   3. THE FONT SIZE IS NOT SET HERE. See the note above `.ph-row`. This is the
+      single most likely thing for a later maintainer to helpfully "fix".
+
+   Two RCSS-6.2 facts, verified against the fetched engine source under
+   out/build/win-rel-deb/_deps/rmlui-src, so nobody re-litigates them:
+     · `text-shadow` DOES NOT EXIST. `font-effect: glow(...)` is the
+       replacement, and it is the better tool anyway — see §HALATION.
+     · No CSS grid, no `::before`/`::after`, no `clip-path`, no
+       `mix-blend-mode`. Every gradient decorator does exist, and this file is
+       built on them.
+
+   This document deliberately carries NEITHER the `panel` NOR the
+   `runic-region` class. `lighting::apply_crt()` sweeps every open document for
+   both and drives their `decorator` inline every frame with the procedural
+   runic frame and a CRT vignette (rmlui_layer.cpp:874-1070). A HUD region with
+   either class would have this stylesheet's ground overwritten 60 times a
+   second by a warm-brown ring that belongs to the menus. The HUD's own CRT
+   glass is `#hud-crt-scan` / `#hud-crt-curve` below; note it is NOT named
+   `crt-overlay`, because apply_crt claims that id too.                       */
 
 body {
     background-color: transparent;
     width: 100%;
     height: 100%;
+    /* Source Code Pro's advance is exactly 0.6em, which is the grid's whole
+       premise: cell_w == 0.6 * font_size, so a 192-cell row has zero horizontal
+       drift. Terminus (theme.rcss's body face) does not have that property. */
     font-family: "Source Code Pro";
-    /* Match theme.rcss's body size: at 15dp the dock's log sat ~4px under the
-       curses font it replaced and read as unreadably tiny on a 1080p screen. */
-    font-size: 18dp;
-    color: {{hud-fg}};
+    /* One face, one weight, no tracking, for the entire HUD. `letter-spacing`
+       and `font-weight` are inherited properties, so these two declarations are
+       the fence: any tracking at all breaks `────` into a dotted line, and
+       there is no bold face loaded anyway (only SourceCodePro-Regular and
+       -Semibold are registered, and the register uses neither weight for
+       emphasis — emphasis is a ladder rung or reverse video). */
+    letter-spacing: normal;
+    font-weight: normal;
+    color: {{ph-4}};
 }
 
-/* Base strip row styles */
-.hud-strip-row {
+/* ═══ REGIONS ═════════════════════════════════════════════════════════════════
+   Nine elements, all absolutely positioned. The six gameplay regions are handed
+   an explicit left/top/width/height in dp by `sidebar_hud_apply_rect()`, snapped
+   to whole cells out of `hud_phosphor::layout_for`. Not one percentage: laying
+   regions out in percentages while the terminal was sized in cells is what put
+   the shipping hotbar 6.34 dp off the bottom of the screen with a 6.36 dp
+   overlap onto the strip above it.
+
+   `box-sizing: border-box` because the rect C++ hands each region is the whole
+   region. `overflow: hidden` is a backstop, not a layout mechanism: producers
+   pad to exactly their region width via `hud_phosphor::pad`, and if one ever
+   overruns anyway, it clips at the rect instead of painting across the map.
+
+   There is no padding on any region. Insets are CELLS, spent inside the text
+   rows by the producers (the internal column grids in
+   04-terminal-phosphor.md §Layout), because a dp inset would push the grid off
+   the cell lattice and the frame would stop closing. */
+#hud-status, #hud-soma, #hud-radar, #hud-dock, #hud-log, #hud-keys, #hud-vehicle {
+    position: absolute;
+    /* RmlUi elements default to `display: inline` — the familiar
+       `div { display: block }` lives in RmlUi's SAMPLE rml.rcss, which this game
+       does not link (theme.rcss:99-105). Without this, a region's rows flow
+       inline into one wrapped paragraph. */
+    display: block;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+/* The data-bound wrapper divs. Every element carrying a `data-rml` in
+   sidebar_hud.rml is a plain class-less container, because the PRODUCER emits
+   the row elements — it knows its own row count and the document does not, which
+   is what lets `hud_log_rows` emit a variable number of rows each carrying its
+   own `log-N` id for `hud_anim` to target. So `.ph-row` elements arrive
+   as grandchildren of a region, with one unstyled layout box in between, and
+   that box has to be neutralised on both axes.
+
+   `display: block` is the load-bearing half: an inline wrapper holding block
+   rows is a broken box tree, and RmlUi defaults a div to inline. Zero margin and
+   padding is the other half — they are already the initial values, but this is
+   the one box in the chain that nobody owns by name, so stating it is what stops
+   a future theme-wide `div { padding: … }` from pushing every region's rows off
+   the cell lattice `apply_rect` snapped the region to.
+
+   Note that the `.ph-row` rule below is UNQUALIFIED on purpose:
+   they must lay out identically whether the producer's row is a grandchild of a
+   region (today) or its direct child (if the wrapper is ever removed). Nothing
+   in this file assumes the wrapper exists. */
+#hud-status > div, #hud-soma > div, #hud-radar > div, #hud-dock > div,
+#hud-log > div, #hud-keys > div, #hud-vehicle > div {
+    display: block;
+    margin: 0dp;
+    padding: 0dp;
+    /* `white-space: pre` HAS to be here as well as on `.ph-row`,
+       and this is not redundancy. RmlUi decides whether to KEEP the whitespace in
+       parsed content from the `white-space` of the element it is parsing INTO, and
+       `data-rml` injects the producer's markup into this wrapper. At
+       `white-space: normal` — the default, and what this class-less div had — every
+       run of padding spaces in the injected rows was collapsed to one space at
+       parse time, before `.ph-row`'s own `pre` ever got a chance to apply at
+       layout. The visible result in-game was every label welded to its value
+       (`DAY16Spring12:59:46`, `STR13DEX22INT9PER20`), every column out of
+       alignment, and rows wrapping because they no longer fitted their box. The
+       cell grid does not survive losing its spaces. */
+    white-space: pre;
+}
+
+/* ═══ THE CELL GRID ═══════════════════════════════════════════════════════════
+   `.ph-row` is one text row, and every producer emits one per row. It is
+   `white-space: pre` and its padding is U+00A0 rather than U+0020 — see the note
+   on the wrapper rule above and on `hud_phosphor::pad`; ordinary spaces are
+   trimmed at span boundaries when `data-rml` parses the row.
+
+   ── DO NOT ADD A `font-size` OR A `line-height` HERE. ──
+   Both are written from C++ onto the document body every sync by
+   `sidebar_hud_apply_rect()`, out of `hud_phosphor::metrics`, and both are
+   inherited properties (verified: StyleSheetSpecification.cpp:330,356 register
+   line-height and font-size with inherited == true), so the value reaches every
+   wrapper, every row and every span inside it. An inline property also outranks
+   any stylesheet rule, which is why theme.rcss's `body { font-size: 18dp }` is
+   already superseded and why a value written here would be dead weight at best.
+
+   RCSS cannot know the cell size. `metrics_for()` chooses it at runtime from the
+   context dimensions, off a legibility-ordered ladder — font_size 20 / 18.3333 /
+   16.6667 / 15 dp, cell 12x24 / 11x22 / 10x20 / 9x18 — picking the largest cell
+   that still yields the minimum grid, so the viewport tiles with no remainder.
+   A 1920x1080 dp context lands on 20 dp and a 160x45 grid; a smaller window does
+   not. Any absolute number typed here is therefore wrong on some viewport, and
+   the em-relative shortcut is worse than it looks. `cell_h == 1.2 * font_size`
+   is exact, not a coincidence of the current ladder: cell_w is 0.6 * font_size
+   (Source Code Pro's advance) and cell_h is 2 * cell_w (metrics_for's 1:2 cell
+   aspect, chosen so box-drawing stems abut between rows), so the product holds
+   on every rung and on any rung anyone adds. `line-height: 1.2` would therefore
+   work — and it would hardcode the composition of one fact this file does not
+   own with one that metrics_for is free to change, which is precisely the
+   coupling to avoid. The 0.6 is the font's; the 1:2 is P1's; the product is
+   nobody's to duplicate.
+
+   Leaving both unset is also how the height gets pinned to exactly one cell
+   without naming it: a block element containing a single line box is exactly one
+   line-height tall, and C++ set line-height to `cell_h`. So `.ph-row` is exactly
+   one cell tall, by construction,
+   at every viewport size — which is what makes `│` stems abut between rows and
+   corners close. An explicit `height` would break that the moment it disagreed
+   with the inherited line-height.
+
+   So this is a deliberate, agreed departure from the letter of the contract's
+   class table, which says `.ph-row` has "`height` and `line-height` both pinned
+   to one cell". Both ARE one cell here; neither is pinned by a declaration,
+   because a declaration is the one way to make them disagree. `height: auto`
+   resolving to the inherited line-height cannot drift from what `apply_rect`
+   computed out of `metrics`, and a typed value can. Reviewed with P1 and P3 and
+   backed by contract rule 3 ("nothing else may set a font size"). Do not "fix"
+   this back to a hardcoded cell height. */
+.ph-row {
     display: block;
     white-space: pre;
-    color: {{hud-fg}};
-    padding: 4dp 10dp;
 }
+/* `.ph-block` USED TO LIVE HERE AND IS DELIBERATELY GONE. It was a single element
+   holding N rows joined by `\n`, relying on `white-space: pre` to break them. That
+   does not work in this engine: `data-rml` parses injected markup with the
+   element's computed style, and the element carrying the class is the one being
+   created, so the newlines were gone before the rule could apply. In-game every
+   SOMA and DOCK row ran together on one line and wrapped at the panel edge. Every
+   producer now emits one `.ph-row` per row instead. Do not reintroduce a
+   newline-joined block element. */
 
-/* Icon inline with text */
-.hud-icon {
-    width: 13dp;
-    height: 13dp;
-    vertical-align: middle;
-}
+/* ═══ THE LADDER ══════════════════════════════════════════════════════════════
+   `hud_phosphor::tint( ink, s )` emits `<span class="ph-iN">s</span>` and
+   `invert( s )` emits `<span class="ph-inv">s</span>`. Producers emit CLASSES
+   and never an inline colour, so the stylesheet keeps ownership of the palette
+   and the F4 Theme tab still edits the HUD live.
 
-/* ========== TOP BAR ========== */
-#hud-topbar {
-    position: absolute;
-    background-color: {{hud-bg}};
-    border-bottom: 1dp {{hud-border}};
-    padding: 4dp 10dp;
-}
-#hud-topbar .hud-strip-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6dp 16dp;
-    align-items: baseline;
-}
-.hud-segment {
+   `display: inline` is stated explicitly on every one of them, and it is not
+   redundant even though inline is RmlUi's default. The shipping HUD's target-HP
+   bar was a permanently empty trough because `.tbar-fill` was a `<span>` with
+   `height: 100%` and no `display`, so RmlUi's inline default collapsed the box
+   the height was a percentage of — while its sibling `.veh-fuel-fill`, which
+   carried `display: block`, worked correctly. Two rules, one file, one of them
+   with the declaration and one without: that is what proves it was an oversight
+   rather than a choice, and stating the intent here is how it stops recurring. */
+.ph-i0 { display: inline; color: {{ph-0}}; }
+.ph-i1 { display: inline; color: {{ph-1}}; }
+.ph-i2 { display: inline; color: {{ph-2}}; }
+.ph-i3 { display: inline; color: {{ph-3}}; }
+.ph-i4 { display: inline; color: {{ph-4}}; }
+.ph-i5 { display: inline; color: {{ph-5}}; }
+
+/* Glyphs drawn INSIDE an inverted cell. Only ever nested in `.ph-inv`. */
+.ph-ik { display: inline; color: {{ph-k}}; }
+
+/* Reverse video — the register's only "shout", and deliberately not a colour.
+   A critical body part does not get a hotter hue; its whole row inverts. That
+   survives greyscale, every form of colour blindness, and a player who has
+   turned saturation off, because the distinguishing feature is a FILLED
+   BACKGROUND, which no colour transform can take away. */
+.ph-inv {
     display: inline;
-    white-space: nowrap;
-}
-.hud-seg-cond {
-    border-left: 1dp {{hud-border}};
-    border-right: 1dp {{hud-border}};
-    padding: 0dp 12dp;
-}
-.seg-label {
-    display: inline;
-    color: #555555ff;
-    font-size: 0.8em;
-    margin-right: 4dp;
+    background-color: {{ph-5}};
+    color: {{ph-k}};
+    /* No halation on an inverted run: the amber glow of {{ph-glow}} around dark
+       {{ph-k}} glyphs sitting in a bright cell reads as a smudge, not as bloom.
+       Real halation is emitted by the bright GROUND here, which font-effect
+       cannot do — so the honest move is to emit none. */
+    font-effect: none;
 }
 
-/* ========== BOTTOM BAR ========== */
-#hud-botbar {
-    position: absolute;
-    background-color: {{hud-bg}};
-    border-top: 1dp {{hud-border}};
-    padding: 4dp 10dp;
+/* A tinted run NESTED inside an inverted one collapses to `ph-k`.
+   `.ph-inv` sets `color`, but `color` loses to any rule that targets the inner
+   span directly, so without this an inverted row would show its nested runs in
+   their own ladder rung — amber-on-near-white, the one contrast pair in the
+   palette that fails. It is not a hypothetical: `hud_phosphor::bar()` returns
+   PRE-TINTED markup (fill in `ink::label`/`ink::datum`, trough in `ink::rule`),
+   and the critical body-part row inverts the WHOLE row including its bar, so the
+   nesting is the normal case rather than a mistake.
+
+   (0,2,0) beats `.ph-iN`'s (0,1,0). This is also just the definition of `ph-k`
+   restated as a rule — "glyphs drawn inside an inverted cell" — so it is correct
+   independently of `bar()`, and it means no producer has to remember not to
+   nest. `.ph-ik` is deliberately absent from the list: it is already `ph-k` and
+   only ever appears in here anyway.
+
+   This does flatten the bar inside an inverted row: fill and trough collapse to
+   one ink, so the fill-versus-trough LUMINANCE distinction is gone for that row.
+   Accepted deliberately, and not replaced. The glyphs still differ — `█`/`▄`
+   against `░` — so the bar stays readable on density alone, which is the
+   register's own claim that any single channel can be destroyed and the state
+   still reads, holding in the one row where it is load-bearing. The alternative
+   is a partial-alpha `ph-k` for the trough, which needs a fourteenth token or a
+   hex literal, and neither is worth buying back a distinction the glyph already
+   carries. A second hue is of course not on the table. */
+.ph-inv .ph-i0, .ph-inv .ph-i1, .ph-inv .ph-i2,
+.ph-inv .ph-i3, .ph-inv .ph-i4, .ph-inv .ph-i5 {
+    color: {{ph-k}};
 }
 
-/* ========== HOTBAR ========== */
-#hud-hotbar {
-    position: absolute;
-    background-color: {{hud-bg}};
-    border-top: 1dp {{hud-border}};
-    padding: 3dp 10dp;
+/* ═══ THE TWO OPAQUE STRIPS ═══════════════════════════════════════════════════
+   `#hud-status` and `#hud-keys` are the only opaque grounds in the HUD, and the
+   reason is structural rather than aesthetic.
+
+   This register spends its entire hue budget up front: every distinction on
+   screen is a luminance step. A luminance-only encoding cannot survive an
+   UNCONTROLLED luminance underneath it — over a snowfield the ph-2/ph-3 rungs
+   collapse toward the background, over asphalt the ph-4/ph-5 rungs do, and the
+   collapse is invisible to the code producing the text. An opaque ground is
+   what fixes the denominator of every contrast ratio in the design, so the
+   35-53 8-bit greyscale steps between adjacent rungs are guaranteed rather than
+   hoped for.
+
+   These two strips are where that guarantee has to be absolute, because they
+   carry the state you must never misread: the status strip holds the world and
+   character state plus the safe-mode indicator, and the keys strip is the one
+   row that tells you which actions are reachable — including which are NOT,
+   encoded as `ink::dead` at contrast 1.41 : 1, a distinction a bright tile
+   behind it would erase outright. The floating panels below can afford
+   translucency because their content is redundantly encoded (bar length, glyph
+   tier, position and inversion all say the same thing); a one-bit indicator has
+   no redundancy to fall back on.
+
+   They are also the two full-width edge-anchored regions, so they read as the
+   terminal's bezel: opacity is what makes the screen edge the fourth wall
+   instead of a floating rectangle. */
+#hud-status, #hud-keys {
+    background-color: {{ph-0}};
+    /* Per-panel scanline pass: 3dp pitch, 2dp lit, 1dp {{ph-scan}} (alpha .30).
+       An order of magnitude stronger than the full-screen glass pass, because
+       here it is over a controlled opaque ground and costs no tilemap clarity.
+       Decorators paint over the background-colour and UNDER the element's
+       content, so the scanlines fall on the ground and never across a glyph. */
+    decorator: repeating-linear-gradient( 180deg,
+        {{ph-veil-0}} 0dp, {{ph-veil-0}} 2dp, {{ph-scan}} 2dp, {{ph-scan}} 3dp );
 }
 
-/* ========== VITALS OVERLAY ========== */
-#hud-vitals {
-    position: absolute;
-    display: flex;
-    flex-direction: column;
-    gap: 4dp;
+/* ═══ THE FOUR TRANSLUCENT PANELS ═════════════════════════════════════════════
+   `#hud-soma`, `#hud-dock`, `#hud-log` and `#hud-vehicle` float over the world
+   on the Sparkline Console treatment (mockups/hud/10-sparkline-console.html:
+   `rgba(5,8,10,.60)` + `backdrop-filter: blur(2.5px) saturate(.72)
+   brightness(.94)` + a soft mask edge), restated on the amber ground as
+   `{{ph-veil}}` (#0c0800a3). They can afford it because their content is
+   redundantly encoded — see the note on the opaque strips.
+
+   ── `backdrop-filter` IS DECLARED AND IS NOT YET IMPLEMENTED. ──
+   Read that as "not yet implemented", not as "implemented, therefore this must
+   be working". The property is real in RmlUi 6.2
+   (StyleSheetSpecification.cpp:408; blur/saturate/brightness are all registered
+   filters, Factory.cpp:217-225), but this game's render interface,
+   `lighting::rmlui_render_interface`, overrides only geometry, textures,
+   scissor, transform and shaders. Four methods it does NOT override —
+   `PushLayer`, `PopLayer`, `CompositeLayers` and `CompileFilter` — are exactly
+   the ones the effect needs, and their base implementations are empty
+   (RenderInterface.cpp:26-50). So on today's build:
+
+     · the ALPHA translucency below is real and visible — it is ordinary blend,
+       straight through the geometry path;
+     · the BLUR, the desaturation and the brightness knock-down are NOT. They
+       draw nothing and cost nothing.
+
+   `filter:` is in the same boat and appears nowhere in this file for that
+   reason. `font-effect` is unaffected — it is applied in the font engine when
+   the glyph bitmap is generated, not through the render interface — so the
+   halation in §HALATION is genuinely there. This declaration is kept because it
+   is correct RCSS that becomes live for free the day the layer API lands; until
+   then it is a known limitation, deliberately traceable from this comment.
+
+   ── THE SOFT EDGE, AND WHY IT IS NOT `mask-image` ──
+   `mask-image` exists too (StyleSheetSpecification.cpp:404) but on this backend
+   it is not inert, it is destructive, and that asymmetry is worth writing down
+   because the property list makes the two look equally safe. At
+   RenderStage::Exit, ElementEffects.cpp:295-307 calls `PushLayer()`, renders the
+   mask decorators THROUGH THE NORMAL RENDER PATH, then calls
+   `SaveLayerAsMaskImage()`. `PushLayer()` returns a null handle and draws
+   nothing, so the mask's gradient quads land straight on the swapchain ON TOP OF
+   the panel's text, while `SaveLayerAsMaskImage()` also returns null and no
+   masking happens at all. There is no safe choice of stop colours either: a mask
+   needs an alpha-1 "keep" stop, and any alpha-1 colour painted directly hides
+   the panel underneath it.
+
+   So the dissolve is the panel's GROUND instead — a linear-gradient decorator,
+   which this backend implements on purpose (rmlui_render_interface.h:79-86:
+   "Without these, RmlUi gradient decorators silently render nothing") and which
+   `#hud-vignette` has shipped on for months. It is the better artefact
+   regardless, and on the merits rather than as a fallback: a mask multiplies the
+   element's whole alpha, so it would dim the GLYPHS along with the ground, and
+   in a register whose entire encoding is luminance, dimming glyphs at a panel
+   edge corrupts the encoding. Fading only the ground leaves every glyph at full
+   luminance. The plateau is exactly `{{ph-veil}}` out to 78%, so the result is
+   pixel-identical to a flat `background-color: {{ph-veil}}` everywhere except
+   the dissolving edge.
+
+   If someone implements the layer API and still wants the literal mask, the
+   change is one declaration: restore a flat `background-color: {{ph-veil}}`,
+   drop the veil stop-list from `decorator`, and add
+   `mask-image: linear-gradient( 180deg, {{ph-5}} 0%, {{ph-5}} 78%,
+   {{ph-veil-0}} 100% )`. Two traps if you do. First, a `closest-side` RADIAL
+   mask leaves the box CORNERS opaque — the closest-side circle never reaches
+   them — so every radial mask paints a square with a soft disc inside it; any
+   radial mask must terminate at `100%`, i.e. `farthest-corner`. Second, do not
+   put two mask decorators on one element expecting an intersection:
+   ElementEffects.cpp:299-304 renders the whole list into ONE layer, so a second
+   full-box gradient composites OVER the first and you get a union, which is to
+   say no fade on either axis.
+
+   The fades are VERTICAL ONLY, and that is a requirement rather than a
+   simplification: `soma`, `dock` and `vehicle` swap sides with
+   `SIDEBAR_POSITION` (layout_options::sidebar_right), so a fade hardcoded on a
+   panel's left or right edge points into the bezel the moment the player
+   mirrors the sidebar. Top and bottom edges do not mirror. */
+.ph-veil {
+    backdrop-filter: blur(2.5dp) saturate(0.72) brightness(0.94);
+    /* Scanline pass over a veil ground that dissolves downward. Listed first =
+       painted last = on top (ElementEffects.cpp:195-200 walks the decorator
+       list in reverse), so the scanlines sit on the veil rather than under it. */
+    decorator:
+        repeating-linear-gradient( 180deg,
+            {{ph-veil-0}} 0dp, {{ph-veil-0}} 2dp, {{ph-scan}} 2dp, {{ph-scan}} 3dp ),
+        linear-gradient( 180deg,
+            {{ph-veil}} 0%, {{ph-veil}} 78%, {{ph-veil-0}} 100% );
 }
 
-.hud-vitals-inner {
-    display: flex;
-    flex-direction: column;
-    gap: 4dp;
+/* `#hud-radar` is DELIBERATELY ABSENT from `.ph-veil` and has no decorator of its
+   own, and that is a requirement rather than an omission. Its content is not text
+   in this document at all: it is a field of solid quads that `hud_radar::draw`
+   queues onto the UI compositing layer, which composites UNDER RmlUi
+   (sdl_render_frame.cpp: world -> ui_target -> HUD particles -> RmlUi). A
+   translucent ground laid over it would multiply every dot, and the two dimmest
+   rungs of the ladder — open ground and water — would sink into the veil and
+   vanish, taking a third of the map's information with them. The radar therefore
+   paints its own opaque `ink::ground` interior before its dots, from the same
+   token, so the luminance encoding still has a controlled background. Do not add
+   `class="ph-veil"` to it in the .rml, and do not give it a `decorator` here. */
+
+/* The log dissolves UPWARD, the other three downward. The log is the only
+   bottom-anchored panel — its newest message is on its last row, hard against
+   the keys strip whose rule closes the log's frame from below — so a downward
+   fade would dissolve exactly the line the player most needs to read. Running
+   it the other way puts the dissolve on the OLDEST rows, where it lands on top
+   of the producers' `ph-2 → ph-5` recency ramp and reinforces it: the phosphor
+   persistence curve and the panel edge fade out together, in the same place, for
+   the same reason. ID (1,0,0) beats `.ph-veil` (0,1,0). */
+#hud-log {
+    decorator:
+        repeating-linear-gradient( 180deg,
+            {{ph-veil-0}} 0dp, {{ph-veil-0}} 2dp, {{ph-scan}} 2dp, {{ph-scan}} 3dp ),
+        linear-gradient( 0deg,
+            {{ph-veil}} 0%, {{ph-veil}} 78%, {{ph-veil-0}} 100% );
 }
 
-/* Chunky Qud HP bars */
-.vbar {
+/* ═══ MESSAGE LOG ═════════════════════════════════════════════════════════════
+   The log region is sized to its line count by `hud_phosphor::layout_for`
+   (layout_options::log_lines), so ALL of the old scroll machinery is gone:
+   `.hud-scroll`, `.log-well`, `.log-fade`, `.log-fade-top`, the
+   `#hud-log-body scrollbarvertical` rules, and the zero-basis flex chain that
+   existed only to give `overflow-y` a bounded viewport to clip against.
+
+   That machinery was managing an emptiness. The shipping log well was 752 dp of
+   container holding 267 dp of message — 485 dp, 45% of the dock's own height and
+   7.6% of the entire screen, spent on empty trough, which is more area than
+   everything this redesign adds. Reclaiming it is where the occlusion saving
+   comes from, and it is why this design carries every field in the fixture at
+   28.80% coverage against the shipping HUD's ratified 31.02%.
+
+   Nothing replaces the age ramp either. The luminance ramp across
+   `.ph-i2` … `.ph-i5` IS the phosphor-persistence curve; `hud_log_rows` picks
+   the rung per message, so the ladder classes above are its entire
+   implementation. Recency and severity now ride on different channels (rung vs.
+   glyph tier) instead of both reaching for opacity, so they cannot contend.
+
+   `hud_log_rows` emits a titled top rule and then one `.ph-row` per message,
+   each carrying `hud-log-entry` and a stable `log-<seq>` id, plus
+   `hud-log-fresh` on the newest. Those two classes need exactly one declaration
+   between them, below.
+
+   `.hud-log-fresh` is deliberately given NOTHING. Its predecessor drew a 2dp
+   accent rule down the row's left edge and washed the ground behind it — which
+   is a CSS border and a second grammar, in a design where the newest message is
+   already the brightest thing in the panel (`ph-5`, against `ph-2` for the
+   oldest) and already carries a `>` marker and a solid cursor block from the
+   producer. Three encodings is enough; a fourth in a different vocabulary is
+   noise. The class stays in the markup as `hud_anim`'s handle. */
+.hud-log-entry {
+    /* The `hud_log_entry` spec animates offset_y, which `hud_anim` applies as
+       `top` — inert on a statically positioned element. hud_anim does set
+       position:relative itself on the first non-zero frame, but declaring it
+       here keeps the slide from depending on that detail. */
     position: relative;
-    height: 18dp;
-    width: 230dp;
-    background-color: {{hud-bar-bg}};
-    margin-bottom: 3dp;
 }
-.vbar-fill {
+
+/* ═══ CRT GLASS ═══════════════════════════════════════════════════════════════
+   Two full-screen artefact layers, above the regions and below the damage
+   vignette, neither of them hit-testable. They are the only elements in this
+   file that paint over the play area, and both are deliberately weak enough that
+   the tilemap, the mobs and the player sprite stay fully legible under them —
+   which is why 04-terminal-phosphor.md §Occlusion reports them separately
+   rather than folding them into the occlusion budget.
+
+   z-index 10 and 11 are the theme's established overlay rungs (theme.rcss `.crt`
+   uses 10, apply_crt's injected `#runic-frame` uses 11), and `#hud-vignette`
+   keeps 20, so the stack from the world upward is: regions, scanline glass,
+   faceplate curve, damage flash. */
+#hud-crt-scan, #hud-crt-curve {
     position: absolute;
+    display: block;
     left: 0;
-    top: 0;
-    height: 100%;
-    background-color: {{hud-fg-bright}};
-}
-.vbar-text {
-    position: absolute;
     top: 0;
     width: 100%;
     height: 100%;
-    color: #0d0d0dff;
-    font-size: 0.85em;
-}
-.vbar-tick {
-    position: absolute;
-    top: 0;
-    width: 1dp;
-    height: 100%;
-    background-color: #0d0d0dff;
-}
-/* Thin bars (STA, MANA) */
-.vbar.thin {
-    height: 11dp;
-    width: 230dp;
-}
-.vbar.thin .vbar-fill {
-    height: 100%;
-}
-.vbar.thin .vbar-text {
-    font-size: 0.75em;
-}
-.vbar.crit {
-    background-color: #401010ff;
-}
-.vbar.crit .vbar-fill {
-    background-color: #e05050ff;
-}
-.vbar.crit .vbar-text {
-    color: #e05050ff;
+    pointer-events: none;
 }
 
-/* Divider between body-part bars and resource bars */
-.vitals-divider {
-    height: 1dp;
-    background-color: {{hud-border}};
-    margin: 6dp 0dp;
+/* Scanlines over the whole faceplate, glass and all: the same 3dp pitch as the
+   per-panel pass but at {{ph-scan-glass}} (alpha .075 against .30) — an order of
+   magnitude weaker, on purpose. The per-panel pass sits on a ground this
+   stylesheet controls; this one sits on the tilemap, where every lost contrast
+   step is a sprite the player has to squint at. Mean darkening is ~2.5%: enough
+   to read as a CRT, not enough to soften a tile edge. */
+#hud-crt-scan {
+    z-index: 10;
+    decorator: repeating-linear-gradient( 180deg,
+        {{ph-veil-0}} 0dp, {{ph-veil-0}} 2dp,
+        {{ph-scan-glass}} 2dp, {{ph-scan-glass}} 3dp );
 }
 
-/* ========== DOCK ========== */
-#hud-dock {
-    position: absolute;
-    display: flex;
-    flex-direction: column;
-    background-color: {{hud-bg}};
-    border-left: 1dp {{hud-border}};
-    padding: 8dp 14dp;
+/* The faceplate curve: the corner darkening a real tube gets from its own
+   geometry. Clear to 42%, then ramping to {{ph-vignette}} (alpha .458) at the
+   corners. `farthest-corner` is load-bearing — it is what makes the ramp
+   actually reach the corners; a `closest-side` radial would leave them at the
+   final stop's colour as a hard square (see the mask-image note above). The
+   centre defaults to 50% 50%, so it is left unstated.
+
+   The mockup ramps in two segments (transparent → .18 at 72% → .46 at 100%).
+   This is one segment, because the ladder has exactly one dark-scrim token and
+   the alternative is a hex literal — which would be the only non-token colour in
+   a file whose whole argument is that there are none. The cost is a slightly
+   deeper mid-field than the mockup's curve; the corners are identical. */
+#hud-crt-curve {
+    z-index: 11;
+    decorator: radial-gradient( farthest-corner, {{ph-veil-0}} 42%, {{ph-vignette}} 100% );
 }
 
-.dock-section {
-    display: block;
-    flex: 0 0 auto;
-    margin-bottom: 8dp;
+/* ═══ HALATION ════════════════════════════════════════════════════════════════
+   Light scattering inside the faceplate, on every text-bearing element.
+
+   The mockup gets this by duplicating the ENTIRE glyph layer, blurring the copy
+   and painting it under the crisp one — rows 53-102 of
+   04-terminal-phosphor.html are a byte-identical copy of rows 0-50 for exactly
+   this reason. That is not a technique, it is a workaround: a browser has no
+   per-glyph glow primitive, so the only way to get bleed proportional to emitted
+   luminance was to blur a copy that already carried the ladder steps.
+
+   RmlUi has `font-effect` natively, so the copy is unnecessary — which halves
+   the text this HUD lays out and rasterises, and removes an entire class of
+   desynchronisation between two copies of the same content. It is also the one
+   effect in this file that is fully implemented on the current backend:
+   `font-effect` is applied in the font engine when the glyph bitmap is
+   generated, not through the render interface, so unlike `backdrop-filter` it
+   needs no layer API. `font-effect` is inherited
+   (StyleSheetSpecification.cpp:405), so declaring it on the row and block
+   elements reaches every ladder span inside them.
+
+   `text-shadow` is NOT the alternative here — it does not exist in RCSS 6.2, at
+   any spelling. If you find yourself reaching for it, `font-effect: glow(
+   <width> <colour> )` is the property you want. */
+.ph-row {
+    font-effect: glow( 2dp {{ph-glow}} );
 }
 
-.dock-flex {
-    display: flex;
-    flex-direction: column;
-    flex: 0 1 auto;
-    min-height: 0;
-    /* The dock now spans the full viewport height (sidebar_hud_apply_rect), so the
-       log may use more of it than the old bars-inset column allowed. */
-    max-height: 60vh;
-    margin-bottom: 0dp;
+/* ═══ VEHICLE PANEL ═══════════════════════════════════════════════════════════
+   Same register as the other floating panels, on `.ph-veil`, and reduced to
+   nothing but that: `hud_veh_panel` emits cell-exact `.ph-row` elements like every
+   other producer, so the whole old flex chain (`.veh-panel-inner`, `.veh-row`,
+   `.veh-name`, `.veh-heading`, `.veh-fuels`, `.veh-fuel-row`, `-label`, `-bar`,
+   `-fill`, `-pct`) is gone along with its min-width/max-width guesses and its
+   1dp box. Its fuel gauges are eighth-block bars now, at sub-cell precision the
+   old 60dp-wide div could not reach.
+
+   `display: none` is the resting state and must stay: C++ toggles this region's
+   display when the player takes or leaves vehicle controls, and `layout_for`
+   only reserves cells for it when `show_vehicle` is set — so a visible-by-
+   default panel would sit on top of the dock's rows on foot. This declaration
+   comes after the region block above, which sets `display: block`, and both are
+   at (1,0,0), so source order is what decides it. Keep it here, below. */
+#hud-vehicle {
+    display: none;
 }
 
-.dock-header {
-    color: {{hud-accent}};
-    letter-spacing: 2dp;
-    font-size: 0.85em;
-    font-weight: bold;
-    border-bottom: 1dp {{hud-border}};
-    padding: 0dp 2dp 2dp 2dp;
-    margin-bottom: 3dp;
-}
+/* ═══ DAMAGE VIGNETTE ═════════════════════════════════════════════════════════
+   Kept fully working, including the `opacity: 0` resting state: `hud_anim` owns
+   this element (`panels.cpp` feeds it under the `hud_vignette` spec on an HP
+   drop) and drives its opacity through a Penner curve. Nothing in this file may
+   write `opacity` here, and nothing does — see the transition note below.
 
-/* ========== LOG ENTRIES ========== */
-.hud-log-entry {
-    display: block;
-    white-space: pre-wrap;
-    word-break: break-word;
-    padding: 3dp 6dp;
-    /* Full size: this is the message log, the most-read text in the HUD. Shrinking
-       it below the base size is what made it unreadable. */
-    font-size: 1em;
-    line-height: 1.4;
-}
-.hud-log-symbol {
-    display: inline;
-    font-weight: bold;
-    margin-right: 2dp;
-}
-.hud-log-time {
-    display: inline;
-    color: #888888ff;
-    margin-right: 4dp;
-    font-size: 0.8em;
-}
-.hud-log-text {
-    display: inline;
-}
-
-.dock-body {
-    color: {{hud-fg}};
-    white-space: pre-wrap;
-    line-height: 1.4;
-}
-
-.hud-map-body {
-    white-space: pre;
-    text-align: center;
-    padding: 8dp 8dp;
-    line-height: 1.2;
-    min-height: 140dp;
-}
-
-/* Scrollable log area */
-.hud-scroll {
-    overflow-y: auto;
-    flex: 1 1 auto;
-    min-height: 0;
-}
-
-/* ========== STRIP CHROME ========== */
-.strip-left {
-    display: inline;
-}
-.strip-right {
-    float: right;
-}
-
-/* Target bar inline in botbar */
-.tbar {
-    display: inline-block;
-    width: 40dp;
-    height: 9dp;
-    background-color: {{hud-bar-bg}};
-    vertical-align: middle;
-}
-.tbar-fill {
-    height: 100%;
-}
-/* ========== DAMAGE VIGNETTE ========== */
+   Recoloured, though. It was the last second hue in the document: a red
+   `#e0505099` radial, a literal that shadowed no token, in a design whose
+   central claim is that every distinction is luminance on one hue. A red flash
+   would also be the one piece of feedback in the HUD that a protanope reads
+   differently from everyone else. The register's own answer to "you were just
+   hit" is a phosphor overload — the tube blooming amber at its edges — so the
+   corners now ramp to {{ph-4}}, the datum rung, from the zero-alpha twin at the
+   centre. Same geometry, same channel, same animation, one fewer hue. */
 #hud-vignette {
     position: absolute;
+    display: block;
     left: 0;
     top: 0;
     width: 100%;
@@ -262,94 +577,72 @@ body {
     pointer-events: none;
     z-index: 20;
     opacity: 0;
-    decorator: radial-gradient( farthest-corner, #00000000, #e0505099 );
+    decorator: radial-gradient( farthest-corner, {{ph-veil-0}}, {{ph-4}} );
 }
 
-/* ========== VEHICLE HUD ========== */
-#hud-vehicle {
-    position: absolute;
-    display: none;
-    background-color: {{hud-bg}};
-    border: 1dp {{hud-border}};
-    padding: 8dp 12dp;
-    min-width: 180dp;
-    max-width: 260dp;
-}
-.veh-panel-inner {
-    display: flex;
-    flex-direction: column;
-    gap: 2dp;
-}
-.veh-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4dp 10dp;
-    align-items: baseline;
-    white-space: nowrap;
-    font-size: 0.9em;
-    color: {{hud-fg}};
-}
-.veh-name {
-    display: inline;
-    color: {{hud-accent}};
-    font-weight: bold;
-    font-size: 0.85em;
-    letter-spacing: 1dp;
-    margin-right: 6dp;
-}
-.veh-heading {
-    display: inline;
-    font-weight: bold;
-}
-/* Fuel gauges */
-.veh-fuels {
-    display: flex;
-    flex-direction: column;
-    gap: 3dp;
-    margin-top: 4dp;
-    border-top: 1dp {{hud-border}};
-    padding-top: 4dp;
-}
-.veh-fuel-row {
-    display: flex;
-    align-items: center;
-    gap: 6dp;
-    font-size: 0.8em;
-}
-.veh-fuel-label {
-    display: inline;
-    color: #888888ff;
-    min-width: 60dp;
-    white-space: nowrap;
-    overflow: hidden;
-}
-.veh-fuel-bar {
-    display: inline-block;
-    width: 60dp;
-    height: 7dp;
-    background-color: {{hud-bar-bg}};
-}
-.veh-fuel-fill {
-    display: block;
-    height: 100%;
-}
-.veh-fuel-pct {
-    display: inline;
-    min-width: 30dp;
-}
-/* ========== ENVIRONMENTAL TINTING ========== */
-.env-night   { opacity: 0.85; }
-.env-fire    { background-color: rgba(255, 100, 30, 0.04); }
-.env-rad     { background-color: rgba(30, 255, 60, 0.04); }
-.env-cold    { background-color: rgba(100, 150, 255, 0.04); }
-.env-storm   { opacity: 0.9; }
+/* ═══ ENVIRONMENTAL RESPONSE, AND WHY THERE IS NO `transition` ═════════════════
+   Two findings from plans/hud-coherence.md §1.8 and §Phase 5 decided this
+   section, and the decision is deliberate in both directions.
 
-/* Smooth transitions for tint changes */
-#hud-topbar, #hud-botbar, #hud-dock, #hud-vitals, #hud-vehicle {
-    transition: background-color 0.8s, opacity 0.8s;
-}
+   ── THE THREE HUE TINTS ARE GONE, NOT FIXED. ──
+   `.env-fire`, `.env-rad` and `.env-cold` repainted each region's ground with a
+   pre-blended hue. Three of the five environmental tints had in fact never
+   rendered: each region set `background-color` through an ID selector (1,0,0)
+   and the tints tried to override it from a bare class selector (0,1,0), so they
+   lost the cascade outright. The mechanical fix is trivial — compound
+   `#hud-soma.env-fire` is (1,1,0) and wins — and it is the wrong fix, because
+   the bug was hiding a design error.
 
-/* Status effect animation targets (Phase 7) */
-#status-poison, #status-fire, #status-bleed, #status-rad {
-    display: inline;
-}
+   An environmental HUE tint is incoherent by construction in this register. The
+   whole design is the claim that there is exactly one hue on screen and that
+   every distinction is therefore a luminance step; a fire-orange or radiation-
+   green ground introduces precisely the second hue the ladder exists to
+   eliminate, and it does it by moving the GROUND, which is the denominator of
+   every contrast ratio in the file. Reviving three dead tints would have been
+   three new ways to break the accessibility property the register is built on.
+   They are styled nowhere below; if `apply_env_classes` still sets those
+   classes, they are inert, and that is the intended end state.
+
+   ── NO LUMINANCE RESPONSE EITHER, FOR NOW. ──
+   An earlier draft kept `.env-night` / `.env-storm` here as an `opacity` step on
+   the four floating panels, on the grounds that "the HUD becomes more
+   transparent to a dark world" is a luminance response rather than a hue one.
+   Both rules are gone, for two reasons that only became clear once the C++ side
+   landed:
+
+   1. Nothing sets the classes. `sidebar_hud_sync` used to apply `.env-*` to the
+      Qud-era region ids, and that block was deleted along with those ids. Live
+      rules that no C++ path can ever trigger are how the three dead hue tints
+      above survived for as long as they did.
+   2. `opacity` is the wrong channel regardless. It multiplies the whole subtree,
+      so it scales every rung of the ladder toward the backdrop at once — which
+      compresses exactly the luminance separation this register's accessibility
+      claim rests on. And it is the one channel `hud_anim` also writes inline, so
+      even a static declaration here puts the two systems on the same property.
+
+   A night response is still worth having; it just has to move the GROUND's alpha
+   rather than the element's opacity, so the rungs keep their separation and the
+   panel gets more transparent instead of the text getting dimmer. That is a new
+   feature with a producer side to it, not a port of the old one, so it is out of
+   scope here and deliberately absent rather than half-present.
+
+   ── THERE IS NO `transition` IN THIS FILE, AND THAT IS THE POINT. ──
+   The shipping HUD carried `transition: background-color 0.8s, opacity 0.8s` on
+   five regions. An RCSS transition wins on the property it names, so that one
+   declaration silently overrode every C++ Penner easing curve `hud_anim` writes
+   to `opacity` — every flash, every pulse, every log entry tween, on five of six
+   regions, replaced by a linear 0.8 s ramp. The recommended repair is to scope
+   the transition to `background-color` alone. Applied literally here it is
+   inert: once the hue tints are dropped, nothing in this document animates
+   `background-color` at all — the two opaque grounds are static `{{ph-0}}` and
+   the four panel grounds are static gradients — so a scoped transition would be
+   a declaration with no property to act on.
+
+   So there is no transition rule, and `hud_anim` owns every animated channel in
+   this document uncontested. Nothing is given up by that here, because with the
+   env classes gone there is no slow context shift left to ease: the two opaque
+   grounds are static `{{ph-0}}` and the four panel grounds are static gradients.
+   If an eased env response is ever wanted it must come from `hud_anim` — a spec
+   on these four ids — and never from RCSS, because `opacity` is the one channel
+   both systems can reach and an RCSS transition on it is the exact mechanism
+   that broke every animation timing in the HUD this replaces. */

@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>03 &mdash; Instrument Cluster</title>
+<style>
+  /* ===== D3-INSTRUMENT-CLUSTER-SENTINEL-7F3A =============================
+     03 - INSTRUMENT CLUSTER / ANALOG DASHBOARD
+     olive-drab machined plate | sand engraving | nixie readouts
+     ====================================================================== */
+  html,body { margin:0; padding:0; background:#000; }
+  #screen {
+    position:relative; width:1920px; height:1080px; overflow:hidden;
+    background-image:url("_shared/world.png");
+    background-size:1920px 1080px;
+  }
+  #screen div, #screen span { box-sizing:border-box;
+    font-family:Consolas,"Cascadia Mono","Lucida Console",monospace; }
+
+  /* --- sheet metal: brushed vertical grain + rolled top bevel ---------- */
+  .plate {
+    background-image:
+      linear-gradient(180deg, rgba(255,255,255,.085) 0px, rgba(255,255,255,.028) 2px, rgba(255,255,255,0) 5px),
+      repeating-linear-gradient(90deg, rgba(255,255,255,.020) 0px, rgba(255,255,255,.020) 1px,
+                                       rgba(0,0,0,.026) 1px, rgba(0,0,0,.026) 3px),
+      linear-gradient(180deg, #4b4e36 0%, #40432e 22%, #383b28 56%, #2b2e1e 88%, #232619 100%);
+  }
+  .rail-plate {
+    background-image:
+      linear-gradient(180deg, rgba(255,255,255,.10) 0px, rgba(255,255,255,.03) 2px, rgba(255,255,255,0) 5px),
+      repeating-linear-gradient(90deg, rgba(255,255,255,.018) 0px, rgba(255,255,255,.018) 1px,
+                                       rgba(0,0,0,.024) 1px, rgba(0,0,0,.024) 3px),
+      linear-gradient(180deg, #52553c 0%, #464932 30%, #3a3d29 74%, #2c2f20 100%);
+  }
+
+  /* --- milled instrument pocket ---------------------------------------- */
+  .recess { position:absolute; border-radius:2px;
+    background-image:
+      linear-gradient(180deg, rgba(0,0,0,.42) 0px, rgba(0,0,0,.10) 6px, rgba(0,0,0,0) 16px),
+      linear-gradient(180deg, #232519 0%, #292c1e 58%, #1c1e14 100%);
+    box-shadow: inset 0 2px 3px rgba(0,0,0,.72), inset 0 0 0 1px rgba(0,0,0,.45),
+                inset 0 -1px 0 rgba(255,255,255,.075), 0 1px 0 rgba(255,255,255,.085); }
+
+  /* --- fasteners and panel seams --------------------------------------- */
+  .rv { position:absolute; width:7px; height:7px; border-radius:4px;
+        background-image: radial-gradient(circle at 34% 28%, #9a9c78 0%, #6d7050 38%, #43462f 68%, #1e2015 100%);
+        box-shadow: inset 0 -1px 1px rgba(0,0,0,.55), 0 1px 1px rgba(255,255,255,.09); }
+  .seam { position:absolute; width:3px;
+        background-image: linear-gradient(90deg, rgba(0,0,0,.10) 0%, rgba(0,0,0,.68) 45%,
+                                                 rgba(0,0,0,.55) 60%, rgba(255,255,255,.085) 100%); }
+  .seamh { position:absolute; height:3px;
+        background-image: linear-gradient(180deg, rgba(0,0,0,.62) 0%, rgba(0,0,0,.40) 55%, rgba(255,255,255,.10) 100%); }
+
+  /* --- hazard striping -------------------------------------------------- */
+  .hz { background-image: repeating-linear-gradient(135deg,
+          #d8ac16 0px, #d8ac16 7px, #191b10 7px, #191b10 14px); }
+
+  /* --- engraved / stencilled legends ----------------------------------- */
+  .eng   { color:#cdc39c; text-shadow: 0 1px 0 rgba(0,0,0,.9), 0 -1px 0 rgba(255,255,255,.055); }
+  .eng-d { color:#9d9878; text-shadow: 0 1px 0 rgba(0,0,0,.85); }
+  .eng-x { color:#6f6d55; text-shadow: 0 1px 0 rgba(0,0,0,.8); }
+
+  /* --- nixie / seven-segment window ------------------------------------ */
+  .win { position:absolute; border-radius:2px; overflow:hidden;
+         background-image: linear-gradient(180deg, #150e07 0%, #1c1409 55%, #0d0905 100%);
+         box-shadow: inset 0 1px 3px rgba(0,0,0,.92), inset 0 -1px 0 rgba(255,150,60,.12),
+                     0 1px 0 rgba(255,255,255,.075); }
+  .slit { position:absolute; left:0px; top:0px; width:100%; height:100%;
+          background-image: repeating-linear-gradient(180deg,
+            rgba(0,0,0,.30) 0px, rgba(0,0,0,.30) 1px, rgba(0,0,0,0) 1px, rgba(0,0,0,0) 3px); }
+  .led   { color:#ffa14a; text-shadow:0 0 5px rgba(255,116,20,.95), 0 0 13px rgba(255,92,10,.42); }
+  .led-r { color:#ff6a52; text-shadow:0 0 5px rgba(255,50,30,.95), 0 0 14px rgba(255,40,20,.45); }
+  .led-g { color:#7bf09a; text-shadow:0 0 5px rgba(40,230,110,.85), 0 0 13px rgba(30,220,100,.35); }
+  .led-x { color:#4a3320; }
+
+  /* ===== OVERHEAD ANNUNCIATOR PANEL  880x56 @ 520,0 ==================== */
+  #oh-sh { position:absolute; left:512px; top:56px; width:896px; height:14px;
+           background-image: linear-gradient(180deg, rgba(0,0,0,.62) 0%, rgba(0,0,0,.26) 42%, rgba(0,0,0,0) 100%); }
+  #oh { position:absolute; left:520px; top:0px; width:880px; height:56px;
+        border-bottom-left-radius:5px; border-bottom-right-radius:5px;
+        box-shadow: inset 0 -1px 0 rgba(0,0,0,.55), inset 1px 0 0 rgba(255,255,255,.05),
+                    inset -1px 0 0 rgba(0,0,0,.45), 0 3px 10px rgba(0,0,0,.55); }
+  #oh-lip { position:absolute; left:0px; top:53px; width:880px; height:3px; opacity:.62;
+            border-bottom-left-radius:5px; border-bottom-right-radius:5px; }
+  .ohc { position:absolute; top:4px; height:45px; }
+
+  /* ===== BOTTOM BINNACLE  1920x240 @ 0,840 ============================= */
+  #bn-sh { position:absolute; left:0px; top:824px; width:1920px; height:16px;
+           background-image: linear-gradient(0deg, rgba(0,0,0,.66) 0%, rgba(0,0,0,.24) 46%, rgba(0,0,0,0) 100%); }
+  #bn { position:absolute; left:0px; top:840px; width:1920px; height:240px;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.14), inset 0 -1px 0 rgba(0,0,0,.6),
+                    0 -4px 12px rgba(0,0,0,.5); }
+  #bn-lip { position:absolute; left:0px; top:0px; width:1920px; height:3px; opacity:.5; }
+  #deck { position:absolute; left:0px; top:3px; width:1920px; height:169px; }
+  #rail { position:absolute; left:0px; top:172px; width:1920px; height:68px;
+          box-shadow: inset 0 2px 0 rgba(255,255,255,.09), inset 0 -1px 0 rgba(0,0,0,.55); }
+  .endhz { position:absolute; top:3px; width:12px; height:237px; opacity:.22; }
+
+  .bay { position:absolute; top:2px; height:165px; }
+  .bay-h { position:absolute; top:0px; height:13px; font-size:9px; letter-spacing:1.4px; line-height:13px; }
+  .tab-hz { position:absolute; top:0px; height:13px; border-radius:1px;
+            box-shadow: inset 0 0 0 1px rgba(0,0,0,.5); }
+  .tab-lgd { position:absolute; top:0px; height:13px; font-size:8px; line-height:13px; text-align:center;
+             letter-spacing:1.2px; font-weight:bold; color:#12140a;
+             background-image: linear-gradient(180deg, rgba(216,172,22,.86) 0%, rgba(216,172,22,.86) 100%); }
+
+  /* ===== BAY 1  CONDITION - six body-part VU columns =================== */
+  .bp      { position:absolute; top:0px; width:50px; }
+  .bp-lab  { position:absolute; left:0px; top:0px; width:50px; height:13px; border-radius:1px;
+             font-size:8.5px; letter-spacing:.6px; line-height:13px; text-align:center;
+             background-image: linear-gradient(180deg,#2f3222 0%,#202217 100%);
+             box-shadow: inset 0 1px 0 rgba(255,255,255,.08), inset 0 -1px 1px rgba(0,0,0,.5); }
+  .bp-lab-hz { position:absolute; left:0px; top:0px; width:50px; height:13px; border-radius:1px;
+             box-shadow: inset 0 0 0 1px rgba(0,0,0,.55); }
+  .bp-lab-al { position:absolute; left:0px; top:0px; width:50px; height:13px; border-radius:1px;
+             font-size:8.5px; letter-spacing:.6px; line-height:13px; text-align:center;
+             font-weight:bold; color:#12140a;
+             background-image: linear-gradient(180deg, rgba(216,172,22,.88) 0%, rgba(216,172,22,.88) 100%); }
+  .bp-well { position:absolute; left:0px; top:16px; width:50px; height:96px; overflow:hidden; border-radius:2px;
+             background-image:
+               repeating-linear-gradient(180deg, rgba(212,206,178,.20) 0px, rgba(212,206,178,.20) 1px,
+                                                 rgba(0,0,0,0) 1px, rgba(0,0,0,0) 9.6px),
+               linear-gradient(180deg,#0c0e08 0%,#131509 60%,#080a05 100%);
+             box-shadow: inset 0 2px 4px rgba(0,0,0,.9), inset 0 0 0 1px rgba(0,0,0,.6),
+                         inset 0 -1px 0 rgba(255,255,255,.07); }
+  .bp-alarm { box-shadow: inset 0 2px 4px rgba(0,0,0,.9), inset 0 0 0 1px rgba(255,58,42,.75),
+                          0 0 12px rgba(255,58,42,.5); }
+  .bp-fill { position:absolute; left:4px; width:42px; bottom:0px; border-radius:1px; }
+  .bp-crit { position:absolute; left:0px; bottom:24px; width:50px; height:1px;
+             background-image: repeating-linear-gradient(90deg,
+               rgba(255,64,40,.85) 0px, rgba(255,64,40,.85) 3px, rgba(255,64,40,0) 3px, rgba(255,64,40,0) 6px); }
+  .bp-seg  { position:absolute; left:0px; top:0px; width:50px; height:96px;
+             background-image: repeating-linear-gradient(180deg,
+               rgba(0,0,0,.62) 0px, rgba(0,0,0,.62) 1px, rgba(0,0,0,0) 1px, rgba(0,0,0,0) 6px); }
+  .bp-glass{ position:absolute; left:0px; top:0px; width:50px; height:96px; border-radius:2px;
+             background-image: linear-gradient(112deg, rgba(255,255,255,.10) 0%, rgba(255,255,255,.03) 30%,
+                                                       rgba(255,255,255,0) 46%); }
+  .bp-val  { position:absolute; left:0px; top:115px; width:50px; height:16px; }
+  .bp-valt { position:absolute; left:0px; top:0px; width:50px; height:16px;
+             font-size:9.5px; line-height:16px; text-align:center; letter-spacing:.3px; }
+  .bp-tag  { position:absolute; left:0px; top:134px; width:50px; height:11px;
+             font-size:7.5px; line-height:11px; text-align:center; letter-spacing:.4px; }
+
+  /* ===== BAY 2  STAMINA - 270 degree dial ============================== */
+  .bez  { position:absolute; width:140px; height:140px; border-radius:70px;
+          background-image: conic-gradient(from 210deg,
+              #7f8261 0deg, #56593d 42deg, #353824 96deg, #23261a 150deg,
+              #43462f 208deg, #6e7152 268deg, #4a4d34 318deg, #7f8261 360deg);
+          box-shadow: 0 2px 4px rgba(0,0,0,.7), inset 0 0 0 1px rgba(0,0,0,.5),
+                      inset 0 2px 3px rgba(255,255,255,.14); }
+  .face { position:absolute; left:7px; top:7px; width:126px; height:126px; border-radius:63px;
+          background-image: radial-gradient(circle at 50% 42%, #16190f 0%, #0d0f09 58%, #050603 100%);
+          box-shadow: inset 0 0 0 2px #1b1e13, inset 0 3px 7px rgba(0,0,0,.95); }
+  .arc  { position:absolute; left:0px; top:0px; width:126px; height:126px; border-radius:63px; opacity:.92;
+          background-image: conic-gradient(from 0deg,
+             #3fc763 0deg, #3fc763 135deg,
+             rgba(0,0,0,0) 135deg, rgba(0,0,0,0) 225deg,
+             #cf2415 225deg, #cf2415 265.5deg,
+             #e79d0c 265.5deg, #e79d0c 319.5deg,
+             #3fc763 319.5deg, #3fc763 360deg); }
+  .arc-m{ position:absolute; left:11px; top:11px; width:104px; height:104px; border-radius:52px;
+          background-image: radial-gradient(circle at 50% 42%, #16190f 0%, #0d0f09 58%, #050603 100%); }
+  .tick { position:absolute; left:62px; top:13px; width:2px; transform-origin:1px 50px;
+          background-image: linear-gradient(180deg,#e6e0c4 0%,#a7a288 100%); }
+  .tick-mj { height:11px; }
+  .tick-mn { height:6px; width:1px; left:62.5px; opacity:.6; }
+  .num  { position:absolute; width:22px; height:11px; font-size:8px; line-height:11px;
+          text-align:center; letter-spacing:.2px; }
+  .dial-unit { position:absolute; left:0px; top:76px; width:126px; height:10px;
+          font-size:7px; line-height:10px; text-align:center; letter-spacing:1.4px; }
+  .dial-win  { position:absolute; left:43px; top:94px; width:40px; height:18px; }
+  .dial-wint { position:absolute; left:0px; top:0px; width:40px; height:18px;
+          font-size:12px; line-height:18px; text-align:center; letter-spacing:.6px; }
+  .ndl  { position:absolute; left:61px; top:11px; width:4px; height:64px; transform-origin:2px 52px;
+          border-radius:1px; box-shadow: 0 0 5px rgba(0,0,0,.85);
+          background-image: linear-gradient(180deg,#e33a22 0px,#e33a22 15px,#f4f1e4 15px,#f4f1e4 52px,
+                                                    #9b9784 52px,#9b9784 64px); }
+  .hub  { position:absolute; left:54px; top:54px; width:18px; height:18px; border-radius:9px;
+          background-image: radial-gradient(circle at 36% 30%, #cfcbb4 0%, #8b8871 38%, #4a4839 72%, #1b1c14 100%);
+          box-shadow: 0 1px 3px rgba(0,0,0,.9), inset 0 -1px 1px rgba(0,0,0,.5); }
+  .glass{ position:absolute; left:0px; top:0px; width:126px; height:126px; border-radius:63px;
+          background-image: linear-gradient(152deg, rgba(255,255,255,.15) 0%, rgba(255,255,255,.055) 25%,
+                                                    rgba(255,255,255,.014) 41%, rgba(255,255,255,0) 43%);
+          box-shadow: inset 0 0 20px rgba(0,0,0,.72); }
+  .bug  { position:absolute; left:68px; top:1px; width:4px; height:9px; transform-origin:2px 69px;
+          border-radius:1px; box-shadow:0 0 4px rgba(255,60,30,.7);
+          background-image: linear-gradient(180deg,#ff4a2c 0%,#a81808 100%); }
+
+  /* ===== BAY 3  ANNUNCIATOR lamp matrix =============================== */
+  .lamp { position:absolute; width:100px; height:26px; border-radius:2px; overflow:hidden; }
+  .lamp-lgd { position:absolute; left:13px; top:0px; width:84px; height:26px;
+              font-size:9px; line-height:26px; letter-spacing:.9px; }
+  .lamp-led { position:absolute; left:4px; top:6px; width:4px; height:14px; border-radius:2px; }
+  .cage { position:absolute; left:0px; top:0px; width:100px; height:26px;
+          background-image: repeating-linear-gradient(90deg,
+            rgba(0,0,0,0) 0px, rgba(0,0,0,0) 8px, rgba(0,0,0,.34) 8px, rgba(0,0,0,.34) 9px),
+            linear-gradient(180deg, rgba(255,255,255,.07) 0%, rgba(0,0,0,.20) 100%); }
+  .ptt { position:absolute; top:0px; height:13px; border-radius:2px;
+         background-image: linear-gradient(180deg,#5b5e42 0%,#43462f 60%,#31341f 100%);
+         box-shadow: 0 1px 0 #191b11, inset 0 1px 0 rgba(255,255,255,.14); }
+  .ptt-lgd { position:absolute; left:0px; top:0px; width:100%; height:13px;
+             font-size:6.5px; line-height:13px; text-align:center; letter-spacing:.9px; }
+
+  /* ===== BAY 4  CONTACT scope ========================================= */
+  .sc-bez { position:absolute; width:138px; height:138px; border-radius:69px;
+            background-image: conic-gradient(from 205deg,
+                #7c7f5f 0deg, #52553a 44deg, #333623 98deg, #212419 152deg,
+                #41442e 210deg, #6b6e50 270deg, #484b33 320deg, #7c7f5f 360deg);
+            box-shadow: 0 2px 4px rgba(0,0,0,.7), inset 0 2px 3px rgba(255,255,255,.13),
+                        inset 0 0 0 1px rgba(0,0,0,.5); }
+  .sc-face{ position:absolute; left:10px; top:10px; width:118px; height:118px; border-radius:59px;
+            overflow:hidden;
+            background-image: radial-gradient(circle at 50% 45%, #12240d 0%, #0a1707 62%, #040802 100%);
+            box-shadow: inset 0 0 0 2px #191c12, inset 0 3px 8px rgba(0,0,0,.95); }
+  .sc-ring{ position:absolute; box-shadow: inset 0 0 0 1px rgba(150,220,140,.22); }
+  .sc-gh  { position:absolute; left:0px; top:58.5px; width:118px; height:1px;
+            background-image: linear-gradient(90deg, rgba(150,220,140,0) 0%, rgba(150,220,140,.20) 18%,
+                                                     rgba(150,220,140,.20) 82%, rgba(150,220,140,0) 100%); }
+  .sc-gv  { position:absolute; left:58.5px; top:0px; width:1px; height:118px;
+            background-image: linear-gradient(180deg, rgba(150,220,140,0) 0%, rgba(150,220,140,.20) 18%,
+                                                      rgba(150,220,140,.20) 82%, rgba(150,220,140,0) 100%); }
+  .sc-cmp { position:absolute; width:14px; height:9px; font-size:7.5px; line-height:9px; text-align:center;
+            color:#8ec98a; text-shadow:0 0 4px rgba(90,200,90,.5); }
+  .sc-ndl { position:absolute; left:57.5px; top:0px; width:3px; height:59px; transform-origin:1.5px 59px;
+            background-image: linear-gradient(180deg, rgba(255,196,60,0) 0%, rgba(255,196,60,.9) 30%,
+                                                      rgba(255,222,140,1) 100%); }
+  .sc-blip2 { position:absolute; width:6px; height:6px; border-radius:3px;
+            background-image: radial-gradient(circle,#c8503a 0%,#7a2414 100%);
+            box-shadow: 0 0 5px rgba(220,80,50,.55); }
+  .sc-lock { position:absolute; width:18px; height:18px; border-radius:9px;
+            box-shadow: inset 0 0 0 1px rgba(255,196,60,.85), 0 0 6px rgba(255,170,40,.4); }
+  .sc-tgt { position:absolute; width:8px; height:8px; border-radius:4px;
+            background-image: radial-gradient(circle,#ffd0a0 0%,#ff4a24 55%,#8e1a08 100%);
+            box-shadow: 0 0 9px rgba(255,74,36,.95); }
+  .sc-own { position:absolute; left:55px; top:55px; width:8px; height:8px; border-radius:4px;
+            background-image: radial-gradient(circle,#ffffff 0%,#bfe8b8 50%,#4a7a44 100%);
+            box-shadow: 0 0 7px rgba(200,255,190,.7); }
+  .sc-glass { position:absolute; left:0px; top:0px; width:118px; height:118px; border-radius:59px;
+            background-image: linear-gradient(150deg, rgba(255,255,255,.13) 0%, rgba(255,255,255,.05) 24%,
+                                                      rgba(255,255,255,.012) 40%, rgba(255,255,255,0) 42%);
+            box-shadow: inset 0 0 20px rgba(0,0,0,.75); }
+
+  /* ===== edgewise (moving-pointer strip) meters ======================= */
+  .ew { position:absolute; height:25px; border-radius:2px; overflow:hidden;
+        background-image: linear-gradient(180deg,#0c0e08 0%,#141609 58%,#080a05 100%);
+        box-shadow: inset 0 2px 3px rgba(0,0,0,.88), inset 0 -1px 0 rgba(255,255,255,.07),
+                    inset 0 0 0 1px rgba(0,0,0,.55); }
+  .ew-scale { position:absolute; left:0px; top:0px; height:8px;
+        background-image: repeating-linear-gradient(90deg,
+          rgba(214,208,180,.34) 0px, rgba(214,208,180,.34) 1px, rgba(0,0,0,0) 1px, rgba(0,0,0,0) 8px); }
+  .ew-red { position:absolute; top:0px; height:8px; opacity:.9;
+        background-image: linear-gradient(180deg,#8f1c0c 0%,#4a0f06 100%); }
+  .ew-zero { position:absolute; top:0px; width:1px; height:9px;
+        background-image: linear-gradient(180deg,rgba(226,220,190,.8),rgba(226,220,190,.25)); }
+  .ew-ptr { position:absolute; top:0px; width:3px; height:12px; box-shadow:0 0 5px rgba(255,190,60,.7);
+        background-image: linear-gradient(180deg,#fff3d0 0%,#e8b028 60%,#8a6410 100%); }
+  .ew-lab { position:absolute; left:5px; top:11px; height:13px; font-size:8px; line-height:13px; letter-spacing:.6px; }
+  .ew-val { position:absolute; top:10px; height:14px; font-size:10px; line-height:14px;
+        text-align:right; letter-spacing:.4px; }
+
+  /* ===== BAY 5  ARMAMENT ============================================== */
+  .np-lit { position:absolute; height:20px; border-radius:2px;
+        background-image: linear-gradient(180deg,#d3c69c 0%,#bdae83 48%,#a4966c 100%);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.5), inset 0 -1px 1px rgba(0,0,0,.35),
+                    0 1px 2px rgba(0,0,0,.55); }
+  .np-dim { position:absolute; height:20px; border-radius:2px;
+        background-image: linear-gradient(180deg,#4e5138 0%,#3d4029 48%,#2f3221 100%);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.10), inset 0 -1px 1px rgba(0,0,0,.5),
+                    0 1px 2px rgba(0,0,0,.5); }
+  .np-t   { position:absolute; left:9px; top:0px; height:20px; font-size:11.5px; line-height:20px;
+        font-weight:bold; letter-spacing:2.2px; }
+  .np-s   { position:absolute; top:0px; height:20px; font-size:7.5px; line-height:20px;
+        letter-spacing:1px; text-align:right; }
+  .ctr    { position:absolute; height:26px; }
+  .ctr-l  { position:absolute; left:5px; top:2px; height:9px; font-size:6.5px; line-height:9px; letter-spacing:.9px; }
+  .ctr-v  { position:absolute; top:8px; height:16px; font-size:13px; line-height:16px;
+        text-align:right; letter-spacing:.5px; }
+  .magseg { position:absolute; top:0px; width:13px; height:8px; border-radius:1px; }
+  .hair   { position:absolute; height:1px;
+        background-image: linear-gradient(90deg, rgba(0,0,0,.5) 0%, rgba(0,0,0,.5) 100%);
+        box-shadow: 0 1px 0 rgba(255,255,255,.06); }
+
+  /* ===== BAY 6  teleprinter tape + chart repeater ===================== */
+  .tape { position:absolute; overflow:hidden; border-radius:1px;
+        background-image:
+          repeating-linear-gradient(180deg, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 20px,
+                                            rgba(90,74,40,.13) 20px, rgba(90,74,40,.13) 21px),
+          linear-gradient(90deg, rgba(120,100,60,.22) 0px, rgba(120,100,60,.06) 20px, rgba(0,0,0,0) 30px),
+          linear-gradient(180deg, #c9bb9a 0%, #d5c8a6 20%, #d9cdae 76%, #cabb98 100%);
+        box-shadow: inset 0 2px 5px rgba(0,0,0,.55), inset 0 -9px 13px rgba(255,182,80,.17),
+                    inset 0 0 0 1px rgba(0,0,0,.5), 0 1px 0 rgba(255,255,255,.08); }
+  .tp-line { position:absolute; left:22px; width:344px; height:21px; font-size:12px; line-height:21px;
+        letter-spacing:.1px; }
+  .tp-ts   { color:#7d6c48; }
+  .tp-hole { position:absolute; left:8px; width:4px; height:4px; border-radius:2px;
+        background-image: radial-gradient(circle at 50% 40%, #2b2418 0%, #6b5e42 70%, #a2957a 100%); }
+  .tp-punch{ position:absolute; left:15px; width:4px; height:9px;
+        background-image: linear-gradient(180deg,#a8200f 0%,#6d1408 100%); }
+  .tp-slot { position:absolute; left:0px; height:5px;
+        background-image: linear-gradient(180deg, rgba(0,0,0,.82) 0%, rgba(0,0,0,.35) 58%, rgba(255,196,110,.32) 100%); }
+  .chart-w { position:absolute; overflow:hidden; border-radius:2px;
+        background-image: linear-gradient(180deg,#0b1207 0%,#101a09 60%,#070c04 100%);
+        box-shadow: inset 0 2px 4px rgba(0,0,0,.9), inset 0 0 0 1px rgba(0,0,0,.55),
+                    inset 0 -1px 0 rgba(255,255,255,.07); }
+  .cc { position:absolute; width:8px; height:8px; }
+
+  /* ===== switch rail =================================================== */
+  .sw-sock { position:absolute; top:4px; width:60px; height:60px; border-radius:3px;
+        background-image: linear-gradient(180deg,#1e2015 0%,#262819 100%);
+        box-shadow: inset 0 2px 3px rgba(0,0,0,.8), inset 0 -1px 0 rgba(255,255,255,.07); }
+  .sw-no  { position:absolute; left:4px; top:2px; font-size:7px; line-height:8px; letter-spacing:.4px; }
+  .sw-cap { position:absolute; left:5px; top:10px; width:50px; height:44px; border-radius:3px;
+        background-image:
+          linear-gradient(180deg, rgba(255,255,255,.16) 0px, rgba(255,255,255,.04) 3px, rgba(255,255,255,0) 9px),
+          linear-gradient(180deg,#5b5e42 0%,#4a4d34 42%,#3a3d29 78%,#2d3021 100%);
+        box-shadow: 0 2px 0 #1a1c12, 0 3px 4px rgba(0,0,0,.62),
+                    inset 0 -1px 0 rgba(0,0,0,.45), inset 0 0 0 1px rgba(0,0,0,.28); }
+  .sw-cap-off { position:absolute; left:5px; top:10px; width:50px; height:44px; border-radius:3px;
+        background-image: linear-gradient(180deg,#31341f 0%,#292b1b 55%,#1f2115 100%);
+        box-shadow: inset 0 1px 2px rgba(0,0,0,.75), inset 0 0 0 1px rgba(0,0,0,.5); }
+  .sw-key { position:absolute; left:0px; top:4px; width:50px; height:16px;
+        font-size:14px; line-height:16px; text-align:center; font-weight:bold; }
+  .sw-act { position:absolute; left:0px; top:22px; width:50px; height:11px;
+        font-size:7.5px; line-height:11px; text-align:center; letter-spacing:.3px; }
+  .sw-bar { position:absolute; left:5px; width:50px; height:3px; box-shadow:0 1px 2px rgba(0,0,0,.8);
+        background-image: linear-gradient(180deg,#cfcab0 0%,#7d7a66 55%,#2a2c1e 100%); }
+  .sw-lock{ position:absolute; left:5px; top:41px; width:50px; height:13px;
+        font-size:7px; line-height:13px; text-align:center; letter-spacing:.5px; color:#ffcfc4;
+        background-image: linear-gradient(180deg,#8e1a10 0%,#5a0f08 100%);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.12); }
+  .ms-cell{ position:absolute; height:22px; font-size:8px; line-height:22px;
+        text-align:center; letter-spacing:.7px; border-radius:2px; }
+  .ms-det { position:absolute; width:1px; height:5px;
+        background-image: linear-gradient(180deg,#b9b39a,#4a4838); }
+  .ms-knob{ position:absolute; width:11px; height:11px; border-radius:6px;
+        background-image: radial-gradient(circle at 36% 28%, #dcd8c0 0%, #94916f 42%, #3f3d2f 100%);
+        box-shadow: 0 1px 3px rgba(0,0,0,.85), inset 0 -1px 1px rgba(0,0,0,.4); }
+  .vu     { position:absolute; border-radius:2px; overflow:hidden;
+        background-image: radial-gradient(circle at 50% 96%, #1a1c10 0%, #0d0f08 62%, #060803 100%);
+        box-shadow: inset 0 2px 4px rgba(0,0,0,.9), inset 0 0 0 1px rgba(0,0,0,.55),
+                    inset 0 -1px 0 rgba(255,255,255,.07); }
+  .vu-tick{ position:absolute; left:99px; width:2px; transform-origin:1px 38px;
+        background-image: linear-gradient(180deg,#e6e0c4 0%,#9d9880 100%); }
+  .vu-ndl { position:absolute; left:98.5px; top:6px; width:3px; height:44px; transform-origin:1.5px 38px;
+        border-radius:1px; box-shadow: 0 0 4px rgba(0,0,0,.8);
+        background-image: linear-gradient(180deg,#f7f3e2 0%,#cfcab0 62%,#6d6a58 100%); }
+  .vu-hub { position:absolute; left:94px; top:39px; width:12px; height:12px; border-radius:6px;
+        background-image: radial-gradient(circle at 36% 30%, #cfcbb4 0%, #7d7a63 45%, #24261a 100%);
+        box-shadow: 0 1px 2px rgba(0,0,0,.85); }
+  .vu-glass { position:absolute; left:0px; top:0px; width:100%; height:100%; border-radius:2px;
+        background-image: linear-gradient(158deg, rgba(255,255,255,.11) 0%, rgba(255,255,255,.035) 26%,
+                                                  rgba(255,255,255,0) 44%); }
+</style></head>
+<body><div id="screen">
+  <!-- ================= OVERHEAD ANNUNCIATOR PANEL  880x56 @ 520,0 ================= -->
+  <div id="oh-sh"></div>
+  <div id="oh" class="plate">
+    <div id="oh-lip" class="hz"></div>
+    <!-- crew identity plate -->
+    <div class="ohc" style="left:10px; width:300px;">
+      <div class="eng" style="position:absolute; left:0px; top:5px; width:300px; height:19px; font-size:15px; line-height:19px; font-weight:bold; letter-spacing:2.6px;">NIGEL ASHBY</div>
+      <div class="eng-x" style="position:absolute; left:0px; top:26px; width:300px; height:12px; font-size:9px; line-height:12px; letter-spacing:.9px;">SURVIVOR &#183; CHESWICK &#8212; RESIDENTIAL</div>
+    </div>
+    <div class="seam" style="left:315px; top:2px; height:49px;"></div>
+    <!-- master chronometer -->
+    <div class="ohc" style="left:320px; width:250px;">
+      <div class="win" style="left:82px; top:2px; width:86px; height:30px;">
+        <div class="led" style="position:absolute; left:0px; top:0px; width:86px; height:30px; font-size:23px; line-height:30px; text-align:center; letter-spacing:2.4px;">21:47</div>
+        <div class="slit"></div>
+      </div>
+      <div class="eng-d" style="position:absolute; left:0px; top:33px; width:250px; height:11px; font-size:8.5px; line-height:11px; text-align:center; letter-spacing:1.6px;">DAY 014 &#183; AUTUMN</div>
+    </div>
+    <div class="seam" style="left:575px; top:2px; height:49px;"></div>
+    <!-- environment repeaters -->
+    <div class="ohc" style="left:580px; width:290px;">
+      <div class="eng-x" style="position:absolute; left:0px; top:4px; width:30px; height:12px; font-size:8px; line-height:12px; letter-spacing:1px;">TEMP</div>
+      <div class="eng" style="position:absolute; left:31px; top:3px; width:112px; height:13px; font-size:9.5px; line-height:13px; letter-spacing:.5px;">+08 &#176;C</div>
+      <div class="eng-x" style="position:absolute; left:148px; top:4px; width:30px; height:12px; font-size:8px; line-height:12px; letter-spacing:1px;">WIND</div>
+      <div class="eng" style="position:absolute; left:179px; top:3px; width:112px; height:13px; font-size:9.5px; line-height:13px; letter-spacing:.5px;">NE 12 KM/H</div>
+      <div class="eng-x" style="position:absolute; left:0px; top:26px; width:30px; height:12px; font-size:8px; line-height:12px; letter-spacing:1px;">SKY</div>
+      <div class="eng" style="position:absolute; left:31px; top:25px; width:112px; height:13px; font-size:9.5px; line-height:13px; letter-spacing:.5px;">LIGHT DRIZZLE</div>
+      <div class="eng-x" style="position:absolute; left:148px; top:26px; width:30px; height:12px; font-size:8px; line-height:12px; letter-spacing:1px;">LUX</div>
+      <div class="eng" style="position:absolute; left:179px; top:25px; width:112px; height:13px; font-size:9.5px; line-height:13px; letter-spacing:.5px;">12% MOON</div>
+      <div style="position:absolute; left:233px; top:37px; width:8px; height:5px; background-image:linear-gradient(180deg,#e8b028,#e8b028); box-shadow:0 0 4px rgba(232,176,40,.6), inset 0 0 0 1px rgba(0,0,0,.5);"></div>
+      <div style="position:absolute; left:244px; top:37px; width:8px; height:5px; background-image:linear-gradient(180deg,#2b2d1e,#2b2d1e); box-shadow:inset 0 0 0 1px rgba(0,0,0,.5);"></div>
+      <div style="position:absolute; left:255px; top:37px; width:8px; height:5px; background-image:linear-gradient(180deg,#2b2d1e,#2b2d1e); box-shadow:inset 0 0 0 1px rgba(0,0,0,.5);"></div>
+      <div style="position:absolute; left:266px; top:37px; width:8px; height:5px; background-image:linear-gradient(180deg,#2b2d1e,#2b2d1e); box-shadow:inset 0 0 0 1px rgba(0,0,0,.5);"></div>
+      <div style="position:absolute; left:277px; top:37px; width:8px; height:5px; background-image:linear-gradient(180deg,#2b2d1e,#2b2d1e); box-shadow:inset 0 0 0 1px rgba(0,0,0,.5);"></div>
+    </div>
+    <div class="rv" style="left:5px; top:5px;"></div>
+    <div class="rv" style="left:5px; top:41px;"></div>
+    <div class="rv" style="left:868px; top:5px;"></div>
+    <div class="rv" style="left:868px; top:41px;"></div>
+  </div>
+
+  <!-- ================= BOTTOM BINNACLE  1920x240 @ 0,840 ================= -->
+  <div id="bn-sh"></div>
+  <div id="bn" class="plate">
+    <div id="bn-lip" class="hz"></div>
+    <div class="endhz hz" style="left:0px;"></div>
+    <div class="endhz hz" style="left:1908px;"></div>
+    <div id="deck">
+      <!-- ---------- BAY 1  CONDITION : six independent body-part VU columns ---------- -->
+      <div class="bay" style="left:0px; width:352px;">
+        <div class="bay-h eng-d" style="left:12px; width:180px;">1 &#183; CONDITION</div>
+        <div class="tab-hz hz" style="left:236px; width:104px;"></div>
+        <div class="tab-lgd" style="left:236px; width:104px;">L&#183;ARM CRIT</div>
+        <div class="recess" style="left:12px; top:15px; width:328px; height:148px;">
+          <!-- HEAD  20/24 = 83.3% -->
+          <div class="bp" style="left:2px;">
+            <div class="bp-lab eng-d">HEAD</div>
+            <div class="bp-well">
+              <div class="bp-fill" style="height:80px; background-image:linear-gradient(180deg,#d6f06a 0px,#d6f06a 2px,#9ac72c 3px,#9ac72c 80px); box-shadow:0 0 8px #9ac72c, inset 0 -1px 2px rgba(0,0,0,.35);"></div>
+              <div class="bp-crit"></div>
+              <div class="bp-seg"></div>
+              <div class="bp-glass"></div>
+            </div>
+            <div class="bp-val win"><div class="bp-valt led">20/24</div><div class="slit"></div></div>
+            <div class="bp-tag eng-x">OK</div>
+          </div>
+          <!-- TORSO  45/60 = 75.0% -->
+          <div class="bp" style="left:57px;">
+            <div class="bp-lab eng-d">TORSO</div>
+            <div class="bp-well">
+              <div class="bp-fill" style="height:72px; background-image:linear-gradient(180deg,#d6f06a 0px,#d6f06a 2px,#9ac72c 3px,#9ac72c 72px); box-shadow:0 0 8px #9ac72c, inset 0 -1px 2px rgba(0,0,0,.35);"></div>
+              <div class="bp-crit"></div>
+              <div class="bp-seg"></div>
+              <div class="bp-glass"></div>
+            </div>
+            <div class="bp-val win"><div class="bp-valt led">45/60</div><div class="slit"></div></div>
+            <div class="bp-tag eng-x">OK</div>
+          </div>
+          <!-- L&#183;ARM  8/30 = 26.7% -->
+          <div class="bp" style="left:112px;">
+            <div class="bp-lab-hz hz"></div>
+            <div class="bp-lab-al">L&#183;ARM</div>
+            <div class="bp-well bp-alarm">
+              <div class="bp-fill" style="height:26px; background-image:linear-gradient(180deg,#ff7057 0px,#ff7057 2px,#d4271a 3px,#d4271a 26px); box-shadow:0 0 8px #d4271a, inset 0 -1px 2px rgba(0,0,0,.35);"></div>
+              <div class="bp-crit"></div>
+              <div class="bp-seg"></div>
+              <div class="bp-glass"></div>
+            </div>
+            <div class="bp-val win"><div class="bp-valt led-r">8/30</div><div class="slit"></div></div>
+            <div class="bp-tag led-r">BLD&#183;BTN</div>
+          </div>
+          <!-- R&#183;ARM  30/30 = 100.0% -->
+          <div class="bp" style="left:167px;">
+            <div class="bp-lab eng-d">R&#183;ARM</div>
+            <div class="bp-well">
+              <div class="bp-fill" style="height:96px; background-image:linear-gradient(180deg,#8ff0ad 0px,#8ff0ad 2px,#3fc763 3px,#3fc763 96px); box-shadow:0 0 8px #3fc763, inset 0 -1px 2px rgba(0,0,0,.35);"></div>
+              <div class="bp-crit"></div>
+              <div class="bp-seg"></div>
+              <div class="bp-glass"></div>
+            </div>
+            <div class="bp-val win"><div class="bp-valt led">30/30</div><div class="slit"></div></div>
+            <div class="bp-tag eng-x">OK</div>
+          </div>
+          <!-- L&#183;LEG  22/28 = 78.6% -->
+          <div class="bp" style="left:222px;">
+            <div class="bp-lab eng-d">L&#183;LEG</div>
+            <div class="bp-well">
+              <div class="bp-fill" style="height:75px; background-image:linear-gradient(180deg,#d6f06a 0px,#d6f06a 2px,#9ac72c 3px,#9ac72c 75px); box-shadow:0 0 8px #9ac72c, inset 0 -1px 2px rgba(0,0,0,.35);"></div>
+              <div class="bp-crit"></div>
+              <div class="bp-seg"></div>
+              <div class="bp-glass"></div>
+            </div>
+            <div class="bp-val win"><div class="bp-valt led">22/28</div><div class="slit"></div></div>
+            <div class="bp-tag eng-x">OK</div>
+          </div>
+          <!-- R&#183;LEG  28/28 = 100.0% -->
+          <div class="bp" style="left:277px;">
+            <div class="bp-lab eng-d">R&#183;LEG</div>
+            <div class="bp-well">
+              <div class="bp-fill" style="height:96px; background-image:linear-gradient(180deg,#8ff0ad 0px,#8ff0ad 2px,#3fc763 3px,#3fc763 96px); box-shadow:0 0 8px #3fc763, inset 0 -1px 2px rgba(0,0,0,.35);"></div>
+              <div class="bp-crit"></div>
+              <div class="bp-seg"></div>
+              <div class="bp-glass"></div>
+            </div>
+            <div class="bp-val win"><div class="bp-valt led">28/28</div><div class="slit"></div></div>
+            <div class="bp-tag eng-x">OK</div>
+          </div>
+        </div>
+      </div>
+      <!-- ---------- BAY 2  STAMINA : 270 deg conic-gradient dial + rotated needle ---------- -->
+      <div class="bay" style="left:352px; width:176px;">
+        <div class="bay-h eng-d" style="left:12px; width:78px;">2 &#183; STAMINA</div>
+        <div class="win" style="left:100px; top:0px; width:64px; height:13px;">
+          <div class="led" style="position:absolute; left:0px; top:0px; width:64px; height:13px; font-size:8.5px; line-height:13px; text-align:center; letter-spacing:.4px;">5100/8700</div>
+          <div class="slit"></div>
+        </div>
+        <div class="recess" style="left:12px; top:15px; width:152px; height:148px;">
+          <div class="bez" style="left:6px; top:4px;">
+            <div class="bug" style="transform:rotate(-94.5deg);"></div>
+            <div class="face">
+              <div class="arc"></div>
+              <div class="arc-m"></div>
+              <div class="tick tick-mj" style="transform:rotate(-135deg);"></div>
+              <div class="tick tick-mn" style="transform:rotate(-121.5deg);"></div>
+              <div class="tick tick-mn" style="transform:rotate(-108deg);"></div>
+              <div class="tick tick-mn" style="transform:rotate(-94.5deg);"></div>
+              <div class="tick tick-mn" style="transform:rotate(-81deg);"></div>
+              <div class="tick tick-mj" style="transform:rotate(-67.5deg);"></div>
+              <div class="tick tick-mn" style="transform:rotate(-54deg);"></div>
+              <div class="tick tick-mn" style="transform:rotate(-40.5deg);"></div>
+              <div class="tick tick-mn" style="transform:rotate(-27deg);"></div>
+              <div class="tick tick-mn" style="transform:rotate(-13.5deg);"></div>
+              <div class="tick tick-mj" style="transform:rotate(0deg);"></div>
+              <div class="tick tick-mn" style="transform:rotate(13.5deg);"></div>
+              <div class="tick tick-mn" style="transform:rotate(27deg);"></div>
+              <div class="tick tick-mn" style="transform:rotate(40.5deg);"></div>
+              <div class="tick tick-mn" style="transform:rotate(54deg);"></div>
+              <div class="tick tick-mj" style="transform:rotate(67.5deg);"></div>
+              <div class="tick tick-mn" style="transform:rotate(81deg);"></div>
+              <div class="tick tick-mn" style="transform:rotate(94.5deg);"></div>
+              <div class="tick tick-mn" style="transform:rotate(108deg);"></div>
+              <div class="tick tick-mn" style="transform:rotate(121.5deg);"></div>
+              <div class="tick tick-mj" style="transform:rotate(135deg);"></div>
+              <div class="num eng-d" style="left:28px; top:82px;">0</div>
+              <div class="num eng-d" style="left:21px; top:44px;">25</div>
+              <div class="num eng-d" style="left:52px; top:24px;">50</div>
+              <div class="num eng-d" style="left:83px; top:44px;">75</div>
+              <div class="num eng-d" style="left:76px; top:82px;">100</div>
+              <div class="dial-unit eng-x">PCT</div>
+              <div class="dial-win win">
+                <div class="dial-wint led">59%</div>
+                <div class="slit"></div>
+              </div>
+              <div class="ndl" style="transform:rotate(23.3deg);"></div>
+              <div class="hub"></div>
+              <div class="glass"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- ---------- BAY 3  ANNUNCIATOR : 15 caged lamps, 12 lit / 3 dark ---------- -->
+      <div class="bay" style="left:528px; width:332px;">
+        <div class="bay-h eng-d" style="left:12px; width:150px;">3 &#183; ANNUNCIATOR</div>
+        <div class="ptt" style="left:236px; width:84px;"><div class="ptt-lgd eng-x">PRESS-TO-TEST</div></div>
+        <div class="recess" style="left:12px; top:15px; width:308px; height:148px;">
+          <div class="lamp" style="left:0px; top:1px; background-image:linear-gradient(180deg,#2c5f33 0%,#163a1b 100%); box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 -1px 1px rgba(0,0,0,.6), inset 0 0 9px rgba(70,230,110,.45), inset 0 0 0 1px rgba(0,0,0,.5);">
+            <div class="lamp-led" style="background-image:linear-gradient(180deg,#4ef07a,#4ef07a); box-shadow:0 0 7px rgba(70,230,110,.85), inset 0 0 0 1px rgba(0,0,0,.4);"></div>
+            <div class="lamp-lgd" style="color:#a9f2b9; text-shadow:0 0 6px rgba(0,0,0,.75);">SAFE MODE ON</div>
+            <div class="cage"></div>
+          </div>
+          <div class="lamp" style="left:104px; top:1px; background-image:linear-gradient(180deg,#5e4711 0%,#332608 100%); box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 -1px 1px rgba(0,0,0,.6), inset 0 0 9px rgba(255,176,32,.45), inset 0 0 0 1px rgba(0,0,0,.5);">
+            <div class="lamp-led" style="background-image:linear-gradient(180deg,#ffb020,#ffb020); box-shadow:0 0 7px rgba(255,176,32,.9), inset 0 0 0 1px rgba(0,0,0,.4);"></div>
+            <div class="lamp-lgd" style="color:#ffd478; text-shadow:0 0 6px rgba(0,0,0,.75);">CONTACT &#215;3</div>
+            <div class="cage"></div>
+          </div>
+          <div class="lamp" style="left:208px; top:1px; background-image:linear-gradient(180deg,#6d1b10 0%,#3a0d07 100%); box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 -1px 1px rgba(0,0,0,.6), inset 0 0 9px rgba(255,58,42,.55), inset 0 0 0 1px rgba(0,0,0,.5);">
+            <div class="lamp-led" style="background-image:linear-gradient(180deg,#ff3a2a,#ff3a2a); box-shadow:0 0 7px rgba(255,58,42,.95), inset 0 0 0 1px rgba(0,0,0,.4);"></div>
+            <div class="lamp-lgd" style="color:#ff9d88; text-shadow:0 0 6px rgba(0,0,0,.75);">TRACKING &#215;1</div>
+            <div class="cage"></div>
+          </div>
+          <div class="lamp" style="left:0px; top:31px; background-image:linear-gradient(180deg,#6d1b10 0%,#3a0d07 100%); box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 -1px 1px rgba(0,0,0,.6), inset 0 0 9px rgba(255,58,42,.55), inset 0 0 0 1px rgba(0,0,0,.5);">
+            <div class="lamp-led" style="background-image:linear-gradient(180deg,#ff3a2a,#ff3a2a); box-shadow:0 0 7px rgba(255,58,42,.95), inset 0 0 0 1px rgba(0,0,0,.4);"></div>
+            <div class="lamp-lgd" style="color:#ff9d88; text-shadow:0 0 6px rgba(0,0,0,.75);">BLEED L&#183;ARM</div>
+            <div class="cage"></div>
+          </div>
+          <div class="lamp" style="left:104px; top:31px; background-image:linear-gradient(180deg,#6d1b10 0%,#3a0d07 100%); box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 -1px 1px rgba(0,0,0,.6), inset 0 0 9px rgba(255,58,42,.55), inset 0 0 0 1px rgba(0,0,0,.5);">
+            <div class="lamp-led" style="background-image:linear-gradient(180deg,#ff3a2a,#ff3a2a); box-shadow:0 0 7px rgba(255,58,42,.95), inset 0 0 0 1px rgba(0,0,0,.4);"></div>
+            <div class="lamp-lgd" style="color:#ff9d88; text-shadow:0 0 6px rgba(0,0,0,.75);">BITE L&#183;ARM</div>
+            <div class="cage"></div>
+          </div>
+          <div class="lamp" style="left:208px; top:31px; background-image:linear-gradient(180deg,#5e4711 0%,#332608 100%); box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 -1px 1px rgba(0,0,0,.6), inset 0 0 9px rgba(255,176,32,.45), inset 0 0 0 1px rgba(0,0,0,.5);">
+            <div class="lamp-led" style="background-image:linear-gradient(180deg,#ffb020,#ffb020); box-shadow:0 0 7px rgba(255,176,32,.9), inset 0 0 0 1px rgba(0,0,0,.4);"></div>
+            <div class="lamp-lgd" style="color:#ffd478; text-shadow:0 0 6px rgba(0,0,0,.75);">PAIN 12</div>
+            <div class="cage"></div>
+          </div>
+          <div class="lamp" style="left:0px; top:61px; background-image:linear-gradient(180deg,#154850 0%,#0a2a2e 100%); box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 -1px 1px rgba(0,0,0,.6), inset 0 0 9px rgba(70,208,224,.42), inset 0 0 0 1px rgba(0,0,0,.5);">
+            <div class="lamp-led" style="background-image:linear-gradient(180deg,#46d0e0,#46d0e0); box-shadow:0 0 7px rgba(70,208,224,.85), inset 0 0 0 1px rgba(0,0,0,.4);"></div>
+            <div class="lamp-lgd" style="color:#98e6f0; text-shadow:0 0 6px rgba(0,0,0,.75);">SOAKED</div>
+            <div class="cage"></div>
+          </div>
+          <div class="lamp" style="left:104px; top:61px; background-image:linear-gradient(180deg,#5e4711 0%,#332608 100%); box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 -1px 1px rgba(0,0,0,.6), inset 0 0 9px rgba(255,176,32,.45), inset 0 0 0 1px rgba(0,0,0,.5);">
+            <div class="lamp-led" style="background-image:linear-gradient(180deg,#ffb020,#ffb020); box-shadow:0 0 7px rgba(255,176,32,.9), inset 0 0 0 1px rgba(0,0,0,.4);"></div>
+            <div class="lamp-lgd" style="color:#ffd478; text-shadow:0 0 6px rgba(0,0,0,.75);">TIRED</div>
+            <div class="cage"></div>
+          </div>
+          <div class="lamp" style="left:208px; top:61px; background-image:linear-gradient(180deg,#154850 0%,#0a2a2e 100%); box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 -1px 1px rgba(0,0,0,.6), inset 0 0 9px rgba(70,208,224,.42), inset 0 0 0 1px rgba(0,0,0,.5);">
+            <div class="lamp-led" style="background-image:linear-gradient(180deg,#46d0e0,#46d0e0); box-shadow:0 0 7px rgba(70,208,224,.85), inset 0 0 0 1px rgba(0,0,0,.4);"></div>
+            <div class="lamp-lgd" style="color:#98e6f0; text-shadow:0 0 6px rgba(0,0,0,.75);">CHILLY</div>
+            <div class="cage"></div>
+          </div>
+          <div class="lamp" style="left:0px; top:91px; background-image:linear-gradient(180deg,#5e4711 0%,#332608 100%); box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 -1px 1px rgba(0,0,0,.6), inset 0 0 9px rgba(255,176,32,.45), inset 0 0 0 1px rgba(0,0,0,.5);">
+            <div class="lamp-led" style="background-image:linear-gradient(180deg,#ffb020,#ffb020); box-shadow:0 0 7px rgba(255,176,32,.9), inset 0 0 0 1px rgba(0,0,0,.4);"></div>
+            <div class="lamp-lgd" style="color:#ffd478; text-shadow:0 0 6px rgba(0,0,0,.75);">PECKISH</div>
+            <div class="cage"></div>
+          </div>
+          <div class="lamp" style="left:104px; top:91px; background-image:linear-gradient(180deg,#5e4711 0%,#332608 100%); box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 -1px 1px rgba(0,0,0,.6), inset 0 0 9px rgba(255,176,32,.45), inset 0 0 0 1px rgba(0,0,0,.5);">
+            <div class="lamp-led" style="background-image:linear-gradient(180deg,#ffb020,#ffb020); box-shadow:0 0 7px rgba(255,176,32,.9), inset 0 0 0 1px rgba(0,0,0,.4);"></div>
+            <div class="lamp-lgd" style="color:#ffd478; text-shadow:0 0 6px rgba(0,0,0,.75);">THIRSTY</div>
+            <div class="cage"></div>
+          </div>
+          <div class="lamp" style="left:208px; top:91px; background-image:linear-gradient(180deg,#5e4711 0%,#332608 100%); box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 -1px 1px rgba(0,0,0,.6), inset 0 0 9px rgba(255,176,32,.45), inset 0 0 0 1px rgba(0,0,0,.5);">
+            <div class="lamp-led" style="background-image:linear-gradient(180deg,#ffb020,#ffb020); box-shadow:0 0 7px rgba(255,176,32,.9), inset 0 0 0 1px rgba(0,0,0,.4);"></div>
+            <div class="lamp-lgd" style="color:#ffd478; text-shadow:0 0 6px rgba(0,0,0,.75);">LAMP 34%</div>
+            <div class="cage"></div>
+          </div>
+          <div class="lamp" style="left:0px; top:121px; background-image:linear-gradient(180deg,#23251a 0%,#1a1c12 100%); box-shadow:inset 0 1px 0 rgba(255,255,255,.07), inset 0 -1px 1px rgba(0,0,0,.65), inset 0 0 0 1px rgba(0,0,0,.5);">
+            <div class="lamp-led" style="background-image:linear-gradient(180deg,#2b2d1f,#2b2d1f); box-shadow:inset 0 0 0 1px rgba(0,0,0,.55);"></div>
+            <div class="lamp-lgd" style="color:#54563f; text-shadow:0 1px 0 rgba(0,0,0,.75);">RADIATION</div>
+            <div class="cage"></div>
+          </div>
+          <div class="lamp" style="left:104px; top:121px; background-image:linear-gradient(180deg,#23251a 0%,#1a1c12 100%); box-shadow:inset 0 1px 0 rgba(255,255,255,.07), inset 0 -1px 1px rgba(0,0,0,.65), inset 0 0 0 1px rgba(0,0,0,.5);">
+            <div class="lamp-led" style="background-image:linear-gradient(180deg,#2b2d1f,#2b2d1f); box-shadow:inset 0 0 0 1px rgba(0,0,0,.55);"></div>
+            <div class="lamp-lgd" style="color:#54563f; text-shadow:0 1px 0 rgba(0,0,0,.75);">INFECTED</div>
+            <div class="cage"></div>
+          </div>
+          <div class="lamp" style="left:208px; top:121px; background-image:linear-gradient(180deg,#23251a 0%,#1a1c12 100%); box-shadow:inset 0 1px 0 rgba(255,255,255,.07), inset 0 -1px 1px rgba(0,0,0,.65), inset 0 0 0 1px rgba(0,0,0,.5);">
+            <div class="lamp-led" style="background-image:linear-gradient(180deg,#2b2d1f,#2b2d1f); box-shadow:inset 0 0 0 1px rgba(0,0,0,.55);"></div>
+            <div class="lamp-lgd" style="color:#54563f; text-shadow:0 1px 0 rgba(0,0,0,.75);">BROKEN LIMB</div>
+            <div class="cage"></div>
+          </div>
+        </div>
+      </div>
+      <!-- ---------- BAY 4  CONTACT : bearing scope, 12-tile range ---------- -->
+      <div class="bay" style="left:860px; width:276px;">
+        <div class="bay-h eng-d" style="left:12px; width:120px;">4 &#183; CONTACT</div>
+        <div class="eng-x" style="position:absolute; left:182px; top:0px; width:82px; height:13px; font-size:7px; line-height:13px; letter-spacing:.9px; text-align:right;">SCALE 12 TILES</div>
+        <div class="recess" style="left:12px; top:15px; width:252px; height:148px;">
+          <div class="sc-bez" style="left:0px; top:4px;">
+            <div class="sc-face">
+              <div class="sc-ring" style="left:39.3px; top:39.3px; width:39.3px; height:39.3px; border-radius:19.7px;"></div>
+              <div class="sc-ring" style="left:19.7px; top:19.7px; width:78.7px; height:78.7px; border-radius:39.3px;"></div>
+              <div class="sc-gh"></div>
+              <div class="sc-gv"></div>
+              <div class="sc-cmp" style="left:52px; top:2px;">N</div>
+              <div class="sc-cmp" style="left:104px; top:54px;">E</div>
+              <div class="sc-cmp" style="left:52px; top:107px;">S</div>
+              <div class="sc-cmp" style="left:0px; top:54px;">W</div>
+              <div class="sc-blip2" style="left:88.7px; top:45.4px;"></div>
+              <div class="sc-blip2" style="left:70.4px; top:11.6px;"></div>
+              <div class="sc-ndl" style="transform:rotate(45deg);"></div>
+              <div class="sc-lock" style="left:63.9px; top:36.1px;"></div>
+              <div class="sc-tgt" style="left:68.9px; top:41.1px;"></div>
+              <div class="sc-own"></div>
+              <div class="sc-glass"></div>
+            </div>
+          </div>
+          <!-- designated-contact readout column -->
+          <div class="eng-x" style="position:absolute; left:146px; top:4px; width:106px; height:11px; font-size:7px; line-height:11px; letter-spacing:.9px;">HOSTILE &#183; DESIGNATED</div>
+          <div class="np-dim" style="left:146px; top:16px; width:106px; background-image:linear-gradient(180deg,#5e2418 0%,#4a1a10 48%,#360f08 100%);">
+            <div class="np-t" style="left:6px; font-size:9.5px; letter-spacing:1.1px; color:#ffb2a0; text-shadow:0 0 6px rgba(255,70,40,.6);">ZOMBIE BRUTE</div>
+          </div>
+          <div class="ew" style="left:146px; top:40px; width:106px;">
+            <div class="ew-scale" style="width:106px;"></div>
+            <div class="ew-ptr" style="left:65px;"></div>
+            <div class="ew-lab eng-x">HP</div>
+            <div class="ew-val led" style="left:52px; width:48px;">62%</div>
+          </div>
+          <div class="win" style="left:146px; top:69px; width:51px; height:24px;">
+            <div class="ctr-l eng-x" style="left:4px;">BRG</div>
+            <div class="ctr-v led" style="left:0px; top:7px; width:47px;">045</div>
+            <div class="slit"></div>
+          </div>
+          <div class="win" style="left:201px; top:69px; width:51px; height:24px;">
+            <div class="ctr-l eng-x" style="left:4px;">RNG</div>
+            <div class="ctr-v led" style="left:0px; top:7px; width:47px;">04</div>
+            <div class="slit"></div>
+          </div>
+          <div class="lamp" style="left:146px; top:98px; width:106px; height:22px; background-image:linear-gradient(180deg,#5e4711 0%,#332608 100%); box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 -1px 1px rgba(0,0,0,.6), inset 0 0 9px rgba(255,176,32,.45), inset 0 0 0 1px rgba(0,0,0,.5);">
+            <div class="lamp-led" style="top:4px; background-image:linear-gradient(180deg,#ffb020,#ffb020); box-shadow:0 0 7px rgba(255,176,32,.9), inset 0 0 0 1px rgba(0,0,0,.4);"></div>
+            <div class="lamp-lgd" style="width:90px; height:22px; line-height:22px; font-size:8.5px; color:#ffd478; text-shadow:0 0 6px rgba(0,0,0,.75);">MOVING &#183; CLOSING</div>
+            <div class="cage" style="width:106px; height:22px;"></div>
+          </div>
+          <div class="eng-x" style="position:absolute; left:146px; top:125px; width:106px; height:11px; font-size:7px; line-height:11px; letter-spacing:.7px;">3 VISIBLE &#183; 1 TRACKING</div>
+        </div>
+      </div>
+      <!-- ---------- BAY 5  ARMAMENT ---------- -->
+      <div class="bay" style="left:1136px; width:284px;">
+        <div class="bay-h eng-d" style="left:12px; width:150px;">5 &#183; ARMAMENT</div>
+        <div class="recess" style="left:12px; top:15px; width:260px; height:148px;">
+          <div class="eng-x" style="position:absolute; left:0px; top:1px; width:260px; height:10px; font-size:7px; line-height:10px; letter-spacing:1.1px;">WIELDED</div>
+          <div class="np-lit" style="left:0px; top:11px; width:260px;">
+            <div class="np-t" style="color:#171910; text-shadow:0 1px 0 rgba(255,255,255,.35);">FIRE AXE</div>
+            <div class="np-s" style="left:170px; width:82px; color:#3c3722;">MELEE &#183; 2H</div>
+          </div>
+          <div class="ctr win" style="left:0px; top:34px; width:84px; height:26px;">
+            <div class="ctr-l eng-x">BASH</div>
+            <div class="ctr-v led" style="left:0px; width:78px;">32</div>
+            <div class="slit"></div>
+          </div>
+          <div class="ctr win" style="left:88px; top:34px; width:84px; height:26px;">
+            <div class="ctr-l eng-x">CUT</div>
+            <div class="ctr-v led-x" style="left:0px; width:78px;">00</div>
+            <div class="slit"></div>
+          </div>
+          <div class="ctr win" style="left:176px; top:34px; width:84px; height:26px;">
+            <div class="ctr-l eng-x">TO-HIT</div>
+            <div class="ctr-v led" style="left:0px; width:78px;">+1</div>
+            <div class="slit"></div>
+          </div>
+          <div class="hair" style="left:0px; top:65px; width:260px;"></div>
+          <div class="eng-x" style="position:absolute; left:0px; top:70px; width:260px; height:10px; font-size:7px; line-height:10px; letter-spacing:1.1px;">SIDEARM &#183; STOWED (NOT IN HAND)</div>
+          <div class="np-dim" style="left:0px; top:80px; width:260px;">
+            <div class="np-t eng-d" style="text-shadow:0 1px 0 rgba(0,0,0,.9);">GLOCK 19</div>
+            <div class="np-s eng-x" style="left:168px; width:84px;">9&#215;19 JHP</div>
+          </div>
+          <div class="ctr win" style="left:0px; top:103px; width:120px; height:26px;">
+            <div class="ctr-l eng-x">ROUNDS</div>
+            <div class="ctr-v led" style="left:0px; width:114px;">12/17</div>
+            <div class="slit"></div>
+          </div>
+          <div class="eng-x" style="position:absolute; left:128px; top:105px; width:132px; height:10px; font-size:6.5px; line-height:10px; letter-spacing:.9px; text-align:right;">MAGAZINE CHARGE</div>
+          <div class="magseg" style="left:0px; top:134px; background-image:linear-gradient(180deg,#ffc55a 0%,#e8901a 100%); box-shadow:0 0 5px rgba(255,168,40,.65), inset 0 0 0 1px rgba(0,0,0,.35);"></div>
+          <div class="magseg" style="left:15px; top:134px; background-image:linear-gradient(180deg,#ffc55a 0%,#e8901a 100%); box-shadow:0 0 5px rgba(255,168,40,.65), inset 0 0 0 1px rgba(0,0,0,.35);"></div>
+          <div class="magseg" style="left:30px; top:134px; background-image:linear-gradient(180deg,#ffc55a 0%,#e8901a 100%); box-shadow:0 0 5px rgba(255,168,40,.65), inset 0 0 0 1px rgba(0,0,0,.35);"></div>
+          <div class="magseg" style="left:45px; top:134px; background-image:linear-gradient(180deg,#ffc55a 0%,#e8901a 100%); box-shadow:0 0 5px rgba(255,168,40,.65), inset 0 0 0 1px rgba(0,0,0,.35);"></div>
+          <div class="magseg" style="left:60px; top:134px; background-image:linear-gradient(180deg,#ffc55a 0%,#e8901a 100%); box-shadow:0 0 5px rgba(255,168,40,.65), inset 0 0 0 1px rgba(0,0,0,.35);"></div>
+          <div class="magseg" style="left:75px; top:134px; background-image:linear-gradient(180deg,#ffc55a 0%,#e8901a 100%); box-shadow:0 0 5px rgba(255,168,40,.65), inset 0 0 0 1px rgba(0,0,0,.35);"></div>
+          <div class="magseg" style="left:90px; top:134px; background-image:linear-gradient(180deg,#ffc55a 0%,#e8901a 100%); box-shadow:0 0 5px rgba(255,168,40,.65), inset 0 0 0 1px rgba(0,0,0,.35);"></div>
+          <div class="magseg" style="left:105px; top:134px; background-image:linear-gradient(180deg,#ffc55a 0%,#e8901a 100%); box-shadow:0 0 5px rgba(255,168,40,.65), inset 0 0 0 1px rgba(0,0,0,.35);"></div>
+          <div class="magseg" style="left:120px; top:134px; background-image:linear-gradient(180deg,#ffc55a 0%,#e8901a 100%); box-shadow:0 0 5px rgba(255,168,40,.65), inset 0 0 0 1px rgba(0,0,0,.35);"></div>
+          <div class="magseg" style="left:135px; top:134px; background-image:linear-gradient(180deg,#ffc55a 0%,#e8901a 100%); box-shadow:0 0 5px rgba(255,168,40,.65), inset 0 0 0 1px rgba(0,0,0,.35);"></div>
+          <div class="magseg" style="left:150px; top:134px; background-image:linear-gradient(180deg,#ffc55a 0%,#e8901a 100%); box-shadow:0 0 5px rgba(255,168,40,.65), inset 0 0 0 1px rgba(0,0,0,.35);"></div>
+          <div class="magseg" style="left:165px; top:134px; background-image:linear-gradient(180deg,#ffc55a 0%,#e8901a 100%); box-shadow:0 0 5px rgba(255,168,40,.65), inset 0 0 0 1px rgba(0,0,0,.35);"></div>
+          <div class="magseg" style="left:180px; top:134px; background-image:linear-gradient(180deg,#2a2c1c 0%,#1c1e12 100%); box-shadow:inset 0 0 0 1px rgba(0,0,0,.5);"></div>
+          <div class="magseg" style="left:195px; top:134px; background-image:linear-gradient(180deg,#2a2c1c 0%,#1c1e12 100%); box-shadow:inset 0 0 0 1px rgba(0,0,0,.5);"></div>
+          <div class="magseg" style="left:210px; top:134px; background-image:linear-gradient(180deg,#2a2c1c 0%,#1c1e12 100%); box-shadow:inset 0 0 0 1px rgba(0,0,0,.5);"></div>
+          <div class="magseg" style="left:225px; top:134px; background-image:linear-gradient(180deg,#2a2c1c 0%,#1c1e12 100%); box-shadow:inset 0 0 0 1px rgba(0,0,0,.5);"></div>
+          <div class="magseg" style="left:240px; top:134px; background-image:linear-gradient(180deg,#2a2c1c 0%,#1c1e12 100%); box-shadow:inset 0 0 0 1px rgba(0,0,0,.5);"></div>
+        </div>
+      </div>
+      <!-- ---------- BAY 6  TELEPRINTER tape + CHART repeater ---------- -->
+      <div class="bay" style="left:1420px; width:500px;">
+        <div class="bay-h eng-d" style="left:12px; width:200px;">6 &#183; TELEPRINTER</div>
+        <div class="eng-x" style="position:absolute; left:392px; top:0px; width:96px; height:13px; font-size:7px; line-height:13px; letter-spacing:.9px; text-align:center;">CHART REPEATER</div>
+        <div class="recess" style="left:12px; top:15px; width:476px; height:148px;">
+          <div class="tape" style="left:0px; top:2px; width:372px; height:140px;">
+            <div class="tp-hole" style="top:12px;"></div>
+            <div class="tp-line" style="top:4px; color:#2b2820; opacity:0.70;"><span class="tp-ts">21:46</span>&#160;&#160;&#160;You hit the zombie brute with your fire axe.</div>
+            <div class="tp-hole" style="top:33px;"></div>
+            <div class="tp-punch" style="top:31px; opacity:0.80;"></div>
+            <div class="tp-line" style="top:25px; color:#8e1a10; opacity:0.80;"><span class="tp-ts">21:46</span>&#160;&#160;&#160;The zombie brute claws your left arm!</div>
+            <div class="tp-hole" style="top:54px;"></div>
+            <div class="tp-punch" style="top:52px; opacity:0.88;"></div>
+            <div class="tp-line" style="top:46px; color:#8e1a10; opacity:0.88;"><span class="tp-ts">21:47</span>&#160;&#160;&#160;Your left arm is bleeding.</div>
+            <div class="tp-hole" style="top:75px;"></div>
+            <div class="tp-punch" style="top:73px; opacity:0.92;"></div>
+            <div class="tp-line" style="top:67px; color:#a2564a; opacity:0.92;"><span class="tp-ts">21:47</span>&#160;&#160;&#160;You feel a sharp pain.</div>
+            <div class="tp-hole" style="top:96px;"></div>
+            <div class="tp-line" style="top:88px; color:#8a6410; opacity:0.96;"><span class="tp-ts">21:47</span>&#160;&#160;&#160;The zombie shambler groans nearby.</div>
+            <div class="tp-hole" style="top:117px;"></div>
+            <div class="tp-line" style="top:109px; color:#8a6410; opacity:1.00; font-weight:bold;"><span class="tp-ts">21:47</span>&#160;&#160;&#160;You are getting thirsty.</div>
+            <div class="tp-slot" style="top:135px; width:372px;"></div>
+          </div>
+          <div class="chart-w" style="left:380px; top:2px; width:96px; height:100px;">
+            <div class="cc" style="left:4px; top:6px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:12px; top:6px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:20px; top:6px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:28px; top:6px; background-image:linear-gradient(180deg,#2f4d20,#2f4d20);"></div>
+            <div class="cc" style="left:36px; top:6px; background-image:linear-gradient(180deg,#2f4d20,#2f4d20);"></div>
+            <div class="cc" style="left:44px; top:6px; background-image:linear-gradient(180deg,#2f4d20,#2f4d20);"></div>
+            <div class="cc" style="left:52px; top:6px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:60px; top:6px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:68px; top:6px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:76px; top:6px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:84px; top:6px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:4px; top:14px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:12px; top:14px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:20px; top:14px; background-image:linear-gradient(180deg,#2f4d20,#2f4d20);"></div>
+            <div class="cc" style="left:28px; top:14px; background-image:linear-gradient(180deg,#2f4d20,#2f4d20);"></div>
+            <div class="cc" style="left:36px; top:14px; background-image:linear-gradient(180deg,#2f4d20,#2f4d20);"></div>
+            <div class="cc" style="left:44px; top:14px; background-image:linear-gradient(180deg,#2f4d20,#2f4d20);"></div>
+            <div class="cc" style="left:52px; top:14px; background-image:linear-gradient(180deg,#2f4d20,#2f4d20);"></div>
+            <div class="cc" style="left:60px; top:14px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:68px; top:14px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:76px; top:14px; background-image:linear-gradient(180deg,#e8b028,#e8b028); box-shadow:0 0 6px rgba(232,176,40,.85);"></div>
+            <div class="cc" style="left:84px; top:14px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:4px; top:22px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:12px; top:22px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:20px; top:22px; background-image:linear-gradient(180deg,#2f4d20,#2f4d20);"></div>
+            <div class="cc" style="left:28px; top:22px; background-image:linear-gradient(180deg,#2f4d20,#2f4d20);"></div>
+            <div class="cc" style="left:36px; top:22px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:44px; top:22px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:52px; top:22px; background-image:linear-gradient(180deg,#2f4d20,#2f4d20);"></div>
+            <div class="cc" style="left:60px; top:22px; background-image:linear-gradient(180deg,#2f4d20,#2f4d20);"></div>
+            <div class="cc" style="left:68px; top:22px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:76px; top:22px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:84px; top:22px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:4px; top:30px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:12px; top:30px; background-image:linear-gradient(180deg,#8a7020,#8a7020);"></div>
+            <div class="cc" style="left:20px; top:30px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:28px; top:30px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:36px; top:30px; background-image:linear-gradient(180deg,#57583f,#57583f);"></div>
+            <div class="cc" style="left:44px; top:30px; background-image:linear-gradient(180deg,#57583f,#57583f);"></div>
+            <div class="cc" style="left:52px; top:30px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:60px; top:30px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:68px; top:30px; background-image:linear-gradient(180deg,#2f4d20,#2f4d20);"></div>
+            <div class="cc" style="left:76px; top:30px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:84px; top:30px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:4px; top:38px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:12px; top:38px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:20px; top:38px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:28px; top:38px; background-image:linear-gradient(180deg,#57583f,#57583f);"></div>
+            <div class="cc" style="left:36px; top:38px; background-image:linear-gradient(180deg,#57583f,#57583f);"></div>
+            <div class="cc" style="left:44px; top:38px; background-image:linear-gradient(180deg,#57583f,#57583f);"></div>
+            <div class="cc" style="left:52px; top:38px; background-image:linear-gradient(180deg,#57583f,#57583f);"></div>
+            <div class="cc" style="left:60px; top:38px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:68px; top:38px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:76px; top:38px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:84px; top:38px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:4px; top:46px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:12px; top:46px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:20px; top:46px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:28px; top:46px; background-image:linear-gradient(180deg,#57583f,#57583f);"></div>
+            <div class="cc" style="left:36px; top:46px; background-image:linear-gradient(180deg,#f2eee2,#f2eee2); box-shadow:0 0 7px rgba(240,238,220,.75);"></div>
+            <div class="cc" style="left:44px; top:46px; background-image:linear-gradient(180deg,#57583f,#57583f);"></div>
+            <div class="cc" style="left:52px; top:46px; background-image:linear-gradient(180deg,#57583f,#57583f);"></div>
+            <div class="cc" style="left:60px; top:46px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:68px; top:46px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:76px; top:46px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:84px; top:46px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:4px; top:54px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:12px; top:54px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:20px; top:54px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:28px; top:54px; background-image:linear-gradient(180deg,#57583f,#57583f);"></div>
+            <div class="cc" style="left:36px; top:54px; background-image:linear-gradient(180deg,#57583f,#57583f);"></div>
+            <div class="cc" style="left:44px; top:54px; background-image:linear-gradient(180deg,#57583f,#57583f);"></div>
+            <div class="cc" style="left:52px; top:54px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:60px; top:54px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:68px; top:54px; background-image:linear-gradient(180deg,#2f4d20,#2f4d20);"></div>
+            <div class="cc" style="left:76px; top:54px; background-image:linear-gradient(180deg,#2f4d20,#2f4d20);"></div>
+            <div class="cc" style="left:84px; top:54px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:4px; top:62px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:12px; top:62px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:20px; top:62px; background-image:linear-gradient(180deg,#2f4d20,#2f4d20);"></div>
+            <div class="cc" style="left:28px; top:62px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:36px; top:62px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:44px; top:62px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:52px; top:62px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:60px; top:62px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:68px; top:62px; background-image:linear-gradient(180deg,#2f4d20,#2f4d20);"></div>
+            <div class="cc" style="left:76px; top:62px; background-image:linear-gradient(180deg,#2f4d20,#2f4d20);"></div>
+            <div class="cc" style="left:84px; top:62px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:4px; top:70px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:12px; top:70px; background-image:linear-gradient(180deg,#2f4d20,#2f4d20);"></div>
+            <div class="cc" style="left:20px; top:70px; background-image:linear-gradient(180deg,#2f4d20,#2f4d20);"></div>
+            <div class="cc" style="left:28px; top:70px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:36px; top:70px; background-image:linear-gradient(180deg,#8a7020,#8a7020);"></div>
+            <div class="cc" style="left:44px; top:70px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:52px; top:70px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:60px; top:70px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:68px; top:70px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:76px; top:70px; background-image:linear-gradient(180deg,#2f4d20,#2f4d20);"></div>
+            <div class="cc" style="left:84px; top:70px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:4px; top:78px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:12px; top:78px; background-image:linear-gradient(180deg,#2f4d20,#2f4d20);"></div>
+            <div class="cc" style="left:20px; top:78px; background-image:linear-gradient(180deg,#2f4d20,#2f4d20);"></div>
+            <div class="cc" style="left:28px; top:78px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:36px; top:78px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:44px; top:78px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:52px; top:78px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:60px; top:78px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:68px; top:78px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:76px; top:78px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:84px; top:78px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:4px; top:86px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:12px; top:86px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:20px; top:86px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:28px; top:86px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:36px; top:86px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:44px; top:86px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:52px; top:86px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:60px; top:86px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:68px; top:86px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:76px; top:86px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+            <div class="cc" style="left:84px; top:86px; background-image:linear-gradient(180deg,#1b2a12,#1b2a12);"></div>
+          </div>
+          <div class="eng-x" style="position:absolute; left:380px; top:106px; width:96px; height:11px; font-size:7px; line-height:11px; letter-spacing:.6px; text-align:center;">11&#215;11 OVERMAP</div>
+          <div class="lamp" style="left:380px; top:120px; width:96px; height:20px; background-image:linear-gradient(180deg,#5e4711 0%,#332608 100%); box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 -1px 1px rgba(0,0,0,.6), inset 0 0 8px rgba(255,176,32,.42), inset 0 0 0 1px rgba(0,0,0,.5);">
+            <div class="lamp-led" style="top:4px; height:12px; background-image:linear-gradient(180deg,#ffb020,#ffb020); box-shadow:0 0 6px rgba(255,176,32,.9), inset 0 0 0 1px rgba(0,0,0,.4);"></div>
+            <div class="lamp-lgd" style="width:80px; height:20px; line-height:20px; font-size:8px; letter-spacing:.6px; color:#ffd478;">MISSION 045</div>
+            <div class="cage" style="width:96px; height:20px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- ================= LOWER SWITCH RAIL  1920x68 ================= -->
+    <div id="rail" class="rail-plate">
+      <!-- move-mode rotary selector -->
+      <div class="eng-x" style="position:absolute; left:12px; top:2px; width:150px; height:9px; font-size:7px; line-height:9px; letter-spacing:1.1px;">MOVE MODE</div>
+      <div class="ms-cell" style="left:12px; top:13px; width:48px; background-image:linear-gradient(180deg,#26281b 0%,#1b1d13 100%); color:#5b5d47; text-shadow:0 1px 0 rgba(0,0,0,.8); box-shadow:inset 0 1px 2px rgba(0,0,0,.7), inset 0 0 0 1px rgba(0,0,0,.5);">CROUCH</div>
+      <div class="ms-det" style="left:35px; top:36px;"></div>
+      <div class="ms-cell" style="left:63px; top:13px; width:48px; background-image:linear-gradient(180deg,#2c5f33 0%,#163a1b 100%); color:#a9f2b9; text-shadow:0 0 6px rgba(0,0,0,.7); box-shadow:inset 0 1px 0 rgba(255,255,255,.12), inset 0 0 8px rgba(70,230,110,.45), inset 0 0 0 1px rgba(0,0,0,.5);">WALK</div>
+      <div class="ms-det" style="left:86px; top:36px;"></div>
+      <div class="ms-cell" style="left:114px; top:13px; width:48px; background-image:linear-gradient(180deg,#26281b 0%,#1b1d13 100%); color:#5b5d47; text-shadow:0 1px 0 rgba(0,0,0,.8); box-shadow:inset 0 1px 2px rgba(0,0,0,.7), inset 0 0 0 1px rgba(0,0,0,.5);">RUN</div>
+      <div class="ms-det" style="left:137px; top:36px;"></div>
+      <div class="ms-knob" style="left:81px; top:41px;"></div>
+      <div class="eng-x" style="position:absolute; left:12px; top:52px; width:150px; height:9px; font-size:6.5px; line-height:9px; letter-spacing:.8px; text-align:center;">DETENT 2 OF 3</div>
+      <!-- noise VU meter : 8 of 30 -->
+      <div class="vu" style="left:174px; top:6px; width:200px; height:56px;">
+        <div class="vu-tick" style="top:6px; height:11px; background-image:linear-gradient(180deg,#e6e0c4 0%,#9d9880 100%); transform:rotate(-42deg);"></div>
+        <div class="vu-tick" style="top:8px; height:7px; background-image:linear-gradient(180deg,#e6e0c4 0%,#9d9880 100%); transform:rotate(-33.6deg);"></div>
+        <div class="vu-tick" style="top:8px; height:7px; background-image:linear-gradient(180deg,#e6e0c4 0%,#9d9880 100%); transform:rotate(-25.2deg);"></div>
+        <div class="vu-tick" style="top:8px; height:7px; background-image:linear-gradient(180deg,#e6e0c4 0%,#9d9880 100%); transform:rotate(-16.8deg);"></div>
+        <div class="vu-tick" style="top:8px; height:7px; background-image:linear-gradient(180deg,#e6e0c4 0%,#9d9880 100%); transform:rotate(-8.4deg);"></div>
+        <div class="vu-tick" style="top:6px; height:11px; background-image:linear-gradient(180deg,#e6e0c4 0%,#9d9880 100%); transform:rotate(0deg);"></div>
+        <div class="vu-tick" style="top:8px; height:7px; background-image:linear-gradient(180deg,#e6e0c4 0%,#9d9880 100%); transform:rotate(8.4deg);"></div>
+        <div class="vu-tick" style="top:8px; height:7px; background-image:linear-gradient(180deg,#e6e0c4 0%,#9d9880 100%); transform:rotate(16.8deg);"></div>
+        <div class="vu-tick" style="top:8px; height:7px; background-image:linear-gradient(180deg,#f07a4a 0%,#a83a1a 100%); transform:rotate(25.2deg);"></div>
+        <div class="vu-tick" style="top:8px; height:7px; background-image:linear-gradient(180deg,#f07a4a 0%,#a83a1a 100%); transform:rotate(33.6deg);"></div>
+        <div class="vu-tick" style="top:6px; height:11px; background-image:linear-gradient(180deg,#f07a4a 0%,#a83a1a 100%); transform:rotate(42deg);"></div>
+        <div class="eng-x" style="position:absolute; left:14px; top:30px; width:24px; height:10px; font-size:7px; line-height:10px;">0</div>
+        <div class="eng-x" style="position:absolute; left:164px; top:30px; width:24px; height:10px; font-size:7px; line-height:10px; text-align:right;">30</div>
+        <div class="vu-ndl" style="transform:rotate(-19.6deg);"></div>
+        <div class="vu-hub"></div>
+        <div class="eng-x" style="position:absolute; left:0px; top:41px; width:200px; height:10px; font-size:7px; line-height:10px; text-align:center; letter-spacing:1.6px;">NOISE EMITTED</div>
+        <div class="win" style="left:150px; top:41px; width:44px; height:13px;">
+          <div class="led" style="position:absolute; left:0px; top:0px; width:44px; height:13px; font-size:9px; line-height:13px; text-align:center;">08</div>
+          <div class="slit"></div>
+        </div>
+        <div class="vu-glass"></div>
+      </div>
+      <!-- encumbrance counters -->
+      <div class="eng-x" style="position:absolute; left:388px; top:2px; width:116px; height:9px; font-size:7px; line-height:9px; letter-spacing:1.1px;">ENCUMBRANCE</div>
+      <div class="ctr win" style="left:388px; top:13px; width:56px; height:26px;">
+        <div class="ctr-l eng-x">TORSO</div>
+        <div class="ctr-v led" style="left:0px; width:50px;">12</div>
+        <div class="slit"></div>
+      </div>
+      <div class="ctr win" style="left:448px; top:13px; width:56px; height:26px;">
+        <div class="ctr-l eng-x">ARMS</div>
+        <div class="ctr-v led" style="left:0px; width:50px;">04</div>
+        <div class="slit"></div>
+      </div>
+      <div class="eng-x" style="position:absolute; left:388px; top:42px; width:116px; height:20px; font-size:6.5px; line-height:10px; letter-spacing:.6px;">SPEED PENALTY<br/>APPLIED &#183; SEE SPD</div>
+      <!-- nine action switches; 01 mechanically caged (no gun wielded) -->
+      <div class="sw-sock" style="left:542px;">
+        <div class="sw-no eng-x">01</div>
+        <div class="sw-cap-off"></div>
+        <div class="sw-key eng-x" style="color:#4f5140;">f</div>
+        <div class="sw-act eng-x" style="color:#4a4c3b;">FIRE</div>
+        <div class="sw-lock">NO GUN</div>
+        <div class="sw-bar hz" style="top:18px; opacity:.85;"></div>
+        <div class="sw-bar hz" style="top:31px; opacity:.85;"></div>
+      </div>
+      <div class="sw-sock" style="left:607px;">
+        <div class="sw-no eng-x">02</div>
+        <div class="sw-cap">
+          <div class="sw-key eng">r</div>
+          <div class="sw-act eng-x">RELOAD</div>
+        </div>
+      </div>
+      <div class="sw-sock" style="left:672px;">
+        <div class="sw-no eng-x">03</div>
+        <div class="sw-cap">
+          <div class="sw-key eng">&#39;</div>
+          <div class="sw-act eng-x">RUN</div>
+        </div>
+      </div>
+      <div class="sw-sock" style="left:737px;">
+        <div class="sw-no eng-x">04</div>
+        <div class="sw-cap">
+          <div class="sw-key eng">e</div>
+          <div class="sw-act eng-x">EXAMINE</div>
+        </div>
+      </div>
+      <div class="sw-sock" style="left:802px;">
+        <div class="sw-no eng-x">05</div>
+        <div class="sw-cap">
+          <div class="sw-key eng">p</div>
+          <div class="sw-act eng-x">PICK UP</div>
+        </div>
+      </div>
+      <div class="sw-sock" style="left:867px;">
+        <div class="sw-no eng-x">06</div>
+        <div class="sw-cap">
+          <div class="sw-key eng">c</div>
+          <div class="sw-act eng-x">CRAFT</div>
+        </div>
+      </div>
+      <div class="sw-sock" style="left:932px;">
+        <div class="sw-no eng-x">07</div>
+        <div class="sw-cap">
+          <div class="sw-key eng">i</div>
+          <div class="sw-act eng-x">INVENTORY</div>
+        </div>
+      </div>
+      <div class="sw-sock" style="left:997px;">
+        <div class="sw-no eng-x">08</div>
+        <div class="sw-cap">
+          <div class="sw-key eng">t</div>
+          <div class="sw-act eng-x">THROW</div>
+        </div>
+      </div>
+      <div class="sw-sock" style="left:1062px;">
+        <div class="sw-no eng-x">09</div>
+        <div class="sw-cap">
+          <div class="sw-key eng">5</div>
+          <div class="sw-act eng-x">WAIT</div>
+        </div>
+      </div>
+      <!-- attribute counters -->
+      <div class="eng-x" style="position:absolute; left:1148px; top:2px; width:300px; height:9px; font-size:7px; line-height:9px; letter-spacing:1.1px;">ATTRIBUTES</div>
+      <div class="ctr win" style="left:1148px; top:13px; width:72px; height:26px;">
+        <div class="ctr-l eng-x">STR</div>
+        <div class="ctr-v led" style="left:0px; width:66px;">10</div>
+        <div class="slit"></div>
+      </div>
+      <div class="ctr win" style="left:1224px; top:13px; width:72px; height:26px;">
+        <div class="ctr-l eng-x">DEX</div>
+        <div class="ctr-v led" style="left:0px; width:66px;">12</div>
+        <div class="slit"></div>
+      </div>
+      <div class="ctr win" style="left:1300px; top:13px; width:72px; height:26px;">
+        <div class="ctr-l eng-x">INT</div>
+        <div class="ctr-v led" style="left:0px; width:66px;">09</div>
+        <div class="slit"></div>
+      </div>
+      <div class="ctr win" style="left:1376px; top:13px; width:72px; height:26px;">
+        <div class="ctr-l eng-x">PER</div>
+        <div class="ctr-v led" style="left:0px; width:66px;">11</div>
+        <div class="slit"></div>
+      </div>
+      <div class="eng-x" style="position:absolute; left:1148px; top:43px; width:300px; height:10px; font-size:6.5px; line-height:10px; letter-spacing:.7px;">EFFECTS: BLEEDING / BITTEN / SOAKED / TIRED / PAIN &#8212; SEE ANNUNCIATOR</div>
+      <!-- condition strip meters -->
+      <div class="ew" style="left:1468px; top:4px; width:214px;">
+        <div class="ew-scale" style="width:214px;"></div>
+        <div class="ew-ptr" style="left:136px;"></div>
+        <div class="ew-lab eng-x">SPEED  0-150</div>
+        <div class="ew-val led" style="left:160px; width:48px;">96</div>
+      </div>
+      <div class="ew" style="left:1694px; top:4px; width:214px;">
+        <div class="ew-scale" style="width:214px;"></div>
+        <div class="ew-ptr" style="left:179px;"></div>
+        <div class="ew-lab eng-x">FOCUS  0-100</div>
+        <div class="ew-val led" style="left:160px; width:48px;">84</div>
+      </div>
+      <div class="ew" style="left:1468px; top:35px; width:214px;">
+        <div class="ew-scale" style="width:214px;"></div>
+        <div class="ew-red" style="left:107px; width:107px;"></div>
+        <div class="ew-ptr" style="left:31px;"></div>
+        <div class="ew-lab eng-x">PAIN  0-80</div>
+        <div class="ew-val led" style="left:160px; width:48px;">12</div>
+      </div>
+      <div class="ew" style="left:1694px; top:35px; width:214px;">
+        <div class="ew-scale" style="width:214px;"></div>
+        <div class="ew-zero" style="left:107px;"></div>
+        <div class="ew-ptr" style="left:103px;"></div>
+        <div class="ew-lab eng-x">MORALE -100/+100</div>
+        <div class="ew-val led-r" style="left:160px; width:48px;">-3</div>
+      </div>
+    </div>
+    <!-- panel seams and fasteners -->
+    <div class="seam" style="left:351px; top:3px; height:169px;"></div>
+    <div class="seam" style="left:527px; top:3px; height:169px;"></div>
+    <div class="seam" style="left:859px; top:3px; height:169px;"></div>
+    <div class="seam" style="left:1135px; top:3px; height:169px;"></div>
+    <div class="seam" style="left:1419px; top:3px; height:169px;"></div>
+    <div class="seamh" style="left:0px; top:170px; width:1920px;"></div>
+    <div class="seam" style="left:527px; top:173px; height:67px;"></div>
+    <div class="seam" style="left:1135px; top:173px; height:67px;"></div>
+    <div class="rv" style="left:7px; top:6px;"></div>
+    <div class="rv" style="left:7px; top:159px;"></div>
+    <div class="rv" style="left:350px; top:6px;"></div>
+    <div class="rv" style="left:350px; top:159px;"></div>
+    <div class="rv" style="left:526px; top:6px;"></div>
+    <div class="rv" style="left:526px; top:159px;"></div>
+    <div class="rv" style="left:858px; top:6px;"></div>
+    <div class="rv" style="left:858px; top:159px;"></div>
+    <div class="rv" style="left:1134px; top:6px;"></div>
+    <div class="rv" style="left:1134px; top:159px;"></div>
+    <div class="rv" style="left:1418px; top:6px;"></div>
+    <div class="rv" style="left:1418px; top:159px;"></div>
+    <div class="rv" style="left:1906px; top:6px;"></div>
+    <div class="rv" style="left:1906px; top:159px;"></div>
+    <div class="rv" style="left:7px; top:178px;"></div>
+    <div class="rv" style="left:7px; top:227px;"></div>
+    <div class="rv" style="left:526px; top:178px;"></div>
+    <div class="rv" style="left:526px; top:227px;"></div>
+    <div class="rv" style="left:1134px; top:178px;"></div>
+    <div class="rv" style="left:1134px; top:227px;"></div>
+    <div class="rv" style="left:1906px; top:178px;"></div>
+    <div class="rv" style="left:1906px; top:227px;"></div>
+  </div>
+</div></body></html>
