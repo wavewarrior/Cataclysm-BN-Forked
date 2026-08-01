@@ -1,15 +1,27 @@
-// JFA SEED — one thread per SS-subcell. Reads tile-res transparency buffer; if
-// the parent tile is opaque (trans < 0.5), seed = this subcell's coord, else
-// sentinel (-1,-1). Writes to seed_a_.
+// JFA SEED — one thread per SS-subcell. Reads the sub-tile COVERAGE field that
+// occ_base + occ_raster built from the tileset artwork and converts it to per-subcell
+// occupancy; writes to seed_a_.
 //
-// Inputs:  t0 space0  TransBuf — StructuredBuffer<float>, tile-res, x-major
-//          trans[(x*map_h+y)] where 0.0=opaque .. 1.0=open
-// Output:  u0 space1  SeedBuf  — RWStructuredBuffer<float2>, SS-grid, x-major
+// This used to read one binary opaque flag per TILE and replicate it into all
+// SDF_SS^2 subcells, which meant the SDF paid 64x the memory and flood cost to carry
+// tile-square, axis-aligned geometry: every tree, barrel, car and fence cast a square
+// shadow. The coverage field is derived from the sprites' own alpha, so the silhouette
+// the player sees is the silhouette that casts.
+//
+// Solid coverage (1.0) seeds every subcell, identical to the old binary path. Partial
+// coverage — a hedge, a chainlink lattice, a smoke field — seeds a stable FRACTION of
+// subcells via a world-locked 4x4 Bayer threshold at subcell resolution, so the SDF
+// develops real holes and the existing sphere-march produces dappled light with no new
+// field and no consumer change.
+//
+// Inputs:  t0 space0  OccSS   — StructuredBuffer<uint>, SS-grid, x-major,
+//                               coverage * 65535 (occ_base then occ_raster).
+// Output:  u0 space1  SeedBuf — RWStructuredBuffer<float2>, SS-grid, x-major.
 // Uniform: b0 space2  JfaParams (map_w, map_h)
 
 #include "jfa_shared.hlsl"
 
-StructuredBuffer<float>   TransBuf : register(t0, space0);
+StructuredBuffer<uint>     OccSS   : register(t0, space0);
 RWStructuredBuffer<float2> SeedBuf : register(u0, space1);
 
 cbuffer JfaParams : register(b0, space2) {
@@ -29,18 +41,11 @@ void main( uint3 tid : SV_DispatchThreadID )
         return;
     }
 
-    // Subcell → parent tile.
-    const int tx = sx / SDF_SS;
-    const int ty = sy / SDF_SS;
+    const uint  idx = (uint)( sx * (int)( map_h * SDF_SS ) + sy );
+    const float cov = (float)OccSS[idx] * ( 1.0 / 65535.0 );
+    const float thr = ( k_jfa_bayer4[ ( sy & 3 ) * 4 + ( sx & 3 ) ] + 0.5 ) / 16.0;
 
-    const float trans = TransBuf[tx * map_h + ty];
-
-    if( trans < 0.5 ) {
-        // Opaque tile — seed with this subcell's own coord.
-        SeedBuf[sx * (int)(map_h * SDF_SS) + sy] = float2( (float)sx, (float)sy );
-    } else {
-        // Open tile — sentinel (no seed yet). The flood pass treats (-1,-1) as
-        // +∞ distance so a real seed always wins.
-        SeedBuf[sx * (int)(map_h * SDF_SS) + sy] = float2( -1.0, -1.0 );
-    }
+    // Occupied subcells seed with their own coord; the rest get the (-1,-1) sentinel,
+    // which the flood pass treats as +INF distance so a real seed always wins.
+    SeedBuf[idx] = ( cov > thr ) ? float2( (float)sx, (float)sy ) : float2( -1.0, -1.0 );
 }

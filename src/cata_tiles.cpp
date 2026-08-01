@@ -2080,7 +2080,8 @@ void cata_tiles::push_occluder_footprint( const occluder_footprint_options &opts
         .u0 = u, .v0 = v, .uw = uw, .vh = vh,
         .tile_x = static_cast<float>( tx ), .tile_y = static_cast<float>( ty ),
         .cx = cx, .cy = cy, .sw = sw, .sh = sh,
-        .rot = rot, .block = blk } );
+        .rot = rot, .block = blk },
+    { .tex = opts.atlas_tex, .atlas_w = opts.atlas_w, .atlas_h = opts.atlas_h } );
 }
 
 bool cata_tiles::draw_sprite_at(
@@ -2267,6 +2268,7 @@ bool cata_tiles::draw_sprite_at(
         if( occluder_capture_ && is_fg ) {
             push_occluder_footprint( {
                 .tex = sprite_tex,
+                .atlas_tex = gpu.texture,
                 .destination = destination,
                 .flip = flip,
                 .atlas_w = gpu.atlas_w,

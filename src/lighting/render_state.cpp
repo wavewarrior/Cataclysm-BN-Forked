@@ -522,7 +522,10 @@ SDL_GPUTexture* render_state::create_rgba_gpu_texture(int w, int h) {
     SDL_GPUTextureCreateInfo tci{};
     tci.type = SDL_GPU_TEXTURETYPE_2D;
     tci.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-    tci.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    // COMPUTE_STORAGE_READ so occ_raster.comp can Texture2D.Load the sprite alpha
+    // when rasterising the SDF seed (Step 3 of the grid-decoupled lighting plan).
+    // SAMPLER is still what the sprite fragment pass uses.
+    tci.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_READ;
     tci.width = static_cast<std::uint32_t>(w);
     tci.height = static_cast<std::uint32_t>(h);
     tci.layer_count_or_depth = 1;

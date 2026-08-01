@@ -135,7 +135,9 @@ public:
         SDL_GPUTextureCreateInfo tci{};
         tci.type = SDL_GPU_TEXTURETYPE_2D;
         tci.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-        tci.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+        // COMPUTE_STORAGE_READ so occ_raster.comp can Texture2D.Load sprite alpha
+        // when rasterising the SDF seed (grid-decoupled lighting, Step 3).
+        tci.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_READ;
         tci.width = static_cast<Uint32>(page_w);
         tci.height = static_cast<Uint32>(page_h);
         tci.layer_count_or_depth = 1;

@@ -276,7 +276,7 @@ float skyvis_bilinear(float2 p) {
 // look consistent. `dist_to_light` is the march length (real distance for
 // point emitters; a fixed reach for the directional sun).
 float trace_shadow(float2 origin, float2 dir, float dist_to_light,
-                   float k, int steps, bool directional) {
+                   float k, int steps, bool directional, float self_eps) {
     if(sdf_map_w == 0u || steps <= 0) {
         return 1.0;
     }
@@ -286,17 +286,22 @@ float trace_shadow(float2 origin, float2 dir, float dist_to_light,
     // tile (vertex light_pos), which is itself an occluder (the tree/wall the
     // shadow is cast from). A naive march would hit that occluder at t~0 and report
     // the lit TOP as fully shadowed. So when the RECEIVER ITSELF sits on an occluder
-    // (sdf(origin) < 0.05 — true only for tall sprites anchored to their own tile,
-    // NOT for open ground near a wall, which is ~0.3), step out of that occluder
-    // body before shadowing. Exit the instant we re-enter open air (sd >= 0.05) so
-    // the NEXT occluder still shadows — a tree inside a building marches out of the
-    // tree, hits the building wall, stays dark (option A). No-op for ground (any
-    // light): its SDF is well above the threshold so the guard never fires.
-    if(sdf_bilinear(origin) < 0.05) {
+    // (sdf(origin) < self_eps), step out of that occluder body before shadowing.
+    // Exit the instant we re-enter open air so the NEXT occluder still shadows — a
+    // tree inside a building marches out of the tree, hits the building wall, stays
+    // dark. No-op for ground: its SDF is well above the threshold.
+    //
+    // self_eps is a PARAMETER because Step 3 made occluders sub-tile: the old
+    // hardcoded 0.05 assumed a tall sprite's base-tile CENTRE is inside its own
+    // occluder, which a slab or thin footprint (a fence, a pole) no longer
+    // guarantees — the centre can now sit outside its own silhouette and the sprite
+    // would self-shadow. Tall sprites pass the wider self_eps_tall; everything else
+    // keeps 0.05, which is an exact no-op versus the previous behaviour.
+    if(sdf_bilinear(origin) < self_eps) {
         [loop] for(int ss = 0; ss < steps; ++ss) {
             if(t >= dist_to_light - 0.4) return 1.0;           // never left occluder → sunlit top
             const float sg = sdf_bilinear(origin + dir * t);
-            if(sg >= 0.05) break;  // back in open air
+            if(sg >= self_eps) break;  // back in open air
             t += 0.15;
         }
     }
@@ -504,7 +509,8 @@ float4 main(VS_OUT i) : SV_Target0 {
 
         const float  shadow = trace_shadow(shade_pos, sh_dir, dist,
                                             shadow_k, (int)shadow_steps,
-                                            /*directional=*/false);
+                                            /*directional=*/false,
+                                            frag_is_tall_n ? self_eps_tall : 0.05);
 
         // Cone / spotlight angular falloff.
         float cone = 1.0;

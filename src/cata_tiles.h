@@ -941,6 +941,8 @@ class cata_tiles
         /// layers do via occluder_capture_guard.
         struct occluder_footprint_options {
             const texture *tex = nullptr;
+            /// GPU atlas page this sprite lives on (dynamic_atlas::gpu_lookup::texture).
+            SDL_GPUTexture *atlas_tex = nullptr;
             SDL_Rect destination = {0, 0, 0, 0};
             SDL_FlipMode flip = SDL_FLIP_NONE;
             int atlas_w = 0;

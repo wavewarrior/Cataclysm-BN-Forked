@@ -18,17 +18,22 @@ auto occluder_capture::resize( int w, int h ) -> void
 auto occluder_capture::begin() -> void
 {
     quads_.clear();
+    pages_.clear();
     std::ranges::fill( captured_, std::uint8_t{0} );
 }
 
-auto occluder_capture::push( const occluder_quad &q ) -> void
+auto occluder_capture::push( const occluder_quad &q, const occluder_page &page ) -> void
 {
+    if( !page.tex || page.atlas_w <= 0 || page.atlas_h <= 0 ) {
+        return;
+    }
     const int tx = static_cast<int>( q.tile_x );
     const int ty = static_cast<int>( q.tile_y );
     if( tx < 0 || ty < 0 || tx >= w_ || ty >= h_ ) {
         return;
     }
     quads_.push_back( q );
+    pages_.push_back( page );
     captured_[static_cast<std::size_t>( tx ) * static_cast<std::size_t>( h_ ) +
                                     static_cast<std::size_t>( ty )] = 1u;
 }

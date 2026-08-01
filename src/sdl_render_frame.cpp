@@ -412,7 +412,8 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     rs.gpu_sdf().record( ctx.cmd_buffer, rs.sdf().trans_buffer(),
                              rs.sdf().sdf_buffer(),
                              static_cast<std::uint32_t>( rs.sdf().map_w() ),
-                             static_cast<std::uint32_t>( rs.sdf().map_h() ) );
+                             static_cast<std::uint32_t>( rs.sdf().map_h() ),
+                             rs.occluders(), g_dbg_params.occ_soft_gain );
         // Step 2 diagnostic: the seed's new input. Fires only on an SDF rebuild, not
         // per frame, so it is safe at Info level. quads ~= visible terrain+furniture
         // +vpart sprites; captured ~= visible tile count.
