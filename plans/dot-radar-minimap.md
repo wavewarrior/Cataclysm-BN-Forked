@@ -741,3 +741,44 @@ the border glyph moves to the far side.
 - **`astyle`/`clang-format` are not installed on this machine**, so the cmake
   `format` target does not exist and `CMakeModules/FormatSource.cmake:41` excludes
   `src/<subdir>/` anyway. Match the surrounding style by hand and say so.
+
+---
+
+## Follow-up (shipped after the plan above): soil vs paving
+
+The plan's world table collapsed every open outdoor tile into one `ground`
+category at `ink::dead`, so a road, a car park and the lawn beside them rendered
+as one undifferentiated field of dim dots. Nothing in the radar carried the
+street grid, which is also the thing that gives the eye its scale reference.
+
+`ground` is therefore split into `soil` (grass, dirt, sand) and `paved` (road,
+sidewalk, concrete, metal and board floors), on the `ROAD` JSON flag — the flag
+every hard man-made surface carries and no natural one does. Interior floors move
+up a rung to keep every `(rung, shape)` pair unique, which leaves the `dot`
+column a monotonic natural-to-built ramp:
+
+| category | rung | shape |
+|---|---|---|
+| `soil` (grass, dirt, sand) | `ink::dead` | dot |
+| `water` | `ink::dead` | half |
+| `paved` (road, walk, concrete) | `ink::rule` | dot |
+| `vegetation` | `ink::rule` | half |
+| `floor_in` (roofed) | `ink::label` | dot |
+| `vehicle` | `ink::label` | full |
+| `furniture` | `ink::datum` | dot |
+| `wall` | `ink::datum` | full |
+| `stairs` | `ink::peak` | dot |
+| `opening` (door/window) | `ink::peak` | full |
+
+`ROAD` has no cached `ter_bitflags` entry, so it costs a `std::set<std::string>`
+lookup. Rather than pay that ~4 200 times per redraw, the whole terrain-only half
+of the classifier is memoised per `ter_id` (`terrain_class`), keyed on
+`ter_t::count()`. That also retires the "no caching of the static layer" note
+above for the terrain half: the per-tile work is now one vector index plus the
+`has_furn` and roof lookups, i.e. strictly less than the plan shipped with.
+
+Measured in-game (2560x1440, `Kendale Lakes`), per-cell peak values inside the
+viewport: two populations at R≈44 and R≈96 separated by an empty gap — the exact
+`dead`→`rule` ladder step, 2.0x — where the plan's version produced one. With a
+building in view a third at R≈184 (`floor_in`) appears, at 91 cells against
+~2 400 of open ground, so interiors stay subordinate to the walls around them.

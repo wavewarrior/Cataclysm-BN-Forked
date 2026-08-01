@@ -37,11 +37,11 @@ namespace
 /// Set at the end of every `hud_radar::draw`; read by `requires_animation`.
 bool g_wants_anim = false;
 
-/// What a radar tile is, in the order the classifier tries them. `num` is the
-/// table bound, never a category.
+/// What a radar tile is. `num` is the table bound, never a category.
 enum class cat : int {
     none = 0,
-    ground,
+    soil,
+    paved,
     floor_in,
     water,
     vegetation,
@@ -63,13 +63,21 @@ struct dot_style {
     dot_shape form = dot_shape::none;
 };
 
-/// (rung, dot_shape) per category. Every pair is unique in BOTH channels: the world
-/// layer therefore survives being desaturated AND survives being flattened to one
-/// luminance, which is what lets it carry nine distinctions without a second hue.
+/// (rung, dot_shape) per category. Every pair is unique in BOTH channels, so the
+/// world layer survives being desaturated AND survives being flattened to one
+/// luminance — that is what lets it carry ten distinctions without a second hue.
+///
+/// Read down the `dot` column and the ladder is a ramp from natural to built:
+/// soil, paving, indoor floor, furniture, stairs. Splitting bare soil from paving
+/// is what makes a road legible as a road: a street now reads one rung brighter
+/// than the verge beside it, so the lattice shows the street grid instead of an
+/// undifferentiated field of dim dots — and a continuous, recognisable road gives
+/// the eye the scale reference that tells it how far across the viewport is.
 constexpr std::array<dot_style, static_cast<std::size_t>( cat::num )> world_table = { {
         { hud_phosphor::ink::dead,  dot_shape::none },  // none — nothing drawn
-        { hud_phosphor::ink::dead,  dot_shape::dot  },  // ground (open sky)
-        { hud_phosphor::ink::rule,  dot_shape::dot  },  // floor_in (roofed)
+        { hud_phosphor::ink::dead,  dot_shape::dot  },  // soil (grass, dirt, sand)
+        { hud_phosphor::ink::rule,  dot_shape::dot  },  // paved (road, walk, concrete)
+        { hud_phosphor::ink::label, dot_shape::dot  },  // floor_in (roofed)
         { hud_phosphor::ink::dead,  dot_shape::half },  // water
         { hud_phosphor::ink::rule,  dot_shape::half },  // vegetation
         { hud_phosphor::ink::datum, dot_shape::dot  },  // furniture
@@ -100,41 +108,89 @@ auto gutter_for_mode() -> int
     return 2;
 }
 
+/// Everything about a tile's category that depends ONLY on its terrain type.
+enum class tclass : int { empty = 0, stairs, opening, wall, water, vegetation, air, soil, paved };
+
 /// First match wins. Ordered by how much each fact matters to a player reading the
 /// map at a glance: level changes, then openings, then structure, then surface.
-auto classify( const map &m, const tripoint_bub_ms &p, bool indoors ) -> cat
+auto terrain_class_of( const ter_t &t ) -> tclass
 {
-    const ter_t &t = m.ter( p ).obj();
     if( t.is_null() ) {
-        return cat::none;
+        return tclass::empty;
     }
     if( t.has_flag( TFLAG_GOES_UP ) || t.has_flag( TFLAG_GOES_DOWN ) || t.has_flag( TFLAG_RAMP ) ) {
-        return cat::stairs;
+        return tclass::stairs;
     }
     // No flag marks a door or a window; a door is exactly a terrain that has an
     // open or close transform, which is also what makes gates and hatches read
     // correctly here.
     if( !t.open.is_null() || !t.close.is_null() ) {
-        return cat::opening;
+        return tclass::opening;
     }
     if( t.has_flag( TFLAG_WALL ) ) {
         // A wall you can see through IS a window.
-        return t.transparent ? cat::opening : cat::wall;
+        return t.transparent ? tclass::opening : tclass::wall;
+    }
+    if( t.has_flag( TFLAG_SWIMMABLE ) || t.has_flag( TFLAG_LIQUID ) ||
+        t.has_flag( TFLAG_DEEP_WATER ) ) {
+        return tclass::water;
+    }
+    if( t.has_flag( TFLAG_TREE ) || t.has_flag( TFLAG_SHRUB ) ) {
+        return tclass::vegetation;
+    }
+    if( t.has_flag( TFLAG_NO_FLOOR ) ) {
+        return tclass::air;
+    }
+    // `ROAD` is the flag every hard man-made surface carries — pavement, sidewalk,
+    // concrete, metal and board floors — and that no soil, grass or sand carries.
+    // It has no cached `ter_bitflags` entry, so it costs a `std::set<std::string>`
+    // lookup, which is the other half of why this function is memoised.
+    return t.has_flag( "ROAD" ) ? tclass::paved : tclass::soil;
+}
+
+/// `terrain_class_of`, memoised per terrain type.
+///
+/// Terrain definitions are immutable once a world is loaded, so the whole flag
+/// battery above runs once per `ter_id` instead of once per tile — roughly 4200
+/// times per redraw at the default viewport. The cache is keyed on the catalogue
+/// size, which changes when a differently-modded world is loaded.
+auto terrain_class( const ter_id &id ) -> tclass
+{
+    static std::vector<tclass> memo;
+    const auto n = ter_t::count();
+    if( memo.size() != n ) {
+        memo.resize( n );
+        for( std::size_t k = 0; k < n; ++k ) {
+            memo[k] = terrain_class_of( ter_id( static_cast<int>( k ) ).obj() );
+        }
+    }
+    const auto i = static_cast<std::size_t>( id.to_i() );
+    return i < memo.size() ? memo[i] : tclass::empty;
+}
+
+/// Resolve one tile: its terrain class, plus the two facts that are per-tile
+/// rather than per-type. Furniture outranks the surface it stands on but never
+/// structure, and a roof turns any walkable surface into an interior floor.
+auto classify( const map &m, const tripoint_bub_ms &p, bool indoors ) -> cat
+{
+    const auto tc = terrain_class( m.ter( p ) );
+    switch( tc ) {
+        case tclass::empty:   return cat::none;
+        case tclass::stairs:  return cat::stairs;
+        case tclass::opening: return cat::opening;
+        case tclass::wall:    return cat::wall;
+        default:              break;
     }
     if( m.has_furn( p ) ) {
         return cat::furniture;
     }
-    if( t.has_flag( TFLAG_SWIMMABLE ) || t.has_flag( TFLAG_LIQUID ) ||
-        t.has_flag( TFLAG_DEEP_WATER ) ) {
-        return cat::water;
+    switch( tc ) {
+        case tclass::water:      return cat::water;
+        case tclass::vegetation: return cat::vegetation;
+        case tclass::air:        return cat::none;
+        case tclass::paved:      return indoors ? cat::floor_in : cat::paved;
+        default:                 return indoors ? cat::floor_in : cat::soil;
     }
-    if( t.has_flag( TFLAG_TREE ) || t.has_flag( TFLAG_SHRUB ) ) {
-        return cat::vegetation;
-    }
-    if( t.has_flag( TFLAG_NO_FLOOR ) ) {
-        return cat::none;
-    }
-    return indoors ? cat::floor_in : cat::ground;
 }
 
 /// Scale RGB by the brightness option, leaving alpha alone.
