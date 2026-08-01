@@ -318,7 +318,19 @@ query_popup::result query_popup::query_once()
         ( res.evt.type == input_event_t::keyboard && res.evt.sequence.empty() ) );
 
     if( rml_session && res.action == "TIMEOUT" ) {
-        // Internal frame tick — keep looping (wait_input stays !anykey).
+        // Internal frame tick, NOT an answer — keep waiting.
+        //
+        // `wait_input` was seeded to `!anykey` above, so an allow_anykey() popup
+        // starts out false. Returning that here ended query()'s `while(
+        // res.wait_input )` loop on the very first 16 ms tick and handed the
+        // caller a TIMEOUT event as though the user had pressed something. The
+        // tick always beats a human, so every anykey popup under RmlUi
+        // self-cancelled before it could be answered — which is what silently
+        // broke keybinding rebinding ("New key for %s" in
+        // input_context::display_menu). Must be set unconditionally: for
+        // non-anykey popups it is already true, so this only ever fixes the
+        // anykey case.
+        res.wait_input = true;
         return res;
     }
 

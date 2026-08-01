@@ -1339,10 +1339,16 @@ action_id input_context::display_menu( const bool permit_execute_action )
                     query_popup().message( _( "New key for %s" ), name ).allow_anykey( true ).query().evt;
 
                 // Reject non-input events (timeout/error) that would corrupt the
-                // keybindings JSON on save (unknown input_event_t in the serializer).
+                // keybindings JSON on save (unknown input_event_t in the
+                // serializer). This must stay a guard, but it must NOT be silent:
+                // while query_popup was ending anykey popups on their first RmlUi
+                // frame tick, every rebind landed here and vanished with no
+                // feedback at all, which made the whole feature look inert rather
+                // than broken. Say something if it ever happens again.
                 if( new_event.type != input_event_t::keyboard
                     && new_event.type != input_event_t::gamepad
                     && new_event.type != input_event_t::mouse ) {
+                    popup_getkey( _( "Didn't catch that key — nothing was changed." ) );
                     kb_rml.set_visible( true );
                     status = s_show;
                     continue;
