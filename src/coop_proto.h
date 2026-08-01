@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 /// Unique character_id value reserved for the client's proxy NPC on the host.
@@ -67,4 +68,16 @@ constexpr int COOP_ACTIVITY_YIELD_INTERVAL = 10;
 /// Accumulator value that triggers COOP_MAX_CATCH_UP game ticks in the main loop.
 /// Derived — changing COOP_IDLE_TICK_MS or COOP_MAX_CATCH_UP automatically updates this.
 constexpr double COOP_FAST_FORWARD_ACCUM_MS = COOP_MAX_CATCH_UP * COOP_IDLE_TICK_MS;
+
+/// Input buffer window bounds (ms of wall clock).  The window is sized from the measured
+/// tick cost of the slower of host and client; see coop_input_window.h.
+/// MIN preserves the previous fixed 16 ms coalescing behaviour on a fast machine.
+constexpr double COOP_INPUT_WINDOW_MIN_MS = 16.0;
+/// MAX bounds how long stale input is retained; above this the game feels unresponsive.
+constexpr double COOP_INPUT_WINDOW_MAX_MS = 250.0;
+/// EWMA smoothing for the tick-cost estimate: reacts within ~4 ticks, ignores one-off spikes.
+constexpr double COOP_INPUT_EWMA_ALPHA = 0.25;
+/// Hard depth cap on the co-op action buffer: the action in flight plus one look-ahead.
+/// This is the anti-"train of actions" bound — a burst can never bank more than this.
+constexpr std::size_t COOP_MAX_QUEUED_ACTIONS = 2;
 

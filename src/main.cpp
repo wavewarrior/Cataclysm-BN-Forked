@@ -2,6 +2,7 @@
  */
 
 #include <array>
+#include <chrono>
 #include <clocale>
 #include <cstdio>
 #include <cstdlib>
@@ -22,6 +23,7 @@
 #else
 #include <csignal>
 #endif
+#include "action.h"
 #include "catalua.h"
 #include "color.h"
 #include "crash.h"
@@ -33,6 +35,7 @@
 #include "calendar.h"    // to_turn<int>(calendar::turn) for tick logging
 #include "coop_client.h" // complete type for g->coop_client_->queue_action()
 #include "coop_session.h" // coop_session::get().is_coop() for main loop selection
+#include "coop_input_window.h" // coop_admit_action/coop_expire_stale_actions in the co-op loop
 #include "coop_server.h" // complete type for g->coop_server_->has_pending_actions()
 #include "game_ui.h"
 #include "get_version.h"
@@ -714,8 +717,13 @@ int main( int argc, char* argv[] )
             using clk = std::chrono::steady_clock;
             auto last_tick = clk::now();
             constexpr double IDLE_TICK_INTERVAL_MS = 1000.0;
-            constexpr double COALESCE_WINDOW_MS = 16.0;
             double coalesce_start_ms = -1.0; // -1 = no window open
+            // Monotonic ms since the co-op loop started — the timebase for buffered_action
+            // timestamps and for staleness expiry.
+            const auto loop_start = clk::now();
+            const auto now_ms = [&]() -> double {
+                return std::chrono::duration<double, std::milli>( clk::now() - loop_start ).count();
+            };
             bool game_done = false;
 
             while( !game_done ) {
@@ -723,6 +731,13 @@ int main( int argc, char* argv[] )
                 const double frame_ms =
                     std::chrono::duration<double, std::milli>( now - last_tick ).count();
                 last_tick = now;
+
+                // Size the coalescing/staleness window from the slower of the two sides:
+                // an action is not "stale" until whoever resolves it has had time to.
+                auto &sess = coop_session::get();
+                const double window_ms = coop_input_window_ms(
+                                             sess.local_tick_cost.value(),
+                                             static_cast<double>( sess.partner_tick_ms.load() ) );
 
                 const auto evt = g->poll_event();
 
@@ -734,7 +749,10 @@ int main( int argc, char* argv[] )
                     const input_context dflt = get_default_mode_input_context();
                     const auto& action_str = dflt.input_to_action( evt );
                     if( !action_str.empty() && action_str != "ERROR" ) {
-                        g->pending_action_queue_.push( action_str );
+                        const bool evictable =
+                            can_action_change_worldstate( look_up_action( action_str ) );
+                        coop_admit_action( g->pending_action_queue_, { .action = action_str,
+                                           .enqueued_ms = now_ms(), .evictable = evictable } );
                         host_acted = true;
                     }
                 }
@@ -749,7 +767,7 @@ int main( int argc, char* argv[] )
 
                 bool fire_tick = false;
                 bool tick_active = false;
-                if( coalesce_start_ms >= COALESCE_WINDOW_MS ) {
+                if( coalesce_start_ms >= window_ms ) {
                     fire_tick = true;
                     tick_active = true;
                     coalesce_start_ms = -1.0;
@@ -762,18 +780,26 @@ int main( int argc, char* argv[] )
                     }
                 }
 
+                // Once the player stops pressing, everything older than one window is
+                // discarded here, leaving at most the newest entry — that is what stops the
+                // avatar walking on for several tiles after the key is released.
+                coop_expire_stale_actions( g->pending_action_queue_, now_ms(), window_ms );
+
                 if( fire_tick ) {
                     DebugLog( DL::Info, DC::Main )
                             << "[coop][tick=" << ( tick_active ? "active" : "idle" ) << "]"
                             << " game_turn=" << to_turn<int>( calendar::turn )
-                            << " pending=" << g->pending_action_queue_.size();
+                            << " pending=" << g->pending_action_queue_.size()
+                            << " window=" << window_ms;
+
+                    const auto tick_t0 = clk::now();
 
                     g->coop_game_tick();
 
                     while( g->u.moves > 0 ) {
                         if( !g->pending_action_queue_.empty() ) {
-                            const auto act = g->pending_action_queue_.front();
-                            g->pending_action_queue_.pop();
+                            const auto act = g->pending_action_queue_.front().action;
+                            g->pending_action_queue_.pop_front();
                             DebugLog( DL::Info, DC::Main ) << "[coop][action] " << act;
                             g->handle_action_from( act );
                             if( g->modal_fiber_ && !g->modal_fiber_->done() ) { break; }
@@ -782,6 +808,9 @@ int main( int argc, char* argv[] )
                             break;
                         }
                     }
+
+                    sess.local_tick_cost.sample(
+                        std::chrono::duration<double, std::milli>( clk::now() - tick_t0 ).count() );
 
                     if( g->is_game_over() ) {
                         g->cleanup_at_end();

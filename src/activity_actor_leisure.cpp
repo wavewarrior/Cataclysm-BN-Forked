@@ -81,6 +81,7 @@
 #include <cmath>
 #include <list>
 #include <memory>
+#include <queue>
 #include <string>
 #include <utility>
 #include "coop_client.h"

@@ -24,6 +24,7 @@
 #include <atomic>
 #include <chrono>
 #include <ctime>
+#include <deque>
 #include <functional>
 #include <iosfwd>
 #include <list>
@@ -39,8 +40,7 @@
 #include <utility>
 #include <vector>
 #include "coop_fiber.h"
-
-#include <queue>
+#include "coop_input_window.h"
 
 class Character;
 class Creature_tracker;
@@ -226,6 +226,15 @@ class game: public submap_load_listener
         /// World simulation pass extracted from do_turn() for the accumulator-gated
         /// non-blocking main loop. Calendar advance + all world sim; NO player input loop.
         auto post_action_world_step() -> void;
+        /// The co-op client's half of post_action_world_step(): the avatar-local statements
+        /// only.  Everything that mutates map, creatures, vehicles, fields or the overmap is
+        /// host-authoritative and arrives through apply_sync().  Called once per turn the
+        /// host reports as advanced.
+        auto coop_client_turn_step() -> void;
+        /// Per-frame companion to coop_client_turn_step(): cache rebuilds, monster info and
+        /// audio, which must run once per sync rather than once per advanced turn (a single
+        /// sync can carry up to COOP_ACTIVITY_YIELD_INTERVAL turns).
+        auto coop_client_frame_step() -> void;
 
         /// Non-blocking SDL event poll. Returns error-type event immediately
         /// if no event is pending (inputdelay=0 semantics).
@@ -239,7 +248,7 @@ class game: public submap_load_listener
 
         // --- FS-B main loop state (only active in co-op mode) ---
         std::optional<coop_fiber> modal_fiber_;
-        std::queue<std::string> pending_action_queue_;
+        std::deque<buffered_action> pending_action_queue_;
         double main_loop_accum_ms_ = 0.0;
         /// Variant of handle_action() that takes a pre-resolved action string
         /// from the non-blocking main loop. Modal-opening cases push to modal_fiber_
@@ -986,6 +995,8 @@ class game: public submap_load_listener
         void place_player_overmap( const tripoint_abs_omt& om_dest );
 
         unsigned int get_seed() const;
+        /// Adopt the host's world seed so a co-op client reproduces the same weather.
+        auto set_seed( unsigned int s ) -> void { seed = s; }
 
         /** If invoked, NPCs will be reloaded before next turn. */
         void set_npcs_dirty();
