@@ -591,6 +591,14 @@ void devui_rml_open()
     c.Bind( "shadow_mask_str", &g_dbg_params.shadow_mask_str );
     c.Bind( "mem_dim", &g_dbg_params.mem_dim );
     c.Bind( "mem_radius", &g_dbg_params.mem_radius );
+    // Grid-decoupled lighting knobs (art-texel quantisation, sub-tile occluders,
+    // palette shade ramps). texels_per_tile is DATA, not a knob — not bound.
+    c.Bind( "light_quant", &g_dbg_params.light_quant );
+    c.Bind( "occ_soft_gain", &g_dbg_params.occ_soft_gain );
+    c.Bind( "self_eps_tall", &g_dbg_params.self_eps_tall );
+    c.Bind( "ramp_enable", &g_dbg_params.ramp_enable );
+    c.Bind( "ramp_steps", &g_dbg_params.ramp_steps );
+    c.Bind( "ramp_chroma", &g_dbg_params.ramp_chroma );
     c.Bind( "sway_amp", &g_dbg_params.sway_amp );
     c.Bind( "sway_freq", &g_dbg_params.sway_freq );
     c.Bind( "ripple_k", &g_dbg_params.ripple_k );

@@ -142,6 +142,15 @@ cbuffer DebugParams : register(b2, space3) {
     float part_radius;
     float part_strength;
     float nrm_entity_amount;
+    // Pixel-art quantisation / sub-tile occluders / palette ramps.
+    float texels_per_tile;   // tileset native tile width in art texels (DATA)
+    float light_quant;       // 1 = snap light sample to art texels, 0 = per-screen-pixel
+    float occ_soft_gain;     // partial-occluder block gain (compute-stage; parity here)
+    float self_eps_tall;     // trace_shadow self-shadow escape radius for TALL sprites
+    float ramp_enable;       // 0 = plain multiply, 1 = full palette-ramp resolve
+    float ramp_steps;        // shade steps per palette row
+    float ramp_chroma;       // how much coloured light tints the ramped surface
+    float dbg_pad2;          // alignment
 };
 struct VS_OUT {
     float4 pos      : SV_Position;

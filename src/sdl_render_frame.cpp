@@ -566,6 +566,13 @@ if( g && tilecontext && in.tile_pixel_size > 0.0f ) {
     in.debug.player_x = static_cast<float>( g->u.bub_pos().x() ) + 0.5f;
         in.debug.player_y = static_cast<float>( g->u.bub_pos().y() ) + 0.5f;
     }
+    // Native tileset tile width in ART texels (32 for MSX++). Distinct from
+    // in.tile_pixel_size, which is the ZOOMED on-screen width. Step 1 quantises the
+    // light sample onto this lattice so shading reads as the tileset's own pixels.
+    in.debug.texels_per_tile =
+        ( tilecontext && tilecontext->current_tileset() )
+        ? static_cast<float>( tilecontext->current_tileset()->get_tile_width() )
+        : 32.0f;
     // Wet specular: fold the user knob with rain intensity so the sheen only shows
     // while raining (mirrors the A3 weather-mult CPU fold). 0 = exact no-op.
     in.debug.spec_strength = g_rain_enable

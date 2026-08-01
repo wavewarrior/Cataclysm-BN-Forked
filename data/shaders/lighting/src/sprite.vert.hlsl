@@ -36,7 +36,7 @@ cbuffer LightParams : register(b1, space1) {
     float lp_sun_pad;
 };
 
-// Cbuffer slot 2: DebugParams (152 bytes — wire-stable with C++ debug_params).
+// Cbuffer slot 2: DebugParams (208 bytes — wire-stable with C++ debug_params).
 // Pushed to the vertex stage so foliage sway can read sway_amp/sway_freq/anim_time.
 // The full field list is declared so those three land at the correct byte offset;
 // every other field is ignored by this shader.
@@ -87,6 +87,16 @@ cbuffer DebugParams : register(b2, space1) {
     float part_radius;   // player foliage parting radius in tiles (0=off)
     float part_strength; // player foliage parting push strength (0=off)
     float nrm_entity_amount; // entity (tall sprite) normal relief: 0=flat .. 1=full bevel
+    // Pixel-art quantisation / sub-tile occluders / palette ramps (fragment +
+    // compute stage only; declared for cbuffer layout parity).
+    float texels_per_tile;
+    float light_quant;
+    float occ_soft_gain;
+    float self_eps_tall;
+    float ramp_enable;
+    float ramp_steps;
+    float ramp_chroma;
+    float dbg_pad2;
 };
 
 struct VS_OUT {

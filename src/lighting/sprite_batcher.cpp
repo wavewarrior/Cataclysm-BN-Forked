@@ -58,7 +58,7 @@ static_assert(sizeof(sun_params) == 48, "sun_params wire-stable with SunParams c
 
 // debug_params struct now lives in sprite_batcher.h so render_state.h can
 // embed it by value in frame_light_inputs. Wire-stable layout enforced here.
-static_assert(sizeof(debug_params) == 176, "debug_params wire-stable with DebugParams cbuffer");
+static_assert(sizeof(debug_params) == 208, "debug_params wire-stable with DebugParams cbuffer");
 
 // ---- 24h sun LUT -------------------------------------------------------
 // Defined at file scope so MSVC won't complain about static-local in nested block.

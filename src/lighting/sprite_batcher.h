@@ -200,6 +200,17 @@ struct debug_params {
     float part_radius = 2.5f;   // player foliage parting radius in tiles (0=off)
     float part_strength = 0.5f; // player foliage parting push strength (0=off)
     float nrm_entity_amount = 0.3f; // entity (tall sprite) normal relief: 0=flat .. 1=full bevel
+    // Pixel-art light quantisation (Step 1).
+    float texels_per_tile = 32.0f; // DATA: tileset native tile width in art texels
+    float light_quant = 1.0f;      // 1 = snap light sample to art texels, 0 = per-screen-pixel
+    // Sub-tile occluders (Step 3/4).
+    float occ_soft_gain = 1.0f; // partial-occluder block gain (0 = hard occluders only)
+    float self_eps_tall = 0.55f; // trace_shadow self-shadow escape radius for TALL sprites
+    // Palette shade ramps (Step 7).
+    float ramp_enable = 1.0f;  // 0 = plain multiply, 1 = full ramp resolve
+    float ramp_steps = 8.0f;   // shade steps per palette row (must match built LUT)
+    float ramp_chroma = 0.35f; // how much coloured light tints the ramped surface
+    float dbg_pad2 = 0.0f;     // alignment
 };
 
 // Returns sun/sky params interpolated from a 24h LUT for the given hour (0..24).

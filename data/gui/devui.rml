@@ -173,6 +173,14 @@
                 <div class="devui-row">mem dim <input type="range" min="0" max="1" step="0.01" data-value="mem_dim"/> <span class="devui-val">{{mem_dim}}</span></div>
                 <div class="devui-row">mem radius <input type="range" min="1" max="60" step="1" data-value="mem_radius"/> <span class="devui-val">{{mem_radius}}</span></div>
 
+                <div class="devui-section">Grid-decoupled lighting</div>
+                <div class="devui-row">light quant <input type="range" min="0" max="1" step="1" data-value="light_quant"/> <span class="devui-val">{{light_quant}}</span></div>
+                <div class="devui-row">occ soft gain <input type="range" min="0" max="1" step="0.01" data-value="occ_soft_gain"/> <span class="devui-val">{{occ_soft_gain}}</span></div>
+                <div class="devui-row">self eps tall <input type="range" min="0" max="2" step="0.01" data-value="self_eps_tall"/> <span class="devui-val">{{self_eps_tall}}</span></div>
+                <div class="devui-row">ramp enable <input type="range" min="0" max="1" step="0.01" data-value="ramp_enable"/> <span class="devui-val">{{ramp_enable}}</span></div>
+                <div class="devui-row">ramp steps <input type="range" min="2" max="16" step="1" data-value="ramp_steps"/> <span class="devui-val">{{ramp_steps}}</span></div>
+                <div class="devui-row">ramp chroma <input type="range" min="0" max="1" step="0.01" data-value="ramp_chroma"/> <span class="devui-val">{{ramp_chroma}}</span></div>
+
                 <div class="devui-section">Foliage sway</div>
                 <div class="devui-row">sway amplitude <input type="range" min="0" max="8" step="0.1" data-value="sway_amp"/> <span class="devui-val">{{sway_amp}}</span></div>
                 <div class="devui-row">sway frequency <input type="range" min="0" max="3" step="0.05" data-value="sway_freq"/> <span class="devui-val">{{sway_freq}}</span></div>
