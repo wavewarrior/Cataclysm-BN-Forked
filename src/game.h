@@ -1079,8 +1079,6 @@ class game: public submap_load_listener
         bool is_game_over(); // Returns true if the player quit or died
         void death_screen(); // Display our stats, "GAME OVER BOO HOO"
         void win_screen();   // Display our stats, "CONGRATULATIONS!"
-        // Draws the pixel minimap based on the player's current location
-        void draw_pixel_minimap( const catacurses::window& w );
 
     private:
         //  int autosave_timeout();  // If autosave enabled, how long we should wait for user inaction
@@ -1189,7 +1187,6 @@ class game: public submap_load_listener
         catacurses::window w_overmap;
         catacurses::window w_omlegend;
         catacurses::window w_minimap;
-        catacurses::window w_pixel_minimap;
         // only a pointer, can refer to w_messages_short or w_messages_long
 
         // View offset based on the driving speed (if any)

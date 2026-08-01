@@ -9,6 +9,7 @@
 #include "field_type.h" // fd_blood
 #include "game_constants.h"
 #include "game.h"
+#include "hud_radar.h"
 #include "line.h"
 #include "map.h"
 #include "monster.h"
@@ -842,7 +843,7 @@ void draw_cone_aoe( const tripoint_bub_ms &origin, const std::map<tripoint_bub_m
 
 bool minimap_requires_animation()
 {
-    return tilecontext->minimap_requires_animation();
+    return hud_radar::requires_animation();
 }
 
 bool terrain_requires_animation()

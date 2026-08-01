@@ -2723,10 +2723,6 @@ void game::resize_reality_bubble_to( int new_size )
     // Discard pathfinding objects sized for the old bubble.
     Pathfinding::clear_pool();
 
-
-    if( tilecontext ) {
-        tilecontext->reset_minimap();
-    }
 }
 
 void game::resize_reality_bubble()

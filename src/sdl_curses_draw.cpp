@@ -278,17 +278,6 @@ static bool draw_window( Font_Ptr &font, const catacurses::window &w )
 }
 
 // ---------------------------------------------------------------------------
-// clear_window_area
-// ---------------------------------------------------------------------------
-
-void clear_window_area( const catacurses::window &win_ )
-{
-    cata_cursesport::WINDOW *const win = win_.get<cata_cursesport::WINDOW>();
-    geometry->rect( renderer, point( win->pos.x * ::fontwidth, win->pos.y * ::fontheight ),
-                    win->width * ::fontwidth, win->height * ::fontheight, color_as_sdl( catacurses::black ) );
-}
-
-// ---------------------------------------------------------------------------
 // set_window_transparent_backdrop
 // ---------------------------------------------------------------------------
 
@@ -446,20 +435,6 @@ void cata_cursesport::curses_drawwindow( const catacurses::window &w )
         ::overmap_tilecontext->draw_om( win->pos, overmap_ui::redraw_info.center,
                                         overmap_ui::redraw_info.blink );
         update = true;
-    } else if( g && w == g->w_pixel_minimap && pixel_minimap_option ) {
-        // ensure the space the minimap covers is "dirtied".
-        // this is necessary when it's the only part of the sidebar being drawn
-        // TODO: Figure out how to properly make the minimap code do whatever it is this does
-        draw_window( font, w );
-
-        // Make sure the entire minimap window is black before drawing.
-        clear_window_area( w );
-        ::tilecontext->draw_minimap(
-            point( win->pos.x * ::fontwidth, win->pos.y * ::fontheight ),
-            tripoint_bub_ms( g->u.bub_pos().xy(), g->ter_view_p.z() ),
-            win->width * font->width, win->height * font->height );
-        update = true;
-
     } else {
         // Either not using tiles (::tilecontext) or not the w_terrain window.
         update = draw_window( font, w );

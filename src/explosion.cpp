@@ -1110,14 +1110,6 @@ void ExplosionProcess::run()
     fill_maps();
     init_event_queue();
 
-    // We need to temporary disable it because
-    //   larger explosions may end up filling
-    //   the texture pool, causing a crash
-    bool disable_minimap = is_animated() && pixel_minimap_option;
-    if( disable_minimap ) {
-        g->toggle_pixel_minimap();
-    }
-
     map &here = get_map();
     while( process_next() ) {
         // No need to redraw in testing mode
@@ -1128,11 +1120,6 @@ void ExplosionProcess::run()
         }
         update_timings();
     };
-
-    // Reenable disabled options
-    if( disable_minimap ) {
-        g->toggle_pixel_minimap();
-    }
 
     // Remove temporary flags
     for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; z++ ) {

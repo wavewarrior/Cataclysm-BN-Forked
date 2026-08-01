@@ -343,9 +343,6 @@ void game::toggle_fullscreen()
 
 void game::toggle_pixel_minimap()
 {
-    if( pixel_minimap_option ) {
-        clear_window_area( w_pixel_minimap );
-    }
     pixel_minimap_option = !pixel_minimap_option;
     mark_main_ui_adaptor_resize();
 }
@@ -423,9 +420,6 @@ shared_ptr_fast<ui_adaptor> game::create_or_get_main_ui_adaptor()
 
             // minimap is always MINIMAP_WIDTH x MINIMAP_HEIGHT in size
             w_minimap = w_minimap_ptr = catacurses::newwin( MINIMAP_HEIGHT, MINIMAP_WIDTH, point_zero );
-
-            // need to init in order to avoid crash. gets updated by the panel code.
-            w_pixel_minimap = catacurses::newwin( 1, 1, point_zero );
 
             ui.position_from_window( catacurses::stdscr );
         } );
@@ -532,11 +526,6 @@ void game::draw_panels( bool /* force_draw */ )
     }
     sidebar_hud_open();
     sidebar_hud_sync( u );
-}
-
-void game::draw_pixel_minimap( const catacurses::window &w )
-{
-    w_pixel_minimap = w;
 }
 
 bool game::is_in_viewport( const tripoint_bub_ms &p, int margin ) const

@@ -829,11 +829,6 @@ class cata_tiles
         /** Simply displays character on a screen with given X,Y position **/
         void display_character( const Character& ch, const point_bub_ms& p );
 
-        /** Minimap functionality */
-        void draw_minimap( point dest, const tripoint_bub_ms& center, int width, int height );
-        bool minimap_requires_animation() const;
-        void reset_minimap();
-
     protected:
         /** How many rows and columns of tiles fit into given dimensions **/
         void get_window_tile_counts( int width, int height, int &columns, int &rows ) const;

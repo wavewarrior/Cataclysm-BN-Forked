@@ -1461,8 +1461,8 @@ void cata_tiles::draw(
     in_animation =
         do_draw_explosion || do_draw_custom_explosion
         || do_draw_line || do_draw_cursor || do_draw_highlight || do_draw_weather || do_draw_sct
-        || do_draw_zones || do_draw_cone_aoe || do_draw_aim_cone || !particles_.idle()
-        || hover_tile_.has_value();
+        || do_draw_zones || do_draw_cone_aoe || do_draw_aim_cone || do_draw_aim_crosshair
+        || !particles_.idle() || hover_tile_.has_value();
 
     draw_footsteps_frame( center );
     if( in_animation ) {
@@ -1513,6 +1513,11 @@ void cata_tiles::draw(
         if( do_draw_throw_arc ) { draw_throw_arc(); }
         if( do_draw_throw_impact ) { draw_throw_impact(); }
         if( do_draw_aim_cone ) { draw_aim_cone(); }
+        // Own branch, after the cone: it used to be a tail call inside draw_cursor(),
+        // which both hid it behind the cone and tied it to do_draw_cursor — false
+        // during hold-to-aim, so the reticle silently vanished in the one mode that
+        // needs it most.
+        if( do_draw_aim_crosshair ) { draw_aim_crosshair(); }
     } else if( g->u.view_offset != tripoint_rel_ms::zero() && !g->u.in_vehicle ) {
         // check to see if player is located at ter
         const tile_search_params tile{"cursor", C_NONE, empty_string, 0, 0};
@@ -1647,85 +1652,6 @@ void cata_tiles::display_character( const Character& ch, const point_bub_ms& p )
 {
     int height_3d = 0;
     draw_entity_with_overlays( ch, tripoint_bub_ms( p, 0 ), lit_level::BRIGHT, height_3d, true );
-}
-
-void cata_tiles::draw_minimap( point dest, const tripoint_bub_ms& center, int width, int height )
-{
-    static_cast<void>( center ); // minimap follows the player OMT, not the view centre
-    if( !g || width <= 0 || height <= 0 || !tileset_ptr ) { return; }
-    avatar& you = get_avatar();
-    auto& rs = lighting::get_render_state();
-
-    // Save the in-game projection. refresh_display's lighting pass reads o/op
-    // (cam_off) and the tile dims AFTER this callback, so they MUST be restored
-    // or the world shadows realign to the minimap. See camera_modernization.md P3.
-    const point_bub_ms saved_o = o;
-    const point saved_op = op;
-    const int saved_tw = tile_width;
-    const int saved_th = tile_height;
-    const float saved_rx = tile_ratiox;
-    const float saved_ry = tile_ratioy;
-    const int saved_stw = screentile_width;
-    const int saved_sth = screentile_height;
-
-    // Small OMT tiles sized to fit ~12 across the minimap's shorter edge.
-    const int mt = std::max( 4, std::min( width, height ) / 12 );
-    const float base =
-        static_cast<float>( tileset_ptr->get_tile_width() ) * tileset_ptr->get_tile_pixelscale();
-    if( base > 0.0f ) { set_draw_scale( mt * 16.0f / base ); }
-
-    op = dest;
-    const int cols = std::max( 1, width / tile_width );
-    const int rows = std::max( 1, height / tile_height );
-    screentile_width = cols;
-    screentile_height = rows;
-
-    const tripoint_abs_omt center_omt = you.abs_omt_pos();
-    const tripoint_abs_omt corner_NW = center_omt - point( cols / 2, rows / 2 );
-    o = corner_NW.xy().reinterpret_as<point_bub_ms>();
-
-    // OMT atlas sprites routed into the unlit overlay path so the world
-    // lighting never samples them at their minimap screen positions.
-    rs.set_unlit_overlay_route( true );
-    for( int row = 0; row < rows; row++ ) {
-        for( int col = 0; col < cols; col++ ) {
-            const tripoint_abs_omt omp = corner_NW + tripoint( col, row, 0 );
-            if( !ACTIVE_OVERMAP_BUFFER.seen( omp ) ) { continue; }
-            int rot = 0;
-            int sub = 0;
-            const std::string id = get_omt_id_rotation_and_subtile( omp, rot, sub );
-            draw_om_tile_recursively( omp, id, rot, sub, 0 );
-        }
-    }
-    rs.set_unlit_overlay_route( false );
-
-    // Player beacon at the centre OMT (queue_ui_rect is the unlit UI path).
-    const point beacon = player_to_screen( center_omt.xy().reinterpret_as<point_bub_ms>() );
-    rs.queue_ui_rect(
-        static_cast<float>( beacon.x ), static_cast<float>( beacon.y ), static_cast<float>( tile_width ),
-        static_cast<float>( tile_height ), 1.0f, 1.0f, 1.0f, 0.85f );
-
-    // Restore the in-game projection.
-    o = saved_o;
-    op = saved_op;
-    tile_width = saved_tw;
-    tile_height = saved_th;
-    tile_ratiox = saved_rx;
-    tile_ratioy = saved_ry;
-    screentile_width = saved_stw;
-    screentile_height = saved_sth;
-}
-
-bool cata_tiles::minimap_requires_animation() const
-{
-    // GPU minimap (draw_minimap) draws a static OMT overview + beacon; no
-    // per-frame animation drives a redraw.
-    return false;
-}
-
-void cata_tiles::reset_minimap()
-{
-    // GPU minimap holds no cache to reset; OMTs are re-resolved each draw.
 }
 
 void cata_tiles::get_window_tile_counts(
