@@ -196,8 +196,12 @@ constexpr std::array<overlay_entry, 12> g_overlay_entries = {{
 std::array<bool, 12> g_overlay_states{}; // indexed by g_overlay_entries
 
 // ── Sound spawner: click-to-place test sounds for the Sound debug overlay ──
-auto g_sound_place_mode =
-    true;  // checkbox: click spawns a sound (default on — opt out if unwanted)
+// Default OFF, matching dev_test_lights::place_mode. On, every left click in the
+// world is swallowed by place_test_sound() (sdl_input.cpp:489 `continue`s on a
+// true return) and queues a real sounds::sound( alert, vol 30 ) that monster AI
+// reacts to — so a stock build ate LMB world clicks, including the fire click in
+// hold-to-aim, and rang a dinner bell every time.
+auto g_sound_place_mode = false;  // checkbox: click spawns a test sound
 auto g_sound_volume = 30.0f;      // volume slider (1-128, matches sounds::sound vol param)
 auto g_sound_category = 0;        // index into sound_t enum (0=background)
 
@@ -1006,10 +1010,12 @@ auto sound_place_mode() -> bool & { return g_sound_place_mode; } // *NOPAD*
 
 auto sound_pulses_visible( bool player_in_stealth ) -> bool
 {
-    // g_sound_place_mode: the "spawn sounds on click" checkbox is itself an
-    // explicit opt-in to see the debug pulse, so it renders even with the F4
-    // panel closed — matching place_test_sound()'s panel-independent gate.
-    return player_in_stealth || devui_visible() || g_sound_place_mode;
+    // Stealth is the gameplay gate: the wavefront rings are the stealth-mode
+    // readout of how far your noise carried, so every other movement mode keeps
+    // them off. An open F4 panel is the one bypass — that is a deliberate
+    // developer action. g_sound_place_mode is NOT: it is a click-to-place debug
+    // toggle, and ORing it in tied the VFX to an unrelated input mode.
+    return player_in_stealth || devui_visible();
 }
 
 bool place_test_light()

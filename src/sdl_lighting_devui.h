@@ -202,12 +202,13 @@ bool &devui_visible();
 /// True when the animated sound-pulse wavefront VFX (dev_test_lights::sound_pulses
 /// — footsteps/melee/gunfire/ballistics, or an F4-panel test spawn) should be
 /// rendered. `player_in_stealth` is the caller's `movement_mode_is( CMM_STEALTH )`
-/// result; the F4-panel-open and "spawn sounds on click" bypasses keep
-/// debug-spawned test pulses visible without requiring stealth mode, and work
-/// independently of each other (either alone is enough).
+/// result and is the only gameplay gate: outside stealth the rings stay hidden.
+/// An open F4 dev panel bypasses it so debug-spawned test pulses stay visible;
+/// the "spawn sounds on click" checkbox deliberately does not, because it is a
+/// click-to-place debug toggle with no bearing on what the player should see.
 auto sound_pulses_visible( bool player_in_stealth ) -> bool;
-/// Mutable ref to the "spawn sounds on click" checkbox state. Tests use this
-/// to isolate from the runtime default (which is `true` for dev convenience).
+/// Mutable ref to the "spawn sounds on click" checkbox state (default off — it
+/// swallows world left-clicks and queues real, monster-audible sounds).
 auto sound_place_mode() -> bool &; // *NOPAD*
 void rml_tick();
 

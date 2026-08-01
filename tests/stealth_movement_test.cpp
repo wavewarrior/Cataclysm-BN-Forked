@@ -32,9 +32,10 @@ TEST_CASE( "stealth_mode_mirrors_crouch_posture", "[stealth][movemode]" )
 
 TEST_CASE( "sound_pulses_visible_gated_by_stealth_or_devui", "[stealth][sound]" )
 {
-    // Isolate from the runtime default (g_sound_place_mode defaults true for dev UX).
     restore_on_out_of_scope<bool> saved_spm( sdl_lighting_devui::sound_place_mode() );
+    restore_on_out_of_scope<bool> saved_devui( sdl_lighting_devui::devui_visible() );
     sdl_lighting_devui::sound_place_mode() = false;
+    sdl_lighting_devui::devui_visible() = false;
 
     CHECK_FALSE( sdl_lighting_devui::sound_pulses_visible( false ) );
     CHECK( sdl_lighting_devui::sound_pulses_visible( true ) );
@@ -43,4 +44,11 @@ TEST_CASE( "sound_pulses_visible_gated_by_stealth_or_devui", "[stealth][sound]" 
     CHECK( sdl_lighting_devui::sound_pulses_visible( false ) );
     sdl_lighting_devui::devui_visible() = false;
     CHECK_FALSE( sdl_lighting_devui::sound_pulses_visible( false ) );
+
+    // The "spawn sounds on click" checkbox defaults to on, so ORing it into the
+    // gate made the wavefront VFX render in every movement mode. It must not
+    // bypass stealth on its own.
+    sdl_lighting_devui::sound_place_mode() = true;
+    CHECK_FALSE( sdl_lighting_devui::sound_pulses_visible( false ) );
+    CHECK( sdl_lighting_devui::sound_pulses_visible( true ) );
 }
