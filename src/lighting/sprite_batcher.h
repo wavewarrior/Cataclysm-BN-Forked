@@ -299,7 +299,9 @@ public:
         SDL_GPUBuffer* sdf_buf = nullptr, SDL_GPUSampler* data_sampler = nullptr,
         SDL_GPUBuffer* sky_vis_buf = nullptr, SDL_GPUBuffer* gi_buf = nullptr,
         const sun_params* sp = nullptr,
-        const debug_params* dbg = nullptr, SDL_GPUBuffer* sky_buf = nullptr);
+        const debug_params* dbg = nullptr, SDL_GPUBuffer* sky_buf = nullptr,
+        // Step 7 palette shade ramps — fragment storage slots 5/6 → t7/t8.
+        SDL_GPUBuffer* ramp_buf = nullptr, SDL_GPUBuffer* pal_index_buf = nullptr);
 
     // Silhouette sun-shadow mask (Phase 2). Now the sole fragment storage-read
     // texture, bound at slot 0 (t1/space2) for sprite.frag. Set separately from

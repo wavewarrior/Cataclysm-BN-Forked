@@ -601,6 +601,23 @@ if( g && tilecontext && in.tile_pixel_size > 0.0f ) {
     in.debug.player_x = static_cast<float>( g->u.bub_pos().x() ) + 0.5f;
         in.debug.player_y = static_cast<float>( g->u.bub_pos().y() ) + 0.5f;
     }
+    // Step 7: the shader indexes RampBuf as `pal_row * ramp_steps + shade`, so
+    // ramp_steps MUST be the stride of the buffer that is actually uploaded, not the
+    // raw slider — a mismatch reads into a neighbouring row and garbles every colour.
+    // The slider is the BAKE REQUEST: when it changes, re-bake, then publish the
+    // authoritative baked stride. Falls back to the slider only before a tileset has
+    // been loaded, where ramp_enable's lerp makes the value moot anyway.
+    {
+        static int last_ramp_steps = -1;
+        const int want = std::clamp( static_cast<int>( g_dbg_params.ramp_steps ), 2, 16 );
+        if( want != last_ramp_steps ) {
+            last_ramp_steps = want;
+            rs.build_palette_ramps( want );
+        }
+        const int baked = rs.palette_steps();
+        in.debug.ramp_steps = baked > 0 ? static_cast<float>( baked )
+                              : g_dbg_params.ramp_steps;
+    }
     // Native tileset tile width in ART texels (32 for MSX++). Distinct from
     // in.tile_pixel_size, which is the ZOOMED on-screen width. Step 1 quantises the
     // light sample onto this lattice so shading reads as the tileset's own pixels.
@@ -1018,7 +1035,8 @@ auto tonemap_pass_t( lighting::render_state &rs,
         grade.ca_amount        = g_grade_ca + hud_shake::intensity() * damage_ca_scale;
         rs.tonemap().record( ctx.cmd_buffer, wt->texture(), rs.gpu_sampler(),
                              wldr->texture(), wldr->width(), wldr->height(),
-                             g_tonemap_exposure, g_tonemap_min_ev, g_tonemap_max_ev, grade );
+                             g_tonemap_exposure, g_tonemap_min_ev, g_tonemap_max_ev,
+                             g_dbg_params.ramp_enable, grade );
     }
 }
 

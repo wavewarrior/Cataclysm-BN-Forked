@@ -16,6 +16,62 @@
 | `font_engine.cpp/h` | SDL_Surface→GPU glyph upload; per-glyph texture cache |
 | `gpu_geometry.cpp/h` | 1×1 white texture (shared by UI rects and solid fills) |
 | `shader_compiler.cpp/h` | HLSL→SPIRV-Cross compile; embedded `SPRITE_VERT_HLSL` in `sprite_batcher.cpp` |
+| `occluder_capture.cpp/h` | Per-frame sprite-alpha footprints feeding the SDF seed |
+| `palette_ramp.cpp/h` | Procedural per-palette shade ramps + OkLab row lookup |
+
+---
+
+## Grid-decoupled lighting (2026-08-01)
+
+The shading pipeline was already continuous; the GRID came from its **inputs**. Seven
+changes decouple them. Every one is runtime-revertible from the F4 Effects tab, and
+every gameplay consumer (`fine_detail_vision_mod`, `Character::sight_range`,
+`Creature::sees`, `map::ambient_light_at`, `map::sees`) is untouched.
+
+1. **Art-texel light quantisation.** `shade_pos` snaps `light_pos` to the tileset
+   texel lattice and is the sample position for every lighting read. Light is
+   constant across an art texel instead of gradient-shaded across it at zoom > 1:1.
+   The Bayer dither is re-keyed to the same lattice, so its cell is 4 art texels wide
+   at every zoom (it used to scale with the zoomed pixel size). Knob: `light_quant`.
+2. **Sprite-alpha occluders.** `occluder_capture` records, per frame, the footprint
+   of every terrain/furniture/vpart sprite (quad centre + size + rotation in TILE
+   units, plus the atlas rect). `occ_base.comp` seeds the old tile-square only where
+   nothing was captured (off-camera fallback — load-bearing); `occ_raster.comp`
+   inverts each quad's transform per subcell and averages 4x4 alpha taps into a
+   coverage field; `jfa_seed.comp` converts coverage to occupancy through a
+   world-locked Bayer threshold, so partial occluders seed a stable fraction of
+   subcells and dapple. The SDF now carries the artwork's real silhouette instead of
+   one binary flag per tile replicated into 64 subcells. Knob: `occ_soft_gain`.
+   - occ_raster is dispatched ONCE PER ATLAS PAGE (one compute dispatch reads one
+     texture), so `gpu_sdf_pass` sorts the quads by page. Atlas pages therefore carry
+     `COMPUTE_STORAGE_READ` as well as `SAMPLER`.
+   - The seed now depends on WHICH TILES WERE DRAWN, so the structure-rebuild gate in
+     `sdl_render_frame.cpp` also fires once the camera drifts `SDF_CAM_DRIFT_TILES`.
+3. **Sub-tile emitters.** `make_omni`/`make_cone` take FLOAT positions. Creature-carried
+   lights add `anim_state.slide_offset_*` so a torch follows the sliding sprite;
+   `flicker_seed` is keyed to the LOGICAL tile (`with_tile_seed`) so the phase does not
+   jump mid-step. Emitters inside their own opaque tile are pushed 0.45 tile onto the
+   wall face (`face_offset`) so a wall lamp lights the corridor, not itself.
+4. **Sub-tile vision carve.** `sprite.frag` marches the same SDF toward the player and
+   multiplies the result in, so a wall corner cuts sight as a smooth curve instead of a
+   tile staircase. It can only SUBTRACT inside a tile the CPU already granted, so it
+   cannot reveal anything. The dead 4.5 MB `VisBuf` field it replaced (built, blurred
+   and uploaded every player move for no reader) is deleted. Knobs: `vis_curve`,
+   `vis_radius`.
+5. **Bilateral GI upsample.** `indirect_bilinear` weights its four taps by SDF
+   similarity so tile-res bounce does not cross a wall.
+6. **Palette shade ramps.** `palette_ramp` histograms every tileset sheet, keeps the
+   256 most frequent colours, generates 8 shades per row procedurally and bakes a 32^3
+   OkLab nearest-row lookup. `sprite.frag` resolves the lit colour to a shade STEP in
+   the texel's own ramp, so a red surface darkens toward dark red, not grey. Gated to
+   lit world tiles (UI/fonts/memory keep their own colour) and to `ramp_enable`.
+   - The shade step keys off `combined` (= `max(tint, gpu_total)`), NOT `gpu_total`:
+     outdoors this engine lights tiles through the CPU lightmap tint, so keying off the
+     GPU term alone crushes daylight to black.
+   - `ramp_steps` is the BAKE REQUEST; `render_state::palette_steps()` is the
+     authoritative row stride the shader indexes with. They must not diverge.
+   - Ramp output is display-referred, so `tonemap.frag` lerps out AgX on
+     `tm_ramp_enable` (which replaced `tm_pad` — both sides move together).
 
 ---
 

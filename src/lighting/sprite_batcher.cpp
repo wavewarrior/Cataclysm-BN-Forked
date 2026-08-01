@@ -219,6 +219,12 @@ public:
     // output (rgb sky-access + a celestial-occ). Storage-buffer slot 4 ⇒
     // t6/space2 (LAST). Null on the shadow/UI batchers.
     SDL_GPUBuffer* lp_sky_buf = nullptr; // fragment storage BUFFER slot 4 (SkyBuf, t6)
+    // Step 7 palette shade ramps. Storage-buffer slots 5 and 6 ⇒ t7/t8 (appended so
+    // no existing slot renumbers). Storage BUFFERS, not sampled textures: shadercross
+    // mis-binds sampler textures on Metal (CLAUDE.md), adding samplers would shift
+    // every storage register in lockstep, and the lookup wants integer indexing.
+    SDL_GPUBuffer* lp_ramp_buf = nullptr;      // RampBuf   (t7)
+    SDL_GPUBuffer* lp_pal_index_buf = nullptr; // PalIdxBuf (t8)
     // Silhouette sun-shadow mask (Phase 2). The SOLE storage-READ texture now
     // (GI moved to GiBuf) ⇒ storage-texture slot 0 ⇒ t1/space2, ahead of the
     // storage buffers (t2..t6). Null on the shadow/UI batchers.
@@ -235,7 +241,8 @@ public:
         SDL_GPUSampler* data_sampler = nullptr, SDL_GPUBuffer* sky_vis_buf = nullptr,
         SDL_GPUBuffer* gi_buf = nullptr,
         const sun_params* sp = nullptr, const debug_params* dbg = nullptr,
-        SDL_GPUBuffer* sky_buf = nullptr) noexcept {
+        SDL_GPUBuffer* sky_buf = nullptr, SDL_GPUBuffer* ramp_buf = nullptr,
+        SDL_GPUBuffer* pal_index_buf = nullptr) noexcept {
         // data_sampler is vestigial now that all lighting data (emitters,
         // SDF, sky-vis) lives in storage buffers — Atlas is the only
         // sampler texture and carries its own sampler from set_texture().
@@ -246,6 +253,8 @@ public:
         lp_sky_vis_buf = sky_vis_buf;
         lp_gi_buf = gi_buf;
         lp_sky_buf = sky_buf;
+        lp_ramp_buf = ramp_buf;
+        lp_pal_index_buf = pal_index_buf;
         lp_data_sampler = data_sampler;
         lp.tile_pixel_size = tile_pixel_size;
         lp.current_z = z_level;
@@ -382,7 +391,7 @@ public:
             << f.resources.num_samplers << " storage_textures=" << f.resources.num_storage_textures
             << " storage_buffers=" << f.resources.num_storage_buffers
             << " uniform_buffers=" << f.resources.num_uniform_buffers
-            << " (sprite frag expects st=2 sb=5 ub=3; shadow frag expects "
+            << " (sprite frag expects samplers=1 st=1 sb=7 ub=3; shadow frag expects "
                "samplers=1 st=0 sb=0 ub=0)";
 
         // Build the pipeline for the configured (swapchain) target format.
@@ -798,10 +807,11 @@ private:
         // binding an unpopulated buffer is read-safe. The shadow/UI batchers
         // leave them null → bind nothing. Bound in ONE call so a later bind can't
         // zero an earlier slot.
-        if (lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_gi_buf && lp_sky_buf) {
-            SDL_GPUBuffer* sbufs[5] =
-                {lp_emitter_buf, lp_sdf_buf, lp_sky_vis_buf, lp_gi_buf, lp_sky_buf};
-            SDL_BindGPUFragmentStorageBuffers(rp, /*first_slot=*/0, sbufs, 5);
+        if (lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_gi_buf && lp_sky_buf
+            && lp_ramp_buf && lp_pal_index_buf) {
+            SDL_GPUBuffer* sbufs[7] = {lp_emitter_buf, lp_sdf_buf,  lp_sky_vis_buf, lp_gi_buf,
+                                       lp_sky_buf,     lp_ramp_buf, lp_pal_index_buf};
+            SDL_BindGPUFragmentStorageBuffers(rp, /*first_slot=*/0, sbufs, 7);
         }
     }
 };
@@ -843,11 +853,11 @@ void sprite_batcher::set_lighting_resources(
     float cam_off_y, Uint32 sdf_map_w, Uint32 sdf_map_h, SDL_GPUBuffer* emitter_buf,
     SDL_GPUBuffer* sdf_buf, SDL_GPUSampler* data_sampler, SDL_GPUBuffer* sky_vis_buf,
     SDL_GPUBuffer* gi_buf, const sun_params* sp, const debug_params* dbg,
-    SDL_GPUBuffer* sky_buf) {
+    SDL_GPUBuffer* sky_buf, SDL_GPUBuffer* ramp_buf, SDL_GPUBuffer* pal_index_buf) {
     p->set_lighting_resources(
         tile_pixel_size, z_level, emitter_count, ambient, cam_off_x, cam_off_y, sdf_map_w,
         sdf_map_h, emitter_buf, sdf_buf, data_sampler, sky_vis_buf, gi_buf, sp, dbg,
-        sky_buf);
+        sky_buf, ramp_buf, pal_index_buf);
 }
 
 void sprite_batcher::draw(const sprite_instance& inst) { p->draw(inst); }

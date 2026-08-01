@@ -80,6 +80,15 @@ StructuredBuffer<float>      GiBuf       : register(t5, space2);
 // a = celestial (sun/moon) occlusion from the 3D coverage-occluder march
 // (REPLACES the inline sun trace_shadow + SunSdfBuf — Stage 2b).
 StructuredBuffer<float>      SkyBuf      : register(t6, space2);
+// Step 7 palette shade ramps. Appended at t7/t8 so no existing slot renumbers.
+// Storage BUFFERS, not sampled textures, for three reasons all recorded in this
+// repo: shadercross mis-binds sampler textures on Metal (silent zeros); adding
+// samplers would shift the storage-texture and every storage-buffer register in
+// lockstep; and the lookup wants nearest/integer indexing anyway. BOTH are read
+// UNCONDITIONALLY below (gated with lerp, never an `if`) — D3D12 strips an unread
+// fragment storage buffer and the hole breaks the root signature.
+StructuredBuffer<uint>       RampBuf     : register(t7, space2); // palette_size*steps RGBA8
+StructuredBuffer<uint>       PalIdxBuf   : register(t8, space2); // 32^3 palette rows
 cbuffer LightParams : register(b0, space3) {
     float tile_pixel_size; float current_z;
     uint  emitter_count;   float ambient;
@@ -220,6 +229,17 @@ float3 indirect_texel(int x, int y) {
     const int o = (x * (int)sdf_map_h + y) * 4;
     return float3(GiBuf[o + 0], GiBuf[o + 1], GiBuf[o + 2]);
 }
+// Bilateral GI upsample: reject taps whose SDF differs sharply from the sample
+// point's, so bounce light does not cross a wall. GI is one probe per TILE, so a
+// plain bilinear blends a lit interior probe with the dark exterior probe on the
+// other side of the wall — indoor bounce bleeds outdoors and the wall edge reads
+// as a blocky tile-scale blob. Weighting each tap by SDF similarity fixes the
+// dominant GI artefact for four extra SDF taps, where raising probe density to
+// 2x2/tile would cost 4x the compute.
+//
+// This only bites once the SDF carries sub-tile detail (Step 3): with tile-square
+// occluders there is no sub-tile contrast to key on.
+static const float GI_BILAT_SIGMA = 0.35; // tiles
 float3 indirect_bilinear(float2 p) {
     const float2 sp = p - 0.5;
     const float2 fp = floor(sp);
@@ -230,7 +250,24 @@ float3 indirect_bilinear(float2 p) {
     const float3 b = indirect_texel(x0 + 1, y0    );
     const float3 c = indirect_texel(x0,     y0 + 1);
     const float3 d = indirect_texel(x0 + 1, y0 + 1);
-    return lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
+    const float3 plain = lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
+
+    // Bilinear weights, then an SDF-similarity factor per tap. Tap centres are the
+    // probe tile centres (integer tile + 0.5), which is what sdf_bilinear expects.
+    const float sd_c = sdf_bilinear(p);
+    const float wa = (1.0 - w.x) * (1.0 - w.y);
+    const float wb =        w.x  * (1.0 - w.y);
+    const float wc = (1.0 - w.x) *        w.y;
+    const float wd =        w.x  *        w.y;
+    const float inv_sigma = 1.0 / GI_BILAT_SIGMA;
+    const float ba = wa * exp(-abs(sdf_bilinear(float2(x0,     y0    ) + 0.5) - sd_c) * inv_sigma);
+    const float bb = wb * exp(-abs(sdf_bilinear(float2(x0 + 1, y0    ) + 0.5) - sd_c) * inv_sigma);
+    const float bc = wc * exp(-abs(sdf_bilinear(float2(x0,     y0 + 1) + 0.5) - sd_c) * inv_sigma);
+    const float bd = wd * exp(-abs(sdf_bilinear(float2(x0 + 1, y0 + 1) + 0.5) - sd_c) * inv_sigma);
+    const float wsum = ba + bb + bc + bd;
+    // A fully-rejected neighbourhood must not produce black — fall back to the
+    // unweighted result rather than dividing by ~0.
+    return (wsum < 1e-4) ? plain : ((a * ba + b * bb + c * bc + d * bd) / wsum);
 }
 // Stage 2a directional skylight reader (SkyBuf). Same tile-res x-major layout +
 // p-0.5 bilinear centre as the GI reader. rgb = sky-access, a = sun-occ.
@@ -339,6 +376,15 @@ float dither_threshold(float2 world_px) {
     const int bx = ((int)floor(world_px.x)) & 3;
     const int by = ((int)floor(world_px.y)) & 3;
     return (k_bayer4[by * 4 + bx] + 0.5) / 16.0;
+}
+// --- Step 7 palette shade ramp helpers -------------------------------------
+float luma(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
+float3 unpack_rgba8(uint p) {
+    return float3((p & 0xFFu), ((p >> 8) & 0xFFu), ((p >> 16) & 0xFFu)) * (1.0 / 255.0);
+}
+uint pal_index_of(float3 rgb) {   // 5 bits/channel → 32^3
+    const uint3 q = (uint3)clamp(rgb * 31.0 + 0.5, 0.0, 31.0);
+    return (q.r * 32u + q.g) * 32u + q.b;
 }
 // --- Bucket A / A1: inline alpha-shape bevel surface normal ----------------
 // Per-pixel relief derived from the sprite's alpha silhouette (decision #15,
@@ -666,6 +712,43 @@ float4 main(VS_OUT i) : SV_Target0 {
     //   Main menu:   tint = 1.0 (no game state) → bright; emitters add glow
     const float3 combined = max(i.tint.rgb, gpu_total);
     float3 final_rgb = texel.rgb * combined;
+
+    // Palette shade ramp. The lighting result selects a SHADE STEP within the base
+    // texel's OWN ramp, so a red surface darkens toward its palette's dark red rather
+    // than toward grey — which is how pixel art shades, and the single biggest reason
+    // a straight light multiply reads as "HD lighting bolted onto pixel art".
+    // Coloured light still reads: ramp_chroma re-tints the ramped colour by the
+    // light's normalised chroma. The ordered-dither term on shade_f is what stops 8
+    // steps from banding (error diffusion is not available in a fragment shader, and
+    // the world-locked Bayer helper already exists).
+    //
+    // The shade step keys off `combined`, NOT gpu_total: outdoors this engine lights
+    // tiles through the CPU lightmap TINT (gpu_total stays low in daylight — the same
+    // masking that makes the GPU light terms nearly invisible outdoors), so keying off
+    // gpu_total put every daylit texel on the bottom ramp step and crushed the scene
+    // to black. `combined` is whichever path actually lit the pixel.
+    //
+    // Gated to LIT WORLD tiles (tint ~ 0, world loaded), matching the debug-mode gate:
+    // UI rects, font glyphs and memorized tiles come through this same shader with a
+    // meaningful tint and must keep their own colour. BOTH buffers are still read
+    // UNCONDITIONALLY and the effect is applied with a lerp, never an `if` — D3D12
+    // strips an unread fragment storage buffer and the hole breaks the root signature.
+    {
+        const uint   pal_row = PalIdxBuf[pal_index_of(texel.rgb)];
+        const float  steps_n = max(ramp_steps, 2.0);
+        const float  shade_f = saturate(luma(combined)) * (steps_n - 1.0)
+                               + (dither_threshold(shade_pos * texels_per_tile) - 0.5);
+        const uint   shade_i = (uint)clamp(shade_f + 0.5, 0.0, steps_n - 1.0);
+        const float3 ramped  = unpack_rgba8(RampBuf[pal_row * (uint)steps_n + shade_i]);
+        // Normalised light chroma, scaled so neutral white light is a no-op (x1).
+        const float3 lit_chroma = normalize(max(combined, 1e-4)) * 1.7320508;
+        const float3 ramp_rgb = lerp(ramped, ramped * lit_chroma, ramp_chroma);
+        const float  ramp_tint_sum = i.tint.r + i.tint.g + i.tint.b;
+        const float  ramp_mask = saturate(ramp_enable)
+                                 * step(ramp_tint_sum, 0.01)
+                                 * ((sdf_map_w > 0u) ? 1.0 : 0.0);
+        final_rgb = lerp(final_rgb, ramp_rgb, ramp_mask);
+    }
 
     // Debug visualisation. Modes 1-5 BLEND a per-component visualisation
     // over the lit scene at debug_opacity; modes 6-7 REPLACE the scene with

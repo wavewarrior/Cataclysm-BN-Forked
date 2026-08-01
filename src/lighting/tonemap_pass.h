@@ -58,10 +58,12 @@ public:
     // not ready or any argument is null.
     // `exposure` (pre-AgX scale) + `min_ev`/`max_ev` (AgX log2 range) are
     // the F4 tonemap sliders, pushed as a fragment uniform (b0/space3).
+    // `ramp_enable` (Step 7) bypasses the AgX curve: palette-ramp output is already
+    // display-referred, so re-mapping it would break the palette contract.
     void record(
         SDL_GPUCommandBuffer* cb, SDL_GPUTexture* src, SDL_GPUSampler* sampler, SDL_GPUTexture* dst,
         std::uint32_t dst_w, std::uint32_t dst_h, float exposure, float min_ev, float max_ev,
-        const grade_params& grade );
+        float ramp_enable, const grade_params& grade );
 
 private:
     gpu_device* dev_ = nullptr;

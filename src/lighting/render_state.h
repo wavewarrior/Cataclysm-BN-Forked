@@ -25,6 +25,7 @@
 #include "gpu_geometry.h"
 #include "gpu_sdf_pass.h"
 #include "occluder_capture.h"
+#include "palette_ramp.h"
 #include "rain_effect.h"
 #include "hud_particle_effect.h"
 #include "sdf_pass.h"
@@ -306,6 +307,24 @@ public:
     // drained by gpu_sdf_pass to rasterise the SDF seed from the artwork.
     occluder_capture& occluders() noexcept { return occluders_; }
 
+    // Per-palette shade ramps (Step 7). The accumulator is fed every tileset sheet
+    // during load; build_palette_ramps() bakes it and uploads the two fragment
+    // storage buffers the sprite shader resolves through.
+    palette_accumulator& palette_acc() noexcept { return palette_acc_; }
+    /// Bake the accumulated histogram at `steps` shades per row and upload. Safe to
+    /// call with nothing accumulated — the buffers stay allocated (a declared-but-
+    /// stripped fragment storage buffer punches a hole in the SRV range and kills the
+    /// pipeline), and the shader's ramp_enable lerp keeps the result a no-op.
+    void build_palette_ramps(int steps);
+    // palette_size * steps RGBA8 shades, row-major by palette row.
+    SDL_GPUBuffer* ramp_buffer() const noexcept { return ramp_buf_; }
+    // 32^3 palette-row indices.
+    SDL_GPUBuffer* pal_index_buffer() const noexcept { return pal_index_buf_; }
+    /// Shades per palette row in the CURRENTLY UPLOADED ramp buffer. This — not the
+    /// F4 slider — is the row stride the shader must index with; the slider is only
+    /// the bake request. 0 until a tileset has been loaded.
+    int palette_steps() const noexcept { return palette_steps_; }
+
     // UI compositor target. Persistent offscreen texture the UI renders
     // into; refresh_display blits it over the lit-world pass. nullptr
     // until init() succeeds. Owned here; lives for the render_state's
@@ -447,6 +466,10 @@ private:
     // Phase 4: SDF + transparency
     sdf_pass sdf_;
     occluder_capture occluders_;
+    palette_accumulator palette_acc_;
+    SDL_GPUBuffer* ramp_buf_ = nullptr;
+    SDL_GPUBuffer* pal_index_buf_ = nullptr;
+    int palette_steps_ = 0;
 
     // UI compositor target (offscreen UI render-to-texture).
     std::unique_ptr<ui_composite_target> ui_target_;

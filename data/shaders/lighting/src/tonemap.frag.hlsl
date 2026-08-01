@@ -17,7 +17,12 @@ cbuffer TonemapParams : register( b0, space3 )
     float tm_exposure;  // pre-AgX scale
     float tm_min_ev;    // AgX log2 floor (default -12.47393)
     float tm_max_ev;    // AgX log2 ceil  (default   4.026069)
-    float tm_pad;
+    // 1 when the sprite pass resolved through the palette shade ramps (Step 7).
+    // Ramp output is DISPLAY-REFERRED — AgX would re-map it and break the palette
+    // contract — so the AgX curve is lerped out in favour of a plain exposure-scaled
+    // saturate(). MUST move in lockstep with tonemap_pass::record's TonemapParams or
+    // every field after it reads garbage.
+    float tm_ramp_enable;
 };
 
 // ASC-CDL colour grade + post effects (SDL_PushGPUFragmentUniformData slot 1 →
@@ -108,7 +113,12 @@ float4 main( VS_OUT i ) : SV_Target0
         hdr = SrcTex.Sample( SrcSmp, i.uv ).rgb;
     }
 
-    float4 c = float4( agx_tonemap( hdr, tm_exposure, tm_min_ev, tm_max_ev ), 1.0 );
+    // Bypass AgX when the sprite pass already resolved to palette colours. Ramp output
+    // is DISPLAY-REFERRED, so it needs neither the pre-AgX exposure scale nor the
+    // curve — either would re-map the palette and break the contract.
+    const float3 agx   = agx_tonemap( hdr, tm_exposure, tm_min_ev, tm_max_ev );
+    const float3 plain = saturate( hdr );
+    float4 c = float4( lerp( agx, plain, saturate( tm_ramp_enable ) ), 1.0 );
 
     // --- ASC-CDL grade ---
     c.rgb = pow( saturate( c.rgb * cdl_slope + cdl_offset ), cdl_power );

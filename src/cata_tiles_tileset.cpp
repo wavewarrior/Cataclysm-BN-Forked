@@ -587,6 +587,12 @@ void cata_tiles::load_tileset(
     // reset the overlay ordering from the previous loaded tileset
     tileset_mutation_overlay_ordering.clear();
 
+    // Step 7: drop the previous tileset's palette histogram before the new sheets are
+    // accumulated, or a tileset swap blends both palettes into one ramp set.
+    if( lighting::render_state * rs = &lighting::get_render_state(); rs->ready() ) {
+        rs->palette_acc().reset();
+    }
+
     // Load the tileset into a separate instance and only set this->tileset_ptr
     // when the loading has succeeded.
     std::unique_ptr<tileset> new_tileset_ptr = std::make_unique<tileset>();
@@ -594,6 +600,14 @@ void cata_tiles::load_tileset(
     loader.load( tileset_id, precheck, /*pump_events=*/pump_events );
     tileset_ptr = std::move( new_tileset_ptr );
     tileset_mod_list_stamp = mod_list;
+
+    // Step 7: bake the accumulated palette into shade ramps + the OkLab lookup and
+    // upload. Runs once per tileset load, after every sheet has been histogrammed.
+    // The F4 ramp_steps slider is the BAKE REQUEST; render_state::palette_steps() is
+    // the authoritative row stride the shader indexes with.
+    if( lighting::render_state * rs = &lighting::get_render_state(); rs->ready() ) {
+        rs->build_palette_ramps( static_cast<int>( g_dbg_params.ramp_steps ) );
+    }
 
     set_draw_scale( 16 );
 }
@@ -1151,6 +1165,12 @@ bool tileset_loader::create_textures_from_tile_atlas(
     const SDL_Surface_Ptr& tile_atlas, point offset )
 {
     assert( tile_atlas );
+    // Step 7: every sheet surface passes through here on BOTH the DYNAMIC_ATLAS and
+    // legacy paths, so this is the single choke point for histogramming the tileset's
+    // own palette. Cheap relative to the atlas upload that follows.
+    if( lighting::render_state * rs = &lighting::get_render_state(); rs->ready() ) {
+        rs->palette_acc().add_surface( *tile_atlas );
+    }
 
 #if defined(DYNAMIC_ATLAS)
     return copy_surface_to_dynamic_atlas( tile_atlas, offset );

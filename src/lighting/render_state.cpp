@@ -101,6 +101,24 @@ void render_state::init(SDL_Window* host_window) {
     const int rt_tiles = REALITY_BUBBLE_SIZE_MAX * SEEX;
     sdf_.init(device_, rt_tiles, rt_tiles);
 
+    // Step 7 palette shade ramps. Allocated UNCONDITIONALLY, even before any tileset
+    // is loaded: sprite.frag declares both buffers, and D3D12 strips a fragment
+    // storage buffer that is never bound, punching a hole in the t2..t8 SRV range and
+    // failing pipeline creation with E_INVALIDARG (see sprite.frag.hlsl's binding
+    // block). Sized for the maximum palette so a later tileset swap never reallocates.
+    {
+        SDL_GPUBufferCreateInfo bci{};
+        bci.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
+        bci.size = static_cast<Uint32>(PALETTE_ROWS * 16 * sizeof(std::uint32_t));
+        ramp_buf_ = SDL_CreateGPUBuffer(device_.raw(), &bci);
+        bci.size = static_cast<Uint32>(PALETTE_LUT_SIDE * PALETTE_LUT_SIDE * PALETTE_LUT_SIDE
+                                       * sizeof(std::uint32_t));
+        pal_index_buf_ = SDL_CreateGPUBuffer(device_.raw(), &bci);
+        if (!ramp_buf_ || !pal_index_buf_) {
+            dbg(DL::Error) << "render_state: palette ramp buffer alloc failed: " << SDL_GetError();
+        }
+    }
+
     // GPU compute GI pass (Stage 1 of GI_COMPUTE_AND_PERF_PLAN — replaced the
     // fragment radiance_cascade_pass). gi_buffer() is tile-res (4 floats/tile,
     // x-major), sized to the same max map extent as the SDF; the sprite reads it
@@ -244,6 +262,15 @@ void render_state::shutdown() noexcept {
     // Phase 4: release SDF textures.
     sdf_.shutdown(device_);
 
+    if (device_.ready()) {
+        if (ramp_buf_) { SDL_ReleaseGPUBuffer(device_.raw(), ramp_buf_); }
+        if (pal_index_buf_) { SDL_ReleaseGPUBuffer(device_.raw(), pal_index_buf_); }
+    }
+    ramp_buf_ = nullptr;
+    pal_index_buf_ = nullptr;
+    palette_steps_ = 0;
+    palette_acc_.reset();
+
     if (device_.ready() && gpu_sampler_) { SDL_ReleaseGPUSampler(device_.raw(), gpu_sampler_); }
     gpu_sampler_ = nullptr;
 
@@ -336,7 +363,8 @@ void render_state::begin_lighting_frame(const frame_light_inputs& in) {
 
     tile_batcher_.set_lighting_resources(
         in.tile_pixel_size, in.z_level, ne, in.ambient, in.camera_off_x, in.camera_off_y, sw, sh,
-        ebuf, sbuf, gpu_sampler_, kvis, gibuf, &in.sun, &in.debug, skybuf);
+        ebuf, sbuf, gpu_sampler_, kvis, gibuf, &in.sun, &in.debug, skybuf, ramp_buf_,
+        pal_index_buf_);
 
     // Silhouette sun-shadow mask (Phase 2): bind it as the tile batcher's 2nd
     // fragment storage texture (sprite.frag ShadowMask, t2/space2). Always
@@ -517,6 +545,67 @@ SDL_GPUTexture* render_state::upload_surface_to_gpu_texture(SDL_Surface* surface
     return tex;
 }
 
+
+void render_state::build_palette_ramps(int steps) {
+    if (!device_.ready() || !ramp_buf_ || !pal_index_buf_ || palette_acc_.empty()) { return; }
+
+    // Clamp to what ramp_buf_ was sized for at init (PALETTE_ROWS * 16 uints).
+    const palette_ramp_data data = palette_acc_.build({.steps = std::clamp(steps, 2, 16)});
+    if (data.palette_size <= 0 || data.ramp.empty() || data.index.empty()) { return; }
+    palette_steps_ = data.steps;
+
+    // One transfer buffer, one copy pass, two uploads.
+    const Uint32 ramp_bytes =
+        static_cast<Uint32>(data.ramp.size() * sizeof(std::uint32_t));
+    const Uint32 index_bytes =
+        static_cast<Uint32>(data.index.size() * sizeof(std::uint32_t));
+    SDL_GPUTransferBufferCreateInfo tbci{};
+    tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    tbci.size = ramp_bytes + index_bytes;
+    SDL_GPUTransferBuffer* xfer = SDL_CreateGPUTransferBuffer(device_.raw(), &tbci);
+    if (!xfer) {
+        dbg(DL::Error) << "build_palette_ramps: transfer buffer: " << SDL_GetError();
+        return;
+    }
+    if (void* mapped = SDL_MapGPUTransferBuffer(device_.raw(), xfer, false)) {
+        auto* dst = static_cast<std::uint8_t*>(mapped);
+        std::memcpy(dst, data.ramp.data(), ramp_bytes);
+        std::memcpy(dst + ramp_bytes, data.index.data(), index_bytes);
+        SDL_UnmapGPUTransferBuffer(device_.raw(), xfer);
+
+        SDL_GPUCommandBuffer* cb = SDL_AcquireGPUCommandBuffer(device_.raw());
+        if (cb) {
+            if (SDL_GPUCopyPass* cp = SDL_BeginGPUCopyPass(cb)) {
+                SDL_GPUTransferBufferLocation src{};
+                src.transfer_buffer = xfer;
+                src.offset = 0;
+                SDL_GPUBufferRegion dstr{};
+                dstr.buffer = ramp_buf_;
+                dstr.offset = 0;
+                dstr.size = ramp_bytes;
+                SDL_UploadToGPUBuffer(cp, &src, &dstr, false);
+
+                src.offset = ramp_bytes;
+                dstr.buffer = pal_index_buf_;
+                dstr.size = index_bytes;
+                SDL_UploadToGPUBuffer(cp, &src, &dstr, false);
+                SDL_EndGPUCopyPass(cp);
+            }
+            SDL_SubmitGPUCommandBuffer(cb);
+        }
+    }
+    SDL_ReleaseGPUTransferBuffer(device_.raw(), xfer);
+
+    DebugLogFL(DL::Info, DC::Main)
+        << "palette ramps built: rows=" << data.palette_size << " steps=" << data.steps
+        << " unique_colours=" << data.unique_colours
+        << " kept_min_count=" << data.kept_min_count
+        << " tail_pixels=" << data.tail_pixels << "/" << data.total_pixels
+        << " tail_pct="
+        << (data.total_pixels ? (100.0 * static_cast<double>(data.tail_pixels)
+                                 / static_cast<double>(data.total_pixels))
+                              : 0.0);
+}
 SDL_GPUTexture* render_state::create_rgba_gpu_texture(int w, int h) {
     if (!device_.ready() || w <= 0 || h <= 0) { return nullptr; }
     SDL_GPUTextureCreateInfo tci{};
