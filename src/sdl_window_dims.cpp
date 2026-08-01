@@ -179,21 +179,28 @@ std::optional<tripoint_bub_ms> input_context::get_coordinates(
     return tripoint_bub_ms( p, g->get_levz() );
 }
 
-auto input_context::get_aim_angle_to_src( const tripoint_bub_ms &src ) const
+auto aim_angle_from_pixel( point pixel, const tripoint_bub_ms &src )
 -> std::optional<units::angle>
 {
-    if( !coordinate_input_received || !tilecontext ) { return std::nullopt; }
-const auto o  = tilecontext->get_tile_map_origin().raw();
-const auto op = tilecontext->get_drawing_pixel_offset();
-const auto tw = std::max( 1, tilecontext->get_tile_width() );
+    if( !tilecontext ) { return std::nullopt; }
+    const auto o  = tilecontext->get_tile_map_origin().raw();
+    const auto op = tilecontext->get_drawing_pixel_offset();
+    const auto tw = std::max( 1, tilecontext->get_tile_width() );
     const auto th = std::max( 1, tilecontext->get_tile_height() );
     // Same formula as sdl_render_frame.cpp (cursor_light_emitter pixel→world conversion)
-    const auto wx = ( coordinate.x - static_cast<double>( op.x ) ) / tw + o.x;
-    const auto wy = ( coordinate.y - static_cast<double>( op.y ) ) / th + o.y;
+    const auto wx = ( pixel.x - static_cast<double>( op.x ) ) / tw + o.x;
+    const auto wy = ( pixel.y - static_cast<double>( op.y ) ) / th + o.y;
     const auto dx = wx - ( src.x() + 0.5 );
     const auto dy = wy - ( src.y() + 0.5 );
     if( std::hypot( dx, dy ) < 0.01 ) { return std::nullopt; }
     return units::atan2( dy, dx );
+}
+
+auto input_context::get_aim_angle_to_src( const tripoint_bub_ms &src ) const
+-> std::optional<units::angle>
+{
+    if( !coordinate_input_received ) { return std::nullopt; }
+    return aim_angle_from_pixel( coordinate, src );
 }
 
 // These four were wrapped in `#ifdef TILES` and so compiled to their stub branches:
@@ -233,4 +240,14 @@ auto get_tracked_mouse_pos() -> point
     // as soon as the player touches a key — useless inside a keyboard-driven loop,
     // which is exactly where the aim crosshair needs it.
     return sdl_input::last_mouse_px();
+}
+
+auto get_aim_mouse_pos() -> point
+{
+    // SDL only fills in the live position while a window holds mouse focus, and
+    // inside the ranged-targeting modal loop it comes back (0, 0) — which would
+    // pin every aim overlay to the map's top-left corner. Fall back to the last
+    // motion event sdl_input recorded, which survives that loop.
+    const auto live = get_sdl_mouse_pos();
+    return live != point_zero ? live : get_tracked_mouse_pos();
 }

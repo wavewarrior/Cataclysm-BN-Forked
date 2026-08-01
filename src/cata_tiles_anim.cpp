@@ -279,6 +279,37 @@ void cata_tiles::void_cursor()
     do_draw_cursor = false;
     cursors.clear();
 }
+namespace
+{
+
+/// Intravenous 2's aim readout, reproduced from the shipped store screenshots
+/// (e.g. ss_54ecefbf on the Steam page for app 2608270): a thin desaturated-khaki
+/// sight line, a white gapped-cross reticle with an open centre, and a small
+/// solid endpoint marker that flips red → orange where line of sight breaks.
+///
+/// The look is deliberately flat. Every channel here stays below 1.0 so the
+/// RGBA16F bloom pass (thresholded at 1.0, see sdl_lighting_devui.cpp) leaves the
+/// overlay alone — the previous fiery, deliberately-over-1.0 impact splash was
+/// the single loudest thing on screen and read nothing like the reference.
+constexpr auto aim_sight_col =
+    lighting::overlay_color{ .r = 0.784f, .g = 0.745f, .b = 0.510f, .a = 0.90f };
+constexpr auto aim_edge_col =
+    lighting::overlay_color{ .r = 0.784f, .g = 0.745f, .b = 0.510f, .a = 0.30f };
+constexpr auto aim_fill_col =
+    lighting::overlay_color{ .r = 0.784f, .g = 0.745f, .b = 0.510f, .a = 0.055f };
+constexpr auto aim_hit_col =
+    lighting::overlay_color{ .r = 1.000f, .g = 0.200f, .b = 0.200f, .a = 0.95f };
+constexpr auto aim_blocked_col =
+    lighting::overlay_color{ .r = 1.000f, .g = 0.467f, .b = 0.133f, .a = 0.95f };
+constexpr auto aim_reticle_col =
+    lighting::overlay_color{ .r = 0.902f, .g = 0.902f, .b = 0.902f, .a = 0.95f };
+/// One-pixel dark surround. The overlay has to stay legible over a lit floor and
+/// over a black wall, and this game shows plenty of both in the same frame.
+constexpr auto aim_shade_col =
+    lighting::overlay_color{ .r = 0.0f, .g = 0.0f, .b = 0.0f, .a = 0.55f };
+
+} // namespace
+
 auto cata_tiles::init_draw_aim_crosshair( point pixel ) -> void
 {
     aim_crosshair_pixel_ = pixel;
@@ -296,18 +327,29 @@ auto cata_tiles::draw_aim_crosshair() -> void
     // optional, so dereferencing it afterwards was undefined behaviour.
     const auto c = *aim_crosshair_pixel_;
     void_aim_crosshair();
-    // Belt-and-braces guard: the caller (ranged_target_ui.cpp) now falls back to
-    // the input layer's tracked mouse position when SDL_GetMouseState reports no
-    // mouse focus, but a genuine (0, 0) would still stamp a crosshair in the
-    // map's top-left corner, which is never what the player means.
+    // A genuine (0, 0) would stamp a reticle in the map's top-left corner, which
+    // is never what the player means.
     if( c == point_zero ) { return; }
-    constexpr auto arm = 6.0f;
-    constexpr auto thickness = 2.0f;
-    const auto col = lighting::overlay_color_from_bytes( 255, 80, 0, 220 );
+
+    // Four detached bars around an open centre plus a single centre pip, so the
+    // tile you are aiming at stays readable through the reticle. Sized off
+    // tile_width to hold its proportions across zoom levels.
+    const auto tw = static_cast<float>( tile_width );
+    const auto gap = std::max( 3.0f, tw * 0.14f );
+    const auto arm = std::max( 5.0f, tw * 0.30f );
+    constexpr auto thick = 2.0f;
     const auto cx = static_cast<float>( c.x );
     const auto cy = static_cast<float>( c.y );
-    lighting::overlay_rect( { cx - arm, cy, 2.0f * arm, thickness }, col );
-    lighting::overlay_rect( { cx, cy - arm, thickness, 2.0f * arm }, col );
+    const auto bar = []( float x, float y, float w, float h ) {
+        lighting::overlay_rect( { x - 1.0f, y - 1.0f, w + 2.0f, h + 2.0f }, aim_shade_col );
+        lighting::overlay_rect( { x, y, w, h }, aim_reticle_col );
+    };
+    const auto hx = thick * 0.5f;
+    bar( cx - gap - arm, cy - hx, arm, thick );
+    bar( cx + gap, cy - hx, arm, thick );
+    bar( cx - hx, cy - gap - arm, thick, arm );
+    bar( cx - hx, cy + gap, thick, arm );
+    bar( cx - hx, cy - hx, thick, thick );
 }
 auto cata_tiles::init_draw_aim_cone( const point_bub_ms &src, float aim_rad,
                                      float spread_half_rad, int max_range, int z ) -> void
@@ -403,9 +445,11 @@ auto cata_tiles::draw_aim_cone() -> void
     const auto center_len = rays[fan_segs / 2].stop * tw;
     const auto sector = ( right_angle - left_angle ) / fan_segs;
 
+    // Barely-there wash inside the spread. Intravenous 2 draws no accuracy cone at
+    // all; keeping one is a concession to a game whose dispersion genuinely varies
+    // by an order of magnitude, so it sits at the edge of perception and shares
+    // the sight line's hue instead of shouting in orange.
     if( half > 0.005f ) {
-        const auto fill_col =
-            lighting::overlay_color{ .r = 1.0f, .g = 0.314f, .b = 0.0f, .a = 0.07f };
         for( auto i = 0; i < fan_segs; ++i ) {
             // Sectors are disjoint in angle, so the translucent fill never
             // double-blends. Each spans the SHORTER of its two bounding rays so
@@ -416,29 +460,7 @@ auto cata_tiles::draw_aim_cone() -> void
                 .half_angle = sector * 0.5f,
                 .radius = std::min( rays[i].stop, rays[i + 1].stop ) * tw,
                 .slabs = 14,
-                .color = fill_col } );
-        }
-
-        // Impact glow on the wall face wherever the cone is cut short. The world
-        // target is RGBA16F and bloom thresholds at 1.0 (sdl_lighting_devui.cpp),
-        // so these tints deliberately exceed 1.0 — that is what makes the bloom
-        // pass pick them up and produce a real halo instead of a flat blob.
-        for( auto i = 0; i < fan_segs; ++i ) {
-            if( !rays[i].blocked || !rays[i + 1].blocked ) { continue; }
-            const auto ang = left_angle + sector * ( static_cast<float>( i ) + 0.5f );
-            const auto d = std::min( rays[i].stop, rays[i + 1].stop ) * tw;
-            const auto hx = ox + d * std::cos( ang );
-            const auto hy = oy + d * std::sin( ang );
-            const std::array<float, 3> sizes = { tw * 0.85f, tw * 0.50f, tw * 0.26f };
-            const std::array<lighting::overlay_color, 3> cols = {
-                lighting::overlay_color{ .r = 1.6f, .g = 0.45f, .b = 0.05f, .a = 0.10f },
-                lighting::overlay_color{ .r = 2.2f, .g = 0.70f, .b = 0.15f, .a = 0.16f },
-                lighting::overlay_color{ .r = 3.0f, .g = 1.20f, .b = 0.40f, .a = 0.28f }
-            };
-            for( std::size_t k = 0; k < sizes.size(); ++k ) {
-                const auto s = sizes[k];
-                lighting::overlay_rect( { hx - s * 0.5f, hy - s * 0.5f, s, s }, cols[k] );
-            }
+                .color = aim_fill_col } );
         }
     }
 
@@ -448,32 +470,38 @@ auto cata_tiles::draw_aim_cone() -> void
     constexpr auto stroke_px = 2.0f;
 
     if( half > 0.005f ) {
-        const auto edge_col = lighting::overlay_color_from_bytes( 255, 120, 0, 80 );
-        const auto edge_len_l = rays[0].stop * tw;
-        const auto edge_len_r = rays[fan_segs].stop * tw;
-        lighting::overlay_line( {
-            .from = { ox, oy },
-            .to = { ox + edge_len_l * std::cos( left_angle ),
-                    oy + edge_len_l * std::sin( left_angle ) },
-            .thickness = stroke_px,
-            .color = edge_col } );
-        lighting::overlay_line( {
-            .from = { ox, oy },
-            .to = { ox + edge_len_r * std::cos( right_angle ),
-                    oy + edge_len_r * std::sin( right_angle ) },
-            .thickness = stroke_px,
-            .color = edge_col } );
+        const auto edge = [&]( float angle, float len ) {
+            lighting::overlay_line( {
+                .from = { ox, oy },
+                .to = { ox + len * std::cos( angle ), oy + len * std::sin( angle ) },
+                .thickness = stroke_px,
+                .color = aim_edge_col } );
+        };
+        edge( left_angle, rays[0].stop * tw );
+        edge( right_angle, rays[fan_segs].stop * tw );
     }
 
-    // Center laser line (bright, always visible)
-    const auto laser_alpha = static_cast<int>(
-                                 std::min( 255.f, 140.f + 115.f * ( 1.f - std::min( half / 0.3f, 1.f ) ) ) );
+    // The sight line is the one element Intravenous 2 always shows: thin, flat and
+    // desaturated, running from the muzzle to wherever the shot actually stops. It
+    // firms up as the spread tightens, which is the overlay's only animation.
+    auto sight_col = aim_sight_col;
+    sight_col.a *= 0.65f + 0.35f * ( 1.0f - std::min( half / 0.3f, 1.0f ) );
+    const auto tip_x = ox + center_len * std::cos( aim_cone_angle_ );
+    const auto tip_y = oy + center_len * std::sin( aim_cone_angle_ );
     lighting::overlay_line( {
         .from = { ox, oy },
-        .to = { ox + center_len * std::cos( aim_cone_angle_ ),
-                oy + center_len * std::sin( aim_cone_angle_ ) },
+        .to = { tip_x, tip_y },
         .thickness = stroke_px,
-        .color = lighting::overlay_color_from_bytes( 255, 60, 0, laser_alpha ) } );
+        .color = sight_col } );
+
+    // Endpoint marker: red where the shot reaches its aim point, orange where
+    // terrain cuts the line short. That red/orange flip is Intravenous 2's
+    // line-of-sight tell, and the cheapest way to say "you are shooting a wall".
+    const auto pip = std::max( 4.0f, tw * 0.20f );
+    lighting::overlay_rect( { tip_x - pip * 0.5f - 1.0f, tip_y - pip * 0.5f - 1.0f,
+                              pip + 2.0f, pip + 2.0f }, aim_shade_col );
+    lighting::overlay_rect( { tip_x - pip * 0.5f, tip_y - pip * 0.5f, pip, pip },
+                            rays[fan_segs / 2].blocked ? aim_blocked_col : aim_hit_col );
 }
 auto cata_tiles::draw_particle_overlay( const particle &p ) -> void
 {
@@ -873,7 +901,6 @@ void cata_tiles::draw_cursor()
         {"cursor", C_NONE, empty_string, 0, 0}, p, std::nullopt, std::nullopt, lit_level::LIT,
         false, 0, false );
     }
-    draw_aim_crosshair();
 }
 void cata_tiles::draw_highlight()
 {

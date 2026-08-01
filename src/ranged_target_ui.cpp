@@ -17,6 +17,7 @@
 #include "character_functions.h"
 #include "color.h"
 #include "coordinates.h"
+#include "coop_session.h"
 #include "creature.h"
 #include "cursesdef.h"
 #include "damage.h"
@@ -183,6 +184,11 @@ struct target_rml_session {
     Rml::DataModelHandle handle;
 };
 
+/// Free-aim jitter buffer, in screen pixels. Wide enough to swallow sensor noise
+/// and hand tremor, narrow enough that a deliberate correction still lands where
+/// the player pointed. See target_ui::aim_jitter_px for why it exists.
+constexpr auto free_aim_jitter_px = 6;
+
 } // namespace
 
 target_handler::trajectory target_ui::run()
@@ -295,6 +301,13 @@ target_handler::trajectory target_ui::run()
     set_cursor_pos( initial_dst );
     sync_aim_angle_from_dst();
     opened_by_rmb = is_rmb_held();
+    aim_commit_px = point_zero;
+    // Only free aim needs the buffer — keyboard aiming moves in deliberate 1°
+    // steps. And only outside co-op: there the world runs on a real-time
+    // accumulator, so holding still does not stop the clock and the buffer would
+    // buy nothing while making the two players' recoil rules disagree.
+    aim_jitter_px = ( opened_by_rmb && !coop_session::get().is_coop() )
+                    ? free_aim_jitter_px : 0;
     if( mode == TargetMode::Throw ) {
         max_throw_range = range;
         throw_charge    = 0.0;
@@ -590,10 +603,20 @@ bool target_ui::handle_cursor_movement( const std::string& action, bool& skip_re
     };
 
     if( action == "MOUSE_MOVE" || action == "TIMEOUT" ) {
+        // Free aim: while the player holds RMB the reticle follows the pointer
+        // continuously, no click needed. Polled on TIMEOUT as well as MOUSE_MOVE
+        // because sdl_input suppresses MOUSE_MOVE actions while the cursor is
+        // hidden, and hold-to-aim is exactly the mode that hides it — without the
+        // poll, holding RMB gave you an aim overlay you could only nudge one
+        // degree at a time with the arrow keys.
+        //
+        // Deliberately NOT extended to the keyboard targeting UI: there a stray
+        // pointer bump would silently drop the target you cycled to with TAB.
+        const bool aim_moved = opened_by_rmb && !shifting_view && track_mouse_aim();
         // Shift pos and/or view via edge scrolling
         auto edge_scroll = g->mouse_edge_scrolling_terrain( ctxt );
         if( edge_scroll == tripoint_rel_ms::zero() ) {
-            skip_redraw = true;
+            skip_redraw = !aim_moved;
         } else {
             if( action == "MOUSE_MOVE" ) { edge_scroll += edge_scroll; }
             if( snap_to_target ) {
@@ -822,6 +845,29 @@ auto target_ui::sync_aim_angle_from_dst() -> void
     if( std::hypot( dx, dy ) > 0.01 ) {
         aim_angle = units::atan2( dy, dx );
     }
+}
+
+auto target_ui::track_mouse_aim() -> bool
+{
+    const auto px = get_aim_mouse_pos();
+    // (0, 0) means neither SDL nor the tracked record has a real position yet;
+    // honouring it would slam the aim into the map's top-left corner.
+    if( px == point_zero || px == aim_commit_px ) { return false; }
+    const auto drift = px - aim_commit_px;
+    if( drift.x * drift.x + drift.y * drift.y < aim_jitter_px * aim_jitter_px ) {
+        // Inside the buffer: leave the weapon pointed where it is. Returning
+        // false also leaves skip_redraw set, so the whole overlay — cone, sight
+        // line and reticle — holds still rather than twitching, which is the
+        // point. The reticle can therefore trail the OS pointer by up to the
+        // buffer radius; at 6 px that is not perceptible, and the system cursor
+        // is still there for anyone who wants the exact pixel.
+        return false;
+    }
+    const auto angle = aim_angle_from_pixel( px, src );
+    if( !angle || *angle == aim_angle ) { return false; }
+    aim_commit_px = px;
+    set_aim_angle( *angle );
+    return true;
 }
 
 auto target_ui::calc_spread_half_angle() const -> units::angle
@@ -1375,26 +1421,15 @@ void target_ui::draw_terrain_overlay()
         }
     }
 
-    // Pixel-accurate spread cone + laser line + crosshair
+    // Pixel-accurate spread cone + sight line + reticle
     if( mode == TargetMode::Fire && dst != src ) {
         const auto half = calc_spread_half_angle();
         g->draw_aim_cone( src.xy(), static_cast<float>( units::to_radians( aim_angle ) ),
                           static_cast<float>( units::to_radians( half ) ), range, src.z() );
-        // SDL_GetMouseState returns (0, 0) from inside this modal input loop (it
-        // reports window-relative coordinates only while a window holds mouse
-        // focus), which pinned the crosshair to the map's top-left corner. Fall
-        // back to the persistent record sdl_input keeps of the last motion event.
-        //
-        // KNOWN OPEN: both operands were additionally hard-zero because
-        // sdl_window_dims.cpp still tested `#ifdef TILES`, which this build never
-        // defines, so every accessor there compiled to its stub branch (see the note
-        // in that file). With that fixed the crosshair is still not observed on
-        // screen, so at least one more cause remains. Everything else up to the draw
-        // checks out: do_draw_cursor and the pixel are both set (instrumented, logged
-        // "flag=1 has_px=1") and the sibling draw_aim_cone on the same overlay pass
-        // renders correctly.
-        const auto live_mouse = get_sdl_mouse_pos();
-        g->draw_aim_crosshair( live_mouse != point_zero ? live_mouse : get_tracked_mouse_pos() );
+        // The reticle sits at the pointer, not at the snapped destination tile:
+        // free aim is continuous and the tile the DDA ray lands on is only ever an
+        // approximation of where the player is actually pointing.
+        g->draw_aim_crosshair( get_aim_mouse_pos() );
     }
 
     // Throw arc and impact indicator

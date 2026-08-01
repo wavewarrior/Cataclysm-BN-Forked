@@ -134,6 +134,21 @@ class target_ui
         double predicted_recoil = 0;
         // RMB press-to-aim: true when the targeting UI was opened via RMB press
         bool opened_by_rmb = false;
+        // Mouse pixel the current aim angle was committed from. Free aim resamples
+        // the pointer every 50 ms TIMEOUT tick, so this doubles as the "no movement"
+        // guard and as the origin of the jitter buffer below.
+        point aim_commit_px = point_zero;
+        // Radius in screen pixels around aim_commit_px inside which pointer movement
+        // does not re-point the weapon. Zero disables the buffer.
+        //
+        // Why it exists: in lockstep (non-co-op) time the clock only advances while
+        // do_aim() still has recoil to burn off, so a perfectly still pointer costs
+        // nothing. Re-pointing for a pixel of hand-shake charges the full turning
+        // penalty, pushes recoil back above min_recoil, and do_aim() spends moves
+        // clawing it back — the player pays turns for standing still. The buffer is
+        // measured from the committed pixel rather than the previous sample, so a
+        // slow deliberate drag still gets charged once it adds up.
+        int aim_jitter_px = 0;
 
         // Throw charge (0..1): grows over throw_charge_full_ms ms in Throw mode
         double throw_charge = 0.0;
@@ -179,6 +194,10 @@ class target_ui
 
         // Sync aim_angle from current dst position (for keyboard/cycle_targets paths).
         auto sync_aim_angle_from_dst() -> void;
+
+        // Free aim: point the reticle at the current mouse pixel. Returns 'true'
+        // when the aim angle actually changed, so the caller knows to redraw.
+        auto track_mouse_aim() -> bool;
 
         // Calculate half-angle of spread cone from current dispersion.
         // Returns 0_radians when not in Fire mode or no relevant weapon.
