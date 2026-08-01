@@ -27,6 +27,7 @@
 #include <iterator>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <vector>
 
@@ -40,6 +41,10 @@
 // g_rml_debugger toggles RmlUi's built-in element inspector.
 static bool g_frame_markers = false;
 static bool g_rml_debugger = false;
+// Set once the Debugger plugin has been Initialise()d, which happens on the first
+// F11 rather than at context creation — Initialise makes its beacon element
+// visible immediately and permanently.
+static bool g_rml_debugger_ready = false;
 
 namespace rmlui_layer {
 
@@ -456,9 +461,21 @@ bool init(lighting::gpu_device& dev) {
         return false;
     }
 
-    // Built-in element inspector (box model, computed RCSS, live outlines).
-    // Hidden until toggled with F11; needs the context to exist first.
-    Rml::Debugger::Initialise(g_context);
+    // The built-in element inspector (box model, computed RCSS, live outlines) is
+    // initialised LAZILY, on the first F11 press — see the SDLK_F11 handler.
+    //
+    // It used to be initialised here, unconditionally, and that was not free:
+    // `Rml::Debugger::Initialise` creates the plugin's beacon element, which stays
+    // visible even while `SetVisible(false)` hides the inspector itself. The result
+    // was a permanent 20x20px saturated-yellow `!` badge in the top-right corner of
+    // every screen, off the layout grid and in a colour from no palette in the
+    // project. It went unnoticed for as long as that corner was empty; the phosphor
+    // HUD puts its safe-mode and hostile readouts there, so the badge
+    // began overlapping live text. Note it is NOT a warning indicator that could be
+    // silenced by fixing warnings: the beacon is created by Initialise itself. (And
+    // RmlUi's warnings would be hard to notice anyway — LogMessage routes them to
+    // debug.log under DC::SDL, which is filtered out of the default debug-class set,
+    // so they are dropped before they are written.)
 
     // Registered as a fallback (second arg) so glyphs still resolve even if a
     // document's font-family doesn't match. Family name embedded in the TTF is
@@ -510,6 +527,11 @@ void shutdown() {
     g_open_docs.clear();
     g_passive_docs.clear();
     g_context = nullptr;
+    // The Debugger plugin is bound to the context it was Initialise()d against, so
+    // a new context needs a fresh Initialise. Without clearing this, F11 after a
+    // renderer restart would skip it and the inspector would silently never appear.
+    g_rml_debugger_ready = false;
+    g_rml_debugger = false;
     if (g_render) { g_render->shutdown(); }
     g_render.reset();
     g_system.reset();
@@ -617,6 +639,15 @@ bool process_event(const SDL_Event& ev) {
                 return true;
             }
             case SDLK_F11:
+                // Initialise on first use, not at context creation: the plugin's
+                // beacon element is visible from the moment Initialise runs, even
+                // with the inspector hidden, and it lands on top of whatever a
+                // document draws in the top-right corner. See the note beside the
+                // context creation above.
+                if (!g_rml_debugger_ready) {
+                    Rml::Debugger::Initialise(g_context);
+                    g_rml_debugger_ready = true;
+                }
                 g_rml_debugger = !g_rml_debugger;
                 Rml::Debugger::SetVisible(g_rml_debugger);
                 dbg(DL::Info) << "rmlui debugger=" << g_rml_debugger;
@@ -654,12 +685,14 @@ bool process_event(const SDL_Event& ev) {
         return false;
     }
 
-    // Mouse wheel: always feed to RmlUi so passive docs (HUD log) can scroll.
-    // Return false when passive-only so the game also gets the event.
+    // Mouse wheel: always feed to RmlUi so an interactive doc can scroll, but only
+    // consume it when one is actually open. The phosphor HUD's log is sized to its
+    // line count and does not scroll, so there is nothing here to protect from the
+    // map zoom — this used to consume the wheel over `hud-log-body`, an element the
+    // Qud-era scrolling log owned and which no longer exists.
     if (ev.type == SDL_EVENT_MOUSE_WHEEL) {
         g_context->ProcessMouseWheel(-ev.wheel.y, mods);
-        if (!any_interactive_open()) { return false; }
-        return true;
+        return any_interactive_open();
     }
 
     // Only PASSIVE docs open and debugger not visible? Fall through so the
