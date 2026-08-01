@@ -1,6 +1,7 @@
 #include "sdl_input.h"
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <climits>
 #include <cstdint>
@@ -412,6 +413,48 @@ point s_last_mouse_px = point_zero;
 // comes back empty — which made hold-to-aim never observe the release and behave
 // like a toggle. The event stream is authoritative regardless of focus.
 bool s_rmb_down = false;
+// Physically-held NON-MODIFIER keys, tracked from the event stream for the same
+// reason as s_rmb_down. Indexed by SDL scancode; 512 covers SDL_SCANCODE_COUNT
+// with a bounds check below, so the array stays valid if SDL grows the enum.
+constexpr size_t SCANCODE_SLOTS = 512;
+std::array<bool, SCANCODE_SLOTS> s_key_down{};
+int s_non_mod_keys_held = 0;
+
+auto is_modifier_scancode( uint32_t sc ) -> bool
+{
+    switch( sc ) {
+        case SDL_SCANCODE_LCTRL:
+        case SDL_SCANCODE_RCTRL:
+        case SDL_SCANCODE_LSHIFT:
+        case SDL_SCANCODE_RSHIFT:
+        case SDL_SCANCODE_LALT:
+        case SDL_SCANCODE_RALT:
+        case SDL_SCANCODE_LGUI:
+        case SDL_SCANCODE_RGUI:
+        case SDL_SCANCODE_MODE:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// Edge-triggered, so SDL key repeat cannot inflate the count.
+void note_key_state( uint32_t sc, bool down )
+{
+    if( sc >= SCANCODE_SLOTS || is_modifier_scancode( sc ) ) { return; }
+    if( s_key_down[sc] == down ) { return; }
+    s_key_down[sc] = down;
+    s_non_mod_keys_held += down ? 1 : -1;
+}
+
+// SDL delivers no key-up while the window is unfocused, so an alt-tab mid-hold
+// would strand the count above zero forever and a hold-to-close UI would never
+// close. Treat losing focus as "everything came up".
+void forget_held_keys()
+{
+    s_key_down.fill( false );
+    s_non_mod_keys_held = 0;
+}
 } // namespace
 
 auto last_mouse_px() -> point
@@ -422,6 +465,11 @@ auto last_mouse_px() -> point
 auto rmb_down() -> bool
 {
     return s_rmb_down;
+}
+
+auto non_modifier_keys_held() -> int
+{
+    return s_non_mod_keys_held;
 }
 
 void CheckMessages( display_context &d )
@@ -457,6 +505,13 @@ void CheckMessages( display_context &d )
             s_rmb_down = true;
         } else if( ev.type == SDL_EVENT_MOUSE_BUTTON_UP && ev.button.button == SDL_BUTTON_RIGHT ) {
             s_rmb_down = false;
+        } else if( ev.type == SDL_EVENT_KEY_DOWN || ev.type == SDL_EVENT_KEY_UP ) {
+            // Same placement rationale as the buttons above: recorded BEFORE the
+            // capture gate, so a release swallowed by an open RmlUi document still
+            // clears the hold.
+            note_key_state( ev.key.scancode, ev.type == SDL_EVENT_KEY_DOWN );
+        } else if( ev.type == SDL_EVENT_WINDOW_FOCUS_LOST ) {
+            forget_held_keys();
         }
         // RmlUi layer sees events first; captures mouse (only) while a menu is open.
         const bool rmlui_capture = rmlui_layer::process_event( ev );

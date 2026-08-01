@@ -1,0 +1,141 @@
+/* Throw quick-slot radial. Appearance only — every position comes from
+   throw_radial_apply_rect() in src/throw_radial.cpp, because RCSS cannot do
+   trigonometry.
+
+   Palette and spacing follow the sidebar HUD design system (see
+   sidebar_hud.rcss): one 4dp spacing unit, and the three type tiers
+   label 0.8em / body 1em / header 0.85em+bold+2dp tracking. The radial is a
+   sibling instrument to the HUD, so it must not introduce a fourth look. */
+
+body {
+    width: 100%;
+    height: 100%;
+    font-family: "Source Code Pro";
+    font-size: 18dp;
+    color: {{hud-fg}};
+}
+
+/* Dim the world so six small cards stay legible over arbitrary terrain. Kept
+   deliberately light: this is a flick menu, not a modal the player reads. */
+#tr-scrim {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: {{hud-bg-scrim}};
+}
+
+/* Zero-size anchor placed at the ring centre; slots are positioned relative to
+   the viewport, so this only needs to exist, not to have extent. */
+#tr-ring {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* One slot card. The negative margins are load-bearing: the controller writes
+   `left`/`top` as the point on the ring, and these pull the card back by half
+   its own size so it is CENTRED on that point. Without them every card would
+   hang down-right of its angle and the ring would look rotated. Any change to
+   width/height here MUST be mirrored in the margins. */
+.tr-slot {
+    position: absolute;
+    width: 208dp;
+    /* Tall enough for a THREE-line name: key (0.8em ~14dp) + 3 x 19dp + count
+       (~14dp) + 8dp padding ~= 93dp. Names wrap rather than clip, so a card too
+       short for the longest names would spill text past its own border instead
+       of truncating. Mirror any change in margin-top AND in the fit_v term of
+       compute_ring() in throw_radial.cpp. */
+    height: 96dp;
+    margin-left: -104dp;
+    margin-top: -48dp;
+    box-sizing: border-box;
+    padding: 4dp 8dp;
+    background-color: {{hud-bg}};
+    border: 1dp {{hud-border}};
+    text-align: center;
+    /* Only the highlight animates. A transform/scale here would fight the
+       controller's per-frame position writes. */
+    transition: background-color 0.15s, border-color 0.15s, opacity 0.15s;
+}
+
+/* Empty slot: present so the ring keeps its shape and the player can see how
+   many quick-slots exist, but clearly not selectable. */
+.tr-slot.empty {
+    opacity: 0.45;
+    border: 1dp {{hud-border}};
+}
+
+/* The slot the pointer is pointing at (or the one a number key picked). */
+.tr-slot.selected {
+    background-color: {{hud-sel}};
+    border: 1dp {{hud-accent}};
+}
+
+/* The slot that is already the active throwable, when it is not the one being
+   pointed at — so opening the ring shows what you would throw right now. Must
+   be a solid accent, not {{hud-accent-wash}}: the wash is ~11% alpha, which on a
+   1dp border against {{hud-bg}} is invisible at any normal viewing distance.
+   Distinguished from .selected by having no background fill. */
+.tr-slot.active {
+    border: 1dp {{hud-accent}};
+}
+
+/* label tier */
+.tr-key {
+    display: block;
+    color: {{hud-fg-muted}};
+    font-size: 0.8em;
+    letter-spacing: 1dp;
+}
+.tr-slot.selected .tr-key {
+    color: {{hud-accent}};
+}
+
+/* The item name is the one thing this menu exists to communicate, so it WRAPS
+   rather than clipping: `white-space: nowrap; overflow: hidden` truncated
+   mid-word with no ellipsis ("[Bombastic Per"), which cannot be told apart from
+   any other item sharing that prefix. Two lines fit in the 80dp card at 0.9em. */
+.tr-name {
+    display: block;
+    font-size: 0.9em;
+    line-height: 1.15;
+}
+
+/* label tier */
+.tr-count {
+    display: block;
+    color: {{hud-fg-muted}};
+    font-size: 0.8em;
+}
+
+/* Hub: centred readout of the current selection. Same negative-margin centring
+   trick as the slots. Narrower than a card so the ring's inner edge clears it. */
+#tr-hub {
+    position: absolute;
+    width: 180dp;
+    height: 60dp;
+    margin-left: -90dp;
+    margin-top: -30dp;
+    box-sizing: border-box;
+    padding: 8dp;
+    text-align: center;
+}
+
+/* header tier */
+#tr-hub-title {
+    display: block;
+    color: {{hud-accent}};
+    font-size: 0.85em;
+    font-weight: bold;
+    letter-spacing: 2dp;
+}
+
+#tr-hub-sel {
+    display: block;
+    font-size: 0.9em;
+    line-height: 1.15;
+}

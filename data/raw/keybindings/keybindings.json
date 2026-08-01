@@ -2063,7 +2063,7 @@
     "name": "Throw quick-slot select",
     "category": "DEFAULTMODE",
     "id": "THROW_QUICKSLOT",
-    "bindings": [ { "input_method": "keyboard", "key": "T" } ]
+    "bindings": [ { "input_method": "keyboard", "key": "CTRL+T" } ]
   },
   {
     "type": "keybinding",
@@ -2292,7 +2292,7 @@
     "name": "Open Wiki",
     "category": "DEFAULTMODE",
     "id": "open_wiki",
-    "bindings": [ { "input_method": "keyboard", "key": "w" } ]
+    "bindings": [ { "input_method": "keyboard", "key": "CTRL+W" } ]
   },
   {
     "type": "keybinding",
@@ -3628,7 +3628,7 @@
     "type": "keybinding",
     "category": "INVENTORY_ITEM",
     "name": "Mark/Unmark for throwing",
-    "bindings": [ { "input_method": "keyboard", "key": "T" } ]
+    "bindings": [ { "input_method": "keyboard", "key": "M" } ]
   },
   {
     "id": "CHANGE_SIDE",

@@ -53,4 +53,15 @@ auto last_mouse_px() -> point;
 /// always came back empty, so hold-to-aim never saw the release.
 auto rmb_down() -> bool;
 
+/// How many NON-MODIFIER keys are physically held right now, tracked from the SDL
+/// event stream for the same reason as rmb_down(): SDL_GetKeyboardState() only
+/// answers while a window holds keyboard focus, so a modal loop cannot use it to
+/// notice a release.
+///
+/// Modifiers are excluded so a hold-to-open UI bound to a combo (CTRL+T) sees the
+/// count drop to zero when the *letter* comes up, without having to know which
+/// key opened it. Zero means "nothing is held" — i.e. the player tapped rather
+/// than held, and a hold-to-close UI should stay open.
+auto non_modifier_keys_held() -> int;
+
 } // namespace sdl_input

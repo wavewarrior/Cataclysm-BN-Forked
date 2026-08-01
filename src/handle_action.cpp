@@ -86,6 +86,7 @@
 #include "string_id.h"
 #include "string_input_popup.h"
 #include "string_utils.h"
+#include "throw_radial.h"
 #include "translations.h"
 #include "ui.h"
 #include "ui_manager.h"
@@ -359,6 +360,39 @@ input_context game::get_player_input( std::string& action )
 // Perform a reach attach using wielded weapon
 namespace
 {
+/// ACTION_THROW_QUICKSLOT, shared by game::handle_action() and
+/// game::handle_action_from(). Both dispatchers used to carry a byte-identical
+/// copy of the list menu below, so the radial would otherwise have had to be
+/// added — and kept in sync — twice, with only one of the two ever exercised.
+void do_throw_quickslot( avatar &u )
+{
+    const throw_radial_result res = show_throw_quickslot_radial( u );
+    std::optional<int> chosen = res.slot;
+
+    if( !res.shown ) {
+        // RmlUi unavailable: the wheel cannot degrade to "point at nothing", so
+        // fall back to the flat list this action shipped with.
+        uilist menu;
+        menu.title = _( "Throw Quick-Slots" );
+        for( int i = 0; i < avatar::MAX_THROW_SLOTS; ++i ) {
+            if( u.is_throw_slot_empty( i ) ) {
+                menu.addentry( i, false, '1' + i, _( "[%d] ---" ), i + 1 );
+            } else {
+                const auto &type = u.get_throw_slot( i );
+                const int count = u.count_throwable( i );
+                const bool active = ( i == u.get_active_throw_slot() );
+                menu.addentry( i, true, '1' + i, "%s[%d] %s \u00d7%d",
+                               active ? "> " : "  ", i + 1, type->nname( 1 ), count );
+            }
+        }
+        menu.query();
+        if( menu.ret >= 0 && menu.ret < avatar::MAX_THROW_SLOTS ) { chosen = menu.ret; }
+    }
+
+    if( !chosen.has_value() ) { return; }
+    u.set_active_throw_slot( *chosen );
+    add_msg( _( "Throw slot set to %s." ), u.get_throw_slot( *chosen )->nname( 1 ) );
+}
 } // namespace
 
 void game::open_consume_item_menu()
@@ -1047,28 +1081,9 @@ bool game::handle_action()
                 break;
             }
 
-            case ACTION_THROW_QUICKSLOT: {
-                uilist menu;
-                menu.title = _( "Throw Quick-Slots" );
-                for( int i = 0; i < avatar::MAX_THROW_SLOTS; ++i ) {
-                    if( u.is_throw_slot_empty( i ) ) {
-                        menu.addentry( i, false, '1' + i, _( "[%d] ---" ), i + 1 );
-                    } else {
-                        const auto &type = u.get_throw_slot( i );
-                        const int count = u.count_throwable( i );
-                        const bool active = ( i == u.get_active_throw_slot() );
-                        menu.addentry( i, true, '1' + i, "%s[%d] %s \u00d7%d",
-                                       active ? "> " : "  ", i + 1, type->nname( 1 ), count );
-                    }
-                }
-                menu.query();
-                if( menu.ret >= 0 && menu.ret < avatar::MAX_THROW_SLOTS ) {
-                    u.set_active_throw_slot( menu.ret );
-                    const auto &type = u.get_throw_slot( menu.ret );
-                    add_msg( _( "Throw slot set to %s." ), type->nname( 1 ) );
-                }
+            case ACTION_THROW_QUICKSLOT:
+                do_throw_quickslot( u );
                 break;
-            }
 
             case ACTION_FIRE:
                 fire();
@@ -2245,28 +2260,9 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
                 break;
             }
 
-            case ACTION_THROW_QUICKSLOT: {
-                uilist menu;
-                menu.title = _( "Throw Quick-Slots" );
-                for( int i = 0; i < avatar::MAX_THROW_SLOTS; ++i ) {
-                    if( u.is_throw_slot_empty( i ) ) {
-                        menu.addentry( i, false, '1' + i, _( "[%d] ---" ), i + 1 );
-                    } else {
-                        const auto &type = u.get_throw_slot( i );
-                        const int count = u.count_throwable( i );
-                        const bool active = ( i == u.get_active_throw_slot() );
-                        menu.addentry( i, true, '1' + i, "%s[%d] %s \u00d7%d",
-                                       active ? "> " : "  ", i + 1, type->nname( 1 ), count );
-                    }
-                }
-                menu.query();
-                if( menu.ret >= 0 && menu.ret < avatar::MAX_THROW_SLOTS ) {
-                    u.set_active_throw_slot( menu.ret );
-                    const auto &type = u.get_throw_slot( menu.ret );
-                    add_msg( _( "Throw slot set to %s." ), type->nname( 1 ) );
-                }
+            case ACTION_THROW_QUICKSLOT:
+                do_throw_quickslot( u );
                 break;
-            }
 
             case ACTION_FIRE:
                 modal_fiber_.emplace( [this]() {

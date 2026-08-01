@@ -1,0 +1,61 @@
+<rml>
+<head>
+    <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="throw_radial.rcss"/>
+</head>
+<body data-model="throw_radial">
+    <!-- Throw quick-slot radial (ACTION_THROW_QUICKSLOT).
+
+         Opened PASSIVE: it paints over the world every frame but never captures
+         input, so throw_radial.cpp owns the whole interaction (mouse direction,
+         1-6, ENTER, ESC, and hold-to-release). That matters because the pointer
+         is sampled every tick rather than on click — RmlUi hover would only fire
+         on real mouse events, and hold-mode needs to track the cursor while the
+         player is holding a key and not clicking at all.
+
+         Every slot is absolutely positioned from C++ (throw_radial_apply_rect):
+         RCSS has no trigonometry, so the ring is laid out in the controller and
+         the stylesheet only owns appearance. Slots carry a negative half-size
+         margin so the C++ side can anchor each one by its CENTRE and stay pure
+         trig — see the note in throw_radial.rcss. -->
+    <div id="tr-scrim"></div>
+    <div id="tr-ring">
+        <div class="tr-slot" id="tr-slot-0">
+            <div class="tr-key" data-rml="s0_key"></div>
+            <div class="tr-name" data-rml="s0_name"></div>
+            <div class="tr-count" data-rml="s0_count"></div>
+        </div>
+        <div class="tr-slot" id="tr-slot-1">
+            <div class="tr-key" data-rml="s1_key"></div>
+            <div class="tr-name" data-rml="s1_name"></div>
+            <div class="tr-count" data-rml="s1_count"></div>
+        </div>
+        <div class="tr-slot" id="tr-slot-2">
+            <div class="tr-key" data-rml="s2_key"></div>
+            <div class="tr-name" data-rml="s2_name"></div>
+            <div class="tr-count" data-rml="s2_count"></div>
+        </div>
+        <div class="tr-slot" id="tr-slot-3">
+            <div class="tr-key" data-rml="s3_key"></div>
+            <div class="tr-name" data-rml="s3_name"></div>
+            <div class="tr-count" data-rml="s3_count"></div>
+        </div>
+        <div class="tr-slot" id="tr-slot-4">
+            <div class="tr-key" data-rml="s4_key"></div>
+            <div class="tr-name" data-rml="s4_name"></div>
+            <div class="tr-count" data-rml="s4_count"></div>
+        </div>
+        <div class="tr-slot" id="tr-slot-5">
+            <div class="tr-key" data-rml="s5_key"></div>
+            <div class="tr-name" data-rml="s5_name"></div>
+            <div class="tr-count" data-rml="s5_count"></div>
+        </div>
+        <!-- Hub: names the current selection so the choice is readable without
+             having to track which of six cards is lit. -->
+        <div id="tr-hub">
+            <div id="tr-hub-title" data-rml="hub_title"></div>
+            <div id="tr-hub-sel" data-rml="hub_sel"></div>
+        </div>
+    </div>
+</body>
+</rml>
