@@ -165,6 +165,12 @@ class texture
             return std::make_pair( static_cast<int>( srcrect.w ), static_cast<int>( srcrect.h ) );
         }
 
+        /// Atlas-sheet pixel rect this sprite occupies. Needed by the occluder
+        /// capture (Step 2), which converts it to the same normalised UV that
+        /// enqueue_tile_sprite produces so the compute rasteriser samples exactly
+        /// the texels the fragment pass does.
+        const SDL_FRect &src_rect() const noexcept { return srcrect; } // *NOPAD*
+
         /// Interface to @ref SDL_RenderTextureRotated, using this as the texture, and
         /// null as source rectangle (render the whole texture). Other parameters
         /// are simply passed through.
@@ -926,6 +932,24 @@ class cata_tiles
             const tint_config& tint, lit_level ll, bool apply_visual_effects, int overlay_count,
             int *height_3d, int retract = 0, size_t warp_hash = TILESET_NO_WARP, float sway = 0.0f );
 
+        /// Step 2 (grid-decoupled lighting): record the footprint of the sprite just
+        /// enqueued by draw_sprite_at, so the SDF seed can be rasterised from the
+        /// tileset alpha instead of one binary flag per tile. Lives on the OUTER class
+        /// (not `texture`) because it needs tile_width/tile_height, the current map
+        /// tile and the map cache, none of which `texture` can see. No-op unless
+        /// occluder_capture_ is set, which only the terrain/furniture/vpart draw
+        /// layers do via occluder_capture_guard.
+        struct occluder_footprint_options {
+            const texture *tex = nullptr;
+            SDL_Rect destination = {0, 0, 0, 0};
+            SDL_FlipMode flip = SDL_FLIP_NONE;
+            int atlas_w = 0;
+            int atlas_h = 0;
+            /// Degrees, screen-clockwise — exactly what was handed to enqueue_tile_sprite.
+            double rotation_degrees = 0.0;
+        };
+        void push_occluder_footprint( const occluder_footprint_options &opts );
+
         /**
          * @brief Calls draw_sprite_at() twice each for foreground and background.
          *
@@ -1398,6 +1422,38 @@ class cata_tiles
         // True if any sprite animation produced motion this frame (breathing, a decaying
         // event reaction, or a live tile-hit). Drives the redraw pump. Reset each draw().
         mutable bool creatures_anim_active_ = false;
+
+        // --- Step 2: sprite-alpha occluder capture ---
+        // Set only while the terrain / furniture / vpart draw layers run (RAII via
+        // occluder_capture_guard). Items, creatures, fields and overlays are
+        // deliberately excluded: creatures move every frame and would force an SDF
+        // rebuild per frame, and their sun shadows already come from the screen-space
+        // silhouette pass.
+        bool occluder_capture_ = false;
+        // Bubble-local map tile of the sprite currently being drawn, published by
+        // draw_from_id_string because draw_sprite_at only receives SCREEN pixels.
+        // Only tiles on the player's own z reach the SDF, which is single-z.
+        tripoint_bub_ms occluder_tile_{};
+        // Screen-pixel top-left of that tile's own ground square, same origin
+        // draw_sprite_at derives `destination` from.
+        point occluder_tile_screen_{};
+
+        /// Scoped enable for push_occluder_footprint. Restores the previous value so
+        /// nesting is safe.
+        class occluder_capture_guard
+        {
+            public:
+                explicit occluder_capture_guard( cata_tiles &ct )
+                    : ct_( ct ), prev_( ct.occluder_capture_ ) {
+                    ct_.occluder_capture_ = true;
+                }
+                ~occluder_capture_guard() { ct_.occluder_capture_ = prev_; }
+                occluder_capture_guard( const occluder_capture_guard & ) = delete;
+                auto operator=( const occluder_capture_guard & ) -> occluder_capture_guard & = delete; // *NOPAD*
+            private:
+                cata_tiles &ct_;
+                bool prev_;
+        };
         // Prefetch state for deferred creature draws: set before each draw_critter_at
         // call from the sorted creature pass, read inside draw_critter_at /
         // draw_entity_with_overlays to skip redundant resolution + xform computation.

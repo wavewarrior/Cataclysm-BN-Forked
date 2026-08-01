@@ -487,6 +487,12 @@ void cata_tiles::draw(
     // it is a full-screen view with its own UI layout.
     if( lighting::render_state * rs = &lighting::get_render_state(); rs->ready() ) {
         rs->clear_tile_queue();
+        // Step 2: the sprite-alpha occluder list is derived from the tile sprite queue,
+        // so it is rebuilt from scratch in lockstep with it. Sized to the RUNTIME cache
+        // dims so captured_mask's stride matches TransBuf's (x * cache_y + y).
+        const level_cache& mc = get_map().access_cache( center.z() );
+        rs->occluders().resize( mc.cache_x, mc.cache_y );
+        rs->occluders().begin();
     }
 
     ZoneScoped;
@@ -1743,6 +1749,13 @@ bool cata_tiles::draw_from_id_string(
     const auto screen_pos =
         as_independent_entity ? pos.xy() : point_bub_ms( player_to_screen( pos.xy() ) );
 
+    // Step 2 (grid-decoupled lighting): publish the map tile + its screen square for
+    // push_occluder_footprint, which runs deep inside draw_sprite_at where only the
+    // screen position is available. `as_independent_entity` sprites are not anchored
+    // to a map tile at all, so poison the tile to keep a stale value from leaking.
+    occluder_tile_ = as_independent_entity ? tripoint_bub_ms( -1, -1, 0 ) : pos;
+    occluder_tile_screen_ = screen_pos.raw();
+
     auto simple_point_hash = []( const auto & p ) { return p.x + p.y * 65536; };
 
     // Remove this once the tripoint migration is complete
@@ -1979,6 +1992,97 @@ void cata_tiles::draw_om_tile_recursively(
 // thickness, alpha, enable and per-attitude colours are live F4 knobs (g_outline_*).
 
 
+// Step 2 of the grid-decoupled lighting plan. See cata_tiles.h for why this lives
+// on the outer class rather than on `texture`.
+void cata_tiles::push_occluder_footprint( const occluder_footprint_options &opts )
+{
+    if( !opts.tex || opts.atlas_w <= 0 || opts.atlas_h <= 0 || opts.destination.w <= 0
+        || opts.destination.h <= 0 || tile_width <= 0 || tile_height <= 0 || !g ) {
+        return;
+    }
+    // The SDF is single-z, so only the player's own level may feed it. Tiles drawn
+    // from a lower z (z_drop) share x/y with the level above and would corrupt it.
+    if( occluder_tile_.z() != g->u.bub_pos().z() ) {
+        return;
+    }
+    lighting::render_state& rs = lighting::get_render_state();
+    if( !rs.ready() ) { return; }
+
+    const level_cache& mc = get_map().access_cache( occluder_tile_.z() );
+    if( !mc.inbounds( occluder_tile_.xy() ) ) { return; }
+    const int tx = occluder_tile_.x();
+    const int ty = occluder_tile_.y();
+    const int idx = mc.idx( tx, ty );
+    if( idx < 0 || idx >= static_cast<int>( mc.transparency_cache.size() ) ) { return; }
+
+    // block = how much light this tile stops, independent of the art. The cache is an
+    // ATTENUATION COEFFICIENT, not a fraction: LIGHT_TRANSPARENCY_SOLID (exactly 0) is
+    // the opaque sentinel and open air is only LIGHT_TRANSPARENCY_OPEN_AIR (0.0384);
+    // larger values attenuate more. Hard occluders are exact; everything else gets
+    // Beer-Lambert over one tile relative to open air, so glass and bars land near 0
+    // and keep NOT occluding (matching the binary rule the rest of the engine uses)
+    // while hedges and smoke land high and now dapple.
+    const float t = mc.transparency_cache[idx];
+    const float blk =
+        ( t <= LIGHT_TRANSPARENCY_SOLID )
+        ? 1.0f
+        : std::clamp( 1.0f - std::exp( -( t - LIGHT_TRANSPARENCY_OPEN_AIR ) ), 0.0f, 1.0f );
+    // Nothing to seed. Leaving the tile uncaptured lets occ_base fall back to the
+    // tile-square TransBuf seed, which for a transmitting tile is "open" anyway.
+    if( blk <= 0.0f ) { return; }
+
+    // Quad geometry in TILE units, relative to this tile's own screen square, exactly
+    // as sprite.vert draws it (centre + size + rotation about the centre).
+    const float inv_tw = 1.0f / static_cast<float>( tile_width );
+    const float inv_th = 1.0f / static_cast<float>( tile_height );
+    const float cx = ( static_cast<float>( opts.destination.x )
+                       + 0.5f * static_cast<float>( opts.destination.w )
+                       - static_cast<float>( occluder_tile_screen_.x ) ) * inv_tw;
+    const float cy = ( static_cast<float>( opts.destination.y )
+                       + 0.5f * static_cast<float>( opts.destination.h )
+                       - static_cast<float>( occluder_tile_screen_.y ) ) * inv_th;
+    const float sw = static_cast<float>( opts.destination.w ) * inv_tw;
+    const float sh = static_cast<float>( opts.destination.h ) * inv_th;
+    constexpr float deg_to_rad = 3.14159265358979323846f / 180.0f;
+    const float rot = static_cast<float>( opts.rotation_degrees ) * deg_to_rad;
+
+    // Conservative reject: the ROTATED bounding box must overlap this tile's own
+    // square [0,1]^2. |cos|/|sin| give the exact rotated extent, so this is tight for
+    // the 90-degree steps single-sprite terrain actually uses.
+    const float ac = std::abs( std::cos( rot ) );
+    const float as = std::abs( std::sin( rot ) );
+    const float hw = 0.5f * ( sw * ac + sh * as );
+    const float hh = 0.5f * ( sw * as + sh * ac );
+    if( cx + hw <= 0.0f || cx - hw >= 1.0f || cy + hh <= 0.0f || cy - hh >= 1.0f ) {
+        return;
+    }
+
+    // Same srcrect -> normalised-UV conversion (flip folded into the sign) that
+    // enqueue_tile_sprite performs, so the compute rasteriser samples exactly the
+    // texels the fragment pass does.
+    const SDL_FRect& sr = opts.tex->src_rect();
+    const float inv_aw = 1.0f / static_cast<float>( opts.atlas_w );
+    const float inv_ah = 1.0f / static_cast<float>( opts.atlas_h );
+    float u = sr.x * inv_aw;
+    float v = sr.y * inv_ah;
+    float uw = sr.w * inv_aw;
+    float vh = sr.h * inv_ah;
+    if( opts.flip & SDL_FLIP_HORIZONTAL ) {
+        u += uw;
+        uw = -uw;
+    }
+    if( opts.flip & SDL_FLIP_VERTICAL ) {
+        v += vh;
+        vh = -vh;
+    }
+
+    rs.occluders().push( {
+        .u0 = u, .v0 = v, .uw = uw, .vh = vh,
+        .tile_x = static_cast<float>( tx ), .tile_y = static_cast<float>( ty ),
+        .cx = cx, .cy = cy, .sw = sw, .sh = sh,
+        .rot = rot, .block = blk } );
+}
+
 bool cata_tiles::draw_sprite_at(
     const tile_type& tile, point_bub_ms p, unsigned int loc_rand, bool is_fg, int rota,
     const tint_config& tint, lit_level ll, bool apply_visual_effects, int overlay_count,
@@ -2156,6 +2260,19 @@ bool cata_tiles::draw_sprite_at(
             static_cast<double>( rotation ) + active_anim_xform_.tilt_deg, gpu_light_r, gpu_light_g,
             gpu_light_b, gpu_light_mul, enq_sway,
             /*outline=*/0.0f, effective_extrude_px, effective_extrude_dark, effective_extrude_lean );
+        // Step 2: capture this sprite's alpha footprint for the SDF seed. Foreground
+        // only — the BACKGROUND layer of a wall tile is the floor underneath it, which
+        // is opaque across the whole square and would re-create the very tile-square
+        // occluder this work exists to remove.
+        if( occluder_capture_ && is_fg ) {
+            push_occluder_footprint( {
+                .tex = sprite_tex,
+                .destination = destination,
+                .flip = flip,
+                .atlas_w = gpu.atlas_w,
+                .atlas_h = gpu.atlas_h,
+                .rotation_degrees = static_cast<double>( rotation ) + active_anim_xform_.tilt_deg } );
+        }
         if( !static_z_effect && overlay_count > 0 ) {
             const auto [overlay_tex, overlay_warp_offset] = tileset_ptr->get_or_default(
                     tile_idx, TILESET_NO_MASK, tileset_fx_type::z_overlay, TILESET_NO_COLOR,

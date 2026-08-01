@@ -57,6 +57,9 @@ bool cata_tiles::draw_terrain(
     const tripoint_bub_ms& p, const lit_level ll, int &height_3d, const bool ( &invisible )[5],
     int z_drop )
 {
+    // Step 2 (grid-decoupled lighting): terrain/furniture/vparts are the sprites whose
+    // alpha defines the ground occluders, so only these three layers feed the SDF seed.
+    const occluder_capture_guard occ_guard( *this );
     // Bash-shake transform for this tile (identity when none/expired; self-resetting per call).
     active_anim_xform_ = tile_hit_xform( p );
     map& here = get_map();
@@ -181,6 +184,7 @@ bool cata_tiles::draw_furniture(
     const tripoint_bub_ms& p, const lit_level ll, int &height_3d, const bool ( &invisible )[5],
     int z_drop )
 {
+    const occluder_capture_guard occ_guard( *this );
     // Bash-shake transform for this tile (identity when none/expired; self-resetting per call).
     active_anim_xform_ = tile_hit_xform( p );
     const auto override = furniture_override.find( p );
@@ -494,6 +498,7 @@ bool cata_tiles::draw_vpart(
     const tripoint_bub_ms& p, lit_level ll, int &height_3d, const bool ( &invisible )[5],
     int z_drop )
 {
+    const occluder_capture_guard occ_guard( *this );
     const auto override = vpart_override.find( p );
     const bool overridden = override != vpart_override.end();
     map& here = get_map();

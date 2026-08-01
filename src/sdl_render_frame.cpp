@@ -177,6 +177,16 @@ static int           last_z = INT_MIN;
 static point         last_origin{ INT_MIN, INT_MIN };
 static int           last_player_x = INT_MIN;
 static int           last_player_y = INT_MIN;
+// Step 2/3: the JFA seed is now rasterised from the sprite footprints captured by
+// cata_tiles, so it depends on WHICH TILES WERE DRAWN, not only on the transparency
+// cache. A tile that was off-camera at the last rebuild falls back to its TransBuf
+// square (exactly the pre-Step-3 behaviour, so it degrades gracefully), but it would
+// stay square until the next submap shift. Rebuilding per walked tile would undo the
+// LIGHTING_PERF_PLAN gate, so instead allow the camera to drift this many tiles from
+// the last structure rebuild before forcing a fresh one.
+static constexpr int SDF_CAM_DRIFT_TILES = 4;
+static int           last_struct_px = INT_MIN;
+static int           last_struct_py = INT_MIN;
 
 lighting::lighting_rebuild_flags rebuild{};
 int px = 0, py = 0;
@@ -190,12 +200,18 @@ if( g && world_generator && world_generator->active_world ) {
         px = g->u.bub_pos().x();
         py = g->u.bub_pos().y();
 
-        // Rebuild the SDF on transparency change (gen), z change, OR map shift
-        // (origin): a shift moves the bubble's contents, so the map-local SDF must
-        // realign immediately or shadows drift behind the camera for a frame.
+        // Rebuild the SDF on transparency change (gen), z change, map shift (origin:
+        // a shift moves the bubble's contents, so the map-local SDF must realign
+        // immediately or shadows drift behind the camera for a frame), or once the
+        // camera has drifted far enough that newly-scrolled-in occluders would still
+        // be carrying their coarse tile-square fallback seed.
+        const bool cam_drifted =
+            last_struct_px == INT_MIN
+            || std::abs( px - last_struct_px ) >= SDF_CAM_DRIFT_TILES
+            || std::abs( py - last_struct_py ) >= SDF_CAM_DRIFT_TILES;
         rebuild.structure = sdl_lighting_devui::devui_visible()
                             || gen != last_gen || z != last_z
-                            || origin != last_origin;
+                            || origin != last_origin || cam_drifted;
 
         // vis depends on player position — the seen_cache shadowcast origin.
         // When the player moves, FOV changes even if terrain hasn't.
@@ -209,6 +225,8 @@ if( g && world_generator && world_generator->active_world ) {
             last_gen = gen;
             last_z = z;
             last_origin = origin;
+            last_struct_px = px;
+            last_struct_py = py;
         }
         if( rebuild.vis ) {
             last_player_x = px;
@@ -395,6 +413,15 @@ auto flush_and_gather_rc( lighting::render_state &rs,
                              rs.sdf().sdf_buffer(),
                              static_cast<std::uint32_t>( rs.sdf().map_w() ),
                              static_cast<std::uint32_t>( rs.sdf().map_h() ) );
+        // Step 2 diagnostic: the seed's new input. Fires only on an SDF rebuild, not
+        // per frame, so it is safe at Info level. quads ~= visible terrain+furniture
+        // +vpart sprites; captured ~= visible tile count.
+        const auto& occ = rs.occluders();
+        const std::size_t captured =
+            static_cast<std::size_t>( std::ranges::count( occ.captured_mask(), std::uint8_t{1} ) );
+        DebugLogFL( DL::Info, DC::Main )
+                << "[lighting][occ] quads=" << occ.quads().size() << " captured_tiles=" << captured
+                << " grid=" << occ.width() << "x" << occ.height();
     }
 
     // Sky/sun + GI are the optional compute layers ON TOP of the SDF; they need

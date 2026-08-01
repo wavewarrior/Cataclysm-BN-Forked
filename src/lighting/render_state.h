@@ -24,6 +24,7 @@
 #include "gpu_device.h"
 #include "gpu_geometry.h"
 #include "gpu_sdf_pass.h"
+#include "occluder_capture.h"
 #include "rain_effect.h"
 #include "hud_particle_effect.h"
 #include "sdf_pass.h"
@@ -300,6 +301,11 @@ public:
     // Phase 4: SDF + transparency ----------------------------------------
     sdf_pass& sdf() noexcept { return sdf_; }
 
+    // Per-frame sprite-alpha occluder footprints (Step 2 of the grid-decoupled
+    // lighting plan). Filled by cata_tiles' terrain/furniture/vpart draws,
+    // drained by gpu_sdf_pass to rasterise the SDF seed from the artwork.
+    occluder_capture& occluders() noexcept { return occluders_; }
+
     // UI compositor target. Persistent offscreen texture the UI renders
     // into; refresh_display blits it over the lit-world pass. nullptr
     // until init() succeeds. Owned here; lives for the render_state's
@@ -440,6 +446,7 @@ private:
 
     // Phase 4: SDF + transparency
     sdf_pass sdf_;
+    occluder_capture occluders_;
 
     // UI compositor target (offscreen UI render-to-texture).
     std::unique_ptr<ui_composite_target> ui_target_;
