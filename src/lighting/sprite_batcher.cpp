@@ -633,15 +633,14 @@ public:
             SDL_BindGPUVertexStorageBuffers(rp, /*first_slot=*/0, &storage_binding.buffer, 1);
 
             // Fragment resource layout (space2), t-order sampled → storage
-            // textures → storage buffers (Step-3 Phase 1b + shadow mask):
-            //   sampler slot 0  → Atlas       (t0, per-segment)
-            //   stor-tex slot 0 → IndirectTex (t1, 1-bounce GI texture)
-            //   stor-tex slot 1 → ShadowMask  (t2, silhouette sun shadow)
-            //   stor-buf slot 0 → Emitters    (t3)
-            //   stor-buf slot 1 → SdfBuf       (t4)
-            //   stor-buf slot 2 → SkyVisBuf    (t5)
-            //   stor-buf slot 3 → VisBuf       (t6)
-            //   stor-buf slot 4 → SunSdfBuf    (t7)
+            // textures → storage buffers:
+            //   sampler slot 0  → Atlas      (t0, per-segment)
+            //   stor-tex slot 0 → ShadowMask (t1, silhouette sun shadow)
+            //   stor-buf slot 0 → Emitters   (t2)
+            //   stor-buf slot 1 → SdfBuf     (t3)
+            //   stor-buf slot 2 → SkyVisBuf  (t4)
+            //   stor-buf slot 3 → GiBuf      (t5)
+            //   stor-buf slot 4 → SkyBuf     (t6)
             // Textures and buffers are SEPARATE SDL binding arrays. All
             // per-tile reads are gated by sdf_map_w>0 in the shader; the
             // declared slots must still be bound on D3D12 (see
@@ -783,11 +782,13 @@ private:
         if (lp_shadow_mask) {
             SDL_BindGPUFragmentStorageTextures(rp, /*first_slot=*/0, &lp_shadow_mask, 1);
         }
-        // Storage BUFFER slots 0..5 → t2..t7 (after the 1 storage texture):
-        // Emitters, SdfBuf, SkyVisBuf, VisBuf, GiBuf, SkyBuf. (Stage 2b dropped
-        // SunSdfBuf — the sun shadow moved to the compute coverage march in
-        // SkyBuf.a, so the fragment no longer declares it.) The sprite pipeline
-        // declares ALL SIX, so this is strictly all-or-none: a PARTIAL bind
+        // Storage BUFFER slots 0..4 → t2..t6 (after the 1 storage texture):
+        // Emitters, SdfBuf, SkyVisBuf, GiBuf, SkyBuf. (Stage 2b dropped SunSdfBuf —
+        // the sun shadow moved to the compute coverage march in SkyBuf.a. VisBuf was
+        // dropped when the dead live-visibility field was deleted; the sub-tile
+        // vision carve marches SdfBuf instead and needs no buffer of its own.) The
+        // sprite pipeline declares ALL FIVE, so this is strictly all-or-none: a
+        // PARTIAL bind
         // leaves declared SRV slots unbound → D3D12 "Missing fragment storage
         // buffer binding!" → device removed. All six producers allocate their
         // buffer unconditionally at init (emitter_collector ctor, sdf_pass::init,

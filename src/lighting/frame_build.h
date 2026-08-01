@@ -43,9 +43,9 @@ struct lighting_rebuild_flags {
     bool vis = true;
 };
 
-// 1-bounce GI is computed on the GPU (radiance_cascade_pass); this only builds
-// + submits the emitter snapshot and per-tile SDF / sky-vis / vis. The HUD
-// snapshot is filled when want_hud_snapshot.
+// 1-bounce GI is computed on the GPU (gi_compute_pass); this only builds + submits
+// the emitter snapshot and the per-tile transparency / sky-vis / coverage fields.
+// The HUD snapshot is filled when want_hud_snapshot.
 //
 // skylight_bleed (0..1): indoor daylight bleed strength. 0 = the old binary
 // sky-vis (open sky 1.0 / roofed 0.0). >0 runs a wall-aware flood-fill that
@@ -53,13 +53,6 @@ struct lighting_rebuild_flags {
 // doorways), blocked by opaque walls, scaled by this strength. Pure sky-ambient
 // lift — artificial light stays GPU-side, so no double-count.
 //
-// vision_blur (tiles, 0 = off): Gaussian sigma applied to BOTH the FOV `vis`
-// mask and the `sky_vis` mask (at tile resolution) before upload. FOV
-// shadowcasting expands through narrow apertures (windows) in tile-sized jumps,
-// so the beam shape is a hard staircase in the source data that bilinear can't
-// dissolve; a blur of radius >= a few tiles smears the steps into a smooth
-// diagonal (Stoneshard's mask-blur technique). Render-only (modulates final_rgb),
-// so gameplay LOS is untouched.
 // cam_x0/cam_y0/cam_w/cam_h (B1): on-screen tile rect in bubble-local tile
 // coords (origin from cata_tiles::get_tile_map_origin, extent from
 // get_screentile_*). The expensive supersampled Euclidean DT (structure_rebuild)
@@ -69,7 +62,6 @@ struct lighting_rebuild_flags {
 // indexing and the full-size upload are unchanged, so no shader edit is needed.
 frame_lighting_result build_and_submit_lighting(
     render_state& rs, lighting_rebuild_flags rebuild, bool want_hud_snapshot,
-    float skylight_bleed = 0.0f, float vision_blur = 0.0f, int cam_x0 = -1, int cam_y0 = -1,
-    int cam_w = 0, int cam_h = 0);
+    float skylight_bleed = 0.0f, int cam_x0 = -1, int cam_y0 = -1, int cam_w = 0, int cam_h = 0);
 
 } // namespace lighting

@@ -49,13 +49,6 @@ void sdf_pass::init(gpu_device& dev, int map_w, int map_h) {
         xfer_skyvis_f_ = SDL_CreateGPUTransferBuffer(d, &tbci);
     }
     {
-        SDL_GPUTransferBufferCreateInfo tbci{};
-        tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-        // VisBuf shares the SDF_SUPERSAMPLE grid (sub-tile vision-edge sampling).
-        tbci.size = static_cast<Uint32>(map_w * map_h * SDF_SUPERSAMPLE * SDF_SUPERSAMPLE * 4);
-        xfer_vis_f_ = SDL_CreateGPUTransferBuffer(d, &tbci);
-    }
-    {
         // Stage 2b coverage occluder: tile-res, 2 floats/tile (height, roof).
         SDL_GPUTransferBufferCreateInfo tbci{};
         tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
@@ -98,16 +91,6 @@ void sdf_pass::init(gpu_device& dev, int map_w, int map_h) {
         }
     }
     {
-        SDL_GPUBufferCreateInfo bci{};
-        bci.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
-        // VisBuf shares the SDF_SUPERSAMPLE grid (SS² floats per tile).
-        bci.size = static_cast<Uint32>(map_w * map_h * SDF_SUPERSAMPLE * SDF_SUPERSAMPLE * 4);
-        visbuf_storage_ = SDL_CreateGPUBuffer(d, &bci);
-        if (!visbuf_storage_) {
-            dbg(DL::Error) << "sdf_pass::init: failed to create visbuf_storage";
-        }
-    }
-    {
         // Stage 2b unified coverage occluder field — tile-res, 2 floats/tile
         // (height, roof). COMPUTE read (sky_sun.comp marches it).
         SDL_GPUBufferCreateInfo bci{};
@@ -140,10 +123,6 @@ void sdf_pass::shutdown(gpu_device& dev) {
         SDL_ReleaseGPUTransferBuffer(d, xfer_skyvis_f_);
         xfer_skyvis_f_ = nullptr;
     }
-    if (xfer_vis_f_) {
-        SDL_ReleaseGPUTransferBuffer(d, xfer_vis_f_);
-        xfer_vis_f_ = nullptr;
-    }
     if (sdf_storage_) {
         SDL_ReleaseGPUBuffer(d, sdf_storage_);
         sdf_storage_ = nullptr;
@@ -151,10 +130,6 @@ void sdf_pass::shutdown(gpu_device& dev) {
     if (skyvis_storage_) {
         SDL_ReleaseGPUBuffer(d, skyvis_storage_);
         skyvis_storage_ = nullptr;
-    }
-    if (visbuf_storage_) {
-        SDL_ReleaseGPUBuffer(d, visbuf_storage_);
-        visbuf_storage_ = nullptr;
     }
     if (xfer_occ_) {
         SDL_ReleaseGPUTransferBuffer(d, xfer_occ_);
@@ -177,7 +152,7 @@ void sdf_pass::shutdown(gpu_device& dev) {
 void sdf_pass::upload(
     SDL_GPUCopyPass* cp, SDL_GPUDevice* dev, int runtime_w, int runtime_h,
     const std::vector<uint8_t>& transparency, const std::vector<float>& sdf,
-    const std::vector<uint8_t>& sky_vis, const std::vector<float>& vis,
+    const std::vector<uint8_t>& sky_vis,
     const std::vector<float>& occ) {
     if (!cp || !dev || !trans_storage_) { return; }
     if (runtime_w <= 0 || runtime_h <= 0) { return; }
@@ -291,31 +266,6 @@ void sdf_pass::upload(
         }
     }
 
-    // Per-tile visibility on the SDF_SUPERSAMPLE grid (SS² floats/tile, x-major,
-    // stride runtime_h*SS). Fragment storage buffer (VisBuf); shader applies the
-    // soft vision falloff sampled as finely as the SDF shadows.
-    {
-        const Uint32 vis_count =
-            pixel_count * static_cast<Uint32>(SDF_SUPERSAMPLE * SDF_SUPERSAMPLE);
-        if (visbuf_storage_ && xfer_vis_f_ && static_cast<Uint32>(vis.size()) >= vis_count) {
-            void* mapped = SDL_MapGPUTransferBuffer(dev, xfer_vis_f_, true);
-            if (mapped) {
-                std::memcpy(mapped, vis.data(), vis_count * sizeof(float));
-                SDL_UnmapGPUTransferBuffer(dev, xfer_vis_f_);
-
-                SDL_GPUTransferBufferLocation tb_src{};
-                tb_src.transfer_buffer = xfer_vis_f_;
-                tb_src.offset = 0;
-
-                SDL_GPUBufferRegion buf_dst{};
-                buf_dst.buffer = visbuf_storage_;
-                buf_dst.offset = 0;
-                buf_dst.size = vis_count * sizeof(float);
-
-                SDL_UploadToGPUBuffer(cp, &tb_src, &buf_dst, false);
-            }
-        }
-    }
 }
 
 } // namespace lighting

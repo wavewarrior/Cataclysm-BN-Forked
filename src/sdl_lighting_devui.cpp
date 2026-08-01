@@ -99,7 +99,6 @@ float g_hud_part_speed_scale = 1.0f;
 bool g_shadow_debug = false;
 uint32_t g_current_dbg_mode = 0u;
 float g_skylight_bleed = 0.5f;
-float g_vision_blur = 1.5f;
 // Hover-outline (HOVER_OUTLINE_PLAN.md) — CPU-side, no shader cbuffer.
 bool g_outline_enable = true;
 float g_outline_thickness = 0.06f; // ring radius as fraction of tile width
@@ -596,6 +595,8 @@ void devui_rml_open()
     c.Bind( "light_quant", &g_dbg_params.light_quant );
     c.Bind( "occ_soft_gain", &g_dbg_params.occ_soft_gain );
     c.Bind( "self_eps_tall", &g_dbg_params.self_eps_tall );
+    c.Bind( "vis_curve", &g_dbg_params.vis_curve );
+    c.Bind( "vis_radius", &g_dbg_params.vis_radius );
     c.Bind( "ramp_enable", &g_dbg_params.ramp_enable );
     c.Bind( "ramp_steps", &g_dbg_params.ramp_steps );
     c.Bind( "ramp_chroma", &g_dbg_params.ramp_chroma );
@@ -627,7 +628,6 @@ void devui_rml_open()
     c.Bind( "sun_scale", &g_dbg_params.sun_scale );
     c.Bind( "sky_scale", &g_dbg_params.sky_scale );
     c.Bind( "skylight_bleed", &g_skylight_bleed );
-    c.Bind( "vision_blur", &g_vision_blur );
     c.Bind( "tonemap_exposure", &g_tonemap_exposure );
     c.Bind( "tonemap_min_ev", &g_tonemap_min_ev );
     c.Bind( "tonemap_max_ev", &g_tonemap_max_ev );

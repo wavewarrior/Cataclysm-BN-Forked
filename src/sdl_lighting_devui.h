@@ -159,8 +159,6 @@ extern float  g_hover_line_color[4];
 extern float  g_hover_line_dot_size;
 extern float  g_hover_line_dot_spacing;
 extern bool   g_hover_line_fade_ends;
-// Vision-mask blur (tiles).
-extern float g_vision_blur;
 // Depth extrude (DitW) global multipliers.
 extern float g_depth_lean_str;
 extern float g_depth_dark_str;

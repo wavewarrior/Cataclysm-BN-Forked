@@ -22,51 +22,10 @@
 
 namespace lighting {
 
-namespace {
-// Separable Gaussian blur of a tile-resolution scalar field (x-major,
-// idx = x*H+y), in place. sigma is in tiles; < 0.05 → no-op. Used to soften the
-// FOV / sky-vis masks so the tile-quantised shadowcast staircase reads as a
-// smooth gradient (Stoneshard-style mask blur) instead of hard tile steps.
-// Two passes (H then V), clamp at borders.
-void gaussian_blur_tilefield(std::vector<float>& f, int W, int H, float sigma) {
-    if (sigma < 0.05f || W <= 0 || H <= 0 || static_cast<int>(f.size()) < W * H) { return; }
-    const int rad = std::min(8, static_cast<int>(std::ceil(2.5f * sigma)));
-    std::vector<float> kernel(2 * rad + 1);
-    float ksum = 0.0f;
-    const float inv2s2 = 1.0f / (2.0f * sigma * sigma);
-    for (int k = -rad; k <= rad; ++k) {
-        const float w = std::exp(-static_cast<float>(k * k) * inv2s2);
-        kernel[k + rad] = w;
-        ksum += w;
-    }
-    for (float& w : kernel) { w /= ksum; }
-    std::vector<float> tmp(f.size(), 0.0f);
-    for (int x = 0; x < W; ++x) { // horizontal pass (along x)
-        for (int y = 0; y < H; ++y) {
-            float acc = 0.0f;
-            for (int k = -rad; k <= rad; ++k) {
-                const int sx = std::clamp(x + k, 0, W - 1);
-                acc += kernel[k + rad] * f[sx * H + y];
-            }
-            tmp[x * H + y] = acc;
-        }
-    }
-    for (int x = 0; x < W; ++x) { // vertical pass (along y)
-        for (int y = 0; y < H; ++y) {
-            float acc = 0.0f;
-            for (int k = -rad; k <= rad; ++k) {
-                const int sy = std::clamp(y + k, 0, H - 1);
-                acc += kernel[k + rad] * tmp[x * H + sy];
-            }
-            f[x * H + y] = acc;
-        }
-    }
-}
-} // namespace
 
 frame_lighting_result build_and_submit_lighting(
     render_state& rs, lighting_rebuild_flags rebuild, bool want_hud_snapshot, float skylight_bleed,
-    float vision_blur, int cam_x0, int cam_y0, int cam_w, int cam_h) {
+    int cam_x0, int cam_y0, int cam_w, int cam_h) {
     ZoneScoped;
     frame_lighting_result result;
 
@@ -88,7 +47,6 @@ frame_lighting_result build_and_submit_lighting(
     std::vector<uint8_t> transparency;
     std::vector<float> occ; // Stage 2b: unified coverage occluder (height,roof) /tile
     std::vector<uint8_t> sky_vis;
-    std::vector<float> vis; // per-tile visibility for soft vision falloff (x-major)
     int sdf_runtime_w = 0;
     int sdf_runtime_h = 0;
 
@@ -279,69 +237,6 @@ frame_lighting_result build_and_submit_lighting(
                 << (static_cast<int>(mc.transparency_cache.size())) << "tiles x" << (ss * ss);
         } // if rebuild.structure
 
-        // ── Vis rebuild: FOV visibility mask ───────────────────────────────
-        // Independent of structure — runs when player position changes even if
-        // terrain hasn't. The seen_cache shadowcast origin follows the player,
-        // so walking in static terrain only requires a vis rebuild.
-        if (rebuild.vis && static_cast<int>(mc.seen_cache.size()) >= total) {
-            ZoneScopedN("light_vis_build");
-            const auto _perf_vis_t0 = std::chrono::steady_clock::now();
-
-            dbg(DL::Debug) << "[lighting] vis_rebuild: seen=" << mc.seen_cache.size()
-                           << " cam=" << mc.camera_cache.size() << " total=" << total;
-
-            // Per-tile visibility for the soft vision falloff (effect 1+2).
-            // Raw max(seen_cache, camera_cache) — the SAME float
-            // apparent_light_helper reads, but the render path otherwise
-            // discards it by bucketing to discrete lit_level (the hard
-            // edge). seen_cache already encodes a continuous radial decay.
-            // x-major (idx = x*H+y), matching transparency_cache. Live-only
-            // (>=0); memorized-tile fade is handled CPU-side at draw time
-            // (ll==MEMORIZED), not via this buffer.
-            // Built at the SAME SDF_SUPERSAMPLE grid as the SDF so the shader's
-            // vision-edge falloff is sampled as finely as the lighting shadows
-            // (tile-res bilinear smeared the rim ~1 tile; the SS grid sharpens
-            // the inter-tile interpolation to ~1/SS tile). Per-tile value is
-            // replicated into its SS×SS subcells (no sub-tile LOS data exists).
-
-            // Per-tile visibility FIRST, so the blur radius is in tile units.
-            std::vector<float> vtile(total, 0.0f);
-            const bool have_cam = static_cast<int>(mc.camera_cache.size()) >= total;
-            for (int x = 0; x < W; ++x) {
-                for (int y = 0; y < H; ++y) {
-                    const float s = mc.seen_cache[x * H + y];
-                    const float c = have_cam ? mc.camera_cache[x * H + y] : 0.0f;
-                    vtile[x * H + y] = std::max(s, c);
-                }
-            }
-            // Blur the FOV mask: shadowcasting through a narrow aperture
-            // (window) expands the visible cone in tile-sized jumps, so the
-            // beam is a hard staircase in the source. A tile-radius Gaussian
-            // smears the steps into a smooth diagonal (Stoneshard mask blur).
-            // Render-only — does not change gameplay LOS. vision_blur=0 = no-op.
-            gaussian_blur_tilefield(vtile, W, H, vision_blur);
-            // Replicate each (now-smoothed) tile value into its SS×SS subcells
-            // for the shader's SS-grid vis_bilinear (sub-tile interpolation on
-            // top of the blur).
-            vis.assign(static_cast<size_t>(SW) * SH, 0.0f);
-            for (int x = 0; x < W; ++x) {
-                for (int y = 0; y < H; ++y) {
-                    const float v = vtile[x * H + y];
-                    const int bx = x * ss;
-                    const int by = y * ss;
-                    for (int sx = 0; sx < ss; ++sx) {
-                        for (int sy = 0; sy < ss; ++sy) {
-                            vis[static_cast<size_t>(bx + sx) * SH + (by + sy)] = v;
-                        }
-                    }
-                }
-            }
-            const double _perf_vis_ms =
-                std::chrono::duration<double, std::milli>(
-                    std::chrono::steady_clock::now() - _perf_vis_t0)
-                    .count();
-            DebugLogFL(DL::Info, DC::Main) << "[lighting][perf] vis_rebuild ms=" << _perf_vis_ms;
-        } // if rebuild.vis
     } // if have_world
 
     if (want_hud_snapshot) {
@@ -353,7 +248,7 @@ frame_lighting_result build_and_submit_lighting(
     rs.collector()->submit(
         std::move(snapshot), std::move(transparency), {}, // P3.3: SDF is GPU-only (JFA), no CPU
                                                           // upload needed
-        std::move(sky_vis), std::move(vis), sdf_runtime_w, sdf_runtime_h, std::move(occ));
+        std::move(sky_vis), sdf_runtime_w, sdf_runtime_h, std::move(occ));
 
     dbg(DL::Debug) << "[lighting] frame_build COMPLETE";
 

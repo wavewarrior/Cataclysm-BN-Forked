@@ -164,7 +164,10 @@ struct debug_params {
     float grade_desat = 0.55f;  // 0=full colour … 1=greyscale
     float grade_cool = 0.20f;   // blend toward cool teal tint (0=off)
     float grade_bright = 0.80f; // brightness multiplier on lit world tiles
-    float vis_radius = 16.0f;   // radial player-distance falloff radius (tiles; 0=off)
+    // Radial player-distance falloff radius (tiles; 0 = off). Read by the Step 5b
+    // sub-tile vision carve. Ships at 0: the carve's LOS term is the point of the
+    // effect, and a 16-tile radial dim would silently darken daylight scenes.
+    float vis_radius = 0.0f;
     float player_x = 0.0f;      // DATA (not a knob): player map-tile centre x
     float player_y = 0.0f;      // DATA: player map-tile centre y
     float mem_radius = 30.0f;   // memory distance-fade scale in tiles (effect 3)

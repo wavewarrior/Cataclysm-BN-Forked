@@ -31,7 +31,7 @@ inline constexpr int SDF_SUPERSAMPLE = 8;
 //
 // Layout: all per-tile data is in storage buffers (no sampler textures — nothing
 // samples them). transparency feeds trans_storage_ (float, JFA seed input);
-// SDF/sky_vis/vis are their own storage buffers.
+// SDF and sky_vis are their own storage buffers.
 //
 // The data is passed to the collector thread which calls upload() inside a copy pass.
 class sdf_pass {
@@ -56,14 +56,10 @@ public:
     //                for backward compat with emitter_collector::submit().
     // sky_vis      : runtime_w*runtime_h bytes (255=open sky, 0=indoor).
     //                Empty = skip.
-    // vis          : runtime_w*runtime_h floats — per-tile visibility
-    //                (>=0: raw seen_cache [0..1]; <0: memorized tile sentinel),
-    //                x-major. Drives the Stoneshard-style soft vision falloff.
-    //                Empty = skip.
     void upload(
         SDL_GPUCopyPass* cp, SDL_GPUDevice* dev, int runtime_w, int runtime_h,
         const std::vector<uint8_t>& transparency, const std::vector<float>& sdf,
-        const std::vector<uint8_t>& sky_vis = {}, const std::vector<float>& vis = {},
+        const std::vector<uint8_t>& sky_vis = {},
         // Stage 2b: unified coverage occluder field, tile-res, 2 floats/tile
         // (height, roof). Marched by sky_sun.comp. Empty = skip.
         const std::vector<float>& occ = {});
@@ -73,10 +69,6 @@ public:
     // Sky visibility as a fragment-readable storage buffer of floats
     // (1.0=open sky, 0.0=roofed) — sampler-texture Load returns 0 on Metal.
     SDL_GPUBuffer* sky_vis_buffer() const noexcept { return skyvis_storage_; }
-    // Per-tile visibility as a fragment-readable storage buffer of floats
-    // (>=0 = live seen_cache [0..1]; <0 = memorized-tile sentinel). Drives the
-    // soft vision falloff + memory desaturate-fade in the fragment shader.
-    SDL_GPUBuffer* vis_buffer() const noexcept { return visbuf_storage_; }
     // Stage 2b: unified coverage occluder field (tile-res, 2 floats/tile: height,
     // roof). Marched by sky_sun.comp for sun/moon/sky occlusion. COMPUTE-readable.
     SDL_GPUBuffer* occ_buffer() const noexcept { return occ_storage_; }
@@ -111,10 +103,8 @@ private:
     SDL_GPUTransferBuffer* xfer_occ_ = nullptr; // float bytes for occ_storage_
     SDL_GPUBuffer* trans_storage_ = nullptr;    // P3 JFA input: tile-res transparency as floats
     SDL_GPUTransferBuffer* xfer_trans_f_ = nullptr; // float bytes for trans_storage_
-    SDL_GPUBuffer* visbuf_storage_ = nullptr; // fragment storage buffer (VisBuf, 1 float/tile)
     SDL_GPUTransferBuffer* xfer_sky_vis_ = nullptr;  // R8 bytes for sky_vis_tex_
     SDL_GPUTransferBuffer* xfer_skyvis_f_ = nullptr; // float bytes for skyvis_storage_
-    SDL_GPUTransferBuffer* xfer_vis_f_ = nullptr;    // float bytes for visbuf_storage_ (1/tile)
     int map_w_ = 0; // physical texture extent (REALITY_BUBBLE_SIZE_MAX*SEEX)
     int map_h_ = 0;
     int runtime_w_ = 0; // last-uploaded runtime dimensions (≤ map_w_)

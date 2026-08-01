@@ -296,8 +296,7 @@ if( g && world_generator && world_generator->active_world ) {
     }
     lighting::frame_lighting_result fr =
         lighting::build_and_submit_lighting( rs, rebuild, g_dbg_lighting,
-            g_skylight_bleed, g_vision_blur,
-            cam_x0, cam_y0, cam_w, cam_h );
+            g_skylight_bleed, cam_x0, cam_y0, cam_w, cam_h );
     rc_rebuild = fr.built_pertile;
     DebugLogFL( DL::Info, DC::Main )
             << "[flash][gpu] rebuild: struct=" << rebuild.structure
@@ -414,15 +413,23 @@ auto flush_and_gather_rc( lighting::render_state &rs,
                              static_cast<std::uint32_t>( rs.sdf().map_w() ),
                              static_cast<std::uint32_t>( rs.sdf().map_h() ),
                              rs.occluders(), g_dbg_params.occ_soft_gain );
-        // Step 2 diagnostic: the seed's new input. Fires only on an SDF rebuild, not
-        // per frame, so it is safe at Info level. quads ~= visible terrain+furniture
-        // +vpart sprites; captured ~= visible tile count.
+        // Step 2/3 diagnostic: the seed's new input. Fires only on an SDF rebuild,
+        // not per frame, so it is safe at Info level. `partial` is the positive
+        // control for occ_soft_gain: those are the quads the knob scales, and only a
+        // nonzero count makes occ_soft_gain=0 an observable change (hard occluders
+        // are unaffected by design).
         const auto& occ = rs.occluders();
         const std::size_t captured =
             static_cast<std::size_t>( std::ranges::count( occ.captured_mask(), std::uint8_t{1} ) );
+        const std::size_t hard = static_cast<std::size_t>( std::ranges::count_if(
+                                     occ.quads(),
+        []( const lighting::occluder_quad & q ) { return q.block >= 0.999f; } ) );
         DebugLogFL( DL::Info, DC::Main )
-                << "[lighting][occ] quads=" << occ.quads().size() << " captured_tiles=" << captured
-                << " grid=" << occ.width() << "x" << occ.height();
+                << "[lighting][occ] quads=" << occ.quads().size() << " hard=" << hard
+                << " partial=" << ( occ.quads().size() - hard )
+                << " captured_tiles=" << captured
+                << " grid=" << occ.width() << "x" << occ.height()
+                << " soft_gain=" << g_dbg_params.occ_soft_gain;
     }
 
     // Sky/sun + GI are the optional compute layers ON TOP of the SDF; they need

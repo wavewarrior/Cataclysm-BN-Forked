@@ -16,7 +16,8 @@
 //   t2       Emitters    — StructuredBuffer<GpuEmitter>, 8192-entry  (storage buf slot 0)
 //   t3       SdfBuf      — StructuredBuffer<float>, sdf_pass dims    (storage buf slot 1)
 //   t4       SkyVisBuf   — StructuredBuffer<float>, sdf_pass dims    (storage buf slot 2)
-//   t5       VisBuf      — StructuredBuffer<float>, per-tile vis     (storage buf slot 3)
+//   t5       GiBuf       — StructuredBuffer<float>, 4 floats/tile    (storage buf slot 3)
+//   t6       SkyBuf      — StructuredBuffer<float>, 4 floats/tile    (storage buf slot 4)
 //
 // Emitter, SDF AND sky-vis data carriers ALL live in storage buffers, NOT
 // sampler textures: SDL_shadercross @ 6b06e55c silently mis-binds sampler
@@ -59,13 +60,14 @@ Texture2D<float4>            ShadowMask  : register(t1, space2);
 StructuredBuffer<GpuEmitter> Emitters    : register(t2, space2);
 StructuredBuffer<float>      SdfBuf      : register(t3, space2);
 StructuredBuffer<float>      SkyVisBuf   : register(t4, space2);
-// Storage buffer slot 3 ⇒ t5.  (VisBuf, the live-visibility buffer, used to sit
-// here; "remove vision overlay" (46261515ac) deleted its only reader and left the
-// declaration orphaned.  DXC then stripped the unused buffer, punching a hole in
-// the t2..t7 SRV range: shadercross reflected 5 storage buffers while the DXIL
-// still referenced t7, so D3D12 rejected the root signature with E_INVALIDARG and
-// the whole lighting pipeline failed to build.  Fragment storage buffers MUST stay
-// contiguous and every one MUST be read.)
+// NOTE: fragment storage buffers MUST stay contiguous and every one MUST be read.
+// VisBuf, the live-visibility buffer, used to sit at t5; "remove vision overlay"
+// (46261515ac) deleted its only reader and left the declaration orphaned. DXC then
+// stripped the unused buffer, punching a hole in the t2..t7 SRV range: shadercross
+// reflected 5 storage buffers while the DXIL still referenced t7, so D3D12 rejected
+// the root signature with E_INVALIDARG and the whole lighting pipeline failed to
+// build. The buffer and its CPU-side field are now fully deleted; the sub-tile
+// vision carve marches SdfBuf instead.
 // 1-bounce indirect light (GI). GPU compute GI pass output (gi_bounce.comp) → gi_buf.
 // Storage buffer slot 3 ⇒ t5 (Stage 2b removed SunSdfBuf, which was here — the sun
 // shadow moved to the compute coverage march, see SkyBuf). Tile-res, 4 floats/tile
@@ -684,6 +686,33 @@ float4 main(VS_OUT i) : SV_Target0 {
         const float d = -i.light_mul;
         const float t = saturate(1.0 - d / max(mem_radius, 1.0));
         final_rgb *= mem_dim + (1.0 - mem_dim) * t;
+    }
+
+    // Sub-tile vision carve. The CPU already decided, per tile, whether this tile is
+    // drawn at all (lit_level -> apply_vision_effects skips non-CLEAR tiles), so this
+    // term can only ever SUBTRACT within an already-granted tile — it is structurally
+    // incapable of revealing anything gameplay says is unseen. What it buys is the
+    // SHAPE: a wall corner cutting your sight now produces a smooth sub-tile curve
+    // instead of a tile staircase, because it marches the same sub-tile SDF the
+    // shadows use. vis_curve = 0 restores the previous look exactly.
+    //
+    // vis_curve / vis_radius are the lanes the deleted VisBuf path left orphaned;
+    // reusing them is semantically exact and costs no cbuffer churn.
+    if(vis_curve > 0.001 && sdf_map_w > 0u) {
+        const float2 eye = float2(player_x, player_y);
+        const float2 ev  = eye - shade_pos;
+        const float  ed  = length(ev);
+        const float  los = (ed < 0.5) ? 1.0
+                           : trace_shadow(shade_pos, ev / ed, ed, shadow_k,
+                                          (int)shadow_steps, /*directional=*/false,
+                                          frag_is_tall_n ? self_eps_tall : 0.05);
+        float v = pow(saturate(los), vis_curve);
+        if(vis_radius > 0.001) {
+            v *= saturate(1.0 - smoothstep(vis_radius * 0.6, vis_radius, ed));
+        }
+        // Fade toward the memory look rather than to black, so the carve reads as the
+        // same material the unseen region already uses.
+        final_rgb *= mem_dim + (1.0 - mem_dim) * v;
     }
 
     const bool  dbg_active   = (debug_mode == 8u)
