@@ -554,7 +554,18 @@ if( use_activity_cache ) {
             if( !critter->is_dead() &&
                 !activity_ai_paused->contains( critter ) &&
                 !critter->has_effect( effect_ai_controlled ) &&
-                critter->moves > 0 &&
+                // NOTE: deliberately NOT gated on `moves > 0`. This collection runs
+                // BEFORE the lifecycle loop below, and a monster's move budget is
+                // granted there by process_turn() (Creature::process_turn ->
+                // moves += get_speed(), creature.cpp). At this point `moves` is only
+                // last turn's leftover, which is <= 0 for anything that acted, so the
+                // check was false for essentially every monster: `plannable` came out
+                // empty, the parallel planning pass computed nothing, and every
+                // monster fell back to serial plan() inside the move loop. Measured
+                // in-game: plannable 0 -> 29, preplan 0 -> 20.5/turn once removed.
+                // Over-collection is harmless and already intended -- see the P-7
+                // comment above: plans for monsters that die or never act are simply
+                // discarded.
                 !critter->has_effect( effect_ridden ) &&
                 critter->lod_tier < 2 &&
                 critter->is_simulated() ) {
