@@ -323,7 +323,7 @@ if( vis_curve > 0.001 ) {
 
 Delete the now-truly-dead declarations in the shader comment block (`sprite.frag.hlsl:19`, `62-68`) that still describe `VisBuf`, and fix the stale slot list at `src/lighting/sprite_batcher.cpp:786-787` and `641-644`, which name `VisBuf` even though the bind array at line 800-803 carries five buffers.
 
-The **outward** frontier (a CLEAR tile's neighbour that is DARK/HIDDEN) keeps a tile edge in this step: `apply_vision_effects` draws a full-tile overlay and the caller `continue`s (`src/cata_tiles.cpp:1437`), so the terrain under it is never drawn and there is nothing for a shader term to fade. Softening it means restructuring the draw loop to draw memory beneath the overlay, which risks revealing unexplored terrain — deliberately out of scope here.
+The **outward** frontier (a CLEAR tile's neighbour that is DARK/HIDDEN) keeps a tile edge in this step. ~~Deliberately out of scope.~~ **SUPERSEDED by Step 8 below** — the premise was wrong on two counts: the loudest outward artefact is not the `lighting_*` overlay at all but the `lit_level::LOW` GREYSCALE ATLAS SWAP, and memorized terrain *is* already drawn beneath its overlay, so there was something to fade after all.
 
 **Done when:** looking down a corridor past a door frame, the lit wedge's edge is a smooth curve at art-texel resolution rather than a staircase, and the `[lighting][perf] vis_rebuild` log line is gone. `vis_curve = 0` restores the pre-step look exactly.
 
@@ -506,3 +506,26 @@ grep -E "\[lighting\]\[perf\]|\[render\]\[perf\]|ERROR|WARN" config/debug.log | 
 - **Palette size 256 with 8 steps** is assumed sufficient for MSX++UnDeadPeopleEdition. If the histogram shows a long tail such that the 256th row's frequency is still significant, raise to 512 rows — the buffers are tiny (512×8 uints = 16 KB, plus 32³ = 128 KB) and only `ramp_steps`/`palette_size` plumbing changes. Do **not** raise the index LUT beyond 32³ without measuring; 48³ is 442 KB and the perceptual gain is small.
 - **Procedural ramps may read wrong for a specific tileset.** All seven `ramp_gen_params` fields are F4-tunable, so the contingency is tuning, not code. If procedural ramps cannot be made to look right at all, the escape hatch is `ramp_enable = 0`, which restores the Step 6 pipeline exactly — Step 7 is designed to be fully revertible at runtime.
 - **`self_eps_tall = 0.55`** is a starting value for Step 3f. If tall sprites still self-shadow after Step 3, raise it via F4 before touching code; if *nearby* walls stop shadowing tall sprites, lower it. The knob exists precisely so this is not a rebuild.
+
+---
+
+## Step 8 — Sub-tile vision FRONTIER (added 2026-08-02, after user report)
+
+Steps 0-7 shipped, and the user reported: *"vision is still very much tile stepped, which now collides with the nice lighting."* Correct — and Step 5's scope note above got the reason wrong. Diagnosis, in the order the evidence forced it:
+
+1. Added `debug_mode == 15`, a frontier view that colours each fragment by which whole-tile vision treatment it carries. This was the load-bearing step: **three successive hypotheses died to it.** The `lighting_*` overlay moved 0.128% of pixels (not the cause). The CPU lightmap tint gate read 0 everywhere (not the cause). In the daylight scene the whole view was "ordinary visible" — the staircase the screenshot showed there is a genuine lawn/road albedo boundary, i.e. map geometry, not a vision artefact at all.
+2. At **night** the same view turned uniformly "desaturate", which located the real mechanism: `cata_tiles.cpp:2167`, `lit_level::LOW` swaps the sprite for a whole GREYSCALE ATLAS VARIANT. A binary, per-tile colour change — the exact thing that reads as a staircase against continuous GPU light. A carried light makes it unmistakable: the lit region is a **razor-sharp 3x3 square**.
+
+**Fix.** Keep the normal sprite for LOW and reproduce `color_pixel_grayscale` in `sprite.frag`, feathered across the boundary tile. Same treatment for the other two whole-tile decisions (memory dim + tint passthrough; overlay alpha). `cata_tiles::frontier_mask` packs the 8 neighbours' "same side" bits; the shader bilinearly interpolates the four corner means and remaps with `smoothstep(0.5, 1.0, cov)`.
+
+The remap bound is not cosmetic: on a straight frontier both corners on the shared edge average to exactly 0.5, so any band centred on 0.5 leaves that edge at half-treatment against an untreated neighbour — a softer staircase, but still a staircase. Anchoring at 0.5 keeps the whole feather inside the treated tile.
+
+Costs no new vertex attribute, cbuffer field or GPU buffer: the mask rides the **negative** range of `sprite_instance.pad2` (the `outline` lane), which is otherwise only ever tested `> 0.5`. Bit 8 selects desaturate vs hide/dim.
+
+**Verified:** night scene, atomic lamp on the ground. `vis_edge` 1→0 moves **46.9%** of the lamp region (meandelta 7.0) against a **0.005%** same-state drift floor; the hard square becomes a graded falloff. Deep-LOW interior is unchanged by construction (`cov = 1` → the original filter, ±1/255 truncation), which a whole-band A/B confirmed at literally 0 changed pixels. Evidence: `out/verification/grid-decoupled-lighting/2{0,1}-step8-vision-frontier-{ON,OFF}.png`. Knob: `vis_edge` (default 1). Tests: 141,451 assertions / 64 cases, pass.
+
+**Harness lessons that cost real time here:**
+- The dev **cursor light is GPU-only** — it never touches the CPU lightmap, so it cannot create a `lit_level` boundary. Worse, it follows the mouse, so if it is left enabled it silently contaminates every A/B where the drive script clicks a panel between captures. Untick it before measuring.
+- After a debug-menu **time change the CPU lightmap settles late**; the first frames are stale. One A/B pair here showed an 86% delta that was entirely stale-vs-settled lighting. Always run knob→capture as a **1→0→1 triplet** and require the third frame to match the first.
+- F4 slider **drags only register right-to-left** (a left-to-right drag misses the thumb), so "restore" silently fails and the next pair is measured in the wrong state.
+- The debug menu is **F12**, and `Change time` is main-menu `c` → `m` → `t` → `h`.
