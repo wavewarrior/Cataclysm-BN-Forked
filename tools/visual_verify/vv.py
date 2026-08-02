@@ -855,7 +855,7 @@ def main(argv: list[str]) -> int:
     p = sub.add_parser("crop")
     p.add_argument("img", type=Path)
     p.add_argument("--rect", required=True)
-    p.add_argument("--scale", type=int, default=1)
+    p.add_argument("--scale", type=float, default=1)
     p.add_argument("--out", type=Path)
 
     p = sub.add_parser("log")
@@ -901,7 +901,10 @@ def main(argv: list[str]) -> int:
         x, y, w, h = parse_rect(a.rect)
         img = Image.open(a.img).convert("RGB").crop((x, y, x + w, y + h))
         if a.scale != 1:
-            img = img.resize((w * a.scale, h * a.scale), Image.NEAREST)
+            # Downscale (scale < 1) needs an area filter or thin bright features
+            # alias away; upscale wants NEAREST to keep pixel edges readable.
+            resample = Image.NEAREST if a.scale > 1 else Image.LANCZOS
+            img = img.resize((max(1, round(w * a.scale)), max(1, round(h * a.scale))), resample)
         out = a.out or a.img.with_name(f"{a.img.stem}-crop.png")
         img.save(out)
         print(f"{out} {img.width}x{img.height} ~{img.width*img.height//750} image tokens")
