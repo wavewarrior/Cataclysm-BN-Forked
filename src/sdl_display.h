@@ -38,7 +38,13 @@ struct display_context {
 
     // Timing / dirty flags
     Uint64 lastupdate = 0;
-    uint32_t interval = 25;
+    // Minimum ms between input-driven redraws in try_sdl_update(). Overwritten
+    // at window init from the display's actual refresh rate (see WinCreate in
+    // sdl_window.cpp); this default only applies if that query fails. The old
+    // value of 25 was a curses-era FRAMERATE leftover that measured as a hard
+    // 40 fps ceiling (39-40 fps observed in gameplay) — 16 makes the fallback
+    // ceiling 60 fps instead.
+    uint32_t interval = 16;
     bool needupdate = false;
     bool need_invalidate_framebuffers = false;
 

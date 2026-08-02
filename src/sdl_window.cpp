@@ -1,5 +1,7 @@
 #include "sdl_window.h"
 
+#include <algorithm>
+
 #include "cached_options.h"
 #include "cata_tiles.h"
 #include "catacharset.h"
@@ -51,6 +53,45 @@ static void InitSDL()
     atexit( SDL_Quit );
 }
 
+namespace
+{
+
+// try_sdl_update() throttles the input-driven redraw path to
+// g_display.interval ms. That was hardcoded to 25 — a curses-era FRAMERATE
+// leftover exposed by no option — which measured as a hard 40 fps ceiling:
+// gameplay sat at exactly 39-40 fps no matter how cheap the frame was.
+// Derive it from the refresh rate of the display the window actually opened
+// on instead (multi-monitor: the window's display, not display 0).
+auto sync_update_interval_to_display( SDL_Window *window ) -> void
+{
+    const auto display_id = SDL_GetDisplayForWindow( window );
+    if( display_id == 0 ) {
+        dbg( DL::Info ) << "SDL_GetDisplayForWindow failed (" << SDL_GetError()
+                        << "); keeping redraw interval at " << g_display.interval << " ms";
+        return;
+    }
+    const auto *mode = SDL_GetCurrentDisplayMode( display_id );
+    if( !mode ) {
+        dbg( DL::Info ) << "SDL_GetCurrentDisplayMode failed (" << SDL_GetError()
+                        << "); keeping redraw interval at " << g_display.interval << " ms";
+        return;
+    }
+    if( mode->refresh_rate <= 0.0f ) {
+        dbg( DL::Info ) << "Display " << display_id << " reports an unknown refresh rate; "
+                        "keeping redraw interval at " << g_display.interval << " ms";
+        return;
+    }
+    const auto derived = static_cast<uint32_t>( 1000.0f / mode->refresh_rate );
+    // Clamp to 4..33 ms. Never 0: try_sdl_update() would then refresh_display()
+    // on every CheckMessages call (~1 kHz), a severe regression. 33 ms keeps a
+    // ~30 fps floor should a display report something absurd.
+    g_display.interval = std::clamp<uint32_t>( derived, 4, 33 );
+    dbg( DL::Info ) << "Display " << display_id << " refresh rate " << mode->refresh_rate
+                    << " Hz -> input redraw interval " << g_display.interval << " ms";
+}
+
+} // namespace
+
 
 //Registers, creates, and shows the Window!!
 static void WinCreate()
@@ -99,6 +140,8 @@ static void WinCreate()
     throwErrorIf( !g_display.window, "SDL_CreateWindow failed" );
     SDL_SetWindowPosition( g_display.window.get(), SDL_WINDOWPOS_CENTERED_DISPLAY( display ),
                            SDL_WINDOWPOS_CENTERED_DISPLAY( display ) );
+    // Redraw throttle follows the panel, not a hardcoded 40 fps (see above).
+    sync_update_interval_to_display( g_display.window.get() );
     SDL_StartTextInput( g_display.window.get() );
 
     // Hidden mirror window for the legacy SDL_Renderer. Same dimensions as
