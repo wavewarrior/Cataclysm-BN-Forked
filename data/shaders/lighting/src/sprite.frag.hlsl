@@ -162,6 +162,10 @@ cbuffer DebugParams : register(b2, space3) {
     float ramp_steps;        // shade steps per palette row
     float ramp_chroma;       // how much coloured light tints the ramped surface
     float gi_bilat;          // Step 6: 1 = SDF-bilateral GI upsample, 0 = plain bilinear
+    float vis_edge;          // Step 8: 1 = feathered vision frontier, 0 = hard tile edge
+    float vis_edge_pad0;
+    float vis_edge_pad1;
+    float vis_edge_pad2;
 };
 struct VS_OUT {
     float4 pos      : SV_Position;
@@ -436,7 +440,7 @@ float wet_spec(float3 n, float3 L) {
     return pow(saturate(dot(ns, H)), SPEC_SHININESS);
 }
 float4 main(VS_OUT i) : SV_Target0 {
-    const float4 texel = Atlas.Sample(AtlasSmp, i.uv);
+    float4 texel = Atlas.Sample(AtlasSmp, i.uv);
     if(texel.a < 0.01) discard;
     // Hover-outline silhouette mask (set per-instance via sprite_instance.pad2).
     // Skip ALL lighting: emit the flat outline colour wherever the sprite is
@@ -450,6 +454,95 @@ float4 main(VS_OUT i) : SV_Target0 {
         if(texel.a < cut) discard;
         return float4(i.tint.rgb, texel.a * i.tint.a);
     }
+    // --- Step 8: sub-tile vision frontier -----------------------------------
+    // The seen/remembered boundary is decided ONCE PER TILE: remembered terrain is
+    // dimmed uniformly to `mem_dim`, and never-seen tiles get a full-tile `lighting_*`
+    // overlay. Either way the frontier can only be a tile staircase — the last grid
+    // artefact, and a jarring one beside the now-continuous lighting.
+    //
+    // cata_tiles encodes the 8 neighbours' "also not clearly visible" bits NEGATIVELY
+    // into the outline lane (only ever tested > 0.5 above, for the hover silhouette),
+    // so this costs no new vertex attribute, cbuffer field or GPU buffer.
+    //
+    // Corner coverage = mean of the 4 cells meeting at that corner (this tile is
+    // always on the hidden side, so it contributes 1), then bilinear across the tile.
+    // That is the standard marching-squares smoothing: a diagonal step becomes a
+    // diagonal ramp instead of a right angle, and a convex corner rounds off.
+    //
+    // The remap MUST be zero at cov = 0.5 and one at cov = 1.0. Only the hidden side
+    // feathers — the visible neighbour is untouched — and on a straight frontier the
+    // two corners on the shared edge both average to exactly 0.5. Any band centred on
+    // 0.5 (e.g. smoothstep(0.3,0.7)) would leave that edge at half dim against a
+    // neighbour at zero: a softer staircase, but a staircase. Anchoring the ramp at
+    // 0.5 puts the whole feather INSIDE the hidden tile, so it meets the visible
+    // neighbour continuously and the seam disappears.
+    //
+    // The feather can only ever WEAKEN this tile's own hiding, and only toward
+    // neighbours the CPU already draws as visible — it cannot reveal anything the
+    // game considers unseen.
+    float frontier_cov = 1.0;
+    bool  frontier_desat = false;
+    if(i.outline < -0.5) {
+        const uint enc = (uint)(-i.outline - 1.0 + 0.5);
+        // Bit 8 selects the treatment: set = desaturate (the dim edge of sight),
+        // clear = hide/dim (remembered tile, or a never-seen tile's overlay).
+        frontier_desat = (enc & 256u) != 0u;
+        const uint m = enc & 255u;
+        // Bit order matches cata_tiles: W, E, N, S, NW, NE, SW, SE.
+        const float w  = (m & 1u)   != 0u ? 1.0 : 0.0;
+        const float e  = (m & 2u)   != 0u ? 1.0 : 0.0;
+        const float n  = (m & 4u)   != 0u ? 1.0 : 0.0;
+        const float s  = (m & 8u)   != 0u ? 1.0 : 0.0;
+        const float nw = (m & 16u)  != 0u ? 1.0 : 0.0;
+        const float ne = (m & 32u)  != 0u ? 1.0 : 0.0;
+        const float sw = (m & 64u)  != 0u ? 1.0 : 0.0;
+        const float se = (m & 128u) != 0u ? 1.0 : 0.0;
+        const float c_nw = (1.0 + n + w + nw) * 0.25;
+        const float c_ne = (1.0 + n + e + ne) * 0.25;
+        const float c_sw = (1.0 + s + w + sw) * 0.25;
+        const float c_se = (1.0 + s + e + se) * 0.25;
+        // Position within this tile. camera_off carries a +0.5, so a tile CENTRE sits
+        // at an integer world_pos and its edges at +/-0.5 (the same p-0.5 convention
+        // sdf_bilinear uses). Shift by half a tile so f = 0 is the north/west edge,
+        // matching the corner naming above. y is south-down.
+        float2 f = frac(i.world_pos + 0.5);
+        // Quantise to the art-texel lattice so the feather stays pixel-art crisp
+        // instead of becoming a smooth photographic ramp (same lattice as shade_pos).
+        if(light_quant > 0.5 && texels_per_tile > 0.5) {
+            f = (floor(f * texels_per_tile) + 0.5) / texels_per_tile;
+        }
+        const float cov = lerp(lerp(c_nw, c_ne, f.x), lerp(c_sw, c_se, f.x), f.y);
+        frontier_cov = lerp(1.0, smoothstep(0.5, 1.0, cov), saturate(vis_edge));
+    }
+    // Dim edge of sight. cata_tiles used to swap in a whole GREYSCALE atlas variant
+    // for a lit_level::LOW tile, which made the edge of vision a hard per-tile colour
+    // change. It now keeps the normal sprite and sends us the frontier shape instead,
+    // so reproduce color_pixel_grayscale here — feathered, so the desaturation ramps
+    // in across the boundary tile rather than snapping on at its edge.
+    //
+    // Mirrors sdl_utils.cpp exactly at frontier_cov = 1, so a tile deep inside a LOW
+    // region renders as it always did:
+    //     average_pixel_color: av = 85 * (r + g + b) >> 8   (85/256, NOT 1/3)
+    //     color_pixel_grayscale: max(av * 5 >> 3, 1), pure black passed through
+    // The atlas is R8G8B8A8_UNORM, so the shader samples the very same encoded values
+    // the CPU filter operated on — no sRGB/linear conversion sits between them. Only
+    // the integer truncation at each step is dropped, worth at most 1/255.
+    if(frontier_desat) {
+        const float av = (texel.r + texel.g + texel.b) * (85.0 / 256.0);
+        const float gv = max(av * 0.625, 1.0 / 255.0);
+        // is_black() passes pure black through untouched; without this the 1/255 floor
+        // would lift every transparent-black texel to a visible dark grey.
+        const bool  blk = (texel.r + texel.g + texel.b) <= 0.0;
+        const float3 grey = blk ? texel.rgb : float3(gv, gv, gv);
+        texel.rgb = lerp(texel.rgb, grey, frontier_cov);
+    }
+    // A never-seen tile's overlay sprite (drawn at lit_level::LIT, so light_mul == 0)
+    // fades out at the frontier. Remembered terrain instead carries light_mul < 0 and
+    // is handled at the memory-dim site below, where the SAME coverage lerps the dim.
+    // A desaturate-kind marker has already been consumed above and must not also
+    // punch a hole in the sprite's alpha.
+    const float vis_overlay_a =
+        (frontier_desat || i.light_mul < -0.0001) ? 1.0 : frontier_cov;
     // Per-pixel surface normal from inline alpha-shape bevel (Bucket A / A1),
     // driving the emitter + sun Lambert. TALL sprites (creatures, trees, walls,
     // tall furniture — light_pos != world_pos) get a GENTLE bevel (30% of full
@@ -713,7 +806,19 @@ float4 main(VS_OUT i) : SV_Target0 {
     //   Game tiles:  tint = 0 (set by CPU side) → gpu_total drives brightness
     //   UI / fonts:  tint = element color → stays fully visible (unlit segment also zeroes emitter_count)
     //   Main menu:   tint = 1.0 (no game state) → bright; emitters add glow
-    const float3 combined = max(i.tint.rgb, gpu_total);
+    //
+    // Step 8: a REMEMBERED tile is normally rendered outside the lighting model —
+    // the CPU leaves tint = 1.0 when the tile's lightmap is dark (cata_tiles.cpp
+    // ~1939), so `combined` pins to full albedo and the memory dim below scales it
+    // down. Feathering only that dim would therefore ramp the frontier toward FULL
+    // UNLIT ALBEDO and replace the dark staircase with a bright rim. So fade the
+    // passthrough out with the same coverage: at the frontier edge tint → 0, the
+    // fragment falls through to gpu_total and renders exactly as the visible
+    // neighbour does; deep inside, tint → 1.0 and memory renders as before. The two
+    // terms together are a true cross-fade between the lit and remembered looks.
+    const float3 mem_tint = (i.light_mul < -0.0001) ? i.tint.rgb * frontier_cov
+                            : i.tint.rgb;
+    const float3 combined = max(mem_tint, gpu_total);
     float3 final_rgb = texel.rgb * combined;
 
     // Palette shade ramp. The lighting result selects a SHADE STEP within the base
@@ -771,7 +876,12 @@ float4 main(VS_OUT i) : SV_Target0 {
     if(i.light_mul < -0.0001) {
         const float d = -i.light_mul;
         const float t = saturate(1.0 - d / max(mem_radius, 1.0));
-        final_rgb *= mem_dim + (1.0 - mem_dim) * t;
+        // Step 8: feather the dim across the frontier tile instead of applying it flat.
+        // frontier_cov is 1 deep inside the remembered region and falls to 0 exactly at
+        // the edge shared with a currently-visible tile, so remembered terrain now
+        // ramps into live terrain instead of stepping into it at the tile boundary.
+        const float mem_mul = mem_dim + (1.0 - mem_dim) * t;
+        final_rgb *= lerp(1.0, mem_mul, frontier_cov);
     }
 
     // Sub-tile vision carve. The CPU already decided, per tile, whether this tile is
@@ -896,6 +1006,32 @@ float4 main(VS_OUT i) : SV_Target0 {
             const float s = (sdf_map_w > 0u) ? sky_bilinear(i.light_pos).a : 0.0;
             vis = float3(s, s, s);
             replace = true;
+        } else if(debug_mode == 15u) {
+            // Vision-frontier view (Step 8): which fragments carry a sub-tile frontier
+            // marker, which treatment it selects, and how the feather ramps inside it.
+            // In every case the GREEN channel is frontier_cov, so the colour is the
+            // "edge" hue where the tile meets the bright/visible side and shifts toward
+            // yellow/white/cyan deep inside its own region.
+            //   GREEN          = drawn, ordinary sprite (no frontier here)
+            //   BLACK          = nothing drawn at all — the true unseen region
+            //   MAGENTA -> WHITE = lit_level::LOW, the dim edge of sight (desaturate)
+            //   RED     -> YELLOW = remembered tile (mem_dim)
+            //   BLUE    -> CYAN   = never-seen tile's `lighting_*` overlay
+            if(i.outline < -0.5) {
+                vis = frontier_desat
+                      ? float3(1.0, frontier_cov, 1.0)
+                      : (i.light_mul < -0.0001)
+                      ? float3(1.0, frontier_cov, 0.0)
+                      : float3(0.0, frontier_cov, 1.0);
+            } else {
+                // Drawn, but not on a frontier. Deliberately a loud GREEN rather than
+                // black or the tint: an undrawn tile leaves the target untouched, so
+                // "black" would be indistinguishable from "no marker" and the view
+                // could not tell a visible tile from an unseen one. With this,
+                // BLACK = nothing rendered here at all = the true unseen region.
+                vis = float3(0.0, 0.55, 0.0);
+            }
+            replace = true;
         }
         if(replace) {
             final_rgb = vis;
@@ -903,5 +1039,7 @@ float4 main(VS_OUT i) : SV_Target0 {
             final_rgb = lerp(final_rgb, vis, saturate(debug_opacity));
         }
     }
-    return float4(final_rgb, texel.a * i.tint.a);
+    // vis_overlay_a is 1.0 for every sprite except a vision-frontier overlay, whose
+    // coverage is feathered across the tile (Step 8).
+    return float4(final_rgb, texel.a * i.tint.a * vis_overlay_a);
 }

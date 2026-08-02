@@ -23,7 +23,7 @@
 
 ## Grid-decoupled lighting (2026-08-01)
 
-The shading pipeline was already continuous; the GRID came from its **inputs**. Seven
+The shading pipeline was already continuous; the GRID came from its **inputs**. Eight
 changes decouple them. Every one is runtime-revertible from the F4 Effects tab, and
 every gameplay consumer (`fine_detail_vision_mod`, `Character::sight_range`,
 `Creature::sees`, `map::ambient_light_at`, `map::sees`) is untouched.
@@ -72,6 +72,32 @@ every gameplay consumer (`fine_detail_vision_mod`, `Character::sight_range`,
      authoritative row stride the shader indexes with. They must not diverge.
    - Ramp output is display-referred, so `tonemap.frag` lerps out AgX on
      `tm_ramp_enable` (which replaced `tm_pad` — both sides move together).
+7. **Sub-tile vision FRONTIER.** The three remaining whole-tile vision treatments are
+   feathered across the boundary tile instead of snapping on at its edge:
+   * `lit_level::LOW` (the dim edge of sight) used to swap the sprite for a GREYSCALE
+     atlas variant — a hard per-tile colour change, and the loudest artefact left. It
+     now keeps the normal sprite; `sprite.frag` reproduces `color_pixel_grayscale`
+     (`av = 85*(r+g+b)>>8`, `max(av*5>>3, 1)`) and ramps it in. The atlas is
+     `R8G8B8A8_UNORM`, so the shader sees the very same encoded values the CPU filter
+     did and a deep-LOW tile renders byte-identically (±1/255 truncation).
+   * remembered tiles lerp BOTH `mem_dim` and the CPU tint passthrough, so the edge
+     falls through to `gpu_total` and renders exactly as the visible neighbour does.
+     Feathering the dim alone would ramp toward full UNLIT ALBEDO — a bright rim.
+   * a never-seen tile's `lighting_*` overlay fades its alpha.
+   `cata_tiles::frontier_mask` packs the 8 neighbours' "same side as me" bits and
+   `sprite.frag` bilinearly interpolates the four corner means (marching squares).
+   The remap MUST be `smoothstep(0.5, 1.0, cov)`: on a straight frontier both corners
+   on the shared edge average to exactly 0.5, so any band centred on 0.5 leaves that
+   edge at half-treatment against an untreated neighbour — a softer staircase, but a
+   staircase. Anchoring at 0.5 keeps the whole feather INSIDE the treated tile.
+   Knob: `vis_edge`. Debug view: `debug_mode == 15`.
+   - The mask rides the NEGATIVE range of `sprite_instance.pad2` (the `outline` lane),
+     which is otherwise only ever tested `> 0.5` for the hover silhouette — so this
+     costs no new vertex attribute, cbuffer field or GPU buffer. Bit 8 selects
+     desaturate vs hide/dim.
+   - `draw_from_id_string` computes the shape (it has the map position) but
+     `draw_tile_at` publishes the marker, because that is the single site that owns
+     the decision to desaturate (goggles / underwater override it).
 
 ---
 

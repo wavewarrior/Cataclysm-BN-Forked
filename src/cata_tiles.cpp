@@ -1950,8 +1950,28 @@ bool cata_tiles::draw_from_id_string(
     // fragment shader dims + distance-fades remembered terrain (floored at
     // mem_dim → persists, never black). 0 = normal tile (no fade).
     gpu_light_mul = 0.0f;
+    low_frontier_mask_ = -1;
     if( ll == lit_level::MEMORIZED && g != nullptr ) {
         gpu_light_mul = -static_cast<float>( trig_dist( g->u.bub_pos(), pos ) );
+        // Step 8: the memorized/visible boundary applies `mem_dim` flat across the
+        // whole tile, so the frontier is a hard staircase against otherwise continuous
+        // lighting. Publish the local frontier shape so the fragment shader can feather
+        // the dim within the tile. Only set for memorized tiles, so
+        // `outline < -0.5 && light_mul < 0` uniquely identifies this case in the shader
+        // (the vision overlay draws at lit_level::LIT, keeping light_mul == 0).
+        vision_overlay_outline_ = frontier_outline_marker( pos, frontier_kind::unseen );
+    } else {
+        // Non-zero only when apply_vision_effects is drawing its own full-tile
+        // `lighting_*` overlay THROUGH this function — it publishes the marker before
+        // calling and clears it after, so an unconditional reset here would wipe it.
+        vision_overlay_outline_ = overlay_frontier_marker_;
+        if( ll == lit_level::LOW && g != nullptr ) {
+            // Step 8: the dim edge of sight. draw_tile_at decides whether this tile
+            // actually takes the greyscale treatment (goggles / underwater override
+            // it), so only the SHAPE is computed here — the marker itself is published
+            // there, at the single site that owns the decision.
+            low_frontier_mask_ = frontier_mask( pos, frontier_kind::low );
+        }
     }
 
     // draw it!
@@ -2145,7 +2165,21 @@ bool cata_tiles::draw_sprite_at(
         fx_type =
             ll == lit_level::LOW ? tileset_fx_type::underwater_dark : tileset_fx_type::underwater;
     } else if( ll == lit_level::LOW ) {
-        fx_type = tileset_fx_type::shadow;
+        // Step 8: the dim edge of sight. This used to swap in a whole GREYSCALE atlas
+        // variant, which is a hard per-tile colour change and therefore draws the edge
+        // of vision as a staircase — glaringly so now the lighting either side of it is
+        // continuous. Instead keep the normal sprite and hand the fragment shader the
+        // frontier shape (bit 8 selects the desaturate treatment); it reproduces
+        // color_pixel_grayscale exactly, but feathered across the boundary tile.
+        // The atlas is R8G8B8A8_UNORM, so the shader samples the same encoded values
+        // the CPU filter operated on and the deep-interior result is byte-identical.
+        if( low_frontier_mask_ >= 0 ) {
+            fx_type = tileset_fx_type::none;
+            vision_overlay_outline_ =
+                -1.0f - static_cast<float>( low_frontier_mask_ | frontier_desaturate_bit );
+        } else {
+            fx_type = tileset_fx_type::shadow;
+        }
     } else {
         fx_type = tileset_fx_type::none;
     }
@@ -2260,7 +2294,8 @@ bool cata_tiles::draw_sprite_at(
             gpu.texture, gpu.atlas_w, gpu.atlas_h, fdst, flip, active_anim_xform_.alpha,
             static_cast<double>( rotation ) + active_anim_xform_.tilt_deg, gpu_light_r, gpu_light_g,
             gpu_light_b, gpu_light_mul, enq_sway,
-            /*outline=*/0.0f, effective_extrude_px, effective_extrude_dark, effective_extrude_lean );
+            vision_overlay_outline_, effective_extrude_px, effective_extrude_dark,
+            effective_extrude_lean );
         // Step 2: capture this sprite's alpha footprint for the SDF seed. Foreground
         // only — the BACKGROUND layer of a wall tile is the floor underneath it, which
         // is opaque across the whole square and would re-create the very tile-square
@@ -2406,6 +2441,61 @@ bool cata_tiles::would_apply_vision_effects( const visibility_type visibility ) 
 {
     return visibility != VIS_CLEAR;
 }
+// Step 8: sub-tile vision frontier.
+//
+// Vision is classified ONCE PER TILE and each class is then rendered as a whole-tile
+// swap, so every vision boundary can only ever be a tile staircase:
+//   * `lit_level::LOW`  — the dim edge of sight — swaps the sprite for a GREYSCALE
+//     atlas variant (see draw_tile_at), a hard per-tile colour change;
+//   * remembered tiles are dimmed flat to `mem_dim`;
+//   * never-seen tiles get a full-tile `lighting_*` overlay.
+// That staircase is the last grid artefact after the rest of this work, and it reads
+// especially badly now the lighting either side of it is continuous.
+//
+// The cure is to tell the fragment shader the SHAPE of the local frontier so it can
+// feather within the tile. Returns the 8 neighbours' "same side as me" bits, packed
+// LSB-first in the order W, E, N, S, NW, NE, SW, SE.
+auto cata_tiles::frontier_mask( const tripoint_bub_ms &pos,
+                                const frontier_kind kind ) const -> int
+{
+    map &here = get_map();
+    if( !here.inbounds( pos ) ) { return -1; }
+    const level_cache &vc = here.access_cache( pos.z() );
+    const visibility_variables &vv = here.get_visibility_variables_cache();
+    static constexpr std::array<point, 8> offs = {
+        point( -1, 0 ), point( 1, 0 ), point( 0, -1 ), point( 0, 1 ),
+        point( -1, -1 ), point( 1, -1 ), point( -1, 1 ), point( 1, 1 )
+    };
+    int mask = 0;
+    for( std::size_t i = 0; i < offs.size(); ++i ) {
+        const point_bub_ms np( pos.x() + offs[i].x, pos.y() + offs[i].y );
+        // Out of bounds counts as "same side", so a frontier never feathers outward
+        // into nothing at the edge of the reality bubble.
+        bool same_side = !vc.inbounds( np );
+        if( !same_side ) {
+            const lit_level nll = vc.visibility_cache[vc.idx( np.x(), np.y() )];
+            const bool clear = !would_apply_vision_effects( here.get_visibility( nll, vv ) );
+            same_side = kind == frontier_kind::unseen
+                        // Feather toward anything clearly visible.
+                        ? !clear
+                        // Feather only toward the BRIGHT side: a neighbour that is
+                        // itself LOW, or not clearly visible at all, is dim like us.
+                        : ( !clear || nll == lit_level::LOW );
+        }
+        if( same_side ) { mask |= 1 << i; }
+    }
+    return mask;
+}
+
+auto cata_tiles::frontier_outline_marker( const tripoint_bub_ms &pos,
+        const frontier_kind kind ) const -> float
+{
+    const int mask = frontier_mask( pos, kind );
+    if( mask < 0 ) { return 0.0f; }
+    // -1 - mask keeps 0 meaning "no marker" for every other sprite in the game.
+    return -1.0f - static_cast<float>( mask );
+}
+
 
 bool cata_tiles::apply_vision_effects(
     const tripoint_bub_ms& pos, const visibility_type visibility )
@@ -2437,10 +2527,14 @@ bool cata_tiles::apply_vision_effects(
             // should never happen
             break;
     }
+    // Published for the nested draw_from_id_string below, which is what actually
+    // reaches draw_sprite_at. Cleared straight after so no other sprite inherits it.
+    overlay_frontier_marker_ = frontier_outline_marker( pos, frontier_kind::unseen );
 
     // lighting is never rotated, though, could possibly add in random rotation?
     const tile_search_params tile{*light_name, C_LIGHTING, empty_string, 0, 0};
     draw_from_id_string( tile, pos, std::nullopt, std::nullopt, lit_level::LIT, false, 0, false );
+    overlay_frontier_marker_ = 0.0f;
 
     return true;
 }

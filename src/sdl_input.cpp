@@ -589,7 +589,7 @@ void CheckMessages( display_context &d )
                     // normal (Sobel) as RGB; mode 10 = ambient occlusion
                     // (grayscale openness); mode 11 = silhouette shadow mask
                     // (.Load at screen pixel); all game tiles only.
-                    g_current_dbg_mode = ( g_current_dbg_mode + 1 ) % 12u;
+                    g_current_dbg_mode = ( g_current_dbg_mode + 1 ) % 16u;
                     g_dbg_params.debug_mode = g_current_dbg_mode;
                     break;
                 } else if( lc == KEY_F( 8 ) ) {

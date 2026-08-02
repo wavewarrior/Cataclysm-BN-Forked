@@ -1016,6 +1016,21 @@ class cata_tiles
         /** Drawing Layers */
         bool would_apply_vision_effects( visibility_type visibility ) const;
         bool apply_vision_effects( const tripoint_bub_ms& pos, visibility_type visibility );
+        /// Step 8: which boundary a frontier mask describes.
+        enum class frontier_kind {
+            /// Neighbour is not clearly visible (unseen / remembered).
+            unseen,
+            /// Neighbour is not on the BRIGHT side, i.e. it is `lit_level::LOW` or is
+            /// not clearly visible at all. Used to feather the dim-vision greyscale.
+            low,
+        };
+        /// Step 8: 8-neighbour "same side of the frontier" mask for `pos`, encoded
+        /// negatively into sprite_instance's `outline` lane so the fragment shader can
+        /// feather the boundary within the tile. 0 = no marker.
+        auto frontier_outline_marker( const tripoint_bub_ms& pos,
+                                      frontier_kind kind ) const -> float;
+        /// Raw mask behind the above; -1 when `pos` is out of bounds.
+        auto frontier_mask( const tripoint_bub_ms& pos, frontier_kind kind ) const -> int;
 
         bool draw_block( const tripoint_bub_ms& p, SDL_Color color, int scale );
 
@@ -1424,6 +1439,25 @@ class cata_tiles
         // True if any sprite animation produced motion this frame (breathing, a decaying
         // event reaction, or a live tile-hit). Drives the redraw pump. Reset each draw().
         mutable bool creatures_anim_active_ = false;
+
+        // --- Step 8: sub-tile vision frontier ---
+        // The value draw_sprite_at forwards into sprite_instance's `outline` lane for
+        // the sprite currently being drawn. Negative = an encoded frontier mask the
+        // fragment shader feathers the boundary with; 0 = ordinary sprite. The lane is
+        // otherwise only ever tested for > 0.5 (hover silhouette), so the negative
+        // range is free.
+        float vision_overlay_outline_ = 0.0f;
+        // Sticky companion: apply_vision_effects publishes the marker for its own
+        // full-tile `lighting_*` overlay here, because that overlay is drawn by a
+        // NESTED draw_from_id_string call which would otherwise reset the live value.
+        float overlay_frontier_marker_ = 0.0f;
+        // Frontier shape for a `lit_level::LOW` tile, computed in draw_from_id_string
+        // (which has the map position) and consumed in draw_tile_at (which owns the
+        // decision to actually desaturate). -1 = this tile is not LOW.
+        int low_frontier_mask_ = -1;
+        // Bit 8 of the encoded mask: 1 = desaturate treatment (dim edge of sight),
+        // 0 = hide/dim treatment (remembered tile or never-seen overlay).
+        static constexpr int frontier_desaturate_bit = 0x100;
 
         // --- Step 2: sprite-alpha occluder capture ---
         // Set only while the terrain / furniture / vpart draw layers run (RAII via

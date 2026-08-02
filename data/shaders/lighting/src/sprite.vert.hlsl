@@ -97,6 +97,10 @@ cbuffer DebugParams : register(b2, space1) {
     float ramp_steps;
     float ramp_chroma;
     float gi_bilat;
+    float vis_edge;
+    float vis_edge_pad0;
+    float vis_edge_pad1;
+    float vis_edge_pad2;
 };
 
 struct VS_OUT {

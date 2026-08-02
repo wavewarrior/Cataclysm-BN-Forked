@@ -217,6 +217,15 @@ struct debug_params {
     // discontinuity (bounce stops at walls), 0 = plain bilinear (the pre-Step-6
     // behaviour). Occupies what was dbg_pad2; size unchanged.
     float gi_bilat = 1.0f;
+    // Step 8: sub-tile vision FRONTIER. The outward edge of the seen region is drawn
+    // as full-tile `lighting_*` overlay sprites, so it can only ever be a tile
+    // staircase — the one grid artefact the rest of this work leaves behind, and it
+    // reads badly next to the now-smooth lighting. 1 = feather the overlay across
+    // the tile from its neighbours' visibility, 0 = the old hard tile edge.
+    float vis_edge = 1.0f;
+    float vis_edge_pad0 = 0.0f;
+    float vis_edge_pad1 = 0.0f;
+    float vis_edge_pad2 = 0.0f;
 };
 
 // Returns sun/sky params interpolated from a 24h LUT for the given hour (0..24).
