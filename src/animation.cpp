@@ -17,7 +17,6 @@
 #include "options.h"
 #include "output.h"
 #include "point.h"
-#include "popup.h"
 #include "posix_time.h"
 #include "ranged.h"
 #include "translations.h"
@@ -42,43 +41,46 @@
 namespace
 {
 
+/// Spin the render loop for `duration_ms` of wall-clock time, redrawing at ~60 Hz so the
+/// wall-clock-driven particles animate smoothly. Events are pumped to keep the window
+/// alive, but no input is consumed.
+///
+/// Deliberately does NOT raise a wait popup. Every animation beat used to construct a
+/// `static_popup`, which builds a `ui_adaptor` (invalidating the whole UI stack) and
+/// loads/unloads `gui/query_popup.rml` through RmlUi. Projectiles pay that per trajectory
+/// tile and explosions per blast layer, which is what made firing and throwing hitch.
+/// The tracer/shard particle is the feedback; a "please wait" box over it is noise.
+// NOLINTNEXTLINE(cata-no-long): timespec uses long int
+auto run_animation_frames( const long int duration_ms ) -> void
+{
+    // NOLINTNEXTLINE(cata-no-long): timespec uses long int
+    long int remain = duration_ms * 1'000'000L;
+    while( remain > 0 ) {
+        g->invalidate_main_ui_adaptor();
+        ui_manager::redraw_invalidated();
+        refresh_display();
+
+        // NOLINTNEXTLINE(cata-no-long): timespec uses long int
+        const long int do_sleep = std::min( remain, 16'000'000L );
+        const timespec ts{ 0, do_sleep };
+        nanosleep( &ts, nullptr );
+        inp_mngr.pump_events();
+        remain -= do_sleep;
+    }
+}
+
 class basic_animation
 {
     public:
         explicit basic_animation( const int scale ) :
-            delay( static_cast<size_t>( get_option<int>( "ANIMATION_DELAY" ) ) * scale * 1000000L ) {
+            delay_ms( static_cast<long int>( get_option<int>( "ANIMATION_DELAY" ) ) * scale ) {
         }
 
-        void popup() const {
-            static_popup popup;
-            popup
-            .wait_message( "%s", _( "Hang on a bit…" ) )
-            .on_top( true );
-        }
-        void draw() const {
-            g->invalidate_main_ui_adaptor();
-            ui_manager::redraw_invalidated();
-            refresh_display();
-        }
-        void progress( bool draw_popup = true ) const {
-            if( draw_popup ) { popup(); }
-            draw();
-
-            // NOLINTNEXTLINE(cata-no-long): timespec uses long int
-            long int remain = delay;
-            while( remain > 0 ) {
-            // NOLINTNEXTLINE(cata-no-long): timespec uses long int
-            long int do_sleep = std::min( remain, 100'000'000L );
-                timespec to_sleep = timespec { 0, do_sleep };
-                nanosleep( &to_sleep, nullptr );
-                inp_mngr.pump_events();
-                remain -= do_sleep;
-            }
-        }
+        void progress() const { run_animation_frames( delay_ms ); }
 
     private:
         // NOLINTNEXTLINE(cata-no-long): timespec uses long int
-        long int delay;
+        long int delay_ms;
 };
 
 class explosion_animation : public basic_animation
@@ -86,13 +88,6 @@ class explosion_animation : public basic_animation
     public:
         explosion_animation() :
             basic_animation( EXPLOSION_MULTIPLIER ) {
-        }
-};
-
-class bullet_animation : public basic_animation
-{
-    public:
-        bullet_animation() : basic_animation( 1 ) {
         }
 };
 
@@ -377,24 +372,8 @@ void game::draw_bullet( const tripoint_bub_ms &t, const int i,
     p.duration = static_cast<float>( delay_ms ) / 1000.f;
     tilecontext->particles().emit( std::move( p ) );
 
-    static_popup popup;
-    popup.wait_message( "%s", _( "Hang on a bit…" ) ).on_top( true );
-
-    // Render loop — particle interpolates via wall-clock during normal draw pass.
-    // NOLINTNEXTLINE(cata-no-long)
-    long int remain = static_cast<long int>( delay_ms ) * 1'000'000L;
-    while( remain > 0 ) {
-        invalidate_main_ui_adaptor();
-        ui_manager::redraw_invalidated();
-        refresh_display();
-
-        // NOLINTNEXTLINE(cata-no-long)
-        const long int do_sleep = std::min( remain, 16'000'000L );
-        const timespec ts{ 0, do_sleep };
-        nanosleep( &ts, nullptr );
-        inp_mngr.pump_events();
-        remain -= do_sleep;
-    }
+    // Particle interpolates via wall-clock during the normal draw pass.
+    run_animation_frames( delay_ms );
 }
 
 namespace
@@ -447,22 +426,8 @@ void draw_bullet_trajectories( const draw_bullet_trajectories_options &options )
         if( longest < 2 ) {
             return;
         }
-        static_popup popup;
-        popup.wait_message( "%s", _( "Hang on a bit…" ) ).on_top( true );
-        // NOLINTNEXTLINE(cata-no-long)
-        long int remain = static_cast<long int>( delay_ms )
-                          * static_cast<long int>( longest - 1 ) * 1'000'000L;
-        while( remain > 0 ) {
-            g->invalidate_main_ui_adaptor();
-            ui_manager::redraw_invalidated();
-            refresh_display();
-            // NOLINTNEXTLINE(cata-no-long)
-            const long int do_sleep = std::min( remain, 16'000'000L );
-            const timespec ts{ 0, do_sleep };
-            nanosleep( &ts, nullptr );
-            inp_mngr.pump_events();
-            remain -= do_sleep;
-        }
+        run_animation_frames( static_cast<long int>( delay_ms )
+                              * static_cast<long int>( longest - 1 ) );
         return;
     }
 
@@ -485,25 +450,9 @@ void draw_bullet_trajectories( const draw_bullet_trajectories_options &options )
         return;
     }
 
-    static_popup popup;
-    popup.wait_message( "%s", _( "Hang on a bit…" ) ).on_top( true );
-
     // Single render loop for all particles.
-    // NOLINTNEXTLINE(cata-no-long)
-    long int remain = static_cast<long int>( delay_ms )
-                      * static_cast<long int>( longest_trajectory_size - 1 ) * 1'000'000L;
-    while( remain > 0 ) {
-        g->invalidate_main_ui_adaptor();
-        ui_manager::redraw_invalidated();
-        refresh_display();
-
-        // NOLINTNEXTLINE(cata-no-long)
-        const long int do_sleep = std::min( remain, 16'000'000L );
-        const timespec ts{ 0, do_sleep };
-        nanosleep( &ts, nullptr );
-        inp_mngr.pump_events();
-        remain -= do_sleep;
-    }
+    run_animation_frames( static_cast<long int>( delay_ms )
+                          * static_cast<long int>( longest_trajectory_size - 1 ) );
 }
 
 void game::draw_hit_mon( const tripoint_bub_ms &/*p*/, const monster &/*m*/, const bool /*dead*/ )
@@ -514,8 +463,14 @@ void game::draw_hit_mon( const tripoint_bub_ms &/*p*/, const monster &/*m*/, con
     }
 
     // Tiles: the old single-frame hit flash is retired — the sprite-animation system draws
-    // the hit reaction (directional recoil + red flash) instead. Keep the pacing tick.
-    bullet_animation().progress();
+    // the hit reaction (directional recoil + red flash) on its own, paced by wall-clock time
+    // during the normal draw pass. Nothing has to be drawn from here.
+    //
+    // This must stay non-blocking: it is reached from monster::melee_attack via
+    // deal_melee_hit, i.e. from inside the world tick. The pacing tick that used to live here
+    // (bullet_animation().progress()) spun the full render loop for ANIMATION_DELAY ms, so
+    // every melee hit stalled the simulation for several ~16 ms frames — measured at
+    // 90-140 ms per attack, the dominant share of a 209 ms turn.
 }
 
 void game::draw_hit_player( const Character &/*p*/, const int /*dam*/ )
@@ -525,9 +480,12 @@ void game::draw_hit_player( const Character &/*p*/, const int /*dam*/ )
         return;
     }
 
-    // Tiles: old single-frame hit flash retired — sprite-animation hit reaction (white flash
-    // + recoil on the avatar) replaces it. Keep the pacing tick.
-    bullet_animation().progress();
+    // Tiles: old single-frame hit flash retired — the sprite-animation hit reaction (white
+    // flash + recoil on the avatar) replaces it and is paced by wall-clock time in the normal
+    // draw pass. Nothing has to be drawn from here.
+    //
+    // Non-blocking for the same reason as draw_hit_mon(): this runs inside the world tick,
+    // and the old blocking pacing tick cost 90-140 ms per melee attack.
 }
 
 /* Line drawing code, not really an animation but should be separated anyway */
@@ -578,25 +536,9 @@ void draw_line_of( const draw_sprite_line_options &options )
     p.duration = static_cast<float>( path.size() - 1 ) * tile_dur;
     tilecontext->particles().emit( std::move( p ) );
 
-    static_popup popup;
-    popup.wait_message( "%s", _( "Hang on a bit…" ) ).on_top( true );
-
-    // Render loop — particle interpolates via wall-clock.
-    // NOLINTNEXTLINE(cata-no-long)
-    long int remain = static_cast<long int>( delay_ms )
-                      * static_cast<long int>( path.size() - 1 ) * 1'000'000L;
-    while( remain > 0 ) {
-        g->invalidate_main_ui_adaptor();
-        ui_manager::redraw_invalidated();
-        refresh_display();
-
-        // NOLINTNEXTLINE(cata-no-long)
-        const long int do_sleep = std::min( remain, 16'000'000L );
-        const timespec ts{ 0, do_sleep };
-        nanosleep( &ts, nullptr );
-        inp_mngr.pump_events();
-        remain -= do_sleep;
-    }
+    // Particle interpolates via wall-clock.
+    run_animation_frames( static_cast<long int>( delay_ms )
+                          * static_cast<long int>( path.size() - 1 ) );
 }
 
 void emit_impact_particle( const tripoint_bub_ms &pos, const bool blood )
