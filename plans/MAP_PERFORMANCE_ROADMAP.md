@@ -81,8 +81,8 @@ Phases (verified at `map.cpp:9848-10117`):
 | Item | Plan | Status |
 |------|------|--------|
 | 0a. Commit walking-hitch fix | `walking_hitch_cache_shift_plan.md` | ✅ DONE — committed `5315065c12` |
-| 0b. Pin residual all-z structural spike | `residual_all_z_structural_spike_plan.md` | Not started |
-| 0c. Pin non-shift all-z lightmap | `non_shift_all_z_lightmap_plan.md` | Not started |
+| 0b. Pin residual all-z structural spike | `residual_all_z_structural_spike_plan.md` | ✅ DIAGNOSED 2026-08-02 — premise falsified. Not an all-z structural rebuild and `invalidate_map_cache` never fires; the 2/17 >16ms spike is **synchronous mapgen inside `map::shift`** (`map::loadn` "Missing mapbuffer data. Regenerating."). Fix = extend async loader lookahead to generate, not new architecture. Deliberately unfixed: ~1 dropped frame, high worldgen-regression risk. |
+| 0c. Pin non-shift all-z lightmap | `non_shift_all_z_lightmap_plan.md` | ❌ ARCHIVED — superseded by 1a (plan moved to `plans/done/`) |
 
 ### Tier 1 — structural, high payoff, moderate effort
 
