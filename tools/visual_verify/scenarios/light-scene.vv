@@ -1,0 +1,96 @@
+# Lighting-heavy scenario, visual pass.
+#
+# Night is a hard prerequisite: sprite.frag computes combined = max(tint.rgb,
+# gpu_total), so in daylight the CPU lightmap tint dominates and GPU lighting is
+# effectively invisible. Everything below happens at 01:00.
+#
+# Zoom matters as much as time of day. At the default zoom the viewport is
+# ~106 tiles wide, so a LIGHT_200 pool (radius ~14) covers a fifth of the
+# screen and the frame reads as "black with dots". 'z' zooms in (Z zooms out).
+#
+# Scene construction goes through the Lua console, not debug-menu keystrokes:
+# menu driving proved unreliable (stray letters land as game commands and start
+# combat), whereas require() is one short line and the script is a file.
+#   Debug menu "l Lua console" -> RETURN opens the editor -> CTRL+S runs it
+#   (RETURN inserts a newline inside STRING_EDITOR, so it cannot confirm).
+#
+# Each state is captured twice as a PAIRED SAME-STATE null: without it there is
+# no way to tell a real lighting delta from frame-to-frame shimmer.
+launch --dont-debugmsg
+waitlog "opened document data/gui/mainmenu.rml" timeout=240000
+focus
+key "o"
+wait 800
+key "{ENTER}"
+wait 1500
+key "h"
+wait 3000
+key "{ENTER}"
+wait 8000
+key "{SPACE}"
+wait 1500
+key "{SPACE}"
+wait 1500
+key "{SPACE}"
+wait 1500
+key "{SPACE}"
+waitlog "opened document .*sidebar_hud.rml" timeout=300000
+wait 6000
+key "!"
+wait 1500
+
+# ---- night ----
+key "{ESC}"
+wait 1800
+key "c"
+wait 2000
+key "m"
+wait 1800
+key "t"
+wait 2000
+key "h"
+wait 1500
+key "{BACKSPACE}"
+wait 300
+key "{BACKSPACE}"
+wait 300
+key "1"
+wait 500
+key "{ENTER}"
+wait 1500
+key "{ESC}"
+wait 1200
+key "{ESC}"
+wait 1200
+key "{ESC}"
+wait 3000
+
+# ---- zoom in so light pools are legible ----
+key "z"
+wait 1200
+key "z"
+wait 1200
+key "z"
+wait 3000
+shot unlit
+wait 2500
+shot unlit_again
+
+# ---- lights ----
+key "{ESC}"
+wait 1800
+key "c"
+wait 2000
+key "l"
+wait 3000
+key "{ENTER}"
+wait 2500
+key "require(\"lib.lightscene\")"
+wait 2000
+key "{CTRL+S}"
+wait 5000
+key "{ESC}"
+wait 3500
+shot lit
+wait 2500
+shot lit_again
