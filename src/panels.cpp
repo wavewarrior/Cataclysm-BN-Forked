@@ -15,6 +15,7 @@
 #include <set>
 #include <string>
 #include <tuple>
+#include <unordered_map>
 #include <utility>
 
 #include <RmlUi/Core.h>
@@ -698,6 +699,102 @@ auto terminal_rows_for( const hud_phosphor::metrics &m, int phosphor_rows ) -> i
     const auto strip_px = phosphor_rows * m.cell_h * hud_dp_ratio();
     return static_cast<int>( std::ceil( strip_px / fontheight ) );
 }
+
+// ── Redundant property-write suppression ────────────────────────────────────
+//
+// `Rml::Element::SetProperty` parses its value string and then calls
+// `ElementStyle::DirtyProperty` UNCONDITIONALLY — an identical value included
+// (RmlUi Source/Core/ElementStyle.cpp:289-290) — and a dirtied element throws
+// away its compiled geometry. Both HUD property writers below run every frame
+// from the render path, so re-applying unchanged values recompiled the whole
+// document continuously.
+//
+// MEASURED in-game (1920x1080, i9-14900K): 10 → 27 geometry batches rebuilt per
+// frame, growing over a session, 109 GPU allocations and 27 copy passes to
+// re-upload 618 vertices — 4.9 → 12.8 ms per frame inside
+// composite_swapchain_pass_b, which was 96% of a ~16 ms frame. RmlUi *layout*
+// was only 0.49 ms and flat; the cost was entirely the re-upload the dirtying
+// forced. The caches below exist so a visually static HUD issues ZERO property
+// writes.
+//
+// Keyed by element id string rather than `Rml::Element *`: a document reload
+// can hand out a fresh element at a recycled address, and an id can never alias
+// across documents the way a pointer can.
+
+/// Quantise to the precision the emitted string actually carries, so a
+/// comparison answers exactly "would the value RmlUi parses differ?" and never
+/// trips on jitter below print precision. `rml::dp` prints `{:.2f}`; the shake
+/// margins print `{:.1f}`.
+auto quantise_dp( float v ) -> long
+{
+    return std::lround( v * 100.0f );
+}
+auto quantise_px1( float v ) -> long
+{
+    return std::lround( v * 10.0f );
+}
+
+/// Last rect applied to one region, quantised.
+struct hud_rect_cache {
+    bool valid = false;
+    long x = 0;
+    long y = 0;
+    long w = 0;
+    long h = 0;
+};
+std::unordered_map<std::string, hud_rect_cache> g_hud_rect_cache;
+
+/// The layout `sidebar_hud_apply_rect` last ran on. Every value it writes is a
+/// pure function of this object, so an equal layout means an identical write
+/// set and the whole pass can be skipped.
+std::optional<hud_phosphor::layout> g_hud_rect_layout;
+
+/// Exact value equality — deliberately not the quantised compare used per
+/// property. `to_dp` multiplies `cell_w` by up to 192 columns, so a cell size
+/// difference far below dp print precision is still a visible rect difference;
+/// the metrics come from `metrics_for`'s discrete candidate set by the same
+/// deterministic path each frame, so exact equality is the honest test.
+auto hud_layout_same( const hud_phosphor::layout &a, const hud_phosphor::layout &b ) -> bool
+{
+    return a.m.cell_w == b.m.cell_w && a.m.cell_h == b.m.cell_h
+           && a.m.font_size == b.m.font_size && a.m.cols == b.m.cols && a.m.rows == b.m.rows
+           && a.status == b.status && a.soma == b.soma && a.radar == b.radar
+           && a.dock == b.dock && a.log == b.log && a.keys == b.keys
+           && a.vehicle == b.vehicle;
+}
+
+/// Last document-level type scale applied, quantised.
+bool g_hud_type_valid = false;
+long g_hud_font_size = 0;
+long g_hud_line_height = 0;
+
+/// Last shake margins applied to one container. `applied == false` means the
+/// element currently carries no shake margins — either never set, or already
+/// removed — so the shake's trailing edge removes exactly once and every idle
+/// frame after it touches nothing.
+struct hud_shake_cache {
+    bool applied = false;
+    long dx = 0;
+    long dy = 0;
+};
+std::unordered_map<std::string, hud_shake_cache> g_hud_shake_cache;
+
+/// Last `display` written to `hud-vehicle`: -1 none yet, 0 `none`, 1 `block`.
+int g_hud_veh_display = -1;
+
+/// Drop every cached "last applied" value.
+///
+/// MUST be called wherever `g_hud_doc` is assigned or reset. A fresh document's
+/// elements carry none of these properties, so a cache surviving the swap would
+/// suppress exactly the writes that place the new HUD.
+auto hud_prop_cache_clear() -> void
+{
+    g_hud_rect_cache.clear();
+    g_hud_rect_layout.reset();
+    g_hud_type_valid = false;
+    g_hud_shake_cache.clear();
+    g_hud_veh_display = -1;
+}
 } // namespace
 
 
@@ -752,6 +849,7 @@ void sidebar_hud_open()
         return;
     }
     g_hud_doc = doc;
+    hud_prop_cache_clear();
     // Opening the HUD claims the top/bottom chrome strips carved out of the terrain
     // viewport (sidebar_hud_top_rows/_bottom_rows) — apply the new viewport size.
     g->mark_main_ui_adaptor_resize();
@@ -775,16 +873,46 @@ auto sidebar_hud_apply_rect( const hud_phosphor::layout &l ) -> void
     if( g_hud_doc == nullptr ) {
         return;
     }
+    // Nothing below depends on anything but `l`, and every write dirties its
+    // element whether or not the value changed — so an unchanged layout must
+    // cost nothing at all. See hud_prop_cache_clear for the measured price of
+    // relaying out the document every frame.
+    if( g_hud_rect_layout && hud_layout_same( *g_hud_rect_layout, l ) ) {
+        return;
+    }
+    g_hud_rect_layout = l;
+
     const auto place = [&l]( const char *id, const hud_phosphor::cell_rect &c ) {
         Rml::Element *el = g_hud_doc->GetElementById( id );
         if( el == nullptr ) {
             return;
         }
         const auto r = hud_phosphor::to_dp( l.m, c );
-        el->SetProperty( "left", rml::dp( r.x ) );
-        el->SetProperty( "top", rml::dp( r.y ) );
-        el->SetProperty( "width", rml::dp( r.w ) );
-        el->SetProperty( "height", rml::dp( r.h ) );
+        // Per region as well as per layout: a genuine layout change — the log
+        // well growing a row, the vehicle panel appearing — usually moves one
+        // region and leaves the other six exactly where they were.
+        auto &cache = g_hud_rect_cache[id];
+        const auto x = quantise_dp( r.x );
+        const auto y = quantise_dp( r.y );
+        const auto w = quantise_dp( r.w );
+        const auto h = quantise_dp( r.h );
+        if( !cache.valid || cache.x != x ) {
+            el->SetProperty( "left", rml::dp( r.x ) );
+            cache.x = x;
+        }
+        if( !cache.valid || cache.y != y ) {
+            el->SetProperty( "top", rml::dp( r.y ) );
+            cache.y = y;
+        }
+        if( !cache.valid || cache.w != w ) {
+            el->SetProperty( "width", rml::dp( r.w ) );
+            cache.w = w;
+        }
+        if( !cache.valid || cache.h != h ) {
+            el->SetProperty( "height", rml::dp( r.h ) );
+            cache.h = h;
+        }
+        cache.valid = true;
     };
     place( "hud-status", l.status );
     place( "hud-soma", l.soma );
@@ -798,8 +926,20 @@ auto sidebar_hud_apply_rect( const hud_phosphor::layout &l ) -> void
     // the stylesheet and the document deliberately omit a font size so this stays
     // the single source. line-height is pinned to the cell height so box-drawing
     // stems abut between rows and the frame corners actually close.
-    g_hud_doc->SetProperty( "font-size", rml::dp( l.m.font_size ) );
-    g_hud_doc->SetProperty( "line-height", rml::dp( l.m.cell_h ) );
+    //
+    // A document-level write is the most expensive one there is: font-size and
+    // line-height are inherited, so every element relayouts. Only on change.
+    const auto font_size = quantise_dp( l.m.font_size );
+    const auto line_height = quantise_dp( l.m.cell_h );
+    if( !g_hud_type_valid || g_hud_font_size != font_size ) {
+        g_hud_doc->SetProperty( "font-size", rml::dp( l.m.font_size ) );
+        g_hud_font_size = font_size;
+    }
+    if( !g_hud_type_valid || g_hud_line_height != line_height ) {
+        g_hud_doc->SetProperty( "line-height", rml::dp( l.m.cell_h ) );
+        g_hud_line_height = line_height;
+    }
+    g_hud_type_valid = true;
 }
 
 } // namespace
@@ -932,7 +1072,14 @@ void sidebar_hud_sync( avatar &u )
     g_hud_data->veh_rml = hud_veh_panel( u, l );
     g_hud_data->handle.DirtyVariable( "veh_rml" );
     if( Rml::Element *el = g_hud_doc->GetElementById( "hud-vehicle" ) ) {
-        el->SetProperty( "display", u.controlling_vehicle ? "block" : "none" );
+        // Only on change: an unchanged SetProperty still dirties the element and
+        // costs it a geometry recompile, and this runs every frame. Driving state
+        // flips a handful of times a session.
+        const int display = u.controlling_vehicle ? 1 : 0;
+        if( g_hud_veh_display != display ) {
+            el->SetProperty( "display", u.controlling_vehicle ? "block" : "none" );
+            g_hud_veh_display = display;
+        }
     }
 
     sidebar_hud_apply_rect( l );
@@ -954,6 +1101,7 @@ void sidebar_hud_close()
         ctx->RemoveDataModel( "sidebar_hud" );
     }
     g_hud_doc = nullptr;
+    hud_prop_cache_clear();
     hud_anim::clear();
     // Reset alongside hud_anim: the seq range is what tells the next sync which
     // rows are new. Messages::deserialize re-stamps every loaded message from the
@@ -1030,12 +1178,31 @@ auto sidebar_hud_anim_tick() -> void
         if( el == nullptr ) {
             return;
         }
+        // Only on change. This runs every frame and the HUD is not shaking on
+        // almost any of them; unguarded, the four writes below dirtied four
+        // containers per frame forever. See hud_prop_cache_clear.
+        auto &cache = g_hud_shake_cache[id];
         if( shaking ) {
-            el->SetProperty( "margin-left", std::format( "{:.1f}px", offset.dx ) );
-            el->SetProperty( "margin-top", std::format( "{:.1f}px", offset.dy ) );
-        } else {
+            // Quantised to the format string's precision, so a decaying shake
+            // stops writing as soon as the printed offset stops moving.
+            const auto dx = quantise_px1( offset.dx );
+            const auto dy = quantise_px1( offset.dy );
+            if( !cache.applied || cache.dx != dx ) {
+                el->SetProperty( "margin-left", std::format( "{:.1f}px", offset.dx ) );
+                cache.dx = dx;
+            }
+            if( !cache.applied || cache.dy != dy ) {
+                el->SetProperty( "margin-top", std::format( "{:.1f}px", offset.dy ) );
+                cache.dy = dy;
+            }
+            cache.applied = true;
+        } else if( cache.applied ) {
+            // Exactly once, on the shake's trailing edge. `applied` stays false
+            // afterwards — and starts false on a fresh document, whose elements
+            // never had these margins — so idle frames issue nothing.
             el->RemoveProperty( "margin-left" );
             el->RemoveProperty( "margin-top" );
+            cache.applied = false;
         }
     };
     apply_shake( "hud-status" );
