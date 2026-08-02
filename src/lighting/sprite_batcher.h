@@ -213,7 +213,10 @@ struct debug_params {
     float ramp_enable = 1.0f;  // 0 = plain multiply, 1 = full ramp resolve
     float ramp_steps = 8.0f;   // shade steps per palette row (must match built LUT)
     float ramp_chroma = 0.35f; // how much coloured light tints the ramped surface
-    float dbg_pad2 = 0.0f;     // alignment
+    // Step 6: SDF-guided bilateral GI upsample. 1 = reject GI taps across an SDF
+    // discontinuity (bounce stops at walls), 0 = plain bilinear (the pre-Step-6
+    // behaviour). Occupies what was dbg_pad2; size unchanged.
+    float gi_bilat = 1.0f;
 };
 
 // Returns sun/sky params interpolated from a 24h LUT for the given hour (0..24).

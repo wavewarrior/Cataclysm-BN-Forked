@@ -161,7 +161,7 @@ cbuffer DebugParams : register(b2, space3) {
     float ramp_enable;       // 0 = plain multiply, 1 = full palette-ramp resolve
     float ramp_steps;        // shade steps per palette row
     float ramp_chroma;       // how much coloured light tints the ramped surface
-    float dbg_pad2;          // alignment
+    float gi_bilat;          // Step 6: 1 = SDF-bilateral GI upsample, 0 = plain bilinear
 };
 struct VS_OUT {
     float4 pos      : SV_Position;
@@ -266,8 +266,11 @@ float3 indirect_bilinear(float2 p) {
     const float bd = wd * exp(-abs(sdf_bilinear(float2(x0 + 1, y0 + 1) + 0.5) - sd_c) * inv_sigma);
     const float wsum = ba + bb + bc + bd;
     // A fully-rejected neighbourhood must not produce black — fall back to the
-    // unweighted result rather than dividing by ~0.
-    return (wsum < 1e-4) ? plain : ((a * ba + b * bb + c * bc + d * bd) / wsum);
+    // unweighted result rather than dividing by ~0. gi_bilat lerps the whole term
+    // back to plain bilinear so the upsample is A/B-able at runtime like every
+    // other step in this plan.
+    const float3 bilat = (wsum < 1e-4) ? plain : ((a * ba + b * bb + c * bc + d * bd) / wsum);
+    return lerp(plain, bilat, saturate(gi_bilat));
 }
 // Stage 2a directional skylight reader (SkyBuf). Same tile-res x-major layout +
 // p-0.5 bilinear centre as the GI reader. rgb = sky-access, a = sun-occ.

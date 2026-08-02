@@ -600,6 +600,7 @@ void devui_rml_open()
     c.Bind( "ramp_enable", &g_dbg_params.ramp_enable );
     c.Bind( "ramp_steps", &g_dbg_params.ramp_steps );
     c.Bind( "ramp_chroma", &g_dbg_params.ramp_chroma );
+    c.Bind( "gi_bilat", &g_dbg_params.gi_bilat );
     c.Bind( "sway_amp", &g_dbg_params.sway_amp );
     c.Bind( "sway_freq", &g_dbg_params.sway_freq );
     c.Bind( "ripple_k", &g_dbg_params.ripple_k );
