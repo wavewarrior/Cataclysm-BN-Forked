@@ -49,6 +49,33 @@ distribution_grid::operator bool() const
     return !empty() && !submap_coords.empty();
 }
 
+namespace
+{
+/// active_tiles::furn_at() without the per-tile mapbuffer lookup: the caller has
+/// already resolved the submap for this tile's group.
+///
+/// distribution_grid::contents is keyed by submap, but mod_resource()/get_resource()
+/// used to call furn_at() per TILE, and each of those runs a
+/// mapbuffer::lookup_submap() -- a recursive_mutex acquire plus a hash lookup.
+/// Because every active tile's update() re-scans the whole grid, that is O(tiles^2)
+/// mutex-guarded lookups per turn. Measured in-game before this change: ~23.7k
+/// lookup_submap calls/turn costing ~1.0 ms, roughly half of the entire world_tick.
+/// Hoisting the resolve to once per submap group leaves the O(tiles^2) iteration
+/// but removes the lock and hash from the inner loop.
+template<typename T>
+auto furn_in_submap( submap *sm, const tile_location &loc ) -> T * // *NOPAD*
+{
+    if( sm == nullptr ) {
+        return nullptr;
+    }
+    const auto iter = sm->active_furniture.find( loc.on_submap );
+    if( iter == sm->active_furniture.end() ) {
+        return nullptr;
+    }
+    return dynamic_cast<T *>( &*iter->second );
+}
+} // namespace
+
 void distribution_grid::update( time_point to )
 {
     for( const auto &c : contents ) {
@@ -77,8 +104,9 @@ int distribution_grid::mod_resource( int amt, bool recurse )
 {
     std::vector<vehicle *> connected_vehicles;
     for( const auto &c : contents ) {
+        submap *const sm = mb.lookup_submap( c.first );
         for( const tile_location &loc : c.second ) {
-            battery_tile *battery = active_tiles::furn_at<battery_tile>( loc.absolute, mb );
+            battery_tile *battery = furn_in_submap<battery_tile>( sm, loc );
             if( battery != nullptr ) {
                 int amt_before_battery = amt;
                 amt = battery->mod_resource( amt );
@@ -95,8 +123,7 @@ int distribution_grid::mod_resource( int amt, bool recurse )
                 continue;
             }
 
-            vehicle_connector_tile *connector = active_tiles::furn_at<vehicle_connector_tile>( loc.absolute,
-                                                mb );
+            vehicle_connector_tile *connector = furn_in_submap<vehicle_connector_tile>( sm, loc );
             if( connector != nullptr ) {
                 for( const tripoint_abs_ms &veh_abs : connector->connected_vehicles ) {
                     vehicle *veh = vehicle::find_vehicle( veh_abs, mb );
@@ -154,9 +181,10 @@ int distribution_grid::get_resource( bool recurse ) const
     }
     int res = 0;
     std::vector<vehicle *> connected_vehicles;
-for( const auto &c : contents ) {
-    for( const tile_location &loc : c.second ) {
-            battery_tile *battery = active_tiles::furn_at<battery_tile>( loc.absolute, mb );
+    for( const auto &c : contents ) {
+        submap *const sm = mb.lookup_submap( c.first );
+        for( const tile_location &loc : c.second ) {
+            battery_tile *battery = furn_in_submap<battery_tile>( sm, loc );
             if( battery != nullptr ) {
                 res += battery->get_resource();
                 if( !recurse && cached_amount_here ) {
@@ -169,8 +197,7 @@ for( const auto &c : contents ) {
                 continue;
             }
 
-            vehicle_connector_tile *connector = active_tiles::furn_at<vehicle_connector_tile>( loc.absolute,
-                                                mb );
+            vehicle_connector_tile *connector = furn_in_submap<vehicle_connector_tile>( sm, loc );
             if( connector != nullptr ) {
                 for( const tripoint_abs_ms &veh_abs : connector->connected_vehicles ) {
                     vehicle *veh = vehicle::find_vehicle( veh_abs, mb );
