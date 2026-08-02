@@ -1,0 +1,60 @@
+# Proves the harness end to end without touching any world.
+#
+# The two SendInput paths reach the game by different routes and each can fail
+# independently, so both are exercised:
+#   arrows  -> scancode + KEYEVENTF_EXTENDEDKEY -> SDL_EVENT_KEY_DOWN  (sdl_input.cpp:569)
+#   letters -> VK_PACKET/WM_CHAR -> SDL_EVENT_TEXT_INPUT -> UTF8_getch (sdl_input.cpp:700)
+# Selecting a top-level entry never confirms it (main_menu.cpp:777), so this is inert.
+#
+# Traps this menu taught the harness -- all of them apply to real scenarios too:
+#  * `n` is a USELESS probe. main_menu.cpp:779 gates hotkeys on `sel1 != i`, so the
+#    hotkey of the already-selected entry is a deliberate no-op. Worse, the menu opens
+#    on Load, so `w` (World) merely repeats what {DOWN} already did -- pick probes that
+#    land far from the starting selection.
+#  * The menu animates (GPU emitters): idle noise is ~1-3k px in this rect and BURSTY,
+#    so its max is an outlier. Average captures (`avg=`) to cancel the time-varying part
+#    and compare against a PAIRED repeat of the same state, never a magic constant.
+#  * A static loading screen is "settled" too, so readiness comes from the log.
+#  * Rects are fractional: this install has come up 1920x1080 and 2560x1440.
+
+set grid=24x10 thresh=150
+rect list 0.015,0.075,0.24,0.32              # main-menu entry column
+launch --dont-debugmsg
+waitlog "opened document data/gui/mainmenu.rml" timeout=120000
+focus
+settle timeout=8000 tol=3.0
+noise floor n=5 gap=250 avg=8 in=list        # reported for context, not asserted on
+
+# Null hypothesis: two back-to-back captures of ONE state. This measures exactly what a
+# real change must beat -- residual animation plus capture jitter.
+shot menu avg=12
+shot menu_again avg=12
+diff menu menu_again as=same_state in=list
+
+key "{DOWN}"                                 # scancode/extended path
+settle timeout=6000 tol=3.0
+shot down avg=12
+diff menu down as=arrow in=list
+assert arrow.changed > same_state.changed * 2
+
+key "{UP}"                                   # must restore, or `arrow` was just noise
+settle timeout=6000 tol=3.0
+shot back avg=12
+diff menu back as=arrow_restore in=list
+assert arrow_restore.changed < same_state.changed * 2
+
+key "c"                                      # unicode/text-input path -> Credits
+settle timeout=8000 tol=3.0
+shot credits avg=12
+diff back credits as=letter in=list
+assert letter.changed > same_state.changed * 2
+
+key "m"                                      # a DIFFERENT letter must reach a DIFFERENT
+settle timeout=8000 tol=3.0                  # state, ruling out "any key just redraws"
+shot motd avg=12
+diff credits motd as=letter_distinct in=list
+assert letter_distinct.changed > same_state.changed * 2
+
+log
+stop
+clean-save

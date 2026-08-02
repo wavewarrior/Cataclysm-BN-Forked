@@ -1,0 +1,37 @@
+# Template for the usual job: prove a visual feature toggle actually does something.
+#
+# Run against an already-running game you have driven to the right scene:
+#   python tools/visual_verify/vv.py run tools/visual_verify/scenarios/example-ab-toggle.vv \
+#          --var KEY='{F7}' --var REGION=0,0,1500,1080
+#
+# Reminders that cost whole debugging cycles when ignored (memory://root):
+#  * sprite.frag does combined = max(tint.rgb, gpu_total). In DAYLIGHT the CPU lightmap
+#    tint dominates and a real GPU lighting change moves 0.3% of pixels -- an apparent
+#    null. Build the scene at NIGHT with a carried light before believing a small number.
+#  * `rect scene` excludes the sidebar HUD, whose clock//timers tick between captures and
+#    add change that has nothing to do with your feature.
+
+set grid=32x14 thresh=8
+attach
+focus
+rect scene ${REGION}
+
+settle timeout=10000
+shot a0            # state 1
+
+key "${KEY}"
+settle timeout=10000
+shot b             # state 0
+
+key "${KEY}"
+settle timeout=10000
+shot a1            # state 1 again
+
+diff a0 b  as toggle   in=scene
+diff b  a1 as untoggle in=scene
+diff a0 a1 as drift    in=scene
+
+# The feature moved pixels...
+assert toggle.changed > 5000
+# ...and it is really the feature, not drift: returning restores the original frame.
+assert drift.pct < 0.20

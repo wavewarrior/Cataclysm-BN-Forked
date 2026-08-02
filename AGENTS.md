@@ -243,6 +243,20 @@ Use installed token reduction tools to compress tool outputs before they enter c
 
 See `token-optimization` skill for details. Track savings with `rtk gain`.
 
+### Visual verification
+
+**Never verify a UI/render change by taking screenshots and looking at them.** Use the
+harness: `python tools/visual_verify/vv.py` drives the installed Windows build and reports
+diffs as numbers plus an ASCII delta grid, so frames stay on disk. Measured: a 6-state,
+8-frame, 4-assertion run costs 932 tokens of report versus ~14,700 to read those frames.
+
+- `vv.py selftest` proves the harness still reaches the game before you trust a result.
+- Reach for the `computer` tool only to *discover* a control's coordinates once; it returns
+  one PNG per call (~1,230 tokens) and cannot measure anything.
+- Escalate numbers → higher `thresh` → `vv crop` (~80 tokens) → full frame, in that order.
+- See `tools/visual_verify/README.md`; it supersedes the PowerShell/`CopyFromScreen` flow
+  described in the `cbn-drive-installed-game` and `cbn-input-harness-pixel-proof` skills.
+
 ## References
 
 - **Docs**: [Building](./docs/en/dev/guides/building/cmake.md), [Formatting](./docs/en/dev/guides/formatting.md), [Dev Index](./docs/en/dev/).
