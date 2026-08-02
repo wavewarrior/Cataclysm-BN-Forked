@@ -34,7 +34,17 @@ void gpu_texture_deleter::operator()(SDL_GPUTexture* t) const noexcept {
 }
 
 void render_state::init(SDL_Window* host_window) {
-    device_.init(host_window, /*debug=*/true, /*vsync=*/false);
+    // GPU validation is a permanent frame-time tax, not a free diagnostic: SDL_gpu
+    // runs SDL_GPU_CheckGraphicsBindings() on every SDL_DrawGPUPrimitives call, and
+    // the backend enables the D3D12 debug layer + DXGI debug + an info-queue logger
+    // (SDL_gpu_d3d12.c: ID3D12Debug_EnableDebugLayer). With thousands of sprite
+    // draws per frame that dominates the frame. Debug builds only.
+#if defined(RELEASE)
+    constexpr auto gpu_debug = false;
+#else
+    constexpr auto gpu_debug = true;
+#endif
+    device_.init(host_window, gpu_debug, /*vsync=*/false);
 
     init_shader_compiler();
 
