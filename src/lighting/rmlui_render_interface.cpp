@@ -10,6 +10,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
 #include <algorithm>
+#include <bit>
 #include <cctype>
 #include <cmath>
 #include <cstddef>
@@ -29,6 +30,29 @@ namespace {
 // Keep released GPU resources alive this many frames before freeing, so the
 // GPU is guaranteed done reading buffers/textures still in flight.
 constexpr std::uint64_t KEEP_FRAMES = 4;
+
+// Staging ring length for upload_pending. The device allows 2 frames in flight,
+// so a slot written now was last touched 3 frames ago and is provably retired.
+constexpr std::uint32_t UPLOAD_RING_SLOTS = 3;
+
+// Smallest GPU-buffer pool bucket. Buckets are powers of two, so a handful of
+// them covers every RmlUi batch size while letting one buffer be reused by any
+// batch that rounds to the same bucket.
+constexpr std::uint32_t POOL_MIN_BYTES = 256;
+
+// Alignment of each region inside the shared staging buffer. Buffer-to-buffer
+// copies have no documented alignment requirement on D3D12/Vulkan, but Metal's
+// blit encoder needs a 4-byte-aligned source offset; 16 is free here and safe
+// everywhere.
+constexpr std::uint32_t STAGE_ALIGN = 16;
+
+auto pool_bucket(std::uint32_t bytes) -> std::uint32_t {
+    return std::bit_ceil(std::max(bytes, POOL_MIN_BYTES));
+}
+
+auto align_up(std::uint32_t v, std::uint32_t a) -> std::uint32_t {
+    return (v + a - 1) & ~(a - 1);
+}
 
 // Per-RenderGeometry vertex uniform (register b0, space1 in rmlui.vert.hlsl).
 // 80 bytes: 16-byte translation/viewport + 64-byte transform matrix.
@@ -77,12 +101,39 @@ struct rmlui_render_interface::impl {
         std::vector<int> idx;
         SDL_GPUBuffer* vbuf = nullptr;
         SDL_GPUBuffer* ibuf = nullptr;
+        // Pool bucket each buffer came from, so release returns it to the right
+        // free-list (pooled buffers are >= the batch size, not equal to it).
+        std::uint32_t vbuf_cap = 0;
+        std::uint32_t ibuf_cap = 0;
         std::uint32_t idx_count = 0;
         bool uploaded = false;
     };
     std::unordered_map<std::uint64_t, geom> geoms;
     std::vector<std::uint64_t> pending; // compiled, awaiting GPU upload
     std::uint64_t next_geom = 1;        // 1-based: 0 is RmlUi's "invalid"
+
+    // Recycled geometry buffers, keyed by pool_bucket() capacity. RmlUi releases
+    // and recompiles geometry HANDLES every frame, so a buffer cached on `geom`
+    // dies with its handle — the pool is what survives that churn. MEASURED
+    // 2026-08-02: creating buffers per batch cost 109 GPU resource creations per
+    // frame (~0.1 ms each on D3D12), the bulk of a 4.9 -> 12.8 ms prepare().
+    std::unordered_map<std::uint32_t, std::vector<SDL_GPUBuffer*>> vbuf_pool;
+    std::unordered_map<std::uint32_t, std::vector<SDL_GPUBuffer*>> ibuf_pool;
+
+    // Persistent staging ring: one mapped transfer buffer per frame instead of
+    // two freshly created ones per batch (was 54 creations/frame for ~6 kB).
+    SDL_GPUTransferBuffer* stage[UPLOAD_RING_SLOTS] = {};
+    std::uint32_t stage_cap[UPLOAD_RING_SLOTS] = {};
+    std::uint32_t stage_slot = 0;
+
+    // Scratch for upload_pending: this frame's copy-pass regions. A member so
+    // its capacity persists across frames (no per-frame heap traffic).
+    struct upload_region {
+        SDL_GPUBuffer* dst;
+        std::uint32_t src_offset;
+        std::uint32_t size;
+    };
+    std::vector<upload_region> upload_regions;
 
     std::unordered_map<std::uint64_t, SDL_GPUTexture*> textures;
     std::uint64_t next_tex = 1;
@@ -165,6 +216,50 @@ struct rmlui_render_interface::impl {
         SDL_SubmitGPUCommandBuffer(ucb);
         SDL_ReleaseGPUTransferBuffer(raw, xfer);
         return tex;
+    }
+
+    // Take a buffer of at least `bytes` from `pool`, creating one only when the
+    // matching bucket is empty. `out_cap` receives the bucket capacity so the
+    // buffer can be returned to the same bucket on release.
+    auto acquire_buffer(
+        std::unordered_map<std::uint32_t, std::vector<SDL_GPUBuffer*>>& pool,
+        SDL_GPUBufferUsageFlags usage, std::uint32_t bytes,
+        std::uint32_t& out_cap) -> SDL_GPUBuffer* { // *NOPAD*
+        const std::uint32_t cap = pool_bucket(bytes);
+        out_cap = cap;
+        auto it = pool.find(cap);
+        if (it != pool.end() && !it->second.empty()) {
+            SDL_GPUBuffer* buf = it->second.back();
+            it->second.pop_back();
+            return buf;
+        }
+        SDL_GPUBufferCreateInfo bci{};
+        bci.usage = usage;
+        bci.size = cap;
+        return SDL_CreateGPUBuffer(raw, &bci);
+    }
+
+    // The current ring slot's staging buffer, grown only when this frame needs
+    // more than it already holds. Steady state creates nothing.
+    auto ensure_stage(std::uint32_t bytes) -> SDL_GPUTransferBuffer* { // *NOPAD*
+        const std::uint32_t slot = stage_slot;
+        if (stage[slot] != nullptr && stage_cap[slot] >= bytes) { return stage[slot]; }
+        const std::uint32_t cap = pool_bucket(bytes);
+        SDL_GPUTransferBufferCreateInfo tci{};
+        tci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+        tci.size = cap;
+        SDL_GPUTransferBuffer* grown = SDL_CreateGPUTransferBuffer(raw, &tci);
+        if (!grown) { return nullptr; }
+        if (stage[slot] != nullptr) {
+            // The outgoing buffer may still be referenced by an in-flight submit,
+            // so free it on the same KEEP_FRAMES delay as every other resource.
+            SDL_GPUDevice* r = raw;
+            SDL_GPUTransferBuffer* old = stage[slot];
+            deferred.emplace_back(frame, [r, old]() { SDL_ReleaseGPUTransferBuffer(r, old); });
+        }
+        stage[slot] = grown;
+        stage_cap[slot] = cap;
+        return grown;
     }
 };
 
@@ -327,6 +422,24 @@ void rmlui_render_interface::shutdown() {
     }
     p->geoms.clear();
     p->pending.clear();
+    // Pooled buffers are not in `geoms` — the deferred frees above are what push
+    // released buffers into the pools, so drain the pools after running them.
+    for (auto& kv : p->vbuf_pool) {
+        for (SDL_GPUBuffer* buf : kv.second) { SDL_ReleaseGPUBuffer(p->raw, buf); }
+    }
+    p->vbuf_pool.clear();
+    for (auto& kv : p->ibuf_pool) {
+        for (SDL_GPUBuffer* buf : kv.second) { SDL_ReleaseGPUBuffer(p->raw, buf); }
+    }
+    p->ibuf_pool.clear();
+    for (std::uint32_t i = 0; i < UPLOAD_RING_SLOTS; ++i) {
+        if (p->stage[i]) {
+            SDL_ReleaseGPUTransferBuffer(p->raw, p->stage[i]);
+            p->stage[i] = nullptr;
+            p->stage_cap[i] = 0;
+        }
+    }
+    p->upload_regions.clear();
     for (auto& kv : p->textures) { SDL_ReleaseGPUTexture(p->raw, kv.second); }
     p->textures.clear();
     if (p->white_tex) {
@@ -363,6 +476,9 @@ void rmlui_render_interface::shutdown() {
 
 void rmlui_render_interface::begin_frame() {
     p->frame++;
+    // Advance the staging ring (impl::stage): with 2 frames in flight, 3 slots
+    // mean the slot this frame writes was last written 3 frames ago.
+    p->stage_slot = (p->stage_slot + 1) % UPLOAD_RING_SLOTS;
     auto& d = p->deferred;
     for (std::size_t i = 0; i < d.size();) {
         if (d[i].first + KEEP_FRAMES <= p->frame) {
@@ -377,6 +493,20 @@ void rmlui_render_interface::begin_frame() {
 
 void rmlui_render_interface::upload_pending(SDL_GPUCommandBuffer* cb) {
     if (p->pending.empty() || !cb) { return; }
+
+    // MEASURED 2026-08-02 (1920x1080, i9-14900K, D3D12): this function used to
+    // create a vertex buffer, an index buffer and two transfer buffers, and open
+    // its own copy pass, PER BATCH. 27 batches/frame = 109 GPU resource
+    // creations + 27 copy passes to move ~618 vertices (a few kB), and D3D12
+    // committed-resource creation is ~0.1 ms each — that was the entire
+    // 4.9 -> 12.8 ms/frame this function cost, i.e. nearly all of render_body.
+    // Now destination buffers come from a recycling pool and staging is one
+    // persistent ring buffer, so a steady-state frame creates nothing and issues
+    // exactly one map + one copy pass.
+
+    // Pass 1: size this frame's staging need. Empty geometry is retired here (as
+    // before) so it never reaches the GPU work below.
+    std::uint32_t total = 0;
     for (std::uint64_t h : p->pending) {
         auto it = p->geoms.find(h);
         if (it == p->geoms.end() || it->second.uploaded) { continue; }
@@ -388,59 +518,92 @@ void rmlui_render_interface::upload_pending(SDL_GPUCommandBuffer* cb) {
             g.uploaded = true;
             continue;
         }
-        SDL_GPUBufferCreateInfo vci{};
-        vci.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
-        vci.size = vbytes;
-        g.vbuf = SDL_CreateGPUBuffer(p->raw, &vci);
-        SDL_GPUBufferCreateInfo ici{};
-        ici.usage = SDL_GPU_BUFFERUSAGE_INDEX;
-        ici.size = ibytes;
-        g.ibuf = SDL_CreateGPUBuffer(p->raw, &ici);
+        total += align_up(vbytes, STAGE_ALIGN) + align_up(ibytes, STAGE_ALIGN);
+    }
+    if (total == 0) {
+        p->pending.clear();
+        return;
+    }
 
-        SDL_GPUTransferBufferCreateInfo tvi{};
-        tvi.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-        tvi.size = vbytes;
-        SDL_GPUTransferBuffer* vx = SDL_CreateGPUTransferBuffer(p->raw, &tvi);
-        SDL_GPUTransferBufferCreateInfo tii{};
-        tii.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-        tii.size = ibytes;
-        SDL_GPUTransferBuffer* ix = SDL_CreateGPUTransferBuffer(p->raw, &tii);
-        if (!g.vbuf || !g.ibuf || !vx || !ix) {
+    SDL_GPUTransferBuffer* xfer = p->ensure_stage(total);
+    if (!xfer) {
+        dbg(DL::Error) << "rmlui: geometry staging alloc failed: " << SDL_GetError();
+        p->pending.clear();
+        return;
+    }
+
+    // The copy pass opens before the staging map so every early-out below can end
+    // it exactly once; mapping is device-scope and legal inside an open pass.
+    SDL_GPUCopyPass* cp = SDL_BeginGPUCopyPass(cb);
+    if (!cp) {
+        dbg(DL::Error) << "rmlui: geometry copy pass failed: " << SDL_GetError();
+        p->pending.clear();
+        return;
+    }
+    // cycle=true matches sprite_batcher's storage upload: the ring should already
+    // guarantee this slot is retired, but cycling is free when it is and removes
+    // the write-while-in-flight race if a driver ever queues deeper.
+    void* mapped = SDL_MapGPUTransferBuffer(p->raw, xfer, true);
+    if (!mapped) {
+        dbg(DL::Error) << "rmlui: geometry staging map failed: " << SDL_GetError();
+        SDL_EndGPUCopyPass(cp);
+        p->pending.clear();
+        return;
+    }
+
+    // Pass 2: acquire pooled buffers and pack every batch into the one staging
+    // buffer at increasing offsets. Uploads are encoded after the unmap, which
+    // SDL requires ("You must unmap the transfer buffer before encoding upload
+    // commands").
+    auto& regions = p->upload_regions;
+    regions.clear();
+    std::uint8_t* base = static_cast<std::uint8_t*>(mapped);
+    std::uint32_t off = 0;
+    for (std::uint64_t h : p->pending) {
+        auto it = p->geoms.find(h);
+        if (it == p->geoms.end() || it->second.uploaded) { continue; }
+        impl::geom& g = it->second;
+        const std::uint32_t vbytes = static_cast<std::uint32_t>(
+            g.verts.size() * sizeof(Rml::Vertex));
+        const std::uint32_t ibytes = static_cast<std::uint32_t>(g.idx.size() * sizeof(int));
+        g.vbuf = p->acquire_buffer(
+            p->vbuf_pool, SDL_GPU_BUFFERUSAGE_VERTEX, vbytes, g.vbuf_cap);
+        g.ibuf = p->acquire_buffer(
+            p->ibuf_pool, SDL_GPU_BUFFERUSAGE_INDEX, ibytes, g.ibuf_cap);
+        if (!g.vbuf || !g.ibuf) {
             dbg(DL::Error) << "rmlui: geometry buffer alloc failed: " << SDL_GetError();
+            // Whichever half succeeded never reached the GPU — recycle it now.
+            if (g.vbuf) { p->vbuf_pool[g.vbuf_cap].push_back(g.vbuf); }
+            if (g.ibuf) { p->ibuf_pool[g.ibuf_cap].push_back(g.ibuf); }
+            g.vbuf = nullptr;
+            g.ibuf = nullptr;
+            g.vbuf_cap = 0;
+            g.ibuf_cap = 0;
             continue;
         }
-        void* mv = SDL_MapGPUTransferBuffer(p->raw, vx, false);
-        std::memcpy(mv, g.verts.data(), vbytes);
-        SDL_UnmapGPUTransferBuffer(p->raw, vx);
-        void* mi = SDL_MapGPUTransferBuffer(p->raw, ix, false);
-        std::memcpy(mi, g.idx.data(), ibytes);
-        SDL_UnmapGPUTransferBuffer(p->raw, ix);
-
-        SDL_GPUCopyPass* cp = SDL_BeginGPUCopyPass(cb);
-        SDL_GPUTransferBufferLocation vsrc{};
-        vsrc.transfer_buffer = vx;
-        SDL_GPUBufferRegion vdst{};
-        vdst.buffer = g.vbuf;
-        vdst.size = vbytes;
-        SDL_UploadToGPUBuffer(cp, &vsrc, &vdst, false);
-        SDL_GPUTransferBufferLocation isrc{};
-        isrc.transfer_buffer = ix;
-        SDL_GPUBufferRegion idst{};
-        idst.buffer = g.ibuf;
-        idst.size = ibytes;
-        SDL_UploadToGPUBuffer(cp, &isrc, &idst, false);
-        SDL_EndGPUCopyPass(cp);
-
-        // Transfer buffers must outlive this frame's submit — defer their free.
-        SDL_GPUDevice* raw = p->raw;
-        p->deferred.emplace_back(p->frame, [raw, vx, ix]() {
-            SDL_ReleaseGPUTransferBuffer(raw, vx);
-            SDL_ReleaseGPUTransferBuffer(raw, ix);
-        });
+        std::memcpy(base + off, g.verts.data(), vbytes);
+        regions.push_back({.dst = g.vbuf, .src_offset = off, .size = vbytes});
+        off += align_up(vbytes, STAGE_ALIGN);
+        std::memcpy(base + off, g.idx.data(), ibytes);
+        regions.push_back({.dst = g.ibuf, .src_offset = off, .size = ibytes});
+        off += align_up(ibytes, STAGE_ALIGN);
 
         g.idx_count = static_cast<std::uint32_t>(g.idx.size());
         g.uploaded = true;
     }
+    SDL_UnmapGPUTransferBuffer(p->raw, xfer);
+
+    for (const impl::upload_region& r : regions) {
+        SDL_GPUTransferBufferLocation src{};
+        src.transfer_buffer = xfer;
+        src.offset = r.src_offset;
+        SDL_GPUBufferRegion dst{};
+        dst.buffer = r.dst;
+        dst.size = r.size;
+        SDL_UploadToGPUBuffer(cp, &src, &dst, false);
+    }
+    SDL_EndGPUCopyPass(cp);
+    regions.clear();
     p->pending.clear();
 }
 
@@ -558,13 +721,19 @@ void rmlui_render_interface::RenderGeometry(
 void rmlui_render_interface::ReleaseGeometry(Rml::CompiledGeometryHandle geometry) {
     auto it = p->geoms.find(static_cast<std::uint64_t>(geometry));
     if (it == p->geoms.end()) { return; }
-    SDL_GPUDevice* raw = p->raw;
     SDL_GPUBuffer* vbuf = it->second.vbuf;
     SDL_GPUBuffer* ibuf = it->second.ibuf;
+    const std::uint32_t vcap = it->second.vbuf_cap;
+    const std::uint32_t icap = it->second.ibuf_cap;
     if (vbuf || ibuf) {
-        p->deferred.emplace_back(p->frame, [raw, vbuf, ibuf]() {
-            if (vbuf) { SDL_ReleaseGPUBuffer(raw, vbuf); }
-            if (ibuf) { SDL_ReleaseGPUBuffer(raw, ibuf); }
+        // Recycle instead of destroy: RmlUi churns handles constantly, so
+        // destroying here is what forced ~109 SDL_CreateGPUBuffer calls per frame
+        // (~12 ms). The KEEP_FRAMES delay is unchanged, so a buffer only re-enters
+        // the pool once the GPU is provably done reading it.
+        impl* ip = p.get();
+        p->deferred.emplace_back(p->frame, [ip, vbuf, ibuf, vcap, icap]() {
+            if (vbuf) { ip->vbuf_pool[vcap].push_back(vbuf); }
+            if (ibuf) { ip->ibuf_pool[icap].push_back(ibuf); }
         });
     }
     p->geoms.erase(it);
