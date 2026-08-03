@@ -332,7 +332,43 @@ void render_state::set_tile_scissor(const SDL_Rect* rect) { tile_batcher_.set_sc
 
 void render_state::clear_tile_scissor() { tile_batcher_.set_scissor(nullptr); }
 
+namespace
+{
+const bool g_diag_face_amt = std::getenv( "CBN_DIAG_SEG_LIGHTING" ) != nullptr;
+std::uint64_t s_face_total = 0;
+std::uint64_t s_face_wall = 0;
+std::uint64_t s_face_other = 0;
+// Exposed-edge count histogram for wall/window sprites: index = how many of the tile's
+// four edges cata_tiles found exposed. A straight wall run scores 2 (its outer face and
+// its interior face), a corner 2 perpendicular, a free-standing pillar 4.
+std::uint64_t s_face_edges[5] = { 0, 0, 0, 0, 0 };
+// PER-FRAME, not cumulative. A cumulative total cannot answer "how many walls were on
+// screen": dividing it by an ASSUMED frame count is how you talk yourself into "about one
+// wall per frame" when the real figure could be thirty, which is the difference between
+// "nothing to light" and "lights only a tenth of the walls present".
+std::uint64_t s_frame_no = 0;
+std::uint64_t s_pf_total = 0;
+std::uint64_t s_pf_wall = 0;
+std::uint64_t s_pf_wall_max = 0;
+} // namespace
+
 void render_state::begin_lighting_frame(const frame_light_inputs& in) {
+    if( g_diag_face_amt ) {
+        // Report the frame that just ENDED, then reset. Frame 0 is the pre-first-frame
+        // state and is deliberately reported too, so a scene that queues no walls at all
+        // is visible as a zero rather than as a missing line.
+        s_pf_wall_max = std::max( s_pf_wall_max, s_pf_wall );
+        if( s_frame_no % 30u == 0u ) {
+            DebugLogFL( DL::Info, DC::Main )
+                    << "[faceframe] frame=" << s_frame_no
+                    << " sprites_this_frame=" << s_pf_total
+                    << " walls_this_frame=" << s_pf_wall
+                    << " walls_max_any_frame=" << s_pf_wall_max;
+        }
+        ++s_frame_no;
+        s_pf_total = 0;
+        s_pf_wall = 0;
+    }
     // Cache for flush_shadow_casters: the silhouette-shadow batcher is stamped
     // separately (own pass, before Pass W) with the same tile geometry + sun so
     // the vertex shear tracks the sun. No lighting storage buffers there.
@@ -781,14 +817,6 @@ void render_state::append_slice(
         static_cast<std::uint32_t>(font_glyph_queue_.size()));
 }
 
-namespace
-{
-const bool g_diag_face_amt = std::getenv( "CBN_DIAG_SEG_LIGHTING" ) != nullptr;
-std::uint64_t s_face_total = 0;
-std::uint64_t s_face_wall = 0;
-std::uint64_t s_face_other = 0;
-} // namespace
-
 void render_state::queue_tile_sprite(SDL_GPUTexture* atlas_tex, const sprite_instance& inst) {
     if (!device_.ready() || !atlas_tex) { return; }
     // DIAGNOSTIC (temporary, CBN_DIAG_SEG_LIGHTING): is the per-sprite facing lane
@@ -799,10 +827,20 @@ void render_state::queue_tile_sprite(SDL_GPUTexture* atlas_tex, const sprite_ins
     // pipeline creation and reports a black frame instead of a reading.
     if( g_diag_face_amt ) {
         ++s_face_total;
-        // face_amt is PACKED (edge mask + amount); threshold the DECODED amount.
-        const float dec = inst.face_amt - std::floor( inst.face_amt );
+        ++s_pf_total;
+        // DECODE exactly as sprite.frag does. The amount is packed into [0.25, 0.75] so
+        // interpolation drift cannot carry floor() across an integer boundary; reading the
+        // raw fraction instead (as this probe first did) mis-buckets every window, which
+        // packs to exactly 0.55 and fails a `> 0.55` test on the undecoded value.
+        const float mask_f = std::floor( inst.face_amt );
+        const float dec = ( inst.face_amt - mask_f - 0.25f ) * 2.0f;
         if( dec > 0.55f ) {
             ++s_face_wall;
+            ++s_pf_wall;
+            unsigned mask = static_cast<unsigned>( mask_f + 0.5f );
+            unsigned pc = 0;
+            for( ; mask != 0u; mask >>= 1u ) { pc += ( mask & 1u ); }
+            ++s_face_edges[std::min<unsigned>( pc, 4u )];
         } else if( dec > 0.0f ) {
             ++s_face_other;
         }
@@ -810,7 +848,12 @@ void render_state::queue_tile_sprite(SDL_GPUTexture* atlas_tex, const sprite_ins
             DebugLogFL( DL::Info, DC::Main )
                     << "[facediag] sprites=" << s_face_total
                     << " face>0.55(walls/windows)=" << s_face_wall
-                    << " 0<face<=0.55(furniture)=" << s_face_other;
+                    << " 0<face<=0.55(furniture)=" << s_face_other
+                    << " edges0=" << s_face_edges[0]
+                    << " edges1=" << s_face_edges[1]
+                    << " edges2=" << s_face_edges[2]
+                    << " edges3=" << s_face_edges[3]
+                    << " edges4=" << s_face_edges[4];
         }
     }
     if (unlit_overlay_route_) {
