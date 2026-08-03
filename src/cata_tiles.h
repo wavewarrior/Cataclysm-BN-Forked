@@ -17,6 +17,7 @@
 #include "sdl_geometry.h"
 #include "sdl_utils.h"
 #include "sdl_wrappers.h"
+#include "tile_light_mode.h"
 #include "type_id.h"
 #include "weather.h"
 #include "weighted_list.h"
@@ -217,65 +218,87 @@ class texture
         /// dynamic_atlas::find_gpu_texture_full.
         SDL_Texture *sdl_texture_handle() const noexcept { return sdl_texture_ptr.get(); }
 
+        /// Everything `enqueue_tile_sprite` needs besides the light mode.
+        struct tile_sprite_options {
+            SDL_GPUTexture *atlas_tex = nullptr;
+            int atlas_w = 0;
+            int atlas_h = 0;
+            SDL_FRect destination{};
+            SDL_FlipMode flip = SDL_FLIP_NONE;
+            float alpha = 1.0f;
+            double rotation_degrees = 0.0;
+            float light_r = 1.0f;
+            float light_g = 1.0f;
+            float light_b = 1.0f;
+            float light_mul = 0.0f;
+            float sway = 0.0f;
+            float outline = 0.0f;
+            float extrude_px = 0.0f;
+            float extrude_dark = 0.0f;
+            float extrude_lean = 0.0f;
+        };
+
         /// Phase 2i-B-5 GPU draw path. Enqueues exactly one tile sprite
         /// into render_state::tile_sprite_queue_; the queue is drained
         /// by refresh_display inside the tile_batcher pass after the
         /// bridge blit.
         ///
-        /// `atlas_tex` is the GPU mirror of this texture's atlas sheet
+        /// `opts.atlas_tex` is the GPU mirror of this texture's atlas sheet
         /// (look up via dynamic_atlas::find_gpu_texture_full).
-        /// `atlas_w/atlas_h` are the atlas page pixel dimensions, used
-        /// to convert the pixel-space srcrect into normalised UV.
+        /// `opts.atlas_w`/`opts.atlas_h` are the atlas page pixel dimensions,
+        /// used to convert the pixel-space srcrect into normalised UV.
         ///
-        /// FLIP folds into UV: horizontal flip swaps u/u+uw, vertical
+        /// `opts.flip` folds into UV: horizontal flip swaps u/u+uw, vertical
         /// flip swaps v/v+vh.
-        /// ROTATION_DEGREES is converted to radians and stored in the
+        /// `opts.rotation_degrees` is converted to radians and stored in the
         /// sprite_instance; the vertex shader rotates the destination
         /// quad around its centre. Matches SDL_RenderTextureRotated
         /// convention (positive = clockwise on screen).
-        bool enqueue_tile_sprite(
-            SDL_GPUTexture* atlas_tex, int atlas_w, int atlas_h, const SDL_FRect& destination,
-            SDL_FlipMode flip, float alpha = 1.0f, double rotation_degrees = 0.0, float light_r = 1.0f,
-            float light_g = 1.0f, float light_b = 1.0f, float light_mul = 0.0f, float sway = 0.0f,
-            float outline = 0.0f, float extrude_px = 0.0f, float extrude_dark = 0.0f,
-            float extrude_lean = 0.0f ) const {
-            if( !atlas_tex || atlas_w <= 0 || atlas_h <= 0 ) { return false; }
-            const float inv_w = 1.0f / static_cast<float>( atlas_w );
-            const float inv_h = 1.0f / static_cast<float>( atlas_h );
+        ///
+        /// `mode` is a required leading positional, deliberately NOT defaulted:
+        /// it makes every call site a compile error until it states its lighting
+        /// mode, which is the only way this codebase can enumerate the migration.
+        /// A wrong mode would otherwise surface only as a wrong-looking pixel,
+        /// which nothing here detects. See src/tile_light_mode.h.
+        bool enqueue_tile_sprite( sprite_light_mode mode, const tile_sprite_options &opts ) const {
+            if( !opts.atlas_tex || opts.atlas_w <= 0 || opts.atlas_h <= 0 ) { return false; }
+            const float inv_w = 1.0f / static_cast<float>( opts.atlas_w );
+            const float inv_h = 1.0f / static_cast<float>( opts.atlas_h );
             float u = srcrect.x * inv_w;
             float v = srcrect.y * inv_h;
             float uw = srcrect.w * inv_w;
             float vh = srcrect.h * inv_h;
-            if( flip & SDL_FLIP_HORIZONTAL ) {
+            if( opts.flip & SDL_FLIP_HORIZONTAL ) {
                 u += uw;
                 uw = -uw;
             }
-            if( flip & SDL_FLIP_VERTICAL ) {
+            if( opts.flip & SDL_FLIP_VERTICAL ) {
                 v += vh;
                 vh = -vh;
             }
             lighting::sprite_instance s{};
-            s.dst_x = destination.x;
-            s.dst_y = destination.y;
-            s.dst_w = destination.w;
-            s.dst_h = destination.h;
+            s.dst_x = opts.destination.x;
+            s.dst_y = opts.destination.y;
+            s.dst_w = opts.destination.w;
+            s.dst_h = opts.destination.h;
             s.src_u = u;
             s.src_v = v;
             s.src_uw = uw;
             s.src_vh = vh;
-            s.tint_r = light_r;
-            s.tint_g = light_g;
-            s.tint_b = light_b;
-            s.tint_a = alpha;
-            s.rotation = static_cast<float>( rotation_degrees * 3.14159265358979323846 / 180.0 );
-            s.light_mul = light_mul;
-            s.pad1 = sway;    // foliage sway weight (read by sprite.vert)
-            s.pad2 = outline; // >0.5 = hover-outline silhouette (sprite.frag)
-            s.extrude_px = extrude_px;
-            s.extrude_dark = extrude_dark;
-            s.extrude_lean = extrude_lean;
+            s.tint_r = opts.light_r;
+            s.tint_g = opts.light_g;
+            s.tint_b = opts.light_b;
+            s.tint_a = opts.alpha;
+            s.rotation = static_cast<float>( opts.rotation_degrees * 3.14159265358979323846 / 180.0 );
+            s.light_mul = opts.light_mul;
+            s.pad1 = opts.sway;    // foliage sway weight (read by sprite.vert)
+            s.pad2 = opts.outline; // >0.5 = hover-outline silhouette (sprite.frag)
+            s.extrude_px = opts.extrude_px;
+            s.extrude_dark = opts.extrude_dark;
+            s.extrude_lean = opts.extrude_lean;
             s.extrude_pad = 0.0f;
-            lighting::get_render_state().queue_tile_sprite( atlas_tex, s );
+            s.light_mode = static_cast<float>( mode );
+            lighting::get_render_state().queue_tile_sprite( opts.atlas_tex, s );
             return true;
         }
 
@@ -1303,6 +1326,10 @@ class cata_tiles
         // 0 = normal sprite; negative = memorized tile carrying -(dist from
         // player in tiles). Set per-tile in draw_from_id_string.
         mutable float gpu_light_mul = 0.0f;
+        /// Lighting composite mode for the sprite currently being drawn. Set
+        /// per-tile in `draw_from_id_string` and forwarded into the
+        /// `sprite_instance` by `draw_sprite_at`. See src/tile_light_mode.h.
+        mutable sprite_light_mode gpu_light_mode = sprite_light_mode::unlit;
 
         idle_animation_manager idle_animations;
 

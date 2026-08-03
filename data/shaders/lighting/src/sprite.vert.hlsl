@@ -1,10 +1,15 @@
-// ---- Sprite instance (80 bytes, wire-stable) ----
+// ---- Sprite instance (96 bytes, wire-stable with lighting::sprite_instance
+// in src/lighting/sprite_batcher.h — the two MUST grow in lockstep) ----
 struct SpriteInstance {
     float dst_x, dst_y, dst_w, dst_h;
     float src_u, src_v, src_uw, src_vh;
     float tint_r, tint_g, tint_b, tint_a;
     float rotation, light_mul, pad1, pad2;
     float extrude_px, extrude_dark, extrude_lean, extrude_pad;
+    // light_mode is sprite_light_mode from src/tile_light_mode.h, carried as a
+    // float: 0 = unlit, 1 = gpu_lit, 2 = memory. lm_pad0..2 exist only to keep
+    // the record 16-byte aligned for the StructuredBuffer<SpriteInstance> binding.
+    float light_mode, lm_pad0, lm_pad1, lm_pad2;
 };
 
 // Vertex storage slot 0: sprite instances
@@ -113,6 +118,10 @@ struct VS_OUT {
                                  // sprites (uniform), else == world_pos (per-pixel)
     float  outline  : TEXCOORD5; // >0.5 = silhouette mask mode (hover outline)
     float  dark_frac: TEXCOORD6; // 0 at sprite base → extrude_dark at canopy; applied in frag
+    // Categorical selector, NOT a quantity: nointerpolation is mandatory because an
+    // interpolated float drifts off exact 0/1/2 across the quad and would silently
+    // reclassify a tile mid-sprite. Consumers must also compare by BAND, never ==.
+    nointerpolation float light_mode : TEXCOORD7; // sprite_light_mode: 0 unlit, 1 gpu_lit, 2 memory
 };
 static const float2 quad_uv[6] = {
     float2(0.0,0.0), float2(1.0,0.0), float2(0.0,1.0),
@@ -222,5 +231,6 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
     o.light_mul = s.light_mul;
     o.light_pos = is_tall ? base_tile : map_pos;
     o.outline   = s.pad2;
+    o.light_mode = s.light_mode;
     return o;
 }

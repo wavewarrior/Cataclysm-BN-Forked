@@ -5,6 +5,7 @@
 #include <string_view>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <ranges>
 #include <cstdint>
@@ -29,6 +30,7 @@
 #include "int_id.h"
 #include "item.h"
 #include "item_stack.h"
+#include "lightmap_ready.h"
 #include "line.h"
 #include "map.h"
 #include "map_iterator.h"
@@ -52,6 +54,25 @@
 #include "vpart_position.h"
 #include "vpart_range.h"
 #include "weather.h"
+
+namespace
+{
+// One-way latch behind lightmap_ever_generated(). Atomic because
+// map::generate_lightmap_worker is fanned out over several z-levels concurrently by
+// parallel_for in map_cache.cpp; relaxed ordering is enough since the value only ever
+// transitions false -> true and guards no other data.
+std::atomic<bool> g_lightmap_ever_generated = false;
+} // namespace
+
+auto lightmap_ever_generated() noexcept -> bool
+{
+    return g_lightmap_ever_generated.load( std::memory_order_relaxed );
+}
+
+auto mark_lightmap_generated() noexcept -> void
+{
+    g_lightmap_ever_generated.store( true, std::memory_order_relaxed );
+}
 
 static const efftype_id effect_haslight( "haslight" );
 static const efftype_id effect_onfire( "onfire" );
@@ -995,6 +1016,10 @@ void map::generate_lightmap_worker( const int zlev )
             lm[map_cache.idx( elem.first.x(), elem.first.y() )].fill( elem.second );
         }
     } // ZoneScopedN generate_lightmap_flush
+
+    // Single exit: the only `return`s inside this function are in nested lambdas, so
+    // reaching here always means `lm` was populated for this z-level.
+    mark_lightmap_generated();
 }
 
 void map::add_light_source( const tripoint_bub_ms &p, float luminance )

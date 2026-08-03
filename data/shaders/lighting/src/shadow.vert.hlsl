@@ -12,12 +12,24 @@
 // LightParams below MUST match sprite.vert exactly (LightParams was grown to
 // 48 bytes with the sun fields this shader needs in the VERTEX stage — the
 // fragment-only sun_params (b1/space3) is not visible here).
+//
+// STRIDE FIX: SpriteInstance below used to declare only the first 16 floats
+// (64 bytes) even though the shared buffer records were 80. Because
+// StructuredBuffer indexing is stride-based, `Instances[iid + instance_base]`
+// therefore stepped 64 bytes into an 80-byte record and every caster past the
+// first read a progressively more misaligned mixture of its neighbours'
+// fields. The resulting garbage mask went unnoticed only because
+// debug_params::shadow_mask_str ships at 0.0, so the mask is multiplied out
+// before it reaches the screen. The struct is now declared IN FULL (24 floats,
+// 96 bytes) and must stay byte-identical to sprite.vert's.
 
 struct SpriteInstance {
     float dst_x, dst_y, dst_w, dst_h;
     float src_u, src_v, src_uw, src_vh;
     float tint_r, tint_g, tint_b, tint_a;
     float rotation, light_mul, pad1, pad2;
+    float extrude_px, extrude_dark, extrude_lean, extrude_pad;
+    float light_mode, lm_pad0, lm_pad1, lm_pad2;
 };
 
 StructuredBuffer<SpriteInstance> Instances : register(t0, space0);

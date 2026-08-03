@@ -29,6 +29,7 @@
 #include "hud_shake.h"
 #include "sdl_wrappers.h"
 #include "splatmap_stamps.h" // splatmap::active
+#include "tile_light_mode.h"
 #include "lighting/dev_test_lights.h"
 #include "lighting/frame_build.h"
 #include "lighting/rmlui_layer.h"
@@ -84,6 +85,8 @@ static lighting::sprite_instance fullscreen_quad( float w, float h )
     q.tint_g = 1.f;
     q.tint_b = 1.f;
     q.tint_a = 1.f;
+    // Identity blit: no radiance term, albedo x tint only.
+    q.light_mode = static_cast<float>( sprite_light_mode::unlit );
     return q;
 }
 
@@ -660,6 +663,8 @@ auto maybe_push_menu_background( lighting::render_state &rs,
         bg.tint_r = 0.0f;
         bg.tint_g = 0.0f;
         bg.tint_b = menu_emitter_tuning::blue_backdrop ? 0.3f : 0.0f;
+        // Main-menu backdrop: no world, no lightmap.
+        bg.light_mode = static_cast<float>( sprite_light_mode::unlit );
         rs.queue_tile_sprite( rs.geometry().white_texture(), bg );
     }
 }

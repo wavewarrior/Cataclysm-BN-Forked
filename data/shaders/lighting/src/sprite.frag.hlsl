@@ -176,6 +176,13 @@ struct VS_OUT {
     float2 light_pos: TEXCOORD4; // base-tile centre for tall sprites, else world_pos
     float  outline  : TEXCOORD5; // >0.5 = silhouette mask mode (hover outline)
     float  dark_frac: TEXCOORD6; // 0 at sprite base → extrude_dark at canopy; applied in frag
+    // Mirrors sprite.vert.hlsl's VS_OUT member-for-member. nointerpolation is
+    // mandatory: this is a categorical selector and an interpolated float drifts
+    // off exact 0/1/2 across the quad, silently reclassifying a tile mid-sprite.
+    // Consumers must also compare by BAND, never ==.
+    // CARRIED BUT NOT YET READ: the composite below still runs
+    // max( mem_tint, gpu_total ); a later phase replaces it with a mode switch.
+    nointerpolation float light_mode : TEXCOORD7; // sprite_light_mode: 0 unlit, 1 gpu_lit, 2 memory
 };
 // SDF supersample factor — MUST match lighting::SDF_SUPERSAMPLE (sdf_pass.h).
 // SdfBuf is the SS-finer grid: dims (sdf_map_w*SDF_SS) x (sdf_map_h*SDF_SS),

@@ -152,23 +152,34 @@ Do NOT clear queues inside a flush method.
 
 ---
 
-## sprite_instance struct (64 bytes, wire-stable)
+## sprite_instance struct (96 bytes, wire-stable)
 
 ```
-float dst_x, dst_y, dst_w, dst_h   // pixel-space destination quad
-float src_u, src_v, src_uw, src_vh  // normalised UV (negative = flipped axis)
-float tint_r, tint_g, tint_b, tint_a  // RGBA multiplier (1.0 = passthrough)
-float rotation                      // radians, clockwise, around quad centre
-float pad0, pad1, pad2
+float dst_x, dst_y, dst_w, dst_h        // pixel-space destination quad
+float src_u, src_v, src_uw, src_vh      // normalised UV (negative = flipped axis)
+float tint_r, tint_g, tint_b, tint_a    // RGBA multiplier (1.0 = passthrough)
+float rotation                          // radians, clockwise, around quad centre
+float light_mul                         // <0 = memorized tile carrying -(dist in tiles)
+float pad1                              // foliage sway weight (sprite.vert)
+float pad2                              // >0.5 hover outline; <-0.5 encoded frontier mask
+float extrude_px, extrude_dark, extrude_lean, extrude_pad  // height-depth pillar
+float light_mode                        // sprite_light_mode: 0 unlit, 1 gpu_lit, 2 memory
+float lm_pad0, lm_pad1, lm_pad2
 ```
 
-Changing this struct requires updating `SPRITE_VERT_HLSL` in `sprite_batcher.cpp`. `static_assert(sizeof(sprite_instance)==64)` enforces the contract.
+Changing this struct requires updating `SpriteInstance` in BOTH
+`data/shaders/lighting/src/sprite.vert.hlsl` AND `shadow.vert.hlsl` — the
+silhouette-shadow batcher is a second `sprite_batcher` over the same instance
+buffer, so a truncated declaration there indexes with the wrong stride.
+`rain_droplet.vert.hlsl` / `splat_stamp.vert.hlsl` declare a look-alike struct
+but read their own 64-byte `quad_instance` buffers and are unaffected.
+`static_assert(sizeof(sprite_instance)==96)` enforces the contract.
 
 ---
 
 ## Rotation in vertex shader
 
-Clockwise screen-space rotation (Y-down) around quad centre. `rotation` field is in radians (converted from degrees by `enqueue_tile_sprite` in `cata_tiles.h`). Flip is UV-encoded (negative `src_uw`/`src_vh`), independent of rotation.
+Clockwise screen-space rotation (Y-down) around quad centre. `rotation` field is in radians (converted from `tile_sprite_options::rotation_degrees` by `enqueue_tile_sprite` in `cata_tiles.h`). Flip is UV-encoded (negative `src_uw`/`src_vh`), independent of rotation.
 
 Formula: `x' = x*cos - y*sin`, `y' = x*sin + y*cos`
 

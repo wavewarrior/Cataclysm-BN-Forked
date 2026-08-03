@@ -5,6 +5,7 @@
 #include "game_constants.h"
 #include "sdf_pass.h"
 #include "shader_compiler.h"
+#include "tile_light_mode.h"
 
 #include <algorithm>
 #include <atomic>
@@ -311,6 +312,8 @@ void render_state::queue_ui_rect(
     s.tint_g = g;
     s.tint_b = b;
     s.tint_a = a;
+    // Legacy GeometryRenderer UI rect.
+    s.light_mode = static_cast<float>( sprite_light_mode::unlit );
     // Route into the current adaptor's retained slice if we're inside a
     // redraw_cb. Otherwise fall through to the composited output (e.g.
     // background fills queued outside the ui_manager redraw loop).

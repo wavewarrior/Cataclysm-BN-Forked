@@ -1,6 +1,7 @@
 #include "gpu_geometry.h"
 
 #include "debug.h"
+#include "tile_light_mode.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -118,6 +119,8 @@ void gpu_geometry::rect(
     s.tint_g = rgba[1];
     s.tint_b = rgba[2];
     s.tint_a = rgba[3];
+    // Flat-colour geometry on the 1x1 white texel.
+    s.light_mode = static_cast<float>( sprite_light_mode::unlit );
     dst.draw(s);
 }
 

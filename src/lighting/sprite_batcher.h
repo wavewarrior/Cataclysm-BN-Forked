@@ -36,8 +36,9 @@ struct SDL_GPUTexture;
 
 namespace lighting {
 
-// One sprite = one instance. 80 bytes, packed std140-friendly.
-// Layout must match data/shaders/lighting/src/sprite.vert input bindings.
+// One sprite = one instance. 96 bytes, packed std140-friendly.
+// Layout must match data/shaders/lighting/src/sprite.vert (and shadow.vert,
+// which is drawn on a second batcher over the SAME instance buffer).
 //
 //   dst_*    — pixel-space destination quad in the bound render target.
 //   src_*    — normalised UV rect within the bound texture (0..1).
@@ -73,10 +74,24 @@ struct sprite_instance {
     float extrude_dark; // darkness at canopy (0..1); fragment multiplies final_rgb by (1 -
                         // dark_frac)
     float extrude_lean; // horizontal shear per px from viewport centre, per vertical fraction
-    float extrude_pad;  // alignment padding — keep 80 bytes 16-byte aligned
+    float extrude_pad;  // alignment padding
+    // Which lighting composite sprite.frag applies to this sprite:
+    // 0 = unlit (albedo x tint), 1 = gpu_lit (albedo x tint x gpu_total),
+    // 2 = memory (cross-fade to the remembered look). Values are
+    // `sprite_light_mode` from src/tile_light_mode.h, cast to float.
+    //
+    // A zero-initialised `sprite_instance{}` is therefore `unlit`, which is the
+    // correct default for every UI rect, flat overlay and fullscreen blit.
+    // World tiles get their mode from cata_tiles' classification, and the
+    // fragment shader compares this by BAND (> 1.5, > 0.5) rather than for
+    // equality, since it crosses the vertex/fragment boundary as a float.
+    float light_mode;
+    float lm_pad0;
+    float lm_pad1;
+    float lm_pad2; // keep 96 bytes 16-byte aligned
 };
 static_assert(
-    sizeof(sprite_instance) == 80,
+    sizeof(sprite_instance) == 96,
     "sprite_instance is wire-stable with the vertex shader; "
     "changing its layout requires shader edits.");
 

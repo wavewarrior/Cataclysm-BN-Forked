@@ -27,6 +27,7 @@
 #include "itype.h"
 #include "json.h"
 #include "lightmap.h"
+#include "lightmap_ready.h"
 #include "line.h"
 #include "make_static.h"
 #include "map.h"
@@ -60,6 +61,7 @@
 #include "string_utils.h"
 #include "submap.h"
 #include "submap_load_manager.h"
+#include "tile_light_mode.h"
 #include "tileray.h"
 #include "translations.h"
 #include "trap.h"
@@ -1909,7 +1911,10 @@ bool cata_tiles::draw_from_id_string(
     // (tint=1.0) up here so it applies to BOTH the transparent early-return path
     // below AND the normal path; the per-tile gpu_light=0 lit-branch at the
     // Phase-5 block skips C_OVERMAP_TERRAIN, so this is the overmap's final tint.
-    if( tile.category == C_OVERMAP_TERRAIN ) { gpu_light_r = gpu_light_g = gpu_light_b = 1.0f; }
+    if( tile.category == C_OVERMAP_TERRAIN ) {
+        gpu_light_r = gpu_light_g = gpu_light_b = 1.0f;
+        gpu_light_mode = sprite_light_mode::unlit;
+    }
 
     // Let's branch transparent overmaps early if tranparency overlays are enabled
     // Because if tranparency is enabled then backgrounds should not be drawn
@@ -1944,6 +1949,19 @@ bool cata_tiles::draw_from_id_string(
             // lum == 0: lightmap not generated yet; keep tint=1.0 (safe white fallback).
         }
     }
+
+    // Phase A of the lighting-composition pipeline: classify how this sprite
+    // should be lit and carry the answer to the GPU. INERT FOR NOW —
+    // sprite.frag.hlsl still composites with max( mem_tint, gpu_total ) and
+    // ignores light_mode, so the tint rule above is deliberately untouched and
+    // no pixel changes. The cutover is a later phase.
+    // `g != nullptr` is evaluated first so get_map() is never reached without a game.
+    gpu_light_mode = classify_tile_light( {
+        .as_independent_entity = as_independent_entity,
+        .is_overmap = tile.category == C_OVERMAP_TERRAIN,
+        .world_present = g != nullptr && get_map().inbounds( pos ),
+        .lighting_ready = lightmap_ever_generated(),
+        .memorized = ll == lit_level::MEMORIZED } );
 
     // Effect 3: memorized (out-of-sight but remembered) tiles carry
     // -(distance from player in tiles) as the sprite light_mul marker, so the
@@ -2290,12 +2308,23 @@ bool cata_tiles::draw_sprite_at(
         // Only the foreground (vegetation) layer gets foliage sway.
         // The background layer (ground under the tile) must stay static.
         const float enq_sway = is_fg ? sway : 0.0f;
-        sprite_tex->enqueue_tile_sprite(
-            gpu.texture, gpu.atlas_w, gpu.atlas_h, fdst, flip, active_anim_xform_.alpha,
-            static_cast<double>( rotation ) + active_anim_xform_.tilt_deg, gpu_light_r, gpu_light_g,
-            gpu_light_b, gpu_light_mul, enq_sway,
-            vision_overlay_outline_, effective_extrude_px, effective_extrude_dark,
-            effective_extrude_lean );
+        sprite_tex->enqueue_tile_sprite( gpu_light_mode, {
+            .atlas_tex = gpu.texture,
+            .atlas_w = gpu.atlas_w,
+            .atlas_h = gpu.atlas_h,
+            .destination = fdst,
+            .flip = flip,
+            .alpha = active_anim_xform_.alpha,
+            .rotation_degrees = static_cast<double>( rotation ) + active_anim_xform_.tilt_deg,
+            .light_r = gpu_light_r,
+            .light_g = gpu_light_g,
+            .light_b = gpu_light_b,
+            .light_mul = gpu_light_mul,
+            .sway = enq_sway,
+            .outline = vision_overlay_outline_,
+            .extrude_px = effective_extrude_px,
+            .extrude_dark = effective_extrude_dark,
+            .extrude_lean = effective_extrude_lean } );
         // Step 2: capture this sprite's alpha footprint for the SDF seed. Foreground
         // only — the BACKGROUND layer of a wall tile is the floor underneath it, which
         // is opaque across the whole square and would re-create the very tile-square
@@ -2318,10 +2347,17 @@ bool cata_tiles::draw_sprite_at(
                 const auto ov_gpu = atlas->find_gpu_texture_full( overlay_tex->sdl_texture_handle() );
                 if( ov_gpu.texture ) {
                     const float a = std::min( 192, overlay_count ) / 255.0f;
-                    overlay_tex->enqueue_tile_sprite(
-                        ov_gpu.texture, ov_gpu.atlas_w, ov_gpu.atlas_h, fdst, flip, a,
-                        static_cast<double>( rotation ) + active_anim_xform_.tilt_deg, gpu_light_r,
-                        gpu_light_g, gpu_light_b );
+                    overlay_tex->enqueue_tile_sprite( gpu_light_mode, {
+                        .atlas_tex = ov_gpu.texture,
+                        .atlas_w = ov_gpu.atlas_w,
+                        .atlas_h = ov_gpu.atlas_h,
+                        .destination = fdst,
+                        .flip = flip,
+                        .alpha = a,
+                        .rotation_degrees = static_cast<double>( rotation ) + active_anim_xform_.tilt_deg,
+                        .light_r = gpu_light_r,
+                        .light_g = gpu_light_g,
+                        .light_b = gpu_light_b } );
                 }
             }
         }

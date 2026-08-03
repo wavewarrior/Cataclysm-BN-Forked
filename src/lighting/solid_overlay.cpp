@@ -1,6 +1,7 @@
 #include "solid_overlay.h"
 
 #include "render_state.h"
+#include "tile_light_mode.h"
 
 #include <algorithm>
 #include <cmath>
@@ -38,6 +39,8 @@ auto make_flat_quad(
     s.tint_a = color.a;
     s.rotation = rotation;
     s.pad2 = 1.0f;
+    // Flat UI overlay quad - world lighting must never dim it.
+    s.light_mode = static_cast<float>( sprite_light_mode::unlit );
     return s;
 }
 
