@@ -1,0 +1,26 @@
+# Phase 2 smoke gate for the lighting-composition change.
+#
+# The lighting HLSL is compiled at RUNTIME (load_lighting_shader_source reads
+# data/shaders/lighting/src from the install), so NOTHING in the C++ build proves
+# sprite.frag.hlsl even parses. Launching the game is the only compile gate there is.
+#
+# It also answers the main-menu question directly. The backdrop used to be a
+# fullscreen quad with tint (0,0,0.3) relying on `max(tint, gpu_total)` to let the
+# decorative menu emitter glow through. It is now mode gpu_lit with a white tint and
+# the blue base in the `flash` lane, composited as
+# `radiance * (1 - 0.3) + (0,0,0.3)` -- so the glow must still be there, ~30%
+# dimmer, over the same blue.
+#
+# Paired same-state captures: this menu animates its own emitter, so without a null
+# there is no way to separate a real difference from frame-to-frame shimmer.
+launch --dont-debugmsg
+waitlog "opened document data/gui/mainmenu.rml" timeout=240000
+focus
+settle timeout=15000
+shot menu avg=12
+wait 2000
+shot menu_again avg=12
+diff menu menu_again as=same_state
+stats menu
+log
+stop
