@@ -1,3 +1,4 @@
+#include <array>
 #include "cata_tiles.h"
 #include "cata_tiles_internal.h"
 
@@ -90,6 +91,50 @@ static auto terrain_face_amount( const ter_t &t ) -> float
 // ramps to a moderate 0.5, because even a full bookcase presents a less clean vertical
 // face than a wall does. Deriving it this way covers new furniture the day it is
 // defined, with no id list to maintain.
+/// 4-bit mask of which of a tile's EDGES present an exposed vertical face:
+/// 1 = N, 2 = E, 4 = S, 8 = W (matching the decode in sprite.frag).
+///
+/// An edge is exposed when the neighbour is not part of the same wall mass. Deliberately
+/// NOT "is the neighbour outdoors": BOTH faces of a wall run are real faces, and which of
+/// them is sunlit is already decided downstream by sky visibility and shadowing. Asking
+/// the map for an inside/outside direction here would double-count that and would also
+/// collapse on a corner, where two perpendicular faces are exposed at once.
+static auto exposed_edge_mask( const map &m, const tripoint_bub_ms &p ) -> unsigned
+{
+    static constexpr std::array<point, 4> dirs{
+        point{ 0, -1 }, point{ 1, 0 }, point{ 0, 1 }, point{ -1, 0 } };
+    unsigned mask = 0u;
+    for( unsigned b = 0; b < 4u; ++b ) {
+        const ter_t &n = m.ter( p + dirs[b] ).obj();
+        const bool joins = n.has_flag( TFLAG_WALL ) || n.has_flag( TFLAG_CONNECT_TO_WALL );
+        if( !joins ) {
+            mask |= 1u << b;
+        }
+    }
+    return mask;
+}
+
+/// Pack the edge mask and the amount into the single `sprite_instance::face_amt` float:
+/// `mask + amount`, decoded in sprite.frag as floor()/frac().
+///
+/// The clamp below is load-bearing, not defensive. terrain_face_amount returns exactly
+/// 1.0 for an opaque wall, and `mask + 1.0` decodes as mask+1 with amount 0 — silently
+/// disabling the feature on the single most important sprite class while looking correct.
+static auto pack_face( const unsigned mask, const float amount ) -> float
+{
+    if( amount <= 0.0f || mask == 0u ) {
+        return 0.0f;
+    }
+    // The fraction is deliberately squeezed into [0.25, 0.75] rather than [0, 1).
+    // `face_amt` travels as an INTERPOLATED varying, and the integer part is now a
+    // categorical bitmask, so drift across the quad must never cross an integer
+    // boundary. The previous encoding put an opaque wall at mask + 0.999, and any
+    // upward drift made the shader's floor() return mask + 1: that broke every
+    // `mask & bit` test AND drove frac() to ~0, so the whole branch was skipped.
+    // Measured: OFF vs ON was byte-identical, maxdelta 0 over the entire frame.
+    return static_cast<float>( mask ) + 0.25f + 0.5f * std::min( amount, 1.0f );
+}
+
 static auto furniture_face_amount( const furn_t &f ) -> float
 {
     constexpr float sight_cover_min = 30.0f;
@@ -132,7 +177,12 @@ bool cata_tiles::draw_terrain(
     // Vertical-face arc: walls and windows are the surfaces that should respond to
     // light DIRECTION rather than just brightness. Unconditional (no option gate) —
     // it is shading, not animation — and 0 for everything that is not a wall.
-    const float ter_face = t ? terrain_face_amount( *t ) : 0.0f;
+    // Amount first: exposed_edge_mask costs 4 map::ter() lookups, and the grass / road /
+    // floor majority scores 0 and would throw the mask away. Only walls and windows pay.
+    const float ter_face_amt = t ? terrain_face_amount( *t ) : 0.0f;
+    const float ter_face = ter_face_amt > 0.0f
+                           ? pack_face( exposed_edge_mask( here, p ), ter_face_amt )
+                           : 0.0f;
 
     // first memorize the actual terrain
     if( t && !invisible[0] ) {
@@ -216,8 +266,10 @@ bool cata_tiles::draw_terrain(
             const lit_level lit = overridden ? lit_level::LIT : ll;
             const bool nv = !overridden;
             const tile_search_params tile{tname, C_TERRAIN, empty_string, subtile, rotation};
+            const float a2 = terrain_face_amount( *t2 );
+            const float t2_face = a2 > 0.0f ? pack_face( exposed_edge_mask( here, p ), a2 ) : 0.0f;
             return draw_from_id_string( tile, p, bgCol, fgCol, lit, nv, z_drop, false, height_3d,
-                                        0.0f, terrain_face_amount( *t2 ) );
+                                        0.0f, t2_face );
         }
     } else if( invisible[0] ) {
         // try drawing memory if invisible and not overridden
@@ -259,7 +311,9 @@ bool cata_tiles::draw_furniture(
     const float furn_sway = ( f && idle_animations.enabled() ) ? foliage_sway_weight( *f ) : 0.0f;
     if( furn_sway > 0.0f ) { idle_animations.mark_present(); }
     // Vertical-face arc, scaled off sight coverage — see furniture_face_amount.
-    const float furn_face = f ? furniture_face_amount( *f ) : 0.0f;
+    // Furniture is not a connected mass, so every edge counts as exposed (mask 15):
+    // it reads as a rounded post rather than a flat panel.
+    const float furn_face = f ? pack_face( 15u, furniture_face_amount( *f ) ) : 0.0f;
 
     // first memorize the actual furniture
     if( f && !invisible[0] ) {
@@ -340,7 +394,7 @@ bool cata_tiles::draw_furniture(
             const bool nv = !overridden;
             const tile_search_params tile{fname, C_FURNITURE, empty_string, subtile, rotation};
             return draw_from_id_string( tile, p, bgCol, fgCol, lit, nv, z_drop, false, height_3d,
-                                        0.0f, furniture_face_amount( *f2 ) );
+                                        0.0f, pack_face( 15u, furniture_face_amount( *f2 ) ) );
         }
     } else if( invisible[0] ) {
         // try drawing memory if invisible and not overridden

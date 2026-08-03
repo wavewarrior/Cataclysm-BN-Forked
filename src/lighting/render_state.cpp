@@ -1,3 +1,5 @@
+#include <cmath>
+#include <cstdlib>
 #include "render_state.h"
 
 #include "debug.h"
@@ -779,8 +781,38 @@ void render_state::append_slice(
         static_cast<std::uint32_t>(font_glyph_queue_.size()));
 }
 
+namespace
+{
+const bool g_diag_face_amt = std::getenv( "CBN_DIAG_SEG_LIGHTING" ) != nullptr;
+std::uint64_t s_face_total = 0;
+std::uint64_t s_face_wall = 0;
+std::uint64_t s_face_other = 0;
+} // namespace
+
 void render_state::queue_tile_sprite(SDL_GPUTexture* atlas_tex, const sprite_instance& inst) {
     if (!device_.ready() || !atlas_tex) { return; }
+    // DIAGNOSTIC (temporary, CBN_DIAG_SEG_LIGHTING): is the per-sprite facing lane
+    // actually populated at runtime? Both the vertical-face arc and the relaxed sun
+    // gates key on it, so if cata_tiles never sets it BOTH features are silently inert
+    // and every pixel A/B measures nothing. Counted here rather than probed in the
+    // shader because a fragment dump that drops varying consumption kills D3D12
+    // pipeline creation and reports a black frame instead of a reading.
+    if( g_diag_face_amt ) {
+        ++s_face_total;
+        // face_amt is PACKED (edge mask + amount); threshold the DECODED amount.
+        const float dec = inst.face_amt - std::floor( inst.face_amt );
+        if( dec > 0.55f ) {
+            ++s_face_wall;
+        } else if( dec > 0.0f ) {
+            ++s_face_other;
+        }
+        if( s_face_total % 200000u == 1u ) {
+            DebugLogFL( DL::Info, DC::Main )
+                    << "[facediag] sprites=" << s_face_total
+                    << " face>0.55(walls/windows)=" << s_face_wall
+                    << " 0<face<=0.55(furniture)=" << s_face_other;
+        }
+    }
     if (unlit_overlay_route_) {
         // GPU minimap overlay: redirect this atlas sprite into the UNLIT
         // font-glyph path (current adaptor slice) so world lighting never

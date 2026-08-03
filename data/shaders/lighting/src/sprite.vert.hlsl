@@ -144,8 +144,11 @@ struct VS_OUT {
     // available for a 1-tile sprite: light_pos == world_pos for anything not `is_tall`,
     // so the old light_pos.y - world_pos.y trick is identically zero for every wall.
     // MUST NOT be `nointerpolation` -- see the long note on light_mode above; that
-    // qualifier broke D3D12 pipeline creation outright (0x80070057).
-    float quad_v : TEXCOORD9;
+    // qualifier broke D3D12 pipeline creation outright (0x80070057). The old quad_v
+    // varying was REMOVED here: the per-edge face normal derives its in-tile position
+    // from frac(world_pos) instead, and a vertex output the fragment shader does not
+    // consume fails pipeline creation the same way -- which rendered the world black
+    // behind a working HUD.
     // Per-sprite "this is a vertical surface" amount (SpriteInstance::face_amt), 0..1.
     // Per-instance constant, so interpolation across the quad is exact; and like flash it
     // is a QUANTITY, not a categorical selector, so drift could only nudge a shade.
@@ -262,7 +265,6 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
     o.outline   = s.pad2;
     o.light_mode = s.light_mode;
     o.flash     = float3(s.flash_r, s.flash_g, s.flash_b);
-    o.quad_v    = quad_uv[vid].y;
     o.face_amt  = s.face_amt;
     return o;
 }

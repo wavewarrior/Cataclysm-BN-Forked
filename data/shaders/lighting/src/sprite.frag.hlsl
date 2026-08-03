@@ -195,7 +195,6 @@ struct VS_OUT {
     // so the old light_pos.y - world_pos.y trick is identically zero for every wall.
     // MUST NOT be `nointerpolation` -- see the long note on light_mode above; that
     // qualifier broke D3D12 pipeline creation outright (0x80070057).
-    float quad_v : TEXCOORD9;
     // Per-sprite "this is a vertical surface" amount (sprite_instance::face_amt), 0..1.
     // Per-instance constant, so interpolation across the quad is exact; and like flash it
     // is a QUANTITY, not a categorical selector, so drift could only nudge a shade.
@@ -580,22 +579,61 @@ float4 main(VS_OUT i) : SV_Target0 {
     // building interior all read 121.6/121.6/243.5 -- identical. This arc supplies the
     // MACRO orientation the bevel structurally cannot.
     //
-    // quad_v is 0 at the sprite's TOP edge and 1 at its BASE, so (2*quad_v - 1) runs
     // -1 at the top .. +1 at the base. Screen/map +Y is DOWN (south), so pushing the
     // normal's y toward +1 at the base makes the base face SOUTH -- lit when the light
     // is south of the tile -- while the top swings north and falls into shade. That
     // gradient is what reads as a wall FACE instead of a uniformly brighter square.
     //
-    // face_arc is SIGNED so the F4 panel can flip which end faces the viewer without a
-    // rebuild (the same trick nrm_relief uses for the bevel's y-down/atlas-V ambiguity).
+    // face_arc is the F4-tunable strength of the rotation toward the outward normal.
     // Exact no-op when face_amt == 0: the tilt is identically zero and `base_n` is
     // returned untouched, with no renormalisation to perturb it. Every sprite that is
     // not a wall, window or tall furniture -- including every zero-initialised UI, font
     // and overlay instance -- ships face_amt == 0.
-    const float  face_tilt = i.face_amt * face_arc * ( 2.0 * i.quad_v - 1.0 );
-    const float3 normal = ( face_tilt == 0.0 )
-                          ? base_n
-                          : normalize( float3( base_n.x, base_n.y + face_tilt, base_n.z ) );
+    // DECODE face_amt ONCE. Packed as `edge_mask + amount` (see sprite_instance::face_amt):
+    // floor() = 4-bit mask of which tile EDGES are exposed to the outside (1=N, 2=E, 4=S,
+    // 8=W), frac() = amount, and exactly 0 means "not a vertical face". Every consumer
+    // below uses the decoded values, never the raw varying, or it reads a mask as a
+    // magnitude.
+    // Encoded as mask + 0.25 + 0.5 * amount, so the fraction sits in [0.25, 0.75] and
+    // interpolation drift can never carry floor() across an integer boundary (which
+    // previously zeroed the mask and the amount at once -- measured as a byte-identical
+    // frame). Round rather than floor for the same reason.
+    const float face_mask_f = floor( i.face_amt );
+    const float face_amt    = ( i.face_amt - face_mask_f - 0.25 ) * 2.0;
+    // Outward direction of the face this fragment belongs to; also steps the sun's
+    // sky-visibility sample below, so it must be the direction the face LOOKS, not the
+    // direction of the sun.
+    float2 face_out = float2( 0.0, 0.0 );
+    float3 normal   = base_n;
+    if( face_amt > 0.001 ) {
+        const uint mask = (uint)( face_mask_f + 0.5 );
+        // In-tile position, 0..1, y south-down — same convention as the corner feather.
+        const float2 ft = frac( i.world_pos + 0.5 );
+        // PER-EDGE normals, like the chamfer of a bevelled box: each exposed side owns a
+        // strip whose normal points out of the building, so the lit and shaded faces of
+        // one wall run differ. A corner tile has TWO exposed edges and gets both, blended.
+        //
+        // Per-edge rather than one direction per sprite because a single averaged
+        // direction cancels on a corner and cannot describe two faces at once. And unlike
+        // Graveyard Keeper -- which solves this by having an artist paint light from four
+        // sides per sprite and merging that into a normal map -- a tile grid hands us the
+        // topology for free, so walls need no authored art at all.
+        const float bev = 0.42;                     // strip width, tile units
+        float2 acc = float2( 0.0, 0.0 );
+        if( mask & 1u ) { acc += float2(  0.0, -1.0 ) * saturate( 1.0 - ft.y / bev ); }
+        if( mask & 2u ) { acc += float2(  1.0,  0.0 ) * saturate( 1.0 - ( 1.0 - ft.x ) / bev ); }
+        if( mask & 4u ) { acc += float2(  0.0,  1.0 ) * saturate( 1.0 - ( 1.0 - ft.y ) / bev ); }
+        if( mask & 8u ) { acc += float2( -1.0,  0.0 ) * saturate( 1.0 - ft.x / bev ); }
+        const float amag = length( acc );
+        if( amag > 0.001 ) {
+            face_out = acc / amag;
+            // nz small but non-zero: with the sun near zenith (measured sin_elev 0.87) a
+            // purely horizontal normal would drop the wall to black.
+            const float3 face_n = normalize( float3( face_out, 0.30 ) );
+            normal = normalize( lerp( base_n, face_n,
+                                      saturate( face_amt * face_arc ) * saturate( amag ) ) );
+        }
+    }
     // Sky exposure (0 roofed .. 1 open), hoisted above the emitter loop so the
     // wet-specular term can gate on it (no indoor glint). SkyVisBuf is x-major
     // (skyvis[x*H+y]); bilinear so the indoor daylight-bleed gradient reads smooth.
@@ -749,15 +787,50 @@ float4 main(VS_OUT i) : SV_Target0 {
     const bool  frag_is_tall  = (i.light_pos.x != i.world_pos.x)
                                 || (i.light_pos.y != i.world_pos.y);
 
+    // ---- Sun exposure for a VERTICAL FACE -----------------------------------------
+    // A building's roof covers its own wall footprint, so a wall tile is flagged
+    // "not outside" and every per-tile sun gate below reads it as interior:
+    //   * sky_vis     (own tile's TOP) -> 0, which fails the block's entry test
+    //   * sky_dir.a   (sun_shadow, marched with the roof bit) -> shadowed
+    //   * mask_term   exempts only `frag_is_tall`, and is_tall comes from sprite ART
+    //                 height, which is false for EVERY wall (t_wall is 32x32 in
+    //                 normal_terrain.png with no size override)
+    // Measured: outside_true was 30586/32400 with 2066 roofed tiles at z=1 — the
+    // building footprints. So walls rendered permanently veiled, never sunlit.
+    //
+    // A wall's FACE is exposed to the sky even though its top is covered, and per-tile
+    // fields simply cannot express that. So for a vertical face take the sun's
+    // exposure from the tile the face LOOKS TOWARD: a south wall is sunlit when the
+    // tile south of it is open sky. `face_amt` is exactly the "this is a vertical
+    // surface" signal, so this costs nothing on ground sprites (face_amt == 0 keeps
+    // every term bit-identical).
+    // Threshold, not `> 0`: cata_tiles assigns walls 1.0, transparent walls and
+    // windows 0.6, and furniture only 0.5 * a coverage ramp. Relaxing the sun gates
+    // for furniture too made scattered objects across the map pop as bright speckles,
+    // because a chair is not a vertical face whose neighbour's sky belongs to it.
+    // 0.55 admits walls and windows and excludes every furniture value.
+    const bool  is_face   = face_amt > 0.55; // DECODED amount, not the packed varying
+    // Step along the FACE's outward direction, not toward the sun: for a north-facing
+    // wall with the sun to the south, stepping sunward samples the building INTERIOR,
+    // where sky_vis is 0 — so the relaxation would still fail on half of every building.
+    const float2 sun_step = face_out * 1.25;
+    const float sun_sky_vis = is_face
+                              ? max(sky_vis, (sdf_map_w > 0u)
+                                    ? saturate(skyvis_bilinear(shade_pos + sun_step)) : 0.0)
+                              : sky_vis;
+    const float sun_occl = is_face
+                           ? max(sky_dir.a, sky_bilinear(shade_pos + sun_step).a)
+                           : sky_dir.a;
+
     float3 sun_contrib = float3(0.0, 0.0, 0.0);
-    if(sun_intensity > 0.001 && sky_vis > 0.05 && sdf_map_w > 0u) {
+    if(sun_intensity > 0.001 && sun_sky_vis > 0.05 && sdf_map_w > 0u) {
         const float2 toward_sun = -float2(sun_dir_x, sun_dir_y);
         // Sun shadow (Stage 2b): the unified coverage occluder marched in 3D toward
         // the sun by sky_sun.comp → SkyBuf.a (0 shadowed .. 1 lit). Replaces the
         // inline SDF trace + SunSdfBuf — half-walls/furniture register by coverage,
         // roofs/overhangs by the roof bit, and a HIGH sun clears what a LOW sun
         // shadows (real elevation). Debug mode 14 shows this term in isolation.
-        const float sun_shadow = sky_dir.a;
+        const float sun_shadow = sun_occl;
         // Per-pixel Lambert against the sun (Bucket A / A1). The 3D sun ray is
         // (toward_sun.xy, sin_elev). At NRM_AMOUNT=0 this collapses to the old
         // flat-normal value: dot((0,0,1), normalize(toward_sun, sin_elev)) =
@@ -769,15 +842,18 @@ float4 main(VS_OUT i) : SV_Target0 {
         // Tall sprites skip it (mask_term=1) so trees/walls stay lit on top.
         // NOTE (Phase 2.2): trees still ALSO cast via the SDF (sun_shadow) here →
         // a temporary double shadow until 2.3 drops trees from the sun SDF.
-        const float mask_term = frag_is_tall
+        // `frag_is_tall` is sprite ART height, so it is false for every wall; a
+        // vertical face must be exempted explicitly or the ground silhouette mask
+        // darkens the very surface this block exists to light.
+        const float mask_term = (frag_is_tall || is_face)
                                 ? 1.0
                                 : saturate(1.0 - sun_mask_cov * shadow_mask_str);
         sun_contrib = float3(sun_r, sun_g, sun_b) * sun_intensity * sun_lambert
-                      * sun_shadow * sky_vis * mask_term;
+                      * sun_shadow * sun_sky_vis * mask_term;
         // Wet specular glint from the sun (same gating: sky_vis + shadow + mask).
         const float sun_spec = (spec_strength > 0.001) ? spec_strength * wet_spec(normal, sun_L) : 0.0;
         sun_contrib += float3(sun_r, sun_g, sun_b) * sun_intensity
-                       * sun_shadow * sky_vis * mask_term * sun_spec;
+                       * sun_shadow * sun_sky_vis * mask_term * sun_spec;
     }
 
     // Apply runtime tuning scales BEFORE compositing. emitter_scale tunes

@@ -74,9 +74,20 @@ struct sprite_instance {
     float extrude_dark; // darkness at canopy (0..1); fragment multiplies final_rgb by (1 -
                         // dark_frac)
     float extrude_lean; // horizontal shear per px from viewport centre, per vertical fraction
-    /// Per-sprite "this is a vertical surface" amount, 0..1. Drives the facing arc in
-    /// sprite.frag (a vertical gradient so a wall face responds to light direction).
-    /// 0 = flat/horizontal surface (ground, most items) => arc disabled for this sprite.
+    /// Vertical-face descriptor, PACKED as `octant + amount`:
+    ///   floor(v)      = outward direction, 0..7 = E, SE, S, SW, W, NW, N, NE
+    ///   frac(v)       = amount 0..0.999, 0 => not a vertical face (exact no-op)
+    ///
+    /// Packed rather than given its own lane because `sprite_instance` has NO free
+    /// float: `pad1` carries the foliage sway weight and `pad2` the hover-outline
+    /// flag (sprite.vert reads them as s.pad1 / s.pad2), despite the names. Growing
+    /// the struct would break the 96-byte wire contract the three-way declaration
+    /// test pins. 8 octants is ample: walls sit on a tile grid and face axis or
+    /// diagonal directions only.
+    ///
+    /// The direction is REQUIRED, not decorative. Without it a north wall and a
+    /// south wall get identical shading, so the sunny and shady sides of a building
+    /// look the same -- which is exactly the defect this replaces.
     float face_amt;
     // Which lighting composite sprite.frag applies to this sprite:
     // 0 = unlit (albedo x tint), 1 = gpu_lit (albedo x tint x gpu_total),
