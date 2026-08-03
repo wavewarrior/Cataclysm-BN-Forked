@@ -6,6 +6,7 @@
 #include <box2d/box2d.h>
 #include <climits>
 #include <cmath>
+#include <optional>
 
 /// Physical size of one map tile in metres.
 /// Source: vehicles::cmps_per_tile = 178.816f (vehicle.h:61); TILE_M = cmps_per_tile / 100.
@@ -22,20 +23,33 @@ static constexpr float TILE_M = 1.78816f;
 ///   3. Centre offset: mount extents are not symmetric about (0, 0).  b2MakeOffsetBox
 ///      places the shape at the correct local-frame offset so the body origin (vehicle
 ///      reference point) and shape centre coincide with world reality.
-inline auto vehicle_box2d_shape( const vehicle &v ) -> b2Polygon
+///
+/// Returns `std::nullopt` when the vehicle has no occupied mount at all.  Box2D cannot
+/// represent an empty polygon: a default-constructed `b2Polygon` carries `count == 0`,
+/// and `b2CreatePolygonShape` hands it straight to `b2ComputePolygonAABB`, which
+/// asserts `count > 0` (box2d-src/src/geometry.c:400) and dereferences `vertices[0]`
+/// regardless — an unconditional process abort on MSVC, where a failed B2_ASSERT
+/// executes `__debugbreak()`.  The optional exists so no caller can consume the
+/// degenerate result by accident; the previous signature returned `b2Polygon{}` and
+/// all three call sites passed it through unchecked.
+///
+/// The empty-footprint case is real, not hypothetical: vproto "none"
+/// (data/json/vehicles/vehicles.json:11) is declared with `"parts": [ ]` and is the
+/// supported way to spawn a bare chassis that the caller then populates with
+/// `vehicle::install_part()`.  `map::add_vehicle()` (mapgen.cpp:5910) calls
+/// `on_vehicle_added()` before any part exists, so the very first vehicle built that
+/// way aborted the process.
+///
+/// A one-tile vehicle is NOT degenerate — hw = hh = 0.5 * TILE_M gives a valid box —
+/// and neither is a straight line of parts, so no legitimate footprint is rejected
+/// here.  Only a completely empty part list is.
+inline auto vehicle_box2d_shape( const vehicle &v ) -> std::optional<b2Polygon>
 {
-    // Guard against vehicles with zero non-removed parts — avoids INT_MIN - INT_MAX
-    // signed overflow when computing bounding box extents.
-    const auto &parts = v.get_all_parts();
-    if( parts.empty() ) {
-        return {}; // empty shape, no body created
-    }
-
     auto min_mx = INT_MAX;
     auto max_mx = INT_MIN;
     auto min_my = INT_MAX;
     auto max_my = INT_MIN;
-    for( const auto &vp : parts ) {
+    for( const auto &vp : v.get_all_parts() ) {
         if( vp.part().removed ) {
             continue;
         }
@@ -45,9 +59,10 @@ inline auto vehicle_box2d_shape( const vehicle &v ) -> b2Polygon
         min_my = std::min( min_my, m.y() );
         max_my = std::max( max_my, m.y() );
     }
-    // All parts were removed — same overflow guard as the empty() check above.
+    // No non-removed part contributed an extent.  Returning here also keeps the
+    // INT_MAX - INT_MIN signed overflow below unreachable.
     if( min_mx > max_mx ) {
-        return {};
+        return std::nullopt;
     }
     const auto hw = ( max_mx - min_mx + 1 ) / 2.0f * TILE_M;
     const auto hh = ( max_my - min_my + 1 ) / 2.0f * TILE_M;

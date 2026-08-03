@@ -60,6 +60,7 @@
 #include "options.h"
 #include "output.h"
 #include "overmapbuffer.h"
+#include "physics/physics_world.h"
 #include "player.h"
 #include "player_activity.h"
 #include "point_float.h"
@@ -555,7 +556,16 @@ int vehicle::install_part( const tripoint_mnt_veh &dp, vehicle_part &&new_part )
     }
 
     refresh();
-    get_map().invalidate_lightmap_caches();
+    map &here = get_map();
+    here.invalidate_lightmap_caches();
+    // Keep the Box2D collider in step with the footprint.  This is what gives a bare
+    // vproto-"none" chassis its collision geometry: map::add_vehicle() registers it with
+    // the physics world while it still has zero parts, so no polygon could be built then.
+    // No-op for a vehicle the physics world does not know about, e.g. anything mapgen is
+    // still assembling.
+    if( physics::PhysicsWorld *phys = here.get_physics_world() ) {
+        phys->on_vehicle_parts_changed( *this );
+    }
     coeff_air_changed = true;
     return parts.size() - 1;
 }

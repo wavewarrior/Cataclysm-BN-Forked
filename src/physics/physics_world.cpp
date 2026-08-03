@@ -7,6 +7,7 @@
 #include "map.h"            // map::abs_to_bub, impassable_ter_furn, is_bashable_ter_furn
 #include "game_constants.h" // SEEX, SEEY
 #include "units_mass.h"     // units::to_kilogram
+#include "debug.h"          // DebugLog, DL, DC
 #include <algorithm>
 #include <cmath>
 #include "physics_debug_draw.h"
@@ -30,6 +31,37 @@ PhysicsWorld::~PhysicsWorld()
 
 // ── Private helpers ───────────────────────────────────────────────────────────
 
+auto PhysicsWorld::create_vehicle_shape( b2BodyId bid, const vehicle &v ) -> bool
+{
+    const auto poly = vehicle_box2d_shape( v );
+    if( !poly ) {
+        return false;
+    }
+
+    const auto mass_kg = units::to_kilogram( v.total_mass() );
+
+    // Approximate body area for density (shape area in m²).
+    // For a box poly vertices[0]=min-corner, vertices[2]=max-corner.
+    const auto half_w = std::max( ( poly->vertices[2].x - poly->vertices[0].x ) * 0.5f, 0.01f );
+    const auto half_h = std::max( ( poly->vertices[2].y - poly->vertices[0].y ) * 0.5f, 0.01f );
+
+    auto sdef                = b2DefaultShapeDef();
+    sdef.density             = mass_kg / ( 4.0f * half_w * half_h );
+    sdef.friction            = 0.3f;
+    sdef.restitution         = 0.5f;  // refined per-collision in transient worlds (Phase 2 / 5)
+    sdef.enableContactEvents = true;
+    sdef.enableHitEvents     = true;
+
+    // Single z-bit shared by all body types; groupIndex separates categories.
+    const auto z_bit = physics::z_category_bit( v.bub_ms_location().z() );
+    sdef.filter.categoryBits = z_bit;
+    sdef.filter.maskBits     = z_bit;
+    sdef.filter.groupIndex   = physics::vehicle_group;
+
+    b2CreatePolygonShape( bid, &sdef, &poly.value() );
+    return true;
+}
+
 auto PhysicsWorld::make_vehicle_body( vehicle &v ) -> b2BodyId
 {
     const auto bpos = v.bub_ms_location();
@@ -49,28 +81,16 @@ auto PhysicsWorld::make_vehicle_body( vehicle &v ) -> b2BodyId
     const auto bid = b2CreateBody( world_, &bdef );
     b2Body_SetUserData( bid, &v );
 
-    const auto poly    = vehicle_box2d_shape( v );
-    const auto mass_kg = units::to_kilogram( v.total_mass() );
-
-    // Approximate body area for density (shape area in m²).
-    // For a box poly vertices[0]=min-corner, vertices[2]=max-corner.
-    const auto half_w = std::max( ( poly.vertices[2].x - poly.vertices[0].x ) * 0.5f, 0.01f );
-    const auto half_h = std::max( ( poly.vertices[2].y - poly.vertices[0].y ) * 0.5f, 0.01f );
-
-    auto sdef                = b2DefaultShapeDef();
-    sdef.density             = mass_kg / ( 4.0f * half_w * half_h );
-    sdef.friction            = 0.3f;
-    sdef.restitution         = 0.5f;  // refined per-collision in transient worlds (Phase 2 / 5)
-    sdef.enableContactEvents = true;
-    sdef.enableHitEvents     = true;
-
-    // Single z-bit shared by all body types; groupIndex separates categories.
-    const auto z_bit = physics::z_category_bit( bpos.z() );
-    sdef.filter.categoryBits = z_bit;
-    sdef.filter.maskBits     = z_bit;
-    sdef.filter.groupIndex   = physics::vehicle_group;
-
-    b2CreatePolygonShape( bid, &sdef, &poly );
+    // A bare chassis (vproto "none") has no footprint yet, so it gets a body with no
+    // shape rather than a zero-vertex polygon.  The body still has to exist: it carries
+    // the transform that on_vehicle_moved() keeps in sync, and on_vehicle_parts_changed()
+    // needs somewhere to attach the shape once the first part is installed.
+    if( !create_vehicle_shape( bid, v ) ) {
+        DebugLog( DL::Info, DC::Map )
+                << "physics: vehicle '" << v.type.str()
+                << "' registered with an empty part list; body created without collision "
+                   "geometry until a part is installed";
+    }
     return bid;
 }
 
@@ -108,6 +128,35 @@ void PhysicsWorld::on_vehicle_added( vehicle &v )
     // constraint, so the tile-step mover keeps ownership.  The body is still built,
     // so other vehicles and terrain collide with it normally.
     v.box2d_position_authority = !v.can_use_rails();
+}
+
+void PhysicsWorld::on_vehicle_parts_changed( vehicle &v )
+{
+    const auto it = vehicle_bodies_.find( &v );
+    if( it == vehicle_bodies_.end() ) {
+        // Not registered here.  Normal during mapgen: map::add_vehicle_to_map() installs
+        // every transferred part while merging wrecks, long before on_vehicle_added()
+        // runs, so this is just a hash lookup and nothing else.
+        return;
+    }
+
+    // Refit the polygon rather than only filling in a missing one.  A bare vproto-"none"
+    // chassis is populated one part at a time, so a create-if-missing hook would freeze
+    // the collider at the footprint of whichever part happened to arrive first — a 1x1
+    // box for a vehicle that ends up several tiles across.  We only ever attach one shape
+    // per vehicle body, so this destroys at most one.
+    auto old_shape = b2ShapeId{};
+    while( b2Body_GetShapes( it->second, &old_shape, 1 ) > 0 ) {
+        b2DestroyShape( old_shape );
+    }
+
+    if( !create_vehicle_shape( it->second, v ) ) {
+        DebugLog( DL::Info, DC::Map )
+                << "physics: vehicle '" << v.type.str()
+                << "' has no occupied mount after a part change; body left without "
+                   "collision geometry";
+    }
+    b2Body_ApplyMassFromShapes( it->second );
 }
 
 void PhysicsWorld::on_vehicle_moved( vehicle &v )
@@ -750,6 +799,14 @@ auto PhysicsWorld::resolve_terrain_impulse( vehicle        &v,
 {
     ( void )tile_mass_kg;  // terrain tile is b2_staticBody; mass not needed
 
+    // A vehicle with no footprint has nothing that can touch the tile, so there is no
+    // impulse to resolve and no polygon to build one from.  Answering with the incoming
+    // state is the identity result the caller already handles.
+    const auto poly = vehicle_box2d_shape( v );
+    if( !poly ) {
+        return terrain_impulse_result{ v.velo_vec(), v.angular_velocity_rads };
+    }
+
     // ── 1. Temporary world (zero gravity, isolated from persistent world_) ────
     auto wdef    = b2DefaultWorldDef();
     wdef.gravity = { 0.0f, 0.0f };
@@ -769,18 +826,17 @@ auto PhysicsWorld::resolve_terrain_impulse( vehicle        &v,
     const auto vbody = b2CreateBody( tmp_world, &vbdef );
     b2Body_SetUserData( vbody, &v );
 
-    const auto poly    = vehicle_box2d_shape( v );
     const auto mass_kg = units::to_kilogram( v.total_mass() );
 
     // Approximate body area for density (same pattern as make_vehicle_body()).
-    const auto half_w = std::max( ( poly.vertices[2].x - poly.vertices[0].x ) * 0.5f, 0.01f );
-    const auto half_h = std::max( ( poly.vertices[2].y - poly.vertices[0].y ) * 0.5f, 0.01f );
+    const auto half_w = std::max( ( poly->vertices[2].x - poly->vertices[0].x ) * 0.5f, 0.01f );
+    const auto half_h = std::max( ( poly->vertices[2].y - poly->vertices[0].y ) * 0.5f, 0.01f );
 
     auto vsdef       = b2DefaultShapeDef();
     vsdef.density    = mass_kg / ( 4.0f * half_w * half_h );
     vsdef.restitution = restitution;
     vsdef.friction   = 0.3f;
-    b2CreatePolygonShape( vbody, &vsdef, &poly );
+    b2CreatePolygonShape( vbody, &vsdef, &poly.value() );
 
     // ── 3. Terrain tile as b2_staticBody relative to vehicle origin ───────────
     const auto vpos = v.bub_ms_location();

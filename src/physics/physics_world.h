@@ -47,6 +47,24 @@ public:
 
     // ── Vehicle lifecycle ──────────────────────────────────────────────────
     void on_vehicle_added( vehicle &v );
+    /// Refit a registered vehicle's collision polygon to its current part footprint.
+    ///
+    /// `on_vehicle_added()` runs while a vproto-"none" chassis still has zero parts, so
+    /// there is no footprint to build a polygon from and the body is created bare (see
+    /// `vehicle_box2d_shape()`).  This is the hook that gives that body a shape once
+    /// parts arrive, so an empty chassis does not stay collider-less for the rest of its
+    /// life.  Because such a chassis is populated one part at a time, the shape is rebuilt
+    /// from the whole footprint on every call rather than only when it is missing —
+    /// otherwise the collider would freeze at the first installed part's single tile.
+    ///
+    /// Called from `vehicle::install_part()`, which is a player action / mapgen path, not
+    /// a per-frame or per-tile one.  A no-op (one hash lookup) for a vehicle that is not
+    /// registered here, which is the case for everything mapgen builds before
+    /// `map::add_vehicle()` registers it.  Part *removal* does not call this: the removal
+    /// choke point `vehicle::part_removal_cleanup()` is reached from the per-map-update
+    /// `dirty_vehicle_list` flush, and a shrinking footprint was never tracked before, so
+    /// keeping it out avoids putting shape churn on that path.
+    void on_vehicle_parts_changed( vehicle &v );
     void on_vehicle_moved( vehicle &v );
     /// Force the b2Body transform back to the vehicle's current tile anchor,
     /// bypassing the `box2d_position_authority` guard in `on_vehicle_moved`.
@@ -198,6 +216,9 @@ private:
     std::unordered_map<const Creature *, creature_body> creature_bodies_;
 
     auto make_vehicle_body( vehicle &v ) -> b2BodyId;
+    /// Attach the vehicle footprint polygon to `bid`.  False when the vehicle has no
+    /// footprint yet, in which case no shape is created and `bid` keeps zero shapes.
+    auto create_vehicle_shape( b2BodyId bid, const vehicle &v ) -> bool; // *NOPAD*
     void rebuild_bashable_lookup();
     /// Push game-side velocity into the bodies (once per turn, before stepping).
     void sync_bodies_from_game();

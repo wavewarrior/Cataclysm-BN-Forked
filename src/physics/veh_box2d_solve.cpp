@@ -65,19 +65,26 @@ auto solve_vv_cluster( vehicle &veh,
         const auto mass_kg   = static_cast<float>( units::to_kilogram( v->total_mass() ) );
         auto sdef            = b2DefaultShapeDef();
         const auto poly      = vehicle_box2d_shape( *v );
-        // Approximate AABB area for density → inertia tensor.
-        const auto half_w    = ( poly.vertices[2].x - poly.vertices[0].x ) / 2.0f;
-        const auto half_h    = ( poly.vertices[2].y - poly.vertices[0].y ) / 2.0f;
-        const auto area      = 4.0f * std::max( half_w * half_h, 0.01f );
-        sdef.density         = mass_kg / area;
-        // Decision D6: set restitution on both bodies from get_collision_factor(relative delta_v)
-        // so b2MixRestitution=max(r1,r2) doesn't collapse to 1.0 for stationary targets.
-        // get_collision_factor() declared vehicle.h:69, defined vehicle_move.cpp:1396.
-        sdef.restitution     = get_collision_factor(
-            std::abs( static_cast<float>( v->velocity ) / 100.0f ) );
-        sdef.friction        = 0.3f;
+        if( poly ) {
+            // Approximate AABB area for density → inertia tensor.
+            const auto half_w    = ( poly->vertices[2].x - poly->vertices[0].x ) / 2.0f;
+            const auto half_h    = ( poly->vertices[2].y - poly->vertices[0].y ) / 2.0f;
+            const auto area      = 4.0f * std::max( half_w * half_h, 0.01f );
+            sdef.density         = mass_kg / area;
+            // Decision D6: set restitution on both bodies from get_collision_factor(relative delta_v)
+            // so b2MixRestitution=max(r1,r2) doesn't collapse to 1.0 for stationary targets.
+            // get_collision_factor() declared vehicle.h:69, defined vehicle_move.cpp:1396.
+            sdef.restitution     = get_collision_factor(
+                std::abs( static_cast<float>( v->velocity ) / 100.0f ) );
+            sdef.friction        = 0.3f;
 
-        b2CreatePolygonShape( body, &sdef, &poly );
+            b2CreatePolygonShape( body, &sdef, &poly.value() );
+        }
+        // else: a vehicle with no footprint (bare vproto-"none" chassis) gets a shapeless
+        // body.  It stays in body_map so the readback below still finds it, and Box2D
+        // treats a dynamic body with no shape as zero-mass, so it simply does not take
+        // part in the cluster solve — which is the right answer for something that has no
+        // collision geometry to collide with.
 
         body_map[v] = BodyData{ body,
                                 { bdef.linearVelocity.x, bdef.linearVelocity.y },
