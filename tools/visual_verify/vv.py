@@ -299,19 +299,47 @@ def settle(bbox, timeout_ms: int = 15000, tol: float = 0.8, poll_ms: int = 220,
     return False, int((time.time() - t0) * 1000)
 
 
-def capture(bbox, avg: int = 1, gap_ms: int = 70) -> Image.Image:
+def capture(bbox, avg: int = 1, gap_ms: int = 70, retries: int = 3) -> Image.Image:
     """Mean of `avg` grabs. Animated backdrops (this game's menu emitters, rain, particles)
     move ~2.5% of pixels per frame on their own, which is the same order as a real UI
     change -- counting thresholded pixels cannot tell them apart. Averaging cancels the
-    time-varying part and leaves the static change standing."""
+    time-varying part and leaves the static change standing.
+
+    The accumulator RESTARTS if a grab comes back a different size. This game's window
+    resizes on its own -- observed 2560x1440 -> 1920x1080 roughly two minutes into a
+    session, and the reverse about 1.5 s after a world finishes loading. Landing inside an
+    `avg` accumulation, that used to raise
+    `ValueError: operands could not be broadcast together` and abort the whole scenario
+    after the run had already been paid for. Restarting is the right response rather than
+    padding or cropping: mixing two window sizes into one mean would silently produce a
+    frame that never existed, which is worse than failing.
+
+    KNOWN LIMIT: a retry re-grabs the SAME bbox it was handed. If the window itself moved
+    or resized (rather than the desktop/virtual-display resolution changing, which is what
+    `clamp_bbox` absorbs), the retry can succeed the shape check while capturing the wrong
+    region. Re-resolving the window rect per attempt needs the caller's context, which this
+    helper does not have; until then a scenario that trips the retry should be re-run and
+    its frames sanity-checked rather than trusted blindly."""
     if avg <= 1:
         return grab(bbox)
-    acc = np.zeros((*grab(bbox).size[::-1], 3), dtype=np.float64)
-    for i in range(avg):
-        if i:
+    for attempt in range(retries):
+        first = np.asarray(grab(bbox), dtype=np.float64)
+        acc, n, resized = first, 1, False
+        for _ in range(avg - 1):
             time.sleep(gap_ms / 1000)
-        acc += np.asarray(grab(bbox), dtype=np.float64)
-    return Image.fromarray((acc / avg).round().astype(np.uint8))
+            nxt = np.asarray(grab(bbox), dtype=np.float64)
+            if nxt.shape != first.shape:
+                resized = True
+                break
+            acc += nxt
+            n += 1
+        if not resized:
+            return Image.fromarray((acc / n).round().astype(np.uint8))
+        if attempt + 1 < retries:
+            time.sleep(1.0)   # let the resize settle before trying again
+    raise SystemExit(
+        f"capture: window kept resizing across {retries} attempts (last shapes "
+        f"{first.shape} vs {nxt.shape}); re-run, and add a longer settle before this shot")
 
 
 def ahash(img: Image.Image) -> str:

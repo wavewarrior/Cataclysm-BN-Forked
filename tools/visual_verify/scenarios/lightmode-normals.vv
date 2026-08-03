@@ -1,0 +1,52 @@
+# Capture debug view 9 (raw surface normal as RGB) to test whether sprite INTERIORS carry
+# any relief at all.
+#
+# PREREQUISITE: a THROWAWAY clone of an explored save, --var WORLD=<name>.
+#
+# Why this view answers the question definitively: `surface_normal()` in sprite.frag.hlsl is
+# a 4-tap gradient of ALPHA (`dx = sR.a - sL.a`), so wherever alpha is saturated -- the
+# whole interior of a wall or building sprite -- dx = dy = 0 and the normal is exactly
+# (0,0,1). Mode 9 encodes the normal as n*0.5+0.5, so a flat normal is rgb(128,128,255),
+# a flat lavender. If the interiors read that colour with near-zero variance, no amount of
+# nrm_relief / nrm_amount tuning can produce face shading, because those knobs multiply a
+# gradient that is zero. That is the difference between "needs tuning" and "needs the
+# distance-transform normal atlas" (GRAVEYARD_KEEPER_VISUAL_PLAN section 3b).
+#
+# 9 F7 presses reach mode 9, gated on the log so a dropped key fails the run rather than
+# silently handing back a capture of some other mode.
+launch --dont-debugmsg --world ${WORLD}
+waitlog "opened document .*sidebar_hud.rml" timeout=300000
+focus
+settle timeout=25000
+shot warmup avg=4
+wait 6000
+settle timeout=15000
+
+rect play 0.25,0.12,0.55,0.80
+
+shot mode0 avg=8
+
+key "{F7}"
+wait 250
+key "{F7}"
+wait 250
+key "{F7}"
+wait 250
+key "{F7}"
+wait 250
+key "{F7}"
+wait 400
+key "{F7}"
+wait 250
+key "{F7}"
+wait 250
+key "{F7}"
+wait 250
+key "{F7}"
+waitlog "lighting debug mode 9" timeout=20000
+wait 2500
+shot normals avg=6
+stats normals in=play
+
+log
+stop

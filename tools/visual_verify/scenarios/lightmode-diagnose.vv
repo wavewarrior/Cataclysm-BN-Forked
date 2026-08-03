@@ -1,0 +1,81 @@
+# One launch, five diagnostic views. Separates the two defects reported on the daylight
+# frame: flat sprite shading, and a shadow with no visible occluder.
+#
+# PREREQUISITE: a THROWAWAY clone of an explored save, --var WORLD=<name>.
+#
+# F7 cycles debug_mode 0..16 and logs the mode it lands on, so every capture is gated on
+# `waitlog` rather than on a keypress count. Views captured, and what each one settles:
+#
+#   6  SDF occupancy       red = wall (s~0) -> green = open (s>=8). Shows which tiles the
+#                          occluder grid thinks are solid.
+#   7  sky_vis             per-tile open-sky. Roofed reads black.
+#   9  surface normal      n*0.5+0.5. FLAT is rgb(128,128,255) lavender. If sprite
+#                          interiors read flat, `surface_normal`'s alpha gradient is zero
+#                          there and no nrm_* knob can produce face shading.
+#   13 sky access          hemisphere fraction reaching open sky, from sky_sun.comp.
+#   14 sun occlusion       THE live sun shadow: the celestial march from the unified
+#                          coverage occluder into SkyBuf.a, 1 = lit, 0 = shadowed. If a dark
+#                          patch of open grass reads 0 here, the shadow is real and cast by
+#                          the coverage grid -- i.e. a tile is an occluder with no visible
+#                          tall sprite, which is map/coverage DATA, not a shader bug.
+#
+# Note shadow_mask_str defaults to 0.0, so the screen-space silhouette mask is OFF and
+# cannot be the source of a phantom shadow.
+launch --dont-debugmsg --world ${WORLD}
+waitlog "opened document .*sidebar_hud.rml" timeout=300000
+focus
+settle timeout=25000
+shot warmup avg=4
+wait 6000
+settle timeout=15000
+
+rect play 0.25,0.12,0.55,0.80
+shot mode0 avg=8
+
+key "{F7}"
+wait 250
+key "{F7}"
+wait 250
+key "{F7}"
+wait 250
+key "{F7}"
+wait 250
+key "{F7}"
+wait 300
+key "{F7}"
+waitlog "lighting debug mode 6" timeout=20000
+wait 2000
+shot m06_sdf avg=6
+
+key "{F7}"
+waitlog "lighting debug mode 7" timeout=20000
+wait 2000
+shot m07_skyvis avg=6
+
+key "{F7}"
+wait 300
+key "{F7}"
+waitlog "lighting debug mode 9" timeout=20000
+wait 2000
+shot m09_normals avg=6
+stats m09_normals in=play
+
+key "{F7}"
+wait 300
+key "{F7}"
+wait 300
+key "{F7}"
+wait 300
+key "{F7}"
+waitlog "lighting debug mode 13" timeout=20000
+wait 2000
+shot m13_skyaccess avg=6
+
+key "{F7}"
+waitlog "lighting debug mode 14" timeout=20000
+wait 2000
+shot m14_sunocclusion avg=6
+stats m14_sunocclusion in=play
+
+log
+stop
