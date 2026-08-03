@@ -116,10 +116,48 @@ enum class sprite_light_mode : int { unlit = 0, gpu_lit = 1, memory = 2 };
 |---|---|---|
 | `unlit` | `albedo x tint` | UI, fonts, overmap, main menu, rain, overlays, world-not-ready |
 | `gpu_lit` | `albedo x tint x gpu_total` | world tiles the player can see |
-| `memory` | `albedo x tint x memory_curve(dist)` | remembered terrain; never reads `gpu_total` |
+| `memory` | `lerp(gpu_lit_result, memory_result, frontier_cov)` | remembered terrain; **still needs the radiance term** - see below |
 
 `max()` is deleted. The `lum > 0.001` test is deleted. "World not ready" becomes
 an explicit flag rather than a per-tile brightness race.
+
+### The memory branch MUST keep `gpu_total` (Step 8 frontier cross-fade)
+
+The obvious spec - "memory never reads `gpu_total`" - is wrong and would
+reintroduce the exact artefact Step 8 was built to remove.
+
+`frontier_cov` (`sprite.frag.hlsl:435-467`) is 1.0 deep inside a remembered
+region and falls to 0 at the edge shared with a currently-visible tile. It
+feathers THREE things today:
+
+| line | feathered term |
+|---|---|
+| 489 | the greyscale texel treatment |
+| 780 | the tint passthrough, via `mem_tint = i.tint.rgb * frontier_cov` |
+| 845 | the memory dim, via `lerp(1.0, mem_mul, frontier_cov)` |
+
+Line 780 is fed into the `max()` on purpose: as `frontier_cov -> 0` the tint goes
+to 0, so `max(0, gpu_total)` yields `gpu_total` and the remembered tile renders
+*exactly as its visible neighbour does*. The comment at 774-779 says so outright -
+"the two terms together are a true cross-fade between the lit and remembered
+looks".
+
+A memory branch that never reads `gpu_total` has nothing to cross-fade toward, so
+the feather ramps to black and the seen/remembered boundary comes back as a dark
+rim. Hence the mode is a lerp, not an independent branch:
+
+```
+memory: lerp(gpu_lit_result, memory_result, frontier_cov)
+```
+
+`frontier_cov == 1` (deep inside) -> pure memory look; `frontier_cov == 0` (at the
+edge) -> bit-identical to the visible neighbour. This is the one place the new
+design must NOT simplify the branch structure.
+
+Endpoint parity is NOT full parity: today's `max(frontier_cov, gpu_total)` and
+this lerp agree at `frontier_cov` 0 and 1 but differ in between, so the frontier
+band changes on purpose. See the Risks entry before treating "no visual diff" as
+the gate there.
 
 ## Phases
 
@@ -163,8 +201,11 @@ an explicit flag rather than a per-tile brightness race.
   `MEMORIZED` -> `memory`; UI / overmap / `as_independent_entity` / world-not-ready
   -> `unlit`; everything else -> `gpu_lit`.
 - Add an explicit `world_lighting_ready` flag for pre-first-lightmap frames.
-- **Gate:** the Catch2 classification table (below) plus the categorical debug
-  view.
+- Implement `memory` as the `frontier_cov` cross-fade, NOT an independent branch,
+  and capture the reference frontier luma profile BEFORE changing the composite.
+- **Gate:** the Catch2 classification table (below), the categorical debug view,
+  AND the monotonic frontier-ramp check (see Risks) - the categorical view shows
+  class, not brightness, so it cannot catch a dark rim on its own.
 
 ### Phase 3 - retune
 
@@ -217,7 +258,26 @@ So the plan leans on methods that work before any pixel is compared:
 - Touches every pixel in the game. The Phase 1 / Phase 2 split exists so the wire
   change is provably inert before behaviour moves.
 - Consumer 4 (palette-ramp gate) silently inverts if it lags the composite.
-- Memory tiles currently derive their look from `tint = 1.0` plus `mem_dim` and
+- **The frontier band WILL change, intentionally - do not use "no visual diff" as
+  its acceptance criterion.** Today the memory composite is
+  `max(frontier_cov, gpu_total)` (tint is 1.0 on memory tiles), i.e. brighter
+  wins. The specced `lerp(gpu_lit_result, memory_result, frontier_cov)` agrees at
+  BOTH endpoints but not in between: at `frontier_cov = 0.5` with
+  `gpu_total = 0.9`, today yields 0.9 while the lerp yields the mean of the two
+  looks. The lerp is the better formulation - a genuine monotonic cross-fade
+  rather than a content-dependent "brighter wins" band - but it is a real change
+  in that band and must be declared, not discovered. If pixel parity there turns
+  out to matter, the fallback is `max(memory_result, gpu_lit_result)` scaled by
+  `frontier_cov`, which preserves current output at the cost of keeping a `max`
+  inside the memory branch.
+- **The frontier cross-fade needs its own gate.** The categorical debug view shows
+  CLASS, not brightness, so it cannot catch a dark rim. Gate with `debug_mode 15`
+  (the existing vision-frontier view, `sprite.frag.hlsl:973-987`, which already
+  encodes `frontier_cov` in GREEN) plus a luma profile sampled ACROSS a
+  seen/remembered boundary: the ramp must be **monotonic** between the two
+  plateaus - no dip below the remembered side, no overshoot above the visible
+  side. Capture the reference profile BEFORE Phase 2.
+- Memory tiles otherwise derive their look from `tint = 1.0` plus `mem_dim` and
   `mem_desat`. Phase 2 must reproduce that exactly or remembered terrain shifts
   brightness.
 - Deleting the `lum` gate means genuinely dark visible tiles render dark instead
