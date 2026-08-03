@@ -60,6 +60,19 @@ static_assert(sizeof(sun_params) == 48, "sun_params wire-stable with SunParams c
 // embed it by value in frame_light_inputs. Wire-stable layout enforced here.
 static_assert(sizeof(debug_params) == 224, "debug_params wire-stable with DebugParams cbuffer");
 
+// Temporary diagnostic for the normal-atlas/facing verification: the surface normal is
+// only consumed by the emitter loops and the sun term, so when both are ~0 the feature
+// provably cannot appear on screen and every pixel A/B measures the SCENE instead. These
+// report the exact floats reaching the GPU, which a blended pixel probe cannot because it
+// reads back through the AgX tonemap and exposure. Enabled by CBN_DIAG_SEG_LIGHTING.
+namespace
+{
+const bool g_diag_seg_lighting = std::getenv( "CBN_DIAG_SEG_LIGHTING" ) != nullptr;
+bool s_diag_first_lit = true;
+std::uint64_t s_diag_lit = 0;
+std::uint64_t s_diag_unlit = 0;
+} // namespace
+
 // ---- 24h sun LUT -------------------------------------------------------
 // Defined at file scope so MSVC won't complain about static-local in nested block.
 namespace {
@@ -723,6 +736,29 @@ public:
                     lp_sun_use.sun_intensity = 0.0f;
                     lp_sun_use.sky_intensity = 0.0f;
                     lp_dbg_use.debug_mode = 0u;
+                }
+                // DIAGNOSTIC (temporary): distinguish "the sun term is zeroed per
+                // segment because is_lit is false" from "sun_intensity was already ~0
+                // upstream". Those two produce an identical black sun in the shader but
+                // need opposite fixes, and a blended pixel probe cannot tell them apart
+                // because it reads back through AgX + exposure. Throttled hard.
+                if( g_diag_seg_lighting ) {
+                    if( s.is_lit ) {
+                        ++s_diag_lit;
+                    } else {
+                        ++s_diag_unlit;
+                    }
+                    if( s.is_lit && s_diag_first_lit ) {
+                        s_diag_first_lit = false;
+                        DebugLogFL( DL::Info, DC::Main )
+                                << "[segdiag] first LIT segment: sun_intensity="
+                                << lp_sun_use.sun_intensity
+                                << " sky_intensity=" << lp_sun_use.sky_intensity
+                                << " sdf_map_w=" << lp_use.sdf_map_w
+                                << " emitter_count=" << lp_use.emitter_count
+                                << " ambient=" << lp_use.ambient
+                                << " count=" << s.count;
+                    }
                 }
                 // Vertex slot 1: LightParams (world_pos computation + the
                 // shadow shear). Always pushed — both sprite.vert and

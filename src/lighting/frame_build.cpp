@@ -207,6 +207,30 @@ frame_lighting_result build_and_submit_lighting(
             if (static_cast<int>(mc.outside_cache.size()) >= total) {
                 for (int i = 0; i < total; ++i) { sky_vis[i] = mc.outside_cache[i] ? 255u : 0u; }
             }
+            // DIAGNOSTIC (temporary, CBN_DIAG_SEG_LIGHTING): in-game SkyVisBuf arrived at
+            // the GPU fully sized (32400) but ALL ZERO, which gates the whole sun term off
+            // (`sky_vis > 0.05` in sprite.frag) and makes daylight shadowless. All-zero is
+            // NOT what an unbuilt/short outside_cache produces -- the assign above would
+            // leave all-255 -- so log whether this block runs at all, plus the two sizes
+            // whose mismatch would make the copy dead code.
+            if( std::getenv( "CBN_DIAG_SEG_LIGHTING" ) ) {
+                static int fb_n = 0;
+                if( ++fb_n <= 3 ) {
+                    int trues = 0;
+                    const int have = static_cast<int>( mc.outside_cache.size() );
+                    for( int i = 0; i < have && i < total; ++i ) {
+                        trues += mc.outside_cache[i] ? 1 : 0;
+                    }
+                    int nz = 0;
+                    for( int i = 0; i < total; ++i ) { nz += sky_vis[i] != 0u ? 1 : 0; }
+                    dbg( DL::Info ) << "[fbdiag] FILL RAN  total=" << total
+                                    << " outside_cache.size=" << have
+                                    << " copy_ran=" << ( have >= total ? "yes" : "NO (dead)" )
+                                    << " outside_true=" << trues
+                                    << " sky_vis_nonzero=" << nz
+                                    << " W=" << W << " H=" << H << " z=" << zlev;
+                }
+            }
 
             // Stage 2a (GI_COMPUTE_AND_PERF_PLAN): the CPU indoor-bleed
             // flood-fill (K=8 wall-aware diffusion over the full bubble) and the

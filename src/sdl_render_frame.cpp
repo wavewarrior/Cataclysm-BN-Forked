@@ -630,6 +630,7 @@ if( g && tilecontext && in.tile_pixel_size > 0.0f ) {
 
     const float sun_hour = celestial_hour();
     in.sun = make_celestial_params( calendar::turn, sun_hour );
+    const float diag_sun_raw = in.sun.sun_intensity;
     float weather_mult = 1.0f;
     // Weather dimming is derived from the REAL calendar (`sunlight( calendar::turn )`),
     // so it survives a pinned hour and silently undoes it: at a night turn `base <= 1.0`,
@@ -651,6 +652,24 @@ if( g && tilecontext && in.tile_pixel_size > 0.0f ) {
         // so apply cloud dimming directly to avoid double-dimming daytime sun.
         if( base <= 1.0f ) {
             in.sun.sun_intensity *= weather_cloud_mult();
+        }
+    }
+    // DIAGNOSTIC (temporary): the exact float, before and after every modifier. Needed
+    // because a pinned hour that still yields ~0 has three candidate causes (LUT lookup,
+    // the sun-vs-moon swap, weather dimming) and reading it back as a pixel cannot
+    // separate them. Paired with [segdiag] in sprite_batcher, which reports the value
+    // that actually reaches the GPU after the per-segment is_lit zeroing.
+    if( std::getenv( "CBN_DIAG_SEG_LIGHTING" ) ) {
+        static int diag_frame = 0;
+        if( ++diag_frame % 120 == 1 ) {
+            dbg( DL::Info ) << "[sundiag] hour=" << sun_hour
+                            << " pinned=" << ( forced_celestial_hour() ? "yes" : "no" )
+                            << " raw_after_celestial=" << diag_sun_raw
+                            << " after_weather=" << in.sun.sun_intensity
+                            << " sky=" << in.sun.sky_intensity
+                            << " weather_mult=" << weather_mult
+                            << " cloud_mult=" << weather_cloud_mult()
+                            << " sin_elev=" << in.sun.sun_sin_elev;
         }
     }
     in.sun.sp_pad = g_dbg_lighting_shader ? 1.0f : 0.0f;
