@@ -17,10 +17,26 @@ launch --dont-debugmsg
 waitlog "opened document data/gui/mainmenu.rml" timeout=240000
 focus
 settle timeout=15000
+
+# The decorative emitter sits at tile (8.5, 4.5) by default, i.e. up and to the left,
+# so a glow corner and a far corner are all that is needed to show it still lights the
+# backdrop instead of having been replaced by a flat blue.
+rect glow 0,0,0.25,0.25
+rect far  0.75,0.75,0.25,0.25
+
 shot menu avg=12
 wait 2000
 shot menu_again avg=12
 diff menu menu_again as=same_state
 stats menu
-log
-stop
+stats menu in=glow
+stats menu in=far
+
+# The glow must still be there. Measured: glow rgb[16.0, 15.2, 18.2] and luma 15.6
+# against far rgb[10.6, 10.5, 15.3] and luma 10.8 - a localised lift whose warm bias
+# (R and G gaining more than B) matches the emitter's own r=1 g=0.55 b=0.15.
+assert menu@glow.luma > menu@far.luma * 1.3
+# ...and it must be a GRADIENT, not a uniformly brighter corner: the far field is
+# essentially flat (std 0.39) while the glow corner has real structure (std 25.1).
+# A flat `unlit` backdrop would fail this even if someone raised its brightness.
+assert menu@glow.std > menu@far.std * 3

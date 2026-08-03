@@ -1,3 +1,15 @@
+# PREREQUISITE: a THROWAWAY clone of an explored save, passed as --var WORLD=<name>.
+#
+#   cp -r "out/install/windows-tiles-sounds-x64-msvc/save/<explored world>" \
+#         "out/install/windows-tiles-sounds-x64-msvc/save/LIGHTAB"
+#   python tools/visual_verify/vv.py run tools/visual_verify/scenarios/lightmode-world.vv --var WORLD=LIGHTAB
+#
+# It MUST be a clone you are willing to lose: this scenario drives the debug menu and
+# the game may autosave, so pointing it at a save you care about will edit that save.
+# An explored save is required rather than a fresh or Lua-built one, because terrain the
+# character has never SEEN renders from map memory and bypasses GPU lighting entirely,
+# so a fabricated scene cannot test this change at all.
+#
 # In-game gate for the lighting-composition change: the memory branch, the Step 8
 # frontier cross-fade, and the categorical light_mode classification.
 #
@@ -20,10 +32,18 @@
 # get dropped -- and every capture is gated on `waitlog` confirming the mode from the
 # log, so a dropped press fails the run instead of silently handing back a capture of
 # the wrong mode.
-launch --dont-debugmsg --world LIGHTAB
+launch --dont-debugmsg --world ${WORLD}
 waitlog "opened document .*sidebar_hud.rml" timeout=300000
 focus
 settle timeout=25000
+
+# The window RESIZES shortly after the world finishes loading -- measured: a first
+# capture at 1920x1080 followed by 2560x1440 only 1.5 s later, which aborts the run with
+# "size mismatch". `settle` returns before that happens (it reported 4.3 s), so discard a
+# warm-up capture and settle again before anything is measured.
+shot warmup avg=4
+wait 6000
+settle timeout=15000
 
 # Play area only: the HUD sidebar is drawn unlit through a separate batcher and would
 # dilute every world-tile measurement.
@@ -84,7 +104,7 @@ diff world world_restored as=restore in=play
 
 # A lone before/after proves nothing: it equally supports "it worked" and "the input
 # never arrived". The restore must land back inside the paired same-state null.
-assert restore.changed < same_state.changed[*3]
+assert restore.changed < same_state.changed * 3
 
 log
 stop

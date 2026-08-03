@@ -649,7 +649,8 @@ def op_assert(ctx: Ctx, args: list[str]) -> None:
     expr = " ".join(args)
     m = re.match(r"^\s*([\w>@.\-]+)\.(\w+)\s*(>=|<=|==|!=|>|<)\s*(.+?)\s*$", expr)
     if not m:
-        raise SystemExit(f"bad assert {expr!r}; want metric.field OP number|metric.field[*k]")
+        raise SystemExit(f"bad assert {expr!r}; want metric.field OP number"
+                         " | metric.field | metric.field * factor")
     got = _metric(ctx, m.group(1), m.group(2))
     r = RHS_RE.match(m.group(4))
     if not r:

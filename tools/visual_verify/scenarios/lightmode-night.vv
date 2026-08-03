@@ -1,3 +1,15 @@
+# PREREQUISITE: a THROWAWAY clone of an explored save, passed as --var WORLD=<name>.
+#
+#   cp -r "out/install/windows-tiles-sounds-x64-msvc/save/<explored world>" \
+#         "out/install/windows-tiles-sounds-x64-msvc/save/LIGHTAB"
+#   python tools/visual_verify/vv.py run tools/visual_verify/scenarios/lightmode-night.vv --var WORLD=LIGHTAB
+#
+# It MUST be a clone you are willing to lose: this scenario drives the debug menu and
+# the game may autosave, so pointing it at a save you care about will edit that save.
+# An explored save is required rather than a fresh or Lua-built one, because terrain the
+# character has never SEEN renders from map memory and bypasses GPU lighting entirely,
+# so a fabricated scene cannot test this change at all.
+#
 # Phase 3 gate: does the composite change crush a NIGHT scene?
 #
 # This is the regime the change matters most in. Deleting the `lum > 0.001` gate means a
@@ -11,10 +23,18 @@
 #   ESC -> c (Debug Menu) -> m -> t -> h, clear the field, type 1, ENTER, ESC out.
 # Menu driving is the flaky part of this harness, so the hour change is confirmed from
 # the log via the debug-mode probe rather than assumed, and each capture is paired.
-launch --dont-debugmsg --world LIGHTAB
+launch --dont-debugmsg --world ${WORLD}
 waitlog "opened document .*sidebar_hud.rml" timeout=300000
 focus
 settle timeout=25000
+
+# The window RESIZES shortly after the world finishes loading -- measured: a first
+# capture at 1920x1080 followed by 2560x1440 only 1.5 s later, which aborts the run with
+# "size mismatch". `settle` returns before that happens (it reported 4.3 s), so discard a
+# warm-up capture and settle again before anything is measured.
+shot warmup avg=4
+wait 6000
+settle timeout=15000
 
 rect play 0.02,0.02,0.70,0.92
 
@@ -57,6 +77,20 @@ stats night in=play
 # The night scene must differ from the daylight one by far more than the capture null,
 # otherwise the clock change never landed and every number below is meaningless.
 diff day night as=daynight in=play
+assert daynight.changed > same_state.changed * 20
+
+# It must actually be NIGHT: measured luma 27.96 against a daylight 52.03 in the same
+# spot, i.e. roughly half. Without this, a mistimed keypress that left the clock alone
+# would still pass the delta check above on ordinary scene churn.
+assert night@play.luma < day@play.luma * 0.7
+
+# ...and it must NOT be crushed. This is the whole point of the Phase 3 check: deleting
+# the `lum > 0.001` gate means genuinely dark visible tiles now render dark instead of
+# at full unlit albedo, so the risk is a scene that goes uniformly black. A crushed
+# frame would be ~99% in the darkest histogram bin with std near 2; measured std is
+# 20.34 with highlights up to 220, i.e. dark but still structured.
+assert night@play.std > 8
+assert night@play.max > 120
 
 # ---- categorical classification at night ----
 key "{F7}"
