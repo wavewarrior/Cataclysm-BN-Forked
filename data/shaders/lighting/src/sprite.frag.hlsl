@@ -176,11 +176,13 @@ struct VS_OUT {
     float2 light_pos: TEXCOORD4; // base-tile centre for tall sprites, else world_pos
     float  outline  : TEXCOORD5; // >0.5 = silhouette mask mode (hover outline)
     float  dark_frac: TEXCOORD6; // 0 at sprite base → extrude_dark at canopy; applied in frag
-    // Mirrors sprite.vert.hlsl's VS_OUT member-for-member. nointerpolation is
-    // mandatory: this is a categorical selector and an interpolated float drifts
-    // off exact 0/1/2 across the quad, silently reclassifying a tile mid-sprite.
-    // Consumers must also compare by BAND, never ==.
-    nointerpolation float light_mode : TEXCOORD7; // sprite_light_mode: 0 unlit, 1 gpu_lit, 2 memory
+    // Mirrors sprite.vert.hlsl's VS_OUT member-for-member, INCLUDING the absence of
+    // `nointerpolation` — see the long note there. Briefly: that qualifier made D3D12
+    // pipeline creation fail (0x80070057) whenever this shader did not consume the
+    // value, which blacked out the entire world, and it bought nothing because the
+    // value is a per-instance constant that interpolates exactly. Consumers still
+    // compare BY BAND, never ==.
+    float light_mode : TEXCOORD7; // sprite_light_mode: 0 unlit, 1 gpu_lit, 2 memory
     float3 flash : TEXCOORD8; // coloured light override: colour * strength, max(colour) == 1
 };
 // SDF supersample factor — MUST match lighting::SDF_SUPERSAMPLE (sdf_pass.h).

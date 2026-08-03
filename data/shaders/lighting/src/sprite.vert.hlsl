@@ -120,10 +120,19 @@ struct VS_OUT {
                                  // sprites (uniform), else == world_pos (per-pixel)
     float  outline  : TEXCOORD5; // >0.5 = silhouette mask mode (hover outline)
     float  dark_frac: TEXCOORD6; // 0 at sprite base → extrude_dark at canopy; applied in frag
-    // Categorical selector, NOT a quantity: nointerpolation is mandatory because an
-    // interpolated float drifts off exact 0/1/2 across the quad and would silently
-    // reclassify a tile mid-sprite. Consumers must also compare by BAND, never ==.
-    nointerpolation float light_mode : TEXCOORD7; // sprite_light_mode: 0 unlit, 1 gpu_lit, 2 memory
+    // MUST NOT be `nointerpolation`. It was, and that broke D3D12 graphics-pipeline
+    // creation outright whenever the fragment shader did not consume it: SDL_GPU
+    // reported "Could not create graphics pipeline state! (0x80070057)", the sprite
+    // batcher never initialised, and the whole world rendered BLACK while the RmlUi
+    // HUD kept drawing. Measured across a build pair: 75.17% of pixels changed with
+    // the qualifier, 0.04% (the cross-launch null) without it.
+    //
+    // Nothing is lost. light_mode is constant across all six vertices of the quad, so
+    // barycentric interpolation of identical values returns that value exactly; the
+    // qualifier only ever bought a negligible perf nicety. The fragment shader also
+    // compares it BY BAND (> 1.5, > 0.5) rather than for equality, so even genuine
+    // drift could not reclassify a tile.
+    float light_mode : TEXCOORD7; // sprite_light_mode: 0 unlit, 1 gpu_lit, 2 memory
     // Interpolated on purpose (cheapest): it is a per-INSTANCE constant, so
     // interpolation across the quad is exact. And unlike light_mode it is a
     // quantity rather than a categorical selector, so even drift would be
