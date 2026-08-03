@@ -1062,6 +1062,20 @@ auto tonemap_pass_t( lighting::render_state &rs,
         // "subtle" static default, without tearing the tiles apart.
         constexpr float damage_ca_scale = 0.006f;
         grade.ca_amount        = g_grade_ca + hud_shake::intensity() * damage_ca_scale;
+        // Diagnostic views must reach the screen UNGRADED. Modes 6+ REPLACE the scene
+        // with a categorical or single-channel visualisation whose whole value is that
+        // its pixel values mean something exact; chromatic aberration splits a class
+        // boundary into a two-channel fringe, and grain/vignette perturb it further.
+        // Measured on debug view 16 (categorical light_mode): CA fringing left 5.6% of
+        // the play area in no class at all, with the top offenders orange rgb(123,85,0)
+        // at green tile edges. Zeroing the spatial post effects removes the fringe
+        // rather than forcing every consumer to tolerate it. The tonal transform is
+        // already handled: `ramp_enable` lerps AgX out for the same reason.
+        if( g_current_dbg_mode >= 6u ) {
+            grade.ca_amount = 0.0f;
+            grade.grain_amount = 0.0f;
+            grade.vignette_amount = 0.0f;
+        }
         rs.tonemap().record( ctx.cmd_buffer, wt->texture(), rs.gpu_sampler(),
                              wldr->texture(), wldr->width(), wldr->height(),
                              g_tonemap_exposure, g_tonemap_min_ev, g_tonemap_max_ev,

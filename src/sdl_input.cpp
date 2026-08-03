@@ -590,6 +590,12 @@ void CheckMessages( display_context &d )
                     // (red=unlit, green=gpu_lit, blue=memory).
                     g_current_dbg_mode = ( g_current_dbg_mode + 1 ) % 17u;
                     g_dbg_params.debug_mode = g_current_dbg_mode;
+                    // Log the mode we LANDED on. Scripted verification cycles this key
+                    // N times and then measures a capture; a single dropped keypress
+                    // would otherwise leave the capture silently showing a different
+                    // mode, which reads as a result rather than as a miss. This turns
+                    // "I pressed it the right number of times" into positive evidence.
+                    dbg( DL::Info ) << "lighting debug mode " << g_current_dbg_mode;
                     break;
                 } else if( lc == KEY_F( 8 ) ) {
                     // F8: decrease emitter/sun/sky scales.

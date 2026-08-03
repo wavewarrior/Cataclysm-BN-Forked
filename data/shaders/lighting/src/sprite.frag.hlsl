@@ -950,6 +950,19 @@ float4 main(VS_OUT i) : SV_Target0 {
     // Applied after memory-fade, before debug modes — so debug replace=true cleanly overrides.
     final_rgb *= ( 1.0 - i.dark_frac );
 
+    // dbg_opaque is hoisted out of the block so the return can force full alpha for
+    // debug view 16 ONLY. A categorical view that gets alpha-blended is not
+    // categorical: sprite quads draw with SRC_ALPHA, several stack per tile
+    // (background, foreground, z-overlays at alpha 24..192/255), so a flat (0,1,0)
+    // reaches the screen as e.g. rgb(8, 172, 9) and two classes can mix at a seam.
+    // Measured: 28% of a mode-16 capture failed an exact-colour test while every one
+    // of those pixels was plainly green.
+    //
+    // Scoped to 16 deliberately. The other replace-mode views NEED their alpha:
+    // view 15 encodes the frontier feather in vis_overlay_a — that IS the thing it
+    // exists to show — and views 9-14 rely on texel.a for sprite silhouettes, which
+    // would become solid quads.
+    float dbg_opaque = 0.0;
     if(dbg_active) {
         float3 vis = float3(0, 0, 0);
         bool   replace = false;
@@ -1076,6 +1089,9 @@ float4 main(VS_OUT i) : SV_Target0 {
             vis = mode_memory ? float3(0.0, 0.0, 1.0)
                   : (mode_gpu_lit ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0));
             replace = true;
+            // Full alpha: see dbg_opaque above. Without it the flat hue is blended by
+            // every stacked quad and the class is no longer exactly recoverable.
+            dbg_opaque = 1.0;
         }
         if(replace) {
             final_rgb = vis;
@@ -1084,6 +1100,8 @@ float4 main(VS_OUT i) : SV_Target0 {
         }
     }
     // vis_overlay_a is 1.0 for every sprite except a vision-frontier overlay, whose
-    // coverage is feathered across the tile (Step 8).
-    return float4(final_rgb, texel.a * i.tint.a * vis_overlay_a);
+    // coverage is feathered across the tile (Step 8). Debug view 16 overrides alpha
+    // entirely so its categorical colour survives to the screenshot.
+    const float out_a = lerp(texel.a * i.tint.a * vis_overlay_a, 1.0, dbg_opaque);
+    return float4(final_rgb, out_a);
 }
