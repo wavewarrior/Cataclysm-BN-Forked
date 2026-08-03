@@ -1,0 +1,103 @@
+# Phase 3 gate: does the composite change crush a NIGHT scene?
+#
+# This is the regime the change matters most in. Deleting the `lum > 0.001` gate means a
+# genuinely dark but VISIBLE tile now renders dark instead of at full unlit albedo, and
+# at night the radiance is the ambient floor plus whatever emitters reach the tile. If
+# any content relied on the old fail-bright to stay readable, it surfaces here and
+# nowhere else -- a daylight capture cannot see it.
+#
+# Loads the LIGHTAB clone (never the user's own saves) and sets the hour to 01:00 through
+# the debug menu, reusing the exact key sequence proven in light-scene.vv:
+#   ESC -> c (Debug Menu) -> m -> t -> h, clear the field, type 1, ENTER, ESC out.
+# Menu driving is the flaky part of this harness, so the hour change is confirmed from
+# the log via the debug-mode probe rather than assumed, and each capture is paired.
+launch --dont-debugmsg --world LIGHTAB
+waitlog "opened document .*sidebar_hud.rml" timeout=300000
+focus
+settle timeout=25000
+
+rect play 0.02,0.02,0.70,0.92
+
+# Daylight reference from the same world position, so the night numbers have a scale.
+shot day avg=12
+stats day in=play
+
+# ---- set the clock to 01:00 ----
+key "{ESC}"
+wait 1800
+key "c"
+wait 2000
+key "m"
+wait 1800
+key "t"
+wait 2000
+key "h"
+wait 1500
+key "{BACKSPACE}"
+wait 300
+key "{BACKSPACE}"
+wait 300
+key "1"
+wait 500
+key "{ENTER}"
+wait 1500
+key "{ESC}"
+wait 1200
+key "{ESC}"
+wait 1200
+key "{ESC}"
+wait 4000
+
+shot night avg=12
+wait 1500
+shot night_again avg=12
+diff night night_again as=same_state in=play
+stats night in=play
+
+# The night scene must differ from the daylight one by far more than the capture null,
+# otherwise the clock change never landed and every number below is meaningless.
+diff day night as=daynight in=play
+
+# ---- categorical classification at night ----
+key "{F7}"
+wait 250
+key "{F7}"
+wait 250
+key "{F7}"
+wait 250
+key "{F7}"
+wait 250
+key "{F7}"
+wait 400
+key "{F7}"
+wait 250
+key "{F7}"
+wait 250
+key "{F7}"
+wait 250
+key "{F7}"
+wait 250
+key "{F7}"
+wait 400
+key "{F7}"
+wait 250
+key "{F7}"
+wait 250
+key "{F7}"
+wait 250
+key "{F7}"
+wait 250
+key "{F7}"
+waitlog "lighting debug mode 15" timeout=20000
+wait 2000
+shot night_frontier15 avg=6
+key "{F7}"
+waitlog "lighting debug mode 16" timeout=20000
+wait 2000
+shot night_mode16 avg=6
+key "{F7}"
+waitlog "lighting debug mode 0" timeout=20000
+wait 2500
+
+log
+stop

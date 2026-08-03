@@ -1,9 +1,93 @@
 # Lighting composition: move to the standard pipeline
 
-## STATUS (diagnosed 2026-08-03) - NOT STARTED
+## STATUS (implemented 2026-08-03)
 
-Diagnosis is complete and evidenced. No code written. Phases below are ordered so
-the wire-format change lands separately from the behaviour change.
+All phases DONE, including the Phase 3 retune check. Commits:
+
+| commit | what |
+|---|---|
+| `d438dc71e0` | Phases 0+1 — `tile_light_mode.h`, a global lightmap-ready latch, a required `mode` on `enqueue_tile_sprite`, `sprite_instance` 80 → 96 B. Also fixed `shadow.vert.hlsl`, which declared a truncated 64-byte `SpriteInstance` and so indexed the shared instance buffer with the wrong stride. |
+| `4c90f96885` | Phase 2 — the composite. `max()` deleted, radiance selected by mode, palette-ramp and debug gates migrated, memory implemented as the `frontier_cov` cross-fade. |
+| `368122c9f0` | Made debug view 16 genuinely categorical (alpha + post-effect gating); F7 now logs the mode it lands on. |
+| `4df928b3ec` | `tools/light_mode_check.py`, `tools/frontier_profile.py`, three `vv` scenarios. |
+| `bd861e4b0d`, `20a03a820a` | Two crashes that had to be fixed to have any regression gate at all. Neither is lighting — see Collateral. |
+
+### One deviation from the spec, and the measurement that forced it
+
+The plan assigned the main menu to `unlit`. That would have silently deleted the
+decorative menu emitter's glow, which `max(tint, gpu_total)` had been carrying. A
+capture settled it instead of an argument: away from the emitter the backdrop reads
+`rgb[10.0, 10.0, 15.0]` (the blue base), while the top-left reads
+`rgb[16.0, 15.2, 18.2]` with std 25.1 against 0.39 elsewhere — a warm, localised lift
+matching the emitter's own `r=1 g=0.55 b=0.15`. So a lane was genuinely needed.
+
+`flash` — the three floats Phase 1 had added as padding — carries `colour x strength`
+with `max(colour) == 1`, composited as `radiance * (1 - strength) + flash`, i.e. a
+hue-preserving `lerp(radiance, colour, strength)`. The melee hit-flash moved onto the
+same lane. Both rejected alternatives are recorded in `sprite_batcher.h`: a purely
+additive emissive clips to white in daylight and destroys the hue that says WHAT was
+hit (additive gives `(1.0, 1.0, 1.0)` where the lerp gives `(1.0, 0.4, 0.4)`), while
+folding the flash into `tint` makes it multiplicative, so it vanishes at night — the
+only place the old `max()` flash was ever visible.
+
+### Verified, and how
+
+- **Classification** — `classify_tile_light` is pure, with a Catch2 table at 9/9,
+  including the regression case: a visible PITCH-DARK tile must be `gpu_lit`.
+- **The HLSL compiles** — it is compiled at RUNTIME from the install, so no C++ build
+  proves it parses. `lightmode-menu.vv` launches the game to the main menu with zero
+  shader failures in `debug.log`.
+- **Nothing takes the fail-bright path** — debug view 16 reads `unlit 0.00%` in
+  daylight AND at night (`gpu_lit` 78–89%, `memory` 1.5–4.3%), at both 1920x1080 and
+  2560x1440. The floor that keeps bloom fringe out of the class counts could have
+  turned a dim `unlit` tile into a false 0.00%, so the dim band is audited by hue:
+  night reads `268269 px, unlit 0, gpu_lit 216319, memory 0` — no red-dominant pixel
+  at ANY brightness. Night is the decisive case, since that is where the old
+  `max(1.0, gpu_total)` would have rendered dark-but-visible tiles at full albedo.
+- **The frontier gains no rim** — daylight: no dip below the remembered plateau (14.5)
+  and no overshoot above the visible one (88.3). Night inverts the direction, exactly
+  as `mem_dim` implies (remembered 29.6 floored above genuinely dark visible 19.7), and
+  descends 30.6 → 18.7 with no dip and no overshoot. The residual wiggle along x is
+  geometry, not the composite: it appears identically in the albedo-free `frontier_cov`
+  channel (dip at x=2108 and a +6 bump at 2120 in BOTH signals), because `frontier_cov`
+  is bilinear over corner coverages and so is monotonic along the boundary NORMAL, not
+  along a screen axis. `frontier_profile.py` profiles along an axis and still judges its
+  block scale against a constant while self-calibrating the raw scale; it reports a
+  −2.1..−4.5 block "violation" for that reason. Left strict on purpose.
+- **Debug cycling is non-destructive** — the 1 → 0 → 1 triplet restores the scene
+  inside the paired same-state null (restore 286 px vs null 364 px).
+- **Phase 3 (retune): no retune needed.** The measurable risk was that genuinely dark
+  visible tiles, no longer failing bright, would crush the scene. Measured at 01:00 in
+  a real explored save: luma 27.96, std 20.34, range 0–220, histogram
+  `[63.0, 33.5, 1.9, 1.2, 0.3, 0, 0, 0]` — dark, but structured and with real
+  highlights, not crushed (a crushed frame would be ~99% in bin 0 with std ~2). The
+  clock change is proven, not assumed: `day → night` moved 80.92% of pixels against a
+  0.01% paired null. `night_floor` / `day_floor` / `mem_dim` therefore stay as shipped.
+- **Suite** — 981 cases, 953 passed, 25 failed, 3 failed-as-expected. The 25 were
+  attributed by stash+rebuild at clean HEAD, fail identically there, and are
+  vehicle / ramp / furniture-grab / stomach / filesystem tests, none of which render.
+
+### The one gap
+
+Phase 1's "rendering is unchanged, expect a diff at or below the capture null" gate was
+never run as a pixel comparison. It was abandoned after about an hour lost to shell and
+build-environment failures, and by the time a working build loop existed, gating Phase 2
+directly was the cheaper and stronger measurement. Phase 1 is inert by construction —
+the shader carried `light_mode` without reading it — but that is an argument, not a
+measurement, and it is the only claim here of that kind.
+
+### Collateral — two crashes fixed to get a regression gate at all
+
+Neither is a lighting defect; both aborted the Catch2 suite, so without them this work
+had no regression signal.
+
+- `bd861e4b0d` — `map::update_visibility_cache` sized the `rl_dist` lookup table from
+  `cache_x/cache_y`, which bounds `|x - player_x|` only while the player is INSIDE the
+  bubble. After a reality-bubble resize the avatar can sit outside it, and `index_3d`
+  bounds-checks nothing. Bit-reproducible at `--rng-seed=2699219069`; it still faulted
+  with zero worker threads, which ruled out the concurrent-realloc theory.
+- `20a03a820a` — the `none` vproto has an empty part list, so `on_vehicle_added` fired
+  with no parts and handed Box2D a zero-vertex polygon, which `__debugbreak`s on MSVC.
 
 ## Premise
 
