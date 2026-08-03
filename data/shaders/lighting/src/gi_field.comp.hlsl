@@ -80,27 +80,10 @@ float sdf_bilinear( float2 p )
     const float d = sdf_texel( x0 + 1, y0 + 1 );
     return lerp( lerp( a, b, w.x ), lerp( c, d, w.x ), w.y );
 }
-float trace_shadow( float2 origin, float2 dir, float dist_to_light, float k, int steps )
-{
-    if( sdf_map_w == 0u || steps <= 0 ) {
-        return 1.0;
-    }
-    float shadow = 1.0;
-    float t = min( 0.3, dist_to_light * 0.5 );
-    [loop] for( int ss = 0; ss < steps; ++ss ) {
-        if( t >= dist_to_light - 0.4 ) {
-            break;
-        }
-        const float sd = sdf_bilinear( origin + dir * t );
-        if( sd < 0.05 ) {
-            shadow = 0.0;
-            break;
-        }
-        shadow = min( shadow, k * sd / max( dist_to_light - t, 0.01 ) );
-        t += max( sd, 0.15 );
-    }
-    return saturate( shadow );
-}
+// Soft-shadow sphere trace, shared with sprite.frag and vol.frag. Included here
+// (not at the top) because it calls sdf_bilinear, defined above. GI probes pass
+// self_eps = 0: a probe sits in open space, not on the occluder it is lit by.
+#include "shadow_trace.hlsl"
 
 [numthreads(8, 8, 1)]
 void main( uint3 tid : SV_DispatchThreadID )
@@ -141,7 +124,9 @@ void main( uint3 tid : SV_DispatchThreadID )
         // First RC_K in-range emitters: refine with a shadow trace.
         if( traced < RC_K ) {
             const float2 dir    = dv / max( dist, 0.001 );
-            const float  shadow = trace_shadow( probe, dir, dist, shadow_k, (int)shadow_steps );
+            const float  shadow = soft_shadow_march( probe, dir, dist, shadow_k,
+                                                     (int)shadow_steps, /*self_eps=*/0.0,
+                                                     /*ref_receiver=*/false );
             gi += rgb * atten * ( shadow - 1.0 );
             traced += 1u;
         }

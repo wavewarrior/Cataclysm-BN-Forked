@@ -78,7 +78,7 @@ StructuredBuffer<float>      GiBuf       : register(t5, space2);
 // directional sky-access (alcove/overhang self-shading + indoor daylight from
 // window openings — REPLACES the flat sky_vis ambient; CPU bleed flood-fill gone).
 // a = celestial (sun/moon) occlusion from the 3D coverage-occluder march
-// (REPLACES the inline sun trace_shadow + SunSdfBuf — Stage 2b).
+// (REPLACES the inline sun shadow march + SunSdfBuf — Stage 2b).
 StructuredBuffer<float>      SkyBuf      : register(t6, space2);
 // Step 7 palette shade ramps. Appended at t7/t8 so no existing slot renumbers.
 // Storage BUFFERS, not sampled textures, for three reasons all recorded in this
@@ -157,7 +157,7 @@ cbuffer DebugParams : register(b2, space3) {
     float texels_per_tile;   // tileset native tile width in art texels (DATA)
     float light_quant;       // 1 = snap light sample to art texels, 0 = per-screen-pixel
     float occ_soft_gain;     // partial-occluder block gain (compute-stage; parity here)
-    float self_eps_tall;     // trace_shadow self-shadow escape radius for TALL sprites
+    float self_eps_tall;     // soft_shadow_march self-shadow escape radius, TALL sprites
     float ramp_enable;       // 0 = plain multiply, 1 = full palette-ramp resolve
     float ramp_steps;        // shade steps per palette row
     float ramp_chroma;       // how much coloured light tints the ramped surface
@@ -317,57 +317,9 @@ float skyvis_bilinear(float2 p) {
     const float d = skyvis_texel(x0 + 1, y0 + 1);
     return lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
 }
-// Shared soft-shadow sphere trace (Inigo Quilez cone ratio). Used by BOTH
-// emitters and the sun so they share the shadow_k / shadow_steps knobs and
-// look consistent. `dist_to_light` is the march length (real distance for
-// point emitters; a fixed reach for the directional sun).
-float trace_shadow(float2 origin, float2 dir, float dist_to_light,
-                   float k, int steps, bool directional, float self_eps) {
-    if(sdf_map_w == 0u || steps <= 0) {
-        return 1.0;
-    }
-    float shadow = 1.0;
-    float t = min(0.3, dist_to_light * 0.5);
-    // Self-shadow guard (sun AND point lights). A tall sprite is lit by its BASE
-    // tile (vertex light_pos), which is itself an occluder (the tree/wall the
-    // shadow is cast from). A naive march would hit that occluder at t~0 and report
-    // the lit TOP as fully shadowed. So when the RECEIVER ITSELF sits on an occluder
-    // (sdf(origin) < self_eps), step out of that occluder body before shadowing.
-    // Exit the instant we re-enter open air so the NEXT occluder still shadows — a
-    // tree inside a building marches out of the tree, hits the building wall, stays
-    // dark. No-op for ground: its SDF is well above the threshold.
-    //
-    // self_eps is a PARAMETER because Step 3 made occluders sub-tile: the old
-    // hardcoded 0.05 assumed a tall sprite's base-tile CENTRE is inside its own
-    // occluder, which a slab or thin footprint (a fence, a pole) no longer
-    // guarantees — the centre can now sit outside its own silhouette and the sprite
-    // would self-shadow. Tall sprites pass the wider self_eps_tall; everything else
-    // keeps 0.05, which is an exact no-op versus the previous behaviour.
-    if(sdf_bilinear(origin) < self_eps) {
-        [loop] for(int ss = 0; ss < steps; ++ss) {
-            if(t >= dist_to_light - 0.4) return 1.0;           // never left occluder → sunlit top
-            const float sg = sdf_bilinear(origin + dir * t);
-            if(sg >= self_eps) break;  // back in open air
-            t += 0.15;
-        }
-    }
-    [loop] for(int ss = 0; ss < steps; ++ss) {
-        if(t >= dist_to_light - 0.4) break;
-        const float sd = sdf_bilinear(origin + dir * t);
-        if(sd < 0.05) { shadow = 0.0; break; }
-        // Penumbra reference for the IQ cone ratio. A POINT light keys it to the
-        // real remaining distance-to-light (dist_to_light - t), which is valid
-        // because dist_to_light is a true distance. A DIRECTIONAL light (the sun)
-        // has no finite distance — dist_to_light is only the march CAP — so
-        // (cap - t) keys the penumbra to a meaningless constant and inverts the
-        // soft/hard ends (the "vertically flipped" sun penumbra). Directional uses
-        // the textbook IQ form k*sd/t (t = distance from the receiver).
-        const float denom = directional ? max(t, 0.01) : max(dist_to_light - t, 0.01);
-        shadow = min(shadow, k * sd / denom);
-        t += max(sd, 0.15);
-    }
-    return saturate(shadow);
-}
+// Soft-shadow sphere trace, shared with gi_field.comp and vol.frag. Included
+// here (not at the top) because it calls sdf_bilinear, defined above.
+#include "shadow_trace.hlsl"
 // 4x4 ordered (Bayer) dither matrix, values 0..15.
 static const float k_bayer4[16] = {
      0.0,  8.0,  2.0, 10.0,
@@ -651,10 +603,19 @@ float4 main(VS_OUT i) : SV_Target0 {
                            ? float3(1, 1, 1) : e_color;
         emitter_light -= rgb * atten * lambert;
 
-        const float  shadow = trace_shadow(shade_pos, sh_dir, dist,
-                                            shadow_k, (int)shadow_steps,
-                                            /*directional=*/false,
-                                            frag_is_tall_n ? self_eps_tall : 0.05);
+        // Direct emitter shadows key the penumbra to the RECEIVER distance (the
+        // textbook IQ form). Switching reference also changes what shadow_k
+        // means: the penumbra half-angle is 1/k about the ray, so the legacy
+        // k=8 that read correctly against the remaining-distance reference is
+        // far too soft here - it makes the cone half-width t/8, which at 30
+        // tiles dims anything passing within ~3.7 tiles of a wall. POINT_K_GAIN
+        // restores the intended sharpness; raising it both tightens the
+        // penumbra and removes that range dimming, since both scale as 1/k.
+        const float POINT_K_GAIN = 4.0;
+        const float  shadow = soft_shadow_march(shade_pos, sh_dir, dist,
+                                            shadow_k * POINT_K_GAIN, (int)shadow_steps,
+                                            frag_is_tall_n ? self_eps_tall : 0.05,
+                                            /*ref_receiver=*/true);
 
         // Cone / spotlight angular falloff.
         float cone = 1.0;
@@ -691,7 +652,7 @@ float4 main(VS_OUT i) : SV_Target0 {
     // mask → tile-square "blocky sun". With bilinear sky_vis the open↔roofed edge
     // ramps over ~1 tile, so the sun shaft through an opening fades smoothly.
     // (With indoor bleed>0 the interior gradient also passes here — that is the
-    // sunbeam-through-window behaviour; trace_shadow keeps it to tiles with a
+    // sunbeam-through-window behaviour; the shadow march keeps it to tiles with a
     // clear path to the sun.)
     // Phase 2 silhouette sun-shadow mask: coverage at this fragment's SCREEN
     // pixel (the mask shares world_target's physical size + viewport+proj, so a
@@ -749,7 +710,7 @@ float4 main(VS_OUT i) : SV_Target0 {
     // term, NOT a normal-hemisphere trace: in top-down the relief normal is near
     // z-up so normal-weighting adds noise, not shape; wall proximity is the term
     // that reads as 3D here. AO modulates ONLY the directionless fills (ambient
-    // floor + sky + GI) below — emitter/sun already self-shadow via trace_shadow,
+    // floor + sky + GI) below — emitter/sun already self-shadow in the march,
     // so AO must not touch them or crevices double-darken. ao_strength=0 → exact
     // no-op (off, the committed default).
     float ao = 1.0;
@@ -899,9 +860,10 @@ float4 main(VS_OUT i) : SV_Target0 {
         const float2 ev  = eye - shade_pos;
         const float  ed  = length(ev);
         const float  los = (ed < 0.5) ? 1.0
-                           : trace_shadow(shade_pos, ev / ed, ed, shadow_k,
-                                          (int)shadow_steps, /*directional=*/false,
-                                          frag_is_tall_n ? self_eps_tall : 0.05);
+                           : soft_shadow_march(shade_pos, ev / ed, ed, shadow_k,
+                                          (int)shadow_steps,
+                                          frag_is_tall_n ? self_eps_tall : 0.05,
+                                          /*ref_receiver=*/false);
         float v = pow(saturate(los), vis_curve);
         if(vis_radius > 0.001) {
             v *= saturate(1.0 - smoothstep(vis_radius * 0.6, vis_radius, ed));

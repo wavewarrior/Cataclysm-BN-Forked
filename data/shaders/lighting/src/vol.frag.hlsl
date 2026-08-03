@@ -18,7 +18,7 @@
 //
 // v1 density is a single uniform (weather-scaled CPU-side); per-tile field
 // density (fd_smoke / fd_*gas / fd_fog) is the follow-on. The in-plane "march"
-// is the shared trace_shadow (smooth SDF cone penumbra), so no blue-noise
+// is the shared soft_shadow_march (smooth SDF cone penumbra), so no blue-noise
 // jitter is needed at v1.
 //
 // Resources (space2), sampler-less ⇒ storage buffers start at t0:
@@ -99,23 +99,12 @@ float skyvis_bilinear(float2 p) {
     const float d = skyvis_texel(x0 + 1, y0 + 1);
     return lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
 }
-float trace_shadow(float2 origin, float2 dir, float dist_to_light, float k, int steps) {
-    if(sdf_map_w == 0u || steps <= 0) { return 1.0; }
-    float shadow = 1.0;
-    float t = min(0.3, dist_to_light * 0.5);
-    [loop] for(int ss = 0; ss < steps; ++ss) {
-        if(t >= dist_to_light - 0.4) break;
-        const float sd = sdf_bilinear(origin + dir * t);
-        if(sd < 0.05) { shadow = 0.0; break; }
-        // Directional (sun): penumbra keys to t (distance from receiver), the
-        // textbook IQ form — NOT (dist_to_light - t), which is for point lights
-        // with a real distance. dist_to_light here is just the march cap, so
-        // (cap - t) inverts the soft/hard ends. Mirrors sprite.frag directional.
-        shadow = min(shadow, k * sd / max(t, 0.01));
-        t += max(sd, 0.15);
-    }
-    return saturate(shadow);
-}
+// Soft-shadow sphere trace, shared with sprite.frag and gi_field.comp. Included
+// here (not at the top) because it calls sdf_bilinear, defined above. This path
+// already used the correct textbook denominator; it now also gets the
+// between-samples correction, and self_eps = 0 keeps it an exact no-op
+// otherwise (volumetric samples are in open air, never on their own occluder).
+#include "shadow_trace.hlsl"
 
 struct VS_OUT {
     float4 pos : SV_Position;
@@ -143,8 +132,8 @@ float4 main(VS_OUT i) : SV_Target0 {
     if(skyvis <= 0.01) {
         return float4(0.0, 0.0, 0.0, 0.0);
     }
-    // Directional shaft = the wall/tree shadow LANES. Vol's trace_shadow is now
-    // byte-identical to sprite.frag's, and both read the SAME sun_dir
+    // Directional shaft = the wall/tree shadow LANES. Vol and sprite.frag now
+    // share ONE soft_shadow_march, and both read the SAME sun_dir
     // (make_sun_params) over the SAME world_pos frame — so the march MUST use the
     // same direction as the sprite surface shadow, toward_sun = -sun_dir. Marching
     // the opposite way puts the dark lane on the sun-FACING (lit) side of every
@@ -157,8 +146,9 @@ float4 main(VS_OUT i) : SV_Target0 {
     float shadow_term = 1.0;
     if(vol_shadow > 0.001) {
         const float2 toward_sun = -float2(sun_dir_x, sun_dir_y);
-        const float  sun_shadow = trace_shadow(world_pos, toward_sun, vol_reach,
-                                               shadow_k, (int)shadow_steps);
+        const float  sun_shadow = soft_shadow_march(world_pos, toward_sun, vol_reach,
+                                               shadow_k, (int)shadow_steps, /*self_eps=*/0.0,
+                                               /*ref_receiver=*/true);
         shadow_term = lerp(1.0, sun_shadow, saturate(vol_shadow));
     }
     const float3 fog = float3(sun_r, sun_g, sun_b)
