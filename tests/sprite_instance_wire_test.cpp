@@ -47,7 +47,7 @@ const std::vector<std::string> canonical_fields = {
     "src_u", "src_v", "src_uw", "src_vh",
     "tint_r", "tint_g", "tint_b", "tint_a",
     "rotation", "light_mul", "pad1", "pad2",
-    "extrude_px", "extrude_dark", "extrude_lean", "extrude_pad",
+    "extrude_px", "extrude_dark", "extrude_lean", "face_amt",
     "light_mode", "flash_r", "flash_g", "flash_b",
 };
 

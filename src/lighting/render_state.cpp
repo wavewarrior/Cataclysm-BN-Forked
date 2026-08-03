@@ -827,7 +827,7 @@ void render_state::build_outline_ring(
             s.inst.extrude_px = 0.0f;     // outline copies must not darken or lean
             s.inst.extrude_dark = 0.0f;
             s.inst.extrude_lean = 0.0f;
-            s.inst.extrude_pad = 0.0f;
+            s.inst.face_amt = 0.0f;       // outline copies are flat silhouettes, no facing arc
             ring.push_back(s);
         }
     }

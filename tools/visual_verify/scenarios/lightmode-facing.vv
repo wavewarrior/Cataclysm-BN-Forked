@@ -1,0 +1,84 @@
+# Facing-normal + normal-atlas A/B, at NOON.
+#
+# PREREQUISITE: a THROWAWAY clone of an explored save, --var WORLD=<name>. See
+# lightmode-world.vv for the clone command and why it must be a save you can lose.
+#
+# WHY NOON, and why every earlier attempt measured nothing:
+# the surface normal is consumed in exactly two places in sprite.frag --
+#   * the emitter loops   (lambert, gated by nrm_amount)
+#   * the sun term        (sun_lambert, line ~767)
+# and the sun term is multiplied by `sun_intensity`. In the shipped save that value was
+# MEASURED at ~0.002 by dumping it as flat grey (0.36/255 against a forced-white 192.6
+# reference), with n_emit=2. So the frame had no directional light whatsoever: its
+# daylight-looking luma of 57.7 comes from the NON-directional sky term. Forcing a +-3.0
+# normal tilt on every sprite in that scene moved 0.28% of pixels, and killing the sun's
+# N.L outright moved 0.13% -- both indistinguishable from the 0.02% same-state null.
+# Those were measurements of the scene, not of the feature.
+#
+# A normal only becomes visible when something DIRECTIONAL illuminates it, so this
+# scenario puts the sun overhead first and measures afterwards.
+#
+# Hour is set through the debug menu with the sequence proven in light-scene.vv:
+#   ESC -> c (Debug Menu) -> m -> t -> h, clear the field, type 12, ENTER, ESC out.
+launch --dont-debugmsg --world ${WORLD}
+waitlog "opened document .*sidebar_hud.rml" timeout=300000
+focus
+settle timeout=25000
+
+# The window resizes shortly after the world loads (measured 1920x1080, then 2560x1440
+# ~1.5 s later), so discard a warm-up capture and settle again: a size change between two
+# measured shots aborts the run.
+shot warmup avg=4
+wait 6000
+settle timeout=15000
+
+# Conservative rect well inside the map viewport. The HUD sidebar and message bar are
+# drawn on is_lit=false segments and are not part of the lighting composite at all, so
+# including them would dilute every number with pixels the feature cannot touch.
+rect play 0.25,0.12,0.55,0.80
+
+# ---- set the clock to 12:00 ----
+key "{ESC}"
+wait 1800
+key "c"
+wait 2000
+key "m"
+wait 1800
+key "t"
+wait 2000
+key "h"
+wait 1500
+key "{BACKSPACE}"
+wait 300
+key "{BACKSPACE}"
+wait 300
+key "1"
+wait 400
+key "2"
+wait 500
+key "{ENTER}"
+wait 1500
+key "{ESC}"
+wait 1200
+key "{ESC}"
+wait 1200
+key "{ESC}"
+wait 4000
+
+settle timeout=15000
+shot noon avg=12
+stats noon in=play
+
+# Paired same-state capture: without a null there is no way to tell a real difference
+# between two BUILDS from frame-to-frame shimmer (this scene has animated foliage sway
+# and flicker, which move pixels on their own).
+shot noon_again avg=12
+diff noon noon_again as=same_state in=play
+
+# The clock change MUST have landed, or `noon` is just a second copy of the unlit frame
+# and the whole A/B silently compares nothing. A sunless frame measured luma 57.7; noon
+# has to be materially brighter than that.
+assert noon.luma > 70
+
+log
+stop

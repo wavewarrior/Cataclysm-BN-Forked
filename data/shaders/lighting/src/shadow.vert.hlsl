@@ -28,7 +28,7 @@ struct SpriteInstance {
     float src_u, src_v, src_uw, src_vh;
     float tint_r, tint_g, tint_b, tint_a;
     float rotation, light_mul, pad1, pad2;
-    float extrude_px, extrude_dark, extrude_lean, extrude_pad;
+    float extrude_px, extrude_dark, extrude_lean, face_amt;
     // light_mode + flash_* are unread here; declared for stride parity.
     float light_mode, flash_r, flash_g, flash_b;
 };

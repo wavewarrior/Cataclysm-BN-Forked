@@ -163,8 +163,12 @@ cbuffer DebugParams : register(b2, space3) {
     float ramp_chroma;       // how much coloured light tints the ramped surface
     float gi_bilat;          // Step 6: 1 = SDF-bilateral GI upsample, 0 = plain bilinear
     float vis_edge;          // Step 8: 1 = feathered vision frontier, 0 = hard tile edge
-    float vis_edge_pad0;
-    float vis_edge_pad1;
+    // Normalised V offset from a colour texel to its NORMAL texel in the same atlas
+    // page (0.5 for a double-height page). 0.0 = no page carries normals, and
+    // atlas_normal() below is then an exact identity. Mirrors debug_params::nrm_atlas_v.
+    float nrm_atlas_v;
+    // Signed strength of the per-sprite vertical-face arc. Mirrors debug_params::face_arc.
+    float face_arc;
     float vis_edge_pad2;
 };
 struct VS_OUT {
@@ -184,6 +188,18 @@ struct VS_OUT {
     // compare BY BAND, never ==.
     float light_mode : TEXCOORD7; // sprite_light_mode: 0 unlit, 1 gpu_lit, 2 memory
     float3 flash : TEXCOORD8; // coloured light override: colour * strength, max(colour) == 1
+    // Quad-local vertical fraction: 0 at the sprite's TOP edge, 1 at its BOTTOM edge.
+    // Taken from quad_uv[vid].y BEFORE any UV flip, because it describes physical height
+    // on screen, not texture addressing. This is the ONLY vertical position information
+    // available for a 1-tile sprite: light_pos == world_pos for anything not `is_tall`,
+    // so the old light_pos.y - world_pos.y trick is identically zero for every wall.
+    // MUST NOT be `nointerpolation` -- see the long note on light_mode above; that
+    // qualifier broke D3D12 pipeline creation outright (0x80070057).
+    float quad_v : TEXCOORD9;
+    // Per-sprite "this is a vertical surface" amount (sprite_instance::face_amt), 0..1.
+    // Per-instance constant, so interpolation across the quad is exact; and like flash it
+    // is a QUANTITY, not a categorical selector, so drift could only nudge a shade.
+    float face_amt : TEXCOORD10;
 };
 // SDF supersample factor — MUST match lighting::SDF_SUPERSAMPLE (sdf_pass.h).
 // SdfBuf is the SS-finer grid: dims (sdf_map_w*SDF_SS) x (sdf_map_h*SDF_SS),
@@ -387,6 +403,30 @@ float3 surface_normal(float2 uv) {
     const float edge = min(min(sL.a, sR.a), min(sU.a, sD.a));
     return normalize(lerp(float3(0.0, 0.0, 1.0), n, saturate(edge)));
 }
+// --- Procedural normal atlas (double-height page) --------------------------
+// Each atlas page carries colour in its TOP half and, at the SAME rect in its
+// bottom half, a normal map generated from the sprite art at tileset load
+// (src/lighting/normal_gen.*). It is a V OFFSET rather than a second texture
+// because shadercross silently mis-binds every sampler texture past slot 0 on
+// Metal — see the note at the top of this file; Atlas is the one sampler
+// binding known to work, so nothing new is bound here.
+//
+// Texel encoding (RGBA8): rg = nx/ny biased to 0..1, b = the coherence-gated
+// per-pixel amplitude used as the blend weight against the alpha bevel, a = 255.
+// The generator deliberately emits b = 0 for dither-noise art rather than
+// fabricating relief, so an unstructured sprite falls back to `bevel_n` on its
+// own without needing a per-sprite opt-in.
+//
+// nrm_atlas_v is the normalised V distance from a colour texel to its normal
+// texel (0.5 for a double-height page). 0.0 means no page carries normals and
+// this is an exact identity on the alpha-bevel normal.
+float3 atlas_normal(float2 uv, float3 bevel_n) {
+    if(nrm_atlas_v <= 0.0) { return bevel_n; }
+    const float4 t   = Atlas.Sample(AtlasSmp, uv + float2(0.0, nrm_atlas_v));
+    const float2 nxy = t.rg * 2.0 - 1.0;
+    const float  nz  = sqrt(saturate(1.0 - dot(nxy, nxy)));
+    return normalize(lerp(bevel_n, float3(nxy, nz), saturate(t.b)));
+}
 // Wet specular glint (Blinn-Phong). View dir is +Z (top-down ortho). The albedo-
 // Sobel normal is too high-frequency for a tight specular lobe (it fireflies), so
 // flatten it toward up by SPEC_FLATTEN for the spec term ONLY. SPEC_SHININESS sets
@@ -529,9 +569,33 @@ float4 main(VS_OUT i) : SV_Target0 {
     if(light_quant > 0.5 && texels_per_tile > 0.5) {
         shade_pos = (floor(i.light_pos * texels_per_tile) + 0.5) / texels_per_tile;
     }
-    const float3 normal = frag_is_tall_n
-                          ? lerp( float3( 0.0, 0.0, 1.0 ), surface_normal( i.uv ), nrm_entity_amount )
-                          : surface_normal( i.uv );
+    const float3 bevel_n = frag_is_tall_n
+                           ? lerp( float3( 0.0, 0.0, 1.0 ), surface_normal( i.uv ), nrm_entity_amount )
+                           : surface_normal( i.uv );
+    // Procedural normal atlas, when a page carries one; exact identity otherwise.
+    const float3 base_n = atlas_normal( i.uv, bevel_n );
+    // Vertical-face arc. The alpha-shape bevel in surface_normal() CANNOT shade a sprite
+    // body: alpha IS its height field, so a fully-opaque wall face has zero gradient and
+    // comes out exactly (0,0,1). Measured in debug view 9: grass, asphalt, wall and
+    // building interior all read 121.6/121.6/243.5 -- identical. This arc supplies the
+    // MACRO orientation the bevel structurally cannot.
+    //
+    // quad_v is 0 at the sprite's TOP edge and 1 at its BASE, so (2*quad_v - 1) runs
+    // -1 at the top .. +1 at the base. Screen/map +Y is DOWN (south), so pushing the
+    // normal's y toward +1 at the base makes the base face SOUTH -- lit when the light
+    // is south of the tile -- while the top swings north and falls into shade. That
+    // gradient is what reads as a wall FACE instead of a uniformly brighter square.
+    //
+    // face_arc is SIGNED so the F4 panel can flip which end faces the viewer without a
+    // rebuild (the same trick nrm_relief uses for the bevel's y-down/atlas-V ambiguity).
+    // Exact no-op when face_amt == 0: the tilt is identically zero and `base_n` is
+    // returned untouched, with no renormalisation to perturb it. Every sprite that is
+    // not a wall, window or tall furniture -- including every zero-initialised UI, font
+    // and overlay instance -- ships face_amt == 0.
+    const float  face_tilt = i.face_amt * face_arc * ( 2.0 * i.quad_v - 1.0 );
+    const float3 normal = ( face_tilt == 0.0 )
+                          ? base_n
+                          : normalize( float3( base_n.x, base_n.y + face_tilt, base_n.z ) );
     // Sky exposure (0 roofed .. 1 open), hoisted above the emitter loop so the
     // wet-specular term can gate on it (no indoor glint). SkyVisBuf is x-major
     // (skyvis[x*H+y]); bilinear so the indoor daylight-bleed gradient reads smooth.

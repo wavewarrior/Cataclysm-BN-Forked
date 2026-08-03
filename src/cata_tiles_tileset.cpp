@@ -1045,6 +1045,12 @@ texture_result tileset::get_or_default(
             if( SDL_GPUTexture * gpu_atlas = tileset_atlas->find_gpu_texture( atl_tex.first.get() ) ) {
                 lighting::get_render_state().upload_surface_subregion_to_gpu_texture(
                     gpu_atlas, atl_tex.second.x, atl_tex.second.y, st_surf, &st_sub_rect_final );
+                // Publish the procedurally generated normal for this sprite into the
+                // bottom half of the same GPU page (plans/procedural-normal-atlas.md).
+                // Same rect, same staging sub-rect: the normal is derived from exactly
+                // the pixels that were just uploaded as colour.
+                tileset_atlas->upload_sprite_normal(
+                    atl_tex.first.get(), atl_tex.second, st_surf, st_sub_rect_final );
             }
         }
 
@@ -1148,6 +1154,8 @@ bool tileset_loader::copy_surface_to_dynamic_atlas(
                     ts.tileset_atlas->find_gpu_texture( atl_tex.first.get() ) ) {
                 lighting::get_render_state().upload_surface_subregion_to_gpu_texture(
                     gpu_atlas, atl_tex.second.x, atl_tex.second.y, st_surf, &st_sub_rect );
+                ts.tileset_atlas->upload_sprite_normal(
+                    atl_tex.first.get(), atl_tex.second, st_surf, st_sub_rect );
             }
         }
 
@@ -2057,6 +2065,12 @@ void tileset_loader::ensure_default_item_highlight()
     if( SDL_GPUTexture * gpu = ts.tileset_atlas->find_gpu_texture( tex.get() ) ) {
         lighting::get_render_state().upload_surface_subregion_to_gpu_texture(
             gpu, rect.x, rect.y, surface.get(), nullptr );
+        // Every colour upload MUST be paired with a normal upload, even for a flat
+        // fill like this highlight. An unwritten normal region is uninitialised VRAM,
+        // which the shader would sample as arbitrary normals — the same class of bug
+        // as the magenta ground tiles noted in copy_surface_to_dynamic_atlas. The
+        // generator's flat short-circuit makes this one correctly featureless.
+        ts.tileset_atlas->upload_sprite_normal( tex.get(), rect, surface.get() );
     }
 
     ts.tile_ids[ITEM_HIGHLIGHT].sprite.fg.add( std::vector<int>( {index} ), 1 );

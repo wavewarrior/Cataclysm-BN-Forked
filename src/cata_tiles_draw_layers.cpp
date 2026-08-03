@@ -27,6 +27,7 @@
 #include "vehicle_part.h"
 #include "vpart_position.h"
 
+#include <algorithm>
 #include <map>
 #include <optional>
 #include <string>
@@ -53,6 +54,51 @@ template <typename T> static float foliage_sway_weight( const T& obj )
     if( obj.has_flag( TFLAG_TALL_GRASS ) ) { return 0.6f; }
     return 0.0f;
 }
+
+// sprite.frag applies a vertical-face arc scaled by this (sprite_instance::face_amt):
+// the surface normal tilts toward the viewer at the sprite's base and away at its top,
+// so a vertical surface finally responds to light DIRECTION instead of merely getting
+// uniformly brighter. 0 = flat/horizontal, which is every other sprite in the game and
+// is why the arc is provably inert outside these two functions.
+//
+// TFLAG_WALL is the solid vertical face. A wall you can SEE THROUGH is glazing rather
+// than masonry (t_wall_glass, t_reinforced_glass), so it takes the reduced window
+// amount — the same `wall && transparent` distinction hud_radar.cpp:140-143 draws.
+//
+// Windows themselves are NOT walls: t_window's flags are TRANSPARENT / CONNECT_TO_WALL /
+// WINDOW with no WALL, so a TFLAG_WALL test alone misses every one of them. "WINDOW" has
+// no ter_bitflags entry, so testing it costs a std::set<std::string> lookup; gating that
+// behind the cached TFLAG_CONNECT_TO_WALL bit rejects all ground, vegetation and floor
+// terrain first and loses nothing. Verified against every terrain definition in
+// data/json: of the 25 WINDOW-flagged terrains, the 6 that lack CONNECT_TO_WALL are
+// exactly the taped ones, which carry WALL and are already caught above.
+static auto terrain_face_amount( const ter_t &t ) -> float
+{
+    if( t.has_flag( TFLAG_WALL ) ) {
+        return t.transparent ? 0.6f : 1.0f;
+    }
+    if( t.has_flag( TFLAG_CONNECT_TO_WALL ) && t.has_flag( "WINDOW" ) ) {
+        return 0.6f;
+    }
+    return 0.0f;
+}
+
+// Furniture carries no "is a vertical surface" flag, so its face amount is read off
+// `coverage` — the sight-blocking percentage every furniture definition already has,
+// documented at mapdata.h:486 as "<30 won't cover from sight". Below that threshold the
+// furniture is flat enough to leave alone (rugs, mats, low tables); above it the amount
+// ramps to a moderate 0.5, because even a full bookcase presents a less clean vertical
+// face than a wall does. Deriving it this way covers new furniture the day it is
+// defined, with no id list to maintain.
+static auto furniture_face_amount( const furn_t &f ) -> float
+{
+    constexpr float sight_cover_min = 30.0f;
+    constexpr float max_amount = 0.5f;
+    const float ramp = ( static_cast<float>( f.coverage ) - sight_cover_min )
+                       / ( 100.0f - sight_cover_min );
+    return max_amount * std::clamp( ramp, 0.0f, 1.0f );
+}
+
 bool cata_tiles::draw_terrain(
     const tripoint_bub_ms& p, const lit_level ll, int &height_3d, const bool ( &invisible )[5],
     int z_drop )
@@ -83,6 +129,10 @@ bool cata_tiles::draw_terrain(
     // present keeps the redraw loop repainting so the breeze actually animates.
     const float ter_sway = ( t && idle_animations.enabled() ) ? foliage_sway_weight( *t ) : 0.0f;
     if( ter_sway > 0.0f ) { idle_animations.mark_present(); }
+    // Vertical-face arc: walls and windows are the surfaces that should respond to
+    // light DIRECTION rather than just brightness. Unconditional (no option gate) —
+    // it is shading, not animation — and 0 for everything that is not a wall.
+    const float ter_face = t ? terrain_face_amount( *t ) : 0.0f;
 
     // first memorize the actual terrain
     if( t && !invisible[0] ) {
@@ -134,13 +184,14 @@ bool cata_tiles::draw_terrain(
             std::string canopy_id;
             if( ter_sway > 0.0f && tileset_ptr
                 && tileset_ptr->find_tile_type( canopy_id = tname + "_canopy" ) ) {
-                draw_from_id_string( tile, p, bgCol, fgCol, ll, true, z_drop, false, height_3d, 0.0f );
+                draw_from_id_string(
+                    tile, p, bgCol, fgCol, ll, true, z_drop, false, height_3d, 0.0f, ter_face );
                 const tile_search_params canopy{canopy_id, C_TERRAIN, empty_string, 0, 0};
                 draw_from_id_string(
-                    canopy, p, bgCol, fgCol, ll, true, z_drop, false, height_3d, ter_sway );
+                    canopy, p, bgCol, fgCol, ll, true, z_drop, false, height_3d, ter_sway, 0.0f );
             } else {
                 draw_from_id_string(
-                    tile, p, bgCol, fgCol, ll, true, z_drop, false, height_3d, ter_sway );
+                    tile, p, bgCol, fgCol, ll, true, z_drop, false, height_3d, ter_sway, ter_face );
             }
             return true;
         }
@@ -165,7 +216,8 @@ bool cata_tiles::draw_terrain(
             const lit_level lit = overridden ? lit_level::LIT : ll;
             const bool nv = !overridden;
             const tile_search_params tile{tname, C_TERRAIN, empty_string, subtile, rotation};
-            return draw_from_id_string( tile, p, bgCol, fgCol, lit, nv, z_drop, false, height_3d );
+            return draw_from_id_string( tile, p, bgCol, fgCol, lit, nv, z_drop, false, height_3d,
+                                        0.0f, terrain_face_amount( *t2 ) );
         }
     } else if( invisible[0] ) {
         // try drawing memory if invisible and not overridden
@@ -206,6 +258,8 @@ bool cata_tiles::draw_furniture(
     // Foliage sway: tag swayable furniture vegetation (gated by ANIMATIONS).
     const float furn_sway = ( f && idle_animations.enabled() ) ? foliage_sway_weight( *f ) : 0.0f;
     if( furn_sway > 0.0f ) { idle_animations.mark_present(); }
+    // Vertical-face arc, scaled off sight coverage — see furniture_face_amount.
+    const float furn_face = f ? furniture_face_amount( *f ) : 0.0f;
 
     // first memorize the actual furniture
     if( f && !invisible[0] ) {
@@ -237,13 +291,14 @@ bool cata_tiles::draw_furniture(
             std::string canopy_id_f;
             if( furn_sway > 0.0f && tileset_ptr
                 && tileset_ptr->find_tile_type( canopy_id_f = fname + "_canopy" ) ) {
-                draw_from_id_string( tile, p, bgCol, fgCol, ll, true, z_drop, false, height_3d, 0.0f );
+                draw_from_id_string(
+                    tile, p, bgCol, fgCol, ll, true, z_drop, false, height_3d, 0.0f, furn_face );
                 const tile_search_params canopy{canopy_id_f, C_FURNITURE, empty_string, 0, 0};
                 draw_from_id_string(
-                    canopy, p, bgCol, fgCol, ll, true, z_drop, false, height_3d, furn_sway );
+                    canopy, p, bgCol, fgCol, ll, true, z_drop, false, height_3d, furn_sway, 0.0f );
             } else {
                 draw_from_id_string(
-                    tile, p, bgCol, fgCol, ll, true, z_drop, false, height_3d, furn_sway );
+                    tile, p, bgCol, fgCol, ll, true, z_drop, false, height_3d, furn_sway, furn_face );
             }
             return true;
         }
@@ -284,7 +339,8 @@ bool cata_tiles::draw_furniture(
             const lit_level lit = overridden ? lit_level::LIT : ll;
             const bool nv = !overridden;
             const tile_search_params tile{fname, C_FURNITURE, empty_string, subtile, rotation};
-            return draw_from_id_string( tile, p, bgCol, fgCol, lit, nv, z_drop, false, height_3d );
+            return draw_from_id_string( tile, p, bgCol, fgCol, lit, nv, z_drop, false, height_3d,
+                                        0.0f, furniture_face_amount( *f2 ) );
         }
     } else if( invisible[0] ) {
         // try drawing memory if invisible and not overridden

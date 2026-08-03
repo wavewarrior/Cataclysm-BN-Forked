@@ -12,6 +12,7 @@
 #include "calendar.h"
 #include "cached_options.h"
 #include "cata_tiles.h"
+#include "dynamic_atlas.h"
 #include "game_constants.h"
 #include "map.h"
 #include "debug.h"
@@ -415,6 +416,50 @@ static lighting::sun_params make_celestial_params( const time_point &when, float
     return sp;
 }
 
+/// Celestial hour driving the sky/sun pass and the GI daylight injection.
+///
+/// Normally the in-game calendar. `CBN_FORCE_SUN_HOUR=12` pins it instead, which exists
+/// because verifying ANY normal-dependent lighting change needs a scene with directional
+/// light, and that turned out to be the hard part. The surface normal is consumed in only
+/// two places in sprite.frag — the emitter loops and the sun term — and the sun term is
+/// gated on `sun_intensity`, which the 24h LUT (sprite_batcher.cpp k_sun) sets to 0.00 for
+/// every hour in 21:00..05:00. A test save sitting at night therefore renders a perfectly
+/// healthy, perfectly lit frame in which a +-3.0 normal perturbation on EVERY sprite moves
+/// 0.28% of pixels — indistinguishable from the 0.02% same-state null, and trivially
+/// misread as "the feature does nothing".
+///
+/// Forcing the hour fragment-side does NOT work, measured: the sky/sun compute pass is
+/// skipped at night on the CPU, so SkyBuf.a (sun_shadow) stays 0 and zeroes the sun term
+/// downstream however the shader is patched. The override has to land here, upstream of
+/// that pass. Driving the in-game clock through the debug menu is the other option and it
+/// is flaky — a dropped keypress leaves a night frame that looks entirely plausible in a
+/// screenshot folder, which is exactly the failure this hook removes.
+static auto forced_celestial_hour() -> const std::optional<float> &// *NOPAD*
+{
+    static const std::optional<float> forced = []() -> std::optional<float> {
+        const char *const raw = std::getenv( "CBN_FORCE_SUN_HOUR" );
+        if( !raw ) {
+            return std::nullopt;
+        }
+        char *end = nullptr;
+        const float h = std::strtof( raw, &end );
+        if( end == raw || h < 0.0f || h > 24.0f ) {
+            dbg( DL::Error ) << "CBN_FORCE_SUN_HOUR: expected 0..24, got '" << raw
+                             << "', ignoring";
+            return std::nullopt;
+        }
+        dbg( DL::Info ) << "CBN_FORCE_SUN_HOUR: celestial hour pinned to " << h;
+        return h;
+    }();
+    return forced;
+}
+
+static auto celestial_hour() -> float
+{
+    const std::optional<float> &forced = forced_celestial_hour();
+    return forced ? *forced : ( g ? hour_of_day<float>( calendar::turn ) : 12.0f );
+}
+
 auto flush_and_gather_rc( lighting::render_state &rs,
                           lighting::frame_context &ctx, bool rc_rebuild ) -> void
 {
@@ -466,7 +511,7 @@ auto flush_and_gather_rc( lighting::render_state &rs,
         // Celestial light params drive BOTH the sky/sun pass and the GI daylight
         // injection, so derive them once. Weather-independent (intensity/colour
         // applied fragment-side); cheap, so no wait on assemble_light_inputs.
-        const float sun_hour = g ? hour_of_day<float>( calendar::turn ) : 12.f;
+        const float sun_hour = celestial_hour();
         const lighting::sun_params sp = make_celestial_params( calendar::turn, sun_hour );
 
         // Stage 2a/2b: directional sky/sun pass FIRST. Marches the unified coverage
@@ -583,10 +628,16 @@ if( g && tilecontext && in.tile_pixel_size > 0.0f ) {
         s_emo.draw_off_px_y = 0;
     }
 
-    const float sun_hour = g ? hour_of_day<float>( calendar::turn ) : 12.f;
+    const float sun_hour = celestial_hour();
     in.sun = make_celestial_params( calendar::turn, sun_hour );
     float weather_mult = 1.0f;
-    if( g ) {
+    // Weather dimming is derived from the REAL calendar (`sunlight( calendar::turn )`),
+    // so it survives a pinned hour and silently undoes it: at a night turn `base <= 1.0`,
+    // the ratio branch is skipped, and the cloud multiplier below drives the pinned noon
+    // sun straight back to ~0. That is exactly what was measured — the hook logged
+    // "pinned to 12" while sun_intensity still dumped as ~0 and frame luma did not move.
+    // When the hour is pinned this is a synthetic sun for measurement, so skip weather.
+    if( g && !forced_celestial_hour() ) {
     const float base = sunlight( calendar::turn, false );
         const weather_type_id wid = get_weather().weather_id;
         if( base > 1.0f && wid.is_valid() ) {
@@ -649,6 +700,16 @@ if( g && tilecontext && in.tile_pixel_size > 0.0f ) {
         ( tilecontext && tilecontext->current_tileset() )
         ? static_cast<float>( tilecontext->current_tileset()->get_tile_width() )
         : 32.0f;
+    // Procedural normal atlas (plans/procedural-normal-atlas.md): the normalised V
+    // distance from a colour texel to its generated normal texel on the same page.
+    // Sourced from the atlas rather than hardcoded to 0.5 so that a page which failed
+    // to get a GPU mirror, or a build with the feature switched off, reports 0.0f --
+    // which sprite.frag treats as an exact no-op and keeps using surface_normal().
+    in.debug.nrm_atlas_v =
+        ( tilecontext && tilecontext->current_tileset() &&
+          tilecontext->current_tileset()->texture_atlas() )
+        ? tilecontext->current_tileset()->texture_atlas()->normal_v_offset()
+        : 0.0f;
     // Wet specular: fold the user knob with rain intensity so the sheen only shows
     // while raining (mirrors the A3 weather-mult CPU fold). 0 = exact no-op.
     in.debug.spec_strength = g_rain_enable
@@ -1225,7 +1286,7 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
         const auto palpha = HUD_PART_BASE_ALPHA;
 
         if( g && world_generator && world_generator->active_world ) {
-            const float hour = hour_of_day<float>( calendar::turn );
+            const float hour = celestial_hour();
             const bool is_night = hour < 5.5f || hour > 20.5f;
             const int z = g->u.bub_pos().z();
             const bool underground = z < 0;

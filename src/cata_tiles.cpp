@@ -1678,7 +1678,7 @@ void cata_tiles::get_window_tile_counts(
 bool cata_tiles::draw_from_id_string(
     const tile_search_params& tile, const tripoint_bub_ms& pos, const tint_config& bg_tint,
     const tint_config& fg_tint, lit_level ll, bool apply_visual_effects, int overlay_count,
-    const bool as_independent_entity, int &height_3d, float sway )
+    const bool as_independent_entity, int &height_3d, float sway, float face_amt )
 {
     // If the ID string does not produce a drawable tile
     // it will revert to the "unknown" tile.
@@ -1990,7 +1990,7 @@ bool cata_tiles::draw_from_id_string(
     // draw it!
     draw_tile_at(
         display_tile, screen_pos, loc_rand, true_rota, bg_tint, fg_tint, ll, apply_visual_effects,
-        height_3d, base_overlay_alpha * overlay_count, retract, sway );
+        height_3d, base_overlay_alpha * overlay_count, retract, sway, face_amt );
 
     return true;
 }
@@ -2120,7 +2120,7 @@ void cata_tiles::push_occluder_footprint( const occluder_footprint_options &opts
 bool cata_tiles::draw_sprite_at(
     const tile_type& tile, point_bub_ms p, unsigned int loc_rand, bool is_fg, int rota,
     const tint_config& tint, lit_level ll, bool apply_visual_effects, int overlay_count,
-    int *height_3d, int retract, size_t warp_hash, float sway )
+    int *height_3d, int retract, size_t warp_hash, float sway, float face_amt )
 {
 
 
@@ -2313,6 +2313,10 @@ bool cata_tiles::draw_sprite_at(
         // Only the foreground (vegetation) layer gets foliage sway.
         // The background layer (ground under the tile) must stay static.
         const float enq_sway = is_fg ? sway : 0.0f;
+        // Same split for the vertical-face arc: the BACKGROUND layer of a wall tile is
+        // the floor underneath it (the same reasoning the occluder capture below spells
+        // out), which is horizontal ground and must not be tilted into a wall face.
+        const float enq_face = is_fg ? face_amt : 0.0f;
         sprite_tex->enqueue_tile_sprite( gpu_light_mode, {
             .atlas_tex = gpu.texture,
             .atlas_w = gpu.atlas_w,
@@ -2330,6 +2334,7 @@ bool cata_tiles::draw_sprite_at(
             .extrude_px = effective_extrude_px,
             .extrude_dark = effective_extrude_dark,
             .extrude_lean = effective_extrude_lean,
+            .face_amt = enq_face,
             .flash_r = flash_r,
             .flash_g = flash_g,
             .flash_b = flash_b } );
@@ -2464,12 +2469,12 @@ bool cata_tiles::draw_sprite_at(
 bool cata_tiles::draw_tile_at(
     const tile_type& tile, point_bub_ms p, unsigned int loc_rand, int rota,
     const tint_config& bg_tint, const tint_config& fg_tint, lit_level ll, bool apply_visual_effects,
-    int &height_3d, int overlay_count, int retract, float sway )
+    int &height_3d, int overlay_count, int retract, float sway, float face_amt )
 {
     draw_sprite_at( tile, p, loc_rand, /*fg:*/ false, rota, bg_tint, ll, apply_visual_effects,
-                    overlay_count, nullptr, retract, TILESET_NO_WARP, sway );
+                    overlay_count, nullptr, retract, TILESET_NO_WARP, sway, face_amt );
     draw_sprite_at( tile, p, loc_rand, /*fg:*/ true, rota, fg_tint, ll, apply_visual_effects,
-                    overlay_count, &height_3d, retract, TILESET_NO_WARP, sway );
+                    overlay_count, &height_3d, retract, TILESET_NO_WARP, sway, face_amt );
     return true;
 }
 

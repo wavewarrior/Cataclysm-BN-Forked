@@ -168,7 +168,8 @@ float rotation                          // radians, clockwise, around quad centr
 float light_mul                         // <0 = memorized tile carrying -(dist in tiles)
 float pad1                              // foliage sway weight (sprite.vert)
 float pad2                              // >0.5 hover outline; <-0.5 encoded frontier mask
-float extrude_px, extrude_dark, extrude_lean, extrude_pad  // height-depth pillar
+float extrude_px, extrude_dark, extrude_lean  // height-depth pillar
+float face_amt                          // 0..1 "this is a vertical surface" (facing arc, sprite.frag)
 float light_mode                        // sprite_light_mode: 0 unlit, 1 gpu_lit, 2 memory
 float flash_r, flash_g, flash_b         // coloured light override: colour * strength, max(colour)==1
 ```

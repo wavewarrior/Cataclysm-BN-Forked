@@ -5,7 +5,7 @@ struct SpriteInstance {
     float src_u, src_v, src_uw, src_vh;
     float tint_r, tint_g, tint_b, tint_a;
     float rotation, light_mul, pad1, pad2;
-    float extrude_px, extrude_dark, extrude_lean, extrude_pad;
+    float extrude_px, extrude_dark, extrude_lean, face_amt;
     // light_mode is sprite_light_mode from src/tile_light_mode.h, carried as a
     // float: 0 = unlit, 1 = gpu_lit, 2 = memory. flash_* is the coloured light
     // override, encoded `colour * strength` with max(colour) == 1 — see
@@ -105,8 +105,8 @@ cbuffer DebugParams : register(b2, space1) {
     float ramp_chroma;
     float gi_bilat;
     float vis_edge;
-    float vis_edge_pad0;
-    float vis_edge_pad1;
+    float nrm_atlas_v;
+    float face_arc;
     float vis_edge_pad2;
 };
 
@@ -138,6 +138,19 @@ struct VS_OUT {
     // quantity rather than a categorical selector, so even drift would be
     // harmless — it cannot reclassify the composite, only nudge a colour.
     float3 flash : TEXCOORD8; // coloured light override: colour * strength, max(colour) == 1
+    // Quad-local vertical fraction: 0 at the sprite's TOP edge, 1 at its BOTTOM edge.
+    // Taken from quad_uv[vid].y BEFORE any UV flip, because it describes physical height
+    // on screen, not texture addressing. This is the ONLY vertical position information
+    // available for a 1-tile sprite: light_pos == world_pos for anything not `is_tall`,
+    // so the old light_pos.y - world_pos.y trick is identically zero for every wall.
+    // MUST NOT be `nointerpolation` -- see the long note on light_mode above; that
+    // qualifier broke D3D12 pipeline creation outright (0x80070057).
+    float quad_v : TEXCOORD9;
+    // Per-sprite "this is a vertical surface" amount (SpriteInstance::face_amt), 0..1.
+    // Per-instance constant, so interpolation across the quad is exact; and like flash it
+    // is a QUANTITY, not a categorical selector, so drift could only nudge a shade.
+    // Also MUST NOT be `nointerpolation`, for the reason recorded above.
+    float face_amt : TEXCOORD10;
 };
 static const float2 quad_uv[6] = {
     float2(0.0,0.0), float2(1.0,0.0), float2(0.0,1.0),
@@ -249,5 +262,7 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
     o.outline   = s.pad2;
     o.light_mode = s.light_mode;
     o.flash     = float3(s.flash_r, s.flash_g, s.flash_b);
+    o.quad_v    = quad_uv[vid].y;
+    o.face_amt  = s.face_amt;
     return o;
 }

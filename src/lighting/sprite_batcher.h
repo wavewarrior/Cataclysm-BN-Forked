@@ -74,7 +74,10 @@ struct sprite_instance {
     float extrude_dark; // darkness at canopy (0..1); fragment multiplies final_rgb by (1 -
                         // dark_frac)
     float extrude_lean; // horizontal shear per px from viewport centre, per vertical fraction
-    float extrude_pad;  // alignment padding
+    /// Per-sprite "this is a vertical surface" amount, 0..1. Drives the facing arc in
+    /// sprite.frag (a vertical gradient so a wall face responds to light direction).
+    /// 0 = flat/horizontal surface (ground, most items) => arc disabled for this sprite.
+    float face_amt;
     // Which lighting composite sprite.frag applies to this sprite:
     // 0 = unlit (albedo x tint), 1 = gpu_lit (albedo x tint x gpu_total),
     // 2 = memory (cross-fade to the remembered look). Values are
@@ -249,8 +252,19 @@ struct debug_params {
     // reads badly next to the now-smooth lighting. 1 = feather the overlay across
     // the tile from its neighbours' visibility, 0 = the old hard tile edge.
     float vis_edge = 1.0f;
-    float vis_edge_pad0 = 0.0f;
-    float vis_edge_pad1 = 0.0f;
+    // Normalised V offset from a colour texel to its NORMAL texel in the same atlas
+    // page (double-height page => 0.5). 0.0 disables the procedural normal atlas
+    // entirely and sprite.frag falls back to surface_normal() unchanged, which is why
+    // it ships at 0.0: the value is supplied per-frame from the atlas once a page
+    // actually carries normals.
+    float nrm_atlas_v = 0.0f;
+    // Signed strength of the per-sprite vertical-FACE arc in sprite.frag: how far the
+    // surface normal tilts toward the viewer at a sprite's base and away at its top,
+    // scaled by sprite_instance::face_amt. Signed so the F4 panel can flip the sense
+    // (which end reads as "lit from the south") without a rebuild. face_amt is 0 for
+    // everything that is not a wall/window/tall furniture, so this is inert there
+    // regardless of its value.
+    float face_arc = 1.5f;
     float vis_edge_pad2 = 0.0f;
 };
 

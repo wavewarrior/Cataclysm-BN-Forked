@@ -602,6 +602,10 @@ void devui_rml_open()
     c.Bind( "ramp_chroma", &g_dbg_params.ramp_chroma );
     c.Bind( "gi_bilat", &g_dbg_params.gi_bilat );
     c.Bind( "vis_edge", &g_dbg_params.vis_edge );
+    // Procedural normal atlas V offset (0 = feature off, 0.5 = double-height page) and
+    // the SIGNED strength of the per-sprite vertical-face arc, both swept live.
+    c.Bind( "nrm_atlas_v", &g_dbg_params.nrm_atlas_v );
+    c.Bind( "face_arc", &g_dbg_params.face_arc );
     c.Bind( "sway_amp", &g_dbg_params.sway_amp );
     c.Bind( "sway_freq", &g_dbg_params.sway_freq );
     c.Bind( "ripple_k", &g_dbg_params.ripple_k );

@@ -236,6 +236,10 @@ class texture
             float extrude_px = 0.0f;
             float extrude_dark = 0.0f;
             float extrude_lean = 0.0f;
+            /// Per-sprite "this is a vertical surface" amount, 0..1, driving the
+            /// vertical-face arc in sprite.frag. See lighting::sprite_instance::face_amt.
+            /// 0 (the default) leaves the sprite exactly as it renders today.
+            float face_amt = 0.0f;
             /// Coloured light override: `colour * strength` with max(colour) == 1.
             /// See lighting::sprite_instance::flash_r. Zero = no override.
             float flash_r = 0.0f;
@@ -301,7 +305,7 @@ class texture
             s.extrude_px = opts.extrude_px;
             s.extrude_dark = opts.extrude_dark;
             s.extrude_lean = opts.extrude_lean;
-            s.extrude_pad = 0.0f;
+            s.face_amt = opts.face_amt;
             s.light_mode = static_cast<float>( mode );
             s.flash_r = opts.flash_r;
             s.flash_g = opts.flash_g;
@@ -933,7 +937,7 @@ class cata_tiles
         bool draw_from_id_string(
             const tile_search_params& tile, const tripoint_bub_ms& pos, const tint_config& bg_tint,
             const tint_config& fg_tint, lit_level ll, bool apply_visual_effects, int overlay_count,
-            bool as_independent_entity, int &height_3d, float sway = 0.0f );
+            bool as_independent_entity, int &height_3d, float sway = 0.0f, float face_amt = 0.0f );
         /**
          * @brief Draw overmap tile, if it's transparent, then draw lower tile first
          *
@@ -965,7 +969,8 @@ class cata_tiles
         bool draw_sprite_at(
             const tile_type& tile, point_bub_ms p, unsigned int loc_rand, bool is_fg, int rota,
             const tint_config& tint, lit_level ll, bool apply_visual_effects, int overlay_count,
-            int *height_3d, int retract = 0, size_t warp_hash = TILESET_NO_WARP, float sway = 0.0f );
+            int *height_3d, int retract = 0, size_t warp_hash = TILESET_NO_WARP, float sway = 0.0f,
+            float face_amt = 0.0f );
 
         /// Step 2 (grid-decoupled lighting): record the footprint of the sprite just
         /// enqueued by draw_sprite_at, so the SDF seed can be rasterised from the
@@ -1006,7 +1011,7 @@ class cata_tiles
             const tile_type& tile, point_bub_ms p, unsigned int loc_rand, int rota,
             const tint_config& bg_tint, const tint_config& fg_tint, lit_level ll,
             bool apply_visual_effects, int &height_3d, int overlay_count, int retract,
-            float sway = 0.0f );
+            float sway = 0.0f, float face_amt = 0.0f );
 
         /**
          * @brief Draws an alpha-blended solid colour tile at a screen position.
