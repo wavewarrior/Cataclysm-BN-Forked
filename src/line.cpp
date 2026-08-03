@@ -24,16 +24,15 @@ double iso_tangent( double distance, units::angle vertex )
     return std::sqrt( 2 * std::pow( distance, 2 ) * ( 1 - cos( vertex ) ) );
 }
 
-static auto lookup_distance( const int dx, const int dy, const int dz,
-                             const bool use_trigdist ) -> uint16_t
+auto rl_dist_from_deltas( const int dx, const int dy, const int dz,
+                          const bool use_trigdist ) -> int
 {
     if( !use_trigdist ) {
-    return static_cast<uint16_t>( std::max( { dx, dy, dz } ) );
+    return std::max( { dx, dy, dz } );
     }
     const auto squared = dx * dx + dy * dy + dz * dz;
     const auto distance = static_cast<float>( std::sqrt( static_cast<double>( squared ) ) );
-    return static_cast<uint16_t>(
-               std::round( distance ) );
+    return static_cast<int>( std::round( distance ) );
 }
 
 auto rl_dist_lookup_table::matches( const rl_dist_lookup_table_dimensions &dimensions ) const ->
@@ -54,7 +53,7 @@ auto rl_dist_lookup_table::reset( const rl_dist_lookup_table_dimensions &dimensi
     for( const auto dy : std::views::iota( 0, dimensions_.max_dy + 1 ) ) {
         for( const auto dx : std::views::iota( 0, dimensions_.max_dx + 1 ) ) {
             distances_2d_[index_2d( dx, dy )] =
-                lookup_distance( dx, dy, 0, dimensions_.trigdist );
+                static_cast<uint16_t>( rl_dist_from_deltas( dx, dy, 0, dimensions_.trigdist ) );
         }
     }
 
@@ -65,7 +64,7 @@ auto rl_dist_lookup_table::reset( const rl_dist_lookup_table_dimensions &dimensi
         for( const auto dy : std::views::iota( 0, dimensions_.max_dy + 1 ) ) {
             for( const auto dx : std::views::iota( 0, dimensions_.max_dx + 1 ) ) {
                 distances_3d_[index_3d( dx, dy, dz )] =
-                    lookup_distance( dx, dy, dz, dimensions_.trigdist );
+                    static_cast<uint16_t>( rl_dist_from_deltas( dx, dy, dz, dimensions_.trigdist ) );
             }
         }
     }
@@ -110,16 +109,39 @@ auto rl_dist_lookup_table::index_3d( const int dx, const int dy, const int dz ) 
 }
 
 auto get_rl_dist_lookup_table( const rl_dist_lookup_table_dimensions &dimensions ) ->
-const rl_dist_lookup_table &
+std::shared_ptr<const rl_dist_lookup_table>
 {
+    if( !dimensions.is_buildable() ) {
+    return nullptr;
+    }
+
     static std::mutex distance_table_mutex;
-    static rl_dist_lookup_table table;
+    static std::shared_ptr<const rl_dist_lookup_table> published;
 
     const std::lock_guard<std::mutex> lock( distance_table_mutex );
-    if( !table.matches( dimensions ) ) {
-        table.reset( dimensions );
+    if( !published || !published->matches( dimensions ) ) {
+        // Grow monotonically: matches() already accepts a larger table, so never
+        // shrink an axis on rebuild.  A caller whose extents move in opposite
+        // directions on different axes (a smaller bubble but a taller z range)
+        // would otherwise rebuild a multi-megabyte table on every call.  A
+        // different distance mode invalidates the contents, so that case builds
+        // exactly what was asked for.
+        auto grown = dimensions;
+        if( published && published->dimensions().trigdist == dimensions.trigdist ) {
+            const auto& current = published->dimensions();
+            grown.max_dx = std::max( grown.max_dx, current.max_dx );
+            grown.max_dy = std::max( grown.max_dy, current.max_dy );
+            grown.max_dz = std::max( grown.max_dz, current.max_dz );
+        }
+        // Copy-on-write: build a new table and publish that, rather than
+        // resetting the live one.  Callers hold their shared_ptr for as long as
+        // they read, so a rebuild can never reallocate storage another thread is
+        // still indexing.
+        auto rebuilt = std::make_shared<rl_dist_lookup_table>();
+        rebuilt->reset( grown );
+        published = std::move( rebuilt );
     }
-    return table;
+    return published;
 }
 
 void bresenham( point p1, point p2, int t,

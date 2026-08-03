@@ -324,8 +324,16 @@ void map::update_visibility_cache( const int zlev )
     visibility_variables_cache.g_light_level = static_cast<int>( g->light_level( zlev ) );
     {
         const level_cache& plr_ch = get_cache_ref( player_pos.z() );
-        visibility_variables_cache.vision_threshold = g->u.get_vision_threshold(
-                plr_ch.lm[plr_ch.idx( player_pos.x(), player_pos.y() )].max() );
+        // bub_pos() is derived from abs_sub, so the avatar can sit outside this
+        // map's bubble whenever the anchor moved without it (a reality-bubble
+        // resize before the map is re-centred, or a harness reloading the map at
+        // a fixed anchor).  lm[] is indexed without bounds checking, so treat an
+        // out-of-bubble avatar as standing in the dark instead of reading past
+        // the end of the cache.
+        const auto plr_light = plr_ch.inbounds( player_pos.xy() )
+                               ? plr_ch.lm[plr_ch.idx( player_pos.x(), player_pos.y() )].max()
+                               : 0.0f;
+        visibility_variables_cache.vision_threshold = g->u.get_vision_threshold( plr_light );
     }
 
     visibility_variables_cache.u_clairvoyance = g->u.clairvoyance();
@@ -342,16 +350,59 @@ void map::update_visibility_cache( const int zlev )
     const auto max_z = fov_3d ? OVERMAP_HEIGHT : zlev;
     const auto max_delta_z =
         std::max( std::abs( min_z - player_pos.z() ), std::abs( max_z - player_pos.z() ) );
-    const auto& reference_cache = get_cache_ref( zlev );
-    const auto* const distance_table =
-        trigdist
-    ? &get_rl_dist_lookup_table( rl_dist_lookup_table_dimensions{
-        .max_dx = reference_cache.cache_x - 1,
-        .max_dy = reference_cache.cache_y - 1,
+    // The table is indexed by |coord - player_coord|, so its extent has to span
+    // the avatar's offset to BOTH ends of the bubble.  cache_x - 1 is that span
+    // only while the avatar stands inside the bubble; when it does not (see the
+    // vision_threshold comment above) dx runs past cache_x - 1 and the loops
+    // below index the table out of bounds from a worker thread.  Size from the
+    // widest span over every z-level this call actually iterates -- once, here,
+    // so the inner loops stay a plain array index with no per-tile bounds check.
+    //
+    // extent - 1 stays in the max so an avatar walking around inside the bubble
+    // always asks for the same extent and the table is built once, not rebuilt
+    // whenever it steps closer to an edge.
+    const auto axis_span = []( const int player_coord, const int extent ) -> int {
+        if( extent <= 0 ) {
+            return -1;
+        }
+        return std::max( { extent - 1,
+                           std::abs( player_coord ),
+                           std::abs( extent - 1 - player_coord ) } );
+    };
+    auto span_dx = -1;
+    auto span_dy = -1;
+    for( const auto z : std::views::iota( min_z, max_z + 1 ) ) {
+        const level_cache& span_cache = get_cache_ref( z );
+        span_dx = std::max( span_dx, axis_span( player_pos.x(), span_cache.cache_x ) );
+        span_dy = std::max( span_dy, axis_span( player_pos.y(), span_cache.cache_y ) );
+    }
+    const auto table_dimensions = rl_dist_lookup_table_dimensions{
+        .max_dx = span_dx,
+        .max_dy = span_dy,
         .max_dz = max_delta_z,
         .trigdist = trigdist,
-    } )
-        : nullptr;
+    };
+    // Owns the table for the whole function: a published table is immutable, and
+    // holding the shared_ptr keeps this one alive even if another thread
+    // publishes a larger one while the workers below are still reading it.
+    const auto distance_table_owner =
+        trigdist
+        ? get_rl_dist_lookup_table( table_dimensions )
+        : std::shared_ptr<const rl_dist_lookup_table>{};
+    const auto* distance_table = distance_table_owner.get();
+    if( distance_table != nullptr && !distance_table->matches( table_dimensions ) ) {
+        // Unreachable through get_rl_dist_lookup_table's contract.  Checked once
+        // per call rather than per tile so that a future regression on either
+        // side of this seam degrades to the direct computation instead of
+        // silently reading out of bounds from a worker thread.
+        const auto& built = distance_table->dimensions();
+        debugmsg( "rl_dist lookup table (%d,%d,%d) does not cover span (%d,%d,%d)",
+                  built.max_dx, built.max_dy, built.max_dz, span_dx, span_dy, max_delta_z );
+        distance_table = nullptr;
+    }
+    // Only read when the table is absent, i.e. trigdist is off or no iterated
+    // z-level has an allocated cache.  Keeps the fallback in the same metric.
+    const auto use_trigdist = trigdist;
 
     for( const auto z : std::views::iota( min_z, max_z + 1 ) ) {
 
@@ -368,7 +419,7 @@ void map::update_visibility_cache( const int zlev )
                     const auto dist =
                         distance_table != nullptr
                         ? distance_table->distance_3d( dx, dy, dz )
-                        : std::max( {dx, dy, dz} );
+                        : rl_dist_from_deltas( dx, dy, dz, use_trigdist );
                     visibility_cache[vc_cache.idx( x, y )] = apparent_light_at(
                             tripoint_bub_ms{x, y, z}, visibility_variables_cache, dist );
                 }
@@ -395,7 +446,7 @@ void map::update_visibility_cache( const int zlev )
                     const auto dist =
                         distance_table != nullptr
                         ? distance_table->distance_3d( dx, dy, dz )
-                        : std::max( {dx, dy, dz} );
+                        : rl_dist_from_deltas( dx, dy, dz, use_trigdist );
                     const auto ll = apparent_light_at(
                                         tripoint_bub_ms{x, y, z}, visibility_variables_cache, dist );
                     visibility_cache[vc_cache.idx( x, y )] = ll;

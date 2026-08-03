@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <span>
 #include <string>
 #include <vector>
@@ -201,13 +202,37 @@ struct rl_dist_lookup_table_dimensions {
     int max_dy = 0;
     int max_dz = 0;
     bool trigdist = false;
+
+    /// True when every axis would hold at least one entry.  A negative extent
+    /// means the caller had nothing to size the table from, and the resulting
+    /// table would be empty; such callers must use rl_dist_from_deltas().
+    auto is_buildable() const -> bool {
+        return max_dx >= 0 && max_dy >= 0 && max_dz >= 0;
+    }
 };
 
+/// Distance between two points given as absolute per-axis deltas.
+///
+/// This is the single definition of the metric rl_dist_lookup_table tabulates,
+/// so a caller that cannot use the table still produces identical values.
+auto rl_dist_from_deltas( int dx, int dy, int dz, bool use_trigdist ) -> int;
+
+/// Precomputed |delta| -> distance table.  Immutable once published by
+/// get_rl_dist_lookup_table(); the distance_*() accessors do no bounds
+/// checking, so callers must size the table via matches() before indexing.
 class rl_dist_lookup_table
 {
     public:
+        /// True when this table was built for the same distance mode and its
+        /// extent covers @p dimensions on every axis, i.e. every index a caller
+        /// asking for @p dimensions can produce is in range.
         auto matches( const rl_dist_lookup_table_dimensions &dimensions ) const -> bool;
+        /// Build the table for exactly @p dimensions, which must be buildable.
         auto reset( const rl_dist_lookup_table_dimensions &dimensions ) -> void;
+
+        auto dimensions() const -> const rl_dist_lookup_table_dimensions & {
+            return dimensions_;
+        }
 
         auto distance_2d( int dx, int dy ) const -> int;
         auto distance_3d( int dx, int dy, int dz ) const -> int;
@@ -223,8 +248,15 @@ class rl_dist_lookup_table
         std::vector<uint16_t> distances_3d_;
 };
 
+/// Return a table covering at least @p dimensions, publishing a freshly built
+/// one when the current table is too small or was built for a different
+/// distance mode.  Returns nullptr when @p dimensions is not buildable.
+///
+/// A published table is never mutated, and the returned shared_ptr keeps it
+/// alive, so a caller may hold it across a parallel region: a concurrent
+/// rebuild swaps in a new table instead of reallocating the one being read.
 auto get_rl_dist_lookup_table( const rl_dist_lookup_table_dimensions &dimensions ) ->
-const rl_dist_lookup_table &;
+std::shared_ptr<const rl_dist_lookup_table>;
 
 /**
  * Helper type for the return value of dist_fast().
