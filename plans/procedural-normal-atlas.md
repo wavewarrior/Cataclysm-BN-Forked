@@ -1,10 +1,61 @@
 # Procedural normal atlas for sprite lighting
 
-## STATUS
+## STATUS (implemented 2026-08-03, commit `96a340fc3a`)
 
-Algorithm **validated offline against the real tileset** (see Evidence). No C++ landed yet.
-Prototype: `C:\WORK\nrmproto.py` (generator), `nrmsheet.py` (contact sheet), `nrmcal*.py`
-(calibration). Contact sheets in `C:\WORK\lighting_review\11..13-proto-*.png`.
+Both features are IMPLEMENTED, built, unit-tested and instrumented. Neither is
+VISUALLY validated. That distinction is the point of this section.
+
+### Proven
+- Builds clean. `[normal_gen]` 1215 assertions / 9 cases pass, and the three-way
+  `sprite_instance` wire test (24 assertions) still pins names/order/count/types.
+  `sizeof(sprite_instance) == 96` unchanged — `extrude_pad` was genuine padding.
+- The runtime HLSL compiles: `load_lighting_shader_source` reads from datadir at launch,
+  so this is the gate no C++ build can give. The game reaches gameplay and renders a lit
+  world (luma 57.7, not black).
+- Pages doubled: `dynamic_atlas: new page colour 4096x4096, GPU mirror 4096x8192,
+  normals on`.
+- `nrm_atlas_v` genuinely reaches the shader: measured 120.04 against a calibrated
+  1.0 -> 240 reference, i.e. exactly 0.5. The feature is enabled, not silently off.
+
+### NOT delivered, and the identified reason
+Feature OFF vs ON moves **0.06%** of pixels (2161 px) against a 0.02% same-state null.
+Forcing a +-3.0 tilt on EVERY sprite moves **0.28%**. So the normal has almost no
+authority in the test scene — and that is a measurement of the SCENE, not of the feature:
+
+- The normal is consumed in exactly two places in sprite.frag: the emitter loops and the
+  sun term. This scene reports `n_emit=2` and effectively no sun, so there is nothing for
+  a normal to modulate. Killing the sun's N.L outright moves only 0.13%.
+- `sun_intensity` measured **0.021** even with `CBN_FORCE_SUN_HOUR=12` AND the weather
+  dimming bypassed. Cause: `make_celestial_params( calendar::turn, hour )` takes the real
+  turn as its FIRST argument and uses it to choose sun-vs-MOON, so a night save gets moon
+  parameters however the hour is pinned — pinning only redirects the LUT lookup. Making
+  this testable needs a third override (the sun/moon selection) or a daytime save.
+
+So the remaining work is a scene that actually has directional light, not more tuning.
+Per the LUT the sun is strong in real play (`sun_intensity` 1.25 at 12:00, 0.95 at 08:00),
+so the path is NOT inert for users — but that is an inference from the table, not a
+measurement.
+
+### Open question (deliberately not called a defect)
+A probe of the sampled normal texel came back bimodal, ~55% near 0. That is the EXPECTED
+signature of a working prefill rather than a hole, because the neutral texel is
+(128, 128, 0) and the coherence gate sets B = 0 for every noise-textured sprite, which on
+this tileset is most terrain. Follow-up probes of R and B separately were inconclusive:
+they returned values byte-identical to the previous probe and emitted no scenario stats
+line, i.e. the run failed and a stale `world.png` was measured. Coverage is therefore
+UNVERIFIED, in neither direction. `cap`-style helpers need a freshness assert (compare
+mtime, or fail when the scenario logged no stats) before any further pixel claims.
+
+### Methodology note — this invalidated four earlier readings
+Do NOT probe this fragment shader with an early `return`, and do NOT replace the final
+output. Both drop varying consumption, D3D12 then refuses pipeline creation
+(`Could not create graphics pipeline state! 0x80070057`), the world renders BLACK, and
+every resulting number describes the black frame. A confident "76.91% of pixels changed,
+the atlas path is live" claim was exactly that artefact. Valid form: BLEND the probe into
+the real output — `lerp( final_rgb, probe, 0.98 )` — which keeps `final_rgb` and hence
+every varying referenced. Verified with a hardcoded-red positive control that correctly
+produced rgb [239.6, 0.35, 0.0]. Run that control before trusting any dump; a
+`float3(x,x,x)` dump reporting unequal channels never landed.
 
 ## Problem
 
