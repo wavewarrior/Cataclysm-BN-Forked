@@ -583,13 +583,12 @@ void CheckMessages( display_context &d )
                     g_dbg_lighting_shader = !g_dbg_lighting_shader;
                     break;
                 } else if( lc == KEY_F( 7 ) ) {
-                    // F7: cycle debug visualization mode (0-10). Mode 8 is the
-                    // B/W emitter-only diagnostic — bypasses tint gating so it
-                    // works on the main-menu blue backdrop. Mode 9 = surface
-                    // normal (Sobel) as RGB; mode 10 = ambient occlusion
-                    // (grayscale openness); mode 11 = silhouette shadow mask
-                    // (.Load at screen pixel); all game tiles only.
-                    g_current_dbg_mode = ( g_current_dbg_mode + 1 ) % 16u;
+                    // F7: cycle debug visualization mode (0-16). Modes include:
+                    // 8 = B/W emitter-only (bypasses tint for main-menu blue),
+                    // 9 = surface normal (Sobel), 10 = AO, 11 = shadow mask (game tiles only),
+                    // 15 = vision frontier (frontier_cov), 16 = light_mode
+                    // (red=unlit, green=gpu_lit, blue=memory).
+                    g_current_dbg_mode = ( g_current_dbg_mode + 1 ) % 17u;
                     g_dbg_params.debug_mode = g_current_dbg_mode;
                     break;
                 } else if( lc == KEY_F( 8 ) ) {

@@ -1904,15 +1904,14 @@ bool cata_tiles::draw_from_id_string(
     // Overmap overlays usually have higher counts, so make them less opaque
     const int base_overlay_alpha = tile.category == C_OVERMAP_TERRAIN ? 12 : 24;
 
-    // Overmap tiles are an UNLIT map view (sdf_map_w==0, no sun/sky/emitter).
-    // The lit shader brightens game tiles via gpu_light (tint); with tint left
-    // at a stale ~0 from the last in-game lit tile, max(tint, ambient=0.05)
-    // collapses the overmap to texel*0.05 -> black. Force full-bright passthrough
-    // (tint=1.0) up here so it applies to BOTH the transparent early-return path
-    // below AND the normal path; the per-tile gpu_light=0 lit-branch at the
-    // Phase-5 block skips C_OVERMAP_TERRAIN, so this is the overmap's final tint.
+    // Overmap tiles are an UNLIT map view (sdf_map_w==0, no sun/sky/emitter), so they
+    // must never take the GPU radiance. Pin the mode up here so it applies to BOTH the
+    // transparent early-return path below AND the normal path; `classify_tile_light`
+    // reaches the same answer further down, this is just the copy the early return needs.
+    // The tint is deliberately NOT forced any more: white is the unconditional default
+    // for every sprite (see the block below), so there is no stale ~0 left over from the
+    // last in-game lit tile to overwrite.
     if( tile.category == C_OVERMAP_TERRAIN ) {
-        gpu_light_r = gpu_light_g = gpu_light_b = 1.0f;
         gpu_light_mode = sprite_light_mode::unlit;
     }
 
@@ -1926,35 +1925,31 @@ bool cata_tiles::draw_from_id_string(
         return true;
     }
 
-    // Phase 5: compute per-tile GPU light tint from lightmap color cache.
-    // `pos` is in map tile coordinates; default to white (1,1,1) for UI tiles,
-    // overmap tiles, out-of-bounds, or when the lightmap hasn't been generated
-    // yet (lum == 0: main menu / first frame before generate_lightmap runs).
-    // Phase 8: tint = 0 for game tiles so max(tint, gpu_light) = gpu_light.
-    // GPU emitters + sky/sun are the sole brightness source for game tiles.
-    // UI elements and main menu (g==nullptr or as_independent_entity) keep tint=1.0
-    // so max(1.0, gpu_light) = 1.0 → full color passthrough regardless of lighting.
-    gpu_light_r = gpu_light_g = gpu_light_b = 1.0f; // default: UI/main-menu passthrough
-    if( !as_independent_entity && tile.category != C_OVERMAP_TERRAIN && g != nullptr ) {
-        const map& here = get_map();
-        if( here.inbounds( pos ) ) {
-            const level_cache& mc = here.access_cache( pos.z() );
-            const int idx = mc.idx( pos.x(), pos.y() );
-            const float lum = mc.lm[idx].max();
-            if( lum > 0.001f ) {
-                // Tile IS lit by CPU lightmap → let GPU emitters drive brightness.
-                // tint = 0 so max(0, gpu_light) = gpu_light (Stoneshard quality).
-                gpu_light_r = gpu_light_g = gpu_light_b = 0.0f;
-            }
-            // lum == 0: lightmap not generated yet; keep tint=1.0 (safe white fallback).
-        }
-    }
+    // `tint` means pure COLOUR again — plain white for every sprite — and the radiance
+    // comes from `light_mode` (classified just below) instead of being smuggled through
+    // the tint lane. The reset stays unconditional and is still required: gpu_light_* are
+    // `mutable` members reused across calls, so dropping it would leak the previous
+    // sprite's tint.
+    //
+    // Deleted here: a per-tile BRIGHTNESS test — the CPU lightmap's peak channel at this
+    // tile against a 0.001 floor — used as a proxy for "the world is ready". It zeroed the
+    // tint on lit tiles so the shader's max( tint, gpu_total ) selected gpu_total, and left
+    // tint at 1.0 otherwise. But that condition equally matches a genuinely pitch-dark yet
+    // VISIBLE tile, which then took max( 1.0, gpu_total ) = 1.0 and rendered at FULL UNLIT
+    // ALBEDO with its shadows discarded — shadows were structurally unrepresentable exactly
+    // where they should be deepest — and the hard threshold made a tile crossing it pop
+    // rather than ramp. Readiness is now an explicit latch ( `lightmap_ever_generated()`,
+    // src/lightmap_ready.h ) consumed by `classify_tile_light`, and darkness is simply a
+    // dark radiance.
+    //
+    // Intended, deliberately visible consequence: a genuinely dark but visible tile now
+    // renders DARK instead of at full albedo.
+    gpu_light_r = gpu_light_g = gpu_light_b = 1.0f;
 
-    // Phase A of the lighting-composition pipeline: classify how this sprite
-    // should be lit and carry the answer to the GPU. INERT FOR NOW —
-    // sprite.frag.hlsl still composites with max( mem_tint, gpu_total ) and
-    // ignores light_mode, so the tint rule above is deliberately untouched and
-    // no pixel changes. The cutover is a later phase.
+    // Classify how this sprite should be lit and carry the answer to the GPU.
+    // sprite.frag.hlsl selects its composite from `light_mode`: unlit = albedo x tint,
+    // gpu_lit = that x gpu_total (with the palette ramp), memory = the frontier
+    // cross-fade between the two.
     // `g != nullptr` is evaluated first so get_map() is never reached without a game.
     gpu_light_mode = classify_tile_light( {
         .as_independent_entity = as_independent_entity,
@@ -2253,17 +2248,27 @@ bool cata_tiles::draw_sprite_at(
     destination.h = height * tile_height * tile.pixelscale / tileset_ptr->get_tile_height();
 
     // Sprite-animation transform (identity for non-creature tiles). Offset shifts the
-    // rect; flash brightens the light tint (white for the avatar, red for others); tilt is
-    // added to the rotation in render().
+    // rect; flash overrides the sprite's radiance colour; tilt is added to the rotation
+    // in render().
     // fg_only transforms (tile-bash recoil) must not move the bg layer (ground stays put);
     // creature transforms leave fg_only false and apply to all layers (rigid body).
+    //
+    // The flash rides its OWN per-instance lane rather than the tint. Folded into the
+    // tint it was MULTIPLICATIVE against the radiance, so it vanished at night — the only
+    // place the previous max()-based flash was ever visible. As a radiance override
+    // ( `radiance * ( 1 - strength ) + flash`, see lighting::sprite_instance::flash_r )
+    // it reads at every brightness. These are LOCALS on purpose: gpu_light_* are mutable
+    // members, and a flash must never persist into the next sprite.
+    float flash_r = 0.0f;
+    float flash_g = 0.0f;
+    float flash_b = 0.0f;
     if( active_anim_xform_.active() && !( active_anim_xform_.fg_only && !is_fg ) ) {
         const sprite_xform& xf = active_anim_xform_;
         destination.x += static_cast<int>( xf.off_x );
         destination.y += static_cast<int>( xf.off_y );
-        gpu_light_r = std::max( 0.0f, gpu_light_r + xf.flash_r );
-        gpu_light_g = std::max( 0.0f, gpu_light_g + xf.flash_g );
-        gpu_light_b = std::max( 0.0f, gpu_light_b + xf.flash_b );
+        flash_r = std::max( 0.0f, xf.flash_r );
+        flash_g = std::max( 0.0f, xf.flash_g );
+        flash_b = std::max( 0.0f, xf.flash_b );
     }
 
     // Height extrusion: extend the fg quad upward when the tile has depth_extrude_px set.
@@ -2324,7 +2329,10 @@ bool cata_tiles::draw_sprite_at(
             .outline = vision_overlay_outline_,
             .extrude_px = effective_extrude_px,
             .extrude_dark = effective_extrude_dark,
-            .extrude_lean = effective_extrude_lean } );
+            .extrude_lean = effective_extrude_lean,
+            .flash_r = flash_r,
+            .flash_g = flash_g,
+            .flash_b = flash_b } );
         // Step 2: capture this sprite's alpha footprint for the SDF seed. Foreground
         // only — the BACKGROUND layer of a wall tile is the floor underneath it, which
         // is opaque across the whole square and would re-create the very tile-square

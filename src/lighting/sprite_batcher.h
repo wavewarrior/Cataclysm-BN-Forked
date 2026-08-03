@@ -86,9 +86,20 @@ struct sprite_instance {
     // fragment shader compares this by BAND (> 1.5, > 0.5) rather than for
     // equality, since it crosses the vertex/fragment boundary as a float.
     float light_mode;
-    float lm_pad0;
-    float lm_pad1;
-    float lm_pad2; // keep 96 bytes 16-byte aligned
+    // Coloured light OVERRIDE, not a plain emissive: `colour * strength` with
+    // max(colour) == 1, so the fragment shader recovers strength as max3(flash)
+    // and composites lerp(radiance, colour, strength) as
+    // `radiance * (1 - strength) + flash` — one lane, hue preserved at both
+    // brightness extremes. Used by the melee hit-flash (cata_tiles_anim) and the
+    // main-menu backdrop's blue base (sdl_render_frame). Zero = exact no-op.
+    //
+    // Additive emissive was rejected: in daylight gpu_total ~ 1, so adding a red
+    // (0.6, 0, 0) clips to white and loses the hue that says WHAT was hit. Folding
+    // the flash into `tint` was also rejected: that is multiplicative, so it
+    // vanishes at night — the only place the previous max()-based flash ever showed.
+    float flash_r;
+    float flash_g;
+    float flash_b;
 };
 static_assert(
     sizeof(sprite_instance) == 96,
@@ -300,8 +311,8 @@ public:
     // false; the shader's existing emitter_count==0 / sdf_map_w==0
     // guards short-circuit both the per-emitter loop and the sun
     // march for these segments, recovering the GPU cost of running
-    // lighting math on fragments where the result would be discarded
-    // by max(tint, gpu_total).
+    // lighting math on fragments whose result is discarded anyway: an
+    // `unlit` sprite's composite never reads the radiance term.
     void set_texture(SDL_GPUTexture* atlas, SDL_GPUSampler* sampler, bool is_lit = true);
     // Set a GPU scissor rect for subsequent draws. nullptr = full viewport.
     void set_scissor(const SDL_Rect* rect);

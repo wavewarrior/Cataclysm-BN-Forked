@@ -63,11 +63,17 @@ every gameplay consumer (`fine_detail_vision_mod`, `Character::sight_range`,
 6. **Palette shade ramps.** `palette_ramp` histograms every tileset sheet, keeps the
    256 most frequent colours, generates 8 shades per row procedurally and bakes a 32^3
    OkLab nearest-row lookup. `sprite.frag` resolves the lit colour to a shade STEP in
-   the texel's own ramp, so a red surface darkens toward dark red, not grey. Gated to
-   lit world tiles (UI/fonts/memory keep their own colour) and to `ramp_enable`.
-   - The shade step keys off `combined` (= `max(tint, gpu_total)`), NOT `gpu_total`:
-     outdoors this engine lights tiles through the CPU lightmap tint, so keying off the
-     GPU term alone crushes daylight to black.
+   the texel's own ramp, so a red surface darkens toward dark red, not grey. Applied only
+   inside the `gpu_lit` branch of the composite, so UI, fonts and remembered tiles cannot
+   reach it structurally; also gated on `ramp_enable`.
+   - The shade step keys off `rad_lit`, the `gpu_lit` radiance. It used to key off
+     `combined` (`= max(tint, gpu_total)`) and claimed the GPU term alone would crush
+     daylight to black because the engine lit tiles through the CPU lightmap tint. That
+     was already false: the CPU zeroed the tint on exactly the tiles the ramp applied to,
+     so `combined` WAS `gpu_total` here.
+   - The old `step(tint_sum, 0.01)` gate is gone with the `max()`. It was a proxy for
+     "this is a lit world tile" and would have inverted to ALWAYS TRUE — eating HUD
+     glyphs — the moment `tint` stopped being 1.0 on UI and memory sprites.
    - `ramp_steps` is the BAKE REQUEST; `render_state::palette_steps()` is the
      authoritative row stride the shader indexes with. They must not diverge.
    - Ramp output is display-referred, so `tonemap.frag` lerps out AgX on
@@ -164,7 +170,7 @@ float pad1                              // foliage sway weight (sprite.vert)
 float pad2                              // >0.5 hover outline; <-0.5 encoded frontier mask
 float extrude_px, extrude_dark, extrude_lean, extrude_pad  // height-depth pillar
 float light_mode                        // sprite_light_mode: 0 unlit, 1 gpu_lit, 2 memory
-float lm_pad0, lm_pad1, lm_pad2
+float flash_r, flash_g, flash_b         // coloured light override: colour * strength, max(colour)==1
 ```
 
 Changing this struct requires updating `SpriteInstance` in BOTH
@@ -433,13 +439,27 @@ The WRONG formula (early bug): `cam_off = o / tile_px + 0.5` — this was ~135 t
 
 Getters: `get_tile_map_origin()` → `o`, `get_drawing_pixel_offset()` → `op`.
 
-### Phase 5 CPU lightmap tint: guards required
+### Sprite `tint` is pure colour — the composite comes from `light_mode`
 
-The `gpu_light_r/g/b = lm[idx].max()` path in `draw_from_id_string` MUST have:
-1. `g != nullptr` — `get_map()` is only safe when `g` exists  
-2. `lum > 0.001f` — before `generate_lightmap` runs, `lm` is all zeros. Tiles reaching this code are guaranteed LIT by the draw loop, so `lum == 0` means lightmap not generated yet (main menu, loading). Fall back to white tint (1.0f).
+`draw_from_id_string` sets `gpu_light_r/g/b` to a flat **1.0f** for every sprite; the
+tint lane carries colour and nothing else. There is no longer any CPU-lightmap read
+here — the old `gpu_light_r/g/b = lm[idx].max()` path, and its `lum > 0.001f`
+"lightmap not generated yet" fallback to a white tint, are **deleted**. That test used
+per-tile BRIGHTNESS as a proxy for readiness, so a pitch-dark but visible tile took
+`max( 1.0, gpu_total ) = 1.0` and rendered at full unlit albedo with its shadows
+discarded.
 
-Without guard 2, the main menu renders completely black.
+Radiance selection is now explicit: `classify_tile_light` (`src/tile_light_mode.h`)
+returns `sprite_light_mode::unlit` / `gpu_lit` / `memory`, carried per instance in
+`sprite_instance::light_mode` and read by `sprite.frag.hlsl`. Readiness is the latch
+`lightmap_ever_generated()` (`src/lightmap_ready.h`), not a brightness race.
+
+The unconditional reset to `1.0f` must stay: `gpu_light_*` are `mutable` members reused
+across calls, so skipping it leaks the previous sprite's tint.
+
+**The main menu is safe because it classifies `unlit`** (`g == nullptr`, so
+`world_present` is false) and `unlit` never multiplies by the GPU radiance — not because
+of a brightness fallback.
 
 ### Phase 7 black screen — CONFIRMED FIX: use Texture2D for fragment emitter data
 

@@ -139,11 +139,17 @@ sprite_xform cata_tiles::compute_anim_xform( const Creature& c ) const
               + a.slide_offset_y * static_cast<float>( tile_height );
     x.tilt_deg = a.tilt_degrees + a.hit_tilt + a.attack_tilt + a.idle_tilt;
     if( a.hit_flash > 0.f ) {
+        // The lane is `colour * strength` with max(colour) == 1, so strength == max3().
         if( c.is_avatar() ) {
-            x.flash_r = x.flash_g = x.flash_b = a.hit_flash * 0.5f; // white
+            // White: colour (1,1,1) x strength. Strength keeps the historic 0.5 scale.
+            x.flash_r = x.flash_g = x.flash_b = a.hit_flash * 0.5f;
         } else {
-            x.flash_r = a.hit_flash * 0.6f; // red
-            x.flash_g = x.flash_b = -a.hit_flash * 0.5f;
+            // Red: colour (1, 0.15, 0.15) x strength 0.6, chosen to land on the same
+            // apparent flash the old max() produced at night ((0.6, 0.05, 0.05)) while
+            // now also reading in daylight. The old encoding put -0.5 in g/b, which the
+            // previous composite clamped to zero; the lerp form carries hue directly.
+            x.flash_r = a.hit_flash * 0.6f;
+            x.flash_g = x.flash_b = a.hit_flash * 0.09f;
         }
     }
     if( x.active() ) {

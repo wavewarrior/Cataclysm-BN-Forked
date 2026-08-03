@@ -907,7 +907,8 @@ void devui_rml_open()
     // Slice 8 — <select> option lists + seed the int proxies from their live globals.
     g_dbg_mode_names = {
         "off",     "ambient", "emitter", "sun",         "sky", "total",      "SDF",    "sky_vis",
-        "emit_bw", "normal",  "AO",      "shadow mask", "GI",  "sky access", "sun occ"
+        "emit_bw", "normal",  "AO",      "shadow mask", "GI",  "sky access", "sun occ",
+        "vision frontier", "light mode"
     };
     g_runic_template_names = {"Auto", "Centred", "Thirds", "Fixed-interval"};
     // Order MUST match lighting::hud_emitter_type — the <select> index is the enum.

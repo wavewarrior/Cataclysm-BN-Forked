@@ -180,9 +180,8 @@ struct VS_OUT {
     // mandatory: this is a categorical selector and an interpolated float drifts
     // off exact 0/1/2 across the quad, silently reclassifying a tile mid-sprite.
     // Consumers must also compare by BAND, never ==.
-    // CARRIED BUT NOT YET READ: the composite below still runs
-    // max( mem_tint, gpu_total ); a later phase replaces it with a mode switch.
     nointerpolation float light_mode : TEXCOORD7; // sprite_light_mode: 0 unlit, 1 gpu_lit, 2 memory
+    float3 flash : TEXCOORD8; // coloured light override: colour * strength, max(colour) == 1
 };
 // SDF supersample factor — MUST match lighting::SDF_SUPERSAMPLE (sdf_pass.h).
 // SdfBuf is the SS-finer grid: dims (sdf_map_w*SDF_SS) x (sdf_map_h*SDF_SS),
@@ -413,6 +412,13 @@ float4 main(VS_OUT i) : SV_Target0 {
         if(texel.a < cut) discard;
         return float4(i.tint.rgb, texel.a * i.tint.a);
     }
+    // --- Lighting composite mode (src/tile_light_mode.h) ---------------------
+    // Compared BY BAND, never ==: the varying is nointerpolation, but a band test
+    // costs nothing and makes any drift fail toward the nearest class instead of
+    // silently to `unlit`, which renders full unlit albedo — the exact defect this
+    // composite replaces.
+    const bool mode_memory  = i.light_mode > 1.5;
+    const bool mode_gpu_lit = !mode_memory && i.light_mode > 0.5;
     // --- Step 8: sub-tile vision frontier -----------------------------------
     // The seen/remembered boundary is decided ONCE PER TILE: remembered terrain is
     // dimmed uniformly to `mem_dim`, and never-seen tiles get a full-tile `lighting_*`
@@ -495,13 +501,14 @@ float4 main(VS_OUT i) : SV_Target0 {
         const float3 grey = blk ? texel.rgb : float3(gv, gv, gv);
         texel.rgb = lerp(texel.rgb, grey, frontier_cov);
     }
-    // A never-seen tile's overlay sprite (drawn at lit_level::LIT, so light_mul == 0)
-    // fades out at the frontier. Remembered terrain instead carries light_mul < 0 and
-    // is handled at the memory-dim site below, where the SAME coverage lerps the dim.
+    // A never-seen tile's overlay sprite (drawn at lit_level::LIT, so it classifies as
+    // gpu_lit) fades out at the frontier. Remembered terrain instead arrives in the
+    // memory MODE and is handled by the rad_mem cross-fade below, where the SAME
+    // coverage lerps the dim — so its own alpha must stay solid. The distance value
+    // still comes from light_mul; only the CLASS test moved to light_mode.
     // A desaturate-kind marker has already been consumed above and must not also
     // punch a hole in the sprite's alpha.
-    const float vis_overlay_a =
-        (frontier_desat || i.light_mul < -0.0001) ? 1.0 : frontier_cov;
+    const float vis_overlay_a = (frontier_desat || mode_memory) ? 1.0 : frontier_cov;
     // Per-pixel surface normal from inline alpha-shape bevel (Bucket A / A1),
     // driving the emitter + sun Lambert. TALL sprites (creatures, trees, walls,
     // tall furniture — light_pos != world_pos) get a GENTLE bevel (30% of full
@@ -528,8 +535,12 @@ float4 main(VS_OUT i) : SV_Target0 {
     // (skyvis[x*H+y]); bilinear so the indoor daylight-bleed gradient reads smooth.
     const float sky_vis = (sdf_map_w > 0u) ? saturate(skyvis_bilinear(shade_pos)) : 0.0;
     // emitter_light accumulates GPU point-light contributions (starts at zero).
-    // Combined with CPU tint ADDITIVELY so colored emitter glow is visible on
-    // top of the CPU-shadowcasting result, not suppressed by max().
+    // It is one additive term of the radiance sum (emitters + sky + sun + GI); that
+    // sum is folded with the ambient floor into `gpu_total` and MULTIPLIED onto
+    // albedo in the composite below. Nothing maxes it against the tint. The comment
+    // that used to sit here claimed the tint was combined "ADDITIVELY ... not
+    // suppressed by max()", which contradicted the code even before the composite
+    // was rewritten — the composite WAS a max().
     float3 emitter_light = float3(0.0, 0.0, 0.0);
     const uint me = min(emitter_count, 8192u);
     // P1: use runtime light_eps from cbuffer (falls back to default when 0).
@@ -770,24 +781,63 @@ float4 main(VS_OUT i) : SV_Target0 {
 
     // GPU total light (dithered dynamic light + un-dithered ambient floor).
     const float3 gpu_total = min(ambient_v + dyn, float3(2.0, 2.0, 2.0));
-    // max(tint, gpu_total):
-    //   Game tiles:  tint = 0 (set by CPU side) → gpu_total drives brightness
-    //   UI / fonts:  tint = element color → stays fully visible (unlit segment also zeroes emitter_count)
-    //   Main menu:   tint = 1.0 (no game state) → bright; emitters add glow
+    // What was here: a `combined` term that took the per-channel MAXIMUM of the memory
+    // tint and `gpu_total`, then multiplied it onto the raw texel. It read as a blend
+    // but was a SELECTOR. The CPU only ever emitted two tint values (cata_tiles.cpp
+    // ~1932-1944): 0 on a lit world tile, so gpu_total won; and 1.0 on everything else
+    // — UI, fonts, overmap, main menu, remembered terrain, and any tile whose CPU
+    // lightmap read <= 0.001 — so 1.0 won. On a lit tile the CPU lightmap therefore
+    // contributed no brightness whatsoever; it was a one-bit "is this tile lit at all"
+    // gate.
     //
-    // Step 8: a REMEMBERED tile is normally rendered outside the lighting model —
-    // the CPU leaves tint = 1.0 when the tile's lightmap is dark (cata_tiles.cpp
-    // ~1939), so `combined` pins to full albedo and the memory dim below scales it
-    // down. Feathering only that dim would therefore ramp the frontier toward FULL
-    // UNLIT ALBEDO and replace the dark staircase with a bright rim. So fade the
-    // passthrough out with the same coverage: at the frontier edge tint → 0, the
-    // fragment falls through to gpu_total and renders exactly as the visible
-    // neighbour does; deep inside, tint → 1.0 and memory renders as before. The two
-    // terms together are a true cross-fade between the lit and remembered looks.
-    const float3 mem_tint = (i.light_mul < -0.0001) ? i.tint.rgb * frontier_cov
-                            : i.tint.rgb;
-    const float3 combined = max(mem_tint, gpu_total);
-    float3 final_rgb = texel.rgb * combined;
+    // Its fallback failed BRIGHT. A genuinely pitch-dark but VISIBLE tile took
+    // max(1.0, gpu_total) = 1.0, rendered at full unlit albedo and threw its own
+    // shadows away, so shadows were structurally unrepresentable exactly where they
+    // should be deepest. And because the gate was a hard binary at a 0.001 lightmap
+    // threshold, a tile crossing it POPPED rather than ramped.
+    //
+    // The standard pipeline computes radiance ONCE and MULTIPLIES it onto albedo,
+    // keeping visibility as a separate multiplicative mask. That is what follows:
+    // one albedo, three radiances, and a categorical select on light_mode.
+    const float3 albedo = texel.rgb * i.tint.rgb;
+
+    // Coloured light override (melee hit-flash; main-menu backdrop blue base).
+    // Encoded as `flash = colour * strength` with max(colour) == 1, so
+    // strength == max3(flash) and `radiance * (1 - strength) + flash` is exactly
+    // lerp(radiance, colour, strength) — hue-preserving at BOTH brightness extremes
+    // out of a single lane, with no second strength channel to keep in sync.
+    //
+    // Deliberately NOT additive emissive: in daylight gpu_total ~ 1, so adding a red
+    // (0.6, 0, 0) clips to white and destroys the hue that says WHAT was hit.
+    // Deliberately NOT folded into `tint` (which is what the old code effectively
+    // did): a tint multiply is multiplicative, so it vanishes at night — the only
+    // place the old max()-based flash was ever visible in the first place.
+    //
+    // flash == 0 is an EXACT no-op: flash_s = 0 ⇒ flash_k = 1, so each radiance below
+    // reduces to its unflashed value identically, with no epsilon and no branch.
+    const float flash_s = saturate(max(i.flash.r, max(i.flash.g, i.flash.b)));
+    const float flash_k = 1.0 - flash_s;
+
+    // (effect 3) Memory distance-fade, hoisted up from the old post-composite block.
+    // Remembered tiles carry light_mul = -(distance from player in tiles). Dim by
+    // distance, floored at mem_dim so remembered terrain persists and never goes
+    // black. Desaturation already comes from the tileset memory FX.
+    //
+    // -min(light_mul, 0.0) is deliberate: the lane is 0 or positive on every ordinary
+    // sprite, so this yields distance 0 there and mem_mul collapses to 1.0. mem_mul is
+    // only ever CONSUMED via rad_mem under mode_memory, so computing it branchlessly
+    // costs one min and cannot reach any other mode.
+    const float mem_d   = -min(i.light_mul, 0.0);
+    const float mem_t   = saturate(1.0 - mem_d / max(mem_radius, 1.0));
+    const float mem_mul = mem_dim + (1.0 - mem_dim) * mem_t;
+
+    // The three radiances. Each is `base * flash_k + i.flash`, i.e.
+    // lerp(base, flash_colour, flash_s), with base = gpu_total / 1.0 / mem_mul.
+    const float3 rad_lit   = gpu_total * flash_k + i.flash;
+    const float3 rad_unlit = flash_k + i.flash;
+    const float3 rad_mem   = mem_mul * flash_k + i.flash;
+
+    float3 lit_rgb = albedo * rad_lit;
 
     // Palette shade ramp. The lighting result selects a SHADE STEP within the base
     // texel's OWN ramp, so a red surface darkens toward its palette's dark red rather
@@ -798,59 +848,68 @@ float4 main(VS_OUT i) : SV_Target0 {
     // steps from banding (error diffusion is not available in a fragment shader, and
     // the world-locked Bayer helper already exists).
     //
-    // The shade step keys off `combined`, NOT gpu_total: outdoors this engine lights
-    // tiles through the CPU lightmap TINT (gpu_total stays low in daylight — the same
-    // masking that makes the GPU light terms nearly invisible outdoors), so keying off
-    // gpu_total put every daylit texel on the bottom ramp step and crushed the scene
-    // to black. `combined` is whichever path actually lit the pixel.
+    // Applied to lit_rgb ONLY, and keyed off `rad_lit`. The old code keyed off
+    // `combined` and justified that by claiming gpu_total "stays low in daylight
+    // because the engine lights tiles through the CPU lightmap TINT". That
+    // justification was already FALSE: the CPU ZEROED the tint on exactly the tiles
+    // the ramp applied to, so `combined` WAS gpu_total right here. The numbers do not
+    // move; only the reasoning is now honest.
     //
-    // Gated to LIT WORLD tiles (tint ~ 0, world loaded), matching the debug-mode gate:
-    // UI rects, font glyphs and memorized tiles come through this same shader with a
-    // meaningful tint and must keep their own colour. BOTH buffers are still read
-    // UNCONDITIONALLY and the effect is applied with a lerp, never an `if` — D3D12
-    // strips an unread fragment storage buffer and the hole breaks the root signature.
+    // The `step(tint sum, 0.01)` factor is GONE, along with its local tint sum. It was
+    // a proxy for "this is a lit world tile", and it would have flipped to ALWAYS TRUE
+    // the moment tint stopped being 1.0 on UI and memory sprites — at which point the
+    // ramp would have started eating HUD glyphs. The ramp now lives STRUCTURALLY
+    // inside the gpu_lit branch: it only ever touches lit_rgb, which only mode_gpu_lit
+    // and the memory cross-fade read, so UI rects, font glyphs and remembered tiles
+    // cannot reach it by construction rather than by a tint coincidence.
+    //
+    // RampBuf and PalIdxBuf are still read UNCONDITIONALLY and the effect applied with
+    // a lerp, never an `if`; this stays a bare top-level scope and must NOT be moved
+    // inside an `if` — D3D12 strips an unread fragment storage buffer and the hole
+    // breaks the root signature.
     {
         const uint   pal_row = PalIdxBuf[pal_index_of(texel.rgb)];
         const float  steps_n = max(ramp_steps, 2.0);
-        const float  shade_f = saturate(luma(combined)) * (steps_n - 1.0)
+        const float  shade_f = saturate(luma(rad_lit)) * (steps_n - 1.0)
                                + (dither_threshold(shade_pos * texels_per_tile) - 0.5);
         const uint   shade_i = (uint)clamp(shade_f + 0.5, 0.0, steps_n - 1.0);
         const float3 ramped  = unpack_rgba8(RampBuf[pal_row * (uint)steps_n + shade_i]);
         // Normalised light chroma, scaled so neutral white light is a no-op (x1).
-        const float3 lit_chroma = normalize(max(combined, 1e-4)) * 1.7320508;
+        const float3 lit_chroma = normalize(max(rad_lit, 1e-4)) * 1.7320508;
         const float3 ramp_rgb = lerp(ramped, ramped * lit_chroma, ramp_chroma);
-        const float  ramp_tint_sum = i.tint.r + i.tint.g + i.tint.b;
         const float  ramp_mask = saturate(ramp_enable)
-                                 * step(ramp_tint_sum, 0.01)
                                  * ((sdf_map_w > 0u) ? 1.0 : 0.0);
-        final_rgb = lerp(final_rgb, ramp_rgb, ramp_mask);
+        lit_rgb = lerp(lit_rgb, ramp_rgb, ramp_mask);
     }
+
+    const float3 mem_rgb   = albedo * rad_mem;
+    const float3 unlit_rgb = albedo * rad_unlit;
+    // Mode select. `memory` is a LERP TOWARD THE LIT RESULT, never an independent
+    // branch. frontier_cov is 1.0 deep inside a remembered region and falls to 0 at
+    // the edge shared with a currently-visible tile, so a branch that never read
+    // lit_rgb would have nothing to cross-fade toward: the feather would ramp to the
+    // memory look against a fully-lit neighbour and the seen/remembered boundary would
+    // return as a DARK RIM — the exact artefact Step 8 exists to remove. At
+    // frontier_cov == 0 this is bit-identical to the visible neighbour; at 1 it is the
+    // pure remembered look.
+    //
+    // Between those two endpoints the frontier band is an INTENTIONAL change from the
+    // old max(), which agreed only AT the endpoints and in between was a
+    // content-dependent "brighter wins" rather than a cross-fade. So "no visual
+    // diff" is NOT the acceptance criterion for this band; tools/frontier_profile.py
+    // gates it on MONOTONICITY of the luma ramp between the two plateaus, sampled via
+    // debug view 15.
+    float3 final_rgb = mode_memory ? lerp(lit_rgb, mem_rgb, frontier_cov)
+                       : (mode_gpu_lit ? lit_rgb : unlit_rgb);
 
     // Debug visualisation. Modes 1-5 BLEND a per-component visualisation
     // over the lit scene at debug_opacity; modes 6-7 REPLACE the scene with
-    // raw SDF / sky_vis colormaps. Modes 1-7 are gated to game tiles
-    // (tint near zero) so HUD glyphs / UI rects always render normally.
-    // Mode 8 (emit_bw diagnostic) bypasses the tint gate so it works on the
-    // tinted main-menu blue backdrop — emitter_count==0 segments still
-    // short-circuit, so HUD/font segments stay untouched.
-    const float dbg_tint_sum = i.tint.r + i.tint.g + i.tint.b;
-
-    // (effect 3) Memory distance-fade. Memorized tiles carry light_mul =
-    // -(distance from player in tiles). Dim by distance, floored at mem_dim so
-    // remembered terrain persists (never black). Applied post-combine (after
-    // max(tint, gpu_total)) so current lighting can't leak into unseen memory.
-    // Desaturation already comes from the tileset memory FX. Not tint-gated:
-    // memory tiles have tint=1.0, the negative marker is the sole trigger.
-    if(i.light_mul < -0.0001) {
-        const float d = -i.light_mul;
-        const float t = saturate(1.0 - d / max(mem_radius, 1.0));
-        // Step 8: feather the dim across the frontier tile instead of applying it flat.
-        // frontier_cov is 1 deep inside the remembered region and falls to 0 exactly at
-        // the edge shared with a currently-visible tile, so remembered terrain now
-        // ramps into live terrain instead of stepping into it at the tile boundary.
-        const float mem_mul = mem_dim + (1.0 - mem_dim) * t;
-        final_rgb *= lerp(1.0, mem_mul, frontier_cov);
-    }
+    // raw SDF / sky_vis colormaps. Modes 1-7 are gated to world sprites that carry
+    // light (light_mode != unlit) so HUD glyphs / UI rects always render normally.
+    // Modes 8 and 16 bypass that gate: mode 8 (emit_bw diagnostic) has to work on the
+    // tinted main-menu blue backdrop, and mode 16 reports the classification itself so
+    // it must be able to display `unlit`. emitter_count==0 segments still
+    // short-circuit mode 8, so HUD/font segments stay untouched.
 
     // Sub-tile vision carve. The CPU already decided, per tile, whether this tile is
     // drawn at all (lit_level -> apply_vision_effects skips non-CLEAR tiles), so this
@@ -880,9 +939,13 @@ float4 main(VS_OUT i) : SV_Target0 {
         final_rgb *= mem_dim + (1.0 - mem_dim) * v;
     }
 
-    const bool  dbg_active   = (debug_mode == 8u)
-                               || (debug_mode > 0u && debug_mode != 8u
-                                   && dbg_tint_sum < 0.01);
+    // The gate used to be `tint sum < 0.01`, i.e. "the CPU zeroed the tint here".
+    // That ALSO excluded memory tiles (tint 1.0), which made debug_mode 15's
+    // remembered-tile branch UNREACHABLE. `mode != unlit` is what it always meant.
+    // Modes 8 and 16 bypass it: 8 needs the tinted main-menu backdrop, and 16 reports
+    // the classification itself so it must be able to show `unlit`.
+    const bool dbg_ungated = (debug_mode == 8u) || (debug_mode == 16u);
+    const bool dbg_active  = debug_mode > 0u && (dbg_ungated || mode_memory || mode_gpu_lit);
     // Height depth: dims canopy to enhance depth perception. dark_frac=0 at base → no-op.
     // Applied after memory-fade, before debug modes — so debug replace=true cleanly overrides.
     final_rgb *= ( 1.0 - i.dark_frac );
@@ -989,7 +1052,7 @@ float4 main(VS_OUT i) : SV_Target0 {
             if(i.outline < -0.5) {
                 vis = frontier_desat
                       ? float3(1.0, frontier_cov, 1.0)
-                      : (i.light_mul < -0.0001)
+                      : mode_memory
                       ? float3(1.0, frontier_cov, 0.0)
                       : float3(0.0, frontier_cov, 1.0);
             } else {
@@ -1000,6 +1063,18 @@ float4 main(VS_OUT i) : SV_Target0 {
                 // BLACK = nothing rendered here at all = the true unseen region.
                 vis = float3(0.0, 0.55, 0.0);
             }
+            replace = true;
+        } else if(debug_mode == 16u) {
+            // light_mode view: RED = unlit, GREEN = gpu_lit, BLUE = memory. A flat
+            // CATEGORICAL hue, deliberately carrying no shading whatsoever, because
+            // categorical membership is immune to the zoom and resolution bistability
+            // that makes every brightness comparison in this project untrustworthy
+            // (measured: 8.02 px vs 42.86 px tile pitch across two runs of the SAME
+            // scenario moved whole-frame mean luma by 19.7). One capture answers "is
+            // every sprite classified as intended". Consumed by
+            // tools/light_mode_check.py.
+            vis = mode_memory ? float3(0.0, 0.0, 1.0)
+                  : (mode_gpu_lit ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0));
             replace = true;
         }
         if(replace) {

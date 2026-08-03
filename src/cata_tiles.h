@@ -236,6 +236,11 @@ class texture
             float extrude_px = 0.0f;
             float extrude_dark = 0.0f;
             float extrude_lean = 0.0f;
+            /// Coloured light override: `colour * strength` with max(colour) == 1.
+            /// See lighting::sprite_instance::flash_r. Zero = no override.
+            float flash_r = 0.0f;
+            float flash_g = 0.0f;
+            float flash_b = 0.0f;
         };
 
         /// Phase 2i-B-5 GPU draw path. Enqueues exactly one tile sprite
@@ -298,6 +303,9 @@ class texture
             s.extrude_lean = opts.extrude_lean;
             s.extrude_pad = 0.0f;
             s.light_mode = static_cast<float>( mode );
+            s.flash_r = opts.flash_r;
+            s.flash_g = opts.flash_g;
+            s.flash_b = opts.flash_b;
             lighting::get_render_state().queue_tile_sprite( opts.atlas_tex, s );
             return true;
         }
@@ -797,7 +805,11 @@ struct sprite_xform {
     float off_x = 0.f; // pixel offset (bob/slide/hit/attack composited)
     float off_y = 0.f;
     float tilt_deg = 0.f; // added to the sprite's rotation (degrees)
-    float flash_r = 0.f;  // additive light tint (white if avatar, red otherwise)
+    // Coloured light override, encoded as `colour * strength` with max(colour) == 1,
+    // so strength == max3(flash). Reaches the shader on its OWN instance lane
+    // (lighting::sprite_instance::flash_r), where it lerps the radiance toward
+    // `colour` — hue-preserving at every brightness. NOT a tint multiplier.
+    float flash_r = 0.f;
     float flash_g = 0.f;
     float flash_b = 0.f;
     float alpha = 1.f;   // multiplicative opacity (1 = opaque, 0 = invisible)

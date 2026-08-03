@@ -29,7 +29,8 @@ struct SpriteInstance {
     float tint_r, tint_g, tint_b, tint_a;
     float rotation, light_mul, pad1, pad2;
     float extrude_px, extrude_dark, extrude_lean, extrude_pad;
-    float light_mode, lm_pad0, lm_pad1, lm_pad2;
+    // light_mode + flash_* are unread here; declared for stride parity.
+    float light_mode, flash_r, flash_g, flash_b;
 };
 
 StructuredBuffer<SpriteInstance> Instances : register(t0, space0);

@@ -72,8 +72,14 @@ static const char *g_phase_name[10] = {
 // render_world_pass_w. Both live in this TU, so file-local (was a dev-UI global).
 static lighting::vol_params g_vol_params;
 
-// Full-screen identity-blit quad (origin, full UV, white tint, no rotation).
-// Callers override tint as needed (e.g. the menu backdrop).
+// Full-screen identity-blit quad (origin, full UV, white tint, no rotation, unlit).
+// TWO callers, and the unlit default is load-bearing for one of them:
+//   - blit_layer: identity blits of the world/UI composite render targets. These MUST
+//     stay unlit — albedo x tint with a white tint reproduces the layer texture exactly.
+//     Do NOT "fix" this to gpu_lit; it would multiply an already-composited image by
+//     scene radiance.
+//   - maybe_push_menu_background: overrides light_mode to gpu_lit on its own copy so the
+//     main-menu backdrop takes part in the standard lighting composite (see below).
 static lighting::sprite_instance fullscreen_quad( float w, float h )
 {
     lighting::sprite_instance q{};
@@ -660,11 +666,29 @@ auto maybe_push_menu_background( lighting::render_state &rs,
         lighting::sprite_instance bg = fullscreen_quad(
                                            static_cast<float>( ctx.swapchain_w ),
                                            static_cast<float>( ctx.swapchain_h ) );
-        bg.tint_r = 0.0f;
-        bg.tint_g = 0.0f;
-        bg.tint_b = menu_emitter_tuning::blue_backdrop ? 0.3f : 0.0f;
-        // Main-menu backdrop: no world, no lightmap.
-        bg.light_mode = static_cast<float>( sprite_light_mode::unlit );
+        // Main-menu backdrop, on the standard lighting pipeline.
+        //
+        // Historically this quad was pushed with tint (0, 0, 0.3) and the composite was
+        // combined = max( tint, gpu_total ): the blue base won everywhere except inside
+        // the decorative warm menu emitter's glow, where the radiance was brighter and
+        // won instead. That max() is gone. Leaving the quad unlit would make it plain
+        // albedo x tint — a flat blue with the emitter glow silently dropped, killing a
+        // real, dev-tunable feature (F10/F11/F12, menu_emitter_tuning).
+        //
+        // So: mode gpu_lit to receive the radiance (ambient + menu emitter), tint left
+        // white so tint means colour only, and the blue base rides the flash lane as a
+        // coloured light override. flash = colour * strength with max( colour ) == 1, and
+        // the shader computes radiance * ( 1 - max3( flash ) ) + flash, i.e.
+        // lerp( radiance, colour, strength ) — so a pure-blue base of 0.3 is the very
+        // same (0, 0, 0.3) triple the tint used to carry.
+        //
+        // Honest behavioural consequence: the composite is a lerp, not a max, so inside
+        // the glow core the warm light is scaled by ( 1 - 0.3 ) = 0.7 rather than winning
+        // outright. The glow reads ~30% dimmer and slightly bluer, while both the blue
+        // base and the glow survive. With blue_backdrop = false (F12) flash stays 0,
+        // which is an exact no-op and yields the pure radiance.
+        bg.flash_b = menu_emitter_tuning::blue_backdrop ? 0.3f : 0.0f;
+        bg.light_mode = static_cast<float>( sprite_light_mode::gpu_lit );
         rs.queue_tile_sprite( rs.geometry().white_texture(), bg );
     }
 }

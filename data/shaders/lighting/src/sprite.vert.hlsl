@@ -7,9 +7,11 @@ struct SpriteInstance {
     float rotation, light_mul, pad1, pad2;
     float extrude_px, extrude_dark, extrude_lean, extrude_pad;
     // light_mode is sprite_light_mode from src/tile_light_mode.h, carried as a
-    // float: 0 = unlit, 1 = gpu_lit, 2 = memory. lm_pad0..2 exist only to keep
-    // the record 16-byte aligned for the StructuredBuffer<SpriteInstance> binding.
-    float light_mode, lm_pad0, lm_pad1, lm_pad2;
+    // float: 0 = unlit, 1 = gpu_lit, 2 = memory. flash_* is the coloured light
+    // override, encoded `colour * strength` with max(colour) == 1 — see
+    // `lighting::sprite_instance` in src/lighting/sprite_batcher.h for the
+    // encoding rule and why it is one lane rather than colour + strength.
+    float light_mode, flash_r, flash_g, flash_b;
 };
 
 // Vertex storage slot 0: sprite instances
@@ -122,6 +124,11 @@ struct VS_OUT {
     // interpolated float drifts off exact 0/1/2 across the quad and would silently
     // reclassify a tile mid-sprite. Consumers must also compare by BAND, never ==.
     nointerpolation float light_mode : TEXCOORD7; // sprite_light_mode: 0 unlit, 1 gpu_lit, 2 memory
+    // Interpolated on purpose (cheapest): it is a per-INSTANCE constant, so
+    // interpolation across the quad is exact. And unlike light_mode it is a
+    // quantity rather than a categorical selector, so even drift would be
+    // harmless — it cannot reclassify the composite, only nudge a colour.
+    float3 flash : TEXCOORD8; // coloured light override: colour * strength, max(colour) == 1
 };
 static const float2 quad_uv[6] = {
     float2(0.0,0.0), float2(1.0,0.0), float2(0.0,1.0),
@@ -232,5 +239,6 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
     o.light_pos = is_tall ? base_tile : map_pos;
     o.outline   = s.pad2;
     o.light_mode = s.light_mode;
+    o.flash     = float3(s.flash_r, s.flash_g, s.flash_b);
     return o;
 }

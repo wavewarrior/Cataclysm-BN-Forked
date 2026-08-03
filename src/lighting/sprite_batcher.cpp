@@ -167,7 +167,8 @@ public:
         // When false, end_pass pushes a zeroed light_params / sun_params
         // for this segment so the fragment shader skips the per-emitter
         // loop and the sun march (saves wasted GPU on HUD/UI fragments
-        // whose lighting result is discarded by max(tint, gpu_total)).
+        // whose lighting result is discarded anyway: those sprites are
+        // `unlit`, and an unlit composite never reads the radiance term).
         // Default true preserves tile-sprite behaviour.
         bool is_lit = true;
     };
