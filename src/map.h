@@ -342,6 +342,24 @@ struct level_cache {
     // its last-seen value to decide whether the SDF needs rebuilding — avoids
     // rebuilding on every combat turn when terrain hasn't actually changed.
     std::uint64_t transparency_generation = 0;
+    // Companion to transparency_generation, for the SAME reason but a different
+    // consumer: the lighting structure snapshot derives sky_vis from outside_cache, and
+    // that snapshot could previously go permanently stale. MEASURED with timestamps: two
+    // structure rebuilds read outside_true=0/32400 at 20:44:04.504 and .527 while
+    // build_outside_cache reported 30586/32400 at 20:44:04.828 — the consumer ran ~300ms
+    // FIRST, and because the rebuild only re-fired on a transparency-generation or
+    // bubble-origin change, SkyVisBuf stayed all-zero for the whole session. sprite.frag
+    // gates its entire sun term on `sky_vis > 0.05`, so daylight rendered with no
+    // directional term and no cast shadows anywhere. Bumped whenever outside_cache is
+    // actually rebuilt, so the render side can notice and re-snapshot.
+    std::uint64_t outside_generation = 0;
+    // Content hash of outside_cache at the last bump. outside_cache_dirty is set far
+    // more often than the CONTENT changes -- every moving vehicle part dirties it, and
+    // set_floor_cache_dirty() always dirties the level below -- so bumping the
+    // generation on every rebuild would force a full lighting re-snapshot on each
+    // vehicle move and door open, which is exactly the cost the generation counters
+    // exist to avoid. Bump only when this hash actually changes.
+    std::uint64_t outside_checksum = 0;
     cata_dynamic_bitset outside_cache_dirty;
     cata_dynamic_bitset floor_cache_dirty;
     bool seen_cache_dirty = false;

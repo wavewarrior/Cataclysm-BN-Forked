@@ -221,7 +221,11 @@ if( g && world_generator && world_generator->active_world ) {
         const point origin = g->m.get_abs_sub().raw().xy();
         // Read generation from the current level's cache.
         const auto &cache = g->m.get_cache_ref( z );
-        gen = cache.transparency_generation;
+        // Fold in outside_generation: sky_vis comes from outside_cache, which is
+        // built on a DIFFERENT schedule to transparency. Without this term a
+        // structure snapshot taken before the map populated outside_cache stayed
+        // zero forever, killing the sun term (see level_cache::outside_generation).
+        gen = cache.transparency_generation ^ ( cache.outside_generation * 1099511628211ull );
         px = g->u.bub_pos().x();
         py = g->u.bub_pos().y();
 

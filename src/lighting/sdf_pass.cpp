@@ -252,7 +252,7 @@ void sdf_pass::upload(
     // math (origin/stride), not the fill.
     if( std::getenv( "CBN_DIAG_SEG_LIGHTING" ) ) {
         static int diag_n = 0;
-        if( ++diag_n <= 3 ) {
+        if( ++diag_n <= 14 ) {
             const Uint32 have = static_cast<Uint32>( sky_vis.size() );
             Uint32 nz = 0;
             unsigned char mx = 0;

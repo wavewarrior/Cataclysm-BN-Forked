@@ -480,7 +480,32 @@ void map::build_outside_cache( const int zlev )
 {
     ZoneScopedN( "build_outside_cache" );
     auto& ch = get_cache( zlev );
-    if( ch.outside_cache_dirty.none() ) { return; }
+    // DIAGNOSTIC (temporary, CBN_DIAG_SEG_LIGHTING). Measured in-game: outside_cache is
+    // FALSE for all 32400 tiles while the player stands outdoors in bright daylight,
+    // which zeroes SkyVisBuf and gates sprite.frag's entire sun term off
+    // (`sky_vis > 0.05`) -- daylight ends up shadowless. Two very different causes
+    // produce that identical symptom and guessing between them has already been wrong
+    // once this session, so measure: (a) this function early-returns on
+    // `outside_cache_dirty.none()` and the cache is simply never built, or (b) it DOES
+    // build but every tile reads roofed because the z+1 floor cache claims a floor
+    // overhead. Reports the early-out, and below, the resulting true-counts.
+    const bool diag_oc = std::getenv( "CBN_DIAG_SEG_LIGHTING" ) != nullptr;
+    static int diag_oc_n = 0;
+    // Filter to the low levels: the recursion runs z=0 -> z=10 and then UNWINDS,
+    // so z=0 is built LAST and a plain call-count cap logs only the sky levels.
+    const bool diag_log = diag_oc && zlev <= 1 && ++diag_oc_n <= 8;
+    if( ch.outside_cache_dirty.none() ) {
+        if( diag_log ) {
+            size_t t = 0;
+            for( size_t i = 0; i < ch.outside_cache.size(); ++i ) {
+                t += ch.outside_cache[i] ? 1u : 0u;
+            }
+            DebugLogFL( DL::Info, DC::Main )
+                    << "[ocdiag] z=" << zlev << " EARLY-OUT (dirty.none) outside_true=" << t
+                    << "/" << ch.outside_cache.size();
+        }
+        return;
+    }
 
     if( zlev >= OVERMAP_HEIGHT ) {
         // Base case: open sky at the top — every tile is outside, nothing above.
@@ -491,6 +516,12 @@ void map::build_outside_cache( const int zlev )
                 std::ranges::fill( std::span( &sm->outside_cache[0][0], SEEX * SEEY ), true );
                 sm->outside_dirty = false;
             }
+        }
+        // All-open is one fixed state; bump only if we were not already there.
+        const std::uint64_t h_open = ~0ull;
+        if( ch.outside_checksum != h_open ) {
+            ch.outside_checksum = h_open;
+            ++ch.outside_generation;
         }
         ch.outside_cache_dirty.reset();
         return;
@@ -550,6 +581,38 @@ void map::build_outside_cache( const int zlev )
         for( int smx = 0; smx < my_MAPSIZE; ++smx ) { process_smx( smx ); }
     }
 
+    if( diag_log ) {
+        size_t ot = 0;
+        for( size_t i = 0; i < ch.outside_cache.size(); ++i ) {
+            ot += ch.outside_cache[i] ? 1u : 0u;
+        }
+        size_t ft = 0;
+        size_t fsz = 0;
+        if( above ) {
+            fsz = above->floor_cache.size();
+            for( size_t i = 0; i < fsz; ++i ) { ft += above->floor_cache[i] ? 1u : 0u; }
+        }
+        DebugLogFL( DL::Info, DC::Main )
+                << "[ocdiag] z=" << zlev << " BUILT rebuild_all=" << rebuild_all
+                << " outside_true=" << ot << "/" << ch.outside_cache.size()
+                << " have_above=" << ( above ? "yes" : "no" )
+                << " above_floor_true=" << ft << "/" << fsz;
+    }
+    // Tell the render side this cache actually changed; the lighting structure
+    // snapshot keys on it so a snapshot taken before the first build cannot stick.
+    // Content-gated: see level_cache::outside_checksum for why a bump-on-work would
+    // re-snapshot the whole lighting structure on every vehicle move.
+    {
+        std::uint64_t h = 1469598103934665603ull;
+        for( size_t i = 0; i < ch.outside_cache.size(); ++i ) {
+            h = ( h ^ static_cast<std::uint64_t>( ch.outside_cache[i] ? 1u : 0u ) ) *
+                1099511628211ull;
+        }
+        if( h != ch.outside_checksum ) {
+            ch.outside_checksum = h;
+            ++ch.outside_generation;
+        }
+    }
     ch.outside_cache_dirty.reset();
 }
 

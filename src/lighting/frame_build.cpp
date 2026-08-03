@@ -215,7 +215,9 @@ frame_lighting_result build_and_submit_lighting(
             // whose mismatch would make the copy dead code.
             if( std::getenv( "CBN_DIAG_SEG_LIGHTING" ) ) {
                 static int fb_n = 0;
-                if( ++fb_n <= 3 ) {
+                static int fb_last_nz = -1;
+                ++fb_n;
+                {
                     int trues = 0;
                     const int have = static_cast<int>( mc.outside_cache.size() );
                     for( int i = 0; i < have && i < total; ++i ) {
@@ -223,7 +225,10 @@ frame_lighting_result build_and_submit_lighting(
                     }
                     int nz = 0;
                     for( int i = 0; i < total; ++i ) { nz += sky_vis[i] != 0u ? 1 : 0; }
-                    dbg( DL::Info ) << "[fbdiag] FILL RAN  total=" << total
+                    const bool changed = nz != fb_last_nz;
+                    fb_last_nz = nz;
+                    if( changed || fb_n <= 2 )
+                        dbg( DL::Info ) << "[fbdiag] n=" << fb_n << " total=" << total
                                     << " outside_cache.size=" << have
                                     << " copy_ran=" << ( have >= total ? "yes" : "NO (dead)" )
                                     << " outside_true=" << trues
