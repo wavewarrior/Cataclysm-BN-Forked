@@ -44,16 +44,28 @@ only place the old `max()` flash was ever visible.
   night reads `268269 px, unlit 0, gpu_lit 216319, memory 0` — no red-dominant pixel
   at ANY brightness. Night is the decisive case, since that is where the old
   `max(1.0, gpu_total)` would have rendered dark-but-visible tiles at full albedo.
-- **The frontier gains no rim** — daylight: no dip below the remembered plateau (14.5)
-  and no overshoot above the visible one (88.3). Night inverts the direction, exactly
-  as `mem_dim` implies (remembered 29.6 floored above genuinely dark visible 19.7), and
-  descends 30.6 → 18.7 with no dip and no overshoot. The residual wiggle along x is
-  geometry, not the composite: it appears identically in the albedo-free `frontier_cov`
-  channel (dip at x=2108 and a +6 bump at 2120 in BOTH signals), because `frontier_cov`
-  is bilinear over corner coverages and so is monotonic along the boundary NORMAL, not
-  along a screen axis. `frontier_profile.py` profiles along an axis and still judges its
-  block scale against a constant while self-calibrating the raw scale; it reports a
-  −2.1..−4.5 block "violation" for that reason. Left strict on purpose.
+- **Phase 1 IS inert — but only after a bug fix it exposed.** Running the gate I had
+  skipped found that the wire commit `d438dc71e0` did not render AT ALL: `nointerpolation`
+  on the `light_mode` varying kills D3D12 graphics-pipeline creation whenever the fragment
+  shader does not consume the value (`0x80070057`), so the sprite batcher never
+  initialised and the whole world was black behind a working RmlUi HUD. Measured against
+  a pre-change build at the same resolution and tile pitch: **75.17%** of pixels differed
+  as committed, **0.04%** with the qualifier removed — the documented cross-launch null.
+  Phase 2 had accidentally repaired it by starting to read the value, so HEAD was correct
+  but one edit away from a black screen. Fixed in `b93bd74575`. The whole change moves
+  **2.41%** of daylight pixels against that 0.04% null.
+- **The frontier cross-fade is NOT verified.** An earlier claim here that it "gains no
+  rim" was WRONG and has been withdrawn. `frontier_profile.py` profiled along a screen
+  axis, and the real boundary in both captures is HORIZONTAL (normal −89.7°), so the
+  x-profile ran along the boundary and never crossed it; the plateaus previously quoted
+  (14.5 / 88.3 and 29.6 / 19.7) came from a stray-pixel bug in the crossing search and
+  were fiction. The tool now profiles along the measured local normal and is confined to
+  the map viewport, and on that basis BOTH captures FAIL — a non-monotonic step and a
+  large overshoot above the visible plateau (+63.4 daylight, +38.3 night). Two caveats it
+  reports itself mean this is not yet a verdict on the shader: the far plateau sits within
+  one blur radius of the viewport edge, and the frontier is one straight line spanning
+  only ~12 tiles. What is needed is a scene with a large seen/remembered boundary well
+  inside the frame; see "Still open".
 - **Debug cycling is non-destructive** — the 1 → 0 → 1 triplet restores the scene
   inside the paired same-state null (restore 286 px vs null 364 px).
 - **Phase 3 (retune): no retune needed.** The measurable risk was that genuinely dark
@@ -67,14 +79,18 @@ only place the old `max()` flash was ever visible.
   attributed by stash+rebuild at clean HEAD, fail identically there, and are
   vehicle / ramp / furniture-grab / stomach / filesystem tests, none of which render.
 
-### The one gap
+### Still open
 
-Phase 1's "rendering is unchanged, expect a diff at or below the capture null" gate was
-never run as a pixel comparison. It was abandoned after about an hour lost to shell and
-build-environment failures, and by the time a working build loop existed, gating Phase 2
-directly was the cheaper and stronger measurement. Phase 1 is inert by construction —
-the shader carried `light_mode` without reading it — but that is an argument, not a
-measurement, and it is the only claim here of that kind.
+**The frontier cross-fade needs a proper test scene.** Everything else here is measured.
+This one is not, and the tool now says so instead of quietly passing. The save used has a
+single straight, viewport-edge-hugging frontier ~12 tiles long, which cannot support a
+plateau estimate. Whoever picks this up should build a scene with a large remembered
+region well inside the frame — walk a character through a multi-room building, then step
+back so a whole room drops out of line of sight — and re-run
+`tools/frontier_profile.py --viewport 0.25,0.12,0.55,0.80`. Until then, treat the memory
+branch's mid-band behaviour as unverified. Both ENDPOINTS are sound by construction
+(`frontier_cov` 0 gives the visible result exactly, 1 gives the remembered look exactly);
+it is only the shape in between that is unmeasured.
 
 ### Collateral — two crashes fixed to get a regression gate at all
 

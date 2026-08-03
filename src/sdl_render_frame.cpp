@@ -72,6 +72,21 @@ static const char *g_phase_name[10] = {
 // render_world_pass_w. Both live in this TU, so file-local (was a dev-UI global).
 static lighting::vol_params g_vol_params;
 
+/// True while a REPLACE-mode lighting debug view is selected (F7 modes 6 and up).
+///
+/// Those views overwrite the scene with a visualisation whose PIXEL VALUES carry the
+/// meaning — view 16 is a flat categorical hue per composite branch, views 6/7/10/13/14
+/// are single-channel colormaps. Any full-frame filter that smears or regrades them
+/// destroys exactly the thing being inspected, so bloom, volumetric fog and the spatial
+/// post effects are skipped while one is active. Measured on view 16: a flat (0,1,0)
+/// sits right at the default bloom threshold of 1.0, so it was thresholded and blurred
+/// into neighbouring undrawn black, producing green pixels as dim as G=13 and
+/// green/blue mixtures at class seams.
+///
+/// The tonal half of this was already handled the same way: `ramp_enable` lerps AgX out
+/// of `tonemap.frag` because palette-ramp output is display-referred.
+static auto diagnostic_view_active() -> bool { return g_current_dbg_mode >= 6u; }
+
 // Full-screen identity-blit quad (origin, full UV, white tint, no rotation, unlit).
 // TWO callers, and the unlit default is load-bearing for one of them:
 //   - blit_layer: identity blits of the world/UI composite render targets. These MUST
@@ -907,7 +922,7 @@ auto render_world_pass_w( lighting::render_state &rs,
                                  cam_x, cam_y, tp, tp );
     }
 
-    if( g_vol_enable && rs.volumetric().ready() ) {
+    if( g_vol_enable && rs.volumetric().ready() && !diagnostic_view_active() ) {
         lighting::vol_params vp = g_vol_params;
         vp.vol_density   = g_vol_density;
         vp.vol_intensity = g_vol_intensity;
@@ -921,7 +936,7 @@ auto render_world_pass_w( lighting::render_state &rs,
                                 vp );
     }
 
-    if( g_bloom_enable && rs.bloom().ready() ) {
+    if( g_bloom_enable && rs.bloom().ready() && !diagnostic_view_active() ) {
         rs.bloom().record( ctx.cmd_buffer, wt->texture(),
                            wt->width(), wt->height(),
                            g_bloom_threshold, g_bloom_intensity );
@@ -1071,7 +1086,7 @@ auto tonemap_pass_t( lighting::render_state &rs,
         // at green tile edges. Zeroing the spatial post effects removes the fringe
         // rather than forcing every consumer to tolerate it. The tonal transform is
         // already handled: `ramp_enable` lerps AgX out for the same reason.
-        if( g_current_dbg_mode >= 6u ) {
+        if( diagnostic_view_active() ) {
             grade.ca_amount = 0.0f;
             grade.grain_amount = 0.0f;
             grade.vignette_amount = 0.0f;

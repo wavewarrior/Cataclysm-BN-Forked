@@ -47,7 +47,16 @@ settle timeout=15000
 
 # Play area only: the HUD sidebar is drawn unlit through a separate batcher and would
 # dilute every world-tile measurement.
-rect play 0.02,0.02,0.70,0.92
+# The `play` rect is deliberately CONSERVATIVE and sits well inside the map viewport.
+# It is not "most of the screen": the HUD sidebar (right ~15%) and the message bar
+# (top ~10%) are drawn on is_lit=false segments, where sprite_batcher.cpp forces
+# debug_mode = 0, so they render NORMALLY and are not categorical at all. A rect that
+# includes them reports HUD pixels as "unclassified" and hides the real signal -- with
+# the old 0.02,0.02,0.70,0.92 rect that inflated unclassified to 16-28%, and a white-
+# marker control read rgb[71.9, 52.9, 11.0] (warm HUD) in its top-left corner against
+# rgb[243.5, 243.5, 243.5] (neutral, correct) in the centre. Verified by locating the
+# achromatic region of that control: this rect measures rgb[233.8, 233.7, 233.3].
+rect play 0.25,0.12,0.55,0.80
 
 shot world avg=12
 wait 1500

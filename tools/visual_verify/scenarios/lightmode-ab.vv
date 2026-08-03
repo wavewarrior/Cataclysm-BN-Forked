@@ -1,0 +1,41 @@
+# Cross-BUILD A/B: capture one world state at mode 0 only.
+#
+# PREREQUISITE: a THROWAWAY clone of an explored save, passed as --var WORLD=<name>.
+# See lightmode-world.vv for the clone command and why it must be a save you can lose.
+#
+# Deliberately minimal, and that is the point: this runs against OLD binaries that lack the
+# newer diagnostics. At 9ff6719e31 and d438dc71e0 the F7 handler does not log the mode it
+# lands on (that arrived in 368122c9f0) and debug view 16 does not exist (the modulo was 16,
+# so the cycle never reached it). A scenario using `waitlog "lighting debug mode N"` would
+# stall its whole timeout and abort AFTER the build had already been paid for. So: no F7,
+# no debug views, mode 0 only.
+#
+# Mode 0 is the entire claim anyway. This answers the one question left open by
+# plans/lighting-composition-pipeline.md Phase 1: is the wire-format change -- carrying
+# light_mode to the shader WITHOUT reading it -- actually inert at the pixel level? Capture
+# `world.png` from a build at 9ff6719e31 and from one at d438dc71e0, then require the
+# cross-build difference to sit at or below each run's own paired same-state null.
+#
+# The window resizes shortly after the world loads (measured 1920x1080, then 2560x1440 1.5 s
+# later), so a warm-up capture and a second settle come first: a size change between the two
+# measured shots aborts the run.
+launch --dont-debugmsg --world ${WORLD}
+waitlog "opened document .*sidebar_hud.rml" timeout=300000
+focus
+settle timeout=25000
+shot warmup avg=4
+wait 6000
+settle timeout=15000
+
+# Conservative rect, well inside the map viewport: the HUD sidebar and the message bar are
+# drawn on is_lit=false segments and are not part of the lighting composite at all.
+rect play 0.25,0.12,0.55,0.80
+
+shot world avg=12
+wait 1500
+shot world_again avg=12
+diff world world_again as=same_state in=play
+stats world in=play
+
+log
+stop
