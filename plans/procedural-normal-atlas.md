@@ -17,7 +17,7 @@ VISUALLY validated. That distinction is the point of this section.
 - `nrm_atlas_v` genuinely reaches the shader: measured 120.04 against a calibrated
   1.0 -> 240 reference, i.e. exactly 0.5. The feature is enabled, not silently off.
 
-### NOT delivered, and the identified reason
+### NOT delivered, and what is known about why
 Feature OFF vs ON moves **0.06%** of pixels (2161 px) against a 0.02% same-state null.
 Forcing a +-3.0 tilt on EVERY sprite moves **0.28%**. So the normal has almost no
 authority in the test scene — and that is a measurement of the SCENE, not of the feature:
@@ -26,15 +26,21 @@ authority in the test scene — and that is a measurement of the SCENE, not of t
   sun term. This scene reports `n_emit=2` and effectively no sun, so there is nothing for
   a normal to modulate. Killing the sun's N.L outright moves only 0.13%.
 - `sun_intensity` measured **0.021** even with `CBN_FORCE_SUN_HOUR=12` AND the weather
-  dimming bypassed. Cause: `make_celestial_params( calendar::turn, hour )` takes the real
-  turn as its FIRST argument and uses it to choose sun-vs-MOON, so a night save gets moon
-  parameters however the hour is pinned — pinning only redirects the LUT lookup. Making
-  this testable needs a third override (the sun/moon selection) or a daytime save.
+  dimming bypassed. The cause is NOT yet identified, and one plausible-looking
+  explanation has been excluded by arithmetic: the sun-vs-MOON swap in
+  `make_celestial_params` cannot be responsible, because with the hour pinned to 12 the
+  LUT gives `sp.sun_intensity = 1.25` while `moon_int` is capped at
+  `MOON_MAX = 0.18`, so `moon_int > sp.sun_intensity` is false and the swap never fires.
+  The remaining candidate is the per-segment zeroing in sprite_batcher.cpp:719-725,
+  which sets `lp_sun_use.sun_intensity = 0.0f` whenever a segment has `is_lit == false`.
+  That is per-SEGMENT and can disagree with the per-SPRITE `light_mode`, which measured
+  94.53% `gpu_lit` — so the two are not interchangeable evidence. Confirming it needs a
+  blend-probe of `is_lit` itself, which has not been run.
 
-So the remaining work is a scene that actually has directional light, not more tuning.
-Per the LUT the sun is strong in real play (`sun_intensity` 1.25 at 12:00, 0.95 at 08:00),
-so the path is NOT inert for users — but that is an inference from the table, not a
-measurement.
+So the remaining work is to find why the sun term is zero for these segments. Per the LUT
+the sun is strong in real play (`sun_intensity` 1.25 at 12:00, 0.95 at 08:00), so the path
+is very likely NOT inert for users — but that is an inference from the table, not a
+measurement, and it should not be reported as one.
 
 ### Open question (deliberately not called a defect)
 A probe of the sampled normal texel came back bimodal, ~55% near 0. That is the EXPECTED
