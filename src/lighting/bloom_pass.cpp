@@ -185,6 +185,9 @@ bool bloom_pass::resize(std::uint32_t full_w, std::uint32_t full_h) {
         }
         mip_count_ = 0;
     }
+    if( !dev_ || !dev_->ready() ) {
+        return false;
+    }
     return create_textures(full_w, full_h);
 }
 
