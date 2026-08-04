@@ -360,7 +360,16 @@ static void WinDestroy()
 
 bool handle_resize( int w, int h )
 {
+    // Guard against recursive re-entry: handle_resize → ui_manager::screen_resized
+    // → redraw → try_sdl_update → CheckMessages → handle_resize again.
+    // The inner call would operate on partially-updated display state and crash.
+    static bool in_resize = false;
+    if( in_resize ) {
+        return false;
+    }
+
     if( ( w != g_display.WindowWidth ) || ( h != g_display.WindowHeight ) ) {
+        in_resize = true;
         g_display.WindowWidth = w;
         g_display.WindowHeight = h;
         g_display.TERMINAL_WIDTH = g_display.WindowWidth / fontwidth / g_display.scaling_factor;
@@ -398,6 +407,7 @@ bool handle_resize( int w, int h )
                 widget_icon::clear();
             }
         }
+        in_resize = false;
         return true;
     }
     return false;

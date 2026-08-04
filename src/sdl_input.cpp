@@ -830,10 +830,13 @@ void CheckMessages( display_context &d )
 
     bool resized = false;
     if( resize_dims.has_value() ) {
+        point rd = resize_dims.value();
+        resize_dims.reset();
         restore_on_out_of_scope<input_event> prev_last_input( d.last_input );
-        d.needupdate = resized = handle_resize( resize_dims.value().x, resize_dims.value().y );
+        d.needupdate = resized = handle_resize( rd.x, rd.y );
     }
     if( !resized && render_target_reset ) {
+        render_target_reset = false;
         reinitialize_framebuffer( true );
         d.needupdate = true;
         restore_on_out_of_scope<input_event> prev_last_input( d.last_input );

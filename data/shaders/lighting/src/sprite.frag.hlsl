@@ -169,7 +169,7 @@ cbuffer DebugParams : register(b2, space3) {
     float nrm_atlas_v;
     // Signed strength of the per-sprite vertical-face arc. Mirrors debug_params::face_arc.
     float face_arc;
-    float vis_edge_pad2;
+    float nrm_radial_amount;
 };
 struct VS_OUT {
     float4 pos      : SV_Position;
@@ -189,6 +189,8 @@ struct VS_OUT {
     float light_mode : TEXCOORD7; // sprite_light_mode: 0 unlit, 1 gpu_lit, 2 memory
     float3 flash : TEXCOORD8; // coloured light override: colour * strength, max(colour) == 1
     // Quad-local vertical fraction: 0 at the sprite's TOP edge, 1 at its BOTTOM edge.
+    float2 center_uv : TEXCOORD11;
+    float2 uv_half   : TEXCOORD12;
     // Taken from quad_uv[vid].y BEFORE any UV flip, because it describes physical height
     // on screen, not texture addressing. This is the ONLY vertical position information
     // available for a 1-tile sprite: light_pos == world_pos for anything not `is_tall`,
@@ -573,6 +575,17 @@ float4 main(VS_OUT i) : SV_Target0 {
                            : surface_normal( i.uv );
     // Procedural normal atlas, when a page carries one; exact identity otherwise.
     const float3 base_n = atlas_normal( i.uv, bevel_n );
+    // Radial macro-normal: treat each sprite as a gently rounded cylinder.
+    // Offset from centre, normalised by half-extents (aspect-correct, [-0.5, 0.5]).
+    // Centre faces viewer (+Z), edges face sideways. Blends with atlas micro-relief
+    // so edge detail survives. nrm_radial_amount=0 is exact no-op.
+    // GATED: only applies to sprites WITHOUT face_arc (face_amt == 0). Walls, windows,
+    // and tall furniture use their per-edge cardinal normals instead.
+    const float2 r_offset = (i.uv - i.center_uv) / i.uv_half;
+    const float3 radial_n = normalize(float3(r_offset, 1.0));
+    const float3 normal_macro = (i.face_amt > 0.001f)
+                                ? base_n
+                                : normalize(lerp(base_n, radial_n, saturate(nrm_radial_amount)));
     // Vertical-face arc. The alpha-shape bevel in surface_normal() CANNOT shade a sprite
     // body: alpha IS its height field, so a fully-opaque wall face has zero gradient and
     // comes out exactly (0,0,1). Measured in debug view 9: grass, asphalt, wall and
@@ -604,7 +617,7 @@ float4 main(VS_OUT i) : SV_Target0 {
     // sky-visibility sample below, so it must be the direction the face LOOKS, not the
     // direction of the sun.
     float2 face_out = float2( 0.0, 0.0 );
-    float3 normal   = base_n;
+    float3 normal   = normal_macro;
     if( face_amt > 0.001 ) {
         const uint mask = (uint)( face_mask_f + 0.5 );
         // In-tile position, 0..1, y south-down — same convention as the corner feather.

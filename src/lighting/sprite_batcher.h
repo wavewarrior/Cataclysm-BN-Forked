@@ -276,7 +276,11 @@ struct debug_params {
     // everything that is not a wall/window/tall furniture, so this is inert there
     // regardless of its value.
     float face_arc = 1.5f;
-    float vis_edge_pad2 = 0.0f;
+    // Radial macro-normal blend: 0=flat(off) .. 1=full cylinder. Treats each sprite
+    // as a gently rounded volume so Lambert shading responds to light direction even
+    // for opaque sprites where alpha-gradient normals are (0,0,1). Blends with base_n
+    // (atlas micro-relief) before the per-edge face_arc block.
+    float nrm_radial_amount = 0.4f;
 };
 
 // Returns sun/sky params interpolated from a 24h LUT for the given hour (0..24).

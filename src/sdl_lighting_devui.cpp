@@ -606,6 +606,7 @@ void devui_rml_open()
     // the SIGNED strength of the per-sprite vertical-face arc, both swept live.
     c.Bind( "nrm_atlas_v", &g_dbg_params.nrm_atlas_v );
     c.Bind( "face_arc", &g_dbg_params.face_arc );
+    c.Bind( "nrm_radial_amount", &g_dbg_params.nrm_radial_amount );
     c.Bind( "sway_amp", &g_dbg_params.sway_amp );
     c.Bind( "sway_freq", &g_dbg_params.sway_freq );
     c.Bind( "ripple_k", &g_dbg_params.ripple_k );

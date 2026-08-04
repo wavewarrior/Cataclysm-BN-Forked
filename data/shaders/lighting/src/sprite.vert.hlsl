@@ -107,7 +107,7 @@ cbuffer DebugParams : register(b2, space1) {
     float vis_edge;
     float nrm_atlas_v;
     float face_arc;
-    float vis_edge_pad2;
+    float nrm_radial_amount;
 };
 
 struct VS_OUT {
@@ -154,6 +154,10 @@ struct VS_OUT {
     // is a QUANTITY, not a categorical selector, so drift could only nudge a shade.
     // Also MUST NOT be `nointerpolation`, for the reason recorded above.
     float face_amt : TEXCOORD10;
+    // Sprite centre in UV space and half-extents, for radial macro-normal in fragment.
+    // Per-instance constant, so interpolation is exact.
+    float2 center_uv : TEXCOORD11;
+    float2 uv_half   : TEXCOORD12;
 };
 static const float2 quad_uv[6] = {
     float2(0.0,0.0), float2(1.0,0.0), float2(0.0,1.0),
@@ -266,5 +270,7 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
     o.light_mode = s.light_mode;
     o.flash     = float3(s.flash_r, s.flash_g, s.flash_b);
     o.face_amt  = s.face_amt;
+    o.center_uv = float2(s.src_u + 0.5 * s.src_uw, s.src_v + 0.5 * s.src_vh);
+    o.uv_half = float2(0.5 * s.src_uw, 0.5 * s.src_vh);
     return o;
 }
