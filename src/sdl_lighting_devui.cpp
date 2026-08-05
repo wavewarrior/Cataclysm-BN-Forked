@@ -607,6 +607,12 @@ void devui_rml_open()
     c.Bind( "nrm_atlas_v", &g_dbg_params.nrm_atlas_v );
     c.Bind( "face_arc", &g_dbg_params.face_arc );
     c.Bind( "nrm_radial_amount", &g_dbg_params.nrm_radial_amount );
+    c.Bind( "cloud_strength", &g_dbg_params.cloud_strength );
+    c.Bind( "cloud_scale", &g_dbg_params.cloud_scale );
+    c.Bind( "cloud_wind_x", &g_dbg_params.cloud_wind_x );
+    c.Bind( "cloud_wind_y", &g_dbg_params.cloud_wind_y );
+    c.Bind( "cloud_threshold", &g_dbg_params.cloud_threshold );
+    c.Bind( "cloud_softness", &g_dbg_params.cloud_softness );
     c.Bind( "sway_amp", &g_dbg_params.sway_amp );
     c.Bind( "sway_freq", &g_dbg_params.sway_freq );
     c.Bind( "ripple_k", &g_dbg_params.ripple_k );
@@ -913,7 +919,7 @@ void devui_rml_open()
     g_dbg_mode_names = {
         "off",     "ambient", "emitter", "sun",         "sky", "total",      "SDF",    "sky_vis",
         "emit_bw", "normal",  "AO",      "shadow mask", "GI",  "sky access", "sun occ",
-        "vision frontier", "light mode"
+        "vision frontier", "light mode", "cloud shadow"
     };
     g_runic_template_names = {"Auto", "Centred", "Thirds", "Fixed-interval"};
     // Order MUST match lighting::hud_emitter_type — the <select> index is the enum.

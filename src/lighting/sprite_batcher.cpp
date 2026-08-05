@@ -58,7 +58,7 @@ static_assert(sizeof(sun_params) == 48, "sun_params wire-stable with SunParams c
 
 // debug_params struct now lives in sprite_batcher.h so render_state.h can
 // embed it by value in frame_light_inputs. Wire-stable layout enforced here.
-static_assert(sizeof(debug_params) == 224, "debug_params wire-stable with DebugParams cbuffer");
+static_assert(sizeof(debug_params) == 256, "debug_params wire-stable with DebugParams cbuffer");
 
 // Temporary diagnostic for the normal-atlas/facing verification: the surface normal is
 // only consumed by the emitter loops and the sun term, so when both are ~0 the feature

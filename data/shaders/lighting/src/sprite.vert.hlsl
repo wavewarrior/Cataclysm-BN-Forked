@@ -108,6 +108,15 @@ cbuffer DebugParams : register(b2, space1) {
     float nrm_atlas_v;
     float face_arc;
     float nrm_radial_amount;
+    // Cloud shadow knobs are fragment-stage only; declared here for cbuffer layout parity.
+    float cloud_strength;
+    float cloud_scale;
+    float cloud_wind_x;
+    float cloud_wind_y;
+    float cloud_threshold;
+    float cloud_softness;
+    float cloud_pad0;
+    float cloud_pad1;
 };
 
 struct VS_OUT {

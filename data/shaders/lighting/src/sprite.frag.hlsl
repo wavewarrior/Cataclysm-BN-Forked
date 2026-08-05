@@ -170,6 +170,14 @@ cbuffer DebugParams : register(b2, space3) {
     // Signed strength of the per-sprite vertical-face arc. Mirrors debug_params::face_arc.
     float face_arc;
     float nrm_radial_amount;
+    float cloud_strength;
+    float cloud_scale;
+    float cloud_wind_x;
+    float cloud_wind_y;
+    float cloud_threshold;
+    float cloud_softness;
+    float cloud_pad0;
+    float cloud_pad1;
 };
 struct VS_OUT {
     float4 pos      : SV_Position;
@@ -362,6 +370,34 @@ float dither_threshold(float2 world_px) {
     const int bx = ((int)floor(world_px.x)) & 3;
     const int by = ((int)floor(world_px.y)) & 3;
     return (k_bayer4[by * 4 + bx] + 0.5) / 16.0;
+}
+// ---- Cloud shadow noise -----------------------------------------------
+// Hash + bilinear value-noise + 3-octave fbm. No existing GPU noise primitive
+// in this file (only the fixed Bayer dither matrix above); this is the shape
+// generator for the passing-cloud-shadow term applied to sun_contrib in main().
+float cloud_hash(float2 p) {
+    return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453123);
+}
+float cloud_value_noise(float2 p) {
+    const float2 i = floor(p);
+    const float2 f = frac(p);
+    const float  a = cloud_hash(i);
+    const float  b = cloud_hash(i + float2(1.0, 0.0));
+    const float  c = cloud_hash(i + float2(0.0, 1.0));
+    const float  d = cloud_hash(i + float2(1.0, 1.0));
+    const float2 u = f * f * (3.0 - 2.0 * f);
+    return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
+}
+float cloud_fbm(float2 p) {
+    const float2x2 rot = float2x2(0.8, 0.6, -0.6, 0.8);
+    float sum = 0.0;
+    float amp = 0.55;
+    for(int o = 0; o < 3; ++o) {
+        sum += amp * cloud_value_noise(p);
+        p = mul(rot, p) * 2.02;
+        amp *= 0.5;
+    }
+    return sum;
 }
 // --- Step 7 palette shade ramp helpers -------------------------------------
 float luma(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
@@ -837,6 +873,24 @@ float4 main(VS_OUT i) : SV_Target0 {
                            ? max(sky_dir.a, sky_bilinear(shade_pos + sun_step).a)
                            : sky_dir.a;
 
+    // ---- Passing cloud shadows (procedural, animated) -----------------------
+    // Sampled at shade_pos — the same world-locked, art-texel-quantised position
+    // sdf_bilinear/indirect_bilinear use — so the pattern sticks to the ground on
+    // scroll and to the tile-base for tall sprites. Animated by anim_time (wrapped
+    // render seconds, injected per-frame — see sprite_batcher.h) x cloud_wind, so
+    // clouds visibly drift instead of shimmering on scroll or standing still.
+    // cloud_strength=0 is an exact no-op: the branch is skipped entirely and
+    // cloud_mul stays 1.0, matching every other knob in this shader (ao_strength,
+    // gi_strength, etc.).
+    float cloud_mul = 1.0;
+    if(cloud_strength > 0.001) {
+        const float2 cloud_cp = (shade_pos + float2(cloud_wind_x, cloud_wind_y) * anim_time) * cloud_scale;
+        const float  cloud_n  = saturate(cloud_fbm(cloud_cp));
+        const float  cloud_cover = smoothstep(cloud_threshold - cloud_softness,
+                                              cloud_threshold + cloud_softness, cloud_n);
+        cloud_mul = lerp(1.0, 1.0 - saturate(cloud_strength), cloud_cover);
+    }
+
     float3 sun_contrib = float3(0.0, 0.0, 0.0);
     if(sun_intensity > 0.001 && sun_sky_vis > 0.05 && sdf_map_w > 0u) {
         const float2 toward_sun = -float2(sun_dir_x, sun_dir_y);
@@ -869,6 +923,7 @@ float4 main(VS_OUT i) : SV_Target0 {
         const float sun_spec = (spec_strength > 0.001) ? spec_strength * wet_spec(normal, sun_L) : 0.0;
         sun_contrib += float3(sun_r, sun_g, sun_b) * sun_intensity
                        * sun_shadow * sun_sky_vis * mask_term * sun_spec;
+        sun_contrib *= cloud_mul;
     }
 
     // Apply runtime tuning scales BEFORE compositing. emitter_scale tunes
@@ -1249,6 +1304,19 @@ float4 main(VS_OUT i) : SV_Target0 {
             // Full alpha: see dbg_opaque above. Without it the flat hue is blended by
             // every stacked quad and the class is no longer exactly recoverable.
             dbg_opaque = 1.0;
+        } else if(debug_mode == 17u) {
+            // Cloud-shadow view: grayscale of cloud_mul, the factor actually
+            // applied to sun_contrib. White = no cloud overhead; darkens toward
+            // (1 - cloud_strength) under a cloud. Independent of sun/sky colour,
+            // ambient, GI, dither. Uniform white everywhere = cloud_strength is 0.
+            // Gated by the SAME condition sun_contrib itself uses (sun_intensity,
+            // sun_sky_vis, sdf_map_w) — indoors/underground/at night cloud_mul has
+            // zero real effect, so the view must show flat white there too, not a
+            // drifting pattern that implies an effect the render doesn't apply.
+            const bool sun_applies = sun_intensity > 0.001 && sun_sky_vis > 0.05 && sdf_map_w > 0u;
+            const float cloud_vis = sun_applies ? cloud_mul : 1.0;
+            vis = float3(cloud_vis, cloud_vis, cloud_vis);
+            replace = true;
         }
         if(replace) {
             final_rgb = vis;

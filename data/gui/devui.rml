@@ -300,6 +300,12 @@
                 <div class="devui-row">max shadow K <input type="range" min="1" max="64" step="1" data-value="max_shadow_k"/> <span class="devui-val">{{max_shadow_k}}</span></div>
                 <div class="devui-row">SDF sharpness <input type="range" min="0" max="1" step="0.01" data-value="sdf_sharp"/> <span class="devui-val">{{sdf_sharp}}</span></div>
                 <div class="devui-row">ambient occlusion <input type="range" min="0" max="1" step="0.01" data-value="ao_strength"/> <span class="devui-val">{{ao_strength}}</span></div>
+                <div class="devui-row">cloud strength <input type="range" min="0" max="1" step="0.01" data-value="cloud_strength"/> <span class="devui-val">{{cloud_strength}}</span></div>
+                <div class="devui-row">cloud scale <input type="range" min="0.005" max="0.2" step="0.005" data-value="cloud_scale"/> <span class="devui-val">{{cloud_scale}}</span></div>
+                <div class="devui-row">cloud wind x <input type="range" min="-2" max="2" step="0.05" data-value="cloud_wind_x"/> <span class="devui-val">{{cloud_wind_x}}</span></div>
+                <div class="devui-row">cloud wind y <input type="range" min="-2" max="2" step="0.05" data-value="cloud_wind_y"/> <span class="devui-val">{{cloud_wind_y}}</span></div>
+                <div class="devui-row">cloud threshold <input type="range" min="0" max="1" step="0.01" data-value="cloud_threshold"/> <span class="devui-val">{{cloud_threshold}}</span></div>
+                <div class="devui-row">cloud softness <input type="range" min="0.01" max="0.5" step="0.01" data-value="cloud_softness"/> <span class="devui-val">{{cloud_softness}}</span></div>
 
                 <div class="devui-row">night floor <input type="range" min="0" max="0.3" step="0.005" data-value="night_floor"/> <span class="devui-val">{{night_floor}}</span></div>
                 <div class="devui-row">day floor <input type="range" min="0" max="0.3" step="0.005" data-value="day_floor"/> <span class="devui-val">{{day_floor}}</span></div>

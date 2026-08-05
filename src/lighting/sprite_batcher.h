@@ -281,6 +281,21 @@ struct debug_params {
     // for opaque sprites where alpha-gradient normals are (0,0,1). Blends with base_n
     // (atlas micro-relief) before the per-edge face_arc block.
     float nrm_radial_amount = 0.4f;
+    // Passing cloud shadows (procedural, moving noise pattern of cloud coverage
+    // drifting over the terrain). Multiplies the SUN contribution only — clouds
+    // block direct sunlight, ambient sky-light is unaffected — so this is an
+    // exact no-op at night (sun_intensity=0) and stacks correctly UNDER
+    // weather_cloud_mult() (src/sdl_render_frame.cpp): that is a flat whole-sky
+    // multiplier for the current weather TYPE; this is the moving SHAPE of
+    // individual clouds passing overhead on top of it.
+    float cloud_strength = 0.35f;  // 0=off .. 1=full darkening under a cloud (ships ON)
+    float cloud_scale = 0.03f;     // noise frequency, tiles^-1 (~33-tile cloud period)
+    float cloud_wind_x = 0.4f;     // cloud drift velocity, world tiles/second, x
+    float cloud_wind_y = 0.15f;    // cloud drift velocity, world tiles/second, y
+    float cloud_threshold = 0.55f; // noise cutoff where a cloud begins casting shadow
+    float cloud_softness = 0.15f;  // feather width of the cloud edge around cloud_threshold
+    float cloud_pad0 = 0.0f;       // reserved: keeps DebugParams a multiple of 16 bytes
+    float cloud_pad1 = 0.0f;       // reserved: keeps DebugParams a multiple of 16 bytes
 };
 
 // Returns sun/sky params interpolated from a 24h LUT for the given hour (0..24).

@@ -583,12 +583,12 @@ void CheckMessages( display_context &d )
                     g_dbg_lighting_shader = !g_dbg_lighting_shader;
                     break;
                 } else if( lc == KEY_F( 7 ) ) {
-                    // F7: cycle debug visualization mode (0-16). Modes include:
+                    // F7: cycle debug visualization mode (0-17). Modes include:
                     // 8 = B/W emitter-only (bypasses tint for main-menu blue),
                     // 9 = surface normal (Sobel), 10 = AO, 11 = shadow mask (game tiles only),
                     // 15 = vision frontier (frontier_cov), 16 = light_mode
                     // (red=unlit, green=gpu_lit, blue=memory).
-                    g_current_dbg_mode = ( g_current_dbg_mode + 1 ) % 17u;
+                    g_current_dbg_mode = ( g_current_dbg_mode + 1 ) % 18u;
                     g_dbg_params.debug_mode = g_current_dbg_mode;
                     // Log the mode we LANDED on. Scripted verification cycles this key
                     // N times and then measures a capture; a single dropped keypress
