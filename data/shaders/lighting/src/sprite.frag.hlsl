@@ -890,31 +890,25 @@ float4 main(VS_OUT i) : SV_Target0 {
                                               cloud_threshold + cloud_softness, cloud_n);
         cloud_mul = lerp(1.0, 1.0 - saturate(cloud_strength), cloud_cover);
     }
-    // Clouds attenuate both direct sun AND diffuse sky light reaching the ground
-    // (a passing cloud dims the whole sky-dome overhead, not just the sun disc) —
-    // gated to sun_intensity>0.001 so this is an EXACT no-op at night/dusk/dawn,
-    // matching the sun_contrib gate below and keeping the night look untouched.
+    // Clouds attenuate the light reaching the ground. Gated to sun_intensity>0.001
+    // so this is an EXACT no-op at night/dusk/dawn, matching the sun_contrib gate
+    // below and keeping the night look untouched.
     //
-    // Sun-only darkening measured as only ~2% visible in the composited image even
-    // at cloud_strength=1.0 (verified via debug modes 3/4 + AB pixel diff). Root
-    // cause: open daylight tiles commonly push luma(rad_lit) ABOVE 1.0 (confirmed
-    // via debug mode 5 — bright ground reads flat white, i.e. saturated), and both
-    // the palette-ramp shade selector (`saturate(luma(rad_lit))`) and the plain
-    // tonemap fallback (`saturate(hdr)`, used whenever ramp_enable=1) hard-clip at
-    // exactly that point. A moderate cut to ONE term (sun) rarely drives the pixel
-    // back under 1.0, so it stays clipped and invisible — only a cut deep enough to
-    // cross that ceiling reads at all. Darkening sky too roughly doubles the
-    // achievable cut per pixel; cloud_threshold/cloud_softness (below) are tuned
-    // tight so more of the noise field actually reaches FULL coverage (cloud_mul at
-    // its floor) rather than sitting in the soft partial-coverage gradient, where
-    // the same clip renders it a no-op. This is a property of the existing
-    // ramp/tonemap pipeline, not something this feature can route around locally.
-    if(sun_intensity > 0.001) {
-        sky_contrib *= cloud_mul;
-    }
+    // Applying cloud_mul to sun_contrib/sky_contrib HERE (pre-composite) measured
+    // as only ~2-3% visible in the composited image even at cloud_strength=1.0
+    // (verified via debug modes 3/4/5 + AB pixel diff). Root cause: `gpu_total`
+    // below is HARD-CLAMPED to a ceiling of 2.0, and open daylight tiles routinely
+    // push ambient_v + dyn ABOVE that ceiling already — so darkening one additive
+    // term (sun, or even sun+sky) rarely pulls the SUM back under the ceiling; it
+    // just eats headroom that was being clipped away anyway, and the visible pixel
+    // does not move. Multiplying `gpu_total` AFTER the clamp (below) instead scales
+    // the ceiling-limited value the eye actually sees, so cloud cover is visible
+    // even on fully sun-saturated ground.
+    const bool sun_applies = sun_intensity > 0.001 && sun_sky_vis > 0.05 && sdf_map_w > 0u;
+    const float cloud_vis = sun_applies ? cloud_mul : 1.0;
 
     float3 sun_contrib = float3(0.0, 0.0, 0.0);
-    if(sun_intensity > 0.001 && sun_sky_vis > 0.05 && sdf_map_w > 0u) {
+    if(sun_applies) {
         const float2 toward_sun = -float2(sun_dir_x, sun_dir_y);
         // Sun shadow (Stage 2b): the unified coverage occluder marched in 3D toward
         // the sun by sky_sun.comp → SkyBuf.a (0 shadowed .. 1 lit). Replaces the
@@ -945,7 +939,6 @@ float4 main(VS_OUT i) : SV_Target0 {
         const float sun_spec = (spec_strength > 0.001) ? spec_strength * wet_spec(normal, sun_L) : 0.0;
         sun_contrib += float3(sun_r, sun_g, sun_b) * sun_intensity
                        * sun_shadow * sun_sky_vis * mask_term * sun_spec;
-        sun_contrib *= cloud_mul;
     }
 
     // Apply runtime tuning scales BEFORE compositing. emitter_scale tunes
@@ -1014,7 +1007,7 @@ float4 main(VS_OUT i) : SV_Target0 {
     }
 
     // GPU total light (dithered dynamic light + un-dithered ambient floor).
-    const float3 gpu_total = min(ambient_v + dyn, float3(2.0, 2.0, 2.0));
+    const float3 gpu_total = min(ambient_v + dyn, float3(2.0, 2.0, 2.0)) * cloud_vis;
     // What was here: a `combined` term that took the per-channel MAXIMUM of the memory
     // tint and `gpu_total`, then multiplied it onto the raw texel. It read as a blend
     // but was a SELECTOR. The CPU only ever emitted two tint values (cata_tiles.cpp
@@ -1327,16 +1320,14 @@ float4 main(VS_OUT i) : SV_Target0 {
             // every stacked quad and the class is no longer exactly recoverable.
             dbg_opaque = 1.0;
         } else if(debug_mode == 17u) {
-            // Cloud-shadow view: grayscale of cloud_mul, the factor actually
-            // applied to sun_contrib. White = no cloud overhead; darkens toward
-            // (1 - cloud_strength) under a cloud. Independent of sun/sky colour,
-            // ambient, GI, dither. Uniform white everywhere = cloud_strength is 0.
-            // Gated by the SAME condition sun_contrib itself uses (sun_intensity,
-            // sun_sky_vis, sdf_map_w) — indoors/underground/at night cloud_mul has
-            // zero real effect, so the view must show flat white there too, not a
-            // drifting pattern that implies an effect the render doesn't apply.
-            const bool sun_applies = sun_intensity > 0.001 && sun_sky_vis > 0.05 && sdf_map_w > 0u;
-            const float cloud_vis = sun_applies ? cloud_mul : 1.0;
+            // Cloud-shadow view: grayscale of cloud_vis, the factor actually
+            // applied to gpu_total post-ceiling-clamp. White = no cloud overhead;
+            // darkens toward (1 - cloud_strength) under a cloud. Independent of
+            // sun/sky colour, ambient, GI, dither. Uniform white everywhere =
+            // cloud_strength is 0. Reuses the SAME `sun_applies`/`cloud_vis`
+            // computed once above (indoors/underground/at night cloud_vis has zero
+            // real effect, so the view must show flat white there too, not a
+            // drifting pattern that implies an effect the render doesn't apply).
             vis = float3(cloud_vis, cloud_vis, cloud_vis);
             replace = true;
         }
