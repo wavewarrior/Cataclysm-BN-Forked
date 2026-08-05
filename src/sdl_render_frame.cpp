@@ -442,12 +442,14 @@ static auto forced_celestial_hour() -> const std::optional<float> &// *NOPAD*
 {
     static const std::optional<float> forced = []() -> std::optional<float> {
         const char *const raw = std::getenv( "CBN_FORCE_SUN_HOUR" );
-        if( !raw ) {
+        if( !raw )
+        {
             return std::nullopt;
         }
         char *end = nullptr;
         const float h = std::strtof( raw, &end );
-        if( end == raw || h < 0.0f || h > 24.0f ) {
+        if( end == raw || h < 0.0f || h > 24.0f )
+        {
             dbg( DL::Error ) << "CBN_FORCE_SUN_HOUR: expected 0..24, got '" << raw
                              << "', ignoring";
             return std::nullopt;
@@ -664,8 +666,8 @@ if( g && tilecontext && in.tile_pixel_size > 0.0f ) {
     // separate them. Paired with [segdiag] in sprite_batcher, which reports the value
     // that actually reaches the GPU after the per-segment is_lit zeroing.
     if( std::getenv( "CBN_DIAG_SEG_LIGHTING" ) ) {
-        static int diag_frame = 0;
-        if( ++diag_frame % 120 == 1 ) {
+    static int diag_frame = 0;
+    if( ++diag_frame % 120 == 1 ) {
             dbg( DL::Info ) << "[sundiag] hour=" << sun_hour
                             << " pinned=" << ( forced_celestial_hour() ? "yes" : "no" )
                             << " raw_after_celestial=" << diag_sun_raw
@@ -966,8 +968,8 @@ auto render_world_pass_w( lighting::render_state &rs,
                                  static_cast<std::uint32_t>( proj_w ),
                                  static_cast<std::uint32_t>( proj_h ),
                                  rs.splat_quads(),
-                                 lighting::splat_colors{
-                                     .blood_strength = g_splat_blood_strength } );
+        lighting::splat_colors{
+            .blood_strength = g_splat_blood_strength } );
 
         // Pass W-b: the entity half, only when there IS one. A null clear colour
         // yields SDL_GPU_LOADOP_LOAD (sprite_batcher.cpp:599), preserving W-a
@@ -1196,25 +1198,35 @@ constexpr float HUD_PART_BASE_ALPHA = 0.5f;
 auto hud_emitter_base_rate( lighting::hud_emitter_type t ) -> float
 {
     switch( t ) {
-        case lighting::hud_emitter_type::ember:  return 2.5f;
-        case lighting::hud_emitter_type::dust:   return 3.0f;
-        case lighting::hud_emitter_type::pollen: return 2.0f;
-        case lighting::hud_emitter_type::snow:   return 8.0f;
-        case lighting::hud_emitter_type::leaf:   return 3.0f;
-    }
-    return 3.0f;
+    case lighting::hud_emitter_type::ember:
+        return 2.5f;
+    case lighting::hud_emitter_type::dust:
+        return 3.0f;
+    case lighting::hud_emitter_type::pollen:
+        return 2.0f;
+    case lighting::hud_emitter_type::snow:
+        return 8.0f;
+    case lighting::hud_emitter_type::leaf:
+        return 3.0f;
+}
+return 3.0f;
 }
 
 auto hud_emitter_enabled( lighting::hud_emitter_type t ) -> bool
 {
     switch( t ) {
-        case lighting::hud_emitter_type::ember:  return g_hud_part_ember_enable;
-        case lighting::hud_emitter_type::dust:   return g_hud_part_dust_enable;
-        case lighting::hud_emitter_type::pollen: return g_hud_part_pollen_enable;
-        case lighting::hud_emitter_type::snow:   return g_hud_part_snow_enable;
-        case lighting::hud_emitter_type::leaf:   return g_hud_part_leaf_enable;
-    }
-    return true;
+    case lighting::hud_emitter_type::ember:
+        return g_hud_part_ember_enable;
+    case lighting::hud_emitter_type::dust:
+        return g_hud_part_dust_enable;
+    case lighting::hud_emitter_type::pollen:
+        return g_hud_part_pollen_enable;
+    case lighting::hud_emitter_type::snow:
+        return g_hud_part_snow_enable;
+    case lighting::hud_emitter_type::leaf:
+        return g_hud_part_leaf_enable;
+}
+return true;
 }
 
 auto composite_swapchain_pass_b( lighting::render_state &rs,
@@ -1432,8 +1444,8 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
     rs.tile_batcher().end_pass(
           ( rmlui_active || particle_count > 0 )
           ? lighting::sprite_batcher::pass_overlay_fn(
-    [&rs, rmlui_active, part_draw](
-                  SDL_GPURenderPass * rp, SDL_GPUCommandBuffer * cb ) {
+              [&rs, rmlui_active, part_draw](
+    SDL_GPURenderPass * rp, SDL_GPUCommandBuffer * cb ) {
         lighting::hud_particle_draw d = part_draw;
         d.rp = rp;
         d.cb = cb;

@@ -172,7 +172,8 @@ TEST_CASE( "phosphor_bar_is_cell_exact_across_its_whole_range", "[hud_phosphor]"
     const auto glyphs = []( std::string_view rml ) -> std::string {
         std::string out;
         bool in_tag = false;
-        for( const char c : rml ) {
+        for( const char c : rml )
+        {
             if( c == '<' ) {
                 in_tag = true;
             } else if( c == '>' ) {
@@ -287,12 +288,13 @@ TEST_CASE( "phosphor_layout_regions_never_overlap", "[hud_phosphor]" )
     // makes that unrepresentable — but only if the regions are actually
     // disjoint at every size the metrics can return.
     const auto overlaps = []( const hud_phosphor::cell_rect & a,
-                              const hud_phosphor::cell_rect & b ) -> bool {
-        if( a.cols <= 0 || a.rows <= 0 || b.cols <= 0 || b.rows <= 0 ) {
+    const hud_phosphor::cell_rect & b ) -> bool {
+        if( a.cols <= 0 || a.rows <= 0 || b.cols <= 0 || b.rows <= 0 )
+        {
             return false; // a clamped-out region cannot overlap anything
         }
         return a.col < b.col + b.cols && b.col < a.col + a.cols &&
-               a.row < b.row + b.rows && b.row < a.row + a.rows;
+        a.row < b.row + b.rows && b.row < a.row + a.rows;
     };
 
     for( const float w : {
@@ -358,7 +360,8 @@ TEST_CASE( "phosphor_ink_spans_one_hue_and_never_collapses", "[hud_phosphor]" )
     const auto luma = []( const std::string & h ) -> float {
         const auto byte = [&]( std::size_t i ) -> float {
             const auto nib = []( char c ) -> int {
-                if( c >= '0' && c <= '9' ) {
+                if( c >= '0' && c <= '9' )
+                {
                     return c - '0';
                 }
                 const char l = static_cast<char>( c | 0x20 );

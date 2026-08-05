@@ -647,18 +647,18 @@ auto hud_dp_ratio() -> float
 auto hud_metrics_now() -> std::optional<hud_phosphor::metrics>
 {
     if( !sidebar_hud_rmlui_enabled() || !rmlui_layer::ready() ) {
-        return std::nullopt;
-    }
-    Rml::Context *ctx = rmlui_layer::context();
-    if( ctx == nullptr ) {
-        return std::nullopt;
-    }
-    const auto dims = ctx->GetDimensions();
-    if( dims.x <= 0 || dims.y <= 0 ) {
-        return std::nullopt;
-    }
-    const auto ratio = hud_dp_ratio();
-    return hud_phosphor::metrics_for( dims.x / ratio, dims.y / ratio );
+    return std::nullopt;
+}
+Rml::Context *ctx = rmlui_layer::context();
+if( ctx == nullptr ) {
+    return std::nullopt;
+}
+const auto dims = ctx->GetDimensions();
+if( dims.x <= 0 || dims.y <= 0 ) {
+    return std::nullopt;
+}
+const auto ratio = hud_dp_ratio();
+return hud_phosphor::metrics_for( dims.x / ratio, dims.y / ratio );
 }
 
 /// Where every region sits this frame.
@@ -882,7 +882,7 @@ auto sidebar_hud_apply_rect( const hud_phosphor::layout &l ) -> void
     }
     g_hud_rect_layout = l;
 
-    const auto place = [&l]( const char *id, const hud_phosphor::cell_rect &c ) {
+    const auto place = [&l]( const char *id, const hud_phosphor::cell_rect & c ) {
         Rml::Element *el = g_hud_doc->GetElementById( id );
         if( el == nullptr ) {
             return;

@@ -2019,7 +2019,8 @@ void map::apply_light_source( const tripoint_bub_ms &p, float luminance,
     // Bail instead: for an out-of-bounds source every probe would be false, so
     // the octant mask would be empty and the ray cast below a no-op anyway.
     if( !inbounds( p ) ||
-        cache.light_source_buffer.size() < static_cast<std::size_t>( sx ) * static_cast<std::size_t>( sy ) ) {
+        cache.light_source_buffer.size() < static_cast<std::size_t>( sx ) * static_cast<std::size_t>
+        ( sy ) ) {
         return;
     }
     bool north = ( p2.y() != 0       &&

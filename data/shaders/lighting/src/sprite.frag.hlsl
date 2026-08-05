@@ -188,19 +188,21 @@ struct VS_OUT {
     // compare BY BAND, never ==.
     float light_mode : TEXCOORD7; // sprite_light_mode: 0 unlit, 1 gpu_lit, 2 memory
     float3 flash : TEXCOORD8; // coloured light override: colour * strength, max(colour) == 1
+    // Per-sprite "this is a vertical surface" amount (sprite_instance::face_amt), 0..1.
+    // Per-instance constant, so interpolation across the quad is exact; and like flash it
+    // is a QUANTITY, not a categorical selector, so drift could only nudge a shade.
+    float face_amt : TEXCOORD10;
     // Quad-local vertical fraction: 0 at the sprite's TOP edge, 1 at its BOTTOM edge.
-    float2 center_uv : TEXCOORD11;
-    float2 uv_half   : TEXCOORD12;
     // Taken from quad_uv[vid].y BEFORE any UV flip, because it describes physical height
     // on screen, not texture addressing. This is the ONLY vertical position information
     // available for a 1-tile sprite: light_pos == world_pos for anything not `is_tall`,
     // so the old light_pos.y - world_pos.y trick is identically zero for every wall.
     // MUST NOT be `nointerpolation` -- see the long note on light_mode above; that
     // qualifier broke D3D12 pipeline creation outright (0x80070057).
-    // Per-sprite "this is a vertical surface" amount (sprite_instance::face_amt), 0..1.
-    // Per-instance constant, so interpolation across the quad is exact; and like flash it
-    // is a QUANTITY, not a categorical selector, so drift could only nudge a shade.
-    float face_amt : TEXCOORD10;
+    // Sprite centre in UV space and half-extents, for radial macro-normal in fragment.
+    // Per-instance constant, so interpolation is exact.
+    float2 center_uv : TEXCOORD11;
+    float2 uv_half   : TEXCOORD12;
 };
 // SDF supersample factor — MUST match lighting::SDF_SUPERSAMPLE (sdf_pass.h).
 // SdfBuf is the SS-finer grid: dims (sdf_map_w*SDF_SS) x (sdf_map_h*SDF_SS),

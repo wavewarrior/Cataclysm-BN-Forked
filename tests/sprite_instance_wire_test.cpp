@@ -170,7 +170,7 @@ void check_matches_canonical( const std::string &path, const std::vector<hlsl_fi
         if( fields[i].type != "float" ) {
             FAIL( path << ": field " << i << " (`" << fields[i].name << "`) is declared `"
                   << fields[i].type << "`, must be `float` — a non-float of the same width "
-                  "silently reinterprets the wire bits" );
+                          "silently reinterprets the wire bits" );
         }
     }
 }

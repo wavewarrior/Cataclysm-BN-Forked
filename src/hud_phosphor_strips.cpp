@@ -73,9 +73,9 @@ using hud_phosphor::ink;
 auto stat_rung( int base, int value ) -> ink
 {
     if( value < base ) {
-        return ink::peak;
-    }
-    return value > base ? ink::datum : ink::label;
+    return ink::peak;
+}
+return value > base ? ink::datum : ink::label;
 }
 
 /// Speed, from `value_color`'s 75/50/25 bands.
@@ -173,20 +173,17 @@ class row
         }
 
         /// Append plain `text` at its natural width.
-        auto put( ink i, std::string_view text ) -> row & // *NOPAD*
-        {
+        auto put( ink i, std::string_view text ) -> row & { // *NOPAD*
             return put( i, text, hud_phosphor::display_width( text ) );
         }
 
         /// Append plain `text` in a field of exactly `cells`, padded or truncated.
-        auto put( ink i, std::string_view text, int cells ) -> row & // *NOPAD*
-        {
+        auto put( ink i, std::string_view text, int cells ) -> row & { // *NOPAD*
             return emit( i, hud_phosphor::pad( text, std::clamp( cells, 0, left() ) ) );
         }
 
         /// Append plain `text` right-aligned in a field of exactly `cells`.
-        auto put_right( ink i, std::string_view text, int cells ) -> row & // *NOPAD*
-        {
+        auto put_right( ink i, std::string_view text, int cells ) -> row & { // *NOPAD*
             return emit( i, hud_phosphor::pad_left( text, std::clamp( cells, 0, left() ) ) );
         }
 
@@ -195,8 +192,7 @@ class row
         /// Padded, escaped and de-spaced exactly like every other field: an
         /// inverted run is still an inline run, so its alignment whitespace is
         /// trimmed at the span boundary unless it goes through `no_break`.
-        auto put_inverted( std::string_view text, int cells ) -> row & // *NOPAD*
-        {
+        auto put_inverted( std::string_view text, int cells ) -> row & { // *NOPAD*
             const auto w = std::clamp( cells, 0, left() );
             return w > 0
                    ? claim( hud_phosphor::invert( no_break( hud_phosphor::pad( text, w ) ) ), w )
@@ -208,8 +204,7 @@ class row
         /// The one writer that cannot measure its own argument, because the
         /// argument is markup: `cells` is the caller's promise about it. A promise
         /// that does not fit is refused rather than trusted — see `claim`.
-        auto put_markup( std::string_view markup, int cells ) -> row & // *NOPAD*
-        {
+        auto put_markup( std::string_view markup, int cells ) -> row & { // *NOPAD*
             return claim( markup, cells );
         }
 
@@ -219,16 +214,14 @@ class row
         /// RmlUi will not trim at a span boundary), and a second literal-space
         /// path here would silently reintroduce the trimming it exists to avoid.
         /// Blanks stay outside any span: an empty tinted span says nothing.
-        auto skip( int cells ) -> row & // *NOPAD*
-        {
+        auto skip( int cells ) -> row & { // *NOPAD*
             const auto w = std::clamp( cells, 0, left() );
             return claim( hud_phosphor::pad( {}, w ), w );
         }
 
         /// Blank-fill forward to column `col`. Never rewinds, so a field that
         /// overran loses its trailing gap rather than corrupting the whole row.
-        auto to( int col ) -> row & // *NOPAD*
-        {
+        auto to( int col ) -> row & { // *NOPAD*
             return skip( col - used_ );
         }
 
@@ -269,8 +262,7 @@ class row
         /// so they can never reach the drop; only `put_markup`, which cannot be
         /// re-measured, can. Either way `line()` closes the row out to exactly
         /// `cols_`, so a drop costs content and never geometry.
-        auto claim( std::string_view markup, int cells ) -> row & // *NOPAD*
-        {
+        auto claim( std::string_view markup, int cells ) -> row & { // *NOPAD*
             if( cells > 0 && cells <= left() ) {
                 out_ += markup;
                 used_ += cells;
@@ -279,8 +271,7 @@ class row
         }
 
         /// Tint `padded` and claim the cells it measures.
-        auto emit( ink i, const std::string &padded ) -> row & // *NOPAD*
-        {
+        auto emit( ink i, const std::string &padded ) -> row & { // *NOPAD*
             const auto w = hud_phosphor::display_width( padded );
             return w > 0 ? claim( hud_phosphor::tint( i, no_break( padded ) ), w ) : *this;
         }
@@ -467,11 +458,11 @@ auto approx_time_of_day() -> std::string
 auto move_mode_word( const avatar &u ) -> std::string
 {
     if( u.movement_mode_is( CMM_RUN ) ) {
-        return _( "RUNNING" );
+    return _( "RUNNING" );
     } else if( u.movement_mode_is( CMM_STEALTH ) ) {
-        return _( "STEALTH" );
+    return _( "STEALTH" );
     } else if( u.movement_mode_is( CMM_CROUCH ) ) {
-        return _( "CROUCHING" );
+    return _( "CROUCHING" );
     }
     return _( "WALKING" );
 }
@@ -584,10 +575,10 @@ auto need_field( std::string label, const std::pair<std::string, nc_color> &desc
                  int cells ) -> segment
 {
     if( desc.first.empty() ) {
-        return { .label = std::move( label ), .value = _( "NORMAL" ), .value_rung = ink::label };
-    }
-    return { .label = std::move( label ),
-             .value = capped( to_upper_case( desc.first ), cells ),
+    return { .label = std::move( label ), .value = _( "NORMAL" ), .value_rung = ink::label };
+}
+return { .label = std::move( label ),
+         .value = capped( to_upper_case( desc.first ), cells ),
              .value_rung = ink::datum };
 }
 
@@ -595,9 +586,9 @@ auto need_field( std::string label, const std::pair<std::string, nc_color> &desc
 auto profession_text( const avatar &u ) -> std::string
 {
     if( !u.custom_profession.empty() ) {
-        return u.custom_profession;
-    }
-    return u.prof ? u.prof->gender_appropriate_name( u.male ) : std::string();
+    return u.custom_profession;
+}
+return u.prof ? u.prof->gender_appropriate_name( u.male ) : std::string();
 }
 
 /// Partner state for the co-op segment; empty when there is no session.
@@ -719,7 +710,8 @@ auto key_slots( const avatar &u ) -> std::array<key_slot, keys_slot_count>
     const auto reload_ok = reload.empty();
     return {{
             { .act = ACTION_FIRE, .label = _( "FIRE" ), .reason = std::move( fire ), .available = fire_ok },
-            {   .act = ACTION_RELOAD_WIELDED, .label = _( "RELOAD" ), .reason = std::move( reload ),
+            {
+                .act = ACTION_RELOAD_WIELDED, .label = _( "RELOAD" ), .reason = std::move( reload ),
                 .available = reload_ok
             },
             { .act = ACTION_TOGGLE_RUN, .label = _( "RUN" ) },
@@ -826,7 +818,7 @@ auto hud_status_row1( avatar &u, const hud_phosphor::layout &l ) -> std::string
     // order they get dropped in when the region is too narrow to hold them all.
     // The place name, the weather description and a partner's character name are
     // the only unbounded strings here, so each is capped.
-    auto segs = std::vector<segment>{};
+    auto segs = std::vector<segment> {};
     if( auto coop = coop_text(); !coop.empty() ) {
         segs.push_back( { .label = _( "CO-OP" ), .value = capped( coop, free_cells ),
                           .value_rung = ink::peak } );
@@ -839,8 +831,8 @@ auto hud_status_row1( avatar &u, const hud_phosphor::layout &l ) -> std::string
     // the one number here that changes what you should be doing.
     segs.push_back( { .label = {},
                       .value = u.has_watch() ? clock_hm( calendar::turn )
-                      : g->get_levz() >= 0 ? to_upper_case( approx_time_of_day() )
-                      : std::string( "???" ),
+                               : g->get_levz() >= 0 ? to_upper_case( approx_time_of_day() )
+                               : std::string( "???" ),
                       .value_rung = ink::peak } );
     const auto place = ACTIVE_OVERMAP_BUFFER.ter( u.abs_omt_pos() )->get_name();
     segs.push_back( { .label = {}, .value = capped( to_upper_case( place ), free_cells ) } );
@@ -905,12 +897,13 @@ auto hud_status_row2( avatar &u, const hud_phosphor::layout &l ) -> std::string
     r.skip( 1 );
     const auto stat_cells = std::max( ( f.left_edge - 1 ) / 4, 1 );
     const auto labelled = stat_cells >= 6;
-    const auto stats = std::array<stat_field, 4>{{
+    const auto stats = std::array<stat_field, 4> {{
             { .label = _( "STR" ), .base = u.get_str_base(), .value = u.get_str() },
             { .label = _( "DEX" ), .base = u.get_dex_base(), .value = u.get_dex() },
             { .label = _( "INT" ), .base = u.get_int_base(), .value = u.get_int() },
             { .label = _( "PER" ), .base = u.get_per_base(), .value = u.get_per() },
-        }};
+        }
+    };
     for( const stat_field &s : stats ) {
         const auto cells = std::min( stat_cells, r.left() );
         row cell( cells );
@@ -944,9 +937,10 @@ auto hud_status_row2( avatar &u, const hud_phosphor::layout &l ) -> std::string
     // `DEAD TIRED` — the longest the engine emits — without an ellipsis.
     const auto need_cells = std::clamp( middle_cols / 10, 6, 14 );
 
-    auto segs = std::vector<segment>{
+    auto segs = std::vector<segment> {
         { .label = _( "MOVE" ), .value = move_mode_word( u ) },
-        {   .label = _( "SPD" ), .value = std::to_string( u.get_speed() ),
+        {
+            .label = _( "SPD" ), .value = std::to_string( u.get_speed() ),
             .value_rung = speed_rung( u.get_speed() )
         },
         { .label = _( "NOISE" ), .value = std::to_string( u.volume ) },
@@ -1180,14 +1174,15 @@ auto hud_keys( avatar &u, const hud_phosphor::layout &l ) -> std::string
         // the next slot's bracket. The widest text any slot can emit is
         // `RELOAD  NO MAG` at 14 cells; the design's 21-cell slot leaves 16.
         const auto text = [&]() -> std::string {
-            if( slot.reason.empty() ) {
-                return slot.label;
-            }
-            const auto spaced = std::format( "{}  {}", slot.label, slot.reason );
-            return hud_phosphor::display_width( spaced ) <= label_cells
-                   ? spaced
-                   : std::format( "{} {}", slot.label, slot.reason );
-        }();
+            if( slot.reason.empty() )
+        {
+            return slot.label;
+        }
+        const auto spaced = std::format( "{}  {}", slot.label, slot.reason );
+        return hud_phosphor::display_width( spaced ) <= label_cells
+        ? spaced
+        : std::format( "{} {}", slot.label, slot.reason );
+    }();
         cell.put( live ? ink::datum : ink::dead, text, label_cells );
         r.put_markup( cell.line(), slot_cells );
     }
@@ -1209,7 +1204,7 @@ auto hud_veh_panel( avatar &u, const hud_phosphor::layout &l ) -> std::string
 
     const auto cols = l.vehicle.cols;
     const auto content_cols = cols - 2;
-    auto rows = std::vector<std::string>{};
+    auto rows = std::vector<std::string> {};
 
     // The panel hangs under the DOCK column, so like the DOCK it draws only the
     // edge facing the play area — its left — and opens on an interrupting rule.
@@ -1256,8 +1251,9 @@ auto hud_veh_panel( avatar &u, const hud_phosphor::layout &l ) -> std::string
                                 : abs_vel <= max_vel ? ink::datum
                                 : ink::peak;
     content_row( [&]( row & body ) {
-        auto segs = std::vector<segment>{
-            {   .label = _( "SPD" ),
+        auto segs = std::vector<segment> {
+            {
+                .label = _( "SPD" ),
                 .value = std::format( "{}/{} {}", to_display( veh->velocity ), to_display( max_vel ),
                                       velocity_units( VU_VEHICLE ) ),
                 .value_rung = speed_rung_veh
@@ -1272,8 +1268,9 @@ auto hud_veh_panel( avatar &u, const hud_phosphor::layout &l ) -> std::string
 
     // Engine and the status flags, each present only while it is true.
     content_row( [&]( row & body ) {
-        auto segs = std::vector<segment>{
-            {   .label = _( "ENG" ), .value = veh->engine_on ? _( "ON" ) : _( "OFF" ),
+        auto segs = std::vector<segment> {
+            {
+                .label = _( "ENG" ), .value = veh->engine_on ? _( "ON" ) : _( "OFF" ),
                 .value_rung = veh->engine_on ? ink::datum : ink::rule
             },
         };

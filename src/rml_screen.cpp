@@ -57,7 +57,7 @@ bool rml_doc::open( bool enabled, const std::string &model_name, input_context &
     Rml::DataModelConstructor c = ctx_rml->CreateDataModel( model_name );
     if( !c ) {
         dbg( DL::Warn ) << "rml_doc: '" << model_name << "' failed — CreateDataModel refused"
-                        " (name already registered?)";
+                           " (name already registered?)";
         return false;
     }
     // Screen-specific: register structs, Bind members, BindEventCallback, and
@@ -82,12 +82,12 @@ bool rml_doc::open( bool enabled, const std::string &model_name, input_context &
 auto rml_doc_unavailable( const rml_doc &doc, const char *screen ) -> bool
 {
     if( doc ) {
-        return false;
-    }
-    debugmsg( "%s could not open its RmlUi document and has no other renderer, so it would "
-              "draw nothing while still swallowing input.  Check that the screen's RmlUi "
-              "toggle is on (F4 panel); config/debug.log records the exact reason.", screen );
-    return true;
+    return false;
+}
+debugmsg( "%s could not open its RmlUi document and has no other renderer, so it would "
+          "draw nothing while still swallowing input.  Check that the screen's RmlUi "
+          "toggle is on (F4 panel); config/debug.log records the exact reason.", screen );
+return true;
 }
 
 void rml_doc::close()

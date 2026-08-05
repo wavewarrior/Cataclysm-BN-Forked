@@ -301,10 +301,10 @@ static void debug_error_prompt(
         _( "Press <color_white>space bar</color> to continue the game." );
     const std::string hint_ignore =
         _( "Press <color_white>I</color> (or <color_white>i</color>) to also ignore this particular "
-           "message in the future." );
+       "message in the future." );
     const std::string hint_copy =
         _( "Press <color_white>C</color> (or <color_white>c</color>) to copy this message to the "
-           "clipboard." );
+       "clipboard." );
     const std::string message = string_format(
                                     "\n\n"  // Looks nicer with some space
                                     " %s\n" // translated user string: error notification

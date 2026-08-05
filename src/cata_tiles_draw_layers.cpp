@@ -76,12 +76,12 @@ template <typename T> static float foliage_sway_weight( const T& obj )
 static auto terrain_face_amount( const ter_t &t ) -> float
 {
     if( t.has_flag( TFLAG_WALL ) ) {
-        return t.transparent ? 0.6f : 1.0f;
-    }
-    if( t.has_flag( TFLAG_CONNECT_TO_WALL ) && t.has_flag( "WINDOW" ) ) {
-        return 0.6f;
-    }
-    return 0.0f;
+    return t.transparent ? 0.6f : 1.0f;
+}
+if( t.has_flag( TFLAG_CONNECT_TO_WALL ) && t.has_flag( "WINDOW" ) ) {
+    return 0.6f;
+}
+return 0.0f;
 }
 
 // Furniture carries no "is a vertical surface" flag, so its face amount is read off

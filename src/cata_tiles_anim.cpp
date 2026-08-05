@@ -85,9 +85,9 @@ struct draw_zone_overlay_options {
 
 void draw_zone_overlay( const draw_zone_overlay_options& opt )
 {
-    lighting::overlay_rect(
-    { static_cast<float>( opt.rect.x ), static_cast<float>( opt.rect.y ),
-      static_cast<float>( opt.rect.w ), static_cast<float>( opt.rect.h ) },
+    lighting::overlay_rect( {
+        static_cast<float>( opt.rect.x ), static_cast<float>( opt.rect.y ),
+        static_cast<float>( opt.rect.w ), static_cast<float>( opt.rect.h ) },
     lighting::overlay_color_from_bytes( opt.color.r, opt.color.g, opt.color.b, opt.alpha ) );
 
     if( opt.draw_label && !opt.name.empty() ) {
@@ -298,21 +298,21 @@ namespace
 /// overlay alone — the previous fiery, deliberately-over-1.0 impact splash was
 /// the single loudest thing on screen and read nothing like the reference.
 constexpr auto aim_sight_col =
-    lighting::overlay_color{ .r = 0.784f, .g = 0.745f, .b = 0.510f, .a = 0.90f };
+lighting::overlay_color{ .r = 0.784f, .g = 0.745f, .b = 0.510f, .a = 0.90f };
 constexpr auto aim_edge_col =
-    lighting::overlay_color{ .r = 0.784f, .g = 0.745f, .b = 0.510f, .a = 0.30f };
+lighting::overlay_color{ .r = 0.784f, .g = 0.745f, .b = 0.510f, .a = 0.30f };
 constexpr auto aim_fill_col =
-    lighting::overlay_color{ .r = 0.784f, .g = 0.745f, .b = 0.510f, .a = 0.055f };
+lighting::overlay_color{ .r = 0.784f, .g = 0.745f, .b = 0.510f, .a = 0.055f };
 constexpr auto aim_hit_col =
-    lighting::overlay_color{ .r = 1.000f, .g = 0.200f, .b = 0.200f, .a = 0.95f };
+lighting::overlay_color{ .r = 1.000f, .g = 0.200f, .b = 0.200f, .a = 0.95f };
 constexpr auto aim_blocked_col =
-    lighting::overlay_color{ .r = 1.000f, .g = 0.467f, .b = 0.133f, .a = 0.95f };
+lighting::overlay_color{ .r = 1.000f, .g = 0.467f, .b = 0.133f, .a = 0.95f };
 constexpr auto aim_reticle_col =
-    lighting::overlay_color{ .r = 0.902f, .g = 0.902f, .b = 0.902f, .a = 0.95f };
+lighting::overlay_color{ .r = 0.902f, .g = 0.902f, .b = 0.902f, .a = 0.95f };
 /// One-pixel dark surround. The overlay has to stay legible over a lit floor and
 /// over a black wall, and this game shows plenty of both in the same frame.
 constexpr auto aim_shade_col =
-    lighting::overlay_color{ .r = 0.0f, .g = 0.0f, .b = 0.0f, .a = 0.55f };
+lighting::overlay_color{ .r = 0.0f, .g = 0.0f, .b = 0.0f, .a = 0.55f };
 
 } // namespace
 
@@ -329,25 +329,25 @@ auto cata_tiles::void_aim_crosshair() -> void
 auto cata_tiles::draw_aim_crosshair() -> void
 {
     if( !do_draw_aim_crosshair || !aim_crosshair_pixel_.has_value() ) { return; }
-    // Read the position BEFORE voiding: void_aim_crosshair() disengages the
-    // optional, so dereferencing it afterwards was undefined behaviour.
-    const auto c = *aim_crosshair_pixel_;
-    void_aim_crosshair();
-    // A genuine (0, 0) would stamp a reticle in the map's top-left corner, which
-    // is never what the player means.
-    if( c == point_zero ) { return; }
+// Read the position BEFORE voiding: void_aim_crosshair() disengages the
+// optional, so dereferencing it afterwards was undefined behaviour.
+const auto c = *aim_crosshair_pixel_;
+void_aim_crosshair();
+// A genuine (0, 0) would stamp a reticle in the map's top-left corner, which
+// is never what the player means.
+if( c == point_zero ) { return; }
 
-    // Four detached bars around an open centre plus a single centre pip, so the
-    // tile you are aiming at stays readable through the reticle. Sized off
-    // tile_width to hold its proportions across zoom levels.
-    const auto tw = static_cast<float>( tile_width );
-    const auto gap = std::max( 3.0f, tw * 0.14f );
-    const auto arm = std::max( 5.0f, tw * 0.30f );
-    constexpr auto thick = 2.0f;
-    const auto cx = static_cast<float>( c.x );
-    const auto cy = static_cast<float>( c.y );
-    const auto bar = []( float x, float y, float w, float h ) {
-        lighting::overlay_rect( { x - 1.0f, y - 1.0f, w + 2.0f, h + 2.0f }, aim_shade_col );
+// Four detached bars around an open centre plus a single centre pip, so the
+// tile you are aiming at stays readable through the reticle. Sized off
+// tile_width to hold its proportions across zoom levels.
+const auto tw = static_cast<float>( tile_width );
+const auto gap = std::max( 3.0f, tw * 0.14f );
+const auto arm = std::max( 5.0f, tw * 0.30f );
+constexpr auto thick = 2.0f;
+const auto cx = static_cast<float>( c.x );
+const auto cy = static_cast<float>( c.y );
+const auto bar = []( float x, float y, float w, float h ) {
+    lighting::overlay_rect( { x - 1.0f, y - 1.0f, w + 2.0f, h + 2.0f }, aim_shade_col );
         lighting::overlay_rect( { x, y, w, h }, aim_reticle_col );
     };
     const auto hx = thick * 0.5f;
@@ -371,13 +371,13 @@ auto cata_tiles::void_aim_cone() -> void { do_draw_aim_cone = false; }
 auto cata_tiles::draw_aim_cone() -> void
 {
     if( !do_draw_aim_cone ) { return; }
-    do_draw_aim_cone = false;
-    // Screen-space overlay quads queued into the world pass (lighting::solid_overlay)
-    // rather than a dedicated triangle pipeline: the wedge fill is a stack of
-    // rotated quads, which at these alpha levels is indistinguishable from a
-    // triangle fan once the sector count is high enough to hide the chords.
-    const auto origin = player_to_screen( aim_cone_src_ );
-    const auto xf = compute_anim_xform( get_avatar() );
+do_draw_aim_cone = false;
+// Screen-space overlay quads queued into the world pass (lighting::solid_overlay)
+// rather than a dedicated triangle pipeline: the wedge fill is a stack of
+// rotated quads, which at these alpha levels is indistinguishable from a
+// triangle fan once the sector count is high enough to hide the chords.
+const auto origin = player_to_screen( aim_cone_src_ );
+const auto xf = compute_anim_xform( get_avatar() );
     const auto tw = static_cast<float>( tile_width );
     const auto th = static_cast<float>( tile_height );
     // Apex on the tile CENTRE. player_to_screen returns the tile's top-left, but
@@ -403,9 +403,11 @@ auto cata_tiles::draw_aim_cone() -> void
     const auto axis_slab = []( float p, float d, float lo ) -> slab_range {
         constexpr auto eps = 1e-6f;
         const auto inf = std::numeric_limits<float>::infinity();
-        if( std::abs( d ) < eps ) {
+        if( std::abs( d ) < eps )
+        {
             // Parallel to this axis: either always within the slab, or never.
-            return ( p >= lo && p <= lo + 1.0f ) ? slab_range{ -inf, inf } : slab_range{ inf, -inf };
+return ( p >= lo && p <= lo + 1.0f ) ? slab_range{ -inf, inf } :
+            slab_range{ inf, -inf };
         }
         const auto t1 = ( lo - p ) / d;
         const auto t2 = ( lo + 1.0f - p ) / d;
@@ -417,7 +419,8 @@ auto cata_tiles::draw_aim_cone() -> void
         const auto dy = std::sin( angle );
         const auto p0x = static_cast<float>( src3d.x() ) + 0.5f;
         const auto p0y = static_cast<float>( src3d.y() ) + 0.5f;
-        for( const tripoint_bub_ms &t : here.ray_cast_angle( src3d, angle, aim_cone_range_ ) ) {
+        for( const tripoint_bub_ms &t : here.ray_cast_angle( src3d, angle, aim_cone_range_ ) )
+        {
             // The shooter's own tile can be impassable (firing from inside a
             // vehicle, mid-bash), and stopping on it would collapse the cone.
             if( t.xy() == src3d.xy() || !here.impassable( t ) ) { continue; }
@@ -443,9 +446,9 @@ auto cata_tiles::draw_aim_cone() -> void
     // Sector count drives how closely the fill's outer boundary follows the arc:
     // each sector contributes one flat chord, so too few reads as a sawtooth.
     constexpr auto fan_segs = 24;
-    std::array<cone_ray, fan_segs + 1> rays{};
+    std::array < cone_ray, fan_segs + 1 > rays{};
     for( auto i = 0; i <= fan_segs; ++i ) {
-        const auto t = static_cast<float>( i ) / fan_segs;
+    const auto t = static_cast<float>( i ) / fan_segs;
         rays[i] = cast_ray( left_angle + ( right_angle - left_angle ) * t );
     }
     const auto center_len = rays[fan_segs / 2].stop * tw;
@@ -456,7 +459,7 @@ auto cata_tiles::draw_aim_cone() -> void
     // by an order of magnitude, so it sits at the edge of perception and shares
     // the sight line's hue instead of shouting in orange.
     if( half > 0.005f ) {
-        for( auto i = 0; i < fan_segs; ++i ) {
+    for( auto i = 0; i < fan_segs; ++i ) {
             // Sectors are disjoint in angle, so the translucent fill never
             // double-blends. Each spans the SHORTER of its two bounding rays so
             // the fill cannot leak past a wall that only one edge sees.
@@ -476,7 +479,7 @@ auto cata_tiles::draw_aim_cone() -> void
     constexpr auto stroke_px = 2.0f;
 
     if( half > 0.005f ) {
-        const auto edge = [&]( float angle, float len ) {
+    const auto edge = [&]( float angle, float len ) {
             lighting::overlay_line( {
                 .from = { ox, oy },
                 .to = { ox + len * std::cos( angle ), oy + len * std::sin( angle ) },
@@ -658,20 +661,20 @@ auto cata_tiles::draw_hover_effect() -> void
 {
     if( !hover_tile_.has_value() ) { return; }
 
-    // Shared pulse: recomputed from wall-clock animation time, so both the
-    // brackets and the dot trail breathe together.
-    const auto pulse_mult = static_cast<float>(
-                                g_hover_highlight_pulse
-                                ? 0.7f + 0.3f * std::sin( anim_wall_now_ * g_hover_highlight_pulse_speed * 2.0f *
-                                        std::numbers::pi_v<float> )
-                                : 1.0f );
+// Shared pulse: recomputed from wall-clock animation time, so both the
+// brackets and the dot trail breathe together.
+const auto pulse_mult = static_cast<float>(
+                            g_hover_highlight_pulse
+                            ? 0.7f + 0.3f * std::sin( anim_wall_now_ * g_hover_highlight_pulse_speed * 2.0f *
+                                std::numbers::pi_v<float> )
+                            : 1.0f );
 
-    const auto tw = static_cast<float>( tile_width );
-    const auto th = static_cast<float>( tile_height );
+const auto tw = static_cast<float>( tile_width );
+const auto th = static_cast<float>( tile_height );
 
-    // --- Tile highlight: corner brackets ---
-    if( g_hover_highlight_enable ) {
-        const auto screen = player_to_screen( hover_tile_->xy() );
+// --- Tile highlight: corner brackets ---
+if( g_hover_highlight_enable ) {
+    const auto screen = player_to_screen( hover_tile_->xy() );
         const auto x = static_cast<float>( screen.x );
         const auto y = static_cast<float>( screen.y );
         const auto arm = std::min( g_hover_highlight_corner_len * tw, tw * 0.5f );
@@ -702,40 +705,41 @@ auto cata_tiles::draw_hover_effect() -> void
     // --- Dotted line: player centre to hover tile centre ---
     if( !g_hover_line_enable || g->u.bub_pos().xy() == hover_tile_->xy() ) { return; }
 
-    const auto player_screen = player_to_screen( g->u.bub_pos().xy() );
-    const auto xf = compute_anim_xform( get_avatar() );
-    const auto px = static_cast<float>( player_screen.x ) + xf.off_x + tw * 0.5f;
-    const auto py = static_cast<float>( player_screen.y ) + xf.off_y + th * 0.5f;
+const auto player_screen = player_to_screen( g->u.bub_pos().xy() );
+const auto xf = compute_anim_xform( get_avatar() );
+const auto px = static_cast<float>( player_screen.x ) + xf.off_x + tw * 0.5f;
+const auto py = static_cast<float>( player_screen.y ) + xf.off_y + th * 0.5f;
 
-    const auto hover_screen = player_to_screen( hover_tile_->xy() );
-    const auto hx = static_cast<float>( hover_screen.x ) + tw * 0.5f;
-    const auto hy = static_cast<float>( hover_screen.y ) + th * 0.5f;
+const auto hover_screen = player_to_screen( hover_tile_->xy() );
+const auto hx = static_cast<float>( hover_screen.x ) + tw * 0.5f;
+const auto hy = static_cast<float>( hover_screen.y ) + th * 0.5f;
 
-    const auto dx = hx - px;
-    const auto dy = hy - py;
-    const auto dist = std::sqrt( dx * dx + dy * dy );
-    const auto spacing = std::max( 1.0f, g_hover_line_dot_spacing );
-    if( dist < spacing ) { return; }
+const auto dx = hx - px;
+const auto dy = hy - py;
+const auto dist = std::sqrt( dx * dx + dy * dy );
+const auto spacing = std::max( 1.0f, g_hover_line_dot_spacing );
+if( dist < spacing ) { return; }
 
-    const auto nx = dx / dist;
-    const auto ny = dy / dist;
-    const auto size = std::max( 1.0f, g_hover_line_dot_size );
-    const auto half_size = size * 0.5f;
-    const auto half_spacing = spacing * 0.5f;
+const auto nx = dx / dist;
+const auto ny = dy / dist;
+const auto size = std::max( 1.0f, g_hover_line_dot_size );
+const auto half_size = size * 0.5f;
+const auto half_spacing = spacing * 0.5f;
 
-    for( auto step = half_spacing; step < dist - half_spacing; step += spacing ) {
-        const auto t = step / dist; // progress along the line, 0..1
-        // Ramp up over the first quarter, down over the last quarter.
-        const auto fade =
-            g_hover_line_fade_ends
-            ? std::min( t * 4.0f, 1.0f ) * std::min( ( 1.0f - t ) * 4.0f, 1.0f )
+for( auto step = half_spacing; step < dist - half_spacing; step += spacing ) {
+    const auto t = step / dist; // progress along the line, 0..1
+    // Ramp up over the first quarter, down over the last quarter.
+    const auto fade =
+        g_hover_line_fade_ends
+        ? std::min( t * 4.0f, 1.0f ) * std::min( ( 1.0f - t ) * 4.0f, 1.0f )
             : 1.0f;
         lighting::overlay_rect(
-        { px + nx * step - half_size, py + ny * step - half_size, size, size },
-        { .r = g_hover_line_color[0],
-          .g = g_hover_line_color[1],
-          .b = g_hover_line_color[2],
-          .a = g_hover_line_color[3] * fade * pulse_mult } );
+        { px + nx * step - half_size, py + ny * step - half_size, size, size }, {
+            .r = g_hover_line_color[0],
+            .g = g_hover_line_color[1],
+            .b = g_hover_line_color[2],
+            .a = g_hover_line_color[3] * fade * pulse_mult
+        } );
     }
 }
 void cata_tiles::void_highlight()

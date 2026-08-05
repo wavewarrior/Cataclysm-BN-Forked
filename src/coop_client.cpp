@@ -190,7 +190,7 @@ auto coop_client::apply_world_seed_to_avatar() -> void
     // default human body Character's own reset installs (character.cpp:455-456).
     // Guarded on emptiness so a rejoining client with a loaded save keeps its real body.
     if( g->u.get_body().empty() ) {
-        g->u.set_anatomy( anatomy_id( "human_anatomy" ) );
+    g->u.set_anatomy( anatomy_id( "human_anatomy" ) );
         character_funcs::normalize( g->u );
         DebugLog( DL::Info, DC::Main )
                 << "[coop] client avatar had no body — installed default human anatomy";
@@ -206,12 +206,12 @@ auto coop_client::apply_world_seed_to_avatar() -> void
     // On rejoin:     keep the saved position; send_join_info() already told the host.
     const bool has_saved_position = ( g->u.abs_pos() != tripoint_abs_ms{0, 0, 0} );
     if( !has_saved_position ) {
-        // g->setup() centered the map on the client's own character (or origin), NOT on
-        // world_seed_spawn_.  abs_to_bub(world_seed_spawn_) returns nonsense bubble coords
-        // until the reality bubble is repositioned — causing the massive drift and
-        // movement crash on unloaded submaps.  Replicate start_game (game.cpp:924-936):
-        // compute the top-left submap corner and call load_map() to reposition abs_sub.
-        const int levz = g->get_levz();
+    // g->setup() centered the map on the client's own character (or origin), NOT on
+    // world_seed_spawn_.  abs_to_bub(world_seed_spawn_) returns nonsense bubble coords
+    // until the reality bubble is repositioned — causing the massive drift and
+    // movement crash on unloaded submaps.  Replicate start_game (game.cpp:924-936):
+    // compute the top-left submap corner and call load_map() to reposition abs_sub.
+    const int levz = g->get_levz();
         auto lev = project_to<coords::sm>( world_seed_spawn_ );
         const tripoint_abs_sm abs_sub_before = g->m.get_abs_sub();
         lev.x() -= g_half_mapsize;

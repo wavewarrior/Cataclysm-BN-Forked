@@ -126,15 +126,17 @@ struct code_point {
 auto decode( std::string_view s ) -> code_point
 {
     if( s.empty() ) {
-        return {};
-    }
-    const auto b0 = static_cast<unsigned char>( s[0] );
-    const auto trailing = [s]( std::size_t n ) -> bool {
-        if( s.size() <= n ) {
+    return {};
+}
+const auto b0 = static_cast<unsigned char>( s[0] );
+const auto trailing = [s]( std::size_t n ) -> bool {
+    if( s.size() <= n )
+        {
             return false;
         }
         return std::ranges::all_of( std::views::iota( std::size_t{ 1 }, n + 1 ),
-        [s]( std::size_t k ) {
+        [s]( std::size_t k )
+        {
             return ( static_cast<unsigned char>( s[k] ) & 0xc0 ) == 0x80;
         } );
     };
@@ -142,24 +144,24 @@ auto decode( std::string_view s ) -> code_point
         return static_cast<char32_t>( static_cast<unsigned char>( s[k] ) & 0x3f );
     };
     if( b0 < 0x80 ) {
-        return { .cp = static_cast<char32_t>( b0 ), .bytes = 1 };
-    }
-    if( ( b0 & 0xe0 ) == 0xc0 && trailing( 1 ) ) {
-        return { .cp = ( static_cast<char32_t>( b0 & 0x1f ) << 6 ) | cont( 1 ), .bytes = 2 };
-    }
-    if( ( b0 & 0xf0 ) == 0xe0 && trailing( 2 ) ) {
-        return { .cp = ( static_cast<char32_t>( b0 & 0x0f ) << 12 ) | ( cont( 1 ) << 6 ) | cont( 2 ),
-                 .bytes = 3 };
-    }
-    if( ( b0 & 0xf8 ) == 0xf0 && trailing( 3 ) ) {
-        return { .cp = ( static_cast<char32_t>( b0 & 0x07 ) << 18 ) | ( cont( 1 ) << 12 ) |
-                       ( cont( 2 ) << 6 ) | cont( 3 ),
-                 .bytes = 4 };
-    }
-    // Malformed lead or truncated sequence: consume exactly one byte and count
-    // it as one cell. Dropping it would let a field silently shrink; consuming
-    // more would risk eating a valid lead byte that follows it.
-    return { .cp = 0xfffd, .bytes = 1 };
+    return { .cp = static_cast<char32_t>( b0 ), .bytes = 1 };
+}
+if( ( b0 & 0xe0 ) == 0xc0 && trailing( 1 ) ) {
+    return { .cp = ( static_cast<char32_t>( b0 & 0x1f ) << 6 ) | cont( 1 ), .bytes = 2 };
+}
+if( ( b0 & 0xf0 ) == 0xe0 && trailing( 2 ) ) {
+    return { .cp = ( static_cast<char32_t>( b0 & 0x0f ) << 12 ) | ( cont( 1 ) << 6 ) | cont( 2 ),
+             .bytes = 3 };
+}
+if( ( b0 & 0xf8 ) == 0xf0 && trailing( 3 ) ) {
+    return { .cp = ( static_cast<char32_t>( b0 & 0x07 ) << 18 ) | ( cont( 1 ) << 12 ) |
+                   ( cont( 2 ) << 6 ) | cont( 3 ),
+             .bytes = 4 };
+}
+// Malformed lead or truncated sequence: consume exactly one byte and count
+// it as one cell. Dropping it would let a field silently shrink; consuming
+// more would risk eating a valid lead byte that follows it.
+return { .cp = 0xfffd, .bytes = 1 };
 }
 
 /// Cells occupied by one code point.
@@ -483,18 +485,22 @@ auto hud_phosphor::layout_for( const layout_options &o ) -> layout
     // Built in the right-sidebar orientation and then mirrored as one operation,
     // so there is exactly one set of geometry to reason about.
     l.soma = { .col = 0, .row = body_top, .cols = soma_cols,
-               .rows = std::min( soma_max_rows, body_rows ) };
+               .rows = std::min( soma_max_rows, body_rows )
+             };
     // Right column, top to bottom: RADAR, DOCK, VEHICLE. The radar is first
     // because it is what the shared status rule above titles.
     l.radar = { .col = cols - dock_cols, .row = body_top, .cols = dock_cols,
-                .rows = std::min( radar_max_rows, body_rows ) };
+                .rows = std::min( radar_max_rows, body_rows )
+              };
     const auto dock_top = bottom( l.radar );
     l.dock = { .col = cols - dock_cols, .row = dock_top, .cols = dock_cols,
-               .rows = std::clamp( body_bot - dock_top, 0, dock_max_rows ) };
+               .rows = std::clamp( body_bot - dock_top, 0, dock_max_rows )
+             };
     if( o.show_vehicle ) {
         const auto veh_top = bottom( l.dock );
         l.vehicle = { .col = l.dock.col, .row = veh_top, .cols = dock_cols,
-                      .rows = std::clamp( body_bot - veh_top, 0, veh_max_rows ) };
+                      .rows = std::clamp( body_bot - veh_top, 0, veh_max_rows )
+                    };
     }
     if( !o.sidebar_right ) {
         mirror( l.soma, cols );
@@ -754,17 +760,17 @@ auto hud_phosphor::is_critical( const crit_options &o ) -> bool
     // including a broken one, because those are the states that tick damage
     // between turns.
     if( o.bleeding || o.bitten ) {
-        return true;
-    }
-    // A broken limb is NOT critical on its own. This has to be an explicit early
-    // return rather than a comment saying `o.broken` is "deliberately not
-    // consulted": `is_limb_broken` means hp == 0, so a broken limb ALWAYS trips
-    // the ratio test below, and leaving it to fall through made every broken limb
-    // permanently inverted — which spends the register's single loudest signal on
-    // a long-term condition the player cannot act on this turn, and makes the
-    // non-inverted "! BROKEN / MENDING" row in hud_soma unreachable.
-    if( o.broken ) {
-        return false;
-    }
-    return o.max > 0 && static_cast<float>( o.cur ) / static_cast<float>( o.max ) < 1.0f / 3.0f;
+    return true;
+}
+// A broken limb is NOT critical on its own. This has to be an explicit early
+// return rather than a comment saying `o.broken` is "deliberately not
+// consulted": `is_limb_broken` means hp == 0, so a broken limb ALWAYS trips
+// the ratio test below, and leaving it to fall through made every broken limb
+// permanently inverted — which spends the register's single loudest signal on
+// a long-term condition the player cannot act on this turn, and makes the
+// non-inverted "! BROKEN / MENDING" row in hud_soma unreachable.
+if( o.broken ) {
+    return false;
+}
+return o.max > 0 && static_cast<float>( o.cur ) / static_cast<float>( o.max ) < 1.0f / 3.0f;
 }

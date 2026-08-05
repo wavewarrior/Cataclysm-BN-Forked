@@ -59,10 +59,10 @@ auto queue_stamps( const tripoint_bub_ms &tile, const field_type_id &type, int i
                    std::uint64_t key ) -> bool
 {
     if( !g || !tilecontext ) {
-        return false;
-    }
-    lighting::splatmap_pass &sp = lighting::get_render_state().splatmap();
-    if( !sp.ready() ) {
+    return false;
+}
+lighting::splatmap_pass &sp = lighting::get_render_state().splatmap();
+if( !sp.ready() ) {
         return false;
     }
     if( !covers_field( type ) ) {
@@ -77,21 +77,21 @@ auto queue_stamps( const tripoint_bub_ms &tile, const field_type_id &type, int i
     }
     const int count = sp.cell_count( gibs );
     if( count == 0 ) {
-        return true;
-    }
-    const int base = sp.cell_base( gibs );
+    return true;
+}
+const int base = sp.cell_base( gibs );
 
-    const tripoint_abs_ms abs = get_map().bub_to_abs( tile );
+const tripoint_abs_ms abs = get_map().bub_to_abs( tile );
 
-    // Local tile within the submap. Bub coords run 0..mapsize*SEEX, so both are
-    // already non-negative.
-    const int lx = tile.x() % SEEX;
-    const int ly = tile.y() % SEEY;
+// Local tile within the submap. Bub coords run 0..mapsize*SEEX, so both are
+// already non-negative.
+const int lx = tile.x() % SEEX;
+const int ly = tile.y() % SEEY;
 
-    // Deterministic per-tile seed: the same field data regenerates the same
-    // pattern after a save/reload.
-    const std::size_t seed = std::hash<long long> {}(
-                                 ( static_cast<long long>( abs.x() ) * 73'856'093LL )
+// Deterministic per-tile seed: the same field data regenerates the same
+// pattern after a save/reload.
+const std::size_t seed = std::hash<long long> {}(
+                             ( static_cast<long long>( abs.x() ) * 73'856'093LL )
                                  ^ ( static_cast<long long>( abs.y() ) * 19'349'663LL )
                                  ^ ( static_cast<long long>( abs.z() ) * 83'492'791LL )
                                  ^ ( static_cast<long long>( type.to_i() ) * 2'654'435'761LL ) );
@@ -100,8 +100,8 @@ auto queue_stamps( const tripoint_bub_ms &tile, const field_type_id &type, int i
     constexpr float px_per_tile = static_cast<float>( lighting::SPLAT_PX_PER_TILE );
     const int n = std::clamp( intensity, 1, 3 );
     for( int i = 0; i < n; ++i ) {
-        lighting::splat_stamp s{};
-        s.px = static_cast<float>( lx ) * px_per_tile + px_per_tile * 0.5f
+    lighting::splat_stamp s{};
+    s.px = static_cast<float>( lx ) * px_per_tile + px_per_tile * 0.5f
                + uniform( -0.4f * px_per_tile, 0.4f * px_per_tile );
         s.py = static_cast<float>( ly ) * px_per_tile + px_per_tile * 0.5f
                + uniform( -0.4f * px_per_tile, 0.4f * px_per_tile );
@@ -124,8 +124,8 @@ auto queue_stamps( const tripoint_bub_ms &tile, const field_type_id &type, int i
 auto key_of( const tripoint_abs_sm &sm ) -> std::uint64_t
 {
     return ( static_cast<std::uint64_t>( sm.x() + 0x80'0000 ) << 40 )
-           | ( static_cast<std::uint64_t>( sm.y() + 0x80'0000 ) << 16 )
-           | static_cast<std::uint64_t>( sm.z() + 10 );
+    | ( static_cast<std::uint64_t>( sm.y() + 0x80'0000 ) << 16 )
+    | static_cast<std::uint64_t>( sm.z() + 10 );
 }
 
 auto active() -> bool
@@ -143,18 +143,18 @@ auto queue_splatter( const tripoint_bub_ms &where, const field_type_id &type,
                      int intensity ) -> void
 {
     if( !g || !tilecontext ) {
-        return;
-    }
-    const tripoint_abs_sm sm = project_to<coords::sm>( get_map().bub_to_abs( where ) );
+    return;
+}
+const tripoint_abs_sm sm = project_to<coords::sm>( get_map().bub_to_abs( where ) );
     queue_stamps( where, type, intensity, key_of( sm ) );
 }
 
 auto seed_submap( const tripoint_bub_ms &origin, std::uint64_t key ) -> void
 {
     if( !g || !tilecontext ) {
-        return;
-    }
-    if( !lighting::get_render_state().splatmap().ready() ) {
+    return;
+}
+if( !lighting::get_render_state().splatmap().ready() ) {
         return;
     }
     // Pointers, not values: these globals are assigned by
@@ -167,7 +167,7 @@ auto seed_submap( const tripoint_bub_ms &origin, std::uint64_t key ) -> void
 
     map &here = get_map();
     for( int dy = 0; dy < SEEY; ++dy ) {
-        for( int dx = 0; dx < SEEX; ++dx ) {
+    for( int dx = 0; dx < SEEX; ++dx ) {
             const tripoint_bub_ms tile( origin.x() + dx, origin.y() + dy, origin.z() );
             if( !here.inbounds( tile ) ) {
                 continue;

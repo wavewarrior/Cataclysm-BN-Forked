@@ -348,9 +348,9 @@ for( const auto &s : sheets ) {
 dynamic_atlas::gpu_lookup dynamic_atlas::find_gpu_texture_full( SDL_Texture *legacy_tex ) const
 {
     if( !legacy_tex ) {
-        return { nullptr, 0, 0 };
-    }
-    const auto it = std::ranges::find_if( sheets, [legacy_tex]( const sprite_sheet & s ) {
+    return { nullptr, 0, 0 };
+}
+const auto it = std::ranges::find_if( sheets, [legacy_tex]( const sprite_sheet & s ) {
         return s.texture.get() == legacy_tex;
     } );
     if( it == sheets.end() ) {
@@ -458,9 +458,9 @@ auto dynamic_atlas::upload_sprite_normal( SDL_Texture *legacy_tex, const SDL_Rec
 auto dynamic_atlas::normal_v_offset( SDL_Texture *legacy_tex ) const -> float
 {
     if( !ENABLE_NORMAL_ATLAS || !legacy_tex ) {
-        return 0.0f;
-    }
-    const auto it = std::ranges::find_if( sheets, [legacy_tex]( const sprite_sheet & s ) {
+    return 0.0f;
+}
+const auto it = std::ranges::find_if( sheets, [legacy_tex]( const sprite_sheet & s ) {
         return s.texture.get() == legacy_tex;
     } );
     if( it == sheets.end() || !it->gpu_texture || it->gpu_atlas_height <= it->atlas_height ) {
@@ -472,16 +472,16 @@ auto dynamic_atlas::normal_v_offset( SDL_Texture *legacy_tex ) const -> float
 auto dynamic_atlas::normal_v_offset() const -> float
 {
     if( !ENABLE_NORMAL_ATLAS ) {
-        return 0.0f;
-    }
-    // The fragment `nrm_atlas_v` uniform is GLOBAL to a frame, not per segment, so it
-    // needs one value for the whole atlas. That is well defined here because every
-    // page is allocated with the same derived `colour_h` (allocate_sprite computes it
-    // from the same caps every time), hence the same 0.5 ratio. Report the first page
-    // that actually has a GPU mirror; pages without one are never sampled through the
-    // GPU path anyway. Returns 0.0f when there is no such page, which the shader reads
-    // as "feature disabled" and falls back to surface_normal().
-    const auto usable = std::ranges::find_if( sheets, []( const sprite_sheet & s ) {
+    return 0.0f;
+}
+// The fragment `nrm_atlas_v` uniform is GLOBAL to a frame, not per segment, so it
+// needs one value for the whole atlas. That is well defined here because every
+// page is allocated with the same derived `colour_h` (allocate_sprite computes it
+// from the same caps every time), hence the same 0.5 ratio. Report the first page
+// that actually has a GPU mirror; pages without one are never sampled through the
+// GPU path anyway. Returns 0.0f when there is no such page, which the shader reads
+// as "feature disabled" and falls back to surface_normal().
+const auto usable = std::ranges::find_if( sheets, []( const sprite_sheet & s ) {
         return s.gpu_texture && s.gpu_atlas_height > s.atlas_height;
     } );
     if( usable == sheets.end() ) {

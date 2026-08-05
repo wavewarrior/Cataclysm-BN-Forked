@@ -333,22 +333,22 @@ auto make_projectile_particle( const char bullet, const std::string &custom_spri
 -> particle
 {
     if( !custom_sprite.empty() ) {
-        return particle{ .style = particle_style::sprite, .sprite = custom_sprite };
-    }
-    switch( bullet ) {
-        case '#': // flame
-            return particle{ .style = particle_style::tracer,
-                             .tint_r = 1.5f, .tint_g = 0.45f, .tint_b = 0.08f,
-                             .size_px = 4.0f, .length_px = 26.0f };
-        case '`': // shrapnel
-            return particle{ .style = particle_style::tracer,
-                             .tint_r = 0.9f, .tint_g = 0.95f, .tint_b = 1.0f,
-                             .size_px = 2.0f, .length_px = 12.0f };
-        default: // ordinary bullet
-            return particle{ .style = particle_style::tracer,
-                             .tint_r = 1.4f, .tint_g = 1.15f, .tint_b = 0.55f,
-                             .size_px = 3.0f, .length_px = 22.0f };
-    }
+    return particle{ .style = particle_style::sprite, .sprite = custom_sprite };
+}
+switch( bullet ) {
+    case '#': // flame
+        return particle{ .style = particle_style::tracer,
+                         .tint_r = 1.5f, .tint_g = 0.45f, .tint_b = 0.08f,
+                         .size_px = 4.0f, .length_px = 26.0f };
+    case '`': // shrapnel
+        return particle{ .style = particle_style::tracer,
+                         .tint_r = 0.9f, .tint_g = 0.95f, .tint_b = 1.0f,
+                         .size_px = 2.0f, .length_px = 12.0f };
+    default: // ordinary bullet
+        return particle{ .style = particle_style::tracer,
+                         .tint_r = 1.4f, .tint_g = 1.15f, .tint_b = 0.55f,
+                         .size_px = 3.0f, .length_px = 22.0f };
+}
 }
 
 } // namespace
@@ -526,7 +526,8 @@ void draw_line_of( const draw_sprite_line_options &options )
                          .tint_r = 0.85f, .tint_g = 0.80f, .tint_b = 0.72f,
                          .size_px = 5.0f,
                          .tumble = options.rotate }
-             : make_projectile_particle( '*', options.sprite );
+             :
+             make_projectile_particle( '*', options.sprite );
     if( p.style == particle_style::sprite ) {
         p.rotation = get_bullet_rotation( get_bullet_dir( path, path.size() - 1 ) );
         p.tumble = options.rotate;

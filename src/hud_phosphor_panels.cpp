@@ -130,8 +130,7 @@ struct seg {
     bool raw = false;  ///< already-rendered RML: emitted verbatim
     int cells = 0;     ///< display width; consulted only when `raw`
 
-    auto width() const -> int
-    {
+    auto width() const -> int {
         return raw ? cells : hud_phosphor::display_width( text );
     }
 };
@@ -212,7 +211,8 @@ auto render_runs( const std::vector<seg> &segs ) -> std::string
     const auto no_break = []( std::string_view text ) -> std::string {
         auto out = std::string();
         out.reserve( text.size() );
-        for( const char c : text ) {
+        for( const char c : text )
+        {
             if( c == ' ' ) {
                 out += nbsp;
             } else {
@@ -424,16 +424,16 @@ auto morale_scale( const morale_scale_options &o ) -> std::string
 auto soma_sub_rule( const std::string &title, int cols ) -> std::string
 {
     return hud_phosphor::rule( { .cols = cols,
-                                 .titles = { { .col = 3, .text = title } },
-                                 .right = std::string( glyph_tee_right ) } );
+    .titles = { { .col = 3, .text = title } },
+    .right = std::string( glyph_tee_right ) } );
 }
 
 /// `├─┤ TARGET ├────────` — a DOCK section head, opening from its left border.
 auto dock_sub_rule( const std::string &title, int cols ) -> std::string
 {
     return hud_phosphor::rule( { .cols = cols,
-                                 .titles = { { .col = 2, .text = title } },
-                                 .left = std::string( glyph_tee_left ) } );
+    .titles = { { .col = 2, .text = title } },
+    .left = std::string( glyph_tee_left ) } );
 }
 
 // ── SOMA rows ───────────────────────────────────────────────────────────────
@@ -514,8 +514,10 @@ auto note_row( const std::vector<std::string> &notes, bool critical, int cols ) 
     return compose( {
         .segs = {
             { .i = ink::rule, .text = " " },
-            { .i = critical ? ink::peak : ink::datum,
-              .text = hud_phosphor::pad( critical ? "!!" : "!", 2 ) },
+            {
+                .i = critical ? ink::peak : ink::datum,
+                .text = hud_phosphor::pad( critical ? "!!" : "!", 2 )
+            },
             { .i = ink::rule, .text = " " },
             { .i = critical ? ink::peak : ink::datum, .text = join( notes, " - " ) },
         },
@@ -703,7 +705,7 @@ auto hud_soma( avatar &u, const hud_phosphor::layout &l ) -> std::string
             .label = body_part_hp_bar_ui_text( bp ),
             .bar = hud_phosphor::bar( { .cur = cur, .max = max, .cells = grid.bar } ),
             .value = broken ? std::string{ splinted ? _( "SPLINT" ) : _( "BROKE" ) }
-            : std::format( "{}/{}", cur, max ),
+: std::format( "{}/{}", cur, max ),
             .label_ink = cur >= max ? ink::label : ink::datum,
             .value_ink = value_ink,
             .inverted = critical,
@@ -759,8 +761,9 @@ auto hud_soma( avatar &u, const hud_phosphor::layout &l ) -> std::string
     const auto roster = character_display::effect_name_and_text( u );
     if( roster.empty() ) {
         rows.push_back( compose( { .segs = { { .i = ink::rule, .text = " " },
-                                             { .i = ink::dead, .text = _( "NONE" ) } },
-                                   .cols = cols, .border = glyph_vert } ) );
+                { .i = ink::dead, .text = _( "NONE" ) }
+            },
+            .cols = cols, .border = glyph_vert } ) );
     } else {
         const auto tiers = effect_tiers( u );
         const auto grid_r = roster_grid_for( cols );
@@ -780,7 +783,7 @@ auto hud_soma( avatar &u, const hud_phosphor::layout &l ) -> std::string
     }
 
     const auto closer = hud_phosphor::rule( { .cols = cols,
-                                              .right = std::string( glyph_corner_br ) } );
+                                            .right = std::string( glyph_corner_br ) } );
     return wrap_rows( clamp_rows( std::move( rows ), l.soma.rows, closer ) );
 }
 
@@ -827,15 +830,16 @@ auto hud_dock( avatar &u, const hud_phosphor::layout &l ) -> std::string
     const auto bearing = has_mission
                          ? std::format( "{} {}", rl_dist( here, target_omt ),
                                         direction_name_short( direction_from( here.raw().xy(),
-                                                target_omt.raw().xy() ) ) )
+                                            target_omt.raw().xy() ) ) )
                          : std::string( _( "NONE" ) );
     rows.push_back( compose( {
         .segs = justify( { { .i = ink::rule, .text = " " },
             { .i = has_mission ? ink::peak : ink::dead, .text = "^" },
             { .i = ink::rule, .text = " " },
             { .i = ink::label, .text = _( "MISSION MARKER" ) } },
-        { { .i = has_mission ? ink::peak : ink::dead, .text = bearing },
-            { .i = ink::rule, .text = " " } },
+        {   { .i = has_mission ? ink::peak : ink::dead, .text = bearing },
+            { .i = ink::rule, .text = " " }
+        },
         cols - 1 ),
         .cols = cols, .border = glyph_vert, .border_leads = true,
     } ) );
@@ -857,8 +861,9 @@ auto hud_dock( avatar &u, const hud_phosphor::layout &l ) -> std::string
         rows.push_back( compose( {
             .segs = justify( { { .i = ink::rule, .text = " " },
                 { .i = ink::peak, .text = to_upper_case( t->disp_name() ) } },
-            { { .i = ink::datum, .text = string_format( _( "%d TILES %s" ), range, heading ) },
-                { .i = ink::rule, .text = " " } },
+            {   { .i = ink::datum, .text = string_format( _( "%d TILES %s" ), range, heading ) },
+                { .i = ink::rule, .text = " " }
+            },
             cols - 1 ),
             .cols = cols, .border = glyph_vert, .border_leads = true,
         } ) );
@@ -871,11 +876,15 @@ auto hud_dock( avatar &u, const hud_phosphor::layout &l ) -> std::string
             .segs = justify( { { .i = ink::rule, .text = " " },
                 { .i = ink::label, .text = _( "HP" ) },
                 { .i = ink::rule, .text = " " },
-                { .text = hud_phosphor::bar( { .cur = hp, .max = hp_max, .cells = bar_cells,
-                                               .intact_recedes = false } ),
-                    .raw = true, .cells = bar_cells } },
-            { { .i = ink::datum, .text = std::format( "{}%", pct ) },
-                { .i = ink::rule, .text = " " } },
+                {
+                    .text = hud_phosphor::bar( {
+                        .cur = hp, .max = hp_max, .cells = bar_cells,
+                        .intact_recedes = false } ),
+                    .raw = true, .cells = bar_cells
+                } },
+            {   { .i = ink::datum, .text = std::format( "{}%", pct ) },
+                { .i = ink::rule, .text = " " }
+            },
             cols - 1 ),
             .cols = cols, .border = glyph_vert, .border_leads = true,
         } ) );
@@ -887,8 +896,9 @@ auto hud_dock( avatar &u, const hud_phosphor::layout &l ) -> std::string
     } else {
         // No target collapses to one line rather than framing an empty box.
         rows.push_back( compose( { .segs = { { .i = ink::rule, .text = " " },
-                                             { .i = ink::dead, .text = _( "NO TARGET" ) } },
-                                   .cols = cols, .border = glyph_vert, .border_leads = true } ) );
+                { .i = ink::dead, .text = _( "NO TARGET" ) }
+            },
+            .cols = cols, .border = glyph_vert, .border_leads = true } ) );
     }
 
     // ── Arms ────────────────────────────────────────────────────────────────
@@ -937,9 +947,12 @@ auto hud_dock( avatar &u, const hud_phosphor::layout &l ) -> std::string
                 { .i = ink::label, .text = hud_phosphor::pad( _( "ALT" ), dock_label_cells ) },
                 { .i = ink::rule, .text = " " },
                 { .i = ink::datum, .text = to_upper_case( sidearm->tname() ) } },
-            { { .i = loaded > 0 ? ink::datum : ink::dead,
-                    .text = std::format( "{}/{}", loaded, capacity ) },
-                { .i = ink::rule, .text = " " } },
+            {   {
+                    .i = loaded > 0 ? ink::datum : ink::dead,
+                    .text = std::format( "{}/{}", loaded, capacity )
+                },
+                { .i = ink::rule, .text = " " }
+            },
             cols - 1 ),
             .cols = cols, .border = glyph_vert, .border_leads = true,
         } ) );
@@ -947,12 +960,12 @@ auto hud_dock( avatar &u, const hud_phosphor::layout &l ) -> std::string
         const auto *ammo = sidearm->ammo_data();
         rows.push_back( field_row( { .label = {},
                                      .value = ammo != nullptr ? to_upper_case( ammo->nname( 1 ) )
-                                     : _( "EMPTY" ),
+                                              : _( "EMPTY" ),
                                      .value_ink = ammo != nullptr ? ink::label : ink::dead,
                                      .cols = cols } ) );
     }
 
     const auto closer = hud_phosphor::rule( { .cols = cols,
-                                              .left = std::string( glyph_corner_bl ) } );
+                                            .left = std::string( glyph_corner_bl ) } );
     return wrap_rows( clamp_rows( std::move( rows ), l.dock.rows, closer ) );
 }

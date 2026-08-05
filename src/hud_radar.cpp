@@ -116,46 +116,46 @@ enum class tclass : int { empty = 0, stairs, opening, wall, water, vegetation, a
 auto terrain_class_of( const ter_t &t ) -> tclass
 {
     if( t.is_null() ) {
-        return tclass::empty;
-    }
-    const auto wet = t.has_flag( TFLAG_SWIMMABLE ) || t.has_flag( TFLAG_LIQUID ) ||
-                     t.has_flag( TFLAG_DEEP_WATER );
-    // Water is excluded from the level-change test rather than tested after it,
-    // because deep water carries GOES_UP/GOES_DOWN so a swimmer can surface and
-    // dive: 19 terrains do, `t_lake_bed`, `t_ocean_bed` and `t_water_dp` among
-    // them. Taking the flags at face value painted every lake as a staircase at
-    // `ink::peak` — the brightest rung on the ladder, for the least structure on
-    // the map. An underwater staircase consequently reads as water, which is the
-    // right trade: one rare tile loses its marker, every lake stops blazing.
-    if( !wet && ( t.has_flag( TFLAG_GOES_UP ) || t.has_flag( TFLAG_GOES_DOWN ) ||
-                  t.has_flag( TFLAG_RAMP ) ) ) {
+    return tclass::empty;
+}
+const auto wet = t.has_flag( TFLAG_SWIMMABLE ) || t.has_flag( TFLAG_LIQUID ) ||
+                 t.has_flag( TFLAG_DEEP_WATER );
+// Water is excluded from the level-change test rather than tested after it,
+// because deep water carries GOES_UP/GOES_DOWN so a swimmer can surface and
+// dive: 19 terrains do, `t_lake_bed`, `t_ocean_bed` and `t_water_dp` among
+// them. Taking the flags at face value painted every lake as a staircase at
+// `ink::peak` — the brightest rung on the ladder, for the least structure on
+// the map. An underwater staircase consequently reads as water, which is the
+// right trade: one rare tile loses its marker, every lake stops blazing.
+if( !wet && ( t.has_flag( TFLAG_GOES_UP ) || t.has_flag( TFLAG_GOES_DOWN ) ||
+                      t.has_flag( TFLAG_RAMP ) ) ) {
         return tclass::stairs;
     }
     // No flag marks a door or a window; a door is exactly a terrain that has an
     // open or close transform, which is also what makes gates and hatches read
     // correctly here.
     if( !t.open.is_null() || !t.close.is_null() ) {
-        return tclass::opening;
-    }
-    if( t.has_flag( TFLAG_WALL ) ) {
-        // A wall you can see through IS a window. Checked before `wet` so a
-        // submerged wall still reads as the structure it is.
-        return t.transparent ? tclass::opening : tclass::wall;
-    }
-    if( wet ) {
-        return tclass::water;
-    }
-    if( t.has_flag( TFLAG_TREE ) || t.has_flag( TFLAG_SHRUB ) ) {
-        return tclass::vegetation;
-    }
-    if( t.has_flag( TFLAG_NO_FLOOR ) ) {
-        return tclass::air;
-    }
-    // `ROAD` is the flag every hard man-made surface carries — pavement, sidewalk,
-    // concrete, metal and board floors — and that no soil, grass or sand carries.
-    // It has no cached `ter_bitflags` entry, so it costs a `std::set<std::string>`
-    // lookup, which is the other half of why this function is memoised.
-    return t.has_flag( "ROAD" ) ? tclass::paved : tclass::soil;
+    return tclass::opening;
+}
+if( t.has_flag( TFLAG_WALL ) ) {
+    // A wall you can see through IS a window. Checked before `wet` so a
+    // submerged wall still reads as the structure it is.
+    return t.transparent ? tclass::opening : tclass::wall;
+}
+if( wet ) {
+    return tclass::water;
+}
+if( t.has_flag( TFLAG_TREE ) || t.has_flag( TFLAG_SHRUB ) ) {
+    return tclass::vegetation;
+}
+if( t.has_flag( TFLAG_NO_FLOOR ) ) {
+    return tclass::air;
+}
+// `ROAD` is the flag every hard man-made surface carries — pavement, sidewalk,
+// concrete, metal and board floors — and that no soil, grass or sand carries.
+// It has no cached `ter_bitflags` entry, so it costs a `std::set<std::string>`
+// lookup, which is the other half of why this function is memoised.
+return t.has_flag( "ROAD" ) ? tclass::paved : tclass::soil;
 }
 
 /// `terrain_class_of`, memoised per terrain type.
@@ -185,21 +185,31 @@ auto classify( const map &m, const tripoint_bub_ms &p, bool indoors ) -> cat
 {
     const auto tc = terrain_class( m.ter( p ) );
     switch( tc ) {
-        case tclass::empty:   return cat::none;
-        case tclass::stairs:  return cat::stairs;
-        case tclass::opening: return cat::opening;
-        case tclass::wall:    return cat::wall;
-        default:              break;
+        case tclass::empty:
+            return cat::none;
+        case tclass::stairs:
+            return cat::stairs;
+        case tclass::opening:
+            return cat::opening;
+        case tclass::wall:
+            return cat::wall;
+        default:
+            break;
     }
     if( m.has_furn( p ) ) {
         return cat::furniture;
     }
     switch( tc ) {
-        case tclass::water:      return cat::water;
-        case tclass::vegetation: return cat::vegetation;
-        case tclass::air:        return cat::none;
-        case tclass::paved:      return indoors ? cat::floor_in : cat::paved;
-        default:                 return indoors ? cat::floor_in : cat::soil;
+        case tclass::water:
+            return cat::water;
+        case tclass::vegetation:
+            return cat::vegetation;
+        case tclass::air:
+            return cat::none;
+        case tclass::paved:
+            return indoors ? cat::floor_in : cat::paved;
+        default:
+            return indoors ? cat::floor_in : cat::soil;
     }
 }
 

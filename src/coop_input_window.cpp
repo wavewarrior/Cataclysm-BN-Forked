@@ -17,11 +17,11 @@ auto coop_tick_cost_tracker::sample( double tick_ms ) -> void
 {
     // A negative or non-finite sample means the clock jumped; keep the previous estimate.
     if( !std::isfinite( tick_ms ) || tick_ms < 0.0 ) { return; }
-    if( ewma_ms == 0.0 ) {
-        ewma_ms = tick_ms;
-        return;
-    }
-    ewma_ms = COOP_INPUT_EWMA_ALPHA * tick_ms + ( 1.0 - COOP_INPUT_EWMA_ALPHA ) * ewma_ms;
+if( ewma_ms == 0.0 ) {
+    ewma_ms = tick_ms;
+    return;
+}
+ewma_ms = COOP_INPUT_EWMA_ALPHA * tick_ms + ( 1.0 - COOP_INPUT_EWMA_ALPHA ) * ewma_ms;
 }
 
 auto coop_input_window_ms( double local_ewma_ms, double remote_ewma_ms ) -> double

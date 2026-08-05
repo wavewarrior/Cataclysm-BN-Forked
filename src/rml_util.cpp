@@ -96,7 +96,7 @@ void clear_nc_color_cache()
 // `resolve` picks which palette the tags map through — see cata_text_to_rml and
 // cata_text_to_rml_hud below.
 static std::string cata_text_to_rml_with( const std::string& s,
-        std::string( *resolve )( const nc_color& ) )
+        std::string( *resolve )( const nc_color & ) )
 {
     const std::vector<std::string> segs = split_by_color( s );
     std::string result;

@@ -148,10 +148,10 @@ auto pointer_dp() -> std::pair<float, float>
 auto slot_under_pointer( const ring_geom &g ) -> std::optional<int>
 {
     if( !g.valid ) { return std::nullopt; }
-    const auto [mx, my] = pointer_dp();
-    const float dx = mx - g.cx;
-    const float dy = my - g.cy;
-    if( std::hypot( dx, dy ) < DEAD_ZONE_DP ) { return std::nullopt; }
+const auto [mx, my] = pointer_dp();
+const float dx = mx - g.cx;
+const float dy = my - g.cy;
+if( std::hypot( dx, dy ) < DEAD_ZONE_DP ) { return std::nullopt; }
     constexpr float pi = std::numbers::pi_v<float>;
     // Rotate so slot 0's centre lands on 0, then quantise to the nearest wedge.
     float t = ( std::atan2( dy, dx ) + 0.5f * pi ) / ( 2.0f * pi );
@@ -248,28 +248,28 @@ auto show_throw_quickslot_radial( avatar &u ) -> throw_radial_result
     // caller to fall back rather than spinning a loop over an invisible UI.
     if( !rml ) { return { .shown = false, .slot = std::nullopt }; }
 
-    // Hold vs sticky. non_modifier_keys_held() is the event-tracked physical
-    // count, so this works for any binding (including the CTRL+T default) without
-    // knowing which key fired the action. NOT const: a tap demotes it below.
-    bool hold_mode =
-        get_option<bool>( "THROW_RADIAL_HOLD" ) && sdl_input::non_modifier_keys_held() > 0;
-    const uint64_t opened_at = get_sdl_ticks();
+// Hold vs sticky. non_modifier_keys_held() is the event-tracked physical
+// count, so this works for any binding (including the CTRL+T default) without
+// knowing which key fired the action. NOT const: a tap demotes it below.
+bool hold_mode =
+    get_option<bool>( "THROW_RADIAL_HOLD" ) && sdl_input::non_modifier_keys_held() > 0;
+const uint64_t opened_at = get_sdl_ticks();
 
-    ring_geom geom = compute_ring();
-    const int active_slot = u.get_active_throw_slot();
-    std::optional<int> sel =
-        active_slot >= 0 ? std::optional<int>( active_slot ) : std::nullopt;
-    sync( *data, rml.document(), u, sel );
-    apply_rect( rml.document(), geom );
+ring_geom geom = compute_ring();
+const int active_slot = u.get_active_throw_slot();
+std::optional<int> sel =
+    active_slot >= 0 ? std::optional<int>( active_slot ) : std::nullopt;
+sync( *data, rml.document(), u, sel );
+apply_rect( rml.document(), geom );
 
-    // Only a slot that can actually be thrown commits; an empty wedge cancels.
-    const auto commit = [&u]( std::optional<int> s ) -> throw_radial_result {
-        const bool ok = s.has_value() && *s >= 0 && *s < SLOTS && !u.is_throw_slot_empty( *s );
+// Only a slot that can actually be thrown commits; an empty wedge cancels.
+const auto commit = [&u]( std::optional<int> s ) -> throw_radial_result {
+    const bool ok = s.has_value() && *s >= 0 && *s < SLOTS && !u.is_throw_slot_empty( *s );
         return { .shown = true, .slot = ok ? s : std::nullopt };
     };
 
     while( true ) {
-        ui_manager::redraw();
+    ui_manager::redraw();
         const std::string action = ctxt.handle_input();
 
         if( action == "TIMEOUT" ) {

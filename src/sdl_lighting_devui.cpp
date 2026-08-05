@@ -1081,7 +1081,15 @@ void rml_tick()
             } else {
                 g_devui_shadow_steps = static_cast<int>( g_dbg_params.shadow_steps );
             }
-            last_ss = g_devui_shadow_steps;
+            // debug_mode (uint32): reconcile with the int proxy — whichever side changed wins.
+            static int last_dm = -1;
+            if( g_devui_dbg_mode != last_dm ) {
+                g_current_dbg_mode = static_cast<uint32_t>( std::max( 0, g_devui_dbg_mode ) );
+                g_dbg_params.debug_mode = g_current_dbg_mode;
+            } else {
+                g_devui_dbg_mode = static_cast<int>( g_current_dbg_mode );
+            }
+            last_dm = g_devui_dbg_mode;
             // placed-light count (size_t → int readout).
             g_devui_placed = static_cast<int>( dev_test_lights::lights.size() );
             // runic auto-regen: bump regen when any edited field changed (cheap field sum).

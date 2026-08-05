@@ -362,12 +362,14 @@ void map::update_visibility_cache( const int zlev )
     // always asks for the same extent and the table is built once, not rebuilt
     // whenever it steps closer to an edge.
     const auto axis_span = []( const int player_coord, const int extent ) -> int {
-        if( extent <= 0 ) {
+        if( extent <= 0 )
+        {
             return -1;
         }
-        return std::max( { extent - 1,
-                           std::abs( player_coord ),
-                           std::abs( extent - 1 - player_coord ) } );
+        return std::max( {
+            extent - 1,
+            std::abs( player_coord ),
+            std::abs( extent - 1 - player_coord ) } );
     };
     auto span_dx = -1;
     auto span_dy = -1;
@@ -388,7 +390,7 @@ void map::update_visibility_cache( const int zlev )
     const auto distance_table_owner =
         trigdist
         ? get_rl_dist_lookup_table( table_dimensions )
-        : std::shared_ptr<const rl_dist_lookup_table>{};
+        : std::shared_ptr<const rl_dist_lookup_table> {};
     const auto* distance_table = distance_table_owner.get();
     if( distance_table != nullptr && !distance_table->matches( table_dimensions ) ) {
         // Unreachable through get_rl_dist_lookup_table's contract.  Checked once

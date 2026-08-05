@@ -1,5 +1,5 @@
 #include "sdl_window.h"
-
+#include <atomic>
 #include <algorithm>
 
 #include "cached_options.h"
@@ -78,7 +78,7 @@ auto sync_update_interval_to_display( SDL_Window *window ) -> void
     }
     if( mode->refresh_rate <= 0.0f ) {
         dbg( DL::Info ) << "Display " << display_id << " reports an unknown refresh rate; "
-                        "keeping redraw interval at " << g_display.interval << " ms";
+                           "keeping redraw interval at " << g_display.interval << " ms";
         return;
     }
     const auto derived = static_cast<uint32_t>( 1000.0f / mode->refresh_rate );
@@ -363,7 +363,7 @@ bool handle_resize( int w, int h )
     // Guard against recursive re-entry: handle_resize → ui_manager::screen_resized
     // → redraw → try_sdl_update → CheckMessages → handle_resize again.
     // The inner call would operate on partially-updated display state and crash.
-    static bool in_resize = false;
+    static std::atomic<bool> in_resize{false};
     if( in_resize ) {
         return false;
     }

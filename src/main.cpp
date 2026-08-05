@@ -752,7 +752,8 @@ int main( int argc, char* argv[] )
                         const bool evictable =
                             can_action_change_worldstate( look_up_action( action_str ) );
                         coop_admit_action( g->pending_action_queue_, { .action = action_str,
-                                           .enqueued_ms = now_ms(), .evictable = evictable } );
+                                           .enqueued_ms = now_ms(), .evictable = evictable
+                                                                     } );
                         host_acted = true;
                     }
                 }

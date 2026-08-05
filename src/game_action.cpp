@@ -2163,14 +2163,14 @@ auto game::coop_client_turn_step() -> void
 
     // If controlling a vehicle that is owned by someone else
     if( u.in_vehicle && u.controlling_vehicle ) {
-        vehicle *veh = veh_pointer_or_null( m.veh_at( u.bub_pos() ) );
+    vehicle *veh = veh_pointer_or_null( m.veh_at( u.bub_pos() ) );
         if( veh && !veh->handle_potential_theft( u, true ) ) {
             veh->handle_potential_theft( u, false, false );
         }
     }
     // If riding a horse - chance to spook
     if( u.is_mounted() ) {
-        u.check_mount_is_spooked();
+    u.check_mount_is_spooked();
     }
 
     u.update_body();
@@ -2178,7 +2178,7 @@ auto game::coop_client_turn_step() -> void
     // Auto-save if autosave is enabled
     if( get_option<bool>( "AUTOSAVE" ) &&
         calendar::once_every( 1_turns * get_option<int>( "AUTOSAVE_TURNS" ) ) &&
-        !u.is_dead_state() ) {
+            !u.is_dead_state() ) {
         autosave();
     }
 
@@ -2195,7 +2195,7 @@ auto game::coop_client_turn_step() -> void
     sounds::reset_markers();
     sounds::process_sound_markers( &u );
     if( u.is_deaf() ) {
-        sfx::do_hearing_loss();
+    sfx::do_hearing_loss();
     }
     // process_sounds() is host-only (it signals hordes and drives monster AI), so drain the
     // monster-AI sound list by hand or it grows for the whole session.
@@ -2203,7 +2203,7 @@ auto game::coop_client_turn_step() -> void
 
     // No-scent debug mutation has to be processed here or else it takes time to start working
     if( !u.has_active_bionic( bionic_id( "bio_scent_mask" ) ) &&
-        !u.has_trait( trait_id( "DEBUG_NOSCENT" ) ) ) {
+            !u.has_trait( trait_id( "DEBUG_NOSCENT" ) ) ) {
         scent.set( u.bub_pos(), u.scent, u.get_type_of_scent() );
         get_overmapbuffer( current_dimension_id_ ).set_scent( u.abs_omt_pos(), u.scent );
     }
@@ -2219,7 +2219,7 @@ auto game::coop_client_turn_step() -> void
     cleanup_dead();
 
     if( get_levz() >= 0 && !u.is_underwater() ) {
-        handle_weather_effects( weather.weather_id );
+    handle_weather_effects( weather.weather_id );
     }
 
     u.update_bodytemp( m, weather );
@@ -2240,7 +2240,7 @@ auto game::coop_client_frame_step() -> void
     update_performance_bubble();
 
     if( driving_view_offset.x != 0 || driving_view_offset.y != 0 ) {
-        vehicle *veh = veh_pointer_or_null( m.veh_at( u.bub_pos() ) );
+    vehicle *veh = veh_pointer_or_null( m.veh_at( u.bub_pos() ) );
         calc_driving_offset( veh );
     }
 
@@ -2251,7 +2251,7 @@ auto game::coop_client_frame_step() -> void
     handle_wait_activity_redraw();
 
     if( !u.is_deaf() ) {
-        sfx::remove_hearing_loss();
+    sfx::remove_hearing_loss();
     }
     sfx::do_danger_music();
     sfx::do_vehicle_engine_sfx();

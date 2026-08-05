@@ -113,21 +113,21 @@ std::shared_ptr<const rl_dist_lookup_table>
 {
     if( !dimensions.is_buildable() ) {
     return nullptr;
-    }
+}
 
-    static std::mutex distance_table_mutex;
-    static std::shared_ptr<const rl_dist_lookup_table> published;
+static std::mutex distance_table_mutex;
+static std::shared_ptr<const rl_dist_lookup_table> published;
 
-    const std::lock_guard<std::mutex> lock( distance_table_mutex );
-    if( !published || !published->matches( dimensions ) ) {
-        // Grow monotonically: matches() already accepts a larger table, so never
-        // shrink an axis on rebuild.  A caller whose extents move in opposite
-        // directions on different axes (a smaller bubble but a taller z range)
-        // would otherwise rebuild a multi-megabyte table on every call.  A
-        // different distance mode invalidates the contents, so that case builds
-        // exactly what was asked for.
-        auto grown = dimensions;
-        if( published && published->dimensions().trigdist == dimensions.trigdist ) {
+const std::lock_guard<std::mutex> lock( distance_table_mutex );
+if( !published || !published->matches( dimensions ) ) {
+    // Grow monotonically: matches() already accepts a larger table, so never
+    // shrink an axis on rebuild.  A caller whose extents move in opposite
+    // directions on different axes (a smaller bubble but a taller z range)
+    // would otherwise rebuild a multi-megabyte table on every call.  A
+    // different distance mode invalidates the contents, so that case builds
+    // exactly what was asked for.
+    auto grown = dimensions;
+    if( published && published->dimensions().trigdist == dimensions.trigdist ) {
             const auto& current = published->dimensions();
             grown.max_dx = std::max( grown.max_dx, current.max_dx );
             grown.max_dy = std::max( grown.max_dy, current.max_dy );

@@ -181,8 +181,8 @@ int distribution_grid::get_resource( bool recurse ) const
     }
     int res = 0;
     std::vector<vehicle *> connected_vehicles;
-    for( const auto &c : contents ) {
-        submap *const sm = mb.lookup_submap( c.first );
+for( const auto &c : contents ) {
+    submap *const sm = mb.lookup_submap( c.first );
         for( const tile_location &loc : c.second ) {
             battery_tile *battery = furn_in_submap<battery_tile>( sm, loc );
             if( battery != nullptr ) {

@@ -38,8 +38,7 @@ class test_surface
     public:
         test_surface( int w, int h )
             : s_( SDL_CreateSurface( w, h, SDL_PIXELFORMAT_RGBA32 ) ) {}
-        ~test_surface()
-        {
+        ~test_surface() {
             if( s_ != nullptr ) {
                 SDL_DestroySurface( s_ );
             }
@@ -53,8 +52,7 @@ class test_surface
         auto width() const -> int { return s_->w; }
         auto height() const -> int { return s_->h; }
 
-        auto fill( const rgba &c ) -> void
-        {
+        auto fill( const rgba &c ) -> void {
             for( int y = 0; y < s_->h; ++y ) {
                 for( int x = 0; x < s_->w; ++x ) {
                     set( x, y, c );
@@ -63,31 +61,27 @@ class test_surface
         }
         /// Paints every pixel from `f( x, y ) -> rgba`.
         template<typename F>
-        auto paint( F &&f ) -> void
-        {
+        auto paint( F &&f ) -> void {
             for( int y = 0; y < s_->h; ++y ) {
                 for( int x = 0; x < s_->w; ++x ) {
                     set( x, y, f( x, y ) );
                 }
             }
         }
-        auto set( int x, int y, const rgba &c ) -> void
-        {
+        auto set( int x, int y, const rgba &c ) -> void {
             std::uint8_t *px = byte_at( x, y );
             px[0] = c[0];
             px[1] = c[1];
             px[2] = c[2];
             px[3] = c[3];
         }
-        auto at( int x, int y ) const -> rgba
-        {
+        auto at( int x, int y ) const -> rgba {
             const std::uint8_t *px = byte_at( x, y );
             return rgba{ px[0], px[1], px[2], px[3] };
         }
 
     private:
-        auto byte_at( int x, int y ) const -> std::uint8_t * // *NOPAD*
-        {
+        auto byte_at( int x, int y ) const -> std::uint8_t * { // *NOPAD*
             return static_cast<std::uint8_t *>( s_->pixels )
                    + static_cast<std::ptrdiff_t>( y ) * s_->pitch
                    + static_cast<std::ptrdiff_t>( x ) * 4;
@@ -130,8 +124,7 @@ auto non_neutral_texels( const test_surface &s ) -> int
 
 /// Runs the generator over the whole of `src` into a freshly sentinel-filled `dst`.
 auto run_gen( const test_surface &src, test_surface &dst,
-              const lighting::normal_gen_params &p = {} ) -> lighting::normal_gen_stats
-{
+const lighting::normal_gen_params &p = {} ) -> lighting::normal_gen_stats {
     dst.fill( SENTINEL );
     return lighting::generate_sprite_normal( {
         .src = src.get(),
@@ -321,7 +314,7 @@ TEST_CASE( "the coherence gate keeps brick and rejects dither", "[normal_gen]" )
         test_surface src( TILE, TILE );
         REQUIRE( src.get() != nullptr );
         src.paint( []( int, int y ) -> rgba {
-            return y % 8 == 0 ? rgba{ 200, 200, 195, 255 } : rgba{ 140, 70, 55, 255 };
+return y % 8 == 0 ? rgba{ 200, 200, 195, 255 } : rgba{ 140, 70, 55, 255 };
         } );
         test_surface dst( TILE, TILE );
         REQUIRE( dst.get() != nullptr );
@@ -348,7 +341,7 @@ TEST_CASE( "the coherence gate keeps brick and rejects dither", "[normal_gen]" )
         test_surface src( TILE, TILE );
         REQUIRE( src.get() != nullptr );
         src.paint( []( int x, int y ) -> rgba {
-            return ( x + y ) % 2 == 0 ? rgba{ 90, 90, 90, 255 } : rgba{ 150, 150, 150, 255 };
+return ( x + y ) % 2 == 0 ? rgba{ 90, 90, 90, 255 } : rgba{ 150, 150, 150, 255 };
         } );
         test_surface dst( TILE, TILE );
         REQUIRE( dst.get() != nullptr );
@@ -374,7 +367,7 @@ TEST_CASE( "the sparse gate refuses to invent relief from speckles", "[normal_ge
     REQUIRE( src.get() != nullptr );
     src.paint( []( int x, int y ) -> rgba {
         const bool spot = ( x == 5 && y == 5 ) || ( x == 20 && y == 9 ) || ( x == 11 && y == 26 );
-        return spot ? rgba{ 240, 240, 240, 255 } : rgba{ 100, 100, 100, 255 };
+return spot ? rgba{ 240, 240, 240, 255 } : rgba{ 100, 100, 100, 255 };
     } );
     test_surface dst( TILE, TILE );
     REQUIRE( dst.get() != nullptr );
@@ -411,7 +404,7 @@ TEST_CASE( "the flat gate short-circuits a sprite with no contours", "[normal_ge
     test_surface src( TILE, TILE );
     REQUIRE( src.get() != nullptr );
     src.paint( []( int x, int ) -> rgba {
-        return x % 2 == 0 ? rgba{ 100, 100, 100, 255 } : rgba{ 105, 100, 100, 255 };
+return x % 2 == 0 ? rgba{ 100, 100, 100, 255 } : rgba{ 105, 100, 100, 255 };
     } );
     test_surface dst( TILE, TILE );
     REQUIRE( dst.get() != nullptr );
@@ -455,7 +448,7 @@ TEST_CASE( "normal encoding pins the axis and the sign", "[normal_gen]" )
         test_surface src( TILE, TILE );
         REQUIRE( src.get() != nullptr );
         src.paint( []( int, int y ) -> rgba {
-            return y == 4 ? rgba{ 230, 230, 230, 255 } : rgba{ 90, 80, 70, 255 };
+return y == 4 ? rgba{ 230, 230, 230, 255 } : rgba{ 90, 80, 70, 255 };
         } );
         test_surface dst( TILE, TILE );
         REQUIRE( dst.get() != nullptr );
@@ -480,7 +473,7 @@ TEST_CASE( "normal encoding pins the axis and the sign", "[normal_gen]" )
         test_surface src( TILE, TILE );
         REQUIRE( src.get() != nullptr );
         src.paint( []( int x, int ) -> rgba {
-            return x == 4 ? rgba{ 230, 230, 230, 255 } : rgba{ 90, 80, 70, 255 };
+return x == 4 ? rgba{ 230, 230, 230, 255 } : rgba{ 90, 80, 70, 255 };
         } );
         test_surface dst( TILE, TILE );
         REQUIRE( dst.get() != nullptr );
@@ -508,11 +501,12 @@ TEST_CASE( "transparent texels carry zero blend weight", "[normal_gen]" )
     REQUIRE( src.get() != nullptr );
     const auto inside = []( int x, int y ) { return x >= 8 && x <= 23 && y >= 8 && y <= 23; };
     src.paint( [&inside]( int x, int y ) -> rgba {
-        if( !inside( x, y ) ) {
-            return rgba{ 0, 0, 0, 0 };
-        }
-        return y % 4 == 0 ? rgba{ 200, 200, 195, 255 } : rgba{ 140, 70, 55, 255 };
-    } );
+        if( !inside( x, y ) )
+    {
+        return rgba{ 0, 0, 0, 0 };
+    }
+    return y % 4 == 0 ? rgba{ 200, 200, 195, 255 } : rgba{ 140, 70, 55, 255 };
+} );
     test_surface dst( TILE, TILE );
     REQUIRE( dst.get() != nullptr );
 
@@ -547,7 +541,8 @@ TEST_CASE( "generate_sprite_normal refuses to write outside its surfaces", "[nor
     REQUIRE( dst.get() != nullptr );
 
     const auto untouched = [&dst]() -> bool {
-        for( int y = 0; y < TILE; ++y ) {
+        for( int y = 0; y < TILE; ++y )
+        {
             for( int x = 0; x < TILE; ++x ) {
                 if( dst.at( x, y ) != SENTINEL ) {
                     return false;

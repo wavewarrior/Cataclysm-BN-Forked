@@ -423,19 +423,19 @@ int s_non_mod_keys_held = 0;
 auto is_modifier_scancode( uint32_t sc ) -> bool
 {
     switch( sc ) {
-        case SDL_SCANCODE_LCTRL:
-        case SDL_SCANCODE_RCTRL:
-        case SDL_SCANCODE_LSHIFT:
-        case SDL_SCANCODE_RSHIFT:
-        case SDL_SCANCODE_LALT:
-        case SDL_SCANCODE_RALT:
-        case SDL_SCANCODE_LGUI:
-        case SDL_SCANCODE_RGUI:
-        case SDL_SCANCODE_MODE:
-            return true;
-        default:
-            return false;
-    }
+    case SDL_SCANCODE_LCTRL:
+    case SDL_SCANCODE_RCTRL:
+    case SDL_SCANCODE_LSHIFT:
+    case SDL_SCANCODE_RSHIFT:
+    case SDL_SCANCODE_LALT:
+    case SDL_SCANCODE_RALT:
+    case SDL_SCANCODE_LGUI:
+    case SDL_SCANCODE_RGUI:
+    case SDL_SCANCODE_MODE:
+        return true;
+    default:
+        return false;
+}
 }
 
 // Edge-triggered, so SDL key repeat cannot inflate the count.

@@ -128,9 +128,9 @@ struct draw_zone_overlay_options {
 
 void draw_zone_overlay( const draw_zone_overlay_options& opt )
 {
-    lighting::overlay_rect(
-    { static_cast<float>( opt.rect.x ), static_cast<float>( opt.rect.y ),
-      static_cast<float>( opt.rect.w ), static_cast<float>( opt.rect.h ) },
+    lighting::overlay_rect( {
+        static_cast<float>( opt.rect.x ), static_cast<float>( opt.rect.y ),
+        static_cast<float>( opt.rect.w ), static_cast<float>( opt.rect.h ) },
     lighting::overlay_color_from_bytes( opt.color.r, opt.color.g, opt.color.b, opt.alpha ) );
 
     if( opt.draw_label && !opt.name.empty() ) {
@@ -1187,7 +1187,7 @@ void cata_tiles::draw(
                 record_splat_frame(
                     draw_points, z, here.get_abs_sub(), tile_width, tile_height,
                     lighting::get_render_state().tile_sprite_count(),
-                    [this]( point_bub_ms p ) { return player_to_screen( p ); } );
+                [this]( point_bub_ms p ) { return player_to_screen( p ); } );
             }
             // ---- Pass 2: ground entities (field_or_item, vpart, in row order) + creature
             // collection ----
@@ -2337,7 +2337,8 @@ bool cata_tiles::draw_sprite_at(
             .face_amt = enq_face,
             .flash_r = flash_r,
             .flash_g = flash_g,
-            .flash_b = flash_b } );
+            .flash_b = flash_b
+        } );
         // Step 2: capture this sprite's alpha footprint for the SDF seed. Foreground
         // only — the BACKGROUND layer of a wall tile is the floor underneath it, which
         // is opaque across the whole square and would re-create the very tile-square
@@ -2370,7 +2371,8 @@ bool cata_tiles::draw_sprite_at(
                         .rotation_degrees = static_cast<double>( rotation ) + active_anim_xform_.tilt_deg,
                         .light_r = gpu_light_r,
                         .light_g = gpu_light_g,
-                        .light_b = gpu_light_b } );
+                        .light_b = gpu_light_b
+                    } );
                 }
             }
         }
@@ -2480,9 +2482,9 @@ bool cata_tiles::draw_tile_at(
 
 auto cata_tiles::draw_color_at( const SDL_Color& color, point_bub_ms pos ) -> void
 {
-    lighting::overlay_rect(
-    { static_cast<float>( pos.x() ), static_cast<float>( pos.y() ),
-      static_cast<float>( tile_width ), static_cast<float>( tile_height ) },
+    lighting::overlay_rect( {
+        static_cast<float>( pos.x() ), static_cast<float>( pos.y() ),
+        static_cast<float>( tile_width ), static_cast<float>( tile_height ) },
     lighting::overlay_color_from_bytes( color.r, color.g, color.b, color.a ) );
 }
 

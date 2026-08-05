@@ -53,13 +53,13 @@ struct tile_light_query {
 constexpr auto classify_tile_light( const tile_light_query &q ) -> sprite_light_mode
 {
     if( q.as_independent_entity || q.is_overmap || !q.world_present ) {
-        return sprite_light_mode::unlit;
-    }
-    if( !q.lighting_ready ) {
-        return sprite_light_mode::unlit;
-    }
-    if( q.memorized ) {
-        return sprite_light_mode::memory;
-    }
-    return sprite_light_mode::gpu_lit;
+    return sprite_light_mode::unlit;
+}
+if( !q.lighting_ready ) {
+    return sprite_light_mode::unlit;
+}
+if( q.memorized ) {
+    return sprite_light_mode::memory;
+}
+return sprite_light_mode::gpu_lit;
 }
