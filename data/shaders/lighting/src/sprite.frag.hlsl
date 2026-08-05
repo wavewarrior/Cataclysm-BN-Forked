@@ -617,13 +617,21 @@ float4 main(VS_OUT i) : SV_Target0 {
     // Offset from centre, normalised by half-extents (aspect-correct, [-0.5, 0.5]).
     // Centre faces viewer (+Z), edges face sideways. Blends with atlas micro-relief
     // so edge detail survives. nrm_radial_amount=0 is exact no-op.
-    // GATED: only applies to sprites WITHOUT face_arc (face_amt == 0). Walls, windows,
-    // and tall furniture use their per-edge cardinal normals instead.
+    // GATED: only for TALL sprites (creatures/trees/tall furniture/items) without a
+    // face_arc mask (walls/windows use their per-edge cardinal normals instead).
+    // Ground/floor tiles (frag_is_tall_n == false) are EXCLUDED: they tile seamlessly
+    // edge-to-edge, so a per-tile radial bump repeats identically across every tile and
+    // reads as a uniform checkerboard of diamonds instead of a flat plane -- it also
+    // swamps the directional sun term (dot(normal, sun_dir)) with a per-tile pattern
+    // that has nothing to do with the sun's actual direction. Measured: default
+    // nrm_radial_amount=0.4 applied to grass/dirt/road produced a full-screen repeating
+    // diamond grid and made ground shading look non-directional.
     const float2 r_offset = (i.uv - i.center_uv) / i.uv_half;
     const float3 radial_n = normalize(float3(r_offset, 1.0));
-    const float3 normal_macro = (i.face_amt > 0.001f)
-                                ? base_n
-                                : normalize(lerp(base_n, radial_n, saturate(nrm_radial_amount)));
+    const bool apply_radial_n = frag_is_tall_n && (i.face_amt <= 0.001f);
+    const float3 normal_macro = apply_radial_n
+                                ? normalize(lerp(base_n, radial_n, saturate(nrm_radial_amount)))
+                                : base_n;
     // Vertical-face arc. The alpha-shape bevel in surface_normal() CANNOT shade a sprite
     // body: alpha IS its height field, so a fully-opaque wall face has zero gradient and
     // comes out exactly (0,0,1). Measured in debug view 9: grass, asphalt, wall and

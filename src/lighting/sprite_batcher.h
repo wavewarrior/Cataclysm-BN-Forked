@@ -276,10 +276,14 @@ struct debug_params {
     // everything that is not a wall/window/tall furniture, so this is inert there
     // regardless of its value.
     float face_arc = 1.5f;
-    // Radial macro-normal blend: 0=flat(off) .. 1=full cylinder. Treats each sprite
-    // as a gently rounded volume so Lambert shading responds to light direction even
-    // for opaque sprites where alpha-gradient normals are (0,0,1). Blends with base_n
-    // (atlas micro-relief) before the per-edge face_arc block.
+    // Radial macro-normal blend: 0=flat(off) .. 1=full cylinder. Treats each TALL
+    // sprite (creatures/trees/tall furniture/items — frag_is_tall_n) as a gently
+    // rounded volume so Lambert shading responds to light direction even for opaque
+    // sprites where alpha-gradient normals are (0,0,1). Blends with base_n (atlas
+    // micro-relief) before the per-edge face_arc block. EXCLUDED for flat ground/
+    // floor tiles: they tile seamlessly edge-to-edge, so a per-tile radial bump
+    // there repeats identically across every tile and reads as a checkerboard of
+    // diamonds instead of one flat plane (see sprite.frag.hlsl apply_radial_n).
     float nrm_radial_amount = 0.4f;
     // Passing cloud shadows (procedural, moving noise pattern of cloud coverage
     // drifting over the terrain). Multiplies the SUN contribution only — clouds
