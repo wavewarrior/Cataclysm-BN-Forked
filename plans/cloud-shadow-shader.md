@@ -209,3 +209,23 @@ No further RML wiring is needed — `attach_slider_wheel()` (`src/sdl_lighting_d
 ## Status
 
 Implemented and verified in commit `a40f69675d` on branch `feature/improvements` (2026-08-05). All 5 approach steps applied. Build clean on `osx-arm-slim`; F4 panel and F7 cycling confirmed via debug.log; mode-17 isolated view confirmed animated drift outdoors at noon (183k/1.03M px changed over 16s). Post-review fix: mode-17 debug view gated to the same `sun_intensity`/`sun_sky_vis`/`sdf_map_w` condition as `sun_contrib` itself, so it reads flat white indoors/underground/at night instead of showing a drifting pattern with no real effect.
+
+**Follow-up (commit `74f1a1b050`, same session, user-reported):** user observed the effect
+in debug mode 17 only — invisible in normal rendering. Root cause: sun-only darkening
+rarely drives a pixel's `luma(rad_lit)` back under 1.0, and both the palette-ramp shade
+selector (`saturate(luma(rad_lit))`) and the plain tonemap fallback (`saturate(hdr)`, used
+whenever `ramp_enable=1`, the default) hard-clip exactly there — open daylight tiles
+commonly sit above that ceiling (confirmed via debug mode 5, `gpu_total`, reading flat
+white on sunlit ground). Fix: also darken `sky_contrib` (same `sun_intensity>0.001` gate,
+exact night no-op preserved; verified NOT touching `amb_floor` so sealed
+interiors/basements stay untouched), tightened `cloud_threshold`/`cloud_softness` so more
+of the noise field reaches true full coverage instead of the soft partial gradient the
+same clip swallows either way, and raised default `cloud_strength` to `0.8f`. Verified via
+debug modes 3/4/5 (isolated terms proven correct and substantial) and AB pixel diffs of
+the shipped build (real, spatially-coherent darkening, up to 491/765 per-pixel delta).
+Residual: on this session's overcast winter test map the visible *fraction* of the screen
+affected at any instant stayed modest (~1-3% of pixels per 16-20s window) because that
+scene's baseline daylight commonly clips high to begin with — a pre-existing renderer
+characteristic (the ramp/tonemap clip), not a defect in this feature. A brighter/clearer
+scene should show the effect more readily; could not force weather/time via the debug
+menu in this session (F12 delivery was unreliable through the automation harness).
