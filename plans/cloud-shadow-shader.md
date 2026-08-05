@@ -229,3 +229,18 @@ scene's baseline daylight commonly clips high to begin with — a pre-existing r
 characteristic (the ramp/tonemap clip), not a defect in this feature. A brighter/clearer
 scene should show the effect more readily; could not force weather/time via the debug
 menu in this session (F12 delivery was unreliable through the automation harness).
+
+**Follow-up 2 (commit `fa610ca979`, same session):** user confirmed clouds were still not
+visible in normal gameplay after the sky_contrib darkening above. Root cause was NOT the
+ramp/tonemap clip alone: `gpu_total = min(ambient_v + dyn, 2.0)` HARD-CLAMPS every additive
+term (sun + sky + ambient + GI) to a ceiling of 2.0 BEFORE cloud darkening was applied.
+Open daylight tiles routinely push `ambient_v + dyn` above 2.0 already, so darkening
+sun/sky pre-clamp just ate headroom that was being clipped away regardless — the visible,
+clamped pixel did not move. Fix: moved the single `cloud_vis` multiply to AFTER the
+`min(..., 2.0)` clamp (scaling `gpu_total` itself, once), removing the now-redundant
+pre-clamp multiplies on `sun_contrib`/`sky_contrib`. Verified in-game with weather forced
+to Sunny and time forced to noon via the debug menu (Main Menu -> c Debug Menu -> m Map...
+-> w Change weather / t Change time): an identical bright ground patch dropped from mean
+luma 13.06 to 9.31 (~29% relative) over 16s of passing cloud cover, clearly visible by eye
+in the NORMAL composited view, not just debug mode 17. Night/indoor gating unchanged and
+still an exact no-op (`cloud_vis` is 1.0 whenever `sun_applies` is false).
