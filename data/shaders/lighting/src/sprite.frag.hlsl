@@ -890,6 +890,28 @@ float4 main(VS_OUT i) : SV_Target0 {
                                               cloud_threshold + cloud_softness, cloud_n);
         cloud_mul = lerp(1.0, 1.0 - saturate(cloud_strength), cloud_cover);
     }
+    // Clouds attenuate both direct sun AND diffuse sky light reaching the ground
+    // (a passing cloud dims the whole sky-dome overhead, not just the sun disc) —
+    // gated to sun_intensity>0.001 so this is an EXACT no-op at night/dusk/dawn,
+    // matching the sun_contrib gate below and keeping the night look untouched.
+    //
+    // Sun-only darkening measured as only ~2% visible in the composited image even
+    // at cloud_strength=1.0 (verified via debug modes 3/4 + AB pixel diff). Root
+    // cause: open daylight tiles commonly push luma(rad_lit) ABOVE 1.0 (confirmed
+    // via debug mode 5 — bright ground reads flat white, i.e. saturated), and both
+    // the palette-ramp shade selector (`saturate(luma(rad_lit))`) and the plain
+    // tonemap fallback (`saturate(hdr)`, used whenever ramp_enable=1) hard-clip at
+    // exactly that point. A moderate cut to ONE term (sun) rarely drives the pixel
+    // back under 1.0, so it stays clipped and invisible — only a cut deep enough to
+    // cross that ceiling reads at all. Darkening sky too roughly doubles the
+    // achievable cut per pixel; cloud_threshold/cloud_softness (below) are tuned
+    // tight so more of the noise field actually reaches FULL coverage (cloud_mul at
+    // its floor) rather than sitting in the soft partial-coverage gradient, where
+    // the same clip renders it a no-op. This is a property of the existing
+    // ramp/tonemap pipeline, not something this feature can route around locally.
+    if(sun_intensity > 0.001) {
+        sky_contrib *= cloud_mul;
+    }
 
     float3 sun_contrib = float3(0.0, 0.0, 0.0);
     if(sun_intensity > 0.001 && sun_sky_vis > 0.05 && sdf_map_w > 0u) {
