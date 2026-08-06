@@ -99803,23 +99803,23 @@
               "fg": [
                 {
                   "weight": 12,
-                  "sprite": 18917
+                  "sprite": 19737
                 },
                 {
                   "weight": 12,
-                  "sprite": 18918
+                  "sprite": 19738
                 },
                 {
                   "weight": 12,
-                  "sprite": 18919
+                  "sprite": 19739
                 },
                 {
                   "weight": 12,
-                  "sprite": 18920
+                  "sprite": 19740
                 },
                 {
                   "weight": 12,
-                  "sprite": 18921
+                  "sprite": 19741
                 }
               ],
               "bg": 9131
@@ -128784,43 +128784,43 @@
           "fg": [
             {
               "weight": 10,
-              "sprite": 18922
+              "sprite": 19753
             },
             {
               "weight": 10,
-              "sprite": 18923
+              "sprite": 19754
             },
             {
               "weight": 10,
-              "sprite": 18924
+              "sprite": 19755
             },
             {
               "weight": 10,
-              "sprite": 18925
+              "sprite": 19756
             },
             {
               "weight": 10,
-              "sprite": 18926
+              "sprite": 19757
             },
             {
               "weight": 10,
-              "sprite": 18927
+              "sprite": 19758
             },
             {
               "weight": 10,
-              "sprite": 18928
+              "sprite": 19759
             },
             {
               "weight": 10,
-              "sprite": 18929
+              "sprite": 19760
             },
             {
               "weight": 10,
-              "sprite": 18930
+              "sprite": 19761
             },
             {
               "weight": 10,
-              "sprite": 18931
+              "sprite": 19762
             }
           ],
           "bg": 18113,
@@ -129119,63 +129119,63 @@
           "fg": [
             {
               "weight": 10,
-              "sprite": 18935
+              "sprite": 20601
             },
             {
               "weight": 10,
-              "sprite": 18936
+              "sprite": 20602
             },
             {
               "weight": 10,
-              "sprite": 18937
+              "sprite": 20603
             },
             {
               "weight": 10,
-              "sprite": 18938
+              "sprite": 20604
             },
             {
               "weight": 10,
-              "sprite": 18939
+              "sprite": 20605
             },
             {
               "weight": 10,
-              "sprite": 18940
+              "sprite": 20606
             },
             {
               "weight": 10,
-              "sprite": 18941
+              "sprite": 20607
             },
             {
               "weight": 10,
-              "sprite": 18942
+              "sprite": 20608
             },
             {
               "weight": 10,
-              "sprite": 18943
+              "sprite": 20609
             },
             {
               "weight": 10,
-              "sprite": 18944
+              "sprite": 20610
             },
             {
               "weight": 10,
-              "sprite": 18945
+              "sprite": 20611
             },
             {
               "weight": 10,
-              "sprite": 18946
+              "sprite": 20612
             },
             {
               "weight": 10,
-              "sprite": 18947
+              "sprite": 20613
             },
             {
               "weight": 10,
-              "sprite": 18948
+              "sprite": 20614
             },
             {
               "weight": 10,
-              "sprite": 18949
+              "sprite": 20615
             }
           ],
           "bg": 18113,
@@ -129510,15 +129510,15 @@
           "fg": [
             {
               "weight": 10,
-              "sprite": 18940
+              "sprite": 20606
             },
             {
               "weight": 10,
-              "sprite": 18941
+              "sprite": 20607
             },
             {
               "weight": 10,
-              "sprite": 18942
+              "sprite": 20608
             }
           ],
           "bg": 18113,
@@ -129853,7 +129853,7 @@
           "fg": [
             {
               "weight": 10,
-              "sprite": 18943
+              "sprite": 20609
             }
           ],
           "bg": 18113,
@@ -130542,15 +130542,15 @@
           "fg": [
             {
               "weight": 10,
-              "sprite": 18944
+              "sprite": 20610
             },
             {
               "weight": 10,
-              "sprite": 18945
+              "sprite": 20611
             },
             {
               "weight": 10,
-              "sprite": 18946
+              "sprite": 20612
             }
           ],
           "bg": 18113,
@@ -130795,15 +130795,15 @@
           "fg": [
             {
               "weight": 10,
-              "sprite": 18947
+              "sprite": 20613
             },
             {
               "weight": 10,
-              "sprite": 18948
+              "sprite": 20614
             },
             {
               "weight": 10,
-              "sprite": 18949
+              "sprite": 20615
             }
           ],
           "bg": 18113,
@@ -130898,19 +130898,19 @@
           "fg": [
             {
               "weight": 10,
-              "sprite": 18928
+              "sprite": 19759
             },
             {
               "weight": 10,
-              "sprite": 18929
+              "sprite": 19760
             },
             {
               "weight": 10,
-              "sprite": 18930
+              "sprite": 19761
             },
             {
               "weight": 10,
-              "sprite": 18931
+              "sprite": 19762
             }
           ],
           "bg": 18113,
@@ -135156,76 +135156,160 @@
     },
     {
       "file": "stoneshard_terrain.png",
+      "sprite_width": 32,
+      "sprite_height": 32,
+      "sprite_offset_x": 0,
+      "sprite_offset_y": 0,
       "tiles": [
         {
           "id": "t_stoneshard_grass_0",
-          "fg": 18917
+          "fg": 0
         },
         {
           "id": "t_stoneshard_grass_1",
-          "fg": 18918
+          "fg": 1
         },
         {
           "id": "t_stoneshard_grass_2",
-          "fg": 18919
+          "fg": 2
         },
         {
           "id": "t_stoneshard_grass_3",
-          "fg": 18920
+          "fg": 3
         },
         {
           "id": "t_stoneshard_grass_4",
-          "fg": 18921
+          "fg": 4
         }
       ]
     },
     {
       "file": "stoneshard_foliage.png",
-      "//": "range 19753 to 19768 - promoted Stoneshard bushes, palette-matched to the UnDeadPeople foliage. Geometry MUST match large_terrain.png (64x80, offset -16/-48): t_shrub / t_underbrush are defined there, and a tile_type applies ONE offset to every sprite in its fg list. Opt-in: referenced only from those two weight lists.",
-      "sprite_width": 64,
-      "sprite_height": 80,
-      "sprite_offset_x": -16,
-      "sprite_offset_y": -48,
+      "//": "promoted Stoneshard bushes from Export_Sprites/ at 128x160 cells. Offset scaled from -16/-48 to -32/-96 for 2x cell size.",
+      "sprite_width": 128,
+      "sprite_height": 160,
+      "sprite_offset_x": -32,
+      "sprite_offset_y": -96,
       "tiles": [
         {
           "id": "t_stoneshard_shrub_0",
-          "fg": 18922
+          "fg": 0
         },
         {
           "id": "t_stoneshard_shrub_1",
-          "fg": 18923
+          "fg": 1
         },
         {
           "id": "t_stoneshard_shrub_2",
-          "fg": 18924
+          "fg": 2
         },
         {
           "id": "t_stoneshard_shrub_3",
-          "fg": 18925
+          "fg": 3
         },
         {
           "id": "t_stoneshard_shrub_4",
-          "fg": 18926
+          "fg": 4
         },
         {
           "id": "t_stoneshard_shrub_5",
-          "fg": 18927
+          "fg": 5
         },
         {
           "id": "t_stoneshard_shrub_6",
-          "fg": 18928
+          "fg": 6
         },
         {
           "id": "t_stoneshard_shrub_7",
-          "fg": 18929
+          "fg": 7
         },
         {
           "id": "t_stoneshard_shrub_8",
-          "fg": 18930
+          "fg": 8
         },
         {
           "id": "t_stoneshard_shrub_9",
-          "fg": 18931
+          "fg": 9
+        },
+        {
+          "id": "t_stoneshard_shrub_10",
+          "fg": 10
+        },
+        {
+          "id": "t_stoneshard_shrub_11",
+          "fg": 11
+        },
+        {
+          "id": "t_stoneshard_shrub_12",
+          "fg": 12
+        },
+        {
+          "id": "t_stoneshard_shrub_13",
+          "fg": 13
+        },
+        {
+          "id": "t_stoneshard_shrub_14",
+          "fg": 14
+        },
+        {
+          "id": "t_stoneshard_shrub_15",
+          "fg": 15
+        },
+        {
+          "id": "t_stoneshard_shrub_16",
+          "fg": 16
+        },
+        {
+          "id": "t_stoneshard_shrub_17",
+          "fg": 17
+        },
+        {
+          "id": "t_stoneshard_shrub_18",
+          "fg": 18
+        },
+        {
+          "id": "t_stoneshard_shrub_19",
+          "fg": 19
+        },
+        {
+          "id": "t_stoneshard_shrub_20",
+          "fg": 20
+        },
+        {
+          "id": "t_stoneshard_shrub_21",
+          "fg": 21
+        },
+        {
+          "id": "t_stoneshard_shrub_22",
+          "fg": 22
+        },
+        {
+          "id": "t_stoneshard_shrub_23",
+          "fg": 23
+        },
+        {
+          "id": "t_stoneshard_shrub_24",
+          "fg": 24
+        },
+        {
+          "id": "t_stoneshard_shrub_25",
+          "fg": 25
+        },
+        {
+          "id": "t_stoneshard_shrub_26",
+          "fg": 26
+        },
+        {
+          "id": "t_stoneshard_shrub_27",
+          "fg": 27
+        },
+        {
+          "id": "t_stoneshard_shrub_28",
+          "fg": 28
+        },
+        {
+          "id": "t_stoneshard_shrub_29",
+          "fg": 29
         }
       ]
     },
@@ -135330,71 +135414,87 @@
     },
     {
       "file": "stoneshard_trees.png",
-      "//": "range 23865 to 23880 - promoted Stoneshard trees, palette-matched PER SPECIES to the UnDeadPeople tree it joins. Registered AFTER fallback.png deliberately: appending here means no existing sheet's base index shifts. Geometry MUST match large_terrain.png (64x80, offset -16/-48) because every t_tree_* is defined there and a tile_type applies ONE offset to its whole fg list. Opt-in: referenced only from the t_tree_* weight lists.",
-      "sprite_width": 64,
-      "sprite_height": 80,
-      "sprite_offset_x": -16,
-      "sprite_offset_y": -48,
+      "//": "promoted Stoneshard trees from Export_Sprites/ at 128x160 cells. Offset scaled from -16/-48 to -32/-96 for 2x cell size.",
+      "sprite_width": 128,
+      "sprite_height": 160,
+      "sprite_offset_x": -32,
+      "sprite_offset_y": -96,
       "tiles": [
         {
           "id": "t_stoneshard_tree_0",
-          "fg": 18935
+          "fg": 0
         },
         {
           "id": "t_stoneshard_tree_1",
-          "fg": 18936
+          "fg": 1
         },
         {
           "id": "t_stoneshard_tree_2",
-          "fg": 18937
+          "fg": 2
         },
         {
           "id": "t_stoneshard_tree_3",
-          "fg": 18938
+          "fg": 3
         },
         {
           "id": "t_stoneshard_tree_4",
-          "fg": 18939
+          "fg": 4
         },
         {
           "id": "t_stoneshard_tree_5",
-          "fg": 18940
+          "fg": 5
         },
         {
           "id": "t_stoneshard_tree_6",
-          "fg": 18941
+          "fg": 6
         },
         {
           "id": "t_stoneshard_tree_7",
-          "fg": 18942
+          "fg": 7
         },
         {
           "id": "t_stoneshard_tree_8",
-          "fg": 18943
+          "fg": 8
         },
         {
           "id": "t_stoneshard_tree_9",
-          "fg": 18944
+          "fg": 9
         },
         {
           "id": "t_stoneshard_tree_10",
-          "fg": 18945
+          "fg": 10
         },
         {
           "id": "t_stoneshard_tree_11",
-          "fg": 18946
+          "fg": 11
         },
         {
           "id": "t_stoneshard_tree_12",
-          "fg": 18947
+          "fg": 12
         },
         {
           "id": "t_stoneshard_tree_13",
-          "fg": 18948
+          "fg": 13
         },
         {
           "id": "t_stoneshard_tree_14",
-          "fg": 18949
+          "fg": 14
+        },
+        {
+          "id": "t_stoneshard_tree_15",
+          "fg": 15
+        },
+        {
+          "id": "t_stoneshard_tree_16",
+          "fg": 16
+        },
+        {
+          "id": "t_stoneshard_tree_17",
+          "fg": 17
+        },
+        {
+          "id": "t_stoneshard_tree_18",
+          "fg": 18
         }
       ]
     },
