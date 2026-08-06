@@ -1743,7 +1743,7 @@ bool cata_tiles::draw_from_id_string(
             };
             return draw_from_id_string(
                        multi_tile, pos, bg_tint, fg_tint, ll, apply_visual_effects, overlay_count,
-                       as_independent_entity, height_3d );
+                       as_independent_entity, height_3d, sway, face_amt );
         }
     }
 
