@@ -1,6 +1,7 @@
 <rml>
 <head>
     <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="newchar_common.rcss"/>
     <link type="text/rcss" href="newcharskills.rcss"/>
 </head>
 <body data-model="newcharskills">
@@ -14,7 +15,10 @@
     <div class="panel nc-panel">
         <div class="tabs nc-tabs">
             <div class="item tab" data-for="t : tabs"
-                 data-class-selected="t.selected" data-rml="t.name_rml"></div>
+                 data-class-selected="t.selected">
+                <div class="nc-tab-icon" data-style-decorator="t.icon_dec"></div>
+                <span class="nc-tab-label" data-rml="t.name_rml"></span>
+            </div>
         </div>
         <div class="nc-points" data-rml="points_rml"></div>
         <div class="nc-cost" data-rml="cost_rml"></div>

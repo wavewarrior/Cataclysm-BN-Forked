@@ -55,6 +55,7 @@
 #include "recipe.h"
 #include "recipe_dictionary.h"
 #include <RmlUi/Core.h>
+#include "rml_length.h"
 #include "rml_screen.h"
 #include "rml_util.h"
 #include "rng.h"
@@ -226,6 +227,159 @@ enum {
     NEWCHAR_TAB_MAX = 7 // The ID of the rightmost tab
 };
 
+/// `label` plus its trailing space, as ONE colour run.
+///
+/// The space MUST sit INSIDE the colour tag. cata_text_to_rml emits one `<span>`
+/// per colour run, and RmlUi trims a lone U+0020 that ends up BETWEEN two spans at
+/// parse time — so `colorize( "Name:" ) + " " + colorize( value )` rendered welded
+/// as `Name:Lon 'Electric' Woody`, and likewise for Height/Age/Starting location.
+/// `Scenario: ` and `Profession: ` never showed the bug because they already
+/// carried the space inside the tag; this makes the rest match them.
+///
+/// The translated string is NOT changed, so no PO churn.
+auto nc_label( const std::string &label, const nc_color &col ) -> std::string
+{
+    return colorize( label + " ", col );
+}
+
+/// Placeholder section/tab glyph as an RCSS `decorator` value.
+///
+/// `?proc:runic-icon:<size>:<seed>:<hex>` is generated in C++ (see
+/// rmlui_render_interface.cpp -> gen_runic_frame) rather than loaded from disk, so
+/// these need no art to ship and are deterministic per seed. Real art replaces the
+/// decorator one row at a time — the seed/size/intent table lives in
+/// plans/charcreation-visual-overhaul.md.
+///
+/// Two golds only, matching the main-menu nav rail: active vs inactive.
+auto nc_icon_dec( unsigned seed, int size, bool active ) -> std::string
+{
+    return string_format( "image( ?proc:runic-icon:%d:%u:%s none contain ) border-box",
+           size, seed, active ? "c4a832" : "a1885f" );
+}
+
+/// Deterministic seeds for the eight tab glyphs, in tab order (POINTS .. OVERVIEW).
+/// Stable by contract: changing one reshuffles a placeholder the artist is matching.
+constexpr unsigned NC_TAB_ICON_SEEDS[8] = {
+    0x5031, 0x5343, 0x5052, 0x5354, 0x5452, 0x4249, 0x534b, 0x4f56,
+};
+
+/// Labelled points budget for the RmlUi tabs.
+///
+/// `points_left::to_string()` renders MULTI_POOL as a bare formula — `Points left:
+/// 1-1+0=0` — which is unreadable at a glance: three sub-pools with no names and the
+/// arithmetic exposed. Same numbers, named, same red-when-overspent colouring. The
+/// other pool modes already read fine, so they fall through unchanged.
+///
+/// `points_left::to_string()` itself is left alone: the curses path still uses it
+/// for the A/B comparison.
+///
+/// Gaps live INSIDE a colour run that also has visible text. A run containing only
+/// spaces is dropped entirely, and a lone U+0020 between two runs is trimmed at
+/// parse time; a trailing space on a run with content survives (proven by nc_label).
+auto nc_points_line( points_left &pts ) -> std::string
+{
+    if( pts.limit != points_left::MULTI_POOL ) {
+        return pts.to_string();
+    }
+    const auto part = [&]( const std::string & label, int v, bool ok ) -> std::string {
+        return colorize( label + " ", c_dark_gray ) +
+        colorize( string_format( "%d    ", v ), ok ? c_light_gray : c_red );
+    };
+    std::string s = colorize( std::string( _( "Points left" ) ) + ":    ", c_dark_gray );
+    s += part( _( "stats" ), pts.stat_points, pts.stat_points_left() >= 0 );
+    s += part( _( "traits" ), pts.trait_points, pts.trait_points_left() >= 0 );
+    s += part( _( "skills" ), pts.skill_points, pts.skill_points_left() >= 0 );
+    s += colorize( std::string( _( "total" ) ) + " ", c_dark_gray );
+    s += colorize( string_format( "%d", pts.stat_points + pts.trait_points + pts.skill_points ),
+                   pts.is_valid() ? c_white : c_red );
+    return s;
+}
+
+/// Everything the tipping trait/bionic balance scale needs, derived from the
+/// good/bad point counters.
+///
+/// Replaces the old `budget_rml` formula ("7/12 0/-12"), which stated the numbers
+/// without conveying the thing that matters — whether you are leaning on advantages
+/// or disadvantages.
+///
+/// The beam rotates; the pans do NOT ride it. If the pans were children of the beam
+/// they would inherit its rotation and the numbers would render tilted, so each pan
+/// gets its own vertical offset computed from the same balance value. `num_bad` is
+/// accumulated as a NEGATIVE total, so its magnitude is the weight on the bad pan.
+struct nc_balance {
+    bool show = false;
+    // Valid neutral defaults, not empty strings: these feed data-style-transform /
+    // data-style-top, which RmlUi applies on the first frame BEFORE sync_rml() has
+    // populated the model. Empty produced `Syntax error parsing inline property
+    // declaration 'transform: ;'` in debug.log (SDL debug class) on every open.
+    Rml::String rotate = "rotate(0deg)";   //< beam angle
+    Rml::String good_top = "0dp";          //< good pan offset (positive sinks)
+    Rml::String bad_top = "0dp";
+    Rml::String good_rml;
+    Rml::String bad_rml;
+    Rml::String good_icon;
+    Rml::String bad_icon;
+    Rml::String fulcrum_icon;
+};
+
+auto nc_make_balance( int num_good, int num_bad, int maxp, bool freeform ) -> nc_balance
+{
+    nc_balance b;
+    // Freeform has no budget, so there is nothing to balance.
+    b.show = !freeform;
+    if( !b.show ) {
+        return b;
+    }
+    const int cap = std::max( 1, maxp );
+    const int good_w = num_good;
+    const int bad_w = std::abs( num_bad );
+    const float bal = std::clamp( static_cast<float>( good_w - bad_w ) / static_cast<float>( cap ),
+                                  -1.0f, 1.0f );
+    // 8deg over the beam's 140dp half-length rises 140*sin(8) = 19.5dp at the ends,
+    // so the pans are nudged 20dp. Keeping the two in step matters: the pans do NOT
+    // ride the beam (they would inherit its rotation and render tilted), so if the
+    // two disagreed the beam would visibly detach from its own pans.
+    //
+    // NEGATIVE angle: rotate() is clockwise, and the good pan is on the LEFT, so a
+    // positive angle would LIFT the left beam end while `good_top` SINKS the good
+    // pan — equal magnitudes in opposite directions, maximally wrong.
+    b.rotate = string_format( "rotate(%.2fdeg)", bal * -8.0f );
+    b.good_top = rml::dp( bal * 20.0f );
+    b.bad_top = rml::dp( -bal * 20.0f );
+    b.good_rml = cata_text_to_rml( colorize( string_format( "%d/%d", good_w, cap ), c_light_green ) );
+    b.bad_rml = cata_text_to_rml( colorize( string_format( "%d/-%d", num_bad, cap ), c_light_red ) );
+    b.good_icon = nc_icon_dec( 0x4744, 20, good_w > 0 );
+    b.bad_icon = nc_icon_dec( 0x4244, 20, bad_w > 0 );
+    b.fulcrum_icon = nc_icon_dec( 0x464c, 16, true );
+    return b;
+}
+
+/// Shared preview-box geometry for every creator tab that shows one.
+///
+/// Each tab used to compute its own ncols/nlines, so the box landed somewhere
+/// different on each — and because the avatar is a GPU sprite drawn UNDERNEATH the
+/// RmlUi document, any opaque panel overlapping the box hides it. TRAITS and BIONICS
+/// only worked by luck (their 80% panel's right edge cleared the box by 0.2% of the
+/// screen); OVERVIEW's 92% panel covered it entirely and PROFESSION's wider box
+/// reached back under its panel.
+///
+/// One geometry for all four, pinned hard right, so the box always sits inside the
+/// strip that `.nc-panel { width: 72% }` leaves clear. A centred panel of width W
+/// has its right edge at (100+W)/2 = 86%, and this box's left edge is at worst
+/// TERMX - ncols - 1, i.e. ~86.7% — so the two never meet at any terminal size.
+void nc_prepare_preview( character_preview_window &pv )
+{
+    const int ncols = std::max( 10, TERMX * 13 / 100 );
+    const int nlines = std::max( 7, TERMY * 22 / 100 );
+    constexpr auto orient = character_preview_window::Orientation{
+        character_preview_window::TOP_RIGHT,
+        character_preview_window::Margin{ 0, 1, 4, 0 }
+    };
+    // hide_below_ncols: drop the preview entirely rather than let it crowd the
+    // panel on a narrow terminal.
+    pv.prepare( nlines, ncols, &orient, 150 );
+}
+
 int skill_increment_cost( const Character &u, const skill_id &skill );
 
 enum struct tab_direction {
@@ -251,6 +405,7 @@ namespace
 {
 struct nc_rml_tab {
     Rml::String name_rml;
+    Rml::String icon_dec;   //< placeholder tab glyph
     bool selected = false;
 };
 struct nc_points_opt {
@@ -274,6 +429,7 @@ void register_nc_points_rml_types( Rml::DataModelConstructor &c )
     }
     Rml::StructHandle<nc_rml_tab> th = c.RegisterStruct<nc_rml_tab>();
     th.RegisterMember( "name_rml", &nc_rml_tab::name_rml );
+    th.RegisterMember( "icon_dec", &nc_rml_tab::icon_dec );
     th.RegisterMember( "selected", &nc_rml_tab::selected );
     c.RegisterArray<Rml::Vector<nc_rml_tab>>();
     Rml::StructHandle<nc_points_opt> oh = c.RegisterStruct<nc_points_opt>();
@@ -302,6 +458,7 @@ Rml::Vector<TabT> build_nc_char_tabs( int active )
         TabT t;
         t.name_rml = cata_text_to_rml( caps[i] );
         t.selected = ( i == active );
+        t.icon_dec = nc_icon_dec( NC_TAB_ICON_SEEDS[i], 24, t.selected );
         tabs.push_back( t );
     }
     return tabs;
@@ -374,13 +531,16 @@ tab_direction set_points( avatar &, points_left &points )
         const int sel = std::max( 0, std::min( highlighted,
                                                static_cast<int>( opts.size() ) - 1 ) );
         data->tabs = build_nc_char_tabs<nc_rml_tab>( 0 ); // POINTS tab active
-        data->points_rml = cata_text_to_rml( points.to_string() );
+        data->points_rml = cata_text_to_rml( nc_points_line( points ) );
         data->opts.clear();
         for( int i = 0; i < static_cast<int>( opts.size() ); i++ ) {
             nc_points_opt o;
             const bool chosen = ( points.limit == std::get<0>( opts[i] ) );
+            // c_light_green, not COL_SKILL_USED (c_green): on the cursor row's dark
+            // fill a dark green measured only 2.55:1, under the 3:1 large-text floor.
+            // Same meaning ("this pool is the chosen one"), one luminance step up.
             o.name_rml = cata_text_to_rml( colorize( std::get<1>( opts[i] ),
-                                           chosen ? COL_SKILL_USED : c_light_gray ) );
+                                           chosen ? c_light_green : c_light_gray ) );
             o.selected = ( sel == i );
             data->opts.push_back( o );
         }
@@ -443,6 +603,7 @@ namespace
 {
 struct nc_stats_tab {
     Rml::String name_rml;
+    Rml::String icon_dec;   //< placeholder tab glyph
     bool selected = false;
 };
 struct nc_stat_row {
@@ -469,6 +630,7 @@ void register_nc_stats_rml_types( Rml::DataModelConstructor &c )
     }
     Rml::StructHandle<nc_stats_tab> th = c.RegisterStruct<nc_stats_tab>();
     th.RegisterMember( "name_rml", &nc_stats_tab::name_rml );
+    th.RegisterMember( "icon_dec", &nc_stats_tab::icon_dec );
     th.RegisterMember( "selected", &nc_stats_tab::selected );
     c.RegisterArray<Rml::Vector<nc_stats_tab>>();
     Rml::StructHandle<nc_stat_row> sh = c.RegisterStruct<nc_stat_row>();
@@ -595,7 +757,7 @@ tab_direction set_stats( avatar &u, points_left &points )
             return;
         }
         data->tabs = build_nc_char_tabs<nc_stats_tab>( 3 ); // STATS tab active
-        data->points_rml = cata_text_to_rml( points.to_string() );
+        data->points_rml = cata_text_to_rml( nc_points_line( points ) );
 
         data->stats.clear();
         const auto add_stat = [&]( const std::string & label, int val, int idx ) {
@@ -754,12 +916,13 @@ namespace
 {
 struct nc_traits_tab {
     Rml::String name_rml;
+    Rml::String icon_dec;   //< placeholder tab glyph
     bool selected = false;
 };
 struct nc_traits_session {
     Rml::Vector<nc_traits_tab> tabs;
     Rml::String points_rml;
-    Rml::String budget_rml;   // good/bad point counters (non-freeform only)
+    nc_balance balance;
     Rml::String cost_rml;     // "<trait> costs/earns N points" for the working trait
     Rml::String col0_html;    // good column (baked rows)
     Rml::String col1_html;    // bad column
@@ -778,8 +941,19 @@ void register_nc_traits_rml_types( Rml::DataModelConstructor &c )
     }
     Rml::StructHandle<nc_traits_tab> th = c.RegisterStruct<nc_traits_tab>();
     th.RegisterMember( "name_rml", &nc_traits_tab::name_rml );
+    th.RegisterMember( "icon_dec", &nc_traits_tab::icon_dec );
     th.RegisterMember( "selected", &nc_traits_tab::selected );
     c.RegisterArray<Rml::Vector<nc_traits_tab>>();
+    Rml::StructHandle<nc_balance> bh = c.RegisterStruct<nc_balance>();
+    bh.RegisterMember( "show", &nc_balance::show );
+    bh.RegisterMember( "rotate", &nc_balance::rotate );
+    bh.RegisterMember( "good_top", &nc_balance::good_top );
+    bh.RegisterMember( "bad_top", &nc_balance::bad_top );
+    bh.RegisterMember( "good_rml", &nc_balance::good_rml );
+    bh.RegisterMember( "bad_rml", &nc_balance::bad_rml );
+    bh.RegisterMember( "good_icon", &nc_balance::good_icon );
+    bh.RegisterMember( "bad_icon", &nc_balance::bad_icon );
+    bh.RegisterMember( "fulcrum_icon", &nc_balance::fulcrum_icon );
     g_nc_traits_types_registered = true;
 }
 } // namespace
@@ -897,21 +1071,9 @@ tab_direction set_traits( avatar &u, points_left &points )
         w_description = catacurses::newwin( 3, TERMX - 2, point( 1, TERMY - 4 ) );
         page_width = std::min( ( TERMX - 4 ) / used_pages, 38 );
 
-        const int int_page_width = static_cast<int>( page_width );
 
         if( use_character_preview ) {
-            constexpr int preview_nlines_min = 7;
-            constexpr int preview_ncols_min = 10;
-            const int preview_nlines = std::max( ( TERMY - 9 ) / 3, preview_nlines_min );
-            const int preview_ncols = std::max( ( TERMX - int_page_width * 3 - 4 ) / 3 - 5, preview_ncols_min );
-            constexpr auto orientation = character_preview_window::Orientation{
-                character_preview_window::TOP_RIGHT,
-                character_preview_window::Margin{0, 2, 5, 0}
-            };
-            character_preview.prepare(
-                preview_nlines, preview_ncols,
-                &orientation, int_page_width * 3 + 5
-            );
+            nc_prepare_preview( character_preview );
         }
 
         ui.position_from_window( w );
@@ -944,8 +1106,6 @@ tab_direction set_traits( avatar &u, points_left &points )
     ctxt.register_action( "TOGGLE_CHARACTER_PREVIEW_CLOTHES" );
 
     // RmlUi render path (render-only; keyboard owns nav/confirm/reroll below).
-    // The tile character_preview overlay is NOT drawn in rml mode this slice
-    // (out of scope like the AIM minimap; flagged deferred).
     auto data = std::make_unique<nc_traits_session>();
     rml_doc rml;
     const auto sync_rml = [&]() {
@@ -953,14 +1113,9 @@ tab_direction set_traits( avatar &u, points_left &points )
             return;
         }
         data->tabs = build_nc_char_tabs<nc_traits_tab>( 4 ); // TRAITS tab active
-        data->points_rml = cata_text_to_rml( points.to_string() );
-        if( !points.is_freeform() ) {
-            data->budget_rml = cata_text_to_rml( string_format(
-                    "<color_light_green>%2d/%-2d</color> <color_light_red>%3d/-%-2d</color>",
-                    num_good, max_trait_points, num_bad, max_trait_points ) );
-        } else {
-            data->budget_rml.clear();
-        }
+        data->points_rml = cata_text_to_rml( nc_points_line( points ) );
+        data->balance = nc_make_balance( num_good, num_bad, max_trait_points,
+                                         points.is_freeform() );
         const auto build_col = [&]( int page ) -> std::string {
             nc_color on_act;
             nc_color off_act;
@@ -1046,7 +1201,7 @@ tab_direction set_traits( avatar &u, points_left &points )
 
         data->handle.DirtyVariable( "tabs" );
         data->handle.DirtyVariable( "points_rml" );
-        data->handle.DirtyVariable( "budget_rml" );
+        data->handle.DirtyVariable( "balance" );
         data->handle.DirtyVariable( "cost_rml" );
         data->handle.DirtyVariable( "col0_html" );
         data->handle.DirtyVariable( "col1_html" );
@@ -1060,7 +1215,7 @@ tab_direction set_traits( avatar &u, points_left &points )
         register_nc_traits_rml_types( c );
         c.Bind( "tabs", &data->tabs );
         c.Bind( "points_rml", &data->points_rml );
-        c.Bind( "budget_rml", &data->budget_rml );
+        c.Bind( "balance", &data->balance );
         c.Bind( "cost_rml", &data->cost_rml );
         c.Bind( "col0_html", &data->col0_html );
         c.Bind( "col1_html", &data->col1_html );
@@ -1076,6 +1231,12 @@ tab_direction set_traits( avatar &u, points_left &points )
     ui.on_redraw( [&]( const ui_adaptor & ) {
         if( rml ) {
             sync_rml();
+            // display() is RmlUi-aware (cp_rml_open/cp_rml_position + a GPU sprite
+            // for the avatar), so it composes over this document rather than
+            // fighting it. It was skipped only because this branch returned early.
+            if( use_character_preview ) {
+                character_preview.display();
+            }
             return;
         }
     } );
@@ -1248,12 +1409,13 @@ namespace
 {
 struct nc_bionics_tab {
     Rml::String name_rml;
+    Rml::String icon_dec;   //< placeholder tab glyph
     bool selected = false;
 };
 struct nc_bionics_session {
     Rml::Vector<nc_bionics_tab> tabs;
     Rml::String points_rml;
-    Rml::String budget_rml;
+    nc_balance balance;
     Rml::String cost_rml;
     Rml::String col0_html;
     Rml::String col1_html;
@@ -1272,8 +1434,19 @@ void register_nc_bionics_rml_types( Rml::DataModelConstructor &c )
     }
     Rml::StructHandle<nc_bionics_tab> th = c.RegisterStruct<nc_bionics_tab>();
     th.RegisterMember( "name_rml", &nc_bionics_tab::name_rml );
+    th.RegisterMember( "icon_dec", &nc_bionics_tab::icon_dec );
     th.RegisterMember( "selected", &nc_bionics_tab::selected );
     c.RegisterArray<Rml::Vector<nc_bionics_tab>>();
+    Rml::StructHandle<nc_balance> bh = c.RegisterStruct<nc_balance>();
+    bh.RegisterMember( "show", &nc_balance::show );
+    bh.RegisterMember( "rotate", &nc_balance::rotate );
+    bh.RegisterMember( "good_top", &nc_balance::good_top );
+    bh.RegisterMember( "bad_top", &nc_balance::bad_top );
+    bh.RegisterMember( "good_rml", &nc_balance::good_rml );
+    bh.RegisterMember( "bad_rml", &nc_balance::bad_rml );
+    bh.RegisterMember( "good_icon", &nc_balance::good_icon );
+    bh.RegisterMember( "bad_icon", &nc_balance::bad_icon );
+    bh.RegisterMember( "fulcrum_icon", &nc_balance::fulcrum_icon );
     g_nc_bionics_types_registered = true;
 }
 } // namespace
@@ -1378,21 +1551,9 @@ tab_direction set_bionics( avatar &u, points_left &points )
         w_description = catacurses::newwin( 3, TERMX - 2, point( 1, TERMY - 4 ) );
         page_width = std::min( ( TERMX - 4 ) / used_pages, 38 );
 
-        const int int_page_width = static_cast<int>( page_width );
 
         if( use_character_preview ) {
-            constexpr int preview_nlines_min = 7;
-            constexpr int preview_ncols_min = 10;
-            const int preview_nlines = std::max( ( TERMY - 9 ) / 3, preview_nlines_min );
-            const int preview_ncols = std::max( ( TERMX - int_page_width * 3 - 4 ) / 3 - 5, preview_ncols_min );
-            constexpr auto orientation = character_preview_window::Orientation{
-                character_preview_window::TOP_RIGHT,
-                character_preview_window::Margin{0, 2, 5, 0}
-            };
-            character_preview.prepare(
-                preview_nlines, preview_ncols,
-                &orientation, int_page_width * 3 + 5
-            );
+            nc_prepare_preview( character_preview );
         }
 
         ui.position_from_window( w );
@@ -1433,14 +1594,9 @@ tab_direction set_bionics( avatar &u, points_left &points )
             return;
         }
         data->tabs = build_nc_char_tabs<nc_bionics_tab>( 5 ); // BIONICS tab active
-        data->points_rml = cata_text_to_rml( points.to_string() );
-        if( !points.is_freeform() ) {
-            data->budget_rml = cata_text_to_rml( string_format(
-                    "<color_light_green>%2d/%-2d</color> <color_light_red>%3d/-%-2d</color>",
-                    num_good, max_trait_points, num_bad, max_trait_points ) );
-        } else {
-            data->budget_rml.clear();
-        }
+        data->points_rml = cata_text_to_rml( nc_points_line( points ) );
+        data->balance = nc_make_balance( num_good, num_bad, max_trait_points,
+                                         points.is_freeform() );
         const auto build_col = [&]( int page ) -> std::string {
             nc_color on_act;
             nc_color off_act;
@@ -1525,7 +1681,7 @@ tab_direction set_bionics( avatar &u, points_left &points )
 
         data->handle.DirtyVariable( "tabs" );
         data->handle.DirtyVariable( "points_rml" );
-        data->handle.DirtyVariable( "budget_rml" );
+        data->handle.DirtyVariable( "balance" );
         data->handle.DirtyVariable( "cost_rml" );
         data->handle.DirtyVariable( "col0_html" );
         data->handle.DirtyVariable( "col1_html" );
@@ -1539,7 +1695,7 @@ tab_direction set_bionics( avatar &u, points_left &points )
         register_nc_bionics_rml_types( c );
         c.Bind( "tabs", &data->tabs );
         c.Bind( "points_rml", &data->points_rml );
-        c.Bind( "budget_rml", &data->budget_rml );
+        c.Bind( "balance", &data->balance );
         c.Bind( "cost_rml", &data->cost_rml );
         c.Bind( "col0_html", &data->col0_html );
         c.Bind( "col1_html", &data->col1_html );
@@ -1555,6 +1711,11 @@ tab_direction set_bionics( avatar &u, points_left &points )
     ui.on_redraw( [&]( const ui_adaptor & ) {
         if( rml ) {
             sync_rml();
+            // See the TRAITS branch: display() is RmlUi-aware; it was skipped only
+            // because this branch returned early.
+            if( use_character_preview ) {
+                character_preview.display();
+            }
             return;
         }
     } );
@@ -1772,6 +1933,7 @@ namespace
 {
 struct nc_prof_tab {
     Rml::String name_rml;
+    Rml::String icon_dec;   //< placeholder tab glyph
     bool selected = false;
 };
 struct nc_prof_row {
@@ -1800,6 +1962,7 @@ void register_nc_prof_rml_types( Rml::DataModelConstructor &c )
     }
     Rml::StructHandle<nc_prof_tab> th = c.RegisterStruct<nc_prof_tab>();
     th.RegisterMember( "name_rml", &nc_prof_tab::name_rml );
+    th.RegisterMember( "icon_dec", &nc_prof_tab::icon_dec );
     th.RegisterMember( "selected", &nc_prof_tab::selected );
     c.RegisterArray<Rml::Vector<nc_prof_tab>>();
     Rml::StructHandle<nc_prof_row> rh = c.RegisterStruct<nc_prof_row>();
@@ -1834,22 +1997,8 @@ tab_direction set_profession( avatar &u, points_left &points,
         w_sorting = catacurses::newwin( 1, 55, point( TERMX / 2, 5 ) );
         w_genderswap = catacurses::newwin( 1, 55, point( TERMX / 2, 6 ) );
         w_items = catacurses::newwin( iContentHeight - 2, 55, point( TERMX / 2, 7 ) );
-        const int int_page_width = 55;
-
         if( use_character_preview ) {
-            constexpr int preview_nlines_min = 7;
-            constexpr int preview_ncols_min = 10;
-            const int preview_nlines = std::max( ( TERMY - 9 ) / 3, preview_nlines_min );
-            const int preview_ncols = std::max( ( TERMX - int_page_width - 4 ) / 3 - 5,
-                                                preview_ncols_min );
-            constexpr auto orientation = character_preview_window::Orientation{
-                character_preview_window::TOP_RIGHT,
-                character_preview_window::Margin{0, 2, 5, 0}
-            };
-            character_preview.prepare(
-                preview_nlines, preview_ncols,
-                &orientation, int_page_width + 5
-            );
+            nc_prepare_preview( character_preview );
         }
         ui.position_from_window( w );
     };
@@ -1891,7 +2040,7 @@ tab_direction set_profession( avatar &u, points_left &points,
         data->tabs = build_nc_char_tabs<nc_prof_tab>( 2 ); // PROFESSION tab active
         const bool valid = cur_id >= 0 && static_cast<size_t>( cur_id ) < sorted_profs.size();
 
-        std::string pmsg = points.to_string();
+        std::string pmsg = nc_points_line( points );
         if( valid ) {
             const int netPointCost = sorted_profs[cur_id]->point_cost() - u.prof->point_cost();
             if( netPointCost > 0 ) {
@@ -2110,6 +2259,9 @@ tab_direction set_profession( avatar &u, points_left &points,
     ui.on_redraw( [&]( const ui_adaptor & ) {
         if( rml ) {
             sync_rml();
+            if( use_character_preview ) {
+                character_preview.display();
+            }
             return;
         }
     } );
@@ -2254,6 +2406,7 @@ namespace
 {
 struct nc_skills_tab {
     Rml::String name_rml;
+    Rml::String icon_dec;   //< placeholder tab glyph
     bool selected = false;
 };
 struct nc_skill_row {
@@ -2279,6 +2432,7 @@ void register_nc_skills_rml_types( Rml::DataModelConstructor &c )
     }
     Rml::StructHandle<nc_skills_tab> th = c.RegisterStruct<nc_skills_tab>();
     th.RegisterMember( "name_rml", &nc_skills_tab::name_rml );
+    th.RegisterMember( "icon_dec", &nc_skills_tab::icon_dec );
     th.RegisterMember( "selected", &nc_skills_tab::selected );
     c.RegisterArray<Rml::Vector<nc_skills_tab>>();
     Rml::StructHandle<nc_skill_row> rh = c.RegisterStruct<nc_skill_row>();
@@ -2408,7 +2562,7 @@ tab_direction set_skills( avatar &u, points_left &points )
             return;
         }
         data->tabs = build_nc_char_tabs<nc_skills_tab>( 6 ); // SKILLS tab active
-        data->points_rml = cata_text_to_rml( points.to_string() );
+        data->points_rml = cata_text_to_rml( nc_points_line( points ) );
 
         const int cost = skill_increment_cost( u, currentSkill->ident() );
         const int level = u.get_skill_level( currentSkill->ident() );
@@ -2564,6 +2718,7 @@ namespace
 {
 struct nc_scen_tab {
     Rml::String name_rml;
+    Rml::String icon_dec;   //< placeholder tab glyph
     bool selected = false;
 };
 struct nc_scen_row {
@@ -2591,6 +2746,7 @@ void register_nc_scen_rml_types( Rml::DataModelConstructor &c )
     }
     Rml::StructHandle<nc_scen_tab> th = c.RegisterStruct<nc_scen_tab>();
     th.RegisterMember( "name_rml", &nc_scen_tab::name_rml );
+    th.RegisterMember( "icon_dec", &nc_scen_tab::icon_dec );
     th.RegisterMember( "selected", &nc_scen_tab::selected );
     c.RegisterArray<Rml::Vector<nc_scen_tab>>();
     Rml::StructHandle<nc_scen_row> rh = c.RegisterStruct<nc_scen_row>();
@@ -2663,7 +2819,7 @@ tab_direction set_scenario( avatar &u, points_left &points,
         data->tabs = build_nc_char_tabs<nc_scen_tab>( 1 ); // SCENARIO tab active
         const bool valid = cur_id >= 0 && static_cast<size_t>( cur_id ) < sorted_scens.size();
 
-        std::string pmsg = points.to_string();
+        std::string pmsg = nc_points_line( points );
         if( valid ) {
             const int netPointCost = sorted_scens[cur_id]->point_cost() - g->scen->point_cost();
             if( netPointCost > 0 ) {
@@ -2724,44 +2880,51 @@ tab_direction set_scenario( avatar &u, points_left &points,
             info += "\n\n";
             info += colorize( _( "Scenario Vehicle:" ), COL_HEADER );
             info += "\n";
-            if( s->vehicle() ) {
-                info += s->vehicle()->name;
-            }
+            // A header with nothing under it reads as a rendering fault rather than
+            // as "empty", so name the empty state.
+            info += s->vehicle() ? s->vehicle()->name : std::string( _( "None" ) );
             info += "\n\n";
             info += colorize( _( "Scenario Flags:" ), COL_HEADER );
             info += "\n";
+            std::vector<std::string> flags;
             if( s->has_flag( "SPR_START" ) ) {
-                info += std::string( _( "Spring start" ) ) + "\n";
+                flags.emplace_back( _( "Spring start" ) );
             } else if( s->has_flag( "SUM_START" ) ) {
-                info += std::string( _( "Summer start" ) ) + "\n";
+                flags.emplace_back( _( "Summer start" ) );
             } else if( s->has_flag( "AUT_START" ) ) {
-                info += std::string( _( "Autumn start" ) ) + "\n";
+                flags.emplace_back( _( "Autumn start" ) );
             } else if( s->has_flag( "WIN_START" ) ) {
-                info += std::string( _( "Winter start" ) ) + "\n";
+                flags.emplace_back( _( "Winter start" ) );
             } else if( s->has_flag( "SUM_ADV_START" ) ) {
-                info += std::string( _( "Next summer start" ) ) + "\n";
+                flags.emplace_back( _( "Next summer start" ) );
             }
             if( s->has_flag( "INFECTED" ) ) {
-                info += std::string( _( "Infected player" ) ) + "\n";
+                flags.emplace_back( _( "Infected player" ) );
             }
             if( s->has_flag( "BAD_DAY" ) ) {
-                info += std::string( _( "Drunk and sick player" ) ) + "\n";
+                flags.emplace_back( _( "Drunk and sick player" ) );
             }
             if( s->has_flag( "FIRE_START" ) ) {
-                info += std::string( _( "Fire nearby" ) ) + "\n";
+                flags.emplace_back( _( "Fire nearby" ) );
             }
             if( s->has_flag( "SUR_START" ) ) {
-                info += std::string( _( "Zombies nearby" ) ) + "\n";
+                flags.emplace_back( _( "Zombies nearby" ) );
             }
             if( s->has_flag( "HELI_CRASH" ) ) {
-                info += std::string( _( "Various limb wounds" ) ) + "\n";
+                flags.emplace_back( _( "Various limb wounds" ) );
             }
             if( get_option<std::string>( "STARTING_NPC" ) == "scenario" &&
                 s->has_flag( "LONE_START" ) ) {
-                info += std::string( _( "No starting NPC" ) ) + "\n";
+                flags.emplace_back( _( "No starting NPC" ) );
             }
             if( s->has_flag( "BORDERED" ) ) {
-                info += std::string( _( "Starting location is bordered by an immense wall" ) ) + "\n";
+                flags.emplace_back( _( "Starting location is bordered by an immense wall" ) );
+            }
+            if( flags.empty() ) {
+                flags.emplace_back( _( "None" ) );
+            }
+            for( const std::string &f : flags ) {
+                info += f + "\n";
             }
             data->info_rml = cata_text_to_rml( info );
         } else {
@@ -2937,8 +3100,31 @@ namespace
 {
 struct nc_desc_tab {
     Rml::String name_rml;
+    Rml::String icon_dec;   //< placeholder tab glyph
     bool selected = false;
 };
+/// One rendered row of an OVERVIEW pane.
+///
+/// `label` and `value` are separate spans so the label can carry its trailing space
+/// INSIDE its own colour run — `colorize(label) + " " + colorize(value)` puts U+0020
+/// between two spans, where RmlUi trims it at parse time (this is what rendered
+/// `Traits:None!` and `Wielded:None!`). Either may be empty: a plain list entry is
+/// value-only, a bare group heading is label-only.
+struct nc_desc_row {
+    Rml::String label_rml;
+    Rml::String value_rml;
+    bool heading = false;   //< styled as a group heading, not a data row
+};
+
+/// One OVERVIEW column. `title_rml` may be empty (the misc column has no title of
+/// its own and opens on its first heading). `icon_dec` is the section's placeholder
+/// glyph — see plans/charcreation-visual-overhaul.md for the art hand-off table.
+struct nc_desc_pane {
+    Rml::String title_rml;
+    Rml::String icon_dec;
+    Rml::Vector<nc_desc_row> rows;
+};
+
 struct nc_desc_session {
     Rml::Vector<nc_desc_tab> tabs;
     Rml::String points_rml;
@@ -2949,12 +3135,7 @@ struct nc_desc_session {
     Rml::String location_rml;
     Rml::String scenario_rml;
     Rml::String profession_rml;
-    Rml::String stats_rml;
-    Rml::String skills_rml;
-    Rml::String traits_rml;
-    Rml::String bionics_rml;
-    Rml::String misc_rml;
-    Rml::String gear_rml;
+    Rml::Vector<nc_desc_pane> panes;
     Rml::String guide_rml;
     Rml::DataModelHandle handle;
 };
@@ -2968,10 +3149,74 @@ void register_nc_desc_rml_types( Rml::DataModelConstructor &c )
     }
     Rml::StructHandle<nc_desc_tab> th = c.RegisterStruct<nc_desc_tab>();
     th.RegisterMember( "name_rml", &nc_desc_tab::name_rml );
+    th.RegisterMember( "icon_dec", &nc_desc_tab::icon_dec );
     th.RegisterMember( "selected", &nc_desc_tab::selected );
     c.RegisterArray<Rml::Vector<nc_desc_tab>>();
+
+    Rml::StructHandle<nc_desc_row> rh = c.RegisterStruct<nc_desc_row>();
+    rh.RegisterMember( "label_rml", &nc_desc_row::label_rml );
+    rh.RegisterMember( "value_rml", &nc_desc_row::value_rml );
+    rh.RegisterMember( "heading", &nc_desc_row::heading );
+    c.RegisterArray<Rml::Vector<nc_desc_row>>();
+
+    Rml::StructHandle<nc_desc_pane> ph = c.RegisterStruct<nc_desc_pane>();
+    ph.RegisterMember( "title_rml", &nc_desc_pane::title_rml );
+    ph.RegisterMember( "icon_dec", &nc_desc_pane::icon_dec );
+    ph.RegisterMember( "rows", &nc_desc_pane::rows );
+    c.RegisterArray<Rml::Vector<nc_desc_pane>>();
+
     g_nc_desc_types_registered = true;
 }
+
+/// Accumulates an OVERVIEW column. Every append keeps the label's trailing space
+/// inside the label's own colour run, so nothing welds.
+class pane_builder
+{
+    public:
+        pane_builder( const std::string &title, const nc_color &title_col, unsigned icon_seed ) {
+            if( !title.empty() ) {
+                p.title_rml = cata_text_to_rml( colorize( title, title_col ) );
+            }
+            p.icon_dec = nc_icon_dec( icon_seed, 20, false );
+        }
+
+        /// A group heading, optionally with an inline value ("Vehicle:  None!").
+        void heading( const std::string &label, const nc_color &label_col,
+                      const std::string &value = std::string(),
+                      const nc_color &value_col = c_white ) {
+            nc_desc_row r;
+            r.heading = true;
+            r.label_rml = cata_text_to_rml( nc_label( label, label_col ) );
+            if( !value.empty() ) {
+                r.value_rml = cata_text_to_rml( colorize( value, value_col ) );
+            }
+            p.rows.push_back( r );
+        }
+
+        /// A `label: value` data row.
+        void field( const std::string &label, const nc_color &label_col,
+                    const std::string &value, const nc_color &value_col ) {
+            nc_desc_row r;
+            r.label_rml = cata_text_to_rml( nc_label( label, label_col ) );
+            r.value_rml = cata_text_to_rml( colorize( value, value_col ) );
+            p.rows.push_back( r );
+        }
+
+        /// A bare list entry.
+        void value( const std::string &value, const nc_color &value_col ) {
+            nc_desc_row r;
+            r.value_rml = cata_text_to_rml( colorize( value, value_col ) );
+            p.rows.push_back( r );
+        }
+
+        /// The "None!" marker, as its own row when a group has no inline value.
+        void none() { value( _( "None!" ), c_light_red ); }
+
+        auto take() -> nc_desc_pane { return std::move( p ); }
+
+    private:
+        nc_desc_pane p;
+};
 } // namespace
 
 tab_direction set_description( avatar &you, const bool allow_reroll,
@@ -3028,21 +3273,8 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
         // Very bottom Row
         w_guide = catacurses::newwin( 6, std::max( 1, TERMX - 3 ), point( 2, TERMY - 7 ) );
 
-        const int int_page_width = 38;
-
         if( use_character_preview ) {
-            constexpr int preview_nlines_min = 7;
-            constexpr int preview_ncols_min = 10;
-            const int preview_nlines = std::max( ( TERMY - 9 ) / 3, preview_nlines_min );
-            const int preview_ncols = std::max( ( TERMX - int_page_width * 3 - 4 ) / 3 - 5, preview_ncols_min );
-            constexpr auto orientation = character_preview_window::Orientation{
-                character_preview_window::TOP_RIGHT,
-                character_preview_window::Margin{0, 2, 10, 0}
-            };
-            character_preview.prepare(
-                preview_nlines, preview_ncols,
-                &orientation, int_page_width * 3 + 5
-            );
+            nc_prepare_preview( character_preview );
         }
 
         ui.position_from_window( w );
@@ -3112,7 +3344,7 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
             return;
         }
         data->tabs = build_nc_char_tabs<nc_desc_tab>( 7 ); // OVERVIEW tab active
-        data->points_rml = cata_text_to_rml( points.to_string() );
+        data->points_rml = cata_text_to_rml( nc_points_line( points ) );
 
         // Name (selector-highlighted). value mirrors the curses three-way state.
         {
@@ -3127,25 +3359,28 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
                 val = you.name;
             }
             data->name_rml = cata_text_to_rml( std::string( sel ? "> " : "  " ) +
-                                               colorize( _( "Name:" ), sel ? c_white : c_light_gray ) +
-                                               " " + colorize( val, val_col ) );
+                                               nc_label( _( "Name:" ), sel ? c_white : c_light_gray ) +
+                                               colorize( val, val_col ) );
         }
 
         data->gender_rml = cata_text_to_rml(
-                               colorize( _( "Gender:" ), c_light_gray ) + " " +
-                               colorize( _( "Male" ), you.male ? c_light_cyan : c_light_gray ) + " " +
+                               nc_label( _( "Gender:" ), c_light_gray ) +
+                               colorize( _( "Male" ), you.male ? c_light_cyan : c_light_gray ) +
+                               // Separator in its own colour run so it survives the trim, and
+                               // so the two values cannot read as one word ("MaleFemale").
+                               colorize( " / ", c_dark_gray ) +
                                colorize( _( "Female" ), you.male ? c_light_gray : c_pink ) );
 
         {
             const bool sel = current_selector == char_creation::HEIGHT;
             data->height_rml = cata_text_to_rml( std::string( sel ? "> " : "  " ) +
-                                                 colorize( _( "Height:" ), sel ? c_white : c_light_gray ) + " " +
+                                                 nc_label( _( "Height:" ), sel ? c_white : c_light_gray ) +
                                                  colorize( string_format( "%d cm", you.base_height() ), c_white ) );
         }
         {
             const bool sel = current_selector == char_creation::AGE;
             data->age_rml = cata_text_to_rml( std::string( sel ? "> " : "  " ) +
-                                              colorize( _( "Age:" ), sel ? c_white : c_light_gray ) + " " +
+                                              nc_label( _( "Age:" ), sel ? c_white : c_light_gray ) +
                                               colorize( string_format( "%d", you.base_age() ), c_white ) );
         }
 
@@ -3156,7 +3391,7 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
                                            you.start_location.obj().name(),
                                            you.start_location.obj().targets_count() );
             data->location_rml = cata_text_to_rml(
-                                     colorize( _( "Starting location:" ), c_light_gray ) + " " +
+                                     nc_label( _( "Starting location:" ), c_light_gray ) +
                                      colorize( locval, you.random_start_location ? c_red : c_white ) );
         }
 
@@ -3167,70 +3402,28 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
                                    colorize( _( "Profession: " ), COL_HEADER ) +
                                    colorize( you.prof->gender_appropriate_name( you.male ), c_light_gray ) );
 
-        // Stats pane.
+        // ── The six OVERVIEW columns ──────────────────────────────────────────
+        // Built as explicit label/value rows rather than one "\n"-joined string per
+        // column: the header then has its own element (so it can carry real
+        // typographic weight) and no label can weld to its value.
+        data->panes.clear();
+
+        // Stats.
         {
-            std::string s = colorize( _( "Stats:" ), COL_HEADER );
-            s += "\n" + colorize( string_format( "%s %d", _( "Strength:" ), you.str_max ), c_light_gray );
-            s += "\n" + colorize( string_format( "%s %d", _( "Dexterity:" ), you.dex_max ), c_light_gray );
-            s += "\n" + colorize( string_format( "%s %d", _( "Intelligence:" ), you.int_max ), c_light_gray );
-            s += "\n" + colorize( string_format( "%s %d", _( "Perception:" ), you.per_max ), c_light_gray );
-            data->stats_rml = cata_text_to_rml( s );
+            pane_builder b( _( "Stats:" ), COL_HEADER, 0x0101 );
+            b.field( _( "Strength:" ), c_light_gray, string_format( "%d", you.str_max ), c_white );
+            b.field( _( "Dexterity:" ), c_light_gray, string_format( "%d", you.dex_max ), c_white );
+            b.field( _( "Intelligence:" ), c_light_gray, string_format( "%d", you.int_max ), c_white );
+            b.field( _( "Perception:" ), c_light_gray, string_format( "%d", you.per_max ), c_white );
+            data->panes.push_back( b.take() );
         }
 
-        // Traits pane.
+        // Skills (category-grouped, only levels > 0).
         {
-            std::string s = colorize( _( "Traits:" ), COL_HEADER );
-            std::vector<trait_id> current_traits = points.limit == points_left::TRANSFER ?
-                                                   you.get_mutations() : you.get_base_traits();
-            std::sort( current_traits.begin(), current_traits.end(), trait_display_sort );
-            if( current_traits.empty() ) {
-                s += " " + colorize( _( "None!" ), c_light_red );
-            } else {
-                for( const trait_id &tr : current_traits ) {
-                    s += "\n" + colorize( tr->name(), tr->get_display_color() );
-                }
-            }
-            data->traits_rml = cata_text_to_rml( s );
-        }
-
-        // Bionics + Spells pane (built once; curses draws it twice).
-        {
-            std::vector<bionic_id> current_bionics;
-            for( const bionic_id &id : you.prof->CBMs() ) {
-                current_bionics.push_back( id );
-            }
-            for( const bionic &bio : you.get_bionic_collection() ) {
-                current_bionics.push_back( bio.id );
-            }
-            std::sort( current_bionics.begin(), current_bionics.end(),
-            []( const bionic_id & a, const bionic_id & b ) {
-                return localized_compare( a->name.translated(), b->name.translated() );
-            } );
-            std::string s = colorize( _( "Bionics: " ), COL_HEADER );
-            if( current_bionics.empty() ) {
-                s += colorize( _( "None!" ), c_light_red );
-            } else {
-                for( const bionic_id &bio : current_bionics ) {
-                    s += "\n" + colorize( bio->name.translated(), c_white );
-                }
-            }
-            s += "\n" + colorize( _( "Spells: " ), COL_HEADER );
-            if( you.prof->spells().empty() ) {
-                s += colorize( _( "None!" ), c_light_red );
-            } else {
-                for( const std::pair<spell_id, int> &sp : you.prof->spells() ) {
-                    s += "\n" + colorize( string_format( _( "%s level %d" ), sp.first->name, sp.second ), c_white );
-                }
-            }
-            data->bionics_rml = cata_text_to_rml( s );
-        }
-
-        // Skills pane (category-grouped, only levels > 0).
-        {
-            std::string s = colorize( _( "Skills:" ), COL_HEADER );
-            auto skillslist = Skill::get_skills_sorted_by( [&]( const Skill & a, const Skill & b ) {
+            pane_builder b( _( "Skills:" ), COL_HEADER, 0x0102 );
+            auto skillslist = Skill::get_skills_sorted_by( [&]( const Skill & a, const Skill & b2 ) {
                 return localized_compare( std::make_pair( a.display_category(), a.name() ),
-                                          std::make_pair( b.display_category(), b.name() ) );
+                                          std::make_pair( b2.display_category(), b2.name() ) );
             } );
             bool has_skills = false;
             skill_displayType_id last_category = skill_displayType_id::NULL_ID();
@@ -3247,77 +3440,121 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
                 if( level > 0 ) {
                     if( last_category != elem->display_category() ) {
                         last_category = elem->display_category();
-                        s += "\n" + colorize( elem->display_category()->display_string(), c_yellow );
+                        b.heading( elem->display_category()->display_string(), c_yellow );
                     }
-                    s += "\n" + colorize( string_format( "%s: %d", elem->name(), level ), c_light_gray );
+                    b.field( string_format( "%s:", elem->name() ), c_light_gray,
+                             string_format( "%d", level ), c_white );
                     has_skills = true;
                 }
             }
             if( !has_skills ) {
-                s += " " + colorize( _( "None!" ), c_light_red );
+                b.none();
             }
-            data->skills_rml = cata_text_to_rml( s );
+            data->panes.push_back( b.take() );
         }
 
-        // Misc pane: Vehicle / Companions / Cash / Pets / Addictions.
+        // Traits.
         {
-            std::string s = colorize( _( "Vehicle: " ), c_white );
+            pane_builder b( _( "Traits:" ), COL_HEADER, 0x0103 );
+            std::vector<trait_id> current_traits = points.limit == points_left::TRANSFER ?
+                                                   you.get_mutations() : you.get_base_traits();
+            std::sort( current_traits.begin(), current_traits.end(), trait_display_sort );
+            if( current_traits.empty() ) {
+                b.none();
+            } else {
+                for( const trait_id &tr : current_traits ) {
+                    b.value( tr->name(), tr->get_display_color() );
+                }
+            }
+            data->panes.push_back( b.take() );
+        }
+
+        // Bionics + Spells (one column; curses drew it as two).
+        {
+            pane_builder b( _( "Bionics:" ), COL_HEADER, 0x0104 );
+            std::vector<bionic_id> current_bionics;
+            for( const bionic_id &id : you.prof->CBMs() ) {
+                current_bionics.push_back( id );
+            }
+            for( const bionic &bio : you.get_bionic_collection() ) {
+                current_bionics.push_back( bio.id );
+            }
+            std::sort( current_bionics.begin(), current_bionics.end(),
+            []( const bionic_id & a, const bionic_id & b2 ) {
+                return localized_compare( a->name.translated(), b2->name.translated() );
+            } );
+            if( current_bionics.empty() ) {
+                b.none();
+            } else {
+                for( const bionic_id &bio : current_bionics ) {
+                    b.value( bio->name.translated(), c_white );
+                }
+            }
+            b.heading( _( "Spells:" ), COL_HEADER );
+            if( you.prof->spells().empty() ) {
+                b.none();
+            } else {
+                for( const std::pair<spell_id, int> &sp : you.prof->spells() ) {
+                    b.value( string_format( _( "%s level %d" ), sp.first->name, sp.second ), c_white );
+                }
+            }
+            data->panes.push_back( b.take() );
+        }
+
+        // Vehicle / Companions / Cash / Pets / Addictions — everything the scenario
+        // and profession grant that is not a stat, skill, trait, bionic or item.
+        {
+            // Titled: with an icon and a rule under every other column head, a
+            // titleless one reads as a rendering fault rather than as deliberate.
+            pane_builder b( _( "Other:" ), COL_HEADER, 0x0105 );
             const vproto_id scen_veh = g->scen->vehicle();
             const vproto_id prof_veh = you.prof->vehicle();
-            if( !scen_veh && !prof_veh ) {
-                s += colorize( _( "None!" ), c_light_red );
-            }
+            b.heading( _( "Vehicle:" ), c_white,
+                       ( !scen_veh && !prof_veh ) ? _( "None!" ) : std::string(), c_light_red );
             if( scen_veh ) {
-                s += "\n" + colorize( scen_veh->name, c_white );
+                b.value( scen_veh->name, c_white );
             }
             if( prof_veh ) {
-                s += "\n" + colorize( prof_veh->name, c_white );
+                b.value( prof_veh->name, c_white );
             }
-            s += "\n" + colorize( _( "Companions: " ), c_white );
+
             const std::vector<npc_class_id> npcs = you.prof->npcs();
-            if( npcs.empty() ) {
-                s += colorize( _( "None!" ), c_light_red );
-            } else {
-                for( const npc_class_id &id : npcs ) {
-                    if( id.is_valid() ) {
-                        s += "\n" + colorize( id.obj().get_name(), c_white );
-                    }
+            b.heading( _( "Companions:" ), c_white,
+                       npcs.empty() ? _( "None!" ) : std::string(), c_light_red );
+            for( const npc_class_id &id : npcs ) {
+                if( id.is_valid() ) {
+                    b.value( id.obj().get_name(), c_white );
                 }
             }
-            s += "\n" + colorize( _( "Cash: " ), c_white );
-            if( !you.prof->starting_cash() ) {
-                s += colorize( _( "Random!" ), c_white );
-            } else {
-                s += colorize( format_money( you.prof->starting_cash().value() ), c_white );
-            }
-            s += "\n" + colorize( _( "Pets: " ), c_white );
-            if( you.prof->pets().empty() ) {
-                s += colorize( _( "None!" ), c_light_red );
-            } else {
-                for( const mtype_id &id : you.prof->pets() ) {
-                    if( id.is_valid() ) {
-                        monster pet( id );
-                        s += "\n" + colorize( pet.get_name(), c_white );
-                    }
+
+            b.heading( _( "Cash:" ), c_white,
+                       !you.prof->starting_cash()
+                       ? _( "Random!" )
+                       : format_money( you.prof->starting_cash().value() ), c_white );
+
+            b.heading( _( "Pets:" ), c_white,
+                       you.prof->pets().empty() ? _( "None!" ) : std::string(), c_light_red );
+            for( const mtype_id &id : you.prof->pets() ) {
+                if( id.is_valid() ) {
+                    monster pet( id );
+                    b.value( pet.get_name(), c_white );
                 }
             }
-            s += "\n" + colorize( _( "Addictions: " ), c_white );
-            if( you.prof->addictions().empty() ) {
-                s += colorize( _( "None!" ), c_light_red );
-            } else {
-                for( addiction &addict : you.prof->addictions() ) {
-                    s += "\n" + colorize( addiction_name( addict ), c_white );
-                }
+
+            b.heading( _( "Addictions:" ), c_white,
+                       you.prof->addictions().empty() ? _( "None!" ) : std::string(), c_light_red );
+            for( addiction &addict : you.prof->addictions() ) {
+                b.value( addiction_name( addict ), c_white );
             }
-            data->misc_rml = cata_text_to_rml( s );
+            data->panes.push_back( b.take() );
         }
 
-        // Gear pane: Items split into wielded / worn / inventory.
+        // Items, split into wielded / worn / inventory.
         {
-            std::string s = colorize( _( "Items: " ), c_white );
+            pane_builder b( _( "Items:" ), c_white, 0x0106 );
             const auto prof_items = you.prof->items( you.male, you.get_mutations() );
             if( prof_items.empty() ) {
-                s += colorize( _( "None!" ), c_light_red );
+                b.none();
             } else {
                 std::vector<std::string> wielded;
                 std::vector<std::string> worn;
@@ -3335,20 +3572,17 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
                 }
                 const auto add_group = [&]( const std::string & head,
                 const std::vector<std::string> &names ) {
-                    s += "\n" + colorize( head, c_yellow );
-                    if( names.empty() ) {
-                        s += " " + colorize( _( "None!" ), c_light_red );
-                    } else {
-                        for( const std::string &name : names ) {
-                            s += "\n" + colorize( name, c_white );
-                        }
+                    b.heading( head, c_yellow, names.empty() ? _( "None!" ) : std::string(),
+                               c_light_red );
+                    for( const std::string &name : names ) {
+                        b.value( name, c_white );
                     }
                 };
-                add_group( _( "Wielded: " ), wielded );
-                add_group( _( "Worn: " ), worn );
-                add_group( _( "Inventory: " ), inventory );
+                add_group( _( "Wielded:" ), wielded );
+                add_group( _( "Worn:" ), worn );
+                add_group( _( "Inventory:" ), inventory );
             }
-            data->gear_rml = cata_text_to_rml( s );
+            data->panes.push_back( b.take() );
         }
 
         // Keybinding guide footer (green keys).
@@ -3387,6 +3621,9 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
     ui.on_redraw( [&]( const ui_adaptor & ) {
         if( rml ) {
             sync_rml();
+            if( use_character_preview ) {
+                character_preview.display();
+            }
             return;
         }
     } );
@@ -3403,12 +3640,7 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
         c.Bind( "location_rml", &data->location_rml );
         c.Bind( "scenario_rml", &data->scenario_rml );
         c.Bind( "profession_rml", &data->profession_rml );
-        c.Bind( "stats_rml", &data->stats_rml );
-        c.Bind( "skills_rml", &data->skills_rml );
-        c.Bind( "traits_rml", &data->traits_rml );
-        c.Bind( "bionics_rml", &data->bionics_rml );
-        c.Bind( "misc_rml", &data->misc_rml );
-        c.Bind( "gear_rml", &data->gear_rml );
+        c.Bind( "panes", &data->panes );
         c.Bind( "guide_rml", &data->guide_rml );
         data->handle = c.GetModelHandle();
     } );

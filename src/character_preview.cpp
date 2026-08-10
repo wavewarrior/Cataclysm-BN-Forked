@@ -452,7 +452,6 @@ void character_preview_window::display() const
 
     // Drawing character itself
     const auto pos = calc_character_pos();
-    // tilecontext->display_character( *character, pos );
     char_preview_adapter::convert( &*tilecontext )->display_avatar_preview_with_overlays( *
             ( character->as_avatar() ), pos, show_clothes );
 }

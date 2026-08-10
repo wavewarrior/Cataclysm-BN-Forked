@@ -1,6 +1,7 @@
 <rml>
 <head>
     <link type="text/rcss" href="theme.rcss"/>
+    <link type="text/rcss" href="newchar_common.rcss"/>
     <link type="text/rcss" href="newchartraits.rcss"/>
 </head>
 <body data-model="newchartraits">
@@ -16,12 +17,37 @@
     <div class="panel nc-panel">
         <div class="tabs nc-tabs">
             <div class="item tab" data-for="t : tabs"
-                 data-class-selected="t.selected" data-rml="t.name_rml"></div>
+                 data-class-selected="t.selected">
+                <div class="nc-tab-icon" data-style-decorator="t.icon_dec"></div>
+                <span class="nc-tab-label" data-rml="t.name_rml"></span>
+            </div>
         </div>
         <div class="nc-trait-top">
             <span class="nc-trait-points" data-rml="points_rml"></span>
-            <span class="nc-trait-budget" data-rml="budget_rml"></span>
             <span class="nc-trait-cost" data-rml="cost_rml"></span>
+        </div>
+        <!-- Own row, not inside .nc-trait-top: at 230dp wedged between the
+             points and cost lines the scale read as clutter rather than as an
+             indicator. -->
+        <div class="nc-balance-row" data-if="balance.show">
+            <!-- No absolute positioning anywhere: RmlUi resolved `position: absolute`
+                 against .nc-panel rather than against .nc-scale's `position: relative`,
+                 which put the beam ~39dp above the pans and across the top bar. Pure
+                 flow instead: arm row (pan | beam | pan) with the fulcrum beneath. -->
+            <div class="nc-scale">
+                <div class="nc-scale-arm">
+                    <div class="nc-scale-pan" data-style-top="balance.good_top">
+                        <div class="nc-scale-icon" data-style-decorator="balance.good_icon"></div>
+                        <span class="nc-scale-num" data-rml="balance.good_rml"></span>
+                    </div>
+                    <div class="nc-scale-beam" data-style-transform="balance.rotate"></div>
+                    <div class="nc-scale-pan" data-style-top="balance.bad_top">
+                        <span class="nc-scale-num" data-rml="balance.bad_rml"></span>
+                        <div class="nc-scale-icon" data-style-decorator="balance.bad_icon"></div>
+                    </div>
+                </div>
+                <div class="nc-scale-fulcrum" data-style-decorator="balance.fulcrum_icon"></div>
+            </div>
         </div>
         <div class="nc-trait-cols">
             <div id="nc-trait-col0" class="nc-trait-col scroll-pane" data-rml="col0_html"></div>

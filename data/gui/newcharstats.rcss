@@ -10,8 +10,15 @@ body {
     height: 100%;
 }
 
+/* 72%, not 80/92%: the character-preview box is pinned to the right of the screen
+   and its avatar is a GPU sprite drawn UNDERNEATH this document, so an opaque panel
+   reaching over that box hides the sprite. A centred panel of width W has its right
+   edge at (100+W)/2, so 72% ends at 86% and the box starts at ~86.7% — they never
+   meet. 80% (right edge 90%) cleared the old box by 0.2% by luck; 92% covered it.
+   Keep all eight tabs identical so the panel edge does not jump while tabbing.
+   See nc_prepare_preview() in newcharacter_ui.cpp. */
 .nc-panel {
-    width: 80%;
+    width: 72%;
     min-width: 720dp;
     height: 92%;
     display: flex;

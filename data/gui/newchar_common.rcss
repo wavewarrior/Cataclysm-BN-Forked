@@ -1,0 +1,231 @@
+/* Shared rules for the eight new-character-creator tabs (Tier 4 #4). Linked by
+   every tab document AFTER theme.rcss so these win on equal specificity.
+
+   ── CURSOR ROW LEGIBILITY — the reason this file exists ────────────────────────
+
+   theme.rcss pairs `.item.selected` with an OPAQUE accent fill plus
+   `color: {{bg-hard}}`, which assumes the row's text colour is the theme's to set.
+   In this creator it is not: every row arrives through `data-rml`, so
+   `cata_text_to_rml` has already baked the colour into an inline
+   `<span style="color:…">` — and an inline colour beats a class rule.
+
+   Measured on the POINTS tab: an RCSS `color` on the cursor row changed ZERO
+   pixels, with and without `!important`, while an RCSS `background-color` applied
+   immediately. So the intended dark-on-gold never happens — the semantic colour
+   stays and sits on the gold fill at 1.65:1, well under the 4.5:1 legibility
+   floor. The cursor row rendered as a blank gold bar on POINTS, SCENARIO and
+   TRAITS. (STATS escaped only because its active colour happens to be dark.)
+
+   Dropping the colour in the producer is NOT the fix: on TRAITS it is the only
+   channel encoding taken / forbidden / available, and on PROFESSION and SCENARIO
+   it encodes affordability. Stripping it would blind the user on the one row they
+   are about to press Enter on.
+
+   So mark the cursor with geometry and a DARK fill instead. Every other row
+   already sits on a dark ground, so each semantic colour keeps exactly the
+   contrast it was designed for — and the cursor row ends up the most readable row
+   on screen rather than the least. */
+
+.nc-opt, .nc-stat, .nc-skill-row, .nc-scen-row, .nc-prof-row, .nc-trait-row {
+    /* Reserved on EVERY row, not just .selected, so the cursor's accent bar does
+       not shift row text sideways as the cursor moves. Longhand, not the
+       `border-left` shorthand: the shorthand form did not paint here. */
+    border-left-width: 3dp;
+    border-left-color: transparent;
+}
+
+.nc-opt.selected, .nc-stat.selected, .nc-skill-row.selected,
+.nc-scen-row.selected, .nc-prof-row.selected, .nc-trait-row.selected {
+    background-color: {{bg-hard}};
+    border-left-width: 3dp;
+    border-left-color: {{yellow}};
+    /* Bold as a second, colour-independent cursor cue — the fill step alone is
+       easy to miss in the dense three-column TRAITS/BIONICS lists. */
+    font-weight: bold;
+    /* Overrides theme `.item.selected`'s on-accent (near-black), which would be
+       invisible on this dark fill for any row that has NO baked colour. */
+    color: {{fg0}};
+}
+
+/* ── GROUPING GEOMETRY ─────────────────────────────────────────────────────────
+
+   The measured complaint is scannability, not spacing: the creator carries 2.5-4x
+   the glyph-edge density of the UI_designs references (TRAITS 8.72% vs 1.36-2.55%)
+   while its line leading is already comparable (1.41x vs 1.44-1.52x). Adding
+   leading would not help; what is missing is anything telling the eye where one
+   group ends.
+
+   Only reaches what has an element boundary. Each OVERVIEW pane is a SINGLE div
+   fed by one data-rml string with its header baked into the text ("Stats:\n
+   Strength: 8\n..."), so a header cannot be given size or weight from here — that
+   needs the producer to emit the header as its own element. See
+   plans/charcreation-visual-overhaul.md workstream 4. */
+
+/* Category headers in the skills list DO have an element boundary
+   (data-class-header), so they can carry real hierarchy. */
+.nc-skill-row.header {
+    font-weight: bold;
+    letter-spacing: 2dp;
+    margin-top: 10dp;
+    margin-bottom: 2dp;
+}
+
+/* ── TAB STRIP GLYPHS ──────────────────────────────────────────────────────────
+   The theme's .tab is a plain text item; it now carries an icon + label, so it
+   becomes a flex row. Icons are ?proc:runic-icon placeholders (see
+   plans/charcreation-visual-overhaul.md for the art hand-off table). */
+.nc-tabs .tab {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+}
+
+.nc-tab-icon {
+    flex: 0 0 auto;
+    width: 16dp;
+    height: 16dp;
+    margin-right: 6dp;
+}
+
+.nc-tab-label {
+    flex: 0 0 auto;
+}
+
+/* ── COLUMN HIERARCHY ─────────────────────────────────────────────────────────
+   This is the hierarchy the screen was missing: previously every line in a column
+   was the same 18dp weight, so a column title competed with its own data and the
+   eye had nowhere to land. The title and group headings now have their own
+   elements (see nc_desc_pane/nc_desc_row) and can carry weight. */
+.nc-pane-head {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 6dp;
+    padding-bottom: 3dp;
+    border-bottom: 1dp {{bg4}};
+}
+
+.nc-pane-icon {
+    flex: 0 0 auto;
+    width: 18dp;
+    height: 18dp;
+    margin-right: 6dp;
+}
+
+.nc-pane-title {
+    flex: 1;
+    font-weight: bold;
+    letter-spacing: 2dp;
+    color: {{fg0}};
+}
+
+.nc-pane-body {
+    flex: 1;
+    min-height: 0;
+    display: block;
+}
+
+.nc-pane-row {
+    display: block;
+}
+
+/* Group headings inside a column (Spells:, Wielded:, a skill category). Spaced
+   away from the rows above so the grouping is visible without a rule per group. */
+.nc-pane-row.heading {
+    font-weight: bold;
+    margin-top: 8dp;
+}
+
+.nc-pane-row.heading:first-child {
+    margin-top: 0;
+}
+
+/* Values sit one luminance step above their labels, so a scan reads the DATA and
+   the labels recede. Both are overridden per-row by the producer's baked colour
+   where that colour is semantic (trait display colours, red None!). */
+.nc-pane-label {
+    color: {{fg4}};
+}
+
+.nc-pane-value {
+    color: {{fg0}};
+}
+
+/* ── TRAIT / BIONIC BALANCE SCALE ──────────────────────────────────────────────
+   Replaces the "7/12 0/-12" formula, which stated the numbers without conveying
+   whether you are leaning on advantages or disadvantages.
+
+   NO ABSOLUTE POSITIONING. The first attempt floated the beam with
+   `position: absolute` inside a `position: relative` .nc-scale; RmlUi resolved it
+   against .nc-panel instead, putting the beam ~39dp above the pans and straight
+   through the top bar. Everything here is flow layout: an arm row
+   (pan | beam | pan) with the fulcrum centred beneath it.
+
+   The BEAM rotates (transform from C++); the PANS do not ride it — they are
+   siblings nudged by their own `top`, so the numbers stay upright instead of
+   inheriting the rotation. `position: relative` on a pan makes that `top` a NUDGE
+   from its flex position, so C++ never needs to know the layout's base offsets.
+   Beam half-length 140dp and 8deg give an end rise of 140*sin(8) = 19.5dp, which is
+   why nc_make_balance() nudges the pans by 20dp — the ends and the pans move
+   together instead of visibly disagreeing.
+
+   It sits in its own centred row: wedged into .nc-trait-top between the points and
+   cost lines it read as clutter rather than as an indicator. */
+.nc-balance-row {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    padding: 2dp 0 8dp 0;
+}
+
+.nc-scale {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 340dp;
+}
+
+.nc-scale-arm {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+}
+
+.nc-scale-beam {
+    flex: 1;
+    height: 2dp;
+    margin: 0 6dp;
+    background-color: {{yellow}};
+    transition: transform 0.25s quadratic-out;
+}
+
+.nc-scale-pan {
+    position: relative;
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    transition: top 0.25s quadratic-out;
+}
+
+.nc-scale-icon {
+    flex: 0 0 auto;
+    width: 16dp;
+    height: 16dp;
+}
+
+.nc-scale-num {
+    flex: 0 0 auto;
+    margin: 0 4dp;
+}
+
+.nc-scale-fulcrum {
+    flex: 0 0 auto;
+    width: 14dp;
+    height: 14dp;
+}

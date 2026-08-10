@@ -10,8 +10,15 @@ body {
     height: 100%;
 }
 
+/* 72%, not 80/92%: the character-preview box is pinned to the right of the screen
+   and its avatar is a GPU sprite drawn UNDERNEATH this document, so an opaque panel
+   reaching over that box hides the sprite. A centred panel of width W has its right
+   edge at (100+W)/2, so 72% ends at 86% and the box starts at ~86.7% — they never
+   meet. 80% (right edge 90%) cleared the old box by 0.2% by luck; 92% covered it.
+   Keep all eight tabs identical so the panel edge does not jump while tabbing.
+   See nc_prepare_preview() in newcharacter_ui.cpp. */
 .nc-panel {
-    width: 92%;
+    width: 72%;
     min-width: 720dp;
     height: 94%;
     display: flex;
@@ -64,20 +71,42 @@ body {
     padding: 4dp 8dp;
 }
 
+/* Six panes separated only by x-position read as one field of text. A hairline
+   rule plus a real gutter gives the eye a group boundary; the first pane skips the
+   rule so the row does not open with a stray edge. The header inside each pane is
+   baked into its data-rml string and cannot be styled from here — see
+   plans/charcreation-visual-overhaul.md workstream 4. */
 .nc-desc-pane {
     flex: 1;
     min-width: 180dp;
     min-height: 0;
-    margin: 0 8dp 8dp 0;
-    white-space: pre-wrap;
+    margin: 0 0 8dp 0;
+    padding: 0 14dp;
+    border-left: 1dp {{bg4}};
+    /* Column is now head + scrolling body, not one text blob. */
+    display: flex;
+    flex-direction: column;
 }
 
+.nc-desc-pane:first-child {
+    border-left-color: transparent;
+    padding-left: 0;
+}
+
+/* Static keybinding help. 110dp fitted only 5 of the 7 lines, clipping the last
+   one mid-glyph and pushing the rest behind a scrollbar — help text you have to
+   scroll is help text you don't read, and there is ample empty space above it.
+   The cap is kept (generously) so a long translation degrades to scrolling
+   instead of eating the panes above. */
 .nc-desc-guide {
     flex: 0 0 auto;
-    max-height: 110dp;
+    max-height: 200dp;
     overflow-y: auto;
     white-space: pre-wrap;
     padding: 6dp 8dp;
     border-top: 1dp {{bg4}};
-    color: {{fg}};
+    /* Dimmer than the character data above it: this is standing reference text,
+       not content, and at full strength it competed with the panes. The keybinding
+       glyphs keep their baked yellow, so the scannable part still stands out. */
+    color: {{fg4}};
 }
