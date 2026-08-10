@@ -41,6 +41,7 @@
 #include "sdlsound.h"
 #include "sounds.h"
 #include "string_formatter.h"
+#include "string_utils.h"
 #include "text_snippets.h"
 #include "translations.h"
 #include "ui.h"
@@ -96,7 +97,10 @@ struct mm_session {
     Rml::String keybinds_rml;         // bottom keybind hints
     Rml::String panel_header_rml;     // left panel section header
     Rml::String context_header_rml;   // right panel header
-    Rml::String context_body_rml;     // right panel body (tips/preview)
+    // Right panel body: ONE element per line. A single element holding lines joined
+    // by "\n" loses them at parse time — data-rml is SetInnerRML and RmlUi decides
+    // whitespace handling from the style of the element it parses INTO.
+    Rml::Vector<mm_item> context_lines;
     Rml::Vector<mm_item> items;       // top nav bar
     Rml::Vector<mm_item> submenu;     // left panel action list
     Rml::Vector<mm_item> motd_lines;  // right panel scroll (MOTD/Credits)
@@ -161,6 +165,67 @@ unsigned lc_name_seed( const std::string& name )
         h *= 16777619u;
     }
     return h;
+}
+
+// Split a paragraph block into one row per line, skipping blanks — the vertical
+// rhythm comes from .mm-context-line's margin, not from empty rows (an empty
+// element is zero-height, so blank lines would collapse anyway).
+//
+// `base` is applied PER LINE, not to the block: colouring the block first and
+// splitting after would leave every line but the first without an opening tag.
+// Lines that already carry their own colour tags nest inside `base` harmlessly.
+auto context_lines_from( const std::string& text, const nc_color& base = c_light_gray )
+-> Rml::Vector<mm_item>
+{
+    Rml::Vector<mm_item> out;
+    for( const std::string& ln : string_split( text, '\n' ) ) {
+        if( ln.empty() ) { continue; }
+        mm_item m;
+        m.text_rml = cata_text_to_rml( colorize( ln, base ) );
+        out.push_back( m );
+    }
+    return out;
+}
+
+// Right-panel body for a world: what is actually in it, then what Enter does.
+auto world_context_text( const std::string& world_name, bool manage ) -> std::string
+{
+    WORLDINFO* world = world_generator->get_world( world_name );
+    if( world == nullptr ) { return std::string(); }
+
+    const auto mods = world->active_mod_order.size();
+    const auto chars = world->world_saves.size();
+
+    std::string body = colorize( world_name, c_white ) + "\n";
+    // A world with no mods.json genuinely has an empty list; "0 mods active"
+    // reads like a bug, so name the state instead of counting to zero.
+    body += colorize( mods == 0
+                      ? _( "No mods recorded" )
+                      : string_format( vgettext( "%d mod active", "%d mods active", mods ),
+                                       static_cast<int>( mods ) ), c_light_gray ) + "\n";
+    body += colorize( world->world_save_format == save_format::V2_COMPRESSED_SQLITE3
+                      ? _( "Save format: SQLite, compressed" )
+                      : _( "Save format: loose JSON (legacy)" ), c_light_gray ) + "\n";
+
+    if( world->world_saves.empty() ) {
+        body += colorize( _( "No characters here yet." ), c_dark_gray ) + "\n";
+    } else {
+        body += colorize( vgettext( "Character:", "Characters:", chars ), c_light_gray ) + "\n";
+        for( const save_t &s : world->world_saves ) {
+            body += colorize( s.decoded_name(), c_yellow ) + "\n";
+        }
+    }
+
+    if( manage ) {
+        body += colorize( _( "Enter to manage this world: inspect or edit its mods, copy its "
+                             "settings, export a character as a template, reset or delete it." ),
+                          c_dark_gray );
+    } else if( !world->world_saves.empty() ) {
+        body += colorize( _( "Enter to choose a character and resume." ), c_dark_gray );
+    } else {
+        body += colorize( _( "Start a character in this world from New Game." ), c_dark_gray );
+    }
+    return body;
 }
 } // namespace
 
@@ -357,6 +422,30 @@ void main_menu::init_strings()
     vSettingsSubItems.emplace_back( pgettext( "Main Menu|Settings", "<D|d>istractions" ) );
     vSettingsSubItems.emplace_back( pgettext( "Main Menu|Settings", "Colo<r|R>s" ) );
 
+    // Parallel to vSettingsSubItems — the context panel describes the highlighted entry.
+    vSettingsHints.clear();
+    vSettingsHints.emplace_back( _(
+                                     "Graphics, sound, interface, world defaults and gameplay rules.  "
+                                     "Changes apply immediately; world-specific options are set when a "
+                                     "world is created." ) );
+    vSettingsHints.emplace_back( _(
+                                     "Rebind any action.  Bindings can be global or scoped to a single "
+                                     "context, so the same key may mean different things in different "
+                                     "menus." ) );
+    vSettingsHints.emplace_back( _(
+                                     "Rules deciding which items are picked up automatically as you walk "
+                                     "over them.  Matched by name, and applied before the pickup prompt." ) );
+    vSettingsHints.emplace_back( _(
+                                     "Rules deciding which monsters interrupt your activities and stop "
+                                     "your movement.  Whitelist harmless creatures to cut down on "
+                                     "interruptions." ) );
+    vSettingsHints.emplace_back( _(
+                                     "Which events are allowed to interrupt a long activity — hostile "
+                                     "spotted, weather change, taking damage, and similar." ) );
+    vSettingsHints.emplace_back( _(
+                                     "Remap the colour of any game element.  Useful for colour-blind "
+                                     "palettes or matching a tileset." ) );
+
     vSettingsHotkeys.clear();
     for( const std::string& item : vSettingsSubItems ) {
         vSettingsHotkeys.push_back( get_hotkeys( item ) );
@@ -530,7 +619,7 @@ bool main_menu::opening_screen()
         // Default context for the right panel.
         data->panel_header_rml = Rml::String();
         data->context_header_rml = Rml::String();
-        data->context_body_rml = Rml::String();
+        data->context_lines.clear();
 
         switch( sel_o ) {
             case main_menu_opts::CREDITS:
@@ -551,9 +640,10 @@ bool main_menu::opening_screen()
             case main_menu_opts::SETTINGS:
                 data->show_submenu = true;
                 data->panel_header_rml = cata_text_to_rml( colorize( _( "SETTINGS" ), c_yellow ) );
-                data->context_header_rml = cata_text_to_rml( colorize( _( "TIP" ), c_yellow ) );
-                data->context_body_rml = cata_text_to_rml(
-                                             colorize( string_format( _( "Tip of the day: %s" ), vdaytip ), c_white ) );
+                data->context_header_rml = cata_text_to_rml( colorize( _( "SETTING" ), c_yellow ) );
+                if( sel2 >= 0 && sel2 < static_cast<int>( vSettingsHints.size() ) ) {
+                    data->context_lines = context_lines_from( vSettingsHints[sel2] );
+                }
                 for( size_t i = 0; i < vSettingsSubItems.size(); ++i ) {
                     push_sub(
                         shortcut_text( static_cast<int>( i ) == sel2 ? hilite( c_yellow ) : c_yellow,
@@ -564,10 +654,9 @@ bool main_menu::opening_screen()
             case main_menu_opts::NEWCHAR:
                 data->show_submenu = true;
                 data->panel_header_rml = cata_text_to_rml( colorize( _( "NEW GAME" ), c_yellow ) );
-                data->context_header_rml = cata_text_to_rml( colorize( _( "INFO" ), c_yellow ) );
+                data->context_header_rml = cata_text_to_rml( colorize( _( "GAME MODE" ), c_yellow ) );
                 if( sel2 >= 0 && sel2 < static_cast<int>( vNewGameHints.size() ) ) {
-                    data->context_body_rml = cata_text_to_rml(
-                                                 colorize( vNewGameHints[sel2], c_yellow ) );
+                    data->context_lines = context_lines_from( vNewGameHints[sel2] );
                 }
                 for( size_t i = 0; i < vNewGameSubItems.size(); ++i ) {
                     push_sub(
@@ -582,7 +671,6 @@ bool main_menu::opening_screen()
                 const bool is_world = sel1 == getopt( main_menu_opts::WORLD );
                 data->panel_header_rml = cata_text_to_rml( colorize(
                                              is_world ? _( "WORLDS" ) : _( "LOAD GAME" ), c_yellow ) );
-                data->context_header_rml = cata_text_to_rml( colorize( _( "WORLD INFO" ), c_yellow ) );
                 const bool extra_opt = is_world;
                 if( extra_opt ) {
                     push_sub( colorize( _( "Create World" ), sel2 == 0 ? hilite( c_yellow ) : c_yellow ),
@@ -601,33 +689,59 @@ bool main_menu::opening_screen()
                                         sel ? hilite( clr ) : clr ),
                               sel );
                 }
-                // Context body: show selected world info.
-                {
-                    const int world_idx = sel2 - ( extra_opt ? 1 : 0 );
-                    if( world_idx >= 0 && world_idx < static_cast<int>( all_worldnames.size() ) ) {
-                        WORLDINFO *world = world_generator->get_world( all_worldnames[world_idx] );
-                        data->context_body_rml = cata_text_to_rml( colorize( string_format(
-                                                     _( "World: %s\nSaves: %d" ), all_worldnames[world_idx],
-                                                     static_cast<int>( world->world_saves.size() ) ), c_white ) );
-                    }
+                // Context: describe whatever the submenu highlights — the "Create
+                // World" pseudo-entry, or a real world's contents.
+                const int world_idx = sel2 - ( extra_opt ? 1 : 0 );
+                if( extra_opt && sel2 == 0 ) {
+                    data->context_header_rml =
+                        cata_text_to_rml( colorize( _( "NEW WORLD" ), c_yellow ) );
+                    data->context_lines = context_lines_from( _(
+                                              "Generate a fresh world.  You pick the mod list and the world "
+                                              "options — city spacing, monster spawn rate, season length — "
+                                              "before anything is generated." ) );
+                } else if( world_idx >= 0 && world_idx < static_cast<int>( all_worldnames.size() ) ) {
+                    data->context_header_rml =
+                        cata_text_to_rml( colorize( _( "WORLD" ), c_yellow ) );
+                    data->context_lines =
+                        context_lines_from( world_context_text( all_worldnames[world_idx], is_world ) );
                 }
                 break;
             }
-            default:
-                // HELP, QUIT, COOP — no submenu, show tip of the day.
-                data->context_header_rml = cata_text_to_rml( colorize( _( "TIP" ), c_yellow ) );
-                data->context_body_rml = cata_text_to_rml(
-                                             colorize( string_format( _( "Tip of the day: %s" ), vdaytip ), c_white ) );
+            case main_menu_opts::HELP:
+                data->context_header_rml = cata_text_to_rml( colorize( _( "HELP" ), c_yellow ) );
+                data->context_lines = context_lines_from( _(
+                                          "The in-game manual: movement and combat, crafting, vehicles, "
+                                          "mutations, bionics and the rest.\n\n"
+                                          "The controls chapter is generated from your current keybindings, "
+                                          "so it stays correct after you rebind anything." ) );
+                break;
+            case main_menu_opts::COOP:
+                data->context_header_rml = cata_text_to_rml( colorize( _( "CO-OP" ), c_yellow ) );
+                data->context_lines = context_lines_from( string_format( _(
+                                          "Host a session for a partner, or join one over the network.\n\n"
+                                          "Hosting loads an existing character from a world, so start a "
+                                          "single-player game first.  Joining asks for the host's address; "
+                                          "the default port is %d and may be overridden as IP:port." ),
+                                      get_option<int>( "COOP_PORT" ) ) );
+                break;
+            case main_menu_opts::QUIT:
+                data->context_header_rml = cata_text_to_rml( colorize( _( "QUIT" ), c_yellow ) );
+                data->context_lines = context_lines_from( _(
+                                          "Close the game and return to the desktop.\n\n"
+                                          "Nothing is at risk from this screen — worlds and characters are "
+                                          "written to disk when a game session ends." ) );
                 break;
         }
 
-        // Bottom tips line.
-        if( sel_o == main_menu_opts::NEWCHAR && sel2 >= 0 &&
-            sel2 < static_cast<int>( vNewGameHints.size() ) ) {
-            data->tips_rml = cata_text_to_rml( colorize( vNewGameHints[sel2], c_yellow ) );
+        // Bottom tips line. The tip of the day lives here so the context panel is
+        // free to describe the current selection; on MOTD it yields to the report
+        // hint, which is about the links in that very panel.
+        if( sel_o == main_menu_opts::MOTD ) {
+            data->tips_rml = cata_text_to_rml( colorize(
+                                                   _( "Bugs?  Suggestions?  Use links in MOTD to report them." ), c_light_gray ) );
         } else {
-            std::string tips = _( "Bugs?  Suggestions?  Use links in MOTD to report them." );
-            data->tips_rml = cata_text_to_rml( colorize( tips, c_white ) );
+            data->tips_rml = cata_text_to_rml( colorize(
+                                                   string_format( _( "Tip of the day: %s" ), vdaytip ), c_light_gray ) );
         }
 
         // Sync the focus flag for RML data-class-focused.
@@ -663,7 +777,7 @@ bool main_menu::opening_screen()
         data->handle.DirtyVariable( "keybinds_rml" );
         data->handle.DirtyVariable( "panel_header_rml" );
         data->handle.DirtyVariable( "context_header_rml" );
-        data->handle.DirtyVariable( "context_body_rml" );
+        data->handle.DirtyVariable( "context_lines" );
         data->handle.DirtyVariable( "items" );
         if( data->show_submenu ) { data->handle.DirtyVariable( "submenu" ); }
         if( data->show_motd ) { data->handle.DirtyVariable( "motd_lines" ); }
@@ -696,7 +810,7 @@ bool main_menu::opening_screen()
         c.Bind( "keybinds_rml", &data->keybinds_rml );
         c.Bind( "panel_header_rml", &data->panel_header_rml );
         c.Bind( "context_header_rml", &data->context_header_rml );
-        c.Bind( "context_body_rml", &data->context_body_rml );
+        c.Bind( "context_lines", &data->context_lines );
         c.Bind( "items", &data->items );
         c.Bind( "submenu", &data->submenu );
         c.Bind( "motd_lines", &data->motd_lines );

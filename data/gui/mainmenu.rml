@@ -13,51 +13,60 @@
             <div class="mm-version" data-rml="version_rml"></div>
         </div>
         <div class="mm-separator"></div>
-        <!-- Content: nav rail + connector + subcol + context area -->
+        <!-- Content: cluster (nav rail + connector + submenu) + context panel -->
         <div class="mm-main">
-            <div class="mm-rail" data-class-focused="!sub_active"
-                 data-style-top="rail_bob">
-                <div class="mm-nav">
-                    <div class="mm-nav-item" data-for="it : items"
-                         data-class-selected="it.selected"
-                         data-event-click="on_item(it_index)">
-                        <div class="mm-nav-icon" data-style-decorator="it.icon_dec"></div>
-                        <span class="mm-nav-label" data-rml="it.text_rml"></span>
+            <!-- One group so rail/connector/submenu share a top edge; the
+                 connector offset in main_menu.cpp is measured from it. -->
+            <div class="mm-cluster">
+                <div class="mm-rail" data-class-focused="!sub_active"
+                     data-style-top="rail_bob">
+                    <div class="mm-nav">
+                        <div class="mm-nav-item" data-for="it : items"
+                             data-class-selected="it.selected"
+                             data-event-click="on_item(it_index)">
+                            <div class="mm-nav-icon" data-style-decorator="it.icon_dec"></div>
+                            <span class="mm-nav-label" data-rml="it.text_rml"></span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Connector column: flex item between rail and subcol.
+                     Spacer pushes the I-beam to the selected item's Y. -->
+                <div class="mm-connector-col" data-if="show_submenu">
+                    <div class="mm-conn-spacer" data-style-height="connector_offset"></div>
+                    <div class="mm-conn-ibeam">
+                        <div class="mm-conn-bar"></div>
+                    </div>
+                </div>
+                <!-- Submenu column: runic-framed region (no close-X, no vignette) -->
+                <div id="mm-subcol" class="runic-region mm-subcol" data-if="show_submenu"
+                     data-class-focused="sub_active"
+                     data-style-top="subcol_bob">
+                    <div class="mm-section-header" data-rml="panel_header_rml"></div>
+                    <div class="mm-action-list">
+                        <div class="mm-action-row" data-for="s : submenu"
+                             data-class-selected="s.selected"
+                             data-event-click="on_sub(it_index)" data-rml="s.text_rml"></div>
                     </div>
                 </div>
             </div>
-            <!-- Connector column: flex item between rail and subcol.
-                 Spacer pushes the I-beam to the selected item's Y. -->
-            <div class="mm-connector-col" data-if="show_submenu">
-                <div class="mm-conn-spacer" data-style-height="connector_offset"></div>
-                <div class="mm-conn-ibeam">
-                    <div class="mm-conn-bar"></div>
-                </div>
-            </div>
-            <!-- Submenu column: runic-framed region (no close-X, no vignette) -->
-            <div id="mm-subcol" class="runic-region mm-subcol" data-if="show_submenu"
-                 data-class-focused="sub_active"
-                 data-style-top="subcol_bob">
-                <div class="mm-section-header" data-rml="panel_header_rml"></div>
-                <div class="mm-action-list">
-                    <div class="mm-action-row" data-for="s : submenu"
-                         data-class-selected="s.selected"
-                         data-event-click="on_sub(it_index)" data-rml="s.text_rml"></div>
-                </div>
-            </div>
-            <!-- Right context area: open space for particles; content anchored bottom -->
+            <!-- Context panel beside the cluster; the rest of the width stays
+                 open for the particle field. -->
             <div class="mm-context-area">
                 <!-- MOTD/Credits: header + scrollable text -->
-                <div class="mm-motd-panel" data-if="show_motd">
+                <div id="mm-motd-panel" class="runic-region mm-motd-panel" data-if="show_motd">
                     <div class="mm-section-header" data-rml="context_header_rml"></div>
                     <div id="mm-motd" class="mm-scroll-text scroll-pane">
                         <div class="mm-scroll-line" data-for="m : motd_lines" data-rml="m.text_rml"></div>
                     </div>
                 </div>
-                <!-- Default: bottom-anchored context card -->
-                <div class="mm-context-card" data-if="!show_motd">
+                <!-- Per-option context card -->
+                <div id="mm-context" class="runic-region mm-context-card" data-if="!show_motd"
+                     data-class-wide="!show_submenu">
                     <div class="mm-section-header" data-rml="context_header_rml"></div>
-                    <div class="mm-context-body" data-rml="context_body_rml"></div>
+                    <div class="mm-context-body">
+                        <div class="mm-context-line" data-for="c : context_lines"
+                             data-rml="c.text_rml"></div>
+                    </div>
                 </div>
             </div>
         </div>

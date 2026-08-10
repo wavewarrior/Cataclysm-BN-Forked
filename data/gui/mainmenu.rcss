@@ -1,56 +1,92 @@
-/* Layout for the title screen (Tier 4 #3: main_menu). Vertical left rail
-   with title block above, optional bordered submenu column, open right context
-   area with bottom-anchored card, footer keybind hints.
-   Palette lives in mainmenu_theme.rcss. */
+/* Layout for the title screen (Tier 4 #3: main_menu). Title block above a
+   vertically-centred cluster of nav rail + connector + submenu column, a
+   runic-framed context panel beside it, footer keybind hints below.
+   Palette lives in mainmenu_theme.rcss.
+
+   DISPLAY IS NOT OPTIONAL IN THIS DOCUMENT. RmlUi elements default to
+   `display: inline` (theme.rcss:99 — we deliberately do not link RmlUi's sample
+   rml.rcss), so every stacking container and every text row here declares its
+   own display. Omitting it welds "CATACLYSM" onto "Bright Nights" onto the
+   version string as a single inline run — which is exactly what used to
+   happen. */
 
 body {
     width: 100%;
     height: 100%;
 }
 
+/* border-box: `height: 100%` with content-box padding makes the root 2*28dp
+   taller than the window, pushing the footer keybind line off the bottom. */
 .mm-root {
     width: 100%;
     height: 100%;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    padding: 24dp 28dp;
+    padding: 28dp 36dp;
 }
 
 /* Title block — above the columns, left-aligned */
 .mm-title-block {
     flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
     padding: 0 16dp;
 }
 
 .mm-title-main {
-    font-size: 34dp;
+    display: block;
+    font-size: 38dp;
     font-weight: bold;
-    letter-spacing: 6dp;
+    letter-spacing: 8dp;
 }
 
 .mm-title-sub {
-    font-size: 16dp;
-    letter-spacing: 3dp;
-    margin-top: 2dp;
-}
-
-.mm-version {
-    font-size: 12dp;
+    display: block;
+    font-size: 17dp;
+    letter-spacing: 4dp;
     margin-top: 4dp;
 }
 
-.mm-separator {
-    flex: 0 0 auto;
-    height: 1dp;
-    margin: 12dp 0;
+.mm-version {
+    display: block;
+    font-size: 12dp;
+    margin-top: 6dp;
 }
 
-/* Main content row: rail + connector-col + subcol + context */
+/* Masthead underline. Inset to match .mm-title-block's side padding so it reads
+   as the title's rule rather than a full-bleed divider. The stroke itself is a
+   gradient decorator in mainmenu_theme.rcss — a 1dp dotted border at #3a3a4a
+   was invisible against this background, which left the title looking orphaned. */
+.mm-separator {
+    flex: 0 0 auto;
+    display: block;
+    height: 2dp;
+    margin: 18dp 16dp 0 16dp;
+}
+
+/* Main content row. `align-items: center` lifts the whole composition off the
+   top edge so it sits in the vertical middle of the screen instead of hugging
+   the upper-left corner. */
 .mm-main {
     flex: 1;
     min-height: 0;
     display: flex;
     flex-direction: row;
+    align-items: center;
+}
+
+/* rail + connector + submenu as ONE content-height group. They must share a top
+   edge: the connector spacer height is measured from it in main_menu.cpp
+   (rail_pad + sel1 * item_step), so centring the three individually — which is
+   what `align-items: center` on .mm-main would otherwise do — desyncs the
+   I-beam from its nav item. */
+.mm-cluster {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    max-height: 100%;
 }
 
 /* Connector column: flex item between rail and subcol.
@@ -63,13 +99,16 @@ body {
 }
 .mm-conn-spacer {
     flex: 0 0 auto;
+    display: block;
 }
 .mm-conn-ibeam {
     flex: 0 0 auto;
+    display: block;
     height: 14dp;
     width: 100%;
 }
 .mm-conn-bar {
+    display: block;
     margin-top: 6dp;
     height: 2dp;
     width: 100%;
@@ -77,10 +116,11 @@ body {
 
 /* Left rail — vertical nav only.
    position:relative so data-style-top bob offset moves the element
-   AND its runic frame together (apply_crt reads GetAbsoluteOffset). */
+   AND its runic frame together (apply_crt reads GetAbsoluteOffset).
+   padding-top MUST stay 12dp: main_menu.cpp's rail_pad hardcodes it. */
 .mm-rail {
     flex: 0 0 auto;
-    width: 260dp;
+    width: 250dp;
     display: flex;
     flex-direction: column;
     padding: 12dp 16dp;
@@ -88,13 +128,13 @@ body {
 }
 
 .mm-nav {
-    flex: 1;
-    min-height: 0;
+    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
-    overflow-y: auto;
 }
 
+/* 24dp icon + 2*8dp padding + 2*1dp margin = the 42dp item_step in
+   main_menu.cpp. Changing any of the three desyncs the connector. */
 .mm-nav-item {
     display: flex;
     flex-direction: row;
@@ -120,8 +160,8 @@ body {
 .mm-subcol {
     flex: 0 0 auto;
     width: 300dp;
-    align-self: flex-start;
-    max-height: 60vh;
+    max-height: 62vh;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     border: 20dp transparent;
@@ -132,7 +172,8 @@ body {
 
 .mm-section-header {
     flex: 0 0 auto;
-    margin-bottom: 8dp;
+    display: block;
+    margin-bottom: 10dp;
 }
 
 .mm-action-list {
@@ -147,29 +188,37 @@ body {
     margin: 1dp 0;
 }
 
-/* Right context area: open space, content bottom-anchored */
+/* Right context area: the panel sits beside the cluster; whatever width is left
+   over stays open for the particle field. */
 .mm-context-area {
     flex: 1;
     min-width: 0;
-    min-height: 0;
     display: flex;
     flex-direction: column;
-    justify-content: flex-end;
-    margin-left: 16dp;
+    align-items: flex-start;
+    margin-left: 28dp;
 }
 
-/* MOTD/Credits panel: fills space, header above scrollable text */
+/* MOTD/Credits panel: the main content for those two options, so it gets a
+   fixed tall box — the credits run for hundreds of lines and a content-sized
+   box would blow past the window. */
 .mm-motd-panel {
-    flex: 1;
-    min-height: 0;
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 820dp;
+    height: 62vh;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    padding: 16dp;
+    border: 20dp transparent;
+    padding: 12dp;
+    position: relative;
 }
 
 .mm-scroll-text {
     flex: 1;
     min-height: 0;
+    display: block;
     overflow-y: auto;
 }
 
@@ -178,16 +227,39 @@ body {
     white-space: pre-wrap;
 }
 
-/* Context card: compact, bottom-anchored */
+/* Context card: a peer panel to the submenu column, same runic frame. */
 .mm-context-card {
     flex: 0 0 auto;
-    max-height: 30%;
-    padding: 12dp 16dp;
+    width: 100%;
+    max-width: 520dp;
+    max-height: 62vh;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    border: 20dp transparent;
+    padding: 12dp;
     overflow-y: auto;
+    position: relative;
+}
+
+/* No submenu column (Help, Quit, Co-op) means ~356dp of the content band would
+   otherwise fall empty, leaving the card marooned against the rail with half the
+   window blank — the very "pushed into the corner" complaint this layout exists
+   to fix. Widening here keeps the content band the same width in every state:
+   rail 250 + conn 16 + subcol 340 + gap 28 + card 560 == rail 250 + gap 28 + card 900. */
+.mm-context-card.wide {
+    max-width: 860dp;
 }
 
 .mm-context-body {
-    white-space: pre-wrap;
+    display: block;
+}
+
+/* One element per line (see main_menu.cpp: context_lines). Paragraph rhythm is
+   this margin, NOT blank rows — an empty element has zero height. */
+.mm-context-line {
+    display: block;
+    margin-bottom: 5dp;
 }
 
 /* Footer */
@@ -196,15 +268,17 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    margin-top: 10dp;
+    margin-top: 12dp;
 }
 
 .mm-tips {
+    display: block;
     white-space: pre-wrap;
     text-align: center;
 }
 
 .mm-keybinds {
+    display: block;
     text-align: center;
-    margin-top: 4dp;
+    margin-top: 6dp;
 }

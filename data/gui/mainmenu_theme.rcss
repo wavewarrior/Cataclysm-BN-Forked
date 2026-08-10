@@ -99,9 +99,10 @@
     letter-spacing: 3dp;
 }
 
-/* Separator lines. */
+/* Masthead rule: gold at the title edge, fading out to the right. A flat 1dp
+   dotted #3a3a4a border rendered as nothing here. */
 .mm-separator {
-    border-top: 1dp dotted #3a3a4a;
+    decorator: linear-gradient( 90deg, #c4a832, #7a6430 30%, #3a3a4a00 85% );
 }
 
 /* Tips / footer. */
