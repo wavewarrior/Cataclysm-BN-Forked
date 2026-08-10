@@ -34,8 +34,9 @@
 #include "sky_sun_pass.h"
 #include "sprite_batcher.h"
 #include "tonemap_pass.h"
-#include "ui_adaptor_draw_slices.h"
 #include "ui_composite_target.h"
+#include "ui_adaptor_draw_slices.h"
+#include "terrain_decals.h"
 #include "volumetric_pass.h"
 
 #include <memory>
@@ -379,9 +380,22 @@ public:
     // tile_sprite_queue_ index of the terrain/entity boundary (SIZE_MAX = no
     // cut this frame → Pass W stays single-pass), `quads` are the visible
     // submaps' composite rects in logical projection px.
-    void set_splat_frame(std::size_t cut, std::vector<splat_quad> quads);
+    void set_splat_frame(std::size_t cut, std::vector<splat_quad> quads,
+                         const SDL_Rect& map_viewport);
     std::size_t splat_cut() const noexcept { return splat_cut_; }
     const std::vector<splat_quad>& splat_quads() const noexcept { return splat_quads_; }
+    // The map drawing area in logical projection px. Terrain decals scissor to
+    // this so a decal straddling the viewport edge is cut, not leaked over the
+    // sidebar. Zero-sized until cata_tiles::draw() records a frame.
+    const SDL_Rect& splat_map_viewport() const noexcept { return splat_map_viewport_; }
+    // Terrain decals resolved for this frame, in logical projection px.
+    // cata_tiles builds this because only it knows which tiles are visible:
+    // a decal must never paint over unexplored space. Cleared per frame, so a
+    // frame where cata_tiles does not draw renders no decals.
+    void set_decal_draws(std::vector<terrain_decal_draw> draws) {
+        decal_draws_ = std::move(draws);
+    }
+    const std::vector<terrain_decal_draw>& decal_draws() const noexcept { return decal_draws_; }
     // GPU shader-based sound wave visualization (expanding ring wavefronts).
     // Driven from refresh_display inside the world pass, after tiles.
     sound_wave_pass& sound_waves() noexcept { return sound_waves_; }
@@ -391,6 +405,9 @@ public:
     // Box2D debug overlay line pass (coloured wireframes over the world target).
     // Driven from cata_tiles (populate) and render_world_pass_w (record).
     debug_line_pass& debug_lines() noexcept { return debug_lines_; }
+
+    // Large multi-tile terrain decals (cosmetic overlays).
+    terrain_decals::manager& decals() noexcept { return decals_; }
 
     // GPU JFA SDF pass (P3). Three compute dispatches: seed → flood → resolve.
     gpu_sdf_pass& gpu_sdf() noexcept { return gpu_sdf_; }
@@ -498,12 +515,15 @@ private:
     volumetric_pass volumetric_;
     rain_effect rain_;
     splatmap_pass splatmap_;
+    terrain_decals::manager decals_;
 
     // Per-frame splatmap state (see set_splat_frame). Reset by
     // clear_frame_queues() / clear_tile_queue() so a frame where cata_tiles
     // does not draw falls back to the single-pass Pass W.
     std::size_t splat_cut_ = static_cast<std::size_t>( -1 );
     std::vector<splat_quad> splat_quads_;
+    SDL_Rect splat_map_viewport_{ 0, 0, 0, 0 };
+    std::vector<terrain_decal_draw> decal_draws_;
     sound_wave_pass sound_waves_;
     gpu_sdf_pass gpu_sdf_;
     debug_line_pass debug_lines_;

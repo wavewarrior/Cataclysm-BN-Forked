@@ -1491,6 +1491,16 @@ void ter_t::load( const JsonObject &jo, const std::string &src )
     optional( jo, was_loaded, "digging_results", digging_results );
     deconstruct.load( jo, "deconstruct", false );
     pry.load( jo, "pry", pry_result::terrain );
+
+    // Cosmetic terrain decals (optional).
+    if( jo.has_object( "decals" ) ) {
+        JsonObject deco = jo.get_object( "decals" );
+        terrain_decal_config cfg;
+        mandatory( deco, was_loaded, "group", cfg.group );
+        assign( deco, "density", cfg.density, true );
+        assign( deco, "min_spacing", cfg.min_spacing, true );
+        decal_config = cfg;
+    }
 }
 
 static void check_bash_items( const map_bash_info &mbi, const std::string &id, bool is_terrain )

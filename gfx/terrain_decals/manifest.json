@@ -1,0 +1,23 @@
+{
+  "tile_size": 64,
+  "groups": {
+    "grass": [
+      "grass_01.png",
+      "grass_02.png",
+      "grass_03.png",
+      "grass_04.png",
+      "grass_05.png",
+      "grass_06.png",
+      "grass_07.png",
+      "grass_08.png",
+      "grass_09.png",
+      "grass_10.png",
+      "grass_11.png",
+      "grass_12.png",
+      "grass_13.png",
+      "grass_14.png",
+      "grass_15.png",
+      "grass_16.png"
+    ]
+  }
+}

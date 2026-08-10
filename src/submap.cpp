@@ -10,6 +10,9 @@
 #include "trap.h"
 #include "vehicle.h"
 #include "vehicle_part.h"
+#include "terrain_decals.h"
+#include "splatmap_stamps.h"
+#include "lighting/render_state.h"
 #include "weather.h"
 
 #include <algorithm>
@@ -569,4 +572,5 @@ auto submap::set_ter( const point_sm_ms& p, ter_id terr ) -> void
         const tripoint_abs_ms abs_pos{pos.x() * SEEX + p.x(), pos.y() * SEEY + p.y(), pos.z()};
         log->push( {coop_event_type::terrain_changed, abs_pos, terr.to_i()} );
     }
+    lighting::get_render_state().decals().invalidate( splatmap::key_of( pos ) );
 }

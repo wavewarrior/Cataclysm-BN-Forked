@@ -21,6 +21,7 @@
 #include "units.h"
 #include "value_ptr.h"
 #include "data_vars.h"
+#include "terrain_decals.h"
 
 struct ter_t;
 using ter_str_id = string_id<ter_t>;
@@ -589,6 +590,11 @@ struct ter_t : map_data_common_t {
     int fill_minutes; // Fill action: minutes to fill up
 
     int heat_radiation = 0; // In fire field intensity "units"
+
+    // Cosmetic terrain decal configuration (optional).
+    // When present, the renderer places large overlay sprites on clusters
+    // of this terrain type to break up visual monotony.
+    std::optional<terrain_decal_config> decal_config;
 
     ter_t();
 

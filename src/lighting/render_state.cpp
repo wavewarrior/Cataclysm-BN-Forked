@@ -235,6 +235,8 @@ void render_state::init(SDL_Window* host_window) {
         // Pass W. No-ops (ready() == false) when gfx/splatmap/stamps.json is
         // missing or lists no loadable stamps.
         splatmap_.init( device_, world_fmt );
+        // Large multi-tile terrain decals (cosmetic overlays)
+        decals_.init( device_ );
         // GPU sound wave visualization pass (expanding ring wavefronts).
         sound_waves_.init(device_, world_fmt);
         // Box2D debug overlay line pass (world-target format, line-list topology).
@@ -267,6 +269,7 @@ void render_state::shutdown() noexcept {
     volumetric_.shutdown();
     rain_.shutdown();
     splatmap_.shutdown();
+    decals_.shutdown();
     sound_waves_.shutdown();
     hud_particles_.shutdown();
     debug_lines_.shutdown();
@@ -497,6 +500,7 @@ void render_state::clear_tile_queue() noexcept {
     // falls back to the single-pass Pass W.
     splat_cut_ = static_cast<std::size_t>( -1 );
     splat_quads_.clear();
+    decal_draws_.clear();
 }
 
 void render_state::clear_frame_queues() noexcept {
@@ -939,9 +943,11 @@ void render_state::flush_tile_sprites(
     }
 }
 
-void render_state::set_splat_frame(std::size_t cut, std::vector<splat_quad> quads) {
+void render_state::set_splat_frame(std::size_t cut, std::vector<splat_quad> quads,
+                                   const SDL_Rect& map_viewport) {
     splat_cut_ = cut;
     splat_quads_ = std::move(quads);
+    splat_map_viewport_ = map_viewport;
 }
 
 void render_state::flush_shadow_casters(

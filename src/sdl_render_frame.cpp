@@ -971,6 +971,56 @@ auto render_world_pass_w( lighting::render_state &rs,
         lighting::splat_colors{
             .blood_strength = g_splat_blood_strength } );
 
+        // Render terrain decals over the splatmap composite, under entities.
+        // Scissored to the map drawing area: a decal is a multi-tile sprite that
+        // can overhang the viewport edge, and without the scissor it would paint
+        // over the sidebar and the letterbox outside the world view.
+        //
+        // cata_tiles records the viewport in LOGICAL projection points (the same
+        // space as the sprite dst coords and proj_w/proj_h), but SDL_SetGPUScissor
+        // is in TARGET TEXTURE PIXELS. On a HiDPI display those differ by the
+        // backing scale, so the rect must be converted or the scissor lands in the
+        // wrong place — clipping the map and leaking decals over the sidebar.
+        const SDL_Rect &vp_pts = rs.splat_map_viewport();
+        if( rs.decals().ready() && rs.decals().atlas() && !rs.decal_draws().empty() &&
+            vp_pts.w > 0 && vp_pts.h > 0 && proj_w > 0 && proj_h > 0 ) {
+            const float sx = static_cast<float>( wt->width() ) / static_cast<float>( proj_w );
+            const float sy = static_cast<float>( wt->height() ) / static_cast<float>( proj_h );
+            const SDL_Rect decal_vp{
+                static_cast<int>( std::floor( vp_pts.x * sx ) ),
+                static_cast<int>( std::floor( vp_pts.y * sy ) ),
+                static_cast<int>( std::ceil( vp_pts.w * sx ) ),
+                static_cast<int>( std::ceil( vp_pts.h * sy ) ) };
+            rs.tile_batcher().begin_pass( ctx.cmd_buffer, wt->texture(),
+                                          wt->width(), wt->height(),
+                                          /*clear=*/nullptr,
+                                          static_cast<std::uint32_t>( proj_w ),
+                                          static_cast<std::uint32_t>( proj_h ),
+                                          wt->format() );
+            rs.tile_batcher().set_scissor( &decal_vp );
+            rs.tile_batcher().set_texture( const_cast<SDL_GPUTexture *>( rs.decals().atlas() ),
+                                           rs.gpu_sampler(), /*is_lit=*/true );
+            for( const auto &d : rs.decal_draws() ) {
+                const auto &var = rs.decals().variants()[d.variant];
+                lighting::sprite_instance si {};
+                si.dst_x = d.dst_x;
+                si.dst_y = d.dst_y;
+                si.dst_w = d.dst_w;
+                si.dst_h = d.dst_h;
+                si.src_u = var.u;
+                si.src_v = var.v;
+                si.src_uw = var.uw;
+                si.src_vh = var.vh;
+                si.rotation = d.rotation;
+                si.tint_r = 1.f;
+                si.tint_g = 1.f;
+                si.tint_b = 1.f;
+                si.tint_a = 1.f;
+                rs.tile_batcher().draw( si );
+            }
+            rs.tile_batcher().set_scissor( nullptr );
+            rs.tile_batcher().end_pass();
+        }
         // Pass W-b: the entity half, only when there IS one. A null clear colour
         // yields SDL_GPU_LOADOP_LOAD (sprite_batcher.cpp:599), preserving W-a
         // plus the composite.

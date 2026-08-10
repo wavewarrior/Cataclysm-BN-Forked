@@ -240,7 +240,8 @@ namespace
 template <typename ToScreen>
 auto record_splat_frame(
     const std::vector<tile_render_info> &draw_points, int z, const tripoint_abs_sm &abs_sub,
-    int tile_w, int tile_h, std::size_t cut, const ToScreen &to_screen ) -> void
+    int tile_w, int tile_h, std::size_t cut, const map &here, const SDL_Rect &map_viewport,
+    const ToScreen &to_screen ) -> void
 {
     lighting::render_state &rs = lighting::get_render_state();
 
@@ -275,7 +276,69 @@ auto record_splat_frame(
             splatmap::seed_submap( tripoint_bub_ms( origin.x(), origin.y(), z ), key );
         }
     }
-    rs.set_splat_frame( cut, std::move( quads ) );
+
+    // ---- Terrain decals ---------------------------------------------------
+    // Placement is terrain-derived and cached per submap, but *drawing* is
+    // visibility-gated: only tiles this frame actually rendered may carry a
+    // decal, otherwise decals float over unexplored black space. Resolve to
+    // screen px here, through the same projection the tile sprites use.
+    std::vector<terrain_decal_draw> decal_draws;
+    if( rs.decals().ready() ) {
+        const auto &variants = rs.decals().variants();
+        for( const point &idx : seen ) {
+            const point_bub_ms origin( idx.x * SEEX, idx.y * SEEY );
+            const std::uint64_t key =
+                splatmap::key_of( tripoint_abs_sm( abs_sub.x() + idx.x, abs_sub.y() + idx.y, z ) );
+            const auto &placements = rs.decals().compute_placements( key,
+            [&here, origin, z]( int x, int y ) {
+                return here.ter( tripoint_bub_ms( origin.x() + x, origin.y() + y, z ) );
+            } );
+            if( placements.empty() ) {
+                continue;
+            }
+            // Which of this submap's tiles are actually VISIBLE this frame.
+            // draw_points spans the whole viewport; invisible[0] marks a tile the
+            // player cannot currently see, where terrain falls back to memory (or
+            // to nothing). Decals are a live overlay on real terrain, so an
+            // unseen tile must not carry one — otherwise they float on black.
+            std::array<bool, static_cast<std::size_t>( SEEX ) * SEEY> visible{};
+            for( const tile_render_info &p : draw_points ) {
+                if( p.pos.z() != z || p.invisible[0] ) {
+                    continue;
+                }
+                const int lx = p.pos.x() - origin.x();
+                const int ly = p.pos.y() - origin.y();
+                if( lx >= 0 && lx < SEEX && ly >= 0 && ly < SEEY ) {
+                    visible[static_cast<std::size_t>( ly ) * SEEX + lx] = true;
+                }
+            }
+            for( const terrain_decal_instance &inst : placements ) {
+                if( !visible[static_cast<std::size_t>( inst.tile_y ) * SEEX + inst.tile_x] ) {
+                    continue;
+                }
+                const point tl = to_screen( point_bub_ms( origin.x() + inst.tile_x,
+                                            origin.y() + inst.tile_y ) );
+                const auto &var = variants[inst.variant];
+                const float cx = static_cast<float>( tl.x )
+                                 + ( 0.5f + inst.off_x ) * static_cast<float>( tile_w );
+                const float cy = static_cast<float>( tl.y )
+                                 + ( 0.5f + inst.off_y ) * static_cast<float>( tile_h );
+                // Footprint is in tiles, so the decal tracks the tileset's tile
+                // size and the player's zoom instead of the display's DPI.
+                const float dw = var.w_tiles * static_cast<float>( tile_w );
+                const float dh = var.h_tiles * static_cast<float>( tile_h );
+                decal_draws.push_back( {
+                    .dst_x = cx - dw * 0.5f,
+                    .dst_y = cy - dh * 0.5f,
+                    .dst_w = dw,
+                    .dst_h = dh,
+                    .rotation = inst.rotation,
+                    .variant = inst.variant } );
+            }
+        }
+    }
+    rs.set_decal_draws( std::move( decal_draws ) );
+    rs.set_splat_frame( cut, std::move( quads ), map_viewport );
 }
 
 } // namespace
@@ -1186,7 +1249,8 @@ void cata_tiles::draw(
             if( z == center.z() && splatmap::active() ) {
                 record_splat_frame(
                     draw_points, z, here.get_abs_sub(), tile_width, tile_height,
-                    lighting::get_render_state().tile_sprite_count(),
+                    lighting::get_render_state().tile_sprite_count(), here,
+                    SDL_Rect{ dest.x, dest.y, width, height },
                 [this]( point_bub_ms p ) { return player_to_screen( p ); } );
             }
             // ---- Pass 2: ground entities (field_or_item, vpart, in row order) + creature

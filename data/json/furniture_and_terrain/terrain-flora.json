@@ -2313,6 +2313,7 @@
     "move_cost": 2,
     "flags": [ "TRANSPARENT", "FLAT", "PLOWABLE" ],
     "digging_results": { "digging_min": 1, "result_ter": "t_pit_shallow", "num_minutes": 60 },
+    "decals": { "group": "grass", "density": 0.035, "min_spacing": 3 },
     "bash": { "sound": "thump", "ter_set": "t_pit_shallow", "str_min": 50, "str_max": 100, "str_min_supported": 100 }
   },
   {
@@ -2325,6 +2326,7 @@
     "move_cost": 2,
     "flags": [ "TRANSPARENT", "FLAT", "PLOWABLE" ],
     "digging_results": { "digging_min": 1, "result_ter": "t_pit_shallow", "num_minutes": 60 },
+    "decals": { "group": "grass", "density": 0.045, "min_spacing": 3 },
     "bash": { "sound": "thump", "ter_set": "t_pit_shallow", "str_min": 50, "str_max": 100, "str_min_supported": 100 }
   },
   {
@@ -2351,6 +2353,7 @@
     "move_cost": 3,
     "flags": [ "TRANSPARENT", "FLAT", "PLOWABLE", "VEH_TREAT_AS_BASH_BELOW" ],
     "digging_results": { "digging_min": 1, "result_ter": "t_pit_shallow", "num_minutes": 60 },
+    "decals": { "group": "grass", "density": 0.03, "min_spacing": 3 },
     "bash": { "sound": "thump", "ter_set": "t_pit_shallow", "str_min": 50, "str_max": 100, "str_min_supported": 100 }
   },
   {
@@ -2365,6 +2368,7 @@
     "coverage": 50,
     "flags": [ "TRANSPARENT", "PLOWABLE", "VEH_TREAT_AS_BASH_BELOW", "HIDE_PLACE", "TALL_GRASS" ],
     "digging_results": { "digging_min": 1, "result_ter": "t_pit_shallow", "num_minutes": 60 },
+    "decals": { "group": "grass", "density": 0.02, "min_spacing": 4 },
     "bash": { "sound": "thump", "ter_set": "t_pit_shallow", "str_min": 50, "str_max": 100, "str_min_supported": 100 }
   },
   {
