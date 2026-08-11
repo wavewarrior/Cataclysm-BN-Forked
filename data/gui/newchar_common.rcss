@@ -369,3 +369,449 @@
     padding: 6dp;
     color: {{fg4}};
 }
+
+/* ── SHARED CHOOSER VOCABULARY ─────────────────────────────────────────────────
+   The grouped card tree, its floaty info panel and the sigil legend, used by the SCENARIO
+   and PROFESSION steps. Promoted here the moment the second tab adopted the pattern: two
+   copies of a visual language diverge, and these two screens are deliberately the same
+   shape. Per-tab sheets keep only their own container and status rows.
+
+   The reasoning behind these rules — notch geometry, why centring is safe, why motion is
+   transitions and never entry keyframes — lives in plans/charcreation-scenario-tree.md. */
+/* ── GROUPED CARD TREE ─────────────────────────────────────────────────────────
+   Replaces the flat list. Two defects the old styling had, both named in review:
+
+   1. The list sat on `.scroll-pane`'s lighter fill, which flattened contrast for every
+      row — each semantic colour was designed against the panel's dark ground, and the
+      pane's fill removed that separation. The tree container carries NO fill; the cards
+      carry their own dark one, so the colours get their intended ground back.
+
+   2. The gold cursor accent butted straight against the row text, reading as a prefix
+      character rather than as an edge. The accent keeps its width and the card's content
+      is inset from it (see .nc-card.selected below). */
+.nc-tree {
+    /* Full stage width. The right-hand info pane used to take half of it to display text
+       that now lives in a fixed panel under the open category, which is both closer to
+       what it describes and cheaper in space.
+
+       Centred vertically: with one group open the content is far shorter than the stage, and
+       top-aligning left a large void beneath it.
+
+       `justify-content: center` is safe on the MAIN axis even when the content is taller than
+       the stage (all three groups open at a 720p-class window — measured at ~609dp against
+       ~558dp available). RmlUi guards its whole main-axis alignment block behind
+       `remaining_free_space > 0` (FlexFormattingContext.cpp:550), so on overflow every offset
+       stays 0 and the items pack from the start — it degrades to flex-start rather than
+       emitting a negative offset that would put the first header out of reach. overflow-y
+       then makes the tall case scrollable. */
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    overflow-y: auto;
+}
+
+/* Every band takes its natural height and they pack from the top. Letting an open band
+   absorb the column's leftover height floated its cards in the middle of the panel,
+   visually detached from the header they belong to. */
+.nc-band {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 6dp;
+}
+
+/* Header doubles as a focus stop, so it needs a visible focused state of its own —
+   distinct from a card's, since they are different kinds of selection. In the
+   all-collapsed opening state these three rows ARE the screen's primary control, so they
+   carry menu-row padding rather than list-row padding. */
+.nc-band-head {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 8dp 10dp;
+    border-bottom: 1dp {{bg4}};
+    color: {{fg4}};
+    transition: background-color 0.16s quadratic-in-out, color 0.14s quadratic-in-out;
+}
+
+.nc-band-head:hover {
+    color: {{fg0}};
+}
+
+.nc-band-head.focused {
+    background-color: {{bg-hard}};
+    color: {{yellow}};
+    font-weight: bold;
+}
+
+.nc-band-marker {
+    display: block;
+    flex: 0 0 auto;
+    width: 14dp;
+}
+
+.nc-band-name {
+    display: block;
+    flex: 0 0 auto;
+    letter-spacing: 2dp;
+    text-transform: uppercase;
+}
+
+.nc-band-count {
+    display: block;
+    flex: 0 0 auto;
+    margin-left: 8dp;
+}
+
+/* Carousel: pager, cards, pager. */
+.nc-band-rail {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 6dp 0;
+}
+
+/* Always present so the card row does not shift when a page boundary is reached; only
+   its colour changes. */
+.nc-band-pager {
+    flex: 0 0 auto;
+    width: 18dp;
+    text-align: center;
+    font-size: 20dp;
+    color: {{bg3}};
+    transition: color 0.16s quadratic-in-out;
+}
+
+.nc-band-pager.on {
+    color: {{yellow}};
+}
+
+.nc-band-cards {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: row;
+}
+
+/* Eight per page. An explicit height, not shrink-to-fit: the row must not change height
+   as the cursor moves between a one-line name and a three-line one, and the bands need
+   real vertical presence or the whole tree collapses into the top-left corner with the
+   stage empty beneath it. */
+.nc-card {
+    flex: 1;
+    min-width: 0;
+    height: 96dp;
+    display: flex;
+    flex-direction: column;
+    margin-right: 6dp;
+    padding: 6dp 7dp;
+    background-color: {{bg-hard}};
+    /* Reserved on EVERY card so selecting one does not resize the row. */
+    border-left-width: 3dp;
+    border-left-color: transparent;
+    transition: background-color 0.15s quadratic-in-out,
+                border-left-color 0.15s quadratic-in-out,
+                border-color 0.15s quadratic-in-out;
+}
+
+.nc-card:hover {
+    background-color: {{bg1}};
+}
+
+/* Cursor. The 3dp gold edge plus the content inset is the fix for defect 2 above. */
+.nc-card.selected {
+    border-left-color: {{yellow}};
+    background-color: {{bg1}};
+}
+
+/* The scenario actually in force — a full outline, so it survives losing the cursor. */
+.nc-card.chosen {
+    border: 1dp {{yellow}};
+    border-left-width: 3dp;
+    border-left-color: {{yellow}};
+}
+
+.nc-card.unavailable {
+    background-color: transparent;
+}
+
+/* `word-break: break-word` is what stops a long single-word name being clipped at the
+   card edge; wrapping alone cannot break "Wilderness". padding-left is the gap between
+   the gold cursor edge and the text — the review complaint, stated as geometry. */
+.nc-card-name {
+    display: block;
+    flex: 1;
+    min-height: 0;
+    padding-left: 5dp;
+    word-break: break-word;
+}
+
+/* Bottom-anchored: flags left, cost right. */
+.nc-card-foot {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding-left: 5dp;
+}
+
+.nc-card-pts {
+    display: block;
+    flex: 0 0 auto;
+    margin-left: 4dp;
+}
+
+/* Flag strip: the storytelling channel. Colour carries valence, so the card reads before
+   any single glyph is recognised. */
+.nc-card-flags {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    min-height: 14dp;
+}
+
+.nc-card-flag {
+    flex: 0 0 auto;
+    width: 14dp;
+    height: 14dp;
+    margin-right: 3dp;
+}
+
+
+/* ── FLOATY INFO PANEL ─────────────────────────────────────────────────────────
+   Sits inside the open band, beneath its carousel. The panel itself never moves and
+   never resizes — only the notch above it travels to the card under the cursor — so
+   reading it while stepping through scenarios does not fight the layout. */
+.nc-band-info {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Mirrors .nc-band-rail: gutter, cells, gutter. Identical flex geometry is what keeps a
+   notch under its card at any stage width, with no measurement in C++ or here. */
+.nc-info-notches {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    height: 7dp;
+}
+
+.nc-info-gutter {
+    flex: 0 0 auto;
+    width: 18dp;
+}
+
+.nc-info-cells {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: row;
+}
+
+/* One cell per visible card, matching .nc-card's flex and right margin exactly. */
+.nc-info-cell {
+    flex: 1;
+    min-width: 0;
+    margin-right: 6dp;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+}
+
+/* A drawn block, not a glyph: the sidebar font has no dependable triangle, and a
+   background rectangle cannot fail to render. Reads as a tab joining card to panel. */
+.nc-info-notch {
+    flex: 0 0 auto;
+    width: 16dp;
+    height: 7dp;
+    background-color: transparent;
+    /* The notch does not move — one cell per card lights up and the rest go transparent —
+       so fading the colour is what makes the cursor appear to glide along the row. */
+    transition: background-color 0.18s quadratic-in-out;
+}
+
+.nc-info-cell.on .nc-info-notch {
+    background-color: {{yellow}};
+}
+
+/* Explicit height: the panel must not grow with a long description, or picking a wordy
+   scenario would shove the categories below it down the screen. */
+.nc-info-panel {
+    flex: 0 0 auto;
+    /* Room for the three fields plus TWO rows of chips. 164dp fitted only one row, and a
+       scenario carrying four vocabulary flags (Really Bad Day: FIRE_START, INFECTED,
+       BAD_DAY, CITY_START) silently lost its fourth chip off the bottom of the facts
+       column — the card still showed the sigil, so the panel disagreed with it. */
+    height: 188dp;
+    display: flex;
+    flex-direction: row;
+    padding: 8dp 10dp;
+    background-color: {{bg-hard}};
+    border-top: 2dp {{yellow}};
+}
+
+/* Three columns: art, facts, prose. The facts column carries the hierarchy the old
+   single pre-wrapped string could not — small dim labels, bright values, dimmer
+   sub-lines — which also removes the blank-line padding that used to separate fields. */
+.nc-info-art {
+    flex: 0 0 auto;
+    width: 132dp;
+    height: 132dp;
+    margin-right: 14dp;
+    background-color: {{bg1}};
+    border: 1dp {{bg4}};
+}
+
+.nc-info-facts {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding-right: 10dp;
+}
+
+.nc-fact {
+    flex: 0 0 auto;
+    display: block;
+    margin-bottom: 7dp;
+}
+
+/* Label: deliberately quiet and small. It names the row; it is not the content. */
+.nc-fact-label {
+    display: block;
+    font-size: 11dp;
+    letter-spacing: 2dp;
+    text-transform: uppercase;
+    color: {{fg4}};
+}
+
+/* Value: the thing being read. Largest and brightest text in the panel. */
+.nc-fact-value {
+    display: block;
+    font-size: 16dp;
+    font-weight: bold;
+    color: {{fg0}};
+}
+
+/* Sub-line: counts and qualifiers, subordinate to the value above them. */
+.nc-fact-sub {
+    display: block;
+    font-size: 11dp;
+    color: {{gray}};
+}
+
+/* Chips wrap: a scenario with six flags must not push the facts column into scrolling. */
+.nc-chips {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-top: 2dp;
+}
+
+.nc-chip {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    margin-right: 10dp;
+    margin-bottom: 4dp;
+    transition: color 0.15s quadratic-in-out;
+}
+
+.nc-chip-icon {
+    flex: 0 0 auto;
+    width: 14dp;
+    height: 14dp;
+    margin-right: 4dp;
+}
+
+.nc-chip-label {
+    display: block;
+    flex: 0 0 auto;
+    font-size: 13dp;
+}
+
+/* Prose column: the scenario's own voice, so it gets room and a readable size rather
+   than being crammed beside the facts as it was in the old right-hand pane. */
+/* Prose column children. The blurb is the thing's own voice and always fits; the detail
+   buffer below it is exhaustive and scrolls on its own, so a wordy entry cannot push the
+   blurb out of the panel. Tabs with only a blurb simply omit the second element. */
+.nc-info-blurb {
+    display: block;
+    flex: 0 0 auto;
+    white-space: pre-wrap;
+    margin-bottom: 6dp;
+}
+
+.nc-info-detail {
+    display: block;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    color: {{fg4}};
+}
+
+.nc-info-desc {
+    flex: 1.1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    padding-left: 12dp;
+    border-left: 1dp {{bg4}};
+    font-size: 14dp;
+    color: {{fg}};
+}
+
+/* ── SIGIL LEGEND ──────────────────────────────────────────────────────────────
+   Thirteen "sigil :: meaning" pairs spread across the full panel width. Wrapping is
+   deliberate: at narrow terminal widths a second row is far better than truncation. */
+.nc-legend {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    padding: 6dp 8dp 2dp 8dp;
+    border-top: 1dp {{bg4}};
+}
+
+.nc-legend-item {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    margin-right: 10dp;
+    margin-bottom: 3dp;
+    transition: color 0.15s quadratic-in-out;
+}
+
+.nc-legend-icon {
+    flex: 0 0 auto;
+    width: 14dp;
+    height: 14dp;
+}
+
+.nc-legend-sep {
+    display: block;
+    flex: 0 0 auto;
+    margin: 0 4dp;
+    color: {{bg4}};
+}
+
+.nc-legend-label {
+    display: block;
+    flex: 0 0 auto;
+}
+

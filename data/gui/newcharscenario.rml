@@ -42,7 +42,7 @@
                 <!-- Grouped card tree. Each band is a header (a focus stop, so CONFIRM on
                      it toggles the group without needing a keybinding of its own) plus a
                      carousel row holding only the VISIBLE page of cards. -->
-                <div class="nc-scen-tree">
+                <div class="nc-tree">
                     <div class="nc-band" data-for="b, bi : bands">
                         <div class="nc-band-head" data-class-focused="b.focused"
                              data-class-collapsed="b.collapsed"
@@ -55,7 +55,7 @@
                             <div class="nc-band-pager" data-class-on="b.has_prev_page"
                                  data-event-click="on_page(bi, -1)">&#60;</div>
                             <div class="nc-band-cards">
-                                <div class="nc-scen-card" data-for="r : b.rows"
+                                <div class="nc-card" data-for="r : b.rows"
                                      data-class-selected="r.selected"
                                      data-class-chosen="r.chosen"
                                      data-class-unavailable="r.unavailable"
@@ -64,13 +64,13 @@
                                          sits in the footer beside the flag strip. Sharing a
                                          row with the cost clipped every long single-word
                                          name ("Wilderness", "Ambush") instead of wrapping. -->
-                                    <span class="nc-scen-name" data-rml="r.text_rml"></span>
+                                    <span class="nc-card-name" data-rml="r.text_rml"></span>
                                     <div class="nc-card-foot">
-                                        <div class="nc-scen-flags">
-                                            <div class="nc-scen-flag" data-for="i : r.icons"
+                                        <div class="nc-card-flags">
+                                            <div class="nc-card-flag" data-for="i : r.icons"
                                                  data-style-decorator="i.dec"></div>
                                         </div>
-                                        <span class="nc-scen-pts" data-rml="r.cost_rml"></span>
+                                        <span class="nc-card-pts" data-rml="r.cost_rml"></span>
                                     </div>
                                 </div>
                             </div>
@@ -133,7 +133,7 @@
             <!-- Key for the card strips: "sigil :: meaning", spread across the panel.
                  Without it the glyphs are decoration; the info panel names the flags of
                  only the ONE selected scenario. -->
-            <div class="nc-scen-legend">
+            <div class="nc-legend">
                 <div class="nc-legend-item" data-for="l : legend">
                     <div class="nc-legend-icon" data-style-decorator="l.dec"></div>
                     <span class="nc-legend-sep">::</span>
