@@ -164,9 +164,27 @@ intent and mutate nothing**; the loop applies it once per input cycle, mirroring
 - Chips match the card strip exactly (Armored Apocalypse: 3 sigils, 3 chips).
 - `[newchar]` passes (133 assertions, 6 cases).
 
+## Sprite decode cost
+
+`?sprite:` decodes a multi-megabyte tileset sheet, so the interface keeps the most recently
+decoded sheet (one entry — consecutive crops almost always share a sheet, and holding more
+would pin tens of megabytes). Measured while browsing: 3 distinct sprites → 3 crops → **2**
+sheet decodes, and revisiting an already-seen scenario costs nothing because RmlUi caches
+textures by source string. So decodes are bounded by distinct *sheets touched*, not by
+selections made.
+
+The cached sheet is released 240 idle frames after the last crop, so visiting character
+creation once does not pin the surface for the rest of the session.
+
 ## Not done
 
 - `SORT` / `FILTER` / `RANDOMIZE` and keyboard tree navigation are unverified: synthetic
   keyboard input does not reach this SDL build, and all three are keyboard-only. They share
   `recalc_scens` and `sync_cur_from_focus` with the mouse paths that were verified.
 - The 13 runic sigils are still procedural placeholders awaiting real art.
+- **The all-collapsed entry state leaves most of the panel empty.** Captured and confirmed:
+  three headers at the top, legend at the bottom, void between. That is the direct
+  consequence of "collapse the categories by default" and is left as the user specified;
+  the obvious fix (centre the cluster while everything is collapsed) trades the void for a
+  layout jump the moment a band opens, so it is a design call rather than a defect to
+  quietly patch.

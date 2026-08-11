@@ -31,6 +31,10 @@ namespace {
 // Keep released GPU resources alive this many frames before freeing, so the
 // GPU is guaranteed done reading buffers/textures still in flight.
 constexpr std::uint64_t KEEP_FRAMES = 4;
+// A cropped-sprite source (see LoadTexture "?sprite:") keeps its decoded sheet alive this
+// many frames after the last crop. Long enough to cover a burst of crops from one sheet,
+// short enough that leaving the screen gives the memory back.
+constexpr std::uint64_t SHEET_KEEP_FRAMES = 240;
 
 // Staging ring length for upload_pending. The device allows 2 frames in flight,
 // so a slot written now was last touched 3 frames ago and is provably retired.
@@ -149,6 +153,17 @@ struct rmlui_render_interface::impl {
     std::function<SDL_GPUTexture*()> borrowed_lookup;
     int borrowed_w = 0;
     int borrowed_h = 0;
+
+    // Most recently decoded tileset sheet, for the "?sprite:" crop source. Tileset sheets
+    // are multi-megabyte PNGs and a UI that browses locations asks for a different sprite
+    // out of the SAME sheet over and over — without this, each distinct location paid a
+    // full sheet decode and the hitch was visible while moving the cursor.
+    //
+    // Exactly one entry: consecutive requests almost always share a sheet, and holding
+    // more would pin tens of megabytes to save a decode that is already rare.
+    std::string sheet_path;
+    SDL_Surface* sheet_rgba = nullptr;
+    std::uint64_t sheet_frame = 0;   //< frame of the last crop, for the idle release
 
     // Deferred frees (run KEEP_FRAMES after the freeing frame).
     std::uint64_t frame = 0;
@@ -424,6 +439,13 @@ bool rmlui_render_interface::init(gpu_device& dev) {
 }
 
 void rmlui_render_interface::shutdown() {
+    // Not gated on p->raw: the cached sheet is a CPU surface and must be released even when
+    // the GPU device is already gone.
+    if (p->sheet_rgba != nullptr) {
+        SDL_DestroySurface(p->sheet_rgba);
+        p->sheet_rgba = nullptr;
+        p->sheet_path.clear();
+    }
     if (!p->raw) { return; }
     // Run all deferred frees regardless of frame age.
     for (auto& d : p->deferred) { d.second(); }
@@ -500,6 +522,14 @@ void rmlui_render_interface::begin_frame() {
         } else {
             ++i;
         }
+    }
+    // Drop the cached tileset sheet once nothing has cropped from it for a while. Without
+    // this, visiting character creation once pins a multi-megabyte surface for the rest of
+    // the session; the cache only needs to survive a burst of crops from one sheet.
+    if (p->sheet_rgba != nullptr && p->sheet_frame + SHEET_KEEP_FRAMES <= p->frame) {
+        SDL_DestroySurface(p->sheet_rgba);
+        p->sheet_rgba = nullptr;
+        p->sheet_path.clear();
     }
 }
 
@@ -937,15 +967,24 @@ Rml::TextureHandle rmlui_render_interface::LoadTexture(
             dbg(DL::Error) << "rmlui_sprite: malformed source \"" << source << "\"";
             return 0;
         }
-        SDL_Surface* sheet = IMG_Load(path.c_str());
-        if (sheet == nullptr) {
-            dbg(DL::Error) << "rmlui_sprite: cannot load \"" << path << "\": " << SDL_GetError();
-            return 0;
+        // Decode only when the sheet changed; see impl::sheet_rgba.
+        if (p->sheet_rgba == nullptr || p->sheet_path != path) {
+            SDL_Surface* sheet = IMG_Load(path.c_str());
+            if (sheet == nullptr) {
+                dbg(DL::Error) << "rmlui_sprite: cannot load \"" << path << "\": " << SDL_GetError();
+                return 0;
+            }
+            // Force a known layout so the row copy below needs no per-format branching.
+            SDL_Surface* conv = SDL_ConvertSurface(sheet, SDL_PIXELFORMAT_ABGR8888);
+            SDL_DestroySurface(sheet);
+            if (conv == nullptr) { return 0; }
+            if (p->sheet_rgba != nullptr) { SDL_DestroySurface(p->sheet_rgba); }
+            p->sheet_rgba = conv;
+            p->sheet_path = path;
+            dbg(DL::Info) << "rmlui_sprite: decoded sheet " << path;
         }
-        // Force a known layout so the row copy below needs no per-format branching.
-        SDL_Surface* rgba = SDL_ConvertSurface(sheet, SDL_PIXELFORMAT_ABGR8888);
-        SDL_DestroySurface(sheet);
-        if (rgba == nullptr) { return 0; }
+        p->sheet_frame = p->frame;
+        SDL_Surface* const rgba = p->sheet_rgba;
         std::vector<std::uint8_t> px(static_cast<std::size_t>(sw) * sh * 4, 0);
         for (int row = 0; row < sh; ++row) {
             const int src_y = sy + row;
@@ -958,7 +997,7 @@ Rml::TextureHandle rmlui_render_interface::LoadTexture(
             std::memcpy(px.data() + static_cast<std::size_t>(row) * sw * 4, src,
                         static_cast<std::size_t>(copy_w) * 4);
         }
-        SDL_DestroySurface(rgba);
+        // rgba is the cached sheet — owned by impl, NOT freed here.
         SDL_GPUTexture* stex = p->upload_rgba(px.data(), sw, sh);
         if (!stex) { return 0; }
         if (p->rp != nullptr) { p->textures_in_pass++; }
