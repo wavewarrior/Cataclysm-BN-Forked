@@ -124,6 +124,12 @@
     flex: 1;
     min-height: 0;
     display: block;
+    overflow-y: auto;
+    /* Bottom gap so an overflowing pane's last row is not sliced flush against the
+       pane edge. On a 1366x768-class terminal (170x48 cells) the panes are short
+       enough to overflow, and without this the cut lands mid-glyph and reads as a
+       rendering fault rather than as "scroll for more". */
+    padding-bottom: 6dp;
 }
 
 .nc-pane-row {
@@ -194,6 +200,13 @@
     flex-direction: row;
     align-items: center;
     width: 100%;
+    /* Tall enough to CONTAIN a pan at full tilt instead of relying on never reaching
+       one. nc_scale::max_pan_dp() is 140*sin(8deg) = 19.5dp of travel each way, so a
+       ~18dp text row needs 18 + 2*19.5 = 57dp. At 58dp with centred items a pan
+       cannot escape into the neighbouring row at any balance value — the full-tilt
+       state (one side of the budget spent, the other empty) is hard to reach by hand
+       and so is a poor thing to leave to testing. */
+    min-height: 58dp;
 }
 
 .nc-scale-beam {

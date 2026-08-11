@@ -55,6 +55,7 @@
 #include "recipe.h"
 #include "recipe_dictionary.h"
 #include <RmlUi/Core.h>
+#include "newchar_balance.h"
 #include "rml_length.h"
 #include "rml_screen.h"
 #include "rml_util.h"
@@ -330,28 +331,34 @@ auto nc_make_balance( int num_good, int num_bad, int maxp, bool freeform ) -> nc
     if( !b.show ) {
         return b;
     }
+    const nc_scale::geometry g = nc_scale::compute( num_good, num_bad, maxp );
+    // Tilt and pan travel both come from nc_scale::compute so they cannot disagree in
+    // sign or magnitude; see src/newchar_balance.h for why that is derived rather
+    // than hand-matched here.
+    b.rotate = string_format( "rotate(%.2fdeg)", g.tilt_deg );
+    b.good_top = rml::dp( g.good_dp );
+    b.bad_top = rml::dp( g.bad_dp );
     const int cap = std::max( 1, maxp );
     const int good_w = num_good;
     const int bad_w = std::abs( num_bad );
-    const float bal = std::clamp( static_cast<float>( good_w - bad_w ) / static_cast<float>( cap ),
-                                  -1.0f, 1.0f );
-    // 8deg over the beam's 140dp half-length rises 140*sin(8) = 19.5dp at the ends,
-    // so the pans are nudged 20dp. Keeping the two in step matters: the pans do NOT
-    // ride the beam (they would inherit its rotation and render tilted), so if the
-    // two disagreed the beam would visibly detach from its own pans.
-    //
-    // NEGATIVE angle: rotate() is clockwise, and the good pan is on the LEFT, so a
-    // positive angle would LIFT the left beam end while `good_top` SINKS the good
-    // pan — equal magnitudes in opposite directions, maximally wrong.
-    b.rotate = string_format( "rotate(%.2fdeg)", bal * -8.0f );
-    b.good_top = rml::dp( bal * 20.0f );
-    b.bad_top = rml::dp( -bal * 20.0f );
     b.good_rml = cata_text_to_rml( colorize( string_format( "%d/%d", good_w, cap ), c_light_green ) );
     b.bad_rml = cata_text_to_rml( colorize( string_format( "%d/-%d", num_bad, cap ), c_light_red ) );
     b.good_icon = nc_icon_dec( 0x4744, 20, good_w > 0 );
     b.bad_icon = nc_icon_dec( 0x4244, 20, bad_w > 0 );
     b.fulcrum_icon = nc_icon_dec( 0x464c, 16, true );
     return b;
+}
+
+/// Width of `.nc-panel` in the creator stylesheets, as a fraction. Must match the
+/// `width:` in data/gui/newchar*.rcss — the preview's whole reason for being visible
+/// is that it sits outside this panel.
+constexpr int nc_panel_pct = 72;
+
+/// Rightmost column the centred creator panel paints, for a given terminal width.
+/// A centred panel of width W has its right edge at (100 + W) / 2.
+constexpr auto nc_panel_right_col( int termx ) -> int
+{
+    return ( 100 + nc_panel_pct ) * termx / 200;
 }
 
 /// Shared preview-box geometry for every creator tab that shows one.
@@ -363,10 +370,18 @@ auto nc_make_balance( int num_good, int num_bad, int maxp, bool freeform ) -> nc
 /// screen); OVERVIEW's 92% panel covered it entirely and PROFESSION's wider box
 /// reached back under its panel.
 ///
-/// One geometry for all four, pinned hard right, so the box always sits inside the
-/// strip that `.nc-panel { width: 72% }` leaves clear. A centred panel of width W
-/// has its right edge at (100+W)/2 = 86%, and this box's left edge is at worst
-/// TERMX - ncols - 1, i.e. ~86.7% — so the two never meet at any terminal size.
+/// One geometry for all four, pinned hard right so the box sits in the strip the
+/// panel leaves clear.
+///
+/// The hide threshold is DERIVED, not a constant. The box is a fixed number of
+/// *cells* wide (character_preview_window::prepare sizes it from the tile pixel size,
+/// not from the requested ncols), while the panel is a *percentage* — so as the
+/// terminal narrows the box occupies a larger fraction and eventually slides back
+/// under the panel. A hard-coded threshold only holds for one box size: at the
+/// measured 20 cells a constant 150 is safe at every terminal size, but from 24 cells
+/// up (a larger tileset, or a smaller font making a tile span more cells) it silently
+/// lets the panel cover the preview again. Comparing against the panel edge instead
+/// keeps the invariant true for any tileset and font.
 void nc_prepare_preview( character_preview_window &pv )
 {
     const int ncols = std::max( 10, TERMX * 13 / 100 );
@@ -375,9 +390,10 @@ void nc_prepare_preview( character_preview_window &pv )
         character_preview_window::TOP_RIGHT,
         character_preview_window::Margin{ 0, 1, 4, 0 }
     };
-    // hide_below_ncols: drop the preview entirely rather than let it crowd the
-    // panel on a narrow terminal.
-    pv.prepare( nlines, ncols, &orient, 150 );
+    // prepare() hides the preview when TERMX - box_ncols < hide_below, so passing the
+    // panel's right edge (plus a column of slack) drops it exactly when it would start
+    // to collide, rather than at an unrelated fixed width.
+    pv.prepare( nlines, ncols, &orient, nc_panel_right_col( TERMX ) + 3 );
 }
 
 int skill_increment_cost( const Character &u, const skill_id &skill );

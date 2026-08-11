@@ -160,8 +160,12 @@ Palette for all icons: ink `#c4a832` when active/selected, `#a1885f` when inacti
   it. All eight panels are now 72% with one shared `nc_prepare_preview()` geometry
   helper, replacing four hand-tuned per-tab computations.
 - **Labelled points budget.** `0+0+0=0` replaced with
-  `stats N traits N skills N total N` via `nc_points_line()`, routed through all
-  eight tabs plus the scenario/profession cost lines.
+  `stats N traits N skills N total N` via `nc_points_line()`, called from all eight
+  tabs plus the scenario/profession cost lines. **Only MULTI_POOL is rewritten** —
+  ONE_POOL, TRANSFER and FREEFORM fall through to `points_left::to_string()` verbatim,
+  deliberately, since those already read fine (TRANSFER is a sentence, not a budget).
+  So three of the four pool modes are untouched, and that fall-through was confirmed by
+  reading the code, not by rendering those modes.
 - **Tipping balance scale** replaces TRAITS/BIONICS' `7/12 0/-12`. Beam rotates,
   pans stay upright.
   - RmlUi resolved `position: absolute` against `.nc-panel`, **not** against the
@@ -170,8 +174,16 @@ Palette for all icons: ink `#c4a832` when active/selected, `#a1885f` when inacti
   - `rotate()` is clockwise and the good pan is on the **left**, so the angle must be
     **negative** to sink the same side `good_top` sinks. Getting this wrong moves beam
     and pans equal magnitudes in opposite directions.
-  - Beam half-length 140dp at 8deg rises 19.5dp, so the pans are nudged 20dp; the two
-    numbers must stay in step or the beam visibly detaches from its own pans.
+  - Tilt and pan travel are no longer two hand-matched constants. Both derive from one
+    balance value in `src/newchar_balance.h` (`nc_scale::compute`), a pure header so it
+    can be tested without a game world. Anything a caller could get wrong separately —
+    sign, magnitude, clamping — is computed there instead.
+  - The pan follows the beam END (`half_length * sin(tilt)`), not `bal` scaled
+    linearly. `bal*sin(8deg) != sin(bal*8deg)`, so the linear version agreed with the
+    beam only at 0 and full tilt. Caught by the unit test, not by looking.
+  - `.nc-scale-arm` reserves `min-height: 58dp` = an 18dp text row plus 2x the 19.5dp
+    pan travel, so a pan CANNOT escape its row at full tilt. Containment by
+    construction beats relying on full tilt being unreachable.
   - Empty `Rml::String` defaults for `data-style-transform` / `data-style-top` emitted
     `Syntax error parsing inline property declaration 'top: ;'` on the first frame,
     before `sync_rml()` populates the model. Valid neutral defaults
@@ -216,14 +228,9 @@ Cursor-row legibility, stated precisely rather than as "all eight":
   selection, so the cursor row was off-screen in every capture. Its legibility is
   *inferred* from the shared `newchar_common.rcss` rule, not verified.
 
-Build is clean (exit 0, no errors). The one remaining project warning
-(`newcharacter_ui.cpp` `selected` set-but-not-used) and all 42 `-Wunused-macros`
-warnings are **pre-existing**, proven rather than assumed: `newcharacter.cpp` has
-zero net diff vs HEAD yet emits an identical 21-macro list, and every macro's use
-count in `newcharacter_ui.cpp` is unchanged from HEAD (`COL_HEADER` gained one).
-Left untouched per the no-churn rule. Four dead `int_page_width` declarations that
-*were* mine — orphaned when the per-tab preview computations were replaced — were
-removed.
+Build is clean (exit 0, no errors). Every remaining project warning is pre-existing,
+measured by compiling both TUs at the pre-work commit — see "Warning attribution,
+measured" below for the numbers.
 
 ### Still open
 
@@ -233,39 +240,100 @@ removed.
 - PROFESSION's list did not scroll to its selected row (`Tourist` was the selection
   while the list sat at the top). Pre-existing scroll-follow behaviour, not
   introduced here.
-- **The balance scale was only ever observed near one-third tilt** (`bal ≈ +0.33` on
-  both TRAITS and BIONICS). Untested: `bal = 0` (level), `bal < 0` (disadvantages
-  outweighing — pans swap, symmetric in code but unobserved), and `bal = ±1` (full
-  tilt). At full tilt a pan is nudged 20dp inside a row whose padding is `2dp 0 8dp`,
-  so a pan overflowing into the neighbouring row is plausible and has NOT been ruled
-  out. Freeform hides the scale (`show = !freeform`) and was also not rendered.
-- **One window size only.** Every capture was 3600x2260 physical. The occlusion fix
-  rests on a geometric argument (a centred 72% panel's right edge at 86% clears the
-  preview's 90.2% left edge), but the preview box is positioned from tile pixels via
-  `calc_character_pos()`, not percentages, and `hide_below_ncols` drops it entirely on
-  narrow terminals. Intermediate sizes are unverified — this is the single-point
-  validation of the argument the whole fix depends on.
-- **`nc_points_line()` only rewrites MULTI_POOL**; ONE_POOL, TRANSFER and FREEFORM
-  fall through to `points_left::to_string()` unchanged (verified by reading, not by
-  rendering those modes).
+- TRAITS was not captured at the narrow size. The scale's containment is
+  resolution-INDEPENDENT by construction (`min-height` and the pan travel are both in
+  dp, which do not scale with cell count) and the log confirms `newchartraits.rml` +
+  `character_preview.rml` open at 170x48 without diagnostics, but no frame was read:
+  the window opened on another macOS Space and never became AX-enumerable.
+- **Freeform was never rendered.** `nc_make_balance` sets `show = !freeform`, so the
+  scale is suppressed entirely in freeform mode; that suppression is covered by no test
+  and no capture. Likewise the ONE_POOL / TRANSFER / FREEFORM points lines were read
+  but not rendered.
 - Mouse navigation remains unverified anywhere.
 - The 17 icon placeholders still need real art (see "Art asset intent").
 
+## Supported terminal sizes
+
+Scope is common PC monitor ratios, not every conceivable size. With this tileset and
+font a cell is 8px wide, so:
+
+| display | cells | preview |
+|---|---|---|
+| 1366x768 (16:9 laptop) | 170x48 | shown, clears panel by 2 cells |
+| 1920x1080 | 240x67 | shown |
+| 2560x1440 | 320x90 | shown |
+| 3440x1440 (21:9) | 430x90 | shown |
+| 3600x2260 (this machine, HiDPI) | 225x70 | shown, verified |
+
+Clearance GROWS with terminal width, because the preview box is a fixed number of
+*cells* (`prepare()` sizes it from the tile pixel size) while the panel is a
+*percentage*. So the tightest common ratio bounds the whole range, and 170x48 was
+verified in-game: box left edge at column 148 against a panel right edge at 146.
+
+`nc_prepare_preview()`'s hide threshold is now DERIVED from the panel edge rather than
+a hard-coded 150. At the measured box width (20 cells) the old constant happened to be
+safe at every size, so nothing shipped broken — but it only holds to 22 cells; from 24
+up (a larger tileset, or a smaller font making a tile span more cells) it silently let
+the panel cover the preview again. An offline sweep over box widths 14-40 and terminal
+widths 120-400 shows overlaps for the constant at box>=24 and none for the derived
+form.
+
+**Harness gotcha:** `TERMINAL_X`/`TERMINAL_Y` do nothing under the default
+`FULLSCREEN=windowedbl`, which sets `SDL_WINDOW_FULLSCREEN`; the terminal size is then
+derived from window pixels and the option is rewritten on exit. Two "different
+resolution" captures were taken before this was noticed and both silently ran at
+225x70. `FULLSCREEN=no` is required for the option to govern.
+
 ## Tests
 
-`cata_test-tiles` builds clean (exit 0) and `[traits]` passes (7 assertions, 1 test
-case). Only `tests/new_character_test.cpp` touches this area, and it exercises
-`newcharacter::add_traits` / `has_conflicting_trait` /
-`add_default_mutation_type_traits` — none of which changed here. No test references
-`points_left`, `nc_points_line`, `character_preview`, or the RmlUi layer, so there is
-no existing contract covering this change; the verification is the in-game render.
+`tests/newchar_balance_test.cpp` covers `nc_scale::compute` — 6 cases, 133 assertions.
+It defends the beam/pan agreement at the states that are awkward to reach by hand and
+so were never observed on screen: level, inverted (disadvantages outweighing), full
+tilt, past-budget clamping, and a zero budget.
 
-**The test binary nevertheless exits 1 on this branch, and it is not this change.**
-`report_unvisited()` logs an ERROR for terrain JSON that declares fields no loader
-reads — `"acoustics"` in `terrain-{walls,windows,floors-indoor}.json` and `"decals"`
-in `terrain-flora.json` — and the runner turns any error logged during
-initialization into a failure even when every assertion passes. Proven pre-existing:
-these two commits touch zero `data/json` files (`git diff --name-only
-1d545a5355..HEAD`), and both fields are already present at `1d545a5355` ("terrain
-decals"). Whoever owns that work should either register the fields or drop them; until
-then the suite's exit code is not a usable signal on this branch.
+It earned its place immediately by failing on real breakage: the pan offset was scaled
+linearly in `bal` while the beam's rise goes as `sin(bal * 8deg)`, and `bal*sin(8)` is
+not `sin(bal*8)`. The two agreed only at 0 and full tilt and drifted between —
+worst-case a fraction of a dp, invisible in a screenshot. The pan is now derived from
+the actual tilt.
+
+`[newchar],[traits]` passes: 140 assertions, 7 cases, exit 0. Beyond this, only
+`tests/new_character_test.cpp` touches the area and it exercises
+`newcharacter::add_traits` / `has_conflicting_trait` /
+`add_default_mutation_type_traits`, none of which changed. No test references
+`points_left`, `nc_points_line`, `character_preview`, or the RmlUi layer, so the render
+verification remains the contract for those.
+
+### Retracted: there is no red test gate on this branch
+
+An earlier revision of this document claimed the suite exits 1 from terrain JSON
+declaring fields no loader reads (`"acoustics"`, `"decals"`). **That was wrong**, and
+it was wrong because of a stale binary — see below. The current binary exits 0 with no
+`Json error` lines; the loaders for those fields exist in current code.
+
+**`cmake --build --preset osx-arm-slim --target cata_test-tiles` links to the REPO
+ROOT (`./cata_test-tiles`).** The path AGENTS.md documents,
+`out/build/<preset>/tests/cata_test-tiles`, holds a stale leftover ninja never
+relinks — a MONTH old here. This is the same trap as the game binary
+(`cbn-osx-slim-binary-launch-path`). Running the stale one produced three false
+conclusions in one sitting: that the tests passed (they did, without this change in
+them), that CMake's `CONFIGURE_DEPENDS` glob was failing to pick up a new test file
+(it was not), and the JSON gate above. Detect it by comparing the binary's mtime
+against a freshly compiled object under `tests/CMakeFiles/cata_test-tiles.dir/`.
+
+### Warning attribution, measured
+
+Both TUs were compiled at the pre-work commit (`1d545a5355`) and at HEAD with their
+exact flags from `compile_commands.json`, `-c` swapped for `-fsyntax-only`:
+
+| TU | pre-work | current | introduced |
+|---|---|---|---|
+| `newcharacter_ui.cpp` | 150 | 150 | 0 |
+| `newcharacter.cpp` | 149 | 149 | 0 |
+
+Zero introduced, zero removed — so the `-Wunused-macros` block and the `selected`
+set-but-not-used warning are all pre-existing, and are left alone per the no-churn
+rule. This supersedes the earlier use-count proxy, which reached the same conclusion
+by weaker means (text occurrences are not macro expansions). The four dead
+`int_page_width` declarations that WERE mine were removed, which is why the counts
+match rather than exceed.
