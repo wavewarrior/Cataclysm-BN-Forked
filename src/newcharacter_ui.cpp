@@ -20,6 +20,8 @@
 
 #include "addiction.h"
 #include "bionics.h"
+#include "cata_tiles.h"
+#include "calendar.h"
 #include "cata_utility.h"
 #include "catacharset.h"
 #include "character.h"
@@ -257,6 +259,22 @@ auto nc_icon_dec( unsigned seed, int size, bool active ) -> std::string
 {
     return string_format( "image( ?proc:runic-icon:%d:%u:%s none contain ) border-box",
            size, seed, active ? "c4a832" : "a1885f" );
+}
+
+/// Same generator, but the glyph takes an arbitrary game colour.
+///
+/// The scenario flag strip encodes VALENCE in colour — danger red, bodily state green,
+/// circumstance grey/blue, season yellow — so the strip is readable before any individual
+/// glyph has been learned. Two golds cannot express that.
+auto nc_icon_dec_col( unsigned seed, int size, const nc_color &col ) -> std::string
+{
+    // nc_color_to_hex is cached and honours theme.json's "game_colors" overrides, so a
+    // retheme moves these glyphs with everything else. It yields "#rrggbbaa"; the
+    // generator wants a bare rrggbb triple, matching the literals in nc_icon_dec.
+    const std::string hex = nc_color_to_hex( col );
+    const std::string rgb = hex.size() >= 7 ? hex.substr( 1, 6 ) : std::string( "a1885f" );
+    return string_format( "image( ?proc:runic-icon:%d:%u:%s none contain ) border-box",
+                          size, seed, rgb );
 }
 
 /// Deterministic seeds for the eight tab glyphs, in tab order (POINTS .. OVERVIEW).
@@ -2505,7 +2523,7 @@ tab_direction set_profession( avatar &u, points_left &points,
         dirty_nc_shell( data->handle );
         data->handle.DirtyVariable( "points_rml" );
         data->handle.DirtyVariable( "cost_rml" );
-        data->handle.DirtyVariable( "rows" );
+        data->handle.DirtyVariable( "bands" );
         data->handle.DirtyVariable( "desc_rml" );
         data->handle.DirtyVariable( "info_rml" );
         data->handle.DirtyVariable( "sort_rml" );
@@ -3040,18 +3058,173 @@ struct nc_scen_tab {
     bool selected = false;
     bool done = false;   //< step already passed
 };
+/// Which band a scenario belongs to. Derived, so mods group correctly without any JSON.
+enum class nc_scen_group : int {
+    basic = 0,      //< costs nothing or costs you points: an ordinary start
+    advanced = 1,   //< grants points, i.e. it is harder in exchange
+    challenge = 2,  //< carries the CHALLENGE flag
+    count = 3,
+};
+
+/// Classify by the CHALLENGE FLAG and the point cost — never by the `"Challenge - "` name
+/// prefix. The prefix is translated, so prefix-matching silently collapses to one group
+/// in every non-English locale, and mods that do not copy the naming convention would be
+/// misfiled. The flag is real data: 28 definitions carry it.
+auto nc_classify_scen( const scenario &s ) -> nc_scen_group
+{
+    if( s.has_flag( "CHALLENGE" ) ) {
+    return nc_scen_group::challenge;
+}
+// A negative cost GRANTS points, which the game only does to compensate for a harder
+// start — so "grants points" is the honest signal for "advanced".
+return s.point_cost() < 0 ? nc_scen_group::advanced : nc_scen_group::basic;
+}
+
+/// One flag worth showing as a glyph, with the colour carrying its valence so the strip
+/// reads before any individual glyph has been learned.
+///
+/// SINGLE SOURCE OF TRUTH for the flag vocabulary: the card strip, the selected scenario's
+/// chips and the legend all derive from this table. They used to disagree — the strip drew
+/// from here while the info text came from a separate, narrower if-chain, so a card could
+/// show a sigil (CITY_START) that nothing on the screen explained.
+struct nc_scen_flag_icon {
+const char *flag;
+unsigned seed;
+nc_color col;
+/// Terse form for the legend. Thirteen of these share one row.
+const char *label;
+/// Full form for the selected scenario's chip, where there is room to be explicit.
+const char *desc;
+};
+
+/// Danger in red, bodily state in green, circumstance in grey/blue, season in yellow.
+///
+/// Seeds must all differ — the generator keys the glyph on the seed, so two flags sharing
+/// one would draw the same shape and the strip would stop distinguishing them. They are
+/// otherwise arbitrary.
+const std::vector<nc_scen_flag_icon> &nc_scen_flag_icons()
+{
+    static const std::vector<nc_scen_flag_icon> icons = {
+        { "FIRE_START", 0x4649, c_red, translate_marker( "Starts on fire" ), translate_marker( "Fire nearby" ) },
+        { "SUR_START", 0x5352, c_red, translate_marker( "Surrounded" ), translate_marker( "Zombies nearby" ) },
+        { "HELI_CRASH", 0x4843, c_red, translate_marker( "Crash injuries" ), translate_marker( "Various limb wounds" ) },
+        { "INFECTED", 0x494E, c_green, translate_marker( "Infected wound" ), translate_marker( "Infected player" ) },
+        { "BAD_DAY", 0x4244, c_green, translate_marker( "Bad day" ), translate_marker( "Drunk and sick player" ) },
+        { "CITY_START", 0x4349, c_light_gray, translate_marker( "Starts in a city" ), translate_marker( "Starts inside a city" ) },
+        { "BORDERED", 0x424F, c_light_gray, translate_marker( "Walled in" ), translate_marker( "Bordered by an immense wall" ) },
+        { "LONE_START", 0x4C4F, c_light_blue, translate_marker( "No starting NPC" ), translate_marker( "No starting NPC" ) },
+        { "SPR_START", 0x5350, c_yellow, translate_marker( "Spring" ), translate_marker( "Spring start" ) },
+        { "SUM_START", 0x5355, c_yellow, translate_marker( "Summer" ), translate_marker( "Summer start" ) },
+        { "AUT_START", 0x4155, c_yellow, translate_marker( "Autumn" ), translate_marker( "Autumn start" ) },
+        { "WIN_START", 0x5749, c_yellow, translate_marker( "Winter" ), translate_marker( "Winter start" ) },
+        { "SUM_ADV_START", 0x5341, c_yellow, translate_marker( "Late summer" ), translate_marker( "Next summer start" ) },
+    };
+    return icons;
+}
+
+struct nc_scen_icon {
+    Rml::String dec;
+};
+
+/// RCSS `decorator` showing the scenario's start-location art, or an empty string when the
+/// tileset has no sprite for it.
+///
+/// Bespoke per-scenario art does not exist yet, so the start location's overmap sprite is
+/// the closest honest stand-in for "where this run begins". Resolved here, on the game side,
+/// because the render interface deliberately knows nothing about tilesets — it is handed a
+/// file path and a pixel rect and does the crop.
+auto nc_scen_art_dec( const scenario &s ) -> std::string
+{
+    if( tilecontext == nullptr ) {
+        return {};
+    }
+    const tileset *ts = tilecontext->current_tileset();
+    if( ts == nullptr ) {
+        return {};
+    }
+    const start_location_id loc = s.start_location();
+    if( !loc.is_valid() ) {
+        return {};
+    }
+    const auto target = loc->first_target();
+    if( !target ) {
+        return {};
+    }
+    // Overmap sprites are keyed by the plain terrain id; the season-aware lookup also covers
+    // tilesets that only ship a seasonal variant.
+    // tile_lookup_res::tile() is non-const, so the optional has to be held by value.
+    auto found = ts->find_tile_type_by_season( target->first, season_of_year( calendar::turn ) );
+    const tile_type *tt = found ? &found->tile() : ts->find_tile_type( target->first );
+    if( tt == nullptr || tt->sprite.fg.empty() ) {
+        return {};
+    }
+    // Each entry is a weighted_object wrapping the variant list; take the first variant of
+    // the first entry so the art is stable rather than rerolled per frame.
+    const std::vector<int> &variants = tt->sprite.fg.begin()->obj;
+    if( variants.empty() ) {
+        return {};
+    }
+    const auto src = ts->sprite_file_source( variants.front() );
+    if( !src ) {
+        return {};
+    }
+    return string_format( "image( ?sprite:%d:%d:%d:%d:%s none contain ) border-box",
+                          src->rect.x, src->rect.y, src->rect.w, src->rect.h, src->path );
+}
+
+/// A sigil paired with words. Used twice: the legend beneath the tree (which states the
+/// vocabulary, since the card strips are unreadable without it) and the selected
+/// scenario's flag chips (which restate its own sigils in full). Sharing the type is what
+/// ties strip, chip and legend to one glyph per flag.
+struct nc_scen_glyph {
+    Rml::String dec;
+    Rml::String label_rml;
+};
+
+/// One scenario card.
 struct nc_scen_row {
     Rml::String text_rml;
-    bool selected = false;
+    Rml::String cost_rml;             //< point cost, coloured by direction
+    Rml::Vector<nc_scen_icon> icons;  //< flag glyph strip
+    bool selected = false;            //< cursor is on this card
+    bool chosen = false;              //< this is the scenario in force
+    bool unavailable = false;         //< CITY_START while cities are disabled
 };
+
+/// One group: a header plus a CAROUSEL page of its cards.
+struct nc_scen_band {
+    Rml::String name_rml;
+    Rml::String count_rml;
+    Rml::String marker_rml;          //< disclosure glyph
+    bool collapsed = false;
+    bool focused = false;            //< cursor is on this header
+    /// This band owns the floaty info panel: it is open and holds the cursor. Only one
+    /// band can, so the panel reads as belonging to the category being browsed.
+    bool has_info = false;
+    bool has_prev_page = false;
+    bool has_next_page = false;
+    Rml::Vector<nc_scen_row> rows;   //< only the visible page
+};
+
 struct nc_scen_session {
+    Rml::Vector<nc_scen_glyph> legend;
+    /// Facts about the selected scenario, one binding per field. Previously a single
+    /// pre-wrapped string with embedded headers and blank-line separators, which no
+    /// stylesheet could give hierarchy to and which spent a third of its height on
+    /// whitespace. Split so each field carries its own size, weight and hue.
+    Rml::String loc_rml;
+    Rml::String loc_sub_rml;
+    Rml::String prof_rml;
+    Rml::String prof_sub_rml;
+    Rml::String veh_rml;
+    Rml::String art_dec;
+    Rml::Vector<nc_scen_glyph> chips;
     Rml::Vector<nc_scen_tab> tabs;
     nc_shell shell;
     Rml::String points_rml;
     Rml::String cost_rml;
-    Rml::Vector<nc_scen_row> rows;
+    Rml::Vector<nc_scen_band> bands;
     Rml::String desc_rml;
-    Rml::String info_rml;
     Rml::String sort_rml;
     Rml::String filter_rml;
     Rml::DataModelHandle handle;
@@ -3070,10 +3243,33 @@ void register_nc_scen_rml_types( Rml::DataModelConstructor &c )
     th.RegisterMember( "selected", &nc_scen_tab::selected );
     th.RegisterMember( "done", &nc_scen_tab::done );
     c.RegisterArray<Rml::Vector<nc_scen_tab>>();
+    Rml::StructHandle<nc_scen_icon> ih = c.RegisterStruct<nc_scen_icon>();
+    ih.RegisterMember( "dec", &nc_scen_icon::dec );
+    c.RegisterArray<Rml::Vector<nc_scen_icon>>();
     Rml::StructHandle<nc_scen_row> rh = c.RegisterStruct<nc_scen_row>();
     rh.RegisterMember( "text_rml", &nc_scen_row::text_rml );
+    rh.RegisterMember( "cost_rml", &nc_scen_row::cost_rml );
+    rh.RegisterMember( "icons", &nc_scen_row::icons );
     rh.RegisterMember( "selected", &nc_scen_row::selected );
+    rh.RegisterMember( "chosen", &nc_scen_row::chosen );
+    rh.RegisterMember( "unavailable", &nc_scen_row::unavailable );
     c.RegisterArray<Rml::Vector<nc_scen_row>>();
+    Rml::StructHandle<nc_scen_glyph> lh = c.RegisterStruct<nc_scen_glyph>();
+    lh.RegisterMember( "dec", &nc_scen_glyph::dec );
+    lh.RegisterMember( "label_rml", &nc_scen_glyph::label_rml );
+    // One array registration covers both the legend and the chips — same element type.
+    c.RegisterArray<Rml::Vector<nc_scen_glyph>>();
+    Rml::StructHandle<nc_scen_band> bh = c.RegisterStruct<nc_scen_band>();
+    bh.RegisterMember( "name_rml", &nc_scen_band::name_rml );
+    bh.RegisterMember( "count_rml", &nc_scen_band::count_rml );
+    bh.RegisterMember( "marker_rml", &nc_scen_band::marker_rml );
+    bh.RegisterMember( "collapsed", &nc_scen_band::collapsed );
+    bh.RegisterMember( "focused", &nc_scen_band::focused );
+    bh.RegisterMember( "has_info", &nc_scen_band::has_info );
+    bh.RegisterMember( "has_prev_page", &nc_scen_band::has_prev_page );
+    bh.RegisterMember( "has_next_page", &nc_scen_band::has_next_page );
+    bh.RegisterMember( "rows", &nc_scen_band::rows );
+    c.RegisterArray<Rml::Vector<nc_scen_band>>();
     g_nc_scen_types_registered = true;
 }
 } // namespace
@@ -3084,6 +3280,37 @@ tab_direction set_scenario( avatar &u, points_left &points,
     int cur_id = 0;
     tab_direction retval = tab_direction::NONE;
     int iContentHeight = 0;
+
+    // ── Tree/carousel view state ──────────────────────────────────────────────
+    //
+    // `cur_id` stays the authoritative index into the flat `sorted_scens`, so SORT,
+    // FILTER, RANDOMIZE and reset_scenario keep working untouched — the grouping is a
+    // VIEW over that list, rebuilt whenever the list is.
+    // Six, not eight: the tree shares the stage with the info pane, so eight cards left
+    // roughly 60dp each and every name longer than "Ambush" was clipped. Six gives a card
+    // wide enough for a wrapped two-line name — see .nc-scen-card in newcharscenario.rcss.
+    constexpr int NC_SCEN_PAGE = 6;             //< cards visible per group at once
+    constexpr int NC_BANDS = static_cast<int>( nc_scen_group::count );
+    // Indices into sorted_scens, per group, in list order.
+    std::array<std::vector<int>, NC_BANDS> band_items;
+    // All three start collapsed: the first decision is "what KIND of run", and three
+    // headers state that choice without 38 cards competing with it. The cursor starts on
+    // the first header, so CONFIRM opens rather than silently re-picking a scenario.
+    std::array<bool, NC_BANDS> band_collapsed = { true, true, true };
+    std::array<int, NC_BANDS> band_page = { 0, 0, 0 };
+    // Cursor: which group, and whether it sits on that group's HEADER or on a card. The
+    // header being a focus stop is what makes this a tree without needing a new
+    // keybinding — CONFIRM on a header toggles it, CONFIRM on a card selects.
+    int focus_band = 0;
+    bool focus_header = true;
+    int focus_card = 0;
+    // Click intent, written by the RmlUi callbacks and applied ONCE per input cycle. See
+    // the BindEventCallback block for why a click callback must not mutate directly.
+    int pending_band = -1;
+    int pending_card_band = -1;
+    int pending_card_slot = -1;
+    int pending_page_band = -1;
+    int pending_page_dir = 0;
 
     ui_adaptor ui;
     catacurses::window w;
@@ -3191,99 +3418,133 @@ tab_direction set_scenario( avatar &u, points_left &points,
             }
             data->desc_rml = cata_text_to_rml( desc );
 
-            std::string info;
-            info += colorize( _( "Professions:" ), COL_HEADER );
-            info += string_format( _( "\n%s" ), s->prof_count_str() );
-            info += _( ", default:\n" );
+            // Facts, one field at a time. The label/value split lives in the stylesheet,
+            // so no header text or blank-line padding is baked into these strings.
             auto psorter = profession_sorter;
             psorter.sort_by_points = true;
             const auto permitted = s->permitted_professions();
             const auto default_prof = *std::min_element( permitted.begin(), permitted.end(), psorter );
             const int prof_points = default_prof->point_cost();
-            info += default_prof->gender_appropriate_name( u.male );
+            std::string prof = default_prof->gender_appropriate_name( u.male );
             if( prof_points > 0 ) {
-                info += colorize( string_format( " (-%d)", prof_points ), c_red );
+                prof += colorize( string_format( " (-%d)", prof_points ), c_red );
             } else if( prof_points < 0 ) {
-                info += colorize( string_format( " (+%d)", -prof_points ), c_green );
+                prof += colorize( string_format( " (+%d)", -prof_points ), c_green );
             }
-            info += "\n\n";
-            info += colorize( _( "Scenario Location:" ), COL_HEADER );
-            info += "\n";
-            info += string_format( _( "%s (%d locations, %d variants)" ), s->start_name(),
-                                   s->start_location_count(), s->start_location_targets_count() );
-            info += "\n\n";
-            info += colorize( _( "Scenario Vehicle:" ), COL_HEADER );
-            info += "\n";
-            // A header with nothing under it reads as a rendering fault rather than
-            // as "empty", so name the empty state.
-            info += s->vehicle() ? s->vehicle()->name : std::string( _( "None" ) );
-            info += "\n\n";
-            info += colorize( _( "Scenario Flags:" ), COL_HEADER );
-            info += "\n";
-            std::vector<std::string> flags;
-            if( s->has_flag( "SPR_START" ) ) {
-                flags.emplace_back( _( "Spring start" ) );
-            } else if( s->has_flag( "SUM_START" ) ) {
-                flags.emplace_back( _( "Summer start" ) );
-            } else if( s->has_flag( "AUT_START" ) ) {
-                flags.emplace_back( _( "Autumn start" ) );
-            } else if( s->has_flag( "WIN_START" ) ) {
-                flags.emplace_back( _( "Winter start" ) );
-            } else if( s->has_flag( "SUM_ADV_START" ) ) {
-                flags.emplace_back( _( "Next summer start" ) );
+            data->prof_rml = cata_text_to_rml( prof );
+            data->prof_sub_rml = cata_text_to_rml( s->prof_count_str() );
+
+            data->loc_rml = cata_text_to_rml( s->start_name() );
+            // Interpunct rather than a second row: two counts do not deserve two lines.
+            data->loc_sub_rml = cata_text_to_rml( string_format(
+                    _( "%d locations \u00b7 %d variants" ),
+                    s->start_location_count(), s->start_location_targets_count() ) );
+
+            // A field with nothing in it reads as a rendering fault, so name the empty state.
+            data->veh_rml = cata_text_to_rml( s->vehicle()
+                                              ? s->vehicle()->name
+                                              : std::string( _( "None" ) ) );
+            data->art_dec = nc_scen_art_dec( *s );
+
+            // Flag chips: this scenario's own sigils, each restated in words. Derived from
+            // the SAME table the card strip draws from, so a chip can never go missing for a
+            // glyph the card shows — the previous hand-written if-chain omitted CITY_START
+            // and BORDERED, leaving those sigils unexplained.
+            data->chips.clear();
+            for( const nc_scen_flag_icon &fi : nc_scen_flag_icons() ) {
+                if( !s->has_flag( fi.flag ) ) {
+                    continue;
+                }
+                // The starting-NPC flag only means anything when the option defers to the
+                // scenario; otherwise the option decides and the chip would be a lie.
+                if( std::string_view( fi.flag ) == "LONE_START" &&
+                    get_option<std::string>( "STARTING_NPC" ) != "scenario" ) {
+                    continue;
+                }
+                data->chips.push_back( {
+                    .dec = nc_icon_dec_col( fi.seed, 14, fi.col ),
+                    .label_rml = cata_text_to_rml( colorize( _( fi.desc ), fi.col ) ) } );
             }
-            if( s->has_flag( "INFECTED" ) ) {
-                flags.emplace_back( _( "Infected player" ) );
-            }
-            if( s->has_flag( "BAD_DAY" ) ) {
-                flags.emplace_back( _( "Drunk and sick player" ) );
-            }
-            if( s->has_flag( "FIRE_START" ) ) {
-                flags.emplace_back( _( "Fire nearby" ) );
-            }
-            if( s->has_flag( "SUR_START" ) ) {
-                flags.emplace_back( _( "Zombies nearby" ) );
-            }
-            if( s->has_flag( "HELI_CRASH" ) ) {
-                flags.emplace_back( _( "Various limb wounds" ) );
-            }
-            if( get_option<std::string>( "STARTING_NPC" ) == "scenario" &&
-                s->has_flag( "LONE_START" ) ) {
-                flags.emplace_back( _( "No starting NPC" ) );
-            }
-            if( s->has_flag( "BORDERED" ) ) {
-                flags.emplace_back( _( "Starting location is bordered by an immense wall" ) );
-            }
-            if( flags.empty() ) {
-                flags.emplace_back( _( "None" ) );
-            }
-            for( const std::string &f : flags ) {
-                info += f + "\n";
-            }
-            data->info_rml = cata_text_to_rml( info );
         } else {
             data->cost_rml.clear();
             data->desc_rml.clear();
-            data->info_rml.clear();
+            data->loc_rml.clear();
+            data->loc_sub_rml.clear();
+            data->prof_rml.clear();
+            data->prof_sub_rml.clear();
+            data->veh_rml.clear();
+            data->art_dec.clear();
+            data->chips.clear();
         }
 
-        data->rows.clear();
-        for( int i = 0; i < static_cast<int>( sorted_scens.size() ); i++ ) {
-            const scenario *s = sorted_scens[i];
-            nc_color col;
-            if( g->scen != s ) {
-                if( s->has_flag( "CITY_START" ) && !scenario_sorter.cities_enabled ) {
-                    col = c_dark_gray;
-                } else {
-                    col = c_light_gray;
-                }
-            } else {
-                col = COL_SKILL_USED;
+        // Static vocabulary: built on the first sync and then left alone.
+        if( data->legend.empty() ) {
+            for( const nc_scen_flag_icon &fi : nc_scen_flag_icons() ) {
+                data->legend.push_back( {
+                    .dec = nc_icon_dec_col( fi.seed, 14, fi.col ),
+                    .label_rml = cata_text_to_rml( colorize( _( fi.label ), fi.col ) ) } );
             }
-            nc_scen_row r;
-            r.text_rml = cata_text_to_rml( colorize( s->gender_appropriate_name( u.male ), col ) );
-            r.selected = ( i == cur_id );
-            data->rows.push_back( r );
+            // Filled after the model was constructed, so the data-for has to be told: with
+            // no dirty notification the legend row stays empty for the life of the screen.
+            data->handle.DirtyVariable( "legend" );
+        }
+
+        // Grouped carousel view. Only the VISIBLE page of each open group is emitted, so
+        // the document holds ~24 cards at most rather than every scenario in the game.
+        data->bands.clear();
+        {
+            const std::array<std::string, 3> band_names = {
+                _( "Basic" ), _( "Advanced" ), _( "Challenge" )
+            };
+            for( int b = 0; b < NC_BANDS; ++b ) {
+                nc_scen_band band;
+                const int total = static_cast<int>( band_items[b].size() );
+                band.name_rml = cata_text_to_rml( colorize( band_names[b], c_white ) );
+                band.collapsed = band_collapsed[b];
+                band.focused = ( b == focus_band && focus_header );
+                // Page position is worth stating: with a group collapsed you cannot see
+                // how much you are hiding, and with it open you cannot see how far the
+                // carousel has left to go.
+                const int page_start = band_collapsed[b] ? 0 : band_page[b];
+                const int page_end = std::min( total, page_start + NC_SCEN_PAGE );
+                band.count_rml = cata_text_to_rml( colorize(
+                                                       band_collapsed[b] || total <= NC_SCEN_PAGE
+                                                       ? string_format( "%d", total )
+                                                       : string_format( "%d-%d / %d", page_start + 1, page_end, total ),
+                                                       c_dark_gray ) );
+                band.marker_rml = cata_text_to_rml( colorize(
+                                                        band_collapsed[b] ? "+" : "-", c_yellow ) );
+                band.has_info = !band_collapsed[b] && b == focus_band && !focus_header;
+                band.has_prev_page = !band_collapsed[b] && page_start > 0;
+                band.has_next_page = !band_collapsed[b] && page_end < total;
+                if( !band_collapsed[b] ) {
+                    for( int k = page_start; k < page_end; ++k ) {
+                        const int i = band_items[b][k];
+                        const scenario *s = sorted_scens[i];
+                        nc_scen_row r;
+                        r.chosen = ( g->scen == s );
+                        r.unavailable = s->has_flag( "CITY_START" ) && !scenario_sorter.cities_enabled;
+                        // Name stays UNCOLOURED on the card: the card's own border and fill
+                        // carry cursor/chosen state, and a baked colour would beat any rule
+                        // the stylesheet tries to apply (see newchar_common.rcss).
+                        r.text_rml = cata_text_to_rml( colorize(
+                                                           s->gender_appropriate_name( u.male ),
+                                                           r.unavailable ? c_dark_gray : c_light_gray ) );
+                        const int cost = s->point_cost();
+                        r.cost_rml = cata_text_to_rml( colorize(
+                                                           cost == 0 ? std::string( "0" ) : string_format( "%+d", -cost ),
+                                                           cost > 0 ? c_red : ( cost < 0 ? c_green : c_dark_gray ) ) );
+                        for( const nc_scen_flag_icon &fi : nc_scen_flag_icons() ) {
+                            if( s->has_flag( fi.flag ) ) {
+                                r.icons.push_back( { nc_icon_dec_col( fi.seed, 14, fi.col ) } );
+                            }
+                        }
+                        r.selected = ( b == focus_band && !focus_header && k == focus_card );
+                        band.rows.push_back( r );
+                    }
+                }
+                data->bands.push_back( band );
+            }
         }
 
         data->sort_rml = cata_text_to_rml( string_format(
@@ -3297,21 +3558,22 @@ tab_direction set_scenario( avatar &u, points_left &points,
         dirty_nc_shell( data->handle );
         data->handle.DirtyVariable( "points_rml" );
         data->handle.DirtyVariable( "cost_rml" );
-        data->handle.DirtyVariable( "rows" );
+        data->handle.DirtyVariable( "bands" );
         data->handle.DirtyVariable( "desc_rml" );
-        data->handle.DirtyVariable( "info_rml" );
+        data->handle.DirtyVariable( "loc_rml" );
+        data->handle.DirtyVariable( "loc_sub_rml" );
+        data->handle.DirtyVariable( "prof_rml" );
+        data->handle.DirtyVariable( "prof_sub_rml" );
+        data->handle.DirtyVariable( "veh_rml" );
+        data->handle.DirtyVariable( "art_dec" );
+        data->handle.DirtyVariable( "chips" );
         data->handle.DirtyVariable( "sort_rml" );
         data->handle.DirtyVariable( "filter_rml" );
 
-        if( rml_scroll_pending && valid ) {
-            rml_scroll_pending = false;
-            if( Rml::Element *list = rml.document()->GetElementById( "nc-scen-list" ) ) {
-                if( cur_id < list->GetNumChildren() ) {
-                    list->GetChild( cur_id )->ScrollIntoView(
-                        Rml::ScrollIntoViewOptions( Rml::ScrollAlignment::Nearest ) );
-                }
-            }
-        }
+        // No ScrollIntoView any more: the carousel pages the cursor into view in
+        // sync_cur_from_focus, so there is never an off-screen card to scroll to. The old
+        // block indexed a flat #nc-scen-list by cur_id, which the grouped view no longer
+        // has — it would have addressed the wrong child.
     };
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
@@ -3335,11 +3597,73 @@ tab_direction set_scenario( avatar &u, points_left &points,
         [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = 1; } );
         c.Bind( "points_rml", &data->points_rml );
         c.Bind( "cost_rml", &data->cost_rml );
-        c.Bind( "rows", &data->rows );
+        c.Bind( "bands", &data->bands );
+        // Clicking a card focuses AND selects it; clicking a header toggles the group.
+        // Both need SELECT registered above, or the click never reaches this loop.
+        // Click callbacks here RECORD INTENT and mutate nothing. `data-event-*` installs a
+        // DataControllerEvent listener on each generated element
+        // (DataControllerDefault.cpp:95), and a `data-for` regeneration adds another
+        // without removing the old one — it is only removed on element destruction. This
+        // document dirties "bands" on every sync_rml, i.e. every redraw, so the listener
+        // count grows with frame count and ONE click invokes these callbacks an unbounded,
+        // unpredictable number of times. Measured: 15 for a single click.
+        //
+        // That cannot be filtered by phase or by target — both are legitimate for a real
+        // click on a child span. A toggle run N times cancels itself out whenever N is
+        // even, which is exactly what kept the groups from opening. So the loop applies
+        // these once per input cycle; N duplicate dispatches record the same intent.
+        // Mirrors the nc_nav idiom the navigators already use.
+        c.BindEventCallback( "on_band",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int b = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( b );
+            }
+            if( b >= 0 && b < NC_BANDS ) {
+                pending_band = b;
+            }
+        } );
+        c.BindEventCallback( "on_card",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            // Two args: the band index and the index WITHIN THE VISIBLE PAGE. The page
+            // offset is added back when the loop applies this.
+            int b = -1;
+            int k = -1;
+            if( args.size() >= 2 ) {
+                args[0].GetInto( b );
+                args[1].GetInto( k );
+            }
+            if( b >= 0 && b < NC_BANDS && k >= 0 ) {
+                pending_card_band = b;
+                pending_card_slot = k;
+            }
+        } );
+        // The carousel arrows. Keyboard reaches the next page by walking off the end of a
+        // row, but a mouse user has only these, so they must be real controls.
+        c.BindEventCallback( "on_page",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int b = -1;
+            int d = 0;
+            if( args.size() >= 2 ) {
+                args[0].GetInto( b );
+                args[1].GetInto( d );
+            }
+            if( b >= 0 && b < NC_BANDS && d != 0 ) {
+                pending_page_band = b;
+                pending_page_dir = d;
+            }
+        } );
         c.Bind( "desc_rml", &data->desc_rml );
-        c.Bind( "info_rml", &data->info_rml );
+        c.Bind( "loc_rml", &data->loc_rml );
+        c.Bind( "loc_sub_rml", &data->loc_sub_rml );
+        c.Bind( "prof_rml", &data->prof_rml );
+        c.Bind( "prof_sub_rml", &data->prof_sub_rml );
+        c.Bind( "veh_rml", &data->veh_rml );
+        c.Bind( "art_dec", &data->art_dec );
+        c.Bind( "chips", &data->chips );
         c.Bind( "sort_rml", &data->sort_rml );
         c.Bind( "filter_rml", &data->filter_rml );
+        c.Bind( "legend", &data->legend );
         data->handle = c.GetModelHandle();
     } );
     if( rml_doc_unavailable( rml, _( "Character creation (SCENARIO tab)" ) ) ) {
@@ -3390,37 +3714,175 @@ tab_direction set_scenario( avatar &u, points_left &points,
                 cur_id = 0;
             }
 
+            // Re-derive the grouped view. Order within a group follows sorted_scens, so
+            // SORT still governs card order; only the partition is new.
+            for( std::vector<int> &v : band_items ) {
+                v.clear();
+            }
+            for( int i = 0; i < scens_length; ++i ) {
+                band_items[static_cast<int>( nc_classify_scen( *sorted_scens[i] ) )].push_back( i );
+            }
+            // Park the cursor on the group holding the active scenario, so re-entering the
+            // step (or changing the filter) does not silently move the selection.
+            for( int b = 0; b < NC_BANDS; ++b ) {
+                const auto it = std::ranges::find( band_items[b], cur_id );
+                if( it != band_items[b].end() ) {
+                    focus_band = b;
+                    focus_card = static_cast<int>( std::distance( band_items[b].begin(), it ) );
+                    focus_header = band_collapsed[b];
+                    band_page[b] = focus_card - focus_card % NC_SCEN_PAGE;
+                    break;
+                }
+            }
+
             recalc_scens = false;
         }
 
         ui_manager::redraw();
         nc_nav = 0;
+        pending_band = -1;
+        pending_card_band = -1;
+        pending_card_slot = -1;
+        pending_page_band = -1;
+        pending_page_dir = 0;
         std::string action = ctxt.handle_input();
         if( nc_nav != 0 ) {
             action = nc_nav < 0 ? "PREV_TAB" : "NEXT_TAB";
         }
+        // ── Tree navigation ───────────────────────────────────────────────────
+        //
+        // Vertical order is header, cards, next header … with a collapsed group's cards
+        // skipped, so the cursor can never land on a card that is not on screen.
+        // Horizontal movement walks the focused group's cards and advances the carousel
+        // page at either end — which is why paging needs no key of its own.
+        const auto band_size = [&]( int b ) {
+            return static_cast<int>( band_items[b].size() );
+        };
+        // Keeps cur_id (and therefore the info pane and CONFIRM) on the focused card.
+        const auto sync_cur_from_focus = [&]() {
+            if( !focus_header && band_size( focus_band ) > 0 ) {
+                focus_card = std::clamp( focus_card, 0, band_size( focus_band ) - 1 );
+                cur_id = band_items[focus_band][focus_card];
+                // Page the carousel to keep the cursor visible.
+                if( focus_card < band_page[focus_band] ) {
+                    band_page[focus_band] = focus_card - focus_card % NC_SCEN_PAGE;
+                } else if( focus_card >= band_page[focus_band] + NC_SCEN_PAGE ) {
+                    band_page[focus_band] = focus_card - focus_card % NC_SCEN_PAGE;
+                }
+            }
+        };
+        // Apply click intent recorded during handle_input, exactly once — however many
+        // times the callback was invoked. Cleared before handle_input so a stale intent
+        // cannot re-apply on a later frame.
+        if( pending_band >= 0 ) {
+            const int b = pending_band;
+            focus_band = b;
+            band_collapsed[b] = !band_collapsed[b];
+            // Opening lands the cursor on the first visible card so the arrow has something
+            // to point at and the info panel has a scenario to describe; closing returns it
+            // to the header, which is then the only thing left to stand on.
+            focus_header = band_collapsed[b] || band_size( b ) == 0;
+            if( !focus_header ) {
+                focus_card = band_page[b];
+                sync_cur_from_focus();
+            }
+        } else if( pending_page_band >= 0 ) {
+            const int b = pending_page_band;
+            const int next = band_page[b] + pending_page_dir * NC_SCEN_PAGE;
+            if( next >= 0 && next < band_size( b ) ) {
+                band_page[b] = next;
+                // Carry the cursor onto the page being shown, so the highlight never sits
+                // on a card that is no longer rendered.
+                focus_band = b;
+                focus_header = false;
+                focus_card = next;
+                sync_cur_from_focus();
+            }
+        } else if( pending_card_band >= 0 && pending_card_slot >= 0 ) {
+            const int b = pending_card_band;
+            const int idx = band_page[b] + pending_card_slot;
+            if( idx < band_size( b ) ) {
+                focus_band = b;
+                focus_header = false;
+                focus_card = idx;
+                sync_cur_from_focus();
+                // Unavailable card: the cursor moves onto it, the selection does not change.
+                if( !( sorted_scens[cur_id]->has_flag( "CITY_START" ) &&
+                       !scenario_sorter.cities_enabled ) ) {
+                    reset_scenario( u, sorted_scens[cur_id] );
+                    points.init_from_options();
+                    points.skill_points -= sorted_scens[cur_id]->point_cost();
+                }
+            }
+        }
         if( action == "DOWN" ) {
-            cur_id++;
-            if( cur_id > scens_length - 1 ) {
-                cur_id = 0;
+            if( focus_header && !band_collapsed[focus_band] && band_size( focus_band ) > 0 ) {
+                focus_header = false;          // into this group's cards
+            } else {
+                // To the next group's header, wrapping.
+                focus_band = ( focus_band + 1 ) % NC_BANDS;
+                focus_header = true;
+                focus_card = 0;
             }
-            rml_scroll_pending = true;
+            sync_cur_from_focus();
         } else if( action == "UP" ) {
-            cur_id--;
-            if( cur_id < 0 ) {
-                cur_id = scens_length - 1;
+            if( !focus_header ) {
+                focus_header = true;           // back onto this group's header
+            } else {
+                focus_band = ( focus_band + NC_BANDS - 1 ) % NC_BANDS;
+                // Land on the previous group's CARDS when it is open, so walking up is the
+                // mirror of walking down rather than skipping every card row.
+                const bool open = !band_collapsed[focus_band] && band_size( focus_band ) > 0;
+                focus_header = !open;
+                focus_card = open ? band_size( focus_band ) - 1 : 0;
             }
-            rml_scroll_pending = true;
+            sync_cur_from_focus();
+        } else if( action == "RIGHT" && !focus_header ) {
+            if( focus_card + 1 < band_size( focus_band ) ) {
+                focus_card++;
+            }
+            sync_cur_from_focus();
+        } else if( action == "LEFT" && !focus_header ) {
+            if( focus_card > 0 ) {
+                focus_card--;
+            }
+            sync_cur_from_focus();
         } else if( action == "RANDOMIZE" ) {
             cur_id = rng( 0, scens_length - 1 );
-            rml_scroll_pending = true;
-        } else if( action == "CONFIRM" ) {
-            if( sorted_scens[cur_id]->has_flag( "CITY_START" ) && !scenario_sorter.cities_enabled ) {
-                continue;
+            // Follow the roll: it may land in a collapsed group, which then opens, because
+            // a cursor you cannot see is worse than a group you did not open yourself.
+            for( int b = 0; b < NC_BANDS; ++b ) {
+                const auto it = std::ranges::find( band_items[b], cur_id );
+                if( it != band_items[b].end() ) {
+                    focus_band = b;
+                    focus_card = static_cast<int>( std::distance( band_items[b].begin(), it ) );
+                    focus_header = false;
+                    band_collapsed[b] = false;
+                    break;
+                }
             }
-            reset_scenario( u, sorted_scens[cur_id] );
-            points.init_from_options();
-            points.skill_points -= sorted_scens[cur_id]->point_cost();
+            sync_cur_from_focus();
+        } else if( action == "CONFIRM" ) {
+            if( focus_header ) {
+                band_collapsed[focus_band] = !band_collapsed[focus_band];
+                // Mirrors the click route: opening steps onto the first visible card.
+                if( !band_collapsed[focus_band] && band_size( focus_band ) > 0 ) {
+                    focus_header = false;
+                    focus_card = band_page[focus_band];
+                    sync_cur_from_focus();
+                }
+                // Collapsing the group the cursor is inside would hide the cursor.
+                if( band_collapsed[focus_band] ) {
+                    focus_header = true;
+                }
+            } else {
+                if( sorted_scens[cur_id]->has_flag( "CITY_START" ) && !scenario_sorter.cities_enabled ) {
+                    continue;
+                }
+                reset_scenario( u, sorted_scens[cur_id] );
+                points.init_from_options();
+                points.skill_points -= sorted_scens[cur_id]->point_cost();
+            }
         } else if( action == "PREV_TAB" ) {
             retval = tab_direction::BACKWARD;
         } else if( action == "NEXT_TAB" ) {

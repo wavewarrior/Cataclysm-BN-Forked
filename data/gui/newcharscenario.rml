@@ -34,18 +34,112 @@
             <div class="nc-scen-top">
                 <span class="nc-scen-points" data-rml="points_rml"></span>
                 <span class="nc-scen-cost" data-rml="cost_rml"></span>
+                <!-- Screen-level control hint, so it belongs beside the other status text
+                     rather than inside the per-scenario info panel. -->
+                <span class="nc-scen-sort" data-rml="sort_rml"></span>
             </div>
             <div class="nc-scen-body">
-                <div id="nc-scen-list" class="nc-scen-list scroll-pane">
-                    <div class="item nc-scen-row" data-for="r : rows"
-                         data-class-selected="r.selected" data-rml="r.text_rml"></div>
-                </div>
-                <div class="nc-scen-info scroll-pane">
-                    <div class="nc-scen-sort" data-rml="sort_rml"></div>
-                    <div class="nc-scen-detail" data-rml="info_rml"></div>
+                <!-- Grouped card tree. Each band is a header (a focus stop, so CONFIRM on
+                     it toggles the group without needing a keybinding of its own) plus a
+                     carousel row holding only the VISIBLE page of cards. -->
+                <div class="nc-scen-tree">
+                    <div class="nc-band" data-for="b, bi : bands">
+                        <div class="nc-band-head" data-class-focused="b.focused"
+                             data-class-collapsed="b.collapsed"
+                             data-event-click="on_band(bi)">
+                            <span class="nc-band-marker" data-rml="b.marker_rml"></span>
+                            <span class="nc-band-name" data-rml="b.name_rml"></span>
+                            <span class="nc-band-count" data-rml="b.count_rml"></span>
+                        </div>
+                        <div class="nc-band-rail" data-if="!b.collapsed">
+                            <div class="nc-band-pager" data-class-on="b.has_prev_page"
+                                 data-event-click="on_page(bi, -1)">&#60;</div>
+                            <div class="nc-band-cards">
+                                <div class="nc-scen-card" data-for="r : b.rows"
+                                     data-class-selected="r.selected"
+                                     data-class-chosen="r.chosen"
+                                     data-class-unavailable="r.unavailable"
+                                     data-event-click="on_card(bi, it_index)">
+                                    <!-- Name owns the card's full width and wraps; the cost
+                                         sits in the footer beside the flag strip. Sharing a
+                                         row with the cost clipped every long single-word
+                                         name ("Wilderness", "Ambush") instead of wrapping. -->
+                                    <span class="nc-scen-name" data-rml="r.text_rml"></span>
+                                    <div class="nc-card-foot">
+                                        <div class="nc-scen-flags">
+                                            <div class="nc-scen-flag" data-for="i : r.icons"
+                                                 data-style-decorator="i.dec"></div>
+                                        </div>
+                                        <span class="nc-scen-pts" data-rml="r.cost_rml"></span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="nc-band-pager" data-class-on="b.has_next_page"
+                                 data-event-click="on_page(bi, 1)">&#62;</div>
+                        </div>
+                        <!-- Floaty info panel for the scenario under the cursor, inside the
+                             band so it reads as part of THIS category. Fixed height and
+                             fixed position: changing scenario moves only the notch above
+                             it, never the panel. Replaces the old right-hand pane, which
+                             cost half the stage width to say the same thing. -->
+                        <div class="nc-band-info" data-if="b.has_info">
+                            <div class="nc-info-notches">
+                                <!-- Gutters and one cell per card mirror the rail's flex
+                                     geometry exactly, so the notch lands under its card
+                                     without any pixel arithmetic. -->
+                                <div class="nc-info-gutter"></div>
+                                <div class="nc-info-cells">
+                                    <div class="nc-info-cell" data-for="r : b.rows"
+                                         data-class-on="r.selected">
+                                        <div class="nc-info-notch"></div>
+                                    </div>
+                                </div>
+                                <div class="nc-info-gutter"></div>
+                            </div>
+                            <div class="nc-info-panel">
+                                <!-- Art slot. Bespoke per-scenario art does not exist yet, so
+                                     this shows the START LOCATION's overmap art: the closest
+                                     honest stand-in for "where this run begins". -->
+                                <div class="nc-info-art" data-style-decorator="art_dec"></div>
+                                <div class="nc-info-facts">
+                                    <div class="nc-fact">
+                                        <div class="nc-fact-label">Location</div>
+                                        <div class="nc-fact-value" data-rml="loc_rml"></div>
+                                        <div class="nc-fact-sub" data-rml="loc_sub_rml"></div>
+                                    </div>
+                                    <div class="nc-fact">
+                                        <div class="nc-fact-label">Profession</div>
+                                        <div class="nc-fact-value" data-rml="prof_rml"></div>
+                                        <div class="nc-fact-sub" data-rml="prof_sub_rml"></div>
+                                    </div>
+                                    <div class="nc-fact">
+                                        <div class="nc-fact-label">Vehicle</div>
+                                        <div class="nc-fact-value" data-rml="veh_rml"></div>
+                                    </div>
+                                    <!-- This scenario's own sigils, restated in words. -->
+                                    <div class="nc-chips">
+                                        <div class="nc-chip" data-for="c : chips">
+                                            <div class="nc-chip-icon" data-style-decorator="c.dec"></div>
+                                            <span class="nc-chip-label" data-rml="c.label_rml"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="nc-info-desc" data-rml="desc_rml"></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="nc-scen-desc" data-rml="desc_rml"></div>
+            <!-- Key for the card strips: "sigil :: meaning", spread across the panel.
+                 Without it the glyphs are decoration; the info panel names the flags of
+                 only the ONE selected scenario. -->
+            <div class="nc-scen-legend">
+                <div class="nc-legend-item" data-for="l : legend">
+                    <div class="nc-legend-icon" data-style-decorator="l.dec"></div>
+                    <span class="nc-legend-sep">::</span>
+                    <span class="nc-legend-label" data-rml="l.label_rml"></span>
+                </div>
+            </div>
             <div class="nc-scen-filter" data-rml="filter_rml"></div>
             </div>
             <div class="nc-arrow nc-arrow-next" data-if="has_next"

@@ -282,7 +282,7 @@
 }
 
 /* Completed: brighter than upcoming, dimmer than current, so the rail shows how far
-   along you are without competing with where you are. {{fg}} not {{fg2}} — only fg,
+   along you are without competing with where you are. plain fg, not the dimmer fg2 — only fg,
    fg0 and fg4 exist in theme.json, and ui_theme::substitute_tokens turns an unknown
    token into #ff00ffff, i.e. magenta. */
 .nc-step.done {
