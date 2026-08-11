@@ -9,26 +9,23 @@ body {
     height: 100%;
 }
 
-/* 72%, not 80/92%: the character-preview box is pinned to the right of the screen
-   and its avatar is a GPU sprite drawn UNDERNEATH this document, so an opaque panel
-   reaching over that box hides the sprite. A centred panel of width W has its right
-   edge at (100+W)/2, so 72% ends at 86% and the box starts at ~86.7% — they never
-   meet. 80% (right edge 90%) cleared the old box by 0.2% by luck; 92% covered it.
-   Keep all eight tabs identical so the panel edge does not jump while tabbing.
-   See nc_prepare_preview() in newcharacter_ui.cpp. */
+/* 98%: creation fills the screen, with the remaining 1% each side keeping the panel's
+   own border visible as a frame instead of running off the display edge. These four
+   tabs have no character preview, so nothing sits outside the panel to be occluded.
+   The four preview tabs stay narrow until the avatar composites through RmlUi — see
+   plans/charcreation-wizard-flow.md. */
 .nc-panel {
-    width: 72%;
-    min-width: 720dp;
-    height: 92%;
+    width: 98%;
+    height: 98%;
     display: flex;
     flex-direction: column;
 }
 
-.nc-tabs {
+.nc-steps {
     flex: 0 0 auto;
 }
 
-.nc-tabs .tab {
+.nc-step {
     flex: 0 0 auto;
 }
 

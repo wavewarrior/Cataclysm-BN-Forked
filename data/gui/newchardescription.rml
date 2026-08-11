@@ -20,41 +20,62 @@
 
          Render-only doc; keyboard owns LEFT/RIGHT/UP/DOWN/CONFIRM/TAB/BACKTAB. -->
     <div class="panel nc-panel">
-        <div class="tabs nc-tabs">
-            <div class="item tab" data-for="t : tabs"
-                 data-class-selected="t.selected">
-                <div class="nc-tab-icon" data-style-decorator="t.icon_dec"></div>
-                <span class="nc-tab-label" data-rml="t.name_rml"></span>
+        <div class="nc-steps">
+            <div class="nc-step" data-for="t : tabs"
+                 data-class-selected="t.selected" data-class-done="t.done">
+                <div class="nc-step-icon" data-style-decorator="t.icon_dec"></div>
+                <span class="nc-step-label" data-rml="t.name_rml"></span>
             </div>
         </div>
-        <div class="nc-desc-points" data-rml="points_rml"></div>
-        <div class="nc-desc-editrow">
-            <span class="nc-desc-field" data-rml="name_rml"></span>
-            <span class="nc-desc-field" data-rml="gender_rml"></span>
-            <span class="nc-desc-field" data-rml="height_rml"></span>
-            <span class="nc-desc-field" data-rml="age_rml"></span>
-            <span class="nc-desc-field" data-rml="location_rml"></span>
-        </div>
-        <div class="nc-desc-sp">
-            <span class="nc-desc-field" data-rml="scenario_rml"></span>
-            <span class="nc-desc-field" data-rml="profession_rml"></span>
-        </div>
-        <div class="nc-desc-panes">
-            <div class="nc-desc-pane" data-for="pane : panes">
-                <div class="nc-pane-head">
-                    <div class="nc-pane-icon" data-style-decorator="pane.icon_dec"></div>
-                    <span class="nc-pane-title" data-rml="pane.title_rml"></span>
-                </div>
-                <div class="nc-pane-body scroll-pane">
-                    <div class="nc-pane-row" data-for="r : pane.rows"
-                         data-class-heading="r.heading">
-                        <span class="nc-pane-label" data-rml="r.label_rml"></span>
-                        <span class="nc-pane-value" data-rml="r.value_rml"></span>
+        <div class="nc-shell">
+            <!-- Navigators. Shortcut text comes from the real binding via
+                 input_context::get_desc, so it stays correct after a rebind. -->
+            <div class="nc-arrow nc-arrow-prev" data-if="has_prev"
+                 data-event-click="on_prev()">
+                <div class="nc-arrow-glyph">&#60;</div>
+                <div class="nc-arrow-key" data-rml="prev_key_rml"></div>
+                <div class="nc-arrow-dest" data-rml="prev_name_rml"></div>
+            </div>
+            <div class="nc-arrow-spacer" data-if="!has_prev"></div>
+            <div class="nc-stage">
+            <div class="nc-desc-points" data-rml="points_rml"></div>
+            <div class="nc-desc-editrow">
+                <span class="nc-desc-field" data-rml="name_rml"></span>
+                <span class="nc-desc-field" data-rml="gender_rml"></span>
+                <span class="nc-desc-field" data-rml="height_rml"></span>
+                <span class="nc-desc-field" data-rml="age_rml"></span>
+                <span class="nc-desc-field" data-rml="location_rml"></span>
+            </div>
+            <div class="nc-desc-sp">
+                <span class="nc-desc-field" data-rml="scenario_rml"></span>
+                <span class="nc-desc-field" data-rml="profession_rml"></span>
+            </div>
+            <div class="nc-desc-panes">
+                <div class="nc-desc-pane" data-for="pane : panes">
+                    <div class="nc-pane-head">
+                        <div class="nc-pane-icon" data-style-decorator="pane.icon_dec"></div>
+                        <span class="nc-pane-title" data-rml="pane.title_rml"></span>
+                    </div>
+                    <div class="nc-pane-body scroll-pane">
+                        <div class="nc-pane-row" data-for="r : pane.rows"
+                             data-class-heading="r.heading">
+                            <span class="nc-pane-label" data-rml="r.label_rml"></span>
+                            <span class="nc-pane-value" data-rml="r.value_rml"></span>
+                        </div>
                     </div>
                 </div>
             </div>
+            <div class="nc-desc-guide" data-rml="guide_rml"></div>
+            </div>
+            <div class="nc-arrow nc-arrow-next" data-if="has_next"
+                 data-event-click="on_next()">
+                <div class="nc-arrow-glyph">&#62;</div>
+                <div class="nc-arrow-key" data-rml="next_key_rml"></div>
+                <div class="nc-arrow-dest" data-rml="next_name_rml"></div>
+            </div>
+            <div class="nc-arrow-spacer" data-if="!has_next"></div>
         </div>
-        <div class="nc-desc-guide" data-rml="guide_rml"></div>
+        <div class="nc-exit" data-rml="exit_rml"></div>
     </div>
     <div id="crt-overlay" class="crt"></div>
 </body>

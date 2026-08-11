@@ -12,46 +12,67 @@
          owns column-switch/move/toggle/randomize/reroll/nav. Tile preview not drawn
          in rml mode this slice. -->
     <div class="panel nc-panel">
-        <div class="tabs nc-tabs">
-            <div class="item tab" data-for="t : tabs"
-                 data-class-selected="t.selected">
-                <div class="nc-tab-icon" data-style-decorator="t.icon_dec"></div>
-                <span class="nc-tab-label" data-rml="t.name_rml"></span>
+        <div class="nc-steps">
+            <div class="nc-step" data-for="t : tabs"
+                 data-class-selected="t.selected" data-class-done="t.done">
+                <div class="nc-step-icon" data-style-decorator="t.icon_dec"></div>
+                <span class="nc-step-label" data-rml="t.name_rml"></span>
             </div>
         </div>
-        <div class="nc-trait-top">
-            <span class="nc-trait-points" data-rml="points_rml"></span>
-            <span class="nc-trait-cost" data-rml="cost_rml"></span>
-        </div>
-        <!-- Own row, not inside .nc-trait-top: at 230dp wedged between the
-             points and cost lines the scale read as clutter rather than as an
-             indicator. -->
-        <div class="nc-balance-row" data-if="balance.show">
-            <!-- No absolute positioning anywhere: RmlUi resolved `position: absolute`
-                 against .nc-panel rather than against .nc-scale's `position: relative`,
-                 which put the beam ~39dp above the pans and across the top bar. Pure
-                 flow instead: arm row (pan | beam | pan) with the fulcrum beneath. -->
-            <div class="nc-scale">
-                <div class="nc-scale-arm">
-                    <div class="nc-scale-pan" data-style-top="balance.good_top">
-                        <div class="nc-scale-icon" data-style-decorator="balance.good_icon"></div>
-                        <span class="nc-scale-num" data-rml="balance.good_rml"></span>
+        <div class="nc-shell">
+            <!-- Navigators. Shortcut text comes from the real binding via
+                 input_context::get_desc, so it stays correct after a rebind. -->
+            <div class="nc-arrow nc-arrow-prev" data-if="has_prev"
+                 data-event-click="on_prev()">
+                <div class="nc-arrow-glyph">&#60;</div>
+                <div class="nc-arrow-key" data-rml="prev_key_rml"></div>
+                <div class="nc-arrow-dest" data-rml="prev_name_rml"></div>
+            </div>
+            <div class="nc-arrow-spacer" data-if="!has_prev"></div>
+            <div class="nc-stage">
+            <div class="nc-trait-top">
+                <span class="nc-trait-points" data-rml="points_rml"></span>
+                <span class="nc-trait-cost" data-rml="cost_rml"></span>
+            </div>
+            <!-- Own row, not inside .nc-trait-top: at 230dp wedged between the
+                 points and cost lines the scale read as clutter rather than as an
+                 indicator. -->
+            <div class="nc-balance-row" data-if="balance.show">
+                <!-- No absolute positioning anywhere: RmlUi resolved `position: absolute`
+                     against .nc-panel rather than against .nc-scale's `position: relative`,
+                     which put the beam ~39dp above the pans and across the top bar. Pure
+                     flow instead: arm row (pan | beam | pan) with the fulcrum beneath. -->
+                <div class="nc-scale">
+                    <div class="nc-scale-arm">
+                        <div class="nc-scale-pan" data-style-top="balance.good_top">
+                            <div class="nc-scale-icon" data-style-decorator="balance.good_icon"></div>
+                            <span class="nc-scale-num" data-rml="balance.good_rml"></span>
+                        </div>
+                        <div class="nc-scale-beam" data-style-transform="balance.rotate"></div>
+                        <div class="nc-scale-pan" data-style-top="balance.bad_top">
+                            <span class="nc-scale-num" data-rml="balance.bad_rml"></span>
+                            <div class="nc-scale-icon" data-style-decorator="balance.bad_icon"></div>
+                        </div>
                     </div>
-                    <div class="nc-scale-beam" data-style-transform="balance.rotate"></div>
-                    <div class="nc-scale-pan" data-style-top="balance.bad_top">
-                        <span class="nc-scale-num" data-rml="balance.bad_rml"></span>
-                        <div class="nc-scale-icon" data-style-decorator="balance.bad_icon"></div>
-                    </div>
+                    <div class="nc-scale-fulcrum" data-style-decorator="balance.fulcrum_icon"></div>
                 </div>
-                <div class="nc-scale-fulcrum" data-style-decorator="balance.fulcrum_icon"></div>
             </div>
+            <div class="nc-trait-cols">
+                <div class="nc-trait-col scroll-pane" data-rml="col0_html"></div>
+                <div class="nc-trait-col scroll-pane" data-rml="col1_html"></div>
+                <div class="nc-trait-col scroll-pane" data-rml="col2_html" data-if="show_col2"></div>
+            </div>
+            <div class="nc-trait-desc" data-rml="desc_rml"></div>
+            </div>
+            <div class="nc-arrow nc-arrow-next" data-if="has_next"
+                 data-event-click="on_next()">
+                <div class="nc-arrow-glyph">&#62;</div>
+                <div class="nc-arrow-key" data-rml="next_key_rml"></div>
+                <div class="nc-arrow-dest" data-rml="next_name_rml"></div>
+            </div>
+            <div class="nc-arrow-spacer" data-if="!has_next"></div>
         </div>
-        <div class="nc-trait-cols">
-            <div class="nc-trait-col scroll-pane" data-rml="col0_html"></div>
-            <div class="nc-trait-col scroll-pane" data-rml="col1_html"></div>
-            <div class="nc-trait-col scroll-pane" data-rml="col2_html" data-if="show_col2"></div>
-        </div>
-        <div class="nc-trait-desc" data-rml="desc_rml"></div>
+        <div class="nc-exit" data-rml="exit_rml"></div>
     </div>
     <div id="crt-overlay" class="crt"></div>
 </body>

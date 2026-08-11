@@ -242,3 +242,130 @@
     width: 14dp;
     height: 14dp;
 }
+
+/* ── WIZARD SHELL ──────────────────────────────────────────────────────────────
+   Creation fills the screen. The panel is 98% with a 1% inset (set per-tab, since
+   those sheets are linked after this one and win) so the panel's own border reads
+   as a deliberate frame instead of running off the display edge.
+
+   Inside it: a step rail across the top, then a row of [prev arrow | stage | next
+   arrow], then the exit line. The arrows sit at the far left/right of the PANEL,
+   which now IS the screen — the reference art has no visible panel edge, so the
+   frame plus the inset is what keeps the composition from floating. */
+
+/* Step rail. Reads as ordered progress rather than as tabs: a continuous hairline
+   track with the current step underlined on it, and three brightness tiers for
+   done / current / upcoming. */
+.nc-steps {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    border-bottom: 1dp {{bg4}};
+}
+
+.nc-step {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 4dp 12dp;
+    /* Reserved on every step so the current step's underline does not shift the
+       rail's height as you advance. Longhand — the shorthand does not paint. */
+    border-bottom-width: 2dp;
+    border-bottom-color: transparent;
+}
+
+/* Upcoming: present but clearly not yet reached. */
+.nc-step {
+    color: {{fg4}};
+}
+
+/* Completed: brighter than upcoming, dimmer than current, so the rail shows how far
+   along you are without competing with where you are. {{fg}} not {{fg2}} — only fg,
+   fg0 and fg4 exist in theme.json, and ui_theme::substitute_tokens turns an unknown
+   token into #ff00ffff, i.e. magenta. */
+.nc-step.done {
+    color: {{fg}};
+}
+
+.nc-step.selected {
+    color: {{yellow}};
+    font-weight: bold;
+    letter-spacing: 1dp;
+    border-bottom-width: 2dp;
+    border-bottom-color: {{yellow}};
+}
+
+.nc-step-icon {
+    flex: 0 0 auto;
+    width: 16dp;
+    height: 16dp;
+    margin-right: 6dp;
+}
+
+.nc-step-label {
+    flex: 0 0 auto;
+}
+
+/* Arrow row: the two navigators flank the working area. */
+.nc-shell {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+}
+
+.nc-arrow {
+    flex: 0 0 auto;
+    width: 168dp;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8dp;
+    color: {{fg4}};
+}
+
+/* Hover is the click affordance: these are the only mouse targets in the shell. */
+.nc-arrow:hover {
+    color: {{yellow}};
+}
+
+.nc-arrow-glyph {
+    flex: 0 0 auto;
+    font-size: 44dp;
+}
+
+.nc-arrow-key {
+    flex: 0 0 auto;
+    margin-top: 2dp;
+}
+
+.nc-arrow-dest {
+    flex: 0 0 auto;
+    text-align: center;
+    white-space: pre-wrap;
+}
+
+/* Keeps the stage centred when only one arrow is present (first and last step). */
+.nc-arrow-spacer {
+    flex: 0 0 auto;
+    width: 168dp;
+}
+
+.nc-stage {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.nc-exit {
+    flex: 0 0 auto;
+    display: block;
+    text-align: center;
+    padding: 6dp;
+    color: {{fg4}};
+}

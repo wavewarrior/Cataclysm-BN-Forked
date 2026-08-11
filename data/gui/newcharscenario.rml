@@ -13,29 +13,50 @@
          keyboard owns UP/DOWN, CONFIRM (pick), SORT, FILTER (string_input popup),
          RANDOMIZE, NEXT/PREV_TAB, QUIT. -->
     <div class="panel nc-panel">
-        <div class="tabs nc-tabs">
-            <div class="item tab" data-for="t : tabs"
-                 data-class-selected="t.selected">
-                <div class="nc-tab-icon" data-style-decorator="t.icon_dec"></div>
-                <span class="nc-tab-label" data-rml="t.name_rml"></span>
+        <div class="nc-steps">
+            <div class="nc-step" data-for="t : tabs"
+                 data-class-selected="t.selected" data-class-done="t.done">
+                <div class="nc-step-icon" data-style-decorator="t.icon_dec"></div>
+                <span class="nc-step-label" data-rml="t.name_rml"></span>
             </div>
         </div>
-        <div class="nc-scen-top">
-            <span class="nc-scen-points" data-rml="points_rml"></span>
-            <span class="nc-scen-cost" data-rml="cost_rml"></span>
-        </div>
-        <div class="nc-scen-body">
-            <div id="nc-scen-list" class="nc-scen-list scroll-pane">
-                <div class="item nc-scen-row" data-for="r : rows"
-                     data-class-selected="r.selected" data-rml="r.text_rml"></div>
+        <div class="nc-shell">
+            <!-- Navigators. Shortcut text comes from the real binding via
+                 input_context::get_desc, so it stays correct after a rebind. -->
+            <div class="nc-arrow nc-arrow-prev" data-if="has_prev"
+                 data-event-click="on_prev()">
+                <div class="nc-arrow-glyph">&#60;</div>
+                <div class="nc-arrow-key" data-rml="prev_key_rml"></div>
+                <div class="nc-arrow-dest" data-rml="prev_name_rml"></div>
             </div>
-            <div class="nc-scen-info scroll-pane">
-                <div class="nc-scen-sort" data-rml="sort_rml"></div>
-                <div class="nc-scen-detail" data-rml="info_rml"></div>
+            <div class="nc-arrow-spacer" data-if="!has_prev"></div>
+            <div class="nc-stage">
+            <div class="nc-scen-top">
+                <span class="nc-scen-points" data-rml="points_rml"></span>
+                <span class="nc-scen-cost" data-rml="cost_rml"></span>
             </div>
+            <div class="nc-scen-body">
+                <div id="nc-scen-list" class="nc-scen-list scroll-pane">
+                    <div class="item nc-scen-row" data-for="r : rows"
+                         data-class-selected="r.selected" data-rml="r.text_rml"></div>
+                </div>
+                <div class="nc-scen-info scroll-pane">
+                    <div class="nc-scen-sort" data-rml="sort_rml"></div>
+                    <div class="nc-scen-detail" data-rml="info_rml"></div>
+                </div>
+            </div>
+            <div class="nc-scen-desc" data-rml="desc_rml"></div>
+            <div class="nc-scen-filter" data-rml="filter_rml"></div>
+            </div>
+            <div class="nc-arrow nc-arrow-next" data-if="has_next"
+                 data-event-click="on_next()">
+                <div class="nc-arrow-glyph">&#62;</div>
+                <div class="nc-arrow-key" data-rml="next_key_rml"></div>
+                <div class="nc-arrow-dest" data-rml="next_name_rml"></div>
+            </div>
+            <div class="nc-arrow-spacer" data-if="!has_next"></div>
         </div>
-        <div class="nc-scen-desc" data-rml="desc_rml"></div>
-        <div class="nc-scen-filter" data-rml="filter_rml"></div>
+        <div class="nc-exit" data-rml="exit_rml"></div>
     </div>
     <div id="crt-overlay" class="crt"></div>
 </body>

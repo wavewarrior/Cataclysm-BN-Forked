@@ -14,30 +14,51 @@
          the info buffer), CONFIRM (pick), CHANGE_GENDER, SORT, FILTER, RANDOMIZE,
          NEXT/PREV_TAB, QUIT. Tile preview not drawn in rml mode this slice. -->
     <div class="panel nc-panel">
-        <div class="tabs nc-tabs">
-            <div class="item tab" data-for="t : tabs"
-                 data-class-selected="t.selected">
-                <div class="nc-tab-icon" data-style-decorator="t.icon_dec"></div>
-                <span class="nc-tab-label" data-rml="t.name_rml"></span>
+        <div class="nc-steps">
+            <div class="nc-step" data-for="t : tabs"
+                 data-class-selected="t.selected" data-class-done="t.done">
+                <div class="nc-step-icon" data-style-decorator="t.icon_dec"></div>
+                <span class="nc-step-label" data-rml="t.name_rml"></span>
             </div>
         </div>
-        <div class="nc-prof-top">
-            <span class="nc-prof-points" data-rml="points_rml"></span>
-            <span class="nc-prof-cost" data-rml="cost_rml"></span>
-        </div>
-        <div class="nc-prof-body">
-            <div id="nc-prof-list" class="nc-prof-list scroll-pane">
-                <div class="item nc-prof-row" data-for="r : rows"
-                     data-class-selected="r.selected" data-rml="r.text_rml"></div>
+        <div class="nc-shell">
+            <!-- Navigators. Shortcut text comes from the real binding via
+                 input_context::get_desc, so it stays correct after a rebind. -->
+            <div class="nc-arrow nc-arrow-prev" data-if="has_prev"
+                 data-event-click="on_prev()">
+                <div class="nc-arrow-glyph">&#60;</div>
+                <div class="nc-arrow-key" data-rml="prev_key_rml"></div>
+                <div class="nc-arrow-dest" data-rml="prev_name_rml"></div>
             </div>
-            <div class="nc-prof-right">
-                <div class="nc-prof-sort" data-rml="sort_rml"></div>
-                <div class="nc-prof-gender" data-rml="gender_rml"></div>
-                <div id="nc-prof-info" class="nc-prof-info scroll-pane" data-rml="info_rml"></div>
+            <div class="nc-arrow-spacer" data-if="!has_prev"></div>
+            <div class="nc-stage">
+            <div class="nc-prof-top">
+                <span class="nc-prof-points" data-rml="points_rml"></span>
+                <span class="nc-prof-cost" data-rml="cost_rml"></span>
             </div>
+            <div class="nc-prof-body">
+                <div id="nc-prof-list" class="nc-prof-list scroll-pane">
+                    <div class="item nc-prof-row" data-for="r : rows"
+                         data-class-selected="r.selected" data-rml="r.text_rml"></div>
+                </div>
+                <div class="nc-prof-right">
+                    <div class="nc-prof-sort" data-rml="sort_rml"></div>
+                    <div class="nc-prof-gender" data-rml="gender_rml"></div>
+                    <div id="nc-prof-info" class="nc-prof-info scroll-pane" data-rml="info_rml"></div>
+                </div>
+            </div>
+            <div class="nc-prof-desc" data-rml="desc_rml"></div>
+            <div class="nc-prof-filter" data-rml="filter_rml"></div>
+            </div>
+            <div class="nc-arrow nc-arrow-next" data-if="has_next"
+                 data-event-click="on_next()">
+                <div class="nc-arrow-glyph">&#62;</div>
+                <div class="nc-arrow-key" data-rml="next_key_rml"></div>
+                <div class="nc-arrow-dest" data-rml="next_name_rml"></div>
+            </div>
+            <div class="nc-arrow-spacer" data-if="!has_next"></div>
         </div>
-        <div class="nc-prof-desc" data-rml="desc_rml"></div>
-        <div class="nc-prof-filter" data-rml="filter_rml"></div>
+        <div class="nc-exit" data-rml="exit_rml"></div>
     </div>
     <div id="crt-overlay" class="crt"></div>
 </body>

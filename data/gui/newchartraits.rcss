@@ -25,11 +25,11 @@ body {
     flex-direction: column;
 }
 
-.nc-tabs {
+.nc-steps {
     flex: 0 0 auto;
 }
 
-.nc-tabs .tab {
+.nc-step {
     flex: 0 0 auto;
 }
 

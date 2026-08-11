@@ -12,29 +12,55 @@ body {
     height: 100%;
 }
 
-/* 72%, not 80/92%: the character-preview box is pinned to the right of the screen
-   and its avatar is a GPU sprite drawn UNDERNEATH this document, so an opaque panel
-   reaching over that box hides the sprite. A centred panel of width W has its right
-   edge at (100+W)/2, so 72% ends at 86% and the box starts at ~86.7% — they never
-   meet. 80% (right edge 90%) cleared the old box by 0.2% by luck; 92% covered it.
-   Keep all eight tabs identical so the panel edge does not jump while tabbing.
-   See nc_prepare_preview() in newcharacter_ui.cpp. */
+/* 98%: creation fills the screen, with the remaining 1% each side keeping the panel's
+   own border visible as a frame instead of running off the display edge. These four
+   tabs have no character preview, so nothing sits outside the panel to be occluded.
+   The four preview tabs stay narrow until the avatar composites through RmlUi — see
+   plans/charcreation-wizard-flow.md. */
 .nc-panel {
-    width: 72%;
-    min-width: 720dp;
-    height: 92%;
+    width: 98%;
+    height: 98%;
     display: flex;
     flex-direction: column;
 }
 
-.nc-tabs {
+.nc-steps {
     flex: 0 0 auto;
 }
 
 /* Character-creation steps size to content (theme .tab is flex:1, which would
    truncate the 8 captions). */
-.nc-tabs .tab {
+.nc-step {
     flex: 0 0 auto;
+}
+
+/* Centred composition for the pool choice, mirroring UI_designs/10_charcreation_*:
+   title block, then the budget line, then the cards. */
+.nc-stage-centred {
+    align-items: center;
+    justify-content: center;
+}
+
+.nc-title-block {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 4dp;
+}
+
+.nc-title {
+    display: block;
+    color: {{yellow}};
+    font-size: 22dp;
+    letter-spacing: 4dp;
+    font-effect: glow( 2dp {{yellow-glow}} );
+}
+
+.nc-subtitle {
+    display: block;
+    color: {{fg4}};
+    letter-spacing: 2dp;
 }
 
 .nc-points {
@@ -44,28 +70,82 @@ body {
     color: {{fg}};
 }
 
-.nc-body {
+/* Row of pool cards. `justify-content: center` with fixed-width cards, NOT flex:1 —
+   CHARACTER_POINT_POOLS can leave only one pool available, and a stretched single card
+   would fill the screen and stop reading as a choice at all. */
+.nc-cards {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    margin-top: 12dp;
+}
+
+.nc-card {
+    flex: 0 0 auto;
+    width: 300dp;
+    /* Explicit height, not shrink-to-fit. `.nc-card-info { flex: 1 }` resolves against
+       the parent's height, so with an auto-height card the info slot collapsed to a
+       sliver — the name was clipped by the bottom border and the body text never drew
+       at all. A fixed height also keeps all cards level when their copy differs in
+       length (Multiple pools runs three lines, Freeform one). */
+    height: 380dp;
+    display: flex;
+    flex-direction: column;
+    margin: 0 12dp;
+    padding: 14dp;
+    background-color: {{bg-hard}};
+    /* Reserved on every card so the selected border does not resize the row. */
+    border: 1dp {{bg4}};
+}
+
+.nc-card:hover {
+    border-color: {{fg4}};
+}
+
+/* Cursor. Distinct from `chosen` on purpose: you can be looking at a card you have
+   not picked, and the two states must be tellable apart at a glance. */
+.nc-card.selected {
+    border-color: {{yellow}};
+}
+
+/* The pool actually in force — a filled left edge, so it survives losing the cursor. */
+.nc-card.chosen {
+    border-left-width: 4dp;
+    border-left-color: {{yellow}};
+}
+
+/* Upper slot: placeholder rune now, real art later. Fixed square so every card is the
+   same height whatever its text length. */
+.nc-card-art {
+    flex: 0 0 auto;
+    width: 100%;
+    height: 110dp;
+    margin-bottom: 10dp;
+}
+
+/* Lower slot, built for the option's own copy. */
+.nc-card-info {
     flex: 1;
     min-height: 0;
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
+    border-top: 1dp {{bg4}};
+    padding-top: 8dp;
 }
 
-.nc-opts {
-    flex: 0 0 auto;
-    min-width: 280dp;
-    border-right: 1dp {{bg4}};
-    padding-right: 8dp;
-}
-
-.nc-opt {
+.nc-card-name {
     display: block;
+    flex: 0 0 auto;
+    font-weight: bold;
+    letter-spacing: 1dp;
+    margin-bottom: 4dp;
 }
 
-.nc-desc {
+.nc-card-text {
+    display: block;
     flex: 1;
-    min-width: 0;
+    min-height: 0;
     white-space: pre-wrap;
-    padding: 8dp;
-    color: {{fg}};
+    overflow-y: auto;
 }

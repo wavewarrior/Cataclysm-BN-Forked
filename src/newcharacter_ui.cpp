@@ -419,20 +419,42 @@ void reset_scenario( avatar &u, const scenario *scen );
 
 namespace
 {
+/// The shell around every creator step: the two navigators and the exit line.
+///
+/// Plain scalars rather than a registered struct — a struct would have to be
+/// registered against eight different data models, and `c.Bind` on scalars needs no
+/// type registration at all.
+struct nc_shell {
+    bool has_prev = false;
+    bool has_next = false;
+    Rml::String prev_key_rml;
+    Rml::String prev_name_rml;
+    Rml::String next_key_rml;
+    Rml::String next_name_rml;
+    Rml::String exit_rml;
+};
+
 struct nc_rml_tab {
     Rml::String name_rml;
     Rml::String icon_dec;   //< placeholder tab glyph
     bool selected = false;
+    bool done = false;   //< step already passed
 };
+/// One point-pool card. The pool choice is the first thing creation asks, so it gets
+/// cards rather than a list row: an art slot on top (placeholder rune until real art
+/// arrives) and an info slot beneath carrying the name and what the pool means.
 struct nc_points_opt {
     Rml::String name_rml;
-    bool selected = false;
+    Rml::String info_rml;   //< the pool's explanation, shown in the card's lower slot
+    Rml::String rune_dec;   //< placeholder art for the card's upper slot
+    bool selected = false;  //< cursor is on this card
+    bool chosen = false;    //< this is the pool actually in force
 };
 struct nc_points_session {
     Rml::Vector<nc_rml_tab> tabs;
+    nc_shell shell;
     Rml::String points_rml;
     Rml::Vector<nc_points_opt> opts;
-    Rml::String desc_rml;
     Rml::DataModelHandle handle;
 };
 
@@ -447,37 +469,112 @@ void register_nc_points_rml_types( Rml::DataModelConstructor &c )
     th.RegisterMember( "name_rml", &nc_rml_tab::name_rml );
     th.RegisterMember( "icon_dec", &nc_rml_tab::icon_dec );
     th.RegisterMember( "selected", &nc_rml_tab::selected );
+    th.RegisterMember( "done", &nc_rml_tab::done );
     c.RegisterArray<Rml::Vector<nc_rml_tab>>();
     Rml::StructHandle<nc_points_opt> oh = c.RegisterStruct<nc_points_opt>();
     oh.RegisterMember( "name_rml", &nc_points_opt::name_rml );
+    oh.RegisterMember( "info_rml", &nc_points_opt::info_rml );
+    oh.RegisterMember( "rune_dec", &nc_points_opt::rune_dec );
     oh.RegisterMember( "selected", &nc_points_opt::selected );
+    oh.RegisterMember( "chosen", &nc_points_opt::chosen );
     c.RegisterArray<Rml::Vector<nc_points_opt>>();
     g_nc_points_types_registered = true;
 }
 
-// The 8 character-creation tab captions (mirrors draw_character_tabs); `active`
-// is the index of the current tab (POINTS=0, STATS=3, …). name_rml is the
-// escaped caption; theme `.tab`/`.tab.selected` does the colouring. Templated on
-// the tab struct so each tab's data-model uses its OWN registered C++ type
-// (RegisterStruct is context-global — distinct types avoid re-registering one
-// type on two models; the worldfactory precedent). Every tab struct has
-// {name_rml, selected}.
-template<typename TabT>
-Rml::Vector<TabT> build_nc_char_tabs( int active )
+/// The eight creation steps, in order. Index 0 is POINTS.
+inline auto nc_step_captions() -> const std::vector<std::string> &
 {
-    const std::vector<std::string> caps = {
+    static const std::vector<std::string> caps = {
         _( "POINTS" ), _( "SCENARIO" ), _( "PROFESSION" ), _( "STATS" ),
         _( "TRAITS" ), _( "BIONICS" ), _( "SKILLS" ), _( "OVERVIEW" ),
     };
+    return caps;
+}
+
+// Builds the wizard step rail. `active` is the index of the current step. These are
+// STEPS IN A PROCESS, not tabs: each carries `done` (already passed) alongside
+// `selected` (current), and the stylesheet gives the three states distinct
+// brightness so the rail shows how far along you are.
+//
+// Templated on the step struct so each tab's data-model uses its OWN registered C++
+// type (RegisterStruct is context-global — distinct types avoid re-registering one
+// type on two models; the worldfactory precedent). Every step struct has
+// {name_rml, icon_dec, selected, done}.
+template<typename TabT>
+Rml::Vector<TabT> build_nc_char_tabs( int active )
+{
+    const std::vector<std::string> &caps = nc_step_captions();
     Rml::Vector<TabT> tabs;
     for( int i = 0; i < static_cast<int>( caps.size() ); i++ ) {
         TabT t;
         t.name_rml = cata_text_to_rml( caps[i] );
         t.selected = ( i == active );
-        t.icon_dec = nc_icon_dec( NC_TAB_ICON_SEEDS[i], 24, t.selected );
+        t.done = ( i < active );
+        t.icon_dec = nc_icon_dec( NC_TAB_ICON_SEEDS[i], 24, t.selected || t.done );
         tabs.push_back( t );
     }
     return tabs;
+}
+
+/// Shortcut labels come from the REAL bindings via `input_context::get_desc`, not
+/// from hard-coded letters: the reference art shows `[Q]`/`[E]`, but this creator
+/// binds PREV_TAB/NEXT_TAB (TAB/BACKTAB by default) and those are rebindable and
+/// translated. Printing an invented key would be a lie the moment anyone rebinds.
+auto fill_nc_shell( int active, const input_context &ctxt ) -> nc_shell
+{
+    const std::vector<std::string> &caps = nc_step_captions();
+    const int last = static_cast<int>( caps.size() ) - 1;
+    nc_shell s;
+    s.has_prev = active > 0;
+    s.has_next = active < last;
+    if( s.has_prev ) {
+        s.prev_key_rml = cata_text_to_rml(
+                             colorize( string_format( "[%s]", ctxt.get_desc( "PREV_TAB" ) ), c_yellow ) );
+        s.prev_name_rml = cata_text_to_rml( colorize( caps[active - 1], c_light_gray ) );
+    }
+    if( s.has_next ) {
+        s.next_key_rml = cata_text_to_rml(
+                             colorize( string_format( "[%s]", ctxt.get_desc( "NEXT_TAB" ) ), c_yellow ) );
+        s.next_name_rml = cata_text_to_rml( colorize( caps[active + 1], c_light_gray ) );
+    }
+    // On the FIRST step PREV_TAB is what leaves creation, so name that instead of a
+    // step; the loops already treat PREV_TAB and QUIT identically there.
+    // max_limit 1: QUIT lists four bindings ("ESC, q, Q or SPACE"), which swamps a
+    // one-line footer. One key is enough to teach the gesture.
+    const std::string exit_key = active > 0 ? ctxt.get_desc( "QUIT", 1 )
+                                 : ctxt.get_desc( "PREV_TAB", 1 );
+    // The gap after the key sits INSIDE the yellow run. A bare space between two
+    // coloured spans is trimmed at parse time (it rendered "[BACKTAB]main menu"), and a
+    // run whose content is only whitespace is dropped entirely; a trailing space on a
+    // run that has text survives. Same rule as nc_label().
+    s.exit_rml = cata_text_to_rml( string_format( ":: %s%s ::",
+                                   colorize( string_format( "[%s] ", exit_key ), c_yellow ),
+                                   colorize( _( "main menu" ), c_dark_gray ) ) );
+    return s;
+}
+
+/// Binds the shell's scalars. Mirrors the field names the shared markup expects.
+void bind_nc_shell( Rml::DataModelConstructor &c, nc_shell &s )
+{
+    c.Bind( "has_prev", &s.has_prev );
+    c.Bind( "has_next", &s.has_next );
+    c.Bind( "prev_key_rml", &s.prev_key_rml );
+    c.Bind( "prev_name_rml", &s.prev_name_rml );
+    c.Bind( "next_key_rml", &s.next_key_rml );
+    c.Bind( "next_name_rml", &s.next_name_rml );
+    c.Bind( "exit_rml", &s.exit_rml );
+}
+
+/// Marks the shell's variables dirty. Called from each step's sync_rml.
+void dirty_nc_shell( Rml::DataModelHandle &h )
+{
+    h.DirtyVariable( "has_prev" );
+    h.DirtyVariable( "has_next" );
+    h.DirtyVariable( "prev_key_rml" );
+    h.DirtyVariable( "prev_name_rml" );
+    h.DirtyVariable( "next_key_rml" );
+    h.DirtyVariable( "next_name_rml" );
+    h.DirtyVariable( "exit_rml" );
 }
 } // namespace
 
@@ -508,6 +605,14 @@ tab_direction set_points( avatar &, points_left &points )
     ctxt.register_action( "HELP_KEYBINDINGS" );
     ctxt.register_action( "NEXT_TAB" );
     ctxt.register_action( "QUIT" );
+    // Required for the navigator/card clicks to reach this loop at all.
+    // MOUSE_LEFT binds to action id SELECT (keybindings.json:1175). An UNREGISTERED
+    // mouse action resolves to CATA_ERROR, and input.cpp:894-897 `continue`s on it
+    // BEFORE the registered_any_input check at :912 — so ANY_INPUT cannot rescue a
+    // mouse event, only registering the action it maps to can. Without this the
+    // click callback fires but handle_input() never returns, leaving the loop parked
+    // until an unrelated keypress, which then got hijacked into a step change.
+    ctxt.register_action( "SELECT" );
     ctxt.register_action( "CONFIRM" );
 
     const std::string point_pool = get_option<std::string>( "CHARACTER_POINT_POOLS" );
@@ -540,32 +645,43 @@ tab_direction set_points( avatar &, points_left &points )
     // RmlUi render path (render-only; keyboard still owns nav/confirm below).
     auto data = std::make_unique<nc_points_session>();
     rml_doc rml;
+    // Set by the arrow click callbacks, consumed by the input loop below. Not a
+    // tab_direction: it is translated into an action string so the existing
+    // keyboard handling stays the single place navigation is decided.
+    int nc_nav = 0;
     const auto sync_rml = [&]() {
         if( !data->handle ) {
             return;
         }
         const int sel = std::max( 0, std::min( highlighted,
                                                static_cast<int>( opts.size() ) - 1 ) );
-        data->tabs = build_nc_char_tabs<nc_rml_tab>( 0 ); // POINTS tab active
+        data->tabs = build_nc_char_tabs<nc_rml_tab>( 0 );  // POINTS tab active
+        data->shell = fill_nc_shell( 0, ctxt );
         data->points_rml = cata_text_to_rml( nc_points_line( points ) );
         data->opts.clear();
+        // Seeds are arbitrary but STABLE: each pool keeps its own glyph across runs, so
+        // the shape becomes recognisable. Replace rune_dec with image(...) when art
+        // lands — see plans/charcreation-wizard-flow.md.
+        static constexpr unsigned POOL_RUNE_SEEDS[3] = { 0x504F, 0x4F4C, 0x4650 };
         for( int i = 0; i < static_cast<int>( opts.size() ); i++ ) {
             nc_points_opt o;
-            const bool chosen = ( points.limit == std::get<0>( opts[i] ) );
-            // c_light_green, not COL_SKILL_USED (c_green): on the cursor row's dark
-            // fill a dark green measured only 2.55:1, under the 3:1 large-text floor.
-            // Same meaning ("this pool is the chosen one"), one luminance step up.
+            o.chosen = ( points.limit == std::get<0>( opts[i] ) );
+            // c_light_green, not COL_SKILL_USED (c_green): on the card's dark fill a
+            // dark green measured only 2.55:1, under the 3:1 large-text floor. Same
+            // meaning ("this pool is the one in force"), one luminance step up.
             o.name_rml = cata_text_to_rml( colorize( std::get<1>( opts[i] ),
-                                           chosen ? c_light_green : c_light_gray ) );
+                                           o.chosen ? c_light_green : c_light_gray ) );
+            o.info_rml = cata_text_to_rml( colorize( std::get<2>( opts[i] ), c_light_gray ) );
             o.selected = ( sel == i );
+            // Art brightens for the focused card as well as the chosen one — at card
+            // scale the rune is the largest thing on it, so it has to carry the cursor.
+            o.rune_dec = nc_icon_dec( POOL_RUNE_SEEDS[i % 3], 96, o.selected || o.chosen );
             data->opts.push_back( o );
         }
-        data->desc_rml = cata_text_to_rml( colorize( std::get<2>( opts[sel] ),
-                                           COL_SKILL_USED ) );
         data->handle.DirtyVariable( "tabs" );
+        dirty_nc_shell( data->handle );
         data->handle.DirtyVariable( "points_rml" );
         data->handle.DirtyVariable( "opts" );
-        data->handle.DirtyVariable( "desc_rml" );
     };
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
@@ -579,9 +695,30 @@ tab_direction set_points( avatar &, points_left &points )
     [&]( Rml::DataModelConstructor & c ) {
         register_nc_points_rml_types( c );
         c.Bind( "tabs", &data->tabs );
+        bind_nc_shell( c, data->shell );
+        // Arrow clicks are translated into the SAME action strings the keyboard
+        // produces, so each step's existing PREV_TAB/NEXT_TAB handling — including
+        // the "Return to main menu?" confirm on step 0 — is reused unchanged.
+        c.BindEventCallback( "on_prev",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = -1; } );
+        c.BindEventCallback( "on_next",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = 1; } );
         c.Bind( "points_rml", &data->points_rml );
         c.Bind( "opts", &data->opts );
-        c.Bind( "desc_rml", &data->desc_rml );
+        // Clicking a card both moves the cursor to it and chooses it, which is the whole
+        // point of a card over a list row: one gesture instead of arrow-then-Enter.
+        // Requires SELECT to be registered above, or the click never reaches this loop.
+        c.BindEventCallback( "on_card",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int idx = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( idx );
+            }
+            if( idx >= 0 && idx < static_cast<int>( opts.size() ) ) {
+                highlighted = idx;
+                points.limit = std::get<0>( opts[idx] );
+            }
+        } );
         data->handle = c.GetModelHandle();
     } );
     if( rml_doc_unavailable( rml, _( "Character creation (POINTS tab)" ) ) ) {
@@ -595,7 +732,11 @@ tab_direction set_points( avatar &, points_left &points )
             highlighted = 0;
         }
         ui_manager::redraw();
-        const std::string action = ctxt.handle_input();
+        nc_nav = 0;
+        std::string action = ctxt.handle_input();
+        if( nc_nav != 0 ) {
+            action = nc_nav < 0 ? "PREV_TAB" : "NEXT_TAB";
+        }
         if( action == "DOWN" ) {
             highlighted++;
         } else if( action == "UP" ) {
@@ -621,6 +762,7 @@ struct nc_stats_tab {
     Rml::String name_rml;
     Rml::String icon_dec;   //< placeholder tab glyph
     bool selected = false;
+    bool done = false;   //< step already passed
 };
 struct nc_stat_row {
     Rml::String name_rml;
@@ -629,6 +771,7 @@ struct nc_stat_row {
 };
 struct nc_stats_session {
     Rml::Vector<nc_stats_tab> tabs;
+    nc_shell shell;
     Rml::String points_rml;
     Rml::Vector<nc_stat_row> stats;
     Rml::String cost_rml;   // red "Increasing X further costs 2 points." or empty
@@ -648,6 +791,7 @@ void register_nc_stats_rml_types( Rml::DataModelConstructor &c )
     th.RegisterMember( "name_rml", &nc_stats_tab::name_rml );
     th.RegisterMember( "icon_dec", &nc_stats_tab::icon_dec );
     th.RegisterMember( "selected", &nc_stats_tab::selected );
+    th.RegisterMember( "done", &nc_stats_tab::done );
     c.RegisterArray<Rml::Vector<nc_stats_tab>>();
     Rml::StructHandle<nc_stat_row> sh = c.RegisterStruct<nc_stat_row>();
     sh.RegisterMember( "name_rml", &nc_stat_row::name_rml );
@@ -735,6 +879,14 @@ tab_direction set_stats( avatar &u, points_left &points )
     ctxt.register_action( "RANDOMIZE" );
     ctxt.register_action( "NEXT_TAB" );
     ctxt.register_action( "QUIT" );
+    // Required for the navigator/card clicks to reach this loop at all.
+    // MOUSE_LEFT binds to action id SELECT (keybindings.json:1175). An UNREGISTERED
+    // mouse action resolves to CATA_ERROR, and input.cpp:894-897 `continue`s on it
+    // BEFORE the registered_any_input check at :912 — so ANY_INPUT cannot rescue a
+    // mouse event, only registering the action it maps to can. Without this the
+    // click callback fires but handle_input() never returns, leaving the loop parked
+    // until an unrelated keypress, which then got hijacked into a step change.
+    ctxt.register_action( "SELECT" );
 
     ui_adaptor ui;
     catacurses::window w;
@@ -768,11 +920,16 @@ tab_direction set_stats( avatar &u, points_left &points )
     // RmlUi render path (render-only; keyboard still owns nav/inc/dec below).
     auto data = std::make_unique<nc_stats_session>();
     rml_doc rml;
+    // Set by the arrow click callbacks, consumed by the input loop below. Not a
+    // tab_direction: it is translated into an action string so the existing
+    // keyboard handling stays the single place navigation is decided.
+    int nc_nav = 0;
     const auto sync_rml = [&]() {
         if( !data->handle ) {
             return;
         }
-        data->tabs = build_nc_char_tabs<nc_stats_tab>( 3 ); // STATS tab active
+        data->tabs = build_nc_char_tabs<nc_stats_tab>( 3 );  // STATS tab active
+        data->shell = fill_nc_shell( 3, ctxt );
         data->points_rml = cata_text_to_rml( nc_points_line( points ) );
 
         data->stats.clear();
@@ -820,6 +977,7 @@ tab_direction set_stats( avatar &u, points_left &points )
                                                 ctxt.get_desc( "PREV_TAB" ) ) );
 
         data->handle.DirtyVariable( "tabs" );
+        dirty_nc_shell( data->handle );
         data->handle.DirtyVariable( "points_rml" );
         data->handle.DirtyVariable( "stats" );
         data->handle.DirtyVariable( "cost_rml" );
@@ -838,6 +996,14 @@ tab_direction set_stats( avatar &u, points_left &points )
     [&]( Rml::DataModelConstructor & c ) {
         register_nc_stats_rml_types( c );
         c.Bind( "tabs", &data->tabs );
+        bind_nc_shell( c, data->shell );
+        // Arrow clicks are translated into the SAME action strings the keyboard
+        // produces, so each step's existing PREV_TAB/NEXT_TAB handling — including
+        // the "Return to main menu?" confirm on step 0 — is reused unchanged.
+        c.BindEventCallback( "on_prev",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = -1; } );
+        c.BindEventCallback( "on_next",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = 1; } );
         c.Bind( "points_rml", &data->points_rml );
         c.Bind( "stats", &data->stats );
         c.Bind( "cost_rml", &data->cost_rml );
@@ -851,7 +1017,11 @@ tab_direction set_stats( avatar &u, points_left &points )
 
     do {
         ui_manager::redraw();
-        const std::string action = ctxt.handle_input();
+        nc_nav = 0;
+        std::string action = ctxt.handle_input();
+        if( nc_nav != 0 ) {
+            action = nc_nav < 0 ? "PREV_TAB" : "NEXT_TAB";
+        }
         if( action == "DOWN" ) {
             if( sel < 4 ) {
                 sel++;
@@ -934,9 +1104,11 @@ struct nc_traits_tab {
     Rml::String name_rml;
     Rml::String icon_dec;   //< placeholder tab glyph
     bool selected = false;
+    bool done = false;   //< step already passed
 };
 struct nc_traits_session {
     Rml::Vector<nc_traits_tab> tabs;
+    nc_shell shell;
     Rml::String points_rml;
     nc_balance balance;
     Rml::String cost_rml;     // "<trait> costs/earns N points" for the working trait
@@ -959,6 +1131,7 @@ void register_nc_traits_rml_types( Rml::DataModelConstructor &c )
     th.RegisterMember( "name_rml", &nc_traits_tab::name_rml );
     th.RegisterMember( "icon_dec", &nc_traits_tab::icon_dec );
     th.RegisterMember( "selected", &nc_traits_tab::selected );
+    th.RegisterMember( "done", &nc_traits_tab::done );
     c.RegisterArray<Rml::Vector<nc_traits_tab>>();
     Rml::StructHandle<nc_balance> bh = c.RegisterStruct<nc_balance>();
     bh.RegisterMember( "show", &nc_balance::show );
@@ -1117,6 +1290,14 @@ tab_direction set_traits( avatar &u, points_left &points )
     ctxt.register_action( "REROLL_CHARACTER_WITH_SCENARIO" );
     ctxt.register_action( "REROLL_APPEARANCE" );
     ctxt.register_action( "QUIT" );
+    // Required for the navigator/card clicks to reach this loop at all.
+    // MOUSE_LEFT binds to action id SELECT (keybindings.json:1175). An UNREGISTERED
+    // mouse action resolves to CATA_ERROR, and input.cpp:894-897 `continue`s on it
+    // BEFORE the registered_any_input check at :912 — so ANY_INPUT cannot rescue a
+    // mouse event, only registering the action it maps to can. Without this the
+    // click callback fires but handle_input() never returns, leaving the loop parked
+    // until an unrelated keypress, which then got hijacked into a step change.
+    ctxt.register_action( "SELECT" );
     ctxt.register_action( "zoom_in" );
     ctxt.register_action( "zoom_out" );
     ctxt.register_action( "TOGGLE_CHARACTER_PREVIEW_CLOTHES" );
@@ -1124,11 +1305,16 @@ tab_direction set_traits( avatar &u, points_left &points )
     // RmlUi render path (render-only; keyboard owns nav/confirm/reroll below).
     auto data = std::make_unique<nc_traits_session>();
     rml_doc rml;
+    // Set by the arrow click callbacks, consumed by the input loop below. Not a
+    // tab_direction: it is translated into an action string so the existing
+    // keyboard handling stays the single place navigation is decided.
+    int nc_nav = 0;
     const auto sync_rml = [&]() {
         if( !data->handle ) {
             return;
         }
-        data->tabs = build_nc_char_tabs<nc_traits_tab>( 4 ); // TRAITS tab active
+        data->tabs = build_nc_char_tabs<nc_traits_tab>( 4 );  // TRAITS tab active
+        data->shell = fill_nc_shell( 4, ctxt );
         data->points_rml = cata_text_to_rml( nc_points_line( points ) );
         data->balance = nc_make_balance( num_good, num_bad, max_trait_points,
                                          points.is_freeform() );
@@ -1216,6 +1402,7 @@ tab_direction set_traits( avatar &u, points_left &points )
         }
 
         data->handle.DirtyVariable( "tabs" );
+        dirty_nc_shell( data->handle );
         data->handle.DirtyVariable( "points_rml" );
         data->handle.DirtyVariable( "balance" );
         data->handle.DirtyVariable( "cost_rml" );
@@ -1230,6 +1417,14 @@ tab_direction set_traits( avatar &u, points_left &points )
     [&]( Rml::DataModelConstructor & c ) {
         register_nc_traits_rml_types( c );
         c.Bind( "tabs", &data->tabs );
+        bind_nc_shell( c, data->shell );
+        // Arrow clicks are translated into the SAME action strings the keyboard
+        // produces, so each step's existing PREV_TAB/NEXT_TAB handling — including
+        // the "Return to main menu?" confirm on step 0 — is reused unchanged.
+        c.BindEventCallback( "on_prev",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = -1; } );
+        c.BindEventCallback( "on_next",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = 1; } );
         c.Bind( "points_rml", &data->points_rml );
         c.Bind( "balance", &data->balance );
         c.Bind( "cost_rml", &data->cost_rml );
@@ -1259,7 +1454,11 @@ tab_direction set_traits( avatar &u, points_left &points )
 
     do {
         ui_manager::redraw();
-        const std::string action = ctxt.handle_input();
+        nc_nav = 0;
+        std::string action = ctxt.handle_input();
+        if( nc_nav != 0 ) {
+            action = nc_nav < 0 ? "PREV_TAB" : "NEXT_TAB";
+        }
         if( action == "zoom_in" && use_character_preview ) {
             character_preview.zoom_in();
         }
@@ -1427,9 +1626,11 @@ struct nc_bionics_tab {
     Rml::String name_rml;
     Rml::String icon_dec;   //< placeholder tab glyph
     bool selected = false;
+    bool done = false;   //< step already passed
 };
 struct nc_bionics_session {
     Rml::Vector<nc_bionics_tab> tabs;
+    nc_shell shell;
     Rml::String points_rml;
     nc_balance balance;
     Rml::String cost_rml;
@@ -1452,6 +1653,7 @@ void register_nc_bionics_rml_types( Rml::DataModelConstructor &c )
     th.RegisterMember( "name_rml", &nc_bionics_tab::name_rml );
     th.RegisterMember( "icon_dec", &nc_bionics_tab::icon_dec );
     th.RegisterMember( "selected", &nc_bionics_tab::selected );
+    th.RegisterMember( "done", &nc_bionics_tab::done );
     c.RegisterArray<Rml::Vector<nc_bionics_tab>>();
     Rml::StructHandle<nc_balance> bh = c.RegisterStruct<nc_balance>();
     bh.RegisterMember( "show", &nc_balance::show );
@@ -1597,6 +1799,14 @@ tab_direction set_bionics( avatar &u, points_left &points )
     ctxt.register_action( "REROLL_CHARACTER_WITH_SCENARIO" );
     ctxt.register_action( "REROLL_APPEARANCE" );
     ctxt.register_action( "QUIT" );
+    // Required for the navigator/card clicks to reach this loop at all.
+    // MOUSE_LEFT binds to action id SELECT (keybindings.json:1175). An UNREGISTERED
+    // mouse action resolves to CATA_ERROR, and input.cpp:894-897 `continue`s on it
+    // BEFORE the registered_any_input check at :912 — so ANY_INPUT cannot rescue a
+    // mouse event, only registering the action it maps to can. Without this the
+    // click callback fires but handle_input() never returns, leaving the loop parked
+    // until an unrelated keypress, which then got hijacked into a step change.
+    ctxt.register_action( "SELECT" );
     ctxt.register_action( "zoom_in" );
     ctxt.register_action( "zoom_out" );
     ctxt.register_action( "TOGGLE_CHARACTER_PREVIEW_CLOTHES" );
@@ -1605,11 +1815,16 @@ tab_direction set_bionics( avatar &u, points_left &points )
     // Structurally the TRAITS tab with bionic data. Tile preview not drawn in rml.
     auto data = std::make_unique<nc_bionics_session>();
     rml_doc rml;
+    // Set by the arrow click callbacks, consumed by the input loop below. Not a
+    // tab_direction: it is translated into an action string so the existing
+    // keyboard handling stays the single place navigation is decided.
+    int nc_nav = 0;
     const auto sync_rml = [&]() {
         if( !data->handle ) {
             return;
         }
-        data->tabs = build_nc_char_tabs<nc_bionics_tab>( 5 ); // BIONICS tab active
+        data->tabs = build_nc_char_tabs<nc_bionics_tab>( 5 );  // BIONICS tab active
+        data->shell = fill_nc_shell( 5, ctxt );
         data->points_rml = cata_text_to_rml( nc_points_line( points ) );
         data->balance = nc_make_balance( num_good, num_bad, max_trait_points,
                                          points.is_freeform() );
@@ -1696,6 +1911,7 @@ tab_direction set_bionics( avatar &u, points_left &points )
         }
 
         data->handle.DirtyVariable( "tabs" );
+        dirty_nc_shell( data->handle );
         data->handle.DirtyVariable( "points_rml" );
         data->handle.DirtyVariable( "balance" );
         data->handle.DirtyVariable( "cost_rml" );
@@ -1710,6 +1926,14 @@ tab_direction set_bionics( avatar &u, points_left &points )
     [&]( Rml::DataModelConstructor & c ) {
         register_nc_bionics_rml_types( c );
         c.Bind( "tabs", &data->tabs );
+        bind_nc_shell( c, data->shell );
+        // Arrow clicks are translated into the SAME action strings the keyboard
+        // produces, so each step's existing PREV_TAB/NEXT_TAB handling — including
+        // the "Return to main menu?" confirm on step 0 — is reused unchanged.
+        c.BindEventCallback( "on_prev",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = -1; } );
+        c.BindEventCallback( "on_next",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = 1; } );
         c.Bind( "points_rml", &data->points_rml );
         c.Bind( "balance", &data->balance );
         c.Bind( "cost_rml", &data->cost_rml );
@@ -1738,7 +1962,11 @@ tab_direction set_bionics( avatar &u, points_left &points )
 
     do {
         ui_manager::redraw();
-        const std::string action = ctxt.handle_input();
+        nc_nav = 0;
+        std::string action = ctxt.handle_input();
+        if( nc_nav != 0 ) {
+            action = nc_nav < 0 ? "PREV_TAB" : "NEXT_TAB";
+        }
         if( action == "zoom_in" && use_character_preview ) {
             character_preview.zoom_in();
         }
@@ -1951,6 +2179,7 @@ struct nc_prof_tab {
     Rml::String name_rml;
     Rml::String icon_dec;   //< placeholder tab glyph
     bool selected = false;
+    bool done = false;   //< step already passed
 };
 struct nc_prof_row {
     Rml::String text_rml;
@@ -1958,6 +2187,7 @@ struct nc_prof_row {
 };
 struct nc_prof_session {
     Rml::Vector<nc_prof_tab> tabs;
+    nc_shell shell;
     Rml::String points_rml;
     Rml::String cost_rml;
     Rml::Vector<nc_prof_row> rows;
@@ -1980,6 +2210,7 @@ void register_nc_prof_rml_types( Rml::DataModelConstructor &c )
     th.RegisterMember( "name_rml", &nc_prof_tab::name_rml );
     th.RegisterMember( "icon_dec", &nc_prof_tab::icon_dec );
     th.RegisterMember( "selected", &nc_prof_tab::selected );
+    th.RegisterMember( "done", &nc_prof_tab::done );
     c.RegisterArray<Rml::Vector<nc_prof_tab>>();
     Rml::StructHandle<nc_prof_row> rh = c.RegisterStruct<nc_prof_row>();
     rh.RegisterMember( "text_rml", &nc_prof_row::text_rml );
@@ -2032,6 +2263,14 @@ tab_direction set_profession( avatar &u, points_left &points,
     ctxt.register_action( "RANDOMIZE" );
     ctxt.register_action( "FILTER" );
     ctxt.register_action( "QUIT" );
+    // Required for the navigator/card clicks to reach this loop at all.
+    // MOUSE_LEFT binds to action id SELECT (keybindings.json:1175). An UNREGISTERED
+    // mouse action resolves to CATA_ERROR, and input.cpp:894-897 `continue`s on it
+    // BEFORE the registered_any_input check at :912 — so ANY_INPUT cannot rescue a
+    // mouse event, only registering the action it maps to can. Without this the
+    // click callback fires but handle_input() never returns, leaving the loop parked
+    // until an unrelated keypress, which then got hijacked into a step change.
+    ctxt.register_action( "SELECT" );
 
     bool recalc_profs = true;
     int profs_length = 0;
@@ -2048,12 +2287,17 @@ tab_direction set_profession( avatar &u, points_left &points,
     // filter below). Tile character_preview not drawn in rml mode this slice.
     auto data = std::make_unique<nc_prof_session>();
     rml_doc rml;
+    // Set by the arrow click callbacks, consumed by the input loop below. Not a
+    // tab_direction: it is translated into an action string so the existing
+    // keyboard handling stays the single place navigation is decided.
+    int nc_nav = 0;
     bool rml_scroll_pending = false;
     const auto sync_rml = [&]() {
         if( !data->handle ) {
             return;
         }
-        data->tabs = build_nc_char_tabs<nc_prof_tab>( 2 ); // PROFESSION tab active
+        data->tabs = build_nc_char_tabs<nc_prof_tab>( 2 );  // PROFESSION tab active
+        data->shell = fill_nc_shell( 2, ctxt );
         const bool valid = cur_id >= 0 && static_cast<size_t>( cur_id ) < sorted_profs.size();
 
         std::string pmsg = nc_points_line( points );
@@ -2242,6 +2486,7 @@ tab_direction set_profession( avatar &u, points_left &points,
                                              filterstring.empty() ? _( "no filter" ) : filterstring ) );
 
         data->handle.DirtyVariable( "tabs" );
+        dirty_nc_shell( data->handle );
         data->handle.DirtyVariable( "points_rml" );
         data->handle.DirtyVariable( "cost_rml" );
         data->handle.DirtyVariable( "rows" );
@@ -2286,6 +2531,14 @@ tab_direction set_profession( avatar &u, points_left &points,
     [&]( Rml::DataModelConstructor & c ) {
         register_nc_prof_rml_types( c );
         c.Bind( "tabs", &data->tabs );
+        bind_nc_shell( c, data->shell );
+        // Arrow clicks are translated into the SAME action strings the keyboard
+        // produces, so each step's existing PREV_TAB/NEXT_TAB handling — including
+        // the "Return to main menu?" confirm on step 0 — is reused unchanged.
+        c.BindEventCallback( "on_prev",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = -1; } );
+        c.BindEventCallback( "on_next",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = 1; } );
         c.Bind( "points_rml", &data->points_rml );
         c.Bind( "cost_rml", &data->cost_rml );
         c.Bind( "rows", &data->rows );
@@ -2335,7 +2588,11 @@ tab_direction set_profession( avatar &u, points_left &points,
         }
 
         ui_manager::redraw();
-        const std::string action = ctxt.handle_input();
+        nc_nav = 0;
+        std::string action = ctxt.handle_input();
+        if( nc_nav != 0 ) {
+            action = nc_nav < 0 ? "PREV_TAB" : "NEXT_TAB";
+        }
         if( action == "DOWN" ) {
             cur_id++;
             if( cur_id > profs_length - 1 ) {
@@ -2424,6 +2681,7 @@ struct nc_skills_tab {
     Rml::String name_rml;
     Rml::String icon_dec;   //< placeholder tab glyph
     bool selected = false;
+    bool done = false;   //< step already passed
 };
 struct nc_skill_row {
     Rml::String text_rml;
@@ -2432,6 +2690,7 @@ struct nc_skill_row {
 };
 struct nc_skills_session {
     Rml::Vector<nc_skills_tab> tabs;
+    nc_shell shell;
     Rml::String points_rml;
     Rml::String cost_rml;
     Rml::Vector<nc_skill_row> rows;
@@ -2450,6 +2709,7 @@ void register_nc_skills_rml_types( Rml::DataModelConstructor &c )
     th.RegisterMember( "name_rml", &nc_skills_tab::name_rml );
     th.RegisterMember( "icon_dec", &nc_skills_tab::icon_dec );
     th.RegisterMember( "selected", &nc_skills_tab::selected );
+    th.RegisterMember( "done", &nc_skills_tab::done );
     c.RegisterArray<Rml::Vector<nc_skills_tab>>();
     Rml::StructHandle<nc_skill_row> rh = c.RegisterStruct<nc_skill_row>();
     rh.RegisterMember( "text_rml", &nc_skill_row::text_rml );
@@ -2560,6 +2820,14 @@ tab_direction set_skills( avatar &u, points_left &points )
     ctxt.register_action( "RANDOMIZE" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
     ctxt.register_action( "QUIT" );
+    // Required for the navigator/card clicks to reach this loop at all.
+    // MOUSE_LEFT binds to action id SELECT (keybindings.json:1175). An UNREGISTERED
+    // mouse action resolves to CATA_ERROR, and input.cpp:894-897 `continue`s on it
+    // BEFORE the registered_any_input check at :912 — so ANY_INPUT cannot rescue a
+    // mouse event, only registering the action it maps to can. Without this the
+    // click callback fires but handle_input() never returns, leaving the loop parked
+    // until an unrelated keypress, which then got hijacked into a step change.
+    ctxt.register_action( "SELECT" );
 
     std::map<skill_id, int> prof_skills;
     const auto &pskills = u.prof->skills();
@@ -2571,13 +2839,18 @@ tab_direction set_skills( avatar &u, points_left &points )
     // RmlUi render path (render-only; keyboard owns nav/inc/dec/scroll below).
     auto data = std::make_unique<nc_skills_session>();
     rml_doc rml;
+    // Set by the arrow click callbacks, consumed by the input loop below. Not a
+    // tab_direction: it is translated into an action string so the existing
+    // keyboard handling stays the single place navigation is decided.
+    int nc_nav = 0;
     int rml_sel_child = -1;       // flattened-row index of the cursor skill
     bool rml_scroll_pending = false; // follow the keyboard cursor in the list
     const auto sync_rml = [&]() {
         if( !data->handle ) {
             return;
         }
-        data->tabs = build_nc_char_tabs<nc_skills_tab>( 6 ); // SKILLS tab active
+        data->tabs = build_nc_char_tabs<nc_skills_tab>( 6 );  // SKILLS tab active
+        data->shell = fill_nc_shell( 6, ctxt );
         data->points_rml = cata_text_to_rml( nc_points_line( points ) );
 
         const int cost = skill_increment_cost( u, currentSkill->ident() );
@@ -2629,6 +2902,7 @@ tab_direction set_skills( avatar &u, points_left &points )
         data->desc_rml = cata_text_to_rml( nc_skill_recipes_desc( u, currentSkill, prof_skills ) );
 
         data->handle.DirtyVariable( "tabs" );
+        dirty_nc_shell( data->handle );
         data->handle.DirtyVariable( "points_rml" );
         data->handle.DirtyVariable( "cost_rml" );
         data->handle.DirtyVariable( "rows" );
@@ -2668,6 +2942,14 @@ tab_direction set_skills( avatar &u, points_left &points )
     [&]( Rml::DataModelConstructor & c ) {
         register_nc_skills_rml_types( c );
         c.Bind( "tabs", &data->tabs );
+        bind_nc_shell( c, data->shell );
+        // Arrow clicks are translated into the SAME action strings the keyboard
+        // produces, so each step's existing PREV_TAB/NEXT_TAB handling — including
+        // the "Return to main menu?" confirm on step 0 — is reused unchanged.
+        c.BindEventCallback( "on_prev",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = -1; } );
+        c.BindEventCallback( "on_next",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = 1; } );
         c.Bind( "points_rml", &data->points_rml );
         c.Bind( "cost_rml", &data->cost_rml );
         c.Bind( "rows", &data->rows );
@@ -2680,7 +2962,11 @@ tab_direction set_skills( avatar &u, points_left &points )
 
     do {
         ui_manager::redraw();
-        const std::string action = ctxt.handle_input();
+        nc_nav = 0;
+        std::string action = ctxt.handle_input();
+        if( nc_nav != 0 ) {
+            action = nc_nav < 0 ? "PREV_TAB" : "NEXT_TAB";
+        }
         if( action == "DOWN" ) {
             cur_pos = modulo( cur_pos + 1, num_skills );
             currentSkill = skill_list[cur_pos].first;
@@ -2736,6 +3022,7 @@ struct nc_scen_tab {
     Rml::String name_rml;
     Rml::String icon_dec;   //< placeholder tab glyph
     bool selected = false;
+    bool done = false;   //< step already passed
 };
 struct nc_scen_row {
     Rml::String text_rml;
@@ -2743,6 +3030,7 @@ struct nc_scen_row {
 };
 struct nc_scen_session {
     Rml::Vector<nc_scen_tab> tabs;
+    nc_shell shell;
     Rml::String points_rml;
     Rml::String cost_rml;
     Rml::Vector<nc_scen_row> rows;
@@ -2764,6 +3052,7 @@ void register_nc_scen_rml_types( Rml::DataModelConstructor &c )
     th.RegisterMember( "name_rml", &nc_scen_tab::name_rml );
     th.RegisterMember( "icon_dec", &nc_scen_tab::icon_dec );
     th.RegisterMember( "selected", &nc_scen_tab::selected );
+    th.RegisterMember( "done", &nc_scen_tab::done );
     c.RegisterArray<Rml::Vector<nc_scen_tab>>();
     Rml::StructHandle<nc_scen_row> rh = c.RegisterStruct<nc_scen_row>();
     rh.RegisterMember( "text_rml", &nc_scen_row::text_rml );
@@ -2814,6 +3103,14 @@ tab_direction set_scenario( avatar &u, points_left &points,
     ctxt.register_action( "RANDOMIZE" );
     ctxt.register_action( "FILTER" );
     ctxt.register_action( "QUIT" );
+    // Required for the navigator/card clicks to reach this loop at all.
+    // MOUSE_LEFT binds to action id SELECT (keybindings.json:1175). An UNREGISTERED
+    // mouse action resolves to CATA_ERROR, and input.cpp:894-897 `continue`s on it
+    // BEFORE the registered_any_input check at :912 — so ANY_INPUT cannot rescue a
+    // mouse event, only registering the action it maps to can. Without this the
+    // click callback fires but handle_input() never returns, leaving the loop parked
+    // until an unrelated keypress, which then got hijacked into a step change.
+    ctxt.register_action( "SELECT" );
 
     bool recalc_scens = true;
     int scens_length = 0;
@@ -2827,12 +3124,17 @@ tab_direction set_scenario( avatar &u, points_left &points,
     // RmlUi render path (render-only; keyboard owns nav/confirm/sort/filter below).
     auto data = std::make_unique<nc_scen_session>();
     rml_doc rml;
+    // Set by the arrow click callbacks, consumed by the input loop below. Not a
+    // tab_direction: it is translated into an action string so the existing
+    // keyboard handling stays the single place navigation is decided.
+    int nc_nav = 0;
     bool rml_scroll_pending = false;
     const auto sync_rml = [&]() {
         if( !data->handle ) {
             return;
         }
-        data->tabs = build_nc_char_tabs<nc_scen_tab>( 1 ); // SCENARIO tab active
+        data->tabs = build_nc_char_tabs<nc_scen_tab>( 1 );  // SCENARIO tab active
+        data->shell = fill_nc_shell( 1, ctxt );
         const bool valid = cur_id >= 0 && static_cast<size_t>( cur_id ) < sorted_scens.size();
 
         std::string pmsg = nc_points_line( points );
@@ -2976,6 +3278,7 @@ tab_direction set_scenario( avatar &u, points_left &points,
                                              filterstring.empty() ? _( "no filter" ) : filterstring ) );
 
         data->handle.DirtyVariable( "tabs" );
+        dirty_nc_shell( data->handle );
         data->handle.DirtyVariable( "points_rml" );
         data->handle.DirtyVariable( "cost_rml" );
         data->handle.DirtyVariable( "rows" );
@@ -3006,6 +3309,14 @@ tab_direction set_scenario( avatar &u, points_left &points,
     [&]( Rml::DataModelConstructor & c ) {
         register_nc_scen_rml_types( c );
         c.Bind( "tabs", &data->tabs );
+        bind_nc_shell( c, data->shell );
+        // Arrow clicks are translated into the SAME action strings the keyboard
+        // produces, so each step's existing PREV_TAB/NEXT_TAB handling — including
+        // the "Return to main menu?" confirm on step 0 — is reused unchanged.
+        c.BindEventCallback( "on_prev",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = -1; } );
+        c.BindEventCallback( "on_next",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = 1; } );
         c.Bind( "points_rml", &data->points_rml );
         c.Bind( "cost_rml", &data->cost_rml );
         c.Bind( "rows", &data->rows );
@@ -3067,7 +3378,11 @@ tab_direction set_scenario( avatar &u, points_left &points,
         }
 
         ui_manager::redraw();
-        const std::string action = ctxt.handle_input();
+        nc_nav = 0;
+        std::string action = ctxt.handle_input();
+        if( nc_nav != 0 ) {
+            action = nc_nav < 0 ? "PREV_TAB" : "NEXT_TAB";
+        }
         if( action == "DOWN" ) {
             cur_id++;
             if( cur_id > scens_length - 1 ) {
@@ -3118,6 +3433,7 @@ struct nc_desc_tab {
     Rml::String name_rml;
     Rml::String icon_dec;   //< placeholder tab glyph
     bool selected = false;
+    bool done = false;   //< step already passed
 };
 /// One rendered row of an OVERVIEW pane.
 ///
@@ -3143,6 +3459,7 @@ struct nc_desc_pane {
 
 struct nc_desc_session {
     Rml::Vector<nc_desc_tab> tabs;
+    nc_shell shell;
     Rml::String points_rml;
     Rml::String name_rml;
     Rml::String gender_rml;
@@ -3167,6 +3484,7 @@ void register_nc_desc_rml_types( Rml::DataModelConstructor &c )
     th.RegisterMember( "name_rml", &nc_desc_tab::name_rml );
     th.RegisterMember( "icon_dec", &nc_desc_tab::icon_dec );
     th.RegisterMember( "selected", &nc_desc_tab::selected );
+    th.RegisterMember( "done", &nc_desc_tab::done );
     c.RegisterArray<Rml::Vector<nc_desc_tab>>();
 
     Rml::StructHandle<nc_desc_row> rh = c.RegisterStruct<nc_desc_row>();
@@ -3312,6 +3630,14 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
     ctxt.register_action( "REROLL_CHARACTER_WITH_SCENARIO" );
     ctxt.register_action( "CONFIRM" );
     ctxt.register_action( "QUIT" );
+    // Required for the navigator/card clicks to reach this loop at all.
+    // MOUSE_LEFT binds to action id SELECT (keybindings.json:1175). An UNREGISTERED
+    // mouse action resolves to CATA_ERROR, and input.cpp:894-897 `continue`s on it
+    // BEFORE the registered_any_input check at :912 — so ANY_INPUT cannot rescue a
+    // mouse event, only registering the action it maps to can. Without this the
+    // click callback fires but handle_input() never returns, leaving the loop parked
+    // until an unrelated keypress, which then got hijacked into a step change.
+    ctxt.register_action( "SELECT" );
     ctxt.register_action( "zoom_in" );
     ctxt.register_action( "zoom_out" );
     ctxt.register_action( "TOGGLE_CHARACTER_PREVIEW_CLOTHES" );
@@ -3355,11 +3681,16 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
     // RmlUi render path (render-only; keyboard still owns nav/edit/confirm below).
     auto data = std::make_unique<nc_desc_session>();
     rml_doc rml;
+    // Set by the arrow click callbacks, consumed by the input loop below. Not a
+    // tab_direction: it is translated into an action string so the existing
+    // keyboard handling stays the single place navigation is decided.
+    int nc_nav = 0;
     const auto sync_rml = [&]() {
         if( !data->handle ) {
             return;
         }
-        data->tabs = build_nc_char_tabs<nc_desc_tab>( 7 ); // OVERVIEW tab active
+        data->tabs = build_nc_char_tabs<nc_desc_tab>( 7 );  // OVERVIEW tab active
+        data->shell = fill_nc_shell( 7, ctxt );
         data->points_rml = cata_text_to_rml( nc_points_line( points ) );
 
         // Name (selector-highlighted). value mirrors the curses three-way state.
@@ -3648,6 +3979,14 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
     [&]( Rml::DataModelConstructor & c ) {
         register_nc_desc_rml_types( c );
         c.Bind( "tabs", &data->tabs );
+        bind_nc_shell( c, data->shell );
+        // Arrow clicks are translated into the SAME action strings the keyboard
+        // produces, so each step's existing PREV_TAB/NEXT_TAB handling — including
+        // the "Return to main menu?" confirm on step 0 — is reused unchanged.
+        c.BindEventCallback( "on_prev",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = -1; } );
+        c.BindEventCallback( "on_next",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = 1; } );
         c.Bind( "points_rml", &data->points_rml );
         c.Bind( "name_rml", &data->name_rml );
         c.Bind( "gender_rml", &data->gender_rml );
@@ -3679,7 +4018,11 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
         max_allowed_age = new_max_age;
         you.set_base_age( clamp( you.base_age(), min_allowed_age, max_allowed_age ) );
         ui_manager::redraw();
-        const std::string action = ctxt.handle_input();
+        nc_nav = 0;
+        std::string action = ctxt.handle_input();
+        if( nc_nav != 0 ) {
+            action = nc_nav < 0 ? "PREV_TAB" : "NEXT_TAB";
+        }
         if( action == "zoom_in" && use_character_preview ) {
             character_preview.zoom_in();
         }
