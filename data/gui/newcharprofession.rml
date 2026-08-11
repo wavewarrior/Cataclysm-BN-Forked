@@ -32,27 +32,112 @@
             </div>
             <div class="nc-arrow-spacer" data-if="!has_prev"></div>
             <div class="nc-stage">
-                <!-- Character portrait. Ordinary document content now: the avatar is
-                     drawn into its own render target and arrives as a decorator, so it
-                     is no longer a GPU sprite pinned outside the panel. -->
-                <div class="nc-portrait" data-if="has_portrait"
-                     data-style-decorator="portrait_dec"></div>
             <div class="nc-prof-top">
                 <span class="nc-prof-points" data-rml="points_rml"></span>
                 <span class="nc-prof-cost" data-rml="cost_rml"></span>
+                <!-- Screen-level control hints, so they sit beside the other status text
+                     rather than inside the per-profession info panel. -->
+                <span class="nc-prof-sort" data-rml="sort_rml"></span>
             </div>
             <div class="nc-prof-body">
-                <div id="nc-prof-list" class="nc-prof-list scroll-pane">
-                    <div class="item nc-prof-row" data-for="r : rows"
-                         data-class-selected="r.selected" data-rml="r.text_rml"></div>
-                </div>
-                <div class="nc-prof-right">
-                    <div class="nc-prof-sort" data-rml="sort_rml"></div>
-                    <div class="nc-prof-gender" data-rml="gender_rml"></div>
-                    <div id="nc-prof-info" class="nc-prof-info scroll-pane" data-rml="info_rml"></div>
+                <!-- Grouped card tree. Each band is a header (a focus stop, so CONFIRM on it
+                     toggles the band without needing a keybinding of its own) plus a carousel
+                     row holding only the VISIBLE page of cards. Bands are discovered from the
+                     data — one per skill display category some profession leads with. -->
+                <div class="nc-tree">
+                    <div class="nc-band" data-for="b, bi : bands">
+                        <div class="nc-band-head" data-class-focused="b.focused"
+                             data-class-collapsed="b.collapsed"
+                             data-event-click="on_band(bi)">
+                            <span class="nc-band-marker" data-rml="b.marker_rml"></span>
+                            <span class="nc-band-name" data-rml="b.name_rml"></span>
+                            <span class="nc-band-count" data-rml="b.count_rml"></span>
+                        </div>
+                        <div class="nc-band-rail" data-if="!b.collapsed">
+                            <div class="nc-band-pager" data-class-on="b.has_prev_page"
+                                 data-event-click="on_page(bi, -1)">&#60;</div>
+                            <div class="nc-band-cards">
+                                <div class="nc-card" data-for="r : b.rows"
+                                     data-class-selected="r.selected"
+                                     data-class-chosen="r.chosen"
+                                     data-event-click="on_card(bi, it_index)">
+                                    <span class="nc-card-name" data-rml="r.text_rml"></span>
+                                    <div class="nc-card-foot">
+                                        <div class="nc-card-flags">
+                                            <div class="nc-card-flag" data-for="i : r.icons"
+                                                 data-style-decorator="i.dec"></div>
+                                        </div>
+                                        <span class="nc-card-pts" data-rml="r.cost_rml"></span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="nc-band-pager" data-class-on="b.has_next_page"
+                                 data-event-click="on_page(bi, 1)">&#62;</div>
+                        </div>
+                        <!-- Floaty info panel for the profession under the cursor, inside the
+                             band so it reads as part of THIS discipline. Fixed height and
+                             position: changing profession moves only the notch above it. -->
+                        <div class="nc-band-info" data-if="b.has_info">
+                            <div class="nc-info-notches">
+                                <div class="nc-info-gutter"></div>
+                                <div class="nc-info-cells">
+                                    <div class="nc-info-cell" data-for="r : b.rows"
+                                         data-class-on="r.selected">
+                                        <div class="nc-info-notch"></div>
+                                    </div>
+                                </div>
+                                <div class="nc-info-gutter"></div>
+                            </div>
+                            <div class="nc-info-panel">
+                                <!-- Art slot: the character portrait, which already wears the
+                                     selected profession's starting kit. Ordinary document
+                                     content — the avatar is drawn into its own render target
+                                     and arrives as a decorator. -->
+                                <div class="nc-info-art" data-if="has_portrait"
+                                     data-style-decorator="portrait_dec"></div>
+                                <div class="nc-info-facts">
+                                    <div class="nc-fact">
+                                        <div class="nc-fact-label">Skills</div>
+                                        <div class="nc-fact-value" data-rml="skills_rml"></div>
+                                        <div class="nc-fact-sub" data-rml="skills_sub_rml"></div>
+                                    </div>
+                                    <div class="nc-fact">
+                                        <div class="nc-fact-label">Traits</div>
+                                        <div class="nc-fact-value" data-rml="traits_rml"></div>
+                                    </div>
+                                    <div class="nc-fact">
+                                        <div class="nc-fact-label">Gear</div>
+                                        <div class="nc-fact-value" data-rml="gear_rml"></div>
+                                        <div class="nc-fact-sub" data-rml="gear_sub_rml"></div>
+                                    </div>
+                                    <div class="nc-chips">
+                                        <div class="nc-chip" data-for="c : chips">
+                                            <div class="nc-chip-icon" data-style-decorator="c.dec"></div>
+                                            <span class="nc-chip-label" data-rml="c.label_rml"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="nc-info-desc">
+                                    <div class="nc-info-blurb" data-rml="desc_rml"></div>
+                                    <!-- The exhaustive buffer keeps its own scroll: LEFT/RIGHT
+                                         still page it when the cursor sits on a header. -->
+                                    <div id="nc-prof-info" class="nc-info-detail scroll-pane"
+                                         data-rml="info_rml"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="nc-prof-desc" data-rml="desc_rml"></div>
+            <!-- Key for the card strips: "sigil :: meaning", spread across the panel. -->
+            <div class="nc-legend">
+                <div class="nc-legend-item" data-for="l : legend">
+                    <div class="nc-legend-icon" data-style-decorator="l.dec"></div>
+                    <span class="nc-legend-sep">::</span>
+                    <span class="nc-legend-label" data-rml="l.label_rml"></span>
+                </div>
+            </div>
+            <div class="nc-prof-gender" data-rml="gender_rml"></div>
             <div class="nc-prof-filter" data-rml="filter_rml"></div>
             </div>
             <div class="nc-arrow nc-arrow-next" data-if="has_next"

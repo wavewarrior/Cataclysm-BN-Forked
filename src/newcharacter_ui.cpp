@@ -2208,24 +2208,148 @@ tab_direction set_bionics( avatar &u, points_left &points )
 
 namespace
 {
+/// Which band a profession belongs to: the display category of its HIGHEST-level starting
+/// skill, or `unskilled` when it grants none.
+///
+/// Derived, never hand-mapped. Every skill declares a `display_category` (skills.json, 28/28)
+/// and `skill_display_type` gives that id a translated name, so a mod's new skill carries its
+/// own grouping and a mod's new profession lands correctly without touching this file. The
+/// alternative — cost bands, as the SCENARIO tab uses — would split 258 professions into three
+/// groups of ~85, which is no more navigable than the flat list it replaces.
+/// Highest-level skill decides the band. Ties break on the skill's ident so the grouping is
+/// stable across runs rather than following whatever order the JSON happened to load in.
+auto nc_classify_prof( const profession &p ) -> skill_displayType_id
+{
+    const profession::StartingSkillList sk = p.skills();
+    if( sk.empty() ) {
+        return skill_displayType_id::NULL_ID();
+    }
+    const auto top = std::ranges::max_element( sk,
+    []( const std::pair<skill_id, int> &a, const std::pair<skill_id, int> &b ) {
+        if( a.second != b.second ) {
+            return a.second < b.second;
+        }
+        return a.first.str() > b.first.str();
+    } );
+    return top->first->display_category();
+}
+
+/// One profession sigil: a thing the profession HANDS YOU, which is what the player compares.
+/// Colour carries valence — a liability red, a gift green/blue, a neutral fact grey — so the
+/// strip reads before any individual glyph is learned.
+///
+/// SINGLE SOURCE OF TRUTH, as on the SCENARIO tab: card strip, selected-profession chips and
+/// the legend all derive from this table. Splitting them across two sources is how that tab
+/// ended up drawing a sigil nothing on screen explained.
+struct nc_prof_sigil {
+    unsigned seed;
+    nc_color col;
+    const char *label;                        //< terse, for the legend
+    const char *desc;                         //< full, for the chip
+    bool ( *present )( const profession & );  //< does this profession carry it
+};
+
+const std::vector<nc_prof_sigil> &nc_prof_sigils()
+{
+    static const std::vector<nc_prof_sigil> sigils = {
+        {
+            0x5452, c_light_gray, translate_marker( "Locked traits" ),
+            translate_marker( "Comes with locked traits" ),
+            []( const profession & p ) { return !p.get_locked_traits().empty(); }
+        },
+        {
+            0x4249, c_light_blue, translate_marker( "Bionics" ),
+            translate_marker( "Starts with bionics installed" ),
+            []( const profession & p ) { return !p.CBMs().empty(); }
+        },
+        {
+            0x5645, c_green, translate_marker( "Vehicle" ),
+            translate_marker( "Starts with a vehicle" ),
+            []( const profession & p ) { return !p.vehicle().str().empty() && p.vehicle().is_valid(); }
+        },
+        {
+            0x4341, c_green, translate_marker( "Cash" ),
+            translate_marker( "Starts with money" ),
+            // Declared-but-zero cash is common, and "Starts with money" over $0.00 is a lie.
+            []( const profession & p ) { return p.starting_cash().value_or( 0 ) != 0; }
+        },
+        {
+            0x5045, c_green, translate_marker( "Animal" ),
+            translate_marker( "Starts with an animal" ),
+            []( const profession & p ) { return !p.pets().empty(); }
+        },
+        {
+            0x4E50, c_light_blue, translate_marker( "Companion" ),
+            translate_marker( "Starts with a companion" ),
+            []( const profession & p ) { return !p.npcs().empty(); }
+        },
+        {
+            0x4144, c_red, translate_marker( "Addiction" ),
+            translate_marker( "Starts addicted" ),
+            []( const profession & p ) { return !p.addictions().empty(); }
+        },
+        {
+            0x4D49, c_yellow, translate_marker( "Mission" ),
+            translate_marker( "Starts on a mission" ),
+            []( const profession & p ) { return !p.missions().empty(); }
+        },
+        {
+            0x5350, c_light_blue, translate_marker( "Spells" ),
+            translate_marker( "Starts knowing spells" ),
+            []( const profession & p ) { return !p.spells().empty(); }
+        },
+    };
+    return sigils;
+}
+
 struct nc_prof_tab {
     Rml::String name_rml;
     Rml::String icon_dec;   //< placeholder tab glyph
     bool selected = false;
     bool done = false;   //< step already passed
 };
+/// A sigil paired with words. Serves both the legend and the selected profession's chips —
+/// see nc_scen_glyph on the SCENARIO tab, same reasoning.
+struct nc_prof_glyph {
+    Rml::String dec;
+    Rml::String label_rml;
+};
 struct nc_prof_row {
     Rml::String text_rml;
-    bool selected = false;
+    Rml::String cost_rml;                  //< point cost, coloured by direction
+    Rml::Vector<nc_prof_glyph> icons;      //< what this profession hands you
+    bool selected = false;                 //< cursor is on this card
+    bool chosen = false;                   //< this is the profession in force
+};
+/// One group: a header plus a CAROUSEL page of its cards.
+struct nc_prof_band {
+    Rml::String name_rml;
+    Rml::String count_rml;
+    Rml::String marker_rml;
+    bool collapsed = false;
+    bool focused = false;        //< cursor is on this header
+    bool has_info = false;       //< this band owns the floaty info panel
+    bool has_prev_page = false;
+    bool has_next_page = false;
+    Rml::Vector<nc_prof_row> rows;
 };
 struct nc_prof_session {
     Rml::Vector<nc_prof_tab> tabs;
     nc_shell shell;
     Rml::String points_rml;
     Rml::String cost_rml;
-    Rml::Vector<nc_prof_row> rows;
+    Rml::Vector<nc_prof_band> bands;
+    Rml::Vector<nc_prof_glyph> legend;
+    /// Facts about the selected profession, one binding per field — the old single
+    /// pre-wrapped buffer could not be given hierarchy and could not fit a fixed panel.
+    Rml::String skills_rml;
+    Rml::String skills_sub_rml;
+    Rml::String traits_rml;
+    Rml::String gear_rml;
+    Rml::String gear_sub_rml;
+    Rml::Vector<nc_prof_glyph> chips;
     Rml::String desc_rml;
-    Rml::String info_rml;
+    Rml::String info_rml;      //< exhaustive detail, prose column
     Rml::String sort_rml;
     Rml::String gender_rml;
     Rml::String filter_rml;
@@ -2245,10 +2369,29 @@ void register_nc_prof_rml_types( Rml::DataModelConstructor &c )
     th.RegisterMember( "selected", &nc_prof_tab::selected );
     th.RegisterMember( "done", &nc_prof_tab::done );
     c.RegisterArray<Rml::Vector<nc_prof_tab>>();
+    Rml::StructHandle<nc_prof_glyph> gh = c.RegisterStruct<nc_prof_glyph>();
+    gh.RegisterMember( "dec", &nc_prof_glyph::dec );
+    gh.RegisterMember( "label_rml", &nc_prof_glyph::label_rml );
+    // One array registration covers the strip, the chips and the legend — same element type.
+    c.RegisterArray<Rml::Vector<nc_prof_glyph>>();
     Rml::StructHandle<nc_prof_row> rh = c.RegisterStruct<nc_prof_row>();
     rh.RegisterMember( "text_rml", &nc_prof_row::text_rml );
+    rh.RegisterMember( "cost_rml", &nc_prof_row::cost_rml );
+    rh.RegisterMember( "icons", &nc_prof_row::icons );
     rh.RegisterMember( "selected", &nc_prof_row::selected );
+    rh.RegisterMember( "chosen", &nc_prof_row::chosen );
     c.RegisterArray<Rml::Vector<nc_prof_row>>();
+    Rml::StructHandle<nc_prof_band> bh = c.RegisterStruct<nc_prof_band>();
+    bh.RegisterMember( "name_rml", &nc_prof_band::name_rml );
+    bh.RegisterMember( "count_rml", &nc_prof_band::count_rml );
+    bh.RegisterMember( "marker_rml", &nc_prof_band::marker_rml );
+    bh.RegisterMember( "collapsed", &nc_prof_band::collapsed );
+    bh.RegisterMember( "focused", &nc_prof_band::focused );
+    bh.RegisterMember( "has_info", &nc_prof_band::has_info );
+    bh.RegisterMember( "has_prev_page", &nc_prof_band::has_prev_page );
+    bh.RegisterMember( "has_next_page", &nc_prof_band::has_next_page );
+    bh.RegisterMember( "rows", &nc_prof_band::rows );
+    c.RegisterArray<Rml::Vector<nc_prof_band>>();
     g_nc_prof_types_registered = true;
 }
 } // namespace
@@ -2260,6 +2403,35 @@ tab_direction set_profession( avatar &u, points_left &points,
     tab_direction retval = tab_direction::NONE;
     int desc_offset = 0;
     int iContentHeight = 0;
+
+    // ── Tree/carousel view state ──────────────────────────────────────────────
+    //
+    // Mirrors the SCENARIO tab (plans/charcreation-scenario-tree.md): `cur_id` stays the
+    // authoritative index into the flat sorted list, so SORT, FILTER, RANDOMIZE and
+    // CHANGE_GENDER keep working untouched — the grouping is a VIEW over that list.
+    //
+    // Six cards per page, matching SCENARIO: same panel width, and a card has to hold a
+    // wrapped two-line profession name.
+    constexpr int NC_PROF_PAGE = 6;
+    // Bands are DISCOVERED from the data, not fixed: one per skill display category that some
+    // profession actually leads with, plus "unskilled" last. A mod adding a skill category
+    // therefore adds a band without touching this file.
+    std::vector<skill_displayType_id> band_cats;
+    std::vector<std::vector<int>> band_items;      //< indices into sorted_profs, per band
+    std::vector<bool> band_collapsed;
+    std::vector<int> band_page;
+    bool first_group_build = true;
+    int focus_band = 0;
+    bool focus_header = true;
+    int focus_card = 0;
+    // Click intent, applied ONCE per input cycle. A click callback must never mutate directly:
+    // `data-event-*` accumulates one listener per `data-for` regeneration, so a toggle run an
+    // even number of times cancels itself out. See the SCENARIO tab for the measurement.
+    int pending_band = -1;
+    int pending_card_band = -1;
+    int pending_card_slot = -1;
+    int pending_page_band = -1;
+    int pending_page_dir = 0;
 
     ui_adaptor ui;
     catacurses::window w;
@@ -2324,7 +2496,6 @@ tab_direction set_profession( avatar &u, points_left &points,
     // tab_direction: it is translated into an action string so the existing
     // keyboard handling stays the single place navigation is decided.
     int nc_nav = 0;
-    bool rml_scroll_pending = false;
     const auto sync_rml = [&]() {
         if( !data->handle ) {
             return;
@@ -2373,25 +2544,19 @@ tab_direction set_profession( avatar &u, points_left &points,
                                           addiction_name( a ), a.intensity ) + "\n";
                 }
             }
-            const auto prof_traits = pid->get_locked_traits();
-            buf += colorize( _( "Traits:" ), c_light_blue ) + "\n";
-            if( prof_traits.empty() ) {
-                buf += pgettext( "set_profession_trait", "None" ) + std::string( "\n" );
-            } else {
-                for( const auto &t : prof_traits ) {
-                    buf += mutation_branch::get_name( t ) + "\n";
-                }
-            }
+            // Traits and skills are NOT repeated here: the fact fields beside this buffer own
+            // them now, and stating them twice in one panel is noise. What stays is the
+            // itemised detail no summary can carry.
             std::vector<std::pair<skill_id, int>> prof_skills = pid->skills();
             std::stable_sort( prof_skills.begin(), prof_skills.end(),
             []( const std::pair<skill_id, int> &a, const std::pair<skill_id, int> &b ) {
                 return localized_compare( std::make_pair( a.first->display_category(), a.first->name() ),
                                           std::make_pair( b.first->display_category(), b.first->name() ) );
             } );
-            buf += colorize( _( "Skills:" ), c_light_blue ) + "\n";
-            if( prof_skills.empty() ) {
-                buf += pgettext( "set_profession_skill", "None" ) + std::string( "\n" );
-            } else {
+            // Full skill breakdown by category — the fact field shows only the top three.
+            // Already sorted by (category, name) just above.
+            if( !prof_skills.empty() ) {
+                buf += colorize( _( "Skills:" ), c_light_blue ) + "\n";
                 skill_displayType_id cur_category = skill_displayType_id::NULL_ID();
                 for( const auto &sl : prof_skills ) {
                     if( cur_category != sl.first->display_category() ) {
@@ -2487,6 +2652,71 @@ tab_direction set_profession( avatar &u, points_left &points,
             }
             data->info_rml = cata_text_to_rml( buf );
 
+            // Facts: the handful that decide the choice, as label/value fields. The prose
+            // buffer above keeps the exhaustive detail — it is scrollable and nobody reads it
+            // to compare two professions.
+            std::vector<std::pair<skill_id, int>> fact_skills = pid->skills();
+            std::ranges::sort( fact_skills, []( const auto & a, const auto & b ) {
+                return a.second > b.second;
+            } );
+            if( fact_skills.empty() ) {
+                data->skills_rml = cata_text_to_rml( colorize( _( "None" ), c_dark_gray ) );
+                data->skills_sub_rml.clear();
+            } else {
+                // Top three by level: enough to characterise a profession, short enough to
+                // stay on one line at card-panel width.
+                std::string top;
+                for( std::size_t k = 0; k < fact_skills.size() && k < 3; ++k ) {
+                    if( k > 0 ) {
+                        top += ", ";
+                    }
+                    top += string_format( "%s %d", fact_skills[k].first->name(),
+                                          fact_skills[k].second );
+                }
+                data->skills_rml = cata_text_to_rml( top );
+                data->skills_sub_rml = fact_skills.size() > 3
+                                       ? cata_text_to_rml( colorize( string_format(
+                                               vgettext( "and %d more skill", "and %d more skills",
+                                                   static_cast<int>( fact_skills.size() ) - 3 ),
+                                               static_cast<int>( fact_skills.size() ) - 3 ), c_dark_gray ) )
+                                       : Rml::String();
+            }
+
+            const std::vector<trait_id> fact_traits = pid->get_locked_traits();
+            if( fact_traits.empty() ) {
+                data->traits_rml = cata_text_to_rml( colorize( _( "None" ), c_dark_gray ) );
+            } else {
+                std::string tl;
+                for( std::size_t k = 0; k < fact_traits.size(); ++k ) {
+                    if( k > 0 ) {
+                        tl += ", ";
+                    }
+                    tl += mutation_branch::get_name( fact_traits[k] );
+                }
+                data->traits_rml = cata_text_to_rml( tl );
+            }
+
+            const std::size_t gear_count = pid->items( u.male, u.get_mutations() ).size();
+            data->gear_rml = cata_text_to_rml( string_format(
+                                                   vgettext( "%d item", "%d items", static_cast<int>( gear_count ) ),
+                                                   static_cast<int>( gear_count ) ) );
+            const std::optional<int> fact_cash = pid->starting_cash();
+            data->gear_sub_rml = fact_cash.value_or( 0 ) != 0
+                                 ? cata_text_to_rml( colorize( format_money( *fact_cash ), c_green ) )
+                                 : Rml::String();
+
+            // Chips: this profession's own sigils in words, from the SAME table the card strip
+            // uses, so a card can never show a glyph the panel fails to explain.
+            data->chips.clear();
+            for( const nc_prof_sigil &s : nc_prof_sigils() ) {
+                if( !s.present( *pid ) ) {
+                    continue;
+                }
+                data->chips.push_back( {
+                    .dec = nc_icon_dec_col( s.seed, 14, s.col ),
+                    .label_rml = cata_text_to_rml( colorize( _( s.desc ), s.col ) ) } );
+            }
+
             data->sort_rml = cata_text_to_rml( string_format(
                                                    _( "<color_white>Sort by:</color> %1$s (Press <color_light_green>%2$s</color> to change sorting.)" ),
                                                    profession_sorter.sort_by_points ? _( "points" ) : _( "name" ),
@@ -2502,18 +2732,83 @@ tab_direction set_profession( avatar &u, points_left &points,
             data->cost_rml.clear();
             data->desc_rml.clear();
             data->info_rml.clear();
+            data->skills_rml.clear();
+            data->skills_sub_rml.clear();
+            data->traits_rml.clear();
+            data->gear_rml.clear();
+            data->gear_sub_rml.clear();
+            data->chips.clear();
             data->sort_rml.clear();
             data->gender_rml.clear();
         }
 
-        data->rows.clear();
-        for( int i = 0; i < static_cast<int>( sorted_profs.size() ); i++ ) {
-            const nc_color col = ( u.prof != sorted_profs[i] ) ? c_light_gray : COL_SKILL_USED;
-            nc_prof_row r;
-            r.text_rml = cata_text_to_rml( colorize(
-                                               sorted_profs[i]->gender_appropriate_name( u.male ), col ) );
-            r.selected = ( i == cur_id );
-            data->rows.push_back( r );
+        // Static vocabulary: built once, then left alone.
+        if( data->legend.empty() ) {
+            for( const nc_prof_sigil &s : nc_prof_sigils() ) {
+                data->legend.push_back( {
+                    .dec = nc_icon_dec_col( s.seed, 14, s.col ),
+                    .label_rml = cata_text_to_rml( colorize( _( s.label ), s.col ) ) } );
+            }
+            // Filled after the model was constructed, so the data-for must be told.
+            data->handle.DirtyVariable( "legend" );
+        }
+
+        // Grouped carousel view. Only the VISIBLE page of each open band is emitted, so the
+        // document holds a couple of dozen cards rather than all 258 professions.
+        data->bands.clear();
+        for( std::size_t b = 0; b < band_cats.size(); ++b ) {
+            nc_prof_band band;
+            const int total = static_cast<int>( band_items[b].size() );
+            band.name_rml = cata_text_to_rml( colorize(
+                                                  band_cats[b].is_null()
+                                                  ? _( "Unskilled" )
+                                                  // Used verbatim. display_string() reads "Melee skills", which is a little
+                                                  // long for a header above cards that are obviously professions — but it is
+                                                  // TRANSLATED, and stripping a " skills" suffix would be prefix-matching a
+                                                  // localised string: the same mistake the scenario grouping avoids by
+                                                  // deriving from the CHALLENGE flag instead of the "Challenge - " name.
+                                                  : SkillDisplayType::get_skill_type( band_cats[b] ).display_string(),
+                                                  c_white ) );
+            band.collapsed = band_collapsed[b];
+            band.focused = ( static_cast<int>( b ) == focus_band && focus_header );
+            band.has_info = !band_collapsed[b] && static_cast<int>( b ) == focus_band &&
+                            !focus_header;
+            const int page_start = band_collapsed[b] ? 0 : band_page[b];
+            const int page_end = std::min( total, page_start + NC_PROF_PAGE );
+            band.count_rml = cata_text_to_rml( colorize(
+                                                   band_collapsed[b] || total <= NC_PROF_PAGE
+                                                   ? string_format( "%d", total )
+                                                   : string_format( "%d-%d / %d", page_start + 1, page_end, total ),
+                                                   c_dark_gray ) );
+            band.marker_rml = cata_text_to_rml( colorize(
+                                                    band_collapsed[b] ? "+" : "-", c_yellow ) );
+            band.has_prev_page = !band_collapsed[b] && page_start > 0;
+            band.has_next_page = !band_collapsed[b] && page_end < total;
+            if( !band_collapsed[b] ) {
+                for( int k = page_start; k < page_end; ++k ) {
+                    const int idx = band_items[b][k];
+                    const string_id<profession> &pr = sorted_profs[idx];
+                    nc_prof_row r;
+                    r.chosen = ( u.prof == pr );
+                    // Name stays UNCOLOURED: the card's own border and fill carry cursor and
+                    // chosen state, and a baked colour would beat any stylesheet rule.
+                    r.text_rml = cata_text_to_rml( colorize(
+                                                       pr->gender_appropriate_name( u.male ), c_light_gray ) );
+                    const int cost = pr->point_cost();
+                    r.cost_rml = cata_text_to_rml( colorize(
+                                                       cost == 0 ? std::string( "0" ) : string_format( "%+d", -cost ),
+                                                       cost > 0 ? c_red : ( cost < 0 ? c_green : c_dark_gray ) ) );
+                    for( const nc_prof_sigil &s : nc_prof_sigils() ) {
+                        if( s.present( *pr ) ) {
+                            r.icons.push_back( { .dec = nc_icon_dec_col( s.seed, 14, s.col ) } );
+                        }
+                    }
+                    r.selected = ( static_cast<int>( b ) == focus_band && !focus_header &&
+                                   k == focus_card );
+                    band.rows.push_back( r );
+                }
+            }
+            data->bands.push_back( band );
         }
 
         data->filter_rml = cata_text_to_rml( string_format( "<%s>",
@@ -2526,19 +2821,19 @@ tab_direction set_profession( avatar &u, points_left &points,
         data->handle.DirtyVariable( "bands" );
         data->handle.DirtyVariable( "desc_rml" );
         data->handle.DirtyVariable( "info_rml" );
+        data->handle.DirtyVariable( "skills_rml" );
+        data->handle.DirtyVariable( "skills_sub_rml" );
+        data->handle.DirtyVariable( "traits_rml" );
+        data->handle.DirtyVariable( "gear_rml" );
+        data->handle.DirtyVariable( "gear_sub_rml" );
+        data->handle.DirtyVariable( "chips" );
         data->handle.DirtyVariable( "sort_rml" );
         data->handle.DirtyVariable( "gender_rml" );
         data->handle.DirtyVariable( "filter_rml" );
 
-        if( rml_scroll_pending && valid ) {
-            rml_scroll_pending = false;
-            if( Rml::Element *list = rml.document()->GetElementById( "nc-prof-list" ) ) {
-                if( cur_id < list->GetNumChildren() ) {
-                    list->GetChild( cur_id )->ScrollIntoView(
-                        Rml::ScrollIntoViewOptions( Rml::ScrollAlignment::Nearest ) );
-                }
-            }
-        }
+        // No ScrollIntoView: the carousel pages the cursor into view (sync_cur_from_focus),
+        // so there is never an off-screen card to scroll to. The old block indexed a flat
+        // #nc-prof-list by cur_id, which the grouped view no longer has.
     };
     const auto scroll_info = [&]( int dir ) {
         if( !rml ) {
@@ -2575,9 +2870,56 @@ tab_direction set_profession( avatar &u, points_left &points,
         [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = 1; } );
         c.Bind( "points_rml", &data->points_rml );
         c.Bind( "cost_rml", &data->cost_rml );
-        c.Bind( "rows", &data->rows );
+        c.Bind( "bands", &data->bands );
+        c.Bind( "legend", &data->legend );
+        // Click callbacks RECORD INTENT and mutate nothing — `data-event-*` installs a
+        // listener per generated element and a `data-for` regeneration adds another without
+        // removing the old, so one click invokes these an unbounded number of times. The loop
+        // applies the intent once. See plans/charcreation-scenario-tree.md for the measurement.
+        c.BindEventCallback( "on_band",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int b = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( b );
+            }
+            if( b >= 0 && b < static_cast<int>( band_cats.size() ) ) {
+                pending_band = b;
+            }
+        } );
+        c.BindEventCallback( "on_card",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int b = -1;
+            int k = -1;
+            if( args.size() >= 2 ) {
+                args[0].GetInto( b );
+                args[1].GetInto( k );
+            }
+            if( b >= 0 && b < static_cast<int>( band_cats.size() ) && k >= 0 ) {
+                pending_card_band = b;
+                pending_card_slot = k;
+            }
+        } );
+        c.BindEventCallback( "on_page",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int b = -1;
+            int d = 0;
+            if( args.size() >= 2 ) {
+                args[0].GetInto( b );
+                args[1].GetInto( d );
+            }
+            if( b >= 0 && b < static_cast<int>( band_cats.size() ) && d != 0 ) {
+                pending_page_band = b;
+                pending_page_dir = d;
+            }
+        } );
         c.Bind( "desc_rml", &data->desc_rml );
         c.Bind( "info_rml", &data->info_rml );
+        c.Bind( "skills_rml", &data->skills_rml );
+        c.Bind( "skills_sub_rml", &data->skills_sub_rml );
+        c.Bind( "traits_rml", &data->traits_rml );
+        c.Bind( "gear_rml", &data->gear_rml );
+        c.Bind( "gear_sub_rml", &data->gear_sub_rml );
+        c.Bind( "chips", &data->chips );
         c.Bind( "sort_rml", &data->sort_rml );
         c.Bind( "gender_rml", &data->gender_rml );
         c.Bind( "filter_rml", &data->filter_rml );
@@ -2618,52 +2960,131 @@ tab_direction set_profession( avatar &u, points_left &points,
                 cur_id = 0;
             }
 
+            // Re-derive the grouped view. Order WITHIN a band follows sorted_profs, so SORT
+            // still governs card order; only the partition is new.
+            //
+            // Band order follows the order skill_display_type declares its categories, so it
+            // is stable and data-driven rather than dependent on which profession happened to
+            // be first. Unskilled goes last: it is a fallback, not a discipline.
+            {
+                std::vector<skill_displayType_id> discovered;
+                for( const SkillDisplayType &dt : SkillDisplayType::skillTypes ) {
+                    discovered.push_back( dt.ident() );
+                }
+                discovered.push_back( skill_displayType_id::NULL_ID() );
+
+                std::vector<std::vector<int>> items( discovered.size() );
+                for( int k = 0; k < profs_length; ++k ) {
+                    const skill_displayType_id cat = nc_classify_prof( *sorted_profs[k] );
+                    const auto it = std::ranges::find( discovered, cat );
+                    // A category no display type declares (mod data) falls into Unskilled
+                    // rather than vanishing from every band.
+                    items[it != discovered.end()
+                          ? std::distance( discovered.begin(), it )
+                          : discovered.size() - 1].push_back( k );
+                }
+
+                // Drop empty bands: a header with nothing under it is noise, and which
+                // categories are populated depends on the loaded mods.
+                std::vector<skill_displayType_id> kept_cats;
+                std::vector<std::vector<int>> kept_items;
+                for( std::size_t b = 0; b < discovered.size(); ++b ) {
+                    if( !items[b].empty() ) {
+                        kept_cats.push_back( discovered[b] );
+                        kept_items.push_back( std::move( items[b] ) );
+                    }
+                }
+                // Preserve collapse state across a re-sort by category, not by index: FILTER
+                // can remove a whole band and shift every later one.
+                std::vector<bool> kept_collapsed( kept_cats.size(), true );
+                std::vector<int> kept_page( kept_cats.size(), 0 );
+                for( std::size_t b = 0; b < kept_cats.size(); ++b ) {
+                    const auto old_it = std::ranges::find( band_cats, kept_cats[b] );
+                    if( old_it != band_cats.end() ) {
+                        kept_collapsed[b] = band_collapsed[std::distance( band_cats.begin(), old_it )];
+                    }
+                }
+                band_cats = std::move( kept_cats );
+                band_items = std::move( kept_items );
+                band_collapsed = std::move( kept_collapsed );
+                band_page = std::move( kept_page );
+            }
+
+            // Park the cursor on the band holding the active profession, and on ENTRY open
+            // that band — a profession is already selected, so opening it puts the cursor, the
+            // notch and the info panel on something real. Only on the first build: a later
+            // SORT or FILTER must not reopen a band the player deliberately closed.
+            focus_band = 0;
+            focus_header = true;
+            focus_card = 0;
+            for( std::size_t b = 0; b < band_items.size(); ++b ) {
+                const auto it = std::ranges::find( band_items[b], cur_id );
+                if( it != band_items[b].end() ) {
+                    focus_band = static_cast<int>( b );
+                    focus_card = static_cast<int>( std::distance( band_items[b].begin(), it ) );
+                    if( first_group_build ) {
+                        band_collapsed[b] = false;
+                        first_group_build = false;
+                    }
+                    focus_header = band_collapsed[b];
+                    band_page[b] = focus_card - focus_card % NC_PROF_PAGE;
+                    break;
+                }
+            }
+
             recalc_profs = false;
         }
 
         ui_manager::redraw();
         nc_nav = 0;
+        pending_band = -1;
+        pending_card_band = -1;
+        pending_card_slot = -1;
+        pending_page_band = -1;
+        pending_page_dir = 0;
         std::string action = ctxt.handle_input();
         if( nc_nav != 0 ) {
             action = nc_nav < 0 ? "PREV_TAB" : "NEXT_TAB";
         }
-        if( action == "DOWN" ) {
-            cur_id++;
-            if( cur_id > profs_length - 1 ) {
-                cur_id = 0;
+        // ── Tree navigation ───────────────────────────────────────────────────
+        //
+        // Vertical order is header, cards, next header … with a collapsed band's cards
+        // skipped, so the cursor can never land on a card that is not on screen. Horizontal
+        // movement walks the focused band's cards and advances the carousel page at either
+        // end, which is why paging needs no key of its own.
+        const auto band_size = [&]( int b ) {
+            return static_cast<int>( band_items[b].size() );
+        };
+        const auto nbands = [&]() {
+            return static_cast<int>( band_cats.size() );
+        };
+        // Keeps cur_id (and therefore the panel, the portrait and CONFIRM) on the focused card.
+        const auto sync_cur_from_focus = [&]() {
+            if( !focus_header && band_size( focus_band ) > 0 ) {
+                focus_card = std::clamp( focus_card, 0, band_size( focus_band ) - 1 );
+                cur_id = band_items[focus_band][focus_card];
+                desc_offset = 0;
+                if( focus_card < band_page[focus_band] ||
+                    focus_card >= band_page[focus_band] + NC_PROF_PAGE ) {
+                    band_page[focus_band] = focus_card - focus_card % NC_PROF_PAGE;
+                }
+                // The portrait wears the selected profession's kit, so it has to be redrawn
+                // the moment the cursor moves rather than on the next input.
+                if( use_character_preview ) {
+                    ui_manager::redraw();
+                }
             }
-            desc_offset = 0;
-            rml_scroll_pending = true;
-            // Update preview immediately when moving selection
-            if( use_character_preview ) {
-                ui_manager::redraw();
+        };
+        // Commit the focused profession. One definition, called by CONFIRM and by a card
+        // click, so "picking" cannot come to mean two different things on one screen — and so
+        // this tab behaves like the SCENARIO tab, where a card click also selects.
+        const auto pick_prof = [&]() {
+            if( !( cur_id >= 0 && static_cast<std::size_t>( cur_id ) < sorted_profs.size() ) ) {
+                return;
             }
-        } else if( action == "UP" ) {
-            cur_id--;
-            if( cur_id < 0 ) {
-                cur_id = profs_length - 1;
+            if( sorted_profs[cur_id] == u.prof ) {
+                return;   // already in force: toggling its locked traits off and on is not a no-op
             }
-            desc_offset = 0;
-            rml_scroll_pending = true;
-            if( use_character_preview ) {
-                ui_manager::redraw();
-            }
-        } else if( action == "LEFT" ) {
-            if( rml ) {
-                scroll_info( -1 );
-            } else if( desc_offset > 0 ) {
-                desc_offset--;
-            }
-        } else if( action == "RANDOMIZE" ) {
-            cur_id = rng( 0, profs_length - 1 );
-            rml_scroll_pending = true;
-        } else if( action == "RIGHT" ) {
-            if( rml ) {
-                scroll_info( +1 );
-            } else if( desc_offset < iheight ) {
-                desc_offset++;
-            }
-        } else if( action == "CONFIRM" ) {
             // Remove traits from the previous profession
             for( const trait_id &old_trait : u.prof->get_locked_traits() ) {
                 u.toggle_trait( old_trait );
@@ -2671,10 +3092,112 @@ tab_direction set_profession( avatar &u, points_left &points,
             const int netPointCost = sorted_profs[cur_id]->point_cost() - u.prof->point_cost();
             u.prof = sorted_profs[cur_id];
             u.set_base_age( random_age_for_profession( *u.prof ) );
-            // Add traits for the new profession (and perhaps scenario, if, for example,
-            // both the scenario and old profession require the same trait)
+            // Add traits for the new profession (and perhaps scenario, if, for example, both
+            // the scenario and old profession require the same trait)
             newcharacter::add_traits( u, points );
             points.skill_points -= netPointCost;
+        };
+        // Apply click intent recorded during handle_input, exactly once — however many times
+        // the callback ran. Cleared above so a stale intent cannot re-apply on a later frame.
+        if( pending_band >= 0 ) {
+            const int b = pending_band;
+            focus_band = b;
+            band_collapsed[b] = !band_collapsed[b];
+            // Opening steps onto the first visible card so the notch and panel have something
+            // to describe; closing returns the cursor to the header.
+            focus_header = band_collapsed[b] || band_size( b ) == 0;
+            if( !focus_header ) {
+                focus_card = band_page[b];
+                sync_cur_from_focus();
+            }
+        } else if( pending_page_band >= 0 ) {
+            const int b = pending_page_band;
+            const int next = band_page[b] + pending_page_dir * NC_PROF_PAGE;
+            if( next >= 0 && next < band_size( b ) ) {
+                band_page[b] = next;
+                focus_band = b;
+                focus_header = false;
+                focus_card = next;
+                sync_cur_from_focus();
+            }
+        } else if( pending_card_band >= 0 && pending_card_slot >= 0 ) {
+            const int b = pending_card_band;
+            const int idx = band_page[b] + pending_card_slot;
+            if( idx < band_size( b ) ) {
+                focus_band = b;
+                focus_header = false;
+                focus_card = idx;
+                sync_cur_from_focus();
+                pick_prof();
+            }
+        }
+        if( action == "DOWN" ) {
+            if( focus_header && !band_collapsed[focus_band] && band_size( focus_band ) > 0 ) {
+                focus_header = false;          // into this band's cards
+            } else {
+                focus_band = ( focus_band + 1 ) % nbands();
+                focus_header = true;
+                focus_card = 0;
+            }
+            sync_cur_from_focus();
+        } else if( action == "UP" ) {
+            if( !focus_header ) {
+                focus_header = true;           // back onto this band's header
+            } else {
+                focus_band = ( focus_band + nbands() - 1 ) % nbands();
+                // Land on the previous band's CARDS when it is open, so walking up is the
+                // exact inverse of walking down.
+                focus_header = band_collapsed[focus_band] || band_size( focus_band ) == 0;
+                focus_card = focus_header ? 0 : band_size( focus_band ) - 1;
+            }
+            sync_cur_from_focus();
+        } else if( action == "LEFT" ) {
+            if( !focus_header && focus_card > 0 ) {
+                focus_card--;
+                sync_cur_from_focus();
+            } else if( rml ) {
+                // On a header there is no row to walk, so LEFT/RIGHT keep their old job of
+                // scrolling the prose column.
+                scroll_info( -1 );
+            } else if( desc_offset > 0 ) {
+                desc_offset--;
+            }
+        } else if( action == "RIGHT" ) {
+            if( !focus_header && focus_card + 1 < band_size( focus_band ) ) {
+                focus_card++;
+                sync_cur_from_focus();
+            } else if( rml ) {
+                scroll_info( +1 );
+            } else if( desc_offset < iheight ) {
+                desc_offset++;
+            }
+        } else if( action == "RANDOMIZE" ) {
+            cur_id = rng( 0, profs_length - 1 );
+            // Follow the roll: it may land in a collapsed band, which then opens, because
+            // rolling a profession the player cannot see would look like nothing happened.
+            for( int b = 0; b < nbands(); ++b ) {
+                const auto it = std::ranges::find( band_items[b], cur_id );
+                if( it != band_items[b].end() ) {
+                    focus_band = b;
+                    focus_card = static_cast<int>( std::distance( band_items[b].begin(), it ) );
+                    band_collapsed[b] = false;
+                    focus_header = false;
+                    band_page[b] = focus_card - focus_card % NC_PROF_PAGE;
+                    break;
+                }
+            }
+            sync_cur_from_focus();
+        } else if( action == "CONFIRM" ) {
+            if( focus_header ) {
+                band_collapsed[focus_band] = !band_collapsed[focus_band];
+                if( !band_collapsed[focus_band] && band_size( focus_band ) > 0 ) {
+                    focus_header = false;
+                    focus_card = band_page[focus_band];
+                    sync_cur_from_focus();
+                }
+                continue;
+            }
+            pick_prof();
         } else if( action == "CHANGE_GENDER" ) {
             u.male = !u.male;
             profession_sorter.male = u.male;
@@ -3374,7 +3897,6 @@ tab_direction set_scenario( avatar &u, points_left &points,
     // tab_direction: it is translated into an action string so the existing
     // keyboard handling stays the single place navigation is decided.
     int nc_nav = 0;
-    bool rml_scroll_pending = false;
     const auto sync_rml = [&]() {
         if( !data->handle ) {
             return;
