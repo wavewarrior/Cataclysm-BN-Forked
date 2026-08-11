@@ -3293,10 +3293,13 @@ tab_direction set_scenario( avatar &u, points_left &points,
     constexpr int NC_BANDS = static_cast<int>( nc_scen_group::count );
     // Indices into sorted_scens, per group, in list order.
     std::array<std::vector<int>, NC_BANDS> band_items;
-    // All three start collapsed: the first decision is "what KIND of run", and three
-    // headers state that choice without 38 cards competing with it. The cursor starts on
-    // the first header, so CONFIRM opens rather than silently re-picking a scenario.
+    // Declared collapsed, but the group holding the already-selected scenario is opened on
+    // the first build (see recalc_scens) — the alternative was an entry screen of three
+    // headers over an empty stage. Every OTHER group stays shut so the first thing the
+    // screen says is still "what KIND of run".
     std::array<bool, NC_BANDS> band_collapsed = { true, true, true };
+    // Cleared once the entry group has been opened; see the parking loop in recalc_scens.
+    bool first_group_build = true;
     std::array<int, NC_BANDS> band_page = { 0, 0, 0 };
     // Cursor: which group, and whether it sits on that group's HEADER or on a card. The
     // header being a focus stop is what makes this a tree without needing a new
@@ -3729,6 +3732,15 @@ tab_direction set_scenario( avatar &u, points_left &points,
                 if( it != band_items[b].end() ) {
                     focus_band = b;
                     focus_card = static_cast<int>( std::distance( band_items[b].begin(), it ) );
+                    // On ENTRY, open that group. A scenario is already selected — it is a
+                    // child of this group — so opening it puts the cursor, the notch and the
+                    // info panel on something real instead of greeting the player with three
+                    // collapsed headers and an empty stage. Only on the first build: a later
+                    // SORT or FILTER must not reopen a group the player deliberately closed.
+                    if( first_group_build ) {
+                        band_collapsed[b] = false;
+                        first_group_build = false;
+                    }
                     focus_header = band_collapsed[b];
                     band_page[b] = focus_card - focus_card % NC_SCEN_PAGE;
                     break;

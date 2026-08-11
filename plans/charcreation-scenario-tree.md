@@ -118,6 +118,31 @@ carousel, inside the open category:
 - All bands start collapsed: the first decision is *what kind of run*. Opening a band steps
   the cursor onto its first card, so the notch and panel always have a scenario to describe.
 
+## Entry state and motion
+
+The stage is centred vertically and the group holding the already-selected scenario is opened
+on the first build, so the screen opens on a real choice instead of three collapsed headers
+over an empty stage. Only the first build does this — a later SORT or FILTER must not reopen a
+group the player deliberately closed.
+
+`justify-content: center` is safe on the main axis even when content overflows (all three
+groups open at a 720p-class window: ~633dp against ~558dp available). RmlUi guards its entire
+main-axis alignment block behind `remaining_free_space > 0`
+(`FlexFormattingContext.cpp:550`), so on overflow every offset stays 0 and items pack from the
+start — it degrades to flex-start rather than emitting a negative offset that would put the
+first header out of reach. `overflow-y` then makes the tall case scrollable. **Do not** "fix"
+this by switching to a row parent with `align-items: center`: the cross axis clamps, but that
+also makes the wrapper shrink-to-fit and the cards, rails and panel stop spanning the stage.
+
+Motion is transitions only, declared inside each element's own rule. No entry keyframes:
+`data-for` regenerates these elements whenever the array is dirtied (every redraw here), so an
+entry animation would restart continuously and read as a flicker. Durations sit at
+0.14–0.18s because this is a chooser the player scrubs through.
+
+Verified by measurement rather than by eye: with the card transition temporarily set to 1.5s,
+a frame captured mid-change put the gold cursor edge at **52% of a 21.4-luma swing** between
+its two endpoints — interpolating, not snapping.
+
 ## Flag vocabulary is one table
 
 `nc_scen_flag_icons()` carries `{flag, seed, colour, label, desc}` and feeds all three
@@ -182,9 +207,5 @@ creation once does not pin the surface for the rest of the session.
   keyboard input does not reach this SDL build, and all three are keyboard-only. They share
   `recalc_scens` and `sync_cur_from_focus` with the mouse paths that were verified.
 - The 13 runic sigils are still procedural placeholders awaiting real art.
-- **The all-collapsed entry state leaves most of the panel empty.** Captured and confirmed:
-  three headers at the top, legend at the bottom, void between. That is the direct
-  consequence of "collapse the categories by default" and is left as the user specified;
-  the obvious fix (centre the cluster while everything is collapsed) trades the void for a
-  layout jump the moment a band opens, so it is a design call rather than a defect to
-  quietly patch.
+- Keyboard tree navigation shares `sync_cur_from_focus` with the verified mouse paths but is
+  itself unverified for the reason above.

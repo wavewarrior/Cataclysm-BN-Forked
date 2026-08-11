@@ -68,11 +68,23 @@ body {
 .nc-scen-tree {
     /* Full stage width. The right-hand info pane used to take half of it to display text
        that now lives in a fixed panel under the open category, which is both closer to
-       what it describes and cheaper in space. */
+       what it describes and cheaper in space.
+
+       Centred vertically: with one group open the content is far shorter than the stage, and
+       top-aligning left a large void beneath it.
+
+       `justify-content: center` is safe on the MAIN axis even when the content is taller than
+       the stage (all three groups open at a 720p-class window — measured at ~609dp against
+       ~558dp available). RmlUi guards its whole main-axis alignment block behind
+       `remaining_free_space > 0` (FlexFormattingContext.cpp:550), so on overflow every offset
+       stays 0 and the items pack from the start — it degrades to flex-start rather than
+       emitting a negative offset that would put the first header out of reach. overflow-y
+       then makes the tall case scrollable. */
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
+    justify-content: center;
     overflow-y: auto;
 }
 
@@ -98,6 +110,7 @@ body {
     padding: 8dp 10dp;
     border-bottom: 1dp {{bg4}};
     color: {{fg4}};
+    transition: background-color 0.16s quadratic-in-out, color 0.14s quadratic-in-out;
 }
 
 .nc-band-head:hover {
@@ -146,6 +159,7 @@ body {
     text-align: center;
     font-size: 20dp;
     color: {{bg3}};
+    transition: color 0.16s quadratic-in-out;
 }
 
 .nc-band-pager.on {
@@ -175,6 +189,9 @@ body {
     /* Reserved on EVERY card so selecting one does not resize the row. */
     border-left-width: 3dp;
     border-left-color: transparent;
+    transition: background-color 0.15s quadratic-in-out,
+                border-left-color 0.15s quadratic-in-out,
+                border-color 0.15s quadratic-in-out;
 }
 
 .nc-scen-card:hover {
@@ -246,6 +263,10 @@ body {
 .nc-scen-sort {
     display: block;
     flex: 0 0 auto;
+    /* Guaranteed gap: the cost line beside it is `flex: 1`, so a long scenario name
+       ("Challenge - Really Bad Day earns 0 points") grows until it butts straight into this
+       hint and the two read as one welded string. */
+    margin-left: 20dp;
     color: {{gray}};
 }
 
@@ -305,6 +326,9 @@ body {
     width: 16dp;
     height: 7dp;
     background-color: transparent;
+    /* The notch does not move — one cell per card lights up and the rest go transparent —
+       so fading the colour is what makes the cursor appear to glide along the row. */
+    transition: background-color 0.18s quadratic-in-out;
 }
 
 .nc-info-cell.on .nc-info-notch {
@@ -315,10 +339,11 @@ body {
    scenario would shove the categories below it down the screen. */
 .nc-info-panel {
     flex: 0 0 auto;
-    /* Sized to the art tile plus its padding. The facts column fits in the same height
-       now that labels/values replaced the header-and-blank-line layout, so the panel is
-       shorter than the 260dp the old text blob needed. */
-    height: 164dp;
+    /* Room for the three fields plus TWO rows of chips. 164dp fitted only one row, and a
+       scenario carrying four vocabulary flags (Really Bad Day: FIRE_START, INFECTED,
+       BAD_DAY, CITY_START) silently lost its fourth chip off the bottom of the facts
+       column — the card still showed the sigil, so the panel disagreed with it. */
+    height: 188dp;
     display: flex;
     flex-direction: row;
     padding: 8dp 10dp;
@@ -393,6 +418,7 @@ body {
     align-items: center;
     margin-right: 10dp;
     margin-bottom: 4dp;
+    transition: color 0.15s quadratic-in-out;
 }
 
 .nc-chip-icon {
@@ -441,6 +467,7 @@ body {
     align-items: center;
     margin-right: 10dp;
     margin-bottom: 3dp;
+    transition: color 0.15s quadratic-in-out;
 }
 
 .nc-legend-icon {
@@ -460,3 +487,16 @@ body {
     display: block;
     flex: 0 0 auto;
 }
+
+/* ── MOTION ────────────────────────────────────────────────────────────────────
+   Transitions live INSIDE each element's own rule above, not in a block down here: a second
+   rule for the same selector is how a property quietly ends up split across two places and
+   one of them loses. See the individual rules for `transition` declarations.
+
+   State changes only — no entry animations. `data-for` regenerates these elements whenever
+   the array is dirtied (every redraw on this screen), so an entry keyframe would restart
+   continuously and read as a flicker. A transition is safe because it animates a VALUE
+   change on an element that survives.
+
+   Durations are deliberately short: this is a chooser the player scrubs through with the
+   arrow keys, and anything slower than ~0.15s turns a cursor move into a wait. */
