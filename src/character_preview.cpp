@@ -26,13 +26,6 @@
 #include "lighting/rmlui_layer.h"
 
 
-bool &character_preview_rmlui_enabled()
-{
-    // Default OFF — opt in via the F4 panel. See rml_screen.h.
-    static bool enabled = true;
-    return enabled;
-}
-
 auto termx_to_pixel_value() -> int
 {
     return projected_window_width() / TERMX / get_scaling_factor();
@@ -362,13 +355,11 @@ void character_preview_window::display() const
     // floating document tracking a screen rect is redundant — and it was drawing its
     // border around the new box, coincidentally aligned.
     //
-    // The curses path still draws its own frame: that is the non-RmlUi A/B fallback and
-    // has no document to put a portrait in.
-    // Gated on the CREATOR's mode, not on character_preview_rmlui_enabled(): that flag
-    // defaults OFF and only ever governed the old chrome document, so testing it here
-    // drew this border on top of the new in-document portrait box. When the creator is
-    // an RmlUi document, .nc-portrait is the box; when it is curses, there is no
-    // document to hold a portrait and this frame is still wanted.
+    // Gated on the CREATOR's mode. The old `character_preview_rmlui_enabled()` toggle is
+    // gone: it governed nothing once the chrome document went away, and its own comment
+    // claimed "Default OFF" while the code read `= true`, so it in fact defaulted ON.
+    // When the creator is an RmlUi document, .nc-portrait is the box; when it is curses,
+    // there is no document to hold a portrait and this frame is still wanted.
     if( !newcharacter_rmlui_enabled() ) {
     werase( w_preview );
         draw_border( w_preview, BORDER_COLOR, _( "CHARACTER PREVIEW" ), BORDER_COLOR );

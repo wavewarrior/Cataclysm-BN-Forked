@@ -313,14 +313,6 @@ bool &panel_adm_rmlui_enabled();
 // rml_doc harness). Default OFF.
 bool &live_view_rmlui_enabled();
 
-// character_preview RmlUi render path (the new-character / preview portrait frame).
-// The character itself is a GPU sprite; only the surrounding box + "CHARACTER
-// PREVIEW" title were curses (draw_border). NON-modal passive backdrop with a
-// TRANSPARENT centre (so the sprite shows through), positioned at the preview rect
-// each redraw. rmlui_layer doc lifecycle (like live_view), not the modal rml_doc.
-// Default OFF.
-bool &character_preview_rmlui_enabled();
-
 // game::look_around RmlUi render path (the examine/look-around info pane: §8.1
 // track-A creature-info). Render-only doc fed by print_all_tile_info_text() (the
 // parallel tile-readout producer; creature section reuses Creature::print_info_text()):

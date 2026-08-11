@@ -267,6 +267,7 @@ void render_state::shutdown() noexcept {
 
     // Release the compositor textures + tonemap pass while the device is live.
     ui_target_.reset();
+    avatar_target_.reset();
     world_target_.reset();
     shadow_mask_.reset();
     world_ldr_target_.reset();
