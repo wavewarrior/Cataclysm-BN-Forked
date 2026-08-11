@@ -127,6 +127,8 @@ static auto draw_lighting_overlays( lighting::render_state &rs,
                                     lighting::frame_context &ctx ) -> void;
 static auto composite_ui_pass_a( lighting::render_state &rs, lighting::frame_context &ctx,
                                  int proj_w, int proj_h ) -> void;
+static auto composite_avatar_pass( lighting::render_state &rs,
+                                   lighting::frame_context &ctx ) -> void;
 static auto render_world_pass_w( lighting::render_state &rs, lighting::frame_context &ctx,
                                  int proj_w, int proj_h ) -> void;
 static auto tonemap_pass_t( lighting::render_state &rs, lighting::frame_context &ctx ) -> void;
@@ -905,6 +907,31 @@ auto composite_ui_pass_a( lighting::render_state &rs,
     }
 }
 
+// Composites the character-creator portrait into its own texture, which RmlUi then
+// samples as a decorator (see render_state::set_avatar_route).
+//
+// A separate pass rather than a region of the UI target: the UI target is blitted
+// BEFORE RmlUi, so anything in it sits under every panel. Its own texture makes the
+// portrait ordinary document content, which is what lets the creator's panels fill the
+// screen instead of leaving the sprite an uncovered strip.
+//
+// Projection is the target's own extent, NOT the screen's: the portrait is drawn at
+// tile coordinates into a 512x512 texture and the element decides its final size.
+auto composite_avatar_pass( lighting::render_state &rs, lighting::frame_context &ctx ) -> void
+{
+    constexpr float clear_transparent[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    lighting::ui_composite_target *at = rs.avatar_target();
+    if( !at || !at->texture() || rs.avatar_sprites_empty() ) {
+        return;
+    }
+    rs.tile_batcher().begin_pass( ctx.cmd_buffer, at->texture(),
+                                  at->width(), at->height(),
+                                  clear_transparent,
+                                  at->width(), at->height() );
+    rs.flush_avatar_sprites( rs.tile_batcher(), rs.gpu_sampler() );
+    rs.tile_batcher().end_pass();
+}
+
 auto render_world_pass_w( lighting::render_state &rs,
                           lighting::frame_context &ctx, int proj_w, int proj_h ) -> void
 {
@@ -1609,6 +1636,8 @@ void refresh_display()
     lap( 5 );
     dbg( DL::Debug ) << "[render] composite_ui_pass_a";
     composite_ui_pass_a( rs, *ctx, proj_w, proj_h );
+    dbg( DL::Debug ) << "[render] composite_avatar_pass";
+    composite_avatar_pass( rs, *ctx );
     lap( 6 );
     dbg( DL::Debug ) << "[render] render_world_pass_w";
     render_world_pass_w( rs, *ctx, proj_w, proj_h );

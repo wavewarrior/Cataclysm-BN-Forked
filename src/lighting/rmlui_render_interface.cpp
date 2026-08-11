@@ -19,6 +19,7 @@
 #include <optional>
 #include <functional>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 // Lighting/ files must define dbg themselves (not globally available).
@@ -137,6 +138,17 @@ struct rmlui_render_interface::impl {
 
     std::unordered_map<std::uint64_t, SDL_GPUTexture*> textures;
     std::uint64_t next_tex = 1;
+
+    // Borrowed textures: handles whose SDL_GPUTexture is owned elsewhere (currently
+    // render_state's character-portrait target). ReleaseTexture drops the mapping but
+    // must NOT free the texture — see ReleaseTexture.
+    std::unordered_set<std::uint64_t> borrowed;
+    // Resolves the borrowed texture on demand. A callback rather than a stored pointer
+    // because the target can be reallocated (window resize) and a cached pointer would
+    // dangle; the "?avatar:<generation>" source busts RmlUi's cache so this is re-run.
+    std::function<SDL_GPUTexture*()> borrowed_lookup;
+    int borrowed_w = 0;
+    int borrowed_h = 0;
 
     // Deferred frees (run KEEP_FRAMES after the freeing frame).
     std::uint64_t frame = 0;
@@ -632,6 +644,13 @@ std::uint32_t rmlui_render_interface::textures_in_pass() const noexcept {
     return p->textures_in_pass;
 }
 
+void rmlui_render_interface::set_borrowed_texture_source(
+    std::function<SDL_GPUTexture*()> resolver, int width, int height) {
+    p->borrowed_lookup = std::move(resolver);
+    p->borrowed_w = width;
+    p->borrowed_h = height;
+}
+
 Rml::CompiledGeometryHandle rmlui_render_interface::CompileGeometry(
     Rml::Span<const Rml::Vertex> vertices, Rml::Span<const int> indices) {
     if (p->rp != nullptr) {
@@ -892,6 +911,27 @@ Rml::TextureHandle rmlui_render_interface::LoadTexture(
                       << " handle=" << ph;
         return static_cast<Rml::TextureHandle>(ph);
     }
+    // Borrowed textures: "?avatar:<generation>" hands back a texture the RENDERER owns
+    // (render_state's portrait target) rather than one this interface allocated. Two
+    // consequences, both load-bearing:
+    //   * it must be recorded in `borrowed` so ReleaseTexture does NOT free it — RmlUi
+    //     drops textures whenever a document reloads, which would destroy a target
+    //     render_state is still drawing into;
+    //   * the <generation> suffix exists only to bust RmlUi's own source-string cache,
+    //     so a reallocated target is re-resolved instead of leaving the document
+    //     sampling a dead texture.
+    if (proc.rfind("?avatar:", 0) == 0) {
+        SDL_GPUTexture* borrowed_tex = p->borrowed_lookup ? p->borrowed_lookup() : nullptr;
+        if (!borrowed_tex) { return 0; }
+        if (p->rp != nullptr) { p->textures_in_pass++; }
+        texture_dimensions = Rml::Vector2i(p->borrowed_w, p->borrowed_h);
+        const std::uint64_t bh = p->next_tex++;
+        p->textures.emplace(bh, borrowed_tex);
+        p->borrowed.insert(bh);
+        dbg(DL::Info) << "rmlui_borrowed: bound \"" << source << "\" "
+                      << p->borrowed_w << "x" << p->borrowed_h << " handle=" << bh;
+        return static_cast<Rml::TextureHandle>(bh);
+    }
     Rml::String path = source;
     int svg_px = 0;
     const std::size_t query_pos = path.rfind("?px=");
@@ -964,8 +1004,16 @@ Rml::TextureHandle rmlui_render_interface::GenerateTexture(
 }
 
 void rmlui_render_interface::ReleaseTexture(Rml::TextureHandle texture) {
-    auto it = p->textures.find(static_cast<std::uint64_t>(texture));
+    const std::uint64_t h = static_cast<std::uint64_t>(texture);
+    auto it = p->textures.find(h);
     if (it == p->textures.end()) { return; }
+    // Borrowed textures belong to render_state, not to us. RmlUi releases textures
+    // whenever a document reloads, so freeing one here would destroy a live render
+    // target mid-frame. Drop the mapping only.
+    if (p->borrowed.erase(h) != 0) {
+        p->textures.erase(it);
+        return;
+    }
     SDL_GPUDevice* raw = p->raw;
     SDL_GPUTexture* tex = it->second;
     p->deferred.emplace_back(p->frame, [raw, tex]() { SDL_ReleaseGPUTexture(raw, tex); });

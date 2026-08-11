@@ -61,6 +61,7 @@
 #include "rml_util.h"
 #include "rng.h"
 #include "scenario.h"
+#include "lighting/render_state.h"
 #include "sdltiles.h"
 #include "skill.h"
 #include "start_location.h"
@@ -349,39 +350,22 @@ auto nc_make_balance( int num_good, int num_bad, int maxp, bool freeform ) -> nc
     return b;
 }
 
-/// Width of `.nc-panel` in the creator stylesheets, as a fraction. Must match the
-/// `width:` in data/gui/newchar*.rcss — the preview's whole reason for being visible
-/// is that it sits outside this panel.
-constexpr int nc_panel_pct = 72;
-
-/// Rightmost column the centred creator panel paints, for a given terminal width.
-/// A centred panel of width W has its right edge at (100 + W) / 2.
-constexpr auto nc_panel_right_col( int termx ) -> int
-{
-    return ( 100 + nc_panel_pct ) * termx / 200;
-}
-
-/// Shared preview-box geometry for every creator tab that shows one.
+/// Prepares the character portrait for every creator step that shows one.
 ///
-/// Each tab used to compute its own ncols/nlines, so the box landed somewhere
-/// different on each — and because the avatar is a GPU sprite drawn UNDERNEATH the
-/// RmlUi document, any opaque panel overlapping the box hides it. TRAITS and BIONICS
-/// only worked by luck (their 80% panel's right edge cleared the box by 0.2% of the
-/// screen); OVERVIEW's 92% panel covered it entirely and PROFESSION's wider box
-/// reached back under its panel.
+/// Only zoom and tile sizing remain here. Everything that used to make this function
+/// interesting is gone, because the portrait no longer competes with the panel for
+/// screen space:
 ///
-/// One geometry for all four, pinned hard right so the box sits in the strip the
-/// panel leaves clear.
+/// The avatar used to be a GPU sprite drawn into the shared UI composite, which the
+/// frame blits BEFORE RmlUi — so any opaque panel over its rect hid it. Keeping it
+/// visible meant pinning the box hard right and holding every panel narrow enough to
+/// leave an uncovered strip (72%, with a hide threshold derived from the panel's right
+/// edge so a larger tileset could not silently slide the box back under the panel).
 ///
-/// The hide threshold is DERIVED, not a constant. The box is a fixed number of
-/// *cells* wide (character_preview_window::prepare sizes it from the tile pixel size,
-/// not from the requested ncols), while the panel is a *percentage* — so as the
-/// terminal narrows the box occupies a larger fraction and eventually slides back
-/// under the panel. A hard-coded threshold only holds for one box size: at the
-/// measured 20 cells a constant 150 is safe at every terminal size, but from 24 cells
-/// up (a larger tileset, or a smaller font making a tile span more cells) it silently
-/// lets the panel cover the preview again. Comparing against the panel edge instead
-/// keeps the invariant true for any tileset and font.
+/// It is now drawn into its own render target and reaches the document as a decorator
+/// (`?avatar:<gen>` — see render_state::set_avatar_route), so the DOCUMENT places it and
+/// the panels are free to fill the screen. `hide_below_ncols` is 0: there is no longer
+/// an occlusion to dodge, and the stylesheet decides whether the portrait has room.
 void nc_prepare_preview( character_preview_window &pv )
 {
     const int ncols = std::max( 10, TERMX * 13 / 100 );
@@ -390,10 +374,7 @@ void nc_prepare_preview( character_preview_window &pv )
         character_preview_window::TOP_RIGHT,
         character_preview_window::Margin{ 0, 1, 4, 0 }
     };
-    // prepare() hides the preview when TERMX - box_ncols < hide_below, so passing the
-    // panel's right edge (plus a column of slack) drops it exactly when it would start
-    // to collide, rather than at an unrelated fixed width.
-    pv.prepare( nlines, ncols, &orient, nc_panel_right_col( TERMX ) + 3 );
+    pv.prepare( nlines, ncols, &orient, 0 );
 }
 
 int skill_increment_cost( const Character &u, const skill_id &skill );
@@ -432,6 +413,11 @@ struct nc_shell {
     Rml::String next_key_rml;
     Rml::String next_name_rml;
     Rml::String exit_rml;
+    // Character portrait, on the four steps that show one. The avatar is drawn into
+    // render_state's own target and reaches the document as a decorator, so it is
+    // ordinary content the layout places — see set_nc_portrait.
+    bool has_portrait = false;
+    Rml::String portrait_dec;
 };
 
 struct nc_rml_tab {
@@ -553,6 +539,29 @@ auto fill_nc_shell( int active, const input_context &ctxt ) -> nc_shell
     return s;
 }
 
+/// Points the portrait element at render_state's avatar texture.
+///
+/// The generation is embedded in the source purely to bust RmlUi's source-keyed texture
+/// cache: if the target were ever reallocated, a stable string would leave the document
+/// sampling a destroyed texture. `contain` keeps the sprite's aspect inside whatever box
+/// the stylesheet gives it.
+void set_nc_portrait( nc_shell &s, bool shown )
+{
+    s.has_portrait = shown;
+    if( !shown ) {
+        s.portrait_dec.clear();
+        return;
+    }
+    // `scale-none`, not `contain`: the target is AVATAR_TARGET_PX square but the sprite
+    // only occupies a tile's worth in the middle, so `contain` scaled the whole texture
+    // (mostly empty margin) down to the box and rendered the avatar about a quarter size.
+    // scale-none draws at native resolution and centres, cropping the empty margin — and
+    // it keeps the sprite pixel-exact, which is the point of sampling the target directly
+    // instead of resampling it.
+    s.portrait_dec = string_format( "image( ?avatar:%u none scale-none center center )",
+                                    lighting::get_render_state().avatar_texture_generation() );
+}
+
 /// Binds the shell's scalars. Mirrors the field names the shared markup expects.
 void bind_nc_shell( Rml::DataModelConstructor &c, nc_shell &s )
 {
@@ -563,6 +572,8 @@ void bind_nc_shell( Rml::DataModelConstructor &c, nc_shell &s )
     c.Bind( "next_key_rml", &s.next_key_rml );
     c.Bind( "next_name_rml", &s.next_name_rml );
     c.Bind( "exit_rml", &s.exit_rml );
+    c.Bind( "has_portrait", &s.has_portrait );
+    c.Bind( "portrait_dec", &s.portrait_dec );
 }
 
 /// Marks the shell's variables dirty. Called from each step's sync_rml.
@@ -575,6 +586,8 @@ void dirty_nc_shell( Rml::DataModelHandle &h )
     h.DirtyVariable( "next_key_rml" );
     h.DirtyVariable( "next_name_rml" );
     h.DirtyVariable( "exit_rml" );
+    h.DirtyVariable( "has_portrait" );
+    h.DirtyVariable( "portrait_dec" );
 }
 } // namespace
 
@@ -1315,6 +1328,7 @@ tab_direction set_traits( avatar &u, points_left &points )
         }
         data->tabs = build_nc_char_tabs<nc_traits_tab>( 4 );  // TRAITS tab active
         data->shell = fill_nc_shell( 4, ctxt );
+        set_nc_portrait( data->shell, use_character_preview );
         data->points_rml = cata_text_to_rml( nc_points_line( points ) );
         data->balance = nc_make_balance( num_good, num_bad, max_trait_points,
                                          points.is_freeform() );
@@ -1825,6 +1839,7 @@ tab_direction set_bionics( avatar &u, points_left &points )
         }
         data->tabs = build_nc_char_tabs<nc_bionics_tab>( 5 );  // BIONICS tab active
         data->shell = fill_nc_shell( 5, ctxt );
+        set_nc_portrait( data->shell, use_character_preview );
         data->points_rml = cata_text_to_rml( nc_points_line( points ) );
         data->balance = nc_make_balance( num_good, num_bad, max_trait_points,
                                          points.is_freeform() );
@@ -2298,6 +2313,7 @@ tab_direction set_profession( avatar &u, points_left &points,
         }
         data->tabs = build_nc_char_tabs<nc_prof_tab>( 2 );  // PROFESSION tab active
         data->shell = fill_nc_shell( 2, ctxt );
+        set_nc_portrait( data->shell, use_character_preview );
         const bool valid = cur_id >= 0 && static_cast<size_t>( cur_id ) < sorted_profs.size();
 
         std::string pmsg = nc_points_line( points );
@@ -3691,6 +3707,7 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
         }
         data->tabs = build_nc_char_tabs<nc_desc_tab>( 7 );  // OVERVIEW tab active
         data->shell = fill_nc_shell( 7, ctxt );
+        set_nc_portrait( data->shell, use_character_preview );
         data->points_rml = cata_text_to_rml( nc_points_line( points ) );
 
         // Name (selector-highlighted). value mirrors the curses three-way state.

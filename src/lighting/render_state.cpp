@@ -159,6 +159,14 @@ void render_state::init(SDL_Window* host_window) {
         }
         ui_target_ = std::make_unique<ui_composite_target>();
         ui_target_->init(device_, pw, ph);
+        // Character-creator portrait target. A FIXED square, not the swapchain size:
+        // it is sampled as an RmlUi decorator whose element decides the on-screen size,
+        // so it only needs enough resolution for a zoomed avatar. Being size-independent
+        // also means a window resize does not reallocate it, so the decorator source
+        // (which embeds avatar_texture_generation()) stays stable across resizes.
+        avatar_target_ = std::make_unique<ui_composite_target>();
+        avatar_target_->init(device_, AVATAR_TARGET_PX, AVATAR_TARGET_PX);
+        ++avatar_generation_;
         // Intermediate UI composite target for post-processing (Phase 9).
         // World accumulation layer. HDR (RGBA16F) so the lit result keeps
         // values >1 for the tonemap pass instead of clipping at the 8-bit
@@ -860,6 +868,14 @@ void render_state::queue_tile_sprite(SDL_GPUTexture* atlas_tex, const sprite_ins
                     << " edges4=" << s_face_edges[4];
         }
     }
+    if (avatar_route_) {
+        // Character-creator portrait: its own queue, flushed into avatar_target_ by
+        // composite_avatar_pass. Checked BEFORE unlit_overlay_route_ so the portrait
+        // never lands in the shared UI slice — that is exactly what buried it under
+        // every RmlUi panel and forced the creator's panels to stay narrow.
+        avatar_sprite_queue_.push_back({atlas_tex, inst});
+        return;
+    }
     if (unlit_overlay_route_) {
         // GPU minimap overlay: redirect this atlas sprite into the UNLIT
         // font-glyph path (current adaptor slice) so world lighting never
@@ -941,6 +957,25 @@ void render_state::flush_tile_sprites(
         }
         dst.draw(s.inst);
     }
+}
+
+void render_state::flush_avatar_sprites(sprite_batcher& dst, SDL_GPUSampler* sampler) {
+    if (avatar_sprite_queue_.empty()) { return; }
+    // Drains AND clears, unlike flush_tile_sprites: the composited queues are reset by
+    // ui_manager's redraw cycle, but the portrait is re-queued by whichever creator step
+    // is showing it. Without the clear a step with no preview would keep compositing the
+    // last step's avatar.
+    if (sampler) {
+        SDL_GPUTexture* bound = nullptr;
+        for (const tile_sprite_draw& s : avatar_sprite_queue_) {
+            if (s.texture != bound) {
+                dst.set_texture(s.texture, sampler);
+                bound = s.texture;
+            }
+            dst.draw(s.inst);
+        }
+    }
+    avatar_sprite_queue_.clear();
 }
 
 void render_state::set_splat_frame(std::size_t cut, std::vector<splat_quad> quads,

@@ -96,11 +96,68 @@ delivers the flow first, as asked, without a window where 4 tabs render a black 
   `nc_panel_right_col`) — that whole mechanism exists only to dodge occlusion and
   becomes dead once the preview composites on top.
 
+## Landed
+
+All three phases are in. Commits: `70f9a47dca` (shell + cards), plus the preview-texture
+work.
+
+### Discoveries worth keeping
+
+- **Clicks need `SELECT`, not `ANY_INPUT`.** `MOUSE_LEFT` binds to action id `SELECT`
+  (`keybindings.json:1175`). An unregistered mouse action resolves to `CATA_ERROR`, and
+  `input.cpp:894-897` `continue`s on that **before** the `registered_any_input` check at
+  `:912` — so `ANY_INPUT` cannot rescue a mouse event; only registering the action it
+  maps to can. Without it the click callback fires but `handle_input()` never returns,
+  leaving the loop parked until an unrelated keypress, which then gets hijacked into a
+  step change. All eight loops now register `SELECT`, and `nc_nav` is cleared BEFORE
+  polling since the callback fires during `handle_input`.
+  - Corollary, unfixed and outside this change: **`main_menu.cpp` registers `ANY_INPUT`
+    but not `SELECT`, so the main menu's own `data-event-click` handlers are very likely
+    dead.** Consistent with the "mouse navigation unverified" note in
+    `plans/charcreation-visual-overhaul.md`.
+- **`{{fg2}}` / `{{fg3}}` do not exist.** `theme.json` defines only `fg`, `fg0`, `fg4`,
+  and `ui_theme::substitute_tokens` turns an unknown token into `#ff00ffff`. So
+  `list_vehicles.rcss:85`, `gamemode_defense.rcss:50` and `veh_interact.rcss:119,125`
+  render **magenta** text today. One-token fixes each, unrelated to this work.
+- **`calc_character_pos()` is screen-space.** It returns `pos.x * termx_pixels + …`
+  (~1640 px here). Feeding it to the avatar pass, which projects at `AVATAR_TARGET_PX`,
+  puts every sprite outside the target and renders a blank portrait. The sprite is
+  centred in the target instead.
+- **`scale-none`, not `contain`, for the portrait decorator.** The target is 512 square
+  but the sprite occupies only a tile's worth in the middle, so `contain` scaled mostly
+  empty margin down to the box and drew the avatar about quarter size. `scale-none`
+  centres at native resolution and crops the margin — which also keeps the sprite
+  pixel-exact, the whole reason for sampling the target rather than resampling it.
+- **`character_preview_rmlui_enabled()` defaults OFF.** It only ever gated the old
+  floating chrome document, so testing it to decide whether to draw the curses border
+  drew that border on top of the new in-document portrait box. The condition is the
+  CREATOR's mode (`newcharacter_rmlui_enabled()`).
+- **The old chrome document is deleted**, not left dormant: `data/gui/character_preview.{rml,rcss}`
+  plus `cp_rml_open/close/position` and their data model. It existed to frame a sprite
+  that no longer draws there.
+- `position: absolute` on `.nc-portrait` resolves against `.nc-panel`, not `.nc-stage` —
+  the same behaviour that broke the balance scale earlier. Here that IS the wanted
+  placement (panel top-right), so it is relied on deliberately and documented as such.
+
 ## Acceptance
 
-- All 8 tabs at 98% with the preview visible on the 4 that own one.
-- Cards clickable; arrows clickable and key-driven; bottom bar exits to main menu.
-- Shortcut labels reflect actual bindings.
-- Existing `[newchar]` tests still pass; `nc_scale` geometry untouched.
-- Verified by capture per tab, at the default size and at 170x48 (1366x768-class), per
-  the range in `plans/charcreation-visual-overhaul.md`.
+- [x] All 8 steps at 98%; portrait visible on the 4 that own one (verified on TRAITS,
+      OVERVIEW and PROFESSION — PROFESSION previously showed an oversized clipped smear
+      and is now clean).
+- [x] Cards clickable and arrows clickable — verified with REAL mouse events, not
+      screenshots: clicking the arrow advanced POINTS→SCENARIO and updated both arrows;
+      clicking the Freeform card took cursor+chosen and switched the budget line.
+- [x] Shortcut labels come from actual bindings (`[TAB]`, `[BACKTAB]`, `[ESC]`), capped
+      to one key via `get_desc(action, 1)` — QUIT otherwise prints "ESC, q, Q or SPACE".
+- [x] `[newchar],[traits]`: 565 assertions, 142 cases, exit 0. `nc_scale` untouched.
+- [x] Build clean; no new warnings in touched files.
+
+### Not yet verified
+
+- STATS, SKILLS, SCENARIO, BIONICS were not re-captured after the 98% change (POINTS,
+  TRAITS, PROFESSION, OVERVIEW were).
+- Not re-checked at 170x48 (1366x768-class) since the shell landed. The portrait box is
+  a fixed 208dp inside a 98% panel, so it no longer depends on the panel-vs-box
+  clearance the old geometry sweep was about — but the claim is untested at that size.
+- Portrait zoom (`zoom_in`/`zoom_out`) past the target's 512 square will clip rather
+  than scale, since the decorator is `scale-none`. Untested.

@@ -22,80 +22,9 @@
 #include "avatar.h"
 #include "overlay_ordering.h"
 #include "effect.h"
+#include "lighting/render_state.h"
 #include "lighting/rmlui_layer.h"
 
-namespace
-{
-// ── RmlUi render path (P5) ───────────────────────────────────────────────────
-// Non-modal, passive backdrop replacing the curses draw_border frame: a bordered
-// box with a transparent centre (so the GPU character sprite shows through) and a
-// "CHARACTER PREVIEW" title strip, positioned at the preview rect each redraw.
-// Uses the rmlui_layer doc lifecycle directly (like live_view), not rml_doc.
-struct cp_rml_model {
-    Rml::String title_rml;
-    Rml::DataModelHandle handle;
-};
-std::unique_ptr<cp_rml_model> g_cp_data;
-Rml::ElementDocument *g_cp_doc = nullptr;
-
-void cp_rml_open()
-{
-    if( g_cp_doc != nullptr ) {
-        return;  // already open (idempotent)
-    }
-    if( !character_preview_rmlui_enabled() || !rmlui_layer::ready() ) {
-        return;
-    }
-    Rml::Context *ctx = rmlui_layer::context();
-    if( ctx == nullptr ) {
-        return;
-    }
-    Rml::DataModelConstructor c = ctx->CreateDataModel( "character_preview" );
-    if( !c ) {
-        return;
-    }
-    g_cp_data = std::make_unique<cp_rml_model>();
-    c.Bind( "title_rml", &g_cp_data->title_rml );
-    g_cp_data->title_rml = cata_text_to_rml( colorize( _( "CHARACTER PREVIEW" ), BORDER_COLOR ) );
-    g_cp_data->handle = c.GetModelHandle();
-    Rml::ElementDocument *doc =
-        rmlui_layer::open_document( PATH_INFO::datadir() + "gui/character_preview.rml", true );
-    if( doc == nullptr ) {
-        ctx->RemoveDataModel( "character_preview" );
-        g_cp_data.reset();
-        return;
-    }
-    g_cp_doc = doc;
-}
-
-void cp_rml_close()
-{
-    if( g_cp_doc == nullptr ) {
-        return;
-    }
-    rmlui_layer::close_document( g_cp_doc );
-    if( Rml::Context *ctx = rmlui_layer::context() ) {
-        ctx->RemoveDataModel( "character_preview" );
-    }
-    g_cp_doc = nullptr;
-    g_cp_data.reset();
-}
-
-void cp_rml_position( const point &p, const int ncols_width, const int nlines_width )
-{
-    if( g_cp_doc == nullptr || TERMX <= 0 || TERMY <= 0 ) {
-        return;
-    }
-    Rml::Element *el = g_cp_doc->GetElementById( "cp-box" );
-    if( el == nullptr ) {
-        return;
-    }
-    el->SetProperty( "left", rml::pct( 100.0f * p.x / TERMX ) );
-    el->SetProperty( "top", rml::pct( 100.0f * p.y / TERMY ) );
-    el->SetProperty( "width", rml::pct( 100.0f * ncols_width / TERMX ) );
-    el->SetProperty( "height", rml::pct( 100.0f * nlines_width / TERMY ) );
-}
-} // namespace
 
 bool &character_preview_rmlui_enabled()
 {
@@ -426,39 +355,50 @@ void character_preview_window::toggle_clothes()
 
 void character_preview_window::display() const
 {
-    const bool too_small = TERMX - ncols_width < hide_below_ncols;
-
-    // RmlUi backdrop owns the frame chrome when enabled+ready; otherwise the
-    // curses draw_border is the A/B fallback. The character itself is always the
-    // GPU sprite below.
-    cp_rml_open();
-    if( g_cp_doc != nullptr ) {
-        g_cp_doc->SetProperty( "visibility", too_small ? "hidden" : "visible" );
-    }
-
-    // If device width is too small - ignore display
-    if( too_small ) {
-        return;
-    }
-
-    if( g_cp_doc != nullptr ) {
-        cp_rml_position( pos, ncols_width, nlines_width );
-    } else {
-        // Drawing UI across character tile (curses fallback)
-        werase( w_preview );
+    // The RmlUi chrome document is gone. It existed to draw a bordered "CHARACTER
+    // PREVIEW" box with a TRANSPARENT centre, positioned each redraw over wherever the
+    // GPU sprite happened to land. Now the creator's own document owns the portrait box
+    // (.nc-portrait) and the sprite arrives as a decorator inside it, so a second
+    // floating document tracking a screen rect is redundant — and it was drawing its
+    // border around the new box, coincidentally aligned.
+    //
+    // The curses path still draws its own frame: that is the non-RmlUi A/B fallback and
+    // has no document to put a portrait in.
+    // Gated on the CREATOR's mode, not on character_preview_rmlui_enabled(): that flag
+    // defaults OFF and only ever governed the old chrome document, so testing it here
+    // drew this border on top of the new in-document portrait box. When the creator is
+    // an RmlUi document, .nc-portrait is the box; when it is curses, there is no
+    // document to hold a portrait and this frame is still wanted.
+    if( !newcharacter_rmlui_enabled() ) {
+    werase( w_preview );
         draw_border( w_preview, BORDER_COLOR, _( "CHARACTER PREVIEW" ), BORDER_COLOR );
         wnoutrefresh( w_preview );
     }
-
-    // Drawing character itself
-    const auto pos = calc_character_pos();
-    char_preview_adapter::convert( &*tilecontext )->display_avatar_preview_with_overlays( *
-            ( character->as_avatar() ), pos, show_clothes );
+    // Drawing character itself.
+    //
+    // Routed into render_state's dedicated portrait target rather than the shared UI
+    // composite: the frame blits the UI composite BEFORE RmlUi, so a sprite in it sits
+    // under every panel and the creator had to keep its panels narrow to leave the
+    // portrait an uncovered strip. In its own target it becomes a texture the document
+    // samples ("?avatar:<gen>"), so layout places it and z-order stops mattering.
+    //
+    // Centred in the TARGET, not placed via calc_character_pos(): that returns absolute
+    // screen pixels (pos.x * termx_pixels + …, ~1640 here), and the avatar pass projects
+    // at AVATAR_TARGET_PX, so a screen-space position lands outside the texture entirely
+    // and the portrait renders blank.
+    lighting::render_state &rs = lighting::get_render_state();
+    const int t_w = tilecontext->get_tile_width();
+    const int t_h = tilecontext->get_tile_height();
+    const auto tgt_pos = point_bub_ms( lighting::AVATAR_TARGET_PX / 2 - t_w / 2,
+                                       lighting::AVATAR_TARGET_PX / 2 - t_h / 2 );
+    rs.set_avatar_route( true );
+    char_preview_adapter::convert( &*tilecontext )->display_avatar_preview_with_overlays(
+        *( character->as_avatar() ), tgt_pos, show_clothes );
+    rs.set_avatar_route( false );
 }
 
 void character_preview_window::clear() const
 {
-    cp_rml_close();
     Messages::clear_messages();
     tilecontext->set_draw_scale( DEFAULT_TILESET_ZOOM );
 }

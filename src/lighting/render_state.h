@@ -44,6 +44,16 @@
 
 namespace lighting {
 
+// Edge length of the character-creator portrait target, in pixels.
+//
+// Shared because three places must agree: render_state allocates the target at this
+// size, the RmlUi interface reports it as the texture's dimensions, and
+// character_preview centres the avatar sprite inside it. It is deliberately fixed and
+// independent of the window — the portrait is sampled as a decorator whose element
+// decides the on-screen size, so a window resize must NOT reallocate it (that would
+// invalidate the handle the document is holding).
+constexpr int AVATAR_TARGET_PX = 512;
+
 // Custom deleter that releases an SDL_GPUTexture against the live
 // render_state device. Safe to invoke even if the render_state has
 // already been shut down — leaks the texture in that case (process
@@ -172,6 +182,30 @@ public:
     void set_unlit_overlay_route(bool on) noexcept { unlit_overlay_route_ = on; }
     bool tile_sprites_empty() const noexcept { return tile_sprite_queue_.empty(); }
     void flush_tile_sprites(sprite_batcher& dst, SDL_GPUSampler* sampler);
+
+    // ── Avatar preview route ──────────────────────────────────────────────
+    // The character-creator portrait used to draw into ui_target(), which the
+    // frame blits BEFORE RmlUi — so any opaque panel covering the portrait's
+    // rect hid it, and the creator had to keep its panels narrow to leave the
+    // sprite an uncovered strip. Routing it into its own target instead makes
+    // it a texture RmlUi can sample as a decorator, so the DOCUMENT places the
+    // portrait and z-order stops mattering.
+    //
+    // Same mechanism as set_unlit_overlay_route, and checked BEFORE it: the two
+    // are never enabled together, and the avatar must not reach the shared UI
+    // slice.
+    void set_avatar_route( bool on ) noexcept { avatar_route_ = on; }
+    bool avatar_sprites_empty() const noexcept { return avatar_sprite_queue_.empty(); }
+    // Drains AND clears: unlike the composited UI queues (which ui_manager owns),
+    // the portrait is re-queued on every redraw that shows it, so a stale frame
+    // must not persist into a step that has no preview.
+    void flush_avatar_sprites( sprite_batcher &dst, SDL_GPUSampler *sampler );
+    // Standalone texture for the portrait. nullptr until init() succeeds.
+    ui_composite_target *avatar_target() noexcept { return avatar_target_.get(); }
+    // Bumped whenever avatar_target_ is (re)allocated. RmlUi caches textures by
+    // source string, so the decorator source carries this counter — otherwise a
+    // window resize would leave the document sampling a destroyed texture.
+    unsigned avatar_texture_generation() const noexcept { return avatar_generation_; }
     // Ranged drain of [begin, end) — used to split Pass W at the
     // terrain/entity boundary so the splatmap composite can land between the
     // halves. Same "drain WITHOUT clearing" contract and set_texture dedupe as
@@ -470,6 +504,11 @@ private:
     };
     std::vector<tile_sprite_draw> tile_sprite_queue_;
 
+    // Avatar portrait route. See set_avatar_route.
+    bool avatar_route_ = false;
+    std::vector<tile_sprite_draw> avatar_sprite_queue_;
+    unsigned avatar_generation_ = 0;
+
     // When true, queue_tile_sprite redirects sprites into the unlit
     // UI/font-glyph path (GPU minimap overlay). See set_unlit_overlay_route.
     bool unlit_overlay_route_ = false;
@@ -490,6 +529,10 @@ private:
 
     // UI compositor target (offscreen UI render-to-texture).
     std::unique_ptr<ui_composite_target> ui_target_;
+
+    // Character-creator portrait target. Its own texture rather than a region of
+    // ui_target_, so RmlUi can sample it as a decorator. See set_avatar_route.
+    std::unique_ptr<ui_composite_target> avatar_target_;
 
     // World accumulation target (persistent lit-world layer, HDR once
     // step 1b lands).

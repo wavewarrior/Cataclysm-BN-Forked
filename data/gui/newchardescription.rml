@@ -38,6 +38,11 @@
             </div>
             <div class="nc-arrow-spacer" data-if="!has_prev"></div>
             <div class="nc-stage">
+                <!-- Character portrait. Ordinary document content now: the avatar is
+                     drawn into its own render target and arrives as a decorator, so it
+                     is no longer a GPU sprite pinned outside the panel. -->
+                <div class="nc-portrait" data-if="has_portrait"
+                     data-style-decorator="portrait_dec"></div>
             <div class="nc-desc-points" data-rml="points_rml"></div>
             <div class="nc-desc-editrow">
                 <span class="nc-desc-field" data-rml="name_rml"></span>

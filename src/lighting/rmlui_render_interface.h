@@ -4,6 +4,7 @@
 
 #include <RmlUi/Core/RenderInterface.h>
 #include <cstdint>
+#include <functional>
 #include <memory>
 
 // RmlUi RenderInterface over SDL_GPU. Sibling of imgui_layer's render path: its
@@ -22,6 +23,7 @@
 
 struct SDL_GPURenderPass;
 struct SDL_GPUCommandBuffer;
+struct SDL_GPUTexture;
 
 namespace lighting {
 
@@ -55,6 +57,16 @@ public:
     // hazard). Zero is the pass condition.
     std::uint32_t compiles_in_pass() const noexcept;
     std::uint32_t textures_in_pass() const noexcept;
+
+    // Registers the texture served by the "?avatar:<generation>" decorator source: the
+    // character-creator portrait, drawn by render_state into its own target so RmlUi
+    // can place it as ordinary document content instead of it being buried under the
+    // panels (it used to ride in the UI composite, which the frame blits before RmlUi).
+    //
+    // A resolver rather than a raw pointer: the target may be reallocated, and
+    // ReleaseTexture deliberately does NOT free textures reached this way.
+    void set_borrowed_texture_source( std::function<SDL_GPUTexture*()> resolver,
+                                      int width, int height );
 
     // --- Rml::RenderInterface (required) ---
     Rml::CompiledGeometryHandle CompileGeometry(

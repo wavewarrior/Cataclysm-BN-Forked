@@ -18,9 +18,8 @@ body {
    Keep all eight tabs identical so the panel edge does not jump while tabbing.
    See nc_prepare_preview() in newcharacter_ui.cpp. */
 .nc-panel {
-    width: 72%;
-    min-width: 720dp;
-    height: 92%;
+    width: 98%;
+    height: 98%;
     display: flex;
     flex-direction: column;
 }
@@ -82,4 +81,21 @@ body {
     padding: 6dp 8dp;
     border-top: 1dp {{bg4}};
     color: {{fg}};
+}
+
+/* Portrait box. The avatar texture is AVATAR_TARGET_PX square and `contain` keeps its
+   aspect, so this only decides how much room the sprite gets. Anchored top-right of the
+   stage, which is where the old floating preview sat — but now it is inside the panel,
+   which is what let the panel grow to 98%. */
+.nc-portrait {
+    /* `position: absolute` here resolves against .nc-panel, NOT against .nc-stage —
+       measured earlier in this work when a beam anchored to a `position: relative`
+       parent landed against the panel instead. That behaviour is exactly the placement
+       wanted here (panel top-right), so it is relied on deliberately rather than by
+       accident. top/right clear the step rail and the panel's 24dp runic-frame inset. */
+    position: absolute;
+    right: 32dp;
+    top: 52dp;
+    width: 208dp;
+    height: 208dp;
 }

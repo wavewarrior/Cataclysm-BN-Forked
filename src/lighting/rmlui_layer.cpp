@@ -6,6 +6,7 @@
 #include "menu_plexus.h"
 #include "rml_length.h"
 #include "rmlui_proc_texture.h"
+#include "render_state.h"
 #include "rmlui_render_interface.h"
 #include "rmlui_system_interface.h"
 #include "ui_theme.h"
@@ -433,6 +434,14 @@ bool init(lighting::gpu_device& dev) {
 
     Rml::SetRenderInterface(g_render.get());
     Rml::SetSystemInterface(g_system.get());
+
+    // Serve the "?avatar:<gen>" decorator source from render_state's portrait target.
+    // Registered here, once, because the resolver is called lazily per LoadTexture —
+    // so it tolerates the target not existing yet and survives its reallocation.
+    g_render->set_borrowed_texture_source( []() -> SDL_GPUTexture* {
+        lighting::ui_composite_target *at = lighting::get_render_state().avatar_target();
+        return at ? at->texture() : nullptr;
+    }, lighting::AVATAR_TARGET_PX, lighting::AVATAR_TARGET_PX );
 
     // Load the theme tokens and install the stylesheet preprocessor BEFORE
     // Initialise, so the very first document's .rcss gets {{token}} substitution.
