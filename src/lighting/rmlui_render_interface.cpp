@@ -911,6 +911,64 @@ Rml::TextureHandle rmlui_render_interface::LoadTexture(
                       << " handle=" << ph;
         return static_cast<Rml::TextureHandle>(ph);
     }
+    // Atlas crop: "?sprite:<x>:<y>:<w>:<h>:<path>" lifts ONE sprite out of a tileset sheet
+    // on disk and uploads it as its own small texture. The path comes last because it is the
+    // only field that may itself contain ':'.
+    //
+    // Why decode from file rather than sample the live atlas: the GPU atlas has no sub-rect
+    // support on this interface (a borrowed texture is handed over whole), and cropping on
+    // the GPU would mean a copy pass inside RmlUi's render — the D3D12 hazard this file
+    // already goes out of its way to avoid. The decode happens once per distinct sprite
+    // because RmlUi caches by source string.
+    if (proc.rfind("?sprite:", 0) == 0) {
+        const std::string spec = proc.substr(8);
+        int sx = 0, sy = 0, sw = 0, sh = 0;
+        std::size_t pos = 0;
+        int *const fields[4] = {&sx, &sy, &sw, &sh};
+        bool parsed = true;
+        for (int *f : fields) {
+            const std::size_t colon = spec.find(':', pos);
+            if (colon == std::string::npos) { parsed = false; break; }
+            *f = std::atoi(spec.substr(pos, colon - pos).c_str());
+            pos = colon + 1;
+        }
+        const std::string path = parsed ? spec.substr(pos) : std::string();
+        if (!parsed || path.empty() || sw <= 0 || sh <= 0) {
+            dbg(DL::Error) << "rmlui_sprite: malformed source \"" << source << "\"";
+            return 0;
+        }
+        SDL_Surface* sheet = IMG_Load(path.c_str());
+        if (sheet == nullptr) {
+            dbg(DL::Error) << "rmlui_sprite: cannot load \"" << path << "\": " << SDL_GetError();
+            return 0;
+        }
+        // Force a known layout so the row copy below needs no per-format branching.
+        SDL_Surface* rgba = SDL_ConvertSurface(sheet, SDL_PIXELFORMAT_ABGR8888);
+        SDL_DestroySurface(sheet);
+        if (rgba == nullptr) { return 0; }
+        std::vector<std::uint8_t> px(static_cast<std::size_t>(sw) * sh * 4, 0);
+        for (int row = 0; row < sh; ++row) {
+            const int src_y = sy + row;
+            if (src_y < 0 || src_y >= rgba->h) { continue; }
+            const int copy_w = std::min(sw, rgba->w - sx);
+            if (copy_w <= 0) { continue; }
+            const auto *src = static_cast<const std::uint8_t*>(rgba->pixels) +
+                              static_cast<std::size_t>(src_y) * rgba->pitch +
+                              static_cast<std::size_t>(sx) * 4;
+            std::memcpy(px.data() + static_cast<std::size_t>(row) * sw * 4, src,
+                        static_cast<std::size_t>(copy_w) * 4);
+        }
+        SDL_DestroySurface(rgba);
+        SDL_GPUTexture* stex = p->upload_rgba(px.data(), sw, sh);
+        if (!stex) { return 0; }
+        if (p->rp != nullptr) { p->textures_in_pass++; }
+        texture_dimensions = Rml::Vector2i(sw, sh);
+        const std::uint64_t sph = p->next_tex++;
+        p->textures.emplace(sph, stex);
+        dbg(DL::Info) << "rmlui_sprite: cropped " << sw << "x" << sh << " from " << path
+                      << " at " << sx << "," << sy << " handle=" << sph;
+        return static_cast<Rml::TextureHandle>(sph);
+    }
     // Borrowed textures: "?avatar:<generation>" hands back a texture the RENDERER owns
     // (render_state's portrait target) rather than one this interface allocated. Two
     // consequences, both load-bearing:

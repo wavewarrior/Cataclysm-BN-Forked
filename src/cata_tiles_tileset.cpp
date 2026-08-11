@@ -1324,6 +1324,19 @@ void tileset_loader::load_tileset( const std::string& img_path, const bool pump_
         if( pump_events ) { inp_mngr.pump_events(); }
     }
 
+    // Retain where these indices came from. Recorded here because this is the only place
+    // that knows the sheet path, its base index and its FULL width at the same time; the
+    // sub-rect loop above splits the upload but not the index space.
+    if( sprite_width > 0 && sprite_height > 0 ) {
+        ts.sheet_spans.push_back( {
+            .path = img_path,
+            .first_index = offset,
+            .count = expected_tilecount,
+            .sprite_w = sprite_width,
+            .sprite_h = sprite_height,
+            .columns = tile_atlas_width / sprite_width } );
+    }
+
     size = expected_tilecount;
 }
 void tileset_loader::load(

@@ -373,6 +373,26 @@ cata_tiles::cata_tiles( const SDL_Renderer_Ptr& renderer, const GeometryRenderer
 cata_tiles::~cata_tiles() = default;
 
 
+auto tileset::sprite_file_source( const int sprite_index ) const
+-> std::optional<tileset::sprite_file_ref>
+{
+for( const sheet_span &s : sheet_spans ) {
+    if( sprite_index < s.first_index || sprite_index >= s.first_index + s.count ||
+            s.columns <= 0 ) {
+            continue;
+        }
+        // Inverse of the index formula in copy_surface_to_dynamic_atlas: row-major over the
+        // whole sheet, so splitting the upload does not change the arithmetic.
+        const int i = sprite_index - s.first_index;
+        return sprite_file_ref{
+            .path = s.path,
+            .rect = SDL_Rect{
+                ( i % s.columns ) * s.sprite_w, ( i / s.columns ) * s.sprite_h,
+                s.sprite_w, s.sprite_h } };
+    }
+    return std::nullopt;
+}
+
 const tile_type *tileset::find_tile_type( const std::string& id ) const
 {
     const auto iter = tile_ids.find( id );

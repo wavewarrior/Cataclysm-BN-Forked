@@ -75,6 +75,15 @@ std::pair<std::string, ot_match_type> start_location::random_target() const
     return random_entry( _omt_types );
 }
 
+auto start_location::first_target() const
+-> std::optional<std::pair<std::string, ot_match_type>>
+{
+    if( _omt_types.empty() ) {
+    return std::nullopt;
+}
+return _omt_types.front();
+}
+
 const std::set<std::string> &start_location::flags() const
 {
     return _flags;

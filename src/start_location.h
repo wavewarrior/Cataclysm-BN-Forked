@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <set>
 #include <string>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -28,6 +29,10 @@ class start_location
         std::string name() const;
         int targets_count() const;
         std::pair<std::string, ot_match_type> random_target() const;
+        /// First declared target, or nullopt when this location declares none. Deterministic
+        /// on purpose: it backs the character creator's art slot, and random_target() would
+        /// reroll every frame and make that art flicker.
+        auto first_target() const -> std::optional<std::pair<std::string, ot_match_type>>;
         const std::set<std::string> &flags() const;
 
         /**

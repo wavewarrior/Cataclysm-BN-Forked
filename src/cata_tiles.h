@@ -520,6 +520,20 @@ class tileset
         // inside `tile_ids`)
         std::unordered_map<std::string, season_tile_value> tile_ids_by_season[season_type::NUM_SEASONS];
 
+        /// Where each sprite index came from on disk. The atlas upload discards the source
+        /// pixels, but a UI that wants ONE sprite's pixels long after load (the character
+        /// creator's scenario art) has no other way back to them. Row-major over the whole
+        /// sheet, matching the index formula in copy_surface_to_dynamic_atlas.
+        struct sheet_span {
+            std::string path;
+            int first_index = 0;
+            int count = 0;
+            int sprite_w = 0;
+            int sprite_h = 0;
+            int columns = 0;
+        };
+        std::vector<sheet_span> sheet_spans;
+
         // State-based UV modifiers (index 0 = highest priority)
         std::vector<state_modifier_group> state_modifiers;
         // Global overlay filters for UV warping (used when group has no filters)
@@ -556,6 +570,14 @@ class tileset
 
         tile_type &create_tile_type( const std::string& id, tile_type&& new_tile_type );
         const tile_type *find_tile_type( const std::string& id ) const;
+
+        /// Atlas file and pixel rect backing a sprite index, or nullopt when the index came
+        /// from a generated sheet (item highlight, ASCII fallbacks) with no file behind it.
+        struct sprite_file_ref {
+            std::string path;
+            SDL_Rect rect;
+        };
+        auto sprite_file_source( int sprite_index ) const -> std::optional<sprite_file_ref>;
         /**
          * Looks up tile by id + season suffix AND just raw id
          * Example: if id == "t_tree_apple" and season == SPRING
