@@ -85,3 +85,381 @@ body {
     padding: 0 8dp 2dp 8dp;
     color: {{gray}};
 }
+
+/* ── STARTING-EQUIPMENT SHEET ──────────────────────────────────────────────────
+
+   The kit the selected profession hands over, in the Caves of Qud idiom: paper doll of body
+   slots, collapsible category tree with weight rollups, carry-capacity bar. Kept in THIS
+   sheet rather than newchar_common.rcss because PROFESSION is its only adopter; promote it on
+   the second one, as the tree vocabulary was — two copies of a visual language diverge.
+
+   It replaces .nc-tree inside .nc-prof-body, so it inherits that row's leftover height. */
+/* Opaque ground, like .nc-info-panel has. Without it the curses layer that still draws
+   underneath this document (main-menu remnants, the old w_items buffer) showed through the
+   sheet's empty right-hand region as ghost text. */
+.nc-eqp {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 4dp 8dp 0 8dp;
+    background-color: {{bg-hard}};
+}
+
+.nc-eqp-head {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding-bottom: 5dp;
+    border-bottom: 2dp {{yellow}};
+}
+
+.nc-eqp-title {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    font-size: 16dp;
+    font-weight: bold;
+    letter-spacing: 1dp;
+}
+
+/* One per total. margin-left rather than spaces in the string: RmlUi trims a lone space between
+   two colour runs at parse time, which welded "16 items 9.1 kg 9.32 L $2795.26" into one word. */
+.nc-eqp-total {
+    display: block;
+    flex: 0 0 auto;
+    margin-left: 18dp;
+    font-size: 13dp;
+}
+
+/* Doll beside tree. The doll is fixed-width so the tree's columns do not shift when a
+   profession's slot captions happen to be longer. */
+.nc-eqp-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    padding-top: 6dp;
+}
+
+.nc-eqp-doll {
+    flex: 0 0 auto;
+    width: 318dp;
+    display: flex;
+    flex-direction: column;
+    margin-right: 14dp;
+    padding-right: 12dp;
+    border-right: 1dp {{bg4}};
+}
+
+/* Six rows of three cells, every position emitted. Equal flex on the cells is the whole
+   alignment story — the spine and rung centre themselves inside their cell, so nothing here
+   depends on a measured pixel. */
+.nc-eqp-dollrow {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+}
+
+.nc-eqp-cell {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Junction: the connecting lines Qud draws with box characters. Three stacked children — spine
+   segment, rung, spine segment — so the rung lands at the exact vertical middle from equal
+   flex alone. No negative margins and no `position: absolute`: percentage margins here resolve
+   against WIDTH, and absolute positioning in this RmlUi build resolves against the PANEL
+   rather than the nearest positioned ancestor. */
+.nc-eqp-spine {
+    flex: 1;
+    width: 1dp;
+    min-height: 0;
+    background-color: {{bg4}};
+}
+
+.nc-eqp-rung {
+    flex: 0 0 auto;
+    width: 100%;
+    height: 1dp;
+    background-color: {{bg4}};
+}
+
+/* A slot box. Empty slots keep their border and caption, dimmed: "no gloves" is information,
+   so an absent item must not become an absent cell. */
+.nc-eqp-slot {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 96dp;
+    padding: 3dp 2dp;
+    border: 1dp {{bg2}};
+    background-color: {{bg}};
+    transition: border-color 0.15s quadratic-in-out;
+}
+
+.nc-eqp-cell.filled .nc-eqp-slot {
+    border-color: {{bg4}};
+    background-color: {{bg-hard}};
+}
+
+/* Art box always present, so a slot with a sprite and a slot without are the same height and
+   the doll grid does not jitter as the selection changes. */
+.nc-eqp-art {
+    flex: 0 0 auto;
+    width: 32dp;
+    height: 32dp;
+}
+
+.nc-eqp-item {
+    display: block;
+    flex: 0 0 auto;
+    font-size: 11dp;
+    text-align: center;
+    word-break: break-word;
+}
+
+.nc-eqp-slotname {
+    display: block;
+    flex: 0 0 auto;
+    font-size: 9dp;
+    letter-spacing: 1dp;
+    text-transform: uppercase;
+}
+
+.nc-eqp-more {
+    display: block;
+    flex: 0 0 auto;
+    font-size: 10dp;
+}
+
+/* Tree. Rows are a FLAT list carrying level classes; uniform height is load-bearing, because
+   the cursor's scroll position is computed as scroll_height / row_count in C++. */
+.nc-eqp-tree {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+/* `overflow: hidden` is LOAD-BEARING. A long item name wrapped to a second line inside this
+   fixed 19dp box and spilled into the row below, so consecutive rows drew on top of each other
+   and the whole tree read as garbage. Uniform height is also what makes the cursor's scroll
+   position exact arithmetic in C++, so growing the row is not an option. */
+.nc-eqp-row {
+    flex: 0 0 auto;
+    height: 19dp;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 0 6dp 0 26dp;
+    font-size: 13dp;
+    overflow: hidden;
+    transition: background-color 0.14s quadratic-in-out;
+}
+
+/* Indentation states the level; the marker states whether it opens. */
+.nc-eqp-row.group {
+    padding-left: 2dp;
+    font-weight: bold;
+    letter-spacing: 1dp;
+    margin-top: 3dp;
+}
+
+.nc-eqp-row.sub {
+    padding-left: 14dp;
+}
+
+.nc-eqp-row.focused {
+    background-color: {{bg-hard}};
+    border-left: 3dp {{yellow}};
+    padding-left: 23dp;
+}
+
+.nc-eqp-row.group.focused {
+    padding-left: 0;
+}
+
+.nc-eqp-row.sub.focused {
+    padding-left: 11dp;
+}
+
+.nc-eqp-row.group:hover, .nc-eqp-row.sub:hover {
+    background-color: {{bg1}};
+}
+
+.nc-eqp-marker {
+    display: block;
+    flex: 0 0 auto;
+    width: 12dp;
+}
+
+/* `white-space: nowrap` stops the wrap; the ROW's `overflow: hidden` does the clipping. The
+   name must NOT carry `overflow: hidden` itself — that makes it a scroll container, whose
+   intrinsic width RmlUi resolves to zero, and every label in the tree disappeared while the
+   numeric columns kept rendering. */
+.nc-eqp-name {
+    display: block;
+    flex: 0 0 auto;
+    max-width: 44%;
+    margin-right: 6dp;
+    white-space: nowrap;
+}
+
+/* Leader rule: carries a HEADER's weight across the gap to it, the job Qud gives a run of
+   dashes. flex:1 so it absorbs every width the columns do not claim. Transparent on item rows —
+   drawn there it struck through every value in the list. */
+.nc-eqp-leader {
+    flex: 1;
+    min-width: 8dp;
+    height: 1dp;
+    margin-right: 8dp;
+}
+
+.nc-eqp-row.group .nc-eqp-leader, .nc-eqp-row.sub .nc-eqp-leader {
+    background-color: {{bg2}};
+}
+
+/* Fixed-width numeric columns, so figures line up down the list rather than ragging with the
+   name beside them. */
+.nc-eqp-stat {
+    display: block;
+    flex: 0 0 auto;
+    width: 68dp;
+    font-size: 12dp;
+    text-align: right;
+}
+
+.nc-eqp-vol {
+    display: block;
+    flex: 0 0 auto;
+    width: 62dp;
+    font-size: 12dp;
+    text-align: right;
+}
+
+.nc-eqp-val {
+    display: block;
+    flex: 0 0 auto;
+    width: 72dp;
+    font-size: 12dp;
+    text-align: right;
+}
+
+.nc-eqp-wt {
+    display: block;
+    flex: 0 0 auto;
+    width: 72dp;
+    text-align: right;
+}
+
+/* Capacity readout: the number, then a proportional bar, then the close hint. */
+.nc-eqp-foot {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 5dp 0 3dp 0;
+    border-top: 1dp {{bg4}};
+}
+
+/* Used, divider, capacity — three elements so the spacing survives parse. */
+.nc-eqp-used {
+    display: block;
+    flex: 0 0 auto;
+    font-size: 14dp;
+    font-weight: bold;
+}
+
+.nc-eqp-slash {
+    display: block;
+    flex: 0 0 auto;
+    margin: 0 5dp;
+    font-size: 14dp;
+    color: {{bg4}};
+}
+
+.nc-eqp-cap {
+    display: block;
+    flex: 0 0 auto;
+    margin-right: 12dp;
+    font-size: 14dp;
+}
+
+/* FIXED width, not `flex: 1`. The fill's width arrives from C++ and a percentage against a
+   flex-sized parent resolved to nothing; against a definite 320dp track a dp length is exact.
+   NC_EQP_BAR_DP in build_nc_eqp_sheet is this minus the 1dp borders — keep them in step. */
+.nc-eqp-bar {
+    flex: 0 0 auto;
+    width: 320dp;
+    height: 9dp;
+    background-color: {{bg1}};
+    border: 1dp {{bg3}};
+}
+
+/* Absorbs the leftover width so the close hint stays hard right now that the bar is fixed. */
+.nc-eqp-spacer {
+    flex: 1;
+    min-width: 0;
+}
+
+/* `display: block` is REQUIRED. RmlUi elements default to `display: inline`, and .nc-eqp-bar is
+   a plain block rather than a flex container, so this child was never blockified: width and
+   height were ignored and the fill drew nothing at all. Every other bare div in this sheet gets
+   blockified by a flex parent, which is why this was the only one affected. */
+.nc-eqp-bar-fill {
+    display: block;
+    width: 0;
+    height: 100%;
+    background-color: {{yellow}};
+    transition: width 0.18s quadratic-out;
+}
+
+/* Over capacity is a real problem, not a style choice: the bar says so before the number is
+   read. */
+.nc-eqp-bar.over .nc-eqp-bar-fill {
+    background-color: {{red}};
+}
+
+.nc-eqp-close {
+    display: block;
+    flex: 0 0 auto;
+    margin-left: 14dp;
+    font-size: 12dp;
+}
+
+/* Opens the sheet, so it must look like a control rather than status text. Same treatment as
+   .nc-tree-all — quiet border, gold on hover — because it is the same kind of thing: a
+   screen-level toggle in a status row. */
+.nc-prof-eqp {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    margin-left: 16dp;
+    padding: 2dp 9dp;
+    border: 1dp {{bg4}};
+    color: {{fg4}};
+    transition: background-color 0.16s quadratic-in-out, border-color 0.16s quadratic-in-out;
+}
+
+.nc-prof-eqp:hover {
+    background-color: {{bg-hard}};
+    border-color: {{yellow}};
+}
+
+.nc-prof-eqp-label {
+    display: block;
+    flex: 0 0 auto;
+    font-size: 13dp;
+    letter-spacing: 1dp;
+    text-transform: uppercase;
+}

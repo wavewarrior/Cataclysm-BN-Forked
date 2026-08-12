@@ -35,16 +35,23 @@
             <div class="nc-prof-top">
                 <span class="nc-prof-points" data-rml="points_rml"></span>
                 <span class="nc-prof-cost" data-rml="cost_rml"></span>
-                <!-- Screen-level control hints, so they sit beside the other status text
-                     rather than inside the per-profession info panel. -->
+                <!-- Screen-level controls, so they sit beside the other status text rather than
+                     inside the per-profession info panel. The equipment toggle is a control of
+                     the SCREEN, not of the selected profession, which is why it lives here and
+                     not on the GEAR fact. -->
+                <div class="nc-prof-eqp" data-event-click="on_gear()">
+                    <span class="nc-prof-eqp-label" data-rml="eqp_btn_rml"></span>
+                </div>
                 <span class="nc-prof-sort" data-rml="sort_rml"></span>
             </div>
             <div class="nc-prof-body">
                 <!-- Grouped card tree. Each band is a header (a focus stop, so CONFIRM on it
                      toggles the band without needing a keybinding of its own) plus a carousel
                      row holding only the VISIBLE page of cards. Bands are discovered from the
-                     data — one per skill display category some profession leads with. -->
-                <div class="nc-tree">
+                     data — one per skill display category some profession leads with.
+                     Hidden while the equipment sheet is up: the sheet takes the stage, and the
+                     input loop hands it the navigation keys for exactly that reason. -->
+                <div class="nc-tree" data-if="!eqp_open">
                     <!-- Expand/collapse every group. A real control rather than a hint: the
                          tree can hold six groups, and opening or shutting them one at a time
                          is the kind of chore a single affordance should absorb. Keyboard
@@ -115,6 +122,10 @@
                                         <div class="nc-fact-label">Traits</div>
                                         <div class="nc-fact-value" data-rml="traits_rml"></div>
                                     </div>
+                                    <!-- A readout, not a control: count, total weight and cash, so
+                                         two kits can be compared without opening anything. The
+                                         toggle that opens the sheet is in the status row, where a
+                                         screen-level control belongs. -->
                                     <div class="nc-fact">
                                         <div class="nc-fact-label">Gear</div>
                                         <div class="nc-fact-value" data-rml="gear_rml"></div>
@@ -138,9 +149,92 @@
                         </div>
                     </div>
                 </div>
+                <!-- ── STARTING EQUIPMENT SHEET ────────────────────────────────
+                     The kit the selected profession hands over, in the Caves of Qud idiom:
+                     a paper doll of body slots on the left, a collapsible category tree with
+                     weight rollups on the right, carry capacity underneath. It takes the whole
+                     stage rather than a fourth column of the fixed 188dp info panel, which a
+                     doll plus a two-level tree cannot fit.
+                     See plans/charcreation-profession-equipment.md. -->
+                <div class="nc-eqp" data-if="eqp_open">
+                    <div class="nc-eqp-head">
+                        <span class="nc-eqp-title" data-rml="eqp_title_rml"></span>
+                        <!-- Four spans, not one string: RmlUi trims a lone space between two
+                             colour runs at parse time, which welded these into one word. The
+                             stylesheet's margins cannot be trimmed. -->
+                        <span class="nc-eqp-total" data-rml="eqp_count_rml"></span>
+                        <span class="nc-eqp-total" data-rml="eqp_wt_rml"></span>
+                        <span class="nc-eqp-total" data-rml="eqp_vol_rml"></span>
+                        <span class="nc-eqp-total" data-rml="eqp_val_rml"></span>
+                    </div>
+                    <div class="nc-eqp-body">
+                        <!-- Paper doll. Six rows of three cells, EVERY position emitted: a
+                             junction cell draws the connecting lines and a blank holds its
+                             column open, so the grid aligns by flex alone with no pixel
+                             arithmetic — the same reason the info panel's notch row mirrors
+                             the carousel's geometry instead of measuring it. -->
+                        <div class="nc-eqp-doll">
+                            <div class="nc-eqp-dollrow" data-for="dr : eqp_doll">
+                                <div class="nc-eqp-cell" data-for="s : dr.cells"
+                                     data-class-blank="s.blank"
+                                     data-class-junction="s.junction"
+                                     data-class-filled="s.filled">
+                                    <!-- Junction: spine segment, rung, spine segment. Equal
+                                         flex on the two segments puts the rung at the exact
+                                         vertical middle, joining the box above to the box below
+                                         and the left cell to the right one — no offsets. -->
+                                    <div class="nc-eqp-spine" data-if="s.junction"></div>
+                                    <div class="nc-eqp-rung" data-if="s.junction"></div>
+                                    <div class="nc-eqp-spine" data-if="s.junction"></div>
+                                    <div class="nc-eqp-slot" data-if="!s.blank && !s.junction">
+                                        <div class="nc-eqp-art" data-style-decorator="s.dec"></div>
+                                        <span class="nc-eqp-item" data-rml="s.item_rml"></span>
+                                        <span class="nc-eqp-slotname" data-rml="s.name_rml"></span>
+                                        <span class="nc-eqp-more" data-rml="s.more_rml"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Category tree. FLAT row list with level classes rather than a
+                             nested data-for: collapsing is then a filter over one list, and
+                             uniform row height makes scrolling the cursor into view exact
+                             arithmetic instead of DOM child indexing. -->
+                        <div id="nc-eqp-tree" class="nc-eqp-tree scroll-pane">
+                            <div class="nc-eqp-row" data-for="r : eqp_rows"
+                                 data-class-group="r.group"
+                                 data-class-sub="r.sub"
+                                 data-class-focused="r.focused"
+                                 data-event-click="on_eqp_row(it_index)">
+                                <span class="nc-eqp-marker" data-rml="r.marker_rml"></span>
+                                <span class="nc-eqp-name" data-rml="r.name_rml"></span>
+                                <!-- Leader rule, so a header's weight reads as belonging to it
+                                     across the gap. Qud draws the same thing with dashes. -->
+                                <div class="nc-eqp-leader"></div>
+                                <span class="nc-eqp-stat" data-rml="r.stat_rml"></span>
+                                <span class="nc-eqp-vol" data-rml="r.vol_rml"></span>
+                                <span class="nc-eqp-val" data-rml="r.val_rml"></span>
+                                <span class="nc-eqp-wt" data-rml="r.wt_rml"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="nc-eqp-foot">
+                        <!-- Used / capacity as two spans with the divider as its own element,
+                             for the same parse-time whitespace reason as the header totals. -->
+                        <span class="nc-eqp-used" data-rml="eqp_used_rml"></span>
+                        <span class="nc-eqp-slash">/</span>
+                        <span class="nc-eqp-cap" data-rml="eqp_cap_rml"></span>
+                        <div class="nc-eqp-bar" data-class-over="eqp_over">
+                            <div class="nc-eqp-bar-fill" data-style-width="eqp_bar_w"></div>
+                        </div>
+                        <div class="nc-eqp-spacer"></div>
+                        <span class="nc-eqp-close" data-rml="eqp_close_rml"></span>
+                    </div>
+                </div>
             </div>
-            <!-- Key for the card strips: "sigil :: meaning", spread across the panel. -->
-            <div class="nc-legend">
+            <!-- Key for the card strips: "sigil :: meaning", spread across the panel. Both it
+                 and the filter line describe the CARD LIST, so they go away with it; the gender
+                 line stays, because gender changes the kit the sheet is showing. -->
+            <div class="nc-legend" data-if="!eqp_open">
                 <div class="nc-legend-item" data-for="l : legend">
                     <div class="nc-legend-icon" data-style-decorator="l.dec"></div>
                     <span class="nc-legend-sep">::</span>
@@ -148,7 +242,7 @@
                 </div>
             </div>
             <div class="nc-prof-gender" data-rml="gender_rml"></div>
-            <div class="nc-prof-filter" data-rml="filter_rml"></div>
+            <div class="nc-prof-filter" data-if="!eqp_open" data-rml="filter_rml"></div>
             </div>
             <div class="nc-arrow nc-arrow-next" data-if="has_next"
                  data-event-click="on_next()">

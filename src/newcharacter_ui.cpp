@@ -20,6 +20,7 @@
 
 #include "addiction.h"
 #include "bionics.h"
+#include "bodypart.h"
 #include "cata_tiles.h"
 #include "calendar.h"
 #include "cata_utility.h"
@@ -28,6 +29,8 @@
 #include "character_martial_arts.h"
 #include "color.h"
 #include "cursesdef.h"
+#include "damage.h"
+#include "detached_ptr.h"
 #include "filesystem.h"
 #include "fstream_utils.h"
 #include "game.h"
@@ -36,6 +39,8 @@
 #include "input.h"
 #include "int_id.h"
 #include "inventory.h"
+#include "item.h"
+#include "item_category.h"
 #include "json.h"
 #include "lightmap.h"
 #include "npc_class.h"
@@ -275,6 +280,52 @@ auto nc_icon_dec_col( unsigned seed, int size, const nc_color &col ) -> std::str
     const std::string rgb = hex.size() >= 7 ? hex.substr( 1, 6 ) : std::string( "a1885f" );
     return string_format( "image( ?proc:runic-icon:%d:%u:%s none contain ) border-box",
                           size, seed, rgb );
+}
+
+/// RCSS `decorator` cropping ONE sprite out of the loaded tileset, or an empty string when
+/// the tileset has nothing for `id`.
+///
+/// Resolved here, on the game side, because the render interface deliberately knows nothing
+/// about tilesets — it is handed a file path and a pixel rect and does the crop
+/// (`?sprite:<x>:<y>:<w>:<h>:<path>`, rmlui_render_interface.cpp).
+///
+/// `find_tile_looks_like` rather than a bare `find_tile_type`: it already does the seasonal
+/// lookup AND walks the category's `looks_like` chain, which is what the world render does,
+/// so a modded item with no art of its own shows its base item's sprite instead of a hole.
+auto nc_tile_sprite_dec( const std::string &id, TILE_CATEGORY cat ) -> std::string
+{
+    // Every miss returns "none", not "". `data-style-decorator` evaluates its binding even for an
+    // element `data-if` has hidden, and an empty value becomes `decorator: ;`, which RmlUi logs as
+    // a parse error EVERY FRAME — 9,583 of them in one session from the doll's empty slots alone.
+    static const std::string dec_none = "none";
+    if( tilecontext == nullptr || id.empty() ) {
+        return dec_none;
+    }
+    const tileset *ts = tilecontext->current_tileset();
+    if( ts == nullptr ) {
+        return dec_none;
+    }
+    // tile_lookup_res::tile() is non-const, so the optional has to be held by value.
+    auto found = tilecontext->find_tile_looks_like( id, cat );
+    if( !found ) {
+        return dec_none;
+    }
+    const tile_type &tt = found->tile();
+    if( tt.sprite.fg.empty() ) {
+        return dec_none;
+    }
+    // Each entry is a weighted_object wrapping the variant list; take the first variant of
+    // the first entry so the art is stable rather than rerolled per frame.
+    const std::vector<int> &variants = tt.sprite.fg.begin()->obj;
+    if( variants.empty() ) {
+        return dec_none;
+    }
+    const auto src = ts->sprite_file_source( variants.front() );
+    if( !src ) {
+        return dec_none;
+    }
+    return string_format( "image( ?sprite:%d:%d:%d:%d:%s none contain ) border-box",
+                          src->rect.x, src->rect.y, src->rect.w, src->rect.h, src->path );
 }
 
 /// Deterministic seeds for the eight tab glyphs, in tab order (POINTS .. OVERVIEW).
@@ -2333,6 +2384,140 @@ struct nc_prof_band {
     bool has_next_page = false;
     Rml::Vector<nc_prof_row> rows;
 };
+
+// ── STARTING-EQUIPMENT SHEET ───────────────────────────────────────────────────
+//
+// A Caves-of-Qud-style view of the kit the selected profession hands over: a paper doll of
+// body slots on the left, a collapsible category tree with weight rollups on the right, and
+// a carry-capacity readout underneath. See plans/charcreation-profession-equipment.md.
+//
+// It takes the whole stage rather than a fourth column of the 188dp info panel: a doll plus a
+// two-level tree does not fit there, and growing the panel would undo the guarantee that
+// picking a wordy profession cannot move the tree.
+
+/// One cell of the paper doll. Every grid position emits a cell — a `junction` draws Qud's
+/// connecting lines instead of a box, and a `blank` holds its column open — so the grid needs
+/// no pixel arithmetic, for the same reason the info panel's notch row mirrors the carousel's
+/// flex geometry rather than measuring it.
+struct nc_eqp_slot {
+    Rml::String name_rml;    //< slot caption ("head", "left hand", "wielded")
+    Rml::String item_rml;    //< what fills it
+    Rml::String more_rml;    //< "+2" when further items also cover this part
+    Rml::String dec = "none";   //< tileset sprite; "none" (never "") when it has none
+    bool filled = false;
+    bool junction = false;   //< spine + rung, no box
+    bool blank = false;      //< spacer, nothing drawn
+};
+/// One row of the doll: left, centre, right. Always three cells.
+struct nc_eqp_dollrow {
+    Rml::Vector<nc_eqp_slot> cells;
+};
+/// One line of the category tree. FLAT with level flags rather than a nested `data-for`:
+/// collapsing is then a filter over one list, and — because every row is the same height —
+/// scrolling the cursor into view is exact arithmetic rather than DOM child indexing.
+struct nc_eqp_row {
+    Rml::String marker_rml;  //< "-"/"+" on headers, empty on items
+    Rml::String name_rml;
+    Rml::String stat_rml;    //< the one number worth comparing, per item kind
+    Rml::String wt_rml;
+    Rml::String vol_rml;
+    Rml::String val_rml;
+    bool group = false;      //< WIELDED / WORN / CARRIED
+    bool sub = false;        //< item category
+    bool focused = false;
+    /// Collapse-map key, empty on item rows. NOT registered with the data model — the input
+    /// loop reads it to know what a click or CONFIRM on this row should toggle.
+    std::string key;
+};
+
+/// The one number worth comparing for an item of this kind, or an empty string when none is.
+///
+/// Deliberately ONE column. Qud can afford `→4 ♥1d2 [6 lbs.]` on every row because its
+/// player is choosing what to wield; here the reader is choosing a profession, so a wall of
+/// per-item stats would out-shout the weights and totals that actually differ between two
+/// kits.
+auto nc_eqp_stat( const item &it ) -> std::string
+{
+    if( it.is_gun() ) {
+    const int dmg = it.gun_damage( false ).total_damage();
+        if( dmg > 0 ) {
+            return colorize( string_format( _( "DMG %d" ), dmg ), c_light_red );
+        }
+    }
+    // Armor BEFORE melee: nearly every boot and hard hat clears the melee threshold as a
+    // kicking or headbutting weapon, and "hard hat DMG 6" tells the reader nothing they want to
+    // know about a hard hat. A weapon is not armor, so it still reaches the melee branch.
+    if( it.is_armor() ) {
+    const int bash = it.bash_resist();
+        const int cut = it.cut_resist();
+        if( bash > 0 || cut > 0 ) {
+            return colorize( string_format( _( "ARM %d/%d" ), bash, cut ), c_light_blue );
+        }
+    }
+    const int melee = std::max( { it.damage_melee( DT_BASH ), it.damage_melee( DT_CUT ),
+                                  it.damage_melee( DT_STAB ) } );
+    if( melee >= 4 ) {
+    return colorize( string_format( _( "DMG %d" ), melee ), c_light_red );
+    }
+    return {};
+}
+
+/// How the profession's own equip pass will place an item. Same predicates the curses buffer
+/// used, so the grouping is the real outcome rather than a taxonomy invented for the display.
+enum class nc_eqp_mode : int { wielded = 0, worn, carried, num_modes };
+
+auto nc_eqp_mode_of( const item &it ) -> nc_eqp_mode
+{
+    if( it.has_flag( json_flag_no_auto_equip ) ) {
+    return nc_eqp_mode::carried;
+}
+if( it.has_flag( json_flag_auto_wield ) ) {
+    return nc_eqp_mode::wielded;
+}
+return it.is_armor() ? nc_eqp_mode::worn : nc_eqp_mode::carried;
+}
+
+auto nc_eqp_mode_name( nc_eqp_mode m ) -> std::string
+{
+    switch( m ) {
+    case nc_eqp_mode::wielded:
+        return _( "Wielded" );
+        case nc_eqp_mode::worn:
+            return _( "Worn" );
+        case nc_eqp_mode::carried:
+            return _( "Carried" );
+        default:
+            return {};
+    }
+}
+
+/// Identical items merged into one row: professions routinely hand out four of a thing, and
+/// four identical lines are four times the noise for no extra information.
+struct nc_eqp_stack {
+    const item *rep = nullptr;
+    int count = 0;
+    units::mass wt = 0_gram;
+    units::volume vol = 0_ml;
+    double val = 0.0;              //< cents, summed as double: price() is a float
+};
+
+auto nc_eqp_weight_str( const units::mass &m ) -> std::string
+{
+    return string_format( "%.1f %s", convert_weight( m ), weight_units() );
+}
+
+struct nc_eqp_build {
+    const std::vector<detached_ptr<item>> &items;
+    const profession &prof;
+    const avatar &u;
+    /// Collapse state keyed by STRING ("wielded", "worn|clothing"), never by index:
+    /// switching profession changes which categories exist, and index-keyed state would
+    /// silently reassign to a different category.
+    const std::map<std::string, bool> &collapsed;
+    int focus = 0;                 //< cursor position in the emitted row list
+    const input_context *ctxt = nullptr;
+};
+
 struct nc_prof_session {
     Rml::Vector<nc_prof_tab> tabs;
     nc_shell shell;
@@ -2358,8 +2543,291 @@ struct nc_prof_session {
     Rml::String sort_rml;
     Rml::String gender_rml;
     Rml::String filter_rml;
+    /// The starting-equipment sheet. While `eqp_open` the sheet takes the stage and the card
+    /// tree is hidden, so the two never compete for the same keys or the same space.
+    bool eqp_open = false;
+    /// Label of the screen-level control that opens the sheet. It sits in the status row because
+    /// that is where a screen-level toggle belongs, beside the sort hint — not because the info
+    /// panel cannot host it. The panel was the first home and its click never fired, but the
+    /// cause was gui/mainmenu.rml still being open underneath the whole creator and swallowing
+    /// hit-tests (see new_character_tab), not anything about the facts column.
+    Rml::String eqp_btn_rml;
+    Rml::String eqp_title_rml;
+    /// Header totals as FOUR fields rather than one spaced string — see build_nc_eqp_sheet for
+    /// why RmlUi cannot be trusted to keep spaces between two colour runs.
+    Rml::String eqp_count_rml;
+    Rml::String eqp_wt_rml;
+    Rml::String eqp_vol_rml;
+    Rml::String eqp_val_rml;
+    Rml::Vector<nc_eqp_dollrow> eqp_doll;
+    Rml::Vector<nc_eqp_row> eqp_rows;
+    Rml::String eqp_used_rml;
+    Rml::String eqp_cap_rml;
+    /// A dp LENGTH fed to `data-style-width`, never empty. `data-if` sets `display: none`
+    /// rather than removing the element, so this binding is still evaluated with the sheet
+    /// shut — an empty string became `width: ;` and RmlUi logged a parse error EVERY FRAME
+    /// (97,015 of them in one session before this default was added).
+    Rml::String eqp_bar_w = "0";
+    bool eqp_over = false;        //< kit exceeds this character's carry capacity
+    Rml::String eqp_close_rml;
     Rml::DataModelHandle handle;
 };
+
+/// Fills the sheet's bindings and returns how many rows it emitted (the cursor's range).
+auto build_nc_eqp_sheet( nc_prof_session &d, const nc_eqp_build &o ) -> int
+{
+    using namespace std::views;
+    namespace ranges = std::ranges;
+
+    // ── Partition ──────────────────────────────────────────────────────────────
+    // Per mode, per item category, a list of merged stacks. display_name() is the stack key
+    // because it already folds in charges and damage: two items that PRINT the same are the
+    // same row as far as the reader is concerned.
+    struct cat_bucket {
+        const item_category *cat = nullptr;
+        std::map<std::string, nc_eqp_stack> stacks;
+    };
+    std::array<std::map<std::string, cat_bucket>, 3> by_mode;
+    units::mass total_wt = 0_gram;
+    units::volume total_vol = 0_ml;
+    double total_val = 0.0;
+    int total_count = 0;
+
+    for( const detached_ptr<item> &ptr : o.items ) {
+        if( !ptr ) {
+            continue;
+        }
+        const item &it = *ptr;
+        const int mode = static_cast<int>( nc_eqp_mode_of( it ) );
+        const item_category &cat = it.get_category();
+        cat_bucket &bucket = by_mode[mode][cat.get_id().str()];
+        bucket.cat = &cat;
+        // `tname( 1, false )` rather than `display_name()`: with ITEM_HEALTH_BAR on,
+        // display_name() prefixes every armor item with a durability bar ("|| hoodie"),
+        // which is noise on a kit that is pristine by construction. with_prefix=false gates
+        // only that prefix and the burnt text (item_display.cpp:343,372) — charges, contents
+        // and container suffixes all survive, so "lighter (25/25)" still reads as such.
+        nc_eqp_stack &st = bucket.stacks[it.tname( 1, false )];
+        if( st.rep == nullptr ) {
+            st.rep = &it;
+        }
+        st.count++;
+        st.wt += it.weight();
+        st.vol += it.volume();
+        st.val += it.price( false );
+        total_wt += it.weight();
+        total_vol += it.volume();
+        total_val += it.price( false );
+        total_count++;
+    }
+
+    // ── Paper doll ─────────────────────────────────────────────────────────────
+    // For each body part, the item with the greatest coverage of it wins the cell (ties to
+    // the heavier), and the rest become a "+N" badge. Layered clothing is not drawn as
+    // layers; neither does Qud.
+    struct slot_pick {
+        const item *best = nullptr;
+        int best_cov = -1;
+        int count = 0;
+    };
+    std::map<bodypart_str_id, slot_pick> picks;
+    for( const detached_ptr<item> &ptr : o.items ) {
+        // WORN, not merely `is_armor()`: a profession that packs a spare pair of boots gives
+        // an armor item flagged `no_auto_equip`, which the equip pass leaves in the pack. Drawing
+        // it on the feet slot would claim the character is wearing something they are not.
+        if( !ptr || nc_eqp_mode_of( *ptr ) != nc_eqp_mode::worn ) {
+            continue;
+        }
+        const item &it = *ptr;
+        const body_part_set covered = it.get_covered_body_parts();
+        for( const body_part bp : all_body_parts ) {
+            const bodypart_str_id &bpid = convert_bp( bp );
+            if( !covered.test( bpid ) ) {
+                continue;
+            }
+            slot_pick &p = picks[bpid];
+            p.count++;
+            const int cov = it.get_coverage( bpid.id() );
+            if( cov > p.best_cov ||
+                ( cov == p.best_cov && p.best != nullptr && it.weight() > p.best->weight() ) ) {
+                p.best_cov = cov;
+                p.best = &it;
+            }
+        }
+    }
+    const item *wielded = nullptr;
+    for( const detached_ptr<item> &ptr : o.items ) {
+        if( ptr && nc_eqp_mode_of( *ptr ) == nc_eqp_mode::wielded ) {
+            wielded = &*ptr;
+            break;
+        }
+    }
+
+    const auto body_cell = [&]( body_part bp ) -> nc_eqp_slot {
+        const bodypart_str_id &bpid = convert_bp( bp );
+        nc_eqp_slot cell;
+        cell.name_rml = cata_text_to_rml( colorize( body_part_name( bpid.id() ), c_dark_gray ) );
+        const auto it = picks.find( bpid );
+        if( it == picks.end() || it->second.best == nullptr )
+        {
+            cell.item_rml = cata_text_to_rml( colorize( "—", c_dark_gray ) );
+            return cell;
+        }
+        cell.filled = true;
+        cell.item_rml = cata_text_to_rml( colorize( it->second.best->tname( 1, false ), c_light_gray ) );
+        cell.dec = nc_tile_sprite_dec( it->second.best->typeId().str(), C_ITEM );
+        if( it->second.count > 1 )
+        {
+            cell.more_rml = cata_text_to_rml( colorize(
+                                                  string_format( "+%d", it->second.count - 1 ), c_yellow ) );
+        }
+        return cell;
+    };
+    const auto junction = []() -> nc_eqp_slot {
+        return { .junction = true };
+    };
+    const auto blank = []() -> nc_eqp_slot {
+        return { .blank = true };
+    };
+
+    nc_eqp_slot wield_cell;
+    wield_cell.name_rml = cata_text_to_rml( colorize( _( "wielded" ), c_dark_gray ) );
+    if( wielded != nullptr ) {
+        wield_cell.filled = true;
+        wield_cell.item_rml = cata_text_to_rml( colorize( wielded->tname( 1, false ), c_light_gray ) );
+        wield_cell.dec = nc_tile_sprite_dec( wielded->typeId().str(), C_ITEM );
+    } else {
+        wield_cell.item_rml = cata_text_to_rml( colorize( _( "empty hands" ), c_dark_gray ) );
+    }
+
+    // Six rows of three. WIELDED sits on the spine between the hands: CBN wields with both
+    // hands, so there is no left/right weapon slot to mirror Qud's pair.
+    d.eqp_doll.clear();
+    d.eqp_doll.push_back( { .cells = { blank(), body_cell( bp_head ), blank() } } );
+    d.eqp_doll.push_back( { .cells = { body_cell( bp_eyes ), junction(), body_cell( bp_mouth ) } } );
+    d.eqp_doll.push_back( { .cells = { body_cell( bp_arm_l ), body_cell( bp_torso ), body_cell( bp_arm_r ) } } );
+    d.eqp_doll.push_back( { .cells = { body_cell( bp_hand_l ), wield_cell, body_cell( bp_hand_r ) } } );
+    d.eqp_doll.push_back( { .cells = { body_cell( bp_leg_l ), junction(), body_cell( bp_leg_r ) } } );
+    d.eqp_doll.push_back( { .cells = { body_cell( bp_foot_l ), junction(), body_cell( bp_foot_r ) } } );
+
+    // ── Tree ───────────────────────────────────────────────────────────────────
+    d.eqp_rows.clear();
+    for( int m = 0; m < 3; ++m ) {
+        if( by_mode[m].empty() ) {
+            continue;   // a group with nothing under it is noise
+        }
+        const std::string mode_key = string_format( "m%d", m );
+        const auto mode_it = o.collapsed.find( mode_key );
+        const bool mode_shut = mode_it != o.collapsed.end() && mode_it->second;
+
+        // Categories in the order the item factory declares for display, so this tree agrees
+        // with every other item list in the game.
+        std::vector<const cat_bucket *> cats;
+        for( const auto &[key, bucket] : by_mode[m] ) {
+            cats.push_back( &bucket );
+        }
+        ranges::sort( cats, []( const cat_bucket * a, const cat_bucket * b ) {
+            return *a->cat < *b->cat;
+        } );
+
+        units::mass mode_wt = 0_gram;
+        for( const cat_bucket *bucket : cats ) {
+            for( const auto &[name, st] : bucket->stacks ) {
+                mode_wt += st.wt;
+            }
+        }
+        nc_eqp_row head;
+        head.group = true;
+        head.marker_rml = cata_text_to_rml( colorize( mode_shut ? "+" : "-", c_yellow ) );
+        head.name_rml = cata_text_to_rml( colorize(
+                                              to_upper_case( nc_eqp_mode_name( static_cast<nc_eqp_mode>( m ) ) ), c_white ) );
+        head.wt_rml = cata_text_to_rml( colorize( nc_eqp_weight_str( mode_wt ), c_light_gray ) );
+        head.key = mode_key;
+        d.eqp_rows.push_back( head );
+        if( mode_shut ) {
+            continue;
+        }
+
+        for( const cat_bucket *bucket : cats ) {
+            const std::string cat_key = string_format( "m%d|%s", m, bucket->cat->get_id().str() );
+            const auto cat_it = o.collapsed.find( cat_key );
+            const bool cat_shut = cat_it != o.collapsed.end() && cat_it->second;
+            units::mass cat_wt = 0_gram;
+            for( const auto &[name, st] : bucket->stacks ) {
+                cat_wt += st.wt;
+            }
+            nc_eqp_row sub;
+            sub.sub = true;
+            sub.marker_rml = cata_text_to_rml( colorize( cat_shut ? "+" : "-", c_yellow ) );
+            sub.name_rml = cata_text_to_rml( colorize( bucket->cat->name(), c_yellow ) );
+            sub.wt_rml = cata_text_to_rml( colorize( nc_eqp_weight_str( cat_wt ), c_dark_gray ) );
+            sub.key = cat_key;
+            d.eqp_rows.push_back( sub );
+            if( cat_shut ) {
+                continue;
+            }
+            for( const auto &[name, st] : bucket->stacks ) {
+                nc_eqp_row row;
+                row.name_rml = cata_text_to_rml( colorize(
+                                                     st.count > 1 ? string_format( "%s x%d", name, st.count ) : name,
+                                                     c_light_gray ) );
+                row.stat_rml = cata_text_to_rml( nc_eqp_stat( *st.rep ) );
+                row.wt_rml = cata_text_to_rml( colorize( nc_eqp_weight_str( st.wt ), c_light_gray ) );
+                row.vol_rml = cata_text_to_rml( colorize( string_format( "%s %s",
+                                                format_volume( st.vol ), volume_units_abbr() ), c_dark_gray ) );
+                row.val_rml = cata_text_to_rml( colorize(
+                                                    format_money( static_cast<int>( st.val ) ), c_dark_gray ) );
+                d.eqp_rows.push_back( row );
+            }
+        }
+    }
+    const int nrows = static_cast<int>( d.eqp_rows.size() );
+    if( nrows > 0 ) {
+        d.eqp_rows[std::clamp( o.focus, 0, nrows - 1 )].focused = true;
+    }
+
+    // ── Header, capacity ───────────────────────────────────────────────────────
+    d.eqp_title_rml = cata_text_to_rml( colorize( string_format(
+                                            _( "Starting equipment · %s" ),
+                                            o.prof.gender_appropriate_name( o.u.male ) ), c_white ) );
+    // FOUR bindings, not one string with spaces between the parts: `cata_text_to_rml` emits one
+    // <span> per colour run and RmlUi trims a lone space between two runs at parse time, which
+    // welded the first attempt into "16 items9.1 kg9.32 L$2795.26". Separation is the
+    // stylesheet's job; margins cannot be trimmed.
+    d.eqp_count_rml = cata_text_to_rml( colorize( string_format(
+                                            vgettext( "%d item", "%d items", total_count ),
+                                            total_count ), c_light_gray ) );
+    d.eqp_wt_rml = cata_text_to_rml( colorize( nc_eqp_weight_str( total_wt ), c_light_gray ) );
+    d.eqp_vol_rml = cata_text_to_rml( colorize( string_format( "%s %s",
+                                      format_volume( total_vol ), volume_units_abbr() ), c_light_gray ) );
+    d.eqp_val_rml = cata_text_to_rml( colorize(
+                                          format_money( static_cast<int>( total_val ) ), c_green ) );
+
+    // weight_capacity() is STR-derived and the creator avatar's STR is live, so this readout
+    // tracks the STATS step: a kit that fits a strong character and not a weak one says so.
+    const units::mass cap = o.u.weight_capacity();
+    const double frac = cap > 0_gram
+                        ? static_cast<double>( to_gram( total_wt ) ) / to_gram( cap )
+                        : 0.0;
+    d.eqp_over = frac > 1.0;
+    // dp, not "%%": the fill is a plain block inside a fixed-width track, and a percentage
+    // width plus a transition starting from `auto` rendered nothing at all. NC_EQP_BAR_DP
+    // must match .nc-eqp-bar's width in newcharprofession.rcss minus its 1dp borders.
+    constexpr int NC_EQP_BAR_DP = 318;
+    d.eqp_bar_w = string_format( "%ddp",
+                                 static_cast<int>( std::lround( std::clamp( frac, 0.0, 1.0 ) *
+                                     NC_EQP_BAR_DP ) ) );
+    // Same reason as the totals: the "/" and its spacing live in the markup.
+    d.eqp_used_rml = cata_text_to_rml( colorize( string_format( "%.1f",
+                                       convert_weight( total_wt ) ),
+                                       d.eqp_over ? c_light_red : c_light_gray ) );
+    d.eqp_cap_rml = cata_text_to_rml( colorize( nc_eqp_weight_str( cap ), c_dark_gray ) );
+    d.eqp_close_rml = cata_text_to_rml( colorize( string_format(
+                                            _( "Close [%s]" ),
+                                            o.ctxt != nullptr ? o.ctxt->get_desc( "VIEW_EQUIPMENT", 1 ) : std::string( "?" ) ),
+                                        c_dark_gray ) );
+    return nrows;
+}
 
 bool g_nc_prof_types_registered = false;
 
@@ -2397,6 +2865,29 @@ void register_nc_prof_rml_types( Rml::DataModelConstructor &c )
     bh.RegisterMember( "has_next_page", &nc_prof_band::has_next_page );
     bh.RegisterMember( "rows", &nc_prof_band::rows );
     c.RegisterArray<Rml::Vector<nc_prof_band>>();
+    Rml::StructHandle<nc_eqp_slot> sh = c.RegisterStruct<nc_eqp_slot>();
+    sh.RegisterMember( "name_rml", &nc_eqp_slot::name_rml );
+    sh.RegisterMember( "item_rml", &nc_eqp_slot::item_rml );
+    sh.RegisterMember( "more_rml", &nc_eqp_slot::more_rml );
+    sh.RegisterMember( "dec", &nc_eqp_slot::dec );
+    sh.RegisterMember( "filled", &nc_eqp_slot::filled );
+    sh.RegisterMember( "junction", &nc_eqp_slot::junction );
+    sh.RegisterMember( "blank", &nc_eqp_slot::blank );
+    c.RegisterArray<Rml::Vector<nc_eqp_slot>>();
+    Rml::StructHandle<nc_eqp_dollrow> dh = c.RegisterStruct<nc_eqp_dollrow>();
+    dh.RegisterMember( "cells", &nc_eqp_dollrow::cells );
+    c.RegisterArray<Rml::Vector<nc_eqp_dollrow>>();
+    Rml::StructHandle<nc_eqp_row> eh = c.RegisterStruct<nc_eqp_row>();
+    eh.RegisterMember( "marker_rml", &nc_eqp_row::marker_rml );
+    eh.RegisterMember( "name_rml", &nc_eqp_row::name_rml );
+    eh.RegisterMember( "stat_rml", &nc_eqp_row::stat_rml );
+    eh.RegisterMember( "wt_rml", &nc_eqp_row::wt_rml );
+    eh.RegisterMember( "vol_rml", &nc_eqp_row::vol_rml );
+    eh.RegisterMember( "val_rml", &nc_eqp_row::val_rml );
+    eh.RegisterMember( "group", &nc_eqp_row::group );
+    eh.RegisterMember( "sub", &nc_eqp_row::sub );
+    eh.RegisterMember( "focused", &nc_eqp_row::focused );
+    c.RegisterArray<Rml::Vector<nc_eqp_row>>();
     g_nc_prof_types_registered = true;
 }
 } // namespace
@@ -2438,6 +2929,18 @@ tab_direction set_profession( avatar &u, points_left &points,
     int pending_page_band = -1;
     int pending_page_dir = 0;
     bool pending_all = false;
+    // ── Starting-equipment sheet state ────────────────────────────────────────
+    //
+    // Opened over the tree rather than beside it: a paper doll plus a two-level item tree
+    // does not fit the fixed 188dp info panel. See plans/charcreation-profession-equipment.md.
+    bool eqp_open = false;
+    int eqp_focus = 0;
+    int eqp_rows = 0;
+    // Keyed by string ("m1", "m1|clothing"), never by index: switching profession changes
+    // which categories exist, so an index-keyed map would reassign state to a stranger.
+    std::map<std::string, bool> eqp_collapsed;
+    bool pending_eqp_open = false;
+    int pending_eqp_row = -1;
 
     ui_adaptor ui;
     catacurses::window w;
@@ -2484,6 +2987,9 @@ tab_direction set_profession( avatar &u, points_left &points,
     // Expand/collapse every group at once. The UI control and this key are the same
     // action, so a rebind moves the hint printed beside the control too.
     ctxt.register_action( "TOGGLE_ALL_GROUPS" );
+    // Opens the starting-equipment sheet over the tree. The label beside the sheet's close
+    // control prints this binding via get_desc, so a rebind moves the hint too.
+    ctxt.register_action( "VIEW_EQUIPMENT" );
     ctxt.register_action( "SELECT" );
 
     bool recalc_profs = true;
@@ -2577,35 +3083,14 @@ tab_direction set_profession( avatar &u, points_left &points,
                                                  sl.first.obj().name(), sl.second ) + "\n";
                 }
             }
+            // Items are built ONCE per sync and shared by the GEAR fact, the paper doll and the
+            // equipment tree — this used to be constructed twice per redraw (here and for the
+            // gear count), and profession::items() runs item groups to do it.
             const auto prof_items = pid->items( u.male, u.get_mutations() );
-            buf += colorize( _( "Items:" ), c_light_blue ) + "\n";
-            if( prof_items.empty() ) {
-                buf += pgettext( "set_profession_item", "None" ) + std::string( "\n" );
-            } else {
-                std::string buffer_wielded;
-                std::string buffer_worn;
-                std::string buffer_inventory;
-                for( const auto &it : prof_items ) {
-                    if( it->has_flag( json_flag_no_auto_equip ) ) {
-                        buffer_inventory += it->display_name() + "\n";
-                    } else if( it->has_flag( json_flag_auto_wield ) ) {
-                        buffer_wielded += it->display_name() + "\n";
-                    } else if( it->is_armor() ) {
-                        buffer_worn += it->display_name() + "\n";
-                    } else {
-                        buffer_inventory += it->display_name() + "\n";
-                    }
-                }
-                buf += colorize( _( "Wielded:" ), c_cyan ) + "\n";
-                buf += !buffer_wielded.empty() ? buffer_wielded
-                       : pgettext( "set_profession_item_wielded", "None\n" );
-                buf += colorize( _( "Worn:" ), c_cyan ) + "\n";
-                buf += !buffer_worn.empty() ? buffer_worn
-                       : pgettext( "set_profession_item_worn", "None\n" );
-                buf += colorize( _( "Inventory:" ), c_cyan ) + "\n";
-                buf += !buffer_inventory.empty() ? buffer_inventory
-                       : pgettext( "set_profession_item_inventory", "None\n" );
-            }
+            // No flat "Items:" list here any more: the equipment sheet ([g]) itemises the same
+            // kit with weights, volumes, values, rollups and a body-slot doll, and two
+            // disagreeing item lists on one screen is exactly what the fact fields fixed for
+            // skills and traits.
             auto prof_CBMs = pid->CBMs();
             std::sort( begin( prof_CBMs ), end( prof_CBMs ), []( const bionic_id & a,
             const bionic_id & b ) {
@@ -2705,14 +3190,36 @@ tab_direction set_profession( avatar &u, points_left &points,
                 data->traits_rml = cata_text_to_rml( tl );
             }
 
-            const std::size_t gear_count = pid->items( u.male, u.get_mutations() ).size();
+            // GEAR keeps summarising with the sheet shut — count, total weight and cash — so
+            // the reader never has to open anything to compare two kits at a glance.
+            const int gear_count = static_cast<int>( prof_items.size() );
+            units::mass gear_wt = 0_gram;
+            for( const detached_ptr<item> &gi : prof_items ) {
+                if( gi ) {
+                    gear_wt += gi->weight();
+                }
+            }
             data->gear_rml = cata_text_to_rml( string_format(
-                                                   vgettext( "%d item", "%d items", static_cast<int>( gear_count ) ),
-                                                   static_cast<int>( gear_count ) ) );
+                                                   vgettext( "%d item", "%d items", gear_count ), gear_count ) );
             const std::optional<int> fact_cash = pid->starting_cash();
-            data->gear_sub_rml = fact_cash.value_or( 0 ) != 0
-                                 ? cata_text_to_rml( colorize( format_money( *fact_cash ), c_green ) )
-                                 : Rml::String();
+            std::string gear_sub = colorize( nc_eqp_weight_str( gear_wt ), c_dark_gray );
+            if( fact_cash.value_or( 0 ) != 0 ) {
+                gear_sub += "  " + colorize( format_money( *fact_cash ), c_green );
+            }
+            data->gear_sub_rml = cata_text_to_rml( gear_sub );
+
+            // The equipment sheet. Built only while it is on screen: it walks every item three
+            // times (partition, doll, tree) and nothing reads it when shut.
+            if( eqp_open ) {
+                eqp_rows = build_nc_eqp_sheet( *data, {
+                    .items = prof_items,
+                    .prof = *pid,
+                    .u = u,
+                    .collapsed = eqp_collapsed,
+                    .focus = eqp_focus,
+                    .ctxt = &ctxt
+                } );
+            }
 
             // Chips: this profession's own sigils in words, from the SAME table the card strip
             // uses, so a card can never show a glyph the panel fails to explain.
@@ -2749,7 +3256,29 @@ tab_direction set_profession( avatar &u, points_left &points,
             data->chips.clear();
             data->sort_rml.clear();
             data->gender_rml.clear();
+            // Nothing selected means nothing to itemise. Closed through the LOCAL, which the
+            // input loop reads: setting only the model flag would hide the sheet while leaving
+            // the loop convinced it is up, so the navigation keys would stay captured by
+            // something not on screen.
+            eqp_open = false;
+            eqp_rows = 0;
+            eqp_focus = 0;
+            data->eqp_doll.clear();
+            data->eqp_rows.clear();
+            data->eqp_title_rml.clear();
+            data->eqp_count_rml.clear();
+            data->eqp_wt_rml.clear();
+            data->eqp_vol_rml.clear();
+            data->eqp_val_rml.clear();
+            data->eqp_used_rml.clear();
+            data->eqp_cap_rml.clear();
+            data->eqp_close_rml.clear();
+            // Reset, not cleared: an empty value is not a parseable length.
+            data->eqp_bar_w = "0";
         }
+        // One assignment, after both branches: the local is the single source of truth for
+        // whether the sheet is up, and the model always agrees with it.
+        data->eqp_open = eqp_open;
 
         // Static vocabulary: built once, then left alone.
         if( data->legend.empty() ) {
@@ -2831,6 +3360,12 @@ tab_direction set_profession( avatar &u, points_left &points,
             data->bands.push_back( band );
         }
 
+        // Screen-level control: states the action, and takes its shortcut from get_desc so a
+        // rebind moves the printed key too — same contract as the expand/collapse-all control.
+        data->eqp_btn_rml = cata_text_to_rml( colorize( string_format(
+                _( "Equipment  [%s]" ),
+                ctxt.get_desc( "VIEW_EQUIPMENT", 1 ) ), c_light_gray ) );
+
         data->filter_rml = cata_text_to_rml( string_format( "<%s>",
                                              filterstring.empty() ? _( "no filter" ) : filterstring ) );
 
@@ -2852,6 +3387,20 @@ tab_direction set_profession( avatar &u, points_left &points,
         data->handle.DirtyVariable( "sort_rml" );
         data->handle.DirtyVariable( "gender_rml" );
         data->handle.DirtyVariable( "filter_rml" );
+        data->handle.DirtyVariable( "eqp_open" );
+        data->handle.DirtyVariable( "eqp_btn_rml" );
+        data->handle.DirtyVariable( "eqp_title_rml" );
+        data->handle.DirtyVariable( "eqp_count_rml" );
+        data->handle.DirtyVariable( "eqp_wt_rml" );
+        data->handle.DirtyVariable( "eqp_vol_rml" );
+        data->handle.DirtyVariable( "eqp_val_rml" );
+        data->handle.DirtyVariable( "eqp_doll" );
+        data->handle.DirtyVariable( "eqp_rows" );
+        data->handle.DirtyVariable( "eqp_used_rml" );
+        data->handle.DirtyVariable( "eqp_cap_rml" );
+        data->handle.DirtyVariable( "eqp_bar_w" );
+        data->handle.DirtyVariable( "eqp_over" );
+        data->handle.DirtyVariable( "eqp_close_rml" );
 
         // No ScrollIntoView: the carousel pages the cursor into view (sync_cur_from_focus),
         // so there is never an off-screen card to scroll to. The old block indexed a flat
@@ -2866,6 +3415,23 @@ tab_direction set_profession( avatar &u, points_left &points,
             const float maxtop = std::max( 0.0f, e->GetScrollHeight() - page );
             e->SetScrollTop( std::clamp( e->GetScrollTop() + dir * page * 0.15f, 0.0f, maxtop ) );
         }
+    };
+    // Keeps the sheet's cursor on screen. Every tree row is the SAME height by stylesheet
+    // rule, so row height is scroll_height / row_count exactly — no DOM child indexing, which
+    // `data-for` makes unreliable anyway.
+    const auto scroll_eqp_to_focus = [&]() {
+        if( !rml || eqp_rows <= 0 ) {
+            return;
+        }
+        Rml::Element *e = rml.document()->GetElementById( "nc-eqp-tree" );
+        if( e == nullptr ) {
+            return;
+        }
+        const float page = e->GetClientHeight();
+        const float total = e->GetScrollHeight();
+        const float row_h = total / static_cast<float>( eqp_rows );
+        const float want = row_h * static_cast<float>( eqp_focus ) - page * 0.5f;
+        e->SetScrollTop( std::clamp( want, 0.0f, std::max( 0.0f, total - page ) ) );
     };
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
@@ -2951,6 +3517,37 @@ tab_direction set_profession( avatar &u, points_left &points,
         c.Bind( "sort_rml", &data->sort_rml );
         c.Bind( "gender_rml", &data->gender_rml );
         c.Bind( "filter_rml", &data->filter_rml );
+        c.Bind( "eqp_open", &data->eqp_open );
+        c.Bind( "eqp_btn_rml", &data->eqp_btn_rml );
+        c.Bind( "eqp_title_rml", &data->eqp_title_rml );
+        c.Bind( "eqp_count_rml", &data->eqp_count_rml );
+        c.Bind( "eqp_wt_rml", &data->eqp_wt_rml );
+        c.Bind( "eqp_vol_rml", &data->eqp_vol_rml );
+        c.Bind( "eqp_val_rml", &data->eqp_val_rml );
+        c.Bind( "eqp_doll", &data->eqp_doll );
+        c.Bind( "eqp_rows", &data->eqp_rows );
+        c.Bind( "eqp_used_rml", &data->eqp_used_rml );
+        c.Bind( "eqp_cap_rml", &data->eqp_cap_rml );
+        c.Bind( "eqp_bar_w", &data->eqp_bar_w );
+        c.Bind( "eqp_over", &data->eqp_over );
+        c.Bind( "eqp_close_rml", &data->eqp_close_rml );
+        // Same rule as the tree's callbacks: RECORD INTENT, mutate nothing. `data-event-*`
+        // installs one listener per generated element and a `data-for` regeneration adds
+        // another without removing the old, so a handler that toggled here would self-cancel.
+        c.BindEventCallback( "on_gear",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) {
+            pending_eqp_open = true;
+        } );
+        c.BindEventCallback( "on_eqp_row",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int r = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( r );
+            }
+            if( r >= 0 ) {
+                pending_eqp_row = r;
+            }
+        } );
         data->handle = c.GetModelHandle();
     } );
     if( rml_doc_unavailable( rml, _( "Character creation (PROFESSION tab)" ) ) ) {
@@ -3071,9 +3668,102 @@ tab_direction set_profession( avatar &u, points_left &points,
         pending_card_slot = -1;
         pending_page_band = -1;
         pending_page_dir = 0;
+        pending_eqp_open = false;
+        pending_eqp_row = -1;
         std::string action = ctxt.handle_input();
         if( nc_nav != 0 ) {
             action = nc_nav < 0 ? "PREV_TAB" : "NEXT_TAB";
+        }
+        // ── Starting-equipment sheet ──────────────────────────────────────────
+        //
+        // The sheet takes the stage, so while it is up it OWNS the navigation keys: leaving
+        // them wired to the hidden card tree would move an invisible cursor and change the
+        // selected profession behind the reader's back. Handled before everything below for
+        // that reason, including TOGGLE_ALL_GROUPS, which the sheet reuses for its own groups.
+        if( pending_eqp_open ) {
+            eqp_open = true;
+            eqp_focus = 0;
+            continue;
+        }
+        if( action == "VIEW_EQUIPMENT" ) {
+            eqp_open = !eqp_open;
+            eqp_focus = 0;
+            continue;
+        }
+        if( eqp_open ) {
+            // Collapse key of the focused row, empty on item rows (which toggle nothing).
+            const auto focus_key = [&]() -> std::string {
+                const int n = static_cast<int>( data->eqp_rows.size() );
+                return eqp_focus >= 0 && eqp_focus < n ? data->eqp_rows[eqp_focus].key : std::string();
+            };
+            if( pending_eqp_row >= 0 &&
+                pending_eqp_row < static_cast<int>( data->eqp_rows.size() ) ) {
+                eqp_focus = pending_eqp_row;
+                const std::string &key = data->eqp_rows[pending_eqp_row].key;
+                if( !key.empty() ) {
+                    eqp_collapsed[key] = !eqp_collapsed[key];
+                }
+            } else if( action == "DOWN" ) {
+                eqp_focus = std::min( eqp_focus + 1, std::max( 0, eqp_rows - 1 ) );
+                scroll_eqp_to_focus();
+            } else if( action == "UP" ) {
+                eqp_focus = std::max( eqp_focus - 1, 0 );
+                scroll_eqp_to_focus();
+            } else if( action == "CONFIRM" ) {
+                const std::string key = focus_key();
+                if( !key.empty() ) {
+                    eqp_collapsed[key] = !eqp_collapsed[key];
+                }
+            } else if( action == "LEFT" ) {
+                const std::string key = focus_key();
+                if( !key.empty() ) {
+                    eqp_collapsed[key] = true;
+                }
+            } else if( action == "RIGHT" ) {
+                const std::string key = focus_key();
+                if( !key.empty() ) {
+                    eqp_collapsed[key] = false;
+                }
+            } else if( action == "TOGGLE_ALL_GROUPS" ) {
+                // A key absent from the map means EXPANDED, so "expand all" is a clear() and
+                // cannot leave a nested category shut behind a reopened group — which a
+                // set-every-visible-key loop would, since a collapsed group emits no category
+                // rows for the loop to see.
+                const bool any_open = std::ranges::any_of( data->eqp_rows,
+                [&]( const nc_eqp_row & r ) {
+                    if( r.key.empty() ) {
+                        return false;
+                    }
+                    const auto it = eqp_collapsed.find( r.key );
+                    return it == eqp_collapsed.end() || !it->second;
+                } );
+                if( any_open ) {
+                    for( const nc_eqp_row &r : data->eqp_rows ) {
+                        if( !r.key.empty() ) {
+                            eqp_collapsed[r.key] = true;
+                        }
+                    }
+                } else {
+                    eqp_collapsed.clear();
+                }
+                eqp_focus = 0;
+            } else if( action == "QUIT" ) {
+                // Closes the sheet rather than asking about the main menu: ESC on an open
+                // overlay means "back", not "quit the whole thing".
+                eqp_open = false;
+            } else if( action == "PREV_TAB" ) {
+                retval = tab_direction::BACKWARD;
+            } else if( action == "NEXT_TAB" ) {
+                retval = tab_direction::FORWARD;
+            } else if( action == "CHANGE_GENDER" ) {
+                // Gender changes the kit, so it stays live with the sheet open.
+                u.male = !u.male;
+                profession_sorter.male = u.male;
+                if( !profession_sorter.sort_by_points ) {
+                    std::sort( sorted_profs.begin(), sorted_profs.end(), profession_sorter );
+                }
+            }
+            continue;
         }
         // ── Tree navigation ───────────────────────────────────────────────────
         //
@@ -3699,18 +4389,9 @@ struct nc_scen_icon {
 /// tileset has no sprite for it.
 ///
 /// Bespoke per-scenario art does not exist yet, so the start location's overmap sprite is
-/// the closest honest stand-in for "where this run begins". Resolved here, on the game side,
-/// because the render interface deliberately knows nothing about tilesets — it is handed a
-/// file path and a pixel rect and does the crop.
+/// the closest honest stand-in for "where this run begins".
 auto nc_scen_art_dec( const scenario &s ) -> std::string
 {
-    if( tilecontext == nullptr ) {
-        return {};
-    }
-    const tileset *ts = tilecontext->current_tileset();
-    if( ts == nullptr ) {
-        return {};
-    }
     const start_location_id loc = s.start_location();
     if( !loc.is_valid() ) {
         return {};
@@ -3719,26 +4400,8 @@ auto nc_scen_art_dec( const scenario &s ) -> std::string
     if( !target ) {
         return {};
     }
-    // Overmap sprites are keyed by the plain terrain id; the season-aware lookup also covers
-    // tilesets that only ship a seasonal variant.
-    // tile_lookup_res::tile() is non-const, so the optional has to be held by value.
-    auto found = ts->find_tile_type_by_season( target->first, season_of_year( calendar::turn ) );
-    const tile_type *tt = found ? &found->tile() : ts->find_tile_type( target->first );
-    if( tt == nullptr || tt->sprite.fg.empty() ) {
-        return {};
-    }
-    // Each entry is a weighted_object wrapping the variant list; take the first variant of
-    // the first entry so the art is stable rather than rerolled per frame.
-    const std::vector<int> &variants = tt->sprite.fg.begin()->obj;
-    if( variants.empty() ) {
-        return {};
-    }
-    const auto src = ts->sprite_file_source( variants.front() );
-    if( !src ) {
-        return {};
-    }
-    return string_format( "image( ?sprite:%d:%d:%d:%d:%s none contain ) border-box",
-                          src->rect.x, src->rect.y, src->rect.w, src->rect.h, src->path );
+    // Overmap sprites are keyed by the plain terrain id.
+    return nc_tile_sprite_dec( target->first, C_OVERMAP_TERRAIN );
 }
 
 /// A sigil paired with words. Used twice: the legend beneath the tree (which states the

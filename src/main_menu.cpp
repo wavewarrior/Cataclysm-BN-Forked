@@ -25,6 +25,7 @@
 #include "mapsharing.h"
 #include "messages.h"
 #include "lighting/menu_plexus.h"
+#include "lighting/rmlui_layer.h"
 #include "newcharacter.h"
 #include "options.h"
 #include "output.h"
@@ -1053,6 +1054,13 @@ bool main_menu::opening_screen()
 
 bool main_menu::new_character_tab()
 {
+    // gui/mainmenu.rml is opened by opening_screen() and this runs from INSIDE its input loop,
+    // so without this the menu document stays live underneath every character-creation screen.
+    // Two consequences, both observed: its text bleeds through the creator's panels as ghost
+    // typography, and it keeps hit-testing — a `data-event-click` handler on a creator element
+    // that happens to sit over a menu element never receives the click, while its neighbours
+    // work, which reads as an inexplicably dead control.
+    const rmlui_layer::scoped_documents_hidden nc_menu_hidden;
     std::string selected_template;
 
     avatar& pc = get_avatar();

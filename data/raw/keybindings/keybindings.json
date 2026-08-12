@@ -1345,6 +1345,13 @@
   },
   {
     "type": "keybinding",
+    "id": "VIEW_EQUIPMENT",
+    "category": "NEW_CHAR_PROFESSIONS",
+    "name": "View starting equipment",
+    "bindings": [ { "input_method": "keyboard", "key": "g" } ]
+  },
+  {
+    "type": "keybinding",
     "id": "SORT",
     "category": "NEW_CHAR_PROFESSIONS",
     "name": "Toggle sorting order",
