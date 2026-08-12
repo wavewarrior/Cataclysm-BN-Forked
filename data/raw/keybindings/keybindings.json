@@ -1331,6 +1331,20 @@
   },
   {
     "type": "keybinding",
+    "id": "TOGGLE_ALL_GROUPS",
+    "category": "NEW_CHAR_PROFESSIONS",
+    "name": "Expand or collapse all groups",
+    "bindings": [ { "input_method": "keyboard", "key": "e" } ]
+  },
+  {
+    "type": "keybinding",
+    "id": "TOGGLE_ALL_GROUPS",
+    "category": "NEW_CHAR_SCENARIOS",
+    "name": "Expand or collapse all groups",
+    "bindings": [ { "input_method": "keyboard", "key": "e" } ]
+  },
+  {
+    "type": "keybinding",
     "id": "SORT",
     "category": "NEW_CHAR_PROFESSIONS",
     "name": "Toggle sorting order",

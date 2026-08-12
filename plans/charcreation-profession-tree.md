@@ -135,6 +135,24 @@ toggling its locked traits off and back on is not a no-op.
 - Chips agree with the card strip; legend covers all nine sigils.
 - `[newchar]` passes; SCENARIO tab unaffected by the stylesheet move.
 
+## Expand/collapse all
+
+A bordered control sits above the first group, right-aligned over the carousel's own edge:
+`- COLLAPSE ALL [E]` when any group is open, `+ EXPAND ALL [E]` when none is. The label states
+what a click WILL do rather than the current state — a control named after its own condition
+makes the reader work out the consequence.
+
+It is one action, `TOGGLE_ALL_GROUPS`, shared by the control and the key, so the shortcut the
+label prints comes from `input_context::get_desc` and follows a rebind. Bound to `e`, verified
+free across GLOBAL and both creator categories before taking it.
+
+Collapsing parks the cursor on the focused group's header, because the card it stood on is gone;
+expanding steps back onto a card so the notch and panel have something to describe. The control
+lives in the shared vocabulary, so both steps got it from one definition.
+
+First attempt was too quiet to be a button — dim, unbordered, indistinguishable from the
+captions around it. It now carries a border that goes gold on hover.
+
 ## Not done
 
 - `SORT` / `FILTER` / `RANDOMIZE` / `CHANGE_GENDER` and keyboard tree navigation are unverified:

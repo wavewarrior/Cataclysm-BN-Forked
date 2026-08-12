@@ -815,3 +815,49 @@
     flex: 0 0 auto;
 }
 
+
+/* Expand/collapse-all control, above the first group. Right-aligned so it sits over the
+   carousel's own right edge rather than competing with the group names on the left. */
+.nc-tree-head {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    padding: 0 0 4dp 0;
+}
+
+/* Reads as a member of the band-header family: same marker vocabulary, same quiet colour,
+   same brightening on hover. */
+.nc-tree-all {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 3dp 9dp;
+    /* A border, because without one this was indistinguishable from the dim captions around
+       it and read as a label rather than something to click. */
+    border: 1dp {{bg4}};
+    color: {{fg4}};
+    transition: background-color 0.16s quadratic-in-out, color 0.14s quadratic-in-out,
+                border-color 0.16s quadratic-in-out;
+}
+
+.nc-tree-all:hover {
+    background-color: {{bg-hard}};
+    border-color: {{yellow}};
+    color: {{fg0}};
+}
+
+.nc-tree-all-marker {
+    display: block;
+    flex: 0 0 auto;
+    width: 12dp;
+}
+
+.nc-tree-all-label {
+    display: block;
+    flex: 0 0 auto;
+    font-size: 13dp;
+    letter-spacing: 1dp;
+    text-transform: uppercase;
+}

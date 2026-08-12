@@ -45,6 +45,16 @@
                      row holding only the VISIBLE page of cards. Bands are discovered from the
                      data — one per skill display category some profession leads with. -->
                 <div class="nc-tree">
+                    <!-- Expand/collapse every group. A real control rather than a hint: the
+                         tree can hold six groups, and opening or shutting them one at a time
+                         is the kind of chore a single affordance should absorb. Keyboard
+                         parity comes from TOGGLE_ALL_GROUPS, whose binding the label prints. -->
+                    <div class="nc-tree-head">
+                        <div class="nc-tree-all" data-event-click="on_toggle_all()">
+                            <span class="nc-tree-all-marker" data-rml="all_marker_rml"></span>
+                            <span class="nc-tree-all-label" data-rml="all_label_rml"></span>
+                        </div>
+                    </div>
                     <div class="nc-band" data-for="b, bi : bands">
                         <div class="nc-band-head" data-class-focused="b.focused"
                              data-class-collapsed="b.collapsed"

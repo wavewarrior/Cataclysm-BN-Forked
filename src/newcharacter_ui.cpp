@@ -2339,6 +2339,11 @@ struct nc_prof_session {
     Rml::String points_rml;
     Rml::String cost_rml;
     Rml::Vector<nc_prof_band> bands;
+    /// The expand/collapse-all control above the tree. The marker mirrors the band headers'
+    /// +/- vocabulary so it reads as the same family, and the label carries the real shortcut
+    /// from input_context::get_desc so it stays correct after a rebind.
+    Rml::String all_marker_rml;
+    Rml::String all_label_rml;
     Rml::Vector<nc_prof_glyph> legend;
     /// Facts about the selected profession, one binding per field — the old single
     /// pre-wrapped buffer could not be given hierarchy and could not fit a fixed panel.
@@ -2432,6 +2437,7 @@ tab_direction set_profession( avatar &u, points_left &points,
     int pending_card_slot = -1;
     int pending_page_band = -1;
     int pending_page_dir = 0;
+    bool pending_all = false;
 
     ui_adaptor ui;
     catacurses::window w;
@@ -2475,6 +2481,9 @@ tab_direction set_profession( avatar &u, points_left &points,
     // mouse event, only registering the action it maps to can. Without this the
     // click callback fires but handle_input() never returns, leaving the loop parked
     // until an unrelated keypress, which then got hijacked into a step change.
+    // Expand/collapse every group at once. The UI control and this key are the same
+    // action, so a rebind moves the hint printed beside the control too.
+    ctxt.register_action( "TOGGLE_ALL_GROUPS" );
     ctxt.register_action( "SELECT" );
 
     bool recalc_profs = true;
@@ -2753,6 +2762,17 @@ tab_direction set_profession( avatar &u, points_left &points,
             data->handle.DirtyVariable( "legend" );
         }
 
+        // Expand/collapse-all control. Its label states what a click WILL do rather than the
+        // current state: a control named after its own condition makes the reader work out the
+        // consequence for themselves.
+        {
+            const bool any_open = std::ranges::any_of( band_collapsed, []( bool c ) { return !c; } );
+            data->all_marker_rml = cata_text_to_rml( colorize( any_open ? "-" : "+", c_yellow ) );
+            data->all_label_rml = cata_text_to_rml( colorize( string_format(
+                    any_open ? _( "Collapse all  [%s]" ) : _( "Expand all  [%s]" ),
+                    ctxt.get_desc( "TOGGLE_ALL_GROUPS", 1 ) ), c_dark_gray ) );
+        }
+
         // Grouped carousel view. Only the VISIBLE page of each open band is emitted, so the
         // document holds a couple of dozen cards rather than all 258 professions.
         data->bands.clear();
@@ -2819,6 +2839,8 @@ tab_direction set_profession( avatar &u, points_left &points,
         data->handle.DirtyVariable( "points_rml" );
         data->handle.DirtyVariable( "cost_rml" );
         data->handle.DirtyVariable( "bands" );
+        data->handle.DirtyVariable( "all_marker_rml" );
+        data->handle.DirtyVariable( "all_label_rml" );
         data->handle.DirtyVariable( "desc_rml" );
         data->handle.DirtyVariable( "info_rml" );
         data->handle.DirtyVariable( "skills_rml" );
@@ -2872,6 +2894,12 @@ tab_direction set_profession( avatar &u, points_left &points,
         c.Bind( "cost_rml", &data->cost_rml );
         c.Bind( "bands", &data->bands );
         c.Bind( "legend", &data->legend );
+        c.Bind( "all_marker_rml", &data->all_marker_rml );
+        c.Bind( "all_label_rml", &data->all_label_rml );
+        c.BindEventCallback( "on_toggle_all",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) {
+            pending_all = true;
+        } );
         // Click callbacks RECORD INTENT and mutate nothing — `data-event-*` installs a
         // listener per generated element and a `data-for` regeneration adds another without
         // removing the old, so one click invokes these an unbounded number of times. The loop
@@ -3037,6 +3065,7 @@ tab_direction set_profession( avatar &u, points_left &points,
 
         ui_manager::redraw();
         nc_nav = 0;
+        pending_all = false;
         pending_band = -1;
         pending_card_band = -1;
         pending_card_slot = -1;
@@ -3097,6 +3126,23 @@ tab_direction set_profession( avatar &u, points_left &points,
             newcharacter::add_traits( u, points );
             points.skill_points -= netPointCost;
         };
+        // Expand every group, or collapse every group when any is open. Collapsing parks the
+        // cursor on the focused group's header, because the card it stood on is gone.
+        const auto toggle_all_bands = [&]() {
+            const bool any_open = std::ranges::any_of( band_collapsed, []( bool c ) { return !c; } );
+            for( std::size_t b = 0; b < band_collapsed.size(); ++b ) {
+                band_collapsed[b] = any_open;
+            }
+            if( any_open ) {
+                focus_header = true;
+            } else if( band_size( focus_band ) > 0 ) {
+                focus_header = false;
+                sync_cur_from_focus();
+            }
+        };
+        if( pending_all || action == "TOGGLE_ALL_GROUPS" ) {
+            toggle_all_bands();
+        }
         // Apply click intent recorded during handle_input, exactly once — however many times
         // the callback ran. Cleared above so a stale intent cannot re-apply on a later frame.
         if( pending_band >= 0 ) {
@@ -3747,6 +3793,11 @@ struct nc_scen_session {
     Rml::String points_rml;
     Rml::String cost_rml;
     Rml::Vector<nc_scen_band> bands;
+    /// The expand/collapse-all control above the tree. The marker mirrors the band headers'
+    /// +/- vocabulary so it reads as the same family, and the label carries the real shortcut
+    /// from input_context::get_desc so it stays correct after a rebind.
+    Rml::String all_marker_rml;
+    Rml::String all_label_rml;
     Rml::String desc_rml;
     Rml::String sort_rml;
     Rml::String filter_rml;
@@ -3837,6 +3888,7 @@ tab_direction set_scenario( avatar &u, points_left &points,
     int pending_card_slot = -1;
     int pending_page_band = -1;
     int pending_page_dir = 0;
+    bool pending_all = false;
 
     ui_adaptor ui;
     catacurses::window w;
@@ -3879,6 +3931,9 @@ tab_direction set_scenario( avatar &u, points_left &points,
     // mouse event, only registering the action it maps to can. Without this the
     // click callback fires but handle_input() never returns, leaving the loop parked
     // until an unrelated keypress, which then got hijacked into a step change.
+    // Expand/collapse every group at once. The UI control and this key are the same
+    // action, so a rebind moves the hint printed beside the control too.
+    ctxt.register_action( "TOGGLE_ALL_GROUPS" );
     ctxt.register_action( "SELECT" );
 
     bool recalc_scens = true;
@@ -4014,6 +4069,17 @@ tab_direction set_scenario( avatar &u, points_left &points,
             data->handle.DirtyVariable( "legend" );
         }
 
+        // Expand/collapse-all control. Its label states what a click WILL do rather than the
+        // current state: a control named after its own condition makes the reader work out the
+        // consequence for themselves.
+        {
+            const bool any_open = std::ranges::any_of( band_collapsed, []( bool c ) { return !c; } );
+            data->all_marker_rml = cata_text_to_rml( colorize( any_open ? "-" : "+", c_yellow ) );
+            data->all_label_rml = cata_text_to_rml( colorize( string_format(
+                    any_open ? _( "Collapse all  [%s]" ) : _( "Expand all  [%s]" ),
+                    ctxt.get_desc( "TOGGLE_ALL_GROUPS", 1 ) ), c_dark_gray ) );
+        }
+
         // Grouped carousel view. Only the VISIBLE page of each open group is emitted, so
         // the document holds ~24 cards at most rather than every scenario in the game.
         data->bands.clear();
@@ -4084,6 +4150,8 @@ tab_direction set_scenario( avatar &u, points_left &points,
         data->handle.DirtyVariable( "points_rml" );
         data->handle.DirtyVariable( "cost_rml" );
         data->handle.DirtyVariable( "bands" );
+        data->handle.DirtyVariable( "all_marker_rml" );
+        data->handle.DirtyVariable( "all_label_rml" );
         data->handle.DirtyVariable( "desc_rml" );
         data->handle.DirtyVariable( "loc_rml" );
         data->handle.DirtyVariable( "loc_sub_rml" );
@@ -4189,6 +4257,12 @@ tab_direction set_scenario( avatar &u, points_left &points,
         c.Bind( "sort_rml", &data->sort_rml );
         c.Bind( "filter_rml", &data->filter_rml );
         c.Bind( "legend", &data->legend );
+        c.Bind( "all_marker_rml", &data->all_marker_rml );
+        c.Bind( "all_label_rml", &data->all_label_rml );
+        c.BindEventCallback( "on_toggle_all",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) {
+            pending_all = true;
+        } );
         data->handle = c.GetModelHandle();
     } );
     if( rml_doc_unavailable( rml, _( "Character creation (SCENARIO tab)" ) ) ) {
@@ -4274,6 +4348,7 @@ tab_direction set_scenario( avatar &u, points_left &points,
 
         ui_manager::redraw();
         nc_nav = 0;
+        pending_all = false;
         pending_band = -1;
         pending_card_band = -1;
         pending_card_slot = -1;
@@ -4305,6 +4380,23 @@ tab_direction set_scenario( avatar &u, points_left &points,
                 }
             }
         };
+        // Expand every group, or collapse every group when any is open. Collapsing parks the
+        // cursor on the focused group's header, because the card it stood on is gone.
+        const auto toggle_all_bands = [&]() {
+            const bool any_open = std::ranges::any_of( band_collapsed, []( bool c ) { return !c; } );
+            for( std::size_t b = 0; b < band_collapsed.size(); ++b ) {
+                band_collapsed[b] = any_open;
+            }
+            if( any_open ) {
+                focus_header = true;
+            } else if( band_size( focus_band ) > 0 ) {
+                focus_header = false;
+                sync_cur_from_focus();
+            }
+        };
+        if( pending_all || action == "TOGGLE_ALL_GROUPS" ) {
+            toggle_all_bands();
+        }
         // Apply click intent recorded during handle_input, exactly once — however many
         // times the callback was invoked. Cleared before handle_input so a stale intent
         // cannot re-apply on a later frame.
