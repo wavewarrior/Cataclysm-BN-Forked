@@ -31,41 +31,9 @@ body {
     flex: 0 0 auto;
 }
 
-/* ── COLUMN HEADING SIGIL ─────────────────────────────────────────────────────
-   The same glyph the radar sector and the detail panel's art slot draw, so a column, its
-   sector and its description cannot disagree about which category is being read. */
-.nc-col-sigil {
-    flex: 0 0 auto;
-    width: 14dp;
-    height: 14dp;
-    margin-right: 6dp;
-}
-
 /* ── ROW MAGNITUDE CELLS ──────────────────────────────────────────────────────
-   Steppers flank the meter, minus on its left and plus on its right, so the mouse gesture
-   is spatially the same as the LEFT/RIGHT keys. */
-.nc-cell-step {
-    flex: 0 0 auto;
-    width: 14dp;
-    text-align: center;
-    color: {{fg4}};
-}
-
-.nc-cell-step:hover {
-    color: {{yellow}};
-}
-
-/* At the floor or the cap. Still drawn, so the row does not change shape — but this is a
-   click target for something that SPENDS points, so it must not offer a hover affordance
-   when pressing it will do nothing. Same pattern the stats steppers use. */
-.nc-cell-step.off {
-    color: {{bg3}};
-}
-
-.nc-cell-step.off:hover {
-    color: {{bg3}};
-}
-
+   `.nc-cell-step` is a shared rule (newchar_common.rcss), promoted there when the OVERVIEW
+   identity rows became its second adopter. The meter it flanks is still this step's own. */
 .nc-cell-meter {
     flex: 0 0 auto;
     width: 84dp;
@@ -157,46 +125,10 @@ body {
     background-color: transparent;
 }
 
-/* Legend beneath the disc. An unlabelled radar is decoration, so each sector gets its sigil,
-   its name and the count it is drawn from.
-
-   `overflow: hidden` because this box can be shrunk below its content: it is the flexible
-   element under a fixed-size disc, and a mod adding display categories adds rows. Clipped is
-   recoverable; drawing over the rule and the detail panel below is not. */
-.nc-apt-legend {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
-
-.nc-apt-leg {
-    flex: 0 0 auto;
-    height: 16dp;
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-}
-
-.nc-apt-leg-icon {
-    flex: 0 0 auto;
-    width: 12dp;
-    height: 12dp;
-    margin-right: 6dp;
-}
-
-.nc-apt-leg-name {
-    display: block;
-    flex: 1;
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-}
-
-.nc-apt-leg-val {
-    display: block;
-    flex: 0 0 auto;
+/* Legend beneath the disc: `.nc-tally*` in newchar_common.rcss, promoted there when the OVERVIEW
+   seal's step digest became its second consumer. Only the gap above it is this step's. */
+.nc-tally {
+    margin-top: 4dp;
 }
 
 /* ── DETAIL ───────────────────────────────────────────────────────────────────

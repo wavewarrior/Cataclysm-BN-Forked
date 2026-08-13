@@ -136,11 +136,11 @@
                                      data-style-background-color="d.col"></div>
                             </div>
                         </div>
-                        <div class="nc-apt-legend">
-                            <div class="nc-apt-leg" data-for="s : apt_legend">
-                                <div class="nc-apt-leg-icon" data-style-decorator="s.dec"></div>
-                                <span class="nc-apt-leg-name" data-rml="s.name_rml"></span>
-                                <span class="nc-apt-leg-val" data-rml="s.val_rml"></span>
+                        <div class="nc-tally">
+                            <div class="nc-tally-row" data-for="s : apt_legend">
+                                <div class="nc-tally-icon" data-style-decorator="s.dec"></div>
+                                <span class="nc-tally-name" data-rml="s.name_rml"></span>
+                                <span class="nc-tally-val" data-rml="s.val_rml"></span>
                             </div>
                         </div>
                     </div>

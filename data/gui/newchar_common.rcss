@@ -973,6 +973,16 @@
     border-bottom: 1dp {{bg2}};
 }
 
+/* The heading's glyph. Promoted from newcharskills.rcss on its second adopter: it is the same
+   glyph the column's own diagram element and the detail panel's art slot draw, so a column, its
+   place on that diagram and its description cannot disagree about what is being read. */
+.nc-col-sigil {
+    flex: 0 0 auto;
+    width: 14dp;
+    height: 14dp;
+    margin-right: 6dp;
+}
+
 .nc-colname {
     display: block;
     flex: 0 0 auto;
@@ -1079,6 +1089,82 @@
     display: block;
     flex: 1;
     min-width: 0;
+}
+
+/* The +/- steppers. Promoted here from newcharskills.rcss when the OVERVIEW identity rows became
+   the second adopter: they flank the value they change, so the mouse gesture is spatially the same
+   as the LEFT/RIGHT keys that do it from the keyboard. */
+.nc-cell-step {
+    display: block;
+    flex: 0 0 auto;
+    width: 14dp;
+    text-align: center;
+    color: {{fg4}};
+}
+
+.nc-cell-step:hover {
+    color: {{yellow}};
+}
+
+/* Plainly dead rather than absent, so the row does not change shape at a floor or a cap — including
+   under the cursor, where the hover colour must not promise that pressing it will do something. */
+.nc-cell-step.off {
+    color: {{bg3}};
+}
+
+.nc-cell-step.off:hover {
+    color: {{bg3}};
+}
+
+/* ── TALLY LEGEND ─────────────────────────────────────────────────────────────
+   A vertical icon | name | value list under a diagram: the SKILLS aptitude radar's sector legend
+   and the OVERVIEW seal's step digest. Promoted on the second adopter under a name that does not
+   lie about what it styles — `.nc-legend*` is already the HORIZONTAL sigil strip on SCENARIO and
+   PROFESSION, which is a different thing.
+
+   Scrolls rather than growing: an unbounded legend under a fixed diagram is recoverable, drawing
+   over the rule and the detail panel below it is not. */
+.nc-tally {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+.nc-tally-row {
+    flex: 0 0 auto;
+    height: 16dp;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    overflow: hidden;
+}
+
+.nc-tally-icon {
+    flex: 0 0 auto;
+    width: 12dp;
+    height: 12dp;
+    margin-right: 6dp;
+}
+
+.nc-tally-name {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+/* nowrap and clipped, both LOAD-BEARING: the row's height is fixed, so a value long enough to wrap
+   inside its own cell draws over the rows beneath it. Measured on the OVERVIEW seal, where a
+   scenario name ("One Last Assassination") welded three legend rows into one illegible smudge. */
+.nc-tally-val {
+    display: block;
+    flex: 0 0 auto;
+    margin-left: 6dp;
+    white-space: nowrap;
+    overflow: hidden;
 }
 
 /* ── DETAIL HEADER AND HINT ───────────────────────────────────────────────────
