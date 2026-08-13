@@ -862,6 +862,42 @@
     text-transform: uppercase;
 }
 
+/* ── PIP METER ─────────────────────────────────────────────────────────────────
+   One pip per point of a range, drawn as a row of narrow blocks. Shared because SKILLS is the
+   second adopter: a stat card's meter and a skill row's level meter are the same idea, so the
+   colours belong in one place. Each adopter sizes its own pips in its own sheet — the STATS
+   card's meter is taller than a 22dp list row can be.
+
+   Filled pips are TALLER as well as brighter, so a meter still reads in greyscale and for any
+   form of colour blindness. Colour is the second channel, never the only one. */
+.nc-pip {
+    flex: 1;
+    min-width: 0;
+    height: 6dp;
+    margin-right: 2dp;
+    /* bg2, not bg1: the SELECTED card's own fill is bg1, so an unfilled pip on it was exactly
+       its background and the empty half of the meter vanished on whichever card had focus. */
+    background-color: {{bg2}};
+    transition: background-color 0.16s quadratic-in-out, height 0.16s quadratic-in-out;
+}
+
+.nc-pip.on {
+    height: 12dp;
+    background-color: {{yellow}};
+}
+
+/* Three classes, so these beat `.nc-pip.on` above without !important.
+   Granted floor: present, but plainly not something the player bought. */
+.nc-pip.on.base {
+    background-color: {{bg4}};
+}
+
+/* Costs two points. Red because that is the colour the stats step already used for
+   "Increasing Str further costs 2 points." — now carried by the thing it describes. */
+.nc-pip.on.steep {
+    background-color: {{red}};
+}
+
 
 /* ── SHARED ROW-LIST VOCABULARY ────────────────────────────────────────────────
    The other half of the creator's language: columns of single-line rows, used by the TRAITS

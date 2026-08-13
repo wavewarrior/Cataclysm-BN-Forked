@@ -128,33 +128,7 @@ body {
     padding-left: 5dp;
 }
 
-.nc-pip {
-    flex: 1;
-    min-width: 0;
-    height: 6dp;
-    margin-right: 2dp;
-    /* bg2, not bg1: the SELECTED card's own fill is bg1, so an unfilled pip on it was exactly
-       its background and the empty half of the meter vanished on whichever card had focus. */
-    background-color: {{bg2}};
-    transition: background-color 0.16s quadratic-in-out, height 0.16s quadratic-in-out;
-}
-
-.nc-pip.on {
-    height: 12dp;
-    background-color: {{yellow}};
-}
-
-/* Three classes, so these beat `.nc-pip.on` above without !important.
-   Granted floor: present, but plainly not something the player bought. */
-.nc-pip.on.base {
-    background-color: {{bg4}};
-}
-
-/* Costs two points. Red because that is the colour this step already used for
-   "Increasing Str further costs 2 points." — now carried by the thing it describes. */
-.nc-pip.on.steep {
-    background-color: {{red}};
-}
+/* The pips themselves are shared vocabulary now, in newchar_common.rcss — SKILLS adopted them. */
 
 /* ── STEPPERS ─────────────────────────────────────────────────────────────────
    The first time this step can be driven with a mouse at all. Bordered for the same reason
