@@ -126,6 +126,33 @@
                             </div>
                         </div>
                     </div>
+                    <div class="nc-vrule"></div>
+                    <!-- Spinning double helix. Two dots per rung whose horizontal positions come
+                         from one antiphase sine (newchar_dna.h), so it reads as a strand turning
+                         about its vertical axis without rotating anything. Every trait taken lights
+                         one rung, coloured by valence, so the genome fills in as you build.
+
+                         Pure flow — a leading gap, a dot, a bond, a dot. No `position: absolute`:
+                         RmlUi resolves it against .nc-panel in this document, which is what put the
+                         balance scale's beam through the top bar. -->
+                    <div class="nc-dna-wrap">
+                        <div class="nc-trait-colhead">
+                            <span class="nc-trait-colname">Genome</span>
+                            <span class="nc-trait-colcount" data-rml="dna_count_rml"></span>
+                        </div>
+                        <div class="nc-dna">
+                            <div class="nc-dna-rung" data-for="g : dna">
+                                <div class="nc-dna-gap" data-style-width="g.gap"></div>
+                                <div class="nc-dna-dot" data-class-front="g.left_front"
+                                     data-class-good="g.mark_good" data-class-bad="g.mark_bad"
+                                     data-class-cosm="g.mark_cosm"></div>
+                                <div class="nc-dna-bond" data-style-width="g.bond"></div>
+                                <div class="nc-dna-dot" data-class-front="!g.left_front"
+                                     data-class-good="g.mark_good" data-class-bad="g.mark_bad"
+                                     data-class-cosm="g.mark_cosm"></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="nc-rule"></div>

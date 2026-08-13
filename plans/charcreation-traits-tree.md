@@ -130,7 +130,64 @@ over-budget once, and three surfaces read it:
 - the `STATUS` fact's sub-line, in words ("Conflicts with a trait you already have."),
 - `CONFIRM`'s refusal popups, unchanged in wording and still firing for exactly their old cases.
 
-They cannot drift, because a single struct decides.
+They cannot drift, because a single struct decides — and that struct's precedence lives in
+`src/newchar_trait_gate.h` as pure data-in/data-out, so the branchiness is reachable from tests
+without an avatar. Two of its rules are NEW behaviour rather than a port, which is why they are
+pinned there rather than trusted:
+
+- `over_budget` keys off the **point sign**, where the old code keyed off the cursor's column
+  index. The regression it guards is specific: keyed off a column, a 0-point trait fell into the
+  disadvantage branch because it was "not an advantage".
+- `can_swap` did not exist. A conflicting trait whose type declares `swap_on_conflict` is a
+  *replacement*, not a refusal — but only when the avatar actually holds one of that type to give
+  up. `swaps` alone is not permission.
+
+## The DNA strand
+
+A double helix in a narrow full-height column beside the lists, turning slowly, with one dot pair
+lit per trait taken — so the genome visibly fills in as the character is built. Geometry is pure
+trigonometry in `src/newchar_dna.h`.
+
+Nothing rotates. A double helix seen side-on is two sine waves half a turn apart, so spinning it
+about its vertical axis is just advancing a shared phase — no `transform`, and in particular no
+`position: absolute`, which RmlUi resolves against `.nc-panel` in this document (the trap that put
+the balance scale's beam through the top bar). Each rung is laid out in pure flow as
+`[gap][dot][bond][dot]`, and C++ writes only the gap and bond widths.
+
+Both backbones come from **one** sine (`a = 0.5 + 0.5·sin t`, `b = 0.5 − 0.5·sin t`) so they cannot
+drift out of antiphase; `cos` of the same angle decides which dot is nearer the viewer and
+therefore which is bright. Tests pin the antiphase invariant, that the bond width is never negative
+(the backbones cross twice per turn, and a negative width would be a parse error every frame), and
+that `span_of` reports the depth of the dot it actually put on the left.
+
+Marked pairs take the valence colours the cost tags and the balance scale already use — green
+advantage, red disadvantage, gold appearance — and beat `.front` on specificity so a lit pair keeps
+its colour through the whole turn instead of flickering with depth.
+
+Rungs are `flex: 1` inside a `flex: 1` column, so 22 of them divide whatever height exists and the
+strand rescales with the window with no pixel arithmetic.
+
+### Animating a screen whose input loop blocks
+
+`rml_doc::open()` already sets a 16 ms poll on the step's input context (`rml_screen.cpp:78`) so
+RmlUi hover and wheel stay live between keys — so the strand animates for free at ~60fps. An
+earlier draft added `ctxt.set_timeout( 33 )` after the main menu's plexus idiom, which on this
+screen only *downgraded* that tick; it was removed.
+
+Phase comes from `steady_clock`, not a frame counter, so the spin neither speeds up while a key is
+held nor stalls when the player stops typing.
+
+The model is rebuilt only when something changed; the strand every frame. Without that split a
+quiet animation tick would re-colour 188 rows and force RmlUi to regenerate 188 `data-for` elements
+thirty times a second to move some dots.
+
+**The dirty test must include the click intents, not just the action.** cata maps `MOUSE_LEFT` to
+`SELECT` on mouse *down*, while RmlUi fires its `click` — and therefore the `data-event` callbacks
+— on mouse *up*, so the loop iteration that carries a click's intent is usually a `"TIMEOUT"` one.
+Gating on `action != "TIMEOUT"` alone applied every mouse toggle and rendered none of it: the
+checkbox, the row highlight, the points total, the balance scale and the detail panel would all
+keep showing the pre-click state. This is the kind of defect that only exists because the screen
+is gated at all — the other seven steps call `sync_rml()` unconditionally.
 
 ## Point-sign, not column index
 
@@ -160,8 +217,9 @@ index 2.
 ## Verified
 
 - Builds clean. Warning counts identical to HEAD for every touched TU: `newcharacter_ui.cpp` 22
-  (all pre-existing), `mutation_type.cpp` 0. `main_menu.cpp` is byte-identical to HEAD.
-- `[newchar]` + `[mutations]`: 3381 assertions in 17 cases, all passing.
+  (all pre-existing `-Wunused-macros`), `mutation_type.cpp` 0, and 0 from either new header.
+  `main_menu.cpp` is byte-identical to HEAD.
+- `[trait_gate]` + `[dna]` + `[newchar]` + `[mutations]`: 9479 assertions in 27 cases, all passing.
 
 ## NOT verified
 

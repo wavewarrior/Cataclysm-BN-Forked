@@ -204,6 +204,77 @@ body {
     min-width: 0;
 }
 
+/* ── DNA STRAND ───────────────────────────────────────────────────────────────
+   A narrow full-height column beside the lists. 88dp of box holds 72dp of travel plus the 8dp
+   dot and a little air, which is why newchar_dna.h's fractions are scaled by exactly 72. */
+.nc-dna-wrap {
+    flex: 0 0 auto;
+    width: 88dp;
+    display: flex;
+    flex-direction: column;
+}
+
+.nc-dna {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Every rung takes an equal share of whatever height the column has, so the strand rescales with
+   the window and never needs a rung count matched to a pixel height. */
+.nc-dna-rung {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+}
+
+/* The leading gap and the bond are the only animated properties: C++ writes their widths each
+   frame and the two dots fall where flow puts them. */
+.nc-dna-gap {
+    flex: 0 0 auto;
+}
+
+/* Rails between the pair. Dim, because it is the connection and not the data. */
+.nc-dna-bond {
+    flex: 0 0 auto;
+    height: 1dp;
+    background-color: {{bg3}};
+}
+
+.nc-dna-dot {
+    flex: 0 0 auto;
+    width: 8dp;
+    height: 8dp;
+    border-radius: 4dp;
+    /* Back half of the turn: recedes. Depth is carried by brightness alone — sizing the dots per
+       rung would change the flow widths and fight the gap arithmetic. */
+    background-color: {{bg4}};
+}
+
+/* Front half of the turn: nearer the viewer. */
+.nc-dna-dot.front {
+    background-color: {{fg4}};
+}
+
+/* A trait the player has taken, lit by valence — the same green/red the cost tags and the balance
+   scale use, so all three agree. Three classes beat `.front` on specificity, so a marked pair
+   stays its own colour through the whole turn rather than flickering with depth. */
+.nc-dna-dot.good {
+    background-color: {{green}};
+}
+
+.nc-dna-dot.bad {
+    background-color: {{red}};
+}
+
+.nc-dna-dot.cosm {
+    background-color: {{yellow}};
+}
+
 /* ── DETAIL ───────────────────────────────────────────────────────────────────
    ":: TRAIT NAME" over the shared art | facts | prose panel. */
 .nc-trait-selname {

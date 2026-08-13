@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <climits>
 #include <cstdlib>
 #include <functional>
@@ -62,8 +63,10 @@
 #include "recipe.h"
 #include "recipe_dictionary.h"
 #include <RmlUi/Core.h>
+#include "newchar_dna.h"
 #include "newchar_balance.h"
 #include "newchar_stat_meter.h"
+#include "newchar_trait_gate.h"
 #include "rml_length.h"
 #include "rml_screen.h"
 #include "rml_util.h"
@@ -1362,6 +1365,22 @@ struct nc_trait_fact {
     Rml::String sub_rml;
 };
 
+/// One rung of the DNA strand. Positions arrive as LENGTHS for a leading gap and a bond, because
+/// the strand is laid out in pure flow — `position: absolute` resolves against .nc-panel in this
+/// document rather than against a `position: relative` parent, which is what put the balance
+/// scale's beam through the top bar.
+struct nc_dna_rung {
+    Rml::String gap;          //< dp before the left-hand dot
+    Rml::String bond;         //< dp between the two dots
+    bool left_front = true;   //< the left dot is nearer the viewer, so it is the bright one
+    /// A trait the player has taken is pinned to this rung. Three flags rather than one colour
+    /// string because `data-class-*` binds to booleans, and valence is the only thing the colour
+    /// carries: advantage, disadvantage, or an appearance pick.
+    bool mark_good = false;
+    bool mark_bad = false;
+    bool mark_cosm = false;
+};
+
 struct nc_traits_session {
     Rml::Vector<nc_traits_tab> tabs;
     nc_shell shell;
@@ -1377,6 +1396,10 @@ struct nc_traits_session {
     Rml::Vector<nc_trait_fact> facts;
     Rml::String desc_rml;
     Rml::String hint_rml;
+    /// The spinning strand. Rebuilt every animation tick; everything else only when the model
+    /// actually changed.
+    Rml::Vector<nc_dna_rung> dna;
+    Rml::String dna_count_rml;
     Rml::DataModelHandle handle;
 };
 
@@ -1421,6 +1444,14 @@ void register_nc_traits_rml_types( Rml::DataModelConstructor &c )
     fh.RegisterMember( "value_rml", &nc_trait_fact::value_rml );
     fh.RegisterMember( "sub_rml", &nc_trait_fact::sub_rml );
     c.RegisterArray<Rml::Vector<nc_trait_fact>>();
+    Rml::StructHandle<nc_dna_rung> dh = c.RegisterStruct<nc_dna_rung>();
+    dh.RegisterMember( "gap", &nc_dna_rung::gap );
+    dh.RegisterMember( "bond", &nc_dna_rung::bond );
+    dh.RegisterMember( "left_front", &nc_dna_rung::left_front );
+    dh.RegisterMember( "mark_good", &nc_dna_rung::mark_good );
+    dh.RegisterMember( "mark_bad", &nc_dna_rung::mark_bad );
+    dh.RegisterMember( "mark_cosm", &nc_dna_rung::mark_cosm );
+    c.RegisterArray<Rml::Vector<nc_dna_rung>>();
     g_nc_traits_types_registered = true;
 }
 
@@ -1697,67 +1728,45 @@ tab_direction set_traits( avatar &u, points_left &points )
     // row shows cannot promise something the keypress then refuses. Before this rework the
     // refusals existed only as popups raised AFTER CONFIRM, and conflicted / forbidden /
     // bionic-blocked / over-budget all rendered as the same dark gray row.
-    struct nc_trait_gate {
-        bool taken = false;
-        bool locked = false;          //< held, and profession/scenario will not release it
-        bool mandatory = false;       //< held, and its type requires exactly one
-        bool conflicts = false;
-        bool can_swap = false;        //< conflicts, but the type swaps rather than refusing
-        bool scen_forbids = false;
-        bool prof_forbids = false;
-        bool over_budget = false;
-        std::vector<bionic_id> blocking_bionics;
-
-        /// Can the player act on this card at all.
-        auto toggleable() const -> bool {
-            if( taken ) {
-            return !locked && !mandatory;
-        }
-        return blocking_bionics.empty() && !scen_forbids && !prof_forbids && !over_budget &&
-               ( !conflicts || can_swap );
-    }
-};
-
-const auto gate_of = [&]( const trait_id & tid ) {
+    //
+    // This lambda only ASKS the game the questions; the precedence between the answers lives in
+    // newchar_trait_gate.h, where it is tested without needing an avatar.
+    const auto gate_of = [&]( const trait_id & tid ) {
         const mutation_branch &m = tid.obj();
-        nc_trait_gate gt;
-        gt.taken = u.has_trait( tid );
-        if( gt.taken ) {
-            gt.locked = g->scen->is_locked_trait( tid ) || u.prof->is_locked_trait( tid );
-            gt.mandatory = std::ranges::any_of( m.types, []( const std::string & t ) {
-                return mutation_type_is_mandatory( t );
-            } );
-            return gt;
-        }
-        gt.conflicts = newcharacter::has_conflicting_trait( u, tid );
-        if( gt.conflicts ) {
-            // A swap type replaces whatever you already hold of it, so a conflict is not a refusal
-            // — but only when there is actually a held trait of that type to give up.
-            const bool swaps = std::ranges::any_of( m.types, []( const std::string & t ) {
-                return mutation_type_swaps_on_conflict( t );
-            } );
-            if( swaps ) {
-                const auto base = u.get_base_traits();
-                gt.can_swap = std::ranges::any_of( base, [&]( const trait_id & tr ) {
-                    return tr != tid && std::ranges::any_of( tr.obj().types,
-                    [&]( const std::string & t ) { return m.types.contains( t ); } );
-                } );
-            }
-        }
-        gt.scen_forbids = g->scen->is_forbidden_trait( tid );
-        gt.prof_forbids = u.prof->is_forbidden_trait( tid );
-        gt.blocking_bionics = bionics_cancelling_trait( u.prof->CBMs(), tid );
+        nc_trait_gate::inputs in;
+        in.taken = u.has_trait( tid );
+        in.locked = g->scen->is_locked_trait( tid ) || u.prof->is_locked_trait( tid );
+        in.mandatory = std::ranges::any_of( m.types, []( const std::string & t ) {
+            return mutation_type_is_mandatory( t );
+        } );
+        in.conflicts = newcharacter::has_conflicting_trait( u, tid );
+        in.swaps = std::ranges::any_of( m.types, []( const std::string & t ) {
+            return mutation_type_swaps_on_conflict( t );
+        } );
+        const auto base = u.get_base_traits();
+        in.has_swap_holder = std::ranges::any_of( base, [&]( const trait_id & tr ) {
+            return tr != tid && std::ranges::any_of( tr.obj().types,
+            [&]( const std::string & t ) { return m.types.contains( t ); } );
+        } );
+        in.scen_forbids = g->scen->is_forbidden_trait( tid );
+        in.prof_forbids = u.prof->is_forbidden_trait( tid );
+        in.bionic_blocks = !bionics_cancelling_trait( u.prof->CBMs(), tid ).empty() ||
+                           !bionics_cancelling_trait( u.get_bionics(), tid ).empty();
+        in.points = m.points;
+        in.num_good = num_good;
+        in.num_bad = num_bad;
+        in.max_points = max_trait_points;
+        in.freeform = points.is_freeform();
+        return nc_trait_gate::evaluate( in );
+    };
+    /// The bionics in the way, for the popup that names them. Only asked once a refusal is certain,
+    /// because building the list on every row of every frame would be wasteful.
+    const auto blocking_bionics_of = [&]( const trait_id & tid ) {
+        std::vector<bionic_id> out = bionics_cancelling_trait( u.prof->CBMs(), tid );
         for( const bionic_id &b : bionics_cancelling_trait( u.get_bionics(), tid ) ) {
-            gt.blocking_bionics.push_back( b );
+            out.push_back( b );
         }
-        // Keyed off the POINT SIGN, not off which band the card sits in. `iCurWorkingPage == 0`
-        // used to stand in for "counts against advantages", which cannot survive eight bands.
-        if( !points.is_freeform() ) {
-            gt.over_budget = m.points > 0
-                             ? num_good + m.points > max_trait_points
-                             : m.points < 0 && num_bad + m.points < -max_trait_points;
-        }
-        return gt;
+        return out;
     };
     // The ONE place a trait is taken or dropped. Keyboard CONFIRM and the card's TAKE/DROP control
     // both come here, so the two cannot drift — the STATS steppers set the same precedent.
@@ -1768,7 +1777,7 @@ const auto gate_of = [&]( const trait_id & tid ) {
         }
         const trait_id cur_trait = starting_traits[flat_idx].id;
         const mutation_branch &mdata = cur_trait.obj();
-        const nc_trait_gate gt = gate_of( cur_trait );
+        const nc_trait_gate::state gt = gate_of( cur_trait );
         int inc_type = 0;
 
         if( gt.taken ) {
@@ -1809,11 +1818,12 @@ const auto gate_of = [&]( const trait_id & tid ) {
         } else if( gt.prof_forbids ) {
             popup( _( "Your profession of %s prevents you from taking this trait." ),
                    u.prof->gender_appropriate_name( u.male ) );
-        } else if( !gt.blocking_bionics.empty() ) {
+        } else if( gt.bionic_blocks ) {
             // Name them, so the player can see what is in the way rather than just that something is.
+            const std::vector<bionic_id> blockers = blocking_bionics_of( cur_trait );
             std::vector<std::string> conflict_names;
-            conflict_names.reserve( gt.blocking_bionics.size() );
-            for( const bionic_id &conflict : gt.blocking_bionics ) {
+            conflict_names.reserve( blockers.size() );
+            for( const bionic_id &conflict : blockers ) {
                 conflict_names.emplace_back( conflict->name.translated() );
             }
             popup( _( "The following bionics prevent you from taking this trait: %s." ),
@@ -1847,6 +1857,62 @@ const auto gate_of = [&]( const trait_id & tid ) {
         }
         recalc_display_cache();
     };
+
+    // ── DNA STRAND ────────────────────────────────────────────────────────────
+    //
+    // A double helix beside the lists, spinning slowly, with one dot pair lit per trait the player
+    // has taken — so the genome visibly fills in as the character is built. Geometry is in
+    // newchar_dna.h; this only turns fractions into lengths and decides which rungs are marked.
+    //
+    // Rebuilt every animation tick, which is why it is separate from the model sync: rebuilding
+    // 188 colour-tagged rows at 30fps to move some dots would be absurd.
+    const auto anim_start = std::chrono::steady_clock::now();
+    const auto sync_dna = [&]() {
+        if( !data->handle ) {
+            return;
+        }
+        // Wall clock, not a frame counter: the spin must not speed up because the player is
+        // holding a key down, and must not stall while they are not.
+        const float secs = std::chrono::duration<float>(
+                               std::chrono::steady_clock::now() - anim_start ).count();
+        const float phase = nc_dna::phase_at( secs );
+
+        // Which rungs are lit. The i-th taken trait lights rung i, in the flat sorted order, so a
+        // given character always lights the same rungs rather than reshuffling as points change.
+        std::array<int, nc_dna::rungs> mark = {};
+        mark.fill( 0 );
+        int taken = 0;
+        for( const trait_entry &e : starting_traits ) {
+            if( !e.avatar_has ) {
+                continue;
+            }
+            const int slot = taken % nc_dna::rungs;
+            const mutation_branch &m = e.id.obj();
+            // 1 advantage, 2 disadvantage, 3 appearance. A later trait overwriting an earlier one
+            // only happens past 22 picks, and then the strand is full anyway.
+            mark[slot] = !e.grp.appearance_type.empty() ? 3 : ( m.points > 0 ? 1 : ( m.points < 0 ? 2 : 3 ) );
+            taken++;
+        }
+
+        data->dna.clear();
+        for( int i = 0; i < nc_dna::rungs; i++ ) {
+            const nc_dna::span sp = nc_dna::span_of( nc_dna::at( i, phase ) );
+            nc_dna_rung r;
+            // Fractions scaled to the strand's travel, which the stylesheet fixes at 72dp so the
+            // dots never leave the column.
+            r.gap = string_format( "%.1fdp", sp.left * 72.0F );
+            r.bond = string_format( "%.1fdp", sp.width * 72.0F );
+            r.left_front = sp.left_front;
+            r.mark_good = mark[i] == 1;
+            r.mark_bad = mark[i] == 2;
+            r.mark_cosm = mark[i] == 3;
+            data->dna.push_back( r );
+        }
+        data->dna_count_rml = cata_text_to_rml( colorize( string_format( "%d", taken ),
+                                                c_dark_gray ) );
+        data->handle.DirtyVariable( "dna" );
+        data->handle.DirtyVariable( "dna_count_rml" );
+    };
     const auto sync_rml = [&]() {
         if( !data->handle ) {
             return;
@@ -1868,7 +1934,7 @@ const auto gate_of = [&]( const trait_id & tid ) {
 
         // In words, why this trait cannot be toggled — the same conditions CONFIRM's popups use,
         // stated where the decision is made instead of after it. Empty when it can be.
-        const auto refusal_of = []( const nc_trait_gate & gt ) -> std::string {
+        const auto refusal_of = []( const nc_trait_gate::state & gt ) -> std::string {
             if( gt.taken )
         {
             if( gt.locked ) {
@@ -1888,9 +1954,9 @@ const auto gate_of = [&]( const trait_id & tid ) {
         {
             return _( "Your profession forbids this trait." );
             }
-            if( !gt.blocking_bionics.empty() )
-            {
-                return _( "A bionic you start with blocks this trait." );
+            if( gt.bionic_blocks )
+        {
+            return _( "A bionic you start with blocks this trait." );
             }
             return gt.over_budget ? _( "No points left on that side of the budget." ) : std::string();
         };
@@ -1900,7 +1966,7 @@ const auto gate_of = [&]( const trait_id & tid ) {
         const auto build_row = [&]( int flat_idx, bool is_cursor ) {
             const trait_entry &e = starting_traits[flat_idx];
             const mutation_branch &m = e.id.obj();
-            const nc_trait_gate gt = gate_of( e.id );
+            const nc_trait_gate::state gt = gate_of( e.id );
             nc_trait_row r;
             r.cursor_rml = cata_text_to_rml( is_cursor ? colorize( ">", c_yellow ) : std::string() );
             // [x] held · [ ] free to take · [-] refused, and the panel says why.
@@ -1954,7 +2020,7 @@ const auto gate_of = [&]( const trait_id & tid ) {
         if( sel_flat >= 0 ) {
             const trait_id tid = starting_traits[sel_flat].id;
             const mutation_branch &wmd = tid.obj();
-            const nc_trait_gate gt = gate_of( tid );
+            const nc_trait_gate::state gt = gate_of( tid );
             // ":: NAME" — the reference's detail header. Uppercasing is left to the stylesheet so
             // no locale gets a hand-rolled case conversion.
             data->sel_name_rml = cata_text_to_rml( colorize( string_format( ":: %s", wmd.name() ),
@@ -2059,9 +2125,16 @@ const auto gate_of = [&]( const trait_id & tid ) {
         return tab_direction::QUIT;
     }
 
+    // The model is rebuilt only when something changed; the strand every frame. Without this split
+    // the 33ms animation tick would re-colour 188 rows thirty times a second to move some dots.
+    bool model_dirty = true;
     ui.on_redraw( [&]( const ui_adaptor & ) {
         if( rml ) {
-            sync_rml();
+            if( model_dirty ) {
+                sync_rml();
+                model_dirty = false;
+            }
+            sync_dna();
             // display() is RmlUi-aware (cp_rml_open/cp_rml_position + a GPU sprite
             // for the avatar), so it composes over this document rather than
             // fighting it. It was skipped only because this branch returned early.
@@ -2104,6 +2177,7 @@ const auto gate_of = [&]( const trait_id & tid ) {
     }
     skip_headings( cur_col, 1 );
 
+
     do {
         ui_manager::redraw();
         nc_nav = 0;
@@ -2114,6 +2188,14 @@ const auto gate_of = [&]( const trait_id & tid ) {
         std::string action = ctxt.handle_input();
         if( nc_nav != 0 ) {
             action = nc_nav < 0 ? "PREV_TAB" : "NEXT_TAB";
+        }
+        // Rebuild the model on the next redraw after anything that can have changed it. The click
+        // intents MUST be part of this test, not just `action`: cata maps MOUSE_LEFT to SELECT on
+        // mouse DOWN while RmlUi fires its `click` — and therefore these callbacks — on mouse UP,
+        // so the iteration that carries a click's intent is usually a "TIMEOUT" one. Gating on the
+        // action alone left every mouse toggle applied but unrendered.
+        if( action != "TIMEOUT" || pending_row >= 0 || pending_check_row >= 0 ) {
+            model_dirty = true;
         }
         if( action == "zoom_in" && use_character_preview ) {
             character_preview.zoom_in();
