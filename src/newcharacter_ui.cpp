@@ -1331,17 +1331,52 @@ struct nc_traits_tab {
     bool selected = false;
     bool done = false;   //< step already passed
 };
+
+/// One line of a column. FLAT list with a `header` flag rather than a nested `data-for`, for the
+/// same reason the profession equipment tree is flat: every row is then the SAME height, so
+/// scrolling the cursor into view is exact arithmetic (scroll_height / row_count) instead of DOM
+/// child indexing, which `data-for` makes unreliable.
+///
+/// The cells are aligned micro-columns — cursor, checkbox, cost, name — which is what lets a
+/// 60-row column be scanned down any one of them. See UI_designs/11_charcreation_mutations.png.
+struct nc_trait_row {
+    Rml::String cursor_rml;   //< ">" on the cursor row, else empty
+    Rml::String check_rml;    //< "[x]" held, "[ ]" available, "[-]" cannot be taken
+    Rml::String cost_rml;     //< "[ 3]" / "[-2]", empty when free
+    Rml::String name_rml;
+    bool header = false;      //< a sub-heading inside the column, not a selectable trait
+    bool selected = false;
+};
+
+/// One column: a heading, a count, and its rows.
+struct nc_trait_col {
+    Rml::String name_rml;
+    Rml::String count_rml;
+    Rml::Vector<nc_trait_row> rows;
+};
+
+/// A label / value / sub-line triple in the detail panel.
+struct nc_trait_fact {
+    Rml::String label_rml;
+    Rml::String value_rml;
+    Rml::String sub_rml;
+};
+
 struct nc_traits_session {
     Rml::Vector<nc_traits_tab> tabs;
     nc_shell shell;
     Rml::String points_rml;
+    Rml::String budget_rml;   //< "Points remaining: N", the reference's meta-bar readout
     nc_balance balance;
-    Rml::String cost_rml;     // "<trait> costs/earns N points" for the working trait
-    Rml::String col0_html;    // good column (baked rows)
-    Rml::String col1_html;    // bad column
-    Rml::String col2_html;    // neutral column (empty unless used_pages==3)
-    bool show_col2 = false;
-    Rml::String desc_rml;     // working trait description
+    /// Three columns, bound separately rather than as an array: each needs a stable element id so
+    /// C++ can scroll its own cursor into view.
+    nc_trait_col col0;
+    nc_trait_col col1;
+    nc_trait_col col2;
+    Rml::String sel_name_rml;   //< ":: TRAIT NAME" over the detail panel
+    Rml::Vector<nc_trait_fact> facts;
+    Rml::String desc_rml;
+    Rml::String hint_rml;
     Rml::DataModelHandle handle;
 };
 
@@ -1368,7 +1403,67 @@ void register_nc_traits_rml_types( Rml::DataModelConstructor &c )
     bh.RegisterMember( "good_icon", &nc_balance::good_icon );
     bh.RegisterMember( "bad_icon", &nc_balance::bad_icon );
     bh.RegisterMember( "fulcrum_icon", &nc_balance::fulcrum_icon );
+    // Rows before the column that holds them: a member cannot be registered before its type is.
+    Rml::StructHandle<nc_trait_row> rh = c.RegisterStruct<nc_trait_row>();
+    rh.RegisterMember( "cursor_rml", &nc_trait_row::cursor_rml );
+    rh.RegisterMember( "check_rml", &nc_trait_row::check_rml );
+    rh.RegisterMember( "cost_rml", &nc_trait_row::cost_rml );
+    rh.RegisterMember( "name_rml", &nc_trait_row::name_rml );
+    rh.RegisterMember( "header", &nc_trait_row::header );
+    rh.RegisterMember( "selected", &nc_trait_row::selected );
+    c.RegisterArray<Rml::Vector<nc_trait_row>>();
+    Rml::StructHandle<nc_trait_col> ch = c.RegisterStruct<nc_trait_col>();
+    ch.RegisterMember( "name_rml", &nc_trait_col::name_rml );
+    ch.RegisterMember( "count_rml", &nc_trait_col::count_rml );
+    ch.RegisterMember( "rows", &nc_trait_col::rows );
+    Rml::StructHandle<nc_trait_fact> fh = c.RegisterStruct<nc_trait_fact>();
+    fh.RegisterMember( "label_rml", &nc_trait_fact::label_rml );
+    fh.RegisterMember( "value_rml", &nc_trait_fact::value_rml );
+    fh.RegisterMember( "sub_rml", &nc_trait_fact::sub_rml );
+    c.RegisterArray<Rml::Vector<nc_trait_fact>>();
     g_nc_traits_types_registered = true;
+}
+
+/// Which of the three columns a trait belongs in, and — for column 2 only — which sub-heading it
+/// sits under. `appearance_type` is empty for the gameplay groups.
+///
+/// Appearance wins over point sign: a hair style with a stray point cost is still a hair style,
+/// and 66 of the 68 point-free starting traits are appearance pickers, which is why the old
+/// "neutral" column read as a wardrobe wedged into a gameplay chooser.
+struct nc_trait_group {
+    int col = 0;
+    std::string appearance_type;
+
+    auto operator==( const nc_trait_group & ) const -> bool = default; // *NOPAD*
+};
+
+auto nc_classify_trait( const mutation_branch &m ) -> nc_trait_group
+{
+for( const std::string &t : m.types ) {
+    if( mutation_type_is_appearance( t ) ) {
+            return { .col = 2, .appearance_type = t };
+        }
+    }
+    if( m.points > 0 ) {
+    return { .col = 0 };
+}
+return m.points < 0 ? nc_trait_group{ .col = 1 } : nc_trait_group{ .col = 2 };
+}
+
+auto nc_trait_group_name( const nc_trait_group &g ) -> std::string
+{
+    if( !g.appearance_type.empty() ) {
+    // Already translated, and now covers facial_hair too.
+    return mutation_type_display_name( g.appearance_type );
+    }
+    switch( g.col ) {
+    case 0:
+        return _( "Advantages" );
+        case 1:
+            return _( "Disadvantages" );
+        default:
+            return _( "Neutral" );
+    }
 }
 } // namespace
 
@@ -1382,11 +1477,14 @@ tab_direction set_traits( avatar &u, points_left &points )
 
     struct trait_entry {
         trait_id id;
+        nc_trait_group grp;
         bool avatar_has;
         bool conflicts;
         bool forbidden;
     };
-    std::vector<trait_entry> vStartingTraits[3];
+    // ONE flat list; the columns are a VIEW over it. That keeps sorting and every id-based lookup
+    // independent of how the screen happens to be grouped.
+    std::vector<trait_entry> starting_traits;
 
     for( auto &bio_iter : bionic_data::get_all() ) {
         if( bio_iter.points > 0 ) {
@@ -1424,57 +1522,122 @@ tab_direction set_traits( avatar &u, points_left &points )
         // We show all starting traits, even if we can't pick them, to keep the interface consistent.
         if( traits_iter.startingtrait || g->scen->traitquery( traits_iter.id ) ||
             u.prof->is_allowed_trait( traits_iter.id ) || is_proftrait ) {
-            size_t page;
-            if( traits_iter.points > 0 ) {
-                page = 0;
-                if( u.has_trait( traits_iter.id ) ) {
+            const nc_trait_group grp = nc_classify_trait( traits_iter );
+            // Budget totals key off the POINT SIGN, never off which column the trait landed in:
+            // an appearance type with a stray cost sits in the pickers column but still counts
+            // against the same budget as any other trait of that sign.
+            if( u.has_trait( traits_iter.id ) ) {
+                if( traits_iter.points > 0 ) {
                     num_good += traits_iter.points;
-                }
-            } else if( traits_iter.points < 0 ) {
-                page = 1;
-                if( u.has_trait( traits_iter.id ) ) {
+                } else if( traits_iter.points < 0 ) {
                     num_bad += traits_iter.points;
                 }
-            } else {
-                page = 2;
             }
-            vStartingTraits[page].push_back( { traits_iter.id, false, false, g->scen->is_forbidden_trait( traits_iter.id ) } );
+            starting_traits.push_back( { .id = traits_iter.id, .grp = grp, .avatar_has = false,
+                                         .conflicts = false,
+                                         .forbidden = g->scen->is_forbidden_trait( traits_iter.id ) } );
         }
     }
-    //If the third page is empty, only use the first two.
-    const int used_pages = vStartingTraits[2].empty() ? 2 : 3;
 
-    for( auto &vStartingTrait : vStartingTraits ) {
-        std::sort( vStartingTrait.begin(), vStartingTrait.end(), []( const trait_entry & a,
-        const trait_entry & b ) {
-            return trait_display_nocolor_sort( a.id, b.id );
-        } );
+    std::ranges::sort( starting_traits, []( const trait_entry & a, const trait_entry & b ) {
+        return trait_display_nocolor_sort( a.id, b.id );
+    } );
+
+    // Sub-headings for column 2, in get_all_mutation_type_ids() order (the mutation_types map, so
+    // alphabetical by id: arbitrary but deterministic and stable however mods load). Neutral leads,
+    // because it is gameplay and the pickers are not. Empty groups are dropped.
+    std::vector<nc_trait_group> col2_groups;
+    {
+        const auto group_has = [&]( const nc_trait_group & g ) {
+            return std::ranges::any_of( starting_traits,
+            [&g]( const trait_entry & e ) { return e.grp == g; } );
+        };
+        if( group_has( { .col = 2 } ) ) {
+            col2_groups.push_back( { .col = 2 } );
+        }
+        for( const std::string &t : get_all_mutation_type_ids() ) {
+            if( !mutation_type_is_appearance( t ) ) {
+                continue;
+            }
+            const nc_trait_group g{ .col = 2, .appearance_type = t };
+            if( group_has( g ) ) {
+                col2_groups.push_back( g );
+            }
+        }
     }
 
     const auto recalc_display_cache = [&]() {
-        for( int page = 0; page < used_pages; page++ ) {
-            for( trait_entry &entry : vStartingTraits[page] ) {
-                entry.conflicts = newcharacter::has_conflicting_trait( u, entry.id );
-                entry.avatar_has = u.has_trait( entry.id );
-            }
+        for( trait_entry &entry : starting_traits ) {
+            entry.conflicts = newcharacter::has_conflicting_trait( u, entry.id );
+            entry.avatar_has = u.has_trait( entry.id );
         }
     };
     recalc_display_cache();
 
-    int iCurWorkingPage = 0;
-    int iStartPos[3] = { 0, 0, 0 };
-    int iCurrentLine[3] = { 0, 0, 0 };
-    size_t traits_size[3];
-    for( int i = 0; i < 3; i++ ) {
-        traits_size[i] = vStartingTraits[i].size();
+    // Each column's rows, as indices into starting_traits. -1 marks a sub-heading, which occupies
+    // a row so that every row is the same height — see nc_trait_row.
+    std::array<std::vector<int>, 3> col_rows;
+    const auto rebuild_col_rows = [&]() {
+        for( std::vector<int> &v : col_rows ) {
+            v.clear();
+        }
+        for( int i = 0; i < static_cast<int>( starting_traits.size() ); i++ ) {
+            const int c = starting_traits[i].grp.col;
+            if( c != 2 ) {
+                col_rows[c].push_back( i );
+            }
+        }
+        // Column 2 is grouped, so it is assembled heading by heading rather than in flat order.
+        for( const nc_trait_group &g : col2_groups ) {
+            col_rows[2].push_back( -1 );
+            for( int i = 0; i < static_cast<int>( starting_traits.size() ); i++ ) {
+                if( starting_traits[i].grp == g ) {
+                    col_rows[2].push_back( i );
+                }
+            }
+        }
+    };
+    rebuild_col_rows();
+
+    // Which sub-heading each column-2 row sits under, parallel to col_rows[2], so a heading row can
+    // name itself without re-deriving the grouping.
+    std::vector<int> col2_head_of( col_rows[2].size(), 0 );
+    {
+        int cur = -1;
+        for( size_t r = 0; r < col_rows[2].size(); r++ ) {
+            if( col_rows[2][r] < 0 ) {
+                cur++;
+            }
+            col2_head_of[r] = std::max( 0, cur );
+        }
     }
 
-    size_t iContentHeight;
-    size_t page_width;
+    int cur_col = 0;
+    std::array<int, 3> cur_row = { 0, 0, 0 };
+
+    const auto col_len = [&]( int c ) {
+        return static_cast<int>( col_rows[c].size() );
+    };
+    /// The trait on a given row, or -1 for a heading or an out-of-range row.
+    const auto trait_at = [&]( int c, int r ) {
+        return ( r >= 0 && r < col_len( c ) ) ? col_rows[c][r] : -1;
+    };
+    // Column 2 opens on a heading, so step off it before anything reads the cursor.
+    const auto skip_headings = [&]( int c, int dir ) {
+        int guard = col_len( c );
+        while( guard-- > 0 && trait_at( c, cur_row[c] ) < 0 ) {
+            cur_row[c] += dir;
+            if( cur_row[c] < 0 ) {
+                cur_row[c] = col_len( c ) - 1;
+            } else if( cur_row[c] >= col_len( c ) ) {
+                cur_row[c] = 0;
+            }
+        }
+    };
+    skip_headings( 2, 1 );
 
     ui_adaptor ui;
     catacurses::window w;
-    catacurses::window w_description;
 
     character_preview_window character_preview;
     character_preview.init( &u );
@@ -1482,24 +1645,10 @@ tab_direction set_traits( avatar &u, points_left &points )
 
     const auto init_windows = [&]( ui_adaptor & ui ) {
         w = catacurses::newwin( TERMY, TERMX, point_zero );
-        w_description = catacurses::newwin( 3, TERMX - 2, point( 1, TERMY - 4 ) );
-        page_width = std::min( ( TERMX - 4 ) / used_pages, 38 );
-
-
         if( use_character_preview ) {
             nc_prepare_preview( character_preview );
         }
-
         ui.position_from_window( w );
-
-        iContentHeight = TERMY - 9;
-
-        for( int i = 0; i < 3; i++ ) {
-            // Shift start position to avoid iterating beyond end
-            int total = static_cast<int>( traits_size[i] );
-            int heigth = static_cast<int>( iContentHeight );
-            iStartPos[i] = std::min( iStartPos[i], std::max( 0, total - heigth ) );
-        }
     };
     init_windows( ui );
     ui.on_screen_resize( init_windows );
@@ -1534,6 +1683,170 @@ tab_direction set_traits( avatar &u, points_left &points )
     // tab_direction: it is translated into an action string so the existing
     // keyboard handling stays the single place navigation is decided.
     int nc_nav = 0;
+    // Click intent, applied ONCE per input cycle. `data-event-*` installs a listener per
+    // generated element and a `data-for` regeneration adds another without removing the old, so a
+    // callback that mutated directly would run an unbounded number of times per click — measured
+    // at 15 on the SCENARIO tab. See plans/charcreation-scenario-tree.md.
+    int pending_row_col = -1;
+    int pending_row = -1;
+    int pending_check_col = -1;
+    int pending_check_row = -1;
+
+    // Why a trait can or cannot be toggled right now. ONE source of truth: the row's checkbox
+    // glyph, the Status fact's reason line and CONFIRM's refusal popups all read this, so what a
+    // row shows cannot promise something the keypress then refuses. Before this rework the
+    // refusals existed only as popups raised AFTER CONFIRM, and conflicted / forbidden /
+    // bionic-blocked / over-budget all rendered as the same dark gray row.
+    struct nc_trait_gate {
+        bool taken = false;
+        bool locked = false;          //< held, and profession/scenario will not release it
+        bool mandatory = false;       //< held, and its type requires exactly one
+        bool conflicts = false;
+        bool can_swap = false;        //< conflicts, but the type swaps rather than refusing
+        bool scen_forbids = false;
+        bool prof_forbids = false;
+        bool over_budget = false;
+        std::vector<bionic_id> blocking_bionics;
+
+        /// Can the player act on this card at all.
+        auto toggleable() const -> bool {
+            if( taken ) {
+            return !locked && !mandatory;
+        }
+        return blocking_bionics.empty() && !scen_forbids && !prof_forbids && !over_budget &&
+               ( !conflicts || can_swap );
+    }
+};
+
+const auto gate_of = [&]( const trait_id & tid ) {
+        const mutation_branch &m = tid.obj();
+        nc_trait_gate gt;
+        gt.taken = u.has_trait( tid );
+        if( gt.taken ) {
+            gt.locked = g->scen->is_locked_trait( tid ) || u.prof->is_locked_trait( tid );
+            gt.mandatory = std::ranges::any_of( m.types, []( const std::string & t ) {
+                return mutation_type_is_mandatory( t );
+            } );
+            return gt;
+        }
+        gt.conflicts = newcharacter::has_conflicting_trait( u, tid );
+        if( gt.conflicts ) {
+            // A swap type replaces whatever you already hold of it, so a conflict is not a refusal
+            // — but only when there is actually a held trait of that type to give up.
+            const bool swaps = std::ranges::any_of( m.types, []( const std::string & t ) {
+                return mutation_type_swaps_on_conflict( t );
+            } );
+            if( swaps ) {
+                const auto base = u.get_base_traits();
+                gt.can_swap = std::ranges::any_of( base, [&]( const trait_id & tr ) {
+                    return tr != tid && std::ranges::any_of( tr.obj().types,
+                    [&]( const std::string & t ) { return m.types.contains( t ); } );
+                } );
+            }
+        }
+        gt.scen_forbids = g->scen->is_forbidden_trait( tid );
+        gt.prof_forbids = u.prof->is_forbidden_trait( tid );
+        gt.blocking_bionics = bionics_cancelling_trait( u.prof->CBMs(), tid );
+        for( const bionic_id &b : bionics_cancelling_trait( u.get_bionics(), tid ) ) {
+            gt.blocking_bionics.push_back( b );
+        }
+        // Keyed off the POINT SIGN, not off which band the card sits in. `iCurWorkingPage == 0`
+        // used to stand in for "counts against advantages", which cannot survive eight bands.
+        if( !points.is_freeform() ) {
+            gt.over_budget = m.points > 0
+                             ? num_good + m.points > max_trait_points
+                             : m.points < 0 && num_bad + m.points < -max_trait_points;
+        }
+        return gt;
+    };
+    // The ONE place a trait is taken or dropped. Keyboard CONFIRM and the card's TAKE/DROP control
+    // both come here, so the two cannot drift — the STATS steppers set the same precedent.
+    // Every popup below fires for exactly the case it fired for before this rework.
+    const auto toggle_trait_at = [&]( int flat_idx ) {
+        if( flat_idx < 0 || flat_idx >= static_cast<int>( starting_traits.size() ) ) {
+            return;
+        }
+        const trait_id cur_trait = starting_traits[flat_idx].id;
+        const mutation_branch &mdata = cur_trait.obj();
+        const nc_trait_gate gt = gate_of( cur_trait );
+        int inc_type = 0;
+
+        if( gt.taken ) {
+            if( g->scen->is_locked_trait( cur_trait ) ) {
+                popup( _( "Your scenario of %s prevents you from removing this trait." ),
+                       g->scen->gender_appropriate_name( u.male ) );
+            } else if( u.prof->is_locked_trait( cur_trait ) ) {
+                popup( _( "Your profession of %s prevents you from removing this trait." ),
+                       u.prof->gender_appropriate_name( u.male ) );
+            } else {
+                const auto mandatory_type = std::ranges::find_if( mdata.types,
+                []( const std::string & t ) { return mutation_type_is_mandatory( t ); } );
+                if( mandatory_type != mdata.types.end() ) {
+                    popup( _( "You need to select 1 %s." ), mutation_type_display_name( *mandatory_type ) );
+                } else {
+                    inc_type = -1;
+                }
+            }
+        } else if( gt.conflicts ) {
+            if( gt.can_swap ) {
+                // Drop whatever of this type is already held, then take the new one.
+                const auto base_traits = u.get_base_traits();
+                const auto it = std::ranges::find_if( base_traits, [&]( const trait_id & tr ) {
+                    return tr != cur_trait && std::ranges::any_of( tr.obj().types,
+                    [&]( const std::string & t ) { return mdata.types.contains( t ); } );
+                } );
+                if( it != base_traits.end() ) {
+                    inc_type = 1;
+                    u.toggle_trait( *it );
+                } else {
+                    popup( _( "You already picked a conflicting trait!" ) );
+                }
+            } else {
+                popup( _( "You already picked a conflicting trait!" ) );
+            }
+        } else if( gt.scen_forbids ) {
+            popup( _( "The scenario you picked prevents you from taking this trait!" ) );
+        } else if( gt.prof_forbids ) {
+            popup( _( "Your profession of %s prevents you from taking this trait." ),
+                   u.prof->gender_appropriate_name( u.male ) );
+        } else if( !gt.blocking_bionics.empty() ) {
+            // Name them, so the player can see what is in the way rather than just that something is.
+            std::vector<std::string> conflict_names;
+            conflict_names.reserve( gt.blocking_bionics.size() );
+            for( const bionic_id &conflict : gt.blocking_bionics ) {
+                conflict_names.emplace_back( conflict->name.translated() );
+            }
+            popup( _( "The following bionics prevent you from taking this trait: %s." ),
+                   enumerate_as_string( conflict_names ) );
+        } else if( gt.over_budget && mdata.points > 0 ) {
+            popup( vgettext( "Sorry, but you can only take %d point of advantages.",
+                             "Sorry, but you can only take %d points of advantages.", max_trait_points ),
+                   max_trait_points );
+        } else if( gt.over_budget ) {
+            popup( vgettext( "Sorry, but you can only take %d point of disadvantages.",
+                             "Sorry, but you can only take %d points of disadvantages.", max_trait_points ),
+                   max_trait_points );
+        } else {
+            inc_type = 1;
+        }
+
+        if( inc_type != 0 ) {
+            const bool had_trait = gt.taken;
+            u.toggle_trait( cur_trait );
+            // A dropped trait may have blocked clothing; re-toggle so the preview re-kits.
+            if( had_trait && character_preview.clothes_showing() ) {
+                character_preview.toggle_clothes();
+                character_preview.toggle_clothes();
+            }
+            points.trait_points -= mdata.points * inc_type;
+            if( mdata.points > 0 ) {
+                num_good += mdata.points * inc_type;
+            } else if( mdata.points < 0 ) {
+                num_bad += mdata.points * inc_type;
+            }
+        }
+        recalc_display_cache();
+    };
     const auto sync_rml = [&]() {
         if( !data->handle ) {
             return;
@@ -1544,99 +1857,148 @@ tab_direction set_traits( avatar &u, points_left &points )
         data->points_rml = cata_text_to_rml( nc_points_line( points ) );
         data->balance = nc_make_balance( num_good, num_bad, max_trait_points,
                                          points.is_freeform() );
-        const auto build_col = [&]( int page ) -> std::string {
-            nc_color on_act;
-            nc_color off_act;
-            nc_color on_pas;
-            nc_color off_pas;
-            switch( page )
-            {
-                case 0:
-                    on_act = COL_TR_GOOD_ON_ACT;
-                    off_act = COL_TR_GOOD_OFF_ACT;
-                    on_pas = COL_TR_GOOD_ON_PAS;
-                    off_pas = COL_TR_GOOD_OFF_PAS;
-                    break;
-                case 1:
-                    on_act = COL_TR_BAD_ON_ACT;
-                    off_act = COL_TR_BAD_OFF_ACT;
-                    on_pas = COL_TR_BAD_ON_PAS;
-                    off_pas = COL_TR_BAD_OFF_PAS;
-                    break;
-                default:
-                    on_act = COL_TR_NEUT_ON_ACT;
-                    off_act = COL_TR_NEUT_OFF_ACT;
-                    on_pas = COL_TR_NEUT_ON_PAS;
-                    off_pas = COL_TR_NEUT_OFF_PAS;
-                    break;
-            }
-            const int cur = iCurrentLine[page];
-            std::string html;
-            for( size_t i = 0; i < vStartingTraits[page].size(); i++ )
-            {
-                const trait_entry &e = vStartingTraits[page][i];
-                nc_color col;
-                if( iCurWorkingPage == page ) {
-                    if( e.avatar_has ) {
-                        col = on_act;
-                    } else if( e.conflicts || e.forbidden ) {
-                        col = c_dark_gray;
-                    } else {
-                        col = off_act;
-                    }
-                } else {
-                    if( e.avatar_has ) {
-                        col = on_pas;
-                    } else if( e.conflicts || e.forbidden ) {
-                        col = c_light_gray;
-                    } else {
-                        col = off_pas;
-                    }
-                }
-                const bool sel = ( iCurWorkingPage == page && static_cast<int>( i ) == cur );
-                html += sel ? "<div class=\"item nc-trait-row selected\">"
-                        : "<div class=\"item nc-trait-row\">";
-                html += cata_text_to_rml( colorize( e.id.obj().name(), col ) );
-                html += "</div>";
-            }
-            return html;
-        };
-        data->col0_html = build_col( 0 );
-        data->col1_html = build_col( 1 );
-        data->show_col2 = ( used_pages == 3 );
-        data->col2_html = data->show_col2 ? build_col( 2 ) : std::string();
+        data->hint_rml = cata_text_to_rml( string_format(
+                                               _( "<color_light_green>%s</color> take or drop · <color_light_green>%s</color> column · <color_light_green>%s</color> reroll" ),
+                                               ctxt.get_desc( "CONFIRM", 1 ), _( "left/right" ),
+                                               ctxt.get_desc( "REROLL_CHARACTER", 1 ) ) );
+        // The reference's meta-bar readout: a dim label with the number bright beside it.
+        data->budget_rml = cata_text_to_rml( string_format(
+                _( "<color_dark_gray>Trait points left:</color> <color_white>%d</color>" ),
+                points.trait_points_left() ) );
 
-        const int wp = iCurWorkingPage;
-        if( !vStartingTraits[wp].empty() ) {
-            const int wl = std::min( iCurrentLine[wp],
-                                     static_cast<int>( vStartingTraits[wp].size() ) - 1 );
-            const trait_entry &we = vStartingTraits[wp][wl];
-            const mutation_branch &wmd = we.id.obj();
-            const nc_color col_tr = wp == 0 ? COL_TR_GOOD : ( wp == 1 ? COL_TR_BAD : COL_TR_NEUT );
-            int pts = wmd.points;
-            const bool neg = pts < 0;
-            if( neg ) {
-                pts *= -1;
+        // In words, why this trait cannot be toggled — the same conditions CONFIRM's popups use,
+        // stated where the decision is made instead of after it. Empty when it can be.
+        const auto refusal_of = []( const nc_trait_gate & gt ) -> std::string {
+            if( gt.taken )
+        {
+            if( gt.locked ) {
+                    return _( "Your profession or scenario will not let you drop this." );
+                }
+                return gt.mandatory ? _( "You must keep one of these." ) : std::string();
             }
-            data->cost_rml = cata_text_to_rml( colorize( string_format(
-                                                   vgettext( "%s %s %d point", "%s %s %d points", pts ),
-                                                   wmd.name(), neg ? _( "earns" ) : _( "costs" ), pts ), col_tr ) );
-            data->desc_rml = cata_text_to_rml( colorize( wmd.desc(), col_tr ) );
+            if( gt.conflicts && !gt.can_swap )
+        {
+            return _( "Conflicts with a trait you already have." );
+            }
+            if( gt.scen_forbids )
+        {
+            return _( "Your scenario forbids this trait." );
+            }
+            if( gt.prof_forbids )
+        {
+            return _( "Your profession forbids this trait." );
+            }
+            if( !gt.blocking_bionics.empty() )
+            {
+                return _( "A bionic you start with blocks this trait." );
+            }
+            return gt.over_budget ? _( "No points left on that side of the budget." ) : std::string();
+        };
+
+        // One row. The cells are fixed-width by stylesheet, so cursor, box, cost and name each form
+        // a column the eye can run down; that alignment is the whole readability argument.
+        const auto build_row = [&]( int flat_idx, bool is_cursor ) {
+            const trait_entry &e = starting_traits[flat_idx];
+            const mutation_branch &m = e.id.obj();
+            const nc_trait_gate gt = gate_of( e.id );
+            nc_trait_row r;
+            r.cursor_rml = cata_text_to_rml( is_cursor ? colorize( ">", c_yellow ) : std::string() );
+            // [x] held · [ ] free to take · [-] refused, and the panel says why.
+            r.check_rml = gt.taken
+                          ? cata_text_to_rml( colorize( "[x]", c_yellow ) )
+                          : ( gt.toggleable() ? cata_text_to_rml( colorize( "[ ]", c_light_gray ) )
+                              : cata_text_to_rml( colorize( "[-]", c_dark_gray ) ) );
+            if( m.points != 0 ) {
+                // Green for an advantage, red for a disadvantage: the same valence the balance
+                // scale's two pans use, so the column and the scale agree at a glance.
+                r.cost_rml = cata_text_to_rml( colorize( string_format( "[%+d]", m.points ),
+                                               m.points > 0 ? COL_TR_GOOD : COL_TR_BAD ) );
+            }
+            const nc_color name_col = gt.taken ? c_white
+                                      : ( gt.toggleable() ? c_light_gray : c_dark_gray );
+            r.name_rml = cata_text_to_rml( colorize( m.name(), name_col ) );
+            r.selected = is_cursor;
+            return r;
+        };
+
+        nc_trait_col *cols[3] = { &data->col0, &data->col1, &data->col2 };
+        for( int c = 0; c < 3; c++ ) {
+            nc_trait_col &dc = *cols[c];
+            dc.rows.clear();
+            int items = 0;
+            for( int r = 0; r < col_len( c ); r++ ) {
+                const int flat = col_rows[c][r];
+                if( flat < 0 ) {
+                    // Sub-heading. Same row height as an item, which is what keeps the scroll
+                    // arithmetic exact; weight and tracking carry the hierarchy instead.
+                    nc_trait_row hr;
+                    hr.header = true;
+                    hr.name_rml = cata_text_to_rml( colorize(
+                                                        nc_trait_group_name( col2_groups[col2_head_of[r]] ), c_yellow ) );
+                    dc.rows.push_back( hr );
+                    continue;
+                }
+                items++;
+                dc.rows.push_back( build_row( flat, c == cur_col && r == cur_row[c] ) );
+            }
+            dc.name_rml = cata_text_to_rml( colorize(
+                                                c == 0 ? _( "Advantages" )
+                                                : ( c == 1 ? _( "Disadvantages" ) : _( "Appearance" ) ),
+                                                c == cur_col ? c_white : c_light_gray ) );
+            dc.count_rml = cata_text_to_rml( colorize( string_format( "%d", items ), c_dark_gray ) );
+        }
+
+        // Detail panel for the trait under the cursor.
+        data->facts.clear();
+        const int sel_flat = trait_at( cur_col, cur_row[cur_col] );
+        if( sel_flat >= 0 ) {
+            const trait_id tid = starting_traits[sel_flat].id;
+            const mutation_branch &wmd = tid.obj();
+            const nc_trait_gate gt = gate_of( tid );
+            // ":: NAME" — the reference's detail header. Uppercasing is left to the stylesheet so
+            // no locale gets a hand-rolled case conversion.
+            data->sel_name_rml = cata_text_to_rml( colorize( string_format( ":: %s", wmd.name() ),
+                                                   c_white ) );
+            const auto add_fact = [&]( const std::string & label, const std::string & value,
+            const nc_color & col, const std::string & sub = std::string() ) {
+                data->facts.push_back( {
+                    .label_rml = cata_text_to_rml( label ),
+                    .value_rml = cata_text_to_rml( colorize( value, col ) ),
+                    .sub_rml = cata_text_to_rml( sub ) } );
+            };
+            const int pts = std::abs( wmd.points );
+            if( wmd.points == 0 ) {
+                add_fact( _( "Cost" ), _( "Free" ), c_light_gray );
+            } else {
+                add_fact( _( "Cost" ),
+                          string_format( vgettext( "%d point", "%d points", pts ), pts ),
+                          wmd.points > 0 ? COL_TR_GOOD : COL_TR_BAD );
+            }
+            add_fact( _( "Group" ), nc_trait_group_name( starting_traits[sel_flat].grp ),
+                      c_light_gray );
+            const std::string refusal = refusal_of( gt );
+            add_fact( _( "Status" ),
+                      gt.taken ? _( "Taken" ) : ( gt.toggleable() ? _( "Available" ) : _( "Unavailable" ) ),
+                      gt.taken ? COL_TR_GOOD : ( gt.toggleable() ? c_white : c_light_red ),
+                      refusal );
+            data->desc_rml = cata_text_to_rml( wmd.desc() );
         } else {
-            data->cost_rml.clear();
+            data->sel_name_rml.clear();
             data->desc_rml.clear();
         }
 
         data->handle.DirtyVariable( "tabs" );
         dirty_nc_shell( data->handle );
         data->handle.DirtyVariable( "points_rml" );
+        data->handle.DirtyVariable( "budget_rml" );
         data->handle.DirtyVariable( "balance" );
-        data->handle.DirtyVariable( "cost_rml" );
-        data->handle.DirtyVariable( "col0_html" );
-        data->handle.DirtyVariable( "col1_html" );
-        data->handle.DirtyVariable( "col2_html" );
-        data->handle.DirtyVariable( "show_col2" );
+        data->handle.DirtyVariable( "col0" );
+        data->handle.DirtyVariable( "col1" );
+        data->handle.DirtyVariable( "col2" );
+        data->handle.DirtyVariable( "sel_name_rml" );
+        data->handle.DirtyVariable( "facts" );
         data->handle.DirtyVariable( "desc_rml" );
+        data->handle.DirtyVariable( "hint_rml" );
     };
 
     rml.open( newcharacter_rmlui_enabled(), "newchartraits", ctxt,
@@ -1652,13 +2014,45 @@ tab_direction set_traits( avatar &u, points_left &points )
         c.BindEventCallback( "on_next",
         [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = 1; } );
         c.Bind( "points_rml", &data->points_rml );
+        c.Bind( "budget_rml", &data->budget_rml );
         c.Bind( "balance", &data->balance );
-        c.Bind( "cost_rml", &data->cost_rml );
-        c.Bind( "col0_html", &data->col0_html );
-        c.Bind( "col1_html", &data->col1_html );
-        c.Bind( "col2_html", &data->col2_html );
-        c.Bind( "show_col2", &data->show_col2 );
+        c.Bind( "col0", &data->col0 );
+        c.Bind( "col1", &data->col1 );
+        c.Bind( "col2", &data->col2 );
+        c.Bind( "sel_name_rml", &data->sel_name_rml );
+        c.Bind( "facts", &data->facts );
         c.Bind( "desc_rml", &data->desc_rml );
+        c.Bind( "hint_rml", &data->hint_rml );
+        // Click callbacks RECORD INTENT and mutate nothing — see the comment on pending_row_col.
+        c.BindEventCallback( "on_row",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int col = -1;
+            int row = -1;
+            if( args.size() >= 2 ) {
+                args[0].GetInto( col );
+                args[1].GetInto( row );
+            }
+            if( col >= 0 && col < 3 && row >= 0 ) {
+                pending_row_col = col;
+                pending_row = row;
+            }
+        } );
+        // The checkbox, not the row, is what toggles: it is a deliberate 26dp target for an action
+        // that spends or refunds points and can raise a modal. Clicking the row only moves the
+        // cursor, so reading a trait is never the same gesture as taking it.
+        c.BindEventCallback( "on_check",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int col = -1;
+            int row = -1;
+            if( args.size() >= 2 ) {
+                args[0].GetInto( col );
+                args[1].GetInto( row );
+            }
+            if( col >= 0 && col < 3 && row >= 0 ) {
+                pending_check_col = col;
+                pending_check_row = row;
+            }
+        } );
         data->handle = c.GetModelHandle();
     } );
     if( rml_doc_unavailable( rml, _( "Character creation (TRAITS tab)" ) ) ) {
@@ -1678,9 +2072,45 @@ tab_direction set_traits( avatar &u, points_left &points )
         }
     } );
 
+    // Keeps the cursor row on screen. Every row is the SAME height by stylesheet rule — headings
+    // included — so row height is scroll_height / row_count exactly, with no DOM child indexing,
+    // which `data-for` makes unreliable anyway. Same mechanism as the equipment sheet's tree.
+    const auto scroll_col_to_cursor = [&]() {
+        if( !rml ) {
+            return;
+        }
+        const int rows = col_len( cur_col );
+        if( rows <= 0 ) {
+            return;
+        }
+        Rml::Element *e = rml.document()->GetElementById(
+                              string_format( "nc-trait-col%d", cur_col ) );
+        if( e == nullptr ) {
+            return;
+        }
+        const float page = e->GetClientHeight();
+        const float total = e->GetScrollHeight();
+        const float row_h = total / static_cast<float>( rows );
+        const float want = row_h * static_cast<float>( cur_row[cur_col] ) - page * 0.5f;
+        e->SetScrollTop( std::clamp( want, 0.0f, std::max( 0.0f, total - page ) ) );
+    };
+
+    // Open on a column that has something in it, cursor on a real trait rather than a heading.
+    for( int c = 0; c < 3; c++ ) {
+        if( col_len( c ) > 0 ) {
+            cur_col = c;
+            break;
+        }
+    }
+    skip_headings( cur_col, 1 );
+
     do {
         ui_manager::redraw();
         nc_nav = 0;
+        pending_row_col = -1;
+        pending_row = -1;
+        pending_check_col = -1;
+        pending_check_row = -1;
         std::string action = ctxt.handle_input();
         if( nc_nav != 0 ) {
             action = nc_nav < 0 ? "PREV_TAB" : "NEXT_TAB";
@@ -1694,21 +2124,43 @@ tab_direction set_traits( avatar &u, points_left &points )
         if( action == "TOGGLE_CHARACTER_PREVIEW_CLOTHES" && use_character_preview ) {
             character_preview.toggle_clothes();
         }
-        if( action == "LEFT" ) {
-            iCurWorkingPage--;
-            if( iCurWorkingPage < 0 ) {
-                iCurWorkingPage = used_pages - 1;
+
+        // Apply click intent exactly once, however many times the callback ran.
+        if( pending_row_col >= 0 && pending_row >= 0 && pending_row < col_len( pending_row_col ) &&
+            trait_at( pending_row_col, pending_row ) >= 0 ) {
+            cur_col = pending_row_col;
+            cur_row[cur_col] = pending_row;
+        }
+        // The checkbox last, so the cursor has already moved to the row being acted on.
+        if( pending_check_col >= 0 && pending_check_row >= 0 &&
+            pending_check_row < col_len( pending_check_col ) ) {
+            const int flat = trait_at( pending_check_col, pending_check_row );
+            if( flat >= 0 ) {
+                cur_col = pending_check_col;
+                cur_row[cur_col] = pending_check_row;
+                toggle_trait_at( flat );
             }
-        } else if( action == "RIGHT" ) {
-            iCurWorkingPage++;
-            if( iCurWorkingPage > used_pages - 1 ) {
-                iCurWorkingPage = 0;
+        }
+
+        // LEFT/RIGHT change column and UP/DOWN move within it — the axis mapping this tab has
+        // always had, and now the one the three-column layout implies.
+        if( action == "LEFT" || action == "RIGHT" ) {
+            const int step = action == "RIGHT" ? 1 : 2;   // +1 / -1 modulo 3
+            for( int n = 0; n < 3; n++ ) {
+                cur_col = ( cur_col + step ) % 3;
+                if( col_len( cur_col ) > 0 ) {
+                    break;
+                }
             }
-        } else if( action == "UP" ) {
-            if( iCurrentLine[iCurWorkingPage] == 0 ) {
-                iCurrentLine[iCurWorkingPage] = traits_size[iCurWorkingPage] - 1;
-            } else {
-                iCurrentLine[iCurWorkingPage]--;
+            skip_headings( cur_col, 1 );
+            scroll_col_to_cursor();
+        } else if( action == "DOWN" || action == "UP" ) {
+            const int dir = action == "DOWN" ? 1 : -1;
+            const int len = col_len( cur_col );
+            if( len > 0 ) {
+                cur_row[cur_col] = ( cur_row[cur_col] + dir + len ) % len;
+                skip_headings( cur_col, dir );
+                scroll_col_to_cursor();
             }
         } else if( action == "REROLL_CHARACTER" ) {
             points.init_from_options();
@@ -1722,117 +2174,20 @@ tab_direction set_traits( avatar &u, points_left &points )
             return tab_direction::NONE;
         } else if( action == "REROLL_APPEARANCE" ) {
             u.randomize_cosmetics();
-            //u.set_body();
             // Return tab_direction::NONE so we re-enter this tab again, but it forces a complete redrawing of it.
             return tab_direction::NONE;
-        } else if( action == "DOWN" ) {
-            iCurrentLine[iCurWorkingPage]++;
-            if( static_cast<size_t>( iCurrentLine[iCurWorkingPage] ) >= traits_size[iCurWorkingPage] ) {
-                iCurrentLine[iCurWorkingPage] = 0;
-            }
         } else if( action == "RANDOMIZE" ) {
-            iCurrentLine[iCurWorkingPage] = rng( 0, traits_size[iCurWorkingPage] - 1 );
+            const int len = col_len( cur_col );
+            if( len > 0 ) {
+                cur_row[cur_col] = rng( 0, len - 1 );
+                skip_headings( cur_col, 1 );
+                scroll_col_to_cursor();
+            }
         } else if( action == "CONFIRM" ) {
-            int inc_type = 0;
-            const trait_id cur_trait = vStartingTraits[iCurWorkingPage][iCurrentLine[iCurWorkingPage]].id;
-            const mutation_branch &mdata = cur_trait.obj();
-
-            // Look through the profession bionics, and see if any of them conflict with this trait
-            std::vector<bionic_id> cbms_blocking_trait = bionics_cancelling_trait( u.prof->CBMs(), cur_trait );
-            std::vector<bionic_id> cbms_blocking_trait2 = bionics_cancelling_trait( u.get_bionics(),
-                cur_trait );
-            for( auto cbm : cbms_blocking_trait2 ) {
-                cbms_blocking_trait.push_back( cbm );
+            const int flat = trait_at( cur_col, cur_row[cur_col] );
+            if( flat >= 0 ) {
+                toggle_trait_at( flat );
             }
-            const bool has_trait = u.has_trait( cur_trait );
-
-            if( has_trait ) {
-
-                inc_type = -1;
-
-                if( g->scen->is_locked_trait( cur_trait ) ) {
-                    inc_type = 0;
-                    popup( _( "Your scenario of %s prevents you from removing this trait." ),
-                           g->scen->gender_appropriate_name( u.male ) );
-                } else if( u.prof->is_locked_trait( cur_trait ) ) {
-                    inc_type = 0;
-                    popup( _( "Your profession of %s prevents you from removing this trait." ),
-                           u.prof->gender_appropriate_name( u.male ) );
-                } else {
-                    const auto mandatory_type = std::ranges::find_if( cur_trait.obj().types,
-                    []( const auto & t ) { return mutation_type_is_mandatory( t ); } );
-                    if( mandatory_type != cur_trait.obj().types.end() ) {
-                        inc_type = 0;
-                        popup( _( "You need to select 1 %s." ), mutation_type_display_name( *mandatory_type ) );
-                    }
-                }
-            } else if( newcharacter::has_conflicting_trait( u, cur_trait ) ) {
-                const auto &new_types = cur_trait.obj().types;
-                const bool do_swap = std::ranges::any_of( new_types,
-                []( const auto & t ) { return mutation_type_swaps_on_conflict( t ); } );
-                if( do_swap ) {
-                    const auto base_traits = u.get_base_traits();
-                    auto it = std::ranges::find_if( base_traits, [&]( const trait_id & tr ) {
-                        return tr != cur_trait && std::ranges::any_of( tr.obj().types,
-                        [&]( const auto & t ) { return new_types.contains( t ); } );
-                    } );
-                    if( it != base_traits.end() ) {
-                        inc_type = 1;
-                        u.toggle_trait( *it );
-                    } else {
-                        popup( _( "You already picked a conflicting trait!" ) );
-                    }
-                } else {
-                    popup( _( "You already picked a conflicting trait!" ) );
-                }
-            } else if( g->scen->is_forbidden_trait( cur_trait ) ) {
-                popup( _( "The scenario you picked prevents you from taking this trait!" ) );
-            } else if( u.prof->is_forbidden_trait( cur_trait ) ) {
-                popup( _( "Your profession of %s prevents you from taking this trait." ),
-                       u.prof->gender_appropriate_name( u.male ) );
-            } else if( !cbms_blocking_trait.empty() ) {
-                // Grab a list of the names of the bionics that block this trait
-                // So that the player know what is preventing them from taking it
-                std::vector<std::string> conflict_names;
-                conflict_names.reserve( cbms_blocking_trait.size() );
-                for( const bionic_id &conflict : cbms_blocking_trait ) {
-                    conflict_names.emplace_back( conflict->name.translated() );
-                }
-                popup( _( "The following bionics prevent you from taking this trait: %s." ),
-                       enumerate_as_string( conflict_names ) );
-            } else if( iCurWorkingPage == 0 && num_good + mdata.points >
-                       max_trait_points && !points.is_freeform() ) {
-                popup( vgettext( "Sorry, but you can only take %d point of advantages.",
-                                 "Sorry, but you can only take %d points of advantages.", max_trait_points ),
-                       max_trait_points );
-
-            } else if( iCurWorkingPage != 0 && num_bad + mdata.points <
-                       -max_trait_points && !points.is_freeform() ) {
-                popup( vgettext( "Sorry, but you can only take %d point of disadvantages.",
-                                 "Sorry, but you can only take %d points of disadvantages.", max_trait_points ),
-                       max_trait_points );
-
-            } else {
-                inc_type = 1;
-            }
-
-            //inc_type is either -1 or 1, so we can just multiply by it to invert
-            if( inc_type != 0 ) {
-                u.toggle_trait( cur_trait );
-                // If character had trait - it's now removed. Trait could blocked some clothes, need to retoggle
-                if( has_trait && character_preview.clothes_showing() ) {
-                    character_preview.toggle_clothes();
-                    character_preview.toggle_clothes();
-                }
-                points.trait_points -= mdata.points * inc_type;
-                if( iCurWorkingPage == 0 ) {
-                    num_good += mdata.points * inc_type;
-                } else {
-                    num_bad += mdata.points * inc_type;
-                }
-            }
-
-            recalc_display_cache();
         } else if( action == "PREV_TAB" ) {
             character_preview.clear();
             return tab_direction::BACKWARD;

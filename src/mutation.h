@@ -513,6 +513,7 @@ bool mutation_type_exists( const std::string &id );
 bool mutation_type_is_mandatory( const std::string &id );
 bool mutation_type_swaps_on_conflict( const std::string &id );
 int mutation_type_random_chance( const std::string &id );
+auto mutation_type_is_appearance( const std::string &id ) -> bool;
 auto mutation_type_display_name( const std::string &id ) -> std::string;
 auto get_default_mutations_for_types() -> std::vector<mutation_type_default>;
 std::vector<std::string> get_all_mutation_type_ids();

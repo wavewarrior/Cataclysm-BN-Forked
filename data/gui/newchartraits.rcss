@@ -1,6 +1,11 @@
-/* Layout for the new-character TRAITS tab (Tier 4 #4 slice 4). Reuses theme
-   .panel / .tabs / .tab / .item / .scroll-pane. body sized + centered; rows
-   need explicit display (the inline-row gotcha). */
+/* Layout for the new-character TRAITS tab (Tier 4 #4 slice 4).
+   Linked AFTER newchar_common.rcss, so a same-specificity rule here wins.
+
+   ROW based, after UI_designs/11_charcreation_mutations.png. The readability argument is
+   ALIGNMENT: every row is cursor | checkbox | cost | name in fixed-width cells, so each cell
+   forms a column the eye can run down. Hierarchy comes from brightness and tracking, not from
+   size — the reference sets everything at one size and separates regions with dotted rules.
+   See plans/charcreation-traits-tree.md. */
 
 body {
     display: flex;
@@ -10,13 +15,6 @@ body {
     height: 100%;
 }
 
-/* 72%, not 80/92%: the character-preview box is pinned to the right of the screen
-   and its avatar is a GPU sprite drawn UNDERNEATH this document, so an opaque panel
-   reaching over that box hides the sprite. A centred panel of width W has its right
-   edge at (100+W)/2, so 72% ends at 86% and the box starts at ~86.7% — they never
-   meet. 80% (right edge 90%) cleared the old box by 0.2% by luck; 92% covered it.
-   Keep all eight tabs identical so the panel edge does not jump while tabbing.
-   See nc_prepare_preview() in newcharacter_ui.cpp. */
 .nc-panel {
     width: 98%;
     height: 98%;
@@ -32,70 +30,206 @@ body {
     flex: 0 0 auto;
 }
 
+/* ── DOTTED RULES ─────────────────────────────────────────────────────────────
+   RmlUi has NO `border-style`, and this repo already recorded that a dotted border "rendered as
+   nothing here" twice (mainmenu.rcss, mainmenu_theme.rcss). A repeating gradient is the working
+   substitute and is what the sidebar HUD uses for its scanlines: 2dp of ink, 3dp of gap. */
+.nc-rule {
+    flex: 0 0 auto;
+    height: 1dp;
+    margin: 5dp 0;
+    decorator: repeating-linear-gradient( 90deg,
+        {{bg4}} 0dp, {{bg4}} 2dp, #00000000 2dp, #00000000 5dp );
+}
+
+/* The same rule turned 90 degrees, between the columns. */
+.nc-vrule {
+    flex: 0 0 auto;
+    width: 1dp;
+    margin: 0 12dp;
+    decorator: repeating-linear-gradient( 180deg,
+        {{bg4}} 0dp, {{bg4}} 2dp, #00000000 2dp, #00000000 5dp );
+}
+
+/* Meta bar: pools left, trait budget right. */
 .nc-trait-top {
     flex: 0 0 auto;
     display: flex;
     flex-direction: row;
-    padding: 6dp 8dp;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8dp;
 }
 
 .nc-trait-points {
     display: block;
     flex: 0 0 auto;
-    margin-right: 16dp;
+    color: {{fg}};
 }
 
 .nc-trait-budget {
     display: block;
     flex: 0 0 auto;
-    margin-right: 16dp;
 }
 
-.nc-trait-cost {
-    display: block;
-    flex: 1;
-}
-
+/* ── COLUMNS ──────────────────────────────────────────────────────────────────
+   Three equal columns. Each scrolls on its own, so a long Advantages list never pushes the
+   detail panel off the screen — the panel's position is fixed for the same reason the card
+   tabs' info panel is. */
 .nc-trait-cols {
     flex: 1;
     min-height: 0;
     display: flex;
     flex-direction: row;
+    padding: 4dp 8dp;
 }
 
-.nc-trait-col {
+.nc-trait-colwrap {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Column heading: tracked-out caps, brighter on the focused column. Its own dim rule beneath
+   ties it to the list without the weight of a full divider. */
+.nc-trait-colhead {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 0 0 4dp 2dp;
+    margin-bottom: 4dp;
+    border-bottom: 1dp {{bg2}};
+}
+
+.nc-trait-colname {
+    display: block;
+    flex: 0 0 auto;
+    letter-spacing: 3dp;
+    text-transform: uppercase;
+}
+
+.nc-trait-colcount {
+    display: block;
+    flex: 0 0 auto;
+    margin-left: 8dp;
+    font-size: 12dp;
+}
+
+.nc-trait-list {
+    flex: 1;
+    min-height: 0;
+    display: block;
+    overflow-y: auto;
+    /* Bottom gap so the last row is not sliced flush against the pane edge, which reads as a
+       rendering fault rather than as "scroll for more". */
+    padding-bottom: 6dp;
+}
+
+/* ── ROWS ─────────────────────────────────────────────────────────────────────
+   EVERY row is this height, headings included. That uniformity is load-bearing: C++ scrolls the
+   cursor into view as scroll_height / row_count, which is only exact while no row is taller.
+
+   `line-height` above the glyph size is the spacious feel the reference has — it sets rows on a
+   generous rhythm without the leading being big enough to break the columns apart. */
+.nc-trait-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    height: 22dp;
+    line-height: 22dp;
+    padding-left: 2dp;
+    /* LOAD-BEARING, exactly as .nc-eqp-row records it (newcharprofession.rcss:253): a long name
+       wrapping to a second line inside a fixed-height box spills into the row below, so
+       consecutive rows draw over each other. It also grows scroll_height, which silently
+       desyncs the cursor-scroll arithmetic that assumes every row is this tall. */
+    overflow: hidden;
+}
+
+/* Hover is the click affordance for a mouse; the cursor row's own fill comes from
+   newchar_common.rcss so it stays identical to every other list in the creator. */
+.nc-trait-row:hover {
+    background-color: {{bg1}};
+}
+
+/* A sub-heading inside a column. Same height as an item, and NO border: `height` is content-box
+   here, so a 1dp rule would make headings 23dp against the items' 22dp and break the uniformity
+   the scroll arithmetic depends on. Tracking, caps and the gold the producer bakes in carry the
+   hierarchy instead. */
+.nc-trait-row.header {
+    letter-spacing: 2dp;
+    text-transform: uppercase;
+}
+
+.nc-trait-row.header:hover {
+    background-color: transparent;
+}
+
+/* Micro-columns. Fixed widths, so cursor / box / cost / name each line up down the whole
+   column; this alignment is the entire readability argument for the row layout. */
+.nc-tr-cursor {
+    display: block;
+    flex: 0 0 auto;
+    width: 10dp;
+}
+
+/* The toggle target. Wider than its glyph so it is comfortable to hit, and the only element on
+   the row that changes the character. */
+.nc-tr-check {
+    display: block;
+    flex: 0 0 auto;
+    width: 30dp;
+}
+
+.nc-tr-check:hover {
+    color: {{yellow}};
+}
+
+/* Right-aligned inside its cell, so the brackets stack into a neat gutter of numbers. */
+.nc-tr-cost {
+    display: block;
+    flex: 0 0 auto;
+    width: 44dp;
+    text-align: right;
     margin-right: 8dp;
 }
 
-.nc-trait-row {
+/* nowrap for the same reason the row clips: one long name must not become two lines. */
+.nc-tr-name {
+    white-space: nowrap;
+    overflow: hidden;
     display: block;
+    flex: 1;
+    min-width: 0;
 }
 
-.nc-trait-desc {
+/* ── DETAIL ───────────────────────────────────────────────────────────────────
+   ":: TRAIT NAME" over the shared art | facts | prose panel. */
+.nc-trait-selname {
     flex: 0 0 auto;
-    max-height: 96dp;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    padding: 6dp 8dp;
-    border-top: 1dp {{bg4}};
-    color: {{fg}};
+    display: block;
+    padding: 0 8dp 4dp 8dp;
+    letter-spacing: 2dp;
+    text-transform: uppercase;
 }
 
-/* Portrait box. The avatar texture is AVATAR_TARGET_PX square and `contain` keeps its
-   aspect, so this only decides how much room the sprite gets. Anchored top-right of the
-   stage, which is where the old floating preview sat — but now it is inside the panel,
-   which is what let the panel grow to 98%. */
-.nc-portrait {
-    /* `position: absolute` here resolves against .nc-panel, NOT against .nc-stage —
-       measured earlier in this work when a beam anchored to a `position: relative`
-       parent landed against the panel instead. That behaviour is exactly the placement
-       wanted here (panel top-right), so it is relied on deliberately rather than by
-       accident. top/right clear the step rail and the panel's 24dp runic-frame inset. */
-    position: absolute;
-    right: 32dp;
-    top: 52dp;
-    width: 208dp;
-    height: 208dp;
+/* Shorter than the card tabs' 188dp: this tab spends its height on three long lists, and the
+   panel carries three facts plus prose rather than facts plus two rows of chips. */
+.nc-info-panel {
+    height: 132dp;
+}
+
+.nc-info-art {
+    width: 108dp;
+    height: 108dp;
+}
+
+.nc-trait-hint {
+    flex: 0 0 auto;
+    display: block;
+    text-align: right;
+    padding: 4dp 8dp 0 8dp;
+    font-size: 13dp;
+    color: {{fg4}};
 }

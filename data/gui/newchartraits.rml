@@ -5,15 +5,20 @@
     <link type="text/rcss" href="newchartraits.rcss"/>
 </head>
 <body data-model="newchartraits">
-    <!-- Tier 4 screen #4 (new-character creator) slice 4: the TRAITS tab
-         (set_traits). Character-tab strip (TRAITS current) + a top bar (points +
-         good/bad budget + the working trait's cost line) + three side-by-side
-         columns (good / bad / neutral; the neutral column hides when empty) +
-         a description footer for the working trait. Only the working column's
-         cursor row is highlighted. Render-only doc; keyboard owns LEFT/RIGHT
-         (switch column), UP/DOWN (move), CONFIRM (toggle trait), RANDOMIZE,
-         REROLL_*, NEXT/PREV_TAB, QUIT. The tile character preview is not drawn
-         in rml mode this slice. -->
+    <!-- Tier 4 screen #4 (new-character creator): the TRAITS tab (set_traits).
+         ROW based, after UI_designs/11_charcreation_mutations.png: three columns of
+         single-line rows separated by dotted rules, each row a set of aligned
+         micro-columns — cursor, checkbox, cost tag, name — so a 60-row column can be
+         scanned down any one of them. Cards were tried first and were not readable at
+         this item count; see plans/charcreation-traits-tree.md.
+
+         Column 3 carries sub-headings (Neutral, then one per appearance mutation type,
+         derived from mandatory_one / swap_on_conflict). A heading occupies a row of the
+         SAME height as an item, which is what keeps the cursor-scroll arithmetic exact.
+
+         Keyboard: LEFT/RIGHT change column, UP/DOWN move within it, CONFIRM takes or
+         drops, RANDOMIZE, REROLL_*, NEXT/PREV_TAB, QUIT. Mouse: row selects, the
+         checkbox toggles. -->
     <div class="panel nc-panel">
         <div class="nc-steps">
             <div class="nc-step" data-for="t : tabs"
@@ -33,45 +38,122 @@
             </div>
             <div class="nc-arrow-spacer" data-if="!has_prev"></div>
             <div class="nc-stage">
-                <!-- Character portrait. Ordinary document content now: the avatar is
-                     drawn into its own render target and arrives as a decorator, so it
-                     is no longer a GPU sprite pinned outside the panel. -->
-                <div class="nc-portrait" data-if="has_portrait"
-                     data-style-decorator="portrait_dec"></div>
-            <div class="nc-trait-top">
-                <span class="nc-trait-points" data-rml="points_rml"></span>
-                <span class="nc-trait-cost" data-rml="cost_rml"></span>
-            </div>
-            <!-- Own row, not inside .nc-trait-top: at 230dp wedged between the
-                 points and cost lines the scale read as clutter rather than as an
-                 indicator. -->
-            <div class="nc-balance-row" data-if="balance.show">
-                <!-- No absolute positioning anywhere: RmlUi resolved `position: absolute`
-                     against .nc-panel rather than against .nc-scale's `position: relative`,
-                     which put the beam ~39dp above the pans and across the top bar. Pure
-                     flow instead: arm row (pan | beam | pan) with the fulcrum beneath. -->
-                <div class="nc-scale">
-                    <div class="nc-scale-arm">
-                        <div class="nc-scale-pan" data-style-top="balance.good_top">
-                            <div class="nc-scale-icon" data-style-decorator="balance.good_icon"></div>
-                            <span class="nc-scale-num" data-rml="balance.good_rml"></span>
+                <!-- Meta bar: pools on the left, the trait budget on the right, dotted
+                     rules above and below it as in the reference. -->
+                <div class="nc-rule"></div>
+                <div class="nc-trait-top">
+                    <span class="nc-trait-points" data-rml="points_rml"></span>
+                    <span class="nc-trait-budget" data-rml="budget_rml"></span>
+                </div>
+                <div class="nc-rule"></div>
+                <!-- Own row, not inside .nc-trait-top: at 230dp wedged between the points
+                     and cost lines the scale read as clutter rather than as an indicator.
+                     It is the one screen-level readout of both budgets. -->
+                <div class="nc-balance-row" data-if="balance.show">
+                    <!-- No absolute positioning anywhere: RmlUi resolved `position: absolute`
+                         against .nc-panel rather than against .nc-scale's `position: relative`,
+                         which put the beam ~39dp above the pans and across the top bar. Pure
+                         flow instead: arm row (pan | beam | pan) with the fulcrum beneath. -->
+                    <div class="nc-scale">
+                        <div class="nc-scale-arm">
+                            <div class="nc-scale-pan" data-style-top="balance.good_top">
+                                <div class="nc-scale-icon" data-style-decorator="balance.good_icon"></div>
+                                <span class="nc-scale-num" data-rml="balance.good_rml"></span>
+                            </div>
+                            <div class="nc-scale-beam" data-style-transform="balance.rotate"></div>
+                            <div class="nc-scale-pan" data-style-top="balance.bad_top">
+                                <span class="nc-scale-num" data-rml="balance.bad_rml"></span>
+                                <div class="nc-scale-icon" data-style-decorator="balance.bad_icon"></div>
+                            </div>
                         </div>
-                        <div class="nc-scale-beam" data-style-transform="balance.rotate"></div>
-                        <div class="nc-scale-pan" data-style-top="balance.bad_top">
-                            <span class="nc-scale-num" data-rml="balance.bad_rml"></span>
-                            <div class="nc-scale-icon" data-style-decorator="balance.bad_icon"></div>
+                        <div class="nc-scale-fulcrum" data-style-decorator="balance.fulcrum_icon"></div>
+                    </div>
+                </div>
+
+                <div class="nc-trait-cols">
+                    <!-- Three columns, written out rather than generated, because each needs a
+                         stable id for C++ to scroll its own cursor into view. -->
+                    <div class="nc-trait-colwrap">
+                        <div class="nc-trait-colhead">
+                            <span class="nc-trait-colname" data-rml="col0.name_rml"></span>
+                            <span class="nc-trait-colcount" data-rml="col0.count_rml"></span>
+                        </div>
+                        <div id="nc-trait-col0" class="nc-trait-list">
+                            <div class="item nc-trait-row" data-for="r, ri : col0.rows"
+                                 data-class-selected="r.selected" data-class-header="r.header"
+                                 data-event-click="on_row(0, ri)">
+                                <span class="nc-tr-cursor" data-rml="r.cursor_rml"></span>
+                                <span class="nc-tr-check" data-rml="r.check_rml"
+                                      data-event-click="on_check(0, ri)"></span>
+                                <span class="nc-tr-cost" data-rml="r.cost_rml"></span>
+                                <span class="nc-tr-name" data-rml="r.name_rml"></span>
+                            </div>
                         </div>
                     </div>
-                    <div class="nc-scale-fulcrum" data-style-decorator="balance.fulcrum_icon"></div>
+                    <div class="nc-vrule"></div>
+                    <div class="nc-trait-colwrap">
+                        <div class="nc-trait-colhead">
+                            <span class="nc-trait-colname" data-rml="col1.name_rml"></span>
+                            <span class="nc-trait-colcount" data-rml="col1.count_rml"></span>
+                        </div>
+                        <div id="nc-trait-col1" class="nc-trait-list">
+                            <div class="item nc-trait-row" data-for="r, ri : col1.rows"
+                                 data-class-selected="r.selected" data-class-header="r.header"
+                                 data-event-click="on_row(1, ri)">
+                                <span class="nc-tr-cursor" data-rml="r.cursor_rml"></span>
+                                <span class="nc-tr-check" data-rml="r.check_rml"
+                                      data-event-click="on_check(1, ri)"></span>
+                                <span class="nc-tr-cost" data-rml="r.cost_rml"></span>
+                                <span class="nc-tr-name" data-rml="r.name_rml"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="nc-vrule"></div>
+                    <div class="nc-trait-colwrap">
+                        <div class="nc-trait-colhead">
+                            <span class="nc-trait-colname" data-rml="col2.name_rml"></span>
+                            <span class="nc-trait-colcount" data-rml="col2.count_rml"></span>
+                        </div>
+                        <div id="nc-trait-col2" class="nc-trait-list">
+                            <div class="item nc-trait-row" data-for="r, ri : col2.rows"
+                                 data-class-selected="r.selected" data-class-header="r.header"
+                                 data-event-click="on_row(2, ri)">
+                                <span class="nc-tr-cursor" data-rml="r.cursor_rml"></span>
+                                <span class="nc-tr-check" data-rml="r.check_rml"
+                                      data-event-click="on_check(2, ri)"></span>
+                                <span class="nc-tr-cost" data-rml="r.cost_rml"></span>
+                                <span class="nc-tr-name" data-rml="r.name_rml"></span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            <div class="nc-trait-cols">
-                <div id="nc-trait-col0" class="nc-trait-col scroll-pane" data-rml="col0_html"></div>
-                <div id="nc-trait-col1" class="nc-trait-col scroll-pane" data-rml="col1_html"></div>
-                <div id="nc-trait-col2" class="nc-trait-col scroll-pane" data-rml="col2_html"
-                     data-if="show_col2"></div>
-            </div>
-            <div class="nc-trait-desc" data-rml="desc_rml"></div>
+
+                <div class="nc-rule"></div>
+                <!-- ":: TRAIT NAME" over the detail panel, as in the reference. -->
+                <div class="nc-trait-selname" data-rml="sel_name_rml"></div>
+                <div class="nc-info-panel">
+                    <!-- Art slot: the character portrait, which already wears the selected kit.
+                         It earns its place on this tab more than any other — taking a visible
+                         mutation changes it. -->
+                    <div class="nc-info-art" data-if="has_portrait"
+                         data-style-decorator="portrait_dec"></div>
+                    <div class="nc-info-facts">
+                        <div class="nc-fact" data-for="f : facts">
+                            <div class="nc-fact-label" data-rml="f.label_rml"></div>
+                            <div class="nc-fact-value" data-rml="f.value_rml"></div>
+                            <!-- Carries the reason an unavailable trait cannot be taken, which
+                                 used to exist only as a popup AFTER pressing CONFIRM. -->
+                            <div class="nc-fact-sub" data-rml="f.sub_rml"></div>
+                        </div>
+                    </div>
+                    <!-- Prose in a .nc-info-blurb CHILD: .nc-info-desc is `display: flex`, and a
+                         bare text node in a flex container gets no inline context and renders
+                         nothing. See plans/charcreation-stats-cards.md. -->
+                    <div class="nc-info-desc">
+                        <div class="nc-info-blurb" data-rml="desc_rml"></div>
+                    </div>
+                </div>
+                <div class="nc-trait-hint" data-rml="hint_rml"></div>
             </div>
             <div class="nc-arrow nc-arrow-next" data-if="has_next"
                  data-event-click="on_next()">

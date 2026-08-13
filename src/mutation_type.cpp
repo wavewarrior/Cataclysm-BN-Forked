@@ -83,6 +83,17 @@ int mutation_type_random_chance( const std::string &id )
     return it != mutation_types.end() ? it->second.random_chance : 0;
 }
 
+/// A type whose members you hold AT MOST ONE of, which is what makes a set of mutations a picker
+/// (hair style, eye colour) rather than a list of independent choices. `mandatory_one` means
+/// exactly one is required; `swap_on_conflict` means taking a second replaces the first. Measured
+/// across all 23 type definitions, this selects the five appearance types and no gameplay type,
+/// so the creator's TRAITS bands derive from it instead of a hardcoded id list — see
+/// plans/charcreation-traits-tree.md.
+auto mutation_type_is_appearance( const std::string &id ) -> bool
+{
+    return mutation_type_is_mandatory( id ) || mutation_type_swaps_on_conflict( id );
+}
+
 auto mutation_type_display_name( const std::string &id ) -> std::string
 {
     if( id == "skin_tone" ) {
@@ -93,6 +104,10 @@ auto mutation_type_display_name( const std::string &id ) -> std::string
         return _( "hair style" );
     } else if( id == "hair_color" ) {
         return _( "hair color" );
+    } else if( id == "facial_hair" ) {
+        // Was falling through to the raw id, so anything printing this type showed
+        // "facial_hair". npctalk_funcs.cpp's barber menu already needed these words.
+        return _( "facial hair" );
     }
     return id;
 }
