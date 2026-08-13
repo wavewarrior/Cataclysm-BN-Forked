@@ -63,6 +63,8 @@
 #include "recipe.h"
 #include "recipe_dictionary.h"
 #include <RmlUi/Core.h>
+#include "newchar_bio_scan.h"
+#include "newchar_bionic_gate.h"
 #include "newchar_dna.h"
 #include "newchar_balance.h"
 #include "newchar_stat_meter.h"
@@ -163,21 +165,12 @@ enum description_selector {
 #define COL_STAT_BONUS      c_light_green // Bonus
 #define COL_STAT_NEUTRAL    c_white   // Neutral Property
 #define COL_STAT_PENALTY    c_light_red   // Penalty
+// The per-row toggled-on/off variants that used to live here went with the last curses list in
+// this file: the TRAITS and BIONICS rows now carry state in a checkbox glyph and the cursor's own
+// fill, so a row's colour only ever encodes point valence.
 #define COL_TR_GOOD         c_green   // Good trait descriptive text
-#define COL_TR_GOOD_OFF_ACT c_light_gray  // A toggled-off good trait
-#define COL_TR_GOOD_ON_ACT  c_light_green // A toggled-on good trait
-#define COL_TR_GOOD_OFF_PAS c_dark_gray  // A toggled-off good trait
-#define COL_TR_GOOD_ON_PAS  c_green   // A toggled-on good trait
 #define COL_TR_BAD          c_red     // Bad trait descriptive text
-#define COL_TR_BAD_OFF_ACT  c_light_gray  // A toggled-off bad trait
-#define COL_TR_BAD_ON_ACT   c_light_red   // A toggled-on bad trait
-#define COL_TR_BAD_OFF_PAS  c_dark_gray  // A toggled-off bad trait
-#define COL_TR_BAD_ON_PAS   c_red     // A toggled-on bad trait
 #define COL_TR_NEUT         c_brown     // Neutral trait descriptive text
-#define COL_TR_NEUT_OFF_ACT c_dark_gray  // A toggled-off neutral trait
-#define COL_TR_NEUT_ON_ACT  c_yellow   // A toggled-on neutral trait
-#define COL_TR_NEUT_OFF_PAS c_dark_gray  // A toggled-off neutral trait
-#define COL_TR_NEUT_ON_PAS  c_brown     // A toggled-on neutral trait
 #define COL_SKILL_USED      c_green   // A skill with at least one point
 #define COL_HEADER          c_white   // Captions, like "Profession items"
 
@@ -215,20 +208,8 @@ static auto random_age_for_profession( const profession &prof ) -> int
 #define COL_STAT_NEUTRAL    c_white   // Neutral Property
 #define COL_STAT_PENALTY    c_light_red   // Penalty
 #define COL_TR_GOOD         c_green   // Good trait descriptive text
-#define COL_TR_GOOD_OFF_ACT c_light_gray  // A toggled-off good trait
-#define COL_TR_GOOD_ON_ACT  c_light_green // A toggled-on good trait
-#define COL_TR_GOOD_OFF_PAS c_dark_gray  // A toggled-off good trait
-#define COL_TR_GOOD_ON_PAS  c_green   // A toggled-on good trait
 #define COL_TR_BAD          c_red     // Bad trait descriptive text
-#define COL_TR_BAD_OFF_ACT  c_light_gray  // A toggled-off bad trait
-#define COL_TR_BAD_ON_ACT   c_light_red   // A toggled-on bad trait
-#define COL_TR_BAD_OFF_PAS  c_dark_gray  // A toggled-off bad trait
-#define COL_TR_BAD_ON_PAS   c_red     // A toggled-on bad trait
 #define COL_TR_NEUT         c_brown     // Neutral trait descriptive text
-#define COL_TR_NEUT_OFF_ACT c_dark_gray  // A toggled-off neutral trait
-#define COL_TR_NEUT_ON_ACT  c_yellow   // A toggled-on neutral trait
-#define COL_TR_NEUT_OFF_PAS c_dark_gray  // A toggled-off neutral trait
-#define COL_TR_NEUT_ON_PAS  c_brown     // A toggled-on neutral trait
 #define COL_SKILL_USED      c_green   // A skill with at least one point
 #define COL_HEADER          c_white   // Captions, like "Profession items"
 
@@ -2294,7 +2275,7 @@ tab_direction set_traits( avatar &u, points_left &points )
             return;
         }
         Rml::Element *e = rml.document()->GetElementById(
-                              string_format( "nc-trait-col%d", cur_col ) );
+                              string_format( "nc-col%d", cur_col ) );
         if( e == nullptr ) {
             return;
         }
@@ -2457,17 +2438,166 @@ struct nc_bionics_tab {
     bool selected = false;
     bool done = false;   //< step already passed
 };
+
+/// One line of a column: cursor | checkbox | cost | name in fixed-width cells, so each cell forms
+/// a micro-column the eye can run down. The TRAITS anatomy, for the same reason — 34 starting
+/// bionics are a checklist of name, price and do-I-have-it.
+struct nc_bio_row {
+    Rml::String cursor_rml;   //< ">" on the cursor row, else empty
+    Rml::String check_rml;    //< "[x]" held, "[ ]" installable, "[-]" refused
+    Rml::String cost_rml;     //< "[+3]" / "[-2]", empty when free
+    Rml::String name_rml;
+    bool header = false;      //< a region sub-heading, not a selectable implant
+    bool selected = false;
+};
+
+/// Which region of the chassis an implant occupies. The lists group by this, head to feet, so a
+/// column reads top-to-bottom in the same order the diagram beside it does — and so a region
+/// heading in the list names something the player can point at on the body.
+///
+/// `count` is the sentinel the group loop iterates to; `none` deliberately sorts last, since an
+/// implant with no site is the exception rather than the opening act.
+enum class nc_bio_region : int {
+    head = 0,
+    torso,
+    arms,
+    legs,
+    none,
+    count
+};
+
+/// Head-to-feet order, which is also the tie-break when an implant claims two parts equally.
+/// These twelve are exactly the parts that declare `bionic_slots`, i.e. every site a bionic can
+/// occupy, and they are the same twelve the chassis grid draws.
+constexpr std::array<std::pair<body_part, nc_bio_region>, 12> nc_bio_part_regions = {{
+        { bp_head, nc_bio_region::head },
+        { bp_eyes, nc_bio_region::head },
+        { bp_mouth, nc_bio_region::head },
+        { bp_torso, nc_bio_region::torso },
+        { bp_arm_l, nc_bio_region::arms },
+        { bp_arm_r, nc_bio_region::arms },
+        { bp_hand_l, nc_bio_region::arms },
+        { bp_hand_r, nc_bio_region::arms },
+        { bp_leg_l, nc_bio_region::legs },
+        { bp_leg_r, nc_bio_region::legs },
+        { bp_foot_l, nc_bio_region::legs },
+        { bp_foot_r, nc_bio_region::legs }
+    }
+};
+
+/// The region an implant belongs to: that of the part it claims the MOST space in, which is the
+/// same rule the diagram's boxes use to pick the implant they show. Derived from
+/// `occupied_bodyparts` — content data — so a modded CBM files itself, and one that occupies a
+/// modded body part falls into `none` rather than being mis-filed.
+auto nc_bio_classify( const bionic_data &bio ) -> nc_bio_region
+{
+    nc_bio_region best = nc_bio_region::none;
+    int best_space = 0;
+    for( const auto &[bp, region] : nc_bio_part_regions ) {
+        const auto it = bio.occupied_bodyparts.find( convert_bp( bp ) );
+        if( it != bio.occupied_bodyparts.end() && it->second > best_space ) {
+            best_space = it->second;
+            best = region;
+        }
+    }
+    return best;
+}
+
+auto nc_bio_region_name( nc_bio_region r ) -> std::string
+{
+    switch( r ) {
+    case nc_bio_region::head:
+        return _( "Head and face" );
+        case nc_bio_region::torso:
+            return _( "Torso" );
+        case nc_bio_region::arms:
+            return _( "Arms and hands" );
+        case nc_bio_region::legs:
+            return _( "Legs and feet" );
+        default:
+            return _( "No implant site" );
+    }
+}
+
+/// One column: a heading, a count, and its rows.
+struct nc_bio_col {
+    Rml::String name_rml;
+    Rml::String count_rml;
+    Rml::Vector<nc_bio_row> rows;
+};
+
+/// A label / value / sub-line triple in the detail panel.
+struct nc_bio_fact {
+    Rml::String label_rml;
+    Rml::String value_rml;
+    Rml::String sub_rml;
+};
+
+/// One cell of the chassis diagram. EVERY grid position emits a cell — a `junction` draws the
+/// connecting lines and a `blank` holds its column open — so the grid aligns from equal flex alone
+/// with no pixel arithmetic, exactly as the profession equipment doll does it.
+struct nc_bio_cell {
+    Rml::String name_rml;     //< body-part caption
+    Rml::String impl_rml;     //< the implant occupying the most space here, or a dash
+    /// That implant's CBM sprite. "none", NOT empty, for a part with nothing in it:
+    /// `data-style-decorator` evaluates its binding for every cell, and an empty value becomes
+    /// `decorator: ;`, which RmlUi logs as a syntax error on every frame. Same rule
+    /// nc_tile_sprite_dec follows for a sprite it cannot resolve.
+    Rml::String dec = "none";
+    Rml::String more_rml;     //< "+N" when further implants share the part
+    Rml::String cap_rml;      //< "6/18" used slots
+    /// Capacity bar width, as a percentage. "0%", NOT empty, for the same reason `dec` is "none":
+    /// `data-style-width` evaluates its binding even for an element `data-if` has hidden, and an
+    /// empty value becomes `width: ;` — measured at ~6 RmlUi syntax errors per frame before this.
+    Rml::String bar_w = "0%";
+    bool show_cap = false;    //< only when CBM_SLOTS_ENABLED is on; it is off by default
+    bool filled = false;
+    bool want = false;        //< the bionic under the cursor claims this part
+    bool over = false;        //< ...and there is not enough room for it
+    bool junction = false;    //< spine + rung, no box
+    bool blank = false;       //< spacer, nothing drawn
+};
+
+/// One row of the chassis: left, centre, right, always three cells. `scan_col` is the sweep's
+/// colour for this row and is consumed TWICE — by the bus-rail node beside the row and by the
+/// scanline inside each of its boxes — so the rail and the body cannot fall out of step.
+struct nc_bio_dollrow {
+    Rml::Vector<nc_bio_cell> cells;
+    Rml::String scan_col;
+};
+
 struct nc_bionics_session {
     Rml::Vector<nc_bionics_tab> tabs;
     nc_shell shell;
     Rml::String points_rml;
+    Rml::String budget_rml;   //< "Bionic points left: N", the reference's meta-bar readout
     nc_balance balance;
-    Rml::String cost_rml;
-    Rml::String col0_html;
-    Rml::String col1_html;
-    Rml::String col2_html;
+    /// Three columns, bound separately rather than as an array: each needs a stable element id so
+    /// C++ can scroll its own cursor into view.
+    nc_bio_col col0;
+    nc_bio_col col1;
+    nc_bio_col col2;
     bool show_col2 = false;
+    Rml::String sel_name_rml;   //< ":: BIONIC NAME" over the detail panel
+    /// The detail panel's art slot: the CBM's own sprite, not the avatar. Bionics do not change
+    /// how the character looks, the chassis beside the lists already IS the body view, and the
+    /// sprite ties the panel to the boxes on the diagram — so the portrait earns its place here
+    /// least of the four steps that carry one.
+    bool has_art = false;
+    /// "none", NOT empty, for the same reason nc_bio_cell::dec is: `data-style-decorator` is
+    /// applied on the first frame, BEFORE sync_rml has run, and an empty value logs `decorator: ;`.
+    Rml::String art_dec = "none";
+    Rml::Vector<nc_bio_fact> facts;
     Rml::String desc_rml;
+    Rml::String hint_rml;
+    /// The chassis, rebuilt every redraw because it carries the scan sweep. That costs nothing
+    /// extra: DataViewStyle skips an unchanged property value (RmlUi DataViewDefault.cpp:168), so
+    /// the sprite decorators are not re-parsed while only the scan colour moves, and DataViewFor
+    /// only creates elements when the array's SIZE changes — this one is always six by three.
+    Rml::Vector<nc_bio_dollrow> doll;
+    Rml::String chassis_name_rml;  //< the diagram's heading
+    Rml::String chassis_rml;       //< implant count
+    Rml::String chassis_cap_rml;   //< total used / total slots, when slots are enforced
     Rml::DataModelHandle handle;
 };
 
@@ -2494,13 +2624,55 @@ void register_nc_bionics_rml_types( Rml::DataModelConstructor &c )
     bh.RegisterMember( "good_icon", &nc_balance::good_icon );
     bh.RegisterMember( "bad_icon", &nc_balance::bad_icon );
     bh.RegisterMember( "fulcrum_icon", &nc_balance::fulcrum_icon );
+    // Rows before the column that holds them: a member cannot be registered before its type is.
+    Rml::StructHandle<nc_bio_row> rh = c.RegisterStruct<nc_bio_row>();
+    rh.RegisterMember( "cursor_rml", &nc_bio_row::cursor_rml );
+    rh.RegisterMember( "check_rml", &nc_bio_row::check_rml );
+    rh.RegisterMember( "cost_rml", &nc_bio_row::cost_rml );
+    rh.RegisterMember( "name_rml", &nc_bio_row::name_rml );
+    rh.RegisterMember( "header", &nc_bio_row::header );
+    rh.RegisterMember( "selected", &nc_bio_row::selected );
+    c.RegisterArray<Rml::Vector<nc_bio_row>>();
+    Rml::StructHandle<nc_bio_col> ch = c.RegisterStruct<nc_bio_col>();
+    ch.RegisterMember( "name_rml", &nc_bio_col::name_rml );
+    ch.RegisterMember( "count_rml", &nc_bio_col::count_rml );
+    ch.RegisterMember( "rows", &nc_bio_col::rows );
+    Rml::StructHandle<nc_bio_fact> fh = c.RegisterStruct<nc_bio_fact>();
+    fh.RegisterMember( "label_rml", &nc_bio_fact::label_rml );
+    fh.RegisterMember( "value_rml", &nc_bio_fact::value_rml );
+    fh.RegisterMember( "sub_rml", &nc_bio_fact::sub_rml );
+    c.RegisterArray<Rml::Vector<nc_bio_fact>>();
+    Rml::StructHandle<nc_bio_cell> sh = c.RegisterStruct<nc_bio_cell>();
+    sh.RegisterMember( "name_rml", &nc_bio_cell::name_rml );
+    sh.RegisterMember( "impl_rml", &nc_bio_cell::impl_rml );
+    sh.RegisterMember( "dec", &nc_bio_cell::dec );
+    sh.RegisterMember( "more_rml", &nc_bio_cell::more_rml );
+    sh.RegisterMember( "cap_rml", &nc_bio_cell::cap_rml );
+    sh.RegisterMember( "bar_w", &nc_bio_cell::bar_w );
+    sh.RegisterMember( "show_cap", &nc_bio_cell::show_cap );
+    sh.RegisterMember( "filled", &nc_bio_cell::filled );
+    sh.RegisterMember( "want", &nc_bio_cell::want );
+    sh.RegisterMember( "over", &nc_bio_cell::over );
+    sh.RegisterMember( "junction", &nc_bio_cell::junction );
+    sh.RegisterMember( "blank", &nc_bio_cell::blank );
+    c.RegisterArray<Rml::Vector<nc_bio_cell>>();
+    Rml::StructHandle<nc_bio_dollrow> dh = c.RegisterStruct<nc_bio_dollrow>();
+    dh.RegisterMember( "cells", &nc_bio_dollrow::cells );
+    dh.RegisterMember( "scan_col", &nc_bio_dollrow::scan_col );
+    c.RegisterArray<Rml::Vector<nc_bio_dollrow>>();
     g_nc_bionics_types_registered = true;
 }
+
 } // namespace
 
 tab_direction set_bionics( avatar &u, points_left &points )
 {
     const int max_trait_points = get_option<int>( "MAX_TRAIT_POINTS" );
+    // CBM slots are an EXTERNAL_OPTION defaulting to FALSE (data/json/game_balance.json; the
+    // bundled cbm_slots mod turns them on), and bionic_installation_issues returns early when they
+    // are off. So the chassis shows capacity only when the mechanic is actually in force — what is
+    // always true is which body parts an implant occupies, and that is what the diagram is for.
+    const bool slots_enforced = get_option<bool>( "CBM_SLOTS_ENABLED" );
 
     // Track how many good / bad POINTS we have; cap both at MAX_TRAIT_POINTS
     int num_good = 0;
@@ -2508,11 +2680,17 @@ tab_direction set_bionics( avatar &u, points_left &points )
 
     struct bionic_entry {
         bionic_id id;
-        bool avatar_has;
-        bool conflicts;
-        bool forbidden;
+        int col = 0;
+        /// Which chassis region it lives in — the sub-heading it sits under.
+        nc_bio_region region = nc_bio_region::none;
+        /// The profession grants it. Profession CBMs are installed by add_profession_items AFTER
+        /// the wizard, so `has_bionic` is false for them all the way through creation — the list
+        /// has always rendered them as held, and the chassis counts them for the same reason.
+        bool granted = false;
     };
-    std::vector<bionic_entry> vStartingBionics[3];
+    // ONE flat list; the columns are a VIEW over it, so sorting and every id-based lookup stays
+    // independent of how the screen happens to be grouped. Same shape as the TRAITS step.
+    std::vector<bionic_entry> starting_bionics;
 
     for( auto &traits_iter : mutation_branch::get_all() ) {
         if( traits_iter.points > 0 ) {
@@ -2526,93 +2704,101 @@ tab_direction set_bionics( avatar &u, points_left &points )
         }
     }
 
+    const std::vector<bionic_id> prof_cbms = u.prof->CBMs();
     for( auto &bio_iter : bionic_data::get_all() ) {
-
-        // Always show profession locked traits, regardless of if they are forbidden
-        const std::vector<bionic_id> profbionics = u.prof->CBMs();
-        const bool is_profbionic = std::find( profbionics.begin(), profbionics.end(),
-                                              bio_iter.id ) != profbionics.end();
-        // We show all starting traits, even if we can't pick them, to keep the interface consistent.
+        const bool is_profbionic = std::ranges::find( prof_cbms, bio_iter.id ) != prof_cbms.end();
+        // We show all starting bionics, even ones we cannot pick, to keep the interface consistent —
+        // and profession-locked ones regardless of whether they are otherwise forbidden.
         if( bio_iter.starting_bionic || g->scen->bionicquery( bio_iter.id ) ||
             u.prof->is_allowed_bionic( bio_iter.id ) || is_profbionic ) {
-            size_t page;
-            if( bio_iter.points > 0 ) {
-                page = 0;
-                if( u.has_bionic( bio_iter.id ) ) {
+            // Budget totals key off the POINT SIGN, never off which column the bionic landed in.
+            if( u.has_bionic( bio_iter.id ) ) {
+                if( bio_iter.points > 0 ) {
                     num_good += bio_iter.points;
-                }
-            } else if( bio_iter.points < 0 ) {
-                page = 1;
-                if( u.has_bionic( bio_iter.id ) ) {
+                } else if( bio_iter.points < 0 ) {
                     num_bad += bio_iter.points;
                 }
-            } else {
-                page = 2;
             }
-            vStartingBionics[page].push_back( { bio_iter.id, false, false, g->scen->is_forbidden_bionic( bio_iter.id ) } );
+            const int col = bio_iter.points > 0 ? 0 : ( bio_iter.points < 0 ? 1 : 2 );
+            starting_bionics.push_back( { .id = bio_iter.id, .col = col,
+                                          .region = nc_bio_classify( bio_iter ),
+                                          .granted = is_profbionic } );
         }
     }
-    //If the third page is empty, only use the first two.
-    const int used_pages = vStartingBionics[2].empty() ? 2 : 3;
 
-    for( auto &vStartingBionic : vStartingBionics ) {
-        std::sort( vStartingBionic.begin(), vStartingBionic.end(), []( const bionic_entry & a,
-        const bionic_entry & b ) {
-            return localized_compare( a.id->name.translated(), b.id->name.translated() );
-        } );
+    std::ranges::sort( starting_bionics, []( const bionic_entry & a, const bionic_entry & b ) {
+        return localized_compare( a.id->name.translated(), b.id->name.translated() );
+    } );
+
+    // Each column's rows, as indices into starting_bionics, grouped by chassis region: -1 marks a
+    // sub-heading, which OCCUPIES A ROW so every row stays the same height — the invariant the
+    // cursor-scroll arithmetic depends on (see .nc-row in newchar_common.rcss).
+    //
+    // Regions run head to feet, so a column reads top-to-bottom in the same order the diagram
+    // beside it does. This is also what the reference art does with its bracketed group headers,
+    // and it is why 19 rows in a tall column no longer read as one undifferentiated slab.
+    std::array<std::vector<int>, 3> col_rows;
+    /// Which region each row belongs to, parallel to col_rows, so a heading row can name itself
+    /// without re-deriving the grouping.
+    std::array<std::vector<nc_bio_region>, 3> row_region;
+    for( int c = 0; c < 3; c++ ) {
+        for( int reg = 0; reg < static_cast<int>( nc_bio_region::count ); reg++ ) {
+            const nc_bio_region region = static_cast<nc_bio_region>( reg );
+            std::vector<int> members;
+            for( int i = 0; i < static_cast<int>( starting_bionics.size() ); i++ ) {
+                if( starting_bionics[i].col == c && starting_bionics[i].region == region ) {
+                    members.push_back( i );
+                }
+            }
+            if( members.empty() ) {
+                continue;   // a heading with nothing under it is noise
+            }
+            col_rows[c].push_back( -1 );
+            row_region[c].push_back( region );
+            for( const int i : members ) {
+                col_rows[c].push_back( i );
+                row_region[c].push_back( region );
+            }
+        }
     }
 
-    const auto recalc_display_cache = [&]() {
-        auto cbms = u.prof->CBMs();
-        for( int page = 0; page < used_pages; page++ ) {
-            for( bionic_entry &entry : vStartingBionics[page] ) {
-                entry.conflicts = newcharacter::bionic_has_conflict( u, entry.id );
-                entry.avatar_has = u.has_bionic( entry.id ) ||
-                                   std::find( cbms.begin(), cbms.end(), entry.id ) != cbms.end();
+    int cur_col = 0;
+    std::array<int, 3> cur_row = { 0, 0, 0 };
+
+    const auto col_len = [&]( int c ) {
+        return static_cast<int>( col_rows[c].size() );
+    };
+    /// The bionic on a given row, or -1 for a heading or an out-of-range row.
+    const auto bionic_at = [&]( int c, int r ) {
+        return ( r >= 0 && r < col_len( c ) ) ? col_rows[c][r] : -1;
+    };
+    /// Every column opens on a heading, so step off it before anything reads the cursor.
+    const auto skip_headings = [&]( int c, int dir ) {
+        int guard = col_len( c );
+        while( guard-- > 0 && bionic_at( c, cur_row[c] ) < 0 ) {
+            cur_row[c] += dir;
+            if( cur_row[c] < 0 ) {
+                cur_row[c] = col_len( c ) - 1;
+            } else if( cur_row[c] >= col_len( c ) ) {
+                cur_row[c] = 0;
             }
         }
     };
-    recalc_display_cache();
-
-    int iCurWorkingPage = 0;
-    int iStartPos[3] = { 0, 0, 0 };
-    int iCurrentLine[3] = { 0, 0, 0 };
-    size_t bionics_size[3];
-    for( int i = 0; i < 3; i++ ) {
-        bionics_size[i] = vStartingBionics[i].size();
+    for( int c = 0; c < 3; c++ ) {
+        skip_headings( c, 1 );
     }
-
-    size_t iContentHeight;
-    size_t page_width;
 
     ui_adaptor ui;
     catacurses::window w;
-    catacurses::window w_description;
 
-    character_preview_window character_preview;
-    character_preview.init( &u );
-    const bool use_character_preview = get_option<bool>( "USE_CHARACTER_PREVIEW" );
-
+    // No character preview on this step, unlike TRAITS / PROFESSION / SCENARIO / DESCRIPTION: the
+    // chassis diagram is this screen's body view, and an implant does not change how the avatar
+    // looks — so the detail panel's art slot carries the CBM's own sprite instead. The preview's
+    // zoom and clothes actions are not registered below for the same reason: there would be
+    // nothing on screen for them to act on.
     const auto init_windows = [&]( ui_adaptor & ui ) {
         w = catacurses::newwin( TERMY, TERMX, point_zero );
-        w_description = catacurses::newwin( 3, TERMX - 2, point( 1, TERMY - 4 ) );
-        page_width = std::min( ( TERMX - 4 ) / used_pages, 38 );
-
-
-        if( use_character_preview ) {
-            nc_prepare_preview( character_preview );
-        }
-
         ui.position_from_window( w );
-
-        iContentHeight = TERMY - 9;
-
-        for( int i = 0; i < 3; i++ ) {
-            // Shift start position to avoid iterating beyond end
-            int total = static_cast<int>( bionics_size[i] );
-            int heigth = static_cast<int>( iContentHeight );
-            iStartPos[i] = std::min( iStartPos[i], std::max( 0, total - heigth ) );
-        }
     };
     init_windows( ui );
     ui.on_screen_resize( init_windows );
@@ -2628,7 +2814,7 @@ tab_direction set_bionics( avatar &u, points_left &points )
     ctxt.register_action( "REROLL_CHARACTER_WITH_SCENARIO" );
     ctxt.register_action( "REROLL_APPEARANCE" );
     ctxt.register_action( "QUIT" );
-    // Required for the navigator/card clicks to reach this loop at all.
+    // Required for the navigator/row/checkbox clicks to reach this loop at all.
     // MOUSE_LEFT binds to action id SELECT (keybindings.json:1175). An UNREGISTERED
     // mouse action resolves to CATA_ERROR, and input.cpp:894-897 `continue`s on it
     // BEFORE the registered_any_input check at :912 — so ANY_INPUT cannot rescue a
@@ -2636,120 +2822,609 @@ tab_direction set_bionics( avatar &u, points_left &points )
     // click callback fires but handle_input() never returns, leaving the loop parked
     // until an unrelated keypress, which then got hijacked into a step change.
     ctxt.register_action( "SELECT" );
-    ctxt.register_action( "zoom_in" );
-    ctxt.register_action( "zoom_out" );
-    ctxt.register_action( "TOGGLE_CHARACTER_PREVIEW_CLOTHES" );
+    // ...and BOTH of these, for the same reason TRAITS needs them — dropping them here cost a
+    // debugging cycle and looked exactly like a dead checkbox. MOUSE_LEFT arrives as SELECT on
+    // mouse DOWN, but RmlUi fires its `click`, and therefore the `data-event-click` callbacks, on
+    // mouse UP. That UP event resolves to CATA_ERROR, and input.cpp:894-897 `continue`s on an
+    // unrecognised MOUSE event WITHOUT returning — so handle_input() stays parked right through the
+    // callbacks, and the intent they recorded is cleared at the top of the next iteration, which
+    // only runs when some later input wakes the loop. Observed: a checkbox click did nothing, and a
+    // row click appeared to work only because the FOLLOWING click's mouse-down flushed it.
+    //
+    // COORDINATE sets handling_coordinate_input, which skips that early `continue`; ANY_INPUT makes
+    // the fall-through at :912 return. Either alone still parks the loop. ANY_INPUT is then
+    // excluded from the model-dirty test below, so a pointer sample does not rebuild the rows.
+    ctxt.register_action( "COORDINATE" );
+    ctxt.register_action( "ANY_INPUT" );
 
     // RmlUi render path (render-only; keyboard owns nav/confirm/reroll below).
-    // Structurally the TRAITS tab with bionic data. Tile preview not drawn in rml.
     auto data = std::make_unique<nc_bionics_session>();
     rml_doc rml;
     // Set by the arrow click callbacks, consumed by the input loop below. Not a
     // tab_direction: it is translated into an action string so the existing
     // keyboard handling stays the single place navigation is decided.
     int nc_nav = 0;
+    // Click intent, applied ONCE per input cycle. `data-event-*` installs a listener per generated
+    // element and a `data-for` regeneration adds another without removing the old, so a callback
+    // that mutated directly would run an unbounded number of times per click — measured at 15 on
+    // the SCENARIO tab. See plans/charcreation-scenario-tree.md.
+    int pending_row_col = -1;
+    int pending_row = -1;
+    int pending_check_col = -1;
+    int pending_check_row = -1;
+
+    // ── THE ONE GATE ──────────────────────────────────────────────────────────
+    //
+    // Why a bionic can or cannot be toggled right now. The row's checkbox glyph, the STATUS fact's
+    // reason line and CONFIRM's refusal popups all read this, so what a row shows cannot promise
+    // something the keypress then refuses. Before this rework the reasons existed ONLY as popups
+    // raised after CONFIRM, and every unavailable row rendered as the same dark gray.
+    //
+    // These lambdas only ASK the game the questions; the precedence between the answers lives in
+    // newchar_bionic_gate.h, where it is tested without needing an avatar.
+    const auto conflicting_traits_of = [&]( const bionic_id & bid ) {
+        std::vector<trait_id> out;
+        for( const trait_id &tid : bid->canceled_mutations ) {
+            if( u.has_trait( tid ) ) {
+                out.push_back( tid );
+            }
+        }
+        return out;
+    };
+    const auto missing_prereqs_of = [&]( const bionic_id & bid ) {
+        std::vector<bionic_id> out;
+        for( const bionic_id &req : bid->required_bionics ) {
+            if( !u.has_bionic( req ) ) {
+                out.push_back( req );
+            }
+        }
+        return out;
+    };
+    /// Installed bionics that name this one in their `required_bionics`, so removing it would leave
+    /// them dangling.
+    const auto dependents_of = [&]( const bionic_id & bid ) {
+        std::vector<std::string> out;
+        for( const bionic &i : u.get_bionic_collection() ) {
+            for( const bionic_id &req : i.id->required_bionics ) {
+                if( req == bid ) {
+                    out.emplace_back( i.id->name.translated() );
+                }
+            }
+        }
+        return out;
+    };
+    /// The version below this one that the avatar already holds, walking the `upgraded_bionic`
+    /// chain. BOUNDED: the loop this replaces reassigned its cursor from the original bionic every
+    /// iteration, so a chain two links deep with nothing held never advanced — an infinite loop
+    /// inside the input handler. The cap also turns a cyclic chain in modded JSON into a wrong
+    /// answer rather than a hang.
+    const auto held_downgrade_of = [&]( const bionic_id & bid ) -> bionic_id {
+        bionic_id step = bid->upgraded_bionic;
+        for( int guard = 0; guard < 64 && step != bionic_id::NULL_ID(); guard++ )
+        {
+            if( u.has_bionic( step ) ) {
+                return step;
+            }
+            step = step->upgraded_bionic;
+        }
+        return bionic_id::NULL_ID();
+    };
+    const auto held_upgrade_of = [&]( const bionic_id & bid ) -> bionic_id {
+for( const bionic_id &up : bid->available_upgrades )
+    {
+        if( u.has_bionic( up ) ) {
+                return up;
+            }
+        }
+        return bionic_id::NULL_ID();
+    };
+    const auto gate_of = [&]( int flat_idx ) {
+        const bionic_entry &e = starting_bionics[flat_idx];
+        const bionic_id &bid = e.id;
+        nc_bionic_gate::inputs in;
+        in.taken = u.has_bionic( bid );
+        in.granted = e.granted;
+        // Only meaningful for a bionic that is installed, and the walk is not free.
+        in.has_dependents = in.taken && !dependents_of( bid ).empty();
+        in.scen_forbids_all = g->scen->forbids_bionics();
+        in.prof_forbids_all = u.prof->forbids_bionics();
+        in.scen_forbids = g->scen->is_forbidden_bionic( bid );
+        in.prof_forbids = u.prof->is_forbidden_bionic( bid );
+        in.scen_locked = g->scen->is_locked_bionic( bid );
+        in.prof_locked = u.prof->is_locked_bionic( bid );
+        in.trait_conflicts = !conflicting_traits_of( bid ).empty();
+        in.no_space = !u.bionic_installation_issues( bid ).empty();
+        in.missing_prereq = !missing_prereqs_of( bid ).empty();
+        in.has_downgrade = held_downgrade_of( bid ) != bionic_id::NULL_ID();
+        in.has_upgrade = held_upgrade_of( bid ) != bionic_id::NULL_ID();
+        in.points = bid->points;
+        in.num_good = num_good;
+        in.num_bad = num_bad;
+        in.max_points = max_trait_points;
+        in.freeform = points.is_freeform();
+        return nc_bionic_gate::evaluate( in );
+    };
+
+    // The ONE place a bionic is installed or removed. Keyboard CONFIRM and the row's checkbox both
+    // come here, so the two cannot drift. Every popup below fires for exactly the case it fired for
+    // before this rework, in the same order and with the same words — only the plumbing changed,
+    // from re-asking the game mid-chain to reading the gate.
+    //
+    // ONE behaviour change, and it is deliberate: a scenario- or profession-LOCKED bionic that is
+    // installed can no longer be removed. Those two popups existed but were unreachable, because
+    // the taken branch returned before them; TRAITS already refuses the same case with the same
+    // wording, and a scenario's forced bionic being droppable defeats the point of forcing it.
+    const auto toggle_bionic_at = [&]( int flat_idx ) {
+        if( flat_idx < 0 || flat_idx >= static_cast<int>( starting_bionics.size() ) ) {
+            return;
+        }
+        const bionic_id cur_bionic = starting_bionics[flat_idx].id;
+        const bionic_data &bio = cur_bionic.obj();
+        const nc_bionic_gate::state gt = gate_of( flat_idx );
+        int inc_type = 0;
+
+        if( gt.taken ) {
+            if( gt.has_dependents ) {
+                popup( _( "These bionics are dependent on the bionic you are trying to uninstall %s." ),
+                       enumerate_as_string( dependents_of( cur_bionic ) ) );
+            } else if( g->scen->is_locked_bionic( cur_bionic ) ) {
+                popup( _( "Your scenario of %s prevents you from removing this bionic." ),
+                       g->scen->gender_appropriate_name( u.male ) );
+            } else if( u.prof->is_locked_bionic( cur_bionic ) ) {
+                popup( _( "Your profession of %s prevents you from removing this bionic." ),
+                       u.prof->gender_appropriate_name( u.male ) );
+            } else {
+                inc_type = -1;
+            }
+        } else if( g->scen->forbids_bionics() ) {
+            popup( _( "The scenario you picked prevents you from taking any bionics!" ) );
+        } else if( u.prof->forbids_bionics() ) {
+            popup( _( "The profession you picked prevents you from taking any bionics!" ) );
+        } else if( g->scen->is_forbidden_bionic( cur_bionic ) ) {
+            popup( _( "The scenario you picked prevents you from taking this bionic!" ) );
+        } else if( u.prof->is_forbidden_bionic( cur_bionic ) ) {
+            popup( _( "Your profession of %s prevents you from taking this bionic." ),
+                   u.prof->gender_appropriate_name( u.male ) );
+        } else if( g->scen->is_locked_bionic( cur_bionic ) ) {
+            popup( _( "Your scenario of %s prevents you from removing this bionic." ),
+                   g->scen->gender_appropriate_name( u.male ) );
+        } else if( u.prof->is_locked_bionic( cur_bionic ) ) {
+            popup( _( "Your profession of %s prevents you from removing this bionic." ),
+                   u.prof->gender_appropriate_name( u.male ) );
+        } else if( gt.trait_conflicts ) {
+            // Name the traits, so the player can see what is in the way rather than just that
+            // something is.
+            const std::vector<trait_id> conflicts = conflicting_traits_of( cur_bionic );
+            std::vector<std::string> conflict_names;
+            conflict_names.reserve( conflicts.size() );
+            for( const trait_id &conflict : conflicts ) {
+                conflict_names.emplace_back( conflict.obj().name() );
+            }
+            popup( _( "The following traits prevent you from taking this bionic: %s." ),
+                   enumerate_as_string( conflict_names ) );
+        } else if( gt.over_budget && bio.points > 0 ) {
+            popup( vgettext( "Sorry, but you can only take %d point of advantages.",
+                             "Sorry, but you can only take %d points of advantages.", max_trait_points ),
+                   max_trait_points );
+        } else if( gt.over_budget ) {
+            popup( vgettext( "Sorry, but you can only take %d point of disadvantages.",
+                             "Sorry, but you can only take %d points of disadvantages.", max_trait_points ),
+                   max_trait_points );
+        } else if( gt.no_space ) {
+            const std::map<bodypart_id, int> issues = u.bionic_installation_issues( cur_bionic );
+            std::string detailed_info;
+            for( const std::pair<const bodypart_id, int> &elem : issues ) {
+                //~ <Body part name>: <number of slots> more slot(s) needed.
+                detailed_info += string_format( _( "\n%s: %i more slot(s) needed." ),
+                                                body_part_name_as_heading( elem.first->token, 1 ),
+                                                elem.second );
+            }
+            popup( _( "Not enough space for bionic installation!%s" ), detailed_info );
+        } else if( gt.missing_prereq ) {
+            const std::vector<bionic_id> missing = missing_prereqs_of( cur_bionic );
+            std::vector<std::string> conflict_names;
+            conflict_names.reserve( missing.size() );
+            for( const bionic_id &conflict : missing ) {
+                conflict_names.emplace_back( conflict->name.translated() );
+            }
+            popup( _( "The lack of the following bionics are prevent you from taking this bionic: %s." ),
+                   enumerate_as_string( conflict_names ) );
+        } else if( gt.has_downgrade ) {
+            popup( _( "You already have the downgraded version of the bionic: %s" ),
+                   held_downgrade_of( cur_bionic )->name );
+        } else if( gt.has_upgrade ) {
+            popup( _( "You already have the upgraded version of the bionic: %s" ),
+                   held_upgrade_of( cur_bionic )->name );
+        } else {
+            // Unreachable for a profession fixture: `profession::is_locked_bionic` IS "in
+            // _starting_CBMs", so a granted bionic always stops at that arm above.
+            inc_type = 1;
+        }
+
+        //inc_type is either -1 or 1, so we can just multiply by it to invert
+        if( inc_type != 0 ) {
+            u.toggle_bionic( cur_bionic );
+            points.trait_points -= bio.points * inc_type;
+            // By POINT SIGN, not by column index: a modded zero-point bionic used to take the
+            // num_bad path purely because it was not an advantage.
+            if( bio.points > 0 ) {
+                num_good += bio.points * inc_type;
+            } else if( bio.points < 0 ) {
+                num_bad += bio.points * inc_type;
+            }
+        }
+    };
+
+    // ── CHASSIS ───────────────────────────────────────────────────────────────
+    //
+    // The body diagram, after UI_designs/02_cybernetics_terminal.png: a slot box per body part
+    // wired to a bus rail, showing which implants live where. The grid is the profession equipment
+    // doll's — six rows of three, every position emitted, a junction drawing spine + rung and a
+    // blank holding its column open — so it aligns from equal flex with no pixel arithmetic.
+    //
+    // Rebuilt every redraw, because it carries the scan sweep. See nc_bionics_session::doll for why
+    // that is cheap.
+    const auto anim_start = std::chrono::steady_clock::now();
+    const auto sync_chassis = [&]() {
+        if( !data->handle ) {
+            return;
+        }
+        // Everything the finished character will start with. Profession CBMs are counted even
+        // though they are not installed yet (add_profession_items does that after the wizard),
+        // because the diagram describes the character being built rather than the half-built
+        // object in memory — and it is what the list's own [x] has always meant.
+        std::vector<bionic_id> held = u.get_bionics();
+        for( const bionic_id &bid : prof_cbms ) {
+            if( std::ranges::find( held, bid ) == held.end() ) {
+                held.push_back( bid );
+            }
+        }
+        // The bionic under the cursor, whose sites the diagram highlights: selecting a row is how
+        // you find out where an implant goes.
+        const int sel_flat = bionic_at( cur_col, cur_row[cur_col] );
+        const bionic_id want_bio = sel_flat >= 0 ? starting_bionics[sel_flat].id
+                                   : bionic_id::NULL_ID();
+        const std::map<bodypart_id, int> want_issues = want_bio == bionic_id::NULL_ID()
+            ? std::map<bodypart_id, int> {}
+            : u.bionic_installation_issues( want_bio );
+
+        const auto site_cell = [&]( body_part bp ) -> nc_bio_cell {
+            const bodypart_str_id &bpid = convert_bp( bp );
+            nc_bio_cell cell;
+            cell.name_rml = cata_text_to_rml( colorize( body_part_name( bpid.id() ), c_dark_gray ) );
+            int used = 0;
+            int count = 0;
+            const bionic_data *best = nullptr;
+            int best_space = 0;
+            for( const bionic_id &bid : held )
+            {
+                const auto it = bid->occupied_bodyparts.find( bpid );
+                if( it == bid->occupied_bodyparts.end() || it->second <= 0 ) {
+                    continue;
+                }
+                used += it->second;
+                count++;
+                // The biggest implant represents the part, ties broken by name so the box does not
+                // change what it shows between two runs of the same character.
+                if( best == nullptr || it->second > best_space ||
+                    ( it->second == best_space &&
+                      localized_compare( bid->name.translated(), best->name.translated() ) ) ) {
+                    best = &bid.obj();
+                    best_space = it->second;
+                }
+            }
+            const int total = bpid->bionic_slots();
+            if( best == nullptr )
+            {
+                cell.impl_rml = cata_text_to_rml( colorize( "—", c_dark_gray ) );
+            } else
+            {
+                cell.filled = true;
+                cell.impl_rml = cata_text_to_rml( colorize( best->name.translated(), c_light_gray ) );
+                cell.dec = nc_tile_sprite_dec( best->id.str(), C_ITEM );
+                if( count > 1 ) {
+                    cell.more_rml = cata_text_to_rml( colorize( string_format( "+%d", count - 1 ),
+                                                      c_yellow ) );
+                }
+            }
+            // Capacity, only where the mechanic is switched on. Presenting used/total while
+            // CBM_SLOTS_ENABLED is off would state a rule that is not in force.
+            if( slots_enforced && total > 0 )
+            {
+                cell.show_cap = true;
+                cell.cap_rml = cata_text_to_rml( colorize( string_format( "%d/%d", used, total ),
+                                                 used > 0 ? c_light_gray : c_dark_gray ) );
+                cell.bar_w = string_format( "%d%%", std::clamp( used * 100 / total, 0, 100 ) );
+            }
+            // What the selection would claim here, and whether it fits.
+            if( want_bio != bionic_id::NULL_ID() )
+            {
+                const auto it = want_bio->occupied_bodyparts.find( bpid );
+                if( it != want_bio->occupied_bodyparts.end() && it->second > 0 ) {
+                    cell.want = true;
+                    cell.over = want_issues.contains( bpid.id() );
+                }
+            }
+            return cell;
+        };
+        const auto junction = []() -> nc_bio_cell {
+            return { .junction = true };
+        };
+        const auto blank = []() -> nc_bio_cell {
+            return { .blank = true };
+        };
+
+        // The sweep. Wall clock, not a frame counter: it must not accelerate because a key is held
+        // down, nor stall while the player is reading. Geometry — and the reason the glow trails
+        // rather than surrounds the head — is in newchar_bio_scan.h.
+        const float secs = std::chrono::duration<float>(
+                               std::chrono::steady_clock::now() - anim_start ).count();
+        const float head = nc_bio_scan::head_at( secs );
+        const auto scan_col = [&]( int row ) {
+            // The step rail's active gold (see nc_icon_dec), carried as ALPHA so the fade is the
+            // compositor's job and no colour arithmetic can drift from the theme.
+            return string_format( "#c4a832%02x",
+                                  nc_bio_scan::alpha_of( nc_bio_scan::intensity( head, row ) ) );
+        };
+
+        data->doll.clear();
+        data->doll.push_back( { .cells = { blank(), site_cell( bp_head ), blank() },
+                                .scan_col = scan_col( 0 ) } );
+        data->doll.push_back( { .cells = { site_cell( bp_eyes ), junction(), site_cell( bp_mouth ) },
+                                .scan_col = scan_col( 1 ) } );
+        data->doll.push_back( { .cells = { site_cell( bp_arm_l ), site_cell( bp_torso ), site_cell( bp_arm_r ) },
+                                .scan_col = scan_col( 2 ) } );
+        data->doll.push_back( { .cells = { site_cell( bp_hand_l ), junction(), site_cell( bp_hand_r ) },
+                                .scan_col = scan_col( 3 ) } );
+        data->doll.push_back( { .cells = { site_cell( bp_leg_l ), junction(), site_cell( bp_leg_r ) },
+                                .scan_col = scan_col( 4 ) } );
+        data->doll.push_back( { .cells = { site_cell( bp_foot_l ), junction(), site_cell( bp_foot_r ) },
+                                .scan_col = scan_col( 5 ) } );
+
+        data->chassis_rml = cata_text_to_rml( colorize(
+                string_format( vgettext( "%d implant", "%d implants", held.size() ), held.size() ),
+                c_dark_gray ) );
+        if( slots_enforced ) {
+            int used_total = 0;
+            int slot_total = 0;
+            for( const body_part bp : all_body_parts ) {
+                const bodypart_str_id &bpid = convert_bp( bp );
+                slot_total += bpid->bionic_slots();
+                for( const bionic_id &bid : held ) {
+                    const auto it = bid->occupied_bodyparts.find( bpid );
+                    if( it != bid->occupied_bodyparts.end() && it->second > 0 ) {
+                        used_total += it->second;
+                    }
+                }
+            }
+            data->chassis_cap_rml = cata_text_to_rml( colorize(
+                                        string_format( _( "%d/%d slots" ), used_total, slot_total ), c_dark_gray ) );
+        } else {
+            data->chassis_cap_rml.clear();
+        }
+        data->handle.DirtyVariable( "doll" );
+        data->handle.DirtyVariable( "chassis_rml" );
+        data->handle.DirtyVariable( "chassis_cap_rml" );
+    };
+
     const auto sync_rml = [&]() {
         if( !data->handle ) {
             return;
         }
         data->tabs = build_nc_char_tabs<nc_bionics_tab>( 5 );  // BIONICS tab active
         data->shell = fill_nc_shell( 5, ctxt );
-        set_nc_portrait( data->shell, use_character_preview );
         data->points_rml = cata_text_to_rml( nc_points_line( points ) );
         data->balance = nc_make_balance( num_good, num_bad, max_trait_points,
                                          points.is_freeform() );
-        const auto build_col = [&]( int page ) -> std::string {
-            nc_color on_act;
-            nc_color off_act;
-            nc_color on_pas;
-            nc_color off_pas;
-            switch( page )
-            {
-                case 0:
-                    on_act = COL_TR_GOOD_ON_ACT;
-                    off_act = COL_TR_GOOD_OFF_ACT;
-                    on_pas = COL_TR_GOOD_ON_PAS;
-                    off_pas = COL_TR_GOOD_OFF_PAS;
-                    break;
-                case 1:
-                    on_act = COL_TR_BAD_ON_ACT;
-                    off_act = COL_TR_BAD_OFF_ACT;
-                    on_pas = COL_TR_BAD_ON_PAS;
-                    off_pas = COL_TR_BAD_OFF_PAS;
-                    break;
-                default:
-                    on_act = COL_TR_NEUT_ON_ACT;
-                    off_act = COL_TR_NEUT_OFF_ACT;
-                    on_pas = COL_TR_NEUT_ON_PAS;
-                    off_pas = COL_TR_NEUT_OFF_PAS;
-                    break;
-            }
-            const int cur = iCurrentLine[page];
-            std::string html;
-            for( size_t i = 0; i < vStartingBionics[page].size(); i++ )
-            {
-                const bionic_entry &e = vStartingBionics[page][i];
-                nc_color col;
-                if( iCurWorkingPage == page ) {
-                    if( e.avatar_has ) {
-                        col = on_act;
-                    } else if( e.conflicts || e.forbidden ) {
-                        col = c_dark_gray;
-                    } else {
-                        col = off_act;
-                    }
-                } else {
-                    if( e.avatar_has ) {
-                        col = on_pas;
-                    } else if( e.conflicts || e.forbidden ) {
-                        col = c_light_gray;
-                    } else {
-                        col = off_pas;
-                    }
-                }
-                const bool sel = ( iCurWorkingPage == page && static_cast<int>( i ) == cur );
-                html += sel ? "<div class=\"item nc-trait-row selected\">"
-                        : "<div class=\"item nc-trait-row\">";
-                html += cata_text_to_rml( colorize( e.id.obj().name.translated(), col ) );
-                html += "</div>";
-            }
-            return html;
-        };
-        data->col0_html = build_col( 0 );
-        data->col1_html = build_col( 1 );
-        data->show_col2 = ( used_pages == 3 );
-        data->col2_html = data->show_col2 ? build_col( 2 ) : std::string();
+        data->chassis_name_rml = cata_text_to_rml( colorize( _( "Chassis" ), c_light_gray ) );
+        data->hint_rml = cata_text_to_rml( string_format(
+                                               _( "<color_light_green>%s</color> install or remove · <color_light_green>%s</color> column · <color_light_green>%s</color> reroll" ),
+                                               ctxt.get_desc( "CONFIRM", 1 ), _( "left/right" ),
+                                               ctxt.get_desc( "REROLL_CHARACTER", 1 ) ) );
+        // The reference's meta-bar readout: a dim label with the number bright beside it. Bionics
+        // and traits spend the SAME pool, which is why this says the same thing the TRAITS step
+        // says rather than inventing a second budget.
+        data->budget_rml = cata_text_to_rml( string_format(
+                _( "<color_dark_gray>Trait points left:</color> <color_white>%d</color>" ),
+                points.trait_points_left() ) );
 
-        const int wp = iCurWorkingPage;
-        if( !vStartingBionics[wp].empty() ) {
-            const int wl = std::min( iCurrentLine[wp],
-                                     static_cast<int>( vStartingBionics[wp].size() ) - 1 );
-            const bionic_data &wb = vStartingBionics[wp][wl].id.obj();
-            const nc_color col_tr = wp == 0 ? COL_TR_GOOD : ( wp == 1 ? COL_TR_BAD : COL_TR_NEUT );
-            int pts = wb.points;
-            const bool neg = pts < 0;
-            if( neg ) {
-                pts *= -1;
+        // In words, why this bionic cannot be toggled — the same conditions CONFIRM's popups use,
+        // stated where the decision is made instead of after it. Empty when it can be.
+        const auto refusal_of = []( const nc_bionic_gate::state & gt ) -> std::string {
+            if( gt.taken )
+        {
+            if( gt.has_dependents ) {
+                    return _( "Another implant you have depends on this one." );
+                }
+                return gt.locked ? _( "Your profession or scenario will not let you remove this." )
+                       : std::string();
             }
-            data->cost_rml = cata_text_to_rml( colorize( string_format(
-                                                   vgettext( "%s %s %d point", "%s %s %d points", pts ),
-                                                   wb.name.translated(), neg ? _( "earns" ) : _( "costs" ), pts ), col_tr ) );
-            data->desc_rml = cata_text_to_rml( colorize( wb.description.translated(), col_tr ) );
+            if( gt.granted )
+        {
+            return _( "Your profession installs this one for you." );
+            }
+            if( gt.locked )
+        {
+            return _( "Your profession or scenario decides this one." );
+            }
+            if( gt.forbidden )
+        {
+            return _( "Your profession or scenario forbids this implant." );
+            }
+            if( gt.trait_conflicts )
+        {
+            return _( "Conflicts with a trait you already have." );
+            }
+            if( gt.no_space )
+        {
+            return _( "Not enough room left in your body for it." );
+            }
+            if( gt.missing_prereq )
+        {
+            return _( "Needs another implant you do not have." );
+            }
+            if( gt.has_downgrade )
+        {
+            return _( "You already have a lesser version of it." );
+            }
+            if( gt.has_upgrade )
+        {
+            return _( "You already have a better version of it." );
+            }
+            return gt.over_budget ? _( "No points left on that side of the budget." ) : std::string();
+        };
+
+        // One row. The cells are fixed-width by stylesheet, so cursor, box, cost and name each form
+        // a column the eye can run down; that alignment is the whole readability argument.
+        const auto build_row = [&]( int flat_idx, bool is_cursor ) {
+            const bionic_data &bio = starting_bionics[flat_idx].id.obj();
+            const nc_bionic_gate::state gt = gate_of( flat_idx );
+            nc_bio_row r;
+            r.cursor_rml = cata_text_to_rml( is_cursor ? colorize( ">", c_yellow ) : std::string() );
+            // [x] held · [ ] installable · [-] refused, and the panel says why.
+            r.check_rml = gt.held()
+                          ? cata_text_to_rml( colorize( "[x]", c_yellow ) )
+                          : ( gt.toggleable() ? cata_text_to_rml( colorize( "[ ]", c_light_gray ) )
+                              : cata_text_to_rml( colorize( "[-]", c_dark_gray ) ) );
+            if( bio.points != 0 ) {
+                // The same valence the balance scale's two pans use, so the column and the scale
+                // agree at a glance.
+                r.cost_rml = cata_text_to_rml( colorize( string_format( "[%+d]", bio.points ),
+                                               bio.points > 0 ? COL_TR_GOOD : COL_TR_BAD ) );
+            }
+            const nc_color name_col = gt.held() ? c_white
+                                      : ( gt.toggleable() ? c_light_gray : c_dark_gray );
+            r.name_rml = cata_text_to_rml( colorize( bio.name.translated(), name_col ) );
+            r.selected = is_cursor;
+            return r;
+        };
+
+        nc_bio_col *cols[3] = { &data->col0, &data->col1, &data->col2 };
+        for( int c = 0; c < 3; c++ ) {
+            nc_bio_col &dc = *cols[c];
+            dc.rows.clear();
+            int items = 0;
+            for( int r = 0; r < col_len( c ); r++ ) {
+                const int flat = col_rows[c][r];
+                if( flat < 0 ) {
+                    // Region sub-heading. Same row height as an implant, which is what keeps the
+                    // scroll arithmetic exact; tracking, caps and colour carry the hierarchy.
+                    nc_bio_row hr;
+                    hr.header = true;
+                    hr.name_rml = cata_text_to_rml( colorize( nc_bio_region_name( row_region[c][r] ),
+                                                    c_yellow ) );
+                    dc.rows.push_back( hr );
+                    continue;
+                }
+                items++;
+                dc.rows.push_back( build_row( flat, c == cur_col && r == cur_row[c] ) );
+            }
+            dc.name_rml = cata_text_to_rml( colorize(
+                                                c == 0 ? _( "Advantages" )
+                                                : ( c == 1 ? _( "Disadvantages" ) : _( "Neutral" ) ),
+                                                c == cur_col ? c_white : c_light_gray ) );
+            dc.count_rml = cata_text_to_rml( colorize( string_format( "%d", items ), c_dark_gray ) );
+        }
+        // Vanilla has no zero-point bionic, so the third column exists only for mods.
+        data->show_col2 = col_len( 2 ) > 0;
+
+        // Detail panel for the bionic under the cursor.
+        data->facts.clear();
+        const int sel_flat = bionic_at( cur_col, cur_row[cur_col] );
+        if( sel_flat >= 0 ) {
+            const bionic_id sel_id = starting_bionics[sel_flat].id;
+            const bionic_data &bio = sel_id.obj();
+            const nc_bionic_gate::state gt = gate_of( sel_flat );
+            // ":: NAME" — the reference's detail header. Uppercasing is left to the stylesheet so
+            // no locale gets a hand-rolled case conversion.
+            data->sel_name_rml = cata_text_to_rml( colorize(
+                    string_format( ":: %s", bio.name.translated() ), c_white ) );
+            // Every starting bionic has a CBM item whose id equals the bionic id (measured: 0
+            // misses across the 34), and nc_tile_sprite_dec follows `looks_like`, so a modded CBM
+            // with no art of its own still resolves rather than leaving a hole.
+            data->art_dec = nc_tile_sprite_dec( sel_id.str(), C_ITEM );
+            data->has_art = true;
+            const auto add_fact = [&]( const std::string & label, const std::string & value,
+            const nc_color & col, const std::string & sub = std::string() ) {
+                data->facts.push_back( {
+                    .label_rml = cata_text_to_rml( label ),
+                    .value_rml = cata_text_to_rml( colorize( value, col ) ),
+                    .sub_rml = cata_text_to_rml( sub ) } );
+            };
+            const int pts = std::abs( bio.points );
+            if( bio.points == 0 ) {
+                add_fact( _( "Cost" ), _( "Free" ), c_light_gray );
+            } else {
+                add_fact( _( "Cost" ),
+                          string_format( vgettext( "%d point", "%d points", pts ), pts ),
+                          bio.points > 0 ? COL_TR_GOOD : COL_TR_BAD );
+            }
+            // WHERE it goes — the fact the chassis draws, in words for the same bionic. Terse
+            // "part n" pairs rather than a sentence, because this column is scanned, not read.
+            std::vector<std::string> site_parts;
+            for( const std::pair<const bodypart_str_id, int> &occ : bio.occupied_bodyparts ) {
+                if( occ.second > 0 ) {
+                    site_parts.push_back( string_format( "%s %d", body_part_name( occ.first.id() ),
+                                                         occ.second ) );
+                }
+            }
+            std::string site_sub;
+            if( slots_enforced ) {
+                const std::map<bodypart_id, int> issues = u.bionic_installation_issues( sel_id );
+                for( const std::pair<const bodypart_id, int> &elem : issues ) {
+                    site_sub += string_format( _( "%s: %d more slot(s) needed.  " ),
+                                               body_part_name( elem.first ), elem.second );
+                }
+            }
+            add_fact( _( "Site" ),
+                      site_parts.empty() ? _( "No body slots" ) : enumerate_as_string( site_parts ),
+                      site_parts.empty() ? c_dark_gray : c_light_gray, site_sub );
+            // Whether it costs the player anything to run, which is the other half of choosing an
+            // implant. `units::display` is the same formatter the in-game bionics menu uses.
+            std::vector<std::string> power_bits;
+            if( bio.power_activate > 0_kJ ) {
+                power_bits.push_back( string_format( _( "%s to switch on" ),
+                                                     units::display( bio.power_activate ) ) );
+            }
+            if( bio.power_over_time > 0_kJ && bio.charge_time > 0 ) {
+                power_bits.push_back( string_format( _( "%s while running" ),
+                                                     units::display( bio.power_over_time ) ) );
+            }
+            if( bio.capacity > 0_kJ ) {
+                power_bits.push_back( string_format( _( "%s of storage" ),
+                                                     units::display( bio.capacity ) ) );
+            }
+            add_fact( _( "Power" ), bio.activated ? _( "Activated" ) : _( "Passive" ),
+                      c_light_gray, enumerate_as_string( power_bits ) );
+            const std::string refusal = refusal_of( gt );
+            add_fact( _( "Status" ),
+                      gt.held() ? _( "Installed" )
+                      : ( gt.toggleable() ? _( "Available" ) : _( "Unavailable" ) ),
+                      gt.held() ? COL_TR_GOOD : ( gt.toggleable() ? c_white : c_light_red ),
+                      refusal );
+            data->desc_rml = cata_text_to_rml( bio.description.translated() );
         } else {
-            data->cost_rml.clear();
+            data->sel_name_rml.clear();
             data->desc_rml.clear();
+            data->has_art = false;
         }
 
         data->handle.DirtyVariable( "tabs" );
         dirty_nc_shell( data->handle );
         data->handle.DirtyVariable( "points_rml" );
+        data->handle.DirtyVariable( "budget_rml" );
         data->handle.DirtyVariable( "balance" );
-        data->handle.DirtyVariable( "cost_rml" );
-        data->handle.DirtyVariable( "col0_html" );
-        data->handle.DirtyVariable( "col1_html" );
-        data->handle.DirtyVariable( "col2_html" );
+        data->handle.DirtyVariable( "col0" );
+        data->handle.DirtyVariable( "col1" );
+        data->handle.DirtyVariable( "col2" );
         data->handle.DirtyVariable( "show_col2" );
+        data->handle.DirtyVariable( "chassis_name_rml" );
+        data->handle.DirtyVariable( "sel_name_rml" );
+        data->handle.DirtyVariable( "has_art" );
+        data->handle.DirtyVariable( "art_dec" );
+        data->handle.DirtyVariable( "facts" );
         data->handle.DirtyVariable( "desc_rml" );
+        data->handle.DirtyVariable( "hint_rml" );
     };
 
     rml.open( newcharacter_rmlui_enabled(), "newcharbionics", ctxt,
@@ -2765,62 +3440,175 @@ tab_direction set_bionics( avatar &u, points_left &points )
         c.BindEventCallback( "on_next",
         [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = 1; } );
         c.Bind( "points_rml", &data->points_rml );
+        c.Bind( "budget_rml", &data->budget_rml );
         c.Bind( "balance", &data->balance );
-        c.Bind( "cost_rml", &data->cost_rml );
-        c.Bind( "col0_html", &data->col0_html );
-        c.Bind( "col1_html", &data->col1_html );
-        c.Bind( "col2_html", &data->col2_html );
+        c.Bind( "col0", &data->col0 );
+        c.Bind( "col1", &data->col1 );
+        c.Bind( "col2", &data->col2 );
         c.Bind( "show_col2", &data->show_col2 );
+        // The chassis. Easy to forget, and it fails SILENTLY: a `data-for` over an unbound name
+        // renders nothing at all, with no warning — on TRAITS that left the GENOME heading sitting
+        // over blank space while its producer happily filled and dirtied the array every frame.
+        c.Bind( "doll", &data->doll );
+        c.Bind( "chassis_name_rml", &data->chassis_name_rml );
+        c.Bind( "chassis_rml", &data->chassis_rml );
+        c.Bind( "chassis_cap_rml", &data->chassis_cap_rml );
+        c.Bind( "sel_name_rml", &data->sel_name_rml );
+        c.Bind( "has_art", &data->has_art );
+        c.Bind( "art_dec", &data->art_dec );
+        c.Bind( "facts", &data->facts );
         c.Bind( "desc_rml", &data->desc_rml );
+        c.Bind( "hint_rml", &data->hint_rml );
+        // Click callbacks RECORD INTENT and mutate nothing — see the comment on pending_row_col.
+        c.BindEventCallback( "on_row",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int col = -1;
+            int row = -1;
+            if( args.size() >= 2 ) {
+                args[0].GetInto( col );
+                args[1].GetInto( row );
+            }
+            if( col >= 0 && col < 3 && row >= 0 ) {
+                pending_row_col = col;
+                pending_row = row;
+            }
+        } );
+        // The checkbox, not the row, is what toggles: installing spends points and can raise a
+        // modal, so reading an implant must not be the same gesture as taking it.
+        c.BindEventCallback( "on_check",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int col = -1;
+            int row = -1;
+            if( args.size() >= 2 ) {
+                args[0].GetInto( col );
+                args[1].GetInto( row );
+            }
+            if( col >= 0 && col < 3 && row >= 0 ) {
+                pending_check_col = col;
+                pending_check_row = row;
+            }
+        } );
         data->handle = c.GetModelHandle();
     } );
     if( rml_doc_unavailable( rml, _( "Character creation (BIONICS tab)" ) ) ) {
         return tab_direction::QUIT;
     }
 
+    // The model is rebuilt only when something changed; the chassis every frame, because it carries
+    // the sweep. Without the split a quiet animation tick would re-gate every row — each of which
+    // asks the game about slots, conflicts and upgrade chains — thirty times a second to move some
+    // light down a rail.
+    bool model_dirty = true;
     ui.on_redraw( [&]( const ui_adaptor & ) {
         if( rml ) {
-            sync_rml();
-            // See the TRAITS branch: display() is RmlUi-aware; it was skipped only
-            // because this branch returned early.
-            if( use_character_preview ) {
-                character_preview.display();
+            if( model_dirty ) {
+                sync_rml();
+                model_dirty = false;
             }
+            sync_chassis();
             return;
         }
     } );
 
+    // Keeps the cursor row on screen. Every row is the SAME height by stylesheet rule, so row
+    // height is scroll_height / row_count exactly, with no DOM child indexing — which `data-for`
+    // makes unreliable anyway. Same mechanism as the TRAITS columns and the equipment tree.
+    const auto scroll_col_to_cursor = [&]() {
+        if( !rml ) {
+            return;
+        }
+        const int rows = col_len( cur_col );
+        if( rows <= 0 ) {
+            return;
+        }
+        Rml::Element *e = rml.document()->GetElementById(
+                              string_format( "nc-col%d", cur_col ) );
+        if( e == nullptr ) {
+            return;
+        }
+        const float page = e->GetClientHeight();
+        const float total = e->GetScrollHeight();
+        const float row_h = total / static_cast<float>( rows );
+        const float want = row_h * static_cast<float>( cur_row[cur_col] ) - page * 0.5f;
+        e->SetScrollTop( std::clamp( want, 0.0f, std::max( 0.0f, total - page ) ) );
+    };
+
+    // Open on a column that has something in it, cursor on a real implant rather than a heading.
+    for( int c = 0; c < 3; c++ ) {
+        if( col_len( c ) > 0 ) {
+            cur_col = c;
+            break;
+        }
+    }
+    skip_headings( cur_col, 1 );
+
     do {
         ui_manager::redraw();
         nc_nav = 0;
+        pending_row_col = -1;
+        pending_row = -1;
+        pending_check_col = -1;
+        pending_check_row = -1;
         std::string action = ctxt.handle_input();
         if( nc_nav != 0 ) {
             action = nc_nav < 0 ? "PREV_TAB" : "NEXT_TAB";
         }
-        if( action == "zoom_in" && use_character_preview ) {
-            character_preview.zoom_in();
+        // Rebuild the model on the next redraw after anything that can have changed it.
+        //
+        // The click intents MUST be part of this test, not just `action`: cata maps MOUSE_LEFT to
+        // SELECT on mouse DOWN while RmlUi fires its `click` — and therefore those callbacks — on
+        // mouse UP, so the iteration carrying a click's intent is usually an idle one. Gating on
+        // the action alone leaves every mouse toggle applied but unrendered, which looks exactly
+        // like a dead control.
+        //
+        // TIMEOUT and ANY_INPUT are both idle as far as the MODEL goes — ANY_INPUT is what every
+        // mouse motion returns now that it is registered, and re-gating every row per pointer
+        // sample is exactly the cost this split exists to avoid. The chassis and its sweep update
+        // regardless, because they are outside the gate.
+        if( ( action != "TIMEOUT" && action != "ANY_INPUT" ) ||
+            pending_row >= 0 || pending_check_row >= 0 ) {
+            model_dirty = true;
         }
-        if( action == "zoom_out" && use_character_preview ) {
-            character_preview.zoom_out();
+
+        // Apply click intent exactly once, however many times the callback ran. A click on a
+        // heading row is ignored rather than parking the cursor on a label.
+        if( pending_row_col >= 0 && pending_row >= 0 && pending_row < col_len( pending_row_col ) &&
+            bionic_at( pending_row_col, pending_row ) >= 0 ) {
+            cur_col = pending_row_col;
+            cur_row[cur_col] = pending_row;
         }
-        if( action == "TOGGLE_CHARACTER_PREVIEW_CLOTHES" && use_character_preview ) {
-            character_preview.toggle_clothes();
-        }
-        if( action == "LEFT" ) {
-            iCurWorkingPage--;
-            if( iCurWorkingPage < 0 ) {
-                iCurWorkingPage = used_pages - 1;
+        // The checkbox last, so the cursor has already moved to the row being acted on.
+        if( pending_check_col >= 0 && pending_check_row >= 0 &&
+            pending_check_row < col_len( pending_check_col ) ) {
+            const int flat = bionic_at( pending_check_col, pending_check_row );
+            if( flat >= 0 ) {
+                cur_col = pending_check_col;
+                cur_row[cur_col] = pending_check_row;
+                toggle_bionic_at( flat );
             }
-        } else if( action == "RIGHT" ) {
-            iCurWorkingPage++;
-            if( iCurWorkingPage > used_pages - 1 ) {
-                iCurWorkingPage = 0;
+        }
+
+        // LEFT/RIGHT change column and UP/DOWN move within it — the axis mapping this tab has
+        // always had, and the one the columns imply.
+        if( action == "LEFT" || action == "RIGHT" ) {
+            const int step = action == "RIGHT" ? 1 : 2;   // +1 / -1 modulo 3
+            for( int n = 0; n < 3; n++ ) {
+                cur_col = ( cur_col + step ) % 3;
+                if( col_len( cur_col ) > 0 ) {
+                    break;
+                }
             }
-        } else if( action == "UP" ) {
-            if( iCurrentLine[iCurWorkingPage] == 0 ) {
-                iCurrentLine[iCurWorkingPage] = bionics_size[iCurWorkingPage] - 1;
-            } else {
-                iCurrentLine[iCurWorkingPage]--;
+            skip_headings( cur_col, 1 );
+            scroll_col_to_cursor();
+        } else if( action == "DOWN" || action == "UP" ) {
+            const int dir = action == "DOWN" ? 1 : -1;
+            const int len = col_len( cur_col );
+            if( len > 0 ) {
+                cur_row[cur_col] = ( cur_row[cur_col] + dir + len ) % len;
+                // Headings are skipped in the direction of travel, so UP and DOWN both step over a
+                // region header onto the next implant instead of parking the cursor on a label.
+                skip_headings( cur_col, dir );
+                scroll_col_to_cursor();
             }
         } else if( action == "REROLL_CHARACTER" ) {
             points.init_from_options();
@@ -2834,170 +3622,25 @@ tab_direction set_bionics( avatar &u, points_left &points )
             return tab_direction::NONE;
         } else if( action == "REROLL_APPEARANCE" ) {
             u.randomize_cosmetics();
-            //u.set_body();
             // Return tab_direction::NONE so we re-enter this tab again, but it forces a complete redrawing of it.
             return tab_direction::NONE;
-        } else if( action == "DOWN" ) {
-            iCurrentLine[iCurWorkingPage]++;
-            if( static_cast<size_t>( iCurrentLine[iCurWorkingPage] ) >= bionics_size[iCurWorkingPage] ) {
-                iCurrentLine[iCurWorkingPage] = 0;
-            }
         } else if( action == "RANDOMIZE" ) {
-            iCurrentLine[iCurWorkingPage] = rng( 0, bionics_size[iCurWorkingPage] - 1 );
+            const int len = col_len( cur_col );
+            if( len > 0 ) {
+                cur_row[cur_col] = rng( 0, len - 1 );
+                skip_headings( cur_col, 1 );
+                scroll_col_to_cursor();
+            }
         } else if( action == "CONFIRM" ) {
-            int inc_type = 0;
-            const bionic_id cur_bionic = vStartingBionics[iCurWorkingPage][iCurrentLine[iCurWorkingPage]].id;
-            const bionic_data &bio = cur_bionic.obj();
-
-            std::vector<trait_id> conflicting_traits;
-            // Look through the profession bionics, and see if any of them conflict with this trait
-            for( trait_id id : bio.canceled_mutations ) {
-                if( u.has_trait( id ) ) {
-                    conflicting_traits.push_back( id );
-                }
+            const int flat = bionic_at( cur_col, cur_row[cur_col] );
+            if( flat >= 0 ) {
+                toggle_bionic_at( flat );
             }
-            std::vector<bionic_id> missing_bionics;
-            if( !bio.required_bionics.empty() ) {
-                for( const bionic_id &req_bid : bio.required_bionics ) {
-                    if( !u.has_bionic( req_bid ) ) {
-                        missing_bionics.push_back( req_bid );
-                    }
-                }
-            }
-            bionic_id has_downgrade = bionic_id::NULL_ID();
-            if( cur_bionic->upgraded_bionic != bionic_id::NULL_ID() ) {
-                bionic_id downgrade = cur_bionic->upgraded_bionic;
-                if( u.has_bionic( downgrade ) ) {
-                    has_downgrade = downgrade;
-                }
-                if( has_downgrade == bionic_id::NULL_ID() ) {
-                    while( downgrade->upgraded_bionic != bionic_id::NULL_ID() ) {
-                        downgrade = cur_bionic->upgraded_bionic;
-                        if( u.has_bionic( downgrade ) ) {
-                            has_downgrade = downgrade;
-                            break;
-                        }
-                    }
-                }
-            }
-            bionic_id has_upgrade = bionic_id::NULL_ID();
-            for( bionic_id bio : cur_bionic->available_upgrades ) {
-                if( u.has_bionic( bio ) ) {
-                    has_upgrade = bio;
-                    break;
-                }
-            }
-            const bool has_bionic = u.has_bionic( cur_bionic );
-            if( has_bionic ) {
-                std::vector<std::string> dependent_bionics;
-                for( const bionic &i : u.get_bionic_collection() ) {
-                    const bionic_id &bid = i.id;
-                    // look at required bionics for every installed bionic
-                    for( const bionic_id &req_bid : bid->required_bionics ) {
-                        if( req_bid == cur_bionic ) {
-                            dependent_bionics.push_back( bid->name.translated() );
-                        }
-                    }
-                }
-                if( !dependent_bionics.empty() ) {
-                    popup( _( "These bionics are dependent on the bionic you are trying to uninstall %s." ),
-                           enumerate_as_string( dependent_bionics ) );
-                } else {
-                    inc_type = - 1;
-                }
-            } else if( g->scen->forbids_bionics() ) {
-                popup( _( "The scenario you picked prevents you from taking any bionics!" ) );
-            } else if( u.prof->forbids_bionics() ) {
-                popup( _( "The profession you picked prevents you from taking any bionics!" ) );
-            } else if( g->scen->is_forbidden_bionic( cur_bionic ) ) {
-                popup( _( "The scenario you picked prevents you from taking this bionic!" ) );
-            } else if( u.prof->is_forbidden_bionic( cur_bionic ) ) {
-                popup( _( "Your profession of %s prevents you from taking this bionic." ),
-                       u.prof->gender_appropriate_name( u.male ) );
-            } else if( g->scen->is_locked_bionic( cur_bionic ) ) {
-                inc_type = 0;
-                popup( _( "Your scenario of %s prevents you from removing this bionic." ),
-                       g->scen->gender_appropriate_name( u.male ) );
-            } else if( u.prof->is_locked_bionic( cur_bionic ) ) {
-                inc_type = 0;
-                popup( _( "Your profession of %s prevents you from removing this bionic." ),
-                       u.prof->gender_appropriate_name( u.male ) );
-            } else if( !conflicting_traits.empty() ) {
-                // Grab a list of the names of the bionics that block this trait
-                // So that the player know what is preventing them from taking it
-                std::vector<std::string> conflict_names;
-                conflict_names.reserve( conflicting_traits.size() );
-                for( const trait_id &conflict : conflicting_traits ) {
-                    conflict_names.emplace_back( conflict.obj().name() );
-                }
-                popup( _( "The following traits prevent you from taking this bionic: %s." ),
-                       enumerate_as_string( conflict_names ) );
-            } else if( iCurWorkingPage == 0 && num_good + bio.points >
-                       max_trait_points && !points.is_freeform() ) {
-                popup( vgettext( "Sorry, but you can only take %d point of advantages.",
-                                 "Sorry, but you can only take %d points of advantages.", max_trait_points ),
-                       max_trait_points );
-
-            } else if( iCurWorkingPage != 0 && num_bad + bio.points <
-                       -max_trait_points && !points.is_freeform() ) {
-                popup( vgettext( "Sorry, but you can only take %d point of disadvantages.",
-                                 "Sorry, but you can only take %d points of disadvantages.", max_trait_points ),
-                       max_trait_points );
-
-            } else if( !u.bionic_installation_issues( cur_bionic ).empty() ) {
-                const auto &issues = u.bionic_installation_issues( cur_bionic );
-                std::string detailed_info;
-                for( auto &elem : issues ) {
-                    //~ <Body part name>: <number of slots> more slot(s) needed.
-                    detailed_info += string_format( _( "\n%s: %i more slot(s) needed." ),
-                                                    body_part_name_as_heading( elem.first->token, 1 ),
-                                                    elem.second );
-                }
-                popup( _( "Not enough space for bionic installation!%s" ), detailed_info );
-            } else if( !missing_bionics.empty() ) {
-                // Grab a list of the names of the bionics that block this trait
-                // So that the player know what is preventing them from taking it
-                std::vector<std::string> conflict_names;
-                conflict_names.reserve( missing_bionics.size() );
-                for( const bionic_id &conflict : missing_bionics ) {
-                    conflict_names.emplace_back( conflict->name.translated() );
-                }
-                popup( _( "The lack of the following bionics are prevent you from taking this bionic: %s." ),
-                       enumerate_as_string( conflict_names ) );
-            } else if( has_downgrade != bionic_id::NULL_ID() ) {
-                popup( _( "You already have the downgraded version of the bionic: %s" ), has_downgrade->name );
-            } else if( has_upgrade != bionic_id::NULL_ID() ) {
-                popup( _( "You already have the upgraded version of the bionic: %s" ), has_upgrade->name );
-            } else {
-                inc_type = 1;
-            }
-
-            //inc_type is either -1 or 1, so we can just multiply by it to invert
-            if( inc_type != 0 ) {
-                u.toggle_bionic( cur_bionic );
-                // If character had trait - it's now removed. Trait could blocked some clothes, need to retoggle
-                if( has_bionic && character_preview.clothes_showing() ) {
-                    character_preview.toggle_clothes();
-                    character_preview.toggle_clothes();
-                }
-                points.trait_points -= bio.points * inc_type;
-
-                if( iCurWorkingPage == 0 ) {
-                    num_good += bio.points * inc_type;
-                } else {
-                    num_bad += bio.points * inc_type;
-                }
-            }
-
-            recalc_display_cache();
         } else if( action == "PREV_TAB" ) {
-            character_preview.clear();
             return tab_direction::BACKWARD;
         } else if( action == "NEXT_TAB" ) {
-            character_preview.clear();
             return tab_direction::FORWARD;
         } else if( action == "QUIT" && query_yn( _( "Return to main menu?" ) ) ) {
-            character_preview.clear();
             return tab_direction::QUIT;
         }
     } while( true );

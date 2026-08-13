@@ -26,7 +26,7 @@
    contrast it was designed for — and the cursor row ends up the most readable row
    on screen rather than the least. */
 
-.nc-opt, .nc-skill-row, .nc-scen-row, .nc-prof-row, .nc-trait-row {
+.nc-opt, .nc-skill-row, .nc-scen-row, .nc-prof-row, .nc-row {
     /* Reserved on EVERY row, not just .selected, so the cursor's accent bar does
        not shift row text sideways as the cursor moves. Longhand, not the
        `border-left` shorthand: the shorthand form did not paint here. */
@@ -35,7 +35,7 @@
 }
 
 .nc-opt.selected, .nc-skill-row.selected,
-.nc-scen-row.selected, .nc-prof-row.selected, .nc-trait-row.selected {
+.nc-scen-row.selected, .nc-prof-row.selected, .nc-row.selected {
     background-color: {{bg-hard}};
     border-left-width: 3dp;
     border-left-color: {{yellow}};
@@ -176,7 +176,7 @@
    why nc_make_balance() nudges the pans by 20dp — the ends and the pans move
    together instead of visibly disagreeing.
 
-   It sits in its own centred row: wedged into .nc-trait-top between the points and
+   It sits in its own centred row: wedged into .nc-meta between the points and
    cost lines it read as clutter rather than as an indicator. */
 .nc-balance-row {
     flex: 0 0 auto;
@@ -860,4 +860,215 @@
     font-size: 13dp;
     letter-spacing: 1dp;
     text-transform: uppercase;
+}
+
+
+/* ── SHARED ROW-LIST VOCABULARY ────────────────────────────────────────────────
+   The other half of the creator's language: columns of single-line rows, used by the TRAITS
+   and BIONICS steps. Promoted here the moment the second step adopted it, for the same reason
+   the card tree was — and under names that do not lie, since a bionics row styled by
+   `.nc-trait-row` is a trap for whichever step adopts this next.
+
+   The readability argument is ALIGNMENT: every row is cursor | checkbox | cost | name in
+   fixed-width cells, so each cell forms a column the eye can run down. Hierarchy comes from
+   brightness and tracking, never from size — the references set everything at one size and
+   separate regions with dotted rules. See plans/charcreation-traits-tree.md. */
+
+/* ── DOTTED RULES ─────────────────────────────────────────────────────────────
+   RmlUi has NO `border-style`, and this repo already recorded that a dotted border "rendered as
+   nothing here" twice (mainmenu.rcss, mainmenu_theme.rcss). A repeating gradient is the working
+   substitute and is what the sidebar HUD uses for its scanlines: 2dp of ink, 3dp of gap. */
+.nc-rule {
+    flex: 0 0 auto;
+    height: 1dp;
+    margin: 5dp 0;
+    decorator: repeating-linear-gradient( 90deg,
+        {{bg4}} 0dp, {{bg4}} 2dp, #00000000 2dp, #00000000 5dp );
+}
+
+/* The same rule turned 90 degrees, between the columns. */
+.nc-vrule {
+    flex: 0 0 auto;
+    width: 1dp;
+    margin: 0 12dp;
+    decorator: repeating-linear-gradient( 180deg,
+        {{bg4}} 0dp, {{bg4}} 2dp, #00000000 2dp, #00000000 5dp );
+}
+
+/* Meta bar: pools left, this step's own budget right. */
+.nc-meta {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8dp;
+}
+
+.nc-meta-pool {
+    display: block;
+    flex: 0 0 auto;
+    color: {{fg}};
+}
+
+.nc-meta-budget {
+    display: block;
+    flex: 0 0 auto;
+}
+
+/* ── COLUMNS ──────────────────────────────────────────────────────────────────
+   Equal columns, each scrolling on its own so a long list never pushes the detail panel off the
+   screen — the panel's position is fixed for the same reason the card steps' info panel is. */
+.nc-cols {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    padding: 4dp 8dp;
+}
+
+.nc-colwrap {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Column heading: tracked-out caps, brighter on the focused column. Its own dim rule beneath
+   ties it to the list without the weight of a full divider. */
+.nc-colhead {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 0 0 4dp 2dp;
+    margin-bottom: 4dp;
+    border-bottom: 1dp {{bg2}};
+}
+
+.nc-colname {
+    display: block;
+    flex: 0 0 auto;
+    letter-spacing: 3dp;
+    text-transform: uppercase;
+}
+
+.nc-colcount {
+    display: block;
+    flex: 0 0 auto;
+    margin-left: 8dp;
+    font-size: 12dp;
+}
+
+.nc-list {
+    flex: 1;
+    min-height: 0;
+    display: block;
+    overflow-y: auto;
+    /* Bottom gap so the last row is not sliced flush against the pane edge, which reads as a
+       rendering fault rather than as "scroll for more". */
+    padding-bottom: 6dp;
+}
+
+/* ── ROWS ─────────────────────────────────────────────────────────────────────
+   EVERY row is this height, headings included. That uniformity is load-bearing: C++ scrolls the
+   cursor into view as scroll_height / row_count, which is only exact while no row is taller.
+
+   `line-height` above the glyph size is the spacious feel the references have — it sets rows on a
+   generous rhythm without the leading being big enough to break the columns apart. */
+.nc-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    height: 22dp;
+    line-height: 22dp;
+    padding-left: 2dp;
+    /* NO fill. The markup carries theme.rcss's `.item`, whose {{bg1}} ground turns a column of
+       rows into one pale slab that stops dead after the last row — and flattens the contrast of
+       every semantic colour in it, since each was designed against the panel's dark ground. That
+       is the same defect recorded for `.scroll-pane` at the top of this file, and the same fix:
+       the container carries no fill, and only the cursor row and hover paint one. This rule beats
+       `.item` because both are single-class and this sheet is linked after the theme. */
+    background-color: transparent;
+    /* LOAD-BEARING, exactly as .nc-eqp-row records it (newcharprofession.rcss:253): a long name
+       wrapping to a second line inside a fixed-height box spills into the row below, so
+       consecutive rows draw over each other. It also grows scroll_height, which silently
+       desyncs the cursor-scroll arithmetic that assumes every row is this tall. */
+    overflow: hidden;
+}
+
+/* Hover is the click affordance for a mouse; the cursor row's own fill comes from the top of
+   this file so it stays identical to every other list in the creator. */
+.nc-row:hover {
+    background-color: {{bg1}};
+}
+
+/* A sub-heading inside a column. Same height as an item, and NO border: `height` is content-box
+   here, so a 1dp rule would make headings 23dp against the items' 22dp and break the uniformity
+   the scroll arithmetic depends on. Tracking, caps and the gold the producer bakes in carry the
+   hierarchy instead. */
+.nc-row.header {
+    letter-spacing: 2dp;
+    text-transform: uppercase;
+}
+
+.nc-row.header:hover {
+    background-color: transparent;
+}
+
+/* Micro-columns. Fixed widths, so cursor / box / cost / name each line up down the whole
+   column; this alignment is the entire readability argument for the row layout. */
+.nc-cell-cursor {
+    display: block;
+    flex: 0 0 auto;
+    width: 10dp;
+}
+
+/* The toggle target. Wider than its glyph so it is comfortable to hit, and the only element on
+   the row that changes the character. */
+.nc-cell-check {
+    display: block;
+    flex: 0 0 auto;
+    width: 30dp;
+}
+
+.nc-cell-check:hover {
+    color: {{yellow}};
+}
+
+/* Right-aligned inside its cell, so the brackets stack into a neat gutter of numbers. */
+.nc-cell-cost {
+    display: block;
+    flex: 0 0 auto;
+    width: 44dp;
+    text-align: right;
+    margin-right: 8dp;
+}
+
+/* nowrap for the same reason the row clips: one long name must not become two lines. */
+.nc-cell-name {
+    white-space: nowrap;
+    overflow: hidden;
+    display: block;
+    flex: 1;
+    min-width: 0;
+}
+
+/* ── DETAIL HEADER AND HINT ───────────────────────────────────────────────────
+   ":: NAME" over the shared art | facts | prose panel, and the keys line under it. */
+.nc-selname {
+    flex: 0 0 auto;
+    display: block;
+    padding: 0 8dp 4dp 8dp;
+    letter-spacing: 2dp;
+    text-transform: uppercase;
+}
+
+.nc-hint {
+    flex: 0 0 auto;
+    display: block;
+    text-align: right;
+    padding: 4dp 8dp 0 8dp;
+    font-size: 13dp;
+    color: {{fg4}};
 }

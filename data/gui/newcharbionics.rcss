@@ -1,5 +1,10 @@
-/* Layout for the new-character BIONICS tab (Tier 4 #4 slice 5). Identical to the
-   TRAITS layout. Reuses theme .panel / .tabs / .tab / .item / .scroll-pane. */
+/* Layout for the new-character BIONICS tab.
+   Linked AFTER newchar_common.rcss, so a same-specificity rule here wins.
+
+   The lists, rules, meta bar, row cells, detail header and hint are the SHARED row-list
+   vocabulary in newchar_common.rcss (.nc-meta, .nc-rule, .nc-cols, .nc-row, .nc-cell-*,
+   .nc-selname, .nc-hint). Only the chassis diagram below is this step's own.
+   See plans/charcreation-bionics-chassis.md. */
 
 body {
     display: flex;
@@ -9,13 +14,6 @@ body {
     height: 100%;
 }
 
-/* 72%, not 80/92%: the character-preview box is pinned to the right of the screen
-   and its avatar is a GPU sprite drawn UNDERNEATH this document, so an opaque panel
-   reaching over that box hides the sprite. A centred panel of width W has its right
-   edge at (100+W)/2, so 72% ends at 86% and the box starts at ~86.7% — they never
-   meet. 80% (right edge 90%) cleared the old box by 0.2% by luck; 92% covered it.
-   Keep all eight tabs identical so the panel edge does not jump while tabbing.
-   See nc_prepare_preview() in newcharacter_ui.cpp. */
 .nc-panel {
     width: 98%;
     height: 98%;
@@ -31,70 +29,220 @@ body {
     flex: 0 0 auto;
 }
 
-.nc-trait-top {
+/* ── CHASSIS ──────────────────────────────────────────────────────────────────
+   A fourth column beside the lists, where TRAITS puts its DNA strand, so the two steps have the
+   same silhouette. Fixed width, so a long body-part caption cannot shift the lists around. */
+.nc-bio-chassis {
     flex: 0 0 auto;
+    width: 336dp;
     display: flex;
-    flex-direction: row;
-    padding: 6dp 8dp;
+    flex-direction: column;
 }
 
-.nc-trait-points {
-    display: block;
-    flex: 0 0 auto;
-    margin-right: 16dp;
-}
-
-.nc-trait-budget {
-    display: block;
-    flex: 0 0 auto;
-    margin-right: 16dp;
-}
-
-.nc-trait-cost {
-    display: block;
+.nc-bio-doll {
     flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
-.nc-trait-cols {
+/* Six rows, each taking an equal share of whatever height the column has, so the diagram
+   rescales with the window and never needs a row height matched to a pixel count. */
+.nc-bio-dollrow {
     flex: 1;
     min-height: 0;
     display: flex;
     flex-direction: row;
+    align-items: stretch;
 }
 
-.nc-trait-col {
+/* ── BUS RAIL ─────────────────────────────────────────────────────────────────
+   The sweep's track: a continuous hairline down the diagram's left edge with one node per body
+   row. C++ writes only the node's colour, so the rail cannot drift out of alignment with the
+   grid — the segments ARE the rows. */
+.nc-bio-rail {
+    flex: 0 0 auto;
+    width: 12dp;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.nc-bio-rail-line {
+    flex: 1;
+    min-height: 0;
+    width: 1dp;
+    background-color: {{bg4}};
+}
+
+/* Dark by default and lit by the sweep, so the node reads as a diode on the bus rather than as a
+   decoration. `background-color` is the only animated property; the border keeps the node visible
+   through the dark part of the cycle. */
+.nc-bio-rail-node {
+    flex: 0 0 auto;
+    width: 8dp;
+    height: 8dp;
+    border: 1dp {{bg4}};
+    background-color: #00000000;
+}
+
+/* ── CELLS ────────────────────────────────────────────────────────────────────
+   Equal flex on the three cells is the whole alignment story — the spine and rung centre
+   themselves inside their cell, so nothing here depends on a measured pixel. */
+.nc-bio-cell {
     flex: 1;
     min-width: 0;
-    margin-right: 8dp;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
 }
 
-.nc-trait-row {
-    display: block;
+/* Junction: the connecting lines. Three stacked children — spine segment, rung, spine segment —
+   so the rung lands at the exact vertical middle from equal flex alone. No negative margins and
+   no `position: absolute`: percentage margins here resolve against WIDTH, and absolute
+   positioning in this RmlUi build resolves against the PANEL rather than the nearest positioned
+   ancestor. */
+.nc-bio-spine {
+    flex: 1;
+    width: 1dp;
+    min-height: 0;
+    background-color: {{bg4}};
 }
 
-.nc-trait-desc {
+.nc-bio-rung {
     flex: 0 0 auto;
-    max-height: 96dp;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    padding: 6dp 8dp;
-    border-top: 1dp {{bg4}};
-    color: {{fg}};
+    width: 100%;
+    height: 1dp;
+    background-color: {{bg4}};
 }
 
-/* Portrait box. The avatar texture is AVATAR_TARGET_PX square and `contain` keeps its
-   aspect, so this only decides how much room the sprite gets. Anchored top-right of the
-   stage, which is where the old floating preview sat — but now it is inside the panel,
-   which is what let the panel grow to 98%. */
-.nc-portrait {
-    /* `position: absolute` here resolves against .nc-panel, NOT against .nc-stage —
-       measured earlier in this work when a beam anchored to a `position: relative`
-       parent landed against the panel instead. That behaviour is exactly the placement
-       wanted here (panel top-right), so it is relied on deliberately rather than by
-       accident. top/right clear the step rail and the panel's 24dp runic-frame inset. */
-    position: absolute;
-    right: 32dp;
-    top: 52dp;
-    width: 208dp;
-    height: 208dp;
+/* A slot box. An empty part keeps its box and caption, dimmed: "nothing in the eyes" is
+   information, so an absent implant must not become an absent cell.
+
+   `overflow: hidden` so a short window clips the box's contents instead of letting them spill
+   into the row below — the rows are flex, so they shrink before anything else does. */
+.nc-bio-slot {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100dp;
+    padding: 2dp 3dp 3dp 3dp;
+    border: 1dp {{bg2}};
+    background-color: {{bg}};
+    overflow: hidden;
+    transition: border-color 0.15s quadratic-in-out;
+}
+
+.nc-bio-cell.filled .nc-bio-slot {
+    border-color: {{bg4}};
+    background-color: {{bg-hard}};
+}
+
+/* The part the selected implant would occupy. Gold is the creator's cursor colour throughout, so
+   the diagram highlights with the same channel the lists do. */
+.nc-bio-cell.want .nc-bio-slot {
+    border-color: {{yellow}};
+    background-color: {{bg-hard}};
+}
+
+/* ...and it does not fit. Only reachable with CBM_SLOTS_ENABLED on. */
+.nc-bio-cell.over .nc-bio-slot {
+    border-color: {{red}};
+}
+
+/* The sweep crossing the body. A hairline across the top of every box, transparent until the
+   pulse reaches its row; it takes the SAME colour string as the rail node beside it. */
+.nc-bio-scanline {
+    flex: 0 0 auto;
+    width: 100%;
+    height: 1dp;
+    margin-bottom: 2dp;
+    background-color: #00000000;
+}
+
+/* Art box always present, so a filled part and an empty one are the same height and the grid does
+   not jitter as the selection changes. */
+.nc-bio-art {
+    flex: 0 0 auto;
+    width: 26dp;
+    height: 26dp;
+}
+
+.nc-bio-impl {
+    display: block;
+    flex: 0 0 auto;
+    width: 100%;
+    font-size: 10dp;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+/* Caption row: part name, used/total, and the "+N others" badge, in one line so the box stays
+   short enough for six of them to fit a 720p-class window. */
+.nc-bio-slotfoot {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+}
+
+.nc-bio-part {
+    display: block;
+    flex: 0 0 auto;
+    font-size: 9dp;
+    letter-spacing: 1dp;
+    text-transform: uppercase;
+}
+
+/* margin-left rather than a space in the producer's string: RmlUi trims a lone space between two
+   colour runs at parse time, which welded the profession sheet's four totals into one word. */
+.nc-bio-cap {
+    display: block;
+    flex: 0 0 auto;
+    margin-left: 5dp;
+    font-size: 9dp;
+}
+
+.nc-bio-more {
+    display: block;
+    flex: 0 0 auto;
+    margin-left: 5dp;
+    font-size: 9dp;
+}
+
+/* Capacity bar. `display: block` is load-bearing: RmlUi elements default to `display: inline`,
+   and an inline fill ignores its width and height — that is why the equipment sheet's bar drew
+   nothing until this was set (see plans/charcreation-profession-equipment.md). */
+.nc-bio-bar {
+    flex: 0 0 auto;
+    display: block;
+    width: 84dp;
+    height: 2dp;
+    margin-top: 2dp;
+    background-color: {{bg2}};
+}
+
+.nc-bio-bar-fill {
+    display: block;
+    width: 0;
+    height: 2dp;
+    background-color: {{yellow}};
+    transition: width 0.16s quadratic-out;
+}
+
+/* ── DETAIL ───────────────────────────────────────────────────────────────────
+   The shared `.nc-selname` header sits above the art | facts | prose panel; only the panel's own
+   proportions are this step's business. Shorter than the card steps' 188dp and than TRAITS' 196dp:
+   the art slot here holds a CBM sprite rather than the avatar, so it needs no room for a figure. */
+.nc-info-panel {
+    height: 168dp;
+}
+
+.nc-info-art {
+    width: 132dp;
+    height: 132dp;
 }

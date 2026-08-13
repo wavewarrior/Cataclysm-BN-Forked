@@ -41,12 +41,12 @@
                 <!-- Meta bar: pools on the left, the trait budget on the right, dotted
                      rules above and below it as in the reference. -->
                 <div class="nc-rule"></div>
-                <div class="nc-trait-top">
-                    <span class="nc-trait-points" data-rml="points_rml"></span>
-                    <span class="nc-trait-budget" data-rml="budget_rml"></span>
+                <div class="nc-meta">
+                    <span class="nc-meta-pool" data-rml="points_rml"></span>
+                    <span class="nc-meta-budget" data-rml="budget_rml"></span>
                 </div>
                 <div class="nc-rule"></div>
-                <!-- Own row, not inside .nc-trait-top: at 230dp wedged between the points
+                <!-- Own row, not inside .nc-meta: at 230dp wedged between the points
                      and cost lines the scale read as clutter rather than as an indicator.
                      It is the one screen-level readout of both budgets. -->
                 <div class="nc-balance-row" data-if="balance.show">
@@ -70,64 +70,64 @@
                     </div>
                 </div>
 
-                <div class="nc-trait-cols">
+                <div class="nc-cols">
                     <!-- Three columns, written out rather than generated, because each needs a
                          stable id for C++ to scroll its own cursor into view. -->
-                    <div class="nc-trait-colwrap">
-                        <div class="nc-trait-colhead">
-                            <span class="nc-trait-colname" data-rml="col0.name_rml"></span>
-                            <span class="nc-trait-colcount" data-rml="col0.count_rml"></span>
+                    <div class="nc-colwrap">
+                        <div class="nc-colhead">
+                            <span class="nc-colname" data-rml="col0.name_rml"></span>
+                            <span class="nc-colcount" data-rml="col0.count_rml"></span>
                         </div>
-                        <div id="nc-trait-col0" class="nc-trait-list">
-                            <div class="item nc-trait-row" data-for="r, ri : col0.rows"
+                        <div id="nc-col0" class="nc-list">
+                            <div class="item nc-row" data-for="r, ri : col0.rows"
                                  data-class-selected="r.selected" data-class-header="r.header"
                                  data-event-click="on_row(0, ri)">
-                                <span class="nc-tr-cursor" data-rml="r.cursor_rml"></span>
-                                <span class="nc-tr-check" data-rml="r.check_rml"
+                                <span class="nc-cell-cursor" data-rml="r.cursor_rml"></span>
+                                <span class="nc-cell-check" data-rml="r.check_rml"
                                       data-event-click="on_check(0, ri)"></span>
-                                <span class="nc-tr-cost" data-rml="r.cost_rml"></span>
-                                <span class="nc-tr-name" data-rml="r.name_rml"></span>
+                                <span class="nc-cell-cost" data-rml="r.cost_rml"></span>
+                                <span class="nc-cell-name" data-rml="r.name_rml"></span>
                             </div>
                         </div>
                     </div>
                     <div class="nc-vrule"></div>
-                    <div class="nc-trait-colwrap">
-                        <div class="nc-trait-colhead">
-                            <span class="nc-trait-colname" data-rml="col1.name_rml"></span>
-                            <span class="nc-trait-colcount" data-rml="col1.count_rml"></span>
+                    <div class="nc-colwrap">
+                        <div class="nc-colhead">
+                            <span class="nc-colname" data-rml="col1.name_rml"></span>
+                            <span class="nc-colcount" data-rml="col1.count_rml"></span>
                         </div>
-                        <div id="nc-trait-col1" class="nc-trait-list">
-                            <div class="item nc-trait-row" data-for="r, ri : col1.rows"
+                        <div id="nc-col1" class="nc-list">
+                            <div class="item nc-row" data-for="r, ri : col1.rows"
                                  data-class-selected="r.selected" data-class-header="r.header"
                                  data-event-click="on_row(1, ri)">
-                                <span class="nc-tr-cursor" data-rml="r.cursor_rml"></span>
-                                <span class="nc-tr-check" data-rml="r.check_rml"
+                                <span class="nc-cell-cursor" data-rml="r.cursor_rml"></span>
+                                <span class="nc-cell-check" data-rml="r.check_rml"
                                       data-event-click="on_check(1, ri)"></span>
-                                <span class="nc-tr-cost" data-rml="r.cost_rml"></span>
-                                <span class="nc-tr-name" data-rml="r.name_rml"></span>
+                                <span class="nc-cell-cost" data-rml="r.cost_rml"></span>
+                                <span class="nc-cell-name" data-rml="r.name_rml"></span>
                             </div>
                         </div>
                     </div>
                     <div class="nc-vrule"></div>
-                    <div class="nc-trait-colwrap">
-                        <div class="nc-trait-colhead">
-                            <span class="nc-trait-colname" data-rml="col2.name_rml"></span>
-                            <span class="nc-trait-colcount" data-rml="col2.count_rml"></span>
+                    <div class="nc-colwrap">
+                        <div class="nc-colhead">
+                            <span class="nc-colname" data-rml="col2.name_rml"></span>
+                            <span class="nc-colcount" data-rml="col2.count_rml"></span>
                         </div>
                         <!-- mouseout BUBBLES, so a row's own mouseout arrives here too when stepping
                              row to row. on_hover_out ignores those and reacts only when the LIST is
                              what the pointer left. -->
-                        <div id="nc-trait-col2" class="nc-trait-list"
+                        <div id="nc-col2" class="nc-list"
                              data-event-mouseout="on_hover_out()">
-                            <div class="item nc-trait-row" data-for="r, ri : col2.rows"
+                            <div class="item nc-row" data-for="r, ri : col2.rows"
                                  data-class-selected="r.selected" data-class-header="r.header"
                                  data-event-click="on_row(2, ri)"
                                  data-event-mouseover="on_hover(ri)">
-                                <span class="nc-tr-cursor" data-rml="r.cursor_rml"></span>
-                                <span class="nc-tr-check" data-rml="r.check_rml"
+                                <span class="nc-cell-cursor" data-rml="r.cursor_rml"></span>
+                                <span class="nc-cell-check" data-rml="r.check_rml"
                                       data-event-click="on_check(2, ri)"></span>
-                                <span class="nc-tr-cost" data-rml="r.cost_rml"></span>
-                                <span class="nc-tr-name" data-rml="r.name_rml"></span>
+                                <span class="nc-cell-cost" data-rml="r.cost_rml"></span>
+                                <span class="nc-cell-name" data-rml="r.name_rml"></span>
                             </div>
                         </div>
                     </div>
@@ -141,9 +141,9 @@
                          RmlUi resolves it against .nc-panel in this document, which is what put the
                          balance scale's beam through the top bar. -->
                     <div class="nc-dna-wrap">
-                        <div class="nc-trait-colhead">
-                            <span class="nc-trait-colname">Genome</span>
-                            <span class="nc-trait-colcount" data-rml="dna_count_rml"></span>
+                        <div class="nc-colhead">
+                            <span class="nc-colname">Genome</span>
+                            <span class="nc-colcount" data-rml="dna_count_rml"></span>
                         </div>
                         <div class="nc-dna">
                             <div class="nc-dna-rung" data-for="g : dna">
@@ -162,7 +162,7 @@
 
                 <div class="nc-rule"></div>
                 <!-- ":: TRAIT NAME" over the detail panel, as in the reference. -->
-                <div class="nc-trait-selname" data-rml="sel_name_rml"></div>
+                <div class="nc-selname" data-rml="sel_name_rml"></div>
                 <div class="nc-info-panel">
                     <!-- Art slot: the character portrait, which already wears the selected kit.
                          It earns its place on this tab more than any other — taking a visible
@@ -185,7 +185,7 @@
                         <div class="nc-info-blurb" data-rml="desc_rml"></div>
                     </div>
                 </div>
-                <div class="nc-trait-hint" data-rml="hint_rml"></div>
+                <div class="nc-hint" data-rml="hint_rml"></div>
             </div>
             <div class="nc-arrow nc-arrow-next" data-if="has_next"
                  data-event-click="on_next()">
