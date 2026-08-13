@@ -70,6 +70,8 @@
 #include "newchar_balance.h"
 #include "newchar_stat_meter.h"
 #include "newchar_trait_gate.h"
+#include "newchar_finish_gate.h"
+#include "newchar_seal.h"
 #include "rml_length.h"
 #include "rml_screen.h"
 #include "rml_util.h"
@@ -154,26 +156,36 @@ struct {
 
 namespace char_creation
 {
+/// The editable identity fields on the OVERVIEW step, in the order its column lists them. UP/DOWN
+/// walk this, LEFT/RIGHT change the current one's value, CONFIRM opens its editor. GENDER and
+/// LOCATION joined the list with the rework: they were changeable only through their own dedicated
+/// keys, and the cursor could not reach them at all.
 enum description_selector {
-    NAME,
+    NAME = 0,
+    GENDER,
     HEIGHT,
-    AGE
+    AGE,
+    LOCATION,
+    NUM_FIELDS,
 };
 } // namespace char_creation
 
 
+// Colours used in this file; most else defaults to c_light_gray.
+//
+// This block used to appear TWICE, verbatim, forty lines apart, which is where most of this file's
+// -Wunused-macros noise came from: every use resolved against the second copy, leaving the first
+// warning as never expanded. COL_TR_NEUT and COL_HEADER went with the OVERVIEW rework — the last
+// consumer of both was that step's six panes, and its columns take their colours from the shared
+// row vocabulary instead. The per-row toggled-on/off variants went earlier, with the last curses
+// list in this file.
 #define COL_STAT_ACT        c_white   // Selected stat
 #define COL_STAT_BONUS      c_light_green // Bonus
 #define COL_STAT_NEUTRAL    c_white   // Neutral Property
 #define COL_STAT_PENALTY    c_light_red   // Penalty
-// The per-row toggled-on/off variants that used to live here went with the last curses list in
-// this file: the TRAITS and BIONICS rows now carry state in a checkbox glyph and the cursor's own
-// fill, so a row's colour only ever encodes point valence.
 #define COL_TR_GOOD         c_green   // Good trait descriptive text
 #define COL_TR_BAD          c_red     // Bad trait descriptive text
-#define COL_TR_NEUT         c_brown     // Neutral trait descriptive text
 #define COL_SKILL_USED      c_green   // A skill with at least one point
-#define COL_HEADER          c_white   // Captions, like "Profession items"
 
 static auto profession_age_limits_enabled() -> bool
 {
@@ -202,17 +214,6 @@ static auto random_age_for_profession( const profession &prof ) -> int
     }
     return rng( min_age, max_age );
 }
-
-// Colors used in this file: (Most else defaults to c_light_gray)
-#define COL_STAT_ACT        c_white   // Selected stat
-#define COL_STAT_BONUS      c_light_green // Bonus
-#define COL_STAT_NEUTRAL    c_white   // Neutral Property
-#define COL_STAT_PENALTY    c_light_red   // Penalty
-#define COL_TR_GOOD         c_green   // Good trait descriptive text
-#define COL_TR_BAD          c_red     // Bad trait descriptive text
-#define COL_TR_NEUT         c_brown     // Neutral trait descriptive text
-#define COL_SKILL_USED      c_green   // A skill with at least one point
-#define COL_HEADER          c_white   // Captions, like "Profession items"
 
 enum {
     HIGH_STAT = 14 // The point after which stats cost double
@@ -7209,41 +7210,96 @@ struct nc_desc_tab {
     bool selected = false;
     bool done = false;   //< step already passed
 };
-/// One rendered row of an OVERVIEW pane.
-///
-/// `label` and `value` are separate spans so the label can carry its trailing space
-/// INSIDE its own colour run — `colorize(label) + " " + colorize(value)` puts U+0020
-/// between two spans, where RmlUi trims it at parse time (this is what rendered
-/// `Traits:None!` and `Wielded:None!`). Either may be empty: a plain list entry is
-/// value-only, a bare group heading is label-only.
-struct nc_desc_row {
+
+/// One IDENTITY row: a field the player can still change on this last step. Fixed cells, so the five
+/// labels form one column and the five values another — the alignment argument every row list in the
+/// creator makes.
+struct nc_ident_row {
+    Rml::String cursor_rml;   //< ">" on the cursor row, else empty
     Rml::String label_rml;
     Rml::String value_rml;
-    bool heading = false;   //< styled as a group heading, not a data row
+    bool selected = false;
+    /// The value has an ordering LEFT/RIGHT can walk, so the steppers apply. False on NAME, which has
+    /// nothing to step along and whose only editor is a modal.
+    bool has_step = false;
+    bool can_dec = false;
+    bool can_inc = false;
 };
 
-/// One OVERVIEW column. `title_rml` may be empty (the misc column has no title of
-/// its own and opens on its first heading). `icon_dec` is the section's placeholder
-/// glyph — see plans/charcreation-visual-overhaul.md for the art hand-off table.
-struct nc_desc_pane {
-    Rml::String title_rml;
-    Rml::String icon_dec;
+/// One row of a record column, or of the BACKGROUND group under the identity list.
+///
+/// `name` and `value` are separate spans so a label can carry its trailing space INSIDE its own
+/// colour run — `colorize(label) + " " + colorize(value)` puts U+0020 between two spans, where RmlUi
+/// trims it at parse time (this is what used to render `Traits:None!`). Either may be empty: a plain
+/// list entry is name-only, and a group heading is a name plus the `header` flag.
+struct nc_desc_row {
+    Rml::String name_rml;
+    Rml::String value_rml;
+    bool header = false;
+};
+
+/// One read-only record column: a sigil, a heading, a count of its DATA rows, and the rows.
+struct nc_desc_col {
+    Rml::String name_rml;
+    Rml::String count_rml;
+    /// "none", NOT empty: `data-style-decorator` is evaluated on the first frame, before sync_rml has
+    /// run, and an empty value becomes `decorator: ;` — a parse error RmlUi logs every frame.
+    Rml::String sigil_dec = "none";
     Rml::Vector<nc_desc_row> rows;
+};
+
+/// A label / value / sub-line triple in the detail panel.
+struct nc_desc_fact {
+    Rml::String label_rml;
+    Rml::String value_rml;
+    Rml::String sub_rml;
+};
+
+/// One cell of the seal's lattice. BOTH channels always carry a valid value — a fully transparent
+/// colour and "none" — for the same reason as `sigil_dec` above: every cell is bound on the first
+/// frame, and an empty style value would be a parse error per cell per frame.
+struct nc_seal_cell {
+    Rml::String col = "#00000000";
+    Rml::String dec = "none";
+    /// A node cell, i.e. one of the seven steps. Drawn as a full-size disc carrying that step's
+    /// glyph, where a thread cell is a small stitch — the stylesheet cannot tell them apart from
+    /// the colour alone, and a ring of uniform blobs reads as a wreath rather than as a seal.
+    bool node = false;
+};
+struct nc_seal_row {
+    Rml::Vector<nc_seal_cell> cells;
+};
+
+/// One line of the legend under the seal: a step's glyph, its name and its one-line summary. An
+/// unlabelled emblem is decoration; with this the seal IS the digest of the build.
+struct nc_seal_tally {
+    Rml::String dec = "none";
+    Rml::String name_rml;
+    Rml::String val_rml;
 };
 
 struct nc_desc_session {
     Rml::Vector<nc_desc_tab> tabs;
     nc_shell shell;
     Rml::String points_rml;
-    Rml::String name_rml;
-    Rml::String gender_rml;
-    Rml::String height_rml;
-    Rml::String age_rml;
-    Rml::String location_rml;
-    Rml::String scenario_rml;
-    Rml::String profession_rml;
-    Rml::Vector<nc_desc_pane> panes;
-    Rml::String guide_rml;
+    Rml::String ready_rml;      //< the finish gate's readiness word, in the meta bar
+    Rml::String ident_name_rml;
+    Rml::String ident_count_rml;
+    Rml::String ident_sigil_dec = "none";
+    Rml::Vector<nc_ident_row> ident;
+    /// Scenario and profession: part of the record, not editable here, and not cursorable — which is
+    /// what keeps the cursor list exactly the five fields above.
+    Rml::Vector<nc_desc_row> background;
+    nc_desc_col col0;
+    nc_desc_col col1;
+    nc_desc_col col2;
+    Rml::String seal_name_rml;
+    Rml::Vector<nc_seal_row> seal;
+    Rml::Vector<nc_seal_tally> tally;
+    Rml::String sel_name_rml;
+    Rml::Vector<nc_desc_fact> facts;
+    Rml::String desc_rml;
+    Rml::String hint_rml;
     Rml::DataModelHandle handle;
 };
 
@@ -7261,69 +7317,107 @@ void register_nc_desc_rml_types( Rml::DataModelConstructor &c )
     th.RegisterMember( "done", &nc_desc_tab::done );
     c.RegisterArray<Rml::Vector<nc_desc_tab>>();
 
+    Rml::StructHandle<nc_ident_row> ih = c.RegisterStruct<nc_ident_row>();
+    ih.RegisterMember( "cursor_rml", &nc_ident_row::cursor_rml );
+    ih.RegisterMember( "label_rml", &nc_ident_row::label_rml );
+    ih.RegisterMember( "value_rml", &nc_ident_row::value_rml );
+    ih.RegisterMember( "selected", &nc_ident_row::selected );
+    ih.RegisterMember( "has_step", &nc_ident_row::has_step );
+    ih.RegisterMember( "can_dec", &nc_ident_row::can_dec );
+    ih.RegisterMember( "can_inc", &nc_ident_row::can_inc );
+    c.RegisterArray<Rml::Vector<nc_ident_row>>();
+
+    // Rows before the column that holds them: a member cannot be registered before its own type is.
     Rml::StructHandle<nc_desc_row> rh = c.RegisterStruct<nc_desc_row>();
-    rh.RegisterMember( "label_rml", &nc_desc_row::label_rml );
+    rh.RegisterMember( "name_rml", &nc_desc_row::name_rml );
     rh.RegisterMember( "value_rml", &nc_desc_row::value_rml );
-    rh.RegisterMember( "heading", &nc_desc_row::heading );
+    rh.RegisterMember( "header", &nc_desc_row::header );
     c.RegisterArray<Rml::Vector<nc_desc_row>>();
 
-    Rml::StructHandle<nc_desc_pane> ph = c.RegisterStruct<nc_desc_pane>();
-    ph.RegisterMember( "title_rml", &nc_desc_pane::title_rml );
-    ph.RegisterMember( "icon_dec", &nc_desc_pane::icon_dec );
-    ph.RegisterMember( "rows", &nc_desc_pane::rows );
-    c.RegisterArray<Rml::Vector<nc_desc_pane>>();
+    Rml::StructHandle<nc_desc_col> ch = c.RegisterStruct<nc_desc_col>();
+    ch.RegisterMember( "name_rml", &nc_desc_col::name_rml );
+    ch.RegisterMember( "count_rml", &nc_desc_col::count_rml );
+    ch.RegisterMember( "sigil_dec", &nc_desc_col::sigil_dec );
+    ch.RegisterMember( "rows", &nc_desc_col::rows );
+
+    Rml::StructHandle<nc_desc_fact> fh = c.RegisterStruct<nc_desc_fact>();
+    fh.RegisterMember( "label_rml", &nc_desc_fact::label_rml );
+    fh.RegisterMember( "value_rml", &nc_desc_fact::value_rml );
+    fh.RegisterMember( "sub_rml", &nc_desc_fact::sub_rml );
+    c.RegisterArray<Rml::Vector<nc_desc_fact>>();
+
+    Rml::StructHandle<nc_seal_cell> sch = c.RegisterStruct<nc_seal_cell>();
+    sch.RegisterMember( "col", &nc_seal_cell::col );
+    sch.RegisterMember( "dec", &nc_seal_cell::dec );
+    sch.RegisterMember( "node", &nc_seal_cell::node );
+    c.RegisterArray<Rml::Vector<nc_seal_cell>>();
+    Rml::StructHandle<nc_seal_row> srh = c.RegisterStruct<nc_seal_row>();
+    srh.RegisterMember( "cells", &nc_seal_row::cells );
+    c.RegisterArray<Rml::Vector<nc_seal_row>>();
+
+    Rml::StructHandle<nc_seal_tally> tyh = c.RegisterStruct<nc_seal_tally>();
+    tyh.RegisterMember( "dec", &nc_seal_tally::dec );
+    tyh.RegisterMember( "name_rml", &nc_seal_tally::name_rml );
+    tyh.RegisterMember( "val_rml", &nc_seal_tally::val_rml );
+    c.RegisterArray<Rml::Vector<nc_seal_tally>>();
 
     g_nc_desc_types_registered = true;
 }
 
-/// Accumulates an OVERVIEW column. Every append keeps the label's trailing space
-/// inside the label's own colour run, so nothing welds.
-class pane_builder
+/// Deterministic seeds for the four OVERVIEW column glyphs, in column order (IDENTITY, ATTRIBUTES,
+/// BODY, EQUIPMENT). Stable by contract, as the tab seeds are: changing one reshuffles a placeholder
+/// the artist is matching. The SEAL draws no seed of its own — its nodes reuse `NC_TAB_ICON_SEEDS`,
+/// which is the whole point of it.
+constexpr unsigned NC_DESC_COL_SEEDS[4] = { 0x4944, 0x4154, 0x424f, 0x4551 };
+
+/// Accumulates one read-only record column.
+class record_column
 {
     public:
-        pane_builder( const std::string &title, const nc_color &title_col, unsigned icon_seed ) {
-            if( !title.empty() ) {
-                p.title_rml = cata_text_to_rml( colorize( title, title_col ) );
-            }
-            p.icon_dec = nc_icon_dec( icon_seed, 20, false );
+        record_column( const std::string &name, unsigned seed ) {
+            c.name_rml = cata_text_to_rml( colorize( name, c_white ) );
+            c.sigil_dec = nc_icon_dec( seed, 14, true );
         }
 
-        /// A group heading, optionally with an inline value ("Vehicle:  None!").
-        void heading( const std::string &label, const nc_color &label_col,
-                      const std::string &value = std::string(),
-                      const nc_color &value_col = c_white ) {
+        /// A group heading, optionally with an inline value — "WIELDED  None!". The stylesheet tracks
+        /// and upper-cases a header row, so a translated label's trailing ":" and space are dropped
+        /// here rather than in the PO: the msgids stay exactly as the panes used them.
+        void head( const std::string &label, const std::string &value = std::string(),
+                   const nc_color &value_col = c_light_red ) {
+            std::string l = label;
+            while( !l.empty() && ( l.back() == ':' || l.back() == ' ' ) ) {
+                l.pop_back();
+            }
             nc_desc_row r;
-            r.heading = true;
-            r.label_rml = cata_text_to_rml( nc_label( label, label_col ) );
+            r.header = true;
+            r.name_rml = cata_text_to_rml( colorize( l, c_yellow ) );
             if( !value.empty() ) {
                 r.value_rml = cata_text_to_rml( colorize( value, value_col ) );
             }
-            p.rows.push_back( r );
+            c.rows.push_back( r );
         }
 
-        /// A `label: value` data row.
-        void field( const std::string &label, const nc_color &label_col,
-                    const std::string &value, const nc_color &value_col ) {
+        /// A data row: a name, and the one number worth comparing where there is one.
+        void row( const std::string &name, const nc_color &name_col,
+                  const std::string &value = std::string(), const nc_color &value_col = c_white ) {
             nc_desc_row r;
-            r.label_rml = cata_text_to_rml( nc_label( label, label_col ) );
-            r.value_rml = cata_text_to_rml( colorize( value, value_col ) );
-            p.rows.push_back( r );
+            r.name_rml = cata_text_to_rml( colorize( name, name_col ) );
+            if( !value.empty() ) {
+                r.value_rml = cata_text_to_rml( colorize( value, value_col ) );
+            }
+            c.rows.push_back( r );
+            items++;
         }
 
-        /// A bare list entry.
-        void value( const std::string &value, const nc_color &value_col ) {
-            nc_desc_row r;
-            r.value_rml = cata_text_to_rml( colorize( value, value_col ) );
-            p.rows.push_back( r );
+        /// The count promises how much there is to READ, so headings do not count towards it.
+        auto take() -> nc_desc_col {
+            c.count_rml = cata_text_to_rml( colorize( string_format( "%d", items ), c_dark_gray ) );
+            return std::move( c );
         }
-
-        /// The "None!" marker, as its own row when a group has no inline value.
-        void none() { value( _( "None!" ), c_light_red ); }
-
-        auto take() -> nc_desc_pane { return std::move( p ); }
 
     private:
-        nc_desc_pane p;
+        nc_desc_col c;
+        int items = 0;
 };
 } // namespace
 
@@ -7337,59 +7431,22 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
 
     ui_adaptor ui;
     catacurses::window w;
-    catacurses::window w_name;
-    catacurses::window w_gender;
-    catacurses::window w_location;
-    catacurses::window w_stats;
-    catacurses::window w_traits;
-    catacurses::window w_bionics;
-    catacurses::window w_misc;
-    catacurses::window w_gear;
-    catacurses::window w_scenario;
-    catacurses::window w_profession;
-    catacurses::window w_skills;
-    catacurses::window w_guide;
-    catacurses::window w_height;
-    catacurses::window w_age;
 
     character_preview_window character_preview;
     character_preview.init( &you );
     const bool use_character_preview = get_option<bool>( "USE_CHARACTER_PREVIEW" );
 
     const auto init_windows = [&]( ui_adaptor & ui ) {
-        // Row 1
+        // The fifteen curses windows this step used to lay out went with the rework: the document
+        // owns every box on screen now, and this one is left only for ui_adaptor's own sizing.
         w = catacurses::newwin( TERMY, TERMX, point_zero );
-        w_name = catacurses::newwin( 3, 42, point( 2, 5 ) );
-        w_gender = catacurses::newwin( 2, 33, point( 46, 5 ) );
-        w_height = catacurses::newwin( 1, 20, point( 80, 5 ) );
-        w_location = catacurses::newwin( 2, 60, point( 100, 5 ) );
-        w_scenario = catacurses::newwin( 1, std::max( 1, TERMX - 161 ), point( 160, 5 ) );
-        w_profession = catacurses::newwin( 1, std::max( 1, TERMX - 161 ), point( 160, 6 ) );
-
-        // Row 2
-        w_age = catacurses::newwin( 1, 12, point( 80, 6 ) );
-
-        // Big Row
-        w_stats = catacurses::newwin( 6, 20, point( 2, 9 ) );
-        w_skills = catacurses::newwin( std::max( 1, TERMY - 17 ), 25, point( 2, 16 ) );
-        w_traits = catacurses::newwin( std::max( 1, TERMY - 10 ), 30, point( 28, 9 ) );
-        w_bionics = catacurses::newwin( std::max( 1, TERMY - 10 ), 30, point( 59, 9 ) );
-        w_misc = catacurses::newwin( std::max( 1, TERMY - 10 ), 30, point( 90, 9 ) );
-        w_gear = catacurses::newwin( std::max( 1, TERMY - 10 ), std::max( 1, TERMX - 122 ), point( 121,
-                                     9 ) );
-
-        // Very bottom Row
-        w_guide = catacurses::newwin( 6, std::max( 1, TERMX - 3 ), point( 2, TERMY - 7 ) );
-
         if( use_character_preview ) {
             nc_prepare_preview( character_preview );
         }
-
         ui.position_from_window( w );
     };
     init_windows( ui );
     ui.on_screen_resize( init_windows );
-
 
     input_context ctxt( "NEW_CHAR_DESCRIPTION" );
     ctxt.register_cardinal();
@@ -7404,14 +7461,16 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
     ctxt.register_action( "REROLL_CHARACTER_WITH_SCENARIO" );
     ctxt.register_action( "CONFIRM" );
     ctxt.register_action( "QUIT" );
-    // Required for the navigator/card clicks to reach this loop at all.
-    // MOUSE_LEFT binds to action id SELECT (keybindings.json:1175). An UNREGISTERED
-    // mouse action resolves to CATA_ERROR, and input.cpp:894-897 `continue`s on it
-    // BEFORE the registered_any_input check at :912 — so ANY_INPUT cannot rescue a
-    // mouse event, only registering the action it maps to can. Without this the
-    // click callback fires but handle_input() never returns, leaving the loop parked
-    // until an unrelated keypress, which then got hijacked into a step change.
+    // All three are required for a click to reach this loop at all. MOUSE_LEFT binds to SELECT on
+    // mouse DOWN while RmlUi fires `click` — and therefore the callbacks — on mouse UP; that UP
+    // resolves to CATA_ERROR, and input.cpp:894-897 `continue`s on an unrecognised MOUSE event
+    // WITHOUT returning. COORDINATE sets handling_coordinate_input, which skips that early
+    // `continue`; ANY_INPUT makes the fall-through at :912 return rather than loop again. Either
+    // alone still parks the loop, and a parked loop clears the intent a click recorded. See
+    // plans/charcreation-bionics-chassis.md.
     ctxt.register_action( "SELECT" );
+    ctxt.register_action( "COORDINATE" );
+    ctxt.register_action( "ANY_INPUT" );
     ctxt.register_action( "zoom_in" );
     ctxt.register_action( "zoom_out" );
     ctxt.register_action( "TOGGLE_CHARACTER_PREVIEW_CLOTHES" );
@@ -7424,12 +7483,17 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
     uilist_entry entry_random_start_location( RANDOM_START_LOC_ENTRY, true, -1,
             random_start_location_text );
     select_location.entries.emplace_back( entry_random_start_location );
+    /// The scenario's allowed locations, in the same order the CHOOSE_LOCATION list shows them.
+    /// LEFT/RIGHT step through this ring with "* Random *" at position 0, so the field answers the
+    /// same keys as the other four instead of needing a modal to change at all.
+    std::vector<start_location_id> allowed_locs;
     for( const auto &loc : start_locations::get_all() ) {
         if( g->scen->allowed_start( loc.id ) ) {
             uilist_entry entry( loc.id.id().to_i(), true, -1,
                                 string_format( START_LOC_TEXT_TEMPLATE, loc.name(), loc.targets_count() ) );
 
             select_location.entries.emplace_back( entry );
+            allowed_locs.push_back( loc.id );
 
             if( !you.random_start_location &&
                 loc.id.id() == you.start_location.id() ) {
@@ -7452,6 +7516,163 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
 
     bool no_name_entered = false;
 
+    int min_allowed_age = profession::min_age;
+    int max_allowed_age = profession::max_age;
+    // in centimeters. 2 std. deviations below average female height
+    const int min_allowed_height = 145;
+    const int max_allowed_height = 200;
+
+    /// Position in the LEFT/RIGHT ring: 0 is "* Random *", 1.. are the allowed locations.
+    ///
+    /// One accumulator and a single `return` at the end, rather than early returns: astyle 3.6.16
+    /// mis-indents a trailing-return-type function whose FIRST statement is an if-guard, and it
+    /// reformats this file on every build. Same reason the two lambdas below are shaped this way.
+    const auto loc_pos = [&]() -> int {
+        int p = 0;
+        if( !you.random_start_location )
+        {
+            for( int i = 0; i < static_cast<int>( allowed_locs.size() ); i++ ) {
+                if( allowed_locs[i] == you.start_location ) {
+                    p = i + 1;
+                    break;
+                }
+            }
+        }
+        return p;
+    };
+    /// Targets the current choice can drop you in: the scenario's whole allowance for a roll, or
+    /// that one location's own count.
+    const auto loc_variants = [&]() -> int {
+        return you.random_start_location ? g->scen->start_location_targets_count()
+        : you.start_location.obj().targets_count();
+    };
+    const auto loc_step = [&]( int dir ) {
+        const int n = static_cast<int>( allowed_locs.size() ) + 1;
+        if( n <= 1 ) {
+            return;
+        }
+        const int p = ( loc_pos() + dir + n ) % n;
+        if( p == 0 ) {
+            you.random_start_location = true;
+        } else {
+            you.random_start_location = false;
+            you.start_location = allowed_locs[p - 1];
+        }
+    };
+
+    /// LEFT/RIGHT on the cursored field, and the same thing the row's two steppers do. A name has no
+    /// ordering to walk, so it is the one field this does nothing for.
+    const auto adjust_field = [&]( char_creation::description_selector f, int dir ) {
+        switch( f ) {
+            case char_creation::GENDER:
+                you.male = !you.male;
+                break;
+            case char_creation::HEIGHT:
+                you.set_base_height( clamp( you.base_height() + dir, min_allowed_height,
+                                            max_allowed_height ) );
+                break;
+            case char_creation::AGE:
+                you.set_base_age( clamp( you.base_age() + dir, min_allowed_age, max_allowed_age ) );
+                break;
+            case char_creation::LOCATION:
+                loc_step( dir );
+                break;
+            default:
+                break;
+        }
+    };
+
+    /// Every field's editor, reached from CONFIRM and from the row's edit cell.
+    ///
+    /// Called from the step's own loop, never from a click callback: three of the five open a modal,
+    /// and running a nested input loop from inside an RmlUi event dispatch is not the same thing as
+    /// running it from here. The callbacks record the intent; this applies it.
+    const auto edit_field = [&]( char_creation::description_selector f ) {
+        string_input_popup popup;
+        switch( f ) {
+            case char_creation::NAME: {
+                // Don't edit names when sharing maps: the name IS the username there.
+                if( MAP_SHARING::isSharing() ) {
+                    break;
+                }
+                popup.title( _( "Enter name.  Cancel to delete all." ) )
+                     .text( you.name )
+                     .only_digits( false );
+                you.name = popup.query_string();
+                no_name_entered = you.name.empty();
+                break;
+            }
+            case char_creation::GENDER:
+                you.male = !you.male;
+                break;
+            case char_creation::HEIGHT: {
+                popup.title( _( "Enter height in centimeters.  Minimum 145, maximum 200" ) )
+                     .text( string_format( "%d", you.base_height() ) )
+                     .only_digits( true );
+                const int result = popup.query_int();
+                if( result != 0 ) {
+                    you.set_base_height( clamp( result, min_allowed_height, max_allowed_height ) );
+                }
+                break;
+            }
+            case char_creation::AGE: {
+                const std::string title = string_format( _( "Enter age in years.  Minimum %d, maximum %d" ),
+                                          min_allowed_age, max_allowed_age );
+                popup.title( title )
+                     .text( string_format( "%d", you.base_age() ) )
+                     .only_digits( true );
+                const int result = popup.query_int();
+                if( result != 0 ) {
+                    you.set_base_age( clamp( result, min_allowed_age, max_allowed_age ) );
+                }
+                break;
+            }
+            case char_creation::LOCATION: {
+                select_location.query();
+                if( select_location.ret == RANDOM_START_LOC_ENTRY ) {
+                    you.random_start_location = true;
+                } else if( select_location.ret >= 0 ) {
+                    for( const auto &loc : start_locations::get_all() ) {
+                        if( loc.id.id().to_i() == select_location.ret ) {
+                            you.random_start_location = false;
+                            you.start_location = loc.id;
+                            break;
+                        }
+                    }
+                }
+                break;
+            }
+            default:
+                break;
+        }
+    };
+
+    /// The finish gate's inputs. `spare_ok` is how the NEXT_TAB chain clears a question it has
+    /// already had answered, so confirming that spare points may be discarded still asks about a
+    /// missing name — which is what the old if/else chain did within one keypress.
+    const auto gate_inputs = [&]( bool spare_ok ) -> nc_finish_gate::inputs {
+        return {
+            .valid = points.is_valid(),
+            .stat_left = points.stat_points_left(),
+            .trait_left = points.trait_points_left(),
+            .skill_left = points.skill_points_left(),
+            .spare = points.has_spare() && !spare_ok,
+            .name_empty = you.name.empty() };
+    };
+    /// The four refusal sentences, unchanged from the popups this chain has always raised. An
+    /// overspent SKILL pool has always shown the generic one.
+    const auto refusal_text = []( nc_finish_gate::verdict v ) -> std::string {
+        std::string msg = _( "Too many points allocated, change some features and try again." );
+        if( v == nc_finish_gate::verdict::over_trait )
+        {
+            msg = _( "Too many trait points allocated, change some traits or lower some stats and try again." );
+        } else if( v == nc_finish_gate::verdict::over_stat )
+        {
+            msg = _( "Too many stat points allocated, lower some stats and try again." );
+        }
+        return msg;
+    };
+
     // RmlUi render path (render-only; keyboard still owns nav/edit/confirm below).
     auto data = std::make_unique<nc_desc_session>();
     rml_doc rml;
@@ -7459,6 +7680,22 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
     // tab_direction: it is translated into an action string so the existing
     // keyboard handling stays the single place navigation is decided.
     int nc_nav = 0;
+    // Click intent, applied ONCE per input cycle. `data-event-*` installs a listener per generated
+    // element and a `data-for` regeneration adds another without removing the old, so a callback that
+    // mutated directly would run an unbounded number of times per click — measured at 15 on the
+    // SCENARIO tab. See plans/charcreation-scenario-tree.md.
+    int pending_row = -1;
+    int pending_step_row = -1;
+    int pending_step_dir = 0;
+    int pending_edit = -1;
+
+    /// The seven steps the seal welds together, POINTS .. SKILLS. A node's colour is its step's
+    /// STATE, so it belongs with the model rather than with the animation tick — only the socket glow
+    /// behind the glyph moves, and sync_seal reads these.
+    std::array<nc_color, nc_seal::nodes> step_col;
+    step_col.fill( c_dark_gray );
+    bool finish_ready = false;
+
     const auto sync_rml = [&]() {
         if( !data->handle ) {
             return;
@@ -7468,90 +7705,199 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
         set_nc_portrait( data->shell, use_character_preview );
         data->points_rml = cata_text_to_rml( nc_points_line( points ) );
 
-        // Name (selector-highlighted). value mirrors the curses three-way state.
+        // ── The finish gate: one verdict, three surfaces ───────────────────────
+        const nc_finish_gate::verdict verdict = nc_finish_gate::evaluate( gate_inputs( false ) );
+        finish_ready = ( verdict == nc_finish_gate::verdict::ready );
+        std::string ready_word;
+        std::string ready_why;
+        nc_color ready_col = c_light_green;
+        switch( verdict ) {
+            case nc_finish_gate::verdict::ready:
+                ready_word = _( "Ready to begin" );
+                ready_why = string_format( _( "%s to begin" ), ctxt.get_desc( "NEXT_TAB" ) );
+                break;
+            case nc_finish_gate::verdict::over_skill:
+                ready_word = _( "Too many points allocated" );
+                ready_why = _( "Skill points overspent" );
+                ready_col = c_red;
+                break;
+            case nc_finish_gate::verdict::over_trait:
+                ready_word = _( "Too many points allocated" );
+                ready_why = _( "Trait points overspent" );
+                ready_col = c_red;
+                break;
+            case nc_finish_gate::verdict::over_stat:
+                ready_word = _( "Too many points allocated" );
+                ready_why = _( "Stat points overspent" );
+                ready_col = c_red;
+                break;
+            case nc_finish_gate::verdict::over_pool:
+                ready_word = _( "Too many points allocated" );
+                ready_why = _( "The pool does not balance" );
+                ready_col = c_red;
+                break;
+            case nc_finish_gate::verdict::spare_points:
+                ready_word = _( "Points left to spend" );
+                ready_why = _( "Starting now discards them" );
+                ready_col = c_yellow;
+                break;
+            case nc_finish_gate::verdict::needs_name:
+                ready_word = _( "No name entered" );
+                ready_why = _( "One will be generated for you" );
+                ready_col = c_yellow;
+                break;
+        }
+        data->ready_rml = cata_text_to_rml( colorize( ready_word, ready_col ) );
+
+        // ── IDENTITY: the five fields that are still editable here ─────────────
+        /// ONE place naming the five fields: the row labels, the ":: HEADER" over the detail panel
+        /// and the first fact's label all read it, so they cannot drift apart.
+        const auto field_name = []( char_creation::description_selector f ) -> std::string {
+            const std::array<std::string, char_creation::NUM_FIELDS> names = {
+                _( "Name" ), _( "Gender" ), _( "Height" ), _( "Age" ), _( "Starting location" )
+            };
+            const int i = static_cast<int>( f );
+            return i >= 0 && i < static_cast<int>( names.size() ) ? names[i] : std::string();
+        };
+        data->ident_name_rml = cata_text_to_rml( colorize( _( "Identity" ), c_white ) );
+        data->ident_count_rml = cata_text_to_rml( colorize(
+                                    string_format( "%d", static_cast<int>( char_creation::NUM_FIELDS ) ), c_dark_gray ) );
+        data->ident_sigil_dec = nc_icon_dec( NC_DESC_COL_SEEDS[0], 14, true );
+        data->ident.clear();
+        /// One field's row. `value` arrives already COLOURED: gender paints its two halves
+        /// separately, and the location's colour carries whether it is a roll or a choice.
+        struct ident_spec {
+            char_creation::description_selector field;
+            std::string label;
+            std::string value;
+            /// The value has an ordering LEFT/RIGHT can walk, so the steppers are drawn.
+            bool has_step = false;
+            bool can_dec = false;
+            bool can_inc = false;
+        };
+        const auto add_ident = [&]( const ident_spec & s ) {
+            nc_ident_row r;
+            r.selected = ( current_selector == s.field );
+            if( r.selected ) {
+                r.cursor_rml = cata_text_to_rml( colorize( ">", c_yellow ) );
+            }
+            r.label_rml = cata_text_to_rml( colorize( s.label, r.selected ? c_white : c_light_gray ) );
+            r.value_rml = cata_text_to_rml( s.value );
+            r.has_step = s.has_step;
+            r.can_dec = s.can_dec;
+            r.can_inc = s.can_inc;
+            data->ident.push_back( r );
+        };
         {
-            const bool sel = current_selector == char_creation::NAME;
             std::string val;
             nc_color val_col = c_white;
             if( no_name_entered ) {
                 val = _( "--- NO NAME ENTERED ---" );
+                val_col = c_light_red;
             } else if( you.name.empty() ) {
                 val = _( "--- RANDOM NAME ---" );
+                val_col = c_light_gray;
             } else {
                 val = you.name;
             }
-            data->name_rml = cata_text_to_rml( std::string( sel ? "> " : "  " ) +
-                                               nc_label( _( "Name:" ), sel ? c_white : c_light_gray ) +
-                                               colorize( val, val_col ) );
+            add_ident( { .field = char_creation::NAME,
+                         .label = field_name( char_creation::NAME ),
+                         .value = colorize( val, val_col ) } );
+        }
+        add_ident( { .field = char_creation::GENDER,
+                     .label = field_name( char_creation::GENDER ),
+                     // Separator in its own colour run so it survives the trim, and so the two
+                     // values cannot read as one word ("MaleFemale").
+                     .value = colorize( _( "Male" ), you.male ? c_light_cyan : c_light_gray ) +
+                              colorize( " / ", c_dark_gray ) +
+                              colorize( _( "Female" ), you.male ? c_light_gray : c_pink ),
+                     .has_step = true, .can_dec = true, .can_inc = true } );
+        add_ident( { .field = char_creation::HEIGHT,
+                     .label = field_name( char_creation::HEIGHT ),
+                     .value = colorize( string_format( "%d cm", you.base_height() ), c_white ),
+                     .has_step = true,
+                     .can_dec = you.base_height() > min_allowed_height,
+                     .can_inc = you.base_height() < max_allowed_height } );
+        add_ident( { .field = char_creation::AGE,
+                     .label = field_name( char_creation::AGE ),
+                     .value = colorize( string_format( _( "%d years" ), you.base_age() ), c_white ),
+                     .has_step = true,
+                     .can_dec = you.base_age() > min_allowed_age,
+                     .can_inc = you.base_age() < max_allowed_age } );
+        // Name only, and a short marker for a roll: the row clips rather than wraps, and the "(N
+        // variants)" the full template carries is on the LOCATION fact's sub-line where it has room.
+        const std::string locval = you.random_start_location
+                                   ? _( "* Random *" )
+                                   : you.start_location.obj().name();
+        // A shorter label than the panel's: the row's label cell is a fixed column, and "Starting
+        // location" does not fit in it at any sensible width.
+        add_ident( { .field = char_creation::LOCATION,
+                     .label = _( "Location" ),
+                     .value = colorize( locval, you.random_start_location ? c_red : c_white ),
+                     .has_step = true,
+                     .can_dec = !allowed_locs.empty(),
+                     .can_inc = !allowed_locs.empty() } );
+
+        data->background.clear();
+        {
+            const auto add_bg = [&]( const std::string & label, const std::string & value ) {
+                std::string l = label;
+                while( !l.empty() && ( l.back() == ':' || l.back() == ' ' ) ) {
+                    l.pop_back();
+                }
+                nc_desc_row h;
+                h.header = true;
+                h.name_rml = cata_text_to_rml( colorize( l, c_yellow ) );
+                data->background.push_back( h );
+                nc_desc_row v;
+                v.name_rml = cata_text_to_rml( colorize( value, c_light_gray ) );
+                data->background.push_back( v );
+            };
+            // Each on its own row under its own heading rather than as "label: value": a scenario
+            // name needs the whole row width, and the row clips rather than wraps.
+            add_bg( _( "Scenario: " ), g->scen->gender_appropriate_name( you.male ) );
+            add_bg( _( "Profession: " ), you.prof->gender_appropriate_name( you.male ) );
         }
 
-        data->gender_rml = cata_text_to_rml(
-                               nc_label( _( "Gender:" ), c_light_gray ) +
-                               colorize( _( "Male" ), you.male ? c_light_cyan : c_light_gray ) +
-                               // Separator in its own colour run so it survives the trim, and
-                               // so the two values cannot read as one word ("MaleFemale").
-                               colorize( " / ", c_dark_gray ) +
-                               colorize( _( "Female" ), you.male ? c_light_gray : c_pink ) );
+        // ── The record: everything the earlier steps committed ─────────────────
+        // Gathered ONCE, then read by both a column and the seal's legend, so the digest and the
+        // list cannot disagree about what was bought.
+        std::vector<trait_id> current_traits = points.limit == points_left::TRANSFER ?
+                                               you.get_mutations() : you.get_base_traits();
+        std::sort( current_traits.begin(), current_traits.end(), trait_display_sort );
 
-        {
-            const bool sel = current_selector == char_creation::HEIGHT;
-            data->height_rml = cata_text_to_rml( std::string( sel ? "> " : "  " ) +
-                                                 nc_label( _( "Height:" ), sel ? c_white : c_light_gray ) +
-                                                 colorize( string_format( "%d cm", you.base_height() ), c_white ) );
+        std::vector<bionic_id> current_bionics;
+        for( const bionic_id &id : you.prof->CBMs() ) {
+            current_bionics.push_back( id );
         }
-        {
-            const bool sel = current_selector == char_creation::AGE;
-            data->age_rml = cata_text_to_rml( std::string( sel ? "> " : "  " ) +
-                                              nc_label( _( "Age:" ), sel ? c_white : c_light_gray ) +
-                                              colorize( string_format( "%d", you.base_age() ), c_white ) );
+        for( const bionic &bio : you.get_bionic_collection() ) {
+            current_bionics.push_back( bio.id );
         }
+        std::sort( current_bionics.begin(), current_bionics.end(),
+        []( const bionic_id & a, const bionic_id & b ) {
+            return localized_compare( a->name.translated(), b->name.translated() );
+        } );
 
+        record_column attrs( _( "Attributes" ), NC_DESC_COL_SEEDS[1] );
+        attrs.head( _( "Stats:" ) );
+        attrs.row( _( "Strength:" ), c_light_gray, string_format( "%d", you.str_max ) );
+        attrs.row( _( "Dexterity:" ), c_light_gray, string_format( "%d", you.dex_max ) );
+        attrs.row( _( "Intelligence:" ), c_light_gray, string_format( "%d", you.int_max ) );
+        attrs.row( _( "Perception:" ), c_light_gray, string_format( "%d", you.per_max ) );
+        attrs.head( _( "Skills:" ) );
+        int skill_levels = 0;
         {
-            const std::string locval = you.random_start_location
-                                       ? remove_color_tags( random_start_location_text )
-                                       : string_format( remove_color_tags( START_LOC_TEXT_TEMPLATE ),
-                                           you.start_location.obj().name(),
-                                           you.start_location.obj().targets_count() );
-            data->location_rml = cata_text_to_rml(
-                                     nc_label( _( "Starting location:" ), c_light_gray ) +
-                                     colorize( locval, you.random_start_location ? c_red : c_white ) );
-        }
-
-        data->scenario_rml = cata_text_to_rml(
-                                 colorize( _( "Scenario: " ), COL_HEADER ) +
-                                 colorize( g->scen->gender_appropriate_name( you.male ), c_light_gray ) );
-        data->profession_rml = cata_text_to_rml(
-                                   colorize( _( "Profession: " ), COL_HEADER ) +
-                                   colorize( you.prof->gender_appropriate_name( you.male ), c_light_gray ) );
-
-        // ── The six OVERVIEW columns ──────────────────────────────────────────
-        // Built as explicit label/value rows rather than one "\n"-joined string per
-        // column: the header then has its own element (so it can carry real
-        // typographic weight) and no label can weld to its value.
-        data->panes.clear();
-
-        // Stats.
-        {
-            pane_builder b( _( "Stats:" ), COL_HEADER, 0x0101 );
-            b.field( _( "Strength:" ), c_light_gray, string_format( "%d", you.str_max ), c_white );
-            b.field( _( "Dexterity:" ), c_light_gray, string_format( "%d", you.dex_max ), c_white );
-            b.field( _( "Intelligence:" ), c_light_gray, string_format( "%d", you.int_max ), c_white );
-            b.field( _( "Perception:" ), c_light_gray, string_format( "%d", you.per_max ), c_white );
-            data->panes.push_back( b.take() );
-        }
-
-        // Skills (category-grouped, only levels > 0).
-        {
-            pane_builder b( _( "Skills:" ), COL_HEADER, 0x0102 );
-            auto skillslist = Skill::get_skills_sorted_by( [&]( const Skill & a, const Skill & b2 ) {
+            auto skillslist = Skill::get_skills_sorted_by( [&]( const Skill & a, const Skill & b ) {
                 return localized_compare( std::make_pair( a.display_category(), a.name() ),
-                                          std::make_pair( b2.display_category(), b2.name() ) );
+                                          std::make_pair( b.display_category(), b.name() ) );
             } );
             bool has_skills = false;
             skill_displayType_id last_category = skill_displayType_id::NULL_ID();
             for( const Skill *elem : skillslist ) {
                 int level = you.get_skill_level( elem->ident() );
                 if( points.limit != points_left::TRANSFER ) {
+                    // The profession's grant is installed AFTER the wizard, so the screen has to add
+                    // it itself — the same compensation the SKILLS meters make.
                     for( const auto &prof_skill : you.prof->skills() ) {
                         if( prof_skill.first == elem->ident() ) {
                             level += static_cast<int>( prof_skill.second );
@@ -7562,187 +7908,294 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
                 if( level > 0 ) {
                     if( last_category != elem->display_category() ) {
                         last_category = elem->display_category();
-                        b.heading( elem->display_category()->display_string(), c_yellow );
+                        attrs.head( elem->display_category()->display_string() );
                     }
-                    b.field( string_format( "%s:", elem->name() ), c_light_gray,
-                             string_format( "%d", level ), c_white );
+                    attrs.row( elem->name(), c_light_gray, string_format( "%d", level ) );
+                    skill_levels += level;
                     has_skills = true;
                 }
             }
             if( !has_skills ) {
-                b.none();
+                attrs.head( _( "Skills:" ), _( "None!" ) );
             }
-            data->panes.push_back( b.take() );
         }
+        data->col0 = attrs.take();
 
-        // Traits.
+        record_column body( _( "Body" ), NC_DESC_COL_SEEDS[2] );
+        body.head( _( "Traits:" ), current_traits.empty() ? _( "None!" ) : std::string() );
+        for( const trait_id &tr : current_traits ) {
+            body.row( tr->name(), tr->get_display_color() );
+        }
+        body.head( _( "Bionics:" ), current_bionics.empty() ? _( "None!" ) : std::string() );
+        for( const bionic_id &bio : current_bionics ) {
+            body.row( bio->name.translated(), c_white );
+        }
+        body.head( _( "Spells:" ), you.prof->spells().empty() ? _( "None!" ) : std::string() );
+        for( const std::pair<spell_id, int> &sp : you.prof->spells() ) {
+            body.row( string_format( _( "%s level %d" ), sp.first->name, sp.second ), c_white );
+        }
+        body.head( _( "Addictions:" ),
+                   you.prof->addictions().empty() ? _( "None!" ) : std::string() );
+        for( addiction &addict : you.prof->addictions() ) {
+            body.row( addiction_name( addict ), c_white );
+        }
+        data->col1 = body.take();
+
+        record_column gear( _( "Equipment" ), NC_DESC_COL_SEEDS[3] );
         {
-            pane_builder b( _( "Traits:" ), COL_HEADER, 0x0103 );
-            std::vector<trait_id> current_traits = points.limit == points_left::TRANSFER ?
-                                                   you.get_mutations() : you.get_base_traits();
-            std::sort( current_traits.begin(), current_traits.end(), trait_display_sort );
-            if( current_traits.empty() ) {
-                b.none();
-            } else {
-                for( const trait_id &tr : current_traits ) {
-                    b.value( tr->name(), tr->get_display_color() );
+            const auto prof_items = you.prof->items( you.male, you.get_mutations() );
+            std::vector<std::string> wielded;
+            std::vector<std::string> worn;
+            std::vector<std::string> inventory;
+            for( const auto &it : prof_items ) {
+                if( it->has_flag( json_flag_no_auto_equip ) ) {
+                    inventory.push_back( it->display_name() );
+                } else if( it->has_flag( json_flag_auto_wield ) ) {
+                    wielded.push_back( it->display_name() );
+                } else if( it->is_armor() ) {
+                    worn.push_back( it->display_name() );
+                } else {
+                    inventory.push_back( it->display_name() );
                 }
             }
-            data->panes.push_back( b.take() );
-        }
-
-        // Bionics + Spells (one column; curses drew it as two).
-        {
-            pane_builder b( _( "Bionics:" ), COL_HEADER, 0x0104 );
-            std::vector<bionic_id> current_bionics;
-            for( const bionic_id &id : you.prof->CBMs() ) {
-                current_bionics.push_back( id );
-            }
-            for( const bionic &bio : you.get_bionic_collection() ) {
-                current_bionics.push_back( bio.id );
-            }
-            std::sort( current_bionics.begin(), current_bionics.end(),
-            []( const bionic_id & a, const bionic_id & b2 ) {
-                return localized_compare( a->name.translated(), b2->name.translated() );
-            } );
-            if( current_bionics.empty() ) {
-                b.none();
-            } else {
-                for( const bionic_id &bio : current_bionics ) {
-                    b.value( bio->name.translated(), c_white );
+            const auto add_group = [&]( const std::string & head,
+            const std::vector<std::string> &names ) {
+                gear.head( head, names.empty() ? _( "None!" ) : std::string() );
+                for( const std::string &name : names ) {
+                    gear.row( name, c_white );
                 }
-            }
-            b.heading( _( "Spells:" ), COL_HEADER );
-            if( you.prof->spells().empty() ) {
-                b.none();
-            } else {
-                for( const std::pair<spell_id, int> &sp : you.prof->spells() ) {
-                    b.value( string_format( _( "%s level %d" ), sp.first->name, sp.second ), c_white );
-                }
-            }
-            data->panes.push_back( b.take() );
+            };
+            add_group( _( "Wielded:" ), wielded );
+            add_group( _( "Worn:" ), worn );
+            add_group( _( "Inventory:" ), inventory );
         }
-
-        // Vehicle / Companions / Cash / Pets / Addictions — everything the scenario
-        // and profession grant that is not a stat, skill, trait, bionic or item.
         {
-            // Titled: with an icon and a rule under every other column head, a
-            // titleless one reads as a rendering fault rather than as deliberate.
-            pane_builder b( _( "Other:" ), COL_HEADER, 0x0105 );
             const vproto_id scen_veh = g->scen->vehicle();
             const vproto_id prof_veh = you.prof->vehicle();
-            b.heading( _( "Vehicle:" ), c_white,
-                       ( !scen_veh && !prof_veh ) ? _( "None!" ) : std::string(), c_light_red );
+            gear.head( _( "Vehicle:" ),
+                       ( !scen_veh && !prof_veh ) ? _( "None!" ) : std::string() );
             if( scen_veh ) {
-                b.value( scen_veh->name, c_white );
+                gear.row( scen_veh->name, c_white );
             }
             if( prof_veh ) {
-                b.value( prof_veh->name, c_white );
+                gear.row( prof_veh->name, c_white );
             }
-
             const std::vector<npc_class_id> npcs = you.prof->npcs();
-            b.heading( _( "Companions:" ), c_white,
-                       npcs.empty() ? _( "None!" ) : std::string(), c_light_red );
+            gear.head( _( "Companions:" ), npcs.empty() ? _( "None!" ) : std::string() );
             for( const npc_class_id &id : npcs ) {
                 if( id.is_valid() ) {
-                    b.value( id.obj().get_name(), c_white );
+                    gear.row( id.obj().get_name(), c_white );
                 }
             }
-
-            b.heading( _( "Cash:" ), c_white,
-                       !you.prof->starting_cash()
-                       ? _( "Random!" )
-                       : format_money( you.prof->starting_cash().value() ), c_white );
-
-            b.heading( _( "Pets:" ), c_white,
-                       you.prof->pets().empty() ? _( "None!" ) : std::string(), c_light_red );
+            gear.head( _( "Pets:" ), you.prof->pets().empty() ? _( "None!" ) : std::string() );
             for( const mtype_id &id : you.prof->pets() ) {
                 if( id.is_valid() ) {
                     monster pet( id );
-                    b.value( pet.get_name(), c_white );
+                    gear.row( pet.get_name(), c_white );
                 }
             }
+            gear.head( _( "Cash:" ), !you.prof->starting_cash()
+                       ? _( "Random!" )
+                       : format_money( you.prof->starting_cash().value() ), c_white );
+        }
+        data->col2 = gear.take();
 
-            b.heading( _( "Addictions:" ), c_white,
-                       you.prof->addictions().empty() ? _( "None!" ) : std::string(), c_light_red );
-            for( addiction &addict : you.prof->addictions() ) {
-                b.value( addiction_name( addict ), c_white );
-            }
-            data->panes.push_back( b.take() );
+        // ── The seal's seven steps ─────────────────────────────────────────────
+        // One glyph colour and one number per step, read by the ring's nodes and by the legend
+        // beneath it. WHITE when the step has content, dim when it is empty, RED when its budget is
+        // overspent — so the seal says what the meta bar's readiness word says.
+        //
+        // White rather than gold, even though gold is this creator's accent: the glyph is drawn ON
+        // the socket the weld animates, and gold on gold at three quarters alpha is not a glyph, it
+        // is a smudge.
+        //
+        // Every value is a NUMBER — the step's effect on the point pool, or the count it committed.
+        // A name does not fit here: at this column width "One Last Assassination" overflowed its
+        // 16dp row and drew over the two rows beneath it, and both names are already printed in full
+        // in the IDENTITY column's BACKGROUND group.
+        const auto tally_col = []( bool overspent, bool empty ) -> nc_color {
+            return overspent ? c_red : ( empty ? c_dark_gray : c_white );
+        };
+        const int trait_count = static_cast<int>( current_traits.size() );
+        const int bionic_count = static_cast<int>( current_bionics.size() );
+        const std::array<std::string, nc_seal::nodes> tally_val = {
+            string_format( "%d", points.stat_points + points.trait_points + points.skill_points ),
+            string_format( "%+d", -g->scen->point_cost() ),
+            string_format( "%+d", -you.prof->point_cost() ),
+            string_format( "%d", you.str_max + you.dex_max + you.int_max + you.per_max ),
+            string_format( "%d", trait_count ),
+            string_format( "%d", bionic_count ),
+            string_format( "%d", skill_levels ),
+        };
+        const std::array<nc_color, nc_seal::nodes> tally_colour = {
+            points.is_valid() ? c_white : c_red,
+            c_white,
+            c_white,
+            tally_col( points.stat_points_left() < 0, false ),
+            tally_col( points.trait_points_left() < 0, trait_count == 0 ),
+            tally_col( false, bionic_count == 0 ),
+            tally_col( points.skill_points_left() < 0, skill_levels == 0 ),
+        };
+        const std::vector<std::string> &caps = nc_step_captions();
+        data->seal_name_rml = cata_text_to_rml( colorize( _( "Record" ), c_light_gray ) );
+        data->tally.clear();
+        for( int i = 0; i < nc_seal::nodes; i++ ) {
+            step_col[i] = tally_colour[i];
+            nc_seal_tally t;
+            t.dec = nc_icon_dec_col( NC_TAB_ICON_SEEDS[i], 12, tally_colour[i] );
+            t.name_rml = cata_text_to_rml( colorize( caps[i], c_light_gray ) );
+            t.val_rml = cata_text_to_rml( colorize( tally_val[i], tally_colour[i] ) );
+            data->tally.push_back( t );
         }
 
-        // Items, split into wielded / worn / inventory.
-        {
-            pane_builder b( _( "Items:" ), c_white, 0x0106 );
-            const auto prof_items = you.prof->items( you.male, you.get_mutations() );
-            if( prof_items.empty() ) {
-                b.none();
-            } else {
-                std::vector<std::string> wielded;
-                std::vector<std::string> worn;
-                std::vector<std::string> inventory;
-                for( const auto &it : prof_items ) {
-                    if( it->has_flag( json_flag_no_auto_equip ) ) {
-                        inventory.push_back( it->display_name() );
-                    } else if( it->has_flag( json_flag_auto_wield ) ) {
-                        wielded.push_back( it->display_name() );
-                    } else if( it->is_armor() ) {
-                        worn.push_back( it->display_name() );
-                    } else {
-                        inventory.push_back( it->display_name() );
-                    }
-                }
-                const auto add_group = [&]( const std::string & head,
-                const std::vector<std::string> &names ) {
-                    b.heading( head, c_yellow, names.empty() ? _( "None!" ) : std::string(),
-                               c_light_red );
-                    for( const std::string &name : names ) {
-                        b.value( name, c_white );
-                    }
-                };
-                add_group( _( "Wielded:" ), wielded );
-                add_group( _( "Worn:" ), worn );
-                add_group( _( "Inventory:" ), inventory );
-            }
-            data->panes.push_back( b.take() );
+        // ── Detail panel ──────────────────────────────────────────────────────
+        data->sel_name_rml = cata_text_to_rml( colorize(
+                string_format( ":: %s", field_name( current_selector ) ), c_white ) );
+        data->facts.clear();
+        const auto add_fact = [&]( const std::string & label, const std::string & value,
+        const nc_color & col, const std::string & sub = std::string() ) {
+            nc_desc_fact f;
+            f.label_rml = cata_text_to_rml( label );
+            f.value_rml = cata_text_to_rml( colorize( value, col ) );
+            f.sub_rml = cata_text_to_rml( sub );
+            data->facts.push_back( f );
+        };
+        switch( current_selector ) {
+            case char_creation::NAME:
+                add_fact( field_name( char_creation::NAME ),
+                          you.name.empty() ? _( "--- RANDOM NAME ---" ) : you.name,
+                          you.name.empty() ? c_light_gray : c_white,
+                          string_format( _( "%s to edit" ), ctxt.get_desc( "CONFIRM", 1 ) ) );
+                data->desc_rml = cata_text_to_rml( colorize(
+                                                       _( "The name your character is remembered by.  Leave it empty and one is generated for you when creation finishes." ),
+                                                       c_light_gray ) );
+                break;
+            case char_creation::GENDER:
+                add_fact( field_name( char_creation::GENDER ),
+                          you.male ? _( "Male" ) : _( "Female" ),
+                          you.male ? c_light_cyan : c_pink,
+                          string_format( _( "%s to switch" ), ctxt.get_desc( "CHANGE_GENDER", 1 ) ) );
+                data->desc_rml = cata_text_to_rml( colorize(
+                                                       _( "Which gender the world addresses you as.  Professions and scenarios have gendered names, and the starting outfit follows it." ),
+                                                       c_light_gray ) );
+                break;
+            case char_creation::HEIGHT:
+                add_fact( field_name( char_creation::HEIGHT ),
+                          string_format( "%d cm", you.base_height() ), c_white,
+                          string_format( _( "%d to %d" ), min_allowed_height, max_allowed_height ) );
+                data->desc_rml = cata_text_to_rml( colorize(
+                                                       _( "Your height in centimetres.  Together with your build it sets your body weight, and mutations that change your size shift it further." ),
+                                                       c_light_gray ) );
+                break;
+            case char_creation::AGE:
+                add_fact( field_name( char_creation::AGE ),
+                          string_format( _( "%d years" ), you.base_age() ), c_white,
+                          string_format( _( "%d to %d" ), min_allowed_age, max_allowed_age ) );
+                data->desc_rml = cata_text_to_rml( colorize(
+                                                       _( "How old your character is when the Cataclysm finds them.  It is recorded on your character sheet and advances with the calendar." ),
+                                                       c_light_gray ) );
+                break;
+            case char_creation::LOCATION:
+                add_fact( field_name( char_creation::LOCATION ),
+                          you.random_start_location
+                          ? remove_color_tags( random_start_location_text )
+                          : you.start_location.obj().name(),
+                          you.random_start_location ? c_red : c_white,
+                          // The count the row's short value gives up: how many kinds of place this
+                          // choice can drop you in.
+                          string_format( vgettext( "%d variant", "%d variants", loc_variants() ),
+                                         loc_variants() ) );
+                data->desc_rml = cata_text_to_rml( colorize(
+                                                       _( "Where you wake up.  A random location is rolled from everything this scenario allows; a named one always starts you somewhere of that kind." ),
+                                                       c_light_gray ) );
+                break;
+            default:
+                break;
         }
+        // What HEIGHT feeds, which nothing else in creation shows. Both readouts honour the
+        // imperial/metric option, and `height_string` includes what mutations do to your size.
+        add_fact( _( "Body" ),
+                  string_format( "%.0f %s", convert_weight( you.bodyweight() ), weight_units() ),
+                  c_white, you.height_string() );
+        add_fact( _( "Status" ), ready_word, ready_col, ready_why );
 
-        // Keybinding guide footer (green keys).
-        {
-            std::string s = string_format(
-                                _( "Press <color_light_green>%s</color> or <color_light_green>%s</color> to cycle through name, height, and age." ),
-                                ctxt.get_desc( "LEFT" ), ctxt.get_desc( "RIGHT" ) );
-            s += "\n" + string_format(
-                     _( "Press <color_light_green>%s</color> and <color_light_green>%s</color> to change height and age." ),
-                     ctxt.get_desc( "UP" ), ctxt.get_desc( "DOWN" ) );
-            s += "\n" + string_format( _( "Press <color_light_green>%s</color> to edit the selected field." ),
-                                       ctxt.get_desc( "CONFIRM" ) );
-            s += "\n" + string_format( _( "Press <color_light_green>%s</color> to switch gender." ),
-                                       ctxt.get_desc( "CHANGE_GENDER" ) );
-            s += "\n" + string_format( _( "Press <color_light_green>%s</color> to select location." ),
-                                       ctxt.get_desc( "CHOOSE_LOCATION" ) );
-            if( allow_reroll ) {
-                s += "\n" + string_format(
-                         _( "Press <color_light_green>%s</color> to save template, <color_light_green>%s</color> to re-roll or <color_light_green>%s</color> for random scenario." ),
-                         ctxt.get_desc( "SAVE_TEMPLATE" ), ctxt.get_desc( "REROLL_CHARACTER" ),
-                         ctxt.get_desc( "REROLL_CHARACTER_WITH_SCENARIO" ) );
-            } else {
-                s += "\n" + string_format(
-                         _( "Press <color_light_green>%s</color> to save a template of this character." ),
-                         ctxt.get_desc( "SAVE_TEMPLATE" ) );
-            }
-            s += "\n" + string_format(
-                     _( "Press <color_light_green>%s</color> to finish or <color_light_green>%s</color> to go back." ),
-                     ctxt.get_desc( "NEXT_TAB" ), ctxt.get_desc( "PREV_TAB" ) );
-            data->guide_rml = cata_text_to_rml( s );
+        // Everything the seven-line guide named that the cursor does not now make obvious. `up/down`
+        // and `left/right` are the axis names the other steps' hints use.
+        if( allow_reroll ) {
+            data->hint_rml = cata_text_to_rml( string_format(
+                                                   _( "<color_light_green>%s</color> field  ·  <color_light_green>%s</color> change  ·  <color_light_green>%s</color> edit  ·  <color_light_green>%s</color> save template  ·  <color_light_green>%s</color> re-roll  ·  <color_light_green>%s</color> random scenario  ·  <color_light_green>%s</color> finish" ),
+                                                   _( "up/down" ), _( "left/right" ), ctxt.get_desc( "CONFIRM", 1 ),
+                                                   ctxt.get_desc( "SAVE_TEMPLATE", 1 ), ctxt.get_desc( "REROLL_CHARACTER", 1 ),
+                                                   ctxt.get_desc( "REROLL_CHARACTER_WITH_SCENARIO", 1 ), ctxt.get_desc( "NEXT_TAB", 1 ) ) );
+        } else {
+            data->hint_rml = cata_text_to_rml( string_format(
+                                                   _( "<color_light_green>%s</color> field  ·  <color_light_green>%s</color> change  ·  <color_light_green>%s</color> edit  ·  <color_light_green>%s</color> save template  ·  <color_light_green>%s</color> finish" ),
+                                                   _( "up/down" ), _( "left/right" ), ctxt.get_desc( "CONFIRM", 1 ),
+                                                   ctxt.get_desc( "SAVE_TEMPLATE", 1 ), ctxt.get_desc( "NEXT_TAB", 1 ) ) );
         }
 
         data->handle.DirtyAllVariables();
     };
 
+    // Wall clock, not a frame counter: the weld must not speed up while a key is held, and must not
+    // stall while the player is reading. Same source the DNA strand and the aptitude beam use.
+    const auto anim_start = std::chrono::steady_clock::now();
+    /// The seal's lattice, rebuilt every animation tick — which is why it is separate from the model
+    /// sync: a quiet tick must not re-derive 45 record rows, and the ring must keep moving when
+    /// nothing about the character has changed.
+    const auto sync_seal = [&]() {
+        if( !data->handle ) {
+            return;
+        }
+        const float secs = std::chrono::duration<float>(
+                               std::chrono::steady_clock::now() - anim_start ).count();
+        const nc_seal::phase ph = nc_seal::at( secs );
+        data->seal.clear();
+        for( int row = 0; row < nc_apt::grid; row++ ) {
+            nc_seal_row sr;
+            for( int col = 0; col < nc_apt::grid; col++ ) {
+                nc_seal_cell sc;
+                switch( nc_seal::classify( col, row ) ) {
+                    case nc_seal::layer::empty:
+                        // Drawn as nothing, which is the only reason a square lattice reads as a ring.
+                        break;
+                    case nc_seal::layer::thread:
+                        sc.col = nc_dot_col( c_yellow, nc_seal::alpha_of( nc_seal::glow_at( ph,
+                                             nc_apt::angle_of( nc_apt::offset_of( col, row ) ) ) ) );
+                        break;
+                    case nc_seal::layer::node: {
+                        const int i = nc_seal::node_at( col, row );
+                        // The socket animates; the GLYPH's colour is its step's state and does not.
+                        sc.node = true;
+                        sc.col = nc_dot_col( c_yellow, nc_seal::node_alpha_of( nc_seal::node_glow( ph, i ) ) );
+                        sc.dec = nc_icon_dec_col( NC_TAB_ICON_SEEDS[i], 14, step_col[i] );
+                        break;
+                    }
+                    case nc_seal::layer::hub:
+                        // The record itself: the OVERVIEW glyph the other seven feed, on a socket
+                        // that flares when the strike closes the ring.
+                        sc.node = true;
+                        sc.col = nc_dot_col( c_yellow, nc_seal::alpha_of( ph.hub ) );
+                        sc.dec = nc_icon_dec_col( NC_TAB_ICON_SEEDS[7], 16,
+                                                  finish_ready ? c_white : c_light_gray );
+                        break;
+                }
+                sr.cells.push_back( sc );
+            }
+            data->seal.push_back( sr );
+        }
+        data->handle.DirtyVariable( "seal" );
+    };
+
+    // The model is rebuilt only when something changed; the seal advances every frame.
+    bool model_dirty = true;
     ui.on_redraw( [&]( const ui_adaptor & ) {
         if( rml ) {
-            sync_rml();
+            if( model_dirty ) {
+                sync_rml();
+                model_dirty = false;
+            }
+            sync_seal();
             if( use_character_preview ) {
                 character_preview.display();
             }
@@ -7763,15 +8216,61 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
         c.BindEventCallback( "on_next",
         [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = 1; } );
         c.Bind( "points_rml", &data->points_rml );
-        c.Bind( "name_rml", &data->name_rml );
-        c.Bind( "gender_rml", &data->gender_rml );
-        c.Bind( "height_rml", &data->height_rml );
-        c.Bind( "age_rml", &data->age_rml );
-        c.Bind( "location_rml", &data->location_rml );
-        c.Bind( "scenario_rml", &data->scenario_rml );
-        c.Bind( "profession_rml", &data->profession_rml );
-        c.Bind( "panes", &data->panes );
-        c.Bind( "guide_rml", &data->guide_rml );
+        c.Bind( "ready_rml", &data->ready_rml );
+        c.Bind( "ident_name_rml", &data->ident_name_rml );
+        c.Bind( "ident_count_rml", &data->ident_count_rml );
+        c.Bind( "ident_sigil_dec", &data->ident_sigil_dec );
+        c.Bind( "ident", &data->ident );
+        c.Bind( "background", &data->background );
+        c.Bind( "col0", &data->col0 );
+        c.Bind( "col1", &data->col1 );
+        c.Bind( "col2", &data->col2 );
+        c.Bind( "seal_name_rml", &data->seal_name_rml );
+        // Easy to forget, and it fails SILENTLY: `data-for` over an unbound name renders nothing at
+        // all, so the ring would be an empty square while sync_seal happily filled the array.
+        c.Bind( "seal", &data->seal );
+        c.Bind( "tally", &data->tally );
+        c.Bind( "sel_name_rml", &data->sel_name_rml );
+        c.Bind( "facts", &data->facts );
+        c.Bind( "desc_rml", &data->desc_rml );
+        c.Bind( "hint_rml", &data->hint_rml );
+        // Click callbacks RECORD INTENT and mutate nothing — see the comment on pending_row.
+        c.BindEventCallback( "on_row",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int row = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( row );
+            }
+            pending_row = row;
+        } );
+        // The steppers and the edit cell, not the row, are what change the character: reading a
+        // field is never the same gesture as editing one.
+        c.BindEventCallback( "on_dec",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int row = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( row );
+            }
+            pending_step_row = row;
+            pending_step_dir = -1;
+        } );
+        c.BindEventCallback( "on_inc",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int row = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( row );
+            }
+            pending_step_row = row;
+            pending_step_dir = 1;
+        } );
+        c.BindEventCallback( "on_edit",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int row = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( row );
+            }
+            pending_edit = row;
+        } );
         data->handle = c.GetModelHandle();
     } );
     if( rml_doc_unavailable( rml, _( "Character creation (OVERVIEW tab)" ) ) ) {
@@ -7781,11 +8280,9 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
     // do not switch IME mode now, but restore previous mode on return
     ime_sentry sentry( ime_sentry::keep );
 
-    int min_allowed_age = profession::min_age;
-    int max_allowed_age = profession::max_age;
-    // in centimeters. 2 std. deviations below average female height
-    int min_allowed_height = 145;
-    int max_allowed_height = 200;
+    const auto in_range = []( int row ) {
+        return row >= 0 && row < static_cast<int>( char_creation::NUM_FIELDS );
+    };
 
     do {
         const auto [new_min_age, new_max_age] = profession_age_bounds( *you.prof );
@@ -7794,9 +8291,37 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
         you.set_base_age( clamp( you.base_age(), min_allowed_age, max_allowed_age ) );
         ui_manager::redraw();
         nc_nav = 0;
+        pending_row = -1;
+        pending_step_row = -1;
+        pending_step_dir = 0;
+        pending_edit = -1;
         std::string action = ctxt.handle_input();
         if( nc_nav != 0 ) {
             action = nc_nav < 0 ? "PREV_TAB" : "NEXT_TAB";
+        }
+        // Rebuild the model on the next redraw after anything that can have changed it. The click
+        // intents MUST be part of this test, not just `action`: MOUSE_LEFT maps to SELECT on mouse
+        // DOWN while RmlUi fires `click` on mouse UP, so the iteration carrying a click's intent is
+        // usually an idle one. TIMEOUT and ANY_INPUT are idle as far as the MODEL goes — ANY_INPUT is
+        // what every pointer motion returns — and the seal advances either way, because it is
+        // outside this gate.
+        if( ( action != "TIMEOUT" && action != "ANY_INPUT" ) ||
+            pending_row >= 0 || pending_step_row >= 0 || pending_edit >= 0 ) {
+            model_dirty = true;
+        }
+        // Apply click intent exactly once, however many times the callback ran.
+        if( in_range( pending_row ) ) {
+            current_selector = static_cast<char_creation::description_selector>( pending_row );
+        }
+        if( in_range( pending_step_row ) && pending_step_dir != 0 ) {
+            // The stepper moves the cursor as well as acting, so the panel describes the field the
+            // player just changed rather than one they left behind.
+            current_selector = static_cast<char_creation::description_selector>( pending_step_row );
+            adjust_field( current_selector, pending_step_dir );
+        }
+        if( in_range( pending_edit ) ) {
+            current_selector = static_cast<char_creation::description_selector>( pending_edit );
+            edit_field( current_selector );
         }
         if( action == "zoom_in" && use_character_preview ) {
             character_preview.zoom_in();
@@ -7808,93 +8333,59 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
             character_preview.toggle_clothes();
         }
         if( action == "NEXT_TAB" ) {
-            if( !points.is_valid() ) {
-                if( points.skill_points_left() < 0 ) {
-                    popup( _( "Too many points allocated, change some features and try again." ) );
-                } else if( points.trait_points_left() < 0 ) {
-                    popup( _( "Too many trait points allocated, change some traits or lower some stats and try again." ) );
-                } else if( points.stat_points_left() < 0 ) {
-                    popup( _( "Too many stat points allocated, lower some stats and try again." ) );
-                } else {
-                    popup( _( "Too many points allocated, change some features and try again." ) );
+            // The gate names ONE reason at a time, and the chain this replaces applied every
+            // applicable one within a single keypress: confirming that spare points may be discarded
+            // then still asks about a missing name. So it is asked until it is ready, refuses, or
+            // somebody says no.
+            bool spare_confirmed = false;
+            bool advance = false;
+            while( true ) {
+                const nc_finish_gate::verdict v = nc_finish_gate::evaluate( gate_inputs( spare_confirmed ) );
+                if( nc_finish_gate::is_refusal( v ) ) {
+                    popup( refusal_text( v ) );
+                    break;
                 }
-                continue;
-            } else if( points.has_spare() &&
-                       !query_yn( _( "Remaining points will be discarded, are you sure you want to proceed?" ) ) ) {
-                continue;
-            } else if( you.name.empty() ) {
-                no_name_entered = true;
-                ui_manager::redraw();
-                if( !query_yn( _( "Are you SURE you're finished?  Your name will be randomly generated." ) ) ) {
+                if( v == nc_finish_gate::verdict::spare_points ) {
+                    if( !query_yn( _( "Remaining points will be discarded, are you sure you want to proceed?" ) ) ) {
+                        break;
+                    }
+                    spare_confirmed = true;
                     continue;
-                } else {
-                    you.pick_name();
-                    character_preview.clear();
-                    return tab_direction::FORWARD;
                 }
-            } else if( query_yn( _( "Are you SURE you're finished?" ) ) ) {
+                if( v == nc_finish_gate::verdict::needs_name ) {
+                    no_name_entered = true;
+                    model_dirty = true;
+                    ui_manager::redraw();
+                    if( !query_yn( _( "Are you SURE you're finished?  Your name will be randomly generated." ) ) ) {
+                        break;
+                    }
+                    you.pick_name();
+                    advance = true;
+                    break;
+                }
+                if( query_yn( _( "Are you SURE you're finished?" ) ) ) {
+                    advance = true;
+                }
+                break;
+            }
+            if( advance ) {
                 character_preview.clear();
                 return tab_direction::FORWARD;
-            } else {
-                continue;
             }
+            continue;
         } else if( action == "PREV_TAB" ) {
             character_preview.clear();
             return tab_direction::BACKWARD;
-        } else if( action == "RIGHT" ) {
-            switch( current_selector ) {
-                case char_creation::NAME:
-                    current_selector = char_creation::HEIGHT;
-                    break;
-                case char_creation::HEIGHT:
-                    current_selector = char_creation::AGE;
-                    break;
-                case char_creation::AGE:
-                    current_selector = char_creation::NAME;
-                    break;
-            }
-        } else if( action == "LEFT" ) {
-            switch( current_selector ) {
-                case char_creation::NAME:
-                    current_selector = char_creation::AGE;
-                    break;
-                case char_creation::HEIGHT:
-                    current_selector = char_creation::NAME;
-                    break;
-                case char_creation::AGE:
-                    current_selector = char_creation::HEIGHT;
-                    break;
-            }
-        } else if( action == "UP" ) {
-            switch( current_selector ) {
-                case char_creation::HEIGHT:
-                    if( you.base_height() < max_allowed_height ) {
-                        you.mod_base_height( 1 );
-                    }
-                    break;
-                case char_creation::AGE:
-                    if( you.base_age() < max_allowed_age ) {
-                        you.mod_base_age( 1 );
-                    }
-                    break;
-                default:
-                    break;
-            }
         } else if( action == "DOWN" ) {
-            switch( current_selector ) {
-                case char_creation::HEIGHT:
-                    if( you.base_height() > min_allowed_height ) {
-                        you.mod_base_height( -1 );
-                    }
-                    break;
-                case char_creation::AGE:
-                    if( you.base_age() > min_allowed_age ) {
-                        you.mod_base_age( -1 );
-                    }
-                    break;
-                default:
-                    break;
-            }
+            current_selector = static_cast<char_creation::description_selector>(
+                                   ( current_selector + 1 ) % char_creation::NUM_FIELDS );
+        } else if( action == "UP" ) {
+            current_selector = static_cast<char_creation::description_selector>(
+                                   ( current_selector + char_creation::NUM_FIELDS - 1 ) % char_creation::NUM_FIELDS );
+        } else if( action == "RIGHT" ) {
+            adjust_field( current_selector, 1 );
+        } else if( action == "LEFT" ) {
+            adjust_field( current_selector, -1 );
         } else if( action == "REROLL_CHARACTER" && allow_reroll ) {
             points.init_from_options();
             you.randomize( false, points );
@@ -7920,56 +8411,9 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
         } else if( action == "CHANGE_GENDER" ) {
             you.male = !you.male;
         } else if( action == "CHOOSE_LOCATION" ) {
-            select_location.query();
-            if( select_location.ret == RANDOM_START_LOC_ENTRY ) {
-                you.random_start_location = true;
-            } else if( select_location.ret >= 0 ) {
-                for( const auto &loc : start_locations::get_all() ) {
-                    if( loc.id.id().to_i() == select_location.ret ) {
-                        you.random_start_location = false;
-                        you.start_location = loc.id;
-                        break;
-                    }
-                }
-            }
-        } else if( action == "CONFIRM" &&
-                   // Don't edit names when sharing maps
-                   !MAP_SHARING::isSharing() ) {
-
-            string_input_popup popup;
-            switch( current_selector ) {
-                case char_creation::NAME: {
-                    popup.title( _( "Enter name.  Cancel to delete all." ) )
-                         .text( you.name )
-                         .only_digits( false );
-                    you.name = popup.query_string();
-                    no_name_entered = you.name.empty();
-                    break;
-                }
-                case char_creation::AGE: {
-                    const std::string title = string_format( _( "Enter age in years.  Minimum %d, maximum %d" ),
-                                              min_allowed_age, max_allowed_age );
-                    popup.title( title )
-                         .text( string_format( "%d", you.base_age() ) )
-                         .only_digits( true );
-                    const int result = popup.query_int();
-                    if( result != 0 ) {
-                        you.set_base_age( clamp( result, min_allowed_age, max_allowed_age ) );
-                    }
-                    break;
-                }
-                case char_creation::HEIGHT: {
-                    popup.title( _( "Enter height in centimeters.  Minimum 145, maximum 200" ) )
-                         .text( string_format( "%d", you.base_height() ) )
-                         .only_digits( true );
-                    const int result = popup.query_int();
-                    if( result != 0 ) {
-                        you.set_base_height( clamp( result, 145, 200 ) );
-                    }
-                    break;
-                }
-            }
-
+            edit_field( char_creation::LOCATION );
+        } else if( action == "CONFIRM" ) {
+            edit_field( current_selector );
         } else if( action == "QUIT" && query_yn( _( "Return to main menu?" ) ) ) {
             character_preview.clear();
             return tab_direction::QUIT;

@@ -5,20 +5,28 @@
     <link type="text/rcss" href="newchardescription.rcss"/>
 </head>
 <body data-model="newchardescription">
-    <!-- Tier 4 screen #4 (new-character creator) slice 8: the OVERVIEW tab
-         (set_description) — the final summary form. Char-tab strip (OVERVIEW
-         current) + points line + an edit row (name/gender/height/age/location,
-         the selected field marked with "> ") + scenario/profession + six summary
-         columns + a keybinding guide footer.
+    <!-- Tier 4 screen #4 (new-character creator): the OVERVIEW tab (set_description), the last
+         step. ROW based, the same vocabulary TRAITS, BIONICS and SKILLS use.
 
-         Each column is built as EXPLICIT ROWS (nc_desc_pane/nc_desc_row in
-         newcharacter_ui.cpp) rather than one "\n"-joined string. Two reasons: the
-         column title and group headings then have their own elements so they can
-         carry real typographic weight, and a label can never weld to its value —
-         `colorize(label) + " " + colorize(value)` puts U+0020 between two spans,
-         where RmlUi trims it at parse time.
+         Two kinds of content share the stage. On the left, the five IDENTITY fields the player can
+         still change here (name, gender, height, age, starting location) as an interactive row
+         list — before this rework three of the five were unreachable by the cursor and nothing on
+         the screen was clickable. On its right, three read-only columns digesting everything the
+         earlier steps committed, which is what the six wrapping panes used to do.
 
-         Render-only doc; keyboard owns LEFT/RIGHT/UP/DOWN/CONFIRM/TAB/BACKTAB. -->
+         Beside them is the RECORD SEAL: a ring carrying one node per earlier creator step, drawing
+         the same runic glyph that step draws in the rail across the top, welded shut by a bead that
+         travels the ring once per cycle. A node's glyph colour is its step's state and never
+         animates — gold when that step has content, dim when it is empty, red when its budget is
+         overspent — so the seal doubles as a validity dashboard. The legend under it names every
+         node with its one-line summary, because an unlabelled emblem is decoration.
+
+         Keyboard: UP/DOWN move through the five fields, LEFT/RIGHT change the cursored field's
+         value, CONFIRM edits it, and CHANGE_GENDER / CHOOSE_LOCATION / RANDOMIZE_CHAR_DESCRIPTION /
+         SAVE_TEMPLATE / REROLL_* / NEXT_TAB / PREV_TAB / QUIT are unchanged. Mouse: a row click
+         moves the cursor while the steppers and the edit cell change the character — reading a
+         field is not the same gesture as editing one, and two of the five editors are modal.
+         See plans/charcreation-overview-seal.md. -->
     <div class="panel nc-panel">
         <div class="nc-steps">
             <div class="nc-step" data-for="t : tabs"
@@ -38,39 +46,159 @@
             </div>
             <div class="nc-arrow-spacer" data-if="!has_prev"></div>
             <div class="nc-stage">
-                <!-- Character portrait. Ordinary document content now: the avatar is
-                     drawn into its own render target and arrives as a decorator, so it
-                     is no longer a GPU sprite pinned outside the panel. -->
-                <div class="nc-portrait" data-if="has_portrait"
-                     data-style-decorator="portrait_dec"></div>
-            <div class="nc-desc-points" data-rml="points_rml"></div>
-            <div class="nc-desc-editrow">
-                <span class="nc-desc-field" data-rml="name_rml"></span>
-                <span class="nc-desc-field" data-rml="gender_rml"></span>
-                <span class="nc-desc-field" data-rml="height_rml"></span>
-                <span class="nc-desc-field" data-rml="age_rml"></span>
-                <span class="nc-desc-field" data-rml="location_rml"></span>
-            </div>
-            <div class="nc-desc-sp">
-                <span class="nc-desc-field" data-rml="scenario_rml"></span>
-                <span class="nc-desc-field" data-rml="profession_rml"></span>
-            </div>
-            <div class="nc-desc-panes">
-                <div class="nc-desc-pane" data-for="pane : panes">
-                    <div class="nc-pane-head">
-                        <div class="nc-pane-icon" data-style-decorator="pane.icon_dec"></div>
-                        <span class="nc-pane-title" data-rml="pane.title_rml"></span>
+                <!-- Meta bar: the points pool left, the finish gate's readiness word right. Both
+                     read one nc_finish_gate verdict, so the word here, the STATUS fact below and
+                     the NEXT_TAB popup cannot disagree. No balance scale: this step spends nothing. -->
+                <div class="nc-rule"></div>
+                <div class="nc-meta">
+                    <span class="nc-meta-pool" data-rml="points_rml"></span>
+                    <span class="nc-meta-budget" data-rml="ready_rml"></span>
+                </div>
+                <div class="nc-rule"></div>
+
+                <div class="nc-cols">
+                    <!-- Wider than the record columns: its values are a name, a gender pair and a
+                         location, where theirs are short names and numbers. -->
+                    <div class="nc-colwrap nc-ident-col">
+                        <div class="nc-colhead">
+                            <div class="nc-col-sigil" data-style-decorator="ident_sigil_dec"></div>
+                            <span class="nc-colname" data-rml="ident_name_rml"></span>
+                            <span class="nc-colcount" data-rml="ident_count_rml"></span>
+                        </div>
+                        <!-- No `item` class on the row, deliberately: theme.rcss's `.item` fill
+                             turns a column of rows into one pale slab and flattens every semantic
+                             colour in it. Recorded in the bionics plan. -->
+                        <div id="nc-col-ident" class="nc-list">
+                            <div class="nc-row" data-for="r, ri : ident"
+                                 data-class-selected="r.selected"
+                                 data-event-click="on_row(ri)">
+                                <span class="nc-cell-cursor" data-rml="r.cursor_rml"></span>
+                                <span class="nc-ident-label" data-rml="r.label_rml"></span>
+                                <span class="nc-ident-val" data-rml="r.value_rml"></span>
+                                <span class="nc-cell-step" data-if="r.has_step"
+                                      data-class-off="!r.can_dec"
+                                      data-event-click="on_dec(ri)">&#8722;</span>
+                                <span class="nc-cell-step" data-if="r.has_step"
+                                      data-class-off="!r.can_inc"
+                                      data-event-click="on_inc(ri)">+</span>
+                                <span class="nc-ident-edit"
+                                      data-event-click="on_edit(ri)">&#8230;</span>
+                            </div>
+                            <!-- Scenario and profession: part of the record, not editable HERE, so
+                                 they are rows in this column rather than a strip across the top —
+                                 and they carry no cursor, which keeps the cursor list exactly the
+                                 five fields above. -->
+                            <div class="nc-row" data-for="r : background"
+                                 data-class-header="r.header">
+                                <span class="nc-cell-name" data-rml="r.name_rml"></span>
+                                <span class="nc-cell-val" data-rml="r.value_rml"></span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="nc-pane-body scroll-pane">
-                        <div class="nc-pane-row" data-for="r : pane.rows"
-                             data-class-heading="r.heading">
-                            <span class="nc-pane-label" data-rml="r.label_rml"></span>
-                            <span class="nc-pane-value" data-rml="r.value_rml"></span>
+                    <!-- The three record columns, written out rather than generated: a data-for
+                         cannot interleave the dotted rules between its own items, and the shared
+                         vocabulary marks a column boundary with .nc-vrule rather than with a solid
+                         border (RmlUi has no border-style, so a dotted border renders as nothing). -->
+                    <div class="nc-vrule"></div>
+                    <div class="nc-colwrap nc-rec-col">
+                        <div class="nc-colhead">
+                            <div class="nc-col-sigil" data-style-decorator="col0.sigil_dec"></div>
+                            <span class="nc-colname" data-rml="col0.name_rml"></span>
+                            <span class="nc-colcount" data-rml="col0.count_rml"></span>
+                        </div>
+                        <div class="nc-list">
+                            <div class="nc-row" data-for="r : col0.rows"
+                                 data-class-header="r.header">
+                                <span class="nc-cell-name" data-rml="r.name_rml"></span>
+                                <span class="nc-cell-val" data-rml="r.value_rml"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="nc-vrule"></div>
+                    <div class="nc-colwrap nc-rec-col">
+                        <div class="nc-colhead">
+                            <div class="nc-col-sigil" data-style-decorator="col1.sigil_dec"></div>
+                            <span class="nc-colname" data-rml="col1.name_rml"></span>
+                            <span class="nc-colcount" data-rml="col1.count_rml"></span>
+                        </div>
+                        <div class="nc-list">
+                            <div class="nc-row" data-for="r : col1.rows"
+                                 data-class-header="r.header">
+                                <span class="nc-cell-name" data-rml="r.name_rml"></span>
+                                <span class="nc-cell-val" data-rml="r.value_rml"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="nc-vrule"></div>
+                    <div class="nc-colwrap nc-rec-col">
+                        <div class="nc-colhead">
+                            <div class="nc-col-sigil" data-style-decorator="col2.sigil_dec"></div>
+                            <span class="nc-colname" data-rml="col2.name_rml"></span>
+                            <span class="nc-colcount" data-rml="col2.count_rml"></span>
+                        </div>
+                        <div class="nc-list">
+                            <div class="nc-row" data-for="r : col2.rows"
+                                 data-class-header="r.header">
+                                <span class="nc-cell-name" data-rml="r.name_rml"></span>
+                                <span class="nc-cell-val" data-rml="r.value_rml"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="nc-vrule"></div>
+                    <!-- Record seal. 13 flex rows of 13 flex cells, so it stays square and aligned
+                         at any stage size; C++ writes every cell's socket colour per frame and the
+                         cells outside the ring stay fully transparent, which is what makes a square
+                         grid read as a ring. Every cell carries both a colour and a decorator —
+                         "none" for the ones with no glyph, never an empty string, since
+                         `decorator: ;` is a parse error RmlUi logs every frame. Geometry is
+                         newchar_seal.h. -->
+                    <div class="nc-seal-wrap">
+                        <div class="nc-colhead">
+                            <span class="nc-colname" data-rml="seal_name_rml"></span>
+                        </div>
+                        <div class="nc-seal">
+                            <div class="nc-seal-row" data-for="sr : seal">
+                                <div class="nc-seal-cell" data-for="sc : sr.cells"
+                                     data-class-node="sc.node"
+                                     data-style-background-color="sc.col"
+                                     data-style-decorator="sc.dec"></div>
+                            </div>
+                        </div>
+                        <div class="nc-tally">
+                            <div class="nc-tally-row" data-for="s : tally">
+                                <div class="nc-tally-icon" data-style-decorator="s.dec"></div>
+                                <span class="nc-tally-name" data-rml="s.name_rml"></span>
+                                <span class="nc-tally-val" data-rml="s.val_rml"></span>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-            <div class="nc-desc-guide" data-rml="guide_rml"></div>
+
+                <div class="nc-rule"></div>
+                <!-- ":: FIELD NAME" over the detail panel, as on every other step. -->
+                <div class="nc-selname" data-rml="sel_name_rml"></div>
+                <div class="nc-info-panel">
+                    <!-- Art slot: the character portrait, where every other preview-bearing step
+                         puts it. The absolutely positioned top-right box this screen used to have
+                         dates from the era when the avatar was a GPU sprite the panels had to
+                         dodge. -->
+                    <div class="nc-info-art" data-if="has_portrait"
+                         data-style-decorator="portrait_dec"></div>
+                    <div class="nc-info-facts">
+                        <div class="nc-fact" data-for="f : facts">
+                            <div class="nc-fact-label" data-rml="f.label_rml"></div>
+                            <div class="nc-fact-value" data-rml="f.value_rml"></div>
+                            <div class="nc-fact-sub" data-rml="f.sub_rml"></div>
+                        </div>
+                    </div>
+                    <!-- Prose in a .nc-info-blurb CHILD: .nc-info-desc is `display: flex`, and a
+                         bare text node in a flex container gets no inline context and renders
+                         nothing. See plans/charcreation-stats-cards.md. -->
+                    <div class="nc-info-desc">
+                        <div class="nc-info-blurb" data-rml="desc_rml"></div>
+                    </div>
+                </div>
+                <div class="nc-hint" data-rml="hint_rml"></div>
             </div>
             <div class="nc-arrow nc-arrow-next" data-if="has_next"
                  data-event-click="on_next()">

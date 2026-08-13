@@ -55,11 +55,9 @@
    leading would not help; what is missing is anything telling the eye where one
    group ends.
 
-   Only reaches what has an element boundary. Each OVERVIEW pane is a SINGLE div
-   fed by one data-rml string with its header baked into the text ("Stats:\n
-   Strength: 8\n..."), so a header cannot be given size or weight from here — that
-   needs the producer to emit the header as its own element. See
-   plans/charcreation-visual-overhaul.md workstream 4. */
+   Only reaches what has an element boundary, which is why every list in the
+   creator emits its rows and its group headings as separate elements rather than
+   as one "\n"-joined data-rml string. */
 
 /* ── TAB STRIP GLYPHS ──────────────────────────────────────────────────────────
    The theme's .tab is a plain text item; it now carries an icon + label, so it
@@ -83,71 +81,13 @@
 }
 
 /* ── COLUMN HIERARCHY ─────────────────────────────────────────────────────────
-   This is the hierarchy the screen was missing: previously every line in a column
-   was the same 18dp weight, so a column title competed with its own data and the
-   eye had nowhere to land. The title and group headings now have their own
-   elements (see nc_desc_pane/nc_desc_row) and can carry weight. */
-.nc-pane-head {
-    flex: 0 0 auto;
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    margin-bottom: 6dp;
-    padding-bottom: 3dp;
-    border-bottom: 1dp {{bg4}};
-}
-
-.nc-pane-icon {
-    flex: 0 0 auto;
-    width: 18dp;
-    height: 18dp;
-    margin-right: 6dp;
-}
-
-.nc-pane-title {
-    flex: 1;
-    font-weight: bold;
-    letter-spacing: 2dp;
-    color: {{fg0}};
-}
-
-.nc-pane-body {
-    flex: 1;
-    min-height: 0;
-    display: block;
-    overflow-y: auto;
-    /* Bottom gap so an overflowing pane's last row is not sliced flush against the
-       pane edge. On a 1366x768-class terminal (170x48 cells) the panes are short
-       enough to overflow, and without this the cut lands mid-glyph and reads as a
-       rendering fault rather than as "scroll for more". */
-    padding-bottom: 6dp;
-}
-
-.nc-pane-row {
-    display: block;
-}
-
-/* Group headings inside a column (Spells:, Wielded:, a skill category). Spaced
-   away from the rows above so the grouping is visible without a rule per group. */
-.nc-pane-row.heading {
-    font-weight: bold;
-    margin-top: 8dp;
-}
-
-.nc-pane-row.heading:first-child {
-    margin-top: 0;
-}
-
-/* Values sit one luminance step above their labels, so a scan reads the DATA and
-   the labels recede. Both are overridden per-row by the producer's baked colour
-   where that colour is semantic (trait display colours, red None!). */
-.nc-pane-label {
-    color: {{fg4}};
-}
-
-.nc-pane-value {
-    color: {{fg0}};
-}
+   The `.nc-pane-*` rules that used to sit here went with the OVERVIEW rework
+   (plans/charcreation-overview-seal.md). They were the last rules in this shared
+   sheet with exactly one consumer: that step's six wrapping panes, which are now
+   three columns of `.nc-row` like every other list in the creator. The hierarchy
+   they carried — a titled head with a sigil, dim labels against bright values,
+   group headings with real weight — is the `.nc-colhead` / `.nc-row.header`
+   vocabulary below, so nothing was lost with them. */
 
 /* ── TRAIT / BIONIC BALANCE SCALE ──────────────────────────────────────────────
    Replaces the "7/12 0/-12" formula, which stated the numbers without conveying

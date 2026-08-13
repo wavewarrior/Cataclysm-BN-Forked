@@ -1,6 +1,8 @@
-/* Layout for the new-character OVERVIEW tab (Tier 4 #4 slice 8). Reuses theme
-   .panel / .tabs / .tab / .item / .scroll-pane. The six summary panes flow in a
-   wrapping row; each scrolls independently. */
+/* Layout for the new-character OVERVIEW tab (Tier 4 #4 slice 8).
+   Linked AFTER newchar_common.rcss, so a same-specificity rule here wins.
+
+   ROW based, the shared row-list vocabulary (newchar_common.rcss) plus this step's own identity
+   cells and the record seal. See plans/charcreation-overview-seal.md. */
 
 body {
     display: flex;
@@ -10,13 +12,6 @@ body {
     height: 100%;
 }
 
-/* 72%, not 80/92%: the character-preview box is pinned to the right of the screen
-   and its avatar is a GPU sprite drawn UNDERNEATH this document, so an opaque panel
-   reaching over that box hides the sprite. A centred panel of width W has its right
-   edge at (100+W)/2, so 72% ends at 86% and the box starts at ~86.7% — they never
-   meet. 80% (right edge 90%) cleared the old box by 0.2% by luck; 92% covered it.
-   Keep all eight tabs identical so the panel edge does not jump while tabbing.
-   See nc_prepare_preview() in newcharacter_ui.cpp. */
 .nc-panel {
     width: 98%;
     height: 98%;
@@ -32,97 +27,132 @@ body {
     flex: 0 0 auto;
 }
 
-.nc-desc-points {
+/* ── COLUMN WIDTHS ────────────────────────────────────────────────────────────
+   Four columns of equal width put the longest values on this screen — a character name, a gender
+   pair, a location — in the narrowest useful space, and they clipped. The identity column takes half
+   again what a record column does; the record columns share what is left equally. */
+.nc-ident-col {
+    flex: 3;
+}
+
+.nc-rec-col {
+    flex: 2;
+}
+
+/* ── IDENTITY CELLS ───────────────────────────────────────────────────────────
+   The five editable fields. Fixed-width label and a flexible value, so the labels form one column
+   and the values another — the same alignment argument every other row list in the creator makes.
+   The cursor cell, the steppers and the row itself are shared rules. */
+.nc-ident-label {
     display: block;
     flex: 0 0 auto;
-    padding: 4dp 8dp;
+    width: 92dp;
+    white-space: nowrap;
+    overflow: hidden;
 }
 
-.nc-desc-editrow {
-    flex: 0 0 auto;
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    padding: 2dp 8dp;
-    border-bottom: 1dp {{bg4}};
-}
-
-.nc-desc-sp {
-    flex: 0 0 auto;
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    padding: 2dp 8dp;
-}
-
-.nc-desc-field {
+.nc-ident-val {
     display: block;
-    margin-right: 24dp;
-    white-space: pre;
+    flex: 1;
+    min-width: 0;
+    /* LOAD-BEARING, as on every other list: a value wrapping to a second line spills into the row
+       below, and it grows the list's scroll height, which desyncs anything measuring rows. */
+    white-space: nowrap;
+    overflow: hidden;
 }
 
-.nc-desc-panes {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    padding: 4dp 8dp;
+/* The edit affordance. Present on all five fields — two of the editors are modal, and a row click
+   only ever moves the cursor, so every field needs a control that means "change this". */
+.nc-ident-edit {
+    display: block;
+    flex: 0 0 auto;
+    width: 20dp;
+    text-align: center;
+    color: {{fg4}};
 }
 
-/* Six panes separated only by x-position read as one field of text. A hairline
-   rule plus a real gutter gives the eye a group boundary; the first pane skips the
-   rule so the row does not open with a stray edge. The header inside each pane is
-   baked into its data-rml string and cannot be styled from here — see
-   plans/charcreation-visual-overhaul.md workstream 4. */
-.nc-desc-pane {
-    flex: 1;
-    min-width: 180dp;
-    min-height: 0;
-    margin: 0 0 8dp 0;
-    padding: 0 14dp;
-    border-left: 1dp {{bg4}};
-    /* Column is now head + scrolling body, not one text blob. */
+.nc-ident-edit:hover {
+    color: {{yellow}};
+}
+
+/* ── RECORD ROWS ──────────────────────────────────────────────────────────────
+   The read-only digest. A name that flexes and a right-aligned value, so the numbers in the
+   ATTRIBUTES column stack into a gutter the eye can run down. Most rows have no value at all (a
+   trait name, an item), which is why the value cell is not reserved a fixed width. */
+.nc-cell-val {
+    display: block;
+    flex: 0 0 auto;
+    text-align: right;
+    margin-left: 8dp;
+    color: {{fg0}};
+}
+
+/* ── RECORD SEAL ──────────────────────────────────────────────────────────────
+   A ring of the seven earlier steps, welded shut once per cycle. Same 13x13 dot lattice as the
+   SKILLS aptitude radar, and for the same reason: a circle on a square grid needs no transform and
+   nothing positioned, and `position: absolute` in these documents resolves against .nc-panel rather
+   than the intended parent (see the balance scale in newchar_common.rcss). */
+.nc-seal-wrap {
+    flex: 0 0 auto;
+    width: 196dp;
     display: flex;
     flex-direction: column;
 }
 
-.nc-desc-pane:first-child {
-    border-left-color: transparent;
-    padding-left: 0;
-}
-
-/* Static keybinding help. 110dp fitted only 5 of the 7 lines, clipping the last
-   one mid-glyph and pushing the rest behind a scrollbar — help text you have to
-   scroll is help text you don't read, and there is ample empty space above it.
-   The cap is kept (generously) so a long translation degrades to scrolling
-   instead of eating the panes above. */
-.nc-desc-guide {
+/* Square: 13 flex rows of 13 flex cells inside a box as wide as the column. The height is fixed to
+   the width so the ring cannot render as an ellipse when the stage is short. */
+.nc-seal {
     flex: 0 0 auto;
-    max-height: 200dp;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    padding: 6dp 8dp;
-    border-top: 1dp {{bg4}};
-    /* Dimmer than the character data above it: this is standing reference text,
-       not content, and at full strength it competed with the panes. The keybinding
-       glyphs keep their baked yellow, so the scannable part still stands out. */
-    color: {{fg4}};
+    height: 196dp;
+    display: flex;
+    flex-direction: column;
 }
 
-/* Portrait box. The avatar texture is AVATAR_TARGET_PX square and `contain` keeps its
-   aspect, so this only decides how much room the sprite gets. Anchored top-right of the
-   stage, which is where the old floating preview sat — but now it is inside the panel,
-   which is what let the panel grow to 98%. */
-.nc-portrait {
-    /* `position: absolute` here resolves against .nc-panel, NOT against .nc-stage —
-       measured earlier in this work when a beam anchored to a `position: relative`
-       parent landed against the panel instead. That behaviour is exactly the placement
-       wanted here (panel top-right), so it is relied on deliberately rather than by
-       accident. top/right clear the step rail and the panel's 24dp runic-frame inset. */
-    position: absolute;
-    right: 32dp;
-    top: 52dp;
-    width: 208dp;
-    height: 208dp;
+.nc-seal-row {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+}
+
+/* Thread: a SMALL round stitch inside its cell. The margin shrinks the painted box without changing
+   the lattice pitch, which is what keeps the ring aligned with the nodes. A cell filling its whole
+   15dp made the ring a wreath of touching blobs — and buried the node glyphs, since a node's socket
+   is the same gold. */
+.nc-seal-cell {
+    flex: 1;
+    min-width: 0;
+    height: 58%;
+    margin: 0 3dp;
+    border-radius: 6dp;
+}
+
+/* Node: the full cell, so its step glyph has room to read against the socket. */
+.nc-seal-cell.node {
+    height: 100%;
+    margin: 0;
+    border-radius: 8dp;
+}
+
+/* ── LEGEND ───────────────────────────────────────────────────────────────────
+   `.nc-tally*` are shared rules (newchar_common.rcss) — the SKILLS radar legend is the other
+   consumer. Only the gap above it belongs to this step. */
+.nc-tally {
+    margin-top: 8dp;
+}
+
+/* ── DETAIL ───────────────────────────────────────────────────────────────────
+   The shared `.nc-selname` header sits above the art | facts | prose panel; only the panel's own
+   proportions are this step's business. Matches TRAITS: three facts plus prose, and a portrait that
+   needs room. */
+.nc-info-panel {
+    height: 196dp;
+}
+
+/* The portrait is a `scale-none` window into a 512px render target, so this box does not resize the
+   character — it decides how much of the target is visible. 168dp is what TRAITS settled on. */
+.nc-info-art {
+    width: 168dp;
+    height: 168dp;
 }
