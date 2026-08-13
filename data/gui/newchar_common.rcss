@@ -14,7 +14,7 @@
    immediately. So the intended dark-on-gold never happens — the semantic colour
    stays and sits on the gold fill at 1.65:1, well under the 4.5:1 legibility
    floor. The cursor row rendered as a blank gold bar on POINTS, SCENARIO and
-   TRAITS. (STATS escaped only because its active colour happens to be dark.)
+   TRAITS.
 
    Dropping the colour in the producer is NOT the fix: on TRAITS it is the only
    channel encoding taken / forbidden / available, and on PROFESSION and SCENARIO
@@ -26,7 +26,7 @@
    contrast it was designed for — and the cursor row ends up the most readable row
    on screen rather than the least. */
 
-.nc-opt, .nc-stat, .nc-skill-row, .nc-scen-row, .nc-prof-row, .nc-trait-row {
+.nc-opt, .nc-skill-row, .nc-scen-row, .nc-prof-row, .nc-trait-row {
     /* Reserved on EVERY row, not just .selected, so the cursor's accent bar does
        not shift row text sideways as the cursor moves. Longhand, not the
        `border-left` shorthand: the shorthand form did not paint here. */
@@ -34,7 +34,7 @@
     border-left-color: transparent;
 }
 
-.nc-opt.selected, .nc-stat.selected, .nc-skill-row.selected,
+.nc-opt.selected, .nc-skill-row.selected,
 .nc-scen-row.selected, .nc-prof-row.selected, .nc-trait-row.selected {
     background-color: {{bg-hard}};
     border-left-width: 3dp;

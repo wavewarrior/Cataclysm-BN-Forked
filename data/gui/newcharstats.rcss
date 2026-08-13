@@ -1,6 +1,11 @@
-/* Layout for the new-character STATS tab (Tier 4 #4 slice 2). Reuses theme
-   .panel / .tabs / .tab / .item / .scroll-pane. body sized + centered (the
-   missions gotcha); rows need explicit display (the inline-row gotcha). */
+/* Layout for the new-character STATS tab (Tier 4 #4 slice 2).
+   Linked AFTER newchar_common.rcss, so a same-specificity rule here wins — which is how
+   .nc-stat-card overrides the shared .nc-card height.
+
+   Everything structural (the tree, the card, the notch row, the info panel, the legend) comes
+   from newchar_common.rcss. What is local to this step is the CARD'S CONTENT — a stat has no
+   flag strip to show, it has a magnitude — plus the top status row.
+   See plans/charcreation-stats-cards.md. */
 
 body {
     display: flex;
@@ -30,78 +35,165 @@ body {
     flex: 0 0 auto;
 }
 
-.nc-points {
+/* Status row: the points total on the left, the key hints on the right. Both are screen-level
+   facts, so they belong here rather than inside the per-stat info panel. */
+.nc-stats-top {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8dp;
+}
+
+.nc-stats-points {
     display: block;
     flex: 0 0 auto;
-    padding: 8dp;
     color: {{fg}};
 }
 
-.nc-body {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: row;
-}
-
-.nc-stats-left {
-    flex: 0 0 auto;
-    min-width: 320dp;
-    display: flex;
-    flex-direction: column;
-    border-right: 1dp {{bg4}};
-    padding-right: 8dp;
-}
-
-.nc-stats {
+.nc-stats-hint {
     display: block;
     flex: 0 0 auto;
-    margin-bottom: 16dp;
+    font-size: 13dp;
+    color: {{fg4}};
 }
 
-/* One stat per line: label (fixed-width column) + right-aligned value. */
-.nc-stat {
+/* Only a little taller than the shared 96dp: name row, a value row flanked by its steppers,
+   and the meter. The first pass at 138dp left a 40dp void between the number and the meter,
+   because the value is a block whose text sits at the top of the space `flex: 1` gave it. */
+.nc-stat-card {
+    height: 108dp;
+}
+
+.nc-stat-head {
+    flex: 0 0 auto;
     display: flex;
     flex-direction: row;
+    align-items: center;
+    padding-left: 5dp;
 }
 
+.nc-stat-sigil {
+    flex: 0 0 auto;
+    width: 14dp;
+    height: 14dp;
+    margin-right: 6dp;
+}
+
+/* The name is the label, not the content: quiet and small, exactly as .nc-fact-label is. */
 .nc-stat-name {
     display: block;
     flex: 0 0 auto;
-    min-width: 160dp;
+    font-size: 12dp;
+    letter-spacing: 2dp;
+    text-transform: uppercase;
 }
 
-.nc-stat-val {
-    display: block;
-    flex: 1;
-    text-align: right;
-}
-
-.nc-hints {
-    display: block;
+/* Value row: the two steppers flank the number they change. */
+.nc-stat-row {
     flex: 1;
     min-height: 0;
-    white-space: pre-wrap;
-    color: {{fg}};
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 5dp;
 }
 
-.nc-stats-right {
+/* The value IS the content. Largest text on the screen, and bright on every card so the four
+   can be compared at a glance — the cursor is carried by the card border and the notch. */
+.nc-stat-value {
+    display: block;
     flex: 1;
     min-width: 0;
-    display: flex;
-    flex-direction: column;
-    padding-left: 8dp;
+    text-align: center;
+    font-size: 34dp;
+    font-weight: bold;
 }
 
-.nc-cost {
-    display: block;
+/* ── PIP METER ─────────────────────────────────────────────────────────────────
+   One pip per point of the range (4..MAX_STAT). `flex: 1` rather than a fixed width, so the
+   row fits any card width at any zoom without arithmetic.
+
+   Filled pips are TALLER as well as brighter, so the meter still reads in greyscale and for
+   any form of colour blindness — colour is the second channel here, not the only one. Growing
+   upward is why the row is bottom-aligned. */
+.nc-stat-meter {
     flex: 0 0 auto;
-    margin-bottom: 8dp;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-end;
+    height: 12dp;
+    padding-left: 5dp;
 }
 
-.nc-desc {
+.nc-pip {
     flex: 1;
-    min-height: 0;
-    white-space: pre-wrap;
-    color: {{fg}};
+    min-width: 0;
+    height: 6dp;
+    margin-right: 2dp;
+    /* bg2, not bg1: the SELECTED card's own fill is bg1, so an unfilled pip on it was exactly
+       its background and the empty half of the meter vanished on whichever card had focus. */
+    background-color: {{bg2}};
+    transition: background-color 0.16s quadratic-in-out, height 0.16s quadratic-in-out;
+}
+
+.nc-pip.on {
+    height: 12dp;
+    background-color: {{yellow}};
+}
+
+/* Three classes, so these beat `.nc-pip.on` above without !important.
+   Granted floor: present, but plainly not something the player bought. */
+.nc-pip.on.base {
+    background-color: {{bg4}};
+}
+
+/* Costs two points. Red because that is the colour this step already used for
+   "Increasing Str further costs 2 points." — now carried by the thing it describes. */
+.nc-pip.on.steep {
+    background-color: {{red}};
+}
+
+/* ── STEPPERS ─────────────────────────────────────────────────────────────────
+   The first time this step can be driven with a mouse at all. Bordered for the same reason
+   .nc-tree-all is: without one it reads as a caption rather than as something to click. */
+.nc-stat-step {
+    flex: 0 0 auto;
+    width: 30dp;
+    text-align: center;
+    font-size: 18dp;
+    border: 1dp {{bg4}};
+    color: {{fg4}};
+    transition: background-color 0.16s quadratic-in-out, color 0.14s quadratic-in-out,
+                border-color 0.16s quadratic-in-out;
+}
+
+.nc-stat-step:hover {
+    background-color: {{bg-hard}};
+    border-color: {{yellow}};
+    color: {{fg0}};
+}
+
+/* At the floor or the cap. Still drawn, so the row does not change shape, but it must not
+   offer a hover affordance for something that will do nothing. */
+.nc-stat-step.off {
+    border-color: {{bg2}};
+    color: {{bg3}};
+}
+
+.nc-stat-step.off:hover {
+    background-color: transparent;
+    border-color: {{bg2}};
+    color: {{bg3}};
+}
+
+/* Legend swatches are real pips, so they inherit `flex: 1` from the meter rule and would
+   stretch across the legend item. Pin them to the meter's own filled size instead. */
+.nc-legend-item .nc-pip {
+    flex: 0 0 auto;
+    width: 5dp;
+    height: 12dp;
+    margin-right: 0;
 }

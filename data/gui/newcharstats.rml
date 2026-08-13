@@ -5,12 +5,16 @@
     <link type="text/rcss" href="newcharstats.rcss"/>
 </head>
 <body data-model="newcharstats">
-    <!-- Tier 4 screen #4 (new-character creator) slice 2: the STATS tab
-         (set_stats). Character-tab strip (STATS current) + points line + the 4
-         stats (Str/Dex/Int/Per; active stat = cursor, COL_STAT_ACT + .selected)
-         + a per-stat effects/description pane + the HIGH_STAT cost warning +
-         keybinding hints. Render-only doc; keyboard owns UP/DOWN select,
-         LEFT/RIGHT dec/inc, RANDOMIZE, NEXT/PREV_TAB, QUIT. -->
+    <!-- Tier 4 screen #4 (new-character creator): the STATS tab (set_stats).
+         Reworked onto the shared chooser vocabulary the SCENARIO and PROFESSION
+         steps established — cards, a notch, a fixed art|facts|prose panel and a
+         legend — with one row of FOUR cards instead of a band tree, because four
+         items have nothing to group. Each card carries a pip meter: the granted
+         floor, the one-point band, and the two-point band above HIGH_STAT.
+         See plans/charcreation-stats-cards.md.
+
+         Keyboard: LEFT/RIGHT walk the cards, UP/DOWN adjust the value, RANDOMIZE
+         jumps the cursor, NEXT/PREV_TAB, QUIT. Mouse: card selects, -/+ adjust. -->
     <div class="panel nc-panel">
         <div class="nc-steps">
             <div class="nc-step" data-for="t : tabs"
@@ -30,23 +34,113 @@
             </div>
             <div class="nc-arrow-spacer" data-if="!has_prev"></div>
             <div class="nc-stage">
-            <div class="nc-points" data-rml="points_rml"></div>
-            <div class="nc-body">
-                <div class="nc-stats-left">
-                    <div class="nc-stats">
-                        <div class="item nc-stat" data-for="s : stats"
-                             data-class-selected="s.selected">
-                            <span class="nc-stat-name" data-rml="s.name_rml"></span>
-                            <span class="nc-stat-val" data-rml="s.val_rml"></span>
+                <div class="nc-stats-top">
+                    <span class="nc-stats-points" data-rml="points_rml"></span>
+                    <!-- One status line in place of the old seven-line hints block: the step
+                         rail, the navigators and the exit line already state the rest. -->
+                    <span class="nc-stats-hint" data-rml="hint_rml"></span>
+                </div>
+                <div class="nc-tree">
+                    <div class="nc-band">
+                        <!-- The rail is flanked by two .nc-info-gutter divs rather than the
+                             carousel pagers the other tabs put there: same 18dp width, so the
+                             notch row's gutter/cells/gutter mirror still lands each notch
+                             under its card with no arithmetic — and no dead pager glyphs
+                             implying a second page that cannot exist. -->
+                        <div class="nc-band-rail">
+                            <div class="nc-info-gutter"></div>
+                            <div class="nc-band-cards">
+                                <div class="nc-card nc-stat-card" data-for="c, ci : cards"
+                                     data-class-selected="c.selected"
+                                     data-event-click="on_card(ci)">
+                                    <div class="nc-stat-head">
+                                        <div class="nc-stat-sigil"
+                                             data-style-decorator="c.icon_dec"></div>
+                                        <span class="nc-stat-name" data-rml="c.name_rml"></span>
+                                    </div>
+                                    <!-- The steppers flank the number they change. In their own
+                                         row at the card's edges they read as unrelated to it. -->
+                                    <div class="nc-stat-row">
+                                        <div class="nc-stat-step" data-class-off="!c.can_dec"
+                                             data-event-click="on_step(ci, -1)">&#8722;</div>
+                                        <div class="nc-stat-value" data-rml="c.val_rml"></div>
+                                        <div class="nc-stat-step" data-class-off="!c.can_inc"
+                                             data-event-click="on_step(ci, 1)">+</div>
+                                    </div>
+                                    <!-- The storytelling channel for this step. Magnitude, not
+                                         flags: how far along the range the stat sits, and
+                                         whether the next point is cheap or steep. -->
+                                    <div class="nc-stat-meter">
+                                        <div class="nc-pip" data-for="p : c.pips"
+                                             data-class-on="p.on"
+                                             data-class-base="p.base"
+                                             data-class-steep="p.steep"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="nc-info-gutter"></div>
+                        </div>
+                        <!-- Fixed panel for the stat under the cursor. Changing stat moves only
+                             the notch above it, never the panel. -->
+                        <div class="nc-band-info">
+                            <div class="nc-info-notches">
+                                <div class="nc-info-gutter"></div>
+                                <div class="nc-info-cells">
+                                    <div class="nc-info-cell" data-for="c : cards"
+                                         data-class-on="c.selected">
+                                        <div class="nc-info-notch"></div>
+                                    </div>
+                                </div>
+                                <div class="nc-info-gutter"></div>
+                            </div>
+                            <div class="nc-info-panel">
+                                <!-- Art slot: the stat's own sigil at panel size. Procedural
+                                     placeholder awaiting real art, as on the other tabs. -->
+                                <div class="nc-info-art" data-style-decorator="art_dec"></div>
+                                <!-- Label AND value are bound: the labels differ per stat and
+                                     are translated, unlike the other tabs' fixed fields. The
+                                     first fact is always what the next point costs. -->
+                                <div class="nc-info-facts">
+                                    <div class="nc-fact" data-for="f : facts">
+                                        <div class="nc-fact-label" data-rml="f.label_rml"></div>
+                                        <div class="nc-fact-value" data-rml="f.value_rml"></div>
+                                        <div class="nc-fact-sub" data-rml="f.sub_rml"></div>
+                                    </div>
+                                </div>
+                                <!-- The prose goes in a .nc-info-blurb CHILD, not straight into
+                                     .nc-info-desc: that class is `display: flex`, and the flex
+                                     path blockifies every child with no inline handling, so a
+                                     bare TEXT node gets no inline context and renders nothing —
+                                     silently, with no log warning. An inline <span> survives it
+                                     (it runs its own block context inside), which is why the
+                                     SCENARIO panel's colorized desc is fine unwrapped and this
+                                     uncolored blurb is not. -->
+                                <div class="nc-info-desc">
+                                    <div class="nc-info-blurb" data-rml="desc_rml"></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div class="nc-hints" data-rml="hints_rml"></div>
                 </div>
-                <div class="nc-stats-right">
-                    <div class="nc-cost" data-rml="cost_rml"></div>
-                    <div class="nc-desc scroll-pane" data-rml="desc_rml"></div>
+                <!-- Key for the meter. Real pips as swatches, not sigils: the legend explains
+                     the card's own vocabulary. -->
+                <div class="nc-legend">
+                    <div class="nc-legend-item">
+                        <div class="nc-pip on base"></div>
+                        <span class="nc-legend-sep">::</span>
+                        <span class="nc-legend-label" data-rml="leg_base_rml"></span>
+                    </div>
+                    <div class="nc-legend-item">
+                        <div class="nc-pip on"></div>
+                        <span class="nc-legend-sep">::</span>
+                        <span class="nc-legend-label" data-rml="leg_cheap_rml"></span>
+                    </div>
+                    <div class="nc-legend-item">
+                        <div class="nc-pip on steep"></div>
+                        <span class="nc-legend-sep">::</span>
+                        <span class="nc-legend-label" data-rml="leg_steep_rml"></span>
+                    </div>
                 </div>
-            </div>
             </div>
             <div class="nc-arrow nc-arrow-next" data-if="has_next"
                  data-event-click="on_next()">

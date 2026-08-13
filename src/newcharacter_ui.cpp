@@ -63,6 +63,7 @@
 #include "recipe_dictionary.h"
 #include <RmlUi/Core.h>
 #include "newchar_balance.h"
+#include "newchar_stat_meter.h"
 #include "rml_length.h"
 #include "rml_screen.h"
 #include "rml_util.h"
@@ -846,19 +847,51 @@ struct nc_stats_tab {
     bool selected = false;
     bool done = false;   //< step already passed
 };
-struct nc_stat_row {
+
+/// One pip of a card's meter. Three booleans rather than a tier string because `data-class-*`
+/// binds to booleans, and the tier is only ever consumed as a colour.
+struct nc_stat_pip {
+    bool on = false;      //< the stat has reached this value
+    bool base = false;    //< inside the granted floor, so it can never be sold back
+    bool steep = false;   //< costs two points
+};
+
+/// A label / value / sub-line triple in the info panel's facts column. Labels differ per stat
+/// and are translated, so they are bound from here rather than written into the markup — the
+/// SCENARIO and PROFESSION panels hardcode their English labels in RML, which this does not
+/// copy.
+struct nc_stat_fact {
+    Rml::String label_rml;
+    Rml::String value_rml;
+    Rml::String sub_rml;
+};
+
+/// One stat card: identity, the number, the meter, and its two adjust affordances.
+struct nc_stat_card {
+    Rml::String icon_dec;
     Rml::String name_rml;
     Rml::String val_rml;
-    bool selected = false;
+    Rml::Vector<nc_stat_pip> pips;
+    bool selected = false;   //< cursor is on this card
+    bool can_dec = false;    //< not at the granted floor
+    bool can_inc = false;    //< not at the cap
 };
+
 struct nc_stats_session {
     Rml::Vector<nc_stats_tab> tabs;
     nc_shell shell;
     Rml::String points_rml;
-    Rml::Vector<nc_stat_row> stats;
-    Rml::String cost_rml;   // red "Increasing X further costs 2 points." or empty
-    Rml::String desc_rml;   // selected stat's effects + blurb
-    Rml::String hints_rml;
+    Rml::String hint_rml;    //< one status line in place of the old seven-line hints block
+    Rml::Vector<nc_stat_card> cards;
+    /// The selected stat's own sigil, at panel size. Never empty: `data-style-decorator` is
+    /// evaluated on the document's FIRST layout, before sync_rml has run, and an empty string
+    /// became `decorator: ;` and an RmlUi parse warning per frame.
+    Rml::String art_dec = "none";
+    Rml::Vector<nc_stat_fact> facts;
+    Rml::String desc_rml;    //< the stat's own voice, prose column
+    Rml::String leg_base_rml;
+    Rml::String leg_cheap_rml;
+    Rml::String leg_steep_rml;
     Rml::DataModelHandle handle;
 };
 
@@ -875,76 +908,152 @@ void register_nc_stats_rml_types( Rml::DataModelConstructor &c )
     th.RegisterMember( "selected", &nc_stats_tab::selected );
     th.RegisterMember( "done", &nc_stats_tab::done );
     c.RegisterArray<Rml::Vector<nc_stats_tab>>();
-    Rml::StructHandle<nc_stat_row> sh = c.RegisterStruct<nc_stat_row>();
-    sh.RegisterMember( "name_rml", &nc_stat_row::name_rml );
-    sh.RegisterMember( "val_rml", &nc_stat_row::val_rml );
-    sh.RegisterMember( "selected", &nc_stat_row::selected );
-    c.RegisterArray<Rml::Vector<nc_stat_row>>();
+    // Pips before cards: a card member cannot be registered before its element type is.
+    Rml::StructHandle<nc_stat_pip> ph = c.RegisterStruct<nc_stat_pip>();
+    ph.RegisterMember( "on", &nc_stat_pip::on );
+    ph.RegisterMember( "base", &nc_stat_pip::base );
+    ph.RegisterMember( "steep", &nc_stat_pip::steep );
+    c.RegisterArray<Rml::Vector<nc_stat_pip>>();
+    Rml::StructHandle<nc_stat_fact> fh = c.RegisterStruct<nc_stat_fact>();
+    fh.RegisterMember( "label_rml", &nc_stat_fact::label_rml );
+    fh.RegisterMember( "value_rml", &nc_stat_fact::value_rml );
+    fh.RegisterMember( "sub_rml", &nc_stat_fact::sub_rml );
+    c.RegisterArray<Rml::Vector<nc_stat_fact>>();
+    Rml::StructHandle<nc_stat_card> ch = c.RegisterStruct<nc_stat_card>();
+    ch.RegisterMember( "icon_dec", &nc_stat_card::icon_dec );
+    ch.RegisterMember( "name_rml", &nc_stat_card::name_rml );
+    ch.RegisterMember( "val_rml", &nc_stat_card::val_rml );
+    ch.RegisterMember( "pips", &nc_stat_card::pips );
+    ch.RegisterMember( "selected", &nc_stat_card::selected );
+    ch.RegisterMember( "can_dec", &nc_stat_card::can_dec );
+    ch.RegisterMember( "can_inc", &nc_stat_card::can_inc );
+    c.RegisterArray<Rml::Vector<nc_stat_card>>();
     g_nc_stats_types_registered = true;
 }
 
-// Build the selected stat's effects + blurb as one colour-tagged string (mirrors
-// the per-stat curses block in set_stats' on_redraw). `u` is mutated as the
-// curses path does (recalc_hp for Str).
-std::string nc_stat_desc( avatar &u, int sel )
+/// The four creator stats behind one cursor index, so every rule that touches them is stated
+/// once instead of once per stat. Replaces eight near-identical arms in the input loop.
+auto nc_stat_ref( avatar &u, int sel ) -> int & // *NOPAD*
 {
-    std::vector<std::string> lines;
+    switch( sel ) {
+        case 1:
+            return u.str_max;
+        case 2:
+            return u.dex_max;
+        case 3:
+            return u.int_max;
+        default:
+            return u.per_max;
+    }
+}
+
+auto nc_stat_name( int sel ) -> std::string
+{
+    switch( sel ) {
+    case 1:
+        return _( "Strength" );
+        case 2:
+            return _( "Dexterity" );
+        case 3:
+            return _( "Intelligence" );
+        default:
+            return _( "Perception" );
+    }
+}
+
+/// Stable per-stat sigil seeds, so each stat keeps one recognisable glyph across runs. The
+/// values are arbitrary but must all DIFFER — the generator keys the shape on the seed.
+constexpr std::array<unsigned, 4> nc_stat_seeds = { 0x5354, 0x4458, 0x494E, 0x5052 };
+
+/// The stat's own voice. The prose column, kept separate from the numbers above it.
+auto nc_stat_blurb( int sel ) -> std::string
+{
+    switch( sel ) {
+    case 1:
+        return
+            _( "Strength also makes you more resistant to many diseases and poisons, and makes actions which require brute force more effective." );
+        case 2:
+            return _( "Dexterity also enhances many actions which require finesse." );
+        case 3:
+            return
+                _( "Intelligence is also used when crafting, installing bionics, and interacting with NPCs." );
+        default:
+            return _( "Perception is also used for detecting traps and other things of interest." );
+    }
+}
+
+/// The selected stat's derived effects as label/value fields. Previously one pre-wrapped
+/// colour-tagged string joined with newlines, which no stylesheet could give hierarchy and
+/// which cannot fit a fixed-height panel.
+///
+/// `u` is mutated exactly as the curses path did: Strength's HP readout needs recalc_hp().
+auto nc_stat_facts( avatar &u, int sel, int max_stat_points ) -> Rml::Vector<nc_stat_fact>
+{
+    Rml::Vector<nc_stat_fact> out;
+    const auto add = [&out]( const std::string & label, const std::string & value,
+    const nc_color & col, const std::string & sub = std::string() ) {
+        out.push_back( {
+            .label_rml = cata_text_to_rml( label ),
+            .value_rml = cata_text_to_rml( colorize( value, col ) ),
+            .sub_rml = cata_text_to_rml( sub ) } );
+    };
+
+    // What the next point costs comes first: it is the decision in front of the player. Stating
+    // it at every value replaces a red warning that only appeared once the threshold was
+    // already behind them.
+    const int val = nc_stat_ref( u, sel );
+    const int cost = nc_stat_meter::next_cost( val, HIGH_STAT, max_stat_points );
+    if( cost == 0 ) {
+        add( _( "Next point" ), _( "Maxed" ), c_dark_gray );
+    } else if( cost > 1 ) {
+        add( _( "Next point" ), _( "2 points" ), COL_STAT_PENALTY );
+    } else {
+        add( _( "Next point" ), _( "1 point" ), COL_STAT_NEUTRAL,
+             string_format( _( "2 points above %d" ), HIGH_STAT ) );
+    }
+
     switch( sel ) {
         case 1:
             u.recalc_hp();
-            lines.push_back( colorize( string_format( _( "Base HP: %d" ),
-                                       u.get_part_hp_max( bodypart_id( "head" ) ) ), COL_STAT_NEUTRAL ) );
-            lines.push_back( colorize( string_format( _( "Carry weight: %.1f %s" ),
-                                       convert_weight( u.weight_capacity() ), weight_units() ), COL_STAT_NEUTRAL ) );
-            lines.push_back( colorize( string_format( _( "Melee damage bonus: +%.1f" ),
-                                       u.bonus_damage( false ) ), COL_STAT_BONUS ) );
-            lines.emplace_back();
-            lines.push_back( colorize(
-                                 _( "Strength also makes you more resistant to many diseases and poisons, and makes actions which require brute force more effective." ),
-                                 COL_STAT_NEUTRAL ) );
+            add( _( "Base HP" ),
+                 string_format( "%d", u.get_part_hp_max( bodypart_id( "head" ) ) ),
+                 COL_STAT_NEUTRAL );
+            add( _( "Carry weight" ),
+                 string_format( "%.1f %s", convert_weight( u.weight_capacity() ), weight_units() ),
+                 COL_STAT_NEUTRAL );
+            add( _( "Melee damage" ), string_format( "+%.1f", u.bonus_damage( false ) ),
+                 COL_STAT_BONUS );
             break;
         case 2:
-            lines.push_back( colorize( string_format( _( "Melee to-hit bonus: +%.2f" ),
-                                       u.get_hit_base() ), COL_STAT_BONUS ) );
-            lines.push_back( colorize( string_format( _( "Throwing penalty per target's dodge: +%d" ),
-                                       ranged::throw_dispersion_per_dodge( u, false ) ), COL_STAT_BONUS ) );
+            add( _( "Melee to-hit" ), string_format( "+%.2f", u.get_hit_base() ), COL_STAT_BONUS );
+            add( _( "Throw penalty" ),
+                 string_format( _( "+%d per dodge" ),
+                                ranged::throw_dispersion_per_dodge( u, false ) ),
+                 COL_STAT_BONUS );
             if( u.ranged_dex_mod() != 0 ) {
-                lines.push_back( colorize( string_format( _( "Ranged penalty: -%d" ),
-                                           std::abs( u.ranged_dex_mod() ) ), COL_STAT_PENALTY ) );
+                add( _( "Ranged penalty" ), string_format( "-%d", std::abs( u.ranged_dex_mod() ) ),
+                     COL_STAT_PENALTY );
             }
-            lines.emplace_back();
-            lines.push_back( colorize( _( "Dexterity also enhances many actions which require finesse." ),
-                                       COL_STAT_NEUTRAL ) );
             break;
         case 3: {
             const int read_spd = u.read_speed( false );
-            lines.push_back( colorize( string_format( _( "Read times: %d%%" ), read_spd ),
-                                       ( read_spd == 100 ? COL_STAT_NEUTRAL :
-                                         ( read_spd < 100 ? COL_STAT_BONUS : COL_STAT_PENALTY ) ) ) );
-            lines.push_back( colorize( string_format( _( "Skill rust: %d%%" ), u.rust_rate() ),
-                                       COL_STAT_PENALTY ) );
-            lines.push_back( colorize( string_format( _( "Crafting bonus: +%d%%" ), u.get_int() ),
-                                       COL_STAT_BONUS ) );
-            lines.emplace_back();
-            lines.push_back( colorize(
-                                 _( "Intelligence is also used when crafting, installing bionics, and interacting with NPCs." ),
-                                 COL_STAT_NEUTRAL ) );
+            add( _( "Read times" ), string_format( "%d%%", read_spd ),
+                 read_spd == 100 ? COL_STAT_NEUTRAL
+                 : ( read_spd < 100 ? COL_STAT_BONUS : COL_STAT_PENALTY ) );
+            add( _( "Skill rust" ), string_format( "%d%%", u.rust_rate() ), COL_STAT_PENALTY );
+            add( _( "Crafting bonus" ), string_format( "+%d%%", u.get_int() ), COL_STAT_BONUS );
             break;
         }
-        case 4:
+        default:
             if( u.ranged_per_mod() > 0 ) {
-                lines.push_back( colorize( string_format( _( "Aiming penalty: -%d" ),
-                                           u.ranged_per_mod() ), COL_STAT_PENALTY ) );
+                add( _( "Aiming penalty" ), string_format( "-%d", u.ranged_per_mod() ),
+                     COL_STAT_PENALTY );
             }
-            lines.push_back( colorize( string_format( _( "Night vision bonus: +%.1f" ),
-                                       vision::nv_range_from_per( u.per_max ) ), COL_STAT_BONUS ) );
-            lines.emplace_back();
-            lines.push_back( colorize(
-                                 _( "Perception is also used for detecting traps and other things of interest." ),
-                                 COL_STAT_NEUTRAL ) );
+            add( _( "Night vision" ),
+                 string_format( "+%.1f", vision::nv_range_from_per( u.per_max ) ), COL_STAT_BONUS );
             break;
     }
-    return join( lines, "\n" );
+    return out;
 }
 } // namespace
 
@@ -952,8 +1061,7 @@ tab_direction set_stats( avatar &u, points_left &points )
 {
     const int max_stat_points = points.is_freeform() ? 20 : MAX_STAT;
 
-    unsigned char sel = 1;
-    const int iSecondColumn = std::max( 27, utf8_width( points.to_string(), true ) + 9 );
+    int sel = 1;
     input_context ctxt( "NEW_CHAR_STATS" );
     ctxt.register_cardinal();
     ctxt.register_action( "PREV_TAB" );
@@ -972,11 +1080,8 @@ tab_direction set_stats( avatar &u, points_left &points )
 
     ui_adaptor ui;
     catacurses::window w;
-    catacurses::window w_description;
     const auto init_windows = [&]( ui_adaptor & ui ) {
         w = catacurses::newwin( TERMY, TERMX, point_zero );
-        w_description = catacurses::newwin( 8, TERMX - iSecondColumn - 1,
-                                            point( iSecondColumn, 6 ) );
         ui.position_from_window( w );
     };
     init_windows( ui );
@@ -999,13 +1104,42 @@ tab_direction set_stats( avatar &u, points_left &points )
     old_pos.x() = 0;
     u.setpos( old_pos );
 
-    // RmlUi render path (render-only; keyboard still owns nav/inc/dec below).
     auto data = std::make_unique<nc_stats_session>();
     rml_doc rml;
     // Set by the arrow click callbacks, consumed by the input loop below. Not a
     // tab_direction: it is translated into an action string so the existing
     // keyboard handling stays the single place navigation is decided.
     int nc_nav = 0;
+    // Card and +/- click intent, applied ONCE per input cycle. `data-event-*` installs a
+    // listener per generated element and a `data-for` regeneration adds another without
+    // removing the old, so a callback that mutated directly would run an unbounded number of
+    // times per click — measured at 15 on the SCENARIO tab, where a toggle silently cancelled
+    // itself out. Recording intent is the fix; see plans/charcreation-scenario-tree.md.
+    int pending_card = -1;
+    int pending_step_stat = -1;
+    int pending_step_dir = 0;
+
+    // One place per direction rather than one per stat per direction. The point arithmetic
+    // lives in newchar_stat_meter.h, where its HIGH_STAT boundaries are tested.
+    const auto dec_stat = [&]( int s ) {
+        int &v = nc_stat_ref( u, s );
+        const int back = nc_stat_meter::refund( v, HIGH_STAT );
+        if( back == 0 ) {
+            return;
+        }
+        v--;
+        points.stat_points += back;
+    };
+    const auto inc_stat = [&]( int s ) {
+        int &v = nc_stat_ref( u, s );
+        const int cost = nc_stat_meter::next_cost( v, HIGH_STAT, max_stat_points );
+        if( cost == 0 ) {
+            return;
+        }
+        v++;
+        points.stat_points -= cost;
+    };
+
     const auto sync_rml = [&]() {
         if( !data->handle ) {
             return;
@@ -1013,58 +1147,77 @@ tab_direction set_stats( avatar &u, points_left &points )
         data->tabs = build_nc_char_tabs<nc_stats_tab>( 3 );  // STATS tab active
         data->shell = fill_nc_shell( 3, ctxt );
         data->points_rml = cata_text_to_rml( nc_points_line( points ) );
-
-        data->stats.clear();
-        const auto add_stat = [&]( const std::string & label, int val, int idx ) {
-            nc_stat_row r;
-            const bool active = ( sel == idx );
-            const nc_color col = active ? COL_STAT_ACT : c_light_gray;
-            r.name_rml = cata_text_to_rml( colorize( label, col ) );
-            r.val_rml = cata_text_to_rml( colorize( string_format( "%2d", val ), col ) );
-            r.selected = active;
-            data->stats.push_back( r );
+        // The cards are a horizontal row, so LEFT/RIGHT walk them and UP/DOWN adjust the
+        // value — the creator's rule everywhere else (the list's own axis navigates, the other
+        // adjusts), and the direction the meter itself grows.
+        //
+        // ONE key each, and a NAMED one where there is one. The cardinals carry five bindings
+        // apiece ('h', LEFT, '4', NUMPAD_4, JOY_LEFT), so an unfiltered get_desc ran
+        // "h, LEFT, 4 or NUMPAD_4 / l, RIGHT, 6 or NUMPAD_6 select · …" across the whole top
+        // bar. disallow_lower_case alone was not enough: UP's second binding is the digit '8',
+        // so the pair read "DOWN / 8". Keycodes above 0x7F are the named keys (arrows are
+        // 0x102-0x105), and the fallback matters — someone who has bound a cardinal to nothing
+        // but a letter must still see it, and get_desc answers "Disabled" for a filter that
+        // rejects every binding.
+        const auto key = [&ctxt]( const std::string & act ) -> std::string {
+            const std::string named = ctxt.get_desc( act, 1, []( const input_event & ev )
+            {
+                return ev.type == input_event_t::keyboard && ev.get_first_input() > 0x7F;
+            } );
+            return named == pgettext( "keybinding", "Disabled" ) ? ctxt.get_desc( act, 1 ) : named;
         };
-        add_stat( _( "Strength:" ), u.str_max, 1 );
-        add_stat( _( "Dexterity:" ), u.dex_max, 2 );
-        add_stat( _( "Intelligence:" ), u.int_max, 3 );
-        add_stat( _( "Perception:" ), u.per_max, 4 );
+        data->hint_rml = cata_text_to_rml( string_format(
+                                               _( "<color_light_green>%s</color> / <color_light_green>%s</color> select · <color_light_green>%s</color> / <color_light_green>%s</color> adjust · <color_light_green>%s</color> randomize" ),
+                                               key( "LEFT" ), key( "RIGHT" ), key( "DOWN" ), key( "UP" ),
+                                               key( "RANDOMIZE" ) ) );
 
-        // HIGH_STAT cost warning for the selected stat (exact curses strings).
-        std::string cost;
-        if( sel == 1 && u.str_max >= HIGH_STAT ) {
-            cost = _( "Increasing Str further costs 2 points." );
-        } else if( sel == 2 && u.dex_max >= HIGH_STAT ) {
-            cost = _( "Increasing Dex further costs 2 points." );
-        } else if( sel == 3 && u.int_max >= HIGH_STAT ) {
-            cost = _( "Increasing Int further costs 2 points." );
-        } else if( sel == 4 && u.per_max >= HIGH_STAT ) {
-            cost = _( "Increasing Per further costs 2 points." );
+        data->cards.clear();
+        for( int s = 1; s <= 4; s++ ) {
+            const int val = nc_stat_ref( u, s );
+            const bool active = ( sel == s );
+            nc_stat_card c;
+            c.icon_dec = nc_icon_dec_col( nc_stat_seeds[s - 1], 14,
+                                          active ? c_yellow : c_light_gray );
+            c.name_rml = cata_text_to_rml( colorize( nc_stat_name( s ), c_light_gray ) );
+            // The value is what the four cards are compared on, so it stays bright on every
+            // one of them; the cursor is carried by the card's border and by the notch.
+            c.val_rml = cata_text_to_rml( colorize( string_format( "%d", val ), COL_STAT_ACT ) );
+            for( int p = 1; p <= max_stat_points; p++ ) {
+                const nc_stat_meter::tier t = nc_stat_meter::pip_tier( p, HIGH_STAT );
+                c.pips.push_back( {
+                    .on = ( val >= p ),
+                    .base = ( t == nc_stat_meter::tier::base ),
+                    .steep = ( t == nc_stat_meter::tier::steep ) } );
+            }
+            c.selected = active;
+            c.can_dec = nc_stat_meter::refund( val, HIGH_STAT ) != 0;
+            c.can_inc = nc_stat_meter::next_cost( val, HIGH_STAT, max_stat_points ) != 0;
+            data->cards.push_back( c );
         }
-        data->cost_rml = cost.empty() ? std::string()
-                         : cata_text_to_rml( colorize( cost, c_light_red ) );
 
-        data->desc_rml = cata_text_to_rml( nc_stat_desc( u, sel ) );
-
-        data->hints_rml = cata_text_to_rml( string_format(
-                                                _( "<color_light_green>%s</color> / <color_light_green>%s</color> to select a statistic.\n"
-                                                    "<color_light_green>%s</color> to increase the statistic.\n"
-                                                    "<color_light_green>%s</color> to decrease the statistic.\n"
-                                                    "\n"
-                                                    "<color_light_green>%s</color> lets you view and alter keybindings.\n"
-                                                    "<color_light_green>%s</color> takes you to the next tab.\n"
-                                                    "<color_light_green>%s</color> returns you to the main menu." ),
-                                                ctxt.get_desc( "UP" ), ctxt.get_desc( "DOWN" ),
-                                                ctxt.get_desc( "RIGHT" ), ctxt.get_desc( "LEFT" ),
-                                                ctxt.get_desc( "HELP_KEYBINDINGS" ), ctxt.get_desc( "NEXT_TAB" ),
-                                                ctxt.get_desc( "PREV_TAB" ) ) );
+        data->art_dec = nc_icon_dec_col( nc_stat_seeds[sel - 1], 112, c_yellow );
+        data->facts = nc_stat_facts( u, sel, max_stat_points );
+        data->desc_rml = cata_text_to_rml( nc_stat_blurb( sel ) );
+        // The legend explains a METER, so its swatches are real pips rather than sigils, and
+        // its wording comes from the same constants the pips do.
+        data->leg_base_rml = cata_text_to_rml( colorize(
+                string_format( _( "Granted (first %d)" ), nc_stat_meter::floor_val ),
+                c_light_gray ) );
+        data->leg_cheap_rml = cata_text_to_rml( colorize( _( "1 point each" ), c_light_gray ) );
+        data->leg_steep_rml = cata_text_to_rml( colorize(
+                string_format( _( "2 points each (above %d)" ), HIGH_STAT ), c_light_gray ) );
 
         data->handle.DirtyVariable( "tabs" );
         dirty_nc_shell( data->handle );
         data->handle.DirtyVariable( "points_rml" );
-        data->handle.DirtyVariable( "stats" );
-        data->handle.DirtyVariable( "cost_rml" );
+        data->handle.DirtyVariable( "hint_rml" );
+        data->handle.DirtyVariable( "cards" );
+        data->handle.DirtyVariable( "art_dec" );
+        data->handle.DirtyVariable( "facts" );
         data->handle.DirtyVariable( "desc_rml" );
-        data->handle.DirtyVariable( "hints_rml" );
+        data->handle.DirtyVariable( "leg_base_rml" );
+        data->handle.DirtyVariable( "leg_cheap_rml" );
+        data->handle.DirtyVariable( "leg_steep_rml" );
     };
 
     ui.on_redraw( [&]( const ui_adaptor & ) {
@@ -1087,10 +1240,39 @@ tab_direction set_stats( avatar &u, points_left &points )
         c.BindEventCallback( "on_next",
         [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = 1; } );
         c.Bind( "points_rml", &data->points_rml );
-        c.Bind( "stats", &data->stats );
-        c.Bind( "cost_rml", &data->cost_rml );
+        c.Bind( "hint_rml", &data->hint_rml );
+        c.Bind( "cards", &data->cards );
+        c.Bind( "art_dec", &data->art_dec );
+        c.Bind( "facts", &data->facts );
         c.Bind( "desc_rml", &data->desc_rml );
-        c.Bind( "hints_rml", &data->hints_rml );
+        c.Bind( "leg_base_rml", &data->leg_base_rml );
+        c.Bind( "leg_cheap_rml", &data->leg_cheap_rml );
+        c.Bind( "leg_steep_rml", &data->leg_steep_rml );
+        // Click callbacks RECORD INTENT and mutate nothing — see the comment on pending_card.
+        c.BindEventCallback( "on_card",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int i = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( i );
+            }
+            if( i >= 0 && i < 4 ) {
+                pending_card = i + 1;
+            }
+        } );
+        // The +/- controls, and the only way a mouse could change a stat at all before this.
+        c.BindEventCallback( "on_step",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int i = -1;
+            int d = 0;
+            if( args.size() >= 2 ) {
+                args[0].GetInto( i );
+                args[1].GetInto( d );
+            }
+            if( i >= 0 && i < 4 && d != 0 ) {
+                pending_step_stat = i + 1;
+                pending_step_dir = d;
+            }
+        } );
         data->handle = c.GetModelHandle();
     } );
     if( rml_doc_unavailable( rml, _( "Character creation (STATS tab)" ) ) ) {
@@ -1100,76 +1282,37 @@ tab_direction set_stats( avatar &u, points_left &points )
     do {
         ui_manager::redraw();
         nc_nav = 0;
+        pending_card = -1;
+        pending_step_stat = -1;
+        pending_step_dir = 0;
         std::string action = ctxt.handle_input();
         if( nc_nav != 0 ) {
             action = nc_nav < 0 ? "PREV_TAB" : "NEXT_TAB";
         }
-        if( action == "DOWN" ) {
-            if( sel < 4 ) {
-                sel++;
+        // Applied once, however many times the callback ran. A click on `+` bubbles to its
+        // card as well, so both intents land — and moving the cursor to the stat being
+        // adjusted is what clicking on it means.
+        if( pending_card >= 1 ) {
+            sel = pending_card;
+        }
+        if( pending_step_stat >= 1 ) {
+            sel = pending_step_stat;
+            if( pending_step_dir < 0 ) {
+                dec_stat( sel );
             } else {
-                sel = 1;
+                inc_stat( sel );
             }
-        } else if( action == "UP" ) {
-            if( sel > 1 ) {
-                sel--;
-            } else {
-                sel = 4;
-            }
+        }
+        if( action == "RIGHT" ) {
+            sel = sel < 4 ? sel + 1 : 1;
+        } else if( action == "LEFT" ) {
+            sel = sel > 1 ? sel - 1 : 4;
         } else if( action == "RANDOMIZE" ) {
             sel = rng( 1, 4 );
-        } else if( action == "LEFT" ) {
-            if( sel == 1 && u.str_max > 4 ) {
-                if( u.str_max > HIGH_STAT ) {
-                    points.stat_points++;
-                }
-                u.str_max--;
-                points.stat_points++;
-            } else if( sel == 2 && u.dex_max > 4 ) {
-                if( u.dex_max > HIGH_STAT ) {
-                    points.stat_points++;
-                }
-                u.dex_max--;
-                points.stat_points++;
-            } else if( sel == 3 && u.int_max > 4 ) {
-                if( u.int_max > HIGH_STAT ) {
-                    points.stat_points++;
-                }
-                u.int_max--;
-                points.stat_points++;
-            } else if( sel == 4 && u.per_max > 4 ) {
-                if( u.per_max > HIGH_STAT ) {
-                    points.stat_points++;
-                }
-                u.per_max--;
-                points.stat_points++;
-            }
-        } else if( action == "RIGHT" ) {
-            if( sel == 1 && u.str_max < max_stat_points ) {
-                points.stat_points--;
-                if( u.str_max >= HIGH_STAT ) {
-                    points.stat_points--;
-                }
-                u.str_max++;
-            } else if( sel == 2 && u.dex_max < max_stat_points ) {
-                points.stat_points--;
-                if( u.dex_max >= HIGH_STAT ) {
-                    points.stat_points--;
-                }
-                u.dex_max++;
-            } else if( sel == 3 && u.int_max < max_stat_points ) {
-                points.stat_points--;
-                if( u.int_max >= HIGH_STAT ) {
-                    points.stat_points--;
-                }
-                u.int_max++;
-            } else if( sel == 4 && u.per_max < max_stat_points ) {
-                points.stat_points--;
-                if( u.per_max >= HIGH_STAT ) {
-                    points.stat_points--;
-                }
-                u.per_max++;
-            }
+        } else if( action == "UP" ) {
+            inc_stat( sel );
+        } else if( action == "DOWN" ) {
+            dec_stat( sel );
         } else if( action == "PREV_TAB" ) {
             return tab_direction::BACKWARD;
         } else if( action == "NEXT_TAB" ) {
