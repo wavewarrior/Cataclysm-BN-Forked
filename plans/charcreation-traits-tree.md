@@ -189,6 +189,84 @@ checkbox, the row highlight, the points total, the balance scale and the detail 
 keep showing the pre-click state. This is the kind of defect that only exists because the screen
 is gated at all — the other seven steps call `sync_rml()` unconditionally.
 
+### It rendered nothing at first, silently
+
+The type was registered, the array filled and `DirtyVariable` called every frame — but
+`c.Bind( "dna", … )` was never written. A `data-for` over an unbound name renders **nothing**, with
+no warning at all: the `GENOME` heading appeared with an empty count over blank space while the
+producer ran happily. "Dirty every new binding" has a sibling — *bind* it — and a heading that
+renders while its list does not is the signature.
+
+## Appearance column
+
+### Prefixes stripped
+
+The sub-heading already says `EYE COLOR`, so `Eye color: amber` repeated it. Not done by
+prefix-matching the translated name — that is the mistake the SCENARIO grouping exists to avoid. In
+order: the authored `apperance_description` (present for all 8 eye colours, 8 hair colours, 13 hair
+styles and 8 of 11 skin tones, and *better* — it says "afro" where the name says "'fro", "very light
+peach" where the name says "lighter"); else a split at the first `": "`, which is punctuation rather
+than a word, for the 28 facial-hair traits that declare none; else the full name, which is what a
+locale writing no colon keeps. A worse label, never a wrong one.
+
+### Hovering — or cursoring — an option previews it on the portrait
+
+So a hair style can be judged before a click is spent. The option is worn for the duration of ONE
+portrait draw and removed again.
+
+Safe against the point budget for a reason **independent of the trait's cost**:
+`Character::toggle_trait` does not know the creator's budget exists. `points.trait_points`,
+`num_good` and `num_bad` are written only by the local `toggle_trait_at` lambda, which this bypasses.
+An earlier comment justified it with "appearance traits are all `points == 0`" — a premise this very
+file rejects, since `nc_classify_trait` deliberately puts a modded hair style *with* a point cost in
+this column. The wrong reason invites the wrong fix: route the swap through `toggle_trait_at` on
+meeting such a trait and it charges the budget per frame, which is real corruption.
+
+Scoped to the draw rather than held between frames. Holding it is cheaper, and was tried, but it
+needs three separate rules to stay correct — each of which turned up as a live bug:
+
+| holding the preview | what broke |
+|---|---|
+| a click landing while applied | `gate_of` sees `taken == true` for the option under the pointer, takes the DROP branch, and removes it while charging the budget for a drop that never happened — the *primary* interaction on this column |
+| `sync_rml` running while applied | rows are built from `u.has_trait`, so the previewed row renders `[x]` in gold with STATUS "Taken" for an option nobody owns, on every arrow-key step |
+| a reroll while applied | `u.randomize` replaces the character wholesale, and the pending un-swap would then toggle traits on a character that never had them |
+
+Draw-scoping deletes all three by construction. It costs four cosmetic `toggle_trait` calls per
+drawn frame while a preview is active, which is the trade taken deliberately.
+
+### Two input traps behind "the hover feels slow"
+
+**Mouse motion did not wake the loop at all.** Motion resolves to `CATA_ERROR`, and
+`input.cpp:894-897` `continue`s on an unrecognised MOUSE event *without returning*; because each
+pass restarts the wait, a moving pointer starves the timeout indefinitely, so `handle_input` only
+returned once the pointer stopped — and that is when the preview caught up. Fixing it needs BOTH
+`register_action( "COORDINATE" )`, which sets `handling_coordinate_input` and skips that early
+`continue`, and `register_action( "ANY_INPUT" )`, which makes the fall-through at `:912` return.
+Either alone still parks the loop. `ANY_INPUT` then has to be excluded from the model-dirty test, or
+every pointer sample rebuilds 188 rows.
+
+**`mouseout` bubbles** (`EventSpecification.cpp:16` declares `bubbles=true`), so stepping from one
+row to the next fires it on the row being left and it arrives at the LIST handler too. Honouring
+that made `hover_flat` oscillate `row → -1 → row`, and since -1 falls back to the cursor row the
+portrait visibly alternated between the option worn and the option under the pointer. The handler
+now reacts only when `GetTargetElement() == GetCurrentElement()`. `mouseover` is deliberately NOT
+filtered the same way: entering one of the row's child spans arrives bubbled with the row as current
+element, which is correct — the spans are the row's whole area — and it reports the same index.
+
+**Keyboard navigation has to reclaim the preview.** `hover_flat` persists until the pointer leaves
+the list and hover takes priority, so with the pointer resting over APPEARANCE the cursor moved while
+the portrait stayed put. `UP`/`DOWN`/`LEFT`/`RIGHT`/`RANDOMIZE` clear it, after the hover intent is
+applied so a key wins even when motion arrived in the same poll.
+
+### Portrait box 108dp → 168dp
+
+Panel 132 → 196dp with it. The portrait is a `scale-none` window into a 512px render target, so this
+box does not resize the character — it decides how much of the target is visible, and at 216 physical
+px the avatar reached the edges and read as cropped. To shrink the CHARACTER instead, zoom is the
+control: `character_preview` defaults to `DEFAULT_ZOOM == MAX_ZOOM` (128), and one `zoom_out()` in
+`nc_prepare_preview` would halve it — deliberately not done, because that function is shared by all
+four preview-bearing tabs.
+
 ## Point-sign, not column index
 
 `iCurWorkingPage` was overloaded: `== 0` meant both "the good column" and "counts against the
@@ -217,17 +295,28 @@ index 2.
 ## Verified
 
 - Builds clean. Warning counts identical to HEAD for every touched TU: `newcharacter_ui.cpp` 22
-  (all pre-existing `-Wunused-macros`), `mutation_type.cpp` 0, and 0 from either new header.
+  (all pre-existing `-Wunused-macros`), `mutation_type.cpp` 0, and 0 from any new header.
   `main_menu.cpp` is byte-identical to HEAD.
-- `[trait_gate]` + `[dna]` + `[newchar]` + `[mutations]`: 9479 assertions in 27 cases, all passing.
+- `[trait_gate]` + `[dna]` + `[newchar]` + `[mutations]` + `[character]`: 9723 assertions in 31
+  cases, all passing.
+- The row layout, the checkbox/cost gutters, the gold sub-headings, `[-]` plus dimming on
+  unavailable rows and the `:: NAME` detail panel were confirmed on screen by the user.
 
 ## NOT verified
 
-**This screen has never been rendered.** Synthetic input does not reach `gui/mainmenu.rml` at
-all — neither clicks nor keys, foreground delivery included — so the creator cannot be reached
-without a temporary scaffold, and macOS window identity for this app is ambiguous enough
-(`desktop.window` matched two windows for one process) that any frame captured this way has
-uncertain provenance. `tools/visual_verify/vv.py` drives the installed *Windows* build.
+The author never rendered this screen. Synthetic input does not reach `gui/mainmenu.rml` at all —
+neither clicks nor keys, foreground delivery included — so the creator cannot be reached without a
+temporary scaffold, and macOS window identity for this app is ambiguous enough (`desktop.window`
+matched two windows for one process) that any frame captured that way has uncertain provenance.
+`tools/visual_verify/vv.py` drives the installed *Windows* build.
 
-So the observer is the user. Everything above about layout, spacing and colour is a design
-argument, not a measurement.
+So the user is the observer, and it shows in where the bugs came from: **six defects in this work
+were found by review or by the user looking, none by a test.** The missing `dna` bind, the
+click-drops-instead-of-takes ordering bug, `sync_rml` rendering `[x]` for unowned options, the
+bubbling `mouseout`, the keyboard-vs-hover priority, and the `set_timeout( 33 )` that downgraded an
+existing 16ms tick. Every one is invisible to a compiler and to the pure-function tests, which is the
+honest measure of what this screen's test coverage does and does not buy.
+
+Still unconfirmed at time of writing: that the strand actually turns and its lit pairs match the
+taken traits, that hover tracks without alternating, that arrow keys move the preview with the
+pointer at rest over the list, and that clicking a hovered option takes rather than drops it.

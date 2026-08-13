@@ -114,10 +114,15 @@
                             <span class="nc-trait-colname" data-rml="col2.name_rml"></span>
                             <span class="nc-trait-colcount" data-rml="col2.count_rml"></span>
                         </div>
-                        <div id="nc-trait-col2" class="nc-trait-list">
+                        <!-- mouseout BUBBLES, so a row's own mouseout arrives here too when stepping
+                             row to row. on_hover_out ignores those and reacts only when the LIST is
+                             what the pointer left. -->
+                        <div id="nc-trait-col2" class="nc-trait-list"
+                             data-event-mouseout="on_hover_out()">
                             <div class="item nc-trait-row" data-for="r, ri : col2.rows"
                                  data-class-selected="r.selected" data-class-header="r.header"
-                                 data-event-click="on_row(2, ri)">
+                                 data-event-click="on_row(2, ri)"
+                                 data-event-mouseover="on_hover(ri)">
                                 <span class="nc-tr-cursor" data-rml="r.cursor_rml"></span>
                                 <span class="nc-tr-check" data-rml="r.check_rml"
                                       data-event-click="on_check(2, ri)"></span>

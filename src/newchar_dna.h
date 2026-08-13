@@ -27,6 +27,12 @@ constexpr float twist_per_rung = 0.55F;
 /// brisk enough to notice while scanning names would be a distraction rather than flair.
 constexpr float spin_turns_per_sec = 0.09F;
 
+/// Horizontal travel available to a backbone, in dp. MUST equal `.nc-dna-wrap`'s width minus
+/// `.nc-dna-dot`'s width in data/gui/newchartraits.rcss (120dp box, 10dp dot) — change either and
+/// this must change with it, or the dots walk out of the column. Named here rather than left in the
+/// producer so the coupling is stated once, in the same place as the rest of the geometry.
+constexpr float travel_dp = 100.0F;
+
 /// Phase for a given elapsed time, in radians.
 inline auto phase_at( float seconds ) -> float
 {

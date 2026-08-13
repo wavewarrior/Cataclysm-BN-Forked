@@ -205,11 +205,12 @@ body {
 }
 
 /* ── DNA STRAND ───────────────────────────────────────────────────────────────
-   A narrow full-height column beside the lists. 88dp of box holds 72dp of travel plus the 8dp
-   dot and a little air, which is why newchar_dna.h's fractions are scaled by exactly 72. */
+   A full-height column beside the lists. 120dp of box holds 100dp of travel plus the 10dp dot and
+   a little air, which is why the producer scales newchar_dna.h's fractions by exactly 100. The
+   three lists give up ~11dp each for it, which they do not miss. */
 .nc-dna-wrap {
     flex: 0 0 auto;
-    width: 88dp;
+    width: 120dp;
     display: flex;
     flex-direction: column;
 }
@@ -247,9 +248,9 @@ body {
 
 .nc-dna-dot {
     flex: 0 0 auto;
-    width: 8dp;
-    height: 8dp;
-    border-radius: 4dp;
+    width: 10dp;
+    height: 10dp;
+    border-radius: 5dp;
     /* Back half of the turn: recedes. Depth is carried by brightness alone — sizing the dots per
        rung would change the flow widths and fight the gap arithmetic. */
     background-color: {{bg4}};
@@ -286,14 +287,21 @@ body {
 }
 
 /* Shorter than the card tabs' 188dp: this tab spends its height on three long lists, and the
-   panel carries three facts plus prose rather than facts plus two rows of chips. */
+   panel carries three facts plus prose rather than facts plus two rows of chips. Taller than the
+   132dp first pass purely to give the portrait room — see .nc-info-art. */
 .nc-info-panel {
-    height: 132dp;
+    height: 196dp;
 }
 
+/* The portrait is a `scale-none` window into a 512px render target, so this box does not resize the
+   character — it decides how much of the target is visible. At 108dp (216 physical px on a 2x
+   display) the avatar reached the edges and read as cropped; 168dp shows it whole with air around
+   it. To shrink the CHARACTER rather than the window, zoom is the control: character_preview
+   defaults to DEFAULT_ZOOM == MAX_ZOOM (128), and one zoom_out() in nc_prepare_preview would halve
+   it for all four preview tabs at once. */
 .nc-info-art {
-    width: 108dp;
-    height: 108dp;
+    width: 168dp;
+    height: 168dp;
 }
 
 .nc-trait-hint {

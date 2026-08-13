@@ -1481,6 +1481,29 @@ for( const std::string &t : m.types ) {
 return m.points < 0 ? nc_trait_group{ .col = 1 } : nc_trait_group{ .col = 2 };
 }
 
+/// The label a row shows. Under an appearance sub-heading the group is already named by the
+/// heading, so "Eye color: amber" repeats it — strip to the bare option.
+///
+/// Prefer the AUTHORED short form: `apperance_description` says "afro" where the name says
+/// "Hair style: 'fro", and every eye colour, hair colour, hair style and most skin tones declare
+/// one. The 28 facial-hair traits declare none, so fall back to splitting at the first ": " —
+/// punctuation, NOT a word. Prefix-matching a translated name is the mistake the SCENARIO grouping
+/// exists to avoid, and a locale that writes no colon simply keeps the full name here: a worse
+/// label, never a wrong one.
+auto nc_trait_row_label( const mutation_branch &m, bool in_appearance ) -> std::string
+{
+    if( !in_appearance ) {
+    return m.name();
+    }
+    const std::string bare = m.apperance_desc();
+    if( !bare.empty() ) {
+        return bare;
+    }
+    const std::string full = m.name();
+    const size_t sep = full.find( ": " );
+    return sep == std::string::npos ? full : full.substr( sep + 2 );
+}
+
 auto nc_trait_group_name( const nc_trait_group &g ) -> std::string
 {
     if( !g.appearance_type.empty() ) {
@@ -1706,6 +1729,17 @@ tab_direction set_traits( avatar &u, points_left &points )
     ctxt.register_action( "zoom_in" );
     ctxt.register_action( "zoom_out" );
     ctxt.register_action( "TOGGLE_CHARACTER_PREVIEW_CLOTHES" );
+    // Mouse MOTION has to wake this loop, or the appearance preview only catches up when the
+    // pointer stops. Motion resolves to CATA_ERROR, and input.cpp:894-897 `continue`s on an
+    // unrecognised MOUSE event without returning — and because each pass restarts the wait, a
+    // moving pointer starves the timeout indefinitely, so handle_input never returns and the loop
+    // never reaches redraw(). It reads as a preview that lags a second behind the cursor.
+    //
+    // BOTH of these are needed. COORDINATE sets handling_coordinate_input, which is what skips that
+    // early `continue`; ANY_INPUT is what then makes the fall-through at :912 return rather than
+    // loop again. Either alone still parks the loop.
+    ctxt.register_action( "COORDINATE" );
+    ctxt.register_action( "ANY_INPUT" );
 
     // RmlUi render path (render-only; keyboard owns nav/confirm/reroll below).
     auto data = std::make_unique<nc_traits_session>();
@@ -1722,6 +1756,11 @@ tab_direction set_traits( avatar &u, points_left &points )
     int pending_row = -1;
     int pending_check_col = -1;
     int pending_check_row = -1;
+    // Hover intent for the appearance preview. Unlike the click intents this is NOT cleared each
+    // cycle: a hover persists until the pointer moves to another row or leaves the list, so the
+    // preview must survive the quiet frames in between. -1 is "nothing hovered".
+    int pending_hover = -2;   //< -2 = no mouseover this cycle, -1 = mouse left the list
+    int hover_flat = -1;      //< index into starting_traits, or -1
 
     // Why a trait can or cannot be toggled right now. ONE source of truth: the row's checkbox
     // glyph, the Status fact's reason line and CONFIRM's refusal popups all read this, so what a
@@ -1898,10 +1937,10 @@ tab_direction set_traits( avatar &u, points_left &points )
         for( int i = 0; i < nc_dna::rungs; i++ ) {
             const nc_dna::span sp = nc_dna::span_of( nc_dna::at( i, phase ) );
             nc_dna_rung r;
-            // Fractions scaled to the strand's travel, which the stylesheet fixes at 72dp so the
-            // dots never leave the column.
-            r.gap = string_format( "%.1fdp", sp.left * 72.0F );
-            r.bond = string_format( "%.1fdp", sp.width * 72.0F );
+            // Fractions scaled to the strand's travel; the coupling to the stylesheet's column
+            // width is documented on nc_dna::travel_dp.
+            r.gap = string_format( "%.1fdp", sp.left * nc_dna::travel_dp );
+            r.bond = string_format( "%.1fdp", sp.width * nc_dna::travel_dp );
             r.left_front = sp.left_front;
             r.mark_good = mark[i] == 1;
             r.mark_bad = mark[i] == 2;
@@ -1982,7 +2021,9 @@ tab_direction set_traits( avatar &u, points_left &points )
             }
             const nc_color name_col = gt.taken ? c_white
                                       : ( gt.toggleable() ? c_light_gray : c_dark_gray );
-            r.name_rml = cata_text_to_rml( colorize( m.name(), name_col ) );
+            r.name_rml = cata_text_to_rml( colorize(
+                                               nc_trait_row_label( m, !e.grp.appearance_type.empty() ),
+                                               name_col ) );
             r.selected = is_cursor;
             return r;
         };
@@ -2085,6 +2126,11 @@ tab_direction set_traits( avatar &u, points_left &points )
         c.Bind( "col0", &data->col0 );
         c.Bind( "col1", &data->col1 );
         c.Bind( "col2", &data->col2 );
+        // The strand. Easy to forget, and it fails SILENTLY: `data-for` over an unbound name
+        // renders nothing at all, so the GENOME heading appeared with an empty count and no rungs
+        // beneath it while sync_dna was happily filling and dirtying the array every frame.
+        c.Bind( "dna", &data->dna );
+        c.Bind( "dna_count_rml", &data->dna_count_rml );
         c.Bind( "sel_name_rml", &data->sel_name_rml );
         c.Bind( "facts", &data->facts );
         c.Bind( "desc_rml", &data->desc_rml );
@@ -2119,18 +2165,109 @@ tab_direction set_traits( avatar &u, points_left &points )
                 pending_check_row = row;
             }
         } );
+        // Hovering an appearance option previews it on the portrait, so a hair style or eye colour
+        // can be judged before spending a click. Records intent only, like every other callback here.
+        //
+        // NOT filtered on the event target: `mouseover` bubbles, so entering one of the row's child
+        // spans arrives here with the row as current element, and that is exactly right — the spans
+        // are the whole row's area. It reports the same row index either way, so it is idempotent.
+        c.BindEventCallback( "on_hover",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int row = -1;
+            if( !args.empty() ) {
+                args[0].GetInto( row );
+            }
+            pending_hover = row;
+        } );
+        // The pointer leaving the list ends the preview — but ONLY when the list itself is what was
+        // left. `mouseout` bubbles too (RmlUi EventSpecification.cpp:16 declares it bubbles=true), so
+        // stepping from one row to the next fires mouseout on the row being left and it arrives here
+        // as well. Honouring that made hover_flat oscillate row -> -1 -> row, and since -1 falls back
+        // to the cursor row the portrait visibly alternated between the option worn and the option
+        // under the pointer. Comparing target to current element is what distinguishes the two.
+        c.BindEventCallback( "on_hover_out",
+        [&]( Rml::DataModelHandle, Rml::Event & ev, const Rml::VariantList & ) {
+            if( ev.GetTargetElement() == ev.GetCurrentElement() ) {
+                pending_hover = -1;
+            }
+        } );
         data->handle = c.GetModelHandle();
     } );
     if( rml_doc_unavailable( rml, _( "Character creation (TRAITS tab)" ) ) ) {
         return tab_direction::QUIT;
     }
 
+    // ── APPEARANCE PREVIEW ────────────────────────────────────────────────────
+    //
+    // The hovered — or cursored — appearance option is worn by the avatar for the duration of ONE
+    // portrait draw, so the picture shows what the option looks like before a click is spent.
+    //
+    // Scoped to the draw, NOT held between frames. An earlier version applied it once per change and
+    // left it on, which is cheaper — but frames are presented from paths this loop does not own, and
+    // any of them catching the avatar mid-preview made the portrait flicker between the option worn
+    // and the option highlighted. Nothing outside this lambda can observe a previewed character now,
+    // which also removes three ordering hazards that version needed rules for: a click landing while
+    // the preview was applied (gate_of would see `taken` and DROP the option it was asked to take),
+    // sync_rml building rows from a previewed character (a row rendering `[x]` for an option nobody
+    // owns), and a reroll replacing the character with a preview outstanding.
+    //
+    // Safe against the POINT BUDGET for a reason that has nothing to do with the trait's cost:
+    // `Character::toggle_trait` does not know the creator's budget exists. `points.trait_points`,
+    // `num_good` and `num_bad` are written ONLY by the local toggle_trait_at lambda, and this
+    // bypasses it. So a preview cannot mis-charge anything even for a modded appearance trait that
+    // carries a point cost — which nc_classify_trait deliberately allows into this column.
+    //
+    // Do NOT "fix" this by routing it through toggle_trait_at because some appearance trait is not
+    // free: that lambda is what moves the budget, and charging it per frame is real corruption.
+    const auto draw_preview = [&]() {
+        // The pointer wins while it is over the list; otherwise the cursor row previews, which is the
+        // only way this works at all for a keyboard user.
+        const int flat = hover_flat >= 0 ? hover_flat : trait_at( cur_col, cur_row[cur_col] );
+        trait_id want = trait_id::NULL_ID();
+        trait_id displaced = trait_id::NULL_ID();
+        if( flat >= 0 && flat < static_cast<int>( starting_traits.size() ) ) {
+            const trait_entry &e = starting_traits[flat];
+            // Already worn needs no preview, and previewing it would toggle it OFF.
+            if( !e.grp.appearance_type.empty() && !u.has_trait( e.id ) ) {
+                want = e.id;
+                // Whatever of that type is worn comes off, or a mandatory_one type renders two
+                // options at once.
+                for( const trait_id &tr : u.get_base_traits() ) {
+                    if( tr != want && tr.obj().types.contains( e.grp.appearance_type ) ) {
+                        displaced = tr;
+                        break;
+                    }
+                }
+            }
+        }
+        const bool previewing = want != trait_id::NULL_ID();
+        if( previewing ) {
+            if( displaced != trait_id::NULL_ID() ) {
+                u.toggle_trait( displaced );
+            }
+            u.toggle_trait( want );
+        }
+        character_preview.display();
+        // Reversed in the opposite order, so the character ends up exactly as it started.
+        if( previewing ) {
+            u.toggle_trait( want );
+            if( displaced != trait_id::NULL_ID() ) {
+                u.toggle_trait( displaced );
+            }
+        }
+    };
+
     // The model is rebuilt only when something changed; the strand every frame. Without this split
-    // the 33ms animation tick would re-colour 188 rows thirty times a second to move some dots.
+    // a quiet tick would re-colour 188 rows and regenerate 188 data-for elements to move some dots.
     bool model_dirty = true;
     ui.on_redraw( [&]( const ui_adaptor & ) {
         if( rml ) {
             if( model_dirty ) {
+                // Built from the character the player actually has, which is automatic now that the
+                // preview exists only inside draw_preview: gate_of asks `u.has_trait`, so a preview
+                // outstanding here would render its row's box as [x] in gold with STATUS "Taken" for
+                // an option nobody owns. The list describes the real character; the portrait shows
+                // what the highlighted option would look like.
                 sync_rml();
                 model_dirty = false;
             }
@@ -2139,7 +2276,7 @@ tab_direction set_traits( avatar &u, points_left &points )
             // for the avatar), so it composes over this document rather than
             // fighting it. It was skipped only because this branch returned early.
             if( use_character_preview ) {
-                character_preview.display();
+                draw_preview();
             }
             return;
         }
@@ -2185,17 +2322,46 @@ tab_direction set_traits( avatar &u, points_left &points )
         pending_row = -1;
         pending_check_col = -1;
         pending_check_row = -1;
+        pending_hover = -2;
         std::string action = ctxt.handle_input();
         if( nc_nav != 0 ) {
             action = nc_nav < 0 ? "PREV_TAB" : "NEXT_TAB";
         }
-        // Rebuild the model on the next redraw after anything that can have changed it. The click
-        // intents MUST be part of this test, not just `action`: cata maps MOUSE_LEFT to SELECT on
-        // mouse DOWN while RmlUi fires its `click` — and therefore these callbacks — on mouse UP,
-        // so the iteration that carries a click's intent is usually a "TIMEOUT" one. Gating on the
+        // Rebuild the model on the next redraw after anything that can have changed it.
+        //
+        // The click intents MUST be part of this test, not just `action`: cata maps MOUSE_LEFT to
+        // SELECT on mouse DOWN while RmlUi fires its `click` — and therefore those callbacks — on
+        // mouse UP, so the iteration carrying a click's intent is usually an idle one. Gating on the
         // action alone left every mouse toggle applied but unrendered.
-        if( action != "TIMEOUT" || pending_row >= 0 || pending_check_row >= 0 ) {
+        //
+        // TIMEOUT and ANY_INPUT are both idle as far as the MODEL goes — ANY_INPUT is what every
+        // mouse motion now returns, and rebuilding 188 rows per pointer move is exactly the cost
+        // this split exists to avoid. The strand and the preview still update, because those are
+        // outside the gate.
+        if( ( action != "TIMEOUT" && action != "ANY_INPUT" ) ||
+            pending_row >= 0 || pending_check_row >= 0 ) {
             model_dirty = true;
+        }
+        // No preview state to unwind before acting on input: draw_preview applies and removes it
+        // inside a single draw, so the avatar is always its true self by the time anything here runs
+        // — including toggle_trait_at, which would otherwise see the previewed option as `taken` and
+        // drop the very thing the click asked it to take.
+        // Hover intent. -2 means no mouseover arrived this cycle, so the existing preview stands;
+        // -1 is the pointer leaving the list, which ends it. Column 2 is the only one that reports.
+        if( pending_hover != -2 ) {
+            const int flat = pending_hover >= 0 ? trait_at( 2, pending_hover ) : -1;
+            if( flat != hover_flat ) {
+                hover_flat = flat;
+            }
+        }
+        // Keyboard navigation takes the preview BACK from the pointer. hover_flat otherwise persists
+        // until the pointer leaves the list, and draw_preview gives hover priority — so with the
+        // pointer resting anywhere over APPEARANCE, which is where it ends up after hovering, the
+        // cursor would move while the portrait stayed on the last hovered row. Applied after the
+        // hover intent above, so a key wins even when motion arrived in the same poll.
+        if( action == "UP" || action == "DOWN" || action == "LEFT" || action == "RIGHT" ||
+            action == "RANDOMIZE" ) {
+            hover_flat = -1;
         }
         if( action == "zoom_in" && use_character_preview ) {
             character_preview.zoom_in();
