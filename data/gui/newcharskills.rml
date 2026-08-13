@@ -5,13 +5,31 @@
     <link type="text/rcss" href="newcharskills.rcss"/>
 </head>
 <body data-model="newcharskills">
-    <!-- Tier 4 screen #4 (new-character creator) slice 3: the SKILLS tab
-         (set_skills). Character-tab strip (SKILLS current) + points line +
-         upgrade-cost hint + a category-grouped skill list (yellow headers; each
-         skill shows level + profession bonus; cursor = .selected) + a scrollable
-         description pane (skill description + the recipes it unlocks). Render-only
-         doc; keyboard owns UP/DOWN select, LEFT/RIGHT dec/inc, RANDOMIZE,
-         SCROLL_UP/DOWN (desc pane), NEXT/PREV_TAB, QUIT. -->
+    <!-- Tier 4 screen #4 (new-character creator): the SKILLS tab (set_skills).
+         ROW based, the same vocabulary TRAITS and BIONICS use, because 28 skills in 6
+         categories is a checklist. What a skill has that a trait does not is a
+         MAGNITUDE, so the row's middle cell is a pip meter flanked by its steppers
+         rather than a checkbox — a column of meters can be read down as a competence
+         profile, where "(2)" inside a coloured sentence cannot.
+
+         The two columns are a WRAP of ONE ordered list, not two independent lists.
+         LEFT/RIGHT have always meant lower/raise the skill here — the primary action of
+         the whole screen — so they cannot be spent on changing column the way they are
+         on TRAITS and BIONICS. The cursor walks the flat visual order instead (column 0
+         top to bottom, then column 1), which is the order the eye reads them in anyway,
+         so UP/DOWN cross the column boundary.
+
+         Beside the lists is the aptitude matrix: a 13x13 dot radar, one filled SECTOR
+         per display category, its depth that category's share of the strongest one, with a
+         beam sweeping one revolution every few seconds. Buying a level deepens a sector,
+         so the screen answers "what am I actually good at" without reading 28 numbers.
+         The legend under it names each sector, because an unlabelled radar is decoration.
+
+         Keyboard: UP/DOWN move through the flat order skipping headings, LEFT/RIGHT
+         lower/raise, CONFIRM raises, RANDOMIZE jumps, SCROLL_UP/DOWN scroll the recipe
+         pane, NEXT/PREV_TAB, QUIT. Mouse: a row click moves the cursor and the steppers
+         change the level — reading a skill is not the same gesture as buying one.
+         See plans/charcreation-skills-matrix.md. -->
     <div class="panel nc-panel">
         <div class="nc-steps">
             <div class="nc-step" data-for="t : tabs"
@@ -31,16 +49,134 @@
             </div>
             <div class="nc-arrow-spacer" data-if="!has_prev"></div>
             <div class="nc-stage">
-            <div class="nc-points" data-rml="points_rml"></div>
-            <div class="nc-cost" data-rml="cost_rml"></div>
-            <div class="nc-body">
-                <div id="nc-skill-list" class="nc-skill-list scroll-pane">
-                    <div class="item nc-skill-row" data-for="r : rows"
-                         data-class-header="r.is_header" data-class-selected="r.selected"
-                         data-rml="r.text_rml"></div>
+                <!-- Meta bar: pools on the left, the skill-point budget on the right,
+                     dotted rules above and below it as in the reference. No balance
+                     scale — skills have no advantage/disadvantage budget to weigh. -->
+                <div class="nc-rule"></div>
+                <div class="nc-meta">
+                    <span class="nc-meta-pool" data-rml="points_rml"></span>
+                    <span class="nc-meta-budget" data-rml="budget_rml"></span>
                 </div>
-                <div id="nc-skill-desc" class="nc-skill-desc scroll-pane" data-rml="desc_rml"></div>
-            </div>
+                <div class="nc-rule"></div>
+
+                <div class="nc-cols">
+                    <!-- Both columns written out rather than generated, because each needs a
+                         stable id for C++ to scroll its own cursor into view. -->
+                    <div class="nc-colwrap">
+                        <div class="nc-colhead">
+                            <div class="nc-col-sigil" data-style-decorator="col0.sigil_dec"></div>
+                            <span class="nc-colname" data-rml="col0.name_rml"></span>
+                            <span class="nc-colcount" data-rml="col0.count_rml"></span>
+                        </div>
+                        <!-- No `item` class on the row, deliberately: theme.rcss's `.item`
+                             fill turns a column of rows into one pale slab and flattens
+                             every semantic colour in it. Recorded in the bionics plan. -->
+                        <div id="nc-col0" class="nc-list">
+                            <div class="nc-row" data-for="r, ri : col0.rows"
+                                 data-class-selected="r.selected" data-class-header="r.header"
+                                 data-event-click="on_row(0, ri)">
+                                <span class="nc-cell-cursor" data-rml="r.cursor_rml"></span>
+                                <span class="nc-cell-step" data-if="!r.header" data-class-off="!r.can_dec"
+                                      data-event-click="on_dec(0, ri)">&#8722;</span>
+                                <div class="nc-cell-meter" data-if="!r.header">
+                                    <div class="nc-pip" data-for="p : r.pips" data-class-on="p.on"
+                                         data-class-bonus="p.bonus" data-class-steep="p.steep"></div>
+                                </div>
+                                <span class="nc-cell-step" data-if="!r.header" data-class-off="!r.can_inc"
+                                      data-event-click="on_inc(0, ri)">+</span>
+                                <span class="nc-cell-lvl" data-rml="r.lvl_rml"></span>
+                                <span class="nc-cell-cost" data-rml="r.cost_rml"></span>
+                                <span class="nc-cell-name" data-rml="r.name_rml"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="nc-vrule"></div>
+                    <div class="nc-colwrap">
+                        <div class="nc-colhead">
+                            <div class="nc-col-sigil" data-style-decorator="col1.sigil_dec"></div>
+                            <span class="nc-colname" data-rml="col1.name_rml"></span>
+                            <span class="nc-colcount" data-rml="col1.count_rml"></span>
+                        </div>
+                        <div id="nc-col1" class="nc-list">
+                            <div class="nc-row" data-for="r, ri : col1.rows"
+                                 data-class-selected="r.selected" data-class-header="r.header"
+                                 data-event-click="on_row(1, ri)">
+                                <span class="nc-cell-cursor" data-rml="r.cursor_rml"></span>
+                                <span class="nc-cell-step" data-if="!r.header" data-class-off="!r.can_dec"
+                                      data-event-click="on_dec(1, ri)">&#8722;</span>
+                                <div class="nc-cell-meter" data-if="!r.header">
+                                    <div class="nc-pip" data-for="p : r.pips" data-class-on="p.on"
+                                         data-class-bonus="p.bonus" data-class-steep="p.steep"></div>
+                                </div>
+                                <span class="nc-cell-step" data-if="!r.header" data-class-off="!r.can_inc"
+                                      data-event-click="on_inc(1, ri)">+</span>
+                                <span class="nc-cell-lvl" data-rml="r.lvl_rml"></span>
+                                <span class="nc-cell-cost" data-rml="r.cost_rml"></span>
+                                <span class="nc-cell-name" data-rml="r.name_rml"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="nc-vrule"></div>
+                    <!-- Aptitude radar. 13 flex rows of 13 flex dots, so it stays square and
+                         aligned at any stage size; C++ writes every dot's colour and alpha per
+                         frame, and dots outside the disc stay fully transparent, which is what
+                         makes a square grid read as a circle. Composition is by ALPHA on the
+                         dark ground rather than by colour arithmetic, and nothing is positioned
+                         or transformed — overlaying bars at one centre would need
+                         `position: absolute`, which these documents resolve against .nc-panel.
+                         Geometry is newchar_aptitude.h. -->
+                    <div class="nc-apt-wrap">
+                        <div class="nc-colhead">
+                            <span class="nc-colname" data-rml="apt_name_rml"></span>
+                            <span class="nc-colcount" data-rml="apt_count_rml"></span>
+                        </div>
+                        <div class="nc-apt">
+                            <div class="nc-apt-row" data-for="ar : apt">
+                                <div class="nc-apt-dot" data-for="d : ar.cells"
+                                     data-style-background-color="d.col"></div>
+                            </div>
+                        </div>
+                        <div class="nc-apt-legend">
+                            <div class="nc-apt-leg" data-for="s : apt_legend">
+                                <div class="nc-apt-leg-icon" data-style-decorator="s.dec"></div>
+                                <span class="nc-apt-leg-name" data-rml="s.name_rml"></span>
+                                <span class="nc-apt-leg-val" data-rml="s.val_rml"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="nc-rule"></div>
+                <!-- ":: SKILL NAME" over the detail panel, as in the reference. -->
+                <div class="nc-selname" data-rml="sel_name_rml"></div>
+                <div class="nc-info-panel">
+                    <!-- Art slot: the category's sigil, not the avatar. A skill does not change
+                         how the character looks, and the sigil is what ties this panel to the
+                         column heading and to its sector on the radar. -->
+                    <div class="nc-info-art" data-if="has_art"
+                         data-style-decorator="art_dec"></div>
+                    <div class="nc-info-facts">
+                        <div class="nc-fact" data-for="f : facts">
+                            <div class="nc-fact-label" data-rml="f.label_rml"></div>
+                            <div class="nc-fact-value" data-rml="f.value_rml"></div>
+                            <!-- Carries the qualifier the value cannot: what the profession adds
+                                 after creation, the free-extra-level rule at 0, the cap. -->
+                            <div class="nc-fact-sub" data-rml="f.sub_rml"></div>
+                        </div>
+                    </div>
+                    <!-- Prose in a .nc-info-blurb CHILD: .nc-info-desc is `display: flex`, and a
+                         bare text node in a flex container gets no inline context and renders
+                         nothing. See plans/charcreation-stats-cards.md.
+
+                         The recipe list gets its own scrolling element beneath the blurb, so a
+                         skill unlocking forty recipes cannot push the description out of the
+                         panel. This is what SCROLL_UP/SCROLL_DOWN scroll. -->
+                    <div class="nc-info-desc">
+                        <div class="nc-info-blurb" data-rml="desc_rml"></div>
+                        <div id="nc-skill-detail" class="nc-info-detail" data-rml="detail_rml"></div>
+                    </div>
+                </div>
+                <div class="nc-hint" data-rml="hint_rml"></div>
             </div>
             <div class="nc-arrow nc-arrow-next" data-if="has_next"
                  data-event-click="on_next()">

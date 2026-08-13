@@ -63,6 +63,7 @@
 #include "recipe.h"
 #include "recipe_dictionary.h"
 #include <RmlUi/Core.h>
+#include "newchar_aptitude.h"
 #include "newchar_bio_scan.h"
 #include "newchar_bionic_gate.h"
 #include "newchar_dna.h"
@@ -5365,18 +5366,94 @@ struct nc_skills_tab {
     bool selected = false;
     bool done = false;   //< step already passed
 };
+
+/// One pip of a row's level meter, the vocabulary the STATS cards established. Bools only: the
+/// stylesheet owns what each tier looks like, and a pip is only ever consumed as a colour and a
+/// height.
+struct nc_skill_pip {
+    bool on = false;      //< bought
+    bool bonus = false;   //< granted by the profession after creation, so it cannot be sold back
+    bool steep = false;   //< reaching this level costs two points or more
+};
+
+/// One row of a column. The cells are fixed-width by stylesheet, so cursor, meter, level, price and
+/// name each form a column the eye can run down — which is the whole reason 28 skills are rows and
+/// not cards: a column of meters reads as a competence profile, and "Marksmanship (2) (+1)" does
+/// not. A heading occupies a row of the SAME height, which is what keeps the cursor-scroll
+/// arithmetic exact; the markup drops its middle cells with `data-if`.
 struct nc_skill_row {
-    Rml::String text_rml;
-    bool is_header = false;
+    Rml::String cursor_rml;   //< ">" on the cursor row, else empty
+    Rml::String lvl_rml;      //< "4", plus " +1" when the profession adds more
+    Rml::String cost_rml;     //< price of the NEXT level, "[max]" at the cap
+    Rml::String name_rml;
+    Rml::Vector<nc_skill_pip> pips;
+    bool can_dec = false;
+    bool can_inc = false;
+    bool header = false;
     bool selected = false;
 };
+
+/// One column: a category sigil, a heading, a count and its rows.
+struct nc_skill_col {
+    Rml::String name_rml;
+    Rml::String count_rml;
+    /// "none", NOT empty: `data-style-decorator` is applied on the first frame, before sync_rml has
+    /// run, and an empty value becomes `decorator: ;`, which RmlUi logs every frame.
+    Rml::String sigil_dec = "none";
+    Rml::Vector<nc_skill_row> rows;
+};
+
+/// A label / value / sub-line triple in the detail panel.
+struct nc_skill_fact {
+    Rml::String label_rml;
+    Rml::String value_rml;
+    Rml::String sub_rml;
+};
+
+/// One dot of the aptitude matrix: a colour and nothing else. Geometry lives in
+/// newchar_aptitude.h, and the sweep is carried in that colour's ALPHA — so the compositor does the
+/// fading and there is no colour arithmetic here to get wrong. Transparent for a dot outside the
+/// disc, which is what makes a square grid read as a circle.
+struct nc_apt_dot {
+    Rml::String col = "#00000000";
+};
+struct nc_apt_row {
+    Rml::Vector<nc_apt_dot> cells;
+};
+/// A sector's line in the legend under the disc. An unlabelled radar is decoration.
+struct nc_apt_sector {
+    Rml::String dec = "none";
+    Rml::String name_rml;
+    Rml::String val_rml;
+};
+
 struct nc_skills_session {
     Rml::Vector<nc_skills_tab> tabs;
     nc_shell shell;
     Rml::String points_rml;
-    Rml::String cost_rml;
-    Rml::Vector<nc_skill_row> rows;
-    Rml::String desc_rml;
+    Rml::String budget_rml;   //< "Skill points left: N", the reference's meta-bar readout
+    /// Two columns, bound separately rather than as an array: each needs a stable element id so
+    /// C++ can scroll its own cursor into view.
+    nc_skill_col col0;
+    nc_skill_col col1;
+    Rml::String sel_name_rml;   //< ":: SKILL NAME" over the detail panel
+    /// The art slot carries the CATEGORY's sigil, not the avatar: a skill does not change how the
+    /// character looks, and the sigil ties the panel to its wedge on the matrix and to the column
+    /// heading it sits under.
+    bool has_art = false;
+    Rml::String art_dec = "none";
+    Rml::Vector<nc_skill_fact> facts;
+    Rml::String desc_rml;     //< the skill's own description
+    Rml::String detail_rml;   //< the recipes it unlocks; scrolls on its own
+    Rml::String hint_rml;
+    /// The matrix, rebuilt every redraw because it carries the sweep. DataViewStyle skips an
+    /// unchanged property value (RmlUi DataViewDefault.cpp:168) and DataViewFor only creates
+    /// elements when an array's SIZE changes — this one is always 13 by 13 — so a quiet tick costs
+    /// the dots the beam is actually moving over and nothing else.
+    Rml::Vector<nc_apt_row> apt;
+    Rml::String apt_name_rml;
+    Rml::String apt_count_rml;
+    Rml::Vector<nc_apt_sector> apt_legend;
     Rml::DataModelHandle handle;
 };
 
@@ -5393,21 +5470,115 @@ void register_nc_skills_rml_types( Rml::DataModelConstructor &c )
     th.RegisterMember( "selected", &nc_skills_tab::selected );
     th.RegisterMember( "done", &nc_skills_tab::done );
     c.RegisterArray<Rml::Vector<nc_skills_tab>>();
+    // Pips before rows and rows before the column that holds them: a member cannot be registered
+    // before its own type is.
+    Rml::StructHandle<nc_skill_pip> ph = c.RegisterStruct<nc_skill_pip>();
+    ph.RegisterMember( "on", &nc_skill_pip::on );
+    ph.RegisterMember( "bonus", &nc_skill_pip::bonus );
+    ph.RegisterMember( "steep", &nc_skill_pip::steep );
+    c.RegisterArray<Rml::Vector<nc_skill_pip>>();
     Rml::StructHandle<nc_skill_row> rh = c.RegisterStruct<nc_skill_row>();
-    rh.RegisterMember( "text_rml", &nc_skill_row::text_rml );
-    rh.RegisterMember( "is_header", &nc_skill_row::is_header );
+    rh.RegisterMember( "cursor_rml", &nc_skill_row::cursor_rml );
+    rh.RegisterMember( "lvl_rml", &nc_skill_row::lvl_rml );
+    rh.RegisterMember( "cost_rml", &nc_skill_row::cost_rml );
+    rh.RegisterMember( "name_rml", &nc_skill_row::name_rml );
+    rh.RegisterMember( "pips", &nc_skill_row::pips );
+    rh.RegisterMember( "can_dec", &nc_skill_row::can_dec );
+    rh.RegisterMember( "can_inc", &nc_skill_row::can_inc );
+    rh.RegisterMember( "header", &nc_skill_row::header );
     rh.RegisterMember( "selected", &nc_skill_row::selected );
     c.RegisterArray<Rml::Vector<nc_skill_row>>();
+    Rml::StructHandle<nc_skill_col> ch = c.RegisterStruct<nc_skill_col>();
+    ch.RegisterMember( "name_rml", &nc_skill_col::name_rml );
+    ch.RegisterMember( "count_rml", &nc_skill_col::count_rml );
+    ch.RegisterMember( "sigil_dec", &nc_skill_col::sigil_dec );
+    ch.RegisterMember( "rows", &nc_skill_col::rows );
+    Rml::StructHandle<nc_skill_fact> fh = c.RegisterStruct<nc_skill_fact>();
+    fh.RegisterMember( "label_rml", &nc_skill_fact::label_rml );
+    fh.RegisterMember( "value_rml", &nc_skill_fact::value_rml );
+    fh.RegisterMember( "sub_rml", &nc_skill_fact::sub_rml );
+    c.RegisterArray<Rml::Vector<nc_skill_fact>>();
+    Rml::StructHandle<nc_apt_dot> dh = c.RegisterStruct<nc_apt_dot>();
+    dh.RegisterMember( "col", &nc_apt_dot::col );
+    c.RegisterArray<Rml::Vector<nc_apt_dot>>();
+    Rml::StructHandle<nc_apt_row> arh = c.RegisterStruct<nc_apt_row>();
+    arh.RegisterMember( "cells", &nc_apt_row::cells );
+    c.RegisterArray<Rml::Vector<nc_apt_row>>();
+    Rml::StructHandle<nc_apt_sector> sh = c.RegisterStruct<nc_apt_sector>();
+    sh.RegisterMember( "dec", &nc_apt_sector::dec );
+    sh.RegisterMember( "name_rml", &nc_apt_sector::name_rml );
+    sh.RegisterMember( "val_rml", &nc_apt_sector::val_rml );
+    c.RegisterArray<Rml::Vector<nc_apt_sector>>();
     g_nc_skills_types_registered = true;
 }
 
-// The selected skill's description + the recipes it unlocks, as one colour-tagged
-// string. Mirrors the recipe-gathering block in set_skills' curses on_redraw
-// verbatim (curses path left intact for the A/B; this is a parallel builder, the
-// armor_layers precedent). Brown for the current skill's own recipes, gray for
-// recipes that merely require it.
-std::string nc_skill_recipes_desc( avatar &u, const Skill *currentSkill,
-                                   const std::map<skill_id, int> &prof_skills )
+/// Sigil seed and colour for a skill display category. ONE source, read by the column heading's
+/// glyph, the wedge that category owns on the aptitude matrix and the detail panel's art slot, so
+/// the three cannot disagree about which category a skill is in.
+///
+/// The seed is an FNV-1a hash of the category id rather than std::hash, which is not required to
+/// agree between platforms or runs — the same category must draw the same glyph everywhere. The
+/// COLOUR comes from the category's position in the sorted list instead, because a hash would
+/// happily hand two neighbouring wedges the same one, and telling the wedges apart is the entire
+/// job of the palette.
+struct nc_skill_cat_art {
+    unsigned seed = 0;
+    nc_color col = c_light_gray;
+};
+
+auto nc_skill_cat_seed( const std::string &id ) -> unsigned
+{
+    unsigned h = 2166136261U;
+    for( const char ch : id ) {
+        h ^= static_cast<unsigned char>( ch );
+        h *= 16777619U;
+    }
+    return h;
+}
+
+auto nc_skill_cat_art_of( const skill_displayType_id &id, int order ) -> nc_skill_cat_art
+{
+    static const std::array<nc_color, 6> palette = {
+        c_yellow, c_light_blue, c_light_green, c_light_cyan, c_pink, c_light_gray
+    };
+    return { .seed = nc_skill_cat_seed( id.str() ),
+             .col = palette[static_cast<size_t>( std::max( 0, order ) ) % palette.size()] };
+}
+
+/// A category's heading. `display_string()` is already translated, so it is used verbatim; the
+/// `weapon` skill declares `display_category: none`, which has no display string at all, and a
+/// heading occupies a row either way — so it gets a name rather than an empty gap.
+auto nc_skill_cat_name( const skill_displayType_id &id ) -> std::string
+{
+    const std::string name = SkillDisplayType::get_skill_type( id ).display_string();
+    return name.empty() ? _( "Other skills" ) : name;
+}
+
+/// A themed colour at an explicit alpha. nc_color_to_hex yields "#rrggbbaa" and honours theme.json's
+/// overrides, so keeping its rgb and replacing only the alpha is what lets the sweep brighten a dot
+/// without blending anything.
+auto nc_dot_col( const nc_color &col, int alpha ) -> Rml::String
+{
+    const std::string hex = nc_color_to_hex( col );
+    return string_format( "%s%02x",
+                          hex.size() >= 7 ? hex.substr( 0, 7 ) : std::string( "#a89984" ),
+                          std::clamp( alpha, 0, 255 ) );
+}
+
+/// The recipes a skill unlocks, and how many. Mirrors the recipe-gathering block the pre-rework
+/// screen ran inline. Brown for the current skill's own recipes, gray for recipes that merely
+/// require it.
+///
+/// The COUNT is returned with the text rather than recomputed, so the RECIPES fact and the prose
+/// pane cannot disagree. This walks all of recipe_dict, which is why the caller keeps it behind the
+/// model-dirty gate and out of the animation tick.
+struct nc_skill_recipes {
+    std::string text;
+    int count = 0;
+};
+
+auto nc_skill_recipe_list( avatar &u, const Skill *currentSkill,
+                           const std::map<skill_id, int> &prof_skills ) -> nc_skill_recipes
 {
     SkillLevelMap with_prof_skills = u.get_all_skills();
     for( const auto &sk : prof_skills ) {
@@ -5432,8 +5603,9 @@ std::string nc_skill_recipes_desc( avatar &u, const Skill *currentSkill,
                 ( skill > 0 ) ? skill : r.difficulty );
         }
     }
-    std::string rec_disp;
+    nc_skill_recipes out;
     for( auto &elem : recipes ) {
+        out.count += static_cast<int>( elem.second.size() );
         std::sort( elem.second.begin(), elem.second.end(),
                    []( const std::pair<std::string, int> &lhs,
         const std::pair<std::string, int> &rhs ) {
@@ -5445,13 +5617,13 @@ std::string nc_skill_recipes_desc( avatar &u, const Skill *currentSkill,
             return string_format( "%s (%d)", rec.first, rec.second );
         } );
         if( elem.first == currentSkill->name() ) {
-            rec_disp = "\n\n" + colorize( rec_temp, c_brown ) + rec_disp;
+            out.text = colorize( rec_temp, c_brown ) + out.text;
         } else {
-            rec_disp += "\n\n" + colorize( "[" + elem.first + "]\n" + rec_temp, c_light_gray );
+            out.text += ( out.text.empty() ? "" : "\n\n" ) +
+                        colorize( "[" + elem.first + "]\n" + rec_temp, c_light_gray );
         }
     }
-    rec_disp = currentSkill->description() + rec_disp;
-    return rec_disp;
+    return out;
 }
 } // namespace
 
@@ -5459,42 +5631,131 @@ tab_direction set_skills( avatar &u, points_left &points )
 {
     ui_adaptor ui;
     catacurses::window w;
-    catacurses::window w_description;
-    int iContentHeight = 0;
     const auto init_windows = [&]( ui_adaptor & ui ) {
-        iContentHeight = TERMY - 6;
         w = catacurses::newwin( TERMY, TERMX, point_zero );
-        w_description = catacurses::newwin( iContentHeight, TERMX - 35, point( 31, 5 ) );
         ui.position_from_window( w );
     };
     init_windows( ui );
     ui.on_screen_resize( init_windows );
 
-    auto sorted_skills = Skill::get_skills_sorted_by( []( const Skill & a, const Skill & b ) {
+    // ONE flat list in display order; the columns are a VIEW over it, so every index-based lookup
+    // stays independent of how the screen happens to be grouped.
+    const std::vector<const Skill *> skills =
+    Skill::get_skills_sorted_by( []( const Skill & a, const Skill & b ) {
         return localized_compare( std::make_pair( a.display_category(), a.name() ),
                                   std::make_pair( b.display_category(), b.name() ) );
     } );
 
-    skill_displayType_id current_category = skill_displayType_id::NULL_ID();
-    // Actual line that the skill takes up.
-    int display_line = 0;
-    std::vector<std::pair<const Skill *, int>> skill_list;
-    for( const Skill *skl : sorted_skills ) {
-        if( current_category != skl->display_category() ) {
-            current_category = skl->display_category();
-            display_line++;
+    /// A display category and the skills in it, in that same order.
+    struct cat_group {
+        skill_displayType_id id;
+        std::string name;
+        nc_skill_cat_art art;
+        std::vector<int> skills;   //< indices into `skills`
+    };
+    std::vector<cat_group> groups;
+    for( int i = 0; i < static_cast<int>( skills.size() ); i++ ) {
+        const skill_displayType_id &dt = skills[i]->display_category();
+        if( groups.empty() || groups.back().id != dt ) {
+            const int order = static_cast<int>( groups.size() );
+            groups.push_back( { .id = dt,
+                                .name = nc_skill_cat_name( dt ),
+                                .art = nc_skill_cat_art_of( dt, order ),
+                                .skills = {} } );
         }
-        skill_list.emplace_back( skl, display_line );
-        display_line++;
+        groups.back().skills.push_back( i );
     }
 
-    const int num_skills = skill_list.size();
-    int cur_pos = 0;
-    const Skill *currentSkill = skill_list[cur_pos].first;
-    int selected = 0;
+    const int num_skills = static_cast<int>( skills.size() );
+    if( num_skills == 0 ) {
+        return tab_direction::FORWARD;
+    }
+
+    // TWO columns, not the three TRAITS and BIONICS use: 28 skills plus their headings is 34 rows,
+    // which fits two columns without scrolling, and a row here needs width for steppers, meter,
+    // level, price and name.
+    //
+    // They are a WRAP of one ordered list rather than two independent ones, which is what lets
+    // LEFT/RIGHT stay on the level — the primary action of this screen — instead of being spent on
+    // changing column. UP/DOWN walk the concatenated row sequence, which is the order the eye reads
+    // the two columns in anyway.
+    static constexpr int ncols = 2;
+    std::array<std::vector<int>, ncols> col_rows;    //< skill index, or -1 for a heading row
+    std::array<std::vector<int>, ncols> col_head_of; //< the group each row belongs to
+    {
+        // Linear partition preserving the sorted order: keep filling column 0 while adding the next
+        // category leaves it closer to half the rows than stopping would. Derived from the counts,
+        // so a mod adding skills or a whole category redistributes with no edit here, and the split
+        // is identical on every run.
+        const int total_rows = num_skills + static_cast<int>( groups.size() );
+        const int want = ( total_rows + ncols - 1 ) / ncols;
+        int c = 0;
+        int placed = 0;
+        for( int gi = 0; gi < static_cast<int>( groups.size() ); gi++ ) {
+            const int rows_here = 1 + static_cast<int>( groups[gi].skills.size() );
+            if( c + 1 < ncols && placed > 0 &&
+                placed + rows_here - want >= want - placed ) {
+                c++;
+                placed = 0;
+            }
+            col_rows[c].push_back( -1 );
+            col_head_of[c].push_back( gi );
+            for( const int si : groups[gi].skills ) {
+                col_rows[c].push_back( si );
+                col_head_of[c].push_back( gi );
+            }
+            placed += rows_here;
+        }
+    }
+
+    int cur_col = 0;
+    std::array<int, ncols> cur_row = {};
+
+    const auto col_len = [&]( int c ) {
+        return static_cast<int>( col_rows[c].size() );
+    };
+    /// The skill on a given row, or -1 for a heading or an out-of-range row.
+    const auto skill_at = [&]( int c, int r ) {
+        return ( r >= 0 && r < col_len( c ) ) ? col_rows[c][r] : -1;
+    };
+    const auto total_rows = [&]() {
+        return col_len( 0 ) + col_len( 1 );
+    };
+    /// Position in the flat visual order: column 0 top to bottom, then column 1.
+    const auto visual_of = [&]( int c, int r ) {
+        return c == 0 ? r : col_len( 0 ) + r;
+    };
+    const auto place_visual = [&]( int v ) {
+        if( v < col_len( 0 ) ) {
+            cur_col = 0;
+            cur_row[0] = v;
+        } else {
+            cur_col = 1;
+            cur_row[1] = v - col_len( 0 );
+        }
+    };
+    /// Step the cursor along that flat order, skipping headings and crossing the column boundary.
+    /// Bounded by the row count, so a list of nothing but headings cannot spin here.
+    const auto move_cursor = [&]( int dir ) {
+        const int n = total_rows();
+        if( n <= 0 ) {
+            return;
+        }
+        int v = visual_of( cur_col, cur_row[cur_col] );
+        for( int guard = 0; guard < n; guard++ ) {
+            v = ( v + dir + n ) % n;
+            place_visual( v );
+            if( skill_at( cur_col, cur_row[cur_col] ) >= 0 ) {
+                return;
+            }
+        }
+    };
+    // Column 0 opens on a heading, so step off it before anything reads the cursor.
+    move_cursor( 1 );
 
     input_context ctxt( "NEW_CHAR_SKILLS" );
     ctxt.register_cardinal();
+    ctxt.register_action( "CONFIRM" );
     ctxt.register_action( "SCROLL_DOWN" );
     ctxt.register_action( "SCROLL_UP" );
     ctxt.register_action( "PREV_TAB" );
@@ -5502,31 +5763,190 @@ tab_direction set_skills( avatar &u, points_left &points )
     ctxt.register_action( "RANDOMIZE" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
     ctxt.register_action( "QUIT" );
-    // Required for the navigator/card clicks to reach this loop at all.
-    // MOUSE_LEFT binds to action id SELECT (keybindings.json:1175). An UNREGISTERED
-    // mouse action resolves to CATA_ERROR, and input.cpp:894-897 `continue`s on it
-    // BEFORE the registered_any_input check at :912 — so ANY_INPUT cannot rescue a
-    // mouse event, only registering the action it maps to can. Without this the
-    // click callback fires but handle_input() never returns, leaving the loop parked
-    // until an unrelated keypress, which then got hijacked into a step change.
+    // All three are required for a click to reach this loop at all. MOUSE_LEFT binds to SELECT on
+    // mouse DOWN while RmlUi fires `click` — and therefore the callbacks — on mouse UP; that UP
+    // resolves to CATA_ERROR, and input.cpp:894-897 `continue`s on an unrecognised MOUSE event
+    // WITHOUT returning. COORDINATE sets handling_coordinate_input, which skips that early
+    // `continue`; ANY_INPUT makes the fall-through at :912 return rather than loop again. Either
+    // alone still parks the loop, and a parked loop clears the intent a click recorded. See
+    // plans/charcreation-bionics-chassis.md.
     ctxt.register_action( "SELECT" );
+    ctxt.register_action( "COORDINATE" );
+    ctxt.register_action( "ANY_INPUT" );
 
     std::map<skill_id, int> prof_skills;
     const auto &pskills = u.prof->skills();
-
     std::copy( pskills.begin(), pskills.end(),
                std::inserter( prof_skills, prof_skills.begin() ) );
+    /// What the profession will add to a skill after creation. Not part of get_skill_level yet:
+    /// avatar::add_profession_items installs those AFTER the wizard, so the screen has to say so
+    /// itself — the same compensation the BIONICS chassis makes for profession CBMs.
+    const auto prof_bonus_of = [&]( const skill_id & id ) {
+        const auto it = prof_skills.find( id );
+        return it == prof_skills.end() ? 0 : it->second;
+    };
 
-
-    // RmlUi render path (render-only; keyboard owns nav/inc/dec/scroll below).
     auto data = std::make_unique<nc_skills_session>();
     rml_doc rml;
-    // Set by the arrow click callbacks, consumed by the input loop below. Not a
-    // tab_direction: it is translated into an action string so the existing
-    // keyboard handling stays the single place navigation is decided.
+    // Set by the arrow click callbacks, consumed by the input loop below. Not a tab_direction: it is
+    // translated into an action string so the existing keyboard handling stays the single place
+    // navigation is decided.
     int nc_nav = 0;
-    int rml_sel_child = -1;       // flattened-row index of the cursor skill
-    bool rml_scroll_pending = false; // follow the keyboard cursor in the list
+    // Click intent, applied ONCE per input cycle. `data-event-*` installs a listener per generated
+    // element and a `data-for` regeneration adds another without removing the old, so a callback
+    // that mutated directly would run an unbounded number of times per click — measured at 15 on
+    // the SCENARIO tab. See plans/charcreation-scenario-tree.md.
+    int pending_row_col = -1;
+    int pending_row = -1;
+    int pending_step_col = -1;
+    int pending_step_row = -1;
+    int pending_step_dir = 0;
+
+    /// Raise or lower one skill. The ONE place the level and the point pool move together, so the
+    /// keyboard, CONFIRM and the two steppers cannot drift apart. The balance rules are the ones
+    /// this step has always had: buying the first level grants two, and selling back from 2 forfeits
+    /// the free one.
+    const auto adjust_skill = [&]( int flat_idx, int dir ) {
+        if( flat_idx < 0 || flat_idx >= num_skills ) {
+            return;
+        }
+        const skill_id id = skills[flat_idx]->ident();
+        const int level = u.get_skill_level( id );
+        if( dir < 0 ) {
+            if( level > 0 ) {
+                u.mod_skill_level( id, level == 2 ? -2 : -1 );
+                // Done *after* the decrementing to get the original cost for incrementing back.
+                points.skill_points += skill_increment_cost( u, id );
+            }
+        } else if( level < MAX_SKILL ) {
+            points.skill_points -= skill_increment_cost( u, id );
+            u.mod_skill_level( id, level == 0 ? +2 : +1 );
+        }
+    };
+
+    // ── APTITUDE MATRIX ───────────────────────────────────────────────────────
+    //
+    // A 13x13 dot radar beside the lists: one filled SECTOR per display category, its depth that
+    // category's share of the strongest, three rings for scale, and a beam sweeping clockwise from
+    // up. Geometry
+    // is newchar_aptitude.h; this only decides which layer claims each dot and at what alpha.
+    //
+    // Rebuilt every animation tick, which is why it is separate from the model sync — and why the
+    // sector depths are recomputed here rather than cached: 28 get_skill_level calls cost nothing,
+    // and a wedge that deepened the instant a level was bought is the point of putting it beside the
+    // list.
+    const auto anim_start = std::chrono::steady_clock::now();
+    const auto sync_apt = [&]() {
+        if( !data->handle ) {
+            return;
+        }
+        // Wall clock, not a frame counter: the sweep must not speed up because the player is holding
+        // a key down, and must not stall while they are not.
+        const float secs = std::chrono::duration<float>(
+                               std::chrono::steady_clock::now() - anim_start ).count();
+        const float beam = nc_apt::beam_at( secs );
+
+        const int nsectors = static_cast<int>( groups.size() );
+        struct sector {
+            float reach = 0.0F;
+            nc_color col = c_light_gray;
+            int levels = 0;
+        };
+        std::vector<sector> sectors;
+        sectors.reserve( groups.size() );
+        int invested = 0;
+        int strongest = 0;
+        for( int gi = 0; gi < nsectors; gi++ ) {
+            const cat_group &g = groups[gi];
+            int total = 0;
+            for( const int si : g.skills ) {
+                const skill_id id = skills[si]->ident();
+                // The profession's grant counts: this describes the character being built, not the
+                // half-built object in memory. Same rule the chassis applies to profession CBMs.
+                total += u.get_skill_level( id ) + prof_bonus_of( id );
+                invested += u.get_skill_level( id );
+            }
+            strongest = std::max( strongest, total );
+            sectors.push_back( { .col = g.art.col, .levels = total } );
+        }
+        // Sectors are scaled against the STRONGEST category, not against every skill at MAX_SKILL.
+        // Measured: a finished creation buys a handful of levels, so a category averages well under
+        // one level of ten — against the theoretical cap every wedge was under a cell deep and the
+        // radar was a dot with a legend. What the player wants from it is comparative anyway: where
+        // the competence sits. The absolute count stays in the legend beside each name.
+        //
+        // The floor stops that relative scale from over-claiming: with it, a category needs half of
+        // one skill's range invested before its wedge reaches the rim, so a single level fills a
+        // fifth of the radius rather than the whole disc.
+        const float denom = static_cast<float>( std::max( strongest, MAX_SKILL / 2 ) );
+        for( sector &s : sectors ) {
+            s.reach = static_cast<float>( s.levels ) / denom * nc_apt::disc_radius();
+        }
+        const int sel_flat = skill_at( cur_col, cur_row[cur_col] );
+        const int sel_group = sel_flat >= 0 ? col_head_of[cur_col][cur_row[cur_col]] : -1;
+
+        data->apt.clear();
+        for( int row = 0; row < nc_apt::grid; row++ ) {
+            nc_apt_row ar;
+            for( int col = 0; col < nc_apt::grid; col++ ) {
+                const nc_apt::vec off = nc_apt::offset_of( col, row );
+                if( !nc_apt::inside( off ) ) {
+                    // Transparent, and the ONLY reason a 13x13 square reads as a circle.
+                    ar.cells.emplace_back();
+                    continue;
+                }
+                const float r = nc_apt::radius_of( off );
+                const float bearing = nc_apt::angle_of( off );
+                // Layers, weakest first: field, ring, then the wedge that owns this bearing. Only
+                // ONE sector can, since they partition the turn, so there is no precedence to
+                // decide — the cursor's category is merely drawn brighter.
+                nc_color col_of = c_dark_gray;
+                int base = 0x22;
+                if( nc_apt::on_ring( r ) ) {
+                    col_of = c_brown;
+                    base = 0x4d;
+                }
+                const int owner = nc_apt::sector_of( bearing, nsectors );
+                if( owner < nsectors && r <= sectors[owner].reach ) {
+                    col_of = sectors[owner].col;
+                    base = owner == sel_group ? 0xff : 0x99;
+                }
+                if( r < 0.5F ) {
+                    col_of = c_yellow;
+                    base = 0xcc;
+                }
+                // The sweep raises a dot's own alpha toward opaque instead of blending a second
+                // colour into it. On a dark ground that is the compositor's job, and it means the
+                // fade cannot be wrong in a way a retheme would hide.
+                const float g = nc_apt::glow( beam, nc_apt::angle_of( off ) );
+                const int alpha = base +
+                                  static_cast<int>( std::lround( g * static_cast<float>( 255 - base ) ) );
+                ar.cells.push_back( { .col = nc_dot_col( col_of, alpha ) } );
+            }
+            data->apt.push_back( ar );
+        }
+
+        data->apt_legend.clear();
+        for( int gi = 0; gi < nsectors; gi++ ) {
+            data->apt_legend.push_back( {
+                .dec = nc_icon_dec_col( groups[gi].art.seed, 12, groups[gi].art.col ),
+                .name_rml = cata_text_to_rml( colorize( groups[gi].name,
+                                                        gi == sel_group ? c_white : c_light_gray ) ),
+                // The count, not a percentage: the wedges are already comparative, so the legend is
+                // where the absolute number belongs. A percentage of every skill at MAX_SKILL reads
+                // as 3% for a perfectly ordinary character, which looks like a fault.
+                .val_rml = cata_text_to_rml( colorize( string_format( "%d", sectors[gi].levels ),
+                                                       groups[gi].art.col ) ) } );
+        }
+        data->apt_name_rml = cata_text_to_rml( colorize( _( "Aptitude" ), c_light_gray ) );
+        data->apt_count_rml = cata_text_to_rml( colorize( string_format( "%d", invested ),
+                                                c_dark_gray ) );
+        data->handle.DirtyVariable( "apt" );
+        data->handle.DirtyVariable( "apt_legend" );
+        data->handle.DirtyVariable( "apt_name_rml" );
+        data->handle.DirtyVariable( "apt_count_rml" );
+    };
+
     const auto sync_rml = [&]() {
         if( !data->handle ) {
             return;
@@ -5534,160 +5954,358 @@ tab_direction set_skills( avatar &u, points_left &points )
         data->tabs = build_nc_char_tabs<nc_skills_tab>( 6 );  // SKILLS tab active
         data->shell = fill_nc_shell( 6, ctxt );
         data->points_rml = cata_text_to_rml( nc_points_line( points ) );
+        data->budget_rml = cata_text_to_rml( string_format(
+                _( "<color_dark_gray>Skill points left:</color> <color_white>%d</color>" ),
+                points.skill_points_left() ) );
+        data->hint_rml = cata_text_to_rml( string_format(
+                                               _( "<color_light_green>%s</color> raise or lower · <color_light_green>%s</color> scroll recipes" ),
+                                               _( "left/right" ), ctxt.get_desc( "SCROLL_DOWN", 1 ) ) );
 
-        const int cost = skill_increment_cost( u, currentSkill->ident() );
-        const int level = u.get_skill_level( currentSkill->ident() );
-        const int upgrade_levels = level == 0 ? 2 : 1;
-        const std::string upgrade_levels_s = string_format(
-                vgettext( "%d level", "%d levels", upgrade_levels ), upgrade_levels );
-        const nc_color ccol = points.skill_points_left() >= cost ? COL_SKILL_USED : c_light_red;
-        data->cost_rml = cata_text_to_rml( colorize( string_format(
-                                               vgettext( "Upgrading %s by %s costs %d point",
-                                                   "Upgrading %s by %s costs %d points", cost ),
-                                               currentSkill->name(), upgrade_levels_s, cost ), ccol ) );
-
-        data->rows.clear();
-        rml_sel_child = -1;
-        skill_displayType_id cat = skill_displayType_id::NULL_ID();
-        for( int i = 0; i < num_skills; i++ ) {
-            const Skill *sk = skill_list[i].first;
-            const skill_displayType_id &dt = sk->display_category();
-            if( cat != dt ) {
-                cat = dt;
-                nc_skill_row h;
-                h.is_header = true;
-                h.text_rml = cata_text_to_rml( colorize( dt->display_string(), c_yellow ) );
-                data->rows.push_back( h );
-            }
-            const int lvl = u.get_skill_level( sk->ident() );
-            const nc_color col = lvl > 0 ? COL_SKILL_USED : c_light_gray;
-            std::string line = colorize( sk->name(), col );
-            if( lvl > 0 ) {
-                line += colorize( string_format( " (%d)", lvl ), col );
-            }
-            for( const auto &ps : u.prof->skills() ) {
-                if( ps.first == sk->ident() ) {
-                    line += colorize( string_format( " (+%d)",
-                                                     static_cast<int>( ps.second ) ), c_white );
-                    break;
-                }
-            }
+        // One row. Cells are fixed-width by stylesheet, so cursor, meter, level, price and name each
+        // form a column the eye can run down.
+        const auto build_row = [&]( int flat_idx, bool is_cursor ) {
+            const Skill *sk = skills[flat_idx];
+            const skill_id id = sk->ident();
+            const int level = u.get_skill_level( id );
+            const int bonus = prof_bonus_of( id );
+            const int cost = skill_increment_cost( u, id );
             nc_skill_row r;
-            r.text_rml = cata_text_to_rml( line );
-            r.selected = ( i == cur_pos );
-            if( i == cur_pos ) {
-                rml_sel_child = static_cast<int>( data->rows.size() );
+            r.cursor_rml = cata_text_to_rml( is_cursor ? colorize( ">", c_yellow ) : std::string() );
+            for( int i = 1; i <= MAX_SKILL; i++ ) {
+                r.pips.push_back( {
+                    .on = i <= level,
+                    .bonus = i > level && i <= level + bonus,
+                    // Reaching level i costs max(1, i/2), so pip 4 is where a level stops being a
+                    // single point. The price curve is drawn rather than described.
+                    .steep = i <= level && i / 2 >= 2 } );
             }
-            data->rows.push_back( r );
+            std::string lvl = colorize( string_format( "%d", level ),
+                                        level > 0 ? COL_SKILL_USED : c_dark_gray );
+            if( bonus > 0 ) {
+                // Same blue the bonus pips are painted, so the number and the meter agree about
+                // which levels the player did not buy.
+                lvl += colorize( string_format( " +%d", bonus ), c_light_blue );
+            }
+            r.lvl_rml = cata_text_to_rml( lvl );
+            r.cost_rml = cata_text_to_rml( level >= MAX_SKILL
+                                           ? colorize( string_format( "[%s]", _( "max" ) ), c_dark_gray )
+                                           : colorize( string_format( "[%2d]", cost ),
+                                               points.skill_points_left() >= cost ? COL_SKILL_USED : c_light_red ) );
+            r.name_rml = cata_text_to_rml( colorize( sk->name(),
+                                           level > 0 ? COL_SKILL_USED : c_light_gray ) );
+            r.can_dec = level > 0;
+            r.can_inc = level < MAX_SKILL;
+            r.selected = is_cursor;
+            return r;
+        };
+
+        nc_skill_col *cols[ncols] = { &data->col0, &data->col1 };
+        for( int c = 0; c < ncols; c++ ) {
+            nc_skill_col &dc = *cols[c];
+            dc.rows.clear();
+            int items = 0;
+            for( int r = 0; r < col_len( c ); r++ ) {
+                const int flat = col_rows[c][r];
+                if( flat < 0 ) {
+                    // A heading is a row of the same height as an item, which is what keeps the
+                    // scroll arithmetic exact; weight and tracking carry the hierarchy instead.
+                    nc_skill_row hr;
+                    hr.header = true;
+                    hr.name_rml = cata_text_to_rml( colorize( groups[col_head_of[c][r]].name,
+                                                    c_yellow ) );
+                    dc.rows.push_back( hr );
+                    continue;
+                }
+                items++;
+                dc.rows.push_back( build_row( flat, c == cur_col && r == cur_row[c] ) );
+            }
+            // The two columns are a WRAP of one list, so neither of them names a grouping — the
+            // category headings inside the list do that. They get a newspaper caption instead, and
+            // the sigil is a "you are here": the cursor's own category, on the column holding it,
+            // matching the sigil the detail panel draws.
+            dc.name_rml = cata_text_to_rml( colorize(
+                                                c == 0 ? _( "Skills" ) : _( "Continued" ),
+                                                c == cur_col ? c_white : c_light_gray ) );
+            dc.count_rml = cata_text_to_rml( colorize( string_format( "%d", items ), c_dark_gray ) );
+            dc.sigil_dec = "none";
+            if( c == cur_col && col_len( c ) > 0 ) {
+                const cat_group &g = groups[col_head_of[c][cur_row[c]]];
+                dc.sigil_dec = nc_icon_dec_col( g.art.seed, 14, g.art.col );
+            }
         }
 
-        data->desc_rml = cata_text_to_rml( nc_skill_recipes_desc( u, currentSkill, prof_skills ) );
+        // Detail panel for the skill under the cursor.
+        data->facts.clear();
+        const int sel_flat = skill_at( cur_col, cur_row[cur_col] );
+        if( sel_flat >= 0 ) {
+            const Skill *sk = skills[sel_flat];
+            const skill_id id = sk->ident();
+            const int level = u.get_skill_level( id );
+            const int bonus = prof_bonus_of( id );
+            const int cost = skill_increment_cost( u, id );
+            const cat_group &g = groups[col_head_of[cur_col][cur_row[cur_col]]];
+            // ":: NAME" — uppercasing is left to the stylesheet, so no locale gets a hand-rolled
+            // case conversion.
+            data->sel_name_rml = cata_text_to_rml( colorize( string_format( ":: %s", sk->name() ),
+                                                   c_white ) );
+            data->has_art = true;
+            data->art_dec = nc_icon_dec_col( g.art.seed, 128, g.art.col );
+            const auto add_fact = [&]( const std::string & label, const std::string & value,
+            const nc_color & col, const std::string & sub = std::string() ) {
+                data->facts.push_back( {
+                    .label_rml = cata_text_to_rml( label ),
+                    .value_rml = cata_text_to_rml( colorize( value, col ) ),
+                    .sub_rml = cata_text_to_rml( sub ) } );
+            };
+            add_fact( _( "Level" ), string_format( "%d", level ),
+                      level > 0 ? COL_SKILL_USED : c_light_gray,
+                      bonus > 0 ? string_format( vgettext( "Your profession adds %d more level.",
+                                                 "Your profession adds %d more levels.", bonus ), bonus )
+                      : std::string() );
+            if( level >= MAX_SKILL ) {
+                add_fact( _( "Next level" ), _( "At maximum" ), c_dark_gray );
+            } else {
+                add_fact( _( "Next level" ),
+                          string_format( vgettext( "%d point", "%d points", cost ), cost ),
+                          points.skill_points_left() >= cost ? COL_SKILL_USED : c_light_red,
+                          // The one balance rule this screen has that nothing on it used to state.
+                          level == 0 ? _( "The first point buys two levels." ) : std::string() );
+            }
+            int gtotal = 0;
+            for( const int si : g.skills ) {
+                gtotal += u.get_skill_level( skills[si]->ident() ) +
+                          prof_bonus_of( skills[si]->ident() );
+            }
+            add_fact( _( "Category" ), g.name, g.art.col,
+                      // The same number the matrix draws this wedge from, and the same one its
+                      // legend prints, so the panel and the disc cannot disagree.
+                      string_format( vgettext( "%d level across %d skills",
+                                               "%d levels across %d skills", gtotal ),
+                                     gtotal, static_cast<int>( g.skills.size() ) ) );
+            const nc_skill_recipes rec = nc_skill_recipe_list( u, sk, prof_skills );
+            add_fact( _( "Unlocks" ),
+                      string_format( vgettext( "%d recipe", "%d recipes", rec.count ), rec.count ),
+                      rec.count > 0 ? c_light_gray : c_dark_gray );
+            data->desc_rml = cata_text_to_rml( sk->description() );
+            data->detail_rml = cata_text_to_rml( rec.text );
+        } else {
+            data->sel_name_rml.clear();
+            data->desc_rml.clear();
+            data->detail_rml.clear();
+            data->has_art = false;
+            data->art_dec = "none";
+        }
 
         data->handle.DirtyVariable( "tabs" );
         dirty_nc_shell( data->handle );
         data->handle.DirtyVariable( "points_rml" );
-        data->handle.DirtyVariable( "cost_rml" );
-        data->handle.DirtyVariable( "rows" );
+        data->handle.DirtyVariable( "budget_rml" );
+        data->handle.DirtyVariable( "col0" );
+        data->handle.DirtyVariable( "col1" );
+        data->handle.DirtyVariable( "sel_name_rml" );
+        data->handle.DirtyVariable( "has_art" );
+        data->handle.DirtyVariable( "art_dec" );
+        data->handle.DirtyVariable( "facts" );
         data->handle.DirtyVariable( "desc_rml" );
-
-        // Follow the keyboard cursor with native scroll (keyboard nav only).
-        if( rml_scroll_pending && rml_sel_child >= 0 ) {
-            rml_scroll_pending = false;
-            if( Rml::Element *list = rml.document()->GetElementById( "nc-skill-list" ) ) {
-                if( rml_sel_child < list->GetNumChildren() ) {
-                    list->GetChild( rml_sel_child )->ScrollIntoView(
-                        Rml::ScrollIntoViewOptions( Rml::ScrollAlignment::Nearest ) );
-                }
-            }
-        }
+        data->handle.DirtyVariable( "detail_rml" );
+        data->handle.DirtyVariable( "hint_rml" );
     };
-    // SCROLL_UP/DOWN scroll the description pane (vs the curses fold offset).
-    const auto scroll_desc = [&]( int dir ) {
-        if( !rml ) {
-            return;
-        }
-        if( Rml::Element *e = rml.document()->GetElementById( "nc-skill-desc" ) ) {
-            const float page = e->GetClientHeight();
-            const float maxtop = std::max( 0.0f, e->GetScrollHeight() - page );
-            e->SetScrollTop( std::clamp( e->GetScrollTop() + dir * page * 0.15f, 0.0f, maxtop ) );
-        }
-    };
-
-    ui.on_redraw( [&]( const ui_adaptor & ) {
-        if( rml ) {
-            sync_rml();
-            return;
-        }
-    } );
 
     rml.open( newcharacter_rmlui_enabled(), "newcharskills", ctxt,
     [&]( Rml::DataModelConstructor & c ) {
         register_nc_skills_rml_types( c );
         c.Bind( "tabs", &data->tabs );
         bind_nc_shell( c, data->shell );
-        // Arrow clicks are translated into the SAME action strings the keyboard
-        // produces, so each step's existing PREV_TAB/NEXT_TAB handling — including
-        // the "Return to main menu?" confirm on step 0 — is reused unchanged.
+        // Arrow clicks are translated into the SAME action strings the keyboard produces, so each
+        // step's existing PREV_TAB/NEXT_TAB handling is reused unchanged.
         c.BindEventCallback( "on_prev",
         [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = -1; } );
         c.BindEventCallback( "on_next",
         [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { nc_nav = 1; } );
         c.Bind( "points_rml", &data->points_rml );
-        c.Bind( "cost_rml", &data->cost_rml );
-        c.Bind( "rows", &data->rows );
+        c.Bind( "budget_rml", &data->budget_rml );
+        c.Bind( "col0", &data->col0 );
+        c.Bind( "col1", &data->col1 );
+        // The matrix. Easy to forget, and it fails SILENTLY: `data-for` over an unbound name renders
+        // nothing at all, so the heading would appear over an empty square while sync_apt happily
+        // filled and dirtied the array every frame.
+        c.Bind( "apt", &data->apt );
+        c.Bind( "apt_legend", &data->apt_legend );
+        c.Bind( "apt_name_rml", &data->apt_name_rml );
+        c.Bind( "apt_count_rml", &data->apt_count_rml );
+        c.Bind( "sel_name_rml", &data->sel_name_rml );
+        c.Bind( "has_art", &data->has_art );
+        c.Bind( "art_dec", &data->art_dec );
+        c.Bind( "facts", &data->facts );
         c.Bind( "desc_rml", &data->desc_rml );
+        c.Bind( "detail_rml", &data->detail_rml );
+        c.Bind( "hint_rml", &data->hint_rml );
+        // Click callbacks RECORD INTENT and mutate nothing — see the comment on pending_row_col.
+        c.BindEventCallback( "on_row",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int col = -1;
+            int row = -1;
+            if( args.size() >= 2 ) {
+                args[0].GetInto( col );
+                args[1].GetInto( row );
+            }
+            if( col >= 0 && col < ncols && row >= 0 ) {
+                pending_row_col = col;
+                pending_row = row;
+            }
+        } );
+        // The steppers, not the row, are what change a level: they flank the meter so the gesture is
+        // spatially the same as the LEFT/RIGHT keys, and reading a skill is never the same gesture
+        // as buying one. Written out twice rather than from a factory lambda: a nested lambda
+        // capturing a reference capture of its enclosing closure outlives that closure here, and the
+        // document holds these callbacks for its whole life.
+        c.BindEventCallback( "on_dec",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int col = -1;
+            int row = -1;
+            if( args.size() >= 2 ) {
+                args[0].GetInto( col );
+                args[1].GetInto( row );
+            }
+            if( col >= 0 && col < ncols && row >= 0 ) {
+                pending_step_col = col;
+                pending_step_row = row;
+                pending_step_dir = -1;
+            }
+        } );
+        c.BindEventCallback( "on_inc",
+        [&]( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
+            int col = -1;
+            int row = -1;
+            if( args.size() >= 2 ) {
+                args[0].GetInto( col );
+                args[1].GetInto( row );
+            }
+            if( col >= 0 && col < ncols && row >= 0 ) {
+                pending_step_col = col;
+                pending_step_row = row;
+                pending_step_dir = 1;
+            }
+        } );
         data->handle = c.GetModelHandle();
     } );
     if( rml_doc_unavailable( rml, _( "Character creation (SKILLS tab)" ) ) ) {
         return tab_direction::QUIT;
     }
 
+    // The model is rebuilt only when something changed; the matrix every frame. Without this split a
+    // quiet tick would re-colour 34 rows, re-scan all of recipe_dict and regenerate every pip to
+    // move the beam one step.
+    bool model_dirty = true;
+    ui.on_redraw( [&]( const ui_adaptor & ) {
+        if( rml ) {
+            if( model_dirty ) {
+                sync_rml();
+                model_dirty = false;
+            }
+            sync_apt();
+            return;
+        }
+    } );
+
+    // Keeps the cursor row on screen. Every row is the SAME height by stylesheet rule — headings
+    // included — so row height is scroll_height / row_count exactly, with no DOM child indexing,
+    // which `data-for` makes unreliable anyway.
+    const auto scroll_col_to_cursor = [&]() {
+        if( !rml ) {
+            return;
+        }
+        const int rows = col_len( cur_col );
+        if( rows <= 0 ) {
+            return;
+        }
+        Rml::Element *e = rml.document()->GetElementById( string_format( "nc-col%d", cur_col ) );
+        if( e == nullptr ) {
+            return;
+        }
+        const float page = e->GetClientHeight();
+        const float total = e->GetScrollHeight();
+        const float row_h = total / static_cast<float>( rows );
+        const float want = row_h * static_cast<float>( cur_row[cur_col] ) - page * 0.5f;
+        e->SetScrollTop( std::clamp( want, 0.0f, std::max( 0.0f, total - page ) ) );
+    };
+    // SCROLL_UP/DOWN scroll the recipe pane, which is the one thing on this screen that can be
+    // taller than the space it has.
+    const auto scroll_detail = [&]( int dir ) {
+        if( !rml ) {
+            return;
+        }
+        if( Rml::Element *e = rml.document()->GetElementById( "nc-skill-detail" ) ) {
+            const float page = e->GetClientHeight();
+            const float maxtop = std::max( 0.0f, e->GetScrollHeight() - page );
+            e->SetScrollTop( std::clamp( e->GetScrollTop() + dir * page * 0.15f, 0.0f, maxtop ) );
+        }
+    };
+
     do {
         ui_manager::redraw();
         nc_nav = 0;
+        pending_row_col = -1;
+        pending_row = -1;
+        pending_step_col = -1;
+        pending_step_row = -1;
+        pending_step_dir = 0;
         std::string action = ctxt.handle_input();
         if( nc_nav != 0 ) {
             action = nc_nav < 0 ? "PREV_TAB" : "NEXT_TAB";
         }
+        // Rebuild the model on the next redraw after anything that can have changed it. The click
+        // intents MUST be part of this test, not just `action`: cata maps MOUSE_LEFT to SELECT on
+        // mouse DOWN while RmlUi fires `click` on mouse UP, so the iteration carrying a click's
+        // intent is usually an idle one. TIMEOUT and ANY_INPUT are idle as far as the MODEL goes —
+        // ANY_INPUT is what every pointer motion returns — and the matrix updates either way,
+        // because it is outside this gate.
+        if( ( action != "TIMEOUT" && action != "ANY_INPUT" ) ||
+            pending_row >= 0 || pending_step_row >= 0 ) {
+            model_dirty = true;
+        }
+
+        // Apply click intent exactly once, however many times the callback ran.
+        if( pending_row_col >= 0 && pending_row >= 0 && pending_row < col_len( pending_row_col ) &&
+            skill_at( pending_row_col, pending_row ) >= 0 ) {
+            cur_col = pending_row_col;
+            cur_row[cur_col] = pending_row;
+        }
+        // The stepper last, so the cursor has already moved to the row being acted on.
+        if( pending_step_col >= 0 && pending_step_row >= 0 &&
+            pending_step_row < col_len( pending_step_col ) && pending_step_dir != 0 ) {
+            const int flat = skill_at( pending_step_col, pending_step_row );
+            if( flat >= 0 ) {
+                cur_col = pending_step_col;
+                cur_row[cur_col] = pending_step_row;
+                adjust_skill( flat, pending_step_dir );
+            }
+        }
+
         if( action == "DOWN" ) {
-            cur_pos = modulo( cur_pos + 1, num_skills );
-            currentSkill = skill_list[cur_pos].first;
-            rml_scroll_pending = true;
+            move_cursor( 1 );
+            scroll_col_to_cursor();
         } else if( action == "UP" ) {
-            cur_pos = modulo( cur_pos - 1, num_skills );
-            currentSkill = skill_list[cur_pos].first;
-            rml_scroll_pending = true;
+            move_cursor( -1 );
+            scroll_col_to_cursor();
         } else if( action == "RANDOMIZE" ) {
-            cur_pos = modulo( rng( 0, num_skills - 1 ), num_skills );
-            rml_scroll_pending = true;
+            const int n = total_rows();
+            if( n > 0 ) {
+                place_visual( rng( 0, n - 1 ) );
+                // Land on a skill, never on a heading.
+                if( skill_at( cur_col, cur_row[cur_col] ) < 0 ) {
+                    move_cursor( 1 );
+                }
+                scroll_col_to_cursor();
+            }
         } else if( action == "LEFT" ) {
-            const int level = u.get_skill_level( currentSkill->ident() );
-            if( level > 0 ) {
-                // For balance reasons, increasing a skill from level 0 gives 1 extra level for free, but
-                // decreasing it from level 2 forfeits the free extra level (thus changes it to 0)
-                u.mod_skill_level( currentSkill->ident(), level == 2 ? -2 : -1 );
-                // Done *after* the decrementing to get the original cost for incrementing back.
-                points.skill_points += skill_increment_cost( u, currentSkill->ident() );
-            }
-        } else if( action == "RIGHT" ) {
-            const int level = u.get_skill_level( currentSkill->ident() );
-            if( level < MAX_SKILL ) {
-                points.skill_points -= skill_increment_cost( u, currentSkill->ident() );
-                // For balance reasons, increasing a skill from level 0 gives 1 extra level for free
-                u.mod_skill_level( currentSkill->ident(), level == 0 ? +2 : +1 );
-            }
+            adjust_skill( skill_at( cur_col, cur_row[cur_col] ), -1 );
+        } else if( action == "RIGHT" || action == "CONFIRM" ) {
+            adjust_skill( skill_at( cur_col, cur_row[cur_col] ), 1 );
         } else if( action == "SCROLL_DOWN" ) {
-            if( rml ) {
-                scroll_desc( +1 );
-            } else {
-                selected++;
-            }
+            scroll_detail( +1 );
         } else if( action == "SCROLL_UP" ) {
-            if( rml ) {
-                scroll_desc( -1 );
-            } else {
-                selected--;
-            }
+            scroll_detail( -1 );
         } else if( action == "PREV_TAB" ) {
             return tab_direction::BACKWARD;
         } else if( action == "NEXT_TAB" ) {

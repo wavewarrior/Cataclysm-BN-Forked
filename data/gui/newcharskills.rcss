@@ -1,6 +1,12 @@
-/* Layout for the new-character SKILLS tab (Tier 4 #4 slice 3). Reuses theme
-   .panel / .tabs / .tab / .item / .scroll-pane. body sized + centered (the
-   missions gotcha); rows need explicit display (the inline-row gotcha). */
+/* Layout for the new-character SKILLS tab (Tier 4 #4 slice 3).
+   Linked AFTER newchar_common.rcss, so a same-specificity rule here wins — which is how the
+   meter pips below re-tune the shared pip sizing.
+
+   The meta bar, the dotted rules, the columns, the row, the cursor cell, the cost cell, the
+   name cell, the detail panel and the hint are all the SHARED row-list vocabulary in
+   newchar_common.rcss. What is local to this step is the part of a row that carries a
+   MAGNITUDE — the steppers, the meter and the level cell — plus the aptitude matrix.
+   See plans/charcreation-skills-matrix.md. */
 
 body {
     display: flex;
@@ -10,11 +16,6 @@ body {
     height: 100%;
 }
 
-/* 98%: creation fills the screen, with the remaining 1% each side keeping the panel's
-   own border visible as a frame instead of running off the display edge. These four
-   tabs have no character preview, so nothing sits outside the panel to be occluded.
-   The four preview tabs stay narrow until the avatar composites through RmlUi — see
-   plans/charcreation-wizard-flow.md. */
 .nc-panel {
     width: 98%;
     height: 98%;
@@ -30,47 +31,177 @@ body {
     flex: 0 0 auto;
 }
 
-.nc-points {
-    display: block;
+/* ── COLUMN HEADING SIGIL ─────────────────────────────────────────────────────
+   The same glyph the radar sector and the detail panel's art slot draw, so a column, its
+   sector and its description cannot disagree about which category is being read. */
+.nc-col-sigil {
     flex: 0 0 auto;
-    padding: 8dp 8dp 0 8dp;
-    color: {{fg}};
+    width: 14dp;
+    height: 14dp;
+    margin-right: 6dp;
 }
 
-.nc-cost {
-    display: block;
+/* ── ROW MAGNITUDE CELLS ──────────────────────────────────────────────────────
+   Steppers flank the meter, minus on its left and plus on its right, so the mouse gesture
+   is spatially the same as the LEFT/RIGHT keys. */
+.nc-cell-step {
     flex: 0 0 auto;
-    padding: 2dp 8dp 6dp 8dp;
+    width: 14dp;
+    text-align: center;
+    color: {{fg4}};
 }
 
-.nc-body {
+.nc-cell-step:hover {
+    color: {{yellow}};
+}
+
+/* At the floor or the cap. Still drawn, so the row does not change shape — but this is a
+   click target for something that SPENDS points, so it must not offer a hover affordance
+   when pressing it will do nothing. Same pattern the stats steppers use. */
+.nc-cell-step.off {
+    color: {{bg3}};
+}
+
+.nc-cell-step.off:hover {
+    color: {{bg3}};
+}
+
+.nc-cell-meter {
+    flex: 0 0 auto;
+    width: 84dp;
+    height: 12dp;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    margin: 0 4dp;
+}
+
+/* The shared pip sizing is tuned for the STATS card's taller meter, and this sheet is linked
+   after the shared one — so the HEIGHT channel has to be restated here or it is lost. It is
+   load-bearing: filled pips are TALLER as well as brighter, which is what keeps the meter
+   readable in greyscale and for any form of colour blindness. Colour is the second channel
+   here, never the only one. */
+.nc-cell-meter .nc-pip {
+    flex: 1;
+    min-width: 0;
+    height: 5dp;
+    margin-right: 2dp;
+}
+
+.nc-cell-meter .nc-pip.on {
+    height: 11dp;
+}
+
+/* A level the profession grants after creation: present, but plainly not something the player
+   bought. Three classes, so it beats the shared filled-pip colour on specificity alone. */
+.nc-cell-meter .nc-pip.bonus {
+    background-color: {{blue}};
+}
+
+/* The number the meter draws, plus what the profession adds — because colour alone must not
+   be the only carrier of a quantity. Right-aligned so the levels stack into a gutter. */
+.nc-cell-lvl {
+    display: block;
+    flex: 0 0 auto;
+    width: 40dp;
+    text-align: right;
+    margin-right: 8dp;
+}
+
+/* ── APTITUDE MATRIX ──────────────────────────────────────────────────────────
+   A dot radar beside the lists: one filled sector per display category, its depth that
+   category's share of the strongest one, with a beam sweeping round it.
+
+   The disc is a FIXED square, not a flexible box: a circle cannot be derived from a height
+   the layout chooses, and both sides must agree. 13 rows of 13 cells at 14dp is 182dp, and
+   the cell count is nc_apt::grid in src/newchar_aptitude.h — the one coupling between this
+   sheet and that header.
+
+   It cannot simply grow to fill the column either: the legend under it needs one row per
+   category, and a taller disc pushes those rows out of the stage. What made the wedges
+   comparable was scaling them against the strongest category rather than against every skill
+   at MAX_SKILL — see sync_apt. */
+.nc-apt-wrap {
+    flex: 0 0 auto;
+    width: 196dp;
+    display: flex;
+    flex-direction: column;
+}
+
+.nc-apt {
+    flex: 0 0 auto;
+    width: 182dp;
+    height: 182dp;
+    display: flex;
+    flex-direction: column;
+    margin: 6dp 0;
+}
+
+.nc-apt-row {
     flex: 1;
     min-height: 0;
     display: flex;
     flex-direction: row;
+    align-items: center;
 }
 
-.nc-skill-list {
-    flex: 0 0 auto;
-    min-width: 320dp;
-    border-right: 1dp {{bg4}};
-    padding-right: 8dp;
-}
-
-.nc-skill-row {
-    display: block;
-}
-
-/* Category headers are plain coloured labels, not filled .item rows. */
-.nc-skill-row.header {
-    background-color: transparent;
-    margin-top: 6dp;
-}
-
-.nc-skill-desc {
+/* Every dot's colour AND alpha is written per frame by C++; dots outside the disc are fully
+   transparent, which is what makes a square grid read as a circle. Nothing here encodes the
+   shape, so the geometry stays testable without a document. */
+.nc-apt-dot {
     flex: 1;
     min-width: 0;
-    white-space: pre-wrap;
-    padding: 8dp;
-    color: {{fg}};
+    height: 8dp;
+    margin: 0 3dp;
+    border-radius: 4dp;
+    background-color: transparent;
+}
+
+/* Legend beneath the disc. An unlabelled radar is decoration, so each sector gets its sigil,
+   its name and the count it is drawn from.
+
+   `overflow: hidden` because this box can be shrunk below its content: it is the flexible
+   element under a fixed-size disc, and a mod adding display categories adds rows. Clipped is
+   recoverable; drawing over the rule and the detail panel below is not. */
+.nc-apt-legend {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.nc-apt-leg {
+    flex: 0 0 auto;
+    height: 16dp;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+}
+
+.nc-apt-leg-icon {
+    flex: 0 0 auto;
+    width: 12dp;
+    height: 12dp;
+    margin-right: 6dp;
+}
+
+.nc-apt-leg-name {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.nc-apt-leg-val {
+    display: block;
+    flex: 0 0 auto;
+}
+
+/* ── DETAIL ───────────────────────────────────────────────────────────────────
+   Same as the traits step: this tab spends its height on the lists, so the shared panel gets
+   the shorter of the two heights. */
+.nc-info-panel {
+    height: 196dp;
 }

@@ -26,7 +26,7 @@
    contrast it was designed for — and the cursor row ends up the most readable row
    on screen rather than the least. */
 
-.nc-opt, .nc-skill-row, .nc-scen-row, .nc-prof-row, .nc-row {
+.nc-opt, .nc-scen-row, .nc-prof-row, .nc-row {
     /* Reserved on EVERY row, not just .selected, so the cursor's accent bar does
        not shift row text sideways as the cursor moves. Longhand, not the
        `border-left` shorthand: the shorthand form did not paint here. */
@@ -34,8 +34,8 @@
     border-left-color: transparent;
 }
 
-.nc-opt.selected, .nc-skill-row.selected,
-.nc-scen-row.selected, .nc-prof-row.selected, .nc-row.selected {
+.nc-opt.selected, .nc-scen-row.selected,
+.nc-prof-row.selected, .nc-row.selected {
     background-color: {{bg-hard}};
     border-left-width: 3dp;
     border-left-color: {{yellow}};
@@ -60,15 +60,6 @@
    Strength: 8\n..."), so a header cannot be given size or weight from here — that
    needs the producer to emit the header as its own element. See
    plans/charcreation-visual-overhaul.md workstream 4. */
-
-/* Category headers in the skills list DO have an element boundary
-   (data-class-header), so they can carry real hierarchy. */
-.nc-skill-row.header {
-    font-weight: bold;
-    letter-spacing: 2dp;
-    margin-top: 10dp;
-    margin-bottom: 2dp;
-}
 
 /* ── TAB STRIP GLYPHS ──────────────────────────────────────────────────────────
    The theme's .tab is a plain text item; it now carries an icon + label, so it
