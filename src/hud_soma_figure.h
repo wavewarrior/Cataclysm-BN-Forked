@@ -214,26 +214,26 @@ inline auto shape_class( limb l ) -> std::string_view
 inline auto fill_class( const limb_state &l ) -> std::string_view
 {
     if( l.critical ) {
-        return "hud-fig-f4";
-    }
-    if( l.broken ) {
-        // A fracture is not `critical` on its own (see `hud_runic::is_critical`),
-        // but at hp == 0 the ratio test below would answer the brightest rung and
-        // shout as loudly as a bleeding limb. Splinted is being dealt with and
-        // recedes a step; unsplinted still wants the eye.
-        return l.splinted ? "hud-fig-f2" : "hud-fig-f3";
-    }
-    const auto r = ratio_of( l );
-    if( r >= 1.0f ) {
-        return "hud-fig-f1";
-    }
-    if( r >= 2.0f / 3.0f ) {
-        return "hud-fig-f2";
-    }
-    if( r >= 1.0f / 3.0f ) {
-        return "hud-fig-f3";
-    }
     return "hud-fig-f4";
+}
+if( l.broken ) {
+    // A fracture is not `critical` on its own (see `hud_runic::is_critical`),
+    // but at hp == 0 the ratio test below would answer the brightest rung and
+    // shout as loudly as a bleeding limb. Splinted is being dealt with and
+    // recedes a step; unsplinted still wants the eye.
+    return l.splinted ? "hud-fig-f2" : "hud-fig-f3";
+}
+const auto r = ratio_of( l );
+if( r >= 1.0f ) {
+    return "hud-fig-f1";
+}
+if( r >= 2.0f / 3.0f ) {
+    return "hud-fig-f2";
+}
+if( r >= 1.0f / 3.0f ) {
+    return "hud-fig-f3";
+}
+return "hud-fig-f4";
 }
 
 // ── Figure metrics ──────────────────────────────────────────────────────────
