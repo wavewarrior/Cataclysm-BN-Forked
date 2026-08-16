@@ -189,11 +189,11 @@ auto tick( Rml::ElementDocument *doc, std::uint32_t now ) -> void
             book.was_animating = false;
         }
         // color_blend (Phase 3): blend toward the spec's target color.
-        // nc_color has no RGB components — resolve the target through the HUD
-        // palette (this only ever runs on HUD elements), then override the alpha
-        // channel with the blend amount.
+        // nc_color carries no RGB components, so resolve the target through the
+        // themed game palette, then override the alpha channel with the blend
+        // amount.
         if( transform.blend != 0.0f && transform.blend_color != c_white ) {
-            std::string hex = hud_color_to_hex( transform.blend_color );
+            std::string hex = nc_color_to_hex( transform.blend_color );
             // hex is "#RRGGBBAA" — replace alpha with blend amount
             if( hex.size() >= 9 ) {
                 const unsigned char a = static_cast<unsigned char>( transform.blend * 255 );

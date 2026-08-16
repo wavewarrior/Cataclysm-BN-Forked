@@ -43,9 +43,9 @@
 #include "widget_icon.h"
 #include "sidebar_anim.h"
 #include "hud_anim.h"
-#include "hud_phosphor.h"
-#include "hud_phosphor_panels.h"
-#include "hud_phosphor_strips.h"
+#include "hud_runic.h"
+#include "hud_runic_panels.h"
+#include "hud_runic_strips.h"
 #include "hud_radar.h"
 #include "effect.h"
 #include "fstream_utils.h"
@@ -83,6 +83,7 @@
 #include "translations.h"
 #include "type_id.h"
 #include "ui_manager.h"
+#include "uistate.h"
 #include "units.h"
 #include "units_utility.h"
 #include "vehicle.h"
@@ -570,31 +571,27 @@ static const std::map<std::string, std::function<bool()>> &render_predicate_regi
     return reg;
 }
 
-// ── Sidebar HUD → RmlUi: the Terminal Phosphor chassis ───────────────────────
+// ── Sidebar HUD → RmlUi: the chassis ─────────────────────────────────────────
 // This TU owns the HUD's data model, document lifecycle, per-turn sync and
-// geometry ONLY. Every producer lives in hud_phosphor_panels.cpp (soma, dock) or
-// hud_phosphor_strips.cpp (status, log, keys, vehicle), built on the primitives
-// in hud_phosphor.h. NOT the modal rml_doc harness: the HUD has no blocking
-// input loop, so there is NO 16ms input tick — the main game loop ticks the
-// RmlUi context every frame, and open order keeps modal screens stacked above
-// the HUD. Lifecycle is driven from game::draw_panels + cleanup_at_end.
+// geometry ONLY. Every producer lives in hud_runic_panels.cpp (soma, dock) or
+// hud_runic_strips.cpp (status, log, keys, vehicle), built on the primitives in
+// hud_runic.h. NOT the modal rml_doc harness: the HUD has no blocking input
+// loop, so there is NO 16ms input tick — the main game loop ticks the RmlUi
+// context every frame, and open order keeps modal screens stacked above the HUD.
+// Lifecycle is driven from game::draw_panels + cleanup_at_end.
 namespace
 {
-// Fixed-region phosphor data model. Each region is one pre-rendered RML string
-// filled by sidebar_hud_sync each turn; data/gui/sidebar_hud.rml binds these nine
-// directly via data-rml, so there is no layout iteration and no per-panel
-// dispatch. Section titles are deliberately NOT fields: the producers bake them
-// into their rules DOS-style (`──┤ SOMA ├──`), which is what makes a section
-// header cost zero rows.
+// Fixed-region data model. Each region is one pre-rendered RML string filled by
+// sidebar_hud_sync each turn; data/gui/sidebar_hud.rml binds these seven directly
+// via data-rml, so there is no layout iteration and no per-panel dispatch. Panel
+// titles are deliberately NOT fields: they are authored in the document and
+// upper-cased by RCSS, so no locale ships a second copy of a word.
 struct hud_rml_model {
     Rml::String status_row1_rml;
     Rml::String status_row2_rml;
-    Rml::String status_rule_rml;
     Rml::String soma_rml;
-    Rml::String radar_rml;
     Rml::String dock_rml;
     Rml::String log_rml;
-    Rml::String keys_rule_rml;
     Rml::String keys_rml;
     Rml::String veh_rml;
     Rml::DataModelHandle handle;
@@ -610,10 +607,6 @@ std::pair<unsigned, unsigned> g_hud_log_prev_seq = { 0, 0 };
 // bakes into the text — the HUD would show "You feel pain" once and never update
 // it while the count climbed.
 std::string g_hud_log_prev_tail;
-// Log region width in cells at the last rebuild. Every phosphor row is padded to
-// exactly its region's width, so a resize invalidates the markup even on a frame
-// where not one message changed.
-int g_hud_log_prev_cols = 0;
 // Total HP at the previous sync, for the damage shake/vignette trigger. At file
 // scope rather than a function-local static so sidebar_hud_close() can reset it:
 // as a local it outlived the HUD, and loading a character with less total HP than
@@ -625,7 +618,7 @@ int g_hud_prev_total_hp = -1;
 /// A ceiling, not a height: the region is sized to the messages actually present,
 /// so two messages cost two rows. The shipping well was 752dp holding 267dp of
 /// message, and closing that gap is where this design's occlusion saving comes
-/// from (mockups/hud/04-terminal-phosphor.md, region D).
+/// from (plans/hud-creator-register.md).
 constexpr int hud_log_max_rows = 6;
 
 /// Physical pixels per dp for the RmlUi context.
@@ -642,9 +635,15 @@ auto hud_dp_ratio() -> float
     return ratio > 0.0f ? ratio : 1.0f;
 }
 
-/// The cell grid the HUD resolves to right now, or nullopt when there is nothing
-/// to measure (toggle off, RmlUi not ready, degenerate context).
-auto hud_metrics_now() -> std::optional<hud_phosphor::metrics>
+/// Where every region sits this frame.
+///
+/// Compute this ONCE per sync and hand the same object to every producer and to
+/// sidebar_hud_apply_rect. Recomputing per call would let two consumers of "the
+/// layout" disagree about it inside a single frame.
+///
+/// nullopt when there is nothing to measure: toggle off, RmlUi not ready, or a
+/// degenerate context.
+auto hud_layout_now( int log_lines, bool show_vehicle ) -> std::optional<hud_runic::layout>
 {
     if( !sidebar_hud_rmlui_enabled() || !rmlui_layer::ready() ) {
     return std::nullopt;
@@ -658,46 +657,30 @@ if( dims.x <= 0 || dims.y <= 0 ) {
     return std::nullopt;
 }
 const auto ratio = hud_dp_ratio();
-return hud_phosphor::metrics_for( dims.x / ratio, dims.y / ratio );
-}
-
-/// Where every region sits this frame.
-///
-/// Compute this ONCE per sync and hand the same object to every producer and to
-/// sidebar_hud_apply_rect. Three producers place box-glyph junctions at columns
-/// read off it — the status rule's two `┼`, the log rule's `┬`/`┐`, the keys
-/// rule's two `┴` — and they close into a single frame only because they all read
-/// the same layout. Recomputing per call reintroduces the disagreement by another
-/// route.
-auto hud_layout_now( int log_lines, bool show_vehicle ) -> std::optional<hud_phosphor::layout>
-{
-    const auto m = hud_metrics_now();
-    if( !m ) {
-        return std::nullopt;
-    }
-    return hud_phosphor::layout_for( {
-        .m = *m,
-        .sidebar_right = get_option<std::string>( "SIDEBAR_POSITION" ) == "right",
+return hud_runic::layout_for( {
+    .ctx_w_dp = dims.x / ratio,
+    .ctx_h_dp = dims.y / ratio,
+    .sidebar_right = get_option<std::string>( "SIDEBAR_POSITION" ) == "right",
         .log_lines = log_lines,
-        .show_vehicle = show_vehicle } );
+        .show_vehicle = show_vehicle,
+        .soma_expanded = uistate.hud_soma_expanded } );
 }
 
-/// GAME terminal rows covering `phosphor_rows` of the HUD's own cell grid.
+/// GAME terminal rows covering a strip `strip_h_dp` tall.
 ///
 /// The terrain viewport is carved in TERMY rows of `fontheight` PHYSICAL pixels;
-/// the HUD chose its cell from the RmlUi context in dp. The two grids are
-/// unrelated, so converting honestly means going back through the same dp ratio
-/// sidebar_hud_apply_rect divides by, then rounding UP — the carve must cover the
-/// strip, never merely approach it. Rounding down is the shipping bug this
-/// replaces: `TERMY * fontheight == 67 * 16 == 1072 != 1080` left an 8px sliver
-/// carved to black and painted by nobody.
-auto terminal_rows_for( const hud_phosphor::metrics &m, int phosphor_rows ) -> int
+/// the HUD is laid out in dp. The two grids are unrelated, so converting honestly
+/// means going back through the same dp ratio sidebar_hud_apply_rect divides by,
+/// then rounding UP — the carve must cover the strip, never merely approach it.
+/// Rounding down is the shipping bug this replaces: `TERMY * fontheight ==
+/// 67 * 16 == 1072 != 1080` left an 8px sliver carved to black and painted by
+/// nobody.
+auto terminal_rows_for( float strip_h_dp ) -> int
 {
     if( fontheight <= 0 ) {
         return 0;
     }
-    const auto strip_px = phosphor_rows * m.cell_h * hud_dp_ratio();
-    return static_cast<int>( std::ceil( strip_px / fontheight ) );
+    return static_cast<int>( std::ceil( strip_h_dp * hud_dp_ratio() / fontheight ) );
 }
 
 // ── Redundant property-write suppression ────────────────────────────────────
@@ -747,26 +730,19 @@ std::unordered_map<std::string, hud_rect_cache> g_hud_rect_cache;
 /// The layout `sidebar_hud_apply_rect` last ran on. Every value it writes is a
 /// pure function of this object, so an equal layout means an identical write
 /// set and the whole pass can be skipped.
-std::optional<hud_phosphor::layout> g_hud_rect_layout;
+std::optional<hud_runic::layout> g_hud_rect_layout;
 
 /// Exact value equality — deliberately not the quantised compare used per
-/// property. `to_dp` multiplies `cell_w` by up to 192 columns, so a cell size
-/// difference far below dp print precision is still a visible rect difference;
-/// the metrics come from `metrics_for`'s discrete candidate set by the same
-/// deterministic path each frame, so exact equality is the honest test.
-auto hud_layout_same( const hud_phosphor::layout &a, const hud_phosphor::layout &b ) -> bool
+/// property. `layout_for` runs the same deterministic arithmetic on the same
+/// context dimensions every frame, so any difference at all is a real one and
+/// exact equality is the honest test.
+auto hud_layout_same( const hud_runic::layout &a, const hud_runic::layout &b ) -> bool
 {
-    return a.m.cell_w == b.m.cell_w && a.m.cell_h == b.m.cell_h
-           && a.m.font_size == b.m.font_size && a.m.cols == b.m.cols && a.m.rows == b.m.rows
+    return a.ctx_w == b.ctx_w && a.ctx_h == b.ctx_h
            && a.status == b.status && a.soma == b.soma && a.radar == b.radar
            && a.dock == b.dock && a.log == b.log && a.keys == b.keys
            && a.vehicle == b.vehicle;
 }
-
-/// Last document-level type scale applied, quantised.
-bool g_hud_type_valid = false;
-long g_hud_font_size = 0;
-long g_hud_line_height = 0;
 
 /// Last shake margins applied to one container. `applied == false` means the
 /// element currently carries no shake margins — either never set, or already
@@ -791,7 +767,6 @@ auto hud_prop_cache_clear() -> void
 {
     g_hud_rect_cache.clear();
     g_hud_rect_layout.reset();
-    g_hud_type_valid = false;
     g_hud_shake_cache.clear();
     g_hud_veh_display = -1;
 }
@@ -800,7 +775,7 @@ auto hud_prop_cache_clear() -> void
 
 bool &sidebar_hud_rmlui_enabled()
 {
-    // Default ON. The phosphor HUD is the only sidebar renderer — the curses panel
+    // Default ON. The RmlUi HUD is the only sidebar renderer — the curses panel
     // loop is gone — so this toggle is an A/B for the RmlUi layer itself, not a
     // fallback to a second implementation. Flipped from the F4 panel.
     static bool enabled = true;
@@ -823,18 +798,15 @@ void sidebar_hud_open()
     if( !c ) {
         return;
     }
-    // Fixed-region model: bind each string directly. Nine fields and no others —
-    // the two static titles the old model carried are gone, because the producers
-    // now interrupt their own rules with them.
+    // Fixed-region model: bind each string directly. Seven fields and no others —
+    // the three frame-stroke rows the cell grid needed (the status rule, the keys
+    // rule, the radar frame) are CSS borders and .nc-rule divs in the document now.
     g_hud_data = std::make_unique<hud_rml_model>();
     c.Bind( "status_row1_rml", &g_hud_data->status_row1_rml );
     c.Bind( "status_row2_rml", &g_hud_data->status_row2_rml );
-    c.Bind( "status_rule_rml", &g_hud_data->status_rule_rml );
     c.Bind( "soma_rml", &g_hud_data->soma_rml );
-    c.Bind( "radar_rml", &g_hud_data->radar_rml );
     c.Bind( "dock_rml", &g_hud_data->dock_rml );
     c.Bind( "log_rml", &g_hud_data->log_rml );
-    c.Bind( "keys_rule_rml", &g_hud_data->keys_rule_rml );
     c.Bind( "keys_rml", &g_hud_data->keys_rml );
     c.Bind( "veh_rml", &g_hud_data->veh_rml );
     g_hud_data->handle = c.GetModelHandle();
@@ -858,17 +830,21 @@ void sidebar_hud_open()
 namespace
 {
 
-/// Place every region on the phosphor cell grid, and pin the document's cell size.
+/// Place every region, in dp.
 ///
 /// Takes the frame's layout rather than recomputing one, so a region's rect and
-/// the glyph rows inside it can never come from different grids.
+/// the rows inside it can never come from different geometry.
 ///
-/// There is not one percentage and not one pixel constant below: every value
-/// flows from `layout_for` through `hud_phosphor::to_dp` and out via `rml::dp`.
-/// Mixing percentage and cell geometry is exactly what put the shipping hotbar
-/// 6.34dp off the bottom of the screen with a 6.36dp overlap onto the bar above
-/// it.
-auto sidebar_hud_apply_rect( const hud_phosphor::layout &l ) -> void
+/// There is not one percentage constant below: every value flows from
+/// `layout_for` out via `rml::dp`. Mixing percentage and computed geometry is
+/// exactly what put the shipping hotbar 6.34dp off the bottom of the screen with
+/// a 6.36dp overlap onto the bar above it.
+///
+/// It also writes no type scale. The old cell grid derived font-size and
+/// line-height from the context and had to push them onto the document from
+/// here; the type scale is now fixed in `sidebar_hud.rcss`, at the creator's own
+/// sizes. Re-adding a font-size write here would desynchronise the two.
+auto sidebar_hud_apply_rect( const hud_runic::layout &l ) -> void
 {
     if( g_hud_doc == nullptr ) {
         return;
@@ -882,12 +858,11 @@ auto sidebar_hud_apply_rect( const hud_phosphor::layout &l ) -> void
     }
     g_hud_rect_layout = l;
 
-    const auto place = [&l]( const char *id, const hud_phosphor::cell_rect & c ) {
+    const auto place = []( const char *id, const hud_runic::rect & r ) {
         Rml::Element *el = g_hud_doc->GetElementById( id );
         if( el == nullptr ) {
             return;
         }
-        const auto r = hud_phosphor::to_dp( l.m, c );
         // Per region as well as per layout: a genuine layout change — the log
         // well growing a row, the vehicle panel appearing — usually moves one
         // region and leaves the other six exactly where they were.
@@ -921,25 +896,6 @@ auto sidebar_hud_apply_rect( const hud_phosphor::layout &l ) -> void
     place( "hud-log", l.log );
     place( "hud-keys", l.keys );
     place( "hud-vehicle", l.vehicle );
-
-    // The cell size is only knowable here — RCSS cannot see the context, and both
-    // the stylesheet and the document deliberately omit a font size so this stays
-    // the single source. line-height is pinned to the cell height so box-drawing
-    // stems abut between rows and the frame corners actually close.
-    //
-    // A document-level write is the most expensive one there is: font-size and
-    // line-height are inherited, so every element relayouts. Only on change.
-    const auto font_size = quantise_dp( l.m.font_size );
-    const auto line_height = quantise_dp( l.m.cell_h );
-    if( !g_hud_type_valid || g_hud_font_size != font_size ) {
-        g_hud_doc->SetProperty( "font-size", rml::dp( l.m.font_size ) );
-        g_hud_font_size = font_size;
-    }
-    if( !g_hud_type_valid || g_hud_line_height != line_height ) {
-        g_hud_doc->SetProperty( "line-height", rml::dp( l.m.cell_h ) );
-        g_hud_line_height = line_height;
-    }
-    g_hud_type_valid = true;
 }
 
 } // namespace
@@ -977,30 +933,34 @@ void sidebar_hud_sync( avatar &u )
     // so it is read before the layout is built.
     auto msgs = Messages::recent_messages_rich( hud_log_max_rows );
 
-    // ONE layout per frame, shared by every producer and by the rect writer. The
-    // status rule's `┼` crossings, the log rule's `┬`/`┐` and the keys rule's two
-    // `┴` are all placed from l.soma / l.dock / l.log, and they only meet if
-    // nobody recomputes the grid underneath them.
+    // ONE layout per frame, shared by every producer and by the rect writer.
+    // Recomputing it per call would let two consumers of "the layout" disagree
+    // about it inside a single frame.
     //
     // Bail BEFORE any log tracking state moves. A degenerate context (minimised
     // window, RmlUi mid-resize) fails here, and advancing the seq window on such a
-    // frame would leave the next successful frame with a matching range, a matching
-    // tail and a matching width — so the messages that arrived meanwhile would
-    // never be drawn at all.
+    // frame would leave the next successful frame with a matching range and a
+    // matching tail — so the messages that arrived meanwhile would never be drawn.
     const auto frame_layout = hud_layout_now( static_cast<int>( msgs.size() ),
                               u.controlling_vehicle );
     if( !frame_layout ) {
         return;
     }
-    const hud_phosphor::layout &l = *frame_layout;
+    const hud_runic::layout &l = *frame_layout;
 
     // `log_lines` is a REQUEST, not a grant. On a short viewport layout_for makes
-    // the log give up rows before any other region, so the well can come back
-    // narrower than it was asked for — and its first row is the titled rule, not a
-    // message. Clip to what was actually granted before anything reads the window,
-    // so the animation keys, the rebuild guard and the rendered rows all describe
-    // the same set of messages and the log cannot overrun its region.
-    const auto granted = static_cast<std::size_t>( std::max( 0, l.log.rows - 1 ) );
+    // the log give up height before any other region, so the well can come back
+    // shorter than it was asked for. Clip to what was actually granted before
+    // anything reads the window, so the animation keys, the rebuild guard and the
+    // rendered rows all describe the same set of messages.
+    //
+    // The log is the ONE region whose content is bounded here rather than by
+    // `.hud-body`'s scroller, because its region is sized FROM its line count:
+    // letting it overflow would mean sizing the region for messages it then
+    // scrolled out of view.
+    const auto log_rows = std::floor( ( l.log.h - hud_runic::head_h - hud_runic::chrome_h ) /
+                                      hud_runic::row_h );
+    const auto granted = static_cast<std::size_t>( std::max( 0.0f, log_rows ) );
     if( msgs.size() > granted ) {
         // Drop the OLDEST: recent_messages_rich yields chronologically, so the
         // newest message is at the back and must always survive the clip.
@@ -1037,31 +997,24 @@ void sidebar_hud_sync( avatar &u )
     g_hud_data->handle.DirtyVariable( "status_row1_rml" );
     g_hud_data->status_row2_rml = hud_status_row2( u, l );
     g_hud_data->handle.DirtyVariable( "status_row2_rml" );
-    g_hud_data->status_rule_rml = hud_status_rule( l );
-    g_hud_data->handle.DirtyVariable( "status_rule_rml" );
 
     g_hud_data->soma_rml = hud_soma( u, l );
     g_hud_data->handle.DirtyVariable( "soma_rml" );
     g_hud_data->dock_rml = hud_dock( u, l );
     g_hud_data->handle.DirtyVariable( "dock_rml" );
-    g_hud_data->radar_rml = hud_radar_frame( l );
-    g_hud_data->handle.DirtyVariable( "radar_rml" );
 
-    g_hud_data->keys_rule_rml = hud_keys_rule( l );
-    g_hud_data->handle.DirtyVariable( "keys_rule_rml" );
     g_hud_data->keys_rml = hud_keys( u, l );
     g_hud_data->handle.DirtyVariable( "keys_rml" );
 
     // The log is the one region worth guarding, because it is the one rebuilt from
-    // a snapshot rather than from live state. Rebuild when the window moved, when
-    // the newest row's TEXT changed (a repeated message coalesces into the existing
-    // entry, so the seq range never notices the "x N" suffix get_with_count() bakes
-    // in), or when a resize changed the width every row is padded to.
+    // a snapshot rather than from live state. Rebuild when the window moved, or
+    // when the newest row's TEXT changed — a repeated message coalesces into the
+    // existing entry, so the seq range never notices the "x N" suffix
+    // get_with_count() bakes in. There is no width term any more: rows are flex
+    // boxes, not padded strings, so a resize cannot change the markup.
     const auto tail = msgs.empty() ? std::string() : msgs.back().text;
-    if( g_hud_log_prev_seq != prev_seq || tail != g_hud_log_prev_tail
-        || l.log.cols != g_hud_log_prev_cols ) {
+    if( g_hud_log_prev_seq != prev_seq || tail != g_hud_log_prev_tail ) {
         g_hud_log_prev_tail = tail;
-        g_hud_log_prev_cols = l.log.cols;
         g_hud_data->log_rml = hud_log_rows( msgs, l );
         g_hud_data->handle.DirtyVariable( "log_rml" );
     }
@@ -1077,7 +1030,10 @@ void sidebar_hud_sync( avatar &u )
         // flips a handful of times a session.
         const int display = u.controlling_vehicle ? 1 : 0;
         if( g_hud_veh_display != display ) {
-            el->SetProperty( "display", u.controlling_vehicle ? "block" : "none" );
+            // "flex", not "block": the region block in sidebar_hud.rcss lays every
+            // panel out as a flex column of head + body, and `block` would strand
+            // the body's `flex: 1`.
+            el->SetProperty( "display", u.controlling_vehicle ? "flex" : "none" );
             g_hud_veh_display = display;
         }
     }
@@ -1109,7 +1065,6 @@ void sidebar_hud_close()
     // whole window look new after a save load and fire an entry tween per row.
     g_hud_log_prev_seq = { 0, 0 };
     g_hud_log_prev_tail.clear();
-    g_hud_log_prev_cols = 0;
     g_hud_prev_total_hp = -1;
     g_hud_data.reset();
     // Closing the HUD releases the carved top/bottom chrome strips — the terrain
@@ -1123,6 +1078,20 @@ bool sidebar_hud_active()
     // sidebar. Replaces the per-panel owns_panel gate.
     return g_hud_doc != nullptr;
 }
+
+auto sidebar_hud_toggle_soma_detail() -> void
+{
+    uistate.hud_soma_expanded = !uistate.hud_soma_expanded;
+    // The card's height is part of the layout, so the region has to be re-placed
+    // before the next paint; `sidebar_hud_sync` does that, but it only runs on a
+    // turn boundary and this action costs no time. Dropping the cached layout
+    // forces `sidebar_hud_apply_rect` to write the new rect on the next sync
+    // rather than short-circuiting on an equal-looking one.
+    g_hud_rect_layout.reset();
+    add_msg( uistate.hud_soma_expanded
+             ? _( "Limb detail expanded." )
+             : _( "Limb detail collapsed." ) );
+}
 int sidebar_hud_top_rows()
 {
     // The two strips are the only OPAQUE regions, so they are the only ones carved
@@ -1132,7 +1101,7 @@ int sidebar_hud_top_rows()
     //
     // KNOWN FOLLOW-UP — the sidebar COLUMN is still carved, and should not be.
     // game::draw_panels (game_misc.cpp:383-389) derives the terrain width from
-    // panel_manager::get_width_left/right(), and the phosphor HUD ought to
+    // panel_manager::get_width_left/right(), and the RmlUi HUD ought to
     // contribute zero there. Zeroing those two accessors is a one-line change in
     // THIS file, but they are also read by live_view.cpp:105/146 — which sizes the
     // hover tile-info box to the column and would collapse it to zero width — plus
@@ -1142,15 +1111,15 @@ int sidebar_hud_top_rows()
     // that is a file outside this slice, so the column stays carved rather than
     // half-changed and left inconsistent with the viewport.
     const auto l = hud_layout_now( hud_log_max_rows, false );
-    return l ? terminal_rows_for( l->m, l->status.rows ) : 0;
+    return l ? terminal_rows_for( l->status.h ) : 0;
 }
 
 int sidebar_hud_bottom_rows()
 {
     // log_lines and show_vehicle cannot move the keys strip — it is pinned to the
-    // bottom edge at a fixed row count — so any value gives the same answer.
+    // viewport's bottom edge at a fixed height — so any value gives the same answer.
     const auto l = hud_layout_now( hud_log_max_rows, false );
-    return l ? terminal_rows_for( l->m, l->keys.rows ) : 0;
+    return l ? terminal_rows_for( l->keys.h ) : 0;
 }
 
 auto sidebar_hud_anim_tick() -> void

@@ -333,6 +333,8 @@ std::string action_ident( action_id act )
             return "toggle_pixel_minimap";
         case ACTION_TOGGLE_PANEL_ADM:
             return "toggle_panel_adm";
+        case ACTION_TOGGLE_SOMA_DETAIL:
+            return "toggle_soma_detail";
         case ACTION_PANEL_MGMT:
             return "panel_mgmt";
         case ACTION_RELOAD_TILESET:
@@ -465,6 +467,7 @@ bool can_action_change_worldstate( const action_id act )
         case ACTION_ZOOM_IN:
         case ACTION_TOGGLE_PIXEL_MINIMAP:
         case ACTION_TOGGLE_PANEL_ADM:
+        case ACTION_TOGGLE_SOMA_DETAIL:
         case ACTION_PANEL_MGMT:
         case ACTION_RELOAD_TILESET:
         case ACTION_TIMEOUT:
@@ -1004,7 +1007,8 @@ action_id handle_action_menu()
         } else if( category_id == "info" ) {
             register_actions( {
                 ACTION_PL_INFO, ACTION_MISSIONS, ACTION_SCORES,
-                ACTION_FACTIONS, ACTION_MORALE, ACTION_MESSAGES, ACTION_DIARY
+                ACTION_FACTIONS, ACTION_MORALE, ACTION_MESSAGES, ACTION_DIARY,
+                ACTION_TOGGLE_SOMA_DETAIL
             } );
             register_lua_action_entries( category_id );
         } else if( category_id == "misc" ) {

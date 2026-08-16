@@ -319,6 +319,8 @@ enum action_id : int {
     ACTION_TOGGLE_PIXEL_MINIMAP,
     /** Turn admin panel on/off */
     ACTION_TOGGLE_PANEL_ADM,
+    /** Expand/collapse the sidebar HUD's limb card */
+    ACTION_TOGGLE_SOMA_DETAIL,
     /** panels management */
     ACTION_PANEL_MGMT,
     /** Reload current tileset */

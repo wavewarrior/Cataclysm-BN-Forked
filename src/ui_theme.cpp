@@ -19,17 +19,9 @@ std::unordered_map<std::string, std::string> g_rcss;
 std::unordered_map<std::string, std::string> g_game_by_name;
 std::unordered_map<int, std::string> g_game_by_int;
 bool g_game_built = false;
-// Same, for theme.json "hud_colors" — the HUD-scoped override layer. The HUD
-// chrome is a cool teal set while the menus are warm gruvbox; without this the
-// gruvbox game palette renders inside teal panels and the two never reconcile.
-// Consulted only by hud_color_to_hex(), so menus are untouched.
-std::unordered_map<std::string, std::string> g_hud_by_name;
-std::unordered_map<int, std::string> g_hud_by_int;
-bool g_hud_built = false;
 // Insertion order (JSON order) for a stable editor UI.
 std::vector<std::string> g_rcss_order;
 std::vector<std::string> g_game_order;
-std::vector<std::string> g_hud_order;
 
 unsigned hex_pair( const std::string &s, std::size_t i )
 {
@@ -110,13 +102,9 @@ void ui_theme::load()
     g_rcss.clear();
     g_game_by_name.clear();
     g_game_by_int.clear();
-    g_hud_by_name.clear();
-    g_hud_by_int.clear();
     g_rcss_order.clear();
     g_game_order.clear();
-    g_hud_order.clear();
     g_game_built = false;
-    g_hud_built = false;
     const std::string path = PATH_INFO::datadir() + "gui/theme.json";
     const bool ok = read_from_file_json( path, []( JsonIn & jsin ) {
         JsonObject root = jsin.get_object();
@@ -133,14 +121,6 @@ void ui_theme::load()
                 if( !m.is_comment() ) {
                     g_game_by_name[ m.name() ] = static_cast<std::string>( m );
                     g_game_order.push_back( m.name() );
-                }
-            }
-        }
-        if( root.has_object( "hud_colors" ) ) {
-            for( JsonMember m : root.get_object( "hud_colors" ) ) {
-                if( !m.is_comment() ) {
-                    g_hud_by_name[ m.name() ] = static_cast<std::string>( m );
-                    g_hud_order.push_back( m.name() );
                 }
             }
         }
@@ -186,20 +166,6 @@ bool ui_theme::game_color_hex( const nc_color &c, std::string &out )
     return true;
 }
 
-bool ui_theme::hud_color_hex( const nc_color &c, std::string &out )
-{
-    if( !g_hud_built ) {
-        build_int_map( g_hud_by_name, g_hud_by_int, "hud colour" );
-        g_hud_built = true;
-    }
-    const auto it = g_hud_by_int.find( static_cast<int>( c ) );
-    if( it == g_hud_by_int.end() ) {
-        return false;
-    }
-    out = it->second;
-    return true;
-}
-
 const std::vector<std::string> &ui_theme::rcss_names()
 {
     return g_rcss_order;
@@ -208,11 +174,6 @@ const std::vector<std::string> &ui_theme::rcss_names()
 const std::vector<std::string> &ui_theme::game_color_names()
 {
     return g_game_order;
-}
-
-const std::vector<std::string> &ui_theme::hud_color_names()
-{
-    return g_hud_order;
 }
 
 bool ui_theme::get_rcss_rgba( const std::string &name, float out[4] )
@@ -246,22 +207,6 @@ void ui_theme::set_game_rgba( const std::string &name, const float in[4] )
     g_game_built = false;  // force re-resolve so reopened screens pick it up
 }
 
-bool ui_theme::get_hud_rgba( const std::string &name, float out[4] )
-{
-    const auto it = g_hud_by_name.find( name );
-    if( it == g_hud_by_name.end() ) {
-        return false;
-    }
-    hex_to_rgba( it->second, out );
-    return true;
-}
-
-void ui_theme::set_hud_rgba( const std::string &name, const float in[4] )
-{
-    g_hud_by_name[ name ] = rgba_to_hex( in );
-    g_hud_built = false;  // force re-resolve so reopened screens pick it up
-}
-
 void ui_theme::save()
 {
     const std::string path = PATH_INFO::datadir() + "gui/theme.json";
@@ -273,8 +218,7 @@ void ui_theme::save()
     f << "{\n";
     f << "  \"//\": \"Central UI theme for the RmlUi menus. 'rcss' values fill {{token}} "
       "placeholders in data/gui/*.rcss; 'game_colors' override the nc_color->hex used for "
-      "menu text; 'hud_colors' override it again for the sidebar HUD only, so the game "
-      "palette sits inside the HUD's own chrome. Editable live in the F4 Theme tab.\",\n\n";
+      "menu text. Editable live in the F4 Theme tab.\",\n\n";
     f << "  \"rcss\": {\n";
     for( std::size_t i = 0; i < g_rcss_order.size(); i++ ) {
         const std::string &k = g_rcss_order[i];
@@ -287,13 +231,6 @@ void ui_theme::save()
         const std::string &k = g_game_order[i];
         f << "    \"" << k << "\": \"" << g_game_by_name[k] << "\""
           << ( i + 1 < g_game_order.size() ? "," : "" ) << "\n";
-    }
-    f << "  },\n\n";
-    f << "  \"hud_colors\": {\n";
-    for( std::size_t i = 0; i < g_hud_order.size(); i++ ) {
-        const std::string &k = g_hud_order[i];
-        f << "    \"" << k << "\": \"" << g_hud_by_name[k] << "\""
-          << ( i + 1 < g_hud_order.size() ? "," : "" ) << "\n";
     }
     f << "  }\n";
     f << "}\n";

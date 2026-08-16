@@ -1450,6 +1450,10 @@ bool game::handle_action()
                 panel_manager::get_manager().show_adm();
                 break;
 
+            case ACTION_TOGGLE_SOMA_DETAIL:
+                sidebar_hud_toggle_soma_detail();
+                break;
+
             case ACTION_RELOAD_TILESET:
                 reload_tileset( []( const std::string & str ) { DebugLog( DL::Info, DC::Main ) << str; } );
                 break;
@@ -2676,6 +2680,10 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
 
             case ACTION_TOGGLE_PANEL_ADM:
                 panel_manager::get_manager().show_adm();
+                break;
+
+            case ACTION_TOGGLE_SOMA_DETAIL:
+                sidebar_hud_toggle_soma_detail();
                 break;
 
             case ACTION_RELOAD_TILESET:

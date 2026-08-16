@@ -2456,6 +2456,14 @@
   },
   {
     "type": "keybinding",
+    "name": "Toggle Limb Detail",
+    "category": "DEFAULTMODE",
+    "id": "toggle_soma_detail",
+    "//": "NOT an F-key: sdl_input.cpp:521 and :577-679 swallow F4 through F12 in the SDL pump for the lighting dev panel and its tuning, so those never reach the action pipeline at all. Every printable DEFAULTMODE key is already bound, which leaves a CTRL combo — the form CTRL+M/S/T/U/V/W/Y already use here.",
+    "bindings": [ { "input_method": "keyboard", "key": "CTRL+B" } ]
+  },
+  {
+    "type": "keybinding",
     "name": "Reload Item",
     "category": "DEFAULTMODE",
     "id": "reload_item",

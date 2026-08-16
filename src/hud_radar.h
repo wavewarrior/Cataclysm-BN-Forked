@@ -2,7 +2,7 @@
 #ifndef CATA_SRC_HUD_RADAR_H
 #define CATA_SRC_HUD_RADAR_H
 
-#include "hud_phosphor.h"
+#include "hud_runic.h"
 
 class avatar;
 
@@ -12,9 +12,9 @@ class avatar;
 /// not RmlUi elements: this project registers no custom `Rml::ElementInstancer`,
 /// so a document cannot host C++-drawn geometry, and a few thousand real elements
 /// per frame would not be affordable if it could. The RmlUi side of the region is
-/// therefore nothing but the box-glyph border emitted by `hud_radar_frame`, and
-/// the quads are drawn UNDER it — which is also why this layer paints its own
-/// opaque ground instead of relying on `.ph-veil`.
+/// therefore nothing but the panel's border and its `.nc-colhead`, and the quads
+/// are drawn UNDER it — which is also why `#hud-radar` carries `.hud-panel-clear`
+/// and this layer paints its own opaque ground.
 namespace hud_radar
 {
 
@@ -22,7 +22,7 @@ namespace hud_radar
 /// No-op when the radar is toggled off, when `l.radar` is empty, or when the
 /// render state is not ready. MUST be called from inside a `ui_adaptor` redraw
 /// callback so the quads land in that adaptor's retained slice.
-auto draw( const avatar &u, const hud_phosphor::layout &l ) -> void;
+auto draw( const avatar &u, const hud_runic::layout &l ) -> void;
 
 /// True when the last `draw` emitted a blinking hostile blip, i.e. the main loop
 /// must keep redrawing for the blink to be visible. Read by

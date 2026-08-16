@@ -91,20 +91,20 @@ window_panel make_value_widget_panel( const widget &w, int width );
 // (hp/temp/encumb/status/wet — see bodygraph_bp_color in panels.cpp).
 window_panel make_bodygraph_widget_panel( const widget &w, int width );
 
-// ── Sidebar HUD → RmlUi: the Terminal Phosphor chassis ───────────────────────
-// One persistent, render-only RmlUi document drawing the whole HUD as a
-// character-cell terminal (plans/phosphor-hud.md). panels.cpp owns only the
-// chassis — the nine-string data model, the document lifecycle, the per-turn
-// sync and the cell geometry; every producer lives in hud_phosphor_panels.cpp
-// (soma, dock) and hud_phosphor_strips.cpp (status, log, keys, vehicle), over
-// the primitives in hud_phosphor.h.
+// ── Sidebar HUD → RmlUi: the chassis ─────────────────────────────────────────
+// One persistent, render-only RmlUi document drawing the whole HUD in the
+// character creator's register (plans/hud-creator-register.md). panels.cpp owns
+// only the chassis — the seven-string data model, the document lifecycle, the
+// per-turn sync and the dp geometry; every producer lives in
+// hud_runic_panels.cpp (soma, dock) and hud_runic_strips.cpp (status, log, keys,
+// vehicle), over the primitives in hud_runic.h.
 //
 // Lifecycle is driven from game::draw_panels — NOT the modal rml_doc harness,
 // because the HUD has no blocking input loop:
 //   open()   — lazily create the "sidebar_hud" data model + open the doc (no-op
 //              when disabled / RmlUi not ready / already open). Idempotent.
-//   sync()   — rebuild the nine bound strings from the avatar and re-place every
-//              region on the cell grid. No-op if closed.
+//   sync()   — rebuild the seven bound strings from the avatar and re-place every
+//              region. No-op if closed.
 //   close()  — close the doc + remove the model. Idempotent; call on toggle-off
 //              and on leaving gameplay (game::cleanup_at_end) so the HUD never
 //              lingers over the main menu.
@@ -114,14 +114,18 @@ void sidebar_hud_open();
 void sidebar_hud_sync( avatar &u );
 void sidebar_hud_close();
 bool sidebar_hud_active();
+// Expand/collapse the SOMA panel's limb card, persisting the choice in
+// `uistate.hud_soma_expanded`. Bound to ACTION_TOGGLE_SOMA_DETAIL; safe to call
+// with the HUD closed, in which case it only records the preference.
+auto sidebar_hud_toggle_soma_detail() -> void;
 // Rows of standard-font (`fontheight`) cells reserved above and below the terrain
 // viewport for the HUD's two OPAQUE strips — the status strip and the function-key
 // strip. The translucent regions (soma, dock, log, vehicle) float over the terrain
 // and are deliberately NOT carved. 0 whenever the HUD can't render.
 //
-// The HUD measures in its own phosphor cells, so these convert:
-// `ceil( strip_rows * cell_h * dp_ratio / fontheight )`, rounded up so the carve
-// always covers the strip.
+// The HUD measures in dp, the terrain in `fontheight` pixels, so these convert:
+// `ceil( strip_h_dp * dp_ratio / fontheight )`, rounded up so the carve always
+// covers the strip.
 int sidebar_hud_top_rows();
 int sidebar_hud_bottom_rows();
 

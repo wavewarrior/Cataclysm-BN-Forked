@@ -59,7 +59,7 @@ enum class cat : int {
 enum class dot_shape : int { none = 0, full, dot, half };
 
 struct dot_style {
-    hud_phosphor::ink rung = hud_phosphor::ink::dead;
+    hud_runic::ink rung = hud_runic::ink::dead;
     dot_shape form = dot_shape::none;
 };
 
@@ -74,17 +74,17 @@ struct dot_style {
 /// undifferentiated field of dim dots — and a continuous, recognisable road gives
 /// the eye the scale reference that tells it how far across the viewport is.
 constexpr std::array<dot_style, static_cast<std::size_t>( cat::num )> world_table = { {
-        { hud_phosphor::ink::dead,  dot_shape::none },  // none — nothing drawn
-        { hud_phosphor::ink::dead,  dot_shape::dot  },  // soil (grass, dirt, sand)
-        { hud_phosphor::ink::rule,  dot_shape::dot  },  // paved (road, walk, concrete)
-        { hud_phosphor::ink::label, dot_shape::dot  },  // floor_in (roofed)
-        { hud_phosphor::ink::dead,  dot_shape::half },  // water
-        { hud_phosphor::ink::rule,  dot_shape::half },  // vegetation
-        { hud_phosphor::ink::datum, dot_shape::dot  },  // furniture
-        { hud_phosphor::ink::peak,  dot_shape::dot  },  // stairs
-        { hud_phosphor::ink::datum, dot_shape::full },  // wall
-        { hud_phosphor::ink::peak,  dot_shape::full },  // opening (door/window)
-        { hud_phosphor::ink::label, dot_shape::full },  // vehicle
+        { hud_runic::ink::dead,  dot_shape::none },  // none — nothing drawn
+        { hud_runic::ink::dead,  dot_shape::dot  },  // soil (grass, dirt, sand)
+        { hud_runic::ink::rule,  dot_shape::dot  },  // paved (road, walk, concrete)
+        { hud_runic::ink::label, dot_shape::dot  },  // floor_in (roofed)
+        { hud_runic::ink::dead,  dot_shape::half },  // water
+        { hud_runic::ink::rule,  dot_shape::half },  // vegetation
+        { hud_runic::ink::datum, dot_shape::dot  },  // furniture
+        { hud_runic::ink::peak,  dot_shape::dot  },  // stairs
+        { hud_runic::ink::datum, dot_shape::full },  // wall
+        { hud_runic::ink::peak,  dot_shape::full },  // opening (door/window)
+        { hud_runic::ink::label, dot_shape::full },  // vehicle
     }
 };
 
@@ -241,10 +241,10 @@ struct grid_cell {
 
 } // namespace
 
-auto hud_radar::draw( const avatar &u, const hud_phosphor::layout &l ) -> void
+auto hud_radar::draw( const avatar &u, const hud_runic::layout &l ) -> void
 {
     g_wants_anim = false;
-    if( !pixel_minimap_option || l.radar.rows <= 0 || l.radar.cols <= 1 || g == nullptr ) {
+    if( !pixel_minimap_option || l.radar.w <= 0.0f || l.radar.h <= 0.0f || g == nullptr ) {
         return;
     }
     auto &rs = lighting::get_render_state();
@@ -260,16 +260,15 @@ auto hud_radar::draw( const avatar &u, const hud_phosphor::layout &l ) -> void
         scale = 1.0f;
     }
 
-    const auto r = hud_phosphor::to_dp( l.m, l.radar );
-    // The region's play-area-facing edge carries the producer's box-drawing
-    // vertical; the dot field is everything on the other side of it. When the
-    // sidebar is mirrored to the left the vertical moves to the far cell, so the
-    // interior starts at the region's own origin instead.
-    const auto border_on_left = l.radar.col > 0;
-    const auto ix = ( r.x + ( border_on_left ? l.m.cell_w : 0.0f ) ) * scale;
-    const auto iy = r.y * scale;
-    const auto iw = ( r.w - l.m.cell_w ) * scale;
-    const auto ih = r.h * scale;
+    // The dot field is the region inside the panel's own chrome: the 1dp CSS
+    // border on every side, plus the `.nc-colhead` at the top. Unlike the cell
+    // grid's box-glyph vertical, that chrome is symmetric, so the inset no longer
+    // depends on which side of the screen the sidebar is on.
+    constexpr auto border_dp = 1.0f;
+    const auto ix = ( l.radar.x + border_dp ) * scale;
+    const auto iy = ( l.radar.y + border_dp + hud_runic::head_h ) * scale;
+    const auto iw = ( l.radar.w - 2.0f * border_dp ) * scale;
+    const auto ih = ( l.radar.h - 2.0f * border_dp - hud_runic::head_h ) * scale;
     if( iw < 8.0f || ih < 8.0f ) {
         return;
     }
@@ -290,14 +289,14 @@ auto hud_radar::draw( const avatar &u, const hud_phosphor::layout &l ) -> void
     // Queue order is paint order on this layer, so the ground goes first: a
     // luminance-only encoding needs a background whose luminance it controls, and
     // the RmlUi document above deliberately leaves this region unveiled.
-    const auto ground = hud_phosphor::rgba( hud_phosphor::ink::ground );
+    const auto ground = hud_runic::rgba( hud_runic::ink::ground );
     rs.queue_ui_rect( ix, iy, iw, ih, ground[0], ground[1], ground[2], 0.92f );
 
     const auto bright = std::clamp(
                             static_cast<float>( get_option<int>( "PIXEL_MINIMAP_BRIGHTNESS" ) ) / 100.0f, 0.0f, 3.0f );
     auto world_col = std::array<std::array<float, 4>, static_cast<std::size_t>( cat::num )> {};
     for( std::size_t k = 0; k < world_col.size(); ++k ) {
-        world_col[k] = shade( hud_phosphor::rgba( world_table[k].rung ), bright );
+        world_col[k] = shade( hud_runic::rgba( world_table[k].rung ), bright );
     }
     const auto gutter = gutter_for_mode();
 

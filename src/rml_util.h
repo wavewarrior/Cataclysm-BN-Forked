@@ -22,13 +22,7 @@ std::string rml_escape( const std::string& s );
 // data/gui/theme.json "game_colors" overrides, else uses the curses SDL palette.
 std::string nc_color_to_hex( const nc_color& color );
 
-// Same, but consults the HUD-scoped "hud_colors" layer first and falls through to
-// nc_color_to_hex when a colour has no HUD restatement. Use this from the sidebar
-// HUD producers ONLY — the HUD's chrome is a cool teal set and the shared warm
-// gruvbox palette reads as foreign inside it. Menus must keep nc_color_to_hex.
-std::string hud_color_to_hex( const nc_color& color );
-
-// Drop both nc_color hex caches (call after a live theme edit so reopened menus
+// Drop the nc_color hex cache (call after a live theme edit so reopened menus
 // pick up new game-colour overrides).
 void clear_nc_color_cache();
 
@@ -36,9 +30,6 @@ void clear_nc_color_cache();
 // RML markup with <span style="color:…"> spans; plain segments are rml_escape'd.
 // Shared by the per-menu draw_rml() overrides and every migrated screen.
 std::string cata_text_to_rml( const std::string& s );
-
-// cata_text_to_rml through the HUD palette. Sidebar HUD producers only.
-std::string cata_text_to_rml_hud( const std::string& s );
 
 // F.2 item-info component core: render an item_info_data's body
 // (format_item_info → colour-delta tags) as RmlUi-ready markup, ONE string per

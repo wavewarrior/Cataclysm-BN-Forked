@@ -98,6 +98,30 @@
       ]
     },
     {
+      "//": "SOMA limb figure. EVERY spec here is finite on purpose: sidebar_requires_animation() is true while any tween is unsettled, and handle_action.cpp:263,314-321 answers that by dropping the input timeout to 33ms AND full-screen-redrawing every iteration. An ambient limb pulse would cost the whole game 30fps while the player stands still.",
+      "id": "hud_limb", "svg": "",
+      "animations": [
+        { "trigger": "on_decrease", "property": "scale", "from": 1.35, "to": 1.0, "duration": 260, "ease": "back_out" },
+        { "trigger": "on_decrease", "property": "alpha", "from": 0.35, "to": 1.0, "duration": 260, "ease": "quad_out" },
+        { "trigger": "critical", "property": "alpha", "from": 1.0, "to": 0.35, "duration": 620, "ease": "sine_in_out", "loop": "pingpong", "repeats": 6 }
+      ]
+    },
+    {
+      "//": "The collapsed card's aggregate bar: a nudge when overall health moves, so a change registers without the player watching the number.",
+      "id": "hud_soma_bar", "svg": "",
+      "animations": [
+        { "trigger": "on_change", "property": "offset_y", "from": 3, "to": 0, "duration": 220, "ease": "back_out" }
+      ]
+    },
+    {
+      "//": "The card itself, on expand/collapse. Fed the state as its value, so the toggle IS the change that fires it.",
+      "id": "hud_soma_card", "svg": "",
+      "animations": [
+        { "trigger": "on_change", "property": "alpha", "from": 0.0, "to": 1.0, "duration": 180, "ease": "quad_out" },
+        { "trigger": "on_change", "property": "offset_y", "from": -6, "to": 0, "duration": 180, "ease": "back_out" }
+      ]
+    },
+    {
       "id": "hud_vignette",
       "animations": [
         { "trigger": "on_change", "property": "alpha", "from": 0.0, "to": 1.0, "duration": 150, "ease": "quad_in" },

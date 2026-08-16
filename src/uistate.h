@@ -159,6 +159,11 @@ class uistatedata
         bool msg_window_wide_display = false;
         bool msg_window_full_height_display = false;
 
+        // Sidebar HUD: is the SOMA panel's limb card expanded to the figure and the
+        // per-limb rows, or collapsed to its summary? Default collapsed. Persisted so
+        // a player who opened it does not have to reopen it every load.
+        bool hud_soma_expanded = false;
+
         // internal stuff
         bool _testing_save = true; // internal: whine on json errors. set false if no complaints in 2 weeks.
         bool _really_testing_save = false; // internal: spammy

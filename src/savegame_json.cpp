@@ -2610,6 +2610,7 @@ void uistatedata::serialize( JsonOut &json ) const
     json.member( "overmap_visible_weather", overmap_visible_weather );
     json.member( "msg_window_wide_display", msg_window_wide_display );
     json.member( "msg_window_full_height_display", msg_window_full_height_display );
+    json.member( "hud_soma_expanded", hud_soma_expanded );
 
     json.member( "input_history" );
     json.start_object();
@@ -2663,6 +2664,7 @@ void uistatedata::deserialize( const JsonObject &jo )
     jo.read( "overmap_visible_weather", overmap_visible_weather );
     jo.read( "msg_window_wide_display", msg_window_wide_display );
     jo.read( "msg_window_full_height_display", msg_window_full_height_display );
+    jo.read( "hud_soma_expanded", hud_soma_expanded );
 
     if( !jo.read( "vmenu_show_items", vmenu_show_items ) ) {
         // This is an old save: 1 means view items, 2 means view monsters,
