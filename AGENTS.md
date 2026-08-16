@@ -209,6 +209,19 @@ cmake --build --preset linux-full --target cataclysm-bn-tiles cata_test-tiles
 deno task docs:gen
 ```
 
+- **Binary path (HARD — verify before trusting ANY test result)**: on `osx-arm-slim` both
+  `cataclysm-bn-tiles` **and `cata_test-tiles` link to the REPO ROOT**, not to
+  `out/build/<preset>/`. The `out/build/osx-arm-slim/tests/cata_test-tiles` path is a
+  months-old leftover that still runs, still exits 0/1, and silently reports results for
+  code that no longer exists — a stale binary here produced a full phantom diagnosis of a
+  "missing sidebar widget" that did not exist, because the July build asserted `== 30`
+  while the tree asserted `== 31`. Always run `./cata_test-tiles` on this preset, and
+  `stat` the binary's mtime against the build you just ran before believing a failure:
+  ```sh
+  ls -l ./cata_test-tiles out/build/osx-arm-slim/tests/cata_test-tiles
+  ./cata_test-tiles "[filter]" --rng-seed 1
+  ```
+
 - **Commit**: Commit **ATOMICALLY**. **MUST** Follow [Conventional Commits](./docs/en/contribute/changelog_guidelines.md). **MUST NOT** add body/footer unless critical.
 
 ## WHEN working on i18n / PO context
@@ -279,6 +292,13 @@ diffs as numbers plus an ASCII delta grid, so frames stay on disk. Measured: a 6
 
 - **Framework**: Catch2 v3 (amalgamated, bundled in `tests/catch/`).
 - **Binary**: `./out/build/<preset>/tests/cata_test-tiles` — run with optional filter string, e.g. `"[item]"` or `"~[.]"`.
+  **On `osx-arm-slim` this path is a stale leftover: the fresh test binary links to `./cata_test-tiles` in the repo root.**
+  Check the mtime before trusting a result — see the binary-path rule under "WHEN working on code changes".
+- **Pre-existing failures** (current tree, not caused by your diff): `translation_text_style_check`
+  and `translation_text_style_check_error_recovery` in `tests/json_test.cpp`. Both are `[.]`-tagged
+  (excluded by default; a bare `"[json]"` filter opts them IN) and expect a debugmsg they never get,
+  because `text_style_check()` is only wired into `tools/clang-tidy-plugin/TextStyleCheck.cpp`, never
+  into the runtime JSON reader. Do not attribute these to your change.
 - **Domain tags**: Tests are tagged by domain — `[item]`, `[melee]`, `[json]`, `[coop]`, `[calendar]`, `[map]`, `[vehicle]`, etc. Filter with `"[tag]"` to run only relevant tests.
 - **Slow tests**: Tagged `[.]` and excluded by default. Include them with `"~[.]"` or explicitly.
 - **Helper modules**:
