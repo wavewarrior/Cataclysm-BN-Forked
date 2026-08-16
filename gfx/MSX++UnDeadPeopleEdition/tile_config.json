@@ -99803,6 +99803,10 @@
               "fg": [
                 {
                   "weight": 12,
+                  "sprite": 19736
+                },
+                {
+                  "weight": 12,
                   "sprite": 19737
                 },
                 {
@@ -99816,10 +99820,6 @@
                 {
                   "weight": 12,
                   "sprite": 19740
-                },
-                {
-                  "weight": 12,
-                  "sprite": 19741
                 }
               ],
               "bg": 9131
@@ -135163,23 +135163,23 @@
       "tiles": [
         {
           "id": "t_stoneshard_grass_0",
-          "fg": 0
+          "fg": 19736
         },
         {
           "id": "t_stoneshard_grass_1",
-          "fg": 1
+          "fg": 19737
         },
         {
           "id": "t_stoneshard_grass_2",
-          "fg": 2
+          "fg": 19738
         },
         {
           "id": "t_stoneshard_grass_3",
-          "fg": 3
+          "fg": 19739
         },
         {
           "id": "t_stoneshard_grass_4",
-          "fg": 4
+          "fg": 19740
         }
       ]
     },
@@ -135193,123 +135193,123 @@
       "tiles": [
         {
           "id": "t_stoneshard_shrub_0",
-          "fg": 0
+          "fg": 19752
         },
         {
           "id": "t_stoneshard_shrub_1",
-          "fg": 1
+          "fg": 19753
         },
         {
           "id": "t_stoneshard_shrub_2",
-          "fg": 2
+          "fg": 19754
         },
         {
           "id": "t_stoneshard_shrub_3",
-          "fg": 3
+          "fg": 19755
         },
         {
           "id": "t_stoneshard_shrub_4",
-          "fg": 4
+          "fg": 19756
         },
         {
           "id": "t_stoneshard_shrub_5",
-          "fg": 5
+          "fg": 19757
         },
         {
           "id": "t_stoneshard_shrub_6",
-          "fg": 6
+          "fg": 19758
         },
         {
           "id": "t_stoneshard_shrub_7",
-          "fg": 7
+          "fg": 19759
         },
         {
           "id": "t_stoneshard_shrub_8",
-          "fg": 8
+          "fg": 19760
         },
         {
           "id": "t_stoneshard_shrub_9",
-          "fg": 9
+          "fg": 19761
         },
         {
           "id": "t_stoneshard_shrub_10",
-          "fg": 10
+          "fg": 19762
         },
         {
           "id": "t_stoneshard_shrub_11",
-          "fg": 11
+          "fg": 19763
         },
         {
           "id": "t_stoneshard_shrub_12",
-          "fg": 12
+          "fg": 19764
         },
         {
           "id": "t_stoneshard_shrub_13",
-          "fg": 13
+          "fg": 19765
         },
         {
           "id": "t_stoneshard_shrub_14",
-          "fg": 14
+          "fg": 19766
         },
         {
           "id": "t_stoneshard_shrub_15",
-          "fg": 15
+          "fg": 19767
         },
         {
           "id": "t_stoneshard_shrub_16",
-          "fg": 16
+          "fg": 19768
         },
         {
           "id": "t_stoneshard_shrub_17",
-          "fg": 17
+          "fg": 19769
         },
         {
           "id": "t_stoneshard_shrub_18",
-          "fg": 18
+          "fg": 19770
         },
         {
           "id": "t_stoneshard_shrub_19",
-          "fg": 19
+          "fg": 19771
         },
         {
           "id": "t_stoneshard_shrub_20",
-          "fg": 20
+          "fg": 19772
         },
         {
           "id": "t_stoneshard_shrub_21",
-          "fg": 21
+          "fg": 19773
         },
         {
           "id": "t_stoneshard_shrub_22",
-          "fg": 22
+          "fg": 19774
         },
         {
           "id": "t_stoneshard_shrub_23",
-          "fg": 23
+          "fg": 19775
         },
         {
           "id": "t_stoneshard_shrub_24",
-          "fg": 24
+          "fg": 19776
         },
         {
           "id": "t_stoneshard_shrub_25",
-          "fg": 25
+          "fg": 19777
         },
         {
           "id": "t_stoneshard_shrub_26",
-          "fg": 26
+          "fg": 19778
         },
         {
           "id": "t_stoneshard_shrub_27",
-          "fg": 27
+          "fg": 19779
         },
         {
           "id": "t_stoneshard_shrub_28",
-          "fg": 28
+          "fg": 19780
         },
         {
           "id": "t_stoneshard_shrub_29",
-          "fg": 29
+          "fg": 19781
         }
       ]
     },
@@ -135422,79 +135422,79 @@
       "tiles": [
         {
           "id": "t_stoneshard_tree_0",
-          "fg": 0
+          "fg": 23880
         },
         {
           "id": "t_stoneshard_tree_1",
-          "fg": 1
+          "fg": 23881
         },
         {
           "id": "t_stoneshard_tree_2",
-          "fg": 2
+          "fg": 23882
         },
         {
           "id": "t_stoneshard_tree_3",
-          "fg": 3
+          "fg": 23883
         },
         {
           "id": "t_stoneshard_tree_4",
-          "fg": 4
+          "fg": 23884
         },
         {
           "id": "t_stoneshard_tree_5",
-          "fg": 5
+          "fg": 23885
         },
         {
           "id": "t_stoneshard_tree_6",
-          "fg": 6
+          "fg": 23886
         },
         {
           "id": "t_stoneshard_tree_7",
-          "fg": 7
+          "fg": 23887
         },
         {
           "id": "t_stoneshard_tree_8",
-          "fg": 8
+          "fg": 23888
         },
         {
           "id": "t_stoneshard_tree_9",
-          "fg": 9
+          "fg": 23889
         },
         {
           "id": "t_stoneshard_tree_10",
-          "fg": 10
+          "fg": 23890
         },
         {
           "id": "t_stoneshard_tree_11",
-          "fg": 11
+          "fg": 23891
         },
         {
           "id": "t_stoneshard_tree_12",
-          "fg": 12
+          "fg": 23892
         },
         {
           "id": "t_stoneshard_tree_13",
-          "fg": 13
+          "fg": 23893
         },
         {
           "id": "t_stoneshard_tree_14",
-          "fg": 14
+          "fg": 23894
         },
         {
           "id": "t_stoneshard_tree_15",
-          "fg": 15
+          "fg": 23895
         },
         {
           "id": "t_stoneshard_tree_16",
-          "fg": 16
+          "fg": 23896
         },
         {
           "id": "t_stoneshard_tree_17",
-          "fg": 17
+          "fg": 23897
         },
         {
           "id": "t_stoneshard_tree_18",
-          "fg": 18
+          "fg": 23898
         }
       ]
     },
