@@ -1,3 +1,8 @@
+> **Superseded by [`hud-creator-register.md`](./hud-creator-register.md).** That plan retires this
+> document's binding contract (cell grid, single amber hue, no CSS border, box-glyph frames) and
+> rebuilds the HUD in the character creator's register. This file is kept as the record of why the
+> HUD looked the way it did.
+
 # Terminal Phosphor HUD — implementation contract
 
 We are replacing the shipping sidebar HUD with the **Terminal Phosphor** design
