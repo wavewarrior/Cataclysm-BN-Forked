@@ -61,6 +61,7 @@
 #include "map_feature_descriptions.h"
 #include "map_functions.h"
 #include "map_iterator.h"
+#include "map_load_stats.h"
 #include "map_memory.h"
 #include "map_selector.h"
 #include "mapbuffer.h"
@@ -195,6 +196,28 @@ static field nulfield;        // Returned when &field_at() is asked for an OOB v
 static level_cache nullcache; // Dummy cache for z-levels outside bounds
 
 bool disable_mapgen = false;
+
+namespace map_load_stats
+{
+
+namespace
+{
+// Single-threaded by construction: only map::loadn() writes it, and loadn() runs
+// on the game thread inside map::shift()/load(). Mapgen worker threads never
+// reach it — they populate the mapbuffer, which is what makes this counter zero.
+unsigned g_sync_generated = 0;
+} // namespace
+
+auto note_sync_generated() -> void { ++g_sync_generated; }
+
+auto take_sync_generated() -> unsigned
+{
+    const auto n = g_sync_generated;
+    g_sync_generated = 0;
+    return n;
+}
+
+} // namespace map_load_stats
 
 // Thread-local context for get_map().  Null means "use the global g->m."
 // Worker threads never push a context, so they always fall through to g->m.
@@ -1644,7 +1667,12 @@ void map::loadn( const tripoint_bub_sm& grid, const bool update_vehicles, const 
     if( tmpsub == nullptr ) {
         ZoneScopedN( "loadn_generate" );
         // It doesn't exist; we must generate it!
-        dbg( DL::Info ) << "map::loadn: Missing mapbuffer data.  Regenerating.";
+        // The player-visible cost: this is mapgen running between frames, on the
+        // edge column the shift is pulling in. Counted so `[shift][perf]` can say
+        // whether a walk hitched because the preloader lost the race.
+        map_load_stats::note_sync_generated();
+        dbg( DL::Info ) << "map::loadn: Missing mapbuffer data.  Regenerating "
+                        << grid_abs_sub.to_string() << ".";
 
         // Each overmap square is two nonants; to prevent overlap, generate only at
         //  squares divisible by 2.
