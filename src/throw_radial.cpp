@@ -16,7 +16,7 @@
 #include "itype.h"
 #include "options.h"
 #include "output.h"
-#include "panels.h"   // panel_manager, sidebar_hud_top_rows/_bottom_rows
+#include "panels.h"   // sidebar_hud_top_rows/_bottom_rows, sidebar_terrain_cols_*
 #include "rml_length.h"
 #include "rml_screen.h"
 #include "rml_util.h"
@@ -96,8 +96,8 @@ auto compute_ring() -> ring_geom
     // window-centred ring sits visibly off to one side of the map the player is
     // actually looking at. Carved from the same sources the HUD uses, so the two
     // always agree.
-    const int width_left = panel_manager::get_manager().get_width_left();
-    const int width_right = panel_manager::get_manager().get_width_right();
+    const int width_left = sidebar_terrain_cols_left();
+    const int width_right = sidebar_terrain_cols_right();
     const float left = w * width_left / TERMX;
     const float right = w * ( TERMX - width_right ) / TERMX;
     const float top = h * sidebar_hud_top_rows() / TERMY;

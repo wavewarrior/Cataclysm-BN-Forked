@@ -1098,18 +1098,9 @@ int sidebar_hud_top_rows()
     // out of the terrain viewport. soma / dock / log / vehicle are translucent and
     // float over the map deliberately — not carving them is where this design's
     // occlusion saving comes from.
-    //
-    // KNOWN FOLLOW-UP — the sidebar COLUMN is still carved, and should not be.
-    // game::draw_panels (game_misc.cpp:383-389) derives the terrain width from
-    // panel_manager::get_width_left/right(), and the RmlUi HUD ought to
-    // contribute zero there. Zeroing those two accessors is a one-line change in
-    // THIS file, but they are also read by live_view.cpp:105/146 — which sizes the
-    // hover tile-info box to the column and would collapse it to zero width — plus
-    // pickup.cpp:750-752, advanced_inv.cpp:1316 and game_ui_extra.cpp:1162/1577.
-    // The correct cutover gives the terrain carve its own accessor at the
-    // game_misc.cpp call site and leaves every other consumer's column intact;
-    // that is a file outside this slice, so the column stays carved rather than
-    // half-changed and left inconsistent with the viewport.
+    // The sidebar COLUMN is handled separately, by sidebar_terrain_cols_left/right()
+    // below — the terrain carve is not the same quantity as the sidebar column
+    // every other consumer anchors to.
     const auto l = hud_layout_now( hud_log_max_rows, false );
     return l ? terminal_rows_for( l->status.h ) : 0;
 }
@@ -1120,6 +1111,16 @@ int sidebar_hud_bottom_rows()
     // viewport's bottom edge at a fixed height — so any value gives the same answer.
     const auto l = hud_layout_now( hud_log_max_rows, false );
     return l ? terminal_rows_for( l->keys.h ) : 0;
+}
+
+auto sidebar_terrain_cols_left() -> int
+{
+    return sidebar_hud_active() ? 0 : panel_manager::get_manager().get_width_left();
+}
+
+auto sidebar_terrain_cols_right() -> int
+{
+    return sidebar_hud_active() ? 0 : panel_manager::get_manager().get_width_right();
 }
 
 auto sidebar_hud_anim_tick() -> void

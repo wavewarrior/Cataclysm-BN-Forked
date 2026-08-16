@@ -137,6 +137,7 @@
 #include "map_functions.h"
 #include "map_item_stack.h"
 #include "map_iterator.h"
+#include "map_load_stats.h"
 #include "map_selector.h"
 #include "mapbuffer.h"
 #include "mapbuffer_registry.h"
@@ -376,9 +377,11 @@ shared_ptr_fast<ui_adaptor> game::create_or_get_main_ui_adaptor()
         } );
         ui->on_screen_resize( [this]( ui_adaptor & ui ) {
             // remove some space for the sidebar, this is the maximal space
-            // (using standard font) that the terrain window can have
-            const int sidebar_left = panel_manager::get_manager().get_width_left();
-            const int sidebar_right = panel_manager::get_manager().get_width_right();
+            // (using standard font) that the terrain window can have. The RmlUi HUD
+            // floats over the map, so it carves no column and the map spans the
+            // full width beneath it.
+            const int sidebar_left = sidebar_terrain_cols_left();
+            const int sidebar_right = sidebar_terrain_cols_right();
             const int top = sidebar_hud_top_rows();
             const int bottom = sidebar_hud_bottom_rows();
 
@@ -1574,6 +1577,8 @@ point_rel_sm game::update_map( int &x, int &y )
     // this handles loading/unloading submaps that have scrolled on or off the viewport
     // NOLINTNEXTLINE(cata-use-named-point-constants)
     inclusive_rectangle<point_rel_sm> size_1( point_rel_sm( -1, -1 ), point_rel_sm( 1, 1 ) );
+    // Zero the counter so the number reported below covers this shift alone.
+    map_load_stats::take_sync_generated();
     auto remaining_shift = shift;
     while( remaining_shift != point_rel_sm::zero() ) {
         auto this_shift = clamp( remaining_shift, size_1 );
@@ -1591,6 +1596,14 @@ point_rel_sm game::update_map( int &x, int &y )
             origin.x() + reality_bubble_radius_, origin.y() + reality_bubble_radius_, origin.z() );
         submap_loader.update_request( reality_bubble_handle_, new_center );
         // Dynamically manage lazy border based on cached option.
+        //
+        // The centre is the BUBBLE centre, not a lead offset in the direction of
+        // travel. Leading it looks like it should buy the preloader a crossing of
+        // slack, but compute_lazy_border_omts() defines the ring as "the OMT
+        // footprint of centre±radius, expanded by one OMT, minus that footprint" —
+        // so a leading centre swallows the very OMT the next shift needs into the
+        // excluded interior. Any change here must be measured against the `regen=`
+        // counter in the [shift][perf] line below, not reasoned about.
         if( lazy_border_enabled ) {
             if( lazy_border_handle_ == 0 ) {
                 lazy_border_handle_ = submap_loader.request_load(
@@ -1676,10 +1689,15 @@ point_rel_sm game::update_map( int &x, int &y )
 
     const double _sh_total = std::chrono::duration<double, std::milli>(
                                  _shclk::now() - _sh_t0 ).count();
+    // `regen` is the count of submaps map::loadn() had to generate on the spot
+    // during this shift. It should be 0 on a walk: any non-zero value is mapgen
+    // running between frames, in view, because the lazy-border preloader had not
+    // finished that overmap tile yet.
     DebugLogFL( DL::Info, DC::Main )
             << "[shift][perf] total=" << _sh_total << "ms shift=" << _sh_shift
             << " loader=" << _sh_loader << " ent=" << _sh_ent << " npc=" << _sh_npc
-            << " cache=" << _sh_cache << " spawn=" << _sh_spawn << " om_seen=" << _sh_om;
+            << " cache=" << _sh_cache << " spawn=" << _sh_spawn << " om_seen=" << _sh_om
+            << " regen=" << map_load_stats::take_sync_generated();
 
     return shift;
 }

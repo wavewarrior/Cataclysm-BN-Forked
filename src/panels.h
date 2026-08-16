@@ -129,6 +129,18 @@ auto sidebar_hud_toggle_soma_detail() -> void;
 int sidebar_hud_top_rows();
 int sidebar_hud_bottom_rows();
 
+// Columns the terrain viewport gives up at each screen edge. The curses sidebar
+// owns a real column, but the RmlUi HUD is translucent and floats over the map,
+// so while it is active this is 0 at both edges and the terrain spans the full
+// screen width — otherwise the vacated column paints as a black band, since
+// nothing draws there once the curses sidebar is suppressed.
+//
+// Deliberately NOT the same as panel_manager::get_width_left/right(): those still
+// report the sidebar column that live_view, pickup and advanced_inv anchor their
+// own windows to, which is unrelated to how wide the map is allowed to be.
+auto sidebar_terrain_cols_left() -> int;
+auto sidebar_terrain_cols_right() -> int;
+
 // Tick HUD animations (advance tweens, apply CSS properties). Called each render frame.
 auto sidebar_hud_anim_tick() -> void;
 class panel_manager

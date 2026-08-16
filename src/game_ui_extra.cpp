@@ -1572,9 +1572,10 @@ static void centerlistview( const tripoint_rel_ms &active_item_position, int ui_
         } else {
             auto pos( active_item_position.xy() + point( POSX, POSY ) );
 
-            // item/monster list UI is on the right, so get the difference between its width
-            // and the width of the sidebar on the right (if any)
-            int sidebar_right_adjusted = ui_width - panel_manager::get_manager().get_width_right();
+            // item/monster list UI is on the right, so get the difference between its
+            // width and the width the terrain viewport already gives up on that edge
+            // (0 under the floating RmlUi HUD, a real column under the curses sidebar)
+            int sidebar_right_adjusted = ui_width - sidebar_terrain_cols_right();
             // if and only if that difference is greater than zero, use that as offset
             int right_offset = sidebar_right_adjusted > 0 ? sidebar_right_adjusted : 0;
 
