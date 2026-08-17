@@ -135218,11 +135218,11 @@
     },
     {
       "file": "stoneshard_foliage.png",
-      "//": "promoted Stoneshard bushes from Export_Sprites/ at 128x160 cells. Offset scaled from -16/-48 to -32/-96 for 2x cell size.",
+      "//": "promoted Stoneshard bushes from Export_Sprites/ at 128x160 cells. Offsets anchor the sprite centred on its tile with its base on the tile's bottom edge: off_x = -(sprite_w - tile_w)/2, off_y = -(sprite_h - tile_h). With tile_info 32x32 that is -48/-128. Do NOT scale the 64x80 sheets' -16/-48 by the cell-size ratio; the tile stayed 32, so that lands the sprite 16px right and a full tile low.",
       "sprite_width": 128,
       "sprite_height": 160,
-      "sprite_offset_x": -32,
-      "sprite_offset_y": -96,
+      "sprite_offset_x": -48,
+      "sprite_offset_y": -128,
       "tiles": [
         {
           "id": "t_stoneshard_shrub_0",
@@ -135447,11 +135447,11 @@
     },
     {
       "file": "stoneshard_trees.png",
-      "//": "promoted Stoneshard trees from Export_Sprites/ at 128x160 cells. Offset scaled from -16/-48 to -32/-96 for 2x cell size.",
+      "//": "promoted Stoneshard trees from Export_Sprites/ at 128x160 cells. Offsets anchor the sprite centred on its tile with its base on the tile's bottom edge: off_x = -(sprite_w - tile_w)/2, off_y = -(sprite_h - tile_h). With tile_info 32x32 that is -48/-128 (see cata_tiles.cpp:2322-2332, where destination = tile origin + offset and w/h = sprite dims).",
       "sprite_width": 128,
       "sprite_height": 160,
-      "sprite_offset_x": -32,
-      "sprite_offset_y": -96,
+      "sprite_offset_x": -48,
+      "sprite_offset_y": -128,
       "tiles": [
         {
           "id": "t_stoneshard_tree_0",
