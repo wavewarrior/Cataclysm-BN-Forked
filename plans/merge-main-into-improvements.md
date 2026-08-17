@@ -533,3 +533,112 @@ These exercise the specific things this merge introduces; a green suite does not
   wrong — stop and re-check rather than pressing on.
 - **`rerere` is load-bearing across eleven stages.** If resolutions stop replaying, confirm
   `rerere.enabled` survived (it is repo-local config, not carried by a worktree switch).
+
+## Execution addenda (measured during S0, 2026-08-17)
+
+Corrections and discoveries from actually running S0. Each supersedes the corresponding claim above.
+
+1. **clang-format 22 was already installed** — `/opt/homebrew/opt/llvm/bin/clang-format` reports
+   `Homebrew clang-format version 22.1.8` (the `llvm` formula is at 22). No `brew install` was
+   needed, and the version pin matches main's `LLVM_VERSION: "22"` exactly. It is **not** on `PATH`
+   under the bare name `clang-format`.
+2. **`-DCLANG_FORMAT_EXECUTABLE=` does nothing under main's formatter.** main's
+   `build-scripts/format-cpp.sh` resolves the binary with `command -v clang-format` and hard-fails
+   otherwise; it never reads a CMake variable. S0 step 6's `-DCLANG_FORMAT_EXECUTABLE=` is inert.
+   The formatter must instead be invoked with `/opt/homebrew/opt/llvm/bin` prepended to `PATH`.
+3. **`.clang-format` must also be taken from `origin/main` in S0.** main adds
+   `IndentPPDirectives: AfterHash` and `BreakStringLiterals: false`. HEAD never touched the file
+   (`git diff base HEAD -- .clang-format` is empty), so main's version wins the merge automatically
+   and is absent from the conflict set — taking it early is merge-neutral, and *required*, because
+   without it S0's output cannot match main's and S7's conflict collapse silently fails.
+4. **The formatter-scope table was wrong about `tests/`.** HEAD's `CMakeModules/FormatSource.cmake`
+   *does* format `tests/`, `tools/format/` and `tools/clang-tidy-plugin/` — with **astyle**, not
+   clang-format (excluding `tests/iteminfo_test.cpp` and `tests/json_test.cpp`, which crashed astyle
+   3.6.13). The divergence is astyle-vs-clang-format, not formatted-vs-unformatted. The action is
+   unchanged: adopt main's script and re-format that scope with clang-format.
+5. **"Token-identical after stripping comments and whitespace" is unachievable as literally
+   written**, because `SortIncludes` + `IncludeBlocks: Regroup` reorder include lines and drop exact
+   duplicates, and `SortUsingDeclarations` reorders adjacent `using` declarations. The correct
+   behaviour-free criterion, and the one actually applied, is: **the multiset of `#include` lines is
+   preserved up to order and de-duplication, and the token stream of everything else is identical.**
+   Measured over all 263 in-scope files: **263/263 behaviour-free**. The three files that first
+   looked semantic were a `using`-declaration sort (`tests/vehicle_box2d_test.cpp`), duplicate
+   include removal of three guarded headers (`tests/player_test.cpp`), and a tokenizer artifact.
+   A naive tokenizer must handle digit separators (`90'000`), raw strings (`R"(...)"`), prefixed
+   character literals (`U'x'`) and backslash line-continuations, or it reports false positives.
+6. **The `tests/` normalization gain is now exact, not directional.** After formatting HEAD's
+   in-scope files with clang-format 22.1.8 and main's `.clang-format`, **37 of the 220 files present
+   on both sides become byte-identical to main's version** and therefore cannot conflict at S7.
+7. **astyle 3.6.16 is a clean no-op on HEAD's flat `src/`** — 0 of 1098 files change. So running the
+   full `format` target after a merge cannot churn `src/`, and the `cbn-astyle-indent-bug` trap is
+   not currently armed. Re-check this after any stage that adds a trailing-return-type function with
+   a negated first-statement `if` guard.
+8. **`CATA_SDL` is the S2 landmine — a dead compile guard.** main wraps *all* of `src/compute/`
+   (including `cata_gpu::get_device`, the entire subject of **D2**) in `#if defined(CATA_SDL)`, and
+   defines it via `link_sdl_core()` → `target_compile_definitions(<target> PUBLIC CATA_SDL)` plus
+   `add_definitions(-DCATA_SDL)`. The token **does not exist anywhere on HEAD**, and the current
+   build defines it in **0 of 2368** TUs. If `CMakeLists.txt`/`src/CMakeLists.txt` are resolved by
+   simply "keeping HEAD" per R4, main's GPU compute lightmap compiles to *nothing*, `get_device()`
+   never exists, and D2 becomes a no-op that no test can detect.
+   **Required resolution:** define `CATA_SDL` **unconditionally** on `cataclysm-bn-tiles-common`.
+   This is R4 applied correctly — drop main's *conditionality* (HEAD links SDL3 unconditionally: 0
+   `#ifdef TILES` in `src/`, 13 files including `SDL3/SDL_gpu.h` directly), while keeping main's
+   *definition*. Verify after S2 with:
+   `python3 -c "import json;cc=json.load(open('out/build/osx-arm-slim/compile_commands.json'));print(sum('CATA_SDL' in e['command'] for e in cc))"`
+   — it must be non-zero, and `src/compute/gpu_lm.cpp.o` must appear in the build log.
+9. **`CMakeLists.txt` has only 1 conflict hunk at S1**, not 11 — the 11 is the cumulative count
+   against full `origin/main`. The S1 hunk is the SDL3_image `FATAL_ERROR` message: resolve as
+   HEAD's wording (no `-DTILES=1` text, per R4) with main's corrected doc path
+   `docs/en/dev/guides/building/cmake.md`.
+10. **S1's measured conflict surface confirms the plan's numbers**: 49 conflicted files, 173 hunks.
+    Only **9 of 173 hunks (5%) are pure include-block unions**, so R1 automation buys little and the
+    bulk needs semantic judgement. **26 of the 49 files carry HEAD-only subsystem hooks** (R3) —
+    highest risk: `src/handle_action.cpp` (55 `coop_` refs), `src/game.h` (23), `src/cata_tiles.cpp`
+    (21 `occluder`, 16 `lighting::`, 11 `render_state`), `src/activity_actor.cpp` (17),
+    `src/map.cpp` (18 `pocket_info_`), `src/sounds.cpp` (14 `sound_vis`).
+11. **The verification commands pointed at a stale binary.** On the `osx-arm-slim` preset the
+    freshly-linked binaries land at the **repo root** — `./cata_test-tiles` and
+    `./cataclysm-bn-tiles` — while `out/build/osx-arm-slim/tests/cata_test-tiles` is a month-stale
+    leftover (2026-07-11 vs. a 2026-08-17 14:30 link). Every `./out/build/osx-arm-slim/…` path in
+    **Verification** must be read as `./<binary>` from the repo root, or the whole merge gets
+    validated against pre-merge objects.
+12. **The plan's single unfiltered baseline run would have been invalid.** Unfiltered, the suite
+    aborts partway on a co-op SIGSEGV and never reaches over half its cases, so the run silently
+    compares different subsets between stages. The baseline is therefore **two** deterministic runs
+    that together cover all 1057 cases with no abort. `--order decl` plus a pinned `--rng-seed`
+    are both required; `--order decl` alone reduced the failure set from the many families named in
+    the `cbn-test-regression-attribution-by-seed` skill to just two, confirming the rest were
+    ordering artifacts.
+13. **The co-op SIGSEGV is fixed on this branch.** `coop_inproc_test.cpp:100` no longer crashes:
+    `[coop]` runs 159/159 green. So `[coop]` **is** usable as a parity gate, and it must be used —
+    co-op is a HEAD-only subsystem and R3's highest-volume hook (`src/handle_action.cpp` alone has
+    55 `coop_` references).
+
+### Recorded baseline — supersedes **Verification § Baseline**
+
+Tree: `f20cc53c59` (HEAD after the three S0 commits). Build: `cataclysm-bn-tiles` +
+`cata_test-tiles` via `cmake --build --preset osx-arm-slim`, **exit 0**, 1865 targets, 46m35s cold
+(ccache had been emptied).
+
+```sh
+./cata_test-tiles "~[coop]" --order decl --rng-seed 1   # 898 cases
+./cata_test-tiles "[coop]"  --order decl --rng-seed 1   # 159 cases
+```
+
+| Run | Cases | Pass | Fail | Expected-fail | Assertions pass | Assertions fail |
+|---|---|---|---|---|---|---|
+| `~[coop]` | 898 | 895 | **2** | 1 | 7,806,945 | 97 |
+| `[coop]` | 159 | 159 | **0** | 0 | 554 | 0 |
+
+**The parity criterion is this named failure set — not "zero failures".** Any stage that adds a
+name here has regressed and blocks the next merge:
+
+| Failing case | Assertion sites |
+|---|---|
+| `vehicle_efficiency` | `vehicle_efficiency_test.cpp:289` |
+| `vehicle_ramp_test_60` | `vehicle_ramp_test.cpp:196, 198, 211, 214, 222, 227` |
+
+Both are pre-existing vehicle-physics failures. Capture each stage's run with
+`-r xml -o /tmp/stageN.xml` and diff the failing-case *name set* against this table; the raw
+assertion counts move with content changes and are not the criterion. The suite leaves the worktree
+clean — no `hit_range.json`/`*.pgm` artifacts appeared.
