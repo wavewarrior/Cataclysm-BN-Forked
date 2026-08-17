@@ -128784,6 +128784,10 @@
           "fg": [
             {
               "weight": 10,
+              "sprite": 19752
+            },
+            {
+              "weight": 10,
               "sprite": 19753
             },
             {
@@ -128812,6 +128816,33 @@
             },
             {
               "weight": 10,
+              "sprite": 19767
+            },
+            {
+              "weight": 10,
+              "sprite": 19768
+            },
+            {
+              "weight": 10,
+              "sprite": 19769
+            },
+            {
+              "weight": 10,
+              "sprite": 19770
+            },
+            {
+              "weight": 10,
+              "sprite": 19771
+            }
+          ],
+          "bg": 18113,
+          "rotates": false
+        },
+        {
+          "id": "t_shrub_season_winter",
+          "fg": [
+            {
+              "weight": 10,
               "sprite": 19760
             },
             {
@@ -128821,32 +128852,16 @@
             {
               "weight": 10,
               "sprite": 19762
+            },
+            {
+              "weight": 10,
+              "sprite": 19780
+            },
+            {
+              "weight": 10,
+              "sprite": 19781
             }
           ],
-          "bg": 18113,
-          "rotates": false
-        },
-        {
-          "id": "t_shrub_season_autumn",
-          "fg": 18677,
-          "bg": 18113,
-          "rotates": false
-        },
-        {
-          "id": "t_shrub_season_spring",
-          "fg": 18678,
-          "bg": 18113,
-          "rotates": false
-        },
-        {
-          "id": "t_shrub_season_summer",
-          "fg": 18679,
-          "bg": 18113,
-          "rotates": false
-        },
-        {
-          "id": "t_shrub_season_winter",
-          "fg": 18680,
           "bg": 18123,
           "rotates": false
         },
@@ -129119,89 +129134,84 @@
           "fg": [
             {
               "weight": 10,
-              "sprite": 20601
+              "sprite": 23889
             },
             {
               "weight": 10,
-              "sprite": 20602
+              "sprite": 23890
             },
             {
               "weight": 10,
-              "sprite": 20603
+              "sprite": 23891
             },
             {
               "weight": 10,
-              "sprite": 20604
+              "sprite": 23892
             },
             {
               "weight": 10,
-              "sprite": 20605
+              "sprite": 23893
             },
             {
               "weight": 10,
-              "sprite": 20606
+              "sprite": 23894
             },
             {
               "weight": 10,
-              "sprite": 20607
+              "sprite": 23895
             },
             {
               "weight": 10,
-              "sprite": 20608
+              "sprite": 23896
             },
             {
               "weight": 10,
-              "sprite": 20609
-            },
-            {
-              "weight": 10,
-              "sprite": 20610
-            },
-            {
-              "weight": 10,
-              "sprite": 20611
-            },
-            {
-              "weight": 10,
-              "sprite": 20612
-            },
-            {
-              "weight": 10,
-              "sprite": 20613
-            },
-            {
-              "weight": 10,
-              "sprite": 20614
-            },
-            {
-              "weight": 10,
-              "sprite": 20615
+              "sprite": 23897
             }
           ],
           "bg": 18113,
           "rotates": false
         },
         {
-          "id": "t_tree_season_autumn",
-          "fg": 18727,
-          "bg": 18113,
-          "rotates": false
-        },
-        {
-          "id": "t_tree_season_spring",
-          "fg": 18728,
-          "bg": 18113,
-          "rotates": false
-        },
-        {
-          "id": "t_tree_season_summer",
-          "fg": 18729,
-          "bg": 18113,
-          "rotates": false
-        },
-        {
           "id": "t_tree_season_winter",
-          "fg": 18730,
+          "fg": [
+            {
+              "weight": 10,
+              "sprite": 23889
+            },
+            {
+              "weight": 10,
+              "sprite": 23890
+            },
+            {
+              "weight": 10,
+              "sprite": 23891
+            },
+            {
+              "weight": 10,
+              "sprite": 23892
+            },
+            {
+              "weight": 10,
+              "sprite": 23893
+            },
+            {
+              "weight": 10,
+              "sprite": 23894
+            },
+            {
+              "weight": 10,
+              "sprite": 23895
+            },
+            {
+              "weight": 10,
+              "sprite": 23896
+            },
+            {
+              "weight": 10,
+              "sprite": 23897
+            }
+          ],
           "bg": 18123,
           "rotates": false
         },
@@ -129510,41 +129520,60 @@
           "fg": [
             {
               "weight": 10,
-              "sprite": 20606
+              "sprite": 23883
             },
             {
               "weight": 10,
-              "sprite": 20607
+              "sprite": 23884
             },
             {
               "weight": 10,
-              "sprite": 20608
+              "sprite": 23885
+            },
+            {
+              "weight": 10,
+              "sprite": 23886
+            },
+            {
+              "weight": 10,
+              "sprite": 23887
+            },
+            {
+              "weight": 10,
+              "sprite": 23888
             }
           ],
           "bg": 18113,
           "rotates": false
         },
         {
-          "id": "t_tree_birch_season_autumn",
-          "fg": 18782,
-          "bg": 18113,
-          "rotates": false
-        },
-        {
-          "id": "t_tree_birch_season_spring",
-          "fg": 18783,
-          "bg": 18113,
-          "rotates": false
-        },
-        {
-          "id": "t_tree_birch_season_summer",
-          "fg": 18784,
-          "bg": 18113,
-          "rotates": false
-        },
-        {
           "id": "t_tree_birch_season_winter",
-          "fg": 18785,
+          "fg": [
+            {
+              "weight": 10,
+              "sprite": 23883
+            },
+            {
+              "weight": 10,
+              "sprite": 23884
+            },
+            {
+              "weight": 10,
+              "sprite": 23885
+            },
+            {
+              "weight": 10,
+              "sprite": 23886
+            },
+            {
+              "weight": 10,
+              "sprite": 23887
+            },
+            {
+              "weight": 10,
+              "sprite": 23888
+            }
+          ],
           "bg": 18123,
           "rotates": false
         },
@@ -129853,33 +129882,20 @@
           "fg": [
             {
               "weight": 10,
-              "sprite": 20609
+              "sprite": 23898
             }
           ],
           "bg": 18113,
           "rotates": false
         },
         {
-          "id": "t_tree_dead_season_autumn",
-          "fg": 18837,
-          "bg": 18113,
-          "rotates": false
-        },
-        {
-          "id": "t_tree_dead_season_spring",
-          "fg": 18838,
-          "bg": 18113,
-          "rotates": false
-        },
-        {
-          "id": "t_tree_dead_season_summer",
-          "fg": 18839,
-          "bg": 18113,
-          "rotates": false
-        },
-        {
           "id": "t_tree_dead_season_winter",
-          "fg": 18840,
+          "fg": [
+            {
+              "weight": 10,
+              "sprite": 23898
+            }
+          ],
           "bg": 18123,
           "rotates": false
         },
@@ -130539,20 +130555,7 @@
         },
         {
           "id": "t_tree_pine",
-          "fg": [
-            {
-              "weight": 10,
-              "sprite": 20610
-            },
-            {
-              "weight": 10,
-              "sprite": 20611
-            },
-            {
-              "weight": 10,
-              "sprite": 20612
-            }
-          ],
+          "fg": 18953,
           "bg": 18113,
           "rotates": false
         },
@@ -130795,41 +130798,36 @@
           "fg": [
             {
               "weight": 10,
-              "sprite": 20613
+              "sprite": 23880
             },
             {
               "weight": 10,
-              "sprite": 20614
+              "sprite": 23881
             },
             {
               "weight": 10,
-              "sprite": 20615
+              "sprite": 23882
             }
           ],
           "bg": 18113,
           "rotates": false
         },
         {
-          "id": "t_tree_willow_season_autumn",
-          "fg": 18991,
-          "bg": 18113,
-          "rotates": false
-        },
-        {
-          "id": "t_tree_willow_season_spring",
-          "fg": 18992,
-          "bg": 18113,
-          "rotates": false
-        },
-        {
-          "id": "t_tree_willow_season_summer",
-          "fg": 18993,
-          "bg": 18113,
-          "rotates": false
-        },
-        {
           "id": "t_tree_willow_season_winter",
-          "fg": 18994,
+          "fg": [
+            {
+              "weight": 10,
+              "sprite": 23880
+            },
+            {
+              "weight": 10,
+              "sprite": 23881
+            },
+            {
+              "weight": 10,
+              "sprite": 23882
+            }
+          ],
           "bg": 18123,
           "rotates": false
         },
@@ -130898,8 +130896,59 @@
           "fg": [
             {
               "weight": 10,
-              "sprite": 19759
+              "sprite": 19763
             },
+            {
+              "weight": 10,
+              "sprite": 19764
+            },
+            {
+              "weight": 10,
+              "sprite": 19765
+            },
+            {
+              "weight": 10,
+              "sprite": 19766
+            },
+            {
+              "weight": 10,
+              "sprite": 19772
+            },
+            {
+              "weight": 10,
+              "sprite": 19773
+            },
+            {
+              "weight": 10,
+              "sprite": 19774
+            },
+            {
+              "weight": 10,
+              "sprite": 19775
+            },
+            {
+              "weight": 10,
+              "sprite": 19776
+            },
+            {
+              "weight": 10,
+              "sprite": 19777
+            },
+            {
+              "weight": 10,
+              "sprite": 19778
+            },
+            {
+              "weight": 10,
+              "sprite": 19779
+            }
+          ],
+          "bg": 18113,
+          "rotates": false
+        },
+        {
+          "id": "t_underbrush_season_winter",
+          "fg": [
             {
               "weight": 10,
               "sprite": 19760
@@ -130911,32 +130960,16 @@
             {
               "weight": 10,
               "sprite": 19762
+            },
+            {
+              "weight": 10,
+              "sprite": 19780
+            },
+            {
+              "weight": 10,
+              "sprite": 19781
             }
           ],
-          "bg": 18113,
-          "rotates": false
-        },
-        {
-          "id": "t_underbrush_season_autumn",
-          "fg": 19006,
-          "bg": 18113,
-          "rotates": false
-        },
-        {
-          "id": "t_underbrush_season_spring",
-          "fg": 19007,
-          "bg": 18113,
-          "rotates": false
-        },
-        {
-          "id": "t_underbrush_season_summer",
-          "fg": 19008,
-          "bg": 18113,
-          "rotates": false
-        },
-        {
-          "id": "t_underbrush_season_winter",
-          "fg": 19009,
           "bg": 18123,
           "rotates": false
         },
@@ -135503,727 +135536,362 @@
       "tiles": [
         {
           "id": "t_pavement_trans_grass_n",
-          "fg": 0,
+          "fg": 23904,
           "rotates": false
         },
         {
           "id": "t_pavement_trans_grass_s",
-          "fg": 1,
+          "fg": 23905,
           "rotates": false
         },
         {
           "id": "t_pavement_trans_grass_e",
-          "fg": 2,
+          "fg": 23906,
           "rotates": false
         },
         {
           "id": "t_pavement_trans_grass_w",
-          "fg": 3,
+          "fg": 23907,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_grass_n",
-          "fg": 4,
+          "fg": 23908,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_grass_s",
-          "fg": 5,
+          "fg": 23909,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_grass_e",
-          "fg": 6,
+          "fg": 23910,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_grass_w",
-          "fg": 7,
+          "fg": 23911,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_dirt_n",
-          "fg": 8,
+          "fg": 23912,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_dirt_s",
-          "fg": 9,
+          "fg": 23913,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_dirt_e",
-          "fg": 10,
+          "fg": 23914,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_dirt_w",
-          "fg": 11,
+          "fg": 23915,
           "rotates": false
         },
         {
           "id": "t_pavement_trans_dirt_n",
-          "fg": 12,
+          "fg": 23916,
           "rotates": false
         },
         {
           "id": "t_pavement_trans_dirt_s",
-          "fg": 13,
+          "fg": 23917,
           "rotates": false
         },
         {
           "id": "t_pavement_trans_dirt_e",
-          "fg": 14,
+          "fg": 23918,
           "rotates": false
         },
         {
           "id": "t_pavement_trans_dirt_w",
-          "fg": 15,
+          "fg": 23919,
           "rotates": false
         },
         {
           "id": "t_sidewalk_trans_grass_n",
-          "fg": 16,
+          "fg": 23920,
           "rotates": false
         },
         {
           "id": "t_sidewalk_trans_grass_s",
-          "fg": 17,
+          "fg": 23921,
           "rotates": false
         },
         {
           "id": "t_sidewalk_trans_grass_e",
-          "fg": 18,
+          "fg": 23922,
           "rotates": false
         },
         {
           "id": "t_sidewalk_trans_grass_w",
-          "fg": 19,
+          "fg": 23923,
           "rotates": false
         },
         {
           "id": "t_sand_trans_grass_n",
-          "fg": 20,
+          "fg": 23924,
           "rotates": false
         },
         {
           "id": "t_sand_trans_grass_s",
-          "fg": 21,
+          "fg": 23925,
           "rotates": false
         },
         {
           "id": "t_sand_trans_grass_e",
-          "fg": 22,
+          "fg": 23926,
           "rotates": false
         },
         {
           "id": "t_sand_trans_grass_w",
-          "fg": 23,
+          "fg": 23927,
           "rotates": false
         },
         {
           "id": "t_dirt_trans_grass_n",
-          "fg": 24,
+          "fg": 23928,
           "rotates": false
         },
         {
           "id": "t_dirt_trans_grass_s",
-          "fg": 25,
+          "fg": 23929,
           "rotates": false
         },
         {
           "id": "t_dirt_trans_grass_e",
-          "fg": 26,
+          "fg": 23930,
           "rotates": false
         },
         {
           "id": "t_dirt_trans_grass_w",
-          "fg": 27,
+          "fg": 23931,
           "rotates": false
         },
         {
           "id": "t_mud_trans_grass_n",
-          "fg": 28,
+          "fg": 23932,
           "rotates": false
         },
         {
           "id": "t_mud_trans_grass_s",
-          "fg": 29,
+          "fg": 23933,
           "rotates": false
         },
         {
           "id": "t_mud_trans_grass_e",
-          "fg": 30,
+          "fg": 23934,
           "rotates": false
         },
         {
           "id": "t_mud_trans_grass_w",
-          "fg": 31,
+          "fg": 23935,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_sand_n",
-          "fg": 32,
+          "fg": 23936,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_sand_s",
-          "fg": 33,
+          "fg": 23937,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_sand_e",
-          "fg": 34,
+          "fg": 23938,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_sand_w",
-          "fg": 35,
+          "fg": 23939,
           "rotates": false
         },
         {
           "id": "t_pavement_trans_sand_n",
-          "fg": 36,
+          "fg": 23940,
           "rotates": false
         },
         {
           "id": "t_pavement_trans_sand_s",
-          "fg": 37,
+          "fg": 23941,
           "rotates": false
         },
         {
           "id": "t_pavement_trans_sand_e",
-          "fg": 38,
+          "fg": 23942,
           "rotates": false
         },
         {
           "id": "t_pavement_trans_sand_w",
-          "fg": 39,
+          "fg": 23943,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_carpet_n",
-          "fg": 40,
+          "fg": 23944,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_carpet_s",
-          "fg": 41,
+          "fg": 23945,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_carpet_e",
-          "fg": 42,
+          "fg": 23946,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_carpet_w",
-          "fg": 43,
+          "fg": 23947,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_linoleum_n",
-          "fg": 44,
+          "fg": 23948,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_linoleum_s",
-          "fg": 45,
+          "fg": 23949,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_linoleum_e",
-          "fg": 46,
+          "fg": 23950,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_linoleum_w",
-          "fg": 47,
+          "fg": 23951,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_metal_floor_n",
-          "fg": 48,
+          "fg": 23952,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_metal_floor_s",
-          "fg": 49,
+          "fg": 23953,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_metal_floor_e",
-          "fg": 50,
+          "fg": 23954,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_metal_floor_w",
-          "fg": 51,
+          "fg": 23955,
           "rotates": false
         },
         {
           "id": "t_thconc_floor_trans_concrete_n",
-          "fg": 52,
+          "fg": 23956,
           "rotates": false
         },
         {
           "id": "t_thconc_floor_trans_concrete_s",
-          "fg": 53,
+          "fg": 23957,
           "rotates": false
         },
         {
           "id": "t_thconc_floor_trans_concrete_e",
-          "fg": 54,
+          "fg": 23958,
           "rotates": false
         },
         {
           "id": "t_thconc_floor_trans_concrete_w",
-          "fg": 55,
+          "fg": 23959,
           "rotates": false
         },
         {
           "id": "t_metal_floor_trans_concrete_n",
-          "fg": 56,
+          "fg": 23960,
           "rotates": false
         },
         {
           "id": "t_metal_floor_trans_concrete_s",
-          "fg": 57,
+          "fg": 23961,
           "rotates": false
         },
         {
           "id": "t_metal_floor_trans_concrete_e",
-          "fg": 58,
+          "fg": 23962,
           "rotates": false
         },
         {
           "id": "t_metal_floor_trans_concrete_w",
-          "fg": 59,
+          "fg": 23963,
           "rotates": false
         },
         {
           "id": "t_grass_trans_water_sh_n",
-          "fg": 60,
+          "fg": 23964,
           "rotates": false
         },
         {
           "id": "t_grass_trans_water_sh_s",
-          "fg": 61,
+          "fg": 23965,
           "rotates": false
         },
         {
           "id": "t_grass_trans_water_sh_e",
-          "fg": 62,
+          "fg": 23966,
           "rotates": false
         },
         {
           "id": "t_grass_trans_water_sh_w",
-          "fg": 63,
+          "fg": 23967,
           "rotates": false
         },
         {
           "id": "t_sand_trans_water_sh_n",
-          "fg": 64,
+          "fg": 23968,
           "rotates": false
         },
         {
           "id": "t_sand_trans_water_sh_s",
-          "fg": 65,
+          "fg": 23969,
           "rotates": false
         },
         {
           "id": "t_sand_trans_water_sh_e",
-          "fg": 66,
+          "fg": 23970,
           "rotates": false
         },
         {
           "id": "t_sand_trans_water_sh_w",
-          "fg": 67,
+          "fg": 23971,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_water_sh_n",
-          "fg": 68,
+          "fg": 23972,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_water_sh_s",
-          "fg": 69,
+          "fg": 23973,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_water_sh_e",
-          "fg": 70,
+          "fg": 23974,
           "rotates": false
         },
         {
           "id": "t_concrete_trans_water_sh_w",
-          "fg": 71,
-          "rotates": false
-        }
-      ]
-    },
-    {
-      "file": "terrain_transitions.png",
-      "tiles": [
-        {
-          "id": "t_pavement_trans_grass_n",
-          "fg": 0,
-          "rotates": false
-        },
-        {
-          "id": "t_pavement_trans_grass_s",
-          "fg": 1,
-          "rotates": false
-        },
-        {
-          "id": "t_pavement_trans_grass_e",
-          "fg": 2,
-          "rotates": false
-        },
-        {
-          "id": "t_pavement_trans_grass_w",
-          "fg": 3,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_grass_n",
-          "fg": 4,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_grass_s",
-          "fg": 5,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_grass_e",
-          "fg": 6,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_grass_w",
-          "fg": 7,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_dirt_n",
-          "fg": 8,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_dirt_s",
-          "fg": 9,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_dirt_e",
-          "fg": 10,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_dirt_w",
-          "fg": 11,
-          "rotates": false
-        },
-        {
-          "id": "t_pavement_trans_dirt_n",
-          "fg": 12,
-          "rotates": false
-        },
-        {
-          "id": "t_pavement_trans_dirt_s",
-          "fg": 13,
-          "rotates": false
-        },
-        {
-          "id": "t_pavement_trans_dirt_e",
-          "fg": 14,
-          "rotates": false
-        },
-        {
-          "id": "t_pavement_trans_dirt_w",
-          "fg": 15,
-          "rotates": false
-        },
-        {
-          "id": "t_sidewalk_trans_grass_n",
-          "fg": 16,
-          "rotates": false
-        },
-        {
-          "id": "t_sidewalk_trans_grass_s",
-          "fg": 17,
-          "rotates": false
-        },
-        {
-          "id": "t_sidewalk_trans_grass_e",
-          "fg": 18,
-          "rotates": false
-        },
-        {
-          "id": "t_sidewalk_trans_grass_w",
-          "fg": 19,
-          "rotates": false
-        },
-        {
-          "id": "t_sand_trans_grass_n",
-          "fg": 20,
-          "rotates": false
-        },
-        {
-          "id": "t_sand_trans_grass_s",
-          "fg": 21,
-          "rotates": false
-        },
-        {
-          "id": "t_sand_trans_grass_e",
-          "fg": 22,
-          "rotates": false
-        },
-        {
-          "id": "t_sand_trans_grass_w",
-          "fg": 23,
-          "rotates": false
-        },
-        {
-          "id": "t_dirt_trans_grass_n",
-          "fg": 24,
-          "rotates": false
-        },
-        {
-          "id": "t_dirt_trans_grass_s",
-          "fg": 25,
-          "rotates": false
-        },
-        {
-          "id": "t_dirt_trans_grass_e",
-          "fg": 26,
-          "rotates": false
-        },
-        {
-          "id": "t_dirt_trans_grass_w",
-          "fg": 27,
-          "rotates": false
-        },
-        {
-          "id": "t_mud_trans_grass_n",
-          "fg": 28,
-          "rotates": false
-        },
-        {
-          "id": "t_mud_trans_grass_s",
-          "fg": 29,
-          "rotates": false
-        },
-        {
-          "id": "t_mud_trans_grass_e",
-          "fg": 30,
-          "rotates": false
-        },
-        {
-          "id": "t_mud_trans_grass_w",
-          "fg": 31,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_sand_n",
-          "fg": 32,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_sand_s",
-          "fg": 33,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_sand_e",
-          "fg": 34,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_sand_w",
-          "fg": 35,
-          "rotates": false
-        },
-        {
-          "id": "t_pavement_trans_sand_n",
-          "fg": 36,
-          "rotates": false
-        },
-        {
-          "id": "t_pavement_trans_sand_s",
-          "fg": 37,
-          "rotates": false
-        },
-        {
-          "id": "t_pavement_trans_sand_e",
-          "fg": 38,
-          "rotates": false
-        },
-        {
-          "id": "t_pavement_trans_sand_w",
-          "fg": 39,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_carpet_n",
-          "fg": 40,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_carpet_s",
-          "fg": 41,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_carpet_e",
-          "fg": 42,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_carpet_w",
-          "fg": 43,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_linoleum_n",
-          "fg": 44,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_linoleum_s",
-          "fg": 45,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_linoleum_e",
-          "fg": 46,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_linoleum_w",
-          "fg": 47,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_metal_floor_n",
-          "fg": 48,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_metal_floor_s",
-          "fg": 49,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_metal_floor_e",
-          "fg": 50,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_metal_floor_w",
-          "fg": 51,
-          "rotates": false
-        },
-        {
-          "id": "t_thconc_floor_trans_concrete_n",
-          "fg": 52,
-          "rotates": false
-        },
-        {
-          "id": "t_thconc_floor_trans_concrete_s",
-          "fg": 53,
-          "rotates": false
-        },
-        {
-          "id": "t_thconc_floor_trans_concrete_e",
-          "fg": 54,
-          "rotates": false
-        },
-        {
-          "id": "t_thconc_floor_trans_concrete_w",
-          "fg": 55,
-          "rotates": false
-        },
-        {
-          "id": "t_metal_floor_trans_concrete_n",
-          "fg": 56,
-          "rotates": false
-        },
-        {
-          "id": "t_metal_floor_trans_concrete_s",
-          "fg": 57,
-          "rotates": false
-        },
-        {
-          "id": "t_metal_floor_trans_concrete_e",
-          "fg": 58,
-          "rotates": false
-        },
-        {
-          "id": "t_metal_floor_trans_concrete_w",
-          "fg": 59,
-          "rotates": false
-        },
-        {
-          "id": "t_grass_trans_water_sh_n",
-          "fg": 60,
-          "rotates": false
-        },
-        {
-          "id": "t_grass_trans_water_sh_s",
-          "fg": 61,
-          "rotates": false
-        },
-        {
-          "id": "t_grass_trans_water_sh_e",
-          "fg": 62,
-          "rotates": false
-        },
-        {
-          "id": "t_grass_trans_water_sh_w",
-          "fg": 63,
-          "rotates": false
-        },
-        {
-          "id": "t_sand_trans_water_sh_n",
-          "fg": 64,
-          "rotates": false
-        },
-        {
-          "id": "t_sand_trans_water_sh_s",
-          "fg": 65,
-          "rotates": false
-        },
-        {
-          "id": "t_sand_trans_water_sh_e",
-          "fg": 66,
-          "rotates": false
-        },
-        {
-          "id": "t_sand_trans_water_sh_w",
-          "fg": 67,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_water_sh_n",
-          "fg": 68,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_water_sh_s",
-          "fg": 69,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_water_sh_e",
-          "fg": 70,
-          "rotates": false
-        },
-        {
-          "id": "t_concrete_trans_water_sh_w",
-          "fg": 71,
+          "fg": 23975,
           "rotates": false
         }
       ]
