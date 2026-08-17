@@ -10,30 +10,25 @@
 #include "timed_event.h"
 #include "weather.h"
 
-namespace
-{
+namespace {
 
-auto full_test_state() -> enum_bitset<test_state>
-{
-    return state::avatar | state::creature | state::npc | state::vehicle |
-           state::map | state::time | state::name | state::arena | state::weather;
+auto full_test_state() -> enum_bitset<test_state> {
+    return state::avatar | state::creature | state::npc | state::vehicle | state::map | state::time
+         | state::name | state::arena | state::weather;
 }
 
 } // namespace
 
-auto clear_states( const enum_bitset<test_state> &states ) -> void
-{
+auto clear_states(const enum_bitset<test_state>& states) -> void {
     auto normalized_states = states;
 
     disable_mapgen = true;
 
-    if( normalized_states.test( state::npc ) ) {
-        normalized_states.set( state::avatar );
-    }
+    if (normalized_states.test(state::npc)) { normalized_states.set(state::avatar); }
 
-    if( normalized_states.test( state::weather ) ) {
-        auto &weather = get_weather();
-        weather.weather_id = weather_type_id( "clear" );
+    if (normalized_states.test(state::weather)) {
+        auto& weather = get_weather();
+        weather.weather_id = weather_type_id("clear");
         weather.weather_override = weather_type_id::NULL_ID();
         weather.nextweather = calendar::before_time_starts;
         weather.temperature = 0_c;
@@ -46,37 +41,22 @@ auto clear_states( const enum_bitset<test_state> &states ) -> void
         weather.clear_temp_cache();
     }
 
-    if( normalized_states.test( state::avatar ) ) {
-        clear_avatar();
-    }
+    if (normalized_states.test(state::avatar)) { clear_avatar(); }
 
-    if( normalized_states.test( state::map ) ) {
+    if (normalized_states.test(state::map)) {
         clear_map();
     } else {
-        if( normalized_states.test( state::npc ) ) {
-            clear_npcs();
-        }
-        if( normalized_states.test( state::creature ) ) {
-            clear_creatures();
-        }
-        if( normalized_states.test( state::vehicle ) ) {
-            clear_vehicles();
-        }
+        if (normalized_states.test(state::npc)) { clear_npcs(); }
+        if (normalized_states.test(state::creature)) { clear_creatures(); }
+        if (normalized_states.test(state::vehicle)) { clear_vehicles(); }
     }
 
-    if( normalized_states.test( state::time ) ) {
-        set_time( calendar::turn_zero );
-        g->timed_events = timed_event_manager {};
+    if (normalized_states.test(state::time)) {
+        set_time(calendar::turn_zero);
+        g->timed_events = timed_event_manager{};
     }
-    if( normalized_states.test( state::name ) ) {
-        Name::clear();
-    }
-    if( normalized_states.test( state::arena ) ) {
-        cleanup_arenas();
-    }
+    if (normalized_states.test(state::name)) { Name::clear(); }
+    if (normalized_states.test(state::arena)) { cleanup_arenas(); }
 }
 
-auto clear_all_state() -> void
-{
-    clear_states( full_test_state() );
-}
+auto clear_all_state() -> void { clear_states(full_test_state()); }

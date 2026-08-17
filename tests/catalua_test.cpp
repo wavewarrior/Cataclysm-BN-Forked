@@ -1,4 +1,3 @@
-#include "catch/catch_amalgamated.hpp"
 #include "avatar.h"
 #include "catacharset.h"
 #include "catalua_coord.h"
@@ -6,6 +5,7 @@
 #include "catalua_impl.h"
 #include "catalua_serde.h"
 #include "catalua_sol.h"
+#include "catch/catch_amalgamated.hpp"
 #include "clzones.h"
 #include "coordinates.h"
 #include "debug.h"
@@ -28,21 +28,19 @@
 #include "vehicle_part.h"
 
 #include <optional>
-#include <string>
 #include <stdexcept>
+#include <string>
 
 // workaround for https://github.com/llvm/llvm-project/issues/113087
 #define CHECK_TUPLE(...) CHECK((__VA_ARGS__))
 
-static void run_lua_test_script( sol::state &lua, const std::string &script_name )
-{
+static void run_lua_test_script(sol::state& lua, const std::string& script_name) {
     std::string full_script_name = "tests/lua/" + script_name;
 
-    run_lua_script( lua, full_script_name );
+    run_lua_script(lua, full_script_name);
 }
 
-TEST_CASE( "lua_class_members", "[lua]" )
-{
+TEST_CASE("lua_class_members", "[lua]") {
     sol::state lua = make_lua_state();
 
     // Create global table for test
@@ -50,19 +48,18 @@ TEST_CASE( "lua_class_members", "[lua]" )
     lua.globals()["test_data"] = test_data;
 
     // Set input
-    test_data["in"] = point( -10, 10 );
+    test_data["in"] = point(-10, 10);
 
     // Run Lua script
-    run_lua_test_script( lua, "class_members_test.lua" );
+    run_lua_test_script(lua, "class_members_test.lua");
 
     // Get test output
     std::string res = test_data["out"];
 
-    REQUIRE( res == "result is Point(12,13)" );
+    REQUIRE(res == "result is Point(12,13)");
 }
 
-TEST_CASE( "lua_global_functions", "[lua]" )
-{
+TEST_CASE("lua_global_functions", "[lua]") {
     sol::state lua = make_lua_state();
 
     // Create global table for test
@@ -74,7 +71,7 @@ TEST_CASE( "lua_global_functions", "[lua]" )
     std::string expected_name = get_avatar().name;
 
     // Run Lua script
-    run_lua_test_script( lua, "global_functions_test.lua" );
+    run_lua_test_script(lua, "global_functions_test.lua");
 
     // Get test output
     std::string lua_avatar_name = test_data["avatar_name"];
@@ -83,75 +80,69 @@ TEST_CASE( "lua_global_functions", "[lua]" )
     std::string lua_character_avatar_name = test_data["character_avatar_name"];
     std::string lua_npc_avatar_name = test_data["npc_avatar_name"];
 
-    REQUIRE( lua_avatar_name == expected_name );
-    REQUIRE( lua_creature_avatar_name == expected_name );
-    REQUIRE( lua_monster_avatar_name == "nil" );
-    REQUIRE( lua_character_avatar_name == expected_name );
-    REQUIRE( lua_npc_avatar_name == "nil" );
+    REQUIRE(lua_avatar_name == expected_name);
+    REQUIRE(lua_creature_avatar_name == expected_name);
+    REQUIRE(lua_monster_avatar_name == "nil");
+    REQUIRE(lua_character_avatar_name == expected_name);
+    REQUIRE(lua_npc_avatar_name == "nil");
 }
 
-TEST_CASE( "lua_typed_coords_projection", "[lua]" )
-{
+TEST_CASE("lua_typed_coords_projection", "[lua]") {
     auto lua = make_lua_state();
 
     auto test_data = lua.create_table();
     lua.globals()["test_data"] = test_data;
-    lua["accept_abs_omt"] = []( const tripoint_abs_omt & p ) {
-        return p.to_string();
-    };
+    lua["accept_abs_omt"] = [](const tripoint_abs_omt& p) { return p.to_string(); };
 
-    run_lua_test_script( lua, "typed_coords_projection_test.lua" );
+    run_lua_test_script(lua, "typed_coords_projection_test.lua");
 
-    CHECK( test_data.get<std::string>( "to_omt" ) == "TripointAbsOmt(1,1,2)" );
-    CHECK( test_data.get<std::string>( "named_to_omt" ) == "TripointAbsOmt(1,1,2)" );
-    CHECK( test_data.get<std::string>( "remain_quotient" ) == "TripointAbsOm(1,0,-1)" );
-    CHECK( test_data.get<std::string>( "remain_remainder" ) == "PointOmSm(1,2)" );
-    CHECK( test_data.get<std::string>( "combined" ) == "TripointAbsSm(361,2,-1)" );
-    CHECK( test_data.get<int>( "distance" ) == 3 );
+    CHECK(test_data.get<std::string>("to_omt") == "TripointAbsOmt(1,1,2)");
+    CHECK(test_data.get<std::string>("named_to_omt") == "TripointAbsOmt(1,1,2)");
+    CHECK(test_data.get<std::string>("remain_quotient") == "TripointAbsOm(1,0,-1)");
+    CHECK(test_data.get<std::string>("remain_remainder") == "PointOmSm(1,2)");
+    CHECK(test_data.get<std::string>("combined") == "TripointAbsSm(361,2,-1)");
+    CHECK(test_data.get<int>("distance") == 3);
 
     // Validate project_remain_omt example from the typed-coordinates documentation.
-    CHECK( test_data.get<std::string>( "doc_remain_omt_quotient" ) == "TripointAbsOmt(1,1,2)" );
-    CHECK( test_data.get<std::string>( "doc_remain_omt_remainder" ) == "PointOmtMs(1,2)" );
-    CHECK( test_data.get<std::string>( "doc_remain_omt_combined" ) == "TripointAbsMs(25,26,2)" );
-    CHECK( test_data.get<std::string>( "doc_remain_omt_method_combined" ) ==
-           "TripointAbsMs(25,26,2)" );
+    CHECK(test_data.get<std::string>("doc_remain_omt_quotient") == "TripointAbsOmt(1,1,2)");
+    CHECK(test_data.get<std::string>("doc_remain_omt_remainder") == "PointOmtMs(1,2)");
+    CHECK(test_data.get<std::string>("doc_remain_omt_combined") == "TripointAbsMs(25,26,2)");
+    CHECK(test_data.get<std::string>("doc_remain_omt_method_combined") == "TripointAbsMs(25,26,2)");
 
-    CHECK( test_data.get<std::string>( "typed_param" ) == "(1,2,3)" );
-    CHECK_FALSE( test_data.get<bool>( "raw_param_ok" ) );
-    CHECK_FALSE( test_data.get<bool>( "wrong_coord_ok" ) );
-    CHECK( test_data.get<std::string>( "raw_reinterpreted" ) == "TripointAbsOmt(1,2,3)" );
-    CHECK( test_data.get<std::string>( "raw_reinterpreted_param" ) == "(1,2,3)" );
-    CHECK( test_data.get<std::string>( "typed_reinterpreted" ) == "TripointAbsOmt(1,2,3)" );
-    CHECK( test_data.get<std::string>( "raw_delta_arithmetic" ) == "TripointAbsSm(364,2,-1)" );
+    CHECK(test_data.get<std::string>("typed_param") == "(1,2,3)");
+    CHECK_FALSE(test_data.get<bool>("raw_param_ok"));
+    CHECK_FALSE(test_data.get<bool>("wrong_coord_ok"));
+    CHECK(test_data.get<std::string>("raw_reinterpreted") == "TripointAbsOmt(1,2,3)");
+    CHECK(test_data.get<std::string>("raw_reinterpreted_param") == "(1,2,3)");
+    CHECK(test_data.get<std::string>("typed_reinterpreted") == "TripointAbsOmt(1,2,3)");
+    CHECK(test_data.get<std::string>("raw_delta_arithmetic") == "TripointAbsSm(364,2,-1)");
 }
 
-TEST_CASE( "lua_coord_cpp_helpers", "[lua]" )
-{
+TEST_CASE("lua_coord_cpp_helpers", "[lua]") {
     auto lua = make_lua_state();
-    const auto cpp_pos = tripoint_abs_omt( 1, 2, 3 );
-    const auto lua_pos = cata::detail::lua_coords::to_lua( cpp_pos );
+    const auto cpp_pos = tripoint_abs_omt(1, 2, 3);
+    const auto lua_pos = cata::detail::lua_coords::to_lua(cpp_pos);
 
-    CHECK( lua_pos.raw == cpp_pos.raw() );
-    CHECK( lua_pos.origin == coords::origin::abs );
-    CHECK( lua_pos.scale == coords::scale::overmap_terrain );
+    CHECK(lua_pos.raw == cpp_pos.raw());
+    CHECK(lua_pos.origin == coords::origin::abs);
+    CHECK(lua_pos.scale == coords::scale::overmap_terrain);
 
-    const auto round_trip = cata::detail::lua_coords::as_cpp<tripoint_abs_omt>( lua_pos );
-    REQUIRE( round_trip );
-    CHECK( *round_trip == cpp_pos );
+    const auto round_trip = cata::detail::lua_coords::as_cpp<tripoint_abs_omt>(lua_pos);
+    REQUIRE(round_trip);
+    CHECK(*round_trip == cpp_pos);
 
-    const auto lua_obj = sol::make_object( lua, lua_pos );
-    const auto object_round_trip = cata::detail::lua_coords::as_cpp<tripoint_abs_omt>( lua_obj );
-    REQUIRE( object_round_trip );
-    CHECK( *object_round_trip == cpp_pos );
+    const auto lua_obj = sol::make_object(lua, lua_pos);
+    const auto object_round_trip = cata::detail::lua_coords::as_cpp<tripoint_abs_omt>(lua_obj);
+    REQUIRE(object_round_trip);
+    CHECK(*object_round_trip == cpp_pos);
 
-    CHECK_FALSE( cata::detail::lua_coords::as_cpp<tripoint_bub_ms>( lua_pos ) );
-    CHECK( cata::detail::lua_coords::expect_cpp<tripoint_abs_omt>( lua_pos ) == cpp_pos );
-    CHECK_THROWS_AS( cata::detail::lua_coords::expect_cpp<tripoint_bub_ms>( lua_pos ),
-                     std::runtime_error );
+    CHECK_FALSE(cata::detail::lua_coords::as_cpp<tripoint_bub_ms>(lua_pos));
+    CHECK(cata::detail::lua_coords::expect_cpp<tripoint_abs_omt>(lua_pos) == cpp_pos);
+    CHECK_THROWS_AS(
+        cata::detail::lua_coords::expect_cpp<tripoint_bub_ms>(lua_pos), std::runtime_error);
 }
 
-TEST_CASE( "lua_called_from_cpp", "[lua]" )
-{
+TEST_CASE("lua_called_from_cpp", "[lua]") {
     sol::state lua = make_lua_state();
 
     // Create global table for test
@@ -159,47 +150,46 @@ TEST_CASE( "lua_called_from_cpp", "[lua]" )
     lua.globals()["test_data"] = test_data;
 
     // Run Lua script
-    run_lua_test_script( lua, "called_from_cpp_test.lua" );
+    run_lua_test_script(lua, "called_from_cpp_test.lua");
 
     // Get Lua function
-    REQUIRE( test_data["func"].valid() );
+    REQUIRE(test_data["func"].valid());
     sol::protected_function lua_func = test_data["func"];
 
     // Get test output
-    REQUIRE( test_data["out"].valid() );
+    REQUIRE(test_data["out"].valid());
     sol::table out_data = test_data["out"];
     int ret = 0;
 
-    REQUIRE( out_data["i"].valid() );
-    REQUIRE( out_data["s"].valid() );
+    REQUIRE(out_data["i"].valid());
+    REQUIRE(out_data["s"].valid());
 
-    CHECK_TUPLE( out_data["i"] == 0 );
-    CHECK( out_data.get<std::string>( "s" ).empty() );
+    CHECK_TUPLE(out_data["i"] == 0);
+    CHECK(out_data.get<std::string>("s").empty());
 
     // Execute function
-    ret = lua_func( 4, "Bright " );
+    ret = lua_func(4, "Bright ");
 
-    CHECK( ret == 8 );
-    CHECK_TUPLE( out_data["i"] == 4 );
-    CHECK( out_data.get<std::string>( "s" ) == "Bright " );
+    CHECK(ret == 8);
+    CHECK_TUPLE(out_data["i"] == 4);
+    CHECK(out_data.get<std::string>("s") == "Bright ");
 
     // Execute function again
-    ret = lua_func( 6, "Nights" );
+    ret = lua_func(6, "Nights");
 
-    CHECK( ret == 12 );
-    CHECK_TUPLE( out_data["i"] == 10 );
-    CHECK( out_data.get<std::string>( "s" ) == "Bright Nights" );
+    CHECK(ret == 12);
+    CHECK_TUPLE(out_data["i"] == 10);
+    CHECK(out_data.get<std::string>("s") == "Bright Nights");
 
     // And again, but this time with 1 parameter
-    ret = lua_func( 1 );
+    ret = lua_func(1);
 
-    CHECK( ret == 2 );
-    CHECK_TUPLE( out_data["i"] == 11 );
-    CHECK( out_data.get<std::string>( "s" ) == "Bright Nights" );
+    CHECK(ret == 2);
+    CHECK_TUPLE(out_data["i"] == 11);
+    CHECK(out_data.get<std::string>("s") == "Bright Nights");
 }
 
-TEST_CASE( "lua_runtime_error", "[lua]" )
-{
+TEST_CASE("lua_runtime_error", "[lua]") {
     sol::state lua = make_lua_state();
 
     // Running Lua script that has a runtime error
@@ -212,14 +202,11 @@ TEST_CASE( "lua_runtime_error", "[lua]" )
         "\ttests/lua/runtime_error.lua:2: in main chunk";
 
     REQUIRE_THROWS_MATCHES(
-        run_lua_test_script( lua, "runtime_error.lua" ),
-        std::runtime_error,
-        Catch::Matchers::Message( expected )
-    );
+        run_lua_test_script(lua, "runtime_error.lua"), std::runtime_error,
+        Catch::Matchers::Message(expected));
 }
 
-TEST_CASE( "lua_called_error_on_lua_side", "[lua]" )
-{
+TEST_CASE("lua_called_error_on_lua_side", "[lua]") {
     sol::state lua = make_lua_state();
 
     // Running Lua script that calls error()
@@ -233,19 +220,15 @@ TEST_CASE( "lua_called_error_on_lua_side", "[lua]" )
         "\ttests/lua/called_error_on_lua_side.lua:2: in main chunk";
 
     REQUIRE_THROWS_MATCHES(
-        run_lua_test_script( lua, "called_error_on_lua_side.lua" ),
-        std::runtime_error,
-        Catch::Matchers::Message( expected )
-    );
+        run_lua_test_script(lua, "called_error_on_lua_side.lua"), std::runtime_error,
+        Catch::Matchers::Message(expected));
 }
 
-static void cpp_call_error( sol::this_state L )
-{
-    luaL_error( L.lua_state(), "Error called on Cpp side!" );
+static void cpp_call_error(sol::this_state L) {
+    luaL_error(L.lua_state(), "Error called on Cpp side!");
 }
 
-TEST_CASE( "lua_called_error_on_cpp_side", "[lua]" )
-{
+TEST_CASE("lua_called_error_on_cpp_side", "[lua]") {
     sol::state lua = make_lua_state();
 
     lua.globals()["cpp_call_error"] = cpp_call_error;
@@ -261,20 +244,16 @@ TEST_CASE( "lua_called_error_on_cpp_side", "[lua]" )
         "\ttests/lua/called_error_on_cpp_side.lua:2: in main chunk";
 
     REQUIRE_THROWS_MATCHES(
-        run_lua_test_script( lua, "called_error_on_cpp_side.lua" ),
-        std::runtime_error,
-        Catch::Matchers::Message( expected )
-    );
+        run_lua_test_script(lua, "called_error_on_cpp_side.lua"), std::runtime_error,
+        Catch::Matchers::Message(expected));
 }
 
-[[ noreturn ]]
-static void cpp_throw_exception()
-{
-    throw std::runtime_error( "Exception thrown on Cpp side!" );
+[[noreturn]]
+static void cpp_throw_exception() {
+    throw std::runtime_error("Exception thrown on Cpp side!");
 }
 
-TEST_CASE( "lua_called_cpp_func_throws", "[lua]" )
-{
+TEST_CASE("lua_called_cpp_func_throws", "[lua]") {
     sol::state lua = make_lua_state();
 
     lua.globals()["cpp_throw_exception"] = cpp_throw_exception;
@@ -290,91 +269,86 @@ TEST_CASE( "lua_called_cpp_func_throws", "[lua]" )
         "\ttests/lua/called_cpp_func_throws.lua:2: in main chunk";
 
     REQUIRE_THROWS_MATCHES(
-        run_lua_test_script( lua, "called_cpp_func_throws.lua" ),
-        std::runtime_error,
-        Catch::Matchers::Message( expected )
-    );
+        run_lua_test_script(lua, "called_cpp_func_throws.lua"), std::runtime_error,
+        Catch::Matchers::Message(expected));
 }
 
 struct custom_udata {
     int unused = 0;
 };
 
-TEST_CASE( "lua_get_luna_type", "[lua]" )
-{
+TEST_CASE("lua_get_luna_type", "[lua]") {
     sol::state lua = make_lua_state();
 
-    SECTION( "number" ) {
+    SECTION("number") {
         sol::table st = lua.create_table();
         st["k"] = 3;
-        CHECK( get_luna_type( st["k"] ) == std::nullopt );
+        CHECK(get_luna_type(st["k"]) == std::nullopt);
     }
-    SECTION( "string" ) {
+    SECTION("string") {
         sol::table st = lua.create_table();
         st["k"] = "abc";
-        CHECK( get_luna_type( st["k"] ) == std::nullopt );
+        CHECK(get_luna_type(st["k"]) == std::nullopt);
     }
-    SECTION( "table" ) {
+    SECTION("table") {
         sol::table st = lua.create_table();
         st["k"] = lua.create_table();
-        CHECK( get_luna_type( st["k"] ) == std::nullopt );
+        CHECK(get_luna_type(st["k"]) == std::nullopt);
     }
-    SECTION( "registered userdata" ) {
+    SECTION("registered userdata") {
         sol::table st = lua.create_table();
-        st["k"] = tripoint( 1, 2, 3 );
-        CHECK( get_luna_type( st["k"] ) == std::optional( "Tripoint" ) );
+        st["k"] = tripoint(1, 2, 3);
+        CHECK(get_luna_type(st["k"]) == std::optional("Tripoint"));
     }
-    SECTION( "unknown userdata" ) {
+    SECTION("unknown userdata") {
         sol::table st = lua.create_table();
         st["k"] = custom_udata{};
-        CHECK( get_luna_type( st["k"] ) == std::nullopt );
+        CHECK(get_luna_type(st["k"]) == std::nullopt);
     }
 }
 
-TEST_CASE( "lua_map_vehicle_replacement", "[lua]" )
-{
+TEST_CASE("lua_map_vehicle_replacement", "[lua]") {
     clear_all_state();
 
-    auto &here = get_map();
-    const auto origin = tripoint_bub_ms( 60, 60, 0 );
+    auto& here = get_map();
+    const auto origin = tripoint_bub_ms(60, 60, 0);
     const auto original_facing = -90_degrees;
     const auto overridden_facing = 180_degrees;
-    auto *vehicle_ptr = here.add_vehicle( vproto_id( "bicycle" ), origin, original_facing, 0, 0 );
-    REQUIRE( vehicle_ptr != nullptr );
+    auto* vehicle_ptr = here.add_vehicle(vproto_id("bicycle"), origin, original_facing, 0, 0);
+    REQUIRE(vehicle_ptr != nullptr);
 
     sol::state lua = make_lua_state();
     auto test_data = lua.create_table();
     test_data["map"] = &here;
     lua.globals()["test_data"] = test_data;
 
-    run_lua_test_script( lua, "map_vehicle_replacement_test.lua" );
+    run_lua_test_script(lua, "map_vehicle_replacement_test.lua");
 
-    CHECK( test_data.get<int>( "vehicle_count_before" ) == 1 );
-    CHECK( test_data.get<std::string>( "vehicle_type_before" ) == "bicycle" );
-    CHECK( test_data.get<bool>( "replace_ok" ) );
-    CHECK( test_data.get<bool>( "replace_with_opts_ok" ) );
-    CHECK( test_data.get<int>( "vehicle_count_after" ) == 1 );
-    CHECK( test_data.get<std::string>( "vehicle_type_after" ) == "swivel_chair" );
+    CHECK(test_data.get<int>("vehicle_count_before") == 1);
+    CHECK(test_data.get<std::string>("vehicle_type_before") == "bicycle");
+    CHECK(test_data.get<bool>("replace_ok"));
+    CHECK(test_data.get<bool>("replace_with_opts_ok"));
+    CHECK(test_data.get<int>("vehicle_count_after") == 1);
+    CHECK(test_data.get<std::string>("vehicle_type_after") == "swivel_chair");
 
     const auto vehicles = here.get_vehicles();
-    REQUIRE( vehicles.size() == 1 );
-    CHECK( vehicles.front().pos == origin );
-    REQUIRE( vehicles.front().v != nullptr );
-    CHECK( vehicles.front().v->type == vproto_id( "swivel_chair" ) );
-    CHECK( normalize( vehicles.front().v->face.dir() ) == normalize( overridden_facing ) );
-    CHECK( vehicles.front().v->static_drag() == vehicles.front().v->static_drag( false ) );
+    REQUIRE(vehicles.size() == 1);
+    CHECK(vehicles.front().pos == origin);
+    REQUIRE(vehicles.front().v != nullptr);
+    CHECK(vehicles.front().v->type == vproto_id("swivel_chair"));
+    CHECK(normalize(vehicles.front().v->face.dir()) == normalize(overridden_facing));
+    CHECK(vehicles.front().v->static_drag() == vehicles.front().v->static_drag(false));
     const auto part_count = vehicles.front().v->part_count();
     auto has_lock = false;
-    for( auto index = 0; index < part_count; ++index ) {
-        CHECK( vehicles.front().v->part( index ).damage_percent() == Catch::Approx( 0.0 ) );
-        has_lock = has_lock ||
-                   vehicles.front().v->part_with_feature( index, "DOOR_LOCKING", false ) == index;
+    for (auto index = 0; index < part_count; ++index) {
+        CHECK(vehicles.front().v->part(index).damage_percent() == Catch::Approx(0.0));
+        has_lock = has_lock
+                || vehicles.front().v->part_with_feature(index, "DOOR_LOCKING", false) == index;
     }
-    CHECK( !has_lock );
+    CHECK(!has_lock);
 }
 
-TEST_CASE( "lua_table_serde", "[lua]" )
-{
+TEST_CASE("lua_table_serde", "[lua]") {
     sol::state lua = make_lua_state();
 
     sol::table st = lua.create_table();
@@ -385,81 +359,83 @@ TEST_CASE( "lua_table_serde", "[lua]" )
     t["member_float"] = 16.0;
     t["member_int"] = 11;
     t["member_string"] = "fuckoff";
-    t["member_usertype"] = tripoint( 7, 5, 3 );
-    t["member_point_coord"] = cata::detail::lua_coords::to_lua( point_bub_ms( 8, 9 ) );
-    t["member_tripoint_coord"] = cata::detail::lua_coords::to_lua( tripoint_abs_omt( 1, 2, 3 ) );
+    t["member_usertype"] = tripoint(7, 5, 3);
+    t["member_point_coord"] = cata::detail::lua_coords::to_lua(point_bub_ms(8, 9));
+    t["member_tripoint_coord"] = cata::detail::lua_coords::to_lua(tripoint_abs_omt(1, 2, 3));
     t["subtable"] = st;
 
-    std::string data = serialize_wrapper( [&]( JsonOut & jsout ) {
-        cata::serialize_lua_table( t, jsout );
-    } );
+    std::string data = serialize_wrapper([&](JsonOut& jsout) {
+        cata::serialize_lua_table(t, jsout);
+    });
 
     sol::table nt = lua.create_table();
-    deserialize_wrapper( [&]( JsonIn & jsin ) {
-        JsonObject jsobj = jsin.get_object();
-        cata::deserialize_lua_table( nt, jsobj );
-    }, data );
+    deserialize_wrapper(
+        [&](JsonIn& jsin) {
+            JsonObject jsobj = jsin.get_object();
+            cata::deserialize_lua_table(nt, jsobj);
+        },
+        data);
 
     // Sanity check: field does not exist
     sol::object mem_none = nt["member_the_best"];
-    REQUIRE( !mem_none.valid() );
+    REQUIRE(!mem_none.valid());
 
     sol::object mem_bool = nt["member_bool"];
-    REQUIRE( mem_bool.valid() );
-    REQUIRE( mem_bool.is<bool>() );
-    CHECK( mem_bool.as<bool>() == false );
+    REQUIRE(mem_bool.valid());
+    REQUIRE(mem_bool.is<bool>());
+    CHECK(mem_bool.as<bool>() == false);
 
     sol::object mem_float = nt["member_float"];
-    REQUIRE( mem_float.valid() );
-    REQUIRE( mem_float.is<double>() );
-    CHECK( mem_float.as<double>() == Catch::Approx( 16.0 ) );
+    REQUIRE(mem_float.valid());
+    REQUIRE(mem_float.is<double>());
+    CHECK(mem_float.as<double>() == Catch::Approx(16.0));
 
     sol::object mem_int = nt["member_int"];
-    REQUIRE( mem_int.valid() );
-    CHECK( mem_int.is<double>() );
-    REQUIRE( mem_int.is<int>() );
-    CHECK( mem_int.as<int>() == 11 );
+    REQUIRE(mem_int.valid());
+    CHECK(mem_int.is<double>());
+    REQUIRE(mem_int.is<int>());
+    CHECK(mem_int.as<int>() == 11);
 
     sol::object mem_string = nt["member_string"];
-    REQUIRE( mem_string.valid() );
-    REQUIRE( mem_string.is<std::string>() );
-    CHECK( mem_string.as<std::string>() == "fuckoff" );
+    REQUIRE(mem_string.valid());
+    REQUIRE(mem_string.is<std::string>());
+    CHECK(mem_string.as<std::string>() == "fuckoff");
 
     sol::object mem_usertype = nt["member_usertype"];
-    REQUIRE( mem_usertype.valid() );
-    REQUIRE( mem_usertype.is<tripoint>() );
-    CHECK( mem_usertype.as<tripoint>() == tripoint( 7, 5, 3 ) );
+    REQUIRE(mem_usertype.valid());
+    REQUIRE(mem_usertype.is<tripoint>());
+    CHECK(mem_usertype.as<tripoint>() == tripoint(7, 5, 3));
 
-    auto mem_point_coord = sol::object( nt["member_point_coord"] );
-    REQUIRE( mem_point_coord.valid() );
-    REQUIRE( mem_point_coord.is<cata::detail::lua_coords::lua_point_coord>() );
+    auto mem_point_coord = sol::object(nt["member_point_coord"]);
+    REQUIRE(mem_point_coord.valid());
+    REQUIRE(mem_point_coord.is<cata::detail::lua_coords::lua_point_coord>());
     const auto point_coord = mem_point_coord.as<cata::detail::lua_coords::lua_point_coord>();
-    CHECK( point_coord.raw == point( 8, 9 ) );
-    CHECK( point_coord.origin == coords::origin::bubble );
-    CHECK( point_coord.scale == coords::scale::map_square );
+    CHECK(point_coord.raw == point(8, 9));
+    CHECK(point_coord.origin == coords::origin::bubble);
+    CHECK(point_coord.scale == coords::scale::map_square);
 
-    auto mem_tripoint_coord = sol::object( nt["member_tripoint_coord"] );
-    REQUIRE( mem_tripoint_coord.valid() );
-    REQUIRE( mem_tripoint_coord.is<cata::detail::lua_coords::lua_tripoint_coord>() );
-    const auto tripoint_coord = mem_tripoint_coord.as<cata::detail::lua_coords::lua_tripoint_coord>();
-    CHECK( tripoint_coord.raw == tripoint( 1, 2, 3 ) );
-    CHECK( tripoint_coord.origin == coords::origin::abs );
-    CHECK( tripoint_coord.scale == coords::scale::overmap_terrain );
+    auto mem_tripoint_coord = sol::object(nt["member_tripoint_coord"]);
+    REQUIRE(mem_tripoint_coord.valid());
+    REQUIRE(mem_tripoint_coord.is<cata::detail::lua_coords::lua_tripoint_coord>());
+    const auto tripoint_coord =
+        mem_tripoint_coord.as<cata::detail::lua_coords::lua_tripoint_coord>();
+    CHECK(tripoint_coord.raw == tripoint(1, 2, 3));
+    CHECK(tripoint_coord.origin == coords::origin::abs);
+    CHECK(tripoint_coord.scale == coords::scale::overmap_terrain);
 
     sol::object mem_table = nt["subtable"];
-    REQUIRE( mem_table.valid() );
-    REQUIRE( mem_table.is<sol::table>() );
+    REQUIRE(mem_table.valid());
+    REQUIRE(mem_table.is<sol::table>());
 
     // Subtable
     sol::table nts = mem_table;
     sol::object inner_val = nts["inner_val"];
-    REQUIRE( inner_val.valid() );
-    REQUIRE( inner_val.is<int>() );
-    CHECK( inner_val.as<int>() == 4 );
+    REQUIRE(inner_val.valid());
+    REQUIRE(inner_val.is<int>());
+    CHECK(inner_val.as<int>() == 4);
 }
 
-TEST_CASE( "lua_table_serde_error_no_reg", "[lua]" )
-{
+TEST_CASE("lua_table_serde_error_no_reg", "[lua]") {
     sol::state lua = make_lua_state();
 
     sol::table t = lua.create_table();
@@ -467,56 +443,47 @@ TEST_CASE( "lua_table_serde_error_no_reg", "[lua]" )
 
     // Trying to serialize unregistered type results in error
     std::string data;
-    std::string dmsg = capture_debugmsg_during( [&]() {
-        data = serialize_wrapper( [&]( JsonOut & jsout ) {
-            cata::serialize_lua_table( t, jsout );
-        } );
-    } );
+    std::string dmsg = capture_debugmsg_during([&]() {
+        data = serialize_wrapper([&](JsonOut& jsout) { cata::serialize_lua_table(t, jsout); });
+    });
 
-    CHECK( dmsg == "Tried to serialize usertype that was not registered with luna." );
+    CHECK(dmsg == "Tried to serialize usertype that was not registered with luna.");
 }
 
-TEST_CASE( "lua_table_serde_error_no_luna", "[lua]" )
-{
+TEST_CASE("lua_table_serde_error_no_luna", "[lua]") {
     sol::state lua = make_lua_state();
 
-    lua.new_usertype<custom_udata>( "CustomUData" );
+    lua.new_usertype<custom_udata>("CustomUData");
 
     sol::table t = lua.create_table();
     t["my_member"] = custom_udata{};
 
     // Trying to serialize type that was not registered with luna results in error
     std::string data;
-    std::string dmsg = capture_debugmsg_during( [&]() {
-        data = serialize_wrapper( [&]( JsonOut & jsout ) {
-            cata::serialize_lua_table( t, jsout );
-        } );
-    } );
+    std::string dmsg = capture_debugmsg_during([&]() {
+        data = serialize_wrapper([&](JsonOut& jsout) { cata::serialize_lua_table(t, jsout); });
+    });
 
-    CHECK( dmsg == "Tried to serialize usertype that was not registered with luna." );
+    CHECK(dmsg == "Tried to serialize usertype that was not registered with luna.");
 }
 
-TEST_CASE( "lua_table_serde_error_no_ser", "[lua]" )
-{
+TEST_CASE("lua_table_serde_error_no_ser", "[lua]") {
     sol::state lua = make_lua_state();
 
     sol::table t = lua.create_table();
-    avatar *av_ptr = &get_avatar();
+    avatar* av_ptr = &get_avatar();
     t["my_member"] = av_ptr;
 
     // Trying to serialize unserializable type results in error
     std::string data;
-    std::string dmsg = capture_debugmsg_during( [&]() {
-        data = serialize_wrapper( [&]( JsonOut & jsout ) {
-            cata::serialize_lua_table( t, jsout );
-        } );
-    } );
+    std::string dmsg = capture_debugmsg_during([&]() {
+        data = serialize_wrapper([&](JsonOut& jsout) { cata::serialize_lua_table(t, jsout); });
+    });
 
-    CHECK( dmsg == "Tried to serialize usertype that does not allow serialization." );
+    CHECK(dmsg == "Tried to serialize usertype that does not allow serialization.");
 }
 
-TEST_CASE( "lua_table_serde_error_rec_table", "[lua]" )
-{
+TEST_CASE("lua_table_serde_error_rec_table", "[lua]") {
     sol::state lua = make_lua_state();
 
     sol::table t1 = lua.create_table();
@@ -540,36 +507,33 @@ TEST_CASE( "lua_table_serde_error_rec_table", "[lua]" )
 
     // Trying to serialize recursive table results in error
     std::string data;
-    std::string dmsg = capture_debugmsg_during( [&]() {
-        data = serialize_wrapper( [&]( JsonOut & jsout ) {
-            cata::serialize_lua_table( t1, jsout );
-        } );
-    } );
+    std::string dmsg = capture_debugmsg_during([&]() {
+        data = serialize_wrapper([&](JsonOut& jsout) { cata::serialize_lua_table(t1, jsout); });
+    });
 
-    CHECK( dmsg == "Tried to serialize recursive table structure." );
+    CHECK(dmsg == "Tried to serialize recursive table structure.");
 }
 
-TEST_CASE( "id_conversions", "[lua]" )
-{
+TEST_CASE("id_conversions", "[lua]") {
     sol::state lua = make_lua_state();
 
     sol::table t = lua.create_table();
 
     // The functions don't need to do anything, we're just checking type conversion
-    t["func_raw"] = []( const ter_t & ) {
+    t["func_raw"] = [](const ter_t&) {
 
     };
-    t["func_int_id"] = []( const ter_id & ) {
+    t["func_int_id"] = [](const ter_id&) {
 
     };
-    t["func_str_id"] = []( const ter_str_id & ) {
+    t["func_str_id"] = [](const ter_str_id&) {
 
     };
 
-    static const ter_str_id t_fragile_roof( "t_fragile_roof" );
-    REQUIRE( t_fragile_roof.is_valid() );
+    static const ter_str_id t_fragile_roof("t_fragile_roof");
+    REQUIRE(t_fragile_roof.is_valid());
 
-    const ter_t *raw_ptr = &t_fragile_roof.obj();
+    const ter_t* raw_ptr = &t_fragile_roof.obj();
 
     t["str_id"] = t_fragile_roof;
     t["int_id"] = t_fragile_roof.id();
@@ -577,310 +541,296 @@ TEST_CASE( "id_conversions", "[lua]" )
 
     lua.globals()["test_data"] = t;
 
-    run_lua_test_script( lua, "id_conversions.lua" );
+    run_lua_test_script(lua, "id_conversions.lua");
 }
 
-TEST_CASE( "id_conversions_no_int_id", "[lua]" )
-{
+TEST_CASE("id_conversions_no_int_id", "[lua]") {
     sol::state lua = make_lua_state();
 
     sol::table t = lua.create_table();
 
     // The functions don't need to do anything, we're just checking type conversion
-    t["func_raw"] = []( const faction & ) {
+    t["func_raw"] = [](const faction&) {
 
     };
-    t["func_str_id"] = []( const faction_id & ) {
+    t["func_str_id"] = [](const faction_id&) {
 
     };
 
-    REQUIRE( your_fac.is_valid() );
+    REQUIRE(your_fac.is_valid());
 
-    const faction *raw_ptr = &your_fac.obj();
+    const faction* raw_ptr = &your_fac.obj();
 
     t["str_id"] = your_fac;
     t["raw_ptr"] = raw_ptr;
 
     lua.globals()["test_data"] = t;
 
-    run_lua_test_script( lua, "id_conversions_no_int_id.lua" );
+    run_lua_test_script(lua, "id_conversions_no_int_id.lua");
 }
 
-TEST_CASE( "catalua_regression_sol_1444", "[lua]" )
-{
+TEST_CASE("catalua_regression_sol_1444", "[lua]") {
     // Regression test for https://github.com/ThePhD/sol2/issues/1444
     sol::state lua = make_lua_state();
-    run_lua_test_script( lua, "regression_sol_1444.lua" );
+    run_lua_test_script(lua, "regression_sol_1444.lua");
 }
 
-TEST_CASE( "catalua_table_compare", "[lua]" )
-{
+TEST_CASE("catalua_table_compare", "[lua]") {
     sol::state lua = make_lua_state();
     sol::table a = lua.create_table();
     sol::table b = lua.create_table();
-    SECTION( "empty tables" ) {
-        CHECK( compare_tables( a, b ) );
-        CHECK( compare_tables( b, a ) );
+    SECTION("empty tables") {
+        CHECK(compare_tables(a, b));
+        CHECK(compare_tables(b, a));
     }
-    SECTION( "one table has values, the other is empty" ) {
+    SECTION("one table has values, the other is empty") {
         a["my_key"] = "my_val";
-        CHECK_FALSE( compare_tables( a, b ) );
-        CHECK_FALSE( compare_tables( b, a ) );
+        CHECK_FALSE(compare_tables(a, b));
+        CHECK_FALSE(compare_tables(b, a));
     }
-    SECTION( "tables have identical keys and values" ) {
+    SECTION("tables have identical keys and values") {
         a["my_key"] = "my_val";
         b["my_key"] = "my_val";
-        CHECK( compare_tables( a, b ) );
-        CHECK( compare_tables( b, a ) );
+        CHECK(compare_tables(a, b));
+        CHECK(compare_tables(b, a));
     }
-    SECTION( "tables have different values" ) {
+    SECTION("tables have different values") {
         a["my_key"] = "my_val";
         b["my_key"] = "ANOTHER_VAL";
-        CHECK_FALSE( compare_tables( a, b ) );
-        CHECK_FALSE( compare_tables( b, a ) );
+        CHECK_FALSE(compare_tables(a, b));
+        CHECK_FALSE(compare_tables(b, a));
     }
-    SECTION( "tables have different keys and values" ) {
+    SECTION("tables have different keys and values") {
         a["my_key"] = "my_val";
         b["best_cata"] = "bn";
-        CHECK_FALSE( compare_tables( a, b ) );
-        CHECK_FALSE( compare_tables( b, a ) );
+        CHECK_FALSE(compare_tables(a, b));
+        CHECK_FALSE(compare_tables(b, a));
     }
-    SECTION( "tables have different keys and values" ) {
+    SECTION("tables have different keys and values") {
         a["my_key"] = "my_val";
         b["best_cata"] = "bn";
-        CHECK_FALSE( compare_tables( a, b ) );
-        CHECK_FALSE( compare_tables( b, a ) );
+        CHECK_FALSE(compare_tables(a, b));
+        CHECK_FALSE(compare_tables(b, a));
     }
-    SECTION( "can't compare tables with functions" ) {
+    SECTION("can't compare tables with functions") {
         a["my_key"] = &compare_tables;
         b["my_key"] = &compare_tables;
-        CHECK_THROWS( compare_tables( a, b ) );
-        CHECK_THROWS( compare_tables( b, a ) );
+        CHECK_THROWS(compare_tables(a, b));
+        CHECK_THROWS(compare_tables(b, a));
     }
-    SECTION( "can't compare tables with lambdas" ) {
-        a["my_key"] = [&]( int ) {
-            debugmsg( "Function A" );
-        };
-        b["my_key"] = [&]( int ) {
-            debugmsg( "Function B" );
-        };
-        CHECK_THROWS( compare_tables( a, b ) );
-        CHECK_THROWS( compare_tables( b, a ) );
+    SECTION("can't compare tables with lambdas") {
+        a["my_key"] = [&](int) { debugmsg("Function A"); };
+        b["my_key"] = [&](int) { debugmsg("Function B"); };
+        CHECK_THROWS(compare_tables(a, b));
+        CHECK_THROWS(compare_tables(b, a));
     }
-    SECTION( "tables have different values" ) {
+    SECTION("tables have different values") {
         a["my_key"] = 1;
         b["my_key"] = 2;
-        CHECK_FALSE( compare_tables( a, b ) );
-        CHECK_FALSE( compare_tables( b, a ) );
+        CHECK_FALSE(compare_tables(a, b));
+        CHECK_FALSE(compare_tables(b, a));
     }
-    SECTION( "tables have different value types" ) {
+    SECTION("tables have different value types") {
         a["my_key"] = 1;
         b["my_key"] = "2";
-        CHECK_FALSE( compare_tables( a, b ) );
-        CHECK_FALSE( compare_tables( b, a ) );
+        CHECK_FALSE(compare_tables(a, b));
+        CHECK_FALSE(compare_tables(b, a));
     }
-    SECTION( "tables have different number types" ) {
+    SECTION("tables have different number types") {
         a["my_key"] = 1;
         b["my_key"] = 1.0;
-        CHECK_FALSE( compare_tables( a, b ) );
-        CHECK_FALSE( compare_tables( b, a ) );
+        CHECK_FALSE(compare_tables(a, b));
+        CHECK_FALSE(compare_tables(b, a));
     }
-    SECTION( "tables have different key types" ) {
+    SECTION("tables have different key types") {
         a["1"] = "abc";
         b[1] = "abc";
-        CHECK_FALSE( compare_tables( a, b ) );
-        CHECK_FALSE( compare_tables( b, a ) );
+        CHECK_FALSE(compare_tables(a, b));
+        CHECK_FALSE(compare_tables(b, a));
     }
-    SECTION( "tables have identical subtables" ) {
+    SECTION("tables have identical subtables") {
         sol::table a_sub = lua.create_table();
         sol::table b_sub = lua.create_table();
         a_sub["my_key"] = "my_val";
         b_sub["my_key"] = "my_val";
         a["sub"] = a_sub;
         b["sub"] = b_sub;
-        CHECK( compare_tables( a, b ) );
-        CHECK( compare_tables( b, a ) );
+        CHECK(compare_tables(a, b));
+        CHECK(compare_tables(b, a));
     }
-    SECTION( "tables have different subtables" ) {
+    SECTION("tables have different subtables") {
         sol::table a_sub = lua.create_table();
         sol::table b_sub = lua.create_table();
         a_sub["my_key"] = "my_val";
         b_sub["my_key"] = "ANOTHER_VAL";
         a["sub"] = a_sub;
         b["sub"] = b_sub;
-        CHECK_FALSE( compare_tables( a, b ) );
-        CHECK_FALSE( compare_tables( b, a ) );
+        CHECK_FALSE(compare_tables(a, b));
+        CHECK_FALSE(compare_tables(b, a));
     }
-    SECTION( "tables have same userdata" ) {
-        a["my_key"] = tripoint( 1, 2, 3 );
-        b["my_key"] = tripoint( 1, 2, 3 );
-        CHECK( compare_tables( a, b ) );
-        CHECK( compare_tables( b, a ) );
+    SECTION("tables have same userdata") {
+        a["my_key"] = tripoint(1, 2, 3);
+        b["my_key"] = tripoint(1, 2, 3);
+        CHECK(compare_tables(a, b));
+        CHECK(compare_tables(b, a));
     }
-    SECTION( "tables have different userdata" ) {
-        a["my_key"] = tripoint( 1, 2, 3 );
-        b["my_key"] = tripoint( 12, 34, 56 );
-        CHECK_FALSE( compare_tables( a, b ) );
-        CHECK_FALSE( compare_tables( b, a ) );
+    SECTION("tables have different userdata") {
+        a["my_key"] = tripoint(1, 2, 3);
+        b["my_key"] = tripoint(12, 34, 56);
+        CHECK_FALSE(compare_tables(a, b));
+        CHECK_FALSE(compare_tables(b, a));
     }
-    SECTION( "tables have different userdata types" ) {
-        a["my_key"] = tripoint( 1, 2, 3 );
-        b["my_key"] = point( 12, 34 );
-        CHECK_FALSE( compare_tables( a, b ) );
-        CHECK_FALSE( compare_tables( b, a ) );
+    SECTION("tables have different userdata types") {
+        a["my_key"] = tripoint(1, 2, 3);
+        b["my_key"] = point(12, 34);
+        CHECK_FALSE(compare_tables(a, b));
+        CHECK_FALSE(compare_tables(b, a));
     }
-    SECTION( "tables with same userdata as keys" ) {
-        a[tripoint( 1, 3, 37 )] = "my_val";
-        b[tripoint( 1, 3, 37 )] = "my_val";
-        CHECK( compare_tables( a, b ) );
-        CHECK( compare_tables( b, a ) );
+    SECTION("tables with same userdata as keys") {
+        a[tripoint(1, 3, 37)] = "my_val";
+        b[tripoint(1, 3, 37)] = "my_val";
+        CHECK(compare_tables(a, b));
+        CHECK(compare_tables(b, a));
     }
-    SECTION( "tables have different userdata types in keys" ) {
-        a[tripoint( 1, 3, 37 )] = "my_val";
-        b[point( 12, 34 )] = "my_val";
-        CHECK_FALSE( compare_tables( a, b ) );
-        CHECK_FALSE( compare_tables( b, a ) );
+    SECTION("tables have different userdata types in keys") {
+        a[tripoint(1, 3, 37)] = "my_val";
+        b[point(12, 34)] = "my_val";
+        CHECK_FALSE(compare_tables(a, b));
+        CHECK_FALSE(compare_tables(b, a));
     }
-    SECTION( "tables have different userdata values in keys" ) {
-        a[tripoint( 1, 3, 37 )] = "my_val";
-        b[tripoint( 1, 2, 3 )] = "my_val";
-        CHECK_FALSE( compare_tables( a, b ) );
-        CHECK_FALSE( compare_tables( b, a ) );
+    SECTION("tables have different userdata values in keys") {
+        a[tripoint(1, 3, 37)] = "my_val";
+        b[tripoint(1, 2, 3)] = "my_val";
+        CHECK_FALSE(compare_tables(a, b));
+        CHECK_FALSE(compare_tables(b, a));
     }
-    SECTION( "tables have equivalent tables as keys" ) {
+    SECTION("tables have equivalent tables as keys") {
         sol::table key_a = lua.create_table();
         key_a["hello"] = "world";
         sol::table key_b = lua.create_table();
         key_b["hello"] = "world";
         a[key_a] = "my_val";
         b[key_b] = "my_val";
-        CHECK( compare_tables( a, b ) );
-        CHECK( compare_tables( b, a ) );
+        CHECK(compare_tables(a, b));
+        CHECK(compare_tables(b, a));
     }
-    SECTION( "tables have different tables as keys" ) {
+    SECTION("tables have different tables as keys") {
         sol::table key_a = lua.create_table();
         key_a["hello"] = "world";
         sol::table key_b = lua.create_table();
         key_b["hello"] = "BRIGHT NIGHTS";
         a[key_a] = "my_val";
         b[key_b] = "my_val";
-        CHECK_FALSE( compare_tables( a, b ) );
-        CHECK_FALSE( compare_tables( b, a ) );
+        CHECK_FALSE(compare_tables(a, b));
+        CHECK_FALSE(compare_tables(b, a));
     }
 }
 
-static std::string serialize_table( sol::table t )
-{
-    return serialize_wrapper( [&]( JsonOut & jsout ) {
-        cata::serialize_lua_table( t, jsout );
-    } );
+static std::string serialize_table(sol::table t) {
+    return serialize_wrapper([&](JsonOut& jsout) { cata::serialize_lua_table(t, jsout); });
 }
 
-static sol::table deserialize_table( sol::state &lua, const std::string &data )
-{
+static sol::table deserialize_table(sol::state& lua, const std::string& data) {
     sol::table res = lua.create_table();
-    deserialize_wrapper( [&]( JsonIn & jsin ) {
-        JsonObject jsobj = jsin.get_object();
-        cata::deserialize_lua_table( res, jsobj );
-    }, data );
+    deserialize_wrapper(
+        [&](JsonIn& jsin) {
+            JsonObject jsobj = jsin.get_object();
+            cata::deserialize_lua_table(res, jsobj);
+        },
+        data);
     return res;
 }
 
-static void run_serde_test( sol::state &lua, sol::table original )
-{
-    std::string data = serialize_table( original );
-    sol::table got = deserialize_table( lua, data );
-    bool eq = compare_tables( original, got );
-    if( !eq ) {
-        std::string data2 = serialize_table( got );
-        CHECK( data == data2 );
+static void run_serde_test(sol::state& lua, sol::table original) {
+    std::string data = serialize_table(original);
+    sol::table got = deserialize_table(lua, data);
+    bool eq = compare_tables(original, got);
+    if (!eq) {
+        std::string data2 = serialize_table(got);
+        CHECK(data == data2);
     }
-    REQUIRE( eq );
+    REQUIRE(eq);
 }
 
-TEST_CASE( "catalua_table_serde", "[lua]" )
-{
+TEST_CASE("catalua_table_serde", "[lua]") {
     sol::state lua = make_lua_state();
     sol::table t = lua.create_table();
-    SECTION( "empty table" ) {
-        run_serde_test( lua, t );
-    }
-    SECTION( "empty table from JSON" ) {
+    SECTION("empty table") { run_serde_test(lua, t); }
+    SECTION("empty table from JSON") {
         // This is a short notation for an empty table
         std::string data = "{}";
-        sol::table got = deserialize_table( lua, data );
-        bool eq = compare_tables( t, got );
-        if( !eq ) {
-            std::string data2 = serialize_table( got );
-            CHECK( data == data2 );
+        sol::table got = deserialize_table(lua, data);
+        bool eq = compare_tables(t, got);
+        if (!eq) {
+            std::string data2 = serialize_table(got);
+            CHECK(data == data2);
         }
-        REQUIRE( eq );
+        REQUIRE(eq);
     }
-    SECTION( "table with string keys and values" ) {
+    SECTION("table with string keys and values") {
         t["my_key"] = "my_val";
         t["another_key"] = "another_val";
-        run_serde_test( lua, t );
+        run_serde_test(lua, t);
     }
-    SECTION( "table with integer values" ) {
+    SECTION("table with integer values") {
         t["my_key"] = 1337;
         t["another_key"] = 1234;
-        run_serde_test( lua, t );
+        run_serde_test(lua, t);
     }
-    SECTION( "table with floating values" ) {
+    SECTION("table with floating values") {
         t["my_key"] = 13.37;
         t["another_key"] = 1.234;
-        run_serde_test( lua, t );
+        run_serde_test(lua, t);
     }
-    SECTION( "table with integer keys" ) {
-        t.add( "abc" );
-        t.add( "def" );
-        run_serde_test( lua, t );
+    SECTION("table with integer keys") {
+        t.add("abc");
+        t.add("def");
+        run_serde_test(lua, t);
     }
-    SECTION( "table with userdata values" ) {
-        t["my_key"] = point( 13, 37 );
-        t["another_key"] = tripoint( 12, 34, 56 );
-        run_serde_test( lua, t );
+    SECTION("table with userdata values") {
+        t["my_key"] = point(13, 37);
+        t["another_key"] = tripoint(12, 34, 56);
+        run_serde_test(lua, t);
     }
-    SECTION( "table with typed coordinate values" ) {
-        t["my_key"] = cata::detail::lua_coords::to_lua( point_bub_ms( 13, 37 ) );
-        t["another_key"] = cata::detail::lua_coords::to_lua( tripoint_abs_omt( 12, 34, 56 ) );
-        run_serde_test( lua, t );
+    SECTION("table with typed coordinate values") {
+        t["my_key"] = cata::detail::lua_coords::to_lua(point_bub_ms(13, 37));
+        t["another_key"] = cata::detail::lua_coords::to_lua(tripoint_abs_omt(12, 34, 56));
+        run_serde_test(lua, t);
     }
-    SECTION( "table with userdata keys" ) {
-        t[point( 13, 37 )] = "leet";
-        t[tripoint( 12, 34, 56 )] = "numbers";
-        run_serde_test( lua, t );
+    SECTION("table with userdata keys") {
+        t[point(13, 37)] = "leet";
+        t[tripoint(12, 34, 56)] = "numbers";
+        run_serde_test(lua, t);
     }
-    SECTION( "table with typed coordinate keys" ) {
-        t[cata::detail::lua_coords::to_lua( point_bub_ms( 13, 37 ) )] = "leet";
-        t[cata::detail::lua_coords::to_lua( tripoint_abs_omt( 12, 34, 56 ) )] = "numbers";
-        run_serde_test( lua, t );
+    SECTION("table with typed coordinate keys") {
+        t[cata::detail::lua_coords::to_lua(point_bub_ms(13, 37))] = "leet";
+        t[cata::detail::lua_coords::to_lua(tripoint_abs_omt(12, 34, 56))] = "numbers";
+        run_serde_test(lua, t);
     }
-    SECTION( "table with userdata keys and values" ) {
-        t[point( 13, 37 )] = tripoint( 1, 3, 37 );
-        t[tripoint( 12, 34, 56 )] = point( 98765, 43210 );
-        run_serde_test( lua, t );
+    SECTION("table with userdata keys and values") {
+        t[point(13, 37)] = tripoint(1, 3, 37);
+        t[tripoint(12, 34, 56)] = point(98765, 43210);
+        run_serde_test(lua, t);
     }
-    SECTION( "table with typed coordinate keys and values" ) {
-        t[cata::detail::lua_coords::to_lua( point_bub_ms( 13, 37 ) )] =
-            cata::detail::lua_coords::to_lua( tripoint_abs_omt( 1, 3, 37 ) );
-        t[cata::detail::lua_coords::to_lua( tripoint_abs_omt( 12, 34, 56 ) )] =
-            cata::detail::lua_coords::to_lua( point_rel_omt( 98765, 43210 ) );
-        run_serde_test( lua, t );
+    SECTION("table with typed coordinate keys and values") {
+        t[cata::detail::lua_coords::to_lua(point_bub_ms(13, 37))] =
+            cata::detail::lua_coords::to_lua(tripoint_abs_omt(1, 3, 37));
+        t[cata::detail::lua_coords::to_lua(tripoint_abs_omt(12, 34, 56))] =
+            cata::detail::lua_coords::to_lua(point_rel_omt(98765, 43210));
+        run_serde_test(lua, t);
     }
-    SECTION( "table with tables as keys" ) {
+    SECTION("table with tables as keys") {
         sol::table key1 = lua.create_table();
         key1["my_key"] = "my_val";
         sol::table key2 = lua.create_table();
         key2[13] = 37;
         t[key1] = "hello";
         t[key2] = "world";
-        run_serde_test( lua, t );
+        run_serde_test(lua, t);
     }
 }
 
-TEST_CASE( "lua_units_functions", "[lua]" )
-{
+TEST_CASE("lua_units_functions", "[lua]") {
     sol::state lua = make_lua_state();
 
     // Test variables
@@ -900,7 +850,7 @@ TEST_CASE( "lua_units_functions", "[lua]" )
     test_data["volume_liters"] = volume_liters;
 
     // Run Lua script
-    run_lua_test_script( lua, "units_test.lua" );
+    run_lua_test_script(lua, "units_test.lua");
 
     // Get test output
     double lua_angle_arcmins = test_data["angle_arcmins"];
@@ -909,14 +859,13 @@ TEST_CASE( "lua_units_functions", "[lua]" )
     int lua_volume_milliliters = test_data["volume_milliliters"];
 
     // Check if match
-    REQUIRE( lua_angle_arcmins == units::to_arcmin( units::from_degrees( angle_degrees ) ) );
-    REQUIRE( lua_energy_joules == units::to_joule( units::from_kilojoule( energy_kilojoules ) ) );
-    REQUIRE( lua_mass_grams == units::to_gram( units::from_kilogram( mass_kilograms ) ) );
-    REQUIRE( lua_volume_milliliters == units::to_milliliter( units::from_liter( volume_liters ) ) );
+    REQUIRE(lua_angle_arcmins == units::to_arcmin(units::from_degrees(angle_degrees)));
+    REQUIRE(lua_energy_joules == units::to_joule(units::from_kilojoule(energy_kilojoules)));
+    REQUIRE(lua_mass_grams == units::to_gram(units::from_kilogram(mass_kilograms)));
+    REQUIRE(lua_volume_milliliters == units::to_milliliter(units::from_liter(volume_liters)));
 }
 
-TEST_CASE( "lua_require_relative", "[lua]" )
-{
+TEST_CASE("lua_require_relative", "[lua]") {
     sol::state lua = make_lua_state();
 
     // Create global table for test
@@ -924,18 +873,17 @@ TEST_CASE( "lua_require_relative", "[lua]" )
     lua.globals()["test_data"] = test_data;
 
     // Run Lua script that uses relative require
-    run_lua_test_script( lua, "require_test_relative.lua" );
+    run_lua_test_script(lua, "require_test_relative.lua");
 
     // Check results
     int result_add = test_data["result_add"];
     int result_mul = test_data["result_mul"];
 
-    REQUIRE( result_add == 5 );   // 2 + 3
-    REQUIRE( result_mul == 20 );  // 4 * 5
+    REQUIRE(result_add == 5);  // 2 + 3
+    REQUIRE(result_mul == 20); // 4 * 5
 }
 
-TEST_CASE( "lua_require_dotted", "[lua]" )
-{
+TEST_CASE("lua_require_dotted", "[lua]") {
     sol::state lua = make_lua_state();
 
     // Create global table for test
@@ -943,35 +891,33 @@ TEST_CASE( "lua_require_dotted", "[lua]" )
     lua.globals()["test_data"] = test_data;
 
     // Run Lua script that uses dotted require
-    run_lua_test_script( lua, "require_test_dotted.lua" );
+    run_lua_test_script(lua, "require_test_dotted.lua");
 
     // Check results
     int result_add = test_data["result_add"];
     int result_mul = test_data["result_mul"];
 
-    REQUIRE( result_add == 30 );  // 10 + 20
-    REQUIRE( result_mul == 21 );  // 3 * 7
+    REQUIRE(result_add == 30); // 10 + 20
+    REQUIRE(result_mul == 21); // 3 * 7
 }
 
-TEST_CASE( "lua_cooking_enjoy_bonus_applies_to_unheated_comestibles", "[lua][cooking]" )
-{
+TEST_CASE("lua_cooking_enjoy_bonus_applies_to_unheated_comestibles", "[lua][cooking]") {
     auto lua = make_lua_state();
     auto test_data = lua.create_table();
     lua.globals()["test_data"] = test_data;
 
-    run_lua_test_script( lua, "cooking_enjoy_bonus_test.lua" );
+    run_lua_test_script(lua, "cooking_enjoy_bonus_test.lua");
 
-    CHECK( test_data.get<std::string>( "high_skill_var_name" ) == "comestible_fun" );
-    CHECK( test_data.get<int>( "high_skill_fun" ) == 15 );
-    CHECK( test_data.get<int>( "high_skill_bad_fun" ) == -5 );
-    CHECK( test_data.get<std::string>( "zero_skill_var_name" ) == "comestible_fun" );
-    CHECK( test_data.get<int>( "zero_skill_fun" ) == 10 );
+    CHECK(test_data.get<std::string>("high_skill_var_name") == "comestible_fun");
+    CHECK(test_data.get<int>("high_skill_fun") == 15);
+    CHECK(test_data.get<int>("high_skill_bad_fun") == -5);
+    CHECK(test_data.get<std::string>("zero_skill_var_name") == "comestible_fun");
+    CHECK(test_data.get<int>("zero_skill_fun") == 10);
 }
 
-static auto init_test_lua_hook_state( cata::lua_state &state ) -> void
-{
+static auto init_test_lua_hook_state(cata::lua_state& state) -> void {
     state.lua = make_lua_state();
-    sol::state &lua = state.lua;
+    sol::state& lua = state.lua;
 
     sol::table game = lua.create_table();
     sol::table hooks = lua.create_table();
@@ -982,123 +928,120 @@ static auto init_test_lua_hook_state( cata::lua_state &state ) -> void
     game["current_mod"] = "test_mod";
     lua.globals()["game"] = game;
 
-    game["add_hook"] = [&lua]( const std::string & hook_name, const sol::object & entry ) {
-        auto *L = lua.lua_state();
+    game["add_hook"] = [&lua](const std::string& hook_name, const sol::object& entry) {
+        auto* L = lua.lua_state();
         sol::table hooks_table = lua["game"]["hooks"];
         sol::optional<sol::table> maybe_hook_list = hooks_table[hook_name];
 
-        if( !maybe_hook_list ) {
-            debugmsg( "Invalid hook name: %s", hook_name );
+        if (!maybe_hook_list) {
+            debugmsg("Invalid hook name: %s", hook_name);
             return;
         }
 
         sol::table hook_list = *maybe_hook_list;
 
         const auto current_mod = lua["game"]["current_mod"];
-        const auto mod_id = current_mod.valid() && current_mod.get_type() == sol::type::string
-                            ? current_mod.get<std::string>()
-                            : "<unknown>";
+        const auto mod_id =
+            current_mod.valid() && current_mod.get_type() == sol::type::string
+                ? current_mod.get<std::string>()
+                : "<unknown>";
 
         const auto is_function = entry.is<sol::function>() || entry.is<sol::protected_function>();
-        if( is_function ) {
+        if (is_function) {
             auto new_entry = lua.create_table();
             new_entry["mod_id"] = mod_id;
             new_entry["priority"] = 0;
             new_entry["fn"] = entry;
 
-            sol::stack::push( L, hook_list );
-            const auto next_index = static_cast<int>( lua_rawlen( L, -1 ) ) + 1;
-            lua_pop( L, 1 );
+            sol::stack::push(L, hook_list);
+            const auto next_index = static_cast<int>(lua_rawlen(L, -1)) + 1;
+            lua_pop(L, 1);
 
-            hook_list.set( next_index, new_entry );
+            hook_list.set(next_index, new_entry);
             return;
         }
 
-        if( entry.is<sol::table>() ) {
+        if (entry.is<sol::table>()) {
             auto tbl = entry.as<sol::table>();
-            const auto has_mod_id = tbl["mod_id"].valid() && tbl["mod_id"].get_type() != sol::type::lua_nil;
-            if( !has_mod_id ) {
-                tbl["mod_id"] = mod_id;
-            }
+            const auto has_mod_id =
+                tbl["mod_id"].valid() && tbl["mod_id"].get_type() != sol::type::lua_nil;
+            if (!has_mod_id) { tbl["mod_id"] = mod_id; }
 
-            sol::stack::push( L, hook_list );
-            const auto next_index = static_cast<int>( lua_rawlen( L, -1 ) ) + 1;
-            lua_pop( L, 1 );
+            sol::stack::push(L, hook_list);
+            const auto next_index = static_cast<int>(lua_rawlen(L, -1)) + 1;
+            lua_pop(L, 1);
 
-            hook_list.set( next_index, tbl );
+            hook_list.set(next_index, tbl);
             return;
         }
 
-        debugmsg( "add_hook expects function or table entry, got type: %s for hook: %s",
-                  sol::type_name( lua, entry.get_type() ).c_str(), hook_name.c_str() );
+        debugmsg("add_hook expects function or table entry, got type: %s for hook: %s",
+                 sol::type_name(lua, entry.get_type()).c_str(), hook_name.c_str());
     };
 
     sol::table cata_tbl = lua.create_table();
-    cata_tbl.set_function( "run_hooks", [&state]( const std::string & name ) -> sol::table {
-        return cata::run_hooks( name, nullptr, { .state = &state } );
-    } );
-    cata_tbl.set_function( "run_hooks_exit_early", [&state]( const std::string & name ) -> sol::table {
-        return cata::run_hooks( name, nullptr, { .exit_early = true, .state = &state } );
-    } );
+    cata_tbl.set_function("run_hooks", [&state](const std::string& name) -> sol::table {
+        return cata::run_hooks(name, nullptr, {.state = &state});
+    });
+    cata_tbl.set_function("run_hooks_exit_early", [&state](const std::string& name) -> sol::table {
+        return cata::run_hooks(name, nullptr, {.exit_early = true, .state = &state});
+    });
     lua.globals()["cata"] = cata_tbl;
 }
 
-TEST_CASE( "lua_has_hooks_tracks_registered_entries", "[lua]" )
-{
+TEST_CASE("lua_has_hooks_tracks_registered_entries", "[lua]") {
     cata::lua_state state;
-    init_test_lua_hook_state( state );
-    sol::state &lua = state.lua;
+    init_test_lua_hook_state(state);
+    sol::state& lua = state.lua;
 
     auto hook_list = lua.create_table();
     lua.globals()["game"]["hooks"]["on_creature_do_turn"] = hook_list;
 
-    CHECK_FALSE( cata::has_hooks( "on_creature_do_turn", { .state = &state } ) );
-    CHECK_FALSE( cata::has_hooks( "on_invalid_hook_for_test", { .state = &state } ) );
+    CHECK_FALSE(cata::has_hooks("on_creature_do_turn", {.state = &state}));
+    CHECK_FALSE(cata::has_hooks("on_invalid_hook_for_test", {.state = &state}));
 
-    hook_list[1] = []( sol::table ) {};
-    CHECK( cata::has_hooks( "on_creature_do_turn", { .state = &state } ) );
+    hook_list[1] = [](sol::table) {};
+    CHECK(cata::has_hooks("on_creature_do_turn", {.state = &state}));
 }
 
-TEST_CASE( "lua_hooks_order_and_chaining", "[lua]" )
-{
+TEST_CASE("lua_hooks_order_and_chaining", "[lua]") {
     cata::lua_state state;
-    init_test_lua_hook_state( state );
-    sol::state &lua = state.lua;
+    init_test_lua_hook_state(state);
+    sol::state& lua = state.lua;
 
     lua.globals()["game"]["hooks"]["on_game_load"] = lua.create_table();
 
-    run_lua_script( lua, "tests/lua/hooks_order_and_chaining_test.lua" );
+    run_lua_script(lua, "tests/lua/hooks_order_and_chaining_test.lua");
 
     sol::table results_tbl = lua.globals()["game"]["cata_internal"]["hook_test_results"];
     const sol::table log_tbl = results_tbl["log"];
 
-    REQUIRE( log_tbl.valid() );
+    REQUIRE(log_tbl.valid());
 
     // Order should be priority 10 -> 5 -> legacy(0)
-    CHECK( log_tbl.get<std::string>( 1 ) == "p10" );
-    CHECK( log_tbl.get<std::string>( 2 ) == "p5" );
-    CHECK( log_tbl.get<std::string>( 3 ) == "legacy" );
+    CHECK(log_tbl.get<std::string>(1) == "p10");
+    CHECK(log_tbl.get<std::string>(2) == "p5");
+    CHECK(log_tbl.get<std::string>(3) == "legacy");
 
     // Ensure hooks can override params.prev and affect downstream hooks.
-    CHECK( results_tbl.get<std::string>( "prev_seen" ) == "p5_ret" );
+    CHECK(results_tbl.get<std::string>("prev_seen") == "p5_ret");
 }
 
-TEST_CASE( "lua_hooks_exit_early", "[lua]" )
-{
+TEST_CASE("lua_hooks_exit_early", "[lua]") {
     cata::lua_state state;
-    init_test_lua_hook_state( state );
-    sol::state &lua = state.lua;
+    init_test_lua_hook_state(state);
+    sol::state& lua = state.lua;
 
     lua.globals()["game"]["hooks"]["on_game_save"] = lua.create_table();
 
-    run_lua_script( lua, "tests/lua/hooks_exit_early_test.lua" );
+    run_lua_script(lua, "tests/lua/hooks_exit_early_test.lua");
 
     sol::table results_tbl = lua.globals()["game"]["cata_internal"]["hook_test_results"];
     const sol::table log_tbl = results_tbl["log"];
 
-    REQUIRE( log_tbl.valid() );
+    REQUIRE(log_tbl.valid());
 
-    CHECK( log_tbl.get<std::string>( 1 ) == "p10" );
-    CHECK( results_tbl.get<bool>( "allowed" ) == false );
-    CHECK( log_tbl.get<sol::optional<std::string>>( 2 ) == sol::nullopt );
+    CHECK(log_tbl.get<std::string>(1) == "p10");
+    CHECK(results_tbl.get<bool>("allowed") == false);
+    CHECK(log_tbl.get<sol::optional<std::string>>(2) == sol::nullopt);
 }

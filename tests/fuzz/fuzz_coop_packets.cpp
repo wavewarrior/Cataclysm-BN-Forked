@@ -10,36 +10,30 @@
 /// libFuzzer entry point — exercise every packet parse function with
 /// arbitrary byte sequences.  No crash or undefined behaviour from any
 /// input is the invariant; std::exceptions are expected and swallowed.
-extern "C" auto LLVMFuzzerTestOneInput( const uint8_t *data, size_t size ) -> int
-{
-    const std::string payload( reinterpret_cast<const char *>( data ), size );
+extern "C" auto LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) -> int {
+    const std::string payload(reinterpret_cast<const char*>(data), size);
 
     try {
-        parse_world_seed_packet( payload );
-    } catch( ... ) {
+        parse_world_seed_packet(payload);
+    } catch (...) {
         // expected for malformed input
     }
 
     try {
-        parse_action_packet( payload );
-    } catch( ... ) {
-    }
+        parse_action_packet(payload);
+    } catch (...) {}
 
     try {
-        parse_join_info_packet( payload );
-    } catch( ... ) {
-    }
+        parse_join_info_packet(payload);
+    } catch (...) {}
 
     try {
-        parse_sync_header( payload );
-    } catch( ... ) {
-    }
+        parse_sync_header(payload);
+    } catch (...) {}
 
     try {
-        parse_vertical_move_ctx( payload );
-    } catch( ... ) {
-    }
+        parse_vertical_move_ctx(payload);
+    } catch (...) {}
 
     return 0;
 }
-

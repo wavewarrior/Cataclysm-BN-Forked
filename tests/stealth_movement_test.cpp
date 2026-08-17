@@ -1,8 +1,7 @@
-#include "catch/catch_amalgamated.hpp"
-
-#include "cata_utility.h"
 #include "action.h"
 #include "avatar.h"
+#include "cata_utility.h"
+#include "catch/catch_amalgamated.hpp"
 #include "character.h"
 #include "enum_conversions.h"
 #include "game.h"
@@ -10,45 +9,43 @@
 #include "sdl_lighting_devui.h"
 #include "state_helpers.h"
 
-TEST_CASE( "stealth_mode_mirrors_crouch_posture", "[stealth][movemode]" )
-{
+TEST_CASE("stealth_mode_mirrors_crouch_posture", "[stealth][movemode]") {
     clear_all_state();
-    avatar &dummy = g->u;
-    clear_character( dummy, false );
+    avatar& dummy = g->u;
+    clear_character(dummy, false);
 
-    CHECK( io::enum_to_string( CMM_STEALTH ) == "stealth" );
+    CHECK(io::enum_to_string(CMM_STEALTH) == "stealth");
 
-    dummy.set_movement_mode( CMM_CROUCH );
-    REQUIRE( dummy.movement_mode_is( CMM_CROUCH ) );
-    CHECK( dummy.is_crouching() );
+    dummy.set_movement_mode(CMM_CROUCH);
+    REQUIRE(dummy.movement_mode_is(CMM_CROUCH));
+    CHECK(dummy.is_crouching());
     const float crouch_run_cost = dummy.running_move_cost_modifier();
 
-    dummy.set_movement_mode( CMM_WALK );
-    dummy.set_movement_mode( CMM_STEALTH );
-    REQUIRE( dummy.movement_mode_is( CMM_STEALTH ) );
-    CHECK( dummy.is_crouching() );
-    CHECK( dummy.running_move_cost_modifier() == crouch_run_cost );
+    dummy.set_movement_mode(CMM_WALK);
+    dummy.set_movement_mode(CMM_STEALTH);
+    REQUIRE(dummy.movement_mode_is(CMM_STEALTH));
+    CHECK(dummy.is_crouching());
+    CHECK(dummy.running_move_cost_modifier() == crouch_run_cost);
 }
 
-TEST_CASE( "sound_pulses_visible_gated_by_stealth_or_devui", "[stealth][sound]" )
-{
-    restore_on_out_of_scope<bool> saved_spm( sdl_lighting_devui::sound_place_mode() );
-    restore_on_out_of_scope<bool> saved_devui( sdl_lighting_devui::devui_visible() );
+TEST_CASE("sound_pulses_visible_gated_by_stealth_or_devui", "[stealth][sound]") {
+    restore_on_out_of_scope<bool> saved_spm(sdl_lighting_devui::sound_place_mode());
+    restore_on_out_of_scope<bool> saved_devui(sdl_lighting_devui::devui_visible());
     sdl_lighting_devui::sound_place_mode() = false;
     sdl_lighting_devui::devui_visible() = false;
 
-    CHECK_FALSE( sdl_lighting_devui::sound_pulses_visible( false ) );
-    CHECK( sdl_lighting_devui::sound_pulses_visible( true ) );
+    CHECK_FALSE(sdl_lighting_devui::sound_pulses_visible(false));
+    CHECK(sdl_lighting_devui::sound_pulses_visible(true));
 
     sdl_lighting_devui::devui_visible() = true;
-    CHECK( sdl_lighting_devui::sound_pulses_visible( false ) );
+    CHECK(sdl_lighting_devui::sound_pulses_visible(false));
     sdl_lighting_devui::devui_visible() = false;
-    CHECK_FALSE( sdl_lighting_devui::sound_pulses_visible( false ) );
+    CHECK_FALSE(sdl_lighting_devui::sound_pulses_visible(false));
 
     // The "spawn sounds on click" checkbox defaults to on, so ORing it into the
     // gate made the wavefront VFX render in every movement mode. It must not
     // bypass stealth on its own.
     sdl_lighting_devui::sound_place_mode() = true;
-    CHECK_FALSE( sdl_lighting_devui::sound_pulses_visible( false ) );
-    CHECK( sdl_lighting_devui::sound_pulses_visible( true ) );
+    CHECK_FALSE(sdl_lighting_devui::sound_pulses_visible(false));
+    CHECK(sdl_lighting_devui::sound_pulses_visible(true));
 }
