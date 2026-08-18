@@ -752,15 +752,70 @@ never hits the obstacle at (66,60).
   pre-merge; sound-only plus formatting.
 - *`vehicle_move.cpp` (`part_collision`)* — merge diff is three sound conversions only.
 
-**Still suspect, in priority order:** `src/itype.cpp` + `src/item_type.cpp` (`damage_max()` now
-returns a real scale for stackable charge items instead of 0, which changes
-`vehicle_part::health_percent`/`damage_percent` from a divide-by-zero to a finite value and feeds
-collision damage math), `src/map_cache.cpp` (52 added lines on the cache path movement uses), and
-`src/vehicle_physics.cpp`'s `noise_and_smoke` restructure.
+#### Minimal reproducer — 10 seconds, use this instead of the suite
 
-**Recommended next step:** binary-search the 69 changed files that contain no sound-API reference
-and are therefore individually revertible. Use `[vehicle] --order decl --rng-seed 1` (~50 s) as the
-harness rather than the full suite, and keep `/tmp/cbn-baseline` for A/B. Note that reverting
-`mapdata.h` breaks `TFLAG_ROAD` in `sounds.cpp`, `map_cache.cpp` breaks
-`map::set_absorption_cache_dirty`, and `map_field.cpp` breaks the 4-arg
-`process_fields_in_submap` — exclude those three from a blanket revert or restore them individually.
+```sh
+./cata_test-tiles "grabbed_shopping_cart_can_be_pulled_up_ramp,box2d_authority_vehicle_bashes_terrain" \
+    --order decl --rng-seed 1
+```
+
+Found by binary-searching the 65 predecessors of the target in `[vehicle]` declaration order. The
+trigger is a **single** test — `grabbed_shopping_cart_can_be_pulled_up_ramp` — and it is sufficient
+on its own; the target passes with no predecessor and fails with just that one.
+
+**Harness gotcha that cost an hour:** this project's `tests/test_main.cpp` joins all positional
+argv into ONE Catch2 spec string, so passing several test names as separate arguments matches
+*nothing* (`No test cases matched '"a" "b"'`). Names must be **comma-separated inside a single
+argument**, with literal commas in a name escaped as `\,`.
+
+#### Additionally ruled out by revert-and-retest (all still fail)
+
+- 20 sound-free `.cpp` files reverted together to `a8bf513326`: `projectile.cpp`,
+  `safe_reference.cpp`, `submap_load_manager.cpp`, `editmap.cpp`, `lightmap.cpp`, `mapbuffer.cpp`,
+  `overmap.cpp`, `crafting.cpp`, `units.cpp`, `action.cpp`, `artifact.cpp`, `catalua_hooks.cpp`,
+  `mission.cpp`, `ranged_aoe.cpp`, `item_factory.cpp`, `item_factory_finalize.cpp`, `main.cpp`,
+  `iexamine_elevator.cpp`, `inventory_ui.cpp`, `character_needs.cpp`.
+  (`pickup.cpp`, `npcmove_combat.cpp`, `game_misc.cpp` and `item_group.cpp` had to stay merged —
+  each is needed by a merged caller.)
+- `safe_reference.h` **and** `safe_reference.cpp` reverted together — the fork's entity-lifetime
+  mechanism was a strong hypothesis because the trigger test leaves a grabbed-vehicle reference
+  behind, but it is not the cause.
+- The damage-scale semantics, reverted surgically (4 lines): `itype::damage_min()`/`damage_max()`
+  back to `count_by_charges() ? 0 : …` and `item::mod_damage`'s two guard flips back to their
+  pre-merge form.
+- `src/vehicle_physics.cpp` `noise_and_smoke` and `src/grab.cpp` — full diffs read line by line;
+  both are sound-only in effect. `vehicle_noise` is consumed only by `sfx::do_vehicle_engine_sfx`.
+- `src/map_cache.cpp`'s 52 added lines — they only set the new `absorption_cache_dirty` /
+  `submap::absorption_dirty` bits, nothing on the movement or transparency path reads them, and both
+  `set_absorption_cache_dirty` overloads are bounds-checked (`inbounds`, `inbounds_z`, plus a clamp
+  inside the `mark` lambda).
+
+#### Instrumentation finding that redirects the next attempt
+
+Do not start by instrumenting `map::bash`. Two probes established that the terrain change this test
+asserts on does **not** go through the path it looks like it should:
+
+- A probe at the top of `map::bash_ter_furn` logged **zero** calls for the obstacle tile in the
+  *passing* isolation run — where the wall demonstrably is destroyed.
+- A probe in `map::ter_set` (`src/map_access.cpp:475`) keyed on `t_wall_wood` logged **nothing at
+  all**, not even the test's own `here.ter_set( obstacle, ter_id( "t_wall_wood" ) )` on line 599.
+
+So `map_access.cpp`'s `map::ter_set` is not the function the test's terrain writes reach. **Find the
+actual terrain-write path first** (there is evidently another `ter_set`/`set_ter` route, plausibly
+`submap::set_ter` directly or a second overload), then instrument that. Also note the obstacle
+coordinate is computed from `veh->face_vec()` and is **not** stable across orderings — it was
+`(66,60)` under `[vehicle]` but must not be hard-coded in a probe.
+
+#### Remaining suspects
+
+All of the sound-coupled files on the movement path, which could not be reverted independently
+because they require the new `sound_event` API: `vehicle_move.cpp` (`part_collision`),
+`map_vehicle.cpp` (`move_vehicle`), `map_bash.cpp`, `map.cpp`, `map_terrain.cpp`,
+`game_movement.cpp`, `monster.cpp`, `character.cpp`. To bisect these, revert the file to
+`a8bf513326` **and** re-apply only its `sound_event` conversions by hand, or revert the whole sound
+subsystem (`sounds.{h,cpp}`) alongside it so the legacy API is self-consistent.
+
+Reverting `mapdata.h` breaks `TFLAG_ROAD` in `sounds.cpp`, `map_cache.cpp` breaks
+`map::set_absorption_cache_dirty`, `map_field.cpp` breaks the 4-arg `process_fields_in_submap`,
+`savegame_json.cpp` breaks `charge_removal_blacklist::split_deferred`, and `item_search.cpp` /
+`auto_pickup.cpp` cannot be reverted without their headers — exclude these from any blanket revert.
