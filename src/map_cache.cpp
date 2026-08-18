@@ -195,6 +195,9 @@ void map::set_transparency_cache_dirty( const int zlev )
     if( inbounds_z( zlev ) ) {
         auto& cache = get_cache( zlev );
         cache.transparency_cache_dirty.set();
+        // If we are invalidating the entire transparency cache for this zlevel, the sound
+        // absorption cache will also be invalidated.
+        cache.absorption_cache_dirty.set();
         ++cache.transparency_generation;
         for( const auto p : bubble_submaps() ) {
             auto* sm = get_submap_at_grid( tripoint_bub_sm( p, zlev ) );
@@ -281,6 +284,8 @@ void map::set_floor_cache_dirty( const int zlev )
     }
     // outside_cache and sheltered_cache at z-1 depend on floor_cache at z.
     set_outside_cache_dirty( zlev - 1 );
+    // This also means the absorption and sound wall caches are marked dirty there as well.
+    set_absorption_cache_dirty( zlev - 1 );
 }
 
 void map::set_floor_cache_dirty( const tripoint_bub_ms& p )
@@ -294,6 +299,9 @@ void map::set_floor_cache_dirty( const tripoint_bub_ms& p )
     // outside_cache and sheltered_cache at z-1 depend on floor_cache at z.
     // The 3×3 neighbourhood means adjacent submaps at z-1 may also be affected.
     set_outside_cache_dirty( p + tripoint_rel_ms::below() );
+    // Setting the floor cache for a submap dirty should also automatically set the absorption
+    // cache and sound_wall caches dirty.
+    set_absorption_cache_dirty( p + tripoint_rel_ms::below() );
 }
 
 void map::set_seen_cache_dirty( const int &zlevel )
@@ -314,6 +322,50 @@ void map::set_transparency_cache_dirty( const tripoint_bub_ms& p )
         auto* sm = get_submap_at_grid( smp );
         if( sm ) { sm->transparency_dirty = true; }
     }
+}
+
+void map::set_absorption_cache_dirty( const tripoint_bub_ms& p )
+{
+    // Logic lifted shamelessly from set_outside_cache_dirty
+    if( !inbounds( p ) ) { return; }
+    level_cache& ch = get_cache( p.z() );
+    const auto proj = project_remain<coords::sm>( p );
+    const auto smp = proj.quotient_tripoint;
+    const auto l = proj.remainder;
+
+    // Helper: mark one submap grid cell dirty in both the bitset and the submap flag.
+    auto mark = [&]( const tripoint_bub_sm & p ) {
+        if( p.x() < 0 || p.y() < 0 || p.x() >= my_MAPSIZE || p.y() >= my_MAPSIZE ) { return; }
+        ch.absorption_cache_dirty.set( static_cast<size_t>( ch.bidx( p.x(), p.y() ) ) );
+        auto* sm = get_submap_at_grid( tripoint_bub_sm{p.x(), p.y(), p.z()} );
+        if( sm ) { sm->absorption_dirty = true; }
+    };
+
+    // Always mark the tile's own submap.
+    mark( smp );
+
+    // rebuild_absorption_cache checks a 3×3 tile neighbourhood, so a tile on a
+    // submap boundary can affect tiles in the adjacent submap.
+    const bool on_left = ( l.x() == 0 );
+    const bool on_right = ( l.x() == SEEX - 1 );
+    const bool on_top = ( l.y() == 0 );
+    const bool on_bottom = ( l.y() == SEEY - 1 );
+
+    if( on_left ) { mark( smp + point_rel_sm::west() ); }
+    if( on_right ) { mark( smp + point_rel_sm::east() ); }
+    if( on_top ) { mark( smp + point_rel_sm::north() ); }
+    if( on_bottom ) { mark( smp + point_rel_sm::south() ); }
+
+    // Corner neighbours when on both x and y boundaries.
+    if( on_left && on_top ) { mark( smp + point_rel_sm::north_west() ); }
+    if( on_right && on_top ) { mark( smp + point_rel_sm::north_east() ); }
+    if( on_left && on_bottom ) { mark( smp + point_rel_sm::south_west() ); }
+    if( on_right && on_bottom ) { mark( smp + point_rel_sm::south_east() ); }
+}
+
+void map::set_absorption_cache_dirty( const int zlev )
+{
+    if( inbounds_z( zlev ) ) { get_cache( zlev ).absorption_cache_dirty.set(); }
 }
 
 void map::update_visibility_cache( const int zlev )

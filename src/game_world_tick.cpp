@@ -274,7 +274,7 @@ void game::world_tick()
                 auto has_fire = false;
                 if( sm_ptr->field_count > 0 ) {
                     ZoneScopedN( "wtd_process_fields" );
-                    has_fire = process_fields_in_submap( *sm_ptr, pos_sm, mb );
+                    has_fire = process_fields_in_submap( dim, *sm_ptr, pos_sm, mb );
                 }
                 sm_ptr->last_touched = calendar::turn;
 
@@ -1479,7 +1479,6 @@ void game::replace_stair_monsters()
     coming_to_stairs.clear();
 }
 
-// ——— void game::update_stair_monsters() ———
 void game::update_stair_monsters()
 {
     ZoneScoped;
@@ -1569,8 +1568,18 @@ void game::update_stair_monsters()
 
             add_msg( m_warning, dump );
         } else {
-            sounds::sound( dest, 5, sounds::sound_t::movement,
-                           _( "a sound nearby from the stairs!" ), true, "misc", "stairs_movement" );
+            sound_event se;
+            se.origin = dest;
+            se.volume = 60;
+            se.category = sounds::sound_t::movement;
+            se.movement_noise = true;
+            se.from_monster = true;
+            se.monfaction = critter.faction.id();
+            se.description = _( "a sound nearby from the stairs!" );
+            se.id = "misc";
+            se.variant = "stairs_movement";
+
+            sounds::sound( se );
         }
 
         if( critter.staircount > 0 ) {

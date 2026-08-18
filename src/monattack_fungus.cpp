@@ -356,7 +356,16 @@ bool mattack::fungus( monster *z )
     z->moves -= 200;
 
     //~ the sound of a fungus releasing spores
-    sounds::sound( z->bub_pos(), 10, sounds::sound_t::combat, _( "Pouf!" ), false, "misc", "puff" );
+    sound_event se;
+    se.origin = z->bub_pos();
+    se.volume = 60;
+    se.category = sounds::sound_t::combat;
+    se.description = _( "Pouf!" );
+    se.from_monster = true;
+    se.monfaction = z->faction.id();
+    se.id = "misc";
+    se.variant = "puff";
+    sounds::sound( se );
     if( g->u.sees( *z ) ) {
         add_msg( m_warning, _( "Spores are released from the %s!" ), z->name() );
     }
@@ -389,7 +398,16 @@ bool mattack::fungus_advanced( monster *z )
     z->moves -= 200;
 
     //~ the sound of a fungus releasing spores
-    sounds::sound( z->bub_pos(), 10, sounds::sound_t::combat, _( "Pouf!" ), false, "misc", "puff" );
+    sound_event se;
+    se.origin = z->bub_pos();
+    se.volume = 60;
+    se.category = sounds::sound_t::combat;
+    se.description = _( "Pouf!" );
+    se.from_monster = true;
+    se.monfaction = z->faction.id();
+    se.id = "misc";
+    se.variant = "puff";
+    sounds::sound( se );
     if( g->u.sees( *z ) ) {
         add_msg( m_warning, _( "Spores are released from the %s!" ), z->name() );
     }
@@ -449,7 +467,16 @@ bool mattack::fungus_corporate( monster *z )
 bool mattack::fungus_haze( monster *z )
 {
     //~ That spore sound again
-    sounds::sound( z->bub_pos(), 10, sounds::sound_t::combat, _( "Pouf!" ), true, "misc", "puff" );
+    sound_event se;
+    se.origin = z->bub_pos();
+    se.volume = 60;
+    se.category = sounds::sound_t::combat;
+    se.description = _( "Pouf!" );
+    se.from_monster = true;
+    se.monfaction = z->faction.id();
+    se.id = "misc";
+    se.variant = "puff";
+    sounds::sound( se );
     if( g->u.sees( *z ) ) {
         add_msg( m_info, _( "The %s pulses, and fresh fungal material bursts forth." ), z->name() );
     }
@@ -483,18 +510,45 @@ bool mattack::fungus_big_blossom( monster *z )
             add_msg( m_warning, _( "The %s suddenly inhales!" ), z->name() );
         }
         //~Sound of a giant fungal blossom inhaling
-        sounds::sound( z->bub_pos(), 20, sounds::sound_t::combat, _( "WOOOSH!" ), true, "misc", "inhale" );
+        sound_event in;
+        in.origin = z->bub_pos();
+        in.volume = 80;
+        in.category = sounds::sound_t::combat;
+        in.description = _( "WOOOSH!" );
+        in.from_monster = true;
+        in.monfaction = z->faction.id();
+        in.id = "misc";
+        in.variant = "inhale";
+        sounds::sound( in );
         if( u_see ) {
             add_msg( m_bad, _( "The %s discharges an immense flow of spores, smothering the flames!" ),
                      z->name() );
         }
         //~Sound of a giant fungal blossom blowing out the dangerous fire!
-        sounds::sound( z->bub_pos(), 20, sounds::sound_t::combat, _( "POUFF!" ), true, "misc", "exhale" );
+        sound_event se;
+        se.origin = z->bub_pos();
+        se.volume = 80;
+        se.category = sounds::sound_t::combat;
+        se.description = _( "POUFF!" );
+        se.from_monster = true;
+        se.monfaction = z->faction.id();
+        se.id = "misc";
+        se.variant = "exhale";
+        sounds::sound( se );
         return true;
     } else {
         // No fire detected, routine haze-emission
         //~ That spore sound, much louder
-        sounds::sound( z->bub_pos(), 15, sounds::sound_t::combat, _( "POUF." ), true, "misc", "puff" );
+        sound_event se;
+        se.origin = z->bub_pos();
+        se.volume = 70;
+        se.category = sounds::sound_t::combat;
+        se.description = _( "POUF" );
+        se.from_monster = true;
+        se.monfaction = z->faction.id();
+        se.id = "misc";
+        se.variant = "puff";
+        sounds::sound( se );
         if( u_see ) {
             add_msg( m_info, _( "The %s pulses, and fresh fungal material bursts forth!" ), z->name() );
         }

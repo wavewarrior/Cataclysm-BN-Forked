@@ -1180,13 +1180,27 @@ void iexamine::cloning_vat_finalize( const tripoint_bub_ms &examp, const time_po
         detached_ptr<item> spawned_item = item::spawn( chosen_id, calendar::turn );
         here.add_item( examp, std::move( spawned_item ) );
 
-        sounds::sound( examp, 8, sounds::sound_t::alarm, _( "beep!" ), true, "misc", "beep" );
+        sound_event se;
+        se.origin = examp;
+        se.volume = 50;
+        se.category = sounds::sound_t::alarm;
+        se.description = _( "beep!" );
+        se.id = "misc";
+        se.variant = "beep";
+        sounds::sound( se );
 
         return;
     }
 
     // success: spawn the completed artificial womb
-    sounds::sound( examp, 8, sounds::sound_t::alarm, _( "ding!" ), true, "misc", "ding" );
+    sound_event se;
+    se.origin = examp;
+    se.volume = 50;
+    se.category = sounds::sound_t::alarm;
+    se.description = _( "ding!" );
+    se.id = "misc";
+    se.variant = "ding";
+    sounds::sound( se );
     detached_ptr<item> spawned_embryo = item::spawn( itype_embryo, calendar::turn );
     spawned_embryo->set_var( "place_monster_override", developing_embryo.get_var( "specimen_sample" ) );
     spawned_embryo->set_var( "place_monster_override_name",
@@ -1566,7 +1580,14 @@ void iexamine::cloning_vat_examine( player &p, const tripoint_bub_ms &examp )
             return;
         }
 
-        sounds::sound( examp, 8, sounds::sound_t::alarm, _( "beep!" ), true, "misc", "beep" );
+        sound_event se;
+        se.origin = examp;
+        se.volume = 50;
+        se.category = sounds::sound_t::alarm;
+        se.description = _( "beep!" );
+        se.id = "misc";
+        se.variant = "beep";
+        sounds::sound( se );
 
         if( items_here.size() > 0 ) {
             items_here.erase( items_here.begin() );  // delete all items here

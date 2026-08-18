@@ -1065,8 +1065,14 @@ bool place_test_sound()
                                       static_cast<int>( dev_test_lights::hover_wy ),
                                       static_cast<int>( dev_test_lights::hover_wz ) );
     // Queue a real sound so monster AI still reacts (drained by the turn loop).
-    sounds::sound( src, static_cast<int>( g_sound_volume ),
-                   sounds::sound_t::alert, "debug test sound", false );
+    // Creature-less emitter, so all from_* flags stay false (ambient) per upstream's model.
+    // g_sound_volume is now interpreted as dB SPL rather than a legacy tile radius.
+    sound_event se;
+    se.origin = src;
+    se.volume = static_cast<short>( g_sound_volume );
+    se.category = static_cast<sounds::sound_t>( g_sound_category );
+    se.description = "debug test sound";
+    sounds::sound( se );
     sfx::emit_sound_pulse( src, g_sound_volume );
     dbg( DL::Info ) << "[sound_vis] pulse pushed, total_pulses="
                     << dev_test_lights::sound_pulses.size();

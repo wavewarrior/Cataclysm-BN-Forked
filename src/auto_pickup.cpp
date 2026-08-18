@@ -30,6 +30,7 @@
 #include "type_id.h"
 #include "ui_manager.h"
 #include "world.h"
+#include "item_search.h"
 
 #include <RmlUi/Core.h>
 
@@ -125,8 +126,17 @@ bool &autopickup_rmlui_enabled()
 
 using namespace auto_pickup;
 
-static bool check_special_rule( const std::vector<material_id> &materials,
-                                const std::string &rule );
+bool auto_pickup::test_pattern_function( const itype &type, std::string filter )
+{
+    auto func = filter_from_string<itype>( filter, wildcard_itype_filter );
+    return func( type );
+}
+
+bool auto_pickup::autopickup_item_function( const item &object, std::string filter )
+{
+    auto func = filter_from_string<item>( filter, wildcard_item_filter );
+    return func( object );
+}
 
 auto_pickup::player_settings &get_auto_pickup()
 {
@@ -403,7 +413,7 @@ void user_interface::show()
                 // (2) Explicitly entered an empty rule- which isn't allowed since "*" should be used
                 // to include/exclude everything
                 if( !r.empty() ) {
-                    cur_rules[iLine].set_rule_string( r );
+                    cur_rules[iLine].sRule = wildcard_trim_rule( r );
                     bStuffChanged = true;
                 } else if( action == "ADD_RULE" ) {
                     cur_rules.pop_back();
@@ -444,7 +454,7 @@ void user_interface::show()
                 iColumn = 1;
             }
         } else if( action == "TEST_RULE" && currentPageNonEmpty && !g->u.name.empty() ) {
-            test_pattern( cur_rules[iLine] );
+            cur_rules[iLine].test_pattern();
         } else if( action == "SWITCH_AUTO_PICKUP_OPTION" ) {
             // TODO: Now that NPCs use this function, it could be used for them too
             get_options().get_option( "AUTO_PICKUP" ).setNext();
@@ -470,21 +480,47 @@ void user_interface::show()
     }
 }
 
+void player_settings::show()
+{
+    user_interface ui;
 
-void user_interface::test_pattern( const rule &rule ) const
+    ui.title = _( " AUTO PICKUP MANAGER " );
+    ui.tabs.emplace_back( _( "[<Global>]" ), global_rules );
+    if( !g->u.name.empty() ) {
+        ui.tabs.emplace_back( _( "[<Character>]" ), character_rules );
+    }
+    ui.is_autopickup = true;
+
+    ui.show();
+
+    if( !ui.bStuffChanged ) {
+        return;
+    }
+
+    save_global();
+    if( !g->u.name.empty() ) {
+        save_character();
+    }
+    invalidate();
+}
+
+void rule::test_pattern() const
 {
     std::vector<std::string> vMatchingItems;
 
-    if( rule.sRule.empty() ) {
+    if( sRule.empty() ) {
         return;
     }
 
     //Loop through all itemfactory items
     //APU now ignores prefixes, bottled items and suffix combinations still not generated
     for( const itype *e : item_controller->all() ) {
-        if( rule( *e ) ) {
-            vMatchingItems.push_back( e->nname( 1 ) );
+        const std::string sItemName = e->nname( 1 );
+        if( !test_pattern_function( *e, sRule ) && !wildcard_match( sItemName, sRule ) ) {
+            continue;
         }
+
+        vMatchingItems.push_back( sItemName );
     }
 
     int iContentHeight = 0;
@@ -512,7 +548,7 @@ void user_interface::test_pattern( const rule &rule ) const
     int nmatch = vMatchingItems.size();
     const std::string buf = string_format( vgettext( "%1$d item matches: %2$s",
                                            "%1$d items match: %2$s",
-                                           nmatch ), nmatch, rule.sRule );
+                                           nmatch ), nmatch, sRule );
 
     int iLine = 0;
 
@@ -590,31 +626,6 @@ void user_interface::test_pattern( const rule &rule ) const
     }
 }
 
-void player_settings::show()
-{
-    user_interface ui;
-
-    ui.title = _( " AUTO PICKUP MANAGER " );
-    ui.tabs.emplace_back( _( "[<Global>]" ), global_rules );
-    if( !g->u.name.empty() ) {
-        ui.tabs.emplace_back( _( "[<Character>]" ), character_rules );
-    }
-    ui.is_autopickup = true;
-
-    ui.show();
-
-    if( !ui.bStuffChanged ) {
-        return;
-    }
-
-    save_global();
-    if( !g->u.name.empty() ) {
-        save_character();
-    }
-
-    refresh_map_items( map_items );
-}
-
 bool player_settings::has_rule( const item *it )
 {
     const std::string &name = it->tname( 1 );
@@ -629,7 +640,7 @@ bool player_settings::has_rule( const item *it )
 void player_settings::add_rule( const item *it )
 {
     character_rules.push_back( rule( it->tname( 1, false ), true, false ) );
-    invalidate();
+    create_rule( it );
 
     if( !get_option<bool>( "AUTO_PICKUP" ) &&
         query_yn( _( "Autopickup is not enabled in the options.  Enable it now?" ) ) ) {
@@ -657,66 +668,100 @@ bool player_settings::empty() const
     return global_rules.empty() && character_rules.empty();
 }
 
-bool check_special_rule( const std::vector<material_id> &materials, const std::string &rule )
+void npc_settings::create_rule( const std::string &to_match )
 {
-    char type = ' ';
-    std::vector<std::string> filter;
-    if( rule[1] == ':' ) {
-        type = rule[0];
-        filter = string_split( rule.substr( 2 ), ',' );
-    }
-
-    if( filter.empty() || materials.empty() ) {
-        return false;
-    }
-
-    if( type == 'm' ) {
-        return std::ranges::any_of( materials, [&filter]( const material_id & mat ) {
-            return std::ranges::any_of( filter, [&mat]( const std::string & search ) {
-                return lcmatch( mat->name(), search );
-            } );
-        } );
-
-    } else if( type == 'M' ) {
-        return std::ranges::all_of( materials, [&filter]( const material_id & mat ) {
-            return std::ranges::any_of( filter, [&mat]( const std::string & search ) {
-                return lcmatch( mat->name(), search );
-            } );
-        } );
-    }
-
-    return false;
+    rules.create_rule( map_items, to_match );
 }
 
-void player_settings::refresh_map_items( item_search_cache &map_items ) const
+void rule_list::create_rule( cache &map_items, const std::string &to_match )
+{
+    for( const rule &elem : *this ) {
+        if( !elem.bActive || !wildcard_match( to_match, elem.sRule ) ) {
+            continue;
+        }
+
+        map_items[ to_match ] = elem.bExclude ? RULE_BLACKLISTED : RULE_WHITELISTED;
+    }
+}
+
+void player_settings::create_rule( const item *it )
+{
+    // TODO: change it to be a reference
+    global_rules.create_rule( map_items, *it );
+    character_rules.create_rule( map_items, *it );
+}
+
+void rule_list::create_rule( cache &map_items, const item &it )
+{
+    const std::string to_match = it.tname( 1, false );
+
+    for( const rule &elem : *this ) {
+        if( !elem.bActive ) {
+            continue;
+        } else if( !autopickup_item_function( it, elem.sRule ) &&
+                   !wildcard_match( to_match, elem.sRule ) ) {
+            continue;
+        }
+
+        map_items[ to_match ] = elem.bExclude ? RULE_BLACKLISTED : RULE_WHITELISTED;
+    }
+}
+
+void player_settings::refresh_map_items( cache &map_items ) const
 {
     //process include/exclude in order of rules, global first, then character specific
     //if a specific item is being added, all the rules need to be checked now
     //may have some performance issues since exclusion needs to check all items also
-    map_items.clear_items();
-    map_items.apply_rules( global_rules );
-    map_items.apply_rules( character_rules );
-
+    global_rules.refresh_map_items( map_items );
+    character_rules.refresh_map_items( map_items );
 }
 
-rule_state base_settings::check_item( const item &item )
+void rule_list::refresh_map_items( cache &map_items ) const
 {
-    if( !cache_is_valid ) {
-        refresh_map_items( map_items );
-        cache_is_valid = true;
+for( const rule &elem : *this ) {
+    if( elem.sRule.empty() || !elem.bActive ) {
+            continue;
+        }
+
+        if( !elem.bExclude ) {
+            //Check include patterns against all itemfactory items
+            for( const itype *e : item_controller->all() ) {
+                const std::string &cur_item = e->nname( 1 );
+
+                if( !test_pattern_function( *e, elem.sRule ) && !wildcard_match( cur_item, elem.sRule ) ) {
+                    continue;
+                }
+
+                map_items[ cur_item ] = RULE_WHITELISTED;
+                map_items.temp_items[ cur_item ] = e;
+            }
+        } else {
+            //only re-exclude items from the existing mapping for now
+            //new exclusions will process during pickup attempts
+            for( auto &map_item : map_items ) {
+                if( !test_pattern_function( *( map_items.temp_items[ map_item.first ] ), elem.sRule ) &&
+                    !wildcard_match( map_item.first, elem.sRule ) ) {
+                    continue;
+                }
+
+                map_items[ map_item.first ] = RULE_BLACKLISTED;
+            }
+        }
+    }
+}
+
+rule_state base_settings::check_item( const std::string &sItemName ) const
+{
+    if( !map_items.ready ) {
+    recreate();
     }
 
-    const auto iter = map_items.find( item.typeId() );
+    const auto iter = map_items.find( sItemName );
     if( iter != map_items.end() ) {
         return iter->second;
     }
 
     return RULE_NONE;
-}
-
-void base_settings::invalidate()
-{
-    cache_is_valid = false;
 }
 
 void player_settings::clear_character_rules()
@@ -758,7 +803,6 @@ bool player_settings::save( const bool bCharacter )
 void player_settings::load_character()
 {
     load( true );
-
 }
 
 void player_settings::load_global()
@@ -781,6 +825,44 @@ void player_settings::load( const bool bCharacter )
     // before item types are frozen, so refresh_map_items() -> Item_factory::all()
     // would assert. The cache is rebuilt lazily on first check_item() in-game.
     invalidate();
+}
+
+void rule::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+    jsout.member( "rule", sRule );
+    jsout.member( "active", bActive );
+    jsout.member( "exclude", bExclude );
+    jsout.end_object();
+}
+
+void rule_list::serialize( JsonOut &jsout ) const
+{
+    jsout.start_array();
+for( const rule &elem : *this ) {
+    elem.serialize( jsout );
+    }
+    jsout.end_array();
+}
+
+void rule::deserialize( JsonIn &jsin )
+{
+    JsonObject jo = jsin.get_object();
+    sRule = jo.get_string( "rule" );
+    bActive = jo.get_bool( "active" );
+    bExclude = jo.get_bool( "exclude" );
+}
+
+void rule_list::deserialize( JsonIn &jsin )
+{
+    clear();
+
+    jsin.start_array();
+    while( !jsin.end_array() ) {
+        rule tmp;
+        tmp.deserialize( jsin );
+        push_back( tmp );
+    }
 }
 
 void npc_settings::show( const std::string &name )
@@ -806,10 +888,9 @@ void npc_settings::deserialize( JsonIn &jsin )
     rules.deserialize( jsin );
 }
 
-void npc_settings::refresh_map_items( item_search_cache &map_items ) const
+void npc_settings::refresh_map_items( cache &map_items ) const
 {
-    map_items.clear_items();
-    map_items.apply_rules( rules );
+    rules.refresh_map_items( map_items );
 }
 
 bool npc_settings::empty() const
@@ -819,7 +900,14 @@ bool npc_settings::empty() const
 
 void base_settings::recreate() const
 {
-    map_items.clear_items();
+    map_items.clear();
+    map_items.temp_items.clear();
     refresh_map_items( map_items );
+    map_items.ready = true;
+    map_items.temp_items.clear();
 }
 
+void base_settings::invalidate()
+{
+    map_items.ready = false;
+}

@@ -2385,6 +2385,7 @@ static std::string distance_string( int range )
     }
 }
 
+// This should really be in npctalk.cpp, along with complain_about and complain
 void npc::warn_about(
     const std::string& type, const time_duration& d, const std::string& name, int range,
     const tripoint_bub_ms& danger_pos )
@@ -2586,7 +2587,7 @@ void npc::do_reload( item& it )
     if( get_player_character().sees( *this ) ) {
         add_msg( _( "%1$s reloads their %2$s." ), name, it.tname() );
         sfx::play_variant_sound(
-            "reload", it.typeId().str(), sfx::get_heard_volume( bub_pos() ),
+            "reload", it.typeId().str(), sfx::get_heard_volume( bub_pos(), 60 ),
             sfx::get_heard_angle( bub_pos() ), sfx::get_heard_distance( bub_pos() ) );
     }
 

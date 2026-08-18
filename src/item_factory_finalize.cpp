@@ -193,10 +193,29 @@ void Item_factory::finalize_pre( itype &obj )
 
     if( obj.ammo ) {
         // for ammo not specifying loudness (or an explicit zero) derive value from other properties
+        // 343 is the speed of sound in atmosphere, but guns are still loud.
+        // Very few firearms have projectiles with speeds lower than 200m/s, so we use that as the cutoff.
+        // For reference, arrows/bolts are sub 140 speed.
         if( obj.ammo->loudness < 0 ) {
-            obj.ammo->loudness = obj.ammo->range * 2;
-            for( const damage_unit &du : obj.ammo->damage ) {
-                obj.ammo->loudness += ( du.amount * 2 ) + du.res_pen;
+            if( obj.ammo->speed > 200 ) {
+                // TODO: Overhaul base noise algorithm. The min/floor/log10 is a stopgap to make firearm noise from tile vol to dB spl.
+                // Basing noise off of range/damage/AP results in wildly varying tile volumes, pistols that cannot deafen the user and .308 rifles that will always deafen all NPCs with no hearing protection in the reality bubble.
+                obj.ammo->loudness = obj.ammo->range * 2;
+                for( const damage_unit &du : obj.ammo->damage ) {
+                    obj.ammo->loudness += ( du.amount * 2 ) + du.res_pen;
+                }
+                // Deliberate divergence from upstream: the clamp is only valid for a positive
+                // loudness. Ammo with no range and no damage (chemicals, crafting reagents and
+                // other non-projectile AMMO) derives loudness == 0, and std::log10( 0 ) is -inf,
+                // which narrows to `int` as UB. Upstream has the same defect; do not "simplify"
+                // this guard away on a future merge.
+                if( obj.ammo->loudness > 0 ) {
+                    obj.ammo->loudness = std::min( 191.0,
+                                                   ( 120 + std::floor( 20 * std::log10( obj.ammo->loudness ) ) ) );
+                }
+            } else {
+                // 20dB is very quiet.
+                obj.ammo->loudness = 20;
             }
         }
 

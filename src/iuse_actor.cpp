@@ -102,6 +102,7 @@
 #include "vpart_range.h"
 #include "weather.h"
 #include "world_type.h"
+#include "faction.h"
 
 #include <algorithm>
 #include <array>
@@ -265,9 +266,15 @@ int explosion_iuse::use( player& p, item& it, bool t, const tripoint_bub_ms& pos
 {
     if( t ) {
     if( sound_volume >= 0 ) {
-            sounds::sound(
-                pos, sound_volume, sounds::sound_t::alarm,
-                sound_msg.empty() ? _( "Tick." ) : _( sound_msg ), true, "misc", "bomb_ticking" );
+            sound_event se;
+            se.origin = pos;
+            se.volume = sound_volume;
+            se.category = sounds::sound_t::alarm;
+            se.movement_noise = true;
+            se.description = sound_msg.empty() ? _( "Tick." ) : _( sound_msg );
+            se.id = "misc";
+            se.variant = "bomb_ticking";
+            sounds::sound( se );
         }
     } else if( it.charges > 0 ) {
     if( p.has_item( it ) ) {
@@ -1061,7 +1068,14 @@ int cloning_syringe_iuse::use( player& p, item& it, bool, const tripoint_bub_ms&
         add_msg( m_bad,
                  _( "The %s emits a loud error beep!  You failed to gather a sufficient sample." ),
                  it.display_name() );
-        sounds::sound( pos, 8, sounds::sound_t::alarm, _( "beep!" ), true, "misc", "beep" );
+        sound_event se;
+        se.origin = pos;
+        se.volume = 50;
+        se.category = sounds::sound_t::alarm;
+        se.description = _( "beep!" );
+        se.id = "misc";
+        se.variant = "beep";
+        sounds::sound( se );
         // add actual noise here
         return charges_to_use;
     }
@@ -1379,7 +1393,14 @@ int multicooker_iuse::use( player& p, item& it, bool t, const tripoint_bub_ms& p
             it.erase_var( "BATCHCOUNT" );
             it.erase_var( "RESULT" );
 
-            sounds::sound( pos, 8, sounds::sound_t::alarm, _( "ding!" ), true, "misc", "ding" );
+            sound_event se;
+            se.origin = pos;
+            se.volume = 50;
+            se.category = sounds::sound_t::alarm;
+            se.description = _( "ding!" );
+            se.id = "misc";
+            se.variant = "ding";
+            sounds::sound( se );
 
             return 0;
         } else {

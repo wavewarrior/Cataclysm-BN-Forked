@@ -35,6 +35,7 @@
 #include "event.h"
 #include "event_bus.h"
 #include "explosion.h"
+#include "faction.h"
 #include "field.h"
 #include "field_type.h"
 #include "flag.h"
@@ -43,6 +44,7 @@
 #include "fragment_cloud.h"
 #include "fungal_effects.h"
 #include "game.h"
+#include "game_constants.h"
 #include "harvest.h"
 #include "iexamine.h"
 #include "input.h"
@@ -65,6 +67,7 @@
 #include "map_memory.h"
 #include "map_selector.h"
 #include "mapbuffer.h"
+#include "mapdata.h"
 #include "mapgen_async.h"
 #include "math_defines.h"
 #include "memory_fast.h"
@@ -79,6 +82,7 @@
 #include "output.h"
 #include "overmapbuffer.h"
 #include "player.h"
+#include "point.h"
 #include "point_float.h"
 #include "profile.h"
 #include "projectile.h"
@@ -1248,6 +1252,8 @@ void map::load( const tripoint_abs_sm& w, const bool update_vehicle, const bool 
         if( pump_events ) { inp_mngr.pump_events(); }
     }
     reset_vehicle_cache();
+
+    charge_removal_blacklist::split_deferred();
 }
 
 
@@ -1549,6 +1555,7 @@ void map::shift( const point_rel_sm& sp )
             }
             set_pathfinding_cache_dirty( gridz );
             set_suspension_cache_dirty( gridz );
+            set_absorption_cache_dirty( gridz );
         }
     } // shift_grid_copy_load
     // New edge submaps have stale solar cache data. Force a rebuild before the next draw.
@@ -1582,6 +1589,7 @@ void map::shift( const point_rel_sm& sp )
     if( !support_cache_dirty.empty() ) {
         shift_tripoint_set( support_cache_dirty, shift_offset_pt, boundaries_2d );
     }
+    sounds::shift_sound_positions( shift_offset_pt );
 
     // Lightmap was translated via shift_flat_cache above, and the per-submap
     // lightmap_dirty bitset was shifted via shift_bitset_cache.  Only new-edge
@@ -1707,11 +1715,13 @@ void map::loadn( const tripoint_bub_sm& grid, const bool update_vehicles, const 
             tmpsub->transparency_dirty = true;
             tmpsub->floor_dirty = true;
             tmpsub->outside_dirty = true;
+            tmpsub->absorption_dirty = true;
             tmpsub->pf_dirty = true;
         } else {
             set_transparency_cache_dirty( grid.z() );
             set_floor_cache_dirty( grid.z() );
             set_outside_cache_dirty( grid.z() );
+            set_absorption_cache_dirty( grid.z() );
             set_seen_cache_dirty( grid.z() );
             set_pathfinding_cache_dirty( grid.z() );
             set_suspension_cache_dirty( grid.z() );
@@ -2459,6 +2469,12 @@ bool map::inbounds( const tripoint_bub_sm& p ) const
 }
 
 bool map::inbounds( const tripoint_abs_sm& p ) const { return inbounds( abs_to_bub( p ) ); }
+
+bool map::inbounds( const point_bub_sm& p ) const
+{
+    const auto max_xy = my_MAPSIZE;
+    return p.x() >= 0 && p.x() < max_xy && p.y() >= 0 && p.y() < max_xy;
+}
 
 bool map::is_position_simulated( const tripoint_bub_sm& p ) const
 {
@@ -3286,6 +3302,8 @@ level_cache::level_cache( int mx, int my )
       transparency_cache_dirty( static_cast<size_t>( mx / SEEX ) * ( my / SEEY ) ),
       outside_cache_dirty( static_cast<size_t>( mx / SEEX ) * ( my / SEEY ) ),
       floor_cache_dirty( static_cast<size_t>( mx / SEEX ) * ( my / SEEY ) ),
+      absorption_cache_dirty( static_cast<size_t>( mx / SEEX ) * ( my / SEEY ) ),
+      sound_wall_cache_dirty( static_cast<size_t>( mx / SEEX ) * ( my / SEEY ) ),
       lightmap_dirty( static_cast<size_t>( mx / SEEX ) * ( my / SEEY ) ),
       lm( static_cast<size_t>( mx * my ), four_quadrants( 0.0f ) ),
       sm( static_cast<size_t>( mx * my ), 0.0f ),
@@ -3303,14 +3321,48 @@ level_cache::level_cache( int mx, int my )
       camera_cache( static_cast<size_t>( mx * my ), 0.0f ),
       visibility_cache( static_cast<size_t>( mx * my ), lit_level::DARK ),
       map_memory_seen_cache( static_cast<size_t>( mx * my ) ),
-      veh_exists_at( static_cast<size_t>( mx * my ), false )
+      veh_exists_at( static_cast<size_t>( mx * my ), false ),
+      absorption_cache( static_cast<size_t>( mx * my ), 0 ),
+      sound_wall_cache( static_cast<size_t>( mx * my ), false )
+
 {
     transparency_cache_dirty.set();
+    absorption_cache_dirty.set();
+    sound_wall_cache_dirty.set();
     outside_cache_dirty.set();
     floor_cache_dirty.set();
     lightmap_dirty.set();
 }
 
+// Default constructor: zero-sized null sentinel — not for normal use.
+sound_instance_cache::sound_instance_cache() = default;
+
+// Normal constructor. Use this in almost all cases, takes the originating sound event.
+// This is done so we can garuntee that the sound is sized to the reality bubble and the level_cache.
+sound_instance_cache::sound_instance_cache( sound_event &input_sound,
+        const sound_vol_for_flood_dist &d_e, const int &f_r )
+    : sound( input_sound ),
+      dist_enum( d_e ),
+      flood_radius( f_r ),
+      origin( input_sound.origin ),
+      envelope_index_point( tripoint( origin.x() - flood_radius, origin.y() - flood_radius,
+                                      origin.z() ) ),
+      offset_x( envelope_index_point.x() ),
+      offset_y( envelope_index_point.y() ),
+      // 4r^2 + 4r + 1 equals our total area, for some (2r + 1) by (2r + 1) flood envelope.
+      volume( static_cast<size_t>( ( 1 + ( 4 * flood_radius ) + ( 4 * ( flood_radius *
+                                     flood_radius ) ) ) ), 0 ),
+      movement_noise( input_sound.movement_noise ),
+      from_player( input_sound.from_player ),
+      from_monster( input_sound.from_monster ),
+      from_npc( input_sound.from_npc )
+{
+
+}
+
+sound_filter_key::sound_filter_key() = default;
+
+sound_cache::sound_cache() = default;
 
 void map::set_pathfinding_cache_dirty( const int zlev )
 {
@@ -3377,6 +3429,8 @@ void map::invalidate_map_cache( const int zlev )
         level_cache& ch = get_cache( zlev );
         ch.floor_cache_dirty.set();
         ch.transparency_cache_dirty.set();
+        ch.absorption_cache_dirty.set();
+        ch.sound_wall_cache_dirty.set();
         ch.seen_cache_dirty = true;
         ch.lightmap_dirty.set();
         ch.visibility_cache_dirty = true;

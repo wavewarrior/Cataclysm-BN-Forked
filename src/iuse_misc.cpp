@@ -467,10 +467,16 @@ int iuse::artifact( player* p, item* it, bool, const tripoint_bub_ms & )
     for( size_t i = 0; i < num_used && !effects.empty(); i++ ) {
         const art_effect_active used = random_entry_removed( effects );
 
+        sound_event se;
         switch( used ) {
             case AEA_STORM: {
-                sounds::sound( p->bub_pos(), 10, sounds::sound_t::combat, _( "Ka-BOOM!" ), true,
-                               "environment", "thunder_near" );
+                se.origin = p->bub_pos();
+                se.volume = 160;
+                se.category = sounds::sound_t::combat;
+                se.description = _( "Ka-BOOM!" );
+                se.id = "environment";
+                se.variant = "thunder_near";
+                sounds::sound( se );
                 int num_bolts = rng( 2, 4 );
                 for( int j = 0; j < num_bolts; j++ ) {
                     point dir;
@@ -561,8 +567,13 @@ int iuse::artifact( player* p, item* it, bool, const tripoint_bub_ms & )
             break;
 
             case AEA_PULSE:
-                sounds::sound( p->bub_pos(), 30, sounds::sound_t::combat, _( "The earth shakes!" ),
-                               true, "misc", "earthquake" );
+                se.origin = p->bub_pos();
+                se.volume = 80;
+                se.category = sounds::sound_t::combat;
+                se.description = _( "The earth shakes!" );
+                se.id = "misc";
+                se.variant = "earthquake";
+                sounds::sound( se );
                 for( const tripoint_bub_ms& pt : g->m.points_in_radius( p->bub_pos(), 2 ) ) {
                     g->m.bash( pt, 40 );
                     g->m.bash( pt, 40 ); // Multibash effect, so that doors &c will fall
@@ -693,18 +704,25 @@ int iuse::artifact( player* p, item* it, bool, const tripoint_bub_ms & )
                 break;
 
             case AEA_NOISE:
-                sounds::sound(
-                    p->bub_pos(), 100, sounds::sound_t::combat,
-                    string_format( _( "a deafening boom from %s %s" ), p->disp_name( true ), it->tname() ),
-                    true, "misc", "shockwave" );
+                se.origin = p->bub_pos();
+                se.volume = 135;
+                se.category = sounds::sound_t::combat;
+                se.description = string_format( _( "a deafening boom from %s %s" ),
+                                                p->disp_name( true ), it->tname() );
+                se.id = "misc";
+                se.variant = "shockwave";
+                sounds::sound( se );
                 break;
 
             case AEA_SCREAM:
-                sounds::sound(
-                    p->bub_pos(), 40, sounds::sound_t::alert,
-                    string_format(
-                        _( "a disturbing scream from %s %s" ), p->disp_name( true ), it->tname() ),
-                    true, "shout", "scream" );
+                se.origin = p->bub_pos();
+                se.volume = 100;
+                se.category = sounds::sound_t::alert;
+                se.description = string_format( _( "a disturbing scream from %s %s" ),
+                                                p->disp_name( true ), it->tname() );
+                se.id = "shout";
+                se.variant = "scream";
+                sounds::sound( se );
                 if( !p->is_deaf() ) { p->add_morale( MORALE_SCREAM, -10, 0, 30_minutes, 1_minutes ); }
                 break;
 
@@ -1079,8 +1097,14 @@ int iuse::talking_doll( player* p, item* it, bool, const tripoint_bub_ms & )
 
     const SpeechBubble& speech = get_speech( it->typeId().str() );
 
-    sounds::sound( p->bub_pos(), speech.volume, sounds::sound_t::electronic_speech,
-                   speech.text.translated(), true, "speech", it->typeId().str() );
+    sound_event se;
+    se.origin = p->bub_pos();
+    se.volume = speech.volume;
+    se.category = sounds::sound_t::electronic_speech;
+    se.description = speech.text.translated();
+    se.id = "speech";
+    se.variant = it->typeId().str();
+    sounds::sound( se );
 
     // Sound code doesn't describe noises at the player position
     if( p->can_hear( p->bub_pos(), speech.volume ) ) {
@@ -1164,17 +1188,23 @@ int iuse::gun_repair( player* p, item* it, bool, const tripoint_bub_ms & )
     const float vision_mod = character_funcs::fine_detail_vision_mod( *p );
     // TODO: this may render player unable to move for minutes, and so should start an activity
     // instead
+    sound_event se;
+    se.origin = p->bub_pos();
+    se.category = sounds::sound_t::activity;
+    se.description = _( "crunch" );
+    se.id = "tool";
+    se.variant = "repair_kit";
     if( fix.damage() <= 0 ) {
-        sounds::
-        sound( p->bub_pos(), 6, sounds::sound_t::activity, "crunch", true, "tool", "repair_kit" );
+        se.volume = 50;
+        sounds::sound( se );
         p->moves -= to_moves<int>( 20_seconds * vision_mod );
         p->practice( skill_mechanics, 10 );
         fix.mod_damage( -itype::damage_scale );
         p->add_msg_if_player( m_good, _( "You accurize your %s." ), fix.tname( 1, false ) );
 
     } else if( fix.damage() > itype::damage_scale ) {
-        sounds::
-        sound( p->bub_pos(), 8, sounds::sound_t::activity, "crunch", true, "tool", "repair_kit" );
+        se.volume = 60;
+        sounds::sound( se );
         p->moves -= to_moves<int>( 10_seconds * vision_mod );
         p->practice( skill_mechanics, 10 );
         fix.mod_damage( -itype::damage_scale );
@@ -1184,8 +1214,8 @@ int iuse::gun_repair( player* p, item* it, bool, const tripoint_bub_ms & )
             resultdurability );
 
     } else {
-        sounds::
-        sound( p->bub_pos(), 8, sounds::sound_t::activity, "crunch", true, "tool", "repair_kit" );
+        se.volume = 60;
+        sounds::sound( se );
         p->moves -= to_moves<int>( 5_seconds * vision_mod );
         p->practice( skill_mechanics, 10 );
         fix.set_damage( 0 );
@@ -1262,8 +1292,14 @@ int iuse::toolmod_attach( player* p, item* it, bool, const tripoint_bub_ms & )
 int iuse::bell( player* p, item* it, bool, const tripoint_bub_ms & )
 {
     if( it->typeId() == itype_cow_bell ) {
-        sounds::sound( p->bub_pos(), 12, sounds::sound_t::music, _( "Clank!  Clank!" ), true, "misc",
-                       "cow_bell" );
+        sound_event se;
+        se.origin = p->bub_pos();
+        se.volume = 70;
+        se.category = sounds::sound_t::music;
+        se.description = _( "Clank!  Clank!" );
+        se.id = "misc";
+        se.variant = "cow_bell";
+        sounds::sound( se );
         if( !p->is_deaf() ) {
             auto cattle_level = p->mutation_category_level.find( mutation_category_id( "CATTLE" ) );
             const int cow_factor =
@@ -1276,8 +1312,14 @@ int iuse::bell( player* p, item* it, bool, const tripoint_bub_ms & )
             }
         }
     } else {
-        sounds::
-        sound( p->bub_pos(), 4, sounds::sound_t::music, _( "Ring!  Ring!" ), true, "misc", "bell" );
+        sound_event se;
+        se.origin = p->bub_pos();
+        se.volume = 40;
+        se.category = sounds::sound_t::music;
+        se.description = _( "Ring!  Ring!" );
+        se.id = "misc";
+        se.variant = "bell";
+        sounds::sound( se );
     }
     return it->type->charges_to_use();
 }

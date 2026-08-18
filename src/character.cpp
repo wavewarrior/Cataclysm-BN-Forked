@@ -1298,6 +1298,7 @@ void static try_remove_webs( Character& c )
     }
 }
 
+
 void Character::expose_to_disease( const diseasetype_id dis_type )
 {
     const std::optional<int> &healt_thresh = dis_type->health_threshold;
@@ -2086,7 +2087,7 @@ bool Character::is_immune_effect( const efftype_id& eff ) const
         return is_immune_damage( DT_HEAT );
     } else if( eff == effect_deaf ) {
         return worn_with_flag( flag_DEAF ) || worn_with_flag( flag_PARTIAL_DEAF )
-               || has_bionic( bio_ears ) || is_wearing( itype_rm13_armor_on );
+               || has_bionic( bio_ears );
     } else if( eff == effect_corroding ) {
         return is_immune_damage( DT_ACID ) || has_trait( trait_SLIMY ) || has_trait( trait_VISCOUS );
     } else if( eff == effect_nausea ) {
@@ -2540,6 +2541,18 @@ int Character::get_env_resist( bodypart_id bp ) const
 
 int Character::get_armor_acid( bodypart_id bp ) const { return get_armor_type( DT_ACID, bp ); }
 
+/**
+ * Returns the total normal hearing protection of a characters worn items, in dB spl.
+ * If bool advanced is true, gets the advanced hearing protection.
+ */
+int Character::get_char_hearing_protection( bool advanced ) const
+{
+    int ret = 0;
+    for( const item * const& worn_item : worn ) {
+        ret += worn_item->get_hearing_protection( advanced );
+    }
+    return ret;
+}
 
 void Character::cough( bool harmful, int loudness )
 {
@@ -2558,8 +2571,18 @@ void Character::cough( bool harmful, int loudness )
     }
 
     if( !is_npc() ) { add_msg( m_bad, _( "You cough heavily." ) ); }
-    sounds::sound( bub_pos(), loudness, sounds::sound_t::speech, _( "a hacking cough." ), false,
-                   "misc", "cough" );
+    sound_event se;
+    se.origin = bub_pos();
+    se.volume = loudness;
+    se.category = sounds::sound_t::speech;
+    se.description = _( "a hacking cough." );
+    se.from_player = is_avatar();
+    se.from_npc = !se.from_player;
+    se.faction = get_faction()->id();
+    se.monfaction = get_faction()->mon_faction();
+    se.id = "misc";
+    se.variant = "cough";
+    sounds::sound( se );
 
     moves -= 80;
 
@@ -2582,16 +2605,17 @@ void Character::wake_up()
 
 int Character::get_shout_volume() const
 {
-    int base = 10;
+    // Base shout set at 65 dB
+    int base = 65;
     int shout_multiplier = 2;
 
     // Mutations make shouting louder, they also define the default message
     if( has_trait( trait_SHOUT3 ) ) {
-        shout_multiplier = 4;
-        base = 20;
-    } else if( has_trait( trait_SHOUT2 ) ) {
-        base = 15;
         shout_multiplier = 3;
+        base = 80;
+    } else if( has_trait( trait_SHOUT2 ) ) {
+        base = 70;
+        shout_multiplier = 2;
     }
 
     // You can't shout without your face
@@ -2606,23 +2630,26 @@ int Character::get_shout_volume() const
     // Balanced around whisper for wearing bondage mask
     // and noise ~= 10 (door smashing) for wearing dust mask for character with strength = 8
     /** @EFFECT_STR increases shouting volume */
-    const int penalty = encumb( body_part_mouth ) * 3 / 2;
-    int noise = base + str_cur * shout_multiplier - penalty;
+    const int penalty = static_cast<int>( std::floor( encumb( body_part_mouth ) * 1.5 ) );
+    int noise = base + static_cast<int>( std::floor( str_cur * shout_multiplier ) ) - penalty;
 
     // Minimum noise volume possible after all reductions.
-    // Volume 1 can't be heard even by player
-    constexpr int minimum_noise = 2;
+    // Volume 20dB or less is generally inaudible.
+    constexpr int minimum_noise = 20;
 
     if( noise <= base ) { noise = std::max( minimum_noise, noise ); }
 
     // Screaming underwater is not good for oxygen and harder to do overall
-    if( is_underwater() ) { noise = std::max( minimum_noise, noise / 2 ); }
-    return noise;
+    if( is_underwater() ) {
+        noise = static_cast<int>( std::max( minimum_noise * 1.0, noise * 0.75 ) );
+    }
+    // Cap shouting to 180dB, which is already going to deafen people.
+    return std::min( 180, noise );
 }
 
 void Character::shout( std::string msg, bool order )
 {
-    int base = 10;
+    int base = 65;
     std::string shout;
 
     // You can't shout without your face
@@ -2636,14 +2663,14 @@ void Character::shout( std::string msg, bool order )
     // Mutations make shouting louder, they also define the default message
     if( msg.empty() ) {
         if( has_trait( trait_SHOUT3 ) ) {
-            base = 20;
+            base = 80;
             add_msg_if_player( m_warning, _( "You let out an ear-piercing howl!" ) );
             msg = is_player()
                   ? _( "yourself let out an ear-piercing howl!" )
                   : _( "an ear-piercing howl!" );
             shout = "howl";
         } else if( has_trait( trait_SHOUT2 ) ) {
-            base = 15;
+            base = 70;
             add_msg_if_player( m_mixed, _( "You scream loudly!" ) );
             msg = is_player() ? _( "yourself scream loudly!" ) : _( "a loud scream!" );
             shout = "scream";
@@ -2663,8 +2690,8 @@ void Character::shout( std::string msg, bool order )
     int noise = get_shout_volume();
 
     // Minimum noise volume possible after all reductions.
-    // Volume 1 can't be heard even by player
-    constexpr int minimum_noise = 2;
+    // 20dB is generally inaudible.
+    constexpr int minimum_noise = 20;
 
     if( noise <= base ) {
         std::string dampened_shout;
@@ -2677,7 +2704,7 @@ void Character::shout( std::string msg, bool order )
         if( !has_trait( trait_GILLS ) && !has_trait( trait_GILLS_CEPH ) ) { mod_stat( "oxygen", -noise ); }
     }
 
-    const int penalty = encumb( body_part_mouth ) * 3 / 2;
+    const int penalty = static_cast<int>( std::floor( encumb( body_part_mouth ) * 1.5 ) );
     // TODO: indistinct noise descriptions should be handled in the sounds code
     if( noise <= minimum_noise ) {
         add_msg_if_player( m_warning, _( "The sound of your voice is almost completely muffled!" ) );
@@ -2687,8 +2714,18 @@ void Character::shout( std::string msg, bool order )
         add_msg_if_player( m_warning, _( "The sound of your voice is significantly muffled!" ) );
     }
 
-    sounds::sound( bub_pos(), noise, order ? sounds::sound_t::order : sounds::sound_t::alert, msg,
-                   false, "shout", shout );
+    sound_event se;
+    se.origin = bub_pos();
+    se.volume = noise;
+    se.category = order ? sounds::sound_t::order : sounds::sound_t::alert;
+    se.description = msg;
+    se.from_player = is_avatar();
+    se.from_npc = !se.from_player;
+    se.faction = get_faction()->id();
+    se.monfaction = get_faction()->mon_faction();
+    se.id = "shout";
+    se.variant = shout;
+    sounds::sound( se );
 }
 
 void Character::signal_nemesis()

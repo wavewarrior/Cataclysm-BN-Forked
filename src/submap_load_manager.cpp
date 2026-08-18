@@ -894,7 +894,7 @@ void submap_load_manager::update()
 
 
     // Drain duplicate submaps created by concurrent preload_omt workers.
-    // Must happen on the main thread (safe_reference / cata_arena not thread-safe).
+    // Must happen on the main thread (safe_reference remains main-thread-only).
     {
         auto drained_dims = std::set<std::string> {};
         std::ranges::transform( new_omts, std::inserter( drained_dims, drained_dims.end() ),

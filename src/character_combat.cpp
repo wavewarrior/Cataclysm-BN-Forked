@@ -23,6 +23,7 @@
 #include "flag.h"
 #include "game.h"
 #include "item.h"
+#include "itype.h"
 #include "magic_enchantment.h"
 #include "map.h"
 #include "material.h"

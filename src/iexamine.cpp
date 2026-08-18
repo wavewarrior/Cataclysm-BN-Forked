@@ -1189,7 +1189,14 @@ void iexamine::recycle_compactor( player &, const tripoint_bub_ms &examp )
     // produce outputs
     double recover_factor = rng( 6, 9 ) / 10.0;
     sum_weight = sum_weight * recover_factor;
-    sounds::sound( examp, 80, sounds::sound_t::combat, _( "Ka-klunk!" ), true, "tool", "compactor" );
+    sound_event se;
+    se.origin = examp;
+    se.volume = 80;
+    se.category = sounds::sound_t::combat;
+    se.description = _( "Ka-klunk!" );
+    se.id = "tool";
+    se.variant = "compactor";
+    sounds::sound( se );
     bool out_desired = false;
     bool out_any = false;
     for( auto it = m.compacts_into().begin() + o_idx; it != m.compacts_into().end(); ++it ) {

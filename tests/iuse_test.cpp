@@ -17,7 +17,7 @@
 TEST_CASE("eyedrops", "[iuse][eyedrops]") {
     avatar dummy;
     detached_ptr<item> det =
-        item::spawn("saline", calendar::start_of_cataclysm, item::default_charges_tag{});
+        item::spawn("eyedrops", calendar::start_of_cataclysm, item::default_charges_tag{});
     item& eyedrops = *det;
     dummy.i_add(std::move(det));
     int charges_before = eyedrops.charges;

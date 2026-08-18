@@ -2047,8 +2047,14 @@ int iuse::camera( player* p, item* it, bool, const tripoint_bub_ms & )
         trajectory.push_back( aim_point );
 
         p->moves -= 50;
-        sounds::sound( p->bub_pos(), 8, sounds::sound_t::activity, _( "Click." ), true, "tool",
-                       "camera_shutter" );
+        sound_event se;
+        se.origin = p->bub_pos();
+        se.volume = 50;
+        se.category = sounds::sound_t::activity;
+        se.description = _( "Click." );
+        se.id = "tool";
+        se.variant = "camera_shutter";
+        sounds::sound( se );
 
         for( std::vector<tripoint_bub_ms>::iterator point_it = trajectory.begin();
              point_it != trajectory.end(); ++point_it ) {
@@ -2310,7 +2316,14 @@ int iuse::ehandcuffs( player* p, item* it, bool t, const tripoint_bub_ms& pos )
 
         if( it->charges == 0 ) {
 
-            sounds::sound( pos, 2, sounds::sound_t::combat, "Click.", true, "tools", "handcuffs" );
+            sound_event se;
+            se.origin = p->bub_pos();
+            se.volume = 40;
+            se.category = sounds::sound_t::combat;
+            se.description = "Click.";
+            se.id = "tool";
+            se.variant = "handcuffs";
+            sounds::sound( se );
             it->unset_flag( flag_NO_UNWIELD );
             it->deactivate();
 
@@ -2339,8 +2352,14 @@ int iuse::ehandcuffs( player* p, item* it, bool t, const tripoint_bub_ms& pos )
         }
 
         if( calendar::once_every( 1_minutes ) ) {
-            sounds::sound( pos, 10, sounds::sound_t::alarm, _( "a police siren, whoop WHOOP." ), true,
-                           "environment", "police_siren" );
+            sound_event se;
+            se.origin = p->bub_pos();
+            se.volume = 70;
+            se.category = sounds::sound_t::alarm;
+            se.description = _( "a police siren, whoop WHOOP." );
+            se.id = "environment";
+            se.variant = "police_siren";
+            sounds::sound( se );
         }
 
         const point p2( it->get_var( "HANDCUFFS_X", 0 ), it->get_var( "HANDCUFFS_Y", 0 ) );
@@ -2392,8 +2411,14 @@ int iuse::foodperson( player* p, item* it, bool t, const tripoint_bub_ms& pos )
     if( t ) {
         if( calendar::once_every( 1_minutes ) ) {
             const SpeechBubble& speech = get_speech( "foodperson_mask" );
-            sounds::sound( pos, speech.volume, sounds::sound_t::alarm, speech.text.translated(),
-                           true, "speech", "foodperson_mask" );
+            sound_event se;
+            se.origin = pos;
+            se.volume = speech.volume;
+            se.category = sounds::sound_t::alarm;
+            se.description = speech.text.translated();
+            se.id = "speech";
+            se.variant = "foodperson_mask";
+            sounds::sound( se );
         }
         return it->type->charges_to_use();
     }
@@ -2480,8 +2505,15 @@ int iuse::radiocaron( player* p, item* it, bool t, const tripoint_bub_ms& pos )
 {
     if( t ) {
         //~Sound of a radio controlled car moving around
-        sounds::
-        sound( pos, 6, sounds::sound_t::movement, _( "buzzz…" ), true, "misc", "rc_car_drives" );
+        sound_event se;
+        se.origin = pos;
+        se.volume = 50;
+        se.category = sounds::sound_t::movement;
+        se.movement_noise = true;
+        se.description = _( "buzzz…" );
+        se.id = "misc";
+        se.variant = "rc_car_drives";
+        sounds::sound( se );
 
         return it->type->charges_to_use();
     } else if( !it->ammo_sufficient() ) {
@@ -2508,12 +2540,19 @@ int iuse::radiocaron( player* p, item* it, bool t, const tripoint_bub_ms& pos )
 /**
  * Send radio signal from player.
  */
-static void emit_radio_signal( player& p, const flag_id& signal )
+static void emit_radio_signal( player &p, const flag_id &signal )
 {
     const auto visitor = [&]( item & it, const tripoint_bub_ms & loc ) -> VisitResponse {
         if( it.has_flag( flag_RADIO_ACTIVATION ) && it.has_flag( signal ) )
     {
-        sounds::sound( p.bub_pos(), 6, sounds::sound_t::alarm, _( "beep" ), true, "misc", "beep" );
+        sound_event se;
+        se.origin = loc;
+        se.volume = 50;
+        se.category = sounds::sound_t::alarm;
+        se.description = _( "beep" );
+            se.id = "misc";
+            se.variant = "beep";
+            sounds::sound( se );
             bool invoke_proc = it.has_flag( flag_RADIO_INVOKE_PROC );
             // Invoke to transform item
             it.type->invoke( p, it, loc );
@@ -2531,27 +2570,39 @@ static void emit_radio_signal( player& p, const flag_id& signal )
         for( auto loc : g->m.points_on_zlevel( zlev ) ) {
             // Items on ground
             map_cursor mc( loc );
-            mc.visit_items( [&]( item * it ) { return visitor( *it, loc ); } );
+            mc.visit_items( [&]( item * it ) {
+                return visitor( *it, loc );
+            } );
 
             // Items in vehicles
             optional_vpart_position vp = g->m.veh_at( loc );
-            if( !vp ) { continue; }
+            if( !vp ) {
+                continue;
+            }
             std::optional<vpart_reference> vpr = vp.part_with_feature( "CARGO", false );
-            if( !vpr ) { continue; }
+            if( !vpr ) {
+                continue;
+            }
             vehicle_cursor vc( vp->vehicle(), vpr->part_index() );
-            vc.visit_items( [&]( item * it ) { return visitor( *it, loc ); } );
+            vc.visit_items( [&]( item * it ) {
+                return visitor( *it, loc );
+            } );
         }
     }
 
     // Items on creatures
-    for( Creature& cr : g->all_creatures() ) {
-        const auto& cr_pos = cr.bub_pos();
+    for( Creature &cr : g->all_creatures() ) {
+        const auto &cr_pos = cr.bub_pos();
         if( cr.is_monster() ) {
-            monster& mon = *cr.as_monster();
-            mon.visit_items( [&]( item * it ) { return visitor( *it, cr_pos ); } );
+            monster &mon = *cr.as_monster();
+            mon.visit_items( [&]( item * it ) {
+                return visitor( *it, cr_pos );
+            } );
         } else {
-            Character& ch = *cr.as_character();
-            ch.visit_items( [&]( item * it ) { return visitor( *it, cr_pos ); } );
+            Character &ch = *cr.as_character();
+            ch.visit_items( [&]( item * it ) {
+                return visitor( *it, cr_pos );
+            } );
         }
     }
 }

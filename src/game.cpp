@@ -171,6 +171,7 @@
 #include "path_info.h"
 #include "pathfinding.h"
 #include "pickup.h"
+#include "utils/pit_trap_helpers.h"
 #include "player.h"
 #include "player_activity.h"
 #include "point_float.h"
@@ -224,6 +225,7 @@
 #include "world_type.h"
 #include "worldfactory.h"
 #include "location_vector.h"
+#include "monfaction.h"
 class computer;
 
 #include "cata_tiles.h"
@@ -871,20 +873,20 @@ bool game::do_turn()
         update_performance_bubble();
     }
     if( !soundperf ) {
-        // Process NPC sound events before they move or they hear themselves talking
-        for( npc &guy : all_npcs() ) {
-            if( rl_dist( guy.bub_pos(), u.bub_pos() ) < g_max_view_distance ) {
-                sounds::process_sound_markers( &guy );
-            }
-        }
+        // Sound information and is broken up into three main blocks: Player, Monsters, NPCs
+        // Player is special in that they are immediatly informed of the sounds they made on their turn for displayed sound marker purposes
+        // Each sound block is generally a map::cull_heard_sounds(), feeding the AI in question remaining sounds, and then moving said AI.
+        // Cull stale sounds that have been heard by all parties, we need to do this three times per cycle.
+        // We do this before each respective party's turn to hear noise.
+        // This block should catch stale sounds from NPCs.
+        m.cull_heard_sounds();
+        // Process sound events into sound markers for display to the player.
         sounds::process_sound_markers( &u );
 
         if( u.is_deaf() ) {
             sfx::do_hearing_loss();
         }
     }
-
-    // Process sound events into sound markers for display to the player.
 
     if( !u.has_effect( effect_sleep ) || uquit == QUIT_WATCH ) {
         if( u.moves > 0 || uquit == QUIT_WATCH ) {
@@ -893,11 +895,6 @@ bool game::do_turn()
                 mon_info_update();
                 // Process any new sounds the player caused during their turn.
                 if( !soundperf ) {
-                    for( npc &guy : all_npcs() ) {
-                        if( rl_dist( guy.bub_pos(), u.bub_pos() ) < g_max_view_distance ) {
-                            sounds::process_sound_markers( &guy );
-                        }
-                    }
                     sounds::process_sound_markers( &u );
                 }
                 if( !u.activity && !u.has_distant_destination() && uquit != QUIT_WATCH && wait_popup ) {
@@ -912,12 +909,30 @@ bool game::do_turn()
                     queue_screenshot = false;
                 }
 
-                if( handle_action() ) {
+                const auto moves_before_action = u.moves;
+                const auto handled_action = handle_action();
+                if( handled_action ) {
                     ++moves_since_last_save;
+                }
+
+                if( !soundperf && u.moves != moves_before_action ) {
+                    sounds::reset_markers();
+                    u.volume = 0;
                 }
 
                 if( is_game_over() ) {
                     return cleanup_at_end();
+                }
+
+                if( !soundperf && u.moves <= 0 ) {
+                    const auto is_unheard_by_player = []( const auto & sound ) {
+                        return !sound.heard_by_player;
+                    };
+                    const auto has_unheard_player_sounds = std::ranges::any_of(
+                            m.m_sound_cache.sound_instances, is_unheard_by_player );
+                    if( has_unheard_player_sounds ) {
+                        sounds::process_sound_markers( &u );
+                    }
                 }
 
                 if( uquit == QUIT_WATCH ) {
@@ -927,9 +942,6 @@ bool game::do_turn()
                     process_activity();
                 }
             }
-            // Reset displayed sound markers now that the turn is over.
-            // We only want this to happen if the player had a chance to examine the sounds.
-            sounds::reset_markers();
         }
     }
 
@@ -989,10 +1001,6 @@ bool game::do_turn()
         fluid_grid::update( calendar::turn );
     }
 
-    // Apply sounds from previous turn to monster and NPC AI.
-    {
-        sounds::process_sounds();
-    }
     _perf_world += std::chrono::duration<double, std::milli>( _perf_clk::now() - _perf_sim_t0 ).count();
     // Update vision caches for monsters. If this turns out to be expensive,
     // consider a stripped down cache just for monsters.
@@ -1001,11 +1009,31 @@ bool game::do_turn()
         m.build_map_cache( get_levz(), true );
         _perf_cache += std::chrono::duration<double, std::milli>( _perf_clk::now() - _t0 ).count();
     }
+    // This has to be done after updating our map caches, as sound propagation relies on terrain.
+    if( !soundperf ) {
+        // Cull stale sounds that have been heard by everyone. Should nominally catch all stale sounds made by the player on the prior turn.
+        m.cull_heard_sounds();
+        // Apply sounds from previous turn to monster AI.
+        // Process sounds marks all sounds in the sound_caches vector as heard by monsters.
+        sounds::process_sounds();
+    }
+
     if( !monperf ) {
         const auto _t0 = _perf_clk::now();
         monmove();
         _perf_mon += std::chrono::duration<double, std::milli>( _perf_clk::now() - _t0 ).count();
     }
+
+    if( !soundperf ) {
+        // Cull any noises that have already been heard by everyone. This should generally cull all stale sounds made by monsters on the prior turn.
+        m.cull_heard_sounds();
+        // Batch floodfill sounds made by monsters or other qued sources.
+        m.batch_flood_fill_sounds();
+        // Apply remaining sounds to NPC AI here so that they are reacting to the most recent monster noises and player noises, not recent player noises and prior turn monster noises.
+        // process_sounds_npc also marks all sounds present in the vector as heard by npcs.
+        sounds::process_sounds_npc();
+    }
+
     if( !npcperf ) {
         npcmove();
     } else {
@@ -1015,6 +1043,15 @@ bool game::do_turn()
         overmap_npc_move();
     }
 
+    if( !soundperf ) {
+        // Floodfill any sounds cued up by NPCs during their respective turns or from other sources.
+        m.batch_flood_fill_sounds();
+    }
+    // We want to clear our floodfill que anyways, so that sounds dont accumulate in the que if soundperf is on.
+    // This function will also print a debug sound diagnostic to the log if !soundperf.
+    {
+        sounds::clear_floodfill_que( soundperf );
+    }
     update_stair_monsters();
     mon_info_update();
     {
@@ -1060,9 +1097,6 @@ bool game::do_turn()
         sfx::do_vehicle_exterior_engine_sfx();
         sfx::do_fatigue();
     }
-
-    // reset player noise
-    u.volume = 0;
 
     // Tick all loaded submaps: fields for every submap, items/vehicles for batch-eligible ones.
     {
@@ -1657,6 +1691,8 @@ input_context get_default_mode_input_context()
     ctxt.register_action( "debug_radiation" );
     ctxt.register_action( "debug_outside" );
     ctxt.register_action( "debug_submap_grid" );
+    ctxt.register_action( "debug_sound_absorption" );
+    ctxt.register_action( "debug_sound_walls" );
     ctxt.register_action( "debug_hour_timer" );
     ctxt.register_action( "debug_fps" );
     ctxt.register_action( "debug_mode" );
@@ -2442,6 +2478,7 @@ void static delete_cyborg_item( map &m, const tripoint_bub_ms &couch_pos, item *
             if( it == cyborg ) {
                 dest_veh->remove_item( dest_part, it );
             }
+
         }
 
     }

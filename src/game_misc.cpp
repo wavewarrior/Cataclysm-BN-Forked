@@ -223,6 +223,7 @@
 #include "location_vector.h"
 
 #include "cata_tiles.h"
+#include "utils/pit_trap_helpers.h"
 
 #if defined(_WIN32)
 #if 1 // HACK: Hack to prevent reordering of #include "platform_win.h" by IWYU
@@ -1425,6 +1426,10 @@ std::vector<std::string> game::get_dangerous_tile( const tripoint_bub_ms &dest_l
     }
 
     const trap &tr = m.tr_at( dest_loc );
+    // Moving from one regular pit into another is not a fresh hazard: the player is already
+    // in a pit, so upstream suppresses the danger prompt for that specific transition.
+    const auto regular_pit_move =
+        pit_trap_helpers::is_regular_pit_destination_from_pit( m.tr_at( u.bub_pos() ), tr );
     if( !u.is_blind() || u.clairvoyance() < 1 || tr.can_see( dest_loc, u ) ) {
         const bool boardable = static_cast<bool>( m.veh_at( dest_loc ).part_with_feature( "BOARDABLE",
                                true ) );
@@ -1436,7 +1441,8 @@ std::vector<std::string> game::get_dangerous_tile( const tripoint_bub_ms &dest_l
                     harmful_stuff.emplace_back( tr.name() );
                 }
             }
-        } else if( tr.can_see( dest_loc, u ) && !tr.is_benign() && !boardable ) {
+        } else if( tr.can_see( dest_loc, u ) && !tr.is_benign() && !boardable &&
+                   !regular_pit_move ) {
             harmful_stuff.emplace_back( tr.name() );
         }
 
@@ -1824,6 +1830,16 @@ void game::display_outside()
 void game::display_sound()
 {
     display_toggle_overlay( ACTION_DISPLAY_SOUND );
+}
+
+void game::display_sound_absorption()
+{
+    display_toggle_overlay( ACTION_DISPLAY_SOUND_ABSORPTION );
+}
+
+void game::display_sound_walls()
+{
+    display_toggle_overlay( ACTION_DISPLAY_SOUND_WALLS );
 }
 
 void game::display_tiles_no_vfx()

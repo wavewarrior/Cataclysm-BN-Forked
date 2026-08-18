@@ -872,7 +872,18 @@ void Character::spores()
     map& here = get_map();
     fungal_effects fe( *g, here );
     //~spore-release sound
-    sounds::sound( bub_pos(), 10, sounds::sound_t::combat, _( "Pouf!" ), false, "misc", "puff" );
+    sound_event se;
+    se.origin = bub_pos();
+    se.volume = 50;
+    se.category = sounds::sound_t::combat;
+    se.description = _( "Pouf!" );
+    se.from_player = is_avatar();
+    se.from_npc = !se.from_player;
+    se.faction = get_faction()->id();
+    se.monfaction = get_faction()->mon_faction();
+    se.id = "misc";
+    se.variant = "puff";
+    sounds::sound( se );
     for( const auto& sporep : here.points_in_radius( bub_pos(), 1 ) ) {
         if( sporep == bub_pos() ) { continue; }
         fe.fungalize( sporep, this, fungal_opt.spore_chance );
@@ -882,7 +893,18 @@ void Character::spores()
 void Character::blossoms()
 {
     // Player blossoms are shorter-ranged, but you can fire much more frequently if you like.
-    sounds::sound( bub_pos(), 10, sounds::sound_t::combat, _( "Pouf!" ), false, "misc", "puff" );
+    sound_event se;
+    se.origin = bub_pos();
+    se.volume = 50;
+    se.category = sounds::sound_t::combat;
+    se.description = _( "Pouf!" );
+    se.from_player = is_avatar();
+    se.from_npc = !se.from_player;
+    se.faction = get_faction()->id();
+    se.monfaction = get_faction()->mon_faction();
+    se.id = "misc";
+    se.variant = "puff";
+    sounds::sound( se );
     map& here = get_map();
     for( const auto& tmp : here.points_in_radius( bub_pos(), 2 ) ) {
         here.add_field( tmp, fd_fungal_haze, rng( 1, 2 ) );

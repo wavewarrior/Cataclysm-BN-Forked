@@ -660,8 +660,16 @@ void spellcasting_activity_actor::finish( player_activity& act, Character& who )
     }
 
     if( spell_being_cast.has_flag( spell_flag::VERBAL ) ) {
-        sounds::sound( p.bub_pos(), p.get_shout_volume() / 2, sounds::sound_t::speech,
-                       _( "cast a spell" ), false );
+        sound_event se;
+        se.origin = p.bub_pos();
+        se.volume = p.get_shout_volume() - 15;
+        se.category = sounds::sound_t::speech;
+        se.description = _( "cast a spell" );
+        se.from_player = p.is_avatar();
+        se.from_npc = !se.from_player;
+        se.faction = p.get_faction()->id();
+        se.monfaction = p.get_faction()->mon_faction();
+        sounds::sound( se );
     }
 
     p.add_msg_if_player( spell_being_cast.message(), spell_being_cast.name() );
@@ -1271,9 +1279,14 @@ void operation_activity_actor::finish( player_activity& act, Character& who )
                                 "performing the operation." ) );
             const auto autodocs =
                 here.find_furnitures_or_vparts_with_flag_in_radius( p->bub_pos(), 1, flag_AUTODOC );
-            sounds::sound(
-                autodocs.front(), 10, sounds::sound_t::music,
-                _( "a short upbeat jingle: \"Operation successful\"" ), true, "Autodoc", "success" );
+            sound_event se;
+            se.origin = autodocs.front();
+            se.volume = 60;
+            se.category = sounds::sound_t::music;
+            se.description = _( "a short upbeat jingle: \"Operation successful\"" );
+            se.id = "Autodoc";
+            se.variant = "success";
+            sounds::sound( se );
         } else {
             if( operation_type == "install" ) {
                 add_msg( m_warning,
@@ -1281,19 +1294,29 @@ void operation_activity_actor::finish( player_activity& act, Character& who )
                             "reports about complications during operation." ) );
                 const auto autodocs = here.find_furnitures_or_vparts_with_flag_in_radius(
                                           p->bub_pos(), 1, flag_AUTODOC );
-                sounds::sound(
-                    autodocs.front(), 10, sounds::sound_t::music,
+                sound_event se;
+                se.origin = autodocs.front();
+                se.volume = 60;
+                se.category = sounds::sound_t::music;
+                se.description =
                     _( "a sad beeping noise: \"Complications detected!  Report to medical personnel "
-                       "immediately!\"" ),
-                    true, "Autodoc", "failure" );
+                   "immediately!\"" );
+                se.id = "Autodoc";
+                se.variant = "failure";
+                sounds::sound( se );
             } else {
                 add_msg( m_bad, _( "The Autodoc jerks back to its resting position after failing the "
                                    "operation." ) );
                 const auto autodocs = here.find_furnitures_or_vparts_with_flag_in_radius(
                                           p->bub_pos(), 1, flag_AUTODOC );
-                sounds::sound(
-                    autodocs.front(), 10, sounds::sound_t::music,
-                    _( "a sad beeping noise: \"Operation failed\"" ), true, "Autodoc", "failure" );
+                sound_event se;
+                se.origin = autodocs.front();
+                se.volume = 60;
+                se.category = sounds::sound_t::music;
+                se.description = _( "a sad beeping noise: \"Operation failed\"" );
+                se.id = "Autodoc";
+                se.variant = "failure";
+                sounds::sound( se );
             }
         }
     } else {

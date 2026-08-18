@@ -1043,9 +1043,13 @@ void vehicle::drive_to_local_target( const tripoint_abs_ms &target, bool follow_
     }
     if( stop ) {
         if( autopilot_on ) {
-            sounds::sound( bub_ms_location(), 30, sounds::sound_t::alert,
-                           string_format( _( "the %s emitting a beep and saying \"Obstacle detected!\"" ),
-                                          name ) );
+            sound_event se;
+            se.origin = bub_ms_location();
+            se.volume = 60;
+            se.category = sounds::sound_t::alert;
+            se.description = string_format( _( "the %s emitting a beep and saying \"Obstacle detected!\"" ),
+                                            name );
+            sounds::sound( se );
         }
         stop_autodriving();
         return;
@@ -1876,14 +1880,12 @@ void traverse( StartPoint &start,
     using tvr = traverse_visitor_result;
     constexpr bool IsConst = std::is_const_v<StartPoint>;
     struct hash {
-        const std::hash<char> char_hash = std::hash<char>();
-        const std::hash<size_t> ptr_hash = std::hash<size_t>();
         auto operator()( const vehicle_or_grid<IsConst> &elem ) const {
-            return char_hash( static_cast<char>( elem.type ) ) ^
-            ptr_hash(
-            // Because only one of pointers is not nullptr, binary OR would get value of set pointer.
-            reinterpret_cast<size_t>( elem.veh ) | reinterpret_cast<size_t>( elem.grid )
-            );
+            return std::hash<char> {}( static_cast<char>( elem.type ) ) ^
+                   std::hash<size_t> {}(
+                       // Because only one of pointers is not nullptr, binary OR would get value of set pointer.
+                       reinterpret_cast<size_t>( elem.veh ) | reinterpret_cast<size_t>( elem.grid )
+                   );
         }
     };
 

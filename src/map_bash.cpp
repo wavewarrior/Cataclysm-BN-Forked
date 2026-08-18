@@ -35,6 +35,7 @@
 #include "event.h"
 #include "event_bus.h"
 #include "explosion.h"
+#include "faction.h"
 #include "field.h"
 #include "field_type.h"
 #include "flag.h"
@@ -949,21 +950,37 @@ static bool furn_is_supported( const map& m, const tripoint_bub_ms& p )
     return false;
 }
 
-static int get_sound_volume( const map_bash_info& bash )
+static auto get_sound_volume( const map_bash_info& bash, const bash_params& params ) -> int
 {
-    int smin = bash.str_min;
-    int smax = bash.str_max;
-    // TODO: Consider setting this in finalize instead of calculating here
-    return bash.sound_vol.value_or( std::min( static_cast<int>( smin * 1.5 ), smax ) );
+    // Just take the minimum/base volume at 20dB.
+    const auto minvol = 20;
+    // Set maxvol to 140dB, which can be deafening for extreme impacts.
+    const auto maxvol = 140;
+    const auto impact_strength = params.destroy ? bash.str_max : params.strength;
+    return bash.sound_vol.value_or( std::clamp( minvol + impact_strength, minvol, maxvol ) );
 }
 
-bash_results map::bash_ter_success( const tripoint_bub_ms& p, const bash_params& params )
+static void set_bash_sound_source( sound_event& se, const bash_params& params )
+{
+    if( !params.caused_by_player ) {
+        return;
+    }
+
+    auto& player_character = get_avatar();
+    se.from_player = true;
+    se.faction = player_character.get_faction()->id();
+    se.monfaction = player_character.get_faction()->mon_faction();
+}
+
+bash_results map::bash_ter_success( const tripoint_bub_ms &p, const bash_params &params )
 {
     bash_results result;
     result.success = true;
-    const ter_t& ter_before = ter( p ).obj();
-    const map_bash_info& bash = ter_before.bash;
-    if( has_flag_ter( "FUNGUS", p ) ) { fungal_effects( *g, *this ).create_spores( p ); }
+    const ter_t &ter_before = ter( p ).obj();
+    const map_bash_info &bash = ter_before.bash;
+    if( has_flag_ter( "FUNGUS", p ) ) {
+        fungal_effects( *g, *this ).create_spores( p );
+    }
     const std::string soundfxvariant = ter_before.id.str();
     const bool will_collapse = ter_before.has_flag( TFLAG_SUPPORTS_ROOF );
     const bool suspended = ter_before.has_flag( TFLAG_SUSPENDED );
@@ -977,14 +994,14 @@ bash_results map::bash_ter_success( const tripoint_bub_ms& p, const bash_params&
         ter_set( p, bash.ter_set );
         follow_below |= zlevels && bash.bash_below;
     } else if( suspended ) {
-        // Its important that we change the ter value before recursing, otherwise we'll hit an
-        // infinite loop. This could be prevented by assembling a visited list, but in order to
-        // avoid that cost, we're going build our recursion to just be resilient.
+        // Its important that we change the ter value before recursing, otherwise we'll hit an infinite loop.
+        // This could be prevented by assembling a visited list, but in order to avoid that cost, we're going
+        // build our recursion to just be resilient.
         ter_set( p, t_open_air );
         propagate_suspension_check( p );
     } else {
         tripoint_bub_ms below( p.xy(), p.z() - 1 );
-        const ter_t& ter_below = ter( below ).obj();
+        const ter_t &ter_below = ter( below ).obj();
         // Only setting the flag here because we want drops and sounds in correct order
         follow_below |= zlevels && bash.bash_below && ter_below.roof;
 
@@ -995,9 +1012,16 @@ bash_results map::bash_ter_success( const tripoint_bub_ms& p, const bash_params&
 
     if( !bash.sound.empty() && !params.silent ) {
         static const std::string soundfxid = "smash_success";
-        int sound_volume = get_sound_volume( bash );
-        sounds::sound(
-            p, sound_volume, sounds::sound_t::combat, bash.sound, false, soundfxid, soundfxvariant );
+        const auto sound_volume = get_sound_volume( bash, params );
+        sound_event se;
+        se.origin = p;
+        se.volume = sound_volume;
+        se.category = sounds::sound_t::combat;
+        se.description = bash.sound.translated();
+        se.id = soundfxid;
+        se.variant = soundfxvariant;
+        set_bash_sound_source( se, params );
+        sounds::sound( se );
     }
 
     if( !zlevels ) {
@@ -1024,7 +1048,7 @@ bash_results map::bash_ter_success( const tripoint_bub_ms& p, const bash_params&
             // Note: we're bashing the new roof, not the tile supported by it!
             int down_bash_tries = 10;
             do {
-                const ter_id& ter_now = ter( p );
+                const ter_id &ter_now = ter( p );
                 if( encountered_types.contains( ter_now ) ) {
                     // We have encountered this type before and destroyed it (didn't block us)
                     ter_set( p, t_open_air );
@@ -1042,9 +1066,10 @@ bash_results map::bash_ter_success( const tripoint_bub_ms& p, const bash_params&
                         debugmsg( "Loop in terrain bashing for type %s", ter_before.id.str() );
                     }
                 } else if( ter_now == t_open_air ) {
-                    const ter_id& roof =
-                        get_roof( below, params.bash_floor && ter( below )->movecost != 0 );
-                    if( roof != t_open_air ) { ter_set( p, roof ); }
+                    const ter_id &roof = get_roof( below, params.bash_floor && ter( below )->movecost != 0 );
+                    if( roof != t_open_air ) {
+                        ter_set( p, roof );
+                    }
                 } else {
                     // This floor/roof tile wasn't destroyed in this loop yet
                     encountered_types.insert( ter_now );
@@ -1059,14 +1084,13 @@ bash_results map::bash_ter_success( const tripoint_bub_ms& p, const bash_params&
                         blocked_by_roof = true;
                     }
                 }
-            } while(
-                down_bash_tries-- > 0 && !blocked_by_roof
-                && ( ter( p ) != t_open_air || ter( p )->movecost == 0 || ter( below )->roof ) );
+            } while( down_bash_tries-- > 0 && !blocked_by_roof &&
+                     ( ter( p ) != t_open_air || ter( p )->movecost == 0 || ter( below )->roof ) );
             if( down_bash_tries <= 0 ) {
                 debugmsg( "Loop in terrain bashing for type %s", ter_before.id.str() );
             }
         } else {
-            const ter_id& roof = get_roof( below, params.bash_floor && ter( below )->movecost != 0 );
+            const ter_id &roof = get_roof( below, params.bash_floor && ter( below )->movecost != 0 );
 
             ter_set( p, roof );
         }
@@ -1084,15 +1108,19 @@ bash_results map::bash_ter_success( const tripoint_bub_ms& p, const bash_params&
     return result;
 }
 
-bash_results map::bash_furn_success( const tripoint_bub_ms& p, const bash_params& params )
+bash_results map::bash_furn_success( const tripoint_bub_ms &p, const bash_params &params )
 {
     bash_results result;
-    const auto& furnid = furn( p ).obj();
-    const map_bash_info& bash = furnid.bash;
+    const auto &furnid = furn( p ).obj();
+    const map_bash_info &bash = furnid.bash;
 
 
-    if( has_flag_furn( "FUNGUS", p ) ) { fungal_effects( *g, *this ).create_spores( p ); }
-    if( has_flag_furn( "MIGO_NERVE", p ) ) { map_funcs::migo_nerve_cage_removal( *this, p, true ); }
+    if( has_flag_furn( "FUNGUS", p ) ) {
+        fungal_effects( *g, *this ).create_spores( p );
+    }
+    if( has_flag_furn( "MIGO_NERVE", p ) ) {
+        map_funcs::migo_nerve_cage_removal( *this, p, true );
+    }
     std::string soundfxvariant = furnid.id.str();
     const bool tent = !bash.tent_centers.empty();
 
@@ -1100,8 +1128,10 @@ bash_results map::bash_furn_success( const tripoint_bub_ms& p, const bash_params
     if( tent ) {
         // Get ids of possible centers
         std::set<furn_id> centers;
-        for( const auto& cur_id : bash.tent_centers ) {
-            if( cur_id.is_valid() ) { centers.insert( cur_id ); }
+        for( const auto &cur_id : bash.tent_centers ) {
+            if( cur_id.is_valid() ) {
+                centers.insert( cur_id );
+            }
         }
 
         std::optional<std::pair<tripoint_bub_ms, furn_id>> tentp;
@@ -1111,8 +1141,8 @@ bash_results map::bash_furn_success( const tripoint_bub_ms& p, const bash_params
         if( centers.contains( furn( p ) ) ) {
             tentp.emplace( p, furn( p ) );
         } else {
-            for( const tripoint_bub_ms& pt : points_in_radius( p, bash.collapse_radius ) ) {
-                const furn_id& f_at = furn( pt );
+            for( const tripoint_bub_ms &pt : points_in_radius( p, bash.collapse_radius ) ) {
+                const furn_id &f_at = furn( pt );
                 // Check if we found the center of the current tent
                 if( centers.contains( f_at ) ) {
                     tentp.emplace( pt, f_at );
@@ -1127,22 +1157,23 @@ bash_results map::bash_furn_success( const tripoint_bub_ms& p, const bash_params
         } else {
             // Take the tent down
             const int rad = tentp->second.obj().bash.collapse_radius;
-            for( const auto& pt : points_in_radius( tripoint_bub_ms( tentp->first ), rad ) ) {
+            for( const auto &pt : points_in_radius( tripoint_bub_ms( tentp->first ), rad ) ) {
                 const furn_id frn = furn( pt );
-                if( frn == f_null ) { continue; }
+                if( frn == f_null ) {
+                    continue;
+                }
 
-                const auto& furn_obj = frn.obj();
-                const auto& recur_bash = furn_obj.bash;
+                const auto &furn_obj = frn.obj();
+                const auto &recur_bash = furn_obj.bash;
                 // Check if we share a center type and thus a "tent type"
-                for( const auto& cur_id : recur_bash.tent_centers ) {
+                for( const auto &cur_id : recur_bash.tent_centers ) {
                     if( centers.contains( cur_id.id() ) ) {
                         // Found same center, wreck current tile
-                        if( furn_obj.fluid_grid
-                            && furn_obj.fluid_grid->role == fluid_grid_role::tank ) {
+                        if( furn_obj.fluid_grid &&
+                            furn_obj.fluid_grid->role == fluid_grid_role::tank ) {
                             fluid_grid::on_tank_removed( tripoint_abs_ms( bub_to_abs( pt ) ) );
                         }
-                        spawn_items( p,
-                                     item_group::items_from( recur_bash.drop_group, calendar::turn ) );
+                        spawn_items( p, item_group::items_from( recur_bash.drop_group, calendar::turn ) );
                         furn_set( pt, recur_bash.furn_set );
                         break;
                     }
@@ -1155,7 +1186,9 @@ bash_results map::bash_furn_success( const tripoint_bub_ms& p, const bash_params
             fluid_grid::on_tank_removed( tripoint_abs_ms( bub_to_abs( p ) ) );
         }
         furn_set( p, bash.furn_set );
-        for( item * const& it : i_at( p ) ) { it->on_drop( p, *this ); }
+        for( item * const &it : i_at( p ) )  {
+            it->on_drop( p, *this );
+        }
         // HACK: Hack alert.
         // Signs have cosmetics associated with them on the submap since
         // furniture can't store dynamic data to disk. To prevent writing
@@ -1164,13 +1197,22 @@ bash_results map::bash_furn_success( const tripoint_bub_ms& p, const bash_params
         delete_signage( p );
     }
 
-    if( !tent ) { spawn_items( p, item_group::items_from( bash.drop_group, calendar::turn ) ); }
+    if( !tent ) {
+        spawn_items( p, item_group::items_from( bash.drop_group, calendar::turn ) );
+    }
 
     if( !bash.sound.empty() && !params.silent ) {
         static const std::string soundfxid = "smash_success";
-        int sound_volume = get_sound_volume( bash );
-        sounds::sound(
-            p, sound_volume, sounds::sound_t::combat, bash.sound, false, soundfxid, soundfxvariant );
+        const auto sound_volume = get_sound_volume( bash, params );
+        sound_event se;
+        se.origin = p;
+        se.volume = sound_volume;
+        se.category = sounds::sound_t::combat;
+        se.description = bash.sound.translated();
+        se.id = soundfxid;
+        se.variant = soundfxvariant;
+        set_bash_sound_source( se, params );
+        sounds::sound( se );
     }
 
     if( bash.explosive > 0 ) {
@@ -1224,8 +1266,14 @@ bash_results map::bash_ter_furn( const tripoint_bub_ms& p, const bash_params& pa
 
     // TODO: what if silent is true?
     if( has_flag( "ALARMED", p ) && !g->timed_events.queued( TIMED_EVENT_WANTED ) ) {
-        sounds::sound(
-            p, 40, sounds::sound_t::alarm, _( "an alarm go off!" ), false, "environment", "alarm" );
+        sound_event se;
+        se.origin = p;
+        se.volume = 90;
+        se.category = sounds::sound_t::alarm;
+        se.description = _( "an alarm go off!" );
+        se.id = "environment";
+        se.variant = "alarm";
+        sounds::sound( se );
         // Blame nearby player
         if( rl_dist( g->u.bub_pos(), p ) <= 3 ) {
             g->events().send<event_type::triggers_alarm>( g->u.getID() );
@@ -1239,8 +1287,15 @@ bash_results map::bash_ter_furn( const tripoint_bub_ms& p, const bash_params& pa
         // Nothing bashable here
         if( impassable( p ) ) {
             if( !params.silent ) {
-                sounds::sound(
-                    p, 18, sounds::sound_t::combat, _( "thump!" ), false, "smash_fail", "default" );
+                sound_event se;
+                se.origin = p;
+                se.volume = 80;
+                se.category = sounds::sound_t::combat;
+                se.description = _( "thump!" );
+                se.id = "smash_fail";
+                se.variant = "default";
+                set_bash_sound_source( se, params );
+                sounds::sound( se );
             }
 
             result.did_bash = true;
@@ -1277,12 +1332,20 @@ bash_results map::bash_ter_furn( const tripoint_bub_ms& p, const bash_params& pa
     }
 
     if( !result.success ) {
-        int sound_volume = bash->sound_fail_vol.value_or( 12 );
+        // Cap out bash volume to 120dB for sanity checking.
+        int sound_volume = std::min( 120, bash->sound_fail_vol.value_or( 70 ) );
 
         result.did_bash = true;
         if( !params.silent ) {
-            sounds::sound( p, sound_volume, sounds::sound_t::combat, bash->sound_fail, false,
-                           "smash_fail", soundfxvariant );
+            sound_event se;
+            se.origin = p;
+            se.volume = sound_volume;
+            se.category = sounds::sound_t::combat;
+            se.description = bash->sound_fail.translated();
+            se.id = "smash_fail";
+            se.variant = soundfxvariant;
+            set_bash_sound_source( se, params );
+            sounds::sound( se );
         }
 
         if( !smash_ter && smax > 0 ) {
@@ -1323,13 +1386,26 @@ bash_results map::bash(
     const tripoint_bub_ms& p, const int str, bool silent, bool destroy, bool bash_floor,
     const vehicle* bashing_vehicle )
 {
-    bash_params
-    bsh{str, silent, destroy, bash_floor, static_cast<float>( rng_float( 0, 1.0f ) ), false, true};
+    const auto bsh = bash_params{
+        .strength = str,
+        .silent = silent,
+        .destroy = destroy,
+        .bash_floor = bash_floor,
+        .roll = static_cast<float>( rng_float( 0, 1.0f ) ),
+        .bashing_from_above = false,
+        .do_recurse = true
+    };
+    return bash( p, bsh, bashing_vehicle );
+}
+
+bash_results map::bash( const tripoint_bub_ms& p, const bash_params& bsh,
+                        const vehicle* bashing_vehicle )
+{
     bash_results result;
 
     // Dimension bounds cannot be bashed - show message from boundary terrain
     if( is_out_of_bounds( tripoint_bub_ms( p ) ) ) {
-        if( !silent && pocket_info_ ) {
+        if( !bsh.silent && pocket_info_ ) {
             const ter_t& boundary_ter = pocket_info_->bounds.boundary_terrain.obj();
             if( !boundary_ter.bash.sound_fail.empty() ) {
                 add_msg( m_info, boundary_ter.bash.sound_fail.translated() );
@@ -1355,9 +1431,10 @@ bash_results map::bash(
     // If we still didn't bash anything solid (a vehicle) or a tile with SEALED flag, bash ter/furn
     if( !result.bashed_solid && !bashed_sealed ) { result |= bash_ter_furn( p, bsh ); }
 
+    // HEAD-only: sprite-animation bash shake. Lives in this overload rather than the int one so
+    // that callers using the bash_params form (e.g. action_handlers::smash) still shake the tile.
     if( result.did_bash ) {
-        note_tile_bash( p ); // sprite-animation bash shake (any connecting bash, not only
-        // destruction)
+        note_tile_bash( p ); // any connecting bash, not only destruction
     }
 
     return result;
@@ -1389,21 +1466,35 @@ bash_results map::bash_items( const tripoint_bub_ms& p, const bash_params& param
 
     // Add a glass sound even when something else also breaks
     if( smashed_glass && !params.silent ) {
-        sounds::sound( p, 12, sounds::sound_t::combat, _( "glass shattering" ), false, "smash_success",
-                       "smash_glass_contents" );
+        sound_event se;
+        se.origin = p;
+        se.volume = 70;
+        se.category = sounds::sound_t::combat;
+        se.description = _( "glass shattering" );
+        se.id = "smash_success";
+        se.variant = "smash_glass_contents";
+        set_bash_sound_source( se, params );
+        sounds::sound( se );
     }
     return result;
 }
 
-bash_results map::bash_vehicle( const tripoint_bub_ms& p, const bash_params& params )
+bash_results map::bash_vehicle( const tripoint_bub_ms &p, const bash_params &params )
 {
     bash_results result;
     // Smash vehicle if present
     if( const optional_vpart_position vp = veh_at( p ) ) {
         vp->vehicle().damage( vp->part_index(), params.strength, DT_BASH );
         if( !params.silent ) {
-            sounds::sound(
-                p, 18, sounds::sound_t::combat, _( "crash!" ), false, "smash_success", "hit_vehicle" );
+            sound_event se;
+            se.origin = p;
+            se.volume = 70;
+            se.category = sounds::sound_t::combat;
+            se.description = _( "crash!" );
+            se.id = "smash_success";
+            se.variant = "hit_vehicle";
+            set_bash_sound_source( se, params );
+            sounds::sound( se );
         }
 
         result.did_bash = true;
@@ -1538,8 +1629,14 @@ void map::shoot(
     float pen = initial_arpen;
 
     if( has_flag( "ALARMED", p ) && !g->timed_events.queued( TIMED_EVENT_WANTED ) ) {
-        sounds::sound(
-            p, 30, sounds::sound_t::alarm, _( "an alarm sound!" ), true, "environment", "alarm" );
+        sound_event se;
+        se.origin = p;
+        se.volume = 90;
+        se.category = sounds::sound_t::alarm;
+        se.description = _( "an alarm sound!" );
+        se.id = "environment";
+        se.variant = "alarm";
+        sounds::sound( se );
         const auto abs = project_to<coords::sm>( bub_to_abs( p ) );
         g->timed_events.add( TIMED_EVENT_WANTED, calendar::turn + 30_minutes, 0, abs );
     }

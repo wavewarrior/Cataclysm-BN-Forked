@@ -331,6 +331,7 @@ enum ter_bitflags : int {
     TFLAG_FREEZER,
     TFLAG_ELEVATOR,
     TFLAG_NO_MEMORY,
+    TFLAG_ROAD,
     NUM_TERFLAGS
 };
 

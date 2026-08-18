@@ -491,8 +491,16 @@ bool mattack::flesh_golem( monster *z )
         if( one_in( 12 ) ) {
             z->moves -= 200;
             // It doesn't "nearly deafen you" when it roars from the other side of bubble
-            sounds::sound( z->bub_pos(), 80, sounds::sound_t::alert, _( "a terrifying roar!" ), false, "shout",
-                           "roar" );
+            sound_event se;
+            se.origin = z->bub_pos();
+            se.volume = 120;
+            se.category = sounds::sound_t::alert;
+            se.description = _( "a terrifying roar!" );
+            se.from_monster = true;
+            se.monfaction = z->faction.id();
+            se.id = "shout";
+            se.variant = "roar";
+            sounds::sound( se );
             return true;
         }
         return false;
@@ -782,15 +790,31 @@ bool mattack::longswipe( monster *z )
 static void parrot_common( monster *parrot )
 {
     const SpeechBubble &speech = get_speech( parrot->type->id.str() );
-    sounds::sound( parrot->bub_pos(), speech.volume, sounds::sound_t::speech, speech.text.translated(),
-                   false, "speech", parrot->type->id.str() );
+    sound_event se;
+    se.origin = parrot->bub_pos();
+    se.volume = speech.volume;
+    se.category = sounds::sound_t::speech;
+    se.description = speech.text.translated();
+    se.from_monster = true;
+    se.monfaction = parrot->faction.id();
+    se.id = "speech";
+    se.variant = parrot->type->id.str();
+    sounds::sound( se );
 }
 
 bool mattack::parrot( monster *z )
 {
     if( z->has_effect( effect_shrieking ) ) {
-        sounds::sound( z->bub_pos(), 120, sounds::sound_t::alert, _( "a piercing wail!" ), false, "shout",
-                       "wail" );
+        sound_event se;
+        se.origin = z->bub_pos();
+        se.volume = 120;
+        se.category = sounds::sound_t::alert;
+        se.description = _( "a piercing wail!" );
+        se.from_monster = true;
+        se.monfaction = z->faction.id();
+        se.id = "shout";
+        se.variant = "wail";
+        sounds::sound( se );
         z->moves -= 40;
         return false;
     } else if( one_in( 20 ) ) {
@@ -991,7 +1015,10 @@ bool mattack::riotbot( monster *z )
             }
         }
     }
-
+    sound_event se;
+    se.origin = z->bub_pos();
+    se.from_monster = true;
+    se.monfaction = z->faction.id();
     //already arrested?
     //and yes, if the player has no hands, we are not going to arrest him.
     if( foe != nullptr &&
@@ -999,9 +1026,13 @@ bool mattack::riotbot( monster *z )
         z->anger = 0;
 
         if( calendar::once_every( 25_turns ) ) {
-            sounds::sound( z->bub_pos(), 10, sounds::sound_t::electronic_speech,
-                           _( "Halt and submit to arrest, citizen!  The police will be here any moment." ), false, "speech",
-                           z->type->id.str() );
+            se.volume = 70;
+            se.category = sounds::sound_t::electronic_speech;
+            se.description = _( "Halt and submit to arrest, citizen!  The police will be here any moment." );
+            se.id = "speech";
+            se.variant = z->type->id.str();
+
+            sounds::sound( se );
         }
 
         return true;
@@ -1017,9 +1048,12 @@ bool mattack::riotbot( monster *z )
     //we need empty hands to arrest
     if( foe == &g->u && !foe->is_armed() ) {
 
-        sounds::sound( z->bub_pos(), 15, sounds::sound_t::electronic_speech,
-                       _( "Please stay in place, citizen, do not make any movements!" ), false, "speech",
-                       z->type->id.str() );
+        se.volume = 70;
+        se.category = sounds::sound_t::electronic_speech;
+        se.description = _( "Please stay in place, citizen, do not make any movements!" );
+        se.id = "speech";
+        se.variant = z->type->id.str();
+        sounds::sound( se );
 
         //we need to come closer and arrest
         if( !is_adjacent( z, foe, false ) ) {
@@ -1083,15 +1117,15 @@ bool mattack::riotbot( monster *z )
                 add_msg( _( "The robot puts handcuffs on you." ) );
             }
 
-            sounds::sound( z->bub_pos(), 5, sounds::sound_t::electronic_speech,
-                           _( "You are under arrest, citizen.  You have the right to remain silent.  If you do not remain silent, anything you say may be used against you in a court of law." ),
-                           false, "speech", z->type->id.str() );
-            sounds::sound( z->bub_pos(), 5, sounds::sound_t::electronic_speech,
-                           _( "You have the right to an attorney.  If you cannot afford an attorney, one will be provided at no cost to you.  You may have your attorney present during any questioning." ) );
-            sounds::sound( z->bub_pos(), 5, sounds::sound_t::electronic_speech,
-                           _( "If you do not understand these rights, an officer will explain them in greater detail when taking you into custody." ) );
-            sounds::sound( z->bub_pos(), 5, sounds::sound_t::electronic_speech,
-                           _( "Do not attempt to flee or to remove the handcuffs, citizen.  That can be dangerous to your health." ) );
+            se.volume = 60;
+            se.category = sounds::sound_t::electronic_speech;
+            // Casting out a a whole bunch of sounds in sequence is less desireable than just one sound with a long description.
+            se.description =
+                _( "You are under arrest, citizen.  You have the right to remain silent.  If you do not remain silent, anything you say may be used against you in a court of law. You have the right to an attorney.  If you cannot afford an attorney, one will be provided at no cost to you.  You may have your attorney present during any questioning. If you do not understand these rights, an officer will explain them in greater detail when taking you into custody. Do not attempt to flee or to remove the handcuffs, citizen.  That can be dangerous to your health." );
+
+            se.id = "speech";
+            se.variant = z->type->id.str();
+            sounds::sound( se );
 
             z->moves -= 300;
 
@@ -1137,8 +1171,12 @@ bool mattack::riotbot( monster *z )
     }
 
     if( calendar::once_every( 5_turns ) ) {
-        sounds::sound( z->bub_pos(), 25, sounds::sound_t::electronic_speech,
-                       _( "Empty your hands and hold your position, citizen!" ), false, "speech", z->type->id.str() );
+        se.volume = 80;
+        se.category = sounds::sound_t::electronic_speech;
+        se.description = _( "Empty your hands and hold your position, citizen!" );
+        se.id = "speech";
+        se.variant = z->type->id.str();
+        sounds::sound( se );
     }
 
     if( dist > 5 && dist < 18 && one_in( 10 ) ) {
@@ -1157,7 +1195,12 @@ bool mattack::riotbot( monster *z )
                                      target->bub_pos().z() };
 
         //~ Sound of a riotbot using its blinding flash
-        sounds::sound( z->bub_pos(), 3, sounds::sound_t::combat, _( "fzzzzzt" ), false, "misc", "flash" );
+        se.volume = 50;
+        se.category = sounds::sound_t::combat;
+        se.description = _( "fzzzzzt" );
+        se.id = "misc";
+        se.variant = "flash";
+        sounds::sound( se );
 
         std::vector<tripoint_bub_ms> traj = line_to( z->bub_pos(), dest, 0, 0 );
         auto prev_point = z->bub_pos();
@@ -1357,13 +1400,21 @@ bool mattack::tindalos_teleport( monster *z )
 bool mattack::flesh_tendril( monster *z )
 {
     Creature *target = z->attack_target();
-
+    sound_event se;
+    se.origin = z->bub_pos();
+    se.category = sounds::sound_t::alert;
+    se.from_monster = true;
+    se.monfaction = z->faction.id();
+    se.faction = faction_id( "no_faction" );
     if( target == nullptr || !z->sees( *target ) ) {
         if( one_in( 70 ) ) {
             add_msg( _( "The floor trembles underneath your feet." ) );
             z->moves -= 200;
-            sounds::sound( z->bub_pos(), 60, sounds::sound_t::alert, _( "a deafening roar!" ), false, "shout",
-                           "roar" );
+            se.volume = 120;
+            se.description = _( "a deafening roar!" );
+            se.id = "shout";
+            se.variant = "roar";
+            sounds::sound( se );
         }
         return false;
     }
@@ -1392,8 +1443,11 @@ bool mattack::flesh_tendril( monster *z )
         //it pulls you towards itself and then knocks you away
         bool pulled = ranged_pull( z );
         if( pulled && one_in( 4 ) ) {
-            sounds::sound( z->bub_pos(), 60, sounds::sound_t::alarm, _( "a deafening roar!" ), false, "shout",
-                           "roar" );
+            se.volume = 120;
+            se.description = _( "a deafening roar!" );
+            se.id = "shout";
+            se.variant = "roar";
+            sounds::sound( se );
         }
         return pulled;
     }
@@ -2135,8 +2189,17 @@ bool mattack::doot( monster *z )
             continue;
         }
     }
-    sounds::sound( z->bub_pos(), 200, sounds::sound_t::music, _( "DOOT." ), false, "music_instrument",
-                   "trumpet" );
+    sound_event se;
+    se.origin = z->bub_pos();
+    se.volume = 140;
+    se.category = sounds::sound_t::music;
+    se.description = _( "DOOT." );
+    se.from_monster = true;
+    se.monfaction = z->faction.id();
+    se.faction = faction_id( "no_faction" );
+    se.id = "music_instrument";
+    se.variant = "trumpet";
+    sounds::sound( se );
     return true;
 }
 

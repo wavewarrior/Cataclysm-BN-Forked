@@ -264,11 +264,18 @@ void vehicle::backfire( const int e ) const
 {
     const int power = part_vpower_w( engines[e], true );
     const auto pos = bub_part_location( engines[e] );
-    sounds::sound( pos, 40 + power / 10000, sounds::sound_t::movement,
-                   // single space after the exclaimation mark because it does not end the sentence
-                   //~ backfire sound
-                   string_format( _( "a loud BANG! from the %s" ), // NOLINT(cata-text-style)
-                                  parts[ engines[ e ] ].name() ), true, "vehicle", "engine_backfire" );
+    sound_event se;
+    se.origin = pos;
+    se.volume = 100 + rng( 0, 20 ) + rng( 0, 20 );
+    se.category = sounds::sound_t::movement;
+    se.movement_noise = true;
+    se.description = string_format( _( "a loud BANG! from the %s" ), // NOLINT(cata-text-style)
+                                    parts[engines[e]].name() );
+    // single space after the exclaimation mark because it does not end the sentence
+    //~ backfire sound
+    se.id = "vehicle";
+    se.variant = "engine_bckfire";
+    sounds::sound( se );
 }
 
 const vpart_info &vehicle::part_info( int index, bool include_removed ) const

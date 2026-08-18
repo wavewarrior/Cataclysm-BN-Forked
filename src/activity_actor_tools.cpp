@@ -189,7 +189,7 @@ void hacksaw_activity_actor::start( player_activity& act, Character & /*who*/ )
     }
 }
 
-void hacksaw_activity_actor::do_turn( player_activity & /* act */, Character& who )
+void hacksaw_activity_actor::do_turn( player_activity &/* act */, Character &who )
 {
     if( progress.front().complete() ) {
         progress.pop();
@@ -197,18 +197,29 @@ void hacksaw_activity_actor::do_turn( player_activity & /* act */, Character& wh
     }
     if( tool->ammo_sufficient() ) {
         tool->ammo_consume( tool->ammo_required(), tool->position() );
-        sfx::play_activity_sound( "tool", "hacksaw", sfx::get_heard_volume( target ) );
+        sfx::play_activity_sound( "tool", "hacksaw", sfx::get_heard_volume( target, 80 ) );
         if( calendar::once_every( 1_minutes ) ) {
             //~ Sound of a metal sawing tool at work!
-            sounds::sound( target, 15, sounds::sound_t::destructive_activity, _( "grnd grnd grnd" ) );
+            sound_event se;
+            se.origin = target;
+            se.volume = 80;
+            se.category = sounds::sound_t::destructive_activity;
+            se.description = _( "grnd grnd grnd" );
+            se.id = "tool";
+            se.variant = "hacksaw";
+            se.from_player = who.is_player();
+            se.from_npc = !se.from_player;
+            se.faction = who.get_faction()->id();
+            se.monfaction = who.get_faction()->mon_faction();
+            sounds::sound( se );
         }
     } else {
         if( who.is_avatar() ) {
             who.add_msg_if_player( m_bad, _( "Your %1$s ran out of charges." ), tool->tname() );
         } else { // who.is_npc()
             if( get_avatar().sees( who.bub_pos() ) ) {
-                add_msg( _( "%1$s %2$s ran out of charges." ), who.disp_name( false, true ),
-                         tool->tname() );
+                add_msg( _( "%1$s %2$s ran out of charges." ), who.disp_name( false,
+                         true ), tool->tname() );
             }
         }
         who.cancel_activity();
@@ -391,12 +402,22 @@ void boltcutting_activity_actor::finish( player_activity& act, Character& who )
         return;
     }
 
+    sound_event se;
+    se.origin = target;
+    se.volume = 60;
+    se.category = sounds::sound_t::combat;
+    se.id = "tool";
+    se.variant = "boltcutters";
+    se.from_player = who.is_player();
+    se.from_npc = !se.from_player;
+    se.faction = who.get_faction()->id();
+    se.monfaction = who.get_faction()->mon_faction();
     if( data->sound().empty() ) {
-        sounds::sound( target, 5, sounds::sound_t::combat, _( "Snick, snick, gachunk!" ), true, "tool",
-                       "boltcutters" );
+        se.description = _( "Snick, snick, gachunk!" );
+        sounds::sound( se );
     } else {
-        sounds::sound( target, 5, sounds::sound_t::combat, data->sound().translated(), true, "tool",
-                       "boltcutters" );
+        se.description = data->sound().translated();
+        sounds::sound( se );
     }
 
 
@@ -473,10 +494,21 @@ void burrow_activity_actor::do_turn( player_activity &, Character& who )
     }
     map& here = get_map();
     sfx::play_activity_sound( "activity", "burrow",
-                              sfx::get_heard_volume( here.abs_to_bub( target ) ) );
+                              sfx::get_heard_volume( here.abs_to_bub( target ), 70 ) );
     if( calendar::once_every( 1_minutes ) ) {
-        sounds::sound( here.abs_to_bub( target ), 10, sounds::sound_t::movement,
-                       _( "ScratchCrunchScrabbleScurry." ) );
+        //~ Sound of a Rat mutant burrowing!
+        sound_event se;
+        se.origin = here.abs_to_bub( target );
+        se.volume = 65;
+        se.category = sounds::sound_t::movement;
+        se.description = _( "ScratchCrunchScrabbleScurry." );
+        se.id = "activity";
+        se.variant = "burrow";
+        se.from_player = who.is_avatar();
+        se.from_npc = !se.from_player;
+        se.faction = who.get_faction()->id();
+        se.monfaction = who.get_faction()->mon_faction();
+        sounds::sound( se );
     }
 }
 
@@ -528,10 +560,23 @@ void pickaxe_activity_actor::do_turn( player_activity &, Character& who )
         return;
     }
     map& here = get_map();
-    sfx::play_activity_sound( "tool", "pickaxe", sfx::get_heard_volume( here.abs_to_bub( target ) ) );
+    sfx::play_activity_sound( "tool", "pickaxe",
+                              sfx::get_heard_volume( here.abs_to_bub( target ), 80 ) );
+    // each turn is too much
     if( calendar::once_every( 1_minutes ) ) {
-        sounds::sound( here.abs_to_bub( target ), 30, sounds::sound_t::destructive_activity,
-                       _( "CHNK!  CHNK!  CHNK!" ) );
+        //~ Sound of a Pickaxe at work!
+        sound_event se;
+        se.origin = here.abs_to_bub( target );
+        se.volume = 90;
+        se.category = sounds::sound_t::destructive_activity;
+        se.description = _( "CHNK!  CHNK!  CHNK!" );
+        se.id = "tool";
+        se.variant = "pickaxe";
+        se.from_player = who.is_avatar();
+        se.from_npc = !se.from_player;
+        se.faction = who.get_faction()->id();
+        se.monfaction = who.get_faction()->mon_faction();
+        sounds::sound( se );
     }
 }
 
@@ -599,10 +644,21 @@ void jackhammer_activity_actor::do_turn( player_activity &, Character& who )
     }
     map& here = get_map();
     sfx::play_activity_sound( "tool", "jackhammer",
-                              sfx::get_heard_volume( here.abs_to_bub( target ) ) );
+                              sfx::get_heard_volume( here.abs_to_bub( target ), 130 ) );
     if( calendar::once_every( 1_minutes ) ) {
-        sounds::sound( here.abs_to_bub( target ), 15, sounds::sound_t::destructive_activity,
-                       _( "TATATATATATATAT!" ) );
+        //~ Sound of a jackhammer at work!
+        sound_event se;
+        se.origin = here.abs_to_bub( target );
+        se.volume = 130;
+        se.category = sounds::sound_t::destructive_activity;
+        se.description = _( "TATATATATATATAT!" );
+        se.id = "tool";
+        se.variant = "jackhammer";
+        se.from_player = who.is_avatar();
+        se.from_npc = !se.from_player;
+        se.faction = who.get_faction()->id();
+        se.monfaction = who.get_faction()->mon_faction();
+        sounds::sound( se );
     }
 }
 
@@ -702,7 +758,7 @@ void fill_pit_activity_actor::start( player_activity &, Character& who )
     progress.emplace( _( "Filling" ), moves );
 }
 
-void fill_pit_activity_actor::do_turn( player_activity &, Character & )
+void fill_pit_activity_actor::do_turn( player_activity &, Character& who )
 {
     if( progress.front().complete() ) {
         progress.pop();
@@ -711,7 +767,19 @@ void fill_pit_activity_actor::do_turn( player_activity &, Character & )
     sfx::play_activity_sound( "tool", "shovel", 100 );
     if( calendar::once_every( 1_minutes ) ) {
         map& here = get_map();
-        sounds::sound( here.abs_to_bub( target ), 10, sounds::sound_t::activity, _( "hsh!" ) );
+        //~ Sound of a shovel filling a pit or mound at work!
+        sound_event se;
+        se.origin = here.abs_to_bub( target );
+        se.volume = 60;
+        se.category = sounds::sound_t::activity;
+        se.description = _( "hsh!" );
+        se.id = "tool";
+        se.variant = "shovel";
+        se.from_player = who.is_avatar();
+        se.from_npc = !se.from_player;
+        se.faction = who.get_faction()->id();
+        se.monfaction = who.get_faction()->mon_faction();
+        sounds::sound( se );
     }
 }
 
@@ -813,7 +881,7 @@ void pry_nails_activity_actor::do_turn( player_activity &, Character & )
     }
     map& here = get_map();
     const auto bub_loc = here.abs_to_bub( target );
-    sfx::play_activity_sound( "tool", "hammer", sfx::get_heard_volume( bub_loc ) );
+    sfx::play_activity_sound( "tool", "hammer", sfx::get_heard_volume( bub_loc, 70 ) );
 }
 
 void pry_nails_activity_actor::finish( player_activity& act, Character& who )
@@ -1464,8 +1532,14 @@ void lockpick_activity_actor::finish( player_activity& act, Character& who )
     if( !perfect && ( lock_roll + dice( 1, 30 ) ) > pick_roll ) {
 
         if( get_map().has_flag( "ALARMED", target ) ) {
-            sounds::sound( who.bub_pos(), 40, sounds::sound_t::alarm, _( "an alarm sound!" ), true,
-                           "environment", "alarm" );
+            sound_event se;
+            se.origin = who.bub_pos();
+            se.volume = 90;
+            se.category = sounds::sound_t::alarm;
+            se.description = _( "an alarm sound!" );
+            se.id = "environment";
+            se.variant = "alarm";
+            sounds::sound( se );
             if( !g->timed_events.queued( TIMED_EVENT_WANTED ) ) {
                 g->timed_events
                 .add( TIMED_EVENT_WANTED, calendar::turn + 30_minutes, 0, who.abs_sm_pos() );
@@ -1583,28 +1657,40 @@ void oxytorch_activity_actor::start( player_activity& act, Character & /*who*/ )
     }
 }
 
-void oxytorch_activity_actor::do_turn( player_activity & /*act*/, Character& who )
+void oxytorch_activity_actor::do_turn( player_activity &/*act*/, Character &who )
 {
-    // We check available charges when first starting the cut, but this prevents abnormal behavior
-    // if torch status changes mid-activity.
+    // We check available charges when first starting the cut, but this prevents abnormal behavior if torch status changes mid-activity.
     if( tool->ammo_sufficient() ) {
         tool->ammo_consume( tool->ammo_required(), tool->position() );
-        sfx::play_activity_sound( "tool", "oxytorch", sfx::get_heard_volume( target ) );
+        sfx::play_activity_sound( "tool", "oxytorch", sfx::get_heard_volume( target, 65 ) );
         if( calendar::once_every( 2_turns ) ) {
-            sounds::sound( target, 10, sounds::sound_t::destructive_activity, _( "hissssssssss!" ) );
+            sound_event se;
+            se.origin = target;
+            se.volume = 65;
+            se.category = sounds::sound_t::destructive_activity;
+            se.description = _( "hissssssssss!" );
+            se.id = "tool";
+            se.variant = "oxytorch";
+            se.from_player = who.is_player();
+            se.from_npc = !se.from_player;
+            se.faction = who.get_faction()->id();
+            se.monfaction = who.get_faction()->mon_faction();
+            sounds::sound( se );
         }
     } else {
         if( who.is_avatar() ) {
             who.add_msg_if_player( m_bad, _( "Your %1$s ran out of charges." ), tool->tname() );
         } else { // who.is_npc()
             if( get_avatar().sees( who.bub_pos() ) ) {
-                add_msg( _( "%1$s %2$s ran out of charges." ), who.disp_name( false, true ),
-                         tool->tname() );
+                add_msg( _( "%1$s %2$s ran out of charges." ), who.disp_name( false,
+                         true ), tool->tname() );
             }
         }
         who.cancel_activity();
     }
-    if( progress.front().complete() ) { progress.pop(); }
+    if( progress.front().complete() ) {
+        progress.pop();
+    }
 }
 
 void oxytorch_activity_actor::finish( player_activity& act, Character& who )

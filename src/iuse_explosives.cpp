@@ -529,15 +529,24 @@ int iuse::can_goo( player* p, item* it, bool, const tripoint_bub_ms & )
     return it->type->charges_to_use();
 }
 
-int iuse::throwable_extinguisher_act( player*, item* it, bool, const tripoint_bub_ms& pos )
+int iuse::throwable_extinguisher_act( player *, item *it, bool, const tripoint_bub_ms &pos )
 {
-    if( pos.x() == -999 || pos.y() == -999 ) { return 0; }
+    if( pos.x() == -999 || pos.y() == -999 ) {
+        return 0;
+    }
     if( g->m.get_field( pos, fd_fire ) != nullptr ) {
-        sounds::sound( pos, 50, sounds::sound_t::combat, _( "Bang!" ), false, "explosion", "small" );
+        sound_event se;
+        se.origin = pos;
+        se.volume = 90;
+        se.category = sounds::sound_t::combat;
+        se.description = _( "Bang!" );
+        se.id = "explosion";
+        se.variant = "small";
+        sounds::sound( se );
         // Reduce the strength of fire (if any) in the target tile.
         g->m.mod_field_intensity( pos, fd_fire, 0 - 2 );
         // Slightly reduce the strength of fire around and in the target tile.
-        for( const tripoint_bub_ms& dest : g->m.points_in_radius( pos, 1 ) ) {
+        for( const tripoint_bub_ms &dest : g->m.points_in_radius( pos, 1 ) ) {
             if( g->m.passable( dest ) && dest != pos ) {
                 g->m.mod_field_intensity( dest, fd_fire, 0 - rng( 0, 2 ) );
             }
@@ -762,7 +771,14 @@ int iuse::grenade_inc_act( player* p, item* it, bool t, const tripoint_bub_ms& p
     if( t ) {
         // Simple timer effects
         // Vol 0 = only heard if you hold it
-        sounds::sound( pos, 0, sounds::sound_t::alarm, _( "Tick!" ), true, "misc", "bomb_ticking" );
+        sound_event se;
+        se.origin = pos;
+        se.volume = 40;
+        se.category = sounds::sound_t::alarm;
+        se.description = _( "Tick!" );
+        se.id = "misc";
+        se.variant = "bomb_ticking";
+        sounds::sound( se );
     } else if( it->charges > 0 ) {
         p->add_msg_if_player( m_info, _( "You've already released the handle, try throwing it "
                                          "instead." ) );
@@ -860,23 +876,40 @@ int iuse::firecracker_pack( player* p, item* it, bool, const tripoint_bub_ms & )
     return 0; // don't use any charges at all. it has became a new item
 }
 
-int iuse::firecracker_pack_act( player*, item* it, bool, const tripoint_bub_ms& pos )
+int iuse::firecracker_pack_act( player *, item *it, bool, const tripoint_bub_ms &pos )
 {
     time_duration timer = it->age();
     if( timer < 2_turns ) {
-        sounds::sound( pos, 0, sounds::sound_t::alarm, _( "ssss…" ), true, "misc", "lit_fuse" );
+        sound_event se;
+        se.origin = pos;
+        se.volume = 30;
+        se.category = sounds::sound_t::alarm;
+        se.description = _( "ssss…" );
+        se.id = "misc";
+        se.variant = "lit_fuse";
+        sounds::sound( se );
         it->inc_damage();
     } else if( it->charges > 0 ) {
         int ex = rng( 4, 6 );
         int i = 0;
-        if( ex > it->charges ) { ex = it->charges; }
+        if( ex > it->charges ) {
+            ex = it->charges;
+        }
         for( i = 0; i < ex; i++ ) {
-            sounds::
-            sound( pos, 20, sounds::sound_t::combat, _( "Bang!" ), false, "explosion", "small" );
+            sound_event se;
+            se.origin = pos;
+            se.volume = 80;
+            se.category = sounds::sound_t::combat;
+            se.description = _( "Bang!" );
+            se.id = "explosion";
+            se.variant = "small";
+            sounds::sound( se );
         }
         it->charges -= ex;
     }
-    if( it->charges == 0 ) { it->charges = -1; }
+    if( it->charges == 0 ) {
+        it->charges = -1;
+    }
     return 0;
 }
 
@@ -897,20 +930,36 @@ int iuse::firecracker( player* p, item* it, bool, const tripoint_bub_ms & )
     return it->type->charges_to_use();
 }
 
-int iuse::firecracker_act( player* p, item* it, bool t, const tripoint_bub_ms& pos )
+int iuse::firecracker_act( player *p, item *it, bool t, const tripoint_bub_ms &pos )
 {
-    if( pos.x() == -999 || pos.y() == -999 ) { return 0; }
+    if( pos.x() == -999 || pos.y() == -999 ) {
+        return 0;
+    }
 
     if( t ) { // Simple timer effects
-        sounds::sound( pos, 0, sounds::sound_t::alarm, _( "ssss…" ), true, "misc", "lit_fuse" );
+        sound_event se;
+        se.origin = pos;
+        se.volume = 40;
+        se.category = sounds::sound_t::alarm;
+        se.description = _( "ssss…" );
+        se.id = "misc";
+        se.variant = "lit_fuse";
+        sounds::sound( se );
     } else if( it->charges > 0 ) {
-        p->add_msg_if_player(
-            m_info, _( "You've already lit the %s, try throwing it instead." ), it->tname() );
+        p->add_msg_if_player( m_info, _( "You've already lit the %s, try throwing it instead." ),
+                              it->tname() );
         return 0;
     }
 
     if( it->charges == 0 ) { // When that timer runs down...
-        sounds::sound( pos, 20, sounds::sound_t::combat, _( "Bang!" ), true, "explosion", "small" );
+        sound_event se;
+        se.origin = pos;
+        se.volume = 80;
+        se.category = sounds::sound_t::combat;
+        se.description = _( "Bang!" );
+        se.id = "explosion";
+        se.variant = "small";
+        sounds::sound( se );
     }
     return 0;
 }

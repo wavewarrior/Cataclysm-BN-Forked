@@ -669,39 +669,44 @@ bool Character::can_run()
 
 bool Character::move_effects( bool attacking )
 {
+    return move_effects( attacking, false );
+}
+
+auto Character::move_effects( const bool attacking, const bool skip_pit_escape ) -> bool
+{
     if( has_effect( effect_downed ) ) {
-        try_remove_downed( *this );
+    try_remove_downed( *this );
         return false;
     }
     if( has_effect( effect_webbed ) ) {
-        try_remove_webs( *this );
+    try_remove_webs( *this );
         return false;
     }
     if( has_effect( effect_lightsnare ) ) {
-        try_remove_lightsnare( *this );
+    try_remove_lightsnare( *this );
         return false;
     }
     if( has_effect( effect_heavysnare ) ) {
-        try_remove_heavysnare( *this );
+    try_remove_heavysnare( *this );
         return false;
     }
     if( has_effect( effect_beartrap ) ) {
-        try_remove_bear_trap( *this );
+    try_remove_bear_trap( *this );
         return false;
     }
     if( has_effect( effect_crushed ) ) {
-        try_remove_crushed( *this );
+    try_remove_crushed( *this );
         return false;
     }
     // Below this point are things that allow for movement if they succeed
 
     // Currently we only have one thing that forces movement if you succeed, should we get more
     // than this will need to be reworked to only have success effects if /all/ checks succeed
-    if( has_effect( effect_in_pit ) ) {
-        /** @EFFECT_STR increases chance to escape pit */
+    if( has_effect( effect_in_pit ) && !skip_pit_escape ) {
+    /** @EFFECT_STR increases chance to escape pit */
 
-        /** @EFFECT_DEX increases chance to escape pit, slightly */
-        if( rng( 0, 40 ) > get_str() + get_dex() / 2 ) {
+    /** @EFFECT_DEX increases chance to escape pit, slightly */
+    if( rng( 0, 40 ) > get_str() + get_dex() / 2 ) {
             add_msg_if_player( m_bad, _( "You try to escape the pit, but slip back in." ) );
             return false;
         } else {
@@ -710,10 +715,10 @@ bool Character::move_effects( bool attacking )
         }
     }
     if( has_effect( effect_grabbed ) && !attacking && !try_remove_grab( *this ) ) {
-        // NOLINTNEXTLINE(readability-simplify-boolean-expr)
-        return false;
-    }
-    return true;
+    // NOLINTNEXTLINE(readability-simplify-boolean-expr)
+    return false;
+}
+return true;
 }
 
 void Character::wait_effects()

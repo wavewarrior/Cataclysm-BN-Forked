@@ -1200,6 +1200,8 @@ look_around_result game::look_around( bool show_window, tripoint_bub_ms &center,
     ctxt.register_action( "debug_lighting" );
     ctxt.register_action( "debug_radiation" );
     ctxt.register_action( "debug_outside" );
+    ctxt.register_action( "debug_sound_absorption" );
+    ctxt.register_action( "debug_sound_walls" );
     ctxt.register_action( "debug_submap_grid" );
     ctxt.register_action( "debug_hour_timer" );
     ctxt.register_action( "debug_fps" );
@@ -1405,6 +1407,14 @@ look_around_result game::look_around( bool show_window, tripoint_bub_ms &center,
         } else if( action == "debug_outside" ) {
             if( !MAP_SHARING::isCompetitive() || MAP_SHARING::isDebugger() ) {
                 display_outside();
+            }
+        } else if( action == "debug_sound_absorption" ) {
+            if( !MAP_SHARING::isCompetitive() || MAP_SHARING::isDebugger() ) {
+                display_sound_absorption();
+            }
+        } else if( action == "debug_sound_walls" ) {
+            if( !MAP_SHARING::isCompetitive() || MAP_SHARING::isDebugger() ) {
+                display_sound_walls();
             }
         } else if( action == "debug_radiation" ) {
             if( !MAP_SHARING::isCompetitive() || MAP_SHARING::isDebugger() ) {

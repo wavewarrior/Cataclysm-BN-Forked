@@ -672,7 +672,12 @@ int iuse::radio_on( player* p, item* it, bool t, const tripoint_bub_ms& pos )
             int index = to_turn<int>( calendar::turn ) % segments.size();
             message = string_format( _( "radio: %s" ), segments[index] );
         }
-        sounds::ambient_sound( pos, 6, sounds::sound_t::electronic_speech, message );
+        sound_event se;
+        se.origin = pos;
+        se.volume = 60;
+        se.category = sounds::sound_t::electronic_speech;
+        se.description = message;
+        sounds::sound( se );
         if( !sfx::is_channel_playing( sfx::channel::radio ) ) {
             if( one_in( 10 ) ) {
                 sfx::play_ambient_variant_sound(
@@ -734,12 +739,18 @@ int iuse::noise_emitter_off( player* p, item* it, bool, const tripoint_bub_ms & 
     return it->type->charges_to_use();
 }
 
-int iuse::noise_emitter_on( player* p, item* it, bool t, const tripoint_bub_ms& pos )
+int iuse::noise_emitter_on( player *p, item *it, bool t, const tripoint_bub_ms &pos )
 {
     if( t ) { // Normal use
         //~ the sound of a noise emitter when turned on
-        sounds::sound(
-            pos, 30, sounds::sound_t::alarm, _( "KXSHHHHRRCRKLKKK!" ), true, "tool", "noise_emitter" );
+        sound_event se;
+        se.origin = pos;
+        se.volume = 100;
+        se.category = sounds::sound_t::alarm;
+        se.description = _( "KXSHHHHRRCRKLKKK!" );
+        se.id = "tool";
+        se.variant = "noise_emitter";
+        sounds::sound( se );
     } else { // Turning it off
         p->add_msg_if_player( _( "The infernal racket dies as the noise emitter turns off." ) );
         it->convert( itype_noise_emitter );
@@ -963,14 +974,26 @@ int iuse::crowbar( player* p, item* it, bool, const tripoint_bub_ms& pos )
         }
 
         if( pry->noise > 0 ) {
-            sounds::sound(
-                pnt, pry->noise, sounds::sound_t::combat, pry->sound, true, "tool", "crowbar" );
+            sound_event se;
+            se.origin = pnt;
+            se.volume = pry->noise;
+            se.category = sounds::sound_t::combat;
+            se.description = pry->sound.translated();
+            se.id = "tool";
+            se.variant = "crowbar";
+            sounds::sound( se );
         }
         g->m.spawn_items( pnt, item_group::items_from( pry->pry_items, calendar::turn ) );
         if( pry->alarm ) {
             g->events().send<event_type::triggers_alarm>( p->getID() );
-            sounds::sound( p->bub_pos(), 40, sounds::sound_t::alarm, _( "an alarm sound!" ), true,
-                           "environment", "alarm" );
+            sound_event se;
+            se.origin = p->bub_pos();
+            se.volume = 100;
+            se.category = sounds::sound_t::alarm;
+            se.description = _( "an alarm sound!" );
+            se.id = "environment";
+            se.variant = "alarm";
+            sounds::sound( se );
             if( !g->timed_events.queued( TIMED_EVENT_WANTED ) ) {
                 g->timed_events
                 .add( TIMED_EVENT_WANTED, calendar::turn + 30_minutes, 0, p->abs_sm_pos() );
@@ -985,8 +1008,14 @@ int iuse::crowbar( player* p, item* it, bool, const tripoint_bub_ms& pos )
             if( dice( 4, diff )
                 > ( dice( 2, p->get_skill_level( skill_mechanics ) ) + dice( 2, p->str_cur ) ) * pry_level ) {
                 p->add_msg_if_player( m_mixed, pry->break_message );
-                sounds::sound( pnt, pry->break_noise, sounds::sound_t::combat, pry->break_sound,
-                               true, "smash", "door" );
+                sound_event se;
+                se.origin = pnt;
+                se.volume = pry->break_noise;
+                se.category = sounds::sound_t::combat;
+                se.description = pry->break_sound.translated();
+                se.id = "smash";
+                se.variant = "door";
+                sounds::sound( se );
                 if( pry_furn ) {
                     g->m.furn_set( pnt, pry->break_furn_type );
                 } else {
@@ -995,8 +1024,14 @@ int iuse::crowbar( player* p, item* it, bool, const tripoint_bub_ms& pos )
                 g->m.spawn_items( pnt, item_group::items_from( pry->break_items, calendar::turn ) );
                 if( pry->alarm ) {
                     g->events().send<event_type::triggers_alarm>( p->getID() );
-                    sounds::sound( p->bub_pos(), 40, sounds::sound_t::alarm, _( "an alarm sound!" ),
-                                   true, "environment", "alarm" );
+                    sound_event se;
+                    se.origin = p->bub_pos();
+                    se.volume = 100;
+                    se.category = sounds::sound_t::alarm;
+                    se.description = _( "an alarm sound!" );
+                    se.id = "environment";
+                    se.variant = "alarm";
+                    sounds::sound( se );
                     if( !g->timed_events.queued( TIMED_EVENT_WANTED ) ) {
                         g->timed_events.add(
                             TIMED_EVENT_WANTED, calendar::turn + 30_minutes, 0, p->abs_sm_pos() );
@@ -1543,8 +1578,15 @@ int iuse::geiger( player* p, item* it, bool t, const tripoint_bub_ms& pos )
             : rads > 25 ? _( "geiger_medium" )
             : _( "geiger_low" );
 
-        sounds::sound( pos, 6, sounds::sound_t::alarm, description, true, "tool", sound_var );
-        if( !p->can_hear( pos, 6 ) ) {
+        sound_event se;
+        se.origin = pos;
+        se.volume = 50;
+        se.category = sounds::sound_t::alarm;
+        se.description = description;
+        se.id = "tool";
+        se.variant = sound_var;
+        sounds::sound( se );
+        if( !p->can_hear( pos, se.volume ) ) {
             // can not hear it, but may have alarmed other creatures
             return it->type->charges_to_use();
         }

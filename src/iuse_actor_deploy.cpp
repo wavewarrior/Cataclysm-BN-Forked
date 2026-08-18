@@ -1121,7 +1121,16 @@ if( it.charges <= 0 ) {
     p.moves -= moves;
     if( rng( 0, 10 ) - it.damage_level( 4 ) > success_chance && !p.is_underwater() ) {
         if( noise > 0 ) {
-            sounds::sound( p.bub_pos(), noise, sounds::sound_t::combat, _( success_message ) );
+            sound_event se;
+            se.origin = p.bub_pos();
+            se.volume = noise;
+            se.category = sounds::sound_t::combat;
+            se.description = _( success_message );
+            se.from_player = p.is_avatar();
+            se.from_npc = !se.from_player;
+            se.faction = p.get_faction()->id();
+            se.monfaction = p.get_faction()->mon_faction();
+            sounds::sound( se );
         }
         p.add_msg_if_player( _( success_message ) );
         if( p.is_npc() && get_player_character().sees( p ) ) {
@@ -1195,7 +1204,16 @@ int fireweapon_on_actor::use( player& p, item& it, bool t, const tripoint_bub_ms
         return 0;
     } else if( one_in( noise_chance ) ) {
         if( noise > 0 ) {
-            sounds::sound( p.bub_pos(), noise, sounds::sound_t::combat, _( noise_message ) );
+            sound_event se;
+            se.origin = p.bub_pos();
+            se.volume = noise;
+            se.category = sounds::sound_t::combat;
+            se.description = _( noise_message );
+            se.from_player = p.is_avatar();
+            se.from_npc = !se.from_player;
+            se.faction = p.get_faction()->id();
+            se.monfaction = p.get_faction()->mon_faction();
+            sounds::sound( se );
         }
         p.add_msg_if_player( _( noise_message ) );
     }
@@ -1229,10 +1247,18 @@ if( it.type->charges_to_use() != 0 && it.charges < it.type->charges_to_use() ) {
     {
         p.moves -= moves;
         if( noise > 0 ) {
-            sounds::sound(
-                p.bub_pos(), noise, sounds::sound_t::activity,
-                noise_message.empty() ? _( "Hsss" ) : _( noise_message ), true, noise_id,
-                noise_variant );
+            sound_event se;
+            se.origin = p.bub_pos();
+            se.volume = noise;
+            se.category = sounds::sound_t::activity;
+            se.description = noise_message.empty() ? _( "Hsss" ) : _( noise_message );
+            se.id = noise_id;
+            se.variant = noise_variant;
+            se.from_player = p.is_avatar();
+            se.from_npc = !se.from_player;
+            se.faction = p.get_faction()->id();
+            se.monfaction = p.get_faction()->mon_faction();
+            sounds::sound( se );
         }
         p.add_msg_if_player( _( use_message ) );
     }
@@ -1354,12 +1380,22 @@ int musical_instrument_actor::use( player& p, item& it, bool t, const tripoint_b
     desc = string_format( _( "%1$s %2$s" ), p.disp_name( false ), random_entry( npc_descriptions ) );
     }
 
+    sound_event se;
+    se.origin = p.bub_pos();
+    se.volume = volume;
+    se.category = sounds::sound_t::music;
+    se.description = desc;
+    se.from_player = p.is_avatar();
+    se.from_npc = !se.from_player;
+    se.faction = p.get_faction()->id();
     if( morale_effect >= 0 ) {
-    sounds::sound( p.bub_pos(), volume, sounds::sound_t::music, desc, true, "musical_instrument",
-                   it.typeId().str() );
+    se.id = "musical_instrument";
+    se.variant = it.typeId().str();
+        sounds::sound( se );
     } else {
-        sounds::sound( p.bub_pos(), volume, sounds::sound_t::music, desc, true,
-                       "musical_instrument_bad", it.typeId().str() );
+        se.id = "musical_instrument_bad";
+        se.variant = it.typeId().str();
+        sounds::sound( se );
     }
 
     if( !p.has_effect( effect_music ) && p.can_hear( p.bub_pos(), volume ) ) {

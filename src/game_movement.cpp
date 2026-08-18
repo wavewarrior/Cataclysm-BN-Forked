@@ -71,6 +71,7 @@
 #include "coop_server.h"
 #include "coop_session.h"
 #include "profile.h"
+#include "utils/pit_trap_helpers.h"
 
 #define dbg(x) DebugLogFL((x),DC::Game)
 
@@ -447,19 +448,25 @@ bool game::walk_move( const tripoint_bub_ms &dest_loc, const bool via_ramp )
         }
     }
     if( !u.has_artifact_with( AEP_STEALTH ) && !u.has_trait( trait_id( "DEBUG_SILENT" ) ) ) {
-        int volume = u.is_stealthy() ? 3 : 6;
+        int volume = u.is_stealthy() ? 30 : 50;
         volume *= u.mutation_value( "noise_modifier" );
         if( volume > 0 ) {
             if( u.is_wearing( itype_rm13_armor_on ) ) {
-                volume = 2;
+                volume = 20;
             } else if( u.has_bionic( bionic_id( "bio_ankles" ) ) ) {
-                volume = 12;
+                volume = 70;
             }
             if( u.movement_mode_is( CMM_RUN ) ) {
-                volume *= 1.5;
+                volume += 10;
             } else if( u.is_crouching() ) {
-                volume /= 2;
+                volume -= 10;
             }
+            sound_event se;
+            se.origin = dest_loc;
+            se.category = sounds::sound_t::movement;
+            se.movement_noise = true;
+            se.id = "none";
+            se.variant = "none";
             if( u.is_mounted() ) {
                 auto mons = u.mounted_creature.get();
                 switch( mons->get_size() ) {
@@ -467,35 +474,53 @@ bool game::walk_move( const tripoint_bub_ms &dest_loc, const bool via_ramp )
                         volume = 0; // No sound for the tinies
                         break;
                     case creature_size::small:
-                        volume /= 3;
+                        volume -= 10;
                         break;
                     case creature_size::medium:
                         break;
                     case creature_size::large:
-                        volume *= 1.5;
+                        volume += 10;
                         break;
                     case creature_size::huge:
-                        volume *= 2;
+                        volume += 20;
                         break;
                     default:
                         break;
                 }
                 if( mons->has_flag( MF_LOUDMOVES ) ) {
-                    volume += 6;
+                    volume += 10;
                 }
-                sounds::sound( dest_loc, volume, sounds::sound_t::movement, mons->type->get_footsteps(), true,
-                               "none", "none" );
+                se.volume = volume;
+                se.description = mons->type->get_footsteps();
+                se.from_monster = true;
+                se.monfaction = mons->faction.id();
+                se.faction = faction_id( "your_followers" );
+                sounds::sound( se );
             } else {
-                sounds::sound( dest_loc, volume, sounds::sound_t::movement, _( "footsteps" ), true,
-                               "none", "none" );    // Sound of footsteps may awaken nearby monsters
+                se.volume = volume;
+                se.description = _( "footsteps" );
+                se.from_player = true;
+                se.faction = u.get_faction()->id();
+                se.monfaction = u.get_faction()->mon_faction();
+                sounds::sound( se );   // Sound of footsteps may awaken nearby monsters
             }
             sfx::do_footstep();
             sfx::emit_sound_pulse( u.bub_pos(), 3.0f );
         }
 
         if( one_in( 20 ) && u.has_artifact_with( AEP_MOVEMENT_NOISE ) ) {
-            sounds::sound( u.bub_pos(), 40, sounds::sound_t::movement, _( "a rattling sound." ), true,
-                           "misc", "rattling" );
+            sound_event rattle;
+            rattle.origin = u.bub_pos();
+            rattle.volume = 80;
+            rattle.category = sounds::sound_t::movement;
+            rattle.description = _( "a rattling sound." );
+            rattle.movement_noise = true;
+            rattle.from_player = true;
+            rattle.id = "misc";
+            rattle.variant = "rattling";
+            rattle.faction = u.get_faction()->id();
+            rattle.monfaction = u.get_faction()->mon_faction();
+            sounds::sound( rattle );
         }
     }
 
@@ -539,6 +564,10 @@ bool game::walk_move( const tripoint_bub_ms &dest_loc, const bool via_ramp )
 // ——— place_player ———
 auto game::place_player( const tripoint_bub_ms &dest_loc, const bool keep_grab ) -> point_rel_sm
 {
+    // Captured before the move is applied: the source tile's trap is needed to decide whether
+    // this is a pit-to-pit transition, and u.bub_pos() has already changed by the trap check.
+    const auto regular_pit_move = pit_trap_helpers::is_regular_pit_destination_from_pit(
+                                      m.tr_at( u.bub_pos() ), m.tr_at( dest_loc ) );
     const optional_vpart_position vp1 = m.veh_at( dest_loc );
     if( const std::optional<std::string> label = vp1.get_label() ) {
         add_msg( m_info, _( "Label here: %s" ), *label );
@@ -780,10 +809,14 @@ auto game::place_player( const tripoint_bub_ms &dest_loc, const bool keep_grab )
     // Traps!
     // Try to detect.
     character_funcs::search_surroundings( u );
-    if( u.is_mounted() ) {
-        m.creature_on_trap( *u.mounted_creature );
-    } else {
-        m.creature_on_trap( u );
+    // Moving from one regular pit into another must not re-trigger the trap: the player is
+    // already in a pit, so upstream skips the trap effect for that specific transition.
+    if( !regular_pit_move ) {
+        if( u.is_mounted() ) {
+            m.creature_on_trap( *u.mounted_creature );
+        } else {
+            m.creature_on_trap( u );
+        }
     }
     // Drench the player if swimmable
     if( m.has_flag( "SWIMMABLE", u.bub_pos() ) &&
@@ -1215,8 +1248,16 @@ auto game::grabbed_furn_move( const tripoint_rel_ms &dp ) -> bool
             }
         }
     }
-    sounds::sound( fdest, effort.str_req * 2, sounds::sound_t::movement,
-                   _( "a scraping noise." ), true, "misc", "scraping" );
+    sound_event se;
+    se.origin = fdest;
+    se.volume = std::min( 80, 40 + ( furntype.move_str_req * 2 ) );
+    se.category = sounds::sound_t::movement;
+    se.movement_noise = true;
+    se.description = _( "a scraping noise." );
+    se.id = "misc";
+    se.variant = "scraping";
+
+    sounds::sound( se );
 
     auto *atd = active_tiles::furn_at<active_tile_data>
                 ( tripoint_abs_ms( m.bub_to_abs( fpos ) ) );

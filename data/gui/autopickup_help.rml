@@ -24,7 +24,7 @@ m:kevlar        matches items made of Kevlar
 M:copper        matches items made purely of copper
 q:drilling      matches items with drilling qualites
 k:fabrication   matches books that teach fabrication
-b:c:food;*meat* matches items that are foods and *meat*</div>
+b:c:food;*meat* matches conditions c:food and *meat*</div>
     </div>
 </body>
 </rml>

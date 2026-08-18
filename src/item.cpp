@@ -23,6 +23,8 @@
 #include "item_factory.h"
 #include "item_group.h"
 #include "itype.h"
+#include "iuse.h"
+#include "iuse_actor.h"
 #include "kill_tracker.h"
 #include "locations.h"
 #include "map.h"
@@ -917,4 +919,40 @@ bool item_ptr_compare_by_charges( const item* left, const item* right )
 bool item_compare_by_charges( const item& left, const item& right )
 {
     return item_ptr_compare_by_charges( &left, &right );
+}
+
+bool item::is_stackable() const
+{
+    return type->is_stackable();
+}
+
+// Get the hearing protection provided by this item.
+// Returns advanced (active) hearing protection if true.
+// Advanced hearing protection does not make it harder for the character to hear other sounds.
+int item::get_hearing_protection( bool advanced ) const
+{
+    if( this->is_armor() ) {
+    const islot_armor* armor = find_armor_data();
+        if( armor == nullptr ) {
+            return 0;
+        }
+        return ( advanced ) ? armor->adv_hearing_protection : armor->hearing_protection;
+    } else {
+        return 0;
+    }
+}
+
+bool item::can_put_in_bandolier( const item& obj, bool ) const
+{
+    if( !type->can_use( "bandolier" ) ) {
+    return false; // item is not a holster
+}
+
+const auto* ptr = dynamic_cast<const bandolier_actor *>
+                  ( type->get_use( "bandolier" )->get_actor_ptr() );
+if( !ptr->can_store( *this, obj ) ) {
+    return false; // item is not a suitable holster for obj
+}
+
+return true;
 }

@@ -41,6 +41,7 @@
 #include "iuse_actor.h"
 #include "json.h"
 #include "light_emission.h"
+#include "sounds.h"
 
 class player;
 
@@ -540,7 +541,10 @@ if( !ammo.is_valid() ) {
 //Returns the template with the given identification tag
 const itype *Item_factory::find_template( const itype_id &id ) const
 {
-    assert( frozen );
+    if( !frozen ) {
+    debugmsg( "Tried to load item definitions before finalization. This is bad, very bad" );
+        assert( frozen );
+    }
 
     auto found = m_templates.find( id );
     if( found != m_templates.end() ) {
@@ -628,7 +632,10 @@ void load_optional_enum_array( std::vector<E> &vec, const JsonObject &jo,
 
 bool Item_factory::load_definition( const JsonObject &jo, const std::string &src, itype &def )
 {
-    assert( !frozen );
+    if( frozen ) {
+        debugmsg( "Tried to load item definitions after finalization. This is bad, very bad" );
+        assert( !frozen );
+    }
 
     if( !jo.has_string( "copy-from" ) ) {
         // if this is a new definition ensure we start with a clean itype
@@ -832,7 +839,7 @@ void Item_factory::load( islot_gun &slot, const JsonObject &jo, const std::strin
     assign( jo, "clip_size", slot.clip, strict, 0 );
     assign( jo, "reload", slot.reload_time, strict, 0 );
     assign( jo, "reload_noise", slot.reload_noise, strict );
-    assign( jo, "reload_noise_volume", slot.reload_noise_volume, strict, 0 );
+    assign( jo, "reload_noise_volume_dB", slot.reload_noise_volume, strict, 0, 191 );
     // Depreciated alias, use barrel_volume instead.
     assign( jo, "barrel_length", slot.barrel_volume, strict, 0_ml );
     assign( jo, "barrel_volume", slot.barrel_volume, strict, 0_ml );
@@ -852,7 +859,12 @@ void Item_factory::load( islot_gun &slot, const JsonObject &jo, const std::strin
             slot.valid_mod_locations.emplace( curr.get_string( 0 ), curr.get_int( 1 ) );
         }
     }
-
+    // Depreciated alias, use reload_noise_dB_volume instead.
+    if( jo.has_int( "reload_noise_volume" ) ) {
+        int volume = jo.get_int( "reload_noise_volume" );
+        volume = approximate_dB_volume_from_legacy_tile_distance_vol( volume );
+        slot.reload_noise_volume = volume;
+    }
     assign( jo, "modes", slot.modes );
 }
 
@@ -923,6 +935,10 @@ void Item_factory::load( islot_armor &slot, const JsonObject &jo, const std::str
     assign( jo, "storage", slot.storage, strict, 0_ml );
     assign( jo, "weight_capacity_modifier", slot.weight_capacity_modifier );
     assign( jo, "weight_capacity_bonus", slot.weight_capacity_bonus, strict, 0_gram );
+    assign( jo, "hearing_protection", slot.hearing_protection, strict, 0,
+            191 );  // Limited from 0 to 191 dB spl
+    assign( jo, "adv_hearing_protection", slot.adv_hearing_protection, strict, 0,
+            191 );  // Limited from 0 to 191 dB spl
     assign( jo, "valid_mods", slot.valid_mods, strict );
 
     if( jo.has_array( "armor_portion_data" ) ) {
@@ -2595,7 +2611,10 @@ bool Item_factory::has_template( const itype_id &id ) const
 
 std::vector<const itype *> Item_factory::all() const
 {
-    assert( frozen );
+    if( !frozen ) {
+    debugmsg( "Tried to load item definitions before finalization. This is bad, very bad" );
+        assert( frozen );
+    }
 
     std::vector<const itype *> res;
     res.reserve( m_templates.size() + m_runtimes.size() );
@@ -2624,7 +2643,10 @@ std::vector<const itype *> Item_factory::get_runtime_types() const
 /** Find all templates matching the UnaryPredicate function */
 std::vector<const itype *> Item_factory::find( const std::function<bool( const itype & )> &func )
 {
-    assert( frozen );
+    if( !frozen ) {
+        debugmsg( "Tried to load item definitions before finalization. This is bad, very bad" );
+        assert( frozen );
+    }
 
     std::vector<const itype *> res;
 

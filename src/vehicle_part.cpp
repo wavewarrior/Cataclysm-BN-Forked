@@ -269,6 +269,10 @@ double vehicle_part::damage_percent() const
 /** parts are considered broken at zero health */
 bool vehicle_part::is_broken() const
 {
+    // A count-by-charges base item has no damage scale: itype::damage_max() returns 0 for it,
+    // and damage() is likewise 0, so an unguarded `damage() >= max_damage()` reports EVERY such
+    // part as broken. Upstream dropped this guard; keeping it is required here or charge-based
+    // parts are treated as destroyed, which silently changes vehicle handling and collisions.
     return base->count_by_charges() ? false : base->damage() >= base->max_damage();
 }
 

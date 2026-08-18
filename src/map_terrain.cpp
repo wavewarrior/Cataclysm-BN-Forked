@@ -341,13 +341,23 @@ return true;
 
 
 bool map::open_door_ter(
-    const interacting_entity& who, const ter_t& ter, const tripoint_bub_ms& p, const bool inside )
+    const interacting_entity &who, const ter_t &ter,
+    const tripoint_bub_ms &p, const bool inside
+)
 {
     if( !can_open_door_ter( static_variant_cast<const_interacting_entity>( who ), ter, p, inside ) ) {
         return false;
     }
 
-    sounds::sound( p, 6, sounds::sound_t::movement, _( "swish" ), true, "open_door", ter.id.str() );
+    sound_event se;
+    se.origin = p;
+    se.volume = 50;
+    se.category = sounds::sound_t::movement;
+    se.movement_noise = true;
+    se.description = _( "swish" );
+    se.id = "open_door";
+    se.variant = ter.id.str();
+    sounds::sound( se );
     ter_set( p, ter.open );
 
     const auto is_schizo = std::visit( []<typename T>( T u ) -> bool {
@@ -360,7 +370,9 @@ bool map::open_door_ter(
 
     const tripoint_bub_ms you_pos = std::visit( []<typename T>( T u ) { return u->bub_pos(); }, who );
 
-    if( is_schizo && one_in( 50 ) && !ter.has_flag( "TRANSPARENT" ) ) {
+    if( is_schizo
+        && one_in( 50 )
+        && !ter.has_flag( "TRANSPARENT" ) ) {
         // This math is schizophrenic
         const tripoint_bub_ms mp =
             p + -2 * you_pos.xy().raw() + tripoint_rel_ms( 2 * p.x(), 2 * p.y(), p.z() );
@@ -368,6 +380,7 @@ bool map::open_door_ter(
     }
 
     return true;
+
 }
 
 bool map::can_open_door_furn(
@@ -388,16 +401,26 @@ return true;
 
 
 bool map::open_door_furn(
-    const interacting_entity& who, const furn_t &furn, const tripoint_bub_ms& p,
-    const bool inside )
+    const interacting_entity &who, const furn_t &furn,
+    const tripoint_bub_ms &p, const bool inside
+)
 {
     if( !can_open_door_furn( static_variant_cast<const_interacting_entity>( who ), furn, p, inside ) ) {
         return false;
     }
 
-    sounds::sound( p, 6, sounds::sound_t::movement, _( "swish" ), true, "open_door", furn.id.str() );
+    sound_event se;
+    se.origin = p;
+    se.volume = 50;
+    se.category = sounds::sound_t::movement;
+    se.movement_noise = true;
+    se.description = _( "swish" );
+    se.id = "open_door";
+    se.variant = furn.id.str();
+    sounds::sound( se );
     furn_set( p, furn.open );
     return true;
+
 }
 
 bool map::can_open_door_veh(
@@ -509,23 +532,31 @@ void map::translate_radius(
     }
 }
 
-bool map::close_door( const tripoint_bub_ms& p, const bool inside, const bool check_only )
+bool map::close_door( const tripoint_bub_ms &p, const bool inside, const bool check_only )
 {
-    if( has_flag( str_OPENCLOSE_INSIDE, p ) && !inside ) { return false; }
+    if( has_flag( str_OPENCLOSE_INSIDE, p ) && !inside ) {
+        return false;
+    }
 
-    const auto& ter = this->ter( p ).obj();
-    const auto& furn = this->furn( p ).obj();
+    const auto &ter = this->ter( p ).obj();
+    const auto &furn = this->furn( p ).obj();
+    sound_event se;
+    se.origin = p;
+    se.volume = 60;
+    se.category = sounds::sound_t::movement;
+    se.movement_noise = true;
+    se.description = _( "swish" );
+    se.id = "close_door";
+    se.variant = ter.id.str();
     if( ter.close && !furn.id ) {
         if( !check_only ) {
-            sounds::sound(
-                p, 10, sounds::sound_t::movement, _( "swish" ), true, "close_door", ter.id.str() );
+            sounds::sound( se );
             ter_set( p, ter.close );
         }
         return true;
     } else if( furn.close ) {
         if( !check_only ) {
-            sounds::sound(
-                p, 10, sounds::sound_t::movement, _( "swish" ), true, "close_door", furn.id.str() );
+            sounds::sound( se );
             furn_set( p, furn.close );
         }
         return true;

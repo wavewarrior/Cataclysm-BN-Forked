@@ -1526,7 +1526,14 @@ void iuse::play_music(
         }
     }
     // do not process mp3 player
-    if( volume != 0 ) { sounds::ambient_sound( source, volume, sounds::sound_t::music, sound ); }
+    if( volume != 0 ) {
+        sound_event se;
+        se.origin = source;
+        se.volume = volume;
+        se.category = sounds::sound_t::music;
+        se.description = sound;
+        sounds::sound( se );
+    }
     if( do_effects ) {
         p.add_effect( effect_music, 1_turns );
         p.add_morale( MORALE_MUSIC, 1, max_morale, 5_minutes, 2_minutes, true );
@@ -1540,7 +1547,7 @@ int iuse::mp3_on( player* p, item* it, bool t, const tripoint_bub_ms& pos )
     if( t ) { // Normal use
         if( p->has_item( *it ) ) {
             // mp3 player in inventory, we can listen
-            play_music( *p, pos, 0, 20 );
+            play_music( *p, pos, 40, 20 );
         }
     } else { // Turning it off
         // Creatively make it so that the reversion isn't hard-coded

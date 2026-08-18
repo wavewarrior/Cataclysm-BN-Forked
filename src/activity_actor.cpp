@@ -549,16 +549,27 @@ void dig_activity_actor::start( player_activity & /*act*/, Character & )
     progress.emplace( name, moves_total );
 }
 
-void dig_activity_actor::do_turn( player_activity & /*act*/, Character & )
+void dig_activity_actor::do_turn( player_activity & /*act*/, Character& who )
 {
     if( progress.front().complete() ) {
         progress.pop();
         return;
     }
-    sfx::play_activity_sound( "tool", "shovel", sfx::get_heard_volume( location ) );
+    sfx::play_activity_sound( "tool", "shovel", sfx::get_heard_volume( location, 60 ) );
     if( calendar::once_every( 1_minutes ) ) {
         //~ Sound of a shovel digging a pit at work!
-        sounds::sound( location, 10, sounds::sound_t::activity, _( "hsh!" ) );
+        sound_event se;
+        se.origin = location;
+        se.volume = 60;
+        se.category = sounds::sound_t::activity;
+        se.description = _( "hsh!" );
+        se.id =  "tool";
+        se.variant = "shovel";
+        se.from_player = who.is_player();
+        se.from_npc = !se.from_player;
+        se.faction = who.get_faction()->id();
+        se.monfaction = who.get_faction()->mon_faction();
+        sounds::sound( se );
     }
 }
 
@@ -648,16 +659,27 @@ void dig_channel_activity_actor::start( player_activity & /*act*/, Character & )
     progress.emplace( here.ter( location )->name(), moves_total );
 }
 
-void dig_channel_activity_actor::do_turn( player_activity & /*act*/, Character & )
+void dig_channel_activity_actor::do_turn( player_activity & /*act*/, Character& who )
 {
     if( progress.front().complete() ) {
         progress.pop();
         return;
     }
-    sfx::play_activity_sound( "tool", "shovel", sfx::get_heard_volume( location ) );
+    sfx::play_activity_sound( "tool", "shovel", sfx::get_heard_volume( location, 70 ) );
     if( calendar::once_every( 1_minutes ) ) {
         //~ Sound of a shovel digging a pit at work!
-        sounds::sound( location, 10, sounds::sound_t::activity, _( "hsh!" ) );
+        sound_event se;
+        se.origin = location;
+        se.volume = 70;
+        se.category = sounds::sound_t::activity;
+        se.description = _( "hsh!" );
+        se.id =  "tool";
+        se.variant =  "shovel";
+        se.from_player = who.is_player();
+        se.from_npc = !se.from_player;
+        se.faction = who.get_faction()->id();
+        se.monfaction = who.get_faction()->mon_faction();
+        sounds::sound( se );
     }
 }
 
@@ -973,6 +995,7 @@ void hacking_activity_actor::finish( player_activity& act, Character& who )
     tripoint_bub_ms examp = abs_to_bub( act.placement );
     hack_type type = get_hack_type( examp );
     map& here = get_map();
+    sound_event se;
     switch( hack_attempt( who, using_bionic ) ) {
         case HACK_UNABLE:
             who.add_msg_if_player( _( "You cannot hack this." ) );
@@ -981,8 +1004,13 @@ void hacking_activity_actor::finish( player_activity& act, Character& who )
             // currently all things that can be hacked have equivalent alarm failure states.
             // this may not always be the case with new hackable things.
             g->events().send<event_type::triggers_alarm>( who.getID() );
-            sounds::sound( who.bub_pos(), 60, sounds::sound_t::music, _( "an alarm sound!" ), true,
-                           "environment", "alarm" );
+            se.origin = who.bub_pos();
+            se.volume = 120;
+            se.category = sounds::sound_t::music;
+            se.description = _( "an alarm sound!" );
+            se.id = "environment";
+            se.variant = "alarm";
+            sounds::sound( se );
             if( examp.z() > 0 && !g->timed_events.queued( TIMED_EVENT_WANTED ) ) {
                 g->timed_events
                 .add( TIMED_EVENT_WANTED, calendar::turn + 30_minutes, 0, who.abs_sm_pos() );
@@ -1004,9 +1032,17 @@ void hacking_activity_actor::finish( player_activity& act, Character& who )
                     who.add_msg_if_player( _(
                                                "You hack the terminal and route all available fuel to "
                                                "your pump!" ) );
-                    sounds::sound(
-                        examp, 6, sounds::sound_t::activity,
-                        _( "Glug Glug Glug Glug Glug Glug Glug Glug Glug" ), true, "tool", "gaspump" );
+                    se.origin = examp;
+                    se.volume = 40;
+                    se.category = sounds::sound_t::activity;
+                    se.description = _( "Glug Glug Glug Glug Glug Glug Glug Glug Glug" );
+                    se.id = "tool";
+                    se.variant =  "gaspump";
+                    se.from_player = who.is_player();
+                    se.from_npc = !se.from_player;
+                    se.faction = who.get_faction()->id();
+                    se.monfaction = who.get_faction()->mon_faction();
+                    sounds::sound( se );
                 } else {
                     who.add_msg_if_player( _( "Nothing happens." ) );
                 }
@@ -2053,11 +2089,16 @@ void reload_activity_actor::finish( player_activity& act, Character& who )
             for( int i = 0; i != qty; ++i ) { msg = _( "You insert one %2$s into the %1$s." ); }
         }
         if( reloadable.type->gun->reload_noise_volume > 0 ) {
-            sfx::play_variant_sound(
-                "reload", reloadable.typeId().str(), sfx::get_heard_volume( p.bub_pos() ) );
-            sounds::ambient_sound(
-                p.bub_pos(), reloadable.type->gun->reload_noise_volume, sounds::sound_t::activity,
-                reloadable.type->gun->reload_noise );
+            sound_event se;
+            se.origin = p.bub_pos();
+            se.volume = reloadable.type->gun->reload_noise_volume;
+            se.category = sounds::sound_t::activity;
+            se.description = reloadable.type->gun->reload_noise;
+            se.id = "reload";
+            se.variant = reloadable.typeId().str();
+            sounds::sound( se );
+            sfx::play_variant_sound( "reload", reloadable.typeId().str(),
+                                     sfx::get_heard_volume( p.bub_pos(), se.volume ) );
         }
     } else if( reloadable.is_container() ) {
         msg = _( "You refill the %s." );
@@ -2270,13 +2311,25 @@ activity_id wood_chop_activity_actor::get_type() const
     return activity_id( "ACT_CHOP_TREE" );
 }
 
-void wood_chop_activity_actor::do_turn( player_activity& act, Character & /*who*/ )
+void wood_chop_activity_actor::do_turn( player_activity& act, Character& who )
 {
     map& here = get_map();
     sfx::play_activity_sound( "tool", "axe",
-                              sfx::get_heard_volume( here.abs_to_bub( act.placement ) ) );
+                              sfx::get_heard_volume( here.abs_to_bub( act.placement ), 85 ) );
     if( calendar::once_every( 1_minutes ) ) {
-        sounds::sound( here.abs_to_bub( act.placement ), 15, sounds::sound_t::activity, _( "CHK!" ) );
+        //~ Sound of a wood chopping tool at work!
+        sound_event se;
+        se.origin = here.abs_to_bub( act.placement );
+        se.volume = 85;
+        se.category = sounds::sound_t::activity;
+        se.description = _( "CHK!" );
+        se.id = "tool";
+        se.variant = "axe";
+        se.from_player = who.is_avatar();
+        se.from_npc = !se.from_player;
+        se.faction = who.get_faction()->id();
+        se.monfaction = who.get_faction()->mon_faction();
+        sounds::sound( se );
     }
 }
 
@@ -2343,7 +2396,7 @@ void wood_chop_activity_actor::finish( player_activity& act, Character& who )
             p.add_msg_if_player( m_good, _( "You finish chopping down a tree." ) );
             here.collapse_at( pos, false, true, false );
             sfx::play_variant_sound(
-                "misc", "timber", sfx::get_heard_volume( here.abs_to_bub( placement ) ) );
+                "misc", "timber", sfx::get_heard_volume( here.abs_to_bub( placement ), 95 ) );
 
             // Exertion calculation
             if( !axe ) {

@@ -403,6 +403,7 @@ void npc::assess_danger()
         npc_lod_tier == 1 && !calendar::stride_due( npc_coarse_danger_interval );
     if( !skip_monster_scan ) {
         ZoneScopedN( "assess_all_monsters" );
+        const auto npc_monster_faction = get_monster_faction();
         for( const shared_ptr_fast<monster> &mon_ptr : g->critter_tracker->get_monsters_list() ) {
             if( mon_ptr->is_dead() ) { continue; }
             monster& critter = *mon_ptr;
@@ -410,16 +411,18 @@ void npc::assess_danger()
             if( dist > default_daylight_level() ) { continue; }
             Attitude att;
             if( !has_special_attitude_traits
-                && critter.cached_npc_attitude_epoch == g_npcmove_attitude_epoch ) {
+                && critter.cached_npc_attitude_epoch == g_npcmove_attitude_epoch
+                && critter.cached_npc_attitude_faction == npc_monster_faction ) {
                 ZoneScopedN( "npc_monster_attitude_cache_hit" );
                 att = critter.cached_npc_attitude;
             } else {
                 ZoneScopedN( "npc_monster_attitude_cache_miss" );
                 att = has_special_attitude_traits
                       ? critter.attitude_to( *this )
-                      : critter.generic_npc_attitude_to();
+                      : critter.generic_npc_attitude_to( npc_monster_faction );
                 if( !has_special_attitude_traits ) {
                     critter.cached_npc_attitude_epoch = g_npcmove_attitude_epoch;
+                    critter.cached_npc_attitude_faction = npc_monster_faction;
                     critter.cached_npc_attitude = att;
                 }
             }
@@ -619,6 +622,7 @@ void npc::regen_ai_cache()
     ai_cache.total_danger = 0.0f;
     ai_cache.my_weapon_value = npc_ai::wielded_value( *this );
     ai_cache.dangerous_explosives = find_dangerous_explosives();
+    ai_cache.warn_about_queue.clear();
 
     assess_danger();
     if( old_assessment > NPC_DANGER_VERY_LOW && ai_cache.danger_assessment <= 0 ) {
@@ -671,6 +675,15 @@ void npc::move()
     }
     // Tier 2 macro step: distant NPCs skip full AI on non-step turns.
     if( npc_lod_tier == 2 && !calendar::stride_due( npc_macro_interval ) ) { return; }
+    if( !ai_cache.warn_about_queue.empty() ) {
+        // Sound off about sound warnings right before we regenerate the AI cache, but after we
+        // apply sounds to NPC AIs.
+        for( auto& warning_sound : ai_cache.warn_about_queue ) {
+            warn_about(
+                warning_sound.type, warning_sound.duration, warning_sound.name,
+                warning_sound.range, warning_sound.danger_pos );
+        }
+    }
     regen_ai_cache();
     adjust_power_cbms();
     {

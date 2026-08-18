@@ -283,7 +283,8 @@ void monster::melee_attack( Creature& target, float accuracy )
         if( u_see_me ) {
             if( target.is_player() ) {
                 sfx::play_variant_sound(
-                    "melee_attack", "monster_melee_hit", sfx::get_heard_volume( target.bub_pos() ) );
+                    "melee_attack", "monster_melee_hit",
+                    sfx::get_heard_volume( target.bub_pos(), 65 ) );
                 sfx::do_player_death_hurt( dynamic_cast<player &>( target ), false );
                 //~ 1$s is attacker name, 2$s is bodypart name in accusative.
                 add_msg( m_bad, _( "%1$s hits your %2$s." ), disp_name( false, true ),
@@ -691,11 +692,10 @@ void monster::die( Creature* nkiller )
     if( type->has_placate_trigger( mon_trigger::FRIEND_DIED ) ) { anger_adjust -= 15; }
 
     if( anger_adjust != 0 || morale_adjust != 0 ) {
-        int light = g->light_level( bub_pos().z() );
         for( monster& critter : g->all_monsters() ) {
             if( critter.faction != this->faction ) { continue; }
 
-            if( g->m.sees( critter.bub_pos(), bub_pos(), light ) ) {
+            if( critter.sees( *this ) ) {
                 critter.morale += morale_adjust;
 
                 if( critter.has_flag( MF_FACTION_MEMORY ) && killer_faction.is_valid() ) {
@@ -819,11 +819,10 @@ void monster::on_hit(
     if( type->has_placate_trigger( mon_trigger::FRIEND_ATTACKED ) ) { anger_adjust -= 15; }
 
     if( anger_adjust != 0 || morale_adjust != 0 ) {
-        int light = g->light_level( bub_pos().z() );
         for( monster& critter : g->all_monsters() ) {
             if( critter.faction != this->faction ) { continue; }
 
-            if( g->m.sees( critter.bub_pos(), bub_pos(), light ) ) {
+            if( critter.sees( *this ) ) {
                 critter.morale += morale_adjust;
 
                 if( critter.has_flag( MF_FACTION_MEMORY ) && attacker_faction.is_valid() ) {

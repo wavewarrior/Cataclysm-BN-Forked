@@ -791,6 +791,7 @@ class item: public location_visitable<item>, public game_object<item>
         int get_quality( const quality_id& id ) const;
         std::map<quality_id, int> get_qualities() const;
         bool count_by_charges() const;
+        bool is_stackable() const;
 
         /**
          * If count_by_charges(), returns charges, otherwise 1
@@ -1039,6 +1040,12 @@ class item: public location_visitable<item>, public game_object<item>
         int stab_resist( bool to_self = false ) const;
         int bullet_resist( bool to_self = false ) const;
         /*@}*/
+
+        /**
+        * Returns the normal hearing protection of the item, in dB spl
+        * If advanced is true, returns the advanced (active) hearing protection of the item, in dB spl.
+        */
+        int get_hearing_protection( bool advanced = false ) const;
 
         /**
          * Assuming that specified du hit the armor, reduce du based on the item's resistance to the
@@ -1358,6 +1365,12 @@ class item: public location_visitable<item>, public game_object<item>
          *  @param ignore only check item is compatible and ignore any existing contents
          */
         bool can_holster( const item& obj, bool ignore = false ) const;
+
+        /** Checks if item is a bandolier and currently capable of storing obj
+         *  @param obj object that we want to holster
+         *  @param ignore only check item is compatible and ignore any existing contents
+         */
+        bool can_put_in_bandolier( const item &obj, bool ignore = false ) const;
 
         /**
          * Callback when a character starts wearing the item. The item is already in the worn
@@ -2545,6 +2558,8 @@ namespace charge_removal_blacklist
 {
 const std::set<itype_id> &get();
 void load( const JsonObject& jo );
+void defer( item*, int );
+void split_deferred();
 void reset();
 } // namespace charge_removal_blacklist
 

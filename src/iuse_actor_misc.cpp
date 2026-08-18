@@ -728,10 +728,14 @@ if( p.has_trait( trait_MUT_JUNKIE ) ) {
     if( p.is_player() && !( p.has_trait( trait_NOPAIN ) ) && m_category.iv_sound ) {
         p.mod_pain( m_category.iv_pain );
         /** @EFFECT_STR increases volume of painful shouting when using IV mutagen */
-        sounds::sound(
-            p.bub_pos(), m_category.iv_noise + p.str_cur, sounds::sound_t::alert,
-            m_category.iv_sound_message(), true, m_category.iv_sound_id(),
-            m_category.iv_sound_variant() );
+        sound_event se;
+        se.origin = p.bub_pos();
+        se.volume = m_category.iv_noise + p.str_cur;
+        se.category = sounds::sound_t::alert;
+        se.description = m_category.iv_sound_message();
+        se.id = m_category.iv_sound_id();
+        se.variant = m_category.iv_sound_variant();
+        sounds::sound( se );
     }
 
     int mut_count = m_category.iv_min_mutations;

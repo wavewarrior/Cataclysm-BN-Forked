@@ -772,19 +772,23 @@ bool Character::avoid_trap( const tripoint_bub_ms& pos, const trap& tr ) const
     return myroll >= traproll;
 }
 
-bool Character::can_hear( const tripoint_bub_ms &source, const int volume ) const
+bool Character::can_hear( const tripoint_bub_ms& source, const int volume ) const
 {
-    if( is_deaf() ) {
-    return false;
-}
+    if( is_deaf() ) { return false; }
 
 // source is in-ear and at our square, we can hear it
-if( source == bub_pos() && volume == 0 ) {
-    return true;
-}
+if( source == bub_pos() ) { return true; }
+
+const map& here = get_map();
+const level_cache& cache = here.get_cache_ref( bub_pos().z() );
 const int dist = rl_dist( source, bub_pos() );
 const float volume_multiplier = hearing_ability();
-return ( volume - get_weather().weather_id->sound_attn ) * volume_multiplier >= dist;
+const short tabsp = here.inbounds( bub_pos() )
+                    ? cache.absorption_cache[cache.idx( bub_pos().x(), bub_pos().y() )]
+                        : 0;
+    // Both sides of this comparison are in mdB: volume is dB, so scale it by 100.
+    return ( ( 100 * volume ) - get_cumulative_vol_dist_loss( 3, dist, tabsp ) )
+           >= ( SOUND_MINIMUM_VOLUME_FOR_PROPAGATION - ( ( volume_multiplier * 100 ) - 100 ) );
 }
 
 float Character::hearing_ability() const
