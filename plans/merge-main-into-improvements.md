@@ -642,3 +642,125 @@ Both are pre-existing vehicle-physics failures. Capture each stage's run with
 `-r xml -o /tmp/stageN.xml` and diff the failing-case *name set* against this table; the raw
 assertion counts move with content changes and are not the criterion. The suite leaves the worktree
 clean — no `hit_range.json`/`*.pgm` artifacts appeared.
+
+## S1 outcome (2026-08-18) — landed as `71e834c4a3`
+
+`git merge 604eeffad5`. 49 conflicted files / 194 hunks. Builds `cataclysm-bn-tiles` +
+`cata_test-tiles` clean.
+
+| Run | Cases | Pass | Fail | Failing names |
+|---|---|---|---|---|
+| `~[coop]` | 926 | 922 | 3 | `box2d_authority_vehicle_bashes_terrain`, `vehicle_efficiency`, `vehicle_ramp_test_60` |
+| `[coop]` | 159 | 159 | 0 | — identical to baseline |
+
+**R3 held exactly.** Every HEAD-only hook is at its pre-merge count: `coop_` 1510,
+`*_rmlui_enabled` 285, `lighting::` 368, `render_state` 275, `occluder` 132, `box2d` 87,
+`submap_load_manager` 91, `physics::` 21, `npc_lod_tier` 11, `pocket_info_` 31,
+`lightmap_ever_generated` 9, `is_coop_remote` 9, `bind_dimension` 16.
+
+### Corrections to the plan discovered in S1
+
+1. **D5 starts at S1, not S10.** Upstream's `sound_event` API refactor is already in
+   `604eeffad5`: `sounds::sound()` takes one `sound_event` and every legacy positional overload
+   (plus `ambient_sound`, `add_footstep`) is commented out. ~575 callsites had to be converted in
+   this stage. S10 (`db0aeeea75`) only adds `units::sound` on top. The plan's D5 sweep list is
+   therefore a *later* refinement of work that begins here.
+2. **Volumes must never be derived by formula.** Upstream retuned every callsite by hand: legacy
+   6→60, 8→50, 10→60, 14→70, 35→100, 50→120 — but 80→80 for the recycle compactor and 80→100 for
+   `pedestal_wyrm`. `approximate_dB_volume_from_legacy_tile_distance_vol()` computes ~35 dB where
+   upstream chose 60, i.e. systematically 20–25 dB low, which would put small legacy values at or
+   under the 20 dB propagation floor and silence them. Use upstream's literal wherever upstream
+   touched the site; the helper is only legitimate for fork-only callsites upstream never saw.
+3. **`ambient` is the discriminator for the `from_*` flags**, not the presence of an operator.
+   Legacy `ambient=true` → all three flags false (semantics-preserving). Legacy `ambient=false` →
+   set the flag matching the emitter, since dropping it silently loses activity interruption and
+   `npc::handle_sound`. Monster form needs `.faction.id()` (`mfaction_id` → `mfaction_str_id`).
+4. **God-file decomposition mis-anchors upstream hunks.** The fork split `character.cpp`,
+   `game.cpp`, `map.cpp`, `iuse.cpp`, `iuse_actor.cpp`, `monattack.cpp`, `iexamine.cpp`,
+   `vehicle.cpp`, `item.cpp`, `activity_handlers.cpp`, `handle_action.cpp` and others, so git aligns
+   upstream's diff against unrelated bodies. Detect by asking whether the hunk's `base` section is a
+   plausible ancestor of `ours`, and by checking `git show :2:<path>` for the identifiers in
+   `theirs` — zero hits means the symbol is not in that file and `@theirs` would duplicate a
+   definition living in another TU. Resolve `@ours`, recover upstream's delta by diffing the base
+   and theirs blobs, and re-home it. Several were hard build/link breaks, not merely lost features.
+5. **A cleanly auto-merged file can still be broken.** Conflicts are not the boundary of risk.
+   Upstream's code assumes upstream's APIs, so files with no conflict at all carried raw member
+   access on the fork's encapsulated `class faction` (30 sites needing `id()`/`mon_faction()`), and
+   `item.h` stopped transitively providing `itype`, breaking `character_combat.cpp`. Additionally
+   `src/item_search.h` and `src/auto_pickup.h` auto-merged to main's form and thereby **reverted the
+   fork's `rule`-functor architecture and its `item_search_cache` lazy-cache fix**; that resolution
+   stands for now but is an open architectural decision, not a settled one.
+6. **`CATA_SDL` is still unresolved and becomes load-bearing at S2.** S1 does not need it, so it was
+   not addressed. Addendum 8 above still applies in full.
+7. **`build_absorption_cache()` has no caller.** It is defined (`src/sounds.cpp:1691`) and declared
+   (`src/map.h:2390`), and the invalidation sites landed in `src/map_cache.cpp`, but the
+   `Phase3_sound_absorption` loop that upstream calls from `map::build_map_cache` was never
+   re-homed. Sound occlusion therefore reads an absorption cache that is never populated — silent,
+   compiles, no failing test. **Fix this early in S2.** Likewise `src/map_access.cpp` never received
+   the `furn_set`/`ter_set` absorption invalidation.
+8. **Deliberate divergences from upstream**, both documented in code comments:
+   - `src/item_factory_finalize.cpp` — the ammo-loudness dB clamp runs only when `loudness > 0`.
+     `log10(0)` is `-inf` narrowed to `int` (UB) and is reachable for 142 ammo definitions with no
+     range and no damage. Upstream ships the same defect.
+   - `src/vehicle_part.cpp` — `is_broken()` keeps the fork's `count_by_charges() ? false :` guard.
+     `itype::damage_max()` returns 0 for a charge-based item, so the unguarded upstream form makes
+     `0 >= 0` true and reports **every** charge-based part broken.
+   - `src/monattack_ranged.cpp` — `_( "a robotic voice boom, \"Citizen, Halt!\"" )` keeps its
+     translation wrapper, which upstream dropped. Contrast `engine_bckfire`, where upstream's typo
+     was **kept** because it is an sfx asset id that must match a data file.
+
+### BLOCKING: `box2d_authority_vehicle_bashes_terrain`
+
+Per the per-stage gate this blocks S2 and **must not be carried forward**. It is a genuine
+merge-induced regression, established by a real A/B against a pre-merge build in a separate
+worktree (`git worktree add /tmp/cbn-baseline a8bf513326`), not by assumption:
+
+| Build | `[vehicle]` decl seed 1 (74 cases) | isolation |
+|---|---|---|
+| pre-merge `a8bf513326` | 63 pass / 10 fail — this test **passes** | passes |
+| S1 `71e834c4a3` | 62 pass / 11 fail — this test **fails** | passes |
+
+Failure mode, from a temporary `WARN` probe in the test loop (since removed). Terrain collider
+counts are identical (0 → 1) in both builds, and both reach turn 0 with the *same* state
+(`vel=113 pos=59,61`), then diverge:
+
+| turn | pre-merge | S1 |
+|---|---|---|
+| 0 | vel 113, pos 59,61 | vel 113, pos 59,61 |
+| 1 | vel **0**, pos 61,61 | vel 107, pos 62,60 |
+| 2 | vel 0 — **wall bashed** | vel 836, pos 64,57 |
+| 3–4 | — | vel 1559 → 2000, drives away; wall intact |
+
+So pre-merge the vehicle collides and stops; post-merge it re-accelerates to `cruise_velocity` and
+never hits the obstacle at (66,60).
+
+**Ruled out by experiment, not by reading:**
+
+- *Test ordering / main's 28 added cases.* Excluding all 28 by name yields exactly 898 cases — the
+  baseline count — and it still fails.
+- *RNG.* Deterministic across `--rng-seed 1`, `2`, `3`, `7` and across `--order decl|lex|rand`.
+- *`data/json`.* The merged binary run against the pre-merge worktree's `data/` still fails, so the
+  cause is code.
+- *`src/vehicle.h`, `vehicle_damage.cpp`, `vehicle_items_tow.cpp`, `vehicle_part.cpp`* — reverted to
+  pre-merge together, still fails.
+- *`map::bash` restructure.* The new `int`-overload → `bash_params`-overload split was diffed
+  against the pre-merge single overload and is semantically identical; `bash_params`' member
+  declaration order matches the designated initialiser, so the old positional init is equivalent.
+- *`charge_removal_blacklist::split_deferred()`* newly called from `map::load()` — commenting it out
+  does not fix it (and it does drain its static vector, so it is not leaking).
+- *`map_bash.cpp`'s `bash_ter_furn` / `bash_vehicle` / `bash_ter_success`* — diffed against
+  pre-merge; sound-only plus formatting.
+- *`vehicle_move.cpp` (`part_collision`)* — merge diff is three sound conversions only.
+
+**Still suspect, in priority order:** `src/itype.cpp` + `src/item_type.cpp` (`damage_max()` now
+returns a real scale for stackable charge items instead of 0, which changes
+`vehicle_part::health_percent`/`damage_percent` from a divide-by-zero to a finite value and feeds
+collision damage math), `src/map_cache.cpp` (52 added lines on the cache path movement uses), and
+`src/vehicle_physics.cpp`'s `noise_and_smoke` restructure.
+
+**Recommended next step:** binary-search the 69 changed files that contain no sound-API reference
+and are therefore individually revertible. Use `[vehicle] --order decl --rng-seed 1` (~50 s) as the
+harness rather than the full suite, and keep `/tmp/cbn-baseline` for A/B. Note that reverting
+`mapdata.h` breaks `TFLAG_ROAD` in `sounds.cpp`, `map_cache.cpp` breaks
+`map::set_absorption_cache_dirty`, and `map_field.cpp` breaks the 4-arg
+`process_fields_in_submap` — exclude those three from a blanket revert or restore them individually.
