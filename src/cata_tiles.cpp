@@ -5,6 +5,7 @@
 
 #include "action.h"
 #include "avatar.h"
+#include "cached_options.h"
 #include "calendar.h"
 #include "cata_utility.h"
 #include "catacharset.h"
@@ -125,6 +126,23 @@ struct draw_zone_overlay_options {
     int alpha = 64;
     bool draw_label = true;
 };
+
+// Upstream's per-sprite coloured-light tint (#9016) is deliberately NOT wired up here.
+//
+// Upstream applies it inside draw_sprite_at via SDL_BLENDMODE_ADD + render_copy_ex, i.e.
+// the legacy SDL renderer. This fork draws sprites through the SDL_GPU path, where
+// SDL_Render* calls land on the hidden legacy mirror renderer and produce nothing, so
+// porting upstream's application code would have added a tint that never reaches a pixel.
+//
+// The data side DID land: gpu_lm.cpp populates level_cache::colored_light_cache, and the
+// `colored_light_tint_from_packed` decode is trivial to reconstruct from upstream. What is
+// missing is a GPU-visible additive tint pass to consume it. Note that the fork's own
+// coloured-light overlay below (search "Colored light overlay") draws with geometry->rect
+// on the same legacy renderer, so it needs the same scrutiny.
+//
+// Tracked follow-up, not merge work: give the coloured-light overlay a GPU pass and feed it
+// from colored_light_cache. Under D2 the GPU lightmap is the normal path and the fork's
+// CPU-only light_color_cache is zeroed there, so coloured lighting is neutral until then.
 
 void draw_zone_overlay( const draw_zone_overlay_options& opt )
 {
@@ -1104,17 +1122,8 @@ void cata_tiles::draw(
                 info.screen_row = row;
                 draw_points.push_back( info );
             };
-            const auto seen_through_air_light = [&]( const tripoint_bub_ms & pos ) {
-                const auto& light_cache = here.access_cache( pos.z() );
-                if( light_cache.inbounds( pos.xy() )
-                    && light_cache.sm[light_cache.idx( pos.x(), pos.y() )] > 0.0f ) {
-                    return lit_level::BRIGHT;
-                }
-                const auto light = here.ambient_light_at( pos );
-                if( light > LIGHT_SOURCE_BRIGHT ) { return lit_level::BRIGHT; }
-                if( light > LIGHT_AMBIENT_LIT ) { return lit_level::LIT; }
-                return lit_level::LOW;
-            };
+            // 3D FoV is unconditional and unlimited in z now, so upstream removed the
+            // "seen through open air beyond the FoV z range" path and its light helper.
 
             const bool in_vis_bounds =
                 ( y >= min_visible_y && y <= max_visible_y && x >= min_visible_x
@@ -1134,7 +1143,7 @@ void cata_tiles::draw(
 
                 ll = ch.inbounds( {x, y} ) ? ch.visibility_cache[ch.idx( x, y )] : lit_level::BLANK;
                 const auto visibility = here.get_visibility( ll, cache );
-                if( ( fov_3d || z == center.z() ) && in_map_bounds ) {
+                if( in_map_bounds ) {
                     if( !would_apply_vision_effects( visibility ) ) {
                         if( here.ter( pos ) != t_open_air ) {
                             last_vis = z;
@@ -1143,8 +1152,8 @@ void cata_tiles::draw(
                             had_visible_open_air = true;
                         }
                     } else if(
-                        !has_memory && z < center.z() && visibility == visibility_type::VIS_HIDDEN
-                        && !( fov_3d && had_visible_open_air && z < center.z() - fov_3d_z_range ) ) {
+                        !has_memory && z < center.z()
+                        && visibility == visibility_type::VIS_HIDDEN ) {
                         if( !drew_occluded_overlay ) {
                             drew_occluded_overlay = true;
                             // Draw a depth-faded semi-transparent overlay for the topmost occluded
@@ -1184,18 +1193,13 @@ void cata_tiles::draw(
                     const auto height_3d =
                         ( pos.z() - center.z() ) * tileset_ptr->get_zlevel_height();
 
-                    const auto render_seen_through_air =
-                        fov_3d && had_visible_open_air && in_map_bounds
-                        && z < center.z() - fov_3d_z_range;
-
                     for( int i = 0; i < 4; i++ ) {
                         const tripoint np = pos.raw() + neighborhood[i];
                         invisible[1 + i] =
                             np.y < min_visible_y || np.y > max_visible_y || np.x < min_visible_x
                             || np.x > max_visible_x
-                            || ( !render_seen_through_air
-                                 && would_apply_vision_effects( here.get_visibility(
-                                         ch.visibility_cache[ch.idx( np.x, np.y )], cache ) ) );
+                            || would_apply_vision_effects( here.get_visibility(
+                                    ch.visibility_cache[ch.idx( np.x, np.y )], cache ) );
                     }
 
                     if( !invisible[0] && apply_vision_effects( pos, visibility ) ) {
@@ -1209,24 +1213,13 @@ void cata_tiles::draw(
                                 ch_above.inbounds( {pos.x(), pos.y()} )
                                 ? ch_above.visibility_cache[ch_above.idx( pos.x(), pos.y() )]
                                 : lit_level::BLANK;
-                            invisible[0] = !render_seen_through_air && above_ll == lit_level::BLANK;
+                            invisible[0] = above_ll == lit_level::BLANK;
                             const auto vehicle_ll =
-                                above_ll != lit_level::BLANK ? above_ll
-                                : render_seen_through_air
-                                ? seen_through_air_light( pos )
-                                : ll;
-                            if( render_seen_through_air ) { here.set_memory_seen_cache_dirty( pos ); }
+                                above_ll != lit_level::BLANK ? above_ll : ll;
                             min_z = std::min( pos.z(), min_z );
                             queue_draw_point(
                                 tile_render_info( pos, height_3d, vehicle_ll, invisible ) );
                         } else {
-                            if( render_seen_through_air ) {
-                                here.set_memory_seen_cache_dirty( pos );
-                                min_z = std::min( pos.z(), min_z );
-                                queue_draw_point( tile_render_info(
-                                                      pos, height_3d, seen_through_air_light( pos ), invisible ) );
-                                break;
-                            }
                             if( has_draw_override( pos ) || has_memory ) { invisible[0] = true; }
                             for( int cz = pos.z(); !invisible[0] && cz <= -center.z(); cz++ ) {
                                 const Creature* critter = g->critter_at( {pos.xy(), cz}, true );
@@ -1240,17 +1233,10 @@ void cata_tiles::draw(
                                 min_z = std::min( pos.z(), min_z );
                                 queue_draw_point( tile_render_info( pos, height_3d, ll, invisible ) );
                             } else if( last_vis != center.z() + 1 ) {
-                                if( fov_3d && in_map_bounds && z < center.z() - fov_3d_z_range ) {
-                                    here.set_memory_seen_cache_dirty( pos );
-                                    min_z = std::min( pos.z(), min_z );
-                                    queue_draw_point( tile_render_info(
-                                                          pos, height_3d, seen_through_air_light( pos ), invisible ) );
-                                } else {
-                                    min_z = std::min( last_vis, min_z );
-                                    queue_draw_point( tile_render_info(
-                                                          tripoint_bub_ms( pos.xy(), last_vis ), height_3d, last_vis_ll,
-                                                          invisible ) );
-                                }
+                                min_z = std::min( last_vis, min_z );
+                                queue_draw_point( tile_render_info(
+                                                      tripoint_bub_ms( pos.xy(), last_vis ), height_3d, last_vis_ll,
+                                                      invisible ) );
                             } else if( had_visible_open_air && in_map_bounds ) {
                                 // No vehicle and no solid last_vis — placeholder so cross-z
                                 // sprite draws (player character above) still execute.
@@ -1485,8 +1471,8 @@ void cata_tiles::draw(
                     continue; // pure white light, no tint
                 }
                 // Alpha: saturated energy relative to total scalar light at this tile.
-                const four_quadrants& lm_val = zlev_cache.lm[zlev_cache.idx( p.pos.x(), p.pos.y() )];
-                const float scalar = lm_val.max();
+                // S2-#2: level_cache::lm is a flat float grid now, not four_quadrants.
+                const float scalar = zlev_cache.lm[zlev_cache.idx( p.pos.x(), p.pos.y() )];
                 const float ratio = scalar > 0.1f ? std::min( 1.0f, sat_mag / scalar ) : 0.0f;
                 const Uint8 alpha = static_cast<Uint8>( ratio * 80.0f );
                 if( alpha == 0 ) { continue; }
@@ -1590,10 +1576,10 @@ void cata_tiles::draw(
                 if( low_overridden
                     ? !low_override->second
                     : ( here.dont_draw_lower_floor( {mem_x, mem_y, z} )
-                        || ( fov_3d && lighting != lit_level::BLANK
+                        || ( lighting != lit_level::BLANK
                              && _lower.visibility_cache[_lower.idx( mem_x, mem_y )]
                              == lit_level::BLANK ) ) ) {
-                    if( fov_3d ) { lighting = _cur.visibility_cache[_cur.idx( mem_x, mem_y )]; }
+                    lighting = _cur.visibility_cache[_cur.idx( mem_x, mem_y )];
                     break;
                 }
             }

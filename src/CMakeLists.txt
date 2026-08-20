@@ -151,6 +151,26 @@ function(setup_common_target_properties target_name)
         ${CMAKE_SOURCE_DIR}/pch/main-pch.hpp)
 endfunction()
 
+function(link_sdl_core target_name)
+    if (NOT DYNAMIC_LINKING)
+        target_link_libraries(${target_name} PUBLIC SDL3::SDL3-static)
+    else()
+        target_link_libraries(${target_name} PUBLIC SDL3::SDL3)
+    endif ()
+    # Upstream gates all of src/compute/ on CATA_SDL. This fork always links SDL3, so it is
+    # always defined — see the CATA_SDL block in the root CMakeLists.txt.
+    target_compile_definitions(${target_name} PUBLIC CATA_SDL)
+endfunction()
+
+function(link_sdl_mixer target_name)
+    if (NOT DYNAMIC_LINKING)
+        target_link_libraries(${target_name} PUBLIC SDL3_mixer::SDL3_mixer-static)
+    else()
+        target_link_libraries(${target_name} PUBLIC SDL3_mixer::SDL3_mixer)
+    endif ()
+    target_compile_definitions(${target_name} PUBLIC SDL_SOUND)
+endfunction()
+
 # Build tiles version (only supported configuration)
 add_library(
         cataclysm-bn-tiles-common OBJECT
@@ -180,6 +200,9 @@ setup_common_target_properties(cataclysm-bn-tiles-common)
 if (DYNAMIC_ATLAS)
     target_compile_definitions(cataclysm-bn-tiles-common PUBLIC DYNAMIC_ATLAS)
 endif()
+
+# Links SDL3 and defines CATA_SDL, which upstream's src/compute/ is entirely gated on.
+link_sdl_core(cataclysm-bn-tiles-common)
 
 # --- Co-op multiplayer ---
 # Co-op is always compiled; gated at runtime via coop_session::get().is_coop().
@@ -267,16 +290,7 @@ if (WIN32)
 endif ()
 
 if (SOUND)
-    if (NOT DYNAMIC_LINKING)
-        target_link_libraries(cataclysm-bn-tiles-common PUBLIC
-            SDL3_mixer::SDL3_mixer-static
-        )
-    else()
-        target_link_libraries(cataclysm-bn-tiles-common PUBLIC
-            SDL3_mixer::SDL3_mixer
-        )
-    endif()
-    add_definitions(-DSDL_SOUND)
+    link_sdl_mixer(cataclysm-bn-tiles-common)
 endif ()
 
 if (RELEASE)
@@ -284,6 +298,15 @@ if (RELEASE)
 endif ()
 
 set_target_properties(cataclysm-bn-tiles PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+if (COMMAND cata_copy_windows_lavapipe_runtime)
+    cata_copy_windows_lavapipe_runtime(cataclysm-bn-tiles)
+endif()
+
+# Upstream builds its compute kernels (src/shaders/lm_*_compute.hlsl) as the `cata_shaders`
+# target; the GPU lightmap has nothing to load without it.
+if (CATA_SHADERS AND TARGET cata_shaders)
+    add_dependencies(cataclysm-bn-tiles-common cata_shaders)
+endif ()
 
 if( LUA_DOCS_ON_BUILD AND DENO_BINARY )
     add_custom_command(

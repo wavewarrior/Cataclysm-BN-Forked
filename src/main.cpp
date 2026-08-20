@@ -64,6 +64,11 @@ class ui_adaptor;
 
 #define SDL_MAIN_HANDLED
 #include "sdl_wrappers.h"
+#if defined(CATA_SDL)
+#   include <SDL3/SDL.h>
+#   include "compute/gpu_platform.h"
+#endif
+#include "preload_config.h"
 
 #include <SDL3/SDL_main.h>
 
@@ -105,6 +110,28 @@ struct arg_handler {
     const char *help_group; //!< Section of the help message in which to include this argument.
     handler_method handler; //!< The callback to be invoked when this argument is encountered.
 };
+
+#if defined(CATA_SDL)
+auto init_sdl_platform( bool init_audio ) -> bool
+{
+    auto init_flags = SDL_InitFlags{ SDL_INIT_VIDEO };
+#if defined(SDL_SOUND)
+    if( init_audio ) {
+        init_flags |= SDL_INIT_AUDIO;
+    }
+#else
+    ( void )init_audio;
+#endif
+
+    if( !SDL_Init( init_flags ) ) {
+        DebugLog( DL::Error, DC::Main ) << "SDL_Init failed: " << SDL_GetError();
+        return false;
+    }
+
+    atexit( SDL_Quit );
+    return true;
+}
+#endif
 
 void printHelpMessage(
     const arg_handler* first_pass_arguments, size_t num_first_pass_arguments,
@@ -153,7 +180,7 @@ int main( int argc, char* argv[] )
         const char *section_default = nullptr;
         const char *section_map_sharing = "Map sharing";
         const char *section_user_directory = "User directories";
-        const std::array<arg_handler, 16> first_pass_arguments = {{
+        const std::array<arg_handler, 17> first_pass_arguments = {{
                 {
                     "--seed", "<string of letters and or numbers>",
                     "Sets the random number generator's seed value",
@@ -371,6 +398,20 @@ int main( int argc, char* argv[] )
                     lua_types_output_path = params[0];
                     return 0;
                 }
+            },
+            {
+                "--gpu-backend", "<driver>",
+                "Override the SDL_GPU backend driver for diagnostics (vulkan / direct3d12 / metal / software).",
+                nullptr,
+                []( int num_args, const char **params ) -> int {
+                    if( num_args < 1 ) {
+                        return -1;
+                    }
+#if defined(CATA_SDL)
+                    preload_config::set_gpu_backend_override( params[0] );
+#endif
+                    return 1;
+                }
             }
         }
     };
@@ -557,6 +598,8 @@ int main( int argc, char* argv[] )
         }
     }
 
+    preload_config::load();
+
     std::string current_path = std::filesystem::current_path().string();
 
     if( !dir_exist( PATH_INFO::datadir() ) ) {
@@ -608,6 +651,13 @@ int main( int argc, char* argv[] )
                                    << SDL_VERSIONNUM_MINOR( linked_ver ) << "."
                                    << SDL_VERSIONNUM_MICRO( linked_ver );
 
+#if defined(CATA_SDL)
+    if( test_mode && lua_doc_output_path.empty() && lua_types_output_path.empty() &&
+        !init_sdl_platform( false ) ) {
+        return 1;
+    }
+#endif
+
     // in test mode don't initialize curses to avoid escape sequences being inserted into output
     // stream
     if( !test_mode ) {
@@ -624,6 +674,13 @@ int main( int argc, char* argv[] )
             return 1;
         }
     }
+
+#if defined(CATA_SDL)
+    if( lua_doc_output_path.empty() && lua_types_output_path.empty() ) {
+        cata_gpu::init();
+        atexit( cata_gpu::shutdown );
+    }
+#endif
 
     if( test_mode ) {
         get_options().init();
@@ -658,20 +715,6 @@ int main( int argc, char* argv[] )
         exit_handler( -999 );
     }
 
-
-    // Now we do the actual game.
-
-    game_ui::init_ui();
-
-    catacurses::curs_set( 0 ); // Invisible cursor here, because MAPBUFFER.load() is crash-prone
-
-#if !defined(_WIN32)
-    struct sigaction sigIntHandler;
-    sigIntHandler.sa_handler = signal_handler;
-    sigemptyset( &sigIntHandler.sa_mask );
-    sigIntHandler.sa_flags = 0;
-    sigaction( SIGINT, &sigIntHandler, nullptr );
-#endif
 
     DebugLog( DL::Info, DC::Main ) << "LAPI version: " << cata::get_lapi_version_string();
     cata::startup_lua_test();
@@ -708,6 +751,20 @@ int main( int argc, char* argv[] )
     // Placed after lua-doc block to avoid spawning a thread that would
     // terminate the process on early exit (deno task docs:gen).
     init::start_prewarm();
+
+    // Now we do the actual game.
+
+    game_ui::init_ui();
+
+    catacurses::curs_set( 0 ); // Invisible cursor here, because MAPBUFFER.load() is crash-prone
+
+#if !defined(_WIN32)
+    struct sigaction sigIntHandler;
+    sigIntHandler.sa_handler = signal_handler;
+    sigemptyset( &sigIntHandler.sa_mask );
+    sigIntHandler.sa_flags = 0;
+    sigaction( SIGINT, &sigIntHandler, nullptr );
+#endif
 
     prompt_select_lang_on_startup();
     replay_buffered_debugmsg_prompts();

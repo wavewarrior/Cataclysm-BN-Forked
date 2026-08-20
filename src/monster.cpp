@@ -2,9 +2,12 @@
 #include "coop_mutation_log.h"
 #include "physics/physics_world.h"
 
+#include "action_time_scale.h"
 #include "avatar.h"
 #include "bodypart.h"
+#include "catalua.h"
 #include "catalua_hooks.h"
+#include "catalua_impl.h"
 #include "catalua_sol.h"
 #include "character.h"
 #include "combat_feedback.h"
@@ -23,6 +26,7 @@
 #include "game.h"
 #include "game_constants.h"
 #include "int_id.h"
+#include "init.h"
 #include "item.h"
 #include "item_category.h"
 #include "item_group.h"
@@ -71,6 +75,7 @@
 #include <optional>
 #include <tuple>
 #include <unordered_map>
+#include <unordered_set>
 
 static const ammo_effect_str_id ammo_effect_WHIP( "WHIP" );
 
@@ -143,6 +148,76 @@ static const trait_id trait_PHEROMONE_INSECT( "PHEROMONE_INSECT" );
 static const trait_id trait_PHEROMONE_MAMMAL( "PHEROMONE_MAMMAL" );
 static const trait_id trait_PROF_FERAL( "PROF_FERAL" );
 static const trait_id trait_TERRIFYING( "TERRIFYING" );
+
+namespace
+{
+
+auto report_missing_lua_attitude( const std::string &method ) -> void
+{
+    static auto warned = std::unordered_set<std::string> {};
+    if( !warned.insert( method ).second ) {
+        return;
+    }
+    debugmsg( "Lua monster attitude function '%s' is not defined", method );
+}
+
+auto report_invalid_lua_attitude_return( const std::string &method, const sol::object &value,
+        sol::state &lua ) -> void
+{
+    static auto warned = std::unordered_set<std::string> {};
+    if( !warned.insert( method ).second ) {
+        return;
+    }
+    const auto type_name = get_luna_type( value );
+    const auto raw_name = type_name.value_or(
+                              std::string( sol::type_name( lua, value.get_type() ) ) );
+    debugmsg( "Lua monster attitude function '%s' returned %s, expected MonsterAttitude",
+              method, raw_name );
+}
+
+auto get_lua_monster_attitude( const monster &mon,
+                               const Character *target ) -> std::optional<monster_attitude>
+{
+    const auto &lua_method = mon.type->lua_attitude;
+    if( !lua_method ) {
+        return std::nullopt;
+    }
+
+    auto *lua_state = DynamicDataLoader::get_instance().lua.get();
+    if( lua_state == nullptr ) {
+        return std::nullopt;
+    }
+
+    sol::state &lua = lua_state->lua;
+    sol::object ref = lua.globals()["game"]["monster_attitude_functions"][*lua_method];
+    if( ref.get_type() != sol::type::function ) {
+        report_missing_lua_attitude( *lua_method );
+        return std::nullopt;
+    }
+
+    auto func = ref.as<sol::protected_function>();
+    const auto target_ref = target != nullptr
+                            ? sol::make_object( lua, target )
+                            : sol::make_object( lua, sol::lua_nil );
+    sol::protected_function_result res = func( &mon, target_ref );
+    check_func_result( res );
+    if( !res.valid() ) {
+        return std::nullopt;
+    }
+
+    const auto value = res.get<sol::object>();
+    if( value.get_type() == sol::type::lua_nil ) {
+        return std::nullopt;
+    }
+    if( value.get_type() != sol::type::number ) {
+        report_invalid_lua_attitude_return( *lua_method, value, lua );
+        return std::nullopt;
+    }
+
+    return value.as<monster_attitude>();
+}
+
+} // namespace
 static const trait_id trait_THRESH_MYCUS( "THRESH_MYCUS" );
 
 struct pathfinding_settings;
@@ -233,8 +308,8 @@ monster::monster()
 monster::monster( const mtype_id& id ): monster()
 {
     type = &id.obj();
-    moves = type->speed;
     Creature::set_speed_base( type->speed );
+    add_action_move_credit( type->speed, action_move_factor() );
     hp = type->hp;
     for( auto& sa : type->special_attacks ) {
         auto& entry = special_attacks[sa.first];
@@ -1347,6 +1422,10 @@ template <> std::string io::enum_to_string<monster_attitude>( monster_attitude a
 
 auto monster::attitude( const Character* u ) const -> monster_attitude
 {
+    if( const auto lua_attitude = get_lua_monster_attitude( *this, u ); lua_attitude ) {
+        return *lua_attitude;
+    }
+
     if( friendly != 0 ) {
         if( has_effect( effect_docile ) ) { return MATT_FPASSIVE; }
         if( u == &g->u ) { return MATT_FRIEND; }
@@ -2104,7 +2183,7 @@ void monster::decrement_summon_timer()
     if( *summon_time_limit <= 0_turns ) {
         die( nullptr );
     } else {
-        *summon_time_limit -= 1_turns;
+        *summon_time_limit -= action_time_scale::calendar_duration_this_tick();
     }
 }
 
@@ -2115,7 +2194,7 @@ void monster::process_turn()
     decrement_summon_timer();
     if( !is_hallucination() ) {
         for( const std::pair<const emit_id, time_duration> &e : type->emit_fields ) {
-            if( !calendar::once_every( e.second ) ) { continue; }
+            if( !action_time_scale::once_every_this_tick( e.second ) ) { continue; }
             const emit_id emid = e.first;
             if( emid == emit_id( "emit_shock_cloud" ) ) {
                 if( has_effect( effect_emp ) ) {
@@ -2138,7 +2217,8 @@ void monster::process_turn()
         mon_special_attack& local_attack_data = local_iter->second;
         if( !local_attack_data.enabled ) { continue; }
 
-        if( local_attack_data.cooldown > 0 ) { local_attack_data.cooldown--; }
+        local_attack_data.cooldown = std::max( 0, local_attack_data.cooldown -
+                                               action_time_scale::calendar_turns_this_tick() );
     }
     // Persist grabs as long as there's an adjacent target.
     if( has_effect( effect_grabbing ) ) {
@@ -2150,7 +2230,7 @@ void monster::process_turn()
     // We update electrical fields here since they act every turn.
     if( has_flag( MF_ELECTRIC_FIELD ) ) {
         if( has_effect( effect_emp ) ) {
-            if( calendar::once_every( 10_turns ) ) {
+            if( action_time_scale::once_every_this_tick( 10_turns ) ) {
                 sound_event se;
                 se.origin = bub_pos();
                 se.volume = 50;
@@ -2228,7 +2308,8 @@ void monster::process_turn()
                     g->u.add_effect( effect_blind, rng( 1_minutes, 2_minutes ) );
                 }
                 add_effect( effect_supercharged, 12_hours );
-            } else if( has_effect( effect_supercharged ) && calendar::once_every( 5_turns ) ) {
+            } else if( has_effect( effect_supercharged ) &&
+                       action_time_scale::once_every_this_tick( 5_turns ) ) {
                 sound_event se;
                 se.origin = bub_pos();
                 se.volume = 80;
@@ -2244,6 +2325,11 @@ void monster::process_turn()
     }
 
     Creature::process_turn();
+}
+
+auto monster::action_move_factor() const -> int
+{
+    return action_time_scale::monster_tick_action_factor();
 }
 
 void monster::batch_turns( int n )

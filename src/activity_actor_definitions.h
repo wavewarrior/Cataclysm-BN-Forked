@@ -2097,6 +2097,15 @@ class operation_activity_actor: public activity_actor
         bionic_id bid;
         std::string installer_name;
         bool autodoc;
+        /// Latches once the install/uninstall has actually been attempted.
+        ///
+        /// The operation used to fire on `time_left == half_op_duration`, an exact
+        /// equality. Under the scaled action clock `moves_left` can drop by more than one
+        /// turn's worth per tick, so `time_left` can step straight over that value — the
+        /// bionic would then never be installed and the activity would burn its whole
+        /// duration doing nothing. Serialized so a save mid-surgery neither repeats nor
+        /// skips the operation.
+        bool operation_attempted = false;
 
     public:
         operation_activity_actor() noexcept;

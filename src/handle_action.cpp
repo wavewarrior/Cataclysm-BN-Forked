@@ -73,6 +73,7 @@
 #include "player_activity.h"
 #include "player_cmd.h"
 #include "popup.h"
+#include "profile.h"
 #include "ranged.h"
 #include "rng.h"
 #include "safemode_ui.h"
@@ -193,36 +194,40 @@ class user_turn
 
 input_context game::get_player_input( std::string& action )
 {
+    ZoneScopedN( "get_player_input" );
     input_context ctxt;
-    if( uquit == QUIT_WATCH ) {
-        ctxt = input_context( "DEFAULTMODE" );
-        ctxt.set_iso( true );
-        // The list of allowed actions in death-cam mode in game::handle_action
-        // *INDENT-OFF*
-        for (const action_id id : {
-                 ACTION_TOGGLE_MAP_MEMORY,
-                 ACTION_CENTER,
-                 ACTION_SHIFT_N,
-                 ACTION_SHIFT_NE,
-                 ACTION_SHIFT_E,
-                 ACTION_SHIFT_SE,
-                 ACTION_SHIFT_S,
-                 ACTION_SHIFT_SW,
-                 ACTION_SHIFT_W,
-                 ACTION_SHIFT_NW,
-                 ACTION_LOOK,
-                 ACTION_KEYBINDINGS,
-             }) {
-            ctxt.register_action(action_ident(id));
+    {
+        ZoneScopedN( "get_player_input_context" );
+        if( uquit == QUIT_WATCH ) {
+            ctxt = input_context( "DEFAULTMODE" );
+            ctxt.set_iso( true );
+            // The list of allowed actions in death-cam mode in game::handle_action
+            // *INDENT-OFF*
+            for( const action_id id : {
+                ACTION_TOGGLE_MAP_MEMORY,
+                ACTION_CENTER,
+                ACTION_SHIFT_N,
+                ACTION_SHIFT_NE,
+                ACTION_SHIFT_E,
+                ACTION_SHIFT_SE,
+                ACTION_SHIFT_S,
+                ACTION_SHIFT_SW,
+                ACTION_SHIFT_W,
+                ACTION_SHIFT_NW,
+                ACTION_LOOK,
+                ACTION_KEYBINDINGS,
+            } ) {
+                ctxt.register_action( action_ident( id ) );
+            }
+            // *INDENT-ON*
+            ctxt.register_action( "QUIT", to_translation( "Accept your fate" ) );
+        } else {
+            ctxt = get_default_mode_input_context();
         }
-        // *INDENT-ON*
-        ctxt.register_action( "QUIT", to_translation( "Accept your fate" ) );
-    } else {
-        ctxt = get_default_mode_input_context();
     }
 
     user_turn current_turn;
-
+    const auto realtime_turns = get_option<float>( "TURN_DURATION" ) > 0.005f;
 
     // Checking early if we will need to handle animations
     // If we do not need to handle animations that will not change as long as the user has not
@@ -231,6 +236,7 @@ input_context game::get_player_input( std::string& action )
     bool animate_weather = false;
     bool animate_sct = false;
     bool do_animations = [&]() {
+        ZoneScopedN( "get_player_input_animation_decision" );
         if( get_option<bool>( "ANIMATIONS" ) ) {
             const bool weather_has_anim = init_weather_anim( get_weather().weather_id, wPrint );
 
@@ -239,7 +245,7 @@ input_context game::get_player_input( std::string& action )
             animate_sct =
                 !SCT.vSCT.empty() && uquit != QUIT_WATCH && get_option<bool>( "ANIMATION_SCT" );
 
-            // Always animate, minimap and terrain may have animations to run
+            // Tiles need the animation-aware loop so minimap and terrain animation state can be checked.
             return true;
         }
         return false;
@@ -247,12 +253,13 @@ input_context game::get_player_input( std::string& action )
     ();
 
     if( do_animations ) {
+        ZoneScopedN( "get_player_input_animation_loop" );
         // Input/redraw cadence. Weather/SCT frame-stepping is tuned to a 125ms
         // tick, so keep that while either is active (rain/combat-text speed
         // unchanged). When ONLY the sidebar is animating, run ~30fps so tween
-        // motion is smooth. Otherwise (idle, nothing animating) stay at 125ms so
-        // we don't wake 30x/sec for nothing — this is re-evaluated each iteration
-        // below, since a tween only starts once the first redraw runs.
+        // motion is smooth. The timeout is applied per iteration below, next to
+        // needs_timed_poll, since a tween only starts once the first redraw runs
+        // and an idle loop blocks instead of polling.
         constexpr int ANIM_FRAME_MS = 33;
         constexpr int SPRITE_ANIM_FRAME_MS = 25; // ~40fps while sprite animations are live
         const auto anim_timeout = []( bool weather, bool sct ) {
@@ -262,7 +269,6 @@ input_context game::get_player_input( std::string& action )
             if( creatures_require_animation() || sfx::sound_pulses_active() ) { return SPRITE_ANIM_FRAME_MS; }
             return sidebar_requires_animation() ? ANIM_FRAME_MS : 125;
         };
-        ctxt.set_timeout( anim_timeout( animate_weather, animate_sct ) );
 
         shared_ptr_fast<game::draw_callback_t> animation_cb = make_shared_fast <
         game::draw_callback_t > ( [&]() {
@@ -274,11 +280,13 @@ input_context game::get_player_input( std::string& action )
 
         do {
             if( animate_weather ) {
+                ZoneScopedN( "get_player_input_weather_anim_frame" );
                 invalidate_main_ui_adaptor();
                 generate_weather_anim_frame( get_weather().weather_id, wPrint );
             }
             // don't bother calculating SCT if we won't show it
             if( animate_sct ) {
+                ZoneScopedN( "get_player_input_sct_anim_frame" );
                 invalidate_main_ui_adaptor();
 
                 SCT.advanceAllSteps();
@@ -311,15 +319,23 @@ input_context game::get_player_input( std::string& action )
                 animate_sct = !SCT.vSCT.empty();
             }
             // We don't cache these checks as their result may change after 1st redraw
-            if( minimap_requires_animation() || terrain_requires_animation()
-                || sidebar_requires_animation() || creatures_require_animation()
-                || sfx::sound_pulses_active() ) {
+            auto needs_map_animation = false;
+            {
+                ZoneScopedN( "get_player_input_map_anim_check" );
+                needs_map_animation = minimap_requires_animation() || terrain_requires_animation()
+                                      || sidebar_requires_animation() || creatures_require_animation()
+                                      || sfx::sound_pulses_active();
+            }
+            if( needs_map_animation ) {
                 // TODO: we redraw *everything* just to animate a couple blinking dots
                 //       on the minimap or a few tiles.
                 //       This is far from ideal, and can probably be done much cheaper
                 //       (update only part of the screen? draw static parts into a texture?)
                 invalidate_main_ui_adaptor();
             }
+            const auto needs_timed_poll = realtime_turns || animate_weather || animate_sct ||
+                                          needs_map_animation || uquit == QUIT_WATCH;
+            TracyPlot( "Input Timed Polling", static_cast<int64_t>( needs_timed_poll ? 1 : 0 ) );
 
             std::unique_ptr<static_popup> deathcam_msg_popup;
             if( uquit == QUIT_WATCH ) {
@@ -329,28 +345,64 @@ input_context game::get_player_input( std::string& action )
                 .on_top( true );
             }
 
-            ui_manager::redraw_invalidated();
-            // This redraw may have started a sidebar tween (a value-change pop):
-            // tighten to ~30fps while one is live, relax back to 125ms once it
-            // settles, so an idle sidebar doesn't hold the loop at 30fps.
-            ctxt.set_timeout( anim_timeout( animate_weather, animate_sct ) );
-        } while(
-            handle_mouseview( ctxt, action ) && uquit != QUIT_WATCH
-            && ( action != "TIMEOUT" || !current_turn.has_timeout_elapsed() ) );
+            {
+                ZoneScopedN( "get_player_input_redraw_invalidated" );
+                ui_manager::redraw_invalidated();
+            }
+            auto keep_waiting = false;
+            {
+                ZoneScopedN( "get_player_input_handle_mouseview" );
+                // This redraw may have started a sidebar tween (a value-change pop):
+                // tighten to ~30fps while one is live, relax back to 125ms once it
+                // settles, so an idle sidebar doesn't hold the loop at 30fps.
+                if( needs_timed_poll ) {
+                    ctxt.set_timeout( anim_timeout( animate_weather, animate_sct ) );
+                } else {
+                    ctxt.reset_timeout();
+                }
+                keep_waiting = handle_mouseview( ctxt, action );
+            }
+            if( !keep_waiting || uquit == QUIT_WATCH ||
+                ( action == "TIMEOUT" && current_turn.has_timeout_elapsed() ) ) {
+                break;
+            }
+        } while( true );
         ctxt.reset_timeout();
     } else {
-        invalidate_main_ui_adaptor();
-        ui_manager::redraw_invalidated();
+        ZoneScopedN( "get_player_input_no_animation" );
+        {
+            ZoneScopedN( "get_player_input_noanim_redraw" );
+            invalidate_main_ui_adaptor();
+            ui_manager::redraw_invalidated();
+        }
         SCT.vSCT.clear();
 
-        ctxt.set_timeout( sfx::sound_pulses_active() ? 25 : 125 );
-        while( handle_mouseview( ctxt, action ) ) {
-            if( action == "TIMEOUT" ) {
-                ctxt.set_timeout( sfx::sound_pulses_active() ? 25 : 125 );
-                if( current_turn.has_timeout_elapsed() ) { break; }
+        if( realtime_turns || uquit == QUIT_WATCH || sfx::sound_pulses_active() ) {
+            ctxt.set_timeout( sfx::sound_pulses_active() ? 25 : 125 );
+            while( true ) {
+                auto keep_waiting = false;
+                {
+                    ZoneScopedN( "get_player_input_noanim_handle_mouseview" );
+                    keep_waiting = handle_mouseview( ctxt, action );
+                }
+                if( !keep_waiting ) {
+                    break;
+                }
+                if( action == "TIMEOUT" ) {
+                    ctxt.set_timeout( sfx::sound_pulses_active() ? 25 : 125 );
+                    if( current_turn.has_timeout_elapsed() ) {
+                        break;
+                    }
+                }
+            }
+            ctxt.reset_timeout();
+        } else {
+            {
+                ZoneScopedN( "get_player_input_noanim_blocking_handle_mouseview" );
+                ctxt.reset_timeout();
+                handle_mouseview( ctxt, action );
             }
         }
-        ctxt.reset_timeout();
     }
 
     return ctxt;
@@ -564,7 +616,7 @@ bool game::handle_action()
 
     int soffset = get_option<int>( "MOVE_VIEW_OFFSET" );
 
-    int before_action_moves = u.moves;
+    const auto before_action_moves = u.moves;
 
     // These actions are allowed while deathcam is active. Registered in game::get_player_input
     if( uquit == QUIT_WATCH || !u.is_dead_state() ) {
@@ -1657,10 +1709,19 @@ bool game::handle_action()
                 break;
         }
     }
-    if( act != ACTION_TIMEOUT ) { u.mod_moves( -current_turn.moves_elapsed() ); }
+    if( act != ACTION_TIMEOUT ) {
+        ZoneScopedN( "handle_action_elapsed_moves" );
+        u.mod_moves( -current_turn.moves_elapsed() );
+    }
     gamemode->post_action( act );
+    const auto moves_before_debug_restore = u.moves;
+    if( act != ACTION_PAUSE ) {
+        restore_debug_infinite_speed_moves( before_action_moves );
+    }
 
-    u.movecounter = ( !u.is_dead_state() ? ( before_action_moves - u.moves ) : 0 );
+    const auto action_moves_spent = u.moves > moves_before_debug_restore ? 0 :
+                                    before_action_moves - u.moves;
+    u.movecounter = ( !u.is_dead_state() ? action_moves_spent : 0 );
     dbg( DL::Info ) << string_format(
                         "%s: [%d] %d - %d = %d", action_ident( act ), to_turn<int>( calendar::turn ),
                         before_action_moves, u.movecounter, u.moves );
@@ -1673,6 +1734,7 @@ bool game::handle_action()
 /// all other cases execute inline identically to handle_action().
 auto game::handle_action_from( const std::string& pre_action ) -> bool
 {
+    ZoneScopedN( "handle_action_from" );
     auto action = pre_action;
     input_context ctxt = get_default_mode_input_context();
     action_id act = ACTION_NULL;
@@ -1682,17 +1744,22 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
     // and skip queuing it — blocked moves in the ring buffer cause wall-flicker.
     const tripoint_bub_ms coop_pos_before_ = u.bub_pos();
 
-    // Auto-move path (identical to handle_action)
-    if( u.has_destination() ) {
-        act = u.get_next_auto_move_direction();
-        if( act == ACTION_NULL ) {
-            add_msg( m_info, _( "Auto-move canceled" ) );
-            u.clear_destination();
+    {
+        ZoneScopedN( "handle_action_get_action" );
+        // Auto-move path (identical to handle_action)
+        if( u.has_destination() ) {
+            ZoneScopedN( "handle_action_get_auto_move" );
+            act = u.get_next_auto_move_direction();
+            if( act == ACTION_NULL ) {
+                add_msg( m_info, _( "Auto-move canceled" ) );
+                u.clear_destination();
+                return false;
+            }
+        } else if( u.has_destination_activity() ) {
+            ZoneScopedN( "handle_action_start_destination_activity" );
+            u.start_destination_activity();
             return false;
         }
-    } else if( u.has_destination_activity() ) {
-        u.start_destination_activity();
-        return false;
     }
     // (no blocking input call — action string comes from pre_action)
 
@@ -1716,6 +1783,7 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
     }
 
     if( act == ACTION_NULL ) {
+        ZoneScopedN( "handle_action_resolve_action" );
         act = look_up_action( action );
 
         if( act == ACTION_KEYBINDINGS ) { return false; }
@@ -1766,15 +1834,24 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
         }
     }
 
-    gamemode->pre_action( act );
+    // This has no action unless we're in a special game mode.
+    {
+        ZoneScopedN( "handle_action_gamemode_pre_action" );
+        gamemode->pre_action( act );
+    }
 
-    int soffset = get_option<int>( "MOVE_VIEW_OFFSET" );
+    int soffset = 0;
+    {
+        ZoneScopedN( "handle_action_move_view_option" );
+        soffset = get_option<int>( "MOVE_VIEW_OFFSET" );
+    }
 
-    int before_action_moves = u.moves;
+    const auto before_action_moves = u.moves;
 
 
     // These actions are allowed while deathcam is active
     if( uquit == QUIT_WATCH || !u.is_dead_state() ) {
+        ZoneScopedN( "handle_action_watch_switch" );
         switch( act ) {
             case ACTION_TOGGLE_MAP_MEMORY:
                 u.toggle_map_memory();
@@ -1825,6 +1902,7 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
     // Actions allowed only while alive
 
     if( !u.is_dead_state() ) {
+        ZoneScopedN( "handle_action_alive_switch" );
         switch( act ) {
             case ACTION_NULL:
             case NUM_ACTIONS:
@@ -1869,17 +1947,27 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
             case ACTION_MOVE_BACK:
             case ACTION_MOVE_BACK_LEFT:
             case ACTION_MOVE_LEFT:
-            case ACTION_MOVE_FORTH_LEFT:
-                if( !u.get_value( "remote_controlling" ).empty()
-                    && ( u.has_active_item_with_action( "RADIOCONTROL" )
-                         || u.has_active_bionic( bio_remote ) ) ) {
+            case ACTION_MOVE_FORTH_LEFT: {
+                ZoneScopedN( "handle_action_movement" );
+                if( !u.get_value( "remote_controlling" ).empty() &&
+                    ( u.has_active_item_with_action( "RADIOCONTROL" ) ||
+                      u.has_active_bionic( bio_remote ) ) ) {
+                    ZoneScopedN( "handle_action_remote_drive" );
                     rcdrive( get_delta_from_movement_action( act, iso_rotate::yes ) );
                 } else if( veh_ctrl ) {
-                    pldrive( get_delta_from_movement_action( act, iso_rotate::no )
-                             .reinterpret_as<point_rel_veh>() );
+                    ZoneScopedN( "handle_action_vehicle_drive" );
+                    // vehicle control uses x for steering and y for ac/deceleration,
+                    // so no rotation needed
+                    pldrive( get_delta_from_movement_action( act, iso_rotate::no ).reinterpret_as<point_rel_veh>() );
                 } else {
-                    auto dest_delta = make_player_move_cmd( act, iso_rotate::yes ).delta.xy();
+                    ZoneScopedN( "handle_action_movement_avatar" );
+                    auto dest_delta = [&]() {
+                        ZoneScopedN( "handle_action_get_move_delta" );
+                        return make_player_move_cmd( act, iso_rotate::yes ).delta.xy();
+                    }
+                    ();
                     if( auto_travel_mode && !u.is_auto_moving() ) {
+                        ZoneScopedN( "handle_action_auto_travel_route" );
                         for( int i = 0; i < SEEX; i++ ) {
                             tripoint_bub_ms auto_travel_destination(
                                 u.bub_pos().x() + dest_delta.x() * ( SEEX - i ),
@@ -1900,10 +1988,19 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
                         if( dest_next == point_rel_ms::zero() ) { u.clear_destination(); }
                         dest_delta = dest_next;
                     }
-                    if( !avatar_action::move( u, m, dest_delta ) ) { u.clear_destination(); }
+                    auto moved = false;
+                    {
+                        ZoneScopedN( "handle_action_call_avatar_move" );
+                        moved = avatar_action::move( u, m, dest_delta );
+                    }
+                    if( !moved ) {
+                        ZoneScopedN( "handle_action_clear_failed_move" );
+                        // auto-move should be canceled due to a failed move or obstacle
+                        u.clear_destination();
+                    }
                 }
                 break;
-
+            }
             case ACTION_MOVE_DOWN:
                 if( u.is_mounted() ) {
                     const monster* mon = u.mounted_creature.get();
@@ -3082,12 +3179,20 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
         }
     }
 
-    if( act != ACTION_TIMEOUT ) { u.mod_moves( -current_turn.moves_elapsed() ); }
+    if( act != ACTION_TIMEOUT ) {
+        ZoneScopedN( "handle_action_elapsed_moves" );
+        u.mod_moves( -current_turn.moves_elapsed() );
+    }
     gamemode->post_action( act );
+    const auto moves_before_debug_restore = u.moves;
+    if( act != ACTION_PAUSE ) {
+        restore_debug_infinite_speed_moves( before_action_moves );
+    }
 
-    u.movecounter = ( !u.is_dead_state() ? ( before_action_moves - u.moves ) : 0 );
-    dbg( DL::Info ) << string_format(
-                        "%s: [%d] %d - %d = %d", action_ident( act ), to_turn<int>( calendar::turn ),
-                        before_action_moves, u.movecounter, u.moves );
+    const auto action_moves_spent = u.moves > moves_before_debug_restore ? 0 :
+                                    before_action_moves - u.moves;
+    u.movecounter = ( !u.is_dead_state() ? action_moves_spent : 0 );
+    dbg( DL::Info ) << string_format( "%s: [%d] %d - %d = %d", action_ident( act ),
+                                      to_turn<int>( calendar::turn ), before_action_moves, u.movecounter, u.moves );
     return ( !u.is_dead_state() );
 }

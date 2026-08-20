@@ -23,6 +23,7 @@
 #include <vector>
 #include <ranges>
 
+#include "action_time_scale.h"
 #include "active_tile_data_def.h"
 #include "avatar.h"
 #include "avatar_functions.h"

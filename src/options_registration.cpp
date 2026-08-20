@@ -1,6 +1,7 @@
 #include "options.h"
 
 #include <algorithm>
+#include <array>
 #include <locale>
 #include <cfloat>
 #include <climits>
@@ -1099,6 +1100,11 @@ void options_manager::add_options_graphics()
 
     add_empty_line();
 
+    add( "COLORED_LIGHTING", graphics, translate_marker( "Colored lighting" ),
+         translate_marker( "If true, map tiles and entities can be tinted by colored light sources." ),
+         true, COPT_CURSES_HIDE
+       );
+
     // Tiles-only fork: the USE_TILES / USE_TILES_OVERMAP options are removed
     // (use_tiles / use_tiles_overmap are forced true in cached_options.cpp). The
     // tileset selectors and tiles-dependent options stay but no longer carry a
@@ -1299,6 +1305,18 @@ void options_manager::add_options_graphics()
         { "4", translate_marker( "4x" ) }
     },
     "1", COPT_CURSES_HIDE );
+
+#if defined(CATA_SDL)
+    add_empty_line();
+    add( "COMPUTE_ACCELERATION", graphics, translate_marker( "Compute Acceleration" ),
+         translate_marker( "Controls SDL_GPU compute device selection for lighting and visibility.  Requires restart." ),
+    {
+        { "auto", translate_marker( "Auto" ) },
+        { "software", translate_marker( "Software" ) },
+        { "force", translate_marker( "Force hardware" ) }
+    },
+    "auto" );
+#endif
 
 }
 
@@ -1527,16 +1545,8 @@ void options_manager::add_options_performance()
     add_option_group( performance, Group( "fov_3d", to_translation( "3D Field of Vision" ),
                                           to_translation( "Configure three-dimensional visibility across z-levels." ) ),
     [&]( auto & page_id ) {
-        add( "FOV_3D", page_id, translate_marker( "3D field of vision" ),
-             translate_marker( "If false, vision is limited to current z-level. If true and the world is in z-level mode, the vision will extend beyond current z-level." ),
-             true
-           );
-        add( "FOV_3D_Z_RANGE", page_id, translate_marker( "Vertical range of 3D field of vision" ),
-             translate_marker( "How many levels up and down the experimental 3D field of vision reaches. (This many levels up, this many levels down.)  3D vision of the full height of the world can slow the game down a lot.  Seeing fewer Z-levels is faster." ),
-             0, OVERMAP_LAYERS, is_android ? 3 : 5
-           );
-        add( "FOV_3D_OCCLUSION", page_id, translate_marker( "3D FoV shadow casting" ),
-             translate_marker( "When enabled, obstacles at other z-levels correctly cast 3D shadows. Requires 3D FoV. Significantly slower than disabled." ),
+        add( "FOV_3D_OCCLUSION", page_id, translate_marker( "Angled Sunlight Shadows" ),
+             translate_marker( "When enabled, direct sunlight follows the current sun angle and roofs or overhangs cast time-dependent shadows." ),
              false
            );
         add( "PREVENT_OCCLUSION", page_id, translate_marker( "Handle occlusion by high sprites" ),
@@ -1566,9 +1576,6 @@ void options_manager::add_options_performance()
              0.0, 60.0, 0.0, 0.1
            );
     } );
-
-    get_option( "FOV_3D_Z_RANGE" ).setPrerequisite( "FOV_3D" );
-    get_option( "FOV_3D_OCCLUSION" ).setPrerequisite( "FOV_3D" );
 
     add_empty_line();
 
@@ -1649,6 +1656,17 @@ void options_manager::add_options_performance()
                                "Larger values increase the loaded area and memory usage; "
                                "smaller values reduce both. " ),
              0, REALITY_BUBBLE_SIZE_MAX, is_android ? 4 : 6 );
+        add( "VISIBILITY_SCALING", page_id,
+             translate_marker( "Visibility Scaling" ),
+             translate_marker( "Controls how clear-air visibility attenuation scales with the reality bubble.  "
+                               "Perfect scales directly with the current bubble size.  Smart keeps visibility "
+                               "near the size 6 baseline while still giving small bubbles less range and large "
+                               "bubbles more range.  None keeps visibility at the size 6 baseline and only uses "
+        "bubble size as a hard view cap." ), {
+            { "perfect", translate_marker( "Perfect Scale" ) },
+            { "smart", translate_marker( "Smart Scale" ) },
+            { "none", translate_marker( "No Scale" ) }
+        }, "smart" );
         add( "LAZY_BORDER", page_id,
              translate_marker( "Pre-load Border" ),
              translate_marker( "Preload a one-overmap-tile border around the reality bubble over several turns.  "
@@ -2219,10 +2237,54 @@ void options_manager::add_options_world_default()
 
     add_empty_line();
 
-    add( "MONSTER_SPEED", world_default, translate_marker( "Monster speed percentage" ),
-         translate_marker( "Determines the movement rate of monsters.  A higher value increases monster speed and a lower reduces it.  Requires world reset." ),
-         1, 1000, 100, COPT_NO_HIDE, "%i%%"
-       );
+    struct time_scale_option {
+        const char *id;
+        const char *name;
+        const char *description;
+    };
+
+    static constexpr auto time_scale_max_percent = 10000;
+    static constexpr auto time_scale_options = std::array<time_scale_option, 7> {{
+            {
+                "TIME_ACTION_SCALE", translate_marker( "Global action speed percentage" ),
+                translate_marker( "Determines the baseline action rate for creatures and activities.  A higher value allows more actions per in-game second, while a lower value makes calendar time pass faster relative to actions." )
+            },
+            {
+                "PLAYER_ACTION_SCALE", translate_marker( "Player action speed percentage" ),
+                translate_marker( "Determines the player's action rate as a percentage of the global action speed.  A higher value allows more player actions per in-game second and a lower value allows fewer." )
+            },
+            {
+                "NPC_ACTION_SCALE", translate_marker( "NPC action speed percentage" ),
+                translate_marker( "Determines NPC action rate as a percentage of the global action speed.  A higher value allows more NPC actions per in-game second and a lower value allows fewer." )
+            },
+            {
+                "ACTIVITY_PROGRESS_SCALE", translate_marker( "Activity progress percentage" ),
+                translate_marker( "Determines long activity and crafting progress as a percentage of the global action speed.  A higher value completes activities faster per in-game second and a lower value completes them slower." )
+            },
+            {
+                "VEHICLE_CONTROL_SCALE", translate_marker( "Vehicle control speed percentage" ),
+                translate_marker( "Determines driver control action rate as a percentage of the global action speed without changing physical vehicle movement.  A higher value allows more steering, braking, and throttle inputs per in-game second and a lower value allows fewer." )
+            },
+            {
+                "OVERMAP_HORDE_SCALE", translate_marker( "Overmap horde speed percentage" ),
+                translate_marker( "Determines overmap horde movement speed as a percentage of global action speed and monster speed.  A higher value makes hordes travel faster over the overmap and a lower value makes them slower." )
+            },
+            {
+                "MONSTER_SPEED", translate_marker( "Monster speed percentage" ),
+                translate_marker( "Determines monster action rate as a percentage of the global action speed.  A higher value allows more monster actions per in-game second and a lower value allows fewer." )
+            },
+        }
+    };
+
+    add_option_group( world_default, Group( "time_scaling",
+                                            to_translation( "Time Scaling" ),
+                                            to_translation( "Configure experimental calendar and action-rate scaling." ) ),
+    [&]( const std::string & page_id ) {
+        for( const auto &option : time_scale_options ) {
+            add( option.id, page_id, option.name, option.description,
+                 1, time_scale_max_percent, 100, COPT_NO_HIDE, "%i%%" );
+        }
+    } );
 
     add( "MONSTER_RESILIENCE", world_default,
          translate_marker( "Monster resilience percentage" ),

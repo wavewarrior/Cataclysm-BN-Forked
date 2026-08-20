@@ -1429,6 +1429,7 @@ for( const auto &maps : *effects ) {
     jsout.member( "speed", speed_base );
 
     jsout.member( "speed_bonus", speed_bonus );
+    jsout.member( "move_credit_remainder", move_credit_remainder );
     jsout.member( "dodge_bonus", dodge_bonus );
     jsout.member( "block_bonus", block_bonus );
     jsout.member( "hit_bonus", hit_bonus );
@@ -1488,6 +1489,7 @@ void Creature::load( const JsonObject &jsin )
     jsin.read( "speed", speed_base );
 
     jsin.read( "speed_bonus", speed_bonus );
+    jsin.read( "move_credit_remainder", move_credit_remainder );
     jsin.read( "dodge_bonus", dodge_bonus );
     jsin.read( "block_bonus", block_bonus );
     jsin.read( "hit_bonus", hit_bonus );

@@ -13,6 +13,7 @@
 #include <type_traits>
 
 #include "action.h"
+#include "action_time_scale.h"
 #include "activity_actor_definitions.h"
 #include "assign.h"
 #include "avatar.h"
@@ -89,6 +90,7 @@
 #include "weather.h"
 #include "weather_gen.h"
 #include "active_tile_data_def.h"
+#include "action_time_scale.h"
 #include "distribution_grid.h"
 
 static const activity_id ACT_OPERATION( "ACT_OPERATION" );
@@ -209,6 +211,7 @@ constexpr int BIONIC_NOITEM_DIFFICULTY = 12;
 namespace
 {
 generic_factory<bionic_data> bionic_factory( "bionic" );
+
 } //namespace
 std::vector<bionic_id> faulty_bionics;
 
@@ -1756,7 +1759,7 @@ void Character::process_bionic( bionic &bio )
         if( !fuel_available.empty() && get_power_level() <= start_threshold * get_max_power_level() ) {
             g->u.activate_bionic( bio );
         } else if( get_power_level() <= start_threshold * get_max_power_level() &&
-                   calendar::once_every( 1_hours ) ) {
+                   action_time_scale::once_every_this_tick( 1_hours ) ) {
             add_msg_player_or_npc( m_bad, _( "Your %s does not have enough fuel to use Auto Start." ),
                                    _( "<npcname>'s %s does not have enough fuel to use Auto Start." ),
                                    bio.info().name );
@@ -1835,7 +1838,7 @@ void Character::process_bionic( bionic &bio )
             deactivate_bionic( bio );
             return;
         }
-        if( calendar::once_every( 30_turns ) ) {
+        if( action_time_scale::once_every_this_tick( 30_turns ) ) {
             std::vector<effect *> bleeding_list = get_all_effects_of_type( effect_bleed );
             // Essential parts (Head/Torso) first.
             std::ranges::sort( bleeding_list,
@@ -1852,7 +1855,7 @@ void Character::process_bionic( bionic &bio )
                     e->set_removed();
                 }
             }
-            if( calendar::once_every( 2_minutes ) ) {
+            if( action_time_scale::once_every_this_tick( 2_minutes ) ) {
                 // Essential parts are considered 10 HP lower than non-essential parts for the purpose of determining priority.
                 // I'd use the essential_value, but it's tied up in the heal_actor class of iuse_actor.
                 const auto effective_hp = [this]( const bodypart_id & bp ) -> int {
@@ -1908,7 +1911,7 @@ void Character::process_bionic( bionic &bio )
     } else if( bio.id == bio_evap ) {
         // Aero-Evaporator provides water at 60 watts with 2 L / kWh efficiency
         // which is 10 mL per 5 minutes.  Humidity can modify the amount gained.
-        if( calendar::once_every( 5_minutes ) ) {
+        if( action_time_scale::once_every_this_tick( 5_minutes ) ) {
             const w_point &weatherPoint = get_weather().get_precise();
             int humidity = get_local_humidity( weatherPoint.humidity, get_weather().weather_id,
                                                g->is_sheltered( g->u.bub_pos() ) );
@@ -2021,7 +2024,7 @@ void Character::process_bionic( bionic &bio )
             }
         }
     } else if( bio.id == bio_radscrubber ) {
-        if( calendar::once_every( 10_minutes ) ) {
+        if( action_time_scale::once_every_this_tick( 10_minutes ) ) {
             const units::energy trigger_cost = bio.info().power_trigger;
 
             if( get_rad() > 0 && bio.energy_stored >= trigger_cost ) {
@@ -2033,4 +2036,5 @@ void Character::process_bionic( bionic &bio )
         }
     }
 }
+
 

@@ -1004,6 +1004,8 @@ class Creature
          * Processes one effect on the Creature.
          */
         virtual void process_one_effect( effect& e, bool is_new ) = 0;
+        auto add_action_move_credit( int base_moves, int action_factor ) -> void;
+        virtual auto action_move_factor() const -> int;
 
         pimpl<effects_map> effects;
         // Miscellaneous key/value pairs.
@@ -1024,6 +1026,7 @@ class Creature
         // skills
 
         int speed_bonus = 0;
+        int move_credit_remainder = 0;
         float speed_mult = 0.f;
         float dodge_bonus = 0.0;
         int block_bonus = 0;

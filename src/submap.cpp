@@ -567,6 +567,7 @@ auto submap::set_furn( const point_sm_ms& p, furn_id furn ) -> void
 auto submap::set_ter( const point_sm_ms& p, ter_id terr ) -> void
 {
     is_uniform = false;
+    emitter_cache = std::nullopt;
     ter[p.x()][p.y()] = terr;
     if( auto * log = coop_mutation_log::current() ) {
         const tripoint_abs_ms abs_pos{pos.x() * SEEX + p.x(), pos.y() * SEEY + p.y(), pos.z()};

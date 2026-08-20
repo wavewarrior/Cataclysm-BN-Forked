@@ -54,6 +54,9 @@ if (BUILD_TESTING)
                 endif()
             endif()
         endforeach()
+        if (COMMAND cata_copy_windows_lavapipe_runtime)
+            cata_copy_windows_lavapipe_runtime(cata_test-tiles)
+        endif()
     endif ()
 
     add_test(

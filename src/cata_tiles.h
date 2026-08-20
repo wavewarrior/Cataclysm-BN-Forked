@@ -1,5 +1,6 @@
 #pragma once
 
+
 #include "animation.h"
 #include "coordinates.h"
 #include "enums.h"
@@ -24,6 +25,7 @@
 #include "zone_draw_options.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <string>
@@ -429,6 +431,15 @@ struct tint_config {
 };
 
 using color_tint_pair = std::pair<tint_config, tint_config>; // {bg, fg}
+
+struct render_light_tint {
+    SDL_Color color = TILESET_NO_COLOR;
+    uint8_t alpha = 0;
+
+    bool has_value() const {
+        return alpha != 0 && color != TILESET_NO_COLOR;
+    }
+};
 
 struct tileset_lookup_key {
     int sprite_index;
@@ -988,6 +999,8 @@ class cata_tiles
          * @param warp_hash UV warp surface hash, or TILESET_NO_WARP
          * @return always true.
          */
+        // No `light_tint` parameter: upstream's per-sprite coloured-light tint is not wired
+        // here — see the note above draw_zone_overlay in cata_tiles.cpp.
         bool draw_sprite_at(
             const tile_type& tile, point_bub_ms p, unsigned int loc_rand, bool is_fg, int rota,
             const tint_config& tint, lit_level ll, bool apply_visual_effects, int overlay_count,

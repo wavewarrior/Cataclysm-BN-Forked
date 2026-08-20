@@ -1,6 +1,7 @@
 #include "iuse_actor.h"
 
 #include "action.h"
+#include "action_time_scale.h"
 #include "active_tile_data_def.h"
 #include "activity_actor_definitions.h"
 #include "activity_handlers.h"
@@ -1363,11 +1364,11 @@ int musical_instrument_actor::use( player& p, item& it, bool t, const tripoint_b
     std::string desc = "music";
     /** @EFFECT_PER increases morale bonus when playing an instrument */
     const int morale_effect = fun + fun_bonus * p.per_cur;
-    if( morale_effect >= 0 && calendar::once_every( description_frequency ) ) {
+    if( morale_effect >= 0 && action_time_scale::once_every_this_tick( description_frequency ) ) {
     if( !player_descriptions.empty() && p.is_player() ) {
             desc = _( random_entry( player_descriptions ) );
         }
-    } else if( morale_effect < 0 && calendar::once_every( 1_minutes ) ) {
+    } else if( morale_effect < 0 && action_time_scale::once_every_this_tick( 1_minutes ) ) {
     // No musical skills = possible morale penalty
     if( p.is_player() ) {
             desc = _( "You produce an annoying sound" );

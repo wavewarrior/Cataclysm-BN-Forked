@@ -228,6 +228,10 @@ std::string PATH_INFO::panel_options()
 {
     return config_dir_value + "panel_options.json";
 }
+std::string PATH_INFO::preload()
+{
+    return config_dir_value + "preload.json";
+}
 std::string PATH_INFO::safemode()
 {
     return config_dir_value + "safemode.json";
@@ -239,6 +243,10 @@ std::string PATH_INFO::distraction()
 std::string PATH_INFO::savedir()
 {
     return savedir_value;
+}
+std::string PATH_INFO::shaders()
+{
+    return datadir_value + "shaders/";
 }
 std::string PATH_INFO::sokoban()
 {

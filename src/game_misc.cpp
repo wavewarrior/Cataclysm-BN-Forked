@@ -485,7 +485,10 @@ void game::draw( ui_adaptor &ui )
     }
 
     werase( w_terrain );
-    draw_ter();
+    {
+        ZoneScopedN( "game_draw_terrain" );
+        draw_ter();
+    }
     {
         ZoneScopedN( "game_draw_callbacks" );
         for( auto it = draw_callbacks.begin(); it != draw_callbacks.end(); ) {
@@ -544,6 +547,11 @@ void game::draw_ter( const bool draw_sounds )
 {
     draw_ter( u.bub_pos() + u.view_offset, is_looking,
               draw_sounds );
+}
+
+auto game::visibility_cache_z() -> int
+{
+    return is_looking ? u.bub_pos().z() : ter_view_p.z();
 }
 
 void game::draw_ter( const tripoint_bub_ms &center, const bool looking,

@@ -261,6 +261,9 @@ void map::furn_set(
         set_transparency_cache_dirty( p );
         set_seen_cache_dirty( p );
     }
+    if( old_t.light_emitted != new_t.light_emitted ) {
+        invalidate_lightmap_caches();
+    }
 
     if( ( old_t.has_flag( TFLAG_NO_FLOOR ) != new_t.has_flag( TFLAG_NO_FLOOR ) )
         || ( old_t.has_flag( TFLAG_Z_TRANSPARENT ) != new_t.has_flag( TFLAG_Z_TRANSPARENT ) ) ) {

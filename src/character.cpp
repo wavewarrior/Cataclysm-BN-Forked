@@ -2,6 +2,7 @@
 #include "coop_mutation_log.h"
 #include "physics/physics_world.h"
 #include "action.h"
+#include "action_time_scale.h"
 #include "activity_actor_definitions.h"
 #include "activity_handlers.h"
 #include "anatomy.h"
@@ -1361,6 +1362,7 @@ void Character::calc_all_parts_hp( float hp_mod, float hp_adjustment, int str_ma
 // occur through a function in this class which calls this function. Clothes are
 // typically added/removed with wear() and takeoff(), but direct access to the
 // 'wears' vector is still allowed due to refactor exhaustion.
+
 namespace vision
 {
 

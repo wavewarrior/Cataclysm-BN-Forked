@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include "action_time_scale.h"
 #include "avatar.h"
 #include "ballistics.h"
 #include "bionics.h"
@@ -2674,7 +2675,7 @@ bool mattack::check_money_left( monster *z )
     } else {
         const time_duration time_left = z->get_effect_dur( effect_paid );
         if( time_left < 1_minutes ) {
-            if( calendar::once_every( 20_seconds ) ) {
+            if( action_time_scale::once_every_this_tick( 20_seconds ) ) {
                 const SpeechBubble &speech_time_low = get_speech( "mon_grocerybot_running_out_of_friendship" );
                 se.volume = speech_time_low.volume;
                 se.description = speech_time_low.text.translated();
@@ -2683,7 +2684,7 @@ bool mattack::check_money_left( monster *z )
         }
     }
     if( z->friendly == -1 && !z->has_effect( effect_paid ) ) {
-        if( calendar::once_every( 3_hours ) ) {
+        if( action_time_scale::once_every_this_tick( 3_hours ) ) {
             const SpeechBubble &speech_override_start = get_speech( "mon_grocerybot_hacked" );
             se.volume = speech_override_start.volume;
             se.description = speech_override_start.text.translated();
@@ -2877,7 +2878,7 @@ bool mattack::generator( monster *z )
     se.monfaction = z->faction.id();
     se.faction = faction_id( "no_faction" );
     sounds::sound( se );
-    if( calendar::once_every( 1_minutes ) && z->get_hp() < z->get_hp_max() ) {
+    if( action_time_scale::once_every_this_tick( 1_minutes ) && z->get_hp() < z->get_hp_max() ) {
         z->heal( 1 );
     }
 

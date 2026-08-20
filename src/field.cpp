@@ -5,6 +5,7 @@
 
 #include "calendar.h"
 #include "int_id.h"
+#include "lightmap.h"
 
 int field_entry::move_cost() const
 {
@@ -73,7 +74,7 @@ float field_entry::light_emitted() const
 
 light_color_rgb field_entry::light_color() const
 {
-    return type.obj().get_light_color( intensity - 1 );
+    return light_color_from_json( type.obj().get_light_color( intensity - 1 ) );
 }
 
 float field_entry::local_light_override() const

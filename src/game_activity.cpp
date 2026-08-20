@@ -2,6 +2,7 @@
 // All game:: methods remain declared in game.h (unchanged).
 #include "game.h"
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <ranges>
@@ -9,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "action_time_scale.h"
 #include "activity_monmove_cache.h"
 #include "activity_time_cadence.h"
 #include "avatar.h"
@@ -65,6 +67,32 @@ static const activity_id ACT_AUTODRIVE( "ACT_AUTODRIVE" );
 static const efftype_id effect_sleep( "sleep" );
 
 static const trait_id trait_HAS_NEMESIS( "HAS_NEMESIS" );
+
+static const trait_id trait_DEBUG_INFINITE_SPEED( "DEBUG_INFINITE_SPEED" );
+
+// DEBUG_INFINITE_SPEED freezes the clock by refunding moves every turn. That is only
+// safe while the current activity measures progress in moves: an activity that measures
+// calendar duration would never advance, so it is excluded here.
+auto game::debug_infinite_speed_can_freeze_time() const -> bool
+{
+    if( !u.has_trait( trait_DEBUG_INFINITE_SPEED ) ) {
+        return false;
+    }
+    if( !u.activity || !*u.activity ) {
+        return true;
+    }
+    return !activity_uses_calendar_duration_progress( u.activity->id() );
+}
+
+auto game::restore_debug_infinite_speed_moves( const int minimum_moves ) -> void
+{
+    if( !debug_infinite_speed_can_freeze_time() ) {
+        return;
+    }
+    const auto minimum_turn_moves = std::max( minimum_moves,
+                                    action_time_scale::base_moves_per_turn );
+    u.moves = std::max( u.moves, minimum_turn_moves );
+}
 
 void game::process_voluntary_act_interrupt()
 {
@@ -276,10 +304,10 @@ for( const auto turn_index : std::views::iota( 0, dur_turns ) ) {
         const auto monster_count = critter_tracker->size();
         timed_events.process();
         mission::process_all();
-        if( calendar::once_every( 1_days ) ) {
+        if( action_time_scale::once_every_this_tick( 1_days ) ) {
             get_overmapbuffer( current_dimension_id_ ).process_mongroups();
         }
-        if( calendar::once_every( time_duration::from_minutes( 2.5 ) ) ) {
+        if( action_time_scale::once_every_this_tick( time_duration::from_minutes( 2.5 ) ) ) {
             get_overmapbuffer( current_dimension_id_ ).move_hordes();
             if( u.has_trait( trait_HAS_NEMESIS ) ) {
                 get_overmapbuffer( current_dimension_id_ ).move_nemesis();
@@ -287,7 +315,7 @@ for( const auto turn_index : std::views::iota( 0, dur_turns ) ) {
             m.spawn_monsters( false );
         }
         if( get_option<bool>( "AUTOSAVE" ) &&
-            calendar::once_every( 1_turns * get_option<int>( "AUTOSAVE_TURNS" ) ) &&
+            action_time_scale::once_every_this_tick( 1_turns * get_option<int>( "AUTOSAVE_TURNS" ) ) &&
             !u.is_dead_state() ) {
             autosave();
         }
@@ -459,7 +487,7 @@ auto game::run_activity_cadence_boundary() -> void
     reset_light_level();
     m.invalidate_lightmap_caches();
     m.invalidate_visibility_caches();
-    if( calendar::once_every( activity_time_cadence::fixed_window() ) ) {
+    if( action_time_scale::once_every_this_tick( activity_time_cadence::fixed_window() ) ) {
         overmap_npc_move();
     }
     Pathfinding::clear_d_maps();
@@ -505,7 +533,7 @@ auto game::handle_wait_activity_redraw( const bool force ) -> void
         wait_redraw = true;
         wait_message = _( "Wait till you wake up…" );
         wait_refresh_rate = 30_minutes;
-        if( calendar::once_every( 1_hours ) ) {
+        if( action_time_scale::once_every_this_tick( 1_hours ) ) {
             add_artifact_dreams();
         }
     } else if( u.has_destination() ) {
@@ -523,8 +551,8 @@ auto game::handle_wait_activity_redraw( const bool force ) -> void
     if( wait_redraw ) {
         ZoneScopedN( "wait_redraw" );
         if( force || first_redraw_since_waiting_started ||
-            calendar::once_every( std::min( 1_minutes, wait_refresh_rate ) ) ) {
-            if( force || first_redraw_since_waiting_started || calendar::once_every( wait_refresh_rate ) ) {
+            action_time_scale::once_every_this_tick( std::min( 1_minutes, wait_refresh_rate ) ) ) {
+            if( force || first_redraw_since_waiting_started || action_time_scale::once_every_this_tick( wait_refresh_rate ) ) {
                 ui_manager::redraw();
             }
 

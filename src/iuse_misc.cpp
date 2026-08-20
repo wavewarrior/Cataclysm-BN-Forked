@@ -1,6 +1,7 @@
 #include "iuse.h"
 
 #include "action.h"
+#include "action_time_scale.h"
 #include "active_tile_data_def.h"
 #include "activity_actor.h"
 #include "activity_actor_definitions.h"
@@ -1973,7 +1974,7 @@ int iuse::bullet_vibe_on( player* p, item* it, bool t, const tripoint_bub_ms & )
     if( t ) { // Normal use
         if( p->has_item( *it ) ) {
             // Only triggers every 1 minute so that fatigue isn't ridiculous
-            if( calendar::once_every( 1_minutes ) ) {
+            if( action_time_scale::once_every_this_tick( 1_minutes ) ) {
                 p->add_morale( MORALE_FEELING_GOOD, 1, 30, 20_minutes, 10_minutes, true );
                 p->mod_fatigue( 1 );
             }

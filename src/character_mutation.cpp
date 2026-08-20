@@ -552,6 +552,10 @@ mutation_value_map = {
         calc_mutation_value_multiplicative<&mutation_branch::overmap_multiplier>
     },
     {"night_vision_range", calc_mutation_value<&mutation_branch::night_vision_range>},
+    // Additive: lightmap.cpp's perception_detail_range_base() sums this onto a baseline
+    // range, so multiple sight mutations should stack. Without this entry the
+    // mutation_value() lookup misses and every local_detail_sight mutation is a silent no-op.
+    {"local_detail_sight", calc_mutation_value_additive<&mutation_branch::local_detail_sight>},
     {
         "reading_speed_multiplier",
         calc_mutation_value_multiplicative<&mutation_branch::reading_speed_multiplier>

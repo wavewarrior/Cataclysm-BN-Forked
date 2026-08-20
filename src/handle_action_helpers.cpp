@@ -600,7 +600,7 @@ void smash()
         } else if( smashskill >= rng( bash_info.str_min, bash_info.str_max ) ) {
             sound_event se;
             se.origin = smashp;
-            se.volume = std::min( 80, bash_info.sound_vol.value_or( 0 ) );
+            se.volume = bash_info.sound_vol.value_or( 0 );
             se.category = sounds::sound_t::combat;
             se.description = bash_info.sound.translated();
             se.id = "smash";
@@ -615,7 +615,7 @@ void smash()
         } else {
             sound_event se;
             se.origin = smashp;
-            se.volume = std::min( 80, bash_info.sound_fail_vol.value_or( 0 ) );
+            se.volume = bash_info.sound_fail_vol.value_or( 0 );
             se.category = sounds::sound_t::combat;
             se.description = bash_info.sound_fail.translated();
             se.id = "smash";
@@ -1007,7 +1007,7 @@ void wait()
         } else if( as_m.ret == 12 ) {
             auto act = std::make_unique<player_activity>(
                            std::make_unique<wait_stamina_activity_actor>( 0 ) );
-            act->moves_left = 100 * ( to_turns<int>( time_to_wait ) );
+            act->moves_left = to_moves<int>( time_to_wait );
             u.assign_activity( std::move( act ), false );
         } else {
             u.assign_activity(

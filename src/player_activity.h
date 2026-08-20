@@ -26,6 +26,8 @@ class translation;
 class activity_ptr;
 class npc;
 
+auto activity_uses_calendar_duration_progress( const activity_id &id ) -> bool;
+
 class player_activity
 {
     private:

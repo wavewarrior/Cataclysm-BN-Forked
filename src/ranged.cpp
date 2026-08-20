@@ -1656,18 +1656,9 @@ static std::string get_colored_bar(
     return result;
 }
 
-// Whether player character knows creature's position and can roughly track it with the aim cursor
-auto outside_visible_z_range( const tripoint_bub_ms& from, const tripoint_bub_ms& to )
--> bool
-{
-    return get_map().has_zlevels() && fov_3d &&
-    std::abs( from.z() - to.z() ) > fov_3d_z_range;
-}
-
 bool pl_sees( const Creature& cr )
 {
     Character& u = get_player_character();
-    if( outside_visible_z_range( u.bub_pos(), cr.bub_pos() ) ) { return false; }
     return u.sees( cr ) || u.sees_with_infrared( cr ) || u.sees_with_specials( cr );
 }
 
@@ -2395,8 +2386,6 @@ std::vector<Creature *> targetable_creatures(
         const auto shooter_pos = c.bub_pos();
         const auto critter_pos = critter.bub_pos();
         if( std::round( rl_dist_exact( shooter_pos, critter_pos ) ) > range ) { return false; }
-
-        if( outside_visible_z_range( shooter_pos, critter_pos ) ) { return false; }
 
         // Special case: if range is 1, it's a melee attack.
         // Melee attacks can only target on same z-level or directly up/down, not "z-diagonally".

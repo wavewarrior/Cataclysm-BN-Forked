@@ -13,6 +13,7 @@
 #include "mapbuffer.h"
 #include "mongroup.h"
 #include "monster.h"
+#include "options_helpers.h"
 #include "overmapbuffer.h"
 #include "state_helpers.h"
 #include "type_id.h"
@@ -306,6 +307,43 @@ TEST_CASE("moving_flying_vehicle_can_use_wait_menu", "[vehicle][wait]") {
     veh_ptr->set_flying(true);
     CHECK_FALSE(vehicle_wait::is_wait_blocked_by_movement(*veh_ptr));
     CHECK(vehicle_wait::should_offer_flying_wait_durations(*veh_ptr));
+}
+
+TEST_CASE( "vehicle control scale modifies throttle move cost", "[vehicle][speed]" )
+{
+    clear_all_state();
+    const auto global_scale = override_option( "TIME_ACTION_SCALE", "50" );
+    const auto player_scale = override_option( "PLAYER_ACTION_SCALE", "50" );
+    const auto vehicle_control_scale = override_option( "VEHICLE_CONTROL_SCALE", "100" );
+
+    auto &you = get_avatar();
+    you.set_moves( 25 );
+
+    const auto origin = tripoint_bub_ms( 60, 60, 0 );
+    auto *veh_ptr = get_map().add_vehicle( vproto_id( "bicycle" ), origin, 0_degrees, 0, 0 );
+    REQUIRE( veh_ptr != nullptr );
+
+    veh_ptr->cruise_on = false;
+    veh_ptr->pldrive( you, tripoint_rel_veh{ 0, 1, 0 } );
+
+    CHECK( you.get_moves() == -25 );
+}
+
+TEST_CASE( "vehicle speed control free in cruise mode", "[vehicle][speed]" )
+{
+    clear_all_state();
+
+    auto &you = get_avatar();
+    you.set_moves( 25 );
+
+    const auto origin = tripoint_bub_ms( 60, 60, 0 );
+    auto *veh_ptr = get_map().add_vehicle( vproto_id( "bicycle" ), origin, 0_degrees, 0, 0 );
+    REQUIRE( veh_ptr != nullptr );
+
+    veh_ptr->cruise_on = true;
+    veh_ptr->pldrive( you, tripoint_rel_veh{ 0, 1, 0 } );
+
+    CHECK( you.get_moves() == 25 );
 }
 
 TEST_CASE("horde_spawns_skip_owned_vehicle_tiles", "[horde][vehicle][monster]") {

@@ -209,7 +209,11 @@ map_stack::iterator map::i_rem(
         submaps_with_active_items.erase( project_to<coords::sm>( bub_to_abs( p ) ) );
     }
 
+    const auto removed_emissive = ( *it )->is_emissive();
     current_submap->update_lum_rem( l, **it );
+    if( removed_emissive ) {
+        invalidate_lightmap_caches();
+    }
 
     return current_submap->get_items( l ).erase( std::move( it ), out );
 }
@@ -241,7 +245,11 @@ std::vector<detached_ptr<item>> map::i_clear( const tripoint_bub_ms& p )
         submaps_with_active_items.erase( project_to<coords::sm>( bub_to_abs( p ) ) );
     }
 
+    const auto had_luminance = current_submap->get_lum( l ) != 0;
     current_submap->set_lum( l, 0 );
+    if( had_luminance ) {
+        invalidate_lightmap_caches();
+    }
     return current_submap->get_items( l ).clear();
 }
 
@@ -459,7 +467,11 @@ void map::add_item( const tripoint_bub_ms& p, detached_ptr<item>&& new_item )
     current_submap->is_uniform = false;
     invalidate_max_populated_zlev( p.z() );
 
+    const auto adds_luminance = new_item->is_emissive();
     current_submap->update_lum_add( l, *new_item );
+    if( adds_luminance ) {
+        invalidate_lightmap_caches();
+    }
     if( new_item->needs_processing() ) {
         if( current_submap->active_items.empty() ) {
             submaps_with_active_items.insert(
@@ -573,6 +585,7 @@ void map::update_lum( item& loc, bool add )
     } else {
         current_submap->update_lum_rem( l, *target );
     }
+    invalidate_lightmap_caches();
 }
 
 static bool process_map_items(

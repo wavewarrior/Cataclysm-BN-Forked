@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include "action_time_scale.h"
 #include "avatar.h"
 #include "ballistics.h"
 #include "bionics.h"
@@ -733,7 +734,7 @@ bool mattack::searchlight( monster *z )
     }
 
     //battery charge from the generator is enough for some time of work
-    if( calendar::once_every( 10_minutes ) ) {
+    if( action_time_scale::once_every_this_tick( 10_minutes ) ) {
 
         bool generator_ok = false;
 

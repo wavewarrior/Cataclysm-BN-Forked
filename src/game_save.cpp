@@ -1,3 +1,4 @@
+#include "action_time_scale.h"
 #include "game.h"
 #include "coop_server.h"
 #include "coop_client.h"
@@ -934,7 +935,7 @@ void game::process_artifact( item &it, Character &who )
 
     if( it.is_tool() ) {
         // Recharge it if necessary
-        if( it.ammo_remaining() < it.ammo_capacity() && calendar::once_every( 1_minutes ) ) {
+        if( it.ammo_remaining() < it.ammo_capacity() && action_time_scale::once_every_this_tick( 1_minutes ) ) {
             //Before incrementing charge, check that any extra requirements are met
             if( check_art_charge_req( it ) ) {
                 switch( it.type->artifact->charge_type ) {
@@ -943,12 +944,12 @@ void game::process_artifact( item &it, Character &who )
                         break; // dummy entries
                     case ARTC_TIME:
                         // Once per hour
-                        if( calendar::once_every( 1_hours ) ) {
+                        if( action_time_scale::once_every_this_tick( 1_hours ) ) {
                             it.charges++;
                         }
                         break;
                     case ARTC_SOLAR:
-                        if( calendar::once_every( 10_minutes ) &&
+                        if( action_time_scale::once_every_this_tick( 10_minutes ) &&
                             is_in_sunlight( who.bub_pos() ) ) {
                             it.charges++;
                         }
@@ -957,21 +958,21 @@ void game::process_artifact( item &it, Character &who )
                     // Some weird Lovecraftian thing.  ;P
                     // (So DON'T route them through mod_pain!)
                     case ARTC_PAIN:
-                        if( calendar::once_every( 1_minutes ) ) {
+                        if( action_time_scale::once_every_this_tick( 1_minutes ) ) {
                             add_msg( m_bad, _( "You suddenly feel sharp pain for no reason." ) );
                             who.mod_pain_noresist( 3 * rng( 1, 3 ) );
                             it.charges++;
                         }
                         break;
                     case ARTC_HP:
-                        if( calendar::once_every( 1_minutes ) ) {
+                        if( action_time_scale::once_every_this_tick( 1_minutes ) ) {
                             add_msg( m_bad, _( "You feel your body decaying." ) );
                             who.hurtall( 1, nullptr );
                             it.charges++;
                         }
                         break;
                     case ARTC_FATIGUE:
-                        if( calendar::once_every( 1_minutes ) ) {
+                        if( action_time_scale::once_every_this_tick( 1_minutes ) ) {
                             add_msg( m_bad, _( "You feel fatigue seeping into your body." ) );
                             u.mod_fatigue( 3 * rng( 1, 3 ) );
                             u.mod_stamina( -90 * rng( 1, 3 ) * rng( 1, 3 ) * rng( 2, 3 ), false );

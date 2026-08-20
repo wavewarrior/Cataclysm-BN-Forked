@@ -4,6 +4,7 @@
 //            peek, drop, drop_in_direction, butcher + static helpers,
 //            post_action_world_step
 
+#include "action_time_scale.h"
 #include "game.h"
 
 #include <algorithm>
@@ -1908,12 +1909,12 @@ const auto npcperf = asleep && get_option<bool>( "SLEEP_SKIP_NPC" );
     if( u.is_mounted() ) {
     u.check_mount_is_spooked();
     }
-    if( calendar::once_every( 1_days ) ) {
+    if( action_time_scale::once_every_this_tick( 1_days ) ) {
     get_overmapbuffer( current_dimension_id_ ).process_mongroups();
     }
 
     // Move hordes every 2.5 min
-    if( calendar::once_every( time_duration::from_minutes( 2.5 ) ) ) {
+    if( action_time_scale::once_every_this_tick( time_duration::from_minutes( 2.5 ) ) ) {
     get_overmapbuffer( current_dimension_id_ ).move_hordes();
         if( u.has_trait( trait_HAS_NEMESIS ) ) {
             get_overmapbuffer( current_dimension_id_ ).move_nemesis();
@@ -1931,7 +1932,7 @@ const auto npcperf = asleep && get_option<bool>( "SLEEP_SKIP_NPC" );
 
     // Auto-save if autosave is enabled
     if( get_option<bool>( "AUTOSAVE" ) &&
-        calendar::once_every( 1_turns * get_option<int>( "AUTOSAVE_TURNS" ) ) &&
+        action_time_scale::once_every_this_tick( 1_turns * get_option<int>( "AUTOSAVE_TURNS" ) ) &&
         !u.is_dead_state() ) {
     autosave();
     }
@@ -2038,7 +2039,7 @@ const auto npcperf = asleep && get_option<bool>( "SLEEP_SKIP_NPC" );
     } else {
         sleep_skip_npc_process();
     }
-    if( calendar::once_every( 5_minutes ) ) {
+    if( action_time_scale::once_every_this_tick( 5_minutes ) ) {
     overmap_npc_move();
     }
 
@@ -2177,7 +2178,7 @@ auto game::coop_client_turn_step() -> void
 
     // Auto-save if autosave is enabled
     if( get_option<bool>( "AUTOSAVE" ) &&
-        calendar::once_every( 1_turns * get_option<int>( "AUTOSAVE_TURNS" ) ) &&
+        action_time_scale::once_every_this_tick( 1_turns * get_option<int>( "AUTOSAVE_TURNS" ) ) &&
             !u.is_dead_state() ) {
         autosave();
     }

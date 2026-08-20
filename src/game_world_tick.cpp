@@ -1,5 +1,6 @@
 // Extracted from game.cpp — B5 decomposition (world-tick cluster).
 // All game:: methods remain declared in game.h (unchanged).
+#include "action_time_scale.h"
 #include "game.h"
 
 #include <algorithm>
@@ -217,7 +218,7 @@ void game::world_tick()
     TracyPlot( "Active Dimensions", static_cast<int64_t>( loaded_dimensions_.size() ) );
 
     const auto fire_spread = reality_bubble_fire_spread;
-    const auto do_emits = calendar::once_every( 10_seconds );
+    const auto do_emits = action_time_scale::once_every_this_tick( 10_seconds );
 
     if( !fire_spread ) {
         fire_loader.clear( submap_loader );
@@ -834,7 +835,7 @@ if( use_activity_cache ) {
             // Field damage always applies, even on strided turns.
             m.creature_in_field( critter );
             // Daily events stay unconditional (already time-throttled):
-            if( calendar::once_every( 1_days ) ) {
+            if( action_time_scale::once_every_this_tick( 1_days ) ) {
                 if( critter.has_flag( MF_MILKABLE ) ) {
                     critter.refill_udders();
                 }
@@ -1361,7 +1362,7 @@ void game::sleep_skip_npc_process()
     // Every ~30 in-game minutes, re-examine sleeping NPCs and wake any whose
     // sleep need is satisfied or whose player has woken up.  Otherwise, renew
     // their lying-down effect for another 30-minute window.
-    if( calendar::once_every( 30_minutes ) ) {
+    if( action_time_scale::once_every_this_tick( 30_minutes ) ) {
         for( npc &guy : g->all_npcs() ) {
             if( guy.is_dead() || !guy.in_sleep_state() ) {
                 continue;
@@ -1759,7 +1760,7 @@ void game::perhaps_add_random_npc()
 {
     ZoneScoped;
     static constexpr time_duration spawn_interval = 1_hours;
-    if( !calendar::once_every( spawn_interval ) ) {
+    if( !action_time_scale::once_every_this_tick( spawn_interval ) ) {
         return;
     }
     // Create a new NPC?

@@ -514,7 +514,8 @@ bool cata_tiles::draw_field_or_item(
     const tripoint_bub_ms& p, const lit_level ll, int &height_3d, const bool ( &invisible )[5],
     int z_drop )
 {
-    if( ( !fov_3d && z_drop > 0 ) || fov_3d_z_range < z_drop ) { return false; }
+    // 3D FoV is unconditional with unlimited z range; upstream keeps only a bounds check.
+    if( z_drop > OVERMAP_HEIGHT + OVERMAP_DEPTH ) { return false; }
     const auto fld_override = field_override.find( p );
     const bool fld_overridden = fld_override != field_override.end();
     map& here = get_map();
@@ -788,7 +789,8 @@ bool cata_tiles::draw_critter_at(
     // (When the deferred y-sort pass prefetches the creature + xform, skip the wipe
     //  so the prefetched xform isn't discarded before the monster/player draw.)
     if( !prefetch_valid_ ) { active_anim_xform_ = {}; }
-    if( ( !fov_3d && z_drop > 0 ) || fov_3d_z_range < z_drop ) { return false; }
+    // 3D FoV is unconditional with unlimited z range; upstream keeps only a bounds check.
+    if( z_drop > OVERMAP_HEIGHT + OVERMAP_DEPTH ) { return false; }
     // Hover-outline: should this creature get a silhouette ring? want_outline_ is
     // a one-shot latch consumed by the first fg sprite enqueue in draw_sprite_at
     // (so only the base sprite is outlined, not worn overlays). Reset on entry to

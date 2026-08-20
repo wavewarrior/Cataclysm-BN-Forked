@@ -1,4 +1,5 @@
 #include "ballistics.h"
+#include "calendar.h"
 #include "catch/catch_amalgamated.hpp"
 #include "dispersion.h"
 #include "field_type.h"
@@ -265,6 +266,7 @@ TEST_CASE(
     const auto target_pos = tripoint_bub_ms(62, 60, 0);
     shooter.set_body();
     shooter.setpos(shooter_pos);
+    set_time(calendar::turn_zero + 12_hours);
     shooter.set_skill_level(skill_gun, 10);
     shooter.set_skill_level(skill_shotgun, 10);
 

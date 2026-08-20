@@ -171,16 +171,18 @@ static void collect_zlev(map& m, int zlev, std::vector<gpu_emitter>& out) {
                     // ter_id / furn_id have operator-> returning const ter_t*/furn_t*
                     const ter_id t_id = cur->get_ter({sx, sy});
                     if (t_id->light_emitted > 0) {
+                        const light_color_rgb tc = light_color_from_json(t_id->light_color);
                         out.push_back(make_omni(
-                            ep.x, ep.y, zlev, static_cast<float>(t_id->light_emitted),
-                            t_id->light_color.r, t_id->light_color.g, t_id->light_color.b));
+                            ep.x, ep.y, zlev, static_cast<float>(t_id->light_emitted), tc.r, tc.g,
+                            tc.b));
                     }
 
                     const furn_id f_id = cur->get_furn({sx, sy});
                     if (f_id->light_emitted > 0) {
+                        const light_color_rgb fc = light_color_from_json(f_id->light_color);
                         out.push_back(make_omni(
-                            ep.x, ep.y, zlev, static_cast<float>(f_id->light_emitted),
-                            f_id->light_color.r, f_id->light_color.g, f_id->light_color.b));
+                            ep.x, ep.y, zlev, static_cast<float>(f_id->light_emitted), fc.r, fc.g,
+                            fc.b));
                     }
 
                     // Fields — plain range-based for; std::ranges::for_each not
@@ -229,9 +231,11 @@ static void collect_zlev(map& m, int zlev, std::vector<gpu_emitter>& out) {
             const int lx = part_pos.x;
             const int ly = part_pos.y;
 
-            const float r = vp.light_color.r;
-            const float g = vp.light_color.g;
-            const float b = vp.light_color.b;
+            // S2-#1: light_color unified on main's std::optional<RGBColor>.
+            const light_color_rgb vp_color = light_color_from_json(vp.light_color);
+            const float r = vp_color.r;
+            const float g = vp_color.g;
+            const float b = vp_color.b;
 
             if (vp.has_flag(VPFLAG_CONE_LIGHT) || vp.has_flag(VPFLAG_WIDE_CONE_LIGHT)) {
                 const float half_rad =

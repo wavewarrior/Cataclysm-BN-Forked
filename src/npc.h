@@ -1037,6 +1037,7 @@ class npc: public player
         /// action decision. Use at every execute_action() call site where action may be npc_flee.
         auto resolve_cmd( npc_action action ) -> npc_cmd_t; // *NOPAD*
         void process_turn() override;
+        auto action_move_factor() const -> int override;
         /**
          * Batch catchup: analytically simulate @p n missed turns.
          * Processes biology at 30-min/5-min/1-turn granularity, then

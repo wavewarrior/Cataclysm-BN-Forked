@@ -1,6 +1,7 @@
 #include "options.h"
 
 #include <algorithm>
+#include <array>
 #include <locale>
 #include <cfloat>
 #include <climits>
@@ -28,6 +29,7 @@
 #include "mapsharing.h"
 #include "output.h"
 #include "path_info.h"
+#include "preload_config.h"
 #include "point.h"
 #include "popup.h"
 #include "sdlsound.h"
@@ -172,7 +174,10 @@ options_manager::options_manager()
     }
     pages_.emplace_back( coop, to_translation( "Co-op" ) );
 
-    mMigrateOption = { {"DELETE_WORLD", { "WORLD_END", { {"no", "keep" }, {"yes", "delete"} } } } };
+    mMigrateOption = {
+        {"DELETE_WORLD", { "WORLD_END", { {"no", "keep" }, {"yes", "delete"} } } },
+        {"COMPUTE_ACCELERATION", { "COMPUTE_ACCELERATION", { {"off", "software"} } } },
+    };
 
     enable_json( "DEFAULT_REGION" );
     // to allow class based init_data functions to add values to a 'string' type option, add:
@@ -1204,6 +1209,7 @@ void options_manager::init()
 
 
 
+
 // Helper method to isolate #ifdeffed tiles code.
 static void refresh_tiles( bool used_tiles_changed, bool pixel_minimap_height_changed, bool ingame,
                            bool force_tile_change )
@@ -1985,13 +1991,12 @@ void options_manager::cache_to_globals()
     trigdist = ::get_option<bool>( "CIRCLEDIST" );
     // Tiles-only fork: use_tiles / use_tiles_overmap are forced true in
     // cached_options.cpp and no longer driven by a (removed) option.
+    colored_lighting = ::get_option<bool>( "COLORED_LIGHTING" );
     use_pinyin_search = ::get_option<bool>( "USE_PINYIN_SEARCH" );
     log_from_top = ::get_option<std::string>( "LOG_FLOW" ) == "new_top";
     message_ttl = ::get_option<int>( "MESSAGE_TTL" );
     message_cooldown = ::get_option<int>( "MESSAGE_COOLDOWN" );
-    fov_3d = ::get_option<bool>( "FOV_3D" );
-    fov_3d_z_range = ::get_option<int>( "FOV_3D_Z_RANGE" );
-    fov_3d_occlusion = ::get_option<bool>( "FOV_3D_OCCLUSION" );
+    angled_sunlight_shadows = ::get_option<bool>( "FOV_3D_OCCLUSION" );
     const auto prevent_occlusion_option = ::get_option<std::string>( "PREVENT_OCCLUSION" );
     prevent_occlusion = prevent_occlusion_option == "off" ? 0 : prevent_occlusion_option == "on" ? 1 :
                         2;
@@ -2031,6 +2036,12 @@ void options_manager::cache_to_globals()
     // corresponding options are commented out above.
     reality_bubble_fire_spread = false;
     fire_spread_submap_cap = 0;
+    {
+        const auto opt = ::get_option<std::string>( "VISIBILITY_SCALING" );
+        visibility_scaling = opt == "perfect" ? visibility_scaling_mode::perfect
+                             : opt == "none" ? visibility_scaling_mode::no_scale
+                             : visibility_scaling_mode::smart;
+    }
 
     {
         const auto psl_str = ::get_option<std::string>( "POCKET_SIMULATION_LEVEL" );
@@ -2069,6 +2080,14 @@ void options_manager::cache_to_globals()
 #if defined(SDL_SOUND)
     sounds::sound_enabled = ::get_option<bool>( "SOUND_ENABLED" );
 #endif
+
+#if defined(CATA_SDL)
+    if( options.contains( "COMPUTE_ACCELERATION" ) ) {
+        preload_config::set_compute_accel(
+            preload_config::compute_accel_from_string(
+                ::get_option<std::string>( "COMPUTE_ACCELERATION" ) ) );
+    }
+#endif
 }
 
 bool options_manager::save()
@@ -2077,10 +2096,16 @@ bool options_manager::save()
     cache_to_globals();
     update_volumes();
 
-    return write_to_file( savefile, [&]( std::ostream & fout ) {
+    auto const ok = write_to_file( savefile, [&]( std::ostream & fout ) {
         JsonOut jout( fout, true );
         serialize( jout );
     }, _( "options" ) );
+
+#if defined(CATA_SDL)
+    preload_config::save();
+#endif
+
+    return ok;
 }
 
 void options_manager::load()

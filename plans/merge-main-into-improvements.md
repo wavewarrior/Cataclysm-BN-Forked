@@ -819,3 +819,152 @@ Reverting `mapdata.h` breaks `TFLAG_ROAD` in `sounds.cpp`, `map_cache.cpp` break
 `map::set_absorption_cache_dirty`, `map_field.cpp` breaks the 4-arg `process_fields_in_submap`,
 `savegame_json.cpp` breaks `charge_removal_blacklist::split_deferred`, and `item_search.cpp` /
 `auto_pickup.cpp` cannot be reverted without their headers — exclude these from any blanket revert.
+
+## S2 outcome (2026-08-19) — `b8b26d6b40`, GPU compute lightmap (#9016, #9348)
+
+265 hunks over 65 files, resolved by a 15-agent fan-out with the parent owning the build/verify loop and
+all cross-file rulings. **Zero conflict markers; `cataclysm-bn-tiles` and `cata_test-tiles` both build
+clean.** `[coop]` is 159/159 with zero failures — byte-identical to baseline, so the co-op subsystem is
+fully preserved.
+
+### Landing (2026-08-20) — merge committed on `feature/merge-dev-into-improvements`
+
+The resolution content was verified against the rulings above, staged (265 files), rebuilt, and gated.
+One drift fix was needed: `activity_actor_combat.cpp::operation_activity_actor::do_turn` referenced
+`half_op_duration` without declaring it (the re-home dropped the `const time_duration` line); restored
+alongside the new `half_op_moves`.
+
+| Run | Cases | Pass | Fail | Failing names |
+|---|---|---|---|---|
+| `~[coop]` | 948 | 940 | **7** | `vehicle_efficiency`, `box2d_authority_vehicle_bashes_terrain`, `vision_wall_obstructs_light`, `vision_single_tile_skylight`, `vision_see_out_of_vehicle`, `vision_see_into_vehicle`, `box2d_map_load_does_not_accumulate_colliders` (shouldfail) |
+| `[coop]` | 159 | 159 | **0** | — identical to baseline |
+
+**Gate verdict: PASS.** The failing set is a strict subset of the S1 baseline set
+(`vehicle_efficiency`, `vehicle_ramp_test_60`, `box2d_authority_vehicle_bashes_terrain`) plus the
+`[!shouldfail]` case — **no new failure names**. The 25-failure / four-cluster state recorded below
+was from the intermediate 2026-08-19 tree; the working tree that landed is strictly better — the
+vehicle/grab/ramp cluster (incl. `vehicle_ramp_test_60`) and the craft 2× and pit-trap clusters no
+longer reproduce. Note the case count differs from the 2026-08-19 figure (1101) — that figure was
+never reproducible from this tree; the gate criterion is the named failure set, which is clean.
+
+### Open items (carried forward, to fix on this branch before merging to `feature/improvements`)
+
+1. **`box2d_authority_vehicle_bashes_terrain`** (S1 blocker, still failing): 10-second reproducer
+   `./cata_test-tiles "grabbed_shopping_cart_can_be_pulled_up_ramp,box2d_authority_vehicle_bashes_terrain" --order decl --rng-seed 1`.
+   Next diagnostic: find the *actual* terrain-write path (not `map_access.cpp::ter_set`).
+2. **Vision cluster (4 cases)**: `vision_wall_obstructs_light`, `vision_single_tile_skylight`,
+   `vision_see_out_of_vehicle`, `vision_see_into_vehicle` — light leaks diagonally past walls
+   (observed `4 1 4` where expected `1 1 1`).
+3. **`vehicle_efficiency`** — pre-existing since S0 baseline; not a merge regression.
+4. **Per-sprite coloured-light tint** (see "Deliberately NOT landed") — GPU additive pass still missing.
+5. **`visibility_cache_z()` pickup** in the tiles draw path — accessor defined but unused.
+
+### D2 implemented — single shared GPU device
+
+`cata_gpu::get_device()` (`src/compute/gpu_platform.cpp`) returns the fork renderer's
+`lighting::gpu_device` when `ready()`, and only falls through to upstream's own creation path when the
+renderer has no device. That keeps exactly one device in the game binary while leaving upstream's logic
+intact for the windowless test binary. `shutdown()` destroys a device only if `cata_gpu` created it, so
+the renderer's device is never double-freed.
+
+**Consequence worth remembering: on this macOS preset the test binary gets NO device at all.** Compute
+shader blobs (`data/shaders/*.msl`) are not built here, so upstream's probe rejects the Metal device and
+`get_device()` returns `nullptr` — which is upstream's own documented "creation failed" contract, and
+`compute_backend.h::selected_backend()` degrades to `backend::cpu_compute`. Three places had to be taught
+to accept that instead of aborting, because upstream's CI always has Lavapipe:
+
+1. `tests/test_main.cpp::init_test_sdl_gpu()` **threw** on a null device, which made all ~1085 cases
+   unrunnable. Now warns and continues.
+2. `map::build_transparency_caches()` (`src/lightmap.cpp:587`) was GPU-only. Now routes to the same
+   per-level CPU builder its own `#else` branch uses.
+3. `map::build_transparency_cache()` (`src/lightmap.cpp:350`) `debugmsg`-ed and returned `false` before
+   reaching the CPU implementation that is still present below it. The GPU block is now wrapped in
+   `if( cata_gpu::get_device() != nullptr )` so a null device falls through.
+
+### Parent rulings issued (all broadcast; two were corrected mid-stage)
+
+| # | Ruling |
+|---|---|
+| S2-#1 | `light_color` unifies on main's `std::optional<RGBColor>`; convert at use with `light_color_from_json()`. The fork's duplicate `light_color`/`light_emitted` members on `furn_t` and `vpart_info` were shadow copies and are deleted. |
+| S2-#2 | `level_cache::lm` is `std::vector<float>`; `four_quadrants` and `.max()` are gone from the lightmap lane. `light_color_cache` stays `light_color_rgb`. |
+| S2-#3 | The `fov_3d` family is removed — 3D FoV unconditional, z range unlimited. `fov_3d_occlusion` → `angled_sunlight_shadows` is a RENAME, not a deletion. Option **ids** `"FOV_3D_OCCLUSION"` and the `"fov_3d"` group id must NOT be renamed. |
+| S2-#4 | (A) *withdrawn, see S2-#5.* (B) This fork has ONE `assign_activity` overload — imported upstream calls need `std::make_unique<player_activity>( id, moves )`. (C) Catch2 v3: `Approx` must be `Catch::Approx`. |
+| S2-#5 | **Reverses S2-#4(A).** `level_cache::angled_sunlight_cache` stays DELETED. Upstream de-memoised it into `map::direct_sunlight_state_at()`; restoring the storage would have created a vector nothing writes, and restoring its old reader would have clamped every outdoor tile to 9% of daylight in broad daylight with a green build. |
+| S2-#6 | Do NOT gate `update_visibility_cache` behind `is_draw_tiles_mode()` in `game::draw`. Upstream split that call into a gate plus a cata_tiles-side pickup via `g->visibility_cache_z()`; only the gate reached this tree, and `is_draw_tiles_mode()` is hardcoded `true` here, so applying half the pair would have permanently disabled per-frame visibility rebuilds. |
+
+Both corrections came from agents pushing back with evidence against a parent ruling. That is the
+mechanism that caught them; a ruling is not evidence.
+
+### The dominant failure mode of this merge
+
+**Every serious defect found in S2 was in a file with NO conflict markers.** The fork decomposed
+upstream's god-files, so upstream's diff anchors against unrelated fork text: 14 of 15 hunks in
+`iuse_actor.cpp`, all 3 in `character.cpp`, all 4 in `ranged.cpp`, 15 of 22 in `game.cpp`, 6273 base
+lines in one `map.cpp` hunk. Those resolve `@ours` — and upstream's real delta then has to be re-homed
+into the fork's split files **by hand**, or it is silently dropped. Meanwhile a symbol upstream *deleted*
+auto-merges away and every fork call site of it breaks with no marker to warn anyone.
+
+Checks that paid for themselves, and should be repeated every stage:
+
+- `git grep` each symbol you rely on, in the MERGED tree, before trusting it exists.
+- Diff `:1:<file>` against `:3:<file>` to recover upstream's real delta, then find the fork's home for it.
+- Prove an anchoring verdict by diffing your resolution against `git show :2:<file>`.
+
+### Silent defects fixed that no test would have caught
+
+- **`mark_lightmap_generated()` never fired on the GPU path.** Under D2 the GPU branch is the *normal*
+  path, and the latch lived only at the end of `generate_lightmap_worker`, which that branch bypasses.
+  `lightmap_ever_generated()` would have stayed false forever, `cata_tiles.cpp` would have picked the
+  unlit sprite mode, and **the world would have rendered unlit with a clean build and a passing suite.**
+  Now also called from `map_cache.cpp::build_map_cache` once `gpu_lighting_ok` is confirmed.
+- **Stale coloured lights on the GPU path.** The same branch neither wrote nor zeroed
+  `light_color_cache`/`has_colored_lights`, so the last CPU frame's tints kept painting over a GPU-lit
+  world. Now zeroed there.
+- **53 unconverted `calendar::once_every` sites** across 8 decomposed files. Upstream retains exactly 6
+  (`calendar.cpp`, `compute/gpu_lm.cpp`, `iuse_actor.h`, `lightmap.cpp`, `map.cpp`, `vehicle_use.cpp`)
+  and our tree now matches that set exactly. The semantics differ — `once_every` MISSES the event when a
+  tick spans more than one calendar turn — and it never fails to compile.
+- **`local_detail_sight` was a no-op.** Member, JSON loader, Lua binding and consumer
+  (`lightmap.cpp:1769`) all merged in, but the `mutation_value` dispatch table entry did not, so the
+  lookup missed and every such mutation contributed 0.
+- **The autodoc could silently eat a surgery.** `operation_activity_actor::do_turn` triggered
+  install/uninstall on `time_left == half_op_duration`, an exact equality the scaled clock steps over.
+  Replaced with a serialized `operation_attempted` latch so a mid-surgery save neither repeats nor skips.
+- **`furn_t` shadowed `light_color`.** After deleting the fork's manual loader nothing wrote the derived
+  member, so furniture colour would have gone white forever.
+- Three declared-but-undefined `game` members (`visibility_cache_z`,
+  `debug_infinite_speed_can_freeze_time`, `restore_debug_infinite_speed_moves`) and a
+  declaration/definition arity mismatch on `update_visibility_cache` — all hard link errors that only
+  surfaced because the build was actually run.
+- **Duplicate JSON key.** Both sides independently added `light_color` to `atomic_lamp` in different
+  positions of the same object, so git merged both additively and the data loader refused the file. A
+  scan of all 2910 `data/**/*.json` found this as the only instance; the fork's value was kept.
+
+### Deliberately NOT landed, recorded as follow-ups
+
+- **Upstream's per-sprite coloured-light tint.** Upstream applies it via `SDL_BLENDMODE_ADD` +
+  `render_copy_ex`, i.e. the legacy SDL renderer — which on this fork's SDL_GPU sprite path draws
+  nothing. The data side did land (`gpu_lm.cpp` fills `level_cache::colored_light_cache`); what is
+  missing is a GPU-visible additive pass to consume it. Note the fork's own coloured-light overlay in
+  `cata_tiles.cpp` draws with `geometry->rect` on that same legacy renderer and needs the same scrutiny.
+  Until then, coloured lighting is neutral on the GPU path.
+- **Upstream's `visibility_cache_z()` pickup** in the tiles draw path (see S2-#6). The accessor is
+  defined but unused; wiring it is what would make upstream's `is_draw_tiles_mode()` gate safe.
+
+### Pre-existing fork bug fixed in passing
+
+`map::shift`'s force-dirty loop indexed `gc.lightmap_dirty.set( sx + sz * cache_mapsize )` while
+`level_cache::bidx` is `sx * cache_mapsize + sy` and `lightmap.cpp` reads it via `bidx( smx, smy )` —
+transposed, so a `+x` shift force-dirtied a column where it meant a row.
+
+### Open: 25 new failures, under investigation in four clusters
+
+| Cluster | Cases | Lead symptom |
+|---|---|---|
+| Vision/lighting | 6 × `vision_*` | Light leaks DIAGONALLY past walls: observed `4 1 4` where expected `1 1 1`. |
+| Vehicle/grab/ramp | 10 (`grabbed_*`, `vehicle_ramp_test_59/61`, `damage_vehicle_oob`, 2 recoil) | Strong prior that this shares S1's unlocalised root cause, widened. Prime suspect is upstream's `map::displace_vehicle` absolute-submap-coords fix vs the fork's `box2d_position_authority` path. |
+| Activity/craft scale | 3 | `craft_item->get_counter()` is `72` where `144` expected — a clean 2× factor, pointing at a re-homed craft delta that never landed in `activity_actor_craft.cpp`. |
+| Ranged/trap/misc | 3 | `moving_between_adjacent_pit_traps` was FIXED in S1 and has regressed — S2 re-homed a lot of `game.cpp` into `game_misc.cpp`/`game_movement.cpp` and may have overwritten S1's pit-trap guard. |
+
+`[coop]` parity and a clean build of both targets are already established, so these are behavioural
+regressions in specific subsystems rather than a broken merge.

@@ -1,5 +1,6 @@
 #include "activity_actor.h"
 
+#include "action_time_scale.h"
 #include "activity_actor_definitions.h"
 #include "activity_handlers.h" // put_into_vehicle_or_drop and drop_on_map
 #include "activity_speed.h"
@@ -224,8 +225,9 @@ void craft_activity_actor::calc_all_moves( player_activity& act, Character& who 
         if( craft_item ) {
             const int elapsed_turns = current_turn - last_turn_nr;
             const double base_total_moves = std::max( 1, rec->batch_time( batch_size, 1.0f, 0 ) );
-            // 100 moves per turn at base speed (no modifiers applied while outside bubble)
-            const double moves_elapsed = elapsed_turns * 100.0;
+            // No live crafting modifiers are applied while outside the reality bubble.
+            const double moves_elapsed =
+                action_time_scale::activity_progress_for_turns( elapsed_turns );
             const int old_counter = craft_item->get_counter();
             const int new_counter = std::
                                     min( static_cast<int>( old_counter + moves_elapsed / base_total_moves * 10'000'000.0 ),
@@ -370,8 +372,8 @@ void craft_activity_actor::do_turn( player_activity& act, Character& who )
     const double base_total_moves = std::max( 1, making.batch_time( batch_size, 1.0f, 0 ) );
     const double cur_total_moves =
         std::max( 1, making.batch_time( batch_size, crafting_speed, assistants ) );
-    const double delta_progress =
-        who.get_moves() > 0 ? who.get_moves() * base_total_moves / cur_total_moves : 0.0;
+    const double scaled_moves = action_time_scale::activity_progress_from_actor_moves( who );
+    const double delta_progress = scaled_moves * base_total_moves / cur_total_moves;
     const double current_progress = old_counter * base_total_moves / 10'000'000.0 + delta_progress;
     const int new_counter = std::
                             min( static_cast<int>( std::round( current_progress / base_total_moves * 10'000'000.0 ) ),
@@ -451,8 +453,9 @@ act_progress_message craft_activity_actor::get_progress_message(
     const double base_total_moves = std::max( 1, rec->batch_time( batch_size, 1.0f, 0 ) );
     const double remaining_pct = 1.0 - craft_counter / 10'000'000.0;
     const float total_mult = act.speed.total();
-    const int remaining_turns = static_cast<int>(
-                                    remaining_pct * base_total_moves / 100 / std::max( 0.01f, total_mult ) );
+    const int remaining_moves = static_cast<int>( std::ceil( remaining_pct * base_total_moves ) );
+    const int remaining_turns = action_time_scale::turns_for_progress(
+                                    remaining_moves, act.speed.calendar_moves_per_turn() );
 
     const std::string time_desc =
         string_format( _( "Time left: %s" ), to_string( time_duration::from_turns( remaining_turns ) ) );

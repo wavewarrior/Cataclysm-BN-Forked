@@ -1,5 +1,6 @@
 #include "iuse.h"
 
+#include "action_time_scale.h"
 #include "action.h"
 #include "active_tile_data_def.h"
 #include "activity_actor.h"
@@ -1514,7 +1515,7 @@ void iuse::play_music(
     // the other characters around should be able to profit as well.
     const bool do_effects = p.can_hear( source, volume ) && !p.has_effect( effect_sleep );
     std::string sound = "music";
-    if( calendar::once_every( 1_hours ) ) {
+    if( action_time_scale::once_every_this_tick( 1_hours ) ) {
         // Every 5 minutes, describe the music
         const std::string music = get_music_description();
         if( !music.empty() ) {

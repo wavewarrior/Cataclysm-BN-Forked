@@ -1,3 +1,4 @@
+#include "action_time_scale.h"
 #include "activity_actor.h"
 
 #include "activity_actor_definitions.h"
@@ -282,7 +283,7 @@ void train_skill_activity_actor::do_turn( player_activity& act, Character& who )
         return;
     }
 
-    if( calendar::once_every( 1_minutes * training_skill_interval ) ) {
+    if( action_time_scale::once_every_this_tick( 1_minutes * training_skill_interval ) ) {
         std::string training_skill = p.get_value( "training_iuse_skill" );
         if( training_skill.empty() ) {
             debugmsg( "training_iuse_skill is empty" );
@@ -1140,9 +1141,13 @@ void operation_activity_actor::do_turn( player_activity& act, Character& who )
 
     const std::vector<bodypart_id> bps = get_occupied_bodyparts( bid );
 
+    const int half_op_moves = to_moves<int>( difficulty * 10_minutes );
     const time_duration half_op_duration = difficulty * 10_minutes;
     const time_duration message_freq = difficulty * 2_minutes;
-    time_duration time_left = time_duration::from_turns( act.moves_left / 100 );
+    // Progress-domain moves, so this matches the estimate iexamine_medical.cpp shows the
+    // player. A raw `moves_left / 100` would ignore ACTIVITY_PROGRESS_SCALE entirely.
+    const time_duration time_left = time_duration::from_turns(
+                                        action_time_scale::activity_turns_for_progress( act.moves_left ) );
 
     map& here = get_map();
 
@@ -1184,7 +1189,7 @@ void operation_activity_actor::do_turn( player_activity& act, Character& who )
     if( time_left > half_op_duration ) {
         if( !bps.empty() ) {
             for( const bodypart_id& bp : bps ) {
-                if( calendar::once_every( message_freq ) && u_see && autodoc ) {
+                if( action_time_scale::once_every_this_tick( message_freq ) && u_see && autodoc ) {
                     p->add_msg_player_or_npc(
                         m_info, _( "The Autodoc is meticulously cutting your %s open." ),
                         _( "The Autodoc is meticulously cutting <npcname>'s %s open." ),
@@ -1192,13 +1197,17 @@ void operation_activity_actor::do_turn( player_activity& act, Character& who )
                 }
             }
         } else {
-            if( calendar::once_every( message_freq ) && u_see ) {
+            if( action_time_scale::once_every_this_tick( message_freq ) && u_see ) {
                 p->add_msg_player_or_npc(
                     m_info, _( "The Autodoc is meticulously cutting you open." ),
                     _( "The Autodoc is meticulously cutting <npcname> open." ) );
             }
         }
-    } else if( time_left == half_op_duration ) {
+    } else if( !operation_attempted ) {
+        // Latched rather than `time_left == half_op_duration`: the scaled action clock can
+        // step time_left straight past that exact value, which would silently skip the
+        // operation entirely.
+        operation_attempted = true;
         if( operation_type == "uninstall" ) {
             if( u_see && autodoc ) {
                 add_msg( m_info, _( "The Autodoc attempts to carefully extract the bionic." ) );
@@ -1229,7 +1238,7 @@ void operation_activity_actor::do_turn( player_activity& act, Character& who )
     } else if( success > 0 ) {
         if( !bps.empty() ) {
             for( const bodypart_id& bp : bps ) {
-                if( calendar::once_every( message_freq ) && u_see && autodoc ) {
+                if( action_time_scale::once_every_this_tick( message_freq ) && u_see && autodoc ) {
                     p->add_msg_player_or_npc(
                         m_info, _( "The Autodoc is stitching your %s back up." ),
                         _( "The Autodoc is stitching <npcname>'s %s back up." ),
@@ -1237,14 +1246,14 @@ void operation_activity_actor::do_turn( player_activity& act, Character& who )
                 }
             }
         } else {
-            if( calendar::once_every( message_freq ) && u_see && autodoc ) {
+            if( action_time_scale::once_every_this_tick( message_freq ) && u_see && autodoc ) {
                 p->add_msg_player_or_npc(
                     m_info, _( "The Autodoc is stitching you back up." ),
                     _( "The Autodoc is stitching <npcname> back up." ) );
             }
         }
     } else {
-        if( calendar::once_every( message_freq ) && u_see && autodoc ) {
+        if( action_time_scale::once_every_this_tick( message_freq ) && u_see && autodoc ) {
             p->add_msg_player_or_npc(
                 m_bad,
                 _( "The Autodoc is moving erratically through the rest of its program, not actually "
@@ -1346,6 +1355,7 @@ void operation_activity_actor::serialize( JsonOut& jsout ) const
     jsout.member( "bid", bid );
     jsout.member( "installer_name", installer_name );
     jsout.member( "autodoc", autodoc );
+    jsout.member( "operation_attempted", operation_attempted );
 }
 
 std::unique_ptr<activity_actor> operation_activity_actor::deserialize( JsonIn& jsin )
@@ -1360,6 +1370,9 @@ std::unique_ptr<activity_actor> operation_activity_actor::deserialize( JsonIn& j
     data.read( "bid", actor->bid );
     data.read( "installer_name", actor->installer_name );
     data.read( "autodoc", actor->autodoc );
+    // Absent in saves written before the latch existed; defaults to false, which
+    // reproduces the pre-save behaviour of still owing the operation.
+    data.read( "operation_attempted", actor->operation_attempted );
     return actor;
 }
 // ---- generic_multi_activity_actor ----

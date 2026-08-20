@@ -39,6 +39,7 @@
 
 #include "achievement.h"
 #include "action.h"
+#include "action_time_scale.h"
 #include "activity_time_cadence.h"
 #include "activity_actor.h"
 #include "activity_actor_definitions.h"
@@ -226,6 +227,10 @@
 #include "worldfactory.h"
 #include "location_vector.h"
 #include "monfaction.h"
+#if defined( CATA_SDL )
+#include "compute/gpu_lm.h"
+#include "compute/gpu_platform.h"
+#endif
 class computer;
 
 #include "cata_tiles.h"
@@ -368,6 +373,7 @@ static const trait_id trait_WEB_ROPE( "WEB_ROPE" );
 static const trait_id trait_INATTENTIVE( "INATTENTIVE" );
 static const trait_id trait_WAYFARER( "WAYFARER" );
 static const trait_id trait_HAS_NEMESIS( "HAS_NEMESIS" );
+static const trait_id trait_DEBUG_INFINITE_SPEED( "DEBUG_INFINITE_SPEED" );
 
 static const trait_flag_str_id trait_flag_MUTATION_FLIGHT( "MUTATION_FLIGHT" );
 static const trait_flag_str_id trait_flag_MUTATION_SWIM( "MUTATION_SWIM" );
@@ -745,11 +751,24 @@ void game::calc_driving_offset( vehicle *veh )
     set_driving_view_offset( point( offset.x, offset.y ) );
 }
 
+auto game::advance_time_action_tick() -> int
+{
+    const auto calendar_turns = action_time_scale::calendar_turns_for_next_tick(
+                                    time_action_scale_turn_remainder );
+    action_time_scale::set_calendar_turns_this_tick( calendar_turns );
+    calendar::turn += time_duration::from_turns( calendar_turns );
+    return calendar_turns;
+}
+
 // MAIN GAME LOOP
 // Returns true if game is over (death, saved, quit, etc)
 bool game::do_turn()
 {
     ZoneScopedN( "game::do_turn" );
+    const auto reset_time_action_tick = on_out_of_scope( [this]() {
+        action_time_scale::set_calendar_turns_this_tick_to_next_tick(
+            time_action_scale_turn_remainder );
+    } );
     // perf probe: per-turn SIM cost (post-input) + the big sub-phases, rolling
     // avg every 120 turns. Renders are ~1ms but frames are ~30ms apart while
     // moving — this finds where the per-turn time actually goes.
@@ -757,6 +776,7 @@ bool game::do_turn()
     static double _perf_sim = 0.0, _perf_cache = 0.0, _perf_mon = 0.0, _perf_world = 0.0;
     static int    _perf_n = 0;
     {
+        ZoneScopedN( "do_turn_initial_cleanup" );
         cleanup_arenas();
         if( is_game_over() ) {
             return cleanup_at_end();
@@ -775,6 +795,7 @@ bool game::do_turn()
     const auto monperf = asleep && get_option<bool>( "SLEEP_SKIP_MON" );
     const auto npcperf = asleep && get_option<bool>( "SLEEP_SKIP_NPC" );
     {
+        ZoneScopedN( "do_turn_population_plots" );
         TracyPlot( "Total Monsters", static_cast<int64_t>( critter_tracker->size() ) );
         auto total_npcs = int64_t{ 0 };
         auto simulated_npcs = int64_t{ 0 };
@@ -792,11 +813,12 @@ bool game::do_turn()
     }
     // Actual stuff
     {
+        ZoneScopedN( "do_turn_calendar" );
         if( !gamemode ) {
             gamemode = std::make_unique<special_game>();
         }
         gamemode->per_turn();
-        calendar::turn += 1_turns;
+        advance_time_action_tick();
     }
     swapping_dimensions = false;
 
@@ -804,22 +826,29 @@ bool game::do_turn()
     // update_visibility_cache; subsequent redraws within the same turn skip it.
     // Lightmap is NOT blanket-invalidated here — per-submap dirty tracking handles
     // the incremental rebuild; only submaps with actual changes are rebuilt.
-    m.invalidate_visibility_caches();
+    {
+        ZoneScopedN( "do_turn_invalidate_visibility" );
+        m.invalidate_visibility_caches();
+    }
 
     // starting a new turn, clear out temperature cache
     weather_manager &weather = get_weather();
     {
+        ZoneScopedN( "do_turn_clear_temp_cache" );
         weather.clear_temp_cache();
     }
 
     if( npcs_dirty ) {
+        ZoneScopedN( "do_turn_load_npcs" );
         load_npcs();
     }
 
     {
+        ZoneScopedN( "do_turn_timed_events" );
         timed_events.process();
     }
     {
+        ZoneScopedN( "do_turn_missions" );
         mission::process_all();
     }
     // If controlling a vehicle that is owned by someone else
@@ -833,12 +862,14 @@ bool game::do_turn()
     if( u.is_mounted() ) {
         u.check_mount_is_spooked();
     }
-    if( calendar::once_every( 1_days ) ) {
+    if( action_time_scale::once_every_this_tick( 1_days ) ) {
+        ZoneScopedN( "do_turn_overmap_mongroups" );
         get_overmapbuffer( current_dimension_id_ ).process_mongroups();
     }
 
     // Move hordes every 2.5 min
-    if( calendar::once_every( time_duration::from_minutes( 2.5 ) ) ) {
+    if( action_time_scale::once_every_this_tick( time_duration::from_minutes( 2.5 ) ) ) {
+        ZoneScopedN( "do_turn_overmap_hordes" );
         get_overmapbuffer( current_dimension_id_ ).move_hordes();
         if( u.has_trait( trait_HAS_NEMESIS ) ) {
             get_overmapbuffer( current_dimension_id_ ).move_nemesis();
@@ -851,28 +882,33 @@ bool game::do_turn()
     debug_hour_timer.print_time();
 
     {
+        ZoneScopedN( "do_turn_update_body" );
         u.update_body();
     }
 
     // Auto-save if autosave is enabled
     if( get_option<bool>( "AUTOSAVE" ) &&
-        calendar::once_every( 1_turns * get_option<int>( "AUTOSAVE_TURNS" ) ) &&
+        action_time_scale::once_every_this_tick( 1_turns * get_option<int>( "AUTOSAVE_TURNS" ) ) &&
         !u.is_dead_state() ) {
+        ZoneScopedN( "do_turn_autosave" );
         autosave();
     }
 
     {
+        ZoneScopedN( "do_turn_weather_update" );
         weather.update_weather();
         reset_light_level();
     }
 
     {
+        ZoneScopedN( "do_turn_pre_action_updates" );
         perhaps_add_random_npc();
         process_voluntary_act_interrupt();
         process_activity();
         update_performance_bubble();
     }
     if( !soundperf ) {
+        ZoneScopedN( "do_turn_player_sound" );
         // Sound information and is broken up into three main blocks: Player, Monsters, NPCs
         // Player is special in that they are immediatly informed of the sounds they made on their turn for displayed sound marker purposes
         // Each sound block is generally a map::cull_heard_sounds(), feeding the AI in question remaining sounds, and then moving said AI.
@@ -890,6 +926,7 @@ bool game::do_turn()
 
     if( !u.has_effect( effect_sleep ) || uquit == QUIT_WATCH ) {
         if( u.moves > 0 || uquit == QUIT_WATCH ) {
+            ZoneScopedN( "do_turn_player_action_loop" );
             while( u.moves > 0 || uquit == QUIT_WATCH ) {
                 cleanup_dead();
                 mon_info_update();
@@ -910,7 +947,11 @@ bool game::do_turn()
                 }
 
                 const auto moves_before_action = u.moves;
-                const auto handled_action = handle_action();
+                auto handled_action = false;
+                {
+                    ZoneScopedN( "do_turn_handle_action" );
+                    handled_action = handle_action();
+                }
                 if( handled_action ) {
                     ++moves_since_last_save;
                 }
@@ -946,6 +987,7 @@ bool game::do_turn()
     }
 
     if( driving_view_offset.x != 0 || driving_view_offset.y != 0 ) {
+        ZoneScopedN( "do_turn_driving_offset" );
         // Still have a view offset, but might not be driving anymore,
         // or the option has been deactivated,
         // might also happen when someone dives from a moving car.
@@ -960,6 +1002,7 @@ bool game::do_turn()
     const auto _perf_sim_t0 = _perf_clk::now();
     // No-scent debug mutation has to be processed here or else it takes time to start working
     {
+        ZoneScopedN( "do_turn_scent" );
         if( !u.has_active_bionic( bionic_id( "bio_scent_mask" ) ) &&
             !u.has_trait( trait_id( "DEBUG_NOSCENT" ) ) ) {
             scent.set( u.bub_pos(), u.scent, u.get_type_of_scent() );
@@ -970,10 +1013,12 @@ bool game::do_turn()
 
     // We need floor cache before checking falling 'n stuff
     {
+        ZoneScopedN( "do_turn_build_floor_caches" );
         m.build_floor_caches();
     }
 
     if( !vehperf ) {
+        ZoneScopedN( "do_turn_vehicle_physics" );
         m.process_falling();
         autopilot_vehicles();
         m.vehmove();
@@ -983,9 +1028,11 @@ bool game::do_turn()
         m.process_items();
     }
     {
+        ZoneScopedN( "do_turn_creature_in_field" );
         m.creature_in_field( u );
     }
     {
+        ZoneScopedN( "do_turn_distribution_trackers" );
         for( auto &[dim_id, tracker_ptr] : grid_trackers_ ) {
             if( tracker_ptr ) {
                 tracker_ptr->update( calendar::turn );
@@ -993,11 +1040,13 @@ bool game::do_turn()
         }
     }
     {
+        ZoneScopedN( "do_turn_dimension_ticks" );
         tick_portal_links();
         tick_temporary_pocket_dimensions();
         tick_vehicle_portal_taps();
     }
     {
+        ZoneScopedN( "do_turn_fluid_grid" );
         fluid_grid::update( calendar::turn );
     }
 
@@ -1005,12 +1054,14 @@ bool game::do_turn()
     // Update vision caches for monsters. If this turns out to be expensive,
     // consider a stripped down cache just for monsters.
     {
+        ZoneScopedN( "do_turn_monster_visibility_cache" );
         const auto _t0 = _perf_clk::now();
         m.build_map_cache( get_levz(), true );
         _perf_cache += std::chrono::duration<double, std::milli>( _perf_clk::now() - _t0 ).count();
     }
     // This has to be done after updating our map caches, as sound propagation relies on terrain.
     if( !soundperf ) {
+        ZoneScopedN( "do_turn_sound_before_monsters" );
         // Cull stale sounds that have been heard by everyone. Should nominally catch all stale sounds made by the player on the prior turn.
         m.cull_heard_sounds();
         // Apply sounds from previous turn to monster AI.
@@ -1019,12 +1070,14 @@ bool game::do_turn()
     }
 
     if( !monperf ) {
+        ZoneScopedN( "do_turn_monmove" );
         const auto _t0 = _perf_clk::now();
         monmove();
         _perf_mon += std::chrono::duration<double, std::milli>( _perf_clk::now() - _t0 ).count();
     }
 
     if( !soundperf ) {
+        ZoneScopedN( "do_turn_sound_before_npcs" );
         // Cull any noises that have already been heard by everyone. This should generally cull all stale sounds made by monsters on the prior turn.
         m.cull_heard_sounds();
         // Batch floodfill sounds made by monsters or other qued sources.
@@ -1035,25 +1088,36 @@ bool game::do_turn()
     }
 
     if( !npcperf ) {
+        ZoneScopedN( "do_turn_npcmove" );
         npcmove();
     } else {
+        ZoneScopedN( "do_turn_sleep_skip_npc_process" );
         sleep_skip_npc_process();
     }
-    if( calendar::once_every( 5_minutes ) ) {
+    if( action_time_scale::once_every_this_tick( 5_minutes ) ) {
+        ZoneScopedN( "do_turn_overmap_npc_move" );
         overmap_npc_move();
     }
 
     if( !soundperf ) {
+        ZoneScopedN( "do_turn_sound_after_npcs" );
         // Floodfill any sounds cued up by NPCs during their respective turns or from other sources.
         m.batch_flood_fill_sounds();
     }
     // We want to clear our floodfill que anyways, so that sounds dont accumulate in the que if soundperf is on.
     // This function will also print a debug sound diagnostic to the log if !soundperf.
     {
+        ZoneScopedN( "do_turn_clear_floodfill" );
         sounds::clear_floodfill_que( soundperf );
     }
-    update_stair_monsters();
-    mon_info_update();
+    {
+        ZoneScopedN( "do_turn_update_stair_monsters" );
+        update_stair_monsters();
+    }
+    {
+        ZoneScopedN( "do_turn_final_mon_info_update" );
+        mon_info_update();
+    }
     {
         ZoneScopedN( "do_turn_player_process_turn" );
         u.process_turn();
@@ -1065,24 +1129,32 @@ bool game::do_turn()
     }
 
     {
+        ZoneScopedN( "do_turn_explosions" );
         explosion_handler::get_explosion_queue().execute();
     }
     {
+        ZoneScopedN( "do_turn_cleanup_dead" );
         cleanup_dead();
     }
 
     if( u.moves < 0 && get_option<bool>( "FORCE_REDRAW" ) ) {
+        ZoneScopedN( "do_turn_force_redraw" );
         ui_manager::redraw();
         refresh_display();
     }
 
     if( get_levz() >= 0 && !u.is_underwater() ) {
+        ZoneScopedN( "do_turn_weather_effects" );
         handle_weather_effects( weather.weather_id );
     }
 
-    handle_wait_activity_redraw();
+    {
+        ZoneScopedN( "do_turn_wait_activity_redraw" );
+        handle_wait_activity_redraw();
+    }
 
     {
+        ZoneScopedN( "do_turn_bodytemp_wetness" );
         u.update_bodytemp( m, weather );
         character_funcs::update_body_wetness( u, get_weather().get_precise() );
         u.apply_wetness_morale( weather.temperature );
@@ -1092,6 +1164,7 @@ bool game::do_turn()
         sfx::remove_hearing_loss();
     }
     {
+        ZoneScopedN( "do_turn_sfx" );
         sfx::do_danger_music();
         sfx::do_vehicle_engine_sfx();
         sfx::do_vehicle_exterior_engine_sfx();
@@ -1100,6 +1173,7 @@ bool game::do_turn()
 
     // Tick all loaded submaps: fields for every submap, items/vehicles for batch-eligible ones.
     {
+        ZoneScopedN( "do_turn_world_tick" );
         const auto _t0 = _perf_clk::now();
         world_tick();
         _perf_world += std::chrono::duration<double, std::milli>( _perf_clk::now() - _t0 ).count();
@@ -1111,12 +1185,20 @@ bool game::do_turn()
     // Ensure trackers exist for all active dimensions before update() fires
     // on_submap_loaded events (mirrors the logic in load_map / update_map).
     for( const auto &dim_id : submap_loader.active_dimensions() ) {
+        ZoneScopedN( "do_turn_ensure_distribution_trackers" );
         ensure_distribution_grid_tracker_for( dim_id );
     }
-    submap_loader.update_lazy_border_focus( current_dimension_id_, u.abs_pos() );
-    submap_loader.update();
+    {
+        ZoneScopedN( "do_turn_lazy_border_focus" );
+        submap_loader.update_lazy_border_focus( current_dimension_id_, u.abs_pos() );
+    }
+    {
+        ZoneScopedN( "do_turn_submap_loader_update" );
+        submap_loader.update( is_draw_tiles_mode() );
+    }
     // Destroy trackers for non-primary dimensions with no remaining tracked submaps.
     {
+        ZoneScopedN( "do_turn_cleanup_distribution_trackers" );
         for( auto it = grid_trackers_.begin(); it != grid_trackers_.end(); ) {
             if( !it->first.empty() && !it->second->has_tracked_submaps() ) {
                 submap_loader.remove_listener( it->second.get() );
@@ -1129,15 +1211,8 @@ bool game::do_turn()
 
     // Finally, clear pathfinding cache
     {
+        ZoneScopedN( "do_turn_clear_pathfinding" );
         Pathfinding::clear_d_maps();
-    }
-
-    // Drain the OS input buffer so key-repeat events generated during world
-    // processing don't accumulate and drive movement after key release.  Keep
-    // input while activity or auto-move interruption checks are active, so
-    // pause/menu keys can still stop long-running actions.
-    if( !u.activity && !u.has_destination() ) {
-        inp_mngr.pump_events();
     }
 
     _perf_sim += std::chrono::duration<double, std::milli>( _perf_clk::now() - _perf_sim_t0 ).count();
@@ -2874,7 +2949,7 @@ void game::debug_hour_timer::toggle()
 void game::debug_hour_timer::print_time()
 {
     if( enabled ) {
-        if( calendar::once_every( time_duration::from_hours( 1 ) ) ) {
+        if( action_time_scale::once_every_this_tick( time_duration::from_hours( 1 ) ) ) {
             const IRLTimeMs now = std::chrono::time_point_cast<std::chrono::milliseconds>(
                                       std::chrono::system_clock::now() );
             if( start_time ) {
@@ -2937,7 +3012,8 @@ bool check_art_charge_req( item &it )
                 return elem.second.get_wetness() != 0;
             } );
             if( !reqsmet &&
-                sum_conditions( calendar::turn - 1_turns, calendar::turn, p.abs_pos() ).rain_amount > 0
+                sum_conditions( calendar::turn - action_time_scale::calendar_duration_this_tick(),
+                                calendar::turn, p.abs_pos() ).rain_amount > 0
                 && !( p.in_vehicle && here.veh_at( p.bub_pos() )->is_inside() ) ) {
                 reqsmet = true;
             }

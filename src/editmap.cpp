@@ -623,9 +623,17 @@ std::string editmap::info_panel_text( const std::string& txt, const std::string&
              static_cast<int>( here.has_floor( target ) ), static_cast<int>( al.obstructed ) )
          + "\n";
     s += string_format(
-             _( "light_at: %s" ), map_cache.lm[map_cache.idx( target.x(), target.y() )].to_string() )
+             _( "light_at: %s" ),
+             std::to_string( map_cache.lm[map_cache.idx( target.x(), target.y() )] ) )
          + "\n";
-    s += string_format( _( "apparent light: %.5f (%d)" ), al.apparent_light, apparent_light ) + "\n";
+#if defined( CATA_SDL )
+    if( visibility_cache.variables_set && !map_cache.visibility_cache_dirty ) {
+        s += string_format( _( "apparent light: GPU visibility (%d)" ), apparent_light ) + "\n";
+    } else
+#endif
+    {
+        s += string_format( _( "apparent light: %.5f (%d)" ), al.apparent_light, apparent_light ) + "\n";
+    }
     std::string extras;
     if( vp ) { extras += _( " [vehicle]" ); }
     if( !here.is_outside( target ) ) {

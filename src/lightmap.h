@@ -3,7 +3,11 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <optional>
 #include <ostream>
+#include <string_view>
+
+#include "hsv_color.h"
 
 static constexpr float LIGHT_SOURCE_LOCAL = 0.1f;
 static constexpr float LIGHT_SOURCE_BRIGHT = 10.0f;
@@ -69,6 +73,12 @@ struct light_color_rgb {
 
 // Dawn/dusk tint: returns cached warm color for twilight or empty outside.
 light_color_rgb dawn_dusk_color_for_lightmap( std::string_view dimension );
+
+// Converts a JSON light colour ( std::optional<RGBColor>, 0-255, a == 0 means unset )
+// to the normalised energy form the CPU colour lane uses.  Mirrors color_is_set() in
+// src/compute/gpu_lm.cpp so the CPU and GPU light paths agree on what counts as
+// "no colour".
+auto light_color_from_json( const std::optional<RGBColor> &color ) -> light_color_rgb;
 
 #define LIGHT_RANGE(b) static_cast<int>( -std::log(LIGHT_AMBIENT_LOW / static_cast<float>(b)) * (1.0 / LIGHT_TRANSPARENCY_OPEN_AIR) )
 

@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <map>
+#include <optional>
 #include <vector>
 #include <string>
 
@@ -101,6 +102,7 @@ class npc_class
         // the int is what level the spell starts at
         std::map<spell_id, int> _starting_spells;
         std::map<bionic_id, int> bionic_list;
+        std::optional<std::string> lua_ai;
         npc_class();
 
         std::string get_name() const;
@@ -153,5 +155,4 @@ extern npc_class_id NC_SOLDIER;
 extern npc_class_id NC_BARTENDER;
 extern npc_class_id NC_JUNK_SHOPKEEP;
 extern npc_class_id NC_HALLU;
-
 

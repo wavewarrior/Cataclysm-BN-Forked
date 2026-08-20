@@ -12,6 +12,7 @@
 
 constexpr int LUA_API_VERSION = 2;
 
+#include "action_time_scale.h"
 #include "catalua_sol.h"
 
 #include "avatar.h"
@@ -259,6 +260,11 @@ void init_global_state_tables( lua_state &state, const std::vector<mod_id> &modl
 
     // mapgen functions
     gt["mapgen_functions"] = lua.create_table();
+
+    // monster / npc functions
+    gt["monster_attitude_functions"] = lua.create_table();
+    gt["monster_ai_functions"] = lua.create_table();
+    gt["npc_ai_functions"] = lua.create_table();
 
     // hooks
     cata::define_hooks( state );
@@ -872,7 +878,7 @@ void run_on_every_x_hooks( lua_state &state )
     std::vector<cata::on_every_x_hooks> &master_table =
         state.lua["game"]["cata_internal"]["on_every_x_hooks"];
     for( auto &entry : master_table ) {
-        if( calendar::once_every( entry.interval ) ) {
+        if( action_time_scale::once_every_this_tick( entry.interval ) ) {
             entry.functions.erase(
                 std::remove_if(
                     entry.functions.begin(), entry.functions.end(),

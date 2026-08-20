@@ -1,3 +1,4 @@
+#include "action_time_scale.h"
 #include "activity_actor.h"
 
 #include "activity_actor_definitions.h"
@@ -181,7 +182,7 @@ void game_activity_actor::do_turn( player_activity& act, Character& who )
 
     if( gtype == game_type::GENERIC_GAME ) {
         // GENERIC_GAME: simple morale boost
-        if( calendar::once_every( 1_minutes ) ) {
+        if( action_time_scale::once_every_this_tick( 1_minutes ) ) {
             p.add_morale( MORALE_GAME, 2, 60, 2_hours, 30_minutes, true );
         }
         return;
@@ -195,7 +196,7 @@ void game_activity_actor::do_turn( player_activity& act, Character& who )
     }
     item& game_item_ref = *game_item;
 
-    if( calendar::once_every( 1_minutes ) ) {
+    if( action_time_scale::once_every_this_tick( 1_minutes ) ) {
         int energy = game_item_ref.ammo_required();
         energy -= game_item_ref.ammo_consume( energy, p.bub_pos() );
         if( energy > 0 && game_item_ref.has_flag( flag_USE_UPS ) ) {
@@ -243,7 +244,7 @@ void vibe_activity_actor::do_turn( player_activity& act, Character& who )
         add_msg( m_bad, _( "You have trouble breathing, and stop." ) );
     }
 
-    if( calendar::once_every( 1_minutes ) ) {
+    if( action_time_scale::once_every_this_tick( 1_minutes ) ) {
         p.mod_fatigue( 1 );
         if( vibrator_item.ammo_remaining() > 0 ) {
             vibrator_item.ammo_consume( 1, p.bub_pos() );
@@ -692,7 +693,7 @@ void read_activity_actor::do_turn( player_activity& act, Character& who )
         who.moves = 0;
     }
 
-    if( calendar::once_every( 1_minutes ) ) {
+    if( action_time_scale::once_every_this_tick( 1_minutes ) ) {
         if( !act.targets.empty() ) {
             safe_reference<item> &loc = act.targets[0];
             if( !loc || !loc->is_book() ) {
@@ -740,7 +741,7 @@ void try_sleep_activity_actor::do_turn( player_activity& act, Character& who )
         } else if( one_in( 1000 ) ) {
             p.add_msg_if_player( _( "You toss and turn…" ) );
         }
-        if( calendar::once_every( 30_minutes ) ) {
+        if( action_time_scale::once_every_this_tick( 30_minutes ) ) {
             // Query handled inline - skip for NPCs
             if( !p.is_npc() ) {
                 if( p.get_value( "sleep_query" ) == "false" ) { return; }
@@ -869,7 +870,8 @@ void start_fire_activity_actor::do_turn( player_activity& act, Character& who )
     p.mod_moves( -p.moves );
     const firestarter_actor* actor = dynamic_cast<const firestarter_actor *>( usef->get_actor_ptr() );
     const float light = actor->light_mod( p.bub_pos() );
-    progress.mod_moves_left( -static_cast<int>( light * 100 ) );
+    progress.mod_moves_left(
+        -static_cast<int>( light * action_time_scale::activity_progress_per_tick() ) );
     if( light < 0.1 ) {
         p.add_msg_if_player(
             m_bad,
@@ -1003,7 +1005,7 @@ void fish_activity_actor::do_turn( player_activity& act, Character& who )
             }
         }
     }
-    if( calendar::once_every( 60_minutes ) ) { p.practice( skill_survival, rng( 1, 3 ) ); }
+    if( action_time_scale::once_every_this_tick( 60_minutes ) ) { p.practice( skill_survival, rng( 1, 3 ) ); }
 }
 
 void fish_activity_actor::finish( player_activity& act, Character& who )
@@ -1171,7 +1173,7 @@ void tree_communion_activity_actor::do_turn( player_activity& act, Character& wh
         return;
     }
     // Information is received every minute
-    if( !calendar::once_every( 1_minutes ) ) { return; }
+    if( !action_time_scale::once_every_this_tick( 1_minutes ) ) { return; }
     // BFS forest tiles
     std::queue<tripoint_abs_omt> q;
     std::unordered_set<tripoint_abs_omt> seen;

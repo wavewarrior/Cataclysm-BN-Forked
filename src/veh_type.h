@@ -21,6 +21,7 @@
 #include "translations.h"
 #include "type_id.h"
 #include "units.h"
+#include "units_angle.h"
 #include "weighted_list.h"
 
 class player;
@@ -169,6 +170,19 @@ struct transform_terrain_data {
     bool diggable;
 };
 
+struct vpart_rotating_light {
+    int arc = 30;
+    int step = 90;
+    int phase = 0;
+    time_duration period = 1_turns;
+    int beams = 2;
+
+    auto arc_width() const -> units::angle;
+    auto beam_count() const -> int;
+    auto beam_spacing() const -> units::angle;
+    auto direction_at( units::angle base_direction, time_point turn ) const -> units::angle;
+};
+
 class vpart_info
 {
     private:
@@ -205,6 +219,7 @@ class vpart_info
         nc_color color_broken = c_light_gray;
 
         RGBColorPair default_color = {};
+        std::optional<RGBColor> light_color;
         /**
          * Symbol of part which will be translated as follows:
          * y, u, n, b to NW, NE, SE, SW lines correspondingly
@@ -314,9 +329,8 @@ class vpart_info
 
         /** seatbelt (str), muffler (%), horn (vol), light (intensity), recharing (power) */
         int bonus = 0;
-        // Per-tile accumulated colored light energy (RGB, normalized to [0,1]).
-        // Optional JSON field "light_color": [R,G,B] where R/G/B are 0-255.
-        light_color_rgb light_color = {};
+        /** Optional cone rotation data for lights that sweep instead of emitting continuously. */
+        std::optional<vpart_rotating_light> rotating_light;
 
         /** cargo weight modifier (percentage) */
         int cargo_weight_modifier = 100;

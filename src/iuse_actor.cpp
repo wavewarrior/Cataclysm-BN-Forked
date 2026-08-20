@@ -1,5 +1,6 @@
 #include "iuse_actor.h"
 
+#include "action_time_scale.h"
 #include "action.h"
 #include "active_tile_data_def.h"
 #include "activity_actor_definitions.h"
@@ -1404,7 +1405,7 @@ int multicooker_iuse::use( player& p, item& it, bool t, const tripoint_bub_ms& p
 
             return 0;
         } else {
-            if( calendar::once_every( 1_minutes ) ) { it.ammo_consume( charges_per_minute, pos ); }
+            if( action_time_scale::once_every_this_tick( 1_minutes ) ) { it.ammo_consume( charges_per_minute, pos ); }
             it.set_var( "COOKTIME", cooktime );
             return 0;
         }

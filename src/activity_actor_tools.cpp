@@ -1,3 +1,4 @@
+#include "action_time_scale.h"
 #include "activity_actor.h"
 
 #include "activity_actor_definitions.h"
@@ -198,7 +199,7 @@ void hacksaw_activity_actor::do_turn( player_activity &/* act */, Character &who
     if( tool->ammo_sufficient() ) {
         tool->ammo_consume( tool->ammo_required(), tool->position() );
         sfx::play_activity_sound( "tool", "hacksaw", sfx::get_heard_volume( target, 80 ) );
-        if( calendar::once_every( 1_minutes ) ) {
+        if( action_time_scale::once_every_this_tick( 1_minutes ) ) {
             //~ Sound of a metal sawing tool at work!
             sound_event se;
             se.origin = target;
@@ -495,7 +496,7 @@ void burrow_activity_actor::do_turn( player_activity &, Character& who )
     map& here = get_map();
     sfx::play_activity_sound( "activity", "burrow",
                               sfx::get_heard_volume( here.abs_to_bub( target ), 70 ) );
-    if( calendar::once_every( 1_minutes ) ) {
+    if( action_time_scale::once_every_this_tick( 1_minutes ) ) {
         //~ Sound of a Rat mutant burrowing!
         sound_event se;
         se.origin = here.abs_to_bub( target );
@@ -563,7 +564,7 @@ void pickaxe_activity_actor::do_turn( player_activity &, Character& who )
     sfx::play_activity_sound( "tool", "pickaxe",
                               sfx::get_heard_volume( here.abs_to_bub( target ), 80 ) );
     // each turn is too much
-    if( calendar::once_every( 1_minutes ) ) {
+    if( action_time_scale::once_every_this_tick( 1_minutes ) ) {
         //~ Sound of a Pickaxe at work!
         sound_event se;
         se.origin = here.abs_to_bub( target );
@@ -645,7 +646,7 @@ void jackhammer_activity_actor::do_turn( player_activity &, Character& who )
     map& here = get_map();
     sfx::play_activity_sound( "tool", "jackhammer",
                               sfx::get_heard_volume( here.abs_to_bub( target ), 130 ) );
-    if( calendar::once_every( 1_minutes ) ) {
+    if( action_time_scale::once_every_this_tick( 1_minutes ) ) {
         //~ Sound of a jackhammer at work!
         sound_event se;
         se.origin = here.abs_to_bub( target );
@@ -765,7 +766,7 @@ void fill_pit_activity_actor::do_turn( player_activity &, Character& who )
         return;
     }
     sfx::play_activity_sound( "tool", "shovel", 100 );
-    if( calendar::once_every( 1_minutes ) ) {
+    if( action_time_scale::once_every_this_tick( 1_minutes ) ) {
         map& here = get_map();
         //~ Sound of a shovel filling a pit or mound at work!
         sound_event se;
@@ -1155,7 +1156,7 @@ void hand_crank_activity_actor::do_turn( player_activity& act, Character& who )
     }
     if( charge_interval <= 0_turns ) { charge_interval = 144_seconds; }
 
-    if( calendar::once_every( charge_interval ) ) {
+    if( action_time_scale::once_every_this_tick( charge_interval ) ) {
         who.mod_fatigue( fatigue_amount );
         if( hand_crank_item.ammo_capacity() > hand_crank_item.ammo_remaining() ) {
             const auto current = hand_crank_item.ammo_remaining();
@@ -1663,7 +1664,7 @@ void oxytorch_activity_actor::do_turn( player_activity &/*act*/, Character &who 
     if( tool->ammo_sufficient() ) {
         tool->ammo_consume( tool->ammo_required(), tool->position() );
         sfx::play_activity_sound( "tool", "oxytorch", sfx::get_heard_volume( target, 65 ) );
-        if( calendar::once_every( 2_turns ) ) {
+        if( action_time_scale::once_every_this_tick( 2_turns ) ) {
             sound_event se;
             se.origin = target;
             se.volume = 65;

@@ -49,6 +49,7 @@
 #include "output.h"
 #include "path_info.h"
 #include "point.h"
+#include "profile.h"
 #include "rng.h"
 #include "sdl_wrappers.h"
 #include "sdl_geometry.h"

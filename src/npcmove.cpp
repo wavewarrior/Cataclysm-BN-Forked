@@ -1,3 +1,4 @@
+#include "action_time_scale.h"
 #include "active_item_cache.h"
 #include "activity_actor_definitions.h"
 #include "activity_handlers.h"
@@ -6,6 +7,8 @@
 #include "cached_options.h"
 #include "calendar.h"
 #include "cata_algo.h"
+#include "catalua.h"
+#include "catalua_impl.h"
 #include "catalua_coord.h"
 #include "catalua_hooks.h"
 #include "catalua_sol.h"
@@ -28,6 +31,7 @@
 #include "game_constants.h"
 #include "gates.h"
 #include "gun_mode.h"
+#include "init.h"
 #include "item.h"
 #include "item_contents.h"
 #include "item_functions.h"
@@ -45,6 +49,7 @@
 #include "mtype.h"
 #include "npc.h" // IWYU pragma: associated
 #include "npc_action.h"
+#include "npc_class.h"
 #include "npctalk.h"
 #include "options.h"
 #include "overmap.h"
@@ -80,7 +85,7 @@
 #include <numeric>
 #include <ostream>
 #include <tuple>
-
+#include <unordered_set>
 
 static const activity_id ACT_PULP( "ACT_PULP" );
 
@@ -1466,7 +1471,7 @@ void npc::move_pause()
 {
     // make sure we're using the best weapon
     if( has_new_items ) { scan_new_items(); }
-    if( calendar::once_every( 1_hours ) ) {
+    if( action_time_scale::once_every_this_tick( 1_hours ) ) {
         deactivate_bionic_by_id( bio_soporific );
         for( const bionic_id& bio_id : health_cbms ) { activate_bionic_by_id( bio_id ); }
     }

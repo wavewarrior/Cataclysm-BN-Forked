@@ -1022,26 +1022,20 @@ texture_result tileset::get_or_default(
         apply_color_filter( st_surf, st_sub_rect_final, st_surf, final_src_rect, color_pixel_copy );
 
         auto surf_hash = get_surface_hash( st_surf, &st_sub_rect_final );
-        auto existing = tileset_atlas->id_search( surf_hash );
+        auto existing = tileset_atlas->find_sprite( surf_hash );
 
         atlas_texture atl_tex;
         if( existing.has_value() ) {
             atl_tex = std::move( existing.value() );
         } else {
-            atl_tex = tileset_atlas->allocate_sprite( final_w, final_h );
-            tileset_atlas->id_assign( surf_hash, atl_tex );
-
-            SDL_UpdateTexture( st_tex, nullptr, st_surf->pixels, st_surf->pitch );
-            SDL_SetRenderTarget( rp, atl_tex.first.get() );
-            {
-                const SDL_FRect
-                fsrc{float( st_sub_rect_final.x ), float( st_sub_rect_final.y ),
-                     float( st_sub_rect_final.w ), float( st_sub_rect_final.h )};
-                const SDL_FRect
-                fdst{float( atl_tex.second.x ), float( atl_tex.second.y ), float( atl_tex.second.w ),
-                     float( atl_tex.second.h )};
-                SDL_RenderTexture( rp, st_tex, &fsrc, &fdst );
-            }
+            // Upstream's callback API. The atlas page is SDL_TEXTUREACCESS_STREAMING now, so
+            // create_sprite locks it to a surface and hands us the destination rect; the old
+            // SDL_SetRenderTarget blit cannot work on a streaming texture.
+            atl_tex = tileset_atlas->create_sprite(
+                          final_w, final_h, surf_hash,
+            [&]( SDL_Surface * dst, const SDL_Rect * dst_rect ) {
+                apply_color_filter( dst, *dst_rect, st_surf, st_sub_rect_final, color_pixel_copy );
+            } );
             if( SDL_GPUTexture * gpu_atlas = tileset_atlas->find_gpu_texture( atl_tex.first.get() ) ) {
                 lighting::get_render_state().upload_surface_subregion_to_gpu_texture(
                     gpu_atlas, atl_tex.second.x, atl_tex.second.y, st_surf, &st_sub_rect_final );
@@ -1132,20 +1126,19 @@ bool tileset_loader::copy_surface_to_dynamic_atlas(
         SDL_BlitSurface( surf.get(), &src_rect, st_surf, &st_sub_rect );
 
         const auto surf_hash = get_surface_hash( st_surf, nullptr );
-        const auto existing = ts.tileset_atlas->id_search( surf_hash );
+        const auto existing = ts.tileset_atlas->find_sprite( surf_hash );
 
         atlas_texture atl_tex;
         if( existing.has_value() ) {
             atl_tex = existing.value();
         } else {
-            atl_tex = ts.tileset_atlas->allocate_sprite( sprite_width, sprite_height );
-            ts.tileset_atlas->id_assign( surf_hash, atl_tex );
-
-            SDL_UpdateTexture( st_tex, nullptr, st_surf->pixels, st_surf->pitch );
-            SDL_SetRenderTarget( renderer.get(), atl_tex.first.get() );
-            const SDL_FRect fsrc{float( st_sub_rect.x ), float( st_sub_rect.y ), float( st_sub_rect.w ), float( st_sub_rect.h )};
-            const SDL_FRect fdst{float( atl_tex.second.x ), float( atl_tex.second.y ), float( atl_tex.second.w ), float( atl_tex.second.h )};
-            SDL_RenderTexture( renderer.get(), st_tex, &fsrc, &fdst );
+            // Streaming atlas page: blit through create_sprite's locked surface rather than
+            // SDL_SetRenderTarget, which only works on a TARGET texture.
+            atl_tex = ts.tileset_atlas->create_sprite(
+                          sprite_width, sprite_height, surf_hash,
+            [&]( SDL_Surface * dst, const SDL_Rect * dst_rect ) {
+                SDL_BlitSurface( st_surf, &st_sub_rect, dst, dst_rect );
+            } );
             // Mirror to the GPU atlas so no-VFX tiles (fx_type::none cache-hit in
             // get_or_default) are visible in the GPU world-render pass.  Without
             // this the GPU sheet is allocated but never populated: the shader
@@ -2072,8 +2065,12 @@ void tileset_loader::ensure_default_item_highlight()
                          highlight_alpha ) ),
         "SDL_FillSurfaceRect failed" );
 
-    auto [tex, rect] = ts.tileset_atlas->allocate_sprite( ts.tile_width, ts.tile_height );
-    SDL_UpdateTexture( tex.get(), &rect, surface->pixels, surface->pitch );
+    // No hash id: this highlight is not content-addressed like tileset sprites are.
+    auto [tex, rect] = ts.tileset_atlas->create_sprite(
+                           ts.tile_width, ts.tile_height, std::nullopt,
+    [&]( SDL_Surface * dst, const SDL_Rect * dst_rect ) {
+        SDL_BlitSurface( surface.get(), nullptr, dst, dst_rect );
+    } );
     // Mirror to GPU atlas — same reason as copy_surface_to_dynamic_atlas.
     if( SDL_GPUTexture * gpu = ts.tileset_atlas->find_gpu_texture( tex.get() ) ) {
         lighting::get_render_state().upload_surface_subregion_to_gpu_texture(

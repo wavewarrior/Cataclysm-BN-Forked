@@ -17,6 +17,7 @@
 #include "path_info.h"
 #include "point.h"
 #include "popup.h"
+#include "profile.h"
 #include "rml_screen.h"
 #include "rml_util.h"
 #include "string_formatter.h"
@@ -869,21 +870,29 @@ const std::string &input_context::handle_input() { return handle_input( timeout 
 
 const std::string &input_context::handle_input( const int timeout )
 {
+    ZoneScopedN( "input_context_handle_input" );
     const auto old_timeout = inp_mngr.get_timeout();
     if( timeout >= 0 ) { inp_mngr.set_timeout( timeout ); }
     next_action.type = input_event_t::error;
     const std::string* result = &CATA_ERROR;
     while( true ) {
-        next_action = coop_fiber::active() ? coop_fiber::yield_event() : inp_mngr.get_input_event();
+        {
+            ZoneScopedN( "input_context_get_input_event" );
+            next_action = coop_fiber::active() ? coop_fiber::yield_event() : inp_mngr.get_input_event();
+        }
         if( next_action.type == input_event_t::timeout ) {
             result = &TIMEOUT;
             break;
         }
 
-        const std::string& action = input_to_action( next_action );
+        const auto &action = [&]() -> const std::string & {
+            ZoneScopedN( "input_context_input_to_action" );
+            return input_to_action( next_action );
+        }();
 
         // Special help action
         if( action == "HELP_KEYBINDINGS" ) {
+            ZoneScopedN( "input_context_help_keybindings" );
             inp_mngr.reset_timeout();
             display_menu();
             inp_mngr.set_timeout( timeout );

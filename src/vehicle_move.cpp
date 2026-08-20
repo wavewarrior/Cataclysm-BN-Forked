@@ -17,8 +17,10 @@
 #include <set>
 #include <vector>
 
+#include "action_time_scale.h"
 #include "avatar.h"
 #include "bodypart.h"
+#include "character.h"
 #include "creature.h"
 #include "debug.h"
 #include "enums.h"
@@ -1284,7 +1286,7 @@ bool vehicle::check_heli_ascend( Character &who )
 void vehicle::pldrive( Character &driver, tripoint_rel_veh p )
 {
     if( p.z() != 0 && is_aircraft() ) {
-        driver.moves = std::min( driver.moves, 0 );
+        driver.moves -= action_time_scale::vehicle_control_cost( driver, 100 );
         thrust( 0, p.z() );
     }
     units::angle turn_delta = 15_degrees * p.x();
@@ -1308,9 +1310,9 @@ void vehicle::pldrive( Character &driver, tripoint_rel_veh p )
             return;
         }
 
-        // If you've got more moves than speed, it's most likely time stop
-        // Let's get rid of that
-        driver.moves = std::min( driver.moves, driver.get_speed() );
+        // If you've got more moves than one normal scaled turn, it's most likely time stop.
+        // Let's get rid of that.
+        driver.moves = std::min( driver.moves, action_time_scale::character_moves_per_tick( driver ) );
 
         ///\EFFECT_DEX reduces chance of losing control of vehicle when turning
 
@@ -1347,7 +1349,8 @@ void vehicle::pldrive( Character &driver, tripoint_rel_veh p )
         turn( turn_delta );
 
         // At most 3 turns per turn, because otherwise it looks really weird and jumpy
-        driver.moves -= std::max( cost, driver.get_speed() / 3 + 1 );
+        driver.moves -= action_time_scale::vehicle_control_cost( driver,
+                        std::max( cost, driver.get_speed() / 3 + 1 ) );
     }
 
     if( p.y() != 0 ) {
@@ -1356,7 +1359,7 @@ void vehicle::pldrive( Character &driver, tripoint_rel_veh p )
             cruise_thrust( -p.y() * thr_amount );
         } else {
             thrust( -p.y() );
-            driver.moves = std::min( driver.moves, 0 );
+            driver.moves -= action_time_scale::vehicle_control_cost( driver, 100 );
         }
     }
 

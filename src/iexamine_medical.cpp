@@ -14,6 +14,7 @@
 #include <utility>
 
 #include "action.h"
+#include "action_time_scale.h"
 #include "activity_actor.h"
 #include "activity_actor_definitions.h"
 #include "active_tile_data_def.h"
@@ -468,7 +469,8 @@ void iexamine::autodoc( player &p, const tripoint_bub_ms &examp )
         }
     } else if( patient.activity->id() == activity_id( "ACT_OPERATION" ) ) {
         popup( _( "Operation underway.  Please wait until the end of the current procedure.  Estimated time remaining: %s." ),
-               to_string( time_duration::from_turns( patient.activity->moves_left / 100 ) ) );
+               to_string( time_duration::from_turns(
+                              action_time_scale::activity_turns_for_progress( patient.activity->moves_left ) ) ) );
         p.add_msg_if_player( m_info, _( "The autodoc is working on %s." ), patient.disp_name() );
         return;
     }
@@ -574,7 +576,9 @@ void iexamine::autodoc( player &p, const tripoint_bub_ms &examp )
                                                 surgery_duration * weight;
 
             if( patient.can_install_bionics( ( *itemtype ), installer, true, has_install_program ? 10 : -1 ) ) {
-                const time_duration duration = itemtype->bionic->difficulty * 20_minutes;
+                const auto duration = time_duration::from_turns(
+                                          action_time_scale::activity_turns_for_progress(
+                                              to_moves<int>( itemtype->bionic->difficulty * 20_minutes ) ) );
                 patient.introduce_into_anesthesia( duration, installer, needs_anesthesia );
                 bionic->detach();
                 if( needs_anesthesia ) {
@@ -646,7 +650,9 @@ void iexamine::autodoc( player &p, const tripoint_bub_ms &examp )
             }
 
             if( patient.can_uninstall_bionic( bid, installer, true ) ) {
-                const time_duration duration = difficulty * 20_minutes;
+                const auto duration = time_duration::from_turns(
+                                          action_time_scale::activity_turns_for_progress(
+                                              to_moves<int>( difficulty * 20_minutes ) ) );
                 patient.introduce_into_anesthesia( duration, installer, needs_anesthesia );
                 if( needs_anesthesia ) {
                     p.consume_tools( anesth_kit, volume_anesth );

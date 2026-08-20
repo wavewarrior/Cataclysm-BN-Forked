@@ -1,5 +1,6 @@
 #include "activity_actor.h"
 
+#include "action_time_scale.h"
 #include "activity_actor_definitions.h"
 #include "activity_handlers.h" // put_into_vehicle_or_drop and drop_on_map
 #include "activity_speed.h"
@@ -556,7 +557,7 @@ void dig_activity_actor::do_turn( player_activity & /*act*/, Character& who )
         return;
     }
     sfx::play_activity_sound( "tool", "shovel", sfx::get_heard_volume( location, 60 ) );
-    if( calendar::once_every( 1_minutes ) ) {
+    if( action_time_scale::once_every_this_tick( 1_minutes ) ) {
         //~ Sound of a shovel digging a pit at work!
         sound_event se;
         se.origin = location;
@@ -666,7 +667,7 @@ void dig_channel_activity_actor::do_turn( player_activity & /*act*/, Character& 
         return;
     }
     sfx::play_activity_sound( "tool", "shovel", sfx::get_heard_volume( location, 70 ) );
-    if( calendar::once_every( 1_minutes ) ) {
+    if( action_time_scale::once_every_this_tick( 1_minutes ) ) {
         //~ Sound of a shovel digging a pit at work!
         sound_event se;
         se.origin = location;
@@ -1596,13 +1597,15 @@ std::unique_ptr<activity_actor> throw_activity_actor::deserialize( JsonIn& jsin 
 void repair_item_activity_actor::do_turn( player_activity& /*act*/, Character& who )
 {
     const float vision_mod = character_funcs::fine_detail_vision_mod( who );
-    const int effective_moves = static_cast<int>( who.moves / vision_mod );
+    const int effective_moves = static_cast<int>(
+                                    action_time_scale::activity_progress_from_actor_moves( who ) / vision_mod );
     const int remaining = progress.get_moves_left();
     if( effective_moves <= remaining ) {
         progress.mod_moves_left( -effective_moves );
         who.moves = 0;
     } else {
-        who.moves -= static_cast<int>( remaining * vision_mod );
+        who.moves -= action_time_scale::actor_moves_for_activity_progress( who,
+                     remaining * vision_mod );
         progress.mod_moves_left( -remaining );
     }
 }
@@ -2316,7 +2319,7 @@ void wood_chop_activity_actor::do_turn( player_activity& act, Character& who )
     map& here = get_map();
     sfx::play_activity_sound( "tool", "axe",
                               sfx::get_heard_volume( here.abs_to_bub( act.placement ), 85 ) );
-    if( calendar::once_every( 1_minutes ) ) {
+    if( action_time_scale::once_every_this_tick( 1_minutes ) ) {
         //~ Sound of a wood chopping tool at work!
         sound_event se;
         se.origin = here.abs_to_bub( act.placement );

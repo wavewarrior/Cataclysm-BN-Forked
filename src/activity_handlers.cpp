@@ -2,6 +2,7 @@
 #include "activity_actor_definitions.h"
 
 #include "action.h"
+#include "action_time_scale.h"
 #include "advanced_inv.h"
 #include "armor_layers.h"
 #include "avatar.h"

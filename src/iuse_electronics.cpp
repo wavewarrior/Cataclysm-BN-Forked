@@ -1,6 +1,7 @@
 #include "iuse.h"
 
 #include "action.h"
+#include "action_time_scale.h"
 #include "active_tile_data_def.h"
 #include "activity_actor.h"
 #include "activity_actor_definitions.h"
@@ -798,7 +799,7 @@ int iuse::einktabletpc( player* p, item* it, bool t, const tripoint_bub_ms& pos 
 {
     if( t ) {
         if( !it->get_var( "EIPC_MUSIC_ON" ).empty() && ( it->ammo_remaining() > 0 ) ) {
-            if( calendar::once_every( 5_minutes ) ) { it->ammo_consume( 1, p->bub_pos() ); }
+            if( action_time_scale::once_every_this_tick( 5_minutes ) ) { it->ammo_consume( 1, p->bub_pos() ); }
 
             // the more varied music, the better max mood.
             const int songs = it->get_var( "EIPC_MUSIC", 0 );
@@ -2351,7 +2352,7 @@ int iuse::ehandcuffs( player* p, item* it, bool t, const tripoint_bub_ms& pos )
             }
         }
 
-        if( calendar::once_every( 1_minutes ) ) {
+        if( action_time_scale::once_every_this_tick( 1_minutes ) ) {
             sound_event se;
             se.origin = p->bub_pos();
             se.volume = 70;
@@ -2409,7 +2410,7 @@ int iuse::ehandcuffs( player* p, item* it, bool t, const tripoint_bub_ms& pos )
 int iuse::foodperson( player* p, item* it, bool t, const tripoint_bub_ms& pos )
 {
     if( t ) {
-        if( calendar::once_every( 1_minutes ) ) {
+        if( action_time_scale::once_every_this_tick( 1_minutes ) ) {
             const SpeechBubble& speech = get_speech( "foodperson_mask" );
             sound_event se;
             se.origin = pos;
