@@ -822,14 +822,15 @@ Reverting `mapdata.h` breaks `TFLAG_ROAD` in `sounds.cpp`, `map_cache.cpp` break
 
 ## S2 outcome (2026-08-19) — `b8b26d6b40`, GPU compute lightmap (#9016, #9348)
 
-265 hunks over 65 files, resolved by a 15-agent fan-out with the parent owning the build/verify loop and
+65 conflicted files, resolved by a 15-agent fan-out with the parent owning the build/verify loop and
 all cross-file rulings. **Zero conflict markers; `cataclysm-bn-tiles` and `cata_test-tiles` both build
 clean.** `[coop]` is 159/159 with zero failures — byte-identical to baseline, so the co-op subsystem is
 fully preserved.
 
 ### Landing (2026-08-20) — merge committed on `feature/merge-dev-into-improvements`
 
-The resolution content was verified against the rulings above, staged (265 files), rebuilt, and gated.
+The resolution content was verified against the rulings above, staged (265 files in the merge commit,
+65 of them formerly conflicted), rebuilt, and gated.
 One drift fix was needed: `activity_actor_combat.cpp::operation_activity_actor::do_turn` referenced
 `half_op_duration` without declaring it (the re-home dropped the `const time_duration` line); restored
 alongside the new `half_op_moves`.
@@ -957,7 +958,11 @@ Checks that paid for themselves, and should be repeated every stage:
 `level_cache::bidx` is `sx * cache_mapsize + sy` and `lightmap.cpp` reads it via `bidx( smx, smy )` —
 transposed, so a `+x` shift force-dirtied a column where it meant a row.
 
-### Open: 25 new failures, under investigation in four clusters
+### Historical (2026-08-19 intermediate tree): 25 new failures in four clusters — superseded by the Landing above
+
+The table below describes the intermediate tree of 2026-08-19, **not** the tree that landed. At landing
+(see the Landing section above) only the vision cluster still reproduces (4 of the 6 cases); the
+vehicle/grab/ramp, craft 2×, and pit-trap clusters no longer fail.
 
 | Cluster | Cases | Lead symptom |
 |---|---|---|
