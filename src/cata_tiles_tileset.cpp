@@ -1849,6 +1849,20 @@ void tileset_loader::load_tilejson_from_file( const JsonObject& config )
             curr_tile.offset = sprite_offset;
             curr_tile.offset_retracted = sprite_offset_retracted;
             curr_tile.pixelscale = sprite_pixelscale;
+            // Per-layer anchor overrides: a tile's fg/bg sprites may live in a
+            // different sheet than the section this entry is declared in, and a
+            // big-sprite layer (e.g. a 128x160 canopy over a 64x80 ground bg)
+            // needs a different anchor than the section's sprite_offset.
+            if( entry.has_int( "fg_offset_x" ) || entry.has_int( "fg_offset_y" ) ) {
+                curr_tile.fg_offset = point(
+                                          entry.get_int( "fg_offset_x", sprite_offset.x ),
+                                          entry.get_int( "fg_offset_y", sprite_offset.y ) );
+            }
+            if( entry.has_int( "bg_offset_x" ) || entry.has_int( "bg_offset_y" ) ) {
+                curr_tile.bg_offset = point(
+                                          entry.get_int( "bg_offset_x", sprite_offset.x ),
+                                          entry.get_int( "bg_offset_y", sprite_offset.y ) );
+            }
             const bool t_multi = entry.get_bool( "multitile", false );
             const bool t_rota = entry.get_bool( "rotates", t_multi );
             const int t_h3d = entry.get_int( "height_3d", 0 );

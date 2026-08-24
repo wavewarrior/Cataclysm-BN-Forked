@@ -1199,7 +1199,7 @@ void cata_tiles::draw(
                             np.y < min_visible_y || np.y > max_visible_y || np.x < min_visible_x
                             || np.x > max_visible_x
                             || would_apply_vision_effects( here.get_visibility(
-                                    ch.visibility_cache[ch.idx( np.x, np.y )], cache ) );
+                                                               ch.visibility_cache[ch.idx( np.x, np.y )], cache ) );
                     }
 
                     if( !invisible[0] && apply_vision_effects( pos, visibility ) ) {
@@ -1296,6 +1296,10 @@ void cata_tiles::draw(
 
     if( !draw_points.empty() ) {
         for( const auto z : std::views::iota( min_z, center.z() + 1 ) ) {
+            // Begin capturing wide terrain canopies for this z (replayed below).
+            canopy_capture_ = true;
+            canopy_defers_.clear();
+
             // ---- Pass 1: per-row terrain + base layers (unchanged) ----
             auto row_begin = draw_points.begin();
             while( row_begin != draw_points.end() ) {
@@ -1320,6 +1324,34 @@ void cata_tiles::draw(
                     }
                 }
                 row_begin = row_end;
+            }
+
+            // ---- Deferred canopy pass -------------------------------------------
+            // Redraw the wide terrain foregrounds captured during the rows above.
+            // Queue order is draw order, so they land on top of everything Pass 1
+            // produced at this z (ground, base layers) and — because they are enqueued
+            // before the Pass 2/3 sprites below — under every entity at this z and
+            // below. The splatmap cut after this point keeps the decal seam between
+            // terrain and entities.
+            if( !canopy_defers_.empty() ) {
+                canopy_capture_ = false;
+                canopy_replay_ = true;
+                for( const auto& d : canopy_defers_ ) {
+                    int replay_height_3d = d.height_3d;
+                    gpu_light_mode = d.light_mode;
+                    gpu_light_r = gpu_light_g = gpu_light_b = 1.0f;
+                    gpu_light_mul = d.light_mul;
+                    low_frontier_mask_ = d.frontier_mask;
+                    vision_overlay_outline_ = d.outline;
+                    active_anim_xform_ = d.xform;
+                    draw_sprite_at(
+                        *d.tile, d.screen_pos, d.loc_rand, /*fg:*/ true, d.rota, d.fg_tint,
+                        d.ll, d.apply_visual_effects, d.overlay_count, &replay_height_3d,
+                        d.retract, TILESET_NO_WARP, d.sway, d.face_amt );
+                }
+                canopy_replay_ = false;
+                canopy_defers_.clear();
+                canopy_capture_ = true;
             }
 
             // ---- Splatmap cut: the terrain→entity boundary --------------------
@@ -1417,6 +1449,10 @@ void cata_tiles::draw(
                 prefetch_valid_ = false;
             }
         }
+        // No more capture: the final drawing layers (and the memorized-tile pass) draw
+        // after everything and never need deferral.
+        canopy_capture_ = false;
+        canopy_defers_.clear();
     }
     for( tile_render_info& p : draw_points ) {
         for( const auto f : final_drawing_layers ) {
@@ -2133,6 +2169,9 @@ bool cata_tiles::draw_from_id_string(
         }
     }
 
+    // Publish the category for the deferred-canopy capture gate in draw_sprite_at.
+    canopy_capture_category_ = tile.category;
+
     // draw it!
     draw_tile_at(
         display_tile, screen_pos, loc_rand, true_rota, bg_tint, fg_tint, ll, apply_visual_effects,
@@ -2357,9 +2396,16 @@ bool cata_tiles::draw_sprite_at(
     const size_t effective_warp_hash =
         ( warp_hash == TILESET_NO_WARP ) ? active_warp_hash : warp_hash;
 
+    // Per-layer anchor: an entry may override the section offset for one layer
+    // (e.g. a 128x160 canopy fg over a 64x80 ground bg). Overridden layers never
+    // participate in the prevent-occlusion retract interpolation.
+    const point layer_offset =
+        ( is_fg ? tile.fg_offset : tile.bg_offset ).value_or( tile.offset );
+    const bool offset_overridden =
+        is_fg ? tile.fg_offset.has_value() : tile.bg_offset.has_value();
     const auto tile_offset =
-        retract <= 0
-        ? tile.offset
+        retract <= 0 || offset_overridden
+        ? layer_offset
         : ( retract >= 100
             ? tile.offset_retracted
             : tile.offset + ( ( tile.offset_retracted - tile.offset ) * retract ) / 100 );
@@ -2433,6 +2479,36 @@ bool cata_tiles::draw_sprite_at(
         effective_extrude_px = screen_ext;
         effective_extrude_dark = tile.depth_extrude_dark * g_depth_dark_str;
         effective_extrude_lean = tile.depth_extrude_lean * g_depth_lean_str;
+    }
+
+    // Deferred-canopy capture: a terrain fg sprite whose final destination overhangs
+    // its own tile square (a multi-tile tree canopy) would be overpainted by the rows
+    // drawn after this one, so record it here. draw() replays it once after the whole
+    // z-layer's rows have landed. Terrain-only (category gate), no z-overlay (the
+    // overlay_count == 0 gate keeps the replay from doubling it), and the replay must
+    // not re-capture (canopy_replay_).
+    if( canopy_capture_ && !canopy_replay_ && is_fg && overlay_count == 0
+        && canopy_capture_category_ == C_TERRAIN
+        && cata_tiles_internal::overhangs_tile(
+            destination, p.x(), p.y(), tile_width, tile_height ) ) {
+        canopy_defers_.push_back( canopy_defer_record{
+            .tile = &tile,
+            .screen_pos = p,
+            .loc_rand = loc_rand,
+            .rota = rota,
+            .fg_tint = tint,
+            .ll = ll,
+            .apply_visual_effects = apply_visual_effects,
+            .overlay_count = overlay_count,
+            .height_3d = height_3d_val,
+            .retract = retract,
+            .sway = sway,
+            .face_amt = face_amt,
+            .light_mode = gpu_light_mode,
+            .light_mul = gpu_light_mul,
+            .frontier_mask = low_frontier_mask_,
+            .outline = vision_overlay_outline_,
+            .xform = active_anim_xform_ } );
     }
 
     // GPU-only render. Rotation is stored in sprite_instance but the HLSL

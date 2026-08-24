@@ -84,6 +84,12 @@ struct tile_type {
     int height_3d = 0;
     point offset = point_zero;
     point offset_retracted = point_zero;
+    /// Per-entry anchor override for the fg layer ("fg_offset_x"/"fg_offset_y");
+    /// nullopt = use `offset`.
+    std::optional<point> fg_offset;
+    /// Per-entry anchor override for the bg layer ("bg_offset_x"/"bg_offset_y");
+    /// nullopt = use `offset`.
+    std::optional<point> bg_offset;
     float pixelscale = 1.0f;
     float depth_extrude_px = 0.0f;   ///< extend fg quad upward by this many tile-def px (0 = no
     ///< effect)
@@ -880,6 +886,33 @@ struct creature_draw_job {
     float sort_key = 0.f;
 };
 
+/// A terrain foreground sprite whose destination overhangs its own tile square
+/// (a multi-tile tree canopy), captured during the row-major pass and redrawn
+/// once after the whole z-layer's rows have landed, so the overhang is not
+/// overpainted by the not-yet-drawn tiles to its right/below. The replay call
+/// must be byte-identical to the original, so every draw_sprite_at parameter
+/// AND the per-tile GPU state draw_from_id_string published are snapshotted.
+struct canopy_defer_record {
+    const tile_type *tile = nullptr;
+    point_bub_ms screen_pos{};
+    unsigned int loc_rand = 0;
+    int rota = 0;
+    tint_config fg_tint;
+    lit_level ll = lit_level::LIT;
+    bool apply_visual_effects = false;
+    int overlay_count = 0;
+    int height_3d = 0;
+    int retract = 0;
+    float sway = 0.0f;
+    float face_amt = 0.0f;
+    // Snapshot of the per-tile state draw_from_id_string publishes for the live tile.
+    sprite_light_mode light_mode = sprite_light_mode::unlit;
+    float light_mul = 0.0f;
+    int frontier_mask = -1;
+    float outline = 0.0f;
+    sprite_xform xform;
+};
+
 class cata_tiles
 {
     public:
@@ -1518,6 +1551,19 @@ class cata_tiles
         // True if any sprite animation produced motion this frame (breathing, a decaying
         // event reaction, or a live tile-hit). Drives the redraw pump. Reset each draw().
         mutable bool creatures_anim_active_ = false;
+
+        // --- Deferred terrain-canopy pass ---
+        // Row-major terrain drawing overpaints a wide canopy's overhang with the tiles
+        // drawn after it. While canopy_capture_ is set, draw_sprite_at records terrain
+        // fg sprites that overhang their own tile square; draw() redraws them once per
+        // z after the row loop (under entities, before the splatmap seam). The replay
+        // itself must not re-capture (canopy_replay_).
+        std::vector<canopy_defer_record> canopy_defers_;
+        bool canopy_capture_ = false;
+        bool canopy_replay_ = false;
+        // Category of the tile draw_from_id_string is rendering; the capture gate is
+        // terrain-only so item/furniture z-ordering is untouched.
+        TILE_CATEGORY canopy_capture_category_ = C_NONE;
 
         // --- Step 8: sub-tile vision frontier ---
         // The value draw_sprite_at forwards into sprite_instance's `outline` lane for

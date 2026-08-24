@@ -97,6 +97,16 @@ inline int divide_round_down( int a, int b )
     }
 }
 
+/// True when the sprite destination rect extends outside the tw x th tile square
+/// whose screen-space top-left corner is (tile_x, tile_y). Used by the deferred
+/// canopy pass (cata_tiles::draw / draw_sprite_at) to decide which wide terrain
+/// foregrounds must be redrawn after their row has finished.
+inline auto overhangs_tile( const SDL_Rect& dst, int tile_x, int tile_y, int tw, int th ) -> bool
+{
+    return dst.x < tile_x || dst.y < tile_y || dst.x + dst.w > tile_x + tw
+           || dst.y + dst.h > tile_y + th;
+}
+
 /* ------------------------------------------------------------------ */
 /* SDL surface helpers                                                 */
 /* ------------------------------------------------------------------ */
