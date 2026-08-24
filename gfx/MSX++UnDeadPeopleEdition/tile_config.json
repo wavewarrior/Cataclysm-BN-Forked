@@ -39175,11 +39175,6 @@
           "fg": 4168
         },
         {
-          "id": "manhole_cover",
-          "fg": 18082,
-          "rotates": false
-        },
-        {
           "id": "overlay_wielded_manhole_cover",
           "fg": 4169,
           "rotates": false
@@ -40390,41 +40385,49 @@
         },
         {
           "id": "overlay_wielded_vac_oven_small",
+          "fg_offset_x": -16, "fg_offset_y": -48,
           "fg": 18261,
           "rotates": false
         },
         {
           "id": "vac_oven_small",
+          "fg_offset_x": -16, "fg_offset_y": -48,
           "fg": 18261,
           "rotates": false
         },
         {
           "id": "overlay_wielded_vac_oven_small_done",
+          "fg_offset_x": -16, "fg_offset_y": -48,
           "fg": 18261,
           "rotates": false
         },
         {
           "id": "vac_oven_small_done",
+          "fg_offset_x": -16, "fg_offset_y": -48,
           "fg": 18261,
           "rotates": false
         },
         {
           "id": "overlay_wielded_vac_oven_small_full",
+          "fg_offset_x": -16, "fg_offset_y": -48,
           "fg": 18261,
           "rotates": false
         },
         {
           "id": "vac_oven_small_full",
+          "fg_offset_x": -16, "fg_offset_y": -48,
           "fg": 18261,
           "rotates": false
         },
         {
           "id": "overlay_wielded_vac_oven_small_on",
+          "fg_offset_x": -16, "fg_offset_y": -48,
           "fg": 18261,
           "rotates": false
         },
         {
           "id": "vac_oven_small_on",
+          "fg_offset_x": -16, "fg_offset_y": -48,
           "fg": 18261,
           "rotates": false
         },
@@ -126313,6 +126316,7 @@
         },
         {
           "id": "candlestick",
+          "bg_offset_x": 0, "bg_offset_y": 0,
           "fg": 18258,
           "bg": 9172,
           "rotates": false
@@ -126636,6 +126640,7 @@
         },
         {
           "id": "press",
+          "bg_offset_x": 0, "bg_offset_y": 0,
           "fg": 18314,
           "bg": 9172,
           "rotates": false
@@ -128653,6 +128658,7 @@
         },
         {
           "id": "t_shrub",
+          "fg_offset_x": -48, "fg_offset_y": -128,
           "fg": [
             {
               "weight": 10,
@@ -128712,6 +128718,7 @@
         },
         {
           "id": "t_shrub_season_winter",
+          "fg_offset_x": -48, "fg_offset_y": -128,
           "fg": [
             {
               "weight": 10,
@@ -129003,6 +129010,7 @@
         },
         {
           "id": "t_tree",
+          "fg_offset_x": -48, "fg_offset_y": -128,
           "fg": [
             {
               "weight": 10,
@@ -129046,6 +129054,7 @@
         },
         {
           "id": "t_tree_season_winter",
+          "fg_offset_x": -48, "fg_offset_y": -128,
           "fg": [
             {
               "weight": 10,
@@ -129389,6 +129398,7 @@
         },
         {
           "id": "t_tree_birch",
+          "fg_offset_x": -48, "fg_offset_y": -128,
           "fg": [
             {
               "weight": 10,
@@ -129420,6 +129430,7 @@
         },
         {
           "id": "t_tree_birch_season_winter",
+          "fg_offset_x": -48, "fg_offset_y": -128,
           "fg": [
             {
               "weight": 10,
@@ -129751,6 +129762,7 @@
         },
         {
           "id": "t_tree_dead",
+          "fg_offset_x": -48, "fg_offset_y": -128,
           "fg": [
             {
               "weight": 10,
@@ -129762,6 +129774,7 @@
         },
         {
           "id": "t_tree_dead_season_winter",
+          "fg_offset_x": -48, "fg_offset_y": -128,
           "fg": [
             {
               "weight": 10,
@@ -130667,6 +130680,7 @@
         },
         {
           "id": "t_tree_willow",
+          "fg_offset_x": -48, "fg_offset_y": -128,
           "fg": [
             {
               "weight": 10,
@@ -130686,6 +130700,7 @@
         },
         {
           "id": "t_tree_willow_season_winter",
+          "fg_offset_x": -48, "fg_offset_y": -128,
           "fg": [
             {
               "weight": 10,
@@ -130765,6 +130780,7 @@
         },
         {
           "id": "t_underbrush",
+          "fg_offset_x": -48, "fg_offset_y": -128,
           "fg": [
             {
               "weight": 10,
@@ -130820,6 +130836,7 @@
         },
         {
           "id": "t_underbrush_season_winter",
+          "fg_offset_x": -48, "fg_offset_y": -128,
           "fg": [
             {
               "weight": 10,
@@ -131440,7 +131457,7 @@
           "animated": true
         }
       ],
-      "//": "range 18673 to 19120",
+      "//": "range 18673 to 19120. Entries below reference cross-sheet sprites (stoneshard 128x160 canopy fg, 64x80 dirt bg); per-layer fg_offset_x/fg_offset_y and bg_offset_x/bg_offset_y keys override the section anchor for that layer. See plans/fix-tree-sprite-anchoring.md.",
       "sprite_width": 64,
       "sprite_height": 80,
       "sprite_offset_x": -16,
@@ -135319,11 +135336,11 @@
     },
     {
       "file": "stoneshard_trees.png",
-      "//": "promoted Stoneshard trees from Export_Sprites/ at 128x160 cells. Cell-anchoring formula is off_x = -(sprite_w - tile_w)/2, off_y = -(sprite_h - tile_h) = -48/-128 for a 32px tile (cata_tiles.cpp:2322-2332: destination = tile origin + offset, w/h = sprite dims). BUT the promotion script pasted each sprite at its cell's top-left instead of centring it: measured left margin 2.3px vs right margin 41.5px, silhouette centroid 20.6px left of centre, base 4px above the cell bottom. These offsets are the formula shifted by that measured packing, so the trunk lands on its own tile. Residual per-sprite spread is 4.8px (0.15 tile). Repacking the PNG centred+bottom-aligned would let this return to a clean -48/-128.",
+      "//": "promoted Stoneshard trees from Export_Sprites/ at 128x160 cells. Cells are centred horizontally and bottom-aligned in the sheet (repacked per plans/fix-tree-sprite-anchoring.md), so the anchor is the clean formula value off_x = -(sprite_w - tile_w)/2 = -48, off_y = -(sprite_h - tile_h) = -128 for the 32px tile: the canopy is centred on the tile and the trunk base sits on the tile's bottom edge.",
       "sprite_width": 128,
       "sprite_height": 160,
-      "sprite_offset_x": -27,
-      "sprite_offset_y": -124,
+      "sprite_offset_x": -48,
+      "sprite_offset_y": -128,
       "tiles": [
         {
           "id": "t_stoneshard_tree_0",
