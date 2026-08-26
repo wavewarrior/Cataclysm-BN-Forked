@@ -317,10 +317,15 @@ struct debug_params {
     // affected. Radius/feather in tiles; radius 0 = effect off.
     float cutout_radius = 0.55f;  // hole radius around the player tile centre (tiles)
     float cutout_feather = 0.22f; // hole edge softness (tiles)
-    float cutout_pad0 = 0.0f;     // reserved: keeps DebugParams a multiple of 16 bytes
-    float cutout_pad1 = 0.0f;     // reserved: keeps DebugParams a multiple of 16 bytes
-    float cloud_pad0 = 0.0f;      // reserved: keeps DebugParams a multiple of 16 bytes
-    float cloud_pad1 = 0.0f;      // reserved: keeps DebugParams a multiple of 16 bytes
+    // SDF sun-shadow penumbra (sky_sun.comp): feather width in tiles of the
+    // shadow edge around occluders. 0 = hard edge; larger = softer, longer
+    // penumbra. The SDF distance IS the miss distance, so this is a direct
+    // clearance-to-lightness mapping. Occupies a former pad slot — the struct
+    // stays 16-byte aligned.
+    float sun_soft = 0.35f;
+    float cutout_pad1 = 0.0f; // reserved: keeps DebugParams a multiple of 16 bytes
+    float cloud_pad0 = 0.0f;  // reserved: keeps DebugParams a multiple of 16 bytes
+    float cloud_pad1 = 0.0f;  // reserved: keeps DebugParams a multiple of 16 bytes
 };
 
 // Returns sun/sky params interpolated from a 24h LUT for the given hour (0..24).

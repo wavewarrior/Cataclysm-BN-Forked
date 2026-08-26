@@ -296,6 +296,7 @@
                 <div class="devui-row">sky reach <input type="range" min="1" max="30" step="0.5" data-value="sky_reach"/> <span class="devui-val">{{sky_reach}}</span></div>
                 <div class="devui-row">sun steps <input type="range" min="1" max="64" step="1" data-value="sun_steps"/> <span class="devui-val">{{sun_steps}}</span></div>
                 <div class="devui-row">sun penumbra <input type="range" min="1" max="12" step="1" data-value="sun_penumbra"/> <span class="devui-val">{{sun_penumbra}}</span></div>
+                <div class="devui-row">sun soft <input type="range" min="0" max="2" step="0.01" data-value="sun_soft"/> <span class="devui-val">{{sun_soft}}</span></div>
                 <div class="devui-row">light eps <input type="range" min="0" max="0.05" step="0.001" data-value="light_eps"/> <span class="devui-val">{{light_eps}}</span></div>
                 <div class="devui-row">max shadow K <input type="range" min="1" max="64" step="1" data-value="max_shadow_k"/> <span class="devui-val">{{max_shadow_k}}</span></div>
                 <div class="devui-row">SDF sharpness <input type="range" min="0" max="1" step="0.01" data-value="sdf_sharp"/> <span class="devui-val">{{sdf_sharp}}</span></div>
@@ -432,6 +433,7 @@
                 <div class="devui-row">volume <input type="range" min="1" max="128" step="1" data-value="sound_volume"/> <span class="devui-val">{{sound_volume}}</span></div>
                 <div class="devui-row">wave speed <input type="range" min="1" max="30" step="0.5" data-value="sound_wave_speed"/> <span class="devui-val">{{sound_wave_speed}}</span></div>
                 <div class="devui-row">wave max radius <input type="range" min="6" max="100" step="1" data-value="sound_wave_max_radius"/> <span class="devui-val">{{sound_wave_max_radius}}</span></div>
+                <div class="devui-row">wave min radius <input type="range" min="0" max="30" step="0.5" data-value="sound_wave_min_radius"/> <span class="devui-val">{{sound_wave_min_radius}}</span></div>
             </div>
 
             <div data-if="tab==6">

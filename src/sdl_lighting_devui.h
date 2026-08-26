@@ -164,6 +164,7 @@ extern float g_depth_lean_str;
 extern float g_depth_dark_str;
 // Sound wavefront ring tuning.
 extern float g_sound_wave_speed;       // tiles/sec expansion rate, default 12.0
+extern float g_sound_wave_min_radius; // min tile radius, default 6.0
 extern float g_sound_wave_max_radius;  // max tile radius, default 48.0
 
 // Main-menu decorative-emitter tuning.

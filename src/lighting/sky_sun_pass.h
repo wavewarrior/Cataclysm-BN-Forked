@@ -23,7 +23,7 @@ namespace lighting {
 class gpu_device;
 
 // Per-dispatch tuning, pushed as the compute uniform (b0/space2). Field names +
-// ORDER must match the SkySunParams cbuffer in sky_sun.comp.hlsl. 48 bytes.
+// ORDER must match the SkySunParams cbuffer in sky_sun.comp.hlsl. 52 bytes.
 struct sky_sun_params {
     std::uint32_t map_w; // runtime tile dims (thread/tile grid extent)
     std::uint32_t map_h;
@@ -37,6 +37,10 @@ struct sky_sun_params {
     float sky_reach = 10.0f;        // sky march max distance (tiles)
     std::uint32_t sun_steps = 24;   // celestial march steps
     std::uint32_t sun_penumbra = 4; // penumbra angular samples (1=hard edge)
+    // SDF sun shadows: the 8x SDF supersample factor (grid = map * sdf_ss)
+    // and the penumbra feather width in tiles (0 = hard edge).
+    std::uint32_t sdf_ss = 8;
+    float sun_soft = 0.35f;
 };
 
 class sky_sun_pass {
@@ -69,13 +73,14 @@ public:
     SDL_GPUBuffer* sky_buffer() const noexcept { return sky_buf_; }
 
     // Run the compute pass on `cb`: one dispatch reading occ_buf (t0) — the
-    // unified coverage occluder field (2 floats/tile: height + roof bit), which
-    // must carry SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ — and writing sky_buf_.
+    // unified coverage occluder field (2 floats/tile: height + roof bit) — and
+    // sdf_buf (t1) — the 8x-supersampled JFA SDF the sun sphere-traces — both
+    // carrying SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ — and writing sky_buf_.
     // SDL_GPU inserts the compute-write→graphics-read barrier on sky_buf_ before
     // the sprite pass. No-op if not ready or any arg invalid.
     void record(
-        SDL_GPUCommandBuffer* cb, SDL_GPUBuffer* occ_buf, std::uint32_t runtime_w,
-        std::uint32_t runtime_h, const sky_sun_params& params);
+        SDL_GPUCommandBuffer* cb, SDL_GPUBuffer* occ_buf, SDL_GPUBuffer* sdf_buf,
+        std::uint32_t runtime_w, std::uint32_t runtime_h, const sky_sun_params& params);
 
 private:
     SDL_GPUBuffer* create_buffer(std::uint32_t floats, SDL_GPUBufferUsageFlags usage);

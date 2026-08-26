@@ -25,11 +25,17 @@
 //
 //   t0 space0  OccBuf — StructuredBuffer<float>, 2 floats/tile, tile-res, x-major
 //              occ[(x*map_h+y)*2 + c]: c0 = occluder height (tiles), c1 = roof bit.
+//   t1 space0  SdfBuf — StructuredBuffer<float>, the 8x-supersampled JFA SDF
+//              (SDF_SS^2 subcells/tile, distances in TILE units), x-major
+//              sdf[(x*sdf_map_h+y)*SDF_SS^2 + c]. Encodes terrain + furniture +
+//              trees + vehicles + roofs — the sun now sphere-traces THIS for
+//              sub-tile shadow edges instead of the blocky tile-res march.
 //   u0 space1  SkyBuf — RWStructuredBuffer<float>, 4 floats/tile (rgb sky-access +
 //              a celestial-occ), tile-res, x-major sky[(x*map_h+y)*4 + c].
 //   b0 space2  SkySunParams (light dir + sin_elev shared by sun/moon).
 
 StructuredBuffer<float>   OccBuf : register(t0, space0);
+StructuredBuffer<float>   SdfBuf : register(t1, space0);
 RWStructuredBuffer<float> SkyBuf : register(u0, space1);
 
 cbuffer SkySunParams : register(b0, space2) {
@@ -44,6 +50,8 @@ cbuffer SkySunParams : register(b0, space2) {
     float sky_reach;    // sky march max distance in tiles (P5b)
     uint  sun_steps;    // celestial march steps (P5b)
     uint  sun_penumbra; // penumbra angular samples, 1=hard edge (P5b)
+    uint  sdf_ss;       // SDF supersample factor (grid = map * sdf_ss)
+    float sun_soft;     // SDF penumbra softness (tiles of feather; 0 = hard)
 };
 
 // Sky-dome sampling. SKY_DIRS/SKY_REACH are cbuffer-driven (P5b — F4 knobs).
@@ -52,11 +60,11 @@ static const int   SKY_STEPS   = 16;    // max march steps per direction
 static const float SKY_STEP    = 0.70;  // tile units per step
 static const float SKY_START   = 0.60;  // skip the tile's own cell
 static const float SKY_WALL_H  = 0.60;  // occluder height that blocks a sky direction
-// Celestial (sun/moon) 3D-elevation march. SUN_STEPS/SUN_PENUMBRA are cbuffer-driven.
-static const float SUN_STEP    = 0.50;  // tile units per step
+// Celestial (sun/moon) SDF sphere-trace. SUN_STEPS is cbuffer-driven.
 static const float SUN_START   = 0.30;  // skip the probe cell
 static const float ROOF_H      = 1.00;  // roof height (tiles) — ray clears above this
-static const float MAX_OCC_H    = 1.20;  // ray above this has cleared all occluders
+static const float MAX_OCC_H   = 1.20;  // ray above this has cleared all occluders
+static const float SUN_FAR     = 8.00;  // trace distance where the step is fully coarse
 
 // OccBuf is tile-res, x-major occ[(x*map_h+y)*2 + c]. c0 = height, c1 = roof.
 float occ_height_at( int x, int y )
@@ -96,12 +104,38 @@ float sky_admit( float2 origin, float2 dir )
     return 0.0;                                // no open sky reachable
 }
 
-// Celestial occlusion via the 3D elevation march. 1 = lit toward the light,
-// 0 = shadowed (wall/half-wall of sufficient height for the sun's elevation, or
-// a roof/overhang the ray hasn't climbed above).
+// SDF bilinear sampler — same p-0.5 centre convention as sprite.frag's
+// sdf_bilinear: (x,y) are TILE coords, the grid is map*sdf_ss, distances are
+// already in tile units.
+float sdf_bilinear( float2 p )
+{
+    const float2 g = p * (float)sdf_ss - 0.5;
+    const float2 fp = floor( g );
+    const int gw = (int)map_w * (int)sdf_ss;
+    const int gh = (int)map_h * (int)sdf_ss;
+    const int x0 = clamp( (int)fp.x, 0, gw - 2 );
+    const int y0 = clamp( (int)fp.y, 0, gh - 2 );
+    const float2 w = g - fp;
+    const uint gx = (uint)gh; // x-stride in subcells
+    const uint row = (uint)( x0 * gh + y0 );
+    const float a = SdfBuf[row + 0u];          // (x0,   y0)
+    const float b = SdfBuf[row + gx];          // (x0+1, y0)
+    const float c = SdfBuf[row + 1u];          // (x0,   y0+1)
+    const float d = SdfBuf[row + gx + 1u];     // (x0+1, y0+1)
+    return lerp( lerp( a, b, w.x ), lerp( c, d, w.x ), w.y );
+}
+
+// Celestial occlusion via a sphere-trace of the 8x SDF. 1 = lit toward the
+// light, 0 = shadowed. The SDF is a 2D horizontal distance field, so the 3D
+// elevation test is recovered analytically: an occluder of height h at
+// horizontal distance d blocks iff h >= d*tan(elev), i.e. the ray is still
+// below h at that distance. The trace therefore only needs to run while the
+// ray is below MAX_OCC_H — beyond that no occluder can block, and the
+// distance-adaptive step (fine near the receiver, coarse far out) is the
+// cascade: sharp soft-edged shadows nearby, cheap soft ones at range.
 float celestial_occ_dir( float2 probe, float2 toward )
 {
-    if( map_w == 0u ) {
+    if( map_w == 0u || sdf_ss == 0u ) {
         return 1.0;
     }
     // Probe under its own roof → no direct celestial light.
@@ -110,24 +144,40 @@ float celestial_occ_dir( float2 probe, float2 toward )
     }
     const float cos_e    = sqrt( max( 1.0 - sun_sin_elev * sun_sin_elev, 0.02 ) );
     const float elev_tan = sun_sin_elev / cos_e;     // ray climb per horizontal tile
+    const float t_end    = MAX_OCC_H / max( elev_tan, 0.001 );
+    // Escape the probe's own occluder body (a tree trunk / wall tile) so the
+    // lit TOP is not self-shadowed; stop at open air so the NEXT occluder
+    // still shadows normally.
     float t = SUN_START;
+    [loop] for( int ss = 0; ss < 8; ++ss ) {
+        if( sdf_bilinear( probe + toward * t ) >= 0.05 ) {
+            break;
+        }
+        t += 0.15;
+    }
+    float shadow = 1.0;
     [loop] for( int s = 0; s < (int)max( sun_steps, 1u ); ++s ) {
-        const float2 pos   = probe + toward * t;
-        const float  ray_h = t * elev_tan;
-        if( ray_h > MAX_OCC_H ) {
+        if( t >= t_end ) {
             break;                            // ray has cleared every occluder
         }
-        const int px = (int)floor( pos.x );
-        const int py = (int)floor( pos.y );
-        if( occ_height_at( px, py ) >= ray_h ) {
-            return 0.0;                       // occluder taller than the ray here
+        const float2 pos = probe + toward * t;
+        const float  sd  = sdf_bilinear( pos );
+        if( sd < 0.05 ) {
+            shadow = 0.0;
+            break;                            // inside an occluder
         }
-        if( roof_at( px, py ) > 0.5 && ray_h < ROOF_H ) {
-            return 0.0;                       // overhang/roof still above the ray
+        // Penumbra: the SDF distance IS the miss distance from the ray, so
+        // feather the shadow over sun_soft tiles of clearance.
+        if( sun_soft > 0.001 ) {
+            shadow = min( shadow, saturate( sd / sun_soft ) );
         }
-        t += SUN_STEP;
+        // Distance-adaptive step: 0.25 tile near the receiver growing to 1.0
+        // tile at SUN_FAR — the cascade. Never overshoot the trace end.
+        const float step = min( 0.25 + 0.75 * saturate( t / SUN_FAR ),
+                                t_end - t );
+        t += max( step, 0.05 );
     }
-    return 1.0;
+    return shadow;
 }
 
 [numthreads(8, 8, 1)]

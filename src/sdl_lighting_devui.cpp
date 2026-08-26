@@ -154,6 +154,7 @@ std::vector<sound_pulse> sound_pulses;
 // Sound wavefront ring tuning (extern-declared in sdl_lighting_devui.h).
 float g_sound_wave_speed = 12.0f;
 float g_sound_wave_max_radius = 48.0f;
+float g_sound_wave_min_radius = 6.0f;
 
 namespace sdl_lighting_devui
 {
@@ -676,6 +677,7 @@ void devui_rml_open()
     c.Bind( "sky_reach", &g_dbg_params.sky_reach );
     c.Bind( "sun_steps", &g_dbg_params.sun_steps );
     c.Bind( "sun_penumbra", &g_dbg_params.sun_penumbra );
+    c.Bind( "sun_soft", &g_dbg_params.sun_soft );
     c.Bind( "light_eps", &g_dbg_params.light_eps );
     c.Bind( "max_shadow_k", &g_dbg_params.max_shadow_k );
     c.Bind( "sdf_sharp", &g_dbg_params.sdf_sharp );
@@ -901,6 +903,7 @@ void devui_rml_open()
     c.Bind( "sound_volume", &g_sound_volume );
     c.Bind( "sound_wave_speed", &g_sound_wave_speed );
     c.Bind( "sound_wave_max_radius", &g_sound_wave_max_radius );
+    c.Bind( "sound_wave_min_radius", &g_sound_wave_min_radius );
     c.Bind( "sound_category", &g_sound_category );
     // Build + bind the theme/game colour combo (names + selected index).
     g_pk_combo.clear();

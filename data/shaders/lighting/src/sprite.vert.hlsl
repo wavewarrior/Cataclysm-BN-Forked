@@ -127,7 +127,7 @@ cbuffer DebugParams: register(b2, space1) {
     // Canopy cut-out knobs (fragment-stage only; declared here for cbuffer layout parity).
     float cutout_radius;
     float cutout_feather;
-    float cutout_pad0;
+    float sun_soft;
     float cutout_pad1;
     float cloud_pad0;
     float cloud_pad1;

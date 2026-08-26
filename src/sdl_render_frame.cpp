@@ -44,12 +44,6 @@
 
 using namespace std::literals;
 
-// Sound-pulse wavefront: minimum reachable radius in tiles. Footstep pulses
-// (volume=3, see game_movement.cpp) would otherwise expire at a barely-visible
-// 3-tile radius; louder pulses (melee 8-12, gunfire 20, ballistics 10) already
-// exceed this floor and are unaffected.
-constexpr float k_min_sound_pulse_radius = 6.0f;
-
 // Rolling averages from frame_perf, published every frame by refresh_display.
 // File-static: consumed only within this TU (the overlay in pass_b).
 static float g_fps_avg = 0.0f;
@@ -542,7 +536,9 @@ auto flush_and_gather_rc( lighting::render_state &rs,
             kp.sky_reach    = g_dbg_params.sky_reach;
             kp.sun_steps    = static_cast<std::uint32_t>( std::max( 1.0f, g_dbg_params.sun_steps ) );
             kp.sun_penumbra = static_cast<std::uint32_t>( std::max( 1.0f, g_dbg_params.sun_penumbra ) );
-            rs.sky().record( ctx.cmd_buffer, rs.sdf().occ_buffer(),
+            kp.sdf_ss       = static_cast<std::uint32_t>( lighting::SDF_SUPERSAMPLE );
+            kp.sun_soft     = g_dbg_params.sun_soft;
+            rs.sky().record( ctx.cmd_buffer, rs.sdf().occ_buffer(), rs.sdf().sdf_buffer(),
                              map_w, map_h, kp );
         }
 
@@ -874,7 +870,8 @@ auto draw_lighting_overlays( lighting::render_state &rs,
         const double now = dev_test_lights::pulse_now_s();
         auto &pulses = dev_test_lights::sound_pulses;
         std::erase_if( pulses, [now, speed]( const dev_test_lights::sound_pulse & p ) {
-            const float max_r = std::clamp( p.volume, k_min_sound_pulse_radius, g_sound_wave_max_radius );
+            const float max_r = std::clamp( p.volume, std::min( g_sound_wave_min_radius,
+                                            g_sound_wave_max_radius ), g_sound_wave_max_radius );
             return static_cast<float>( now - p.spawn_s ) * speed > max_r;
         } );
         if( !pulses.empty() ) {
@@ -1169,7 +1166,8 @@ auto render_world_pass_w( lighting::render_state &rs,
         instances.reserve( 32 );
         for( const auto &p : dev_test_lights::sound_pulses ) {
             if( p.z != s_emo.player_z ) { continue; }
-            const float max_r = std::clamp( p.volume, k_min_sound_pulse_radius, g_sound_wave_max_radius );
+            const float max_r = std::clamp( p.volume, std::min( g_sound_wave_min_radius,
+                                            g_sound_wave_max_radius ), g_sound_wave_max_radius );
             const float radius = static_cast<float>( now - p.spawn_s ) * speed;
             const float life = std::clamp( 1.f - radius / max_r, 0.f, 1.f );
             if( life <= 0.f ) { continue; }
