@@ -42,10 +42,11 @@ namespace {
 /// ...and this list. This test is what makes forgetting any one of the three a
 /// test failure rather than a silently misaligned GPU read.
 const std::vector<std::string> canonical_fields = {
-    "dst_x",        "dst_y",     "dst_w",      "dst_h",   "src_u",      "src_v",
-    "src_uw",       "src_vh",    "tint_r",     "tint_g",  "tint_b",     "tint_a",
-    "rotation",     "light_mul", "pad1",       "pad2",    "extrude_px", "extrude_dark",
-    "extrude_lean", "face_amt",  "light_mode", "flash_r", "flash_g",    "flash_b",
+    "dst_x",        "dst_y",       "dst_w",       "dst_h",       "src_u",      "src_v",
+    "src_uw",       "src_vh",      "tint_r",      "tint_g",      "tint_b",     "tint_a",
+    "rotation",     "light_mul",   "pad1",        "pad2",        "extrude_px", "extrude_dark",
+    "extrude_lean", "face_amt",    "light_mode",  "flash_r",     "flash_g",    "flash_b",
+    "cutout",       "cutout_pad0", "cutout_pad1", "cutout_pad2",
 };
 
 /// One declarator from an HLSL struct body, in declaration order.

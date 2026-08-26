@@ -58,16 +58,15 @@ static_assert(sizeof(sun_params) == 48, "sun_params wire-stable with SunParams c
 
 // debug_params struct now lives in sprite_batcher.h so render_state.h can
 // embed it by value in frame_light_inputs. Wire-stable layout enforced here.
-static_assert(sizeof(debug_params) == 256, "debug_params wire-stable with DebugParams cbuffer");
+static_assert(sizeof(debug_params) == 272, "debug_params wire-stable with DebugParams cbuffer");
 
 // Temporary diagnostic for the normal-atlas/facing verification: the surface normal is
 // only consumed by the emitter loops and the sun term, so when both are ~0 the feature
 // provably cannot appear on screen and every pixel A/B measures the SCENE instead. These
 // report the exact floats reaching the GPU, which a blended pixel probe cannot because it
 // reads back through the AgX tonemap and exposure. Enabled by CBN_DIAG_SEG_LIGHTING.
-namespace
-{
-const bool g_diag_seg_lighting = std::getenv( "CBN_DIAG_SEG_LIGHTING" ) != nullptr;
+namespace {
+const bool g_diag_seg_lighting = std::getenv("CBN_DIAG_SEG_LIGHTING") != nullptr;
 bool s_diag_first_lit = true;
 std::uint64_t s_diag_lit = 0;
 std::uint64_t s_diag_unlit = 0;
@@ -253,10 +252,9 @@ public:
         float cam_off_y = 0.0f, Uint32 sdf_map_w = 0u, Uint32 sdf_map_h = 0u,
         SDL_GPUBuffer* emitter_buf = nullptr, SDL_GPUBuffer* sdf_buf = nullptr,
         SDL_GPUSampler* data_sampler = nullptr, SDL_GPUBuffer* sky_vis_buf = nullptr,
-        SDL_GPUBuffer* gi_buf = nullptr,
-        const sun_params* sp = nullptr, const debug_params* dbg = nullptr,
-        SDL_GPUBuffer* sky_buf = nullptr, SDL_GPUBuffer* ramp_buf = nullptr,
-        SDL_GPUBuffer* pal_index_buf = nullptr) noexcept {
+        SDL_GPUBuffer* gi_buf = nullptr, const sun_params* sp = nullptr,
+        const debug_params* dbg = nullptr, SDL_GPUBuffer* sky_buf = nullptr,
+        SDL_GPUBuffer* ramp_buf = nullptr, SDL_GPUBuffer* pal_index_buf = nullptr) noexcept {
         // data_sampler is vestigial now that all lighting data (emitters,
         // SDF, sky-vis) lives in storage buffers — Atlas is the only
         // sampler texture and carries its own sampler from set_texture().
@@ -742,22 +740,20 @@ public:
                 // upstream". Those two produce an identical black sun in the shader but
                 // need opposite fixes, and a blended pixel probe cannot tell them apart
                 // because it reads back through AgX + exposure. Throttled hard.
-                if( g_diag_seg_lighting ) {
-                    if( s.is_lit ) {
+                if (g_diag_seg_lighting) {
+                    if (s.is_lit) {
                         ++s_diag_lit;
                     } else {
                         ++s_diag_unlit;
                     }
-                    if( s.is_lit && s_diag_first_lit ) {
+                    if (s.is_lit && s_diag_first_lit) {
                         s_diag_first_lit = false;
-                        DebugLogFL( DL::Info, DC::Main )
-                                << "[segdiag] first LIT segment: sun_intensity="
-                                << lp_sun_use.sun_intensity
-                                << " sky_intensity=" << lp_sun_use.sky_intensity
-                                << " sdf_map_w=" << lp_use.sdf_map_w
-                                << " emitter_count=" << lp_use.emitter_count
-                                << " ambient=" << lp_use.ambient
-                                << " count=" << s.count;
+                        DebugLogFL(DL::Info, DC::Main)
+                            << "[segdiag] first LIT segment: sun_intensity="
+                            << lp_sun_use.sun_intensity << " sky_intensity="
+                            << lp_sun_use.sky_intensity << " sdf_map_w=" << lp_use.sdf_map_w
+                            << " emitter_count=" << lp_use.emitter_count
+                            << " ambient=" << lp_use.ambient << " count=" << s.count;
                     }
                 }
                 // Vertex slot 1: LightParams (world_pos computation + the
@@ -844,10 +840,11 @@ private:
         // binding an unpopulated buffer is read-safe. The shadow/UI batchers
         // leave them null → bind nothing. Bound in ONE call so a later bind can't
         // zero an earlier slot.
-        if (lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_gi_buf && lp_sky_buf
-            && lp_ramp_buf && lp_pal_index_buf) {
-            SDL_GPUBuffer* sbufs[7] = {lp_emitter_buf, lp_sdf_buf,  lp_sky_vis_buf, lp_gi_buf,
-                                       lp_sky_buf,     lp_ramp_buf, lp_pal_index_buf};
+        if (lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_gi_buf && lp_sky_buf && lp_ramp_buf
+            && lp_pal_index_buf) {
+            SDL_GPUBuffer* sbufs[7] =
+                {lp_emitter_buf, lp_sdf_buf,  lp_sky_vis_buf,  lp_gi_buf,
+                 lp_sky_buf,     lp_ramp_buf, lp_pal_index_buf};
             SDL_BindGPUFragmentStorageBuffers(rp, /*first_slot=*/0, sbufs, 7);
         }
     }
@@ -889,12 +886,12 @@ void sprite_batcher::set_lighting_resources(
     float tile_pixel_size, float z_level, Uint32 emitter_count, float ambient, float cam_off_x,
     float cam_off_y, Uint32 sdf_map_w, Uint32 sdf_map_h, SDL_GPUBuffer* emitter_buf,
     SDL_GPUBuffer* sdf_buf, SDL_GPUSampler* data_sampler, SDL_GPUBuffer* sky_vis_buf,
-    SDL_GPUBuffer* gi_buf, const sun_params* sp, const debug_params* dbg,
-    SDL_GPUBuffer* sky_buf, SDL_GPUBuffer* ramp_buf, SDL_GPUBuffer* pal_index_buf) {
+    SDL_GPUBuffer* gi_buf, const sun_params* sp, const debug_params* dbg, SDL_GPUBuffer* sky_buf,
+    SDL_GPUBuffer* ramp_buf, SDL_GPUBuffer* pal_index_buf) {
     p->set_lighting_resources(
         tile_pixel_size, z_level, emitter_count, ambient, cam_off_x, cam_off_y, sdf_map_w,
-        sdf_map_h, emitter_buf, sdf_buf, data_sampler, sky_vis_buf, gi_buf, sp, dbg,
-        sky_buf, ramp_buf, pal_index_buf);
+        sdf_map_h, emitter_buf, sdf_buf, data_sampler, sky_vis_buf, gi_buf, sp, dbg, sky_buf,
+        ramp_buf, pal_index_buf);
 }
 
 void sprite_batcher::draw(const sprite_instance& inst) { p->draw(inst); }

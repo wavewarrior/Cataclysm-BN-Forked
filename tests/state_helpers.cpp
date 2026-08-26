@@ -2,6 +2,7 @@
 
 #include "calendar.h"
 #include "cata_arena.h"
+#include "coop_session.h"
 #include "game.h"
 #include "map.h"
 #include "map_helpers.h"
@@ -57,6 +58,10 @@ auto clear_states(const enum_bitset<test_state>& states) -> void {
     }
     if (normalized_states.test(state::name)) { Name::clear(); }
     if (normalized_states.test(state::arena)) { cleanup_arenas(); }
+    // Coop tests leave the singleton in host/client mode with a partner_name
+    // and proxy_npc_id; without this, later tests (e.g. lua_global_functions,
+    // which asserts the avatar name is nil) see the leaked "TestClient".
+    coop_session::get().reset();
 }
 
 auto clear_all_state() -> void { clear_states(full_test_state()); }

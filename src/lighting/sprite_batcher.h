@@ -114,9 +114,21 @@ struct sprite_instance {
     float flash_r;
     float flash_g;
     float flash_b;
+    // Canopy cut-out marker: 1 = this sprite is an overhanging terrain canopy
+    // (a multi-tile tree/foliage foreground drawn in the deferred-canopy pass),
+    // so the fragment shader punches a soft hole around the player to keep the
+    // character readable through the leaves (Stardew/Graveyard-Keeper style).
+    // 0 (default) = exact no-op for every other sprite.
+    float cutout;
+    // Reserved pads: keep the struct a multiple of 16 bytes (112 B = 28 floats)
+    // for the GPU StructuredBuffer stride. Never written; must stay in lockstep
+    // with the HLSL SpriteInstance declarations.
+    float cutout_pad0;
+    float cutout_pad1;
+    float cutout_pad2;
 };
 static_assert(
-    sizeof(sprite_instance) == 96,
+    sizeof(sprite_instance) == 112,
     "sprite_instance is wire-stable with the vertex shader; "
     "changing its layout requires shader edits.");
 
@@ -208,15 +220,16 @@ struct debug_params {
     // sub-tile vision carve. Ships at 0: the carve's LOS term is the point of the
     // effect, and a 16-tile radial dim would silently darken daylight scenes.
     float vis_radius = 0.0f;
-    float player_x = 0.0f;      // DATA (not a knob): player map-tile centre x
-    float player_y = 0.0f;      // DATA: player map-tile centre y
-    float mem_radius = 30.0f;   // memory distance-fade scale in tiles (effect 3)
+    float player_x = 0.0f;    // DATA (not a knob): player map-tile centre x
+    float player_y = 0.0f;    // DATA: player map-tile centre y
+    float mem_radius = 30.0f; // memory distance-fade scale in tiles (effect 3)
     // Bucket A / A1 surface-normal knobs (live; sprite.frag surface_normal + Lambert).
-    float nrm_amount = 0.9f;  // normal Lambert blend: 0=flat(off) .. 1=full
-    float nrm_relief = -2.0f; // tilt magnitude; SIGNED — negative flips global relief dir
-    float nrm_elev = 0.3f;    // implied light height; LOWER=more grazing=stronger relief
-    float sdf_sharp = 0.0f;   // SDF sample: 0=bilinear(smooth) .. 1=nearest(tight/grid-snap)
-    float ao_strength = 0.35f; // A4 ambient occlusion: 0=off .. 1=full SDF-cavity darkening (ships ON)
+    float nrm_amount = 0.9f;   // normal Lambert blend: 0=flat(off) .. 1=full
+    float nrm_relief = -2.0f;  // tilt magnitude; SIGNED — negative flips global relief dir
+    float nrm_elev = 0.3f;     // implied light height; LOWER=more grazing=stronger relief
+    float sdf_sharp = 0.0f;    // SDF sample: 0=bilinear(smooth) .. 1=nearest(tight/grid-snap)
+    float ao_strength = 0.35f; // A4 ambient occlusion: 0=off .. 1=full SDF-cavity darkening (ships
+                               // ON)
     float shadow_mask_str = 0.0f; // Phase 2 silhouette sun-shadow mask on ground: 0=off(default) ..
                                   // 1=full
     // Foliage sway (vertex stage; sprite.vert reads these via DebugParams b2/space1).
@@ -237,17 +250,17 @@ struct debug_params {
     float sun_steps = 24.0f;   // celestial march steps
     float sun_penumbra = 4.0f; // penumbra angular samples (1=hard edge, 6=very soft)
     // Wave 2: vegetation life knobs (vertex stage; sprite.vert reads via DebugParams b2/space1).
-    float ripple_k = 1.5f;      // intra-sprite column UV desync (0=rigid, 2=heavy shear)
-    float gust_amp = 0.4f;      // multi-octave wind gust envelope amplitude (0=steady)
-    float gust_freq = 0.3f;     // gust envelope frequency (Hz-ish, slow)
-    float part_radius = 2.5f;   // player foliage parting radius in tiles (0=off)
-    float part_strength = 0.5f; // player foliage parting push strength (0=off)
+    float ripple_k = 1.5f;          // intra-sprite column UV desync (0=rigid, 2=heavy shear)
+    float gust_amp = 0.4f;          // multi-octave wind gust envelope amplitude (0=steady)
+    float gust_freq = 0.3f;         // gust envelope frequency (Hz-ish, slow)
+    float part_radius = 2.5f;       // player foliage parting radius in tiles (0=off)
+    float part_strength = 0.5f;     // player foliage parting push strength (0=off)
     float nrm_entity_amount = 0.3f; // entity (tall sprite) normal relief: 0=flat .. 1=full bevel
     // Pixel-art light quantisation (Step 1).
     float texels_per_tile = 32.0f; // DATA: tileset native tile width in art texels
     float light_quant = 1.0f;      // 1 = snap light sample to art texels, 0 = per-screen-pixel
     // Sub-tile occluders (Step 3/4).
-    float occ_soft_gain = 1.0f; // partial-occluder block gain (0 = hard occluders only)
+    float occ_soft_gain = 1.0f;  // partial-occluder block gain (0 = hard occluders only)
     float self_eps_tall = 0.55f; // trace_shadow self-shadow escape radius for TALL sprites
     // Palette shade ramps (Step 7).
     float ramp_enable = 1.0f;  // 0 = plain multiply, 1 = full ramp resolve
@@ -292,14 +305,22 @@ struct debug_params {
     // weather_cloud_mult() (src/sdl_render_frame.cpp): that is a flat whole-sky
     // multiplier for the current weather TYPE; this is the moving SHAPE of
     // individual clouds passing overhead on top of it.
-    float cloud_strength = 0.8f;  // 0=off .. 1=full darkening under a cloud (ships ON)
+    float cloud_strength = 0.8f;   // 0=off .. 1=full darkening under a cloud (ships ON)
     float cloud_scale = 0.03f;     // noise frequency, tiles^-1 (~33-tile cloud period)
     float cloud_wind_x = 0.4f;     // cloud drift velocity, world tiles/second, x
     float cloud_wind_y = 0.15f;    // cloud drift velocity, world tiles/second, y
     float cloud_threshold = 0.46f; // noise cutoff where a cloud begins casting shadow
     float cloud_softness = 0.06f;  // feather width of the cloud edge around cloud_threshold
-    float cloud_pad0 = 0.0f;       // reserved: keeps DebugParams a multiple of 16 bytes
-    float cloud_pad1 = 0.0f;       // reserved: keeps DebugParams a multiple of 16 bytes
+    // Canopy cut-out (sprite.frag): soft circular hole around the player in
+    // overhanging terrain canopies so the character stays visible under the
+    // leaves. Keys off sprite_instance::cutout, so only flagged canopies are
+    // affected. Radius/feather in tiles; radius 0 = effect off.
+    float cutout_radius = 0.55f;  // hole radius around the player tile centre (tiles)
+    float cutout_feather = 0.22f; // hole edge softness (tiles)
+    float cutout_pad0 = 0.0f;     // reserved: keeps DebugParams a multiple of 16 bytes
+    float cutout_pad1 = 0.0f;     // reserved: keeps DebugParams a multiple of 16 bytes
+    float cloud_pad0 = 0.0f;      // reserved: keeps DebugParams a multiple of 16 bytes
+    float cloud_pad1 = 0.0f;      // reserved: keeps DebugParams a multiple of 16 bytes
 };
 
 // Returns sun/sky params interpolated from a 24h LUT for the given hour (0..24).
@@ -384,8 +405,8 @@ public:
         Uint32 sdf_map_h = 0u, SDL_GPUBuffer* emitter_buf = nullptr,
         SDL_GPUBuffer* sdf_buf = nullptr, SDL_GPUSampler* data_sampler = nullptr,
         SDL_GPUBuffer* sky_vis_buf = nullptr, SDL_GPUBuffer* gi_buf = nullptr,
-        const sun_params* sp = nullptr,
-        const debug_params* dbg = nullptr, SDL_GPUBuffer* sky_buf = nullptr,
+        const sun_params* sp = nullptr, const debug_params* dbg = nullptr,
+        SDL_GPUBuffer* sky_buf = nullptr,
         // Step 7 palette shade ramps — fragment storage slots 5/6 → t7/t8.
         SDL_GPUBuffer* ramp_buf = nullptr, SDL_GPUBuffer* pal_index_buf = nullptr);
 

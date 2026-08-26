@@ -2,6 +2,7 @@
 
 **Phase**: 2i-B (bridge removed, GPU-only rendering)
 **Backend**: SDL_GPU / SPIRV-Cross on D3D12 (Win11), Vulkan, Metal
+**Last verified against source**: 2026-08-24 (struct sizes, register layout, pass order, removed items)
 
 ---
 
@@ -18,6 +19,18 @@
 | `shader_compiler.cpp/h` | HLSL→SPIRV-Cross compile; embedded `SPRITE_VERT_HLSL` in `sprite_batcher.cpp` |
 | `occluder_capture.cpp/h` | Per-frame sprite-alpha footprints feeding the SDF seed |
 | `palette_ramp.cpp/h` | Procedural per-palette shade ramps + OkLab row lookup |
+| `gi_compute_pass.cpp/h` | GPU compute GI (2 dispatches) → `gi_buf_` |
+| `sky_sun_pass.cpp/h` | GPU sky/sun coverage march (Stage 2a/2b) → `SkyBuf` |
+| `sdf_pass.cpp/h` | Chebyshev SDF (CPU BFS) + occluder seeding |
+| `normal_gen.cpp/h` | Surface normals for per-pixel Lambert |
+| `splatmap_pass.cpp/h` | Decal stamps into per-submap splatmap textures |
+| `sound_wave_pass.cpp/h` | Sound-pulse discs (stealth) |
+| `emitter_collector.cpp/h` | Per-frame emitter gather |
+| `frame_build.cpp/h` | Per-frame lighting data build |
+| `bloom/volumetric/tonemap/debug_line_pass, hud_particle_effect, menu_plexus, solid_overlay, snapshot` | Auxiliary GPU passes |
+| `rmlui_*.cpp/h` | RmlUI (HTML panel) layer rendered to GPU |
+| `../sdl_render_frame.cpp/h` | `refresh_display()` frame orchestration + pass helpers |
+| `../sdl_overmap_draw.cpp` | `draw_om()` overmap draw |
 
 ---
 
@@ -107,19 +120,28 @@ every gameplay consumer (`fine_detail_vision_mod`, `Character::sight_range`,
 
 ---
 
-## Per-frame render pass (bridge-free single pass)
+## Per-frame render pass (orchestrated in `src/sdl_render_frame.cpp`)
 
-`refresh_display()` in `sdltiles.cpp`:
+`refresh_display()` lives in `src/sdl_render_frame.cpp:1538` (moved out of
+`sdltiles.cpp`). Phase order (each phase is timing-lapped):
 
 ```
-tile_batcher.begin_pass(cb, swapchain_tex, LOADOP_CLEAR=black)
-  1. flush_tile_sprites(gpu_sampler)   ← terrain/mob/item/vehicle sprites
-  2. flush_ui(gpu_sampler)             ← per-slice ordered: each ui_adaptor slice
-                                          draws its rects (white) THEN its glyphs,
-                                          slices in z-order, so overlapping windows
-                                          occlude correctly; transient overlays last
-tile_batcher.end_pass()
-submit_frame()
+begin_frame(rs)                        ← ring advance (tile/ui/font batchers) + device begin_frame
+build_lighting(rs)                     ← SDF/sky/GI data build; returns rc_rebuild dirty gate
+flush_and_gather_rc(rs, ctx, rebuild)  ← GI compute dispatch + emitter/SDF upload (:471)
+assemble_light_inputs(rs, ctx)
+maybe_push_menu_background(rs, ctx)
+draw_lighting_overlays(rs, ctx)
+composite_ui_pass_a                    ← UI → ui_target via flush_ui, per-slice ordered:
+                                          each ui_adaptor slice draws its rects (white)
+                                          THEN its glyphs, slices in z-order, so
+                                          overlapping windows occlude correctly
+composite_avatar_pass                  ← character-creator portrait → avatar_target
+render_world_pass_w                    ← shadow casters + splatmap stamps + Pass W → world_target
+                                          (tile sprites, split at the terrain/entity cut
+                                          recorded by cata_tiles::draw(); sound pulses)
+tonemap_pass_t
+composite_swapchain_pass_b             ← final composite → swapchain
 ```
 
 UI flush is **per-adaptor-slice ordered**, not two-phase. `ui_manager` calls
@@ -137,15 +159,16 @@ Bridge removed 2026-05-22. `gpu_sampler_` created eagerly in `render_state::init
 ## Queue lifecycle
 
 ```
-ui_adaptor::redraw_invalidated()        ← called on every UI redraw cycle
-  → clear_frame_queues()                ← ALL 3 queues cleared at start
-  → window callbacks run                ← populate ui_rect + font_glyph queues
+ui_adaptor::redraw_invalidated()        ← called on every UI redraw cycle (ui_manager.cpp:270)
+  → clear_tile_queue()                  ← TILE sprites only; UI queues NOT cleared (2i-B-7g)
+  → invalidated adaptors clear+repopulate their own retained draw slices
+  → all slices recomposited in z-order into the global UI queues (append_slice)
 
 cata_tiles::draw() (in-game map)        ← called as a window callback WITHIN redraw_invalidated()
   → clear_tile_queue()                  ← ONLY tile sprites; NOT ui/font (already cleared by outer cycle)
   → enqueue all terrain/mob/vehicle sprites
 
-draw_om() (sdltiles.cpp, overmap)       ← also a window callback within redraw_invalidated()
+draw_om() (src/sdl_overmap_draw.cpp)   ← also a window callback within redraw_invalidated()
   → clear_tile_queue()                  ← same: tile-only clear
   → enqueue overmap tile sprites
 ```
@@ -154,7 +177,7 @@ On **no-input frames** (between redraw cycles), `refresh_display()` re-drains th
 
 Do NOT clear queues inside a flush method.
 
-**Known limitation**: Partial redraws (e.g. tooltip on mouse-move) trigger `redraw_invalidated()` → `clear_frame_queues()` → only tooltip repopulates → one-frame black sidebar. Root fix = GPU accumulation texture (future phase 2i-B-7g or similar).
+**One-frame black sidebar — FIXED in phase 2i-B-7g (verified 2026-08-24).** `redraw_invalidated()` no longer calls `clear_frame_queues()`: each ui_adaptor owns a retained draw slice, only invalidated adaptors clear+repopulate their own slice, then all slices re-composite in z-order (ui_manager.cpp:270). Non-invalidated adaptors keep their previous slice, so partial redraws (e.g. tooltip) no longer wipe unrelated windows. The GPU accumulation texture is no longer needed for this.
 
 ---
 
@@ -169,7 +192,7 @@ float light_mul                         // <0 = memorized tile carrying -(dist i
 float pad1                              // foliage sway weight (sprite.vert)
 float pad2                              // >0.5 hover outline; <-0.5 encoded frontier mask
 float extrude_px, extrude_dark, extrude_lean  // height-depth pillar
-float face_amt                          // 0..1 "this is a vertical surface" (facing arc, sprite.frag)
+float face_amt                          // PACKED: floor(v)=octant dir 0..7 (E,SE,S,SW,W,NW,N,NE), frac(v)=amount 0..0.999; 0 = not a vertical face
 float light_mode                        // sprite_light_mode: 0 unlit, 1 gpu_lit, 2 memory
 float flash_r, flash_g, flash_b         // coloured light override: colour * strength, max(colour)==1
 ```
@@ -180,7 +203,8 @@ silhouette-shadow batcher is a second `sprite_batcher` over the same instance
 buffer, so a truncated declaration there indexes with the wrong stride.
 `rain_droplet.vert.hlsl` / `splat_stamp.vert.hlsl` declare a look-alike struct
 but read their own 64-byte `quad_instance` buffers and are unaffected.
-`static_assert(sizeof(sprite_instance)==96)` enforces the contract.
+`static_assert(sizeof(sprite_instance)==96)` (sprite_batcher.h:118) and
+`tests/sprite_instance_wire_test.cpp` (three-way declaration test) pin the contract.
 
 ---
 
@@ -194,7 +218,7 @@ Formula: `x' = x*cos - y*sin`, `y' = x*sin + y*cos`
 
 ## sprite_batcher internals
 
-- `MAX_INSTANCES = 65536`, `RING_SLOTS = 3` (storage-buffer ring)
+- `MAX_INSTANCES = 262144`, `RING_SLOTS = 3` (storage-buffer ring; 262144 × 96 B ≈ 24 MB per slot)
 - `cycle=true` on storage buffer upload (D3D12 frames-in-flight race fix)
 - Blend: `SrcAlpha · src + (1−SrcAlpha) · dst`
 - `set_texture()` closes current segment and starts a new one; same-texture calls extend current segment
@@ -234,16 +258,21 @@ Fragment shader (`SPRITE_FRAG_HLSL` in `sprite_batcher.cpp`):
   than the 8-subcell SDF grid, so sub-tile shadow curvature survives. `light_quant`
   = 0 restores per-screen-pixel evaluation. `i.uv`, `i.world_pos` and the AO taps
   are deliberately NOT snapped.
-- **Knobs** in `debug_params` (**208 bytes** as of 2026-08-01 — grew from 176 when
-  the grid-decoupled lighting knobs were added; `static_assert` enforces 208):
+- **Knobs** in `debug_params` (**256 bytes** as of 2026-08-24 — 176 → 208 on
+  2026-08-01 with the grid-decoupled knobs, then → 256 with normal-mapping, AO,
+  shadow-mask, sway, specular and cloud-shadow knobs; `static_assert` at
+  sprite_batcher.cpp:61 enforces 256):
   `dither_amt` (0=off), `dither_bands`, `light_quant`, `occ_soft_gain`,
-  `self_eps_tall`, `ramp_enable`, `ramp_steps`, `ramp_chroma`.
+  `self_eps_tall`, `ramp_enable`, `ramp_steps`, `ramp_chroma`,
+  `nrm_amount`/`nrm_relief`/`nrm_elev`, `ao_strength`, `shadow_mask_str`,
+  `sway_amp`/`sway_freq`, `spec_strength`, `light_eps`, `max_shadow_k`,
+  `cloud_threshold` (+ other `cloud_*`).
   Widget: Shift+F8/F9 = strength, Ctrl+F8/F9 = bands.
 
 ## Colored indirect light / GI — now GPU COMPUTE (Stage 1, supersedes RC fragment)
 
 GI is computed on the GPU by `gi_compute_pass` (Stage 1 of
-`GI_COMPUTE_AND_PERF_PLAN.md`, 2026-06-18). It **replaced** the fragment
+`plans/done/GI_COMPUTE_AND_PERF_PLAN.md`, 2026-06-18). It **replaced** the fragment
 `radiance_cascade_pass` (+ `rc.frag`/`rc_bounce.frag`), which created on Metal
 but failed `SDL_CreateGPUGraphicsPipeline` root-signature construction on D3D12
 (a fragment storage buffer with no leading sampler). Compute uses a distinct
@@ -265,14 +294,19 @@ Win11/D3D12. The older CPU diffusion path was already deleted in Phase 4.
   them. Compute HLSL spaces: readonly storage `(tN,space0)`, RW `(uN,space1)`,
   uniform `(bN,space2)`.
 - **Consumer** (`sprite.frag.hlsl`): `StructuredBuffer<float> GiBuf :
-  register(t7, space2)` — the LAST fragment storage buffer (slot 5). Replaced the
-  old `IndirectTex` storage texture; with GI off the storage textures,
-  **`ShadowMask` is now the sole storage texture (t1)** and the 6 storage buffers
-  are t2..t7 (Emitters/Sdf/SkyVis/Vis/SunSdf/Gi). `indirect_bilinear(p)` reads
+  register(t5, space2)` (storage buffer slot 3). Current layout (verified
+  2026-08-24): t0 Atlas (sampler) | t1 ShadowMask (sole storage texture) |
+  t2 Emitters | t3 SdfBuf | t4 SkyVisBuf | t5 GiBuf | t6 SkyBuf (sky_sun compute
+  output — SunSdfBuf, which used to sit after GiBuf, was removed in Stage 2b; the
+  sun shadow now comes from that compute coverage march). VisBuf is deleted.
+  The palette-ramp buffers were appended at t7/t8. `indirect_bilinear(p)` reads
   GiBuf scalar at tile-res with the `p-0.5` centre; `dyn += gi_strength *
   indirect_bilinear(light_pos) * ao`, gated `gi_strength>0.001 && sdf_map_w>0`.
   `render_state` feeds `gi().gi_buffer()` via the lighting god-call's `gi_buf`
   param (only the tile batcher; ui/shadow batchers pass null).
+  CRITICAL: fragment storage buffers must stay contiguous and every one must be
+  read — DXC strips unread buffers, which breaks the t-range and D3D12 rejects
+  the root signature (the VisBuf-removal incident).
 - **Driven** in `refresh_display` (`flush_and_gather_rc` in `sdl_render_frame.cpp`)
   after the emitter/SDF upload, before Pass W, under the `rc_rebuild`
   (=`fr.built_pertile`) dirty gate; `gi_buf_` retained on skip frames (RW bindings
@@ -287,7 +321,7 @@ Win11/D3D12. The older CPU diffusion path was already deleted in Phase 4.
 - **Future (Stage 2)**: add the directional cascade hierarchy for sun/sky on this
   proven-parity compute base; promote gather constants to F4 knobs.
 
-## Intended direction (grilled 2026-06-01 — see `LIGHTING_REWORK_PLAN.md`)
+## Intended direction (grilled 2026-06-01 — see plans/done/LIGHTING_REWORK_PLAN.md, archived after Stage 1 shipped)
 
 The CPU **Chebyshev BFS SDF** and CPU **per-tile diffusion GI** above are
 **interim, not the design target** — they produce squarish penumbra + blocky
@@ -300,7 +334,7 @@ add the dirty-gate (busted while F4 panel visible), and single-source the shader
 (externalize the live HLSL, delete the dead `data/shaders/lighting/src/*.hlsl`
 copies). Then backbone + AgX tonemap (mandatory together) → JFA → RC → bloom/LUT.
 Single-thread emitter collect is ratified (no dedicated thread). Full rationale +
-roadmap in `LIGHTING_REWORK_PLAN.md`.
+roadmap in `plans/done/LIGHTING_REWORK_PLAN.md`.
 
 ## Known invariants & gotchas
 
@@ -311,10 +345,10 @@ roadmap in `LIGHTING_REWORK_PLAN.md`.
 Returns `{nullptr,0,0}` if the SDL_Texture is not tracked as an atlas sheet. GPU miss → sprite invisible + D_WARNING log. Causes: sprite not packing through `copy_surface_to_dynamic_atlas`, or texture handle mismatch.
 
 **3. `draw()` and `draw_om()` are window callbacks.**
-Both run INSIDE a `redraw_invalidated()` cycle. `clear_frame_queues()` already ran before them. They call `clear_tile_queue()` only to reset tile sprites before re-enqueuing. Calling `clear_frame_queues()` here would wipe UI content the other window callbacks just populated.
+Both run INSIDE a `redraw_invalidated()` cycle, which since 2i-B-7g clears only the TILE queue at start. They call their own `clear_tile_queue()` before re-enqueuing so stale tiles never mix. Do NOT clear the UI queues from here: UI content lives in per-adaptor retained slices that are re-composited AFTER the window callbacks run.
 
-**4. Loading image GPU path disabled.**
-`loading_ui.cpp:409` has `if (false && cache->gpu_texture)`. The GPU path caused a D3D12 crash: `upload_surface_to_gpu_texture` submits on a separate CB; D3D12 may not complete the resource barrier to PIXEL_SHADER_RESOURCE before the render pass samples → command buffer corruption. Fix: upload on the render CB, or fence the separate CB before sampling.
+**4. Loading image — GPU path REMOVED (verified 2026-08-24).**
+`loading_ui.cpp` no longer contains the `if (false && …)` guard or any `RenderCopy`/GPU-texture reference — the draw path was rewritten. Historical lesson if re-adding GPU uploads for UI images: a separate-CB upload sampled before its PIXEL_SHADER_RESOURCE barrier completed corrupted the command list (the old D3D12 crash) — upload on the render CB or fence the copy CB first.
 
 **5. SDL_Renderer still alive.**
 `copy_surface_to_dynamic_atlas` still creates SDL_Textures (used as lookup keys for `find_gpu_texture_full`). Cannot delete SDL_Renderer until atlas switches to a pure GPU key. Target: phase 2i-B-7f.
@@ -325,12 +359,12 @@ Both run INSIDE a `redraw_invalidated()` cycle. `clear_frame_queues()` already r
 
 | Sub | State | Notes |
 |---|---|---|
-| 7b pixel_minimap | ⏳ NOT migrated, invisible | `render()` blits `main_tex` via `RenderCopy(renderer,…)` (pixel_minimap.cpp:324) to the no-op'd display_buffer target → invisible. The line-190 `queue_ui_rect` comment is stale (no such call); a May-22 GPU migration was reverted. Migrate or drop. |
-| 7c loading image | 🟡 GPU path disabled | `if(false && …)` "DIAG: disabled to isolate crash" (loading_ui.cpp:398); legacy `RenderCopy` live but dead. Re-enable = upload on render CB / fence the copy CB. |
+| 7b pixel_minimap | ✅ DROPPED (verified 2026-08-24) | `pixel_minimap.cpp/h` no longer exist in src/ — the renderer was deleted; only the `pixel_minimap_option` + `toggle_pixel_minimap` action remain. |
+| 7c loading image | ✅ RESOLVED (verified 2026-08-24) | The `if(false && …)` guard and legacy `RenderCopy` are gone — loading_ui.cpp has no GPU-texture references at all. |
 | 7d scissor/clip | ✅ done | `sprite_batcher::set_scissor` + `SDL_SetGPUScissor`. |
 | 7e screenshot | ✅ done | `save_screenshot` GPU copy-pass readback (sdltiles.cpp:3920-3960); no `SDL_RenderReadPixels`. |
-| 7f mechanical delete | ⏳ | `SDL_Renderer_Ptr renderer` + `SDL_CreateRenderer` still live (sdltiles.cpp:129,350,363); `set_displaybuffer_rendertarget()` is no-op'd `{}` but `display_buffer` refs remain (sdltiles.cpp:3781) — **not fully removed** (corrects the "7f Part A removed display_buffer" note below). Blocked on atlas pure-GPU key. |
-| accumulation texture | future | GPU-side "previous frame" buffer to fix partial-redraw flicker |
+| 7f mechanical delete | ⏳ | `SDL_Renderer` still live (atlas-page SDL_Textures are the `find_gpu_texture_full` lookup keys); `set_displaybuffer_rendertarget()` is no-op'd `{}` (sdltiles.cpp:118 as of 2026-08-24) but `display_buffer` refs remain — **not fully removed**. Blocked on atlas pure-GPU key. |
+| accumulation texture | ✅ OBSOLETE (2i-B-7g, verified 2026-08-24) | Per-adaptor retained draw slices fixed partial-redraw flicker without a GPU accumulation buffer. |
 
 ---
 
@@ -350,7 +384,7 @@ Every item below has bitten us and costs 1+ build cycles. Check here first.
 | `effect_onfire` (extern) | `static const efftype_id my_effect_onfire("onfire")` | It's a translation-unit static in `lightmap.cpp`. Define a local copy. |
 | `std::ranges::for_each(field, lambda)` | plain range-based `for` | MSVC rejects `std::ranges::for_each` on `field` objects; use `for(const auto& [ftype, fentry] : field)`. |
 | `get_option<int>("MAPSIZE")` | doesn't exist | The option is named differently (or doesn't exist). Use `get_map().getmapsize()`. |
-| `display_buffer` (dead, not deleted) | `get_sdl_window_size()` | display_buffer rendertarget plumbing is no-op'd (`set_displaybuffer_rendertarget(){}`) but the symbol + refs remain (sdltiles.cpp:3781) — NOT deleted. Still: callers of `get_sdl_display_buffer_size()` → use `get_sdl_window_size()`. |
+| `display_buffer` (dead, not deleted) | `get_sdl_window_size()` | display_buffer rendertarget plumbing is no-op'd (`set_displaybuffer_rendertarget(){}`, sdltiles.cpp:118 as of 2026-08-24) but the symbol + refs remain — NOT deleted. Still: callers of `get_sdl_display_buffer_size()` → use `get_sdl_window_size()`. |
 
 ### `dbg` macro — lighting/ files must define it themselves
 
@@ -413,12 +447,13 @@ gated off entirely; sky_vis is sourced from `map::access_cache().outside_cache`,
 y=`(int)world.y`, both clamped). No row/col swap (that was only needed for the
 row-major *texture* Load).
 
-Fragment resource layout (space2), K=1 sampled texture: Atlas `t0` (sampler) |
-Emitters `t1` (storage slot 0) | SdfBuf `t2` (storage slot 1) | SkyVisBuf `t3`
-(storage slot 2). Storage slot N → register `t(K+N)`. All 3 storage buffers are
-bound in ONE `SDL_BindGPUFragmentStorageBuffers(first_slot=0, …, 3)` call so a
-later bind can't zero an earlier slot. **The `space4` row below is WRONG** —
-that layout failed with E_INVALIDARG; working code uses space2.
+Fragment resource layout (space2), verified 2026-08-24: Atlas `t0` (sampler) |
+ShadowMask `t1` (sole storage texture) | Emitters `t2` (storage slot 0) |
+SdfBuf `t3` (slot 1) | SkyVisBuf `t4` (slot 2) | GiBuf `t5` (slot 3) |
+SkyBuf `t6` (slot 4) | palette-ramp buffers `t7/t8`. All storage buffers are
+bound in ONE `SDL_BindGPUFragmentStorageBuffers` call so a later bind can't zero
+an earlier slot. **The `space4` row above is WRONG** — that layout failed with
+E_INVALIDARG; working code uses space2.
 `sdf_tex_`/`sky_vis_tex_` R8/R32F textures still exist in `sdf_pass` but are now
 dead (no shader reads them) — removable in a later cleanup.
 
@@ -503,7 +538,7 @@ reflected by SDL_shadercross on all backends.
 
 ### MAX_INSTANCES must be large for 4K + minimap
 
-At 4K with a large terminal sidebar + pixel_minimap (17K rects) + tile sprites, the old 65536 cap is hit constantly. Current value: **262144** (262144 × 64 bytes = 16 MB/ring slot). Do not reduce.
+At 4K with a large terminal sidebar + minimap UI + tile sprites, the old 65536 cap is hit constantly. Current value: **262144** (262144 × 96 bytes ≈ 24 MB/ring slot, since sprite_instance grew to 96 B). Do not reduce.
 
 ### Variable scope in upload functions
 

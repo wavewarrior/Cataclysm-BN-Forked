@@ -853,9 +853,28 @@ never reproducible from this tree; the gate criterion is the named failure set, 
 1. **`box2d_authority_vehicle_bashes_terrain`** (S1 blocker, still failing): 10-second reproducer
    `./cata_test-tiles "grabbed_shopping_cart_can_be_pulled_up_ramp,box2d_authority_vehicle_bashes_terrain" --order decl --rng-seed 1`.
    Next diagnostic: find the *actual* terrain-write path (not `map_access.cpp::ter_set`).
-2. **Vision cluster (4 cases)**: `vision_wall_obstructs_light`, `vision_single_tile_skylight`,
-   `vision_see_out_of_vehicle`, `vision_see_into_vehicle` — light leaks diagonally past walls
-   (observed `4 1 4` where expected `1 1 1`).
+2. **Vision cluster (4 cases)** — root-caused 2026-08-24. Three sub-bugs:
+   - **GPU compute entrypoint (FIXED, committed `4da499f078`)**: all 19 committed
+     `data/shaders/*.msl` artifacts name their kernel `main0`, but three call sites
+     (`gpu_platform.cpp` probe, `gpu_transparency.cpp`, `gpu_lm.cpp`) requested `"main"` →
+     `Creating MTLFunction failed` → device rejected → no GPU in the test binary → CPU fallback.
+     With the fix the test binary gets a device and the `[vision]` suite went 14→4 failures.
+   - **Stale GPU `vehicle_obscured` buffer (root cause of the 4 failing cases)**: the per-build
+     unconditional CPU clear of `vehicle_obscured_cache` (`map_cache.cpp` Phase1_parallel_caches)
+     only marked the GPU level dirty when `veh_in_active_range`. After a vehicle leaves the level
+     (tests wipe vehicles between cases; in-game when the player moves out of range), the resident
+     GPU `vehicle_obscured` buffer keeps the last vehicle diagonal bits. The GPU seen ray-cast
+     (`lm_seen_compute`) blocks a ray step on `vehicle_obscured_all[prev] & 1/2` for diagonal
+     steps — so a stale bit at the player tile blinds every NW-diagonal ray, producing a 2-tile-wide
+     blind band NW of the player (the observed pattern in `vision_daylight`,
+     `vision_single_tile_skylight` (all 8 transforms), `vision_see_wall_in_moonlight`, and
+     `vision_see_out_of_vehicle`). Fix: also mark the GPU level dirty when the CPU cache is
+     non-empty before the clear (mirrors the existing `vehicle_floor_was_dirty` pattern), both
+     parallel and serial branches. Cases pass individually but fail in-suite because a vehicle
+     test case runs first and pollutes the resident buffer.
+   - **Seen-cache rebuild flags (user WIP, committed `0aa17ed28e`)**: `rebuild_seen_cache` /
+     `download_seen_cache` `true` in `build_map_cache` — required so the CPU `visibility_cache`
+     the goldens compare against is filled from the GPU seen pass.
 3. **`vehicle_efficiency`** — pre-existing since S0 baseline; not a merge regression.
 4. **Per-sprite coloured-light tint** (see "Deliberately NOT landed") — GPU additive pass still missing.
 5. **`visibility_cache_z()` pickup** in the tiles draw path — accessor defined but unused.

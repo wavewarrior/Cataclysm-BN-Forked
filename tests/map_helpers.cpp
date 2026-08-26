@@ -14,6 +14,7 @@
 #include "mapdata.h"
 #include "npc.h"
 #include "overmapbuffer.h"
+#include "physics/physics_world.h"
 #include "submap.h"
 #include "type_id.h"
 
@@ -146,6 +147,18 @@ void clear_map() {
     // test's Catch2 WHEN section do not bleed into the next run.  The tracker
     // is a global singleton; grid_at() rebuilds on demand, so clearing here is safe.
     get_distribution_grid_tracker().clear();
+    // Drop every Box2D terrain/vehicle body.  The physics world outlives any
+    // single test (it lives in the map pimpl, built once in game()), and its
+    // terrain_bodies_ are keyed by ABSOLUTE submap coordinate.  NOTE: this reset
+    // is in place but has NOT been shown to fix
+    // box2d_authority_vehicle_bashes_terrain (suite run byte-identical with and
+    // without it) — the in-suite wedge comes from bodies that are (re)created
+    // after this point, or from a different leak vector.  Chasing that is
+    // deferred; do not cite this reset as the fix for that test.
+    if (auto* pw = g->m.get_physics_world()) {
+        pw->clear_world_bodies();
+        pw->clear_creature_bodies();
+    }
 }
 
 void put_player_underground() {

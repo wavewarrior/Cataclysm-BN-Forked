@@ -45,8 +45,8 @@ struct GpuEmitter {
     float4 cone_shape;
     float4 misc;
 };
-Texture2D<float4>            Atlas       : register(t0, space2);
-SamplerState                 AtlasSmp    : register(s0, space2);
+Texture2D<float4> Atlas: register(t0, space2);
+SamplerState AtlasSmp: register(s0, space2);
 // Silhouette sun-shadow mask (Phase 2). Screen-space coverage, read-only storage
 // texture (Texture2D, .Load only — that is what makes shadercross reflect it as a
 // storage texture, not a 2nd sampled image). Now the SOLE storage texture ⇒
@@ -56,10 +56,10 @@ SamplerState                 AtlasSmp    : register(s0, space2);
 // camera/proj math). (GI moved off a storage texture to GiBuf below — Stage 1 of
 // GI_COMPUTE_AND_PERF_PLAN; ShadowMask being the only storage texture removes the
 // old all-or-none 2-slot bind hazard.)
-Texture2D<float4>            ShadowMask  : register(t1, space2);
-StructuredBuffer<GpuEmitter> Emitters    : register(t2, space2);
-StructuredBuffer<float>      SdfBuf      : register(t3, space2);
-StructuredBuffer<float>      SkyVisBuf   : register(t4, space2);
+Texture2D<float4> ShadowMask: register(t1, space2);
+StructuredBuffer<GpuEmitter> Emitters: register(t2, space2);
+StructuredBuffer<float> SdfBuf: register(t3, space2);
+StructuredBuffer<float> SkyVisBuf: register(t4, space2);
 // NOTE: fragment storage buffers MUST stay contiguous and every one MUST be read.
 // VisBuf, the live-visibility buffer, used to sit at t5; "remove vision overlay"
 // (46261515ac) deleted its only reader and left the declaration orphaned. DXC then
@@ -72,14 +72,14 @@ StructuredBuffer<float>      SkyVisBuf   : register(t4, space2);
 // Storage buffer slot 3 ⇒ t5 (Stage 2b removed SunSdfBuf, which was here — the sun
 // shadow moved to the compute coverage march, see SkyBuf). Tile-res, 4 floats/tile
 // (rgb + pad), x-major gi[(x*sdf_map_h+y)*4 + c], scalar StructuredBuffer<float>.
-StructuredBuffer<float>      GiBuf       : register(t5, space2);
+StructuredBuffer<float> GiBuf: register(t5, space2);
 // Stage 2a/2b sky+sun/moon (sky_sun.comp output) — LAST fragment storage buffer,
 // slot 4 ⇒ t6. Tile-res, 4 floats/tile [(x*sdf_map_h+y)*4 + c], x-major. rgb =
 // directional sky-access (alcove/overhang self-shading + indoor daylight from
 // window openings — REPLACES the flat sky_vis ambient; CPU bleed flood-fill gone).
 // a = celestial (sun/moon) occlusion from the 3D coverage-occluder march
 // (REPLACES the inline sun shadow march + SunSdfBuf — Stage 2b).
-StructuredBuffer<float>      SkyBuf      : register(t6, space2);
+StructuredBuffer<float> SkyBuf: register(t6, space2);
 // Step 7 palette shade ramps. Appended at t7/t8 so no existing slot renumbers.
 // Storage BUFFERS, not sampled textures, for three reasons all recorded in this
 // repo: shadercross mis-binds sampler textures on Metal (silent zeros); adding
@@ -87,65 +87,71 @@ StructuredBuffer<float>      SkyBuf      : register(t6, space2);
 // lockstep; and the lookup wants nearest/integer indexing anyway. BOTH are read
 // UNCONDITIONALLY below (gated with lerp, never an `if`) — D3D12 strips an unread
 // fragment storage buffer and the hole breaks the root signature.
-StructuredBuffer<uint>       RampBuf     : register(t7, space2); // palette_size*steps RGBA8
-StructuredBuffer<uint>       PalIdxBuf   : register(t8, space2); // 32^3 palette rows
-cbuffer LightParams : register(b0, space3) {
-    float tile_pixel_size; float current_z;
-    uint  emitter_count;   float ambient;
-    float camera_off_x;    float camera_off_y;
-    uint  sdf_map_w;       uint  sdf_map_h;
+StructuredBuffer<uint> RampBuf: register(t7, space2);   // palette_size*steps RGBA8
+StructuredBuffer<uint> PalIdxBuf: register(t8, space2); // 32^3 palette rows
+cbuffer LightParams: register(b0, space3) {
+    float tile_pixel_size;
+    float current_z;
+    uint emitter_count;
+    float ambient;
+    float camera_off_x;
+    float camera_off_y;
+    uint sdf_map_w;
+    uint sdf_map_h;
 };
 // Phase 8: sun + skylight params.
-cbuffer SunParams : register(b1, space3) {
+cbuffer SunParams: register(b1, space3) {
     float sun_dir_x, sun_dir_y, sun_sin_elev, sun_intensity;
-    float sun_r,     sun_g,     sun_b,        sky_r;
-    float sky_g,     sky_b,     sky_intensity, sp_pad;
+    float sun_r, sun_g, sun_b, sky_r;
+    float sky_g, sky_b, sky_intensity, sp_pad;
 };
 // Debug visualisation + runtime-tunable knobs. See lighting::debug_params
 // in sprite_batcher.cpp for the C++-side wire-stable layout.
-cbuffer DebugParams : register(b2, space3) {
-    uint  debug_mode;          // 0=off, 1..7=visualisation modes (see C++ comment)
-    float debug_opacity;       // blend fraction for modes 1-5
-    float emitter_scale;       // per-channel multiplier applied to emitter_light
-    float sun_scale;           // multiplier for sun_contrib
-    float sky_scale;           // multiplier for sky_contrib
-    float shadow_k;            // sphere-trace cone hardness (was hardcoded 8.0)
-    uint  shadow_steps;        // per-emitter march iteration cap (was 16)
-    float dither_amt;          // 0=smooth .. 1=full ordered dither
-    float dither_bands;        // quantisation levels for the dither (e.g. 6)
-    float gi_strength;         // 1-bounce indirect light multiplier (0=off)
-    float vis_curve;           // vision-edge falloff exponent (0=off → no falloff)
-    float mem_dim;             // memorized-tile brightness floor
-    float mem_desat;           // memorized-tile desaturation 0..1
-    float night_floor;         // ambient floor at night (sun_intensity=0)
-    float day_floor;           // ambient floor at noon  (sun_intensity=1)
-    float grade_desat;         // tone grade: 0=full colour, 1=greyscale
-    float grade_cool;          // tone grade: blend toward cool teal tint
-    float grade_bright;        // tone grade: brightness multiplier (lit world tiles)
-    float vis_radius;          // radial player-distance falloff radius (tiles; 0=off)
-    float player_x;            // player map-tile centre x (radial origin)
-    float player_y;            // player map-tile centre y
-    float mem_radius;          // memory distance-fade scale in tiles (effect 3)
-    float nrm_amount;          // A1 normal Lambert blend: 0=flat(off) .. 1=full
-    float nrm_relief;          // A1 normal tilt magnitude; SIGNED (negative flips global relief direction)
-    float nrm_elev;            // A1 implied light height above plane; LOWER=more grazing=stronger relief
-    float sdf_sharp;           // SDF sample sharpness: 0=bilinear(smooth) .. 1=nearest(tight, grid-snapped)
-    float ao_strength;         // A4 ambient occlusion: 0=off .. 1=full SDF-cavity darkening of the ambient fills
-    float shadow_mask_str;     // Phase 2: silhouette sun-shadow mask strength on ground (0=off/default .. 1=full)
+cbuffer DebugParams: register(b2, space3) {
+    uint debug_mode;     // 0=off, 1..7=visualisation modes (see C++ comment)
+    float debug_opacity; // blend fraction for modes 1-5
+    float emitter_scale; // per-channel multiplier applied to emitter_light
+    float sun_scale;     // multiplier for sun_contrib
+    float sky_scale;     // multiplier for sky_contrib
+    float shadow_k;      // sphere-trace cone hardness (was hardcoded 8.0)
+    uint shadow_steps;   // per-emitter march iteration cap (was 16)
+    float dither_amt;    // 0=smooth .. 1=full ordered dither
+    float dither_bands;  // quantisation levels for the dither (e.g. 6)
+    float gi_strength;   // 1-bounce indirect light multiplier (0=off)
+    float vis_curve;     // vision-edge falloff exponent (0=off → no falloff)
+    float mem_dim;       // memorized-tile brightness floor
+    float mem_desat;     // memorized-tile desaturation 0..1
+    float night_floor;   // ambient floor at night (sun_intensity=0)
+    float day_floor;     // ambient floor at noon  (sun_intensity=1)
+    float grade_desat;   // tone grade: 0=full colour, 1=greyscale
+    float grade_cool;    // tone grade: blend toward cool teal tint
+    float grade_bright;  // tone grade: brightness multiplier (lit world tiles)
+    float vis_radius;    // radial player-distance falloff radius (tiles; 0=off)
+    float player_x;      // player map-tile centre x (radial origin)
+    float player_y;      // player map-tile centre y
+    float mem_radius;    // memory distance-fade scale in tiles (effect 3)
+    float nrm_amount;    // A1 normal Lambert blend: 0=flat(off) .. 1=full
+    float nrm_relief;  // A1 normal tilt magnitude; SIGNED (negative flips global relief direction)
+    float nrm_elev;    // A1 implied light height above plane; LOWER=more grazing=stronger relief
+    float sdf_sharp;   // SDF sample sharpness: 0=bilinear(smooth) .. 1=nearest(tight, grid-snapped)
+    float ao_strength; // A4 ambient occlusion: 0=off .. 1=full SDF-cavity darkening of the ambient
+                       // fills
+    float shadow_mask_str; // Phase 2: silhouette sun-shadow mask strength on ground (0=off/default
+                           // .. 1=full)
     // Tail mirrors the C++ debug_params layout. sway_* / anim_time are vertex-stage
     // only — declared here purely so spec_strength lands at the right cbuffer offset.
-    float sway_amp;            // (vertex-only padding here)
-    float sway_freq;           // (vertex-only padding here)
-    float anim_time;           // (vertex-only padding here)
-    float spec_strength;       // wet specular glint strength (0=off; CPU-folded with rain intensity)
-    float light_eps;           // P1: contribution epsilon for shadow march gating (default 0.004)
-    float max_shadow_k;        // P2: max emitters per pixel that get full shadow trace (default 16)
+    float sway_amp;      // (vertex-only padding here)
+    float sway_freq;     // (vertex-only padding here)
+    float anim_time;     // (vertex-only padding here)
+    float spec_strength; // wet specular glint strength (0=off; CPU-folded with rain intensity)
+    float light_eps;     // P1: contribution epsilon for shadow march gating (default 0.004)
+    float max_shadow_k;  // P2: max emitters per pixel that get full shadow trace (default 16)
     // P5b: sky/sun quality knobs (vertex+fragment padding — not used here; consumed by
     // sky_sun.comp via sky_sun_params cbuffer. Declared for cbuffer layout parity.)
-    float sky_dirs;            // sky hemisphere directions (float → uint in compute push)
-    float sky_reach;           // sky march max distance (tiles)
-    float sun_steps;           // celestial march steps (float → uint in compute push)
-    float sun_penumbra;        // penumbra angular samples (float → uint in compute push)
+    float sky_dirs;     // sky hemisphere directions (float → uint in compute push)
+    float sky_reach;    // sky march max distance (tiles)
+    float sun_steps;    // celestial march steps (float → uint in compute push)
+    float sun_penumbra; // penumbra angular samples (float → uint in compute push)
     // Wave 2: vegetation life knobs (vertex-stage only; declared for cbuffer layout parity).
     float ripple_k;
     float gust_amp;
@@ -154,15 +160,15 @@ cbuffer DebugParams : register(b2, space3) {
     float part_strength;
     float nrm_entity_amount;
     // Pixel-art quantisation / sub-tile occluders / palette ramps.
-    float texels_per_tile;   // tileset native tile width in art texels (DATA)
-    float light_quant;       // 1 = snap light sample to art texels, 0 = per-screen-pixel
-    float occ_soft_gain;     // partial-occluder block gain (compute-stage; parity here)
-    float self_eps_tall;     // soft_shadow_march self-shadow escape radius, TALL sprites
-    float ramp_enable;       // 0 = plain multiply, 1 = full palette-ramp resolve
-    float ramp_steps;        // shade steps per palette row
-    float ramp_chroma;       // how much coloured light tints the ramped surface
-    float gi_bilat;          // Step 6: 1 = SDF-bilateral GI upsample, 0 = plain bilinear
-    float vis_edge;          // Step 8: 1 = feathered vision frontier, 0 = hard tile edge
+    float texels_per_tile; // tileset native tile width in art texels (DATA)
+    float light_quant;     // 1 = snap light sample to art texels, 0 = per-screen-pixel
+    float occ_soft_gain;   // partial-occluder block gain (compute-stage; parity here)
+    float self_eps_tall;   // soft_shadow_march self-shadow escape radius, TALL sprites
+    float ramp_enable;     // 0 = plain multiply, 1 = full palette-ramp resolve
+    float ramp_steps;      // shade steps per palette row
+    float ramp_chroma;     // how much coloured light tints the ramped surface
+    float gi_bilat;        // Step 6: 1 = SDF-bilateral GI upsample, 0 = plain bilinear
+    float vis_edge;        // Step 8: 1 = feathered vision frontier, 0 = hard tile edge
     // Normalised V offset from a colour texel to its NORMAL texel in the same atlas
     // page (0.5 for a double-height page). 0.0 = no page carries normals, and
     // atlas_normal() below is then an exact identity. Mirrors debug_params::nrm_atlas_v.
@@ -176,18 +182,25 @@ cbuffer DebugParams : register(b2, space3) {
     float cloud_wind_y;
     float cloud_threshold;
     float cloud_softness;
+    // Canopy cut-out: soft circular hole around the player in flagged overhanging
+    // terrain canopies (sprite_instance::cutout == 1), so the character stays
+    // visible through the leaves. Radius and feather in tiles; radius 0 = off.
+    float cutout_radius;
+    float cutout_feather;
+    float cutout_pad0;
+    float cutout_pad1;
     float cloud_pad0;
     float cloud_pad1;
 };
 struct VS_OUT {
-    float4 pos      : SV_Position;
-    float2 uv       : TEXCOORD0;
-    float4 tint     : TEXCOORD1;
-    float2 world_pos: TEXCOORD2;
-    float  light_mul: TEXCOORD3; // memory-fade marker (<0 = -(dist); else no-op)
-    float2 light_pos: TEXCOORD4; // base-tile centre for tall sprites, else world_pos
-    float  outline  : TEXCOORD5; // >0.5 = silhouette mask mode (hover outline)
-    float  dark_frac: TEXCOORD6; // 0 at sprite base → extrude_dark at canopy; applied in frag
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD0;
+    float4 tint : TEXCOORD1;
+    float2 world_pos : TEXCOORD2;
+    float light_mul : TEXCOORD3;  // memory-fade marker (<0 = -(dist); else no-op)
+    float2 light_pos : TEXCOORD4; // base-tile centre for tall sprites, else world_pos
+    float outline : TEXCOORD5;    // >0.5 = silhouette mask mode (hover outline)
+    float dark_frac : TEXCOORD6;  // 0 at sprite base → extrude_dark at canopy; applied in frag
     // Mirrors sprite.vert.hlsl's VS_OUT member-for-member, INCLUDING the absence of
     // `nointerpolation` — see the long note there. Briefly: that qualifier made D3D12
     // pipeline creation fail (0x80070057) whenever this shader did not consume the
@@ -195,7 +208,7 @@ struct VS_OUT {
     // value is a per-instance constant that interpolates exactly. Consumers still
     // compare BY BAND, never ==.
     float light_mode : TEXCOORD7; // sprite_light_mode: 0 unlit, 1 gpu_lit, 2 memory
-    float3 flash : TEXCOORD8; // coloured light override: colour * strength, max(colour) == 1
+    float3 flash : TEXCOORD8;     // coloured light override: colour * strength, max(colour) == 1
     // Per-sprite "this is a vertical surface" amount (sprite_instance::face_amt), 0..1.
     // Per-instance constant, so interpolation across the quad is exact; and like flash it
     // is a QUANTITY, not a categorical selector, so drift could only nudge a shade.
@@ -210,7 +223,10 @@ struct VS_OUT {
     // Sprite centre in UV space and half-extents, for radial macro-normal in fragment.
     // Per-instance constant, so interpolation is exact.
     float2 center_uv : TEXCOORD11;
-    float2 uv_half   : TEXCOORD12;
+    float2 uv_half : TEXCOORD12;
+    // Canopy cut-out marker (SpriteInstance::cutout): 1 = overhanging terrain
+    // canopy. Per-instance constant, so interpolation across the quad is exact.
+    float cutout : TEXCOORD13;
 };
 // SDF supersample factor — MUST match lighting::SDF_SUPERSAMPLE (sdf_pass.h).
 // SdfBuf is the SS-finer grid: dims (sdf_map_w*SDF_SS) x (sdf_map_h*SDF_SS),
@@ -237,19 +253,19 @@ float sdf_texel(int x, int y) {
 // (so a tile centre still lands on a subcell sample, preserving the old p-0.5
 // alignment that keeps shadows glued to occluders).
 float sdf_bilinear(float2 p) {
-    const float2 g  = p * (float)SDF_SS - 0.5;
+    const float2 g = p * (float)SDF_SS - 0.5;
     const float2 fp = floor(g);
-    const int   x0  = (int)fp.x;
-    const int   y0  = (int)fp.y;
-    const float2 w  = g - fp;         // frac
-    const float a = sdf_texel(x0,     y0    );
-    const float b = sdf_texel(x0 + 1, y0    );
-    const float c = sdf_texel(x0,     y0 + 1);
+    const int x0 = (int)fp.x;
+    const int y0 = (int)fp.y;
+    const float2 w = g - fp; // frac
+    const float a = sdf_texel(x0, y0);
+    const float b = sdf_texel(x0 + 1, y0);
+    const float c = sdf_texel(x0, y0 + 1);
     const float d = sdf_texel(x0 + 1, y0 + 1);
     const float bil = lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
     // sdf_sharp biases bilinear→nearest. With the SS grid this is rarely needed
     // (the field is already fine), but kept as a live tightness lever.
-    if(sdf_sharp <= 0.001) { return bil; }
+    if (sdf_sharp <= 0.001) { return bil; }
     const float nr = sdf_texel((int)floor(g.x + 0.5), (int)floor(g.y + 0.5));
     return lerp(bil, nr, saturate(sdf_sharp));
 }
@@ -282,12 +298,12 @@ static const float GI_BILAT_SIGMA = 0.35; // tiles
 float3 indirect_bilinear(float2 p) {
     const float2 sp = p - 0.5;
     const float2 fp = floor(sp);
-    const int   x0  = (int)fp.x;
-    const int   y0  = (int)fp.y;
-    const float2 w  = sp - fp;
-    const float3 a = indirect_texel(x0,     y0    );
-    const float3 b = indirect_texel(x0 + 1, y0    );
-    const float3 c = indirect_texel(x0,     y0 + 1);
+    const int x0 = (int)fp.x;
+    const int y0 = (int)fp.y;
+    const float2 w = sp - fp;
+    const float3 a = indirect_texel(x0, y0);
+    const float3 b = indirect_texel(x0 + 1, y0);
+    const float3 c = indirect_texel(x0, y0 + 1);
     const float3 d = indirect_texel(x0 + 1, y0 + 1);
     const float3 plain = lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
 
@@ -295,13 +311,13 @@ float3 indirect_bilinear(float2 p) {
     // probe tile centres (integer tile + 0.5), which is what sdf_bilinear expects.
     const float sd_c = sdf_bilinear(p);
     const float wa = (1.0 - w.x) * (1.0 - w.y);
-    const float wb =        w.x  * (1.0 - w.y);
-    const float wc = (1.0 - w.x) *        w.y;
-    const float wd =        w.x  *        w.y;
+    const float wb = w.x * (1.0 - w.y);
+    const float wc = (1.0 - w.x) * w.y;
+    const float wd = w.x * w.y;
     const float inv_sigma = 1.0 / GI_BILAT_SIGMA;
-    const float ba = wa * exp(-abs(sdf_bilinear(float2(x0,     y0    ) + 0.5) - sd_c) * inv_sigma);
-    const float bb = wb * exp(-abs(sdf_bilinear(float2(x0 + 1, y0    ) + 0.5) - sd_c) * inv_sigma);
-    const float bc = wc * exp(-abs(sdf_bilinear(float2(x0,     y0 + 1) + 0.5) - sd_c) * inv_sigma);
+    const float ba = wa * exp(-abs(sdf_bilinear(float2(x0, y0) + 0.5) - sd_c) * inv_sigma);
+    const float bb = wb * exp(-abs(sdf_bilinear(float2(x0 + 1, y0) + 0.5) - sd_c) * inv_sigma);
+    const float bc = wc * exp(-abs(sdf_bilinear(float2(x0, y0 + 1) + 0.5) - sd_c) * inv_sigma);
     const float bd = wd * exp(-abs(sdf_bilinear(float2(x0 + 1, y0 + 1) + 0.5) - sd_c) * inv_sigma);
     const float wsum = ba + bb + bc + bd;
     // A fully-rejected neighbourhood must not produce black — fall back to the
@@ -322,12 +338,12 @@ float4 sky_texel(int x, int y) {
 float4 sky_bilinear(float2 p) {
     const float2 sp = p - 0.5;
     const float2 fp = floor(sp);
-    const int   x0  = (int)fp.x;
-    const int   y0  = (int)fp.y;
-    const float2 w  = sp - fp;
-    const float4 a = sky_texel(x0,     y0    );
-    const float4 b = sky_texel(x0 + 1, y0    );
-    const float4 c = sky_texel(x0,     y0 + 1);
+    const int x0 = (int)fp.x;
+    const int y0 = (int)fp.y;
+    const float2 w = sp - fp;
+    const float4 a = sky_texel(x0, y0);
+    const float4 b = sky_texel(x0 + 1, y0);
+    const float4 c = sky_texel(x0, y0 + 1);
     const float4 d = sky_texel(x0 + 1, y0 + 1);
     return lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
 }
@@ -341,14 +357,14 @@ float skyvis_texel(int x, int y) {
     return SkyVisBuf[x * (int)sdf_map_h + y];
 }
 float skyvis_bilinear(float2 p) {
-    const float2 g  = p - 0.5;
+    const float2 g = p - 0.5;
     const float2 fp = floor(g);
-    const int   x0  = (int)fp.x;
-    const int   y0  = (int)fp.y;
-    const float2 w  = g - fp;
-    const float a = skyvis_texel(x0,     y0    );
-    const float b = skyvis_texel(x0 + 1, y0    );
-    const float c = skyvis_texel(x0,     y0 + 1);
+    const int x0 = (int)fp.x;
+    const int y0 = (int)fp.y;
+    const float2 w = g - fp;
+    const float a = skyvis_texel(x0, y0);
+    const float b = skyvis_texel(x0 + 1, y0);
+    const float c = skyvis_texel(x0, y0 + 1);
     const float d = skyvis_texel(x0 + 1, y0 + 1);
     return lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
 }
@@ -356,12 +372,8 @@ float skyvis_bilinear(float2 p) {
 // here (not at the top) because it calls sdf_bilinear, defined above.
 #include "shadow_trace.hlsl"
 // 4x4 ordered (Bayer) dither matrix, values 0..15.
-static const float k_bayer4[16] = {
-     0.0,  8.0,  2.0, 10.0,
-    12.0,  4.0, 14.0,  6.0,
-     3.0, 11.0,  1.0,  9.0,
-    15.0,  7.0, 13.0,  5.0
-};
+static const float k_bayer4[16] =
+    {0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0};
 // Ordered Bayer threshold in (0,1). Keyed to world ART-TEXEL coords (shade_pos *
 // texels_per_tile) so the 4x4 cell is exactly 4 tileset texels wide at EVERY zoom
 // level and sticks to the terrain — it neither shimmers when the camera pans nor
@@ -375,16 +387,14 @@ float dither_threshold(float2 world_px) {
 // Hash + bilinear value-noise + 3-octave fbm. No existing GPU noise primitive
 // in this file (only the fixed Bayer dither matrix above); this is the shape
 // generator for the passing-cloud-shadow term applied to sun_contrib in main().
-float cloud_hash(float2 p) {
-    return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453123);
-}
+float cloud_hash(float2 p) { return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453123); }
 float cloud_value_noise(float2 p) {
     const float2 i = floor(p);
     const float2 f = frac(p);
-    const float  a = cloud_hash(i);
-    const float  b = cloud_hash(i + float2(1.0, 0.0));
-    const float  c = cloud_hash(i + float2(0.0, 1.0));
-    const float  d = cloud_hash(i + float2(1.0, 1.0));
+    const float a = cloud_hash(i);
+    const float b = cloud_hash(i + float2(1.0, 0.0));
+    const float c = cloud_hash(i + float2(0.0, 1.0));
+    const float d = cloud_hash(i + float2(1.0, 1.0));
     const float2 u = f * f * (3.0 - 2.0 * f);
     return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
 }
@@ -392,7 +402,7 @@ float cloud_fbm(float2 p) {
     const float2x2 rot = float2x2(0.8, 0.6, -0.6, 0.8);
     float sum = 0.0;
     float amp = 0.55;
-    for(int o = 0; o < 3; ++o) {
+    for (int o = 0; o < 3; ++o) {
         sum += amp * cloud_value_noise(p);
         p = mul(rot, p) * 2.02;
         amp *= 0.5;
@@ -404,7 +414,7 @@ float luma(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
 float3 unpack_rgba8(uint p) {
     return float3((p & 0xFFu), ((p >> 8) & 0xFFu), ((p >> 16) & 0xFFu)) * (1.0 / 255.0);
 }
-uint pal_index_of(float3 rgb) {   // 5 bits/channel → 32^3
+uint pal_index_of(float3 rgb) { // 5 bits/channel → 32^3
     const uint3 q = (uint3)clamp(rgb * 31.0 + 0.5, 0.0, 31.0);
     return (q.r * 32u + q.g) * 32u + q.b;
 }
@@ -460,10 +470,10 @@ float3 surface_normal(float2 uv) {
 // texel (0.5 for a double-height page). 0.0 means no page carries normals and
 // this is an exact identity on the alpha-bevel normal.
 float3 atlas_normal(float2 uv, float3 bevel_n) {
-    if(nrm_atlas_v <= 0.0) { return bevel_n; }
-    const float4 t   = Atlas.Sample(AtlasSmp, uv + float2(0.0, nrm_atlas_v));
+    if (nrm_atlas_v <= 0.0) { return bevel_n; }
+    const float4 t = Atlas.Sample(AtlasSmp, uv + float2(0.0, nrm_atlas_v));
     const float2 nxy = t.rg * 2.0 - 1.0;
-    const float  nz  = sqrt(saturate(1.0 - dot(nxy, nxy)));
+    const float nz = sqrt(saturate(1.0 - dot(nxy, nxy)));
     return normalize(lerp(bevel_n, float3(nxy, nz), saturate(t.b)));
 }
 // Wet specular glint (Blinn-Phong). View dir is +Z (top-down ortho). The albedo-
@@ -471,26 +481,26 @@ float3 atlas_normal(float2 uv, float3 bevel_n) {
 // flatten it toward up by SPEC_FLATTEN for the spec term ONLY. SPEC_SHININESS sets
 // the lobe tightness. Caller scales the result by spec_strength (× sky_vis).
 static const float SPEC_SHININESS = 24.0;
-static const float SPEC_FLATTEN   = 0.5;
+static const float SPEC_FLATTEN = 0.5;
 float wet_spec(float3 n, float3 L) {
-    const float3 V  = float3(0.0, 0.0, 1.0);
+    const float3 V = float3(0.0, 0.0, 1.0);
     const float3 ns = normalize(lerp(n, float3(0.0, 0.0, 1.0), SPEC_FLATTEN));
-    const float3 H  = normalize(L + V);
+    const float3 H = normalize(L + V);
     return pow(saturate(dot(ns, H)), SPEC_SHININESS);
 }
-float4 main(VS_OUT i) : SV_Target0 {
+float4 main(VS_OUT i): SV_Target0 {
     float4 texel = Atlas.Sample(AtlasSmp, i.uv);
-    if(texel.a < 0.01) discard;
+    if (texel.a < 0.01) { discard; }
     // Hover-outline silhouette mask (set per-instance via sprite_instance.pad2).
     // Skip ALL lighting: emit the flat outline colour wherever the sprite is
     // opaque. Offset copies of the sprite are drawn behind the real one, so the
     // union forms a dilated ring around it (see HOVER_OUTLINE_PLAN.md).
-    if(i.outline > 0.5) {
+    if (i.outline > 0.5) {
         // light_mul carries the alpha cutoff for outline instances (reused field;
         // normal lighting is skipped here). Higher = drops translucent baked
         // drop-shadows in the sprite art so the ring follows the body only.
         const float cut = max(i.light_mul, 0.35);
-        if(texel.a < cut) discard;
+        if (texel.a < cut) { discard; }
         return float4(i.tint.rgb, texel.a * i.tint.a);
     }
     // --- Lighting composite mode (src/tile_light_mode.h) ---------------------
@@ -498,7 +508,7 @@ float4 main(VS_OUT i) : SV_Target0 {
     // costs nothing and makes any drift fail toward the nearest class instead of
     // silently to `unlit`, which renders full unlit albedo — the exact defect this
     // composite replaces.
-    const bool mode_memory  = i.light_mode > 1.5;
+    const bool mode_memory = i.light_mode > 1.5;
     const bool mode_gpu_lit = !mode_memory && i.light_mode > 0.5;
     // --- Step 8: sub-tile vision frontier -----------------------------------
     // The seen/remembered boundary is decided ONCE PER TILE: remembered terrain is
@@ -527,21 +537,21 @@ float4 main(VS_OUT i) : SV_Target0 {
     // neighbours the CPU already draws as visible — it cannot reveal anything the
     // game considers unseen.
     float frontier_cov = 1.0;
-    bool  frontier_desat = false;
-    if(i.outline < -0.5) {
+    bool frontier_desat = false;
+    if (i.outline < -0.5) {
         const uint enc = (uint)(-i.outline - 1.0 + 0.5);
         // Bit 8 selects the treatment: set = desaturate (the dim edge of sight),
         // clear = hide/dim (remembered tile, or a never-seen tile's overlay).
         frontier_desat = (enc & 256u) != 0u;
         const uint m = enc & 255u;
         // Bit order matches cata_tiles: W, E, N, S, NW, NE, SW, SE.
-        const float w  = (m & 1u)   != 0u ? 1.0 : 0.0;
-        const float e  = (m & 2u)   != 0u ? 1.0 : 0.0;
-        const float n  = (m & 4u)   != 0u ? 1.0 : 0.0;
-        const float s  = (m & 8u)   != 0u ? 1.0 : 0.0;
-        const float nw = (m & 16u)  != 0u ? 1.0 : 0.0;
-        const float ne = (m & 32u)  != 0u ? 1.0 : 0.0;
-        const float sw = (m & 64u)  != 0u ? 1.0 : 0.0;
+        const float w = (m & 1u) != 0u ? 1.0 : 0.0;
+        const float e = (m & 2u) != 0u ? 1.0 : 0.0;
+        const float n = (m & 4u) != 0u ? 1.0 : 0.0;
+        const float s = (m & 8u) != 0u ? 1.0 : 0.0;
+        const float nw = (m & 16u) != 0u ? 1.0 : 0.0;
+        const float ne = (m & 32u) != 0u ? 1.0 : 0.0;
+        const float sw = (m & 64u) != 0u ? 1.0 : 0.0;
         const float se = (m & 128u) != 0u ? 1.0 : 0.0;
         const float c_nw = (1.0 + n + w + nw) * 0.25;
         const float c_ne = (1.0 + n + e + ne) * 0.25;
@@ -554,7 +564,7 @@ float4 main(VS_OUT i) : SV_Target0 {
         float2 f = frac(i.world_pos + 0.5);
         // Quantise to the art-texel lattice so the feather stays pixel-art crisp
         // instead of becoming a smooth photographic ramp (same lattice as shade_pos).
-        if(light_quant > 0.5 && texels_per_tile > 0.5) {
+        if (light_quant > 0.5 && texels_per_tile > 0.5) {
             f = (floor(f * texels_per_tile) + 0.5) / texels_per_tile;
         }
         const float cov = lerp(lerp(c_nw, c_ne, f.x), lerp(c_sw, c_se, f.x), f.y);
@@ -573,12 +583,12 @@ float4 main(VS_OUT i) : SV_Target0 {
     // The atlas is R8G8B8A8_UNORM, so the shader samples the very same encoded values
     // the CPU filter operated on — no sRGB/linear conversion sits between them. Only
     // the integer truncation at each step is dropped, worth at most 1/255.
-    if(frontier_desat) {
+    if (frontier_desat) {
         const float av = (texel.r + texel.g + texel.b) * (85.0 / 256.0);
         const float gv = max(av * 0.625, 1.0 / 255.0);
         // is_black() passes pure black through untouched; without this the 1/255 floor
         // would lift every transparent-black texel to a visible dark grey.
-        const bool  blk = (texel.r + texel.g + texel.b) <= 0.0;
+        const bool blk = (texel.r + texel.g + texel.b) <= 0.0;
         const float3 grey = blk ? texel.rgb : float3(gv, gv, gv);
         texel.rgb = lerp(texel.rgb, grey, frontier_cov);
     }
@@ -597,22 +607,23 @@ float4 main(VS_OUT i) : SV_Target0 {
     // hatching (the old albedo-Sobel "weird toning" cause), so tall sprites can
     // safely receive subtle silhouette relief without darkening. Ground terrain
     // (light_pos == world_pos) keeps the full tuned relief.
-    const bool   frag_is_tall_n = ( i.light_pos.x != i.world_pos.x )
-                                  || ( i.light_pos.y != i.world_pos.y );
+    const bool frag_is_tall_n =
+        (i.light_pos.x != i.world_pos.x) || (i.light_pos.y != i.world_pos.y);
     // Art-texel light quantisation. Light is resolved once per TILESET texel rather
     // than per screen pixel, so a zoomed sprite shades in its own pixel blocks
     // instead of receiving a continuous gradient across them. 1/32 tile is 4x finer
     // than the SDF subcell grid, so sub-tile shadow curvature is preserved.
     // MUST be computed AFTER frag_is_tall_n, which compares the UNSNAPPED values.
     float2 shade_pos = i.light_pos;
-    if(light_quant > 0.5 && texels_per_tile > 0.5) {
+    if (light_quant > 0.5 && texels_per_tile > 0.5) {
         shade_pos = (floor(i.light_pos * texels_per_tile) + 0.5) / texels_per_tile;
     }
-    const float3 bevel_n = frag_is_tall_n
-                           ? lerp( float3( 0.0, 0.0, 1.0 ), surface_normal( i.uv ), nrm_entity_amount )
-                           : surface_normal( i.uv );
+    const float3 bevel_n =
+        frag_is_tall_n
+            ? lerp(float3(0.0, 0.0, 1.0), surface_normal(i.uv), nrm_entity_amount)
+            : surface_normal(i.uv);
     // Procedural normal atlas, when a page carries one; exact identity otherwise.
-    const float3 base_n = atlas_normal( i.uv, bevel_n );
+    const float3 base_n = atlas_normal(i.uv, bevel_n);
     // Radial macro-normal: treat each sprite as a gently rounded cylinder.
     // Offset from centre, normalised by half-extents (aspect-correct, [-0.5, 0.5]).
     // Centre faces viewer (+Z), edges face sideways. Blends with atlas micro-relief
@@ -629,9 +640,8 @@ float4 main(VS_OUT i) : SV_Target0 {
     const float2 r_offset = (i.uv - i.center_uv) / i.uv_half;
     const float3 radial_n = normalize(float3(r_offset, 1.0));
     const bool apply_radial_n = frag_is_tall_n && (i.face_amt <= 0.001f);
-    const float3 normal_macro = apply_radial_n
-                                ? normalize(lerp(base_n, radial_n, saturate(nrm_radial_amount)))
-                                : base_n;
+    const float3 normal_macro =
+        apply_radial_n ? normalize(lerp(base_n, radial_n, saturate(nrm_radial_amount))) : base_n;
     // Vertical-face arc. The alpha-shape bevel in surface_normal() CANNOT shade a sprite
     // body: alpha IS its height field, so a fully-opaque wall face has zero gradient and
     // comes out exactly (0,0,1). Measured in debug view 9: grass, asphalt, wall and
@@ -657,17 +667,17 @@ float4 main(VS_OUT i) : SV_Target0 {
     // interpolation drift can never carry floor() across an integer boundary (which
     // previously zeroed the mask and the amount at once -- measured as a byte-identical
     // frame). Round rather than floor for the same reason.
-    const float face_mask_f = floor( i.face_amt );
-    const float face_amt    = ( i.face_amt - face_mask_f - 0.25 ) * 2.0;
+    const float face_mask_f = floor(i.face_amt);
+    const float face_amt = (i.face_amt - face_mask_f - 0.25) * 2.0;
     // Outward direction of the face this fragment belongs to; also steps the sun's
     // sky-visibility sample below, so it must be the direction the face LOOKS, not the
     // direction of the sun.
-    float2 face_out = float2( 0.0, 0.0 );
-    float3 normal   = normal_macro;
-    if( face_amt > 0.001 ) {
-        const uint mask = (uint)( face_mask_f + 0.5 );
+    float2 face_out = float2(0.0, 0.0);
+    float3 normal = normal_macro;
+    if (face_amt > 0.001) {
+        const uint mask = (uint)(face_mask_f + 0.5);
         // In-tile position, 0..1, y south-down — same convention as the corner feather.
-        const float2 ft = frac( i.world_pos + 0.5 );
+        const float2 ft = frac(i.world_pos + 0.5);
         // PER-EDGE normals, like the chamfer of a bevelled box: each exposed side owns a
         // strip whose normal points out of the building, so the lit and shaded faces of
         // one wall run differ. A corner tile has TWO exposed edges and gets both, blended.
@@ -677,20 +687,20 @@ float4 main(VS_OUT i) : SV_Target0 {
         // Graveyard Keeper -- which solves this by having an artist paint light from four
         // sides per sprite and merging that into a normal map -- a tile grid hands us the
         // topology for free, so walls need no authored art at all.
-        const float bev = 0.42;                     // strip width, tile units
-        float2 acc = float2( 0.0, 0.0 );
-        if( mask & 1u ) { acc += float2(  0.0, -1.0 ) * saturate( 1.0 - ft.y / bev ); }
-        if( mask & 2u ) { acc += float2(  1.0,  0.0 ) * saturate( 1.0 - ( 1.0 - ft.x ) / bev ); }
-        if( mask & 4u ) { acc += float2(  0.0,  1.0 ) * saturate( 1.0 - ( 1.0 - ft.y ) / bev ); }
-        if( mask & 8u ) { acc += float2( -1.0,  0.0 ) * saturate( 1.0 - ft.x / bev ); }
-        const float amag = length( acc );
-        if( amag > 0.001 ) {
+        const float bev = 0.42; // strip width, tile units
+        float2 acc = float2(0.0, 0.0);
+        if (mask & 1u) { acc += float2(0.0, -1.0) * saturate(1.0 - ft.y / bev); }
+        if (mask & 2u) { acc += float2(1.0, 0.0) * saturate(1.0 - (1.0 - ft.x) / bev); }
+        if (mask & 4u) { acc += float2(0.0, 1.0) * saturate(1.0 - (1.0 - ft.y) / bev); }
+        if (mask & 8u) { acc += float2(-1.0, 0.0) * saturate(1.0 - ft.x / bev); }
+        const float amag = length(acc);
+        if (amag > 0.001) {
             face_out = acc / amag;
             // nz small but non-zero: with the sun near zenith (measured sin_elev 0.87) a
             // purely horizontal normal would drop the wall to black.
-            const float3 face_n = normalize( float3( face_out, 0.30 ) );
-            normal = normalize( lerp( base_n, face_n,
-                                      saturate( face_amt * face_arc ) * saturate( amag ) ) );
+            const float3 face_n = normalize(float3(face_out, 0.30));
+            normal = normalize(
+                lerp(base_n, face_n, saturate(face_amt * face_arc) * saturate(amag)));
         }
     }
     // Sky exposure (0 roofed .. 1 open), hoisted above the emitter loop so the
@@ -709,50 +719,49 @@ float4 main(VS_OUT i) : SV_Target0 {
     // P1: use runtime light_eps from cbuffer (falls back to default when 0).
     const float eps = max(light_eps, LIGHT_EPS_DEFAULT);
     // P2: K-max shadow budget — track strongest emitters for full shadow trace.
-    const int   k_max = (int)max(max_shadow_k, MAX_SHADOW_K_DEFAULT);
+    const int k_max = (int)max(max_shadow_k, MAX_SHADOW_K_DEFAULT);
     // Tracking arrays for K-strongest by atten*lambert. 64 covers extreme horde density.
-    uint   top_idx[64];
-    float  top_val[64];
-    int    top_n = 0;
+    uint top_idx[64];
+    float top_val[64];
+    int top_n = 0;
 
     // --- PASS 1: accumulate unshadowed light + track K-max candidates ---
-    for(uint ei = 0u; ei < me; ++ei) {
+    for (uint ei = 0u; ei < me; ++ei) {
         const GpuEmitter e = Emitters[ei];
-        const float3 e_pos    = e.pos_radius.xyz;
-        const float  e_radius = e.pos_radius.w;
-        const float3 e_color  = e.color_falloff.xyz;
-        const float  e_falloff= e.color_falloff.w;
-        if(abs(e_pos.z - current_z) > 0.5) continue;
-        const float2 dv   = e_pos.xy - shade_pos;
-        const float  dist = length(dv);
-        if(dist < 0.01) continue;
-        const float  atten = point_light_atten(dist, e_radius, e_falloff);
-        if(atten <= 0.0) continue;
+        const float3 e_pos = e.pos_radius.xyz;
+        const float e_radius = e.pos_radius.w;
+        const float3 e_color = e.color_falloff.xyz;
+        const float e_falloff = e.color_falloff.w;
+        if (abs(e_pos.z - current_z) > 0.5) { continue; }
+        const float2 dv = e_pos.xy - shade_pos;
+        const float dist = length(dv);
+        if (dist < 0.01) { continue; }
+        const float atten = point_light_atten(dist, e_radius, e_falloff);
+        if (atten <= 0.0) { continue; }
 
         // Per-pixel Lambert against this emitter (Bucket A / A1).
         const float2 sh_dir = dv / max(dist, 0.001);
-        const float  lambert = saturate(lerp(1.0,
-                                    saturate(dot(normal, normalize(float3(sh_dir, nrm_elev)))),
-                                    nrm_amount));
+        const float lambert = saturate(
+            lerp(1.0, saturate(dot(normal, normalize(float3(sh_dir, nrm_elev)))), nrm_amount));
 
         // P1: skip negligible contributions entirely — no shadow march needed.
-        if(atten * lambert <= eps) continue;
+        if (atten * lambert <= eps) { continue; }
 
-        const float3 rgb = (e_color.x < 0.01 && e_color.y < 0.01 && e_color.z < 0.01)
-                           ? float3(1, 1, 1) : e_color;
+        const float3 rgb =
+            (e_color.x < 0.01 && e_color.y < 0.01 && e_color.z < 0.01) ? float3(1, 1, 1) : e_color;
         // Unshadowed contribution (always added — weaker lights still illuminate).
         emitter_light += rgb * atten * lambert;
 
         // P2: track K-strongest for full shadow trace (inline selection, no sort).
-        if(top_n < k_max) {
+        if (top_n < k_max) {
             top_idx[top_n] = ei;
             top_val[top_n] = atten * lambert;
             ++top_n;
-        } else if(atten * lambert > top_val[0]) {
+        } else if (atten * lambert > top_val[0]) {
             // Replace weakest tracked entry.
             int min_i = 0;
-            for(int mi = 1; mi < top_n; ++mi) {
-                if(top_val[mi] < top_val[min_i]) min_i = mi;
+            for (int mi = 1; mi < top_n; ++mi) {
+                if (top_val[mi] < top_val[min_i]) { min_i = mi; }
             }
             top_idx[min_i] = ei;
             top_val[min_i] = atten * lambert;
@@ -760,28 +769,27 @@ float4 main(VS_OUT i) : SV_Target0 {
     }
 
     // --- PASS 2: full shadow trace for K strongest candidates ---
-    for(int ti = 0; ti < top_n; ++ti) {
+    for (int ti = 0; ti < top_n; ++ti) {
         const uint ei = top_idx[ti];
         const GpuEmitter e = Emitters[ei];
-        const float3 e_pos    = e.pos_radius.xyz;
-        const float  e_radius = e.pos_radius.w;
-        const float3 e_color  = e.color_falloff.xyz;
-        const float  e_falloff= e.color_falloff.w;
+        const float3 e_pos = e.pos_radius.xyz;
+        const float e_radius = e.pos_radius.w;
+        const float3 e_color = e.color_falloff.xyz;
+        const float e_falloff = e.color_falloff.w;
         const float2 e_cone_dir = e.cone_shape.xy;
-        const float  e_cone_ha  = e.cone_shape.z;
-        const uint   e_shape    = asuint(e.cone_shape.w);
+        const float e_cone_ha = e.cone_shape.z;
+        const uint e_shape = asuint(e.cone_shape.w);
 
-        const float2 dv   = e_pos.xy - shade_pos;
-        const float  dist = length(dv);
-        const float  atten = point_light_atten(dist, e_radius, e_falloff);
+        const float2 dv = e_pos.xy - shade_pos;
+        const float dist = length(dv);
+        const float atten = point_light_atten(dist, e_radius, e_falloff);
         const float2 sh_dir = dv / max(dist, 0.001);
-        const float  lambert = saturate(lerp(1.0,
-                                    saturate(dot(normal, normalize(float3(sh_dir, nrm_elev)))),
-                                    nrm_amount));
+        const float lambert = saturate(
+            lerp(1.0, saturate(dot(normal, normalize(float3(sh_dir, nrm_elev)))), nrm_amount));
 
         // Subtract unshadowed contribution (added in pass 1) and re-add with shadow.
-        const float3 rgb = (e_color.x < 0.01 && e_color.y < 0.01 && e_color.z < 0.01)
-                           ? float3(1, 1, 1) : e_color;
+        const float3 rgb =
+            (e_color.x < 0.01 && e_color.y < 0.01 && e_color.z < 0.01) ? float3(1, 1, 1) : e_color;
         emitter_light -= rgb * atten * lambert;
 
         // Direct emitter shadows key the penumbra to the RECEIVER distance (the
@@ -793,23 +801,23 @@ float4 main(VS_OUT i) : SV_Target0 {
         // restores the intended sharpness; raising it both tightens the
         // penumbra and removes that range dimming, since both scale as 1/k.
         const float POINT_K_GAIN = 4.0;
-        const float  shadow = soft_shadow_march(shade_pos, sh_dir, dist,
-                                            shadow_k * POINT_K_GAIN, (int)shadow_steps,
-                                            frag_is_tall_n ? self_eps_tall : 0.05,
-                                            /*ref_receiver=*/true);
+        const float shadow = soft_shadow_march(
+            shade_pos, sh_dir, dist, shadow_k * POINT_K_GAIN, (int)shadow_steps,
+            frag_is_tall_n ? self_eps_tall : 0.05,
+            /*ref_receiver=*/true);
 
         // Cone / spotlight angular falloff.
         float cone = 1.0;
-        if(e_shape == 1u) {            // emitter_shape::CONE
+        if (e_shape == 1u) { // emitter_shape::CONE
             const float cosang = dot(normalize(e_cone_dir), -sh_dir);
             cone = smoothstep(cos(e_cone_ha), cos(e_cone_ha * 0.6), cosang);
         }
 
         // Wet specular glint on top of diffuse.
-        const float e_spec = (spec_strength > 0.001)
-                             ? spec_strength * sky_vis *
-                               wet_spec(normal, normalize(float3(sh_dir, nrm_elev)))
-                             : 0.0;
+        const float e_spec =
+            (spec_strength > 0.001)
+                ? spec_strength * sky_vis * wet_spec(normal, normalize(float3(sh_dir, nrm_elev)))
+                : 0.0;
         emitter_light += rgb * atten * shadow * cone * (lambert + e_spec);
     }
     // Phase 8 + Stage 2a: directional skylight + sun. sky_sun.comp provides
@@ -842,9 +850,8 @@ float4 main(VS_OUT i) : SV_Target0 {
     // Applied only to GROUND fragments' sun term below; tall sprites (trees/
     // walls — light_pos is their base-tile centre, ≠ world_pos) keep the SDF
     // self-shadow so they stay lit on top. shadow_mask_str=0 → exact no-op.
-    const float sun_mask_cov  = ShadowMask.Load(int3((int)i.pos.x, (int)i.pos.y, 0)).r;
-    const bool  frag_is_tall  = (i.light_pos.x != i.world_pos.x)
-                                || (i.light_pos.y != i.world_pos.y);
+    const float sun_mask_cov = ShadowMask.Load(int3((int)i.pos.x, (int)i.pos.y, 0)).r;
+    const bool frag_is_tall = (i.light_pos.x != i.world_pos.x) || (i.light_pos.y != i.world_pos.y);
 
     // ---- Sun exposure for a VERTICAL FACE -----------------------------------------
     // A building's roof covers its own wall footprint, so a wall tile is flagged
@@ -868,18 +875,17 @@ float4 main(VS_OUT i) : SV_Target0 {
     // for furniture too made scattered objects across the map pop as bright speckles,
     // because a chair is not a vertical face whose neighbour's sky belongs to it.
     // 0.55 admits walls and windows and excludes every furniture value.
-    const bool  is_face   = face_amt > 0.55; // DECODED amount, not the packed varying
+    const bool is_face = face_amt > 0.55; // DECODED amount, not the packed varying
     // Step along the FACE's outward direction, not toward the sun: for a north-facing
     // wall with the sun to the south, stepping sunward samples the building INTERIOR,
     // where sky_vis is 0 — so the relaxation would still fail on half of every building.
     const float2 sun_step = face_out * 1.25;
-    const float sun_sky_vis = is_face
-                              ? max(sky_vis, (sdf_map_w > 0u)
-                                    ? saturate(skyvis_bilinear(shade_pos + sun_step)) : 0.0)
-                              : sky_vis;
-    const float sun_occl = is_face
-                           ? max(sky_dir.a, sky_bilinear(shade_pos + sun_step).a)
-                           : sky_dir.a;
+    const float sun_sky_vis =
+        is_face
+            ? max(sky_vis, (sdf_map_w > 0u) ? saturate(skyvis_bilinear(shade_pos + sun_step)) : 0.0)
+            : sky_vis;
+    const float sun_occl =
+        is_face ? max(sky_dir.a, sky_bilinear(shade_pos + sun_step).a) : sky_dir.a;
 
     // ---- Passing cloud shadows (procedural, animated) -----------------------
     // Sampled at shade_pos — the same world-locked, art-texel-quantised position
@@ -891,11 +897,12 @@ float4 main(VS_OUT i) : SV_Target0 {
     // cloud_mul stays 1.0, matching every other knob in this shader (ao_strength,
     // gi_strength, etc.).
     float cloud_mul = 1.0;
-    if(cloud_strength > 0.001) {
-        const float2 cloud_cp = (shade_pos + float2(cloud_wind_x, cloud_wind_y) * anim_time) * cloud_scale;
-        const float  cloud_n  = saturate(cloud_fbm(cloud_cp));
-        const float  cloud_cover = smoothstep(cloud_threshold - cloud_softness,
-                                              cloud_threshold + cloud_softness, cloud_n);
+    if (cloud_strength > 0.001) {
+        const float2 cloud_cp =
+            (shade_pos + float2(cloud_wind_x, cloud_wind_y) * anim_time) * cloud_scale;
+        const float cloud_n = saturate(cloud_fbm(cloud_cp));
+        const float cloud_cover =
+            smoothstep(cloud_threshold - cloud_softness, cloud_threshold + cloud_softness, cloud_n);
         cloud_mul = lerp(1.0, 1.0 - saturate(cloud_strength), cloud_cover);
     }
     // Clouds attenuate the light reaching the ground. Gated to sun_intensity>0.001
@@ -916,7 +923,7 @@ float4 main(VS_OUT i) : SV_Target0 {
     const float cloud_vis = sun_applies ? cloud_mul : 1.0;
 
     float3 sun_contrib = float3(0.0, 0.0, 0.0);
-    if(sun_applies) {
+    if (sun_applies) {
         const float2 toward_sun = -float2(sun_dir_x, sun_dir_y);
         // Sun shadow (Stage 2b): the unified coverage occluder marched in 3D toward
         // the sun by sky_sun.comp → SkyBuf.a (0 shadowed .. 1 lit). Replaces the
@@ -929,8 +936,9 @@ float4 main(VS_OUT i) : SV_Target0 {
         // flat-normal value: dot((0,0,1), normalize(toward_sun, sin_elev)) =
         // sin_elev / sqrt(1 + sin_elev^2).
         const float flat_sun = sun_sin_elev / sqrt(1.0 + sun_sin_elev * sun_sin_elev);
-        const float3 sun_L   = normalize(float3(toward_sun, sun_sin_elev));
-        const float sun_lambert = saturate(lerp(flat_sun, saturate(dot(normal, sun_L)), nrm_amount));
+        const float3 sun_L = normalize(float3(toward_sun, sun_sin_elev));
+        const float sun_lambert = saturate(
+            lerp(flat_sun, saturate(dot(normal, sun_L)), nrm_amount));
         // Silhouette mask darkens the GROUND sun term (knob-gated; 0=identity).
         // Tall sprites skip it (mask_term=1) so trees/walls stay lit on top.
         // NOTE (Phase 2.2): trees still ALSO cast via the SDF (sun_shadow) here →
@@ -938,23 +946,25 @@ float4 main(VS_OUT i) : SV_Target0 {
         // `frag_is_tall` is sprite ART height, so it is false for every wall; a
         // vertical face must be exempted explicitly or the ground silhouette mask
         // darkens the very surface this block exists to light.
-        const float mask_term = (frag_is_tall || is_face)
-                                ? 1.0
-                                : saturate(1.0 - sun_mask_cov * shadow_mask_str);
-        sun_contrib = float3(sun_r, sun_g, sun_b) * sun_intensity * sun_lambert
-                      * sun_shadow * sun_sky_vis * mask_term;
+        const float mask_term =
+            (frag_is_tall || is_face) ? 1.0 : saturate(1.0 - sun_mask_cov * shadow_mask_str);
+        sun_contrib =
+            float3(sun_r, sun_g, sun_b) * sun_intensity * sun_lambert * sun_shadow * sun_sky_vis
+            * mask_term;
         // Wet specular glint from the sun (same gating: sky_vis + shadow + mask).
-        const float sun_spec = (spec_strength > 0.001) ? spec_strength * wet_spec(normal, sun_L) : 0.0;
-        sun_contrib += float3(sun_r, sun_g, sun_b) * sun_intensity
-                       * sun_shadow * sun_sky_vis * mask_term * sun_spec;
+        const float sun_spec =
+            (spec_strength > 0.001) ? spec_strength * wet_spec(normal, sun_L) : 0.0;
+        sun_contrib +=
+            float3(sun_r, sun_g, sun_b) * sun_intensity * sun_shadow * sun_sky_vis * mask_term
+            * sun_spec;
     }
 
     // Apply runtime tuning scales BEFORE compositing. emitter_scale tunes
     // global brightness of all emitter contributions; sun_scale / sky_scale
     // tune the sun + sky streams. Defaults are 1.0 (no-op).
     emitter_light *= emitter_scale;
-    sun_contrib   *= sun_scale;
-    sky_contrib   *= sky_scale;
+    sun_contrib *= sun_scale;
+    sky_contrib *= sky_scale;
 
     // Ambient occlusion (Bucket A / A4). SDF-proximity cavity term: 8 short taps
     // of the (4x-supersampled, transposed) SDF around the fragment via the shared
@@ -967,19 +977,19 @@ float4 main(VS_OUT i) : SV_Target0 {
     // so AO must not touch them or crevices double-darken. ao_strength=0 → exact
     // no-op (off, the committed default).
     float ao = 1.0;
-    if(ao_strength > 0.001 && sdf_map_w > 0u) {
-        const float aor = 1.5;              // tap radius in tiles
-        const float ad  = aor * 0.70711;    // diagonal taps at the same radius
+    if (ao_strength > 0.001 && sdf_map_w > 0u) {
+        const float aor = 1.5;          // tap radius in tiles
+        const float ad = aor * 0.70711; // diagonal taps at the same radius
         float open = 0.0;
-        open += saturate(sdf_bilinear(i.light_pos + float2( aor, 0.0)) / aor);
+        open += saturate(sdf_bilinear(i.light_pos + float2(aor, 0.0)) / aor);
         open += saturate(sdf_bilinear(i.light_pos + float2(-aor, 0.0)) / aor);
-        open += saturate(sdf_bilinear(i.light_pos + float2( 0.0, aor)) / aor);
-        open += saturate(sdf_bilinear(i.light_pos + float2( 0.0,-aor)) / aor);
-        open += saturate(sdf_bilinear(i.light_pos + float2( ad,  ad)) / aor);
-        open += saturate(sdf_bilinear(i.light_pos + float2(-ad,  ad)) / aor);
-        open += saturate(sdf_bilinear(i.light_pos + float2( ad, -ad)) / aor);
+        open += saturate(sdf_bilinear(i.light_pos + float2(0.0, aor)) / aor);
+        open += saturate(sdf_bilinear(i.light_pos + float2(0.0, -aor)) / aor);
+        open += saturate(sdf_bilinear(i.light_pos + float2(ad, ad)) / aor);
+        open += saturate(sdf_bilinear(i.light_pos + float2(-ad, ad)) / aor);
+        open += saturate(sdf_bilinear(i.light_pos + float2(ad, -ad)) / aor);
         open += saturate(sdf_bilinear(i.light_pos + float2(-ad, -ad)) / aor);
-        open *= 0.125;                      // mean of the 8 taps
+        open *= 0.125; // mean of the 8 taps
         ao = lerp(1.0, open, saturate(ao_strength));
     }
 
@@ -988,9 +998,8 @@ float4 main(VS_OUT i) : SV_Target0 {
     // nights (effect 4). UI / main menu (no world) keep the CPU `ambient`
     // uniform so backdrops/text are unaffected. night_floor==day_floor
     // disables the day/night swing (bisect).
-    const float amb_floor = (sdf_map_w > 0u)
-                            ? lerp(night_floor, day_floor, saturate(sun_intensity))
-                            : ambient;
+    const float amb_floor =
+        (sdf_map_w > 0u) ? lerp(night_floor, day_floor, saturate(sun_intensity)) : ambient;
     const float3 ambient_v = float3(amb_floor, amb_floor, amb_floor) * ao;
 
     // Multi-band ordered (Bayer) dither, world-locked. Quantise ONLY the
@@ -1004,12 +1013,12 @@ float4 main(VS_OUT i) : SV_Target0 {
     // 1-bounce indirect fill (fake GI): colored light diffused off surfaces into
     // open neighbours on the CPU, added here before dither so it bands with the
     // rest of the dynamic light.
-    if(gi_strength > 0.001 && sdf_map_w > 0u) {
+    if (gi_strength > 0.001 && sdf_map_w > 0u) {
         dyn += gi_strength * indirect_bilinear(shade_pos) * ao;
     }
-    if(dither_amt > 0.001) {
-        const float  bands = max(dither_bands, 1.0);
-        const float  bthr  = dither_threshold(shade_pos * texels_per_tile);
+    if (dither_amt > 0.001) {
+        const float bands = max(dither_bands, 1.0);
+        const float bthr = dither_threshold(shade_pos * texels_per_tile);
         const float3 dithered = floor(dyn * bands + bthr) / bands;
         dyn = lerp(dyn, dithered, saturate(dither_amt));
     }
@@ -1062,15 +1071,15 @@ float4 main(VS_OUT i) : SV_Target0 {
     // sprite, so this yields distance 0 there and mem_mul collapses to 1.0. mem_mul is
     // only ever CONSUMED via rad_mem under mode_memory, so computing it branchlessly
     // costs one min and cannot reach any other mode.
-    const float mem_d   = -min(i.light_mul, 0.0);
-    const float mem_t   = saturate(1.0 - mem_d / max(mem_radius, 1.0));
+    const float mem_d = -min(i.light_mul, 0.0);
+    const float mem_t = saturate(1.0 - mem_d / max(mem_radius, 1.0));
     const float mem_mul = mem_dim + (1.0 - mem_dim) * mem_t;
 
     // The three radiances. Each is `base * flash_k + i.flash`, i.e.
     // lerp(base, flash_colour, flash_s), with base = gpu_total / 1.0 / mem_mul.
-    const float3 rad_lit   = gpu_total * flash_k + i.flash;
+    const float3 rad_lit = gpu_total * flash_k + i.flash;
     const float3 rad_unlit = flash_k + i.flash;
-    const float3 rad_mem   = mem_mul * flash_k + i.flash;
+    const float3 rad_mem = mem_mul * flash_k + i.flash;
 
     float3 lit_rgb = albedo * rad_lit;
 
@@ -1103,21 +1112,21 @@ float4 main(VS_OUT i) : SV_Target0 {
     // inside an `if` — D3D12 strips an unread fragment storage buffer and the hole
     // breaks the root signature.
     {
-        const uint   pal_row = PalIdxBuf[pal_index_of(texel.rgb)];
-        const float  steps_n = max(ramp_steps, 2.0);
-        const float  shade_f = saturate(luma(rad_lit)) * (steps_n - 1.0)
-                               + (dither_threshold(shade_pos * texels_per_tile) - 0.5);
-        const uint   shade_i = (uint)clamp(shade_f + 0.5, 0.0, steps_n - 1.0);
-        const float3 ramped  = unpack_rgba8(RampBuf[pal_row * (uint)steps_n + shade_i]);
+        const uint pal_row = PalIdxBuf[pal_index_of(texel.rgb)];
+        const float steps_n = max(ramp_steps, 2.0);
+        const float shade_f =
+            saturate(luma(rad_lit)) * (steps_n - 1.0)
+            + (dither_threshold(shade_pos * texels_per_tile) - 0.5);
+        const uint shade_i = (uint)clamp(shade_f + 0.5, 0.0, steps_n - 1.0);
+        const float3 ramped = unpack_rgba8(RampBuf[pal_row * (uint)steps_n + shade_i]);
         // Normalised light chroma, scaled so neutral white light is a no-op (x1).
         const float3 lit_chroma = normalize(max(rad_lit, 1e-4)) * 1.7320508;
         const float3 ramp_rgb = lerp(ramped, ramped * lit_chroma, ramp_chroma);
-        const float  ramp_mask = saturate(ramp_enable)
-                                 * ((sdf_map_w > 0u) ? 1.0 : 0.0);
+        const float ramp_mask = saturate(ramp_enable) * ((sdf_map_w > 0u) ? 1.0 : 0.0);
         lit_rgb = lerp(lit_rgb, ramp_rgb, ramp_mask);
     }
 
-    const float3 mem_rgb   = albedo * rad_mem;
+    const float3 mem_rgb = albedo * rad_mem;
     const float3 unlit_rgb = albedo * rad_unlit;
     // Mode select. `memory` is a LERP TOWARD THE LIT RESULT, never an independent
     // branch. frontier_cov is 1.0 deep inside a remembered region and falls to 0 at
@@ -1134,8 +1143,8 @@ float4 main(VS_OUT i) : SV_Target0 {
     // diff" is NOT the acceptance criterion for this band; tools/frontier_profile.py
     // gates it on MONOTONICITY of the luma ramp between the two plateaus, sampled via
     // debug view 15.
-    float3 final_rgb = mode_memory ? lerp(lit_rgb, mem_rgb, frontier_cov)
-                       : (mode_gpu_lit ? lit_rgb : unlit_rgb);
+    float3 final_rgb =
+        mode_memory ? lerp(lit_rgb, mem_rgb, frontier_cov) : (mode_gpu_lit ? lit_rgb : unlit_rgb);
 
     // Debug visualisation. Modes 1-5 BLEND a per-component visualisation
     // over the lit scene at debug_opacity; modes 6-7 REPLACE the scene with
@@ -1156,17 +1165,19 @@ float4 main(VS_OUT i) : SV_Target0 {
     //
     // vis_curve / vis_radius are the lanes the deleted VisBuf path left orphaned;
     // reusing them is semantically exact and costs no cbuffer churn.
-    if(vis_curve > 0.001 && sdf_map_w > 0u) {
+    if (vis_curve > 0.001 && sdf_map_w > 0u) {
         const float2 eye = float2(player_x, player_y);
-        const float2 ev  = eye - shade_pos;
-        const float  ed  = length(ev);
-        const float  los = (ed < 0.5) ? 1.0
-                           : soft_shadow_march(shade_pos, ev / ed, ed, shadow_k,
-                                          (int)shadow_steps,
-                                          frag_is_tall_n ? self_eps_tall : 0.05,
-                                          /*ref_receiver=*/false);
+        const float2 ev = eye - shade_pos;
+        const float ed = length(ev);
+        const float los =
+            (ed < 0.5)
+                ? 1.0
+                : soft_shadow_march(
+                      shade_pos, ev / ed, ed, shadow_k, (int)shadow_steps,
+                      frag_is_tall_n ? self_eps_tall : 0.05,
+                      /*ref_receiver=*/false);
         float v = pow(saturate(los), vis_curve);
-        if(vis_radius > 0.001) {
+        if (vis_radius > 0.001) {
             v *= saturate(1.0 - smoothstep(vis_radius * 0.6, vis_radius, ed));
         }
         // Fade toward the memory look rather than to black, so the carve reads as the
@@ -1180,10 +1191,10 @@ float4 main(VS_OUT i) : SV_Target0 {
     // Modes 8 and 16 bypass it: 8 needs the tinted main-menu backdrop, and 16 reports
     // the classification itself so it must be able to show `unlit`.
     const bool dbg_ungated = (debug_mode == 8u) || (debug_mode == 16u);
-    const bool dbg_active  = debug_mode > 0u && (dbg_ungated || mode_memory || mode_gpu_lit);
+    const bool dbg_active = debug_mode > 0u && (dbg_ungated || mode_memory || mode_gpu_lit);
     // Height depth: dims canopy to enhance depth perception. dark_frac=0 at base → no-op.
     // Applied after memory-fade, before debug modes — so debug replace=true cleanly overrides.
-    final_rgb *= ( 1.0 - i.dark_frac );
+    final_rgb *= (1.0 - i.dark_frac);
 
     // dbg_opaque is hoisted out of the block so the return can force full alpha for
     // debug view 16 ONLY. A categorical view that gets alpha-blended is not
@@ -1198,20 +1209,20 @@ float4 main(VS_OUT i) : SV_Target0 {
     // exists to show — and views 9-14 rely on texel.a for sprite silhouettes, which
     // would become solid quads.
     float dbg_opaque = 0.0;
-    if(dbg_active) {
+    if (dbg_active) {
         float3 vis = float3(0, 0, 0);
-        bool   replace = false;
-        if(debug_mode == 1u) {
+        bool replace = false;
+        if (debug_mode == 1u) {
             vis = ambient_v;
-        } else if(debug_mode == 2u) {
+        } else if (debug_mode == 2u) {
             vis = emitter_light;
-        } else if(debug_mode == 3u) {
+        } else if (debug_mode == 3u) {
             vis = sun_contrib;
-        } else if(debug_mode == 4u) {
+        } else if (debug_mode == 4u) {
             vis = sky_contrib;
-        } else if(debug_mode == 5u) {
+        } else if (debug_mode == 5u) {
             vis = gpu_total;
-        } else if(debug_mode == 6u) {
+        } else if (debug_mode == 6u) {
             // SDF view: red (wall, s≈0) → yellow (s≈4) → green (open, s≥8).
             // Bilinear at light_pos — the SAME sample the shadow march uses, so
             // tall sprites (walls/trees) show their base-tile distance, not the
@@ -1220,7 +1231,7 @@ float4 main(VS_OUT i) : SV_Target0 {
             const float t = saturate(s / 8.0);
             vis = float3(1.0 - t, t, 0.0);
             replace = true;
-        } else if(debug_mode == 7u) {
+        } else if (debug_mode == 7u) {
             // SkyVis view: grayscale 0..1. Sample at light_pos (base-tile centre
             // for tall sprites) to match the live sky-vis read, not world_pos.
             const int sx = clamp((int)shade_pos.x, 0, (int)sdf_map_w - 1);
@@ -1228,7 +1239,7 @@ float4 main(VS_OUT i) : SV_Target0 {
             const float v = (sdf_map_w > 0u) ? SkyVisBuf[sx * (int)sdf_map_h + sy] : 0.0;
             vis = float3(v, v, v);
             replace = true;
-        } else if(debug_mode == 8u) {
+        } else if (debug_mode == 8u) {
             // emit_bw — grayscale luminance of accumulated emitter
             // contribution. Bypasses tint gate so the main-menu blue
             // backdrop sprite reveals the gradient. Bright top-left
@@ -1236,20 +1247,20 @@ float4 main(VS_OUT i) : SV_Target0 {
             const float L = max(emitter_light.r, max(emitter_light.g, emitter_light.b));
             vis = float3(L, L, L);
             replace = true;
-        } else if(debug_mode == 9u) {
+        } else if (debug_mode == 9u) {
             // Normal view (Bucket A / A1): encode the inline-Sobel surface
             // normal as RGB via n*0.5+0.5. Flat tiles read ~(0.5,0.5,1.0)
             // lavender-blue; relief tilts push R (x-slope) / G (y-slope).
             // Replace so it shows raw; game tiles only (tint-gated below).
             vis = normal * 0.5 + 0.5;
             replace = true;
-        } else if(debug_mode == 10u) {
+        } else if (debug_mode == 10u) {
             // AO view (Bucket A / A4): grayscale mean SDF-openness. White =
             // fully open (ao≈1, no darkening), darkening toward walls/crevices.
             // Uniform white = ao_strength is 0 or the SDF is empty.
             vis = float3(ao, ao, ao);
             replace = true;
-        } else if(debug_mode == 11u) {
+        } else if (debug_mode == 11u) {
             // Shadow-mask view (Phase 2.1 alignment gate): the silhouette mask
             // .Load()ed at this fragment's SCREEN pixel. Should match the
             // Phase-1 sampler debug blit (g_shadow_debug) — same silhouettes in
@@ -1257,7 +1268,7 @@ float4 main(VS_OUT i) : SV_Target0 {
             const float m = ShadowMask.Load(int3((int)i.pos.x, (int)i.pos.y, 0)).r;
             vis = float3(m, m, m);
             replace = true;
-        } else if(debug_mode == 12u) {
+        } else if (debug_mode == 12u) {
             // GI view: the raw 1-bounce indirect field (GiBuf) from the compute
             // GI pass, shown directly as colour — independent of gi_strength,
             // ambient, and dither. Lit emitters appear as coloured blobs that
@@ -1266,7 +1277,7 @@ float4 main(VS_OUT i) : SV_Target0 {
             // compute pass failed to create). The definitive GI confirmation.
             vis = (sdf_map_w > 0u) ? indirect_bilinear(i.light_pos) : float3(0.0, 0.0, 0.0);
             replace = true;
-        } else if(debug_mode == 13u) {
+        } else if (debug_mode == 13u) {
             // Sky-access view (Stage 2a): GREY = per-tile directional sky-access
             // (hemisphere fraction reaching open sky) straight from sky_sun.comp,
             // independent of sky colour/intensity, ambient, GI, dither. Grade:
@@ -1277,7 +1288,7 @@ float4 main(VS_OUT i) : SV_Target0 {
             const float a = (sdf_map_w > 0u) ? sky_bilinear(i.light_pos).r : 0.0;
             vis = float3(a, a, a);
             replace = true;
-        } else if(debug_mode == 14u) {
+        } else if (debug_mode == 14u) {
             // Sun-occlusion view (Stage 2b): GREY = the per-tile celestial shadow
             // sky_sun.comp marches from the unified coverage occluder into SkyBuf.a
             // (1 = lit toward the sun, 0 = shadowed). This IS the live sun shadow now
@@ -1286,7 +1297,7 @@ float4 main(VS_OUT i) : SV_Target0 {
             const float s = (sdf_map_w > 0u) ? sky_bilinear(i.light_pos).a : 0.0;
             vis = float3(s, s, s);
             replace = true;
-        } else if(debug_mode == 15u) {
+        } else if (debug_mode == 15u) {
             // Vision-frontier view (Step 8): which fragments carry a sub-tile frontier
             // marker, which treatment it selects, and how the feather ramps inside it.
             // In every case the GREEN channel is frontier_cov, so the colour is the
@@ -1297,12 +1308,11 @@ float4 main(VS_OUT i) : SV_Target0 {
             //   MAGENTA -> WHITE = lit_level::LOW, the dim edge of sight (desaturate)
             //   RED     -> YELLOW = remembered tile (mem_dim)
             //   BLUE    -> CYAN   = never-seen tile's `lighting_*` overlay
-            if(i.outline < -0.5) {
-                vis = frontier_desat
-                      ? float3(1.0, frontier_cov, 1.0)
-                      : mode_memory
-                      ? float3(1.0, frontier_cov, 0.0)
-                      : float3(0.0, frontier_cov, 1.0);
+            if (i.outline < -0.5) {
+                vis = frontier_desat ? float3(1.0, frontier_cov, 1.0)
+                    : mode_memory
+                        ? float3(1.0, frontier_cov, 0.0)
+                        : float3(0.0, frontier_cov, 1.0);
             } else {
                 // Drawn, but not on a frontier. Deliberately a loud GREEN rather than
                 // black or the tint: an undrawn tile leaves the target untouched, so
@@ -1312,7 +1322,7 @@ float4 main(VS_OUT i) : SV_Target0 {
                 vis = float3(0.0, 0.55, 0.0);
             }
             replace = true;
-        } else if(debug_mode == 16u) {
+        } else if (debug_mode == 16u) {
             // light_mode view: RED = unlit, GREEN = gpu_lit, BLUE = memory. A flat
             // CATEGORICAL hue, deliberately carrying no shading whatsoever, because
             // categorical membership is immune to the zoom and resolution bistability
@@ -1321,13 +1331,14 @@ float4 main(VS_OUT i) : SV_Target0 {
             // scenario moved whole-frame mean luma by 19.7). One capture answers "is
             // every sprite classified as intended". Consumed by
             // tools/light_mode_check.py.
-            vis = mode_memory ? float3(0.0, 0.0, 1.0)
-                  : (mode_gpu_lit ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0));
+            vis = mode_memory
+                    ? float3(0.0, 0.0, 1.0)
+                    : (mode_gpu_lit ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0));
             replace = true;
             // Full alpha: see dbg_opaque above. Without it the flat hue is blended by
             // every stacked quad and the class is no longer exactly recoverable.
             dbg_opaque = 1.0;
-        } else if(debug_mode == 17u) {
+        } else if (debug_mode == 17u) {
             // Cloud-shadow view: grayscale of cloud_vis, the factor actually
             // applied to gpu_total post-ceiling-clamp. White = no cloud overhead;
             // darkens toward (1 - cloud_strength) under a cloud. Independent of
@@ -1339,15 +1350,33 @@ float4 main(VS_OUT i) : SV_Target0 {
             vis = float3(cloud_vis, cloud_vis, cloud_vis);
             replace = true;
         }
-        if(replace) {
+        if (replace) {
             final_rgb = vis;
         } else {
             final_rgb = lerp(final_rgb, vis, saturate(debug_opacity));
         }
     }
+    // --- Canopy cut-out -------------------------------------------------------
+    // Overhanging terrain canopies (sprite_instance::cutout == 1) are drawn in
+    // front of the entities at this z (deferred-canopy pass, y-sorted against
+    // creatures), so without this the leaves would cover the player. Punch a
+    // soft circular hole around the player tile centre so the character stays
+    // readable through the foliage — the standard treatment in top-down pixel
+    // games. world_pos is per-fragment (tile top-left = integer); player_x/y is
+    // the player tile centre (+0.5), so the distance is in tiles. The cut only
+    // ever REDUCES alpha (it cannot reveal occluded content), and it is an exact
+    // no-op for every sprite without the flag, in debug mode, or with
+    // cutout_radius == 0.
+    float cut = 1.0;
+    if (i.cutout > 0.5 && cutout_radius > 0.001) {
+        const float cd = length(i.world_pos - float2(player_x, player_y));
+        const float inner = max(cutout_radius - cutout_feather, 0.0);
+        cut = 1.0 - smoothstep(inner, cutout_radius + cutout_feather, cd);
+    }
     // vis_overlay_a is 1.0 for every sprite except a vision-frontier overlay, whose
     // coverage is feathered across the tile (Step 8). Debug view 16 overrides alpha
     // entirely so its categorical colour survives to the screenshot.
-    const float out_a = lerp(texel.a * i.tint.a * vis_overlay_a, 1.0, dbg_opaque);
+    const float out_a =
+        lerp(texel.a * i.tint.a * vis_overlay_a * lerp(1.0, cut, i.cutout), 1.0, dbg_opaque);
     return float4(final_rgb, out_a);
 }

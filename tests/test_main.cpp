@@ -66,6 +66,7 @@
 #    endif
 #    include "compute/gpu_platform.h"
 #    include "preload_config.h"
+
 #    include <SDL3/SDL.h>
 #endif
 
@@ -73,27 +74,24 @@ using name_value_pair_t = std::pair<std::string, std::string>;
 using option_overrides_t = std::vector<name_value_pair_t>;
 
 #if defined(CATA_SDL)
-namespace
-{
+namespace {
 
 bool s_sdl_platform_initialized = false;
 
-auto init_test_sdl_gpu() -> void
-{
-    if( !SDL_Init( SDL_InitFlags{ SDL_INIT_VIDEO } ) ) {
-        throw std::runtime_error( string_format( "SDL_Init failed: %s", SDL_GetError() ) );
+auto init_test_sdl_gpu() -> void {
+    if (!SDL_Init(SDL_InitFlags{SDL_INIT_VIDEO})) {
+        throw std::runtime_error(string_format("SDL_Init failed: %s", SDL_GetError()));
     }
     s_sdl_platform_initialized = true;
 
     preload_config::load();
-    if( get_options().has_option( "COMPUTE_ACCELERATION" ) ) {
-        preload_config::set_compute_accel(
-            preload_config::compute_accel_from_string(
-                get_options().get_option( "COMPUTE_ACCELERATION" ).getValue() ) );
+    if (get_options().has_option("COMPUTE_ACCELERATION")) {
+        preload_config::set_compute_accel(preload_config::compute_accel_from_string(
+            get_options().get_option("COMPUTE_ACCELERATION").getValue()));
     }
 
     cata_gpu::init();
-    if( cata_gpu::get_device() == nullptr ) {
+    if (cata_gpu::get_device() == nullptr) {
         // Upstream throws here because its CI provisions a software Vulkan driver. This fork
         // must not: the test binary is windowless, so under D2 there is no
         // lighting::gpu_device to adopt, and cata_gpu's own probe needs compute shader blobs
@@ -102,15 +100,14 @@ auto init_test_sdl_gpu() -> void
         // compute_backend.h::selected_backend() already degrades to backend::cpu_compute on
         // it — which is exactly the lightmap path the pre-merge baseline suite exercised.
         // Throwing would make every one of the ~1085 cases unrunnable on this platform.
-        DebugLog( DL::Warn, DC::Main )
-                << "SDL_GPU unavailable for tests; falling back to the CPU compute path";
+        DebugLog(DL::Warn, DC::Main)
+            << "SDL_GPU unavailable for tests; falling back to the CPU compute path";
     }
 }
 
-auto shutdown_test_sdl_gpu() -> void
-{
+auto shutdown_test_sdl_gpu() -> void {
     cata_gpu::shutdown();
-    if( s_sdl_platform_initialized ) {
+    if (s_sdl_platform_initialized) {
         SDL_Quit();
         s_sdl_platform_initialized = false;
     }
@@ -180,6 +177,14 @@ static void init_global_game_state(
 
     get_options().init();
     get_options().load();
+
+    // Pin the reality bubble to size 4 (half=60, 11×11 grid) for test determinism.
+    // Most tests hardcode coordinates assuming the center is at (60,60).
+    // The production default is 6 (half=84), which would shift the anchor.
+    {
+        auto& opt = get_options().get_option("REALITY_BUBBLE_SIZE");
+        opt.setValue("4");
+    }
 
     // Apply command-line option overrides for test suite execution.
     if (!option_overrides.empty()) {

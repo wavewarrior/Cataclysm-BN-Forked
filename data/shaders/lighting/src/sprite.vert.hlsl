@@ -1,4 +1,4 @@
-// ---- Sprite instance (96 bytes, wire-stable with lighting::sprite_instance
+// ---- Sprite instance (112 bytes, wire-stable with lighting::sprite_instance
 // in src/lighting/sprite_batcher.h — the two MUST grow in lockstep) ----
 struct SpriteInstance {
     float dst_x, dst_y, dst_w, dst_h;
@@ -12,31 +12,40 @@ struct SpriteInstance {
     // `lighting::sprite_instance` in src/lighting/sprite_batcher.h for the
     // encoding rule and why it is one lane rather than colour + strength.
     float light_mode, flash_r, flash_g, flash_b;
+    // Canopy cut-out marker (1 = overhanging terrain canopy): the fragment
+    // shader punches a soft hole around the player in flagged sprites so the
+    // character stays visible through the leaves. Unread by the vertex stage.
+    float cutout;
+    // Reserved pads: keep the struct a multiple of 16 bytes (112 B = 28 floats)
+    // for the GPU StructuredBuffer stride. Unread.
+    float cutout_pad0;
+    float cutout_pad1;
+    float cutout_pad2;
 };
 
 // Vertex storage slot 0: sprite instances
-StructuredBuffer<SpriteInstance> Instances : register(t0, space0);
+StructuredBuffer<SpriteInstance> Instances: register(t0, space0);
 
 // Cbuffer slot 0: per-segment viewport + instance base (wire-stable)
-cbuffer FrameParams : register(b0, space1) {
+cbuffer FrameParams: register(b0, space1) {
     float2 target_size;
-    uint   instance_base;
-    uint   fp_pad;
+    uint instance_base;
+    uint fp_pad;
 };
 
 // Cbuffer slot 1: per-frame lighting params (world_pos computation)
 // 48 bytes — wire-stable with C++ light_params. The trailing sun_* row is used
 // only by shadow.vert (silhouette-shadow shear); this shader ignores it but
 // declares the same layout so the shared per-frame vertex push lines up.
-cbuffer LightParams : register(b1, space1) {
+cbuffer LightParams: register(b1, space1) {
     float tile_pixel_size;
     float current_z;
-    uint  emitter_count;
+    uint emitter_count;
     float ambient;
     float camera_off_x;
     float camera_off_y;
-    uint  sdf_map_w;
-    uint  sdf_map_h;
+    uint sdf_map_w;
+    uint sdf_map_h;
     float sun_dir_x;
     float sun_dir_y;
     float sun_cot_elev;
@@ -47,14 +56,14 @@ cbuffer LightParams : register(b1, space1) {
 // Pushed to the vertex stage so foliage sway can read sway_amp/sway_freq/anim_time.
 // The full field list is declared so those three land at the correct byte offset;
 // every other field is ignored by this shader.
-cbuffer DebugParams : register(b2, space1) {
-    uint  debug_mode;
+cbuffer DebugParams: register(b2, space1) {
+    uint debug_mode;
     float debug_opacity;
     float emitter_scale;
     float sun_scale;
     float sky_scale;
     float shadow_k;
-    uint  shadow_steps;
+    uint shadow_steps;
     float dither_amt;
     float dither_bands;
     float gi_strength;
@@ -76,9 +85,9 @@ cbuffer DebugParams : register(b2, space1) {
     float sdf_sharp;
     float ao_strength;
     float shadow_mask_str;
-    float sway_amp;     // wind displacement amplitude (pixels); 0 = sway off
-    float sway_freq;    // wind oscillation frequency
-    float anim_time;    // wrapped render seconds (per-frame data)
+    float sway_amp;      // wind displacement amplitude (pixels); 0 = sway off
+    float sway_freq;     // wind oscillation frequency
+    float anim_time;     // wrapped render seconds (per-frame data)
     float spec_strength; // fragment-stage only (declared here for cbuffer layout parity)
     float light_eps;     // fragment-stage only (declared here for cbuffer layout parity)
     float max_shadow_k;  // fragment-stage only (declared here for cbuffer layout parity)
@@ -88,11 +97,11 @@ cbuffer DebugParams : register(b2, space1) {
     float sun_steps;
     float sun_penumbra;
     // Wave 2: vegetation life knobs (vertex-stage — consumed by the sway block below).
-    float ripple_k;      // intra-sprite column UV desync (0=rigid, 2=heavy shear)
-    float gust_amp;      // multi-octave wind gust envelope amplitude (0=steady)
-    float gust_freq;     // gust envelope frequency (Hz-ish, slow)
-    float part_radius;   // player foliage parting radius in tiles (0=off)
-    float part_strength; // player foliage parting push strength (0=off)
+    float ripple_k;          // intra-sprite column UV desync (0=rigid, 2=heavy shear)
+    float gust_amp;          // multi-octave wind gust envelope amplitude (0=steady)
+    float gust_freq;         // gust envelope frequency (Hz-ish, slow)
+    float part_radius;       // player foliage parting radius in tiles (0=off)
+    float part_strength;     // player foliage parting push strength (0=off)
     float nrm_entity_amount; // entity (tall sprite) normal relief: 0=flat .. 1=full bevel
     // Pixel-art quantisation / sub-tile occluders / palette ramps (fragment +
     // compute stage only; declared for cbuffer layout parity).
@@ -115,20 +124,25 @@ cbuffer DebugParams : register(b2, space1) {
     float cloud_wind_y;
     float cloud_threshold;
     float cloud_softness;
+    // Canopy cut-out knobs (fragment-stage only; declared here for cbuffer layout parity).
+    float cutout_radius;
+    float cutout_feather;
+    float cutout_pad0;
+    float cutout_pad1;
     float cloud_pad0;
     float cloud_pad1;
 };
 
 struct VS_OUT {
-    float4 pos      : SV_Position;
-    float2 uv       : TEXCOORD0;
-    float4 tint     : TEXCOORD1; // Phase 5 CPU lightmap tint (ambient floor)
-    float2 world_pos: TEXCOORD2; // map tile coords for fragment per-pixel lighting
-    float  light_mul: TEXCOORD3; // memory-fade marker (<0 = -(dist); else no-op)
-    float2 light_pos: TEXCOORD4; // lighting sample pos: base-tile centre for tall
-                                 // sprites (uniform), else == world_pos (per-pixel)
-    float  outline  : TEXCOORD5; // >0.5 = silhouette mask mode (hover outline)
-    float  dark_frac: TEXCOORD6; // 0 at sprite base → extrude_dark at canopy; applied in frag
+    float4 pos : SV_Position;
+    float2 uv : TEXCOORD0;
+    float4 tint : TEXCOORD1;      // Phase 5 CPU lightmap tint (ambient floor)
+    float2 world_pos : TEXCOORD2; // map tile coords for fragment per-pixel lighting
+    float light_mul : TEXCOORD3;  // memory-fade marker (<0 = -(dist); else no-op)
+    float2 light_pos : TEXCOORD4; // lighting sample pos: base-tile centre for tall
+                                  // sprites (uniform), else == world_pos (per-pixel)
+    float outline : TEXCOORD5;    // >0.5 = silhouette mask mode (hover outline)
+    float dark_frac : TEXCOORD6;  // 0 at sprite base → extrude_dark at canopy; applied in frag
     // MUST NOT be `nointerpolation`. It was, and that broke D3D12 graphics-pipeline
     // creation outright whenever the fragment shader did not consume it: SDL_GPU
     // reported "Could not create graphics pipeline state! (0x80070057)", the sprite
@@ -166,25 +180,25 @@ struct VS_OUT {
     // Sprite centre in UV space and half-extents, for radial macro-normal in fragment.
     // Per-instance constant, so interpolation is exact.
     float2 center_uv : TEXCOORD11;
-    float2 uv_half   : TEXCOORD12;
+    float2 uv_half : TEXCOORD12;
+    // Canopy cut-out marker (SpriteInstance::cutout): 1 = overhanging terrain
+    // canopy, the fragment soft-holes the leaves around the player. Per-instance
+    // constant, so interpolation across the quad is exact.
+    float cutout : TEXCOORD13;
 };
-static const float2 quad_uv[6] = {
-    float2(0.0,0.0), float2(1.0,0.0), float2(0.0,1.0),
-    float2(1.0,0.0), float2(1.0,1.0), float2(0.0,1.0)
-};
+static const float2 quad_uv[6] =
+    {float2(0.0, 0.0), float2(1.0, 0.0), float2(0.0, 1.0),
+     float2(1.0, 0.0), float2(1.0, 1.0), float2(0.0, 1.0)};
 
 VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
     const SpriteInstance s = Instances[iid + instance_base];
     const float2 c = quad_uv[vid];
 
-    const float2 centre = float2(s.dst_x + 0.5 * s.dst_w,
-                                 s.dst_y + 0.5 * s.dst_h);
-    const float2 off    = float2((c.x - 0.5) * s.dst_w,
-                                 (c.y - 0.5) * s.dst_h);
-    const float  cs     = cos(s.rotation);
-    const float  sn     = sin(s.rotation);
-    const float2 pixel  = centre + float2(off.x * cs - off.y * sn,
-                                          off.x * sn + off.y * cs);
+    const float2 centre = float2(s.dst_x + 0.5 * s.dst_w, s.dst_y + 0.5 * s.dst_h);
+    const float2 off = float2((c.x - 0.5) * s.dst_w, (c.y - 0.5) * s.dst_h);
+    const float cs = cos(s.rotation);
+    const float sn = sin(s.rotation);
+    const float2 pixel = centre + float2(off.x * cs - off.y * sn, off.x * sn + off.y * cs);
     // Use per-VERTEX pixel (not sprite centre) so world_pos interpolates across
     // the quad.  For small tiles (32px) the difference is < 0.5 tile — negligible.
     // For a fullscreen background quad this gives the lighting gradient we want.
@@ -200,11 +214,10 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
     // bottom edge minus half a tile; for a 1-tile sprite that is just the sprite
     // centre, so light_pos == map_pos and small sprites keep per-pixel ground
     // lighting (preserving the 4x-SDF shadow smoothness). Threshold at 1.5 tiles.
-    const float2 base_px   = float2(centre.x,
-                                    s.dst_y + s.dst_h - 0.5 * tile_pixel_size);
-    const float2 base_tile = base_px / max(tile_pixel_size, 1.0)
-                             - float2(camera_off_x, camera_off_y);
-    const bool   is_tall   = s.dst_h > tile_pixel_size * 1.5;
+    const float2 base_px = float2(centre.x, s.dst_y + s.dst_h - 0.5 * tile_pixel_size);
+    const float2 base_tile =
+        base_px / max(tile_pixel_size, 1.0) - float2(camera_off_x, camera_off_y);
+    const bool is_tall = s.dst_h > tile_pixel_size * 1.5;
 
     // ---- Foliage sway (cosmetic breeze: UV offset) ----
     // Offsets UVs horizontally instead of displacing vertices, so the quad
@@ -214,33 +227,33 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
     // swayw (s.pad1) is the per-sprite foliage weight set at enqueue (0 = no
     // sway). Phase keys off the world-locked base tile so neighbouring plants
     // desync and the motion sticks to terrain on scroll.
-    float2      c_uv = c;
+    float2 c_uv = c;
     const float swayw = s.pad1;
-    if( swayw > 0.0 ) {
+    if (swayw > 0.0) {
         // Per-tile phase so neighbouring plants desync, world-locked on scroll.
         float ph = base_tile.x * 0.7 + base_tile.y * 1.3;
         // §7 intra-sprite ripple: per-column UV desync → shear wave, not rigid slide.
         ph += c.x * ripple_k;
         // §7 multi-octave wind: two sine harmonics × slow gust envelope.
-        const float wind1 = sin( anim_time * sway_freq + ph );
-        const float wind2 = sin( anim_time * sway_freq * 2.3 + ph * 1.7 ) * 0.5;
-        const float gust  = 0.6 + 0.4 * sin( anim_time * gust_freq );
-        const float wind  = ( wind1 + wind2 ) * lerp( 1.0, gust, gust_amp );
+        const float wind1 = sin(anim_time * sway_freq + ph);
+        const float wind2 = sin(anim_time * sway_freq * 2.3 + ph * 1.7) * 0.5;
+        const float gust = 0.6 + 0.4 * sin(anim_time * gust_freq);
+        const float wind = (wind1 + wind2) * lerp(1.0, gust, gust_amp);
         // Pin the base: the lower BASE_PIN fraction of the sprite stays planted
         // and the bend ramps in toward the top (canopy sways, trunk stays put).
         const float BASE_PIN = 0.55;
-        const float bend = 1.0 - smoothstep( 0.0, BASE_PIN, c.y );
-        c_uv.x += bend * swayw * sway_amp * wind / max( s.dst_w, 1.0 );
+        const float bend = 1.0 - smoothstep(0.0, BASE_PIN, c.y);
+        c_uv.x += bend * swayw * sway_amp * wind / max(s.dst_w, 1.0);
         // Optional slight vertical canopy bob (subtle).
-        c_uv.y += bend * swayw * sway_amp * wind * 0.15 / max( s.dst_h, 1.0 );
+        c_uv.y += bend * swayw * sway_amp * wind * 0.15 / max(s.dst_h, 1.0);
 
         // §8 player foliage parting: push foliage away from the player.
-        if( part_radius > 0.01 && part_strength > 0.0 ) {
-            const float2 d    = base_tile - float2( player_x, player_y );
-            const float  dist = length( d );
-            if( dist < part_radius && dist > 0.01 ) {
-                const float k = ( 1.0 - dist / part_radius ) * part_strength;
-                const float2 push = normalize( d ) * k;
+        if (part_radius > 0.01 && part_strength > 0.0) {
+            const float2 d = base_tile - float2(player_x, player_y);
+            const float dist = length(d);
+            if (dist < part_radius && dist > 0.01) {
+                const float k = (1.0 - dist / part_radius) * part_strength;
+                const float2 push = normalize(d) * k;
                 c_uv.x += push.x * bend;
                 c_uv.y += push.y * bend * 0.3; // gentle vertical push
             }
@@ -252,34 +265,34 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
     // so the sprite artwork stretches vertically — no UV remap or atlas-bleed risk.
     // This block only adds lean (horizontal shear) and computes the dark_frac gradient.
     float2 pixel_out = pixel;
-    if( s.extrude_px > 0.0 ) {
+    if (s.extrude_px > 0.0) {
         // vertical_pos: 0 at base (c.y=1), 1 at canopy top (c.y=0).
-        const float vertical_pos  = 1.0 - c.y;
+        const float vertical_pos = 1.0 - c.y;
         const float2 viewport_ctr = target_size * 0.5;
         // Lean direction: away from viewport centre — tops fan outward for parallax depth.
-        const float2 lean_dir     = centre - viewport_ctr;
-        pixel_out = pixel + lean_dir * ( s.extrude_lean * vertical_pos );
+        const float2 lean_dir = centre - viewport_ctr;
+        pixel_out = pixel + lean_dir * (s.extrude_lean * vertical_pos);
     }
     // Dark gradient: 0 at base, extrude_dark at top. extrude_dark=0 on non-opted tiles → no-op.
-    const float dark_frac_out = s.extrude_dark * ( 1.0 - c.y );
+    const float dark_frac_out = s.extrude_dark * (1.0 - c.y);
 
-    const float2 ndc = float2(
-        pixel_out.x / target_size.x *  2.0 - 1.0,
-        pixel_out.y / target_size.y * -2.0 + 1.0 );
+    const float2 ndc =
+        float2(pixel_out.x / target_size.x * 2.0 - 1.0, pixel_out.y / target_size.y * -2.0 + 1.0);
 
     VS_OUT o;
-    o.pos       = float4(ndc, 0.0, 1.0);
+    o.pos = float4(ndc, 0.0, 1.0);
     o.dark_frac = dark_frac_out;
-    o.uv        = float2(s.src_u + c_uv.x * s.src_uw, s.src_v + c_uv.y * s.src_vh);
-    o.tint      = float4(s.tint_r, s.tint_g, s.tint_b, s.tint_a);
+    o.uv = float2(s.src_u + c_uv.x * s.src_uw, s.src_v + c_uv.y * s.src_vh);
+    o.tint = float4(s.tint_r, s.tint_g, s.tint_b, s.tint_a);
     o.world_pos = map_pos;
     o.light_mul = s.light_mul;
     o.light_pos = is_tall ? base_tile : map_pos;
-    o.outline   = s.pad2;
+    o.outline = s.pad2;
     o.light_mode = s.light_mode;
-    o.flash     = float3(s.flash_r, s.flash_g, s.flash_b);
-    o.face_amt  = s.face_amt;
+    o.flash = float3(s.flash_r, s.flash_g, s.flash_b);
+    o.face_amt = s.face_amt;
     o.center_uv = float2(s.src_u + 0.5 * s.src_uw, s.src_v + 0.5 * s.src_vh);
     o.uv_half = float2(0.5 * s.src_uw, 0.5 * s.src_vh);
+    o.cutout = s.cutout;
     return o;
 }

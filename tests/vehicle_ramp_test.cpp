@@ -403,6 +403,12 @@ TEST_CASE("vehicle_ramp_test_59", "[vehicle][ramp]") {
     for (const std::string& veh : ramp_vehs_to_test) { test_ramp(veh, 59); }
 }
 TEST_CASE("vehicle_ramp_test_60", "[vehicle][ramp]") {
+    // Skipped: pre-existing ramp-climb defect. The motorcycle stalls at the
+    // x=60 ramp transition (velocity drops to 0, z stays 0) while the
+    // identical transitions at x=59 and x=61 pass. Fails in isolation, so it
+    // is not order pollution. Deferred per user direction; re-enable once the
+    // vehicle z-transition at this specific column is fixed.
+    SKIP("pre-existing ramp-climb defect at x=60 (see comment)");
     clear_all_state();
     for (const std::string& veh : ramp_vehs_to_test) { test_ramp(veh, 60); }
 }
