@@ -562,12 +562,16 @@ auto flush_and_gather_rc( lighting::render_state &rs,
         rp.sky_g         = sp.sky_g;
         rp.sky_b         = sp.sky_b;
         rp.sky_intensity = sp.sky_intensity;
-        // Two compute dispatches (field gather → ray-march bounce) on the render
-        // CB. SDL_GPU inserts the compute→graphics barrier so the sprite pass
-        // reads the finished gi_buffer().
+        // Phase 4: 2nd-bounce + temporal + albedo-bleed knobs (F4-tunable).
+        rp.gi_temporal = g_gi_temporal;
+        rp.gi_bounce2  = g_gi_bounce2;
+        rp.gi_albedo   = g_gi_albedo;
+        // Three compute dispatches (field gather → 1st-bounce march → 2nd-bounce
+        // march + combine) on the render CB. SDL_GPU inserts the compute→graphics
+        // barrier so the sprite pass reads the finished gi_out_buffer().
         rs.gi().record( ctx.cmd_buffer,
                         rs.collector()->emitter_buffer(), rs.sdf().sdf_buffer(),
-                        rs.sky().sky_buffer(),
+                        rs.sky().sky_buffer(), rs.sdf().albedo_buffer(),
                         map_w, map_h, rp );
     }
 

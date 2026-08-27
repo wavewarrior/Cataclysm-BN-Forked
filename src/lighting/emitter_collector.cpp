@@ -61,12 +61,13 @@ emitter_collector::~emitter_collector() {
 
 void emitter_collector::submit(
     std::vector<gpu_emitter> snapshot, std::vector<uint8_t> transparency, std::vector<float> sdf,
-    std::vector<uint8_t> sky_vis, int runtime_w, int runtime_h,
-    std::vector<float> occ) {
+    std::vector<uint8_t> sky_vis, int runtime_w, int runtime_h, std::vector<float> occ,
+    std::vector<float> albedo) {
     pending_ = std::move(snapshot);
     pending_transparency_ = std::move(transparency);
     pending_sdf_ = std::move(sdf);
     pending_occ_ = std::move(occ);
+    pending_albedo_ = std::move(albedo);
     pending_sky_vis_ = std::move(sky_vis);
     pending_runtime_w_ = runtime_w;
     pending_runtime_h_ = runtime_h;
@@ -79,8 +80,9 @@ void emitter_collector::flush_to_render_cb(SDL_GPUCommandBuffer* cb) {
     if (!have_pending_) { return; }
     std::vector<gpu_emitter> data = std::move(pending_);
     std::vector<uint8_t> transparency = std::move(pending_transparency_);
-    std::vector<float> sdf = std::move(pending_sdf_);
     std::vector<float> occ = std::move(pending_occ_);
+    std::vector<float> albedo = std::move(pending_albedo_);
+    std::vector<float> sdf = std::move(pending_sdf_);
     std::vector<uint8_t> sky_vis = std::move(pending_sky_vis_);
     const int runtime_w = pending_runtime_w_;
     const int runtime_h = pending_runtime_h_;
@@ -138,7 +140,8 @@ void emitter_collector::flush_to_render_cb(SDL_GPUCommandBuffer* cb) {
     // trans_storage_, so transparency presence is the real upload trigger.
     if (rs_.sdf().ready() && !transparency.empty() && runtime_w > 0 && runtime_h > 0) {
         rs_.sdf().upload(
-            cp, rs_.device().raw(), runtime_w, runtime_h, transparency, sdf, sky_vis, occ);
+            cp, rs_.device().raw(), runtime_w, runtime_h, transparency, sdf, sky_vis, occ,
+            albedo);
     }
 
     SDL_EndGPUCopyPass(cp);

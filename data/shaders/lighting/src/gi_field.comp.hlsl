@@ -26,15 +26,18 @@
 //              injected into the field so the bounce pass propagates daylight.
 //   u0 space1  FieldBuf — RWStructuredBuffer<float>, 4 floats/tile (rgb + pad),
 //              tile-res, x-major field[(x*map_h+y)*4 + c].
+//   t3 space0  AlbedoBuf — StructuredBuffer<float>, 4 floats/tile (rgb+pad),
+//              tile-res, x-major (terrain albedo; 1,1,1 = neutral). Albedo
+//              bleed: the field is multiplied by lerp(1, albedo, gi_albedo)
+//              so a red carpet tints the bounced light.
 //   b0 space2  GiParams.
-
-#include "attenuation.hlsl"
 
 StructuredBuffer<float>   Emitters : register(t0, space0);
 StructuredBuffer<float>   SdfBuf   : register(t1, space0);
 StructuredBuffer<float>   SkyBuf   : register(t2, space0);
+StructuredBuffer<float>   AlbedoBuf : register(t3, space0);
 RWStructuredBuffer<float> FieldBuf : register(u0, space1);
-
+#include "attenuation.hlsl"
 cbuffer GiParams : register(b0, space2) {
     uint  emitter_count;
     uint  sdf_map_w;      // runtime tile dims (probe grid extent)
@@ -42,11 +45,12 @@ cbuffer GiParams : register(b0, space2) {
     float current_z;      // probe z-plane (skip off-plane emitters)
     float shadow_k;       // sphere-trace cone hardness (sprite shadow_k knob)
     uint  shadow_steps;   // per-emitter march cap
-    float gi_pad0;
-    float gi_pad1;
+    float gi_temporal;    // (unused here — shared gi_params push)
+    float gi_bounce2;     // (unused here — shared gi_params push)
     // P2 sun/sky surface-radiance injection (matches sprite.frag sun/sky colour).
     float sun_r, sun_g, sun_b, sun_intensity;
     float sky_r, sky_g, sky_b, sky_intensity;
+    float gi_albedo;      // albedo-bleed mix (0=off): field *= lerp(1, albedo, k)
 };
 
 // P1: contribution epsilon — skip shadow march when atten is negligible.
@@ -55,7 +59,8 @@ static const float LIGHT_EPS = 0.004;
 // trace_shadow; the rest add unshadowed. Bounds the pass at tiles*RC_K*steps.
 static const uint  RC_K = 8u;
 // SDF supersample factor — MUST match lighting::SDF_SUPERSAMPLE (sdf_pass.h)
-// and the SDF_SS in sprite.frag.hlsl. SdfBuf is the SS-finer grid.
+// and the SDF_SS in sprite.frag.hlsl. SdfBuf is the SS-finer grid. Declared
+// BEFORE sdf_texel below (HLSL has no forward declarations).
 static const int   SDF_SS = 8;
 
 // --- SDF helpers (SS-finer grid, identical math to sprite.frag) --------------
@@ -147,6 +152,13 @@ void main( uint3 tid : SV_DispatchThreadID )
         const float  sun_occ    = SkyBuf[o + 3u];
         gi += float3( sky_r, sky_g, sky_b ) * sky_intensity * sky_access;
         gi += float3( sun_r, sun_g, sun_b ) * sun_intensity * sun_occ;
+    }
+    // Albedo bleed: tint the field by the tile's surface colour so the bounce
+    // pass propagates coloured light (a red carpet tints the room). Neutral
+    // (1,1,1) albedo = no change; gi_albedo=0 disables the mix entirely.
+    if( gi_albedo > 0.001 ) {
+        const float3 alb = float3( AlbedoBuf[o + 0u], AlbedoBuf[o + 1u], AlbedoBuf[o + 2u] );
+        gi *= lerp( float3( 1.0, 1.0, 1.0 ), alb, gi_albedo );
     }
 
     FieldBuf[o + 0u] = gi.x;

@@ -62,7 +62,10 @@ public:
         const std::vector<uint8_t>& sky_vis = {},
         // Stage 2b: unified coverage occluder field, tile-res, 2 floats/tile
         // (height, roof). Marched by sky_sun.comp. Empty = skip.
-        const std::vector<float>& occ = {});
+        const std::vector<float>& occ = {},
+        // GI albedo bleed: per-tile surface albedo, 3 floats/tile (rgb 0..1).
+        // Empty = skip (the buffer keeps its last / neutral-1.0 content).
+        const std::vector<float>& albedo = {});
 
     // Phase 6b: SDF values as a vertex-readable storage buffer (JFA output).
     SDL_GPUBuffer* sdf_buffer() const noexcept { return sdf_storage_; }
@@ -72,6 +75,9 @@ public:
     // Stage 2b: unified coverage occluder field (tile-res, 2 floats/tile: height,
     // roof). Marched by sky_sun.comp for sun/moon/sky occlusion. COMPUTE-readable.
     SDL_GPUBuffer* occ_buffer() const noexcept { return occ_storage_; }
+    // GI albedo bleed: per-tile surface albedo (tile-res, 4 floats/tile rgb+pad,
+    // 0..1). Read by gi_field.comp as AlbedoBuf. COMPUTE-readable.
+    SDL_GPUBuffer* albedo_buffer() const noexcept { return albedo_storage_; }
     // P3 JFA input: tile-res transparency as floats (0.0=opaque .. 1.0=open).
     // COMPUTE-readable so the seed shader can read it directly.
     SDL_GPUBuffer* trans_buffer() const noexcept { return trans_storage_; }
@@ -101,7 +107,9 @@ private:
     SDL_GPUBuffer* occ_storage_ = nullptr;      // Stage 2b unified coverage occluder (tile-res, 2
                                                 // floats/tile)
     SDL_GPUTransferBuffer* xfer_occ_ = nullptr; // float bytes for occ_storage_
-    SDL_GPUBuffer* trans_storage_ = nullptr;    // P3 JFA input: tile-res transparency as floats
+    SDL_GPUBuffer* albedo_storage_ = nullptr;   // GI albedo bleed (tile-res, 4 floats/tile)
+    SDL_GPUTransferBuffer* xfer_albedo_ = nullptr; // float bytes for albedo_storage_
+    SDL_GPUBuffer* trans_storage_ = nullptr;    // P3 JFA input (TransBuf, floats)
     SDL_GPUTransferBuffer* xfer_trans_f_ = nullptr; // float bytes for trans_storage_
     SDL_GPUTransferBuffer* xfer_sky_vis_ = nullptr;  // R8 bytes for sky_vis_tex_
     SDL_GPUTransferBuffer* xfer_skyvis_f_ = nullptr; // float bytes for skyvis_storage_

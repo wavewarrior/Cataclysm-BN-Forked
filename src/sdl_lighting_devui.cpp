@@ -156,6 +156,14 @@ float g_sound_wave_speed = 12.0f;
 float g_sound_wave_max_radius = 48.0f;
 float g_sound_wave_min_radius = 6.0f;
 
+// GI compute pass tuning (Phase 4). Defaults tuned for a pleasant indoor bounce:
+// temporal 0.3 keeps the 2nd-bounce term stable across rebuilds without freezing
+// it; bounce2 0.35 adds a soft secondary fill; albedo 0.6 lets surface colour
+// tint the bounce without overpowering the radiance.
+float g_gi_temporal = 0.3f;
+float g_gi_bounce2 = 0.35f;
+float g_gi_albedo = 0.6f;
+
 namespace sdl_lighting_devui
 {
 
@@ -602,6 +610,9 @@ void devui_rml_open()
     c.Bind( "ramp_steps", &g_dbg_params.ramp_steps );
     c.Bind( "ramp_chroma", &g_dbg_params.ramp_chroma );
     c.Bind( "gi_bilat", &g_dbg_params.gi_bilat );
+    c.Bind( "gi_bounce2", &g_gi_bounce2 );
+    c.Bind( "gi_temporal", &g_gi_temporal );
+    c.Bind( "gi_albedo", &g_gi_albedo );
     c.Bind( "vis_edge", &g_dbg_params.vis_edge );
     // Procedural normal atlas V offset (0 = feature off, 0.5 = double-height page) and
     // the SIGNED strength of the per-sprite vertical-face arc, both swept live.

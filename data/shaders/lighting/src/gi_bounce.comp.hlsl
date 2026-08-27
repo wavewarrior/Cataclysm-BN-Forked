@@ -29,8 +29,11 @@ cbuffer GiParams : register(b0, space2) {
     float current_z;
     float shadow_k;
     uint  shadow_steps;
-    float gi_pad0;
-    float gi_pad1;
+    float gi_temporal;  // (unused here — shared gi_params push)
+    float gi_bounce2;   // (unused here — shared gi_params push)
+    float sun_r, sun_g, sun_b, sun_intensity; // (unused here)
+    float sky_r, sky_g, sky_b, sky_intensity; // (unused here)
+    float gi_albedo;    // (unused here)
 };
 
 // Gather tuning (constants; matches rc_bounce.frag).

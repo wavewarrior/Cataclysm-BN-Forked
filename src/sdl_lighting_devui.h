@@ -167,6 +167,13 @@ extern float g_sound_wave_speed;       // tiles/sec expansion rate, default 12.0
 extern float g_sound_wave_min_radius; // min tile radius, default 6.0
 extern float g_sound_wave_max_radius;  // max tile radius, default 48.0
 
+// GI compute pass tuning (Phase 4: 2nd bounce + temporal + albedo bleed).
+// Static globals (NOT debug_params): the DebugParams cbuffer is wire-stable
+// with the sprite shader, so new GI knobs ride here like the sound-wave knobs.
+extern float g_gi_temporal; // 2nd-bounce EMA blend (0=pure spatial, 1=full replace)
+extern float g_gi_bounce2;  // 2nd-bounce mix: out = 1st + k·2nd (0=off)
+extern float g_gi_albedo;   // albedo-bleed mix (0=off): field *= lerp(1, albedo, k)
+
 // Main-menu decorative-emitter tuning.
 namespace menu_emitter_tuning
 {

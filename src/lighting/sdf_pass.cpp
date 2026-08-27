@@ -56,6 +56,13 @@ void sdf_pass::init(gpu_device& dev, int map_w, int map_h) {
         xfer_occ_ = SDL_CreateGPUTransferBuffer(d, &tbci);
     }
     {
+        // GI albedo bleed: tile-res, 4 floats/tile (rgb + pad).
+        SDL_GPUTransferBufferCreateInfo tbci{};
+        tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+        tbci.size = static_cast<Uint32>(map_w * map_h * 4 * 4);
+        xfer_albedo_ = SDL_CreateGPUTransferBuffer(d, &tbci);
+    }
+    {
         // P3 JFA input: tile-res transparency as floats (0.0=opaque .. 1.0=open).
         SDL_GPUTransferBufferCreateInfo tbci{};
         tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
@@ -101,6 +108,49 @@ void sdf_pass::init(gpu_device& dev, int map_w, int map_h) {
         if (!occ_storage_) { dbg(DL::Error) << "sdf_pass::init: failed to create occ_storage"; }
     }
     {
+        // GI albedo bleed: tile-res, 4 floats/tile (rgb + pad). COMPUTE read
+        // (gi_field.comp tints the field with the tile's surface colour).
+        SDL_GPUBufferCreateInfo bci{};
+        bci.usage = SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ;
+        bci.size = static_cast<Uint32>(map_w * map_h * 4 * 4);
+        albedo_storage_ = SDL_CreateGPUBuffer(d, &bci);
+        if (!albedo_storage_) {
+            dbg(DL::Error) << "sdf_pass::init: failed to create albedo_storage";
+        }
+        // Initialise to NEUTRAL 1.0 (white albedo = no tint). Garbage before the
+        // first upload would otherwise multiply the field by random values.
+        if (albedo_storage_) {
+            const Uint32 alb_bytes = static_cast<Uint32>(map_w * map_h * 4 * 4);
+            SDL_GPUTransferBufferCreateInfo tbci{};
+            tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+            tbci.size = alb_bytes;
+            SDL_GPUTransferBuffer* tb = SDL_CreateGPUTransferBuffer(d, &tbci);
+            if (tb) {
+                void* mp = SDL_MapGPUTransferBuffer(d, tb, false);
+                if (mp) {
+                    std::fill_n(reinterpret_cast<float*>(mp),
+                                 static_cast<long>(alb_bytes / 4), 1.0f);
+                    SDL_UnmapGPUTransferBuffer(d, tb);
+                    SDL_GPUCommandBuffer* cb = SDL_AcquireGPUCommandBuffer(d);
+                    if (cb) {
+                        SDL_GPUCopyPass* cp = SDL_BeginGPUCopyPass(cb);
+                        SDL_GPUTransferBufferLocation src{};
+                        src.transfer_buffer = tb;
+                        src.offset = 0;
+                        SDL_GPUBufferRegion dst{};
+                        dst.buffer = albedo_storage_;
+                        dst.offset = 0;
+                        dst.size = alb_bytes;
+                        SDL_UploadToGPUBuffer(cp, &src, &dst, false);
+                        SDL_EndGPUCopyPass(cp);
+                        SDL_SubmitGPUCommandBuffer(cb);
+                    }
+                }
+                SDL_ReleaseGPUTransferBuffer(d, tb);
+            }
+        }
+    }
+    {
         // P3 JFA input: tile-res transparency as floats (0.0=opaque .. 1.0=open).
         // COMPUTE read so the seed shader can consume it directly.
         SDL_GPUBufferCreateInfo bci{};
@@ -131,6 +181,14 @@ void sdf_pass::shutdown(gpu_device& dev) {
         SDL_ReleaseGPUBuffer(d, skyvis_storage_);
         skyvis_storage_ = nullptr;
     }
+    if (xfer_albedo_) {
+        SDL_ReleaseGPUTransferBuffer(d, xfer_albedo_);
+        xfer_albedo_ = nullptr;
+    }
+    if (albedo_storage_) {
+        SDL_ReleaseGPUBuffer(d, albedo_storage_);
+        albedo_storage_ = nullptr;
+    }
     if (xfer_occ_) {
         SDL_ReleaseGPUTransferBuffer(d, xfer_occ_);
         xfer_occ_ = nullptr;
@@ -152,8 +210,8 @@ void sdf_pass::shutdown(gpu_device& dev) {
 void sdf_pass::upload(
     SDL_GPUCopyPass* cp, SDL_GPUDevice* dev, int runtime_w, int runtime_h,
     const std::vector<uint8_t>& transparency, const std::vector<float>& sdf,
-    const std::vector<uint8_t>& sky_vis,
-    const std::vector<float>& occ) {
+    const std::vector<uint8_t>& sky_vis, const std::vector<float>& occ,
+    const std::vector<float>& albedo) {
     if (!cp || !dev || !trans_storage_) { return; }
     if (runtime_w <= 0 || runtime_h <= 0) { return; }
     // Refuse runtime sizes that exceed the buffer allocation. Should never
@@ -286,6 +344,30 @@ void sdf_pass::upload(
             buf_dst.size = pixel_count * static_cast<Uint32>(sizeof(float));
 
             SDL_UploadToGPUBuffer(cp, &tb_src, &buf_dst, false);
+        }
+    }
+
+    // GI albedo bleed: tile-res, 4 floats/tile (rgb 0..1 + pad). The CPU side
+    // converts terrain colour → linear-ish RGB during the structure rebuild.
+    {
+        const Uint32 alb_floats = pixel_count * 4u;
+        if (xfer_albedo_ && albedo_storage_ && static_cast<Uint32>(albedo.size()) >= alb_floats) {
+            void* mapped = SDL_MapGPUTransferBuffer(dev, xfer_albedo_, true);
+            if (mapped) {
+                std::memcpy(mapped, albedo.data(), alb_floats * sizeof(float));
+                SDL_UnmapGPUTransferBuffer(dev, xfer_albedo_);
+
+                SDL_GPUTransferBufferLocation tb_src{};
+                tb_src.transfer_buffer = xfer_albedo_;
+                tb_src.offset = 0;
+
+                SDL_GPUBufferRegion buf_dst{};
+                buf_dst.buffer = albedo_storage_;
+                buf_dst.offset = 0;
+                buf_dst.size = alb_floats * static_cast<Uint32>(sizeof(float));
+
+                SDL_UploadToGPUBuffer(cp, &tb_src, &buf_dst, false);
+            }
         }
     }
 

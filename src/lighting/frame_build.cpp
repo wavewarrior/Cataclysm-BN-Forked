@@ -1,8 +1,10 @@
 #include "frame_build.h"
 
 #include "avatar.h"
+#include "color.h"
 #include "game.h"
 #include "game_constants.h"
+#include "hsv_color.h"
 #include "lighting/emitter_collector.h"
 #include "lighting/render_state.h"
 #include "lighting/sdf_pass.h"
@@ -46,6 +48,7 @@ frame_lighting_result build_and_submit_lighting(
     // shadow=0 every emitter beyond ~1 tile.
     std::vector<uint8_t> transparency;
     std::vector<float> occ; // Stage 2b: unified coverage occluder (height,roof) /tile
+    std::vector<float> albedo; // GI albedo bleed: terrain colour (rgb,pad) /tile
     std::vector<uint8_t> sky_vis;
     int sdf_runtime_w = 0;
     int sdf_runtime_h = 0;
@@ -199,6 +202,37 @@ frame_lighting_result build_and_submit_lighting(
                 }
             }
 
+            // GI albedo bleed: per-tile surface albedo (4 floats/tile: rgb 0..1 +
+            // pad). The tile's curses colour IS the hand-picked surface colour, so
+            // bounced light inherits it — a red carpet tints the room, neutral
+            // floors stay neutral. Furniture overrides terrain when present (it
+            // is the visible surface). Off-region tiles stay neutral 1.0 so a
+            // bounce ray landing outside the camera rect neither darkens nor
+            // tints. Same x-major layout as occ: albedo[(x*H+y)*4 + c].
+            albedo.assign( static_cast<size_t>( total ) * 4, 1.0f );
+            {
+                for( int x = rx0; x < rx1; ++x ) {
+                    for( int y = ry0; y < ry1; ++y ) {
+                        const int idx = x * H + y;
+                        const tripoint_bub_ms tp( point_bub_ms( x, y ), zlev );
+                        const ter_id tid = m.ter( tp );
+                        const furn_id fid = m.furn( tp );
+                        // int_id: 0 = null. Furniture wins (visible surface).
+                        const nc_color col =
+                            fid ? fid.obj().color()
+                                 : ( tid ? tid.obj().color() : c_light_gray );
+                        const RGBColor rgb = curses_color_to_RGB( col );
+                        albedo[ static_cast<size_t>( idx ) * 4 + 0 ] =
+                            static_cast<float>( rgb.r ) / 255.0f;
+                        albedo[ static_cast<size_t>( idx ) * 4 + 1 ] =
+                            static_cast<float>( rgb.g ) / 255.0f;
+                        albedo[ static_cast<size_t>( idx ) * 4 + 2 ] =
+                            static_cast<float>( rgb.b ) / 255.0f;
+                        albedo[ static_cast<size_t>( idx ) * 4 + 3 ] = 1.0f;
+                    }
+                }
+            }
+
             // Sky visibility from outside_cache (same x-major layout as
             // transparency_cache, idx = x*H+y). 255 = open sky overhead,
             // 0 = roofed/indoor. Falls back to all-open if the cache
@@ -277,7 +311,7 @@ frame_lighting_result build_and_submit_lighting(
     rs.collector()->submit(
         std::move(snapshot), std::move(transparency), {}, // P3.3: SDF is GPU-only (JFA), no CPU
                                                           // upload needed
-        std::move(sky_vis), sdf_runtime_w, sdf_runtime_h, std::move(occ));
+        std::move(sky_vis), sdf_runtime_w, sdf_runtime_h, std::move(occ), std::move(albedo));
 
     dbg(DL::Debug) << "[lighting] frame_build COMPLETE";
 

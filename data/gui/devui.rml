@@ -289,6 +289,9 @@
                 <div class="devui-row">dither amt <input type="range" min="0" max="2" step="0.01" data-value="dither_amt"/> <span class="devui-val">{{dither_amt}}</span></div>
                 <div class="devui-row">dither bands <input type="range" min="1" max="32" step="1" data-value="dither_bands"/> <span class="devui-val">{{dither_bands}}</span></div>
                 <div class="devui-row">GI strength <input type="range" min="0" max="3" step="0.02" data-value="gi_strength"/> <span class="devui-val">{{gi_strength}}</span></div>
+                <div class="devui-row">GI 2nd bounce <input type="range" min="0" max="1" step="0.01" data-value="gi_bounce2"/> <span class="devui-val">{{gi_bounce2}}</span></div>
+                <div class="devui-row">GI temporal <input type="range" min="0" max="1" step="0.01" data-value="gi_temporal"/> <span class="devui-val">{{gi_temporal}}</span></div>
+                <div class="devui-row">GI albedo <input type="range" min="0" max="1" step="0.01" data-value="gi_albedo"/> <span class="devui-val">{{gi_albedo}}</span></div>
                 <div class="devui-row"><span class="devui-btn" data-event-click="rc_readback">RC cascade readback (log)</span></div>
                 <div class="devui-row">shadow k <input type="range" min="0" max="32" step="0.5" data-value="shadow_k"/> <span class="devui-val">{{shadow_k}}</span></div>
                 <div class="devui-row">shadow steps <input type="range" min="1" max="64" step="1" data-value="shadow_steps"/> <span class="devui-val">{{shadow_steps}}</span></div>
