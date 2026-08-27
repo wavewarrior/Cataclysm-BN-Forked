@@ -1556,18 +1556,21 @@ private:
 
     // --- Deferred terrain-canopy pass ---
     // Row-major terrain drawing overpaints a wide canopy's overhang with the tiles
-    // drawn after it. While canopy_capture_ is set, draw_sprite_at records terrain
-    // fg sprites that overhang their own tile square; draw() replays them once per
-    // z inside the Pass 3 y-sort, interleaved with the creatures by base y (the
-    // tree tile's bottom edge) so the canopy lands in front of the player when the
-    // tree's base is at or below the player's — the fragment cut-out then keeps the
-    // character visible through the leaves. The replay must not re-capture
-    // (canopy_replay_); the replayed sprites carry cutout = 1 for that hole.
+    // drawn after it. While canopy_capture_ is set, draw_sprite_at records
+    // terrain/furniture fg sprites that overhang their own tile square; draw()
+    // replays them once per z inside the Pass 3 y-sort, interleaved with the
+    // creatures by base y (the sprite's art bottom edge) so the overhang lands
+    // in front of the player when its base is at or below the player's — the
+    // fragment cut-out then keeps the character visible through the leaves.
+    // The replay must not re-capture (canopy_replay_); the replayed sprites
+    // carry cutout = 1 for that hole.
     std::vector<canopy_defer_record> canopy_defers_;
     bool canopy_capture_ = false;
     bool canopy_replay_ = false;
-    // Category of the tile draw_from_id_string is rendering; the capture gate is
-    // terrain-only so item/furniture z-ordering is untouched.
+    // Category of the tile draw_from_id_string is rendering; the capture gate
+    // admits terrain + overhanging furniture (the overhangs_tile requirement
+    // keeps ordinary single-tile furniture out), so item z-ordering is
+    // untouched.
     TILE_CATEGORY canopy_capture_category_ = C_NONE;
 
     // --- Step 8: sub-tile vision frontier ---

@@ -2495,7 +2495,8 @@ bool cata_tiles::draw_sprite_at(
     // player. Without it, walking in front of a tree still opened the hole and
     // exposed the ground behind the leaves (an exposed-ground ring).
     float cutout_flag = 0.0f;
-    if (canopy_replay_ && is_fg && overlay_count == 0 && canopy_capture_category_ == C_TERRAIN
+    if (canopy_replay_ && is_fg && overlay_count == 0
+        && (canopy_capture_category_ == C_TERRAIN || canopy_capture_category_ == C_FURNITURE)
         && g != nullptr) {
         const point player_scr = player_to_screen(g->u.bub_pos().xy());
         const int player_cx = player_scr.x + tile_width / 2;
@@ -2505,15 +2506,16 @@ bool cata_tiles::draw_sprite_at(
             cutout_flag = 1.0f;
         }
     }
-
-    // Deferred-canopy capture: a terrain fg sprite whose final destination overhangs
-    // its own tile square (a multi-tile tree canopy) would be overpainted by the rows
-    // drawn after this one, so record it here. draw() replays it once, y-sorted
-    // against the creatures of this z. Terrain-only (category gate), no z-overlay
-    // (the overlay_count == 0 gate keeps the replay from doubling it), and the
-    // replay must not re-capture (canopy_replay_).
+    // Deferred-canopy capture: a terrain OR furniture fg sprite whose final
+    // destination overhangs its own tile square (a multi-tile tree canopy, an
+    // awning, a big plant) would be overpainted by the rows drawn after this
+    // one, so record it here. draw() replays it once, y-sorted against the
+    // creatures of this z. The overhangs_tile requirement is KEPT: only
+    // sprites wider than their tile defer, so ordinary chairs/tables are
+    // untouched. No z-overlay (the overlay_count == 0 gate keeps the replay
+    // from doubling it), and the replay must not re-capture (canopy_replay_).
     if (canopy_capture_ && !canopy_replay_ && is_fg && overlay_count == 0
-        && canopy_capture_category_ == C_TERRAIN
+        && (canopy_capture_category_ == C_TERRAIN || canopy_capture_category_ == C_FURNITURE)
         && cata_tiles_internal::overhangs_tile(destination, p.x(), p.y(), tile_width, tile_height)) {
         canopy_defers_.push_back(canopy_defer_record{
             .tile = &tile,
