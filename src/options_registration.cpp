@@ -418,6 +418,13 @@ void options_manager::add_options_general()
        );
 
     get_option( "ENABLE_TTS" ).setPrerequisite( "SOUND_ENABLED" );
+
+    add( "TTS_PIPER_BIN", general, translate_marker( "Piper TTS binary" ),
+         translate_marker( "Path to the piper TTS binary. Empty = bundled data/tts/piper, then PATH." ),
+         "", 512
+       );
+
+    get_option( "TTS_PIPER_BIN" ).setPrerequisite( "ENABLE_TTS" );
 }
 
 void options_manager::add_options_interface()

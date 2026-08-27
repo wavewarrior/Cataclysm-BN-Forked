@@ -23,6 +23,7 @@
 #include "rng.h"
 #include "sdl_wrappers.h"
 #include "sounds.h"
+#include "tts_piper_synthesizer.h"
 #include "tts_synthesizer.h"
 #include "units_angle.h"
 
@@ -253,8 +254,10 @@ for( auto *t : temp_tracks ) {
 
 auto shutdown_sound() -> void
 {
+    // Join the TTS worker before tearing down the mixer it plays into.
+    shutdown_tts_synthesizer();
+
     sfx_resources.resource.clear();
-    sfx_resources.sound_effects.clear();
     playlists.clear();
 
     if( !sound_init_success ) {
@@ -641,6 +644,39 @@ if( !track ) {
         dbg( DL::Debug ) << "Failed to play sound effect { id: " << id
                          << ", variant: " << variant << " }: " << SDL_GetError();
     }
+}
+
+auto sfx::play_tts_audio( const std::string &wav_path ) -> void
+{
+    if( test_mode || !sound_init_success ) {
+        return;
+    }
+
+    const int ch = static_cast<int>( sfx::channel::tts );
+    if( ch < 0 || ch >= MAX_CHANNEL_COUNT || !channel_tracks[ch] ) {
+        return;
+    }
+    auto *track = channel_tracks[ch ];
+
+    // Streamed (predecode=false): TTS WAVs are small but this avoids a peak
+    // of resident audio for a burst of dialogue.
+    auto *audio = MIX_LoadAudio( g_mixer, wav_path.c_str(), false );
+    if( !audio ) {
+        dbg( DL::Warn ) << "TTS: failed to load " << wav_path << ": " << SDL_GetError();
+        return;
+    }
+
+    // Interrupt the previous utterance. MIX_StopTrack blocks until the track
+    // is stopped, so the old audio's ref is dropped before we swap input.
+    MIX_StopTrack( track, 0 );
+    MIX_SetTrackGain( track, volume_to_gain( get_option<int>( "SOUND_EFFECT_VOLUME" ) ) );
+    MIX_SetTrackAudio( track, audio );
+    MIX_SetTrackLoops( track, 0 );
+    if( !MIX_PlayTrack( track, 0 ) ) {
+        dbg( DL::Warn ) << "TTS: failed to play: " << SDL_GetError();
+    }
+    // Drop our ref; the track holds its own until the audio stops.
+    MIX_DestroyAudio( audio );
 }
 
 auto sfx::play_ambient_variant_sound( const std::string &id, const std::string &variant,

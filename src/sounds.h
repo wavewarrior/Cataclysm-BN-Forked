@@ -458,6 +458,7 @@ enum class channel : int {
     exterior_engine_sound,
     interior_engine_sound,
     radio,
+    tts,                        // NPC speech (Piper TTS) — interrupts previous utterance
     MAX_CHANNEL                 //the last reserved channel
 };
 
@@ -507,6 +508,9 @@ void set_channel_3d_position( channel channel, units::angle angle, int distance 
 int get_channel_volume( channel channel );
 void do_player_death_hurt( const player &target, bool death );
 void do_fatigue();
+/// Play a pre-synthesized TTS WAV on the dedicated `tts` channel, interrupting
+/// any previous utterance. Thread-safe (called from the TTS worker thread).
+void play_tts_audio( const std::string &wav_path );
 // @param obst should be string id of obstacle terrain or vehicle part
 void do_obstacle( const std::string &obst = "" );
 } // namespace sfx

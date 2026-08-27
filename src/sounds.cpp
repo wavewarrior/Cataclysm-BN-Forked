@@ -1826,6 +1826,7 @@ std::string enum_to_string<sfx::channel>( sfx::channel chan )
     case sfx::channel::exterior_engine_sound: return "exterior_engine_sound";
     case sfx::channel::interior_engine_sound: return "interior_engine_sound";
     case sfx::channel::radio: return "radio";
+    case sfx::channel::tts: return "tts";
     case sfx::channel::MAX_CHANNEL: break;
     }
     debugmsg( "Invalid sound channel" );
@@ -4271,6 +4272,7 @@ void sfx::do_danger_music() { }
 void sfx::do_vehicle_engine_sfx() { }
 void sfx::do_vehicle_exterior_engine_sfx() { }
 void sfx::do_ambient() { }
+void sfx::play_tts_audio( const std::string & ) { }
 void sfx::fade_audio_group( group, int ) { }
 void sfx::fade_audio_channel( channel, int ) { }
 bool sfx::is_channel_playing( channel )
