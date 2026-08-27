@@ -23,7 +23,7 @@ namespace lighting {
 
 class gpu_device;
 
-// Wire-stable with the VolParams cbuffer in vol.frag.hlsl (20 floats, 80 B).
+// Wire-stable with the VolParams cbuffer in vol.frag.hlsl (21 floats, 84 B).
 struct vol_params {
     float tile_pixel_size = 32.0f;
     float camera_off_x = 0.0f;
@@ -45,6 +45,9 @@ struct vol_params {
     float proj_w = 0.0f; // projection (game-view) px; world_pos reconstruct
     float proj_h = 0.0f;
     float vol_shadow = 0.0f; // 0 = uniform haze (no cast shadow); >0 = directional lanes
+    float vol_indoor = 0.0f; // indoor shaft strength: 0 = sky-gated only (old behaviour);
+                             // >0 = the sun march (windows are transparent in the SDF)
+                             // lights air under roofs — godrays through window openings
 };
 
 class volumetric_pass {

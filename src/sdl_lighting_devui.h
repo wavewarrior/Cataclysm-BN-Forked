@@ -79,6 +79,7 @@ extern float g_vol_density;
 extern float g_vol_intensity;
 extern float g_vol_shadow;
 extern float g_vol_reach;
+extern float g_vol_indoor;
 // High-fidelity rain effect controls.
 extern bool g_rain_enable;
 extern float g_rain_intensity;

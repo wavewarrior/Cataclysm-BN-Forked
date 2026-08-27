@@ -10,11 +10,14 @@
 // result is composited additively into the HDR world_target BEFORE bloom +
 // tonemap (shafts bloom; AgX rolls off the highlights).
 //
-// skyvis gates to open-sky (outdoor) air. The engine sky-gates the sun, so the
-// shafts here are the lit haze between wall/tree shadow LANES outdoors, not
-// indoor window beams (those would need decoupling the sun from skyvis — a
-// later, larger change). Strict light-shaft = shadow air contributes zero, so
-// shadows stay black and the additive haze does not wash the AgX black floor.
+// skyvis gates OUTDOOR air to open sky. The engine sky-gates the sun, so the
+// outdoor shafts are the lit haze between wall/tree shadow LANES. INDOOR air
+// (skyvis = 0) additionally gets vol_indoor * sun-march: the march walks toward
+// the sun through the SDF, where window terrain is transparent, so only air
+// sitting in a window's light cone is lit — godrays through the opening.
+// vol_indoor = 0 is the exact old behaviour (pure sky-gated haze). Strict
+// light-shaft = shadow air contributes zero, so shadows stay black and the
+// additive haze does not wash the AgX black floor.
 //
 // v1 density is a single uniform (weather-scaled CPU-side); per-tile field
 // density (fd_smoke / fd_*gas / fd_fog) is the follow-on. The in-plane "march"
@@ -51,6 +54,9 @@ cbuffer VolParams : register(b0, space3) {
     float proj_h;           // texture size; proj-space stretches to fill the target
     float vol_shadow;       // 0 = uniform sky-gated haze (no cast shadow); >0 lerps
                             // the directional wall/tree shadow lanes back in
+    float vol_indoor;       // indoor shaft strength: 0 = sky-gated only (old behaviour);
+                            // >0 = the sun march (windows are transparent in the SDF)
+                            // lights air under roofs — godrays through window openings
 };
 
 // MUST match lighting::SDF_SUPERSAMPLE (sdf_pass.h) and sprite.frag's SDF_SS.
@@ -125,33 +131,41 @@ float4 main(VS_OUT i) : SV_Target0 {
     const float2 pixel = i.uv * float2(proj_w, proj_h);
     const float2 world_pos = pixel / max(tile_pixel_size, 1.0)
                              - float2(camera_off_x, camera_off_y);
+    // Sun march, shared by BOTH gates. Vol and sprite.frag share ONE
+    // soft_shadow_march and read the SAME sun_dir (make_sun_params) over the SAME
+    // world_pos frame — so the march MUST use the same direction as the sprite
+    // surface shadow, toward_sun = -sun_dir. Marching the opposite way puts the
+    // dark lane on the sun-FACING (lit) side of every occluder, which reads as the
+    // shadow being OFFSET from the lit-scene shadow. (A 2026-06-04 "inversion fix"
+    // flipped this to +sun_dir while the penumbra denominator was still being
+    // tuned; with the denominator now == sprite's the flip is pure error — vol is
+    // just a longer-reach copy of the sprite sun shadow, so by construction the
+    // lanes co-register with the lit scene.)
+    // Skipped when both consumers are off (vol_shadow=0, vol_indoor=0) → the
+    // exact old uniform sky-gated haze, blacks black.
+    const float2 toward_sun = -float2(sun_dir_x, sun_dir_y);
+    float sun_shadow = 1.0;
+    if(vol_shadow > 0.001 || vol_indoor > 0.001) {
+        sun_shadow = soft_shadow_march(world_pos, toward_sun, vol_reach,
+                                       shadow_k, (int)shadow_steps, /*self_eps=*/0.0,
+                                       /*ref_receiver=*/true);
+    }
     // Outdoor gate: the sun only reaches open-sky air. Bilinear (matches
     // sprite.frag) so the fog's open↔roofed edge ramps over ~1 tile instead of
-    // hard tile squares. Roofed → no sun fog (and shadows stay black).
+    // hard tile squares. vol_shadow lerps the directional wall/tree shadow LANES
+    // back in (0 = uniform haze).
     const float skyvis = saturate(skyvis_bilinear(world_pos));
-    if(skyvis <= 0.01) {
+    const float outdoor_gate = skyvis * lerp(1.0, sun_shadow, saturate(vol_shadow));
+    // Indoor gate: air under a roof (skyvis ≈ 0) is lit only where the march
+    // toward the sun clears the SDF — i.e. inside a window's light cone, because
+    // window terrain is transparent in the SDF. Walls/roof keep the rest dark.
+    // vol_indoor = 0 → exact old behaviour (no indoor shafts).
+    const float indoor_gate = (1.0 - skyvis) * vol_indoor * sun_shadow;
+    const float light_term = outdoor_gate + indoor_gate;
+    if(light_term <= 0.001) {
         return float4(0.0, 0.0, 0.0, 0.0);
     }
-    // Directional shaft = the wall/tree shadow LANES. Vol and sprite.frag now
-    // share ONE soft_shadow_march, and both read the SAME sun_dir
-    // (make_sun_params) over the SAME world_pos frame — so the march MUST use the
-    // same direction as the sprite surface shadow, toward_sun = -sun_dir. Marching
-    // the opposite way puts the dark lane on the sun-FACING (lit) side of every
-    // occluder, which reads as the shadow being OFFSET from the lit-scene shadow.
-    // (A 2026-06-04 "inversion fix" flipped this to +sun_dir while the penumbra
-    // denominator was still being tuned; with the denominator now == sprite's the
-    // flip is pure error — vol is just a longer-reach copy of the sprite sun
-    // shadow, so by construction the lanes co-register with the lit scene.)
-    // vol_shadow=0 (default) skips the march → uniform sky-gated haze, blacks black.
-    float shadow_term = 1.0;
-    if(vol_shadow > 0.001) {
-        const float2 toward_sun = -float2(sun_dir_x, sun_dir_y);
-        const float  sun_shadow = soft_shadow_march(world_pos, toward_sun, vol_reach,
-                                               shadow_k, (int)shadow_steps, /*self_eps=*/0.0,
-                                               /*ref_receiver=*/true);
-        shadow_term = lerp(1.0, sun_shadow, saturate(vol_shadow));
-    }
     const float3 fog = float3(sun_r, sun_g, sun_b)
-                       * (sun_intensity * vol_density * vol_intensity * skyvis * shadow_term);
+                       * (sun_intensity * vol_density * vol_intensity * light_term);
     return float4(fog, 0.0); // additive (ONE/ONE); alpha unused
 }

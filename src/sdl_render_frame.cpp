@@ -1092,6 +1092,7 @@ auto render_world_pass_w( lighting::render_state &rs,
         vp.vol_intensity = g_vol_intensity;
         vp.vol_reach     = g_vol_reach;
         vp.vol_shadow    = g_vol_shadow;
+        vp.vol_indoor    = g_vol_indoor;
         vp.proj_w = static_cast<float>( proj_w );
         vp.proj_h = static_cast<float>( proj_h );
         rs.volumetric().record( ctx.cmd_buffer, wt->texture(),

@@ -10,7 +10,7 @@
 
 namespace lighting {
 
-static_assert(sizeof(vol_params) == 80, "vol_params wire-stable with the VolParams cbuffer in "
+static_assert(sizeof(vol_params) == 84, "vol_params wire-stable with the VolParams cbuffer in "
                                         "vol.frag.hlsl");
 
 // Fullscreen-tri pipeline writing into hdr_format with ADDITIVE blend (ONE/ONE)

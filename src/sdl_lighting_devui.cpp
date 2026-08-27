@@ -77,6 +77,7 @@ float g_vol_density = 0.3f;
 float g_vol_intensity = 1.0f;
 float g_vol_shadow = 0.0f;
 float g_vol_reach = 8.0f;
+float g_vol_indoor = 0.0f;
 bool g_rain_enable = true;
 float g_rain_intensity = 0.5f;
 float g_spec_strength = 0.0f; // wet specular glint (0=off); × rain intensity per-frame
@@ -556,6 +557,7 @@ void devui_rml_open()
     c.Bind( "vol_intensity", &g_vol_intensity );
     c.Bind( "vol_reach", &g_vol_reach );
     c.Bind( "vol_shadow", &g_vol_shadow );
+    c.Bind( "vol_indoor", &g_vol_indoor );
     c.Bind( "rain_enable", &g_rain_enable );
     c.Bind( "rain_intensity", &g_rain_intensity );
     c.Bind( "spec_strength", &g_spec_strength );
