@@ -13,16 +13,26 @@
 namespace
 {
 
-/// Unique scratch dir for this test run (baked in at first use).
+/// Scratch dir for this test run; removed at process exit (keeps CI temp tidy).
+struct scratch {
+    std::filesystem::path dir;
+    scratch()
+    {
+        dir = std::filesystem::temp_directory_path() /
+              ( "cbn_tts_test_" + std::to_string( ::getpid() ) );
+        std::filesystem::create_directories( dir );
+    }
+    ~scratch()
+    {
+        std::error_code ec;
+        std::filesystem::remove_all( dir, ec );
+    }
+};
+
 const std::filesystem::path &scratch_dir()
 {
-    static const std::filesystem::path dir = [] {
-        const auto base = std::filesystem::temp_directory_path() /
-                          ( "cbn_tts_test_" + std::to_string( ::getpid() ) );
-        std::filesystem::create_directories( base );
-        return base;
-    }();
-    return dir;
+    static const scratch s;
+    return s.dir;
 }
 
 /// Restore a string option to its captured value on scope exit.
@@ -85,7 +95,9 @@ bool wait_for_file( const std::filesystem::path &p, int timeout_ms = 10000 )
 
 } // namespace
 
-TEST_CASE( "tts_piper_graceful_degradation_without_binary", "[tts]" )
+// [.]: spawns a real subprocess (POSIX sh script) and polls/sleeps — excluded
+// from the default gate, and skipped on platforms without a POSIX shell.
+TEST_CASE( "tts_piper_graceful_degradation_without_binary", "[tts][.]" )
 {
     // Point the backend at a binary that does not exist. The worker must
     // probe, log, and degrade to a no-op — no crash, no hang, no throw.
@@ -102,7 +114,7 @@ TEST_CASE( "tts_piper_graceful_degradation_without_binary", "[tts]" )
     CHECK( true );
 }
 
-TEST_CASE( "tts_piper_subprocess_pipeline", "[tts]" )
+TEST_CASE( "tts_piper_subprocess_pipeline", "[tts][.]" )
 {
     const auto dir = scratch_dir() / "pipeline";
     std::filesystem::create_directories( dir / "tts" / "voices" );

@@ -55,6 +55,11 @@ tts_piper_synthesizer::tts_piper_synthesizer()
 tts_piper_synthesizer::~tts_piper_synthesizer()
 {
     shutdown();
+    // Stack instances (tests) die while the global still points at them;
+    // clear it so late teardown (shutdown_sound) never dereferences freed memory.
+    if( g_piper_backend == this ) {
+        g_piper_backend = nullptr;
+    }
 }
 
 void tts_piper_synthesizer::synthesize( const std::string &text, const std::string &voice_name )
@@ -99,6 +104,9 @@ void tts_piper_synthesizer::shutdown()
         worker.join();
     }
     worker_started = false;
+    if( g_piper_backend == this ) {
+        g_piper_backend = nullptr;
+    }
 }
 
 void tts_piper_synthesizer::worker_loop()
