@@ -562,6 +562,7 @@ TEST_CASE("broken_door_and_lock_can_be_removed", "[vehicle]") {
 
 #include "physics/physics_world.h"
 #include "physics/terrain_body.h"
+#include "physics/vehicle_tile_bash.h"
 
 // Box2D position authority is revoked when a vehicle's home submap leaves the
 // simulated set while staying resident, and re-granted when it returns.  The
@@ -649,8 +650,71 @@ TEST_CASE("box2d_authority_vehicle_bashes_terrain", "[vehicle][box2d]") {
     pw->on_submap_loaded(here, project_to<coords::sm>(here.bub_to_abs(obstacle)));
     REQUIRE(pw->terrain_body_count() > colliders_before);
 
-    for (int turn = 0; turn < 5 && here.ter(obstacle) == before; ++turn) { here.vehmove(); }
+    for (int turn = 0; turn < 5 && here.ter(obstacle) == before; ++turn) {
+        here.vehmove();
+    }
 
+    CHECK(here.ter(obstacle) != before);
+    // The wall changing alone doesn't prove the *vehicle* paid for it — assert the
+    // collision was actually consequential, ruling out an unrelated terrain change
+    // (e.g. the bash dispatch firing against the wrong body/tile) coincidentally
+    // satisfying the ter() check while the vehicle sails through untouched.
+    //
+    // veh->velocity itself can't prove this: it's the game's cruise-control model,
+    // never round-tripped from the Box2D body (see sync_game_from_bodies) — it stays
+    // pinned at 2000 by IN_CONTROL_OVERRIDE regardless of what the physics body did.
+    // physics_pos IS round-tripped every turn, so use it instead: at 20 m/s for one
+    // turn, an unimpeded vehicle covers 20m / TILE_M (~1.79m) =~ 11.2 tiles, well past
+    // the 6-tile-distant obstacle. A vehicle that actually collided with the wall
+    // stays near it rather than sailing through.
+    const auto dx = veh->physics_pos.x - static_cast<float>(start.x());
+    const auto dy = veh->physics_pos.y - static_cast<float>(start.y());
+    CHECK(dx * dx + dy * dy < 9.0f * 9.0f);
+}
+
+// bash_vehicle_tile() must gate on momentum, not bash unconditionally on contact.
+// Exercised directly — rather than driving a vehicle into a wall via map::vehmove()
+// at low cruise speed — because the tile-step readback walk's of_turn budgeting
+// (move_vehicle(), map_vehicle.cpp) intermittently stalls a vehicle outright below
+// roughly one tile/turn of progress: measured, 50 cm/s covered 0.28 tiles then reset
+// to start every single turn, and even 250 cm/s (~1.4 tiles/turn) advanced once then
+// stalled at velocity 0 forever. That's a pre-existing quirk of the cruise-control /
+// tile-step interaction, unrelated to this gate; box2d_authority_vehicle_bashes_terrain
+// and box2d_authority_vehicle_climbs_ramp both use velocities (2000, 800 cm/s) picked
+// specifically to stay clear of it. Driving a slow vehicle in for this test would
+// make "the wall is unchanged" pass because the vehicle got stuck partway, not
+// because the gate rejected a real contact — exactly the vacuous failure mode to
+// avoid. Calling bash_vehicle_tile() directly with an explicit tile sidesteps the
+// whole movement simulation and tests the gate itself: same vehicle, same tile, only
+// velocity differs between the two calls, so a spurious pass is not possible.
+TEST_CASE("bash_vehicle_tile_gates_on_momentum", "[vehicle][box2d]") {
+    clear_all_state();
+    auto& here = get_map();
+    build_test_map(ter_id("t_pavement"));
+
+    auto* veh =
+        here.add_vehicle(vproto_id("car_test"), tripoint_bub_ms(60, 60, 0), 0_degrees, 100, 0);
+    REQUIRE(veh != nullptr);
+
+    const auto obstacle = tripoint_bub_ms(61, 60, 0);
+    here.ter_set(obstacle, ter_id("t_wall_wood"));
+    here.build_map_cache(0, true);
+    REQUIRE(here.is_bashable_ter_furn(obstacle, false));
+    // Pin the assumption the low-velocity case below depends on: if t_wall_wood's
+    // JSON ever changes, this fails loudly here instead of the CHECK_FALSE silently
+    // passing or failing for the wrong reason.
+    REQUIRE(here.bash_resistance(obstacle, false) > 5);
+    const auto before = here.ter(obstacle);
+
+    // Too slow to bash: impulse_to_damage scales ~9.8 * vel(m/s) for this car/wall
+    // pair, so 0.5 m/s yields ~4.9, well under t_wall_wood's str_min of 12.
+    veh->velocity = 50;
+    CHECK_FALSE(physics::bash_vehicle_tile(*veh, obstacle));
+    CHECK(here.ter(obstacle) == before);
+
+    // Same tile, same vehicle: comfortably past the threshold now, so it must bash.
+    veh->velocity = 2000;
+    CHECK(physics::bash_vehicle_tile(*veh, obstacle));
     CHECK(here.ter(obstacle) != before);
 }
 

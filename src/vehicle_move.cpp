@@ -3,6 +3,7 @@
 #include "vehicle_move.h" // IWYU pragma: associated
 
 #include "physics/physics_world.h"  // physics::terrain_impulse_result
+#include "physics/vehicle_tile_bash.h"
 
 #include <cassert>
 #include <algorithm>
@@ -517,6 +518,40 @@ static void terrain_collision_data( const tripoint_bub_ms &p, bool bash_floor,
     mass = ( bash_min + bash_max ) / 2.0;
     density = bash_min;
 }
+
+namespace physics
+{
+
+// Bash the bashable terrain/furniture at `p` using `veh`'s current momentum.
+// Reuses the exact 1D-collision impulse model that part_collision's bashable-terrain
+// branch uses (terrain_collision_data for mass2/e, impulse_to_damage for the Ns->damage
+// conversion), with the target starting at rest (vel2 = 0). Called from the Box2D
+// contact-event dispatch, which detects a vehicle touching a bashable tile directly
+// rather than through the per-tile readback walk that part_collision normally runs in.
+auto bash_vehicle_tile( vehicle &veh, const tripoint_bub_ms &p ) -> bool
+{
+    map &here = get_map();
+    if( !here.is_bashable_ter_furn( p, false ) || veh.velocity == 0 ) {
+        return false;
+    }
+    float mass2 = 0.0f;
+    float part_dens = 0.0f;
+    float e = 0.30f;
+    terrain_collision_data( p, false, mass2, part_dens, e );
+    const float mass = to_kilogram( veh.total_mass() );
+    const float vel1 = cmps_to_mps( veh.velocity );
+    const float vel2 = 0.0f;
+    const float vel2_a = ( mass * vel1 + mass2 * vel2 + e * mass * ( vel1 - vel2 ) ) /
+                         ( mass + mass2 );
+    const float impulse_obj = std::abs( mass2 * ( vel2_a - vel2 ) );
+    const float obj_dmg = impulse_to_damage( impulse_obj );
+    if( here.bash_resistance( p, false ) > obj_dmg ) {
+        return false;
+    }
+    return here.bash( p, obj_dmg, false, false, false, &veh ).success;
+}
+
+} // namespace physics
 
 auto vehicle::part_collision( const vehicle_part_collision_options &options ) -> veh_collision
 {

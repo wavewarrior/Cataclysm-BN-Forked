@@ -2,6 +2,7 @@
 #include "terrain_body.h"
 #include "filter_bits.h"
 #include "vehicle_shape.h"  // vehicle_box2d_shape, TILE_M
+#include "vehicle_tile_bash.h" // bash_vehicle_tile
 #include "vehicle.h"        // vehicle, velo_vec, face_vec, bub_ms_location, total_mass
 #include "creature.h"        // Creature::get_size, bub_pos
 #include "map.h"            // map::abs_to_bub, impassable_ter_furn, is_bashable_ter_furn
@@ -726,7 +727,9 @@ auto PhysicsWorld::substeps_for_turn( float turn_seconds ) const -> int
 
 void PhysicsWorld::step_turn( float turn_seconds )
 {
-    if( turn_seconds <= 0.0f ) { return; }
+    if( turn_seconds <= 0.0f ) {
+        return;
+    }
     sync_bodies_from_game();
     const auto steps = substeps_for_turn( turn_seconds );
     const auto dt    = turn_seconds / static_cast<float>( steps );
@@ -760,26 +763,39 @@ void PhysicsWorld::dispatch_contact_events()
     // Begin-contact events (beginCount) fire on the first frame of every new contact
     // regardless of speed and are confirmed reliable for dynamic–static pairs (Test 5).
     //
-    // TODO Phase 10 Step 5 (tile-step retirement):
-    //   For each begin-contact event that involves a terrain body (identified by
-    //   vehicle_bodies_.count(ptr) == 0), dispatch to the bash/damage system:
-    //     const auto bub = decode_tile_pos(reinterpret_cast<uintptr_t>(b2Body_GetUserData(bid)));
-    //     on_tile_bashed(bub);  // already implemented; call here instead of from vehicle_move.cpp
-    //   For VT hits on vehicle shapes, route sound emission.
+    // For each begin-contact event that involves both a vehicle body and a terrain
+    // body, route to the bash/damage system: decode the tile from the terrain body's
+    // tagged user-data, look up the vehicle from vehicle_bodies_, and let
+    // bash_vehicle_tile() apply its momentum to the tile via the validated
+    // part_collision impulse model. On success, drop the now-obsolete terrain body.
 
     const auto events = b2World_GetContactEvents( world_ );
     for( int i = 0; i < events.beginCount; ++i ) {
         const auto &ev = events.beginEvents[i];
-        const auto check = []( b2ShapeId sid ) {
-            if( b2Shape_IsSensor( sid ) ) { return; } // creature sensors — not vehicle pointers
+        vehicle *veh = nullptr;
+        tripoint_bub_ms tile{};
+        bool have_tile = false;
+        for( const auto sid : { ev.shapeIdA, ev.shapeIdB } ) {
+            if( b2Shape_IsSensor( sid ) ) { continue; } // creature sensors — skip
             const auto bid = b2Shape_GetBody( sid );
-            auto *ptr      = static_cast<vehicle *>( b2Body_GetUserData( bid ) );
-            // TODO Phase 10 Step 5: vehicle_bodies_.count(ptr) → route bash/damage/sound
-            ( void )ptr;
-            ( void )bid;
-        };
-        check( ev.shapeIdA );
-        check( ev.shapeIdB );
+            auto *ud = b2Body_GetUserData( bid );
+            if( ud == nullptr ) { continue; }
+            const auto enc = reinterpret_cast<std::uintptr_t>( ud );
+            if( ( enc & tile_pos_tag ) != 0 ) {
+                // Tagged user-data: a bashable-tile body (see encode_tile_pos).
+                tile = decode_tile_pos( enc );
+                have_tile = true;
+                continue;
+            }
+            auto *maybe_veh = static_cast<vehicle *>( ud );
+            if( vehicle_bodies_.count( maybe_veh ) != 0 ) {
+                veh = maybe_veh;
+            }
+        }
+        if( veh == nullptr || !have_tile ) { continue; }
+        if( bash_vehicle_tile( *veh, tile ) ) {
+            on_tile_bashed( tile );
+        }
     }
 }
 
