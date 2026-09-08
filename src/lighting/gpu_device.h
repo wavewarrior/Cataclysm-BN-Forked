@@ -7,6 +7,7 @@
 
 #include "sdl_wrappers.h"
 
+#include <cstdint>
 #include <memory>
 
 namespace lighting {
@@ -66,16 +67,31 @@ public:
     SDL_Window* window_ptr() const noexcept { return claimed_window; }
     SDL_GPUTextureFormat swapchain_format() const noexcept { return swap_format; }
     bool ready() const noexcept { return device != nullptr && claimed_window != nullptr; }
+    std::uint64_t frame_count() const noexcept { return frame_count_; }
+    std::uint64_t last_dump_frame() const noexcept { return last_dump_frame_; }
 
 private:
     gpu_device_ptr device;
     SDL_Window* claimed_window = nullptr;
     SDL_GPUTextureFormat swap_format = SDL_GPU_TEXTUREFORMAT_INVALID;
     bool vsync_enabled = true;
+    // DIAGNOSTIC (temporary): CATA_FRAME_DUMP="<frame>:<path>" dumps the
+    // swapchain texture of that frame to a BMP (screenshot harness is
+    std::uint64_t frame_count_ = 0;
+    std::uint64_t last_dump_frame_ = 0;
+    SDL_GPUTransferBuffer* dump_xfer_ = nullptr;
+    std::uint32_t dump_xfer_bytes_ = 0;
+    bool maybe_dump_frame(frame_context& ctx) noexcept;
 };
-
 // Process-wide singleton accessor. Created on demand by sdltiles.cpp; nullptr
 // until init_gpu_device is called. Defined in gpu_device.cpp.
 gpu_device& get_gpu_device();
+// DIAGNOSTIC (temporary): F13 (or `touch /tmp/cata_dump_trigger`) bumps the
+// request; the next frame dumps the swapchain to /tmp/cata_frame_<n>.bmp AND
+// the map state to /tmp/cata_map_<n>.json, independent of the
+// CATA_FRAME_DUMP / CATA_MAP_DUMP env specs. The file trigger is the
+// user-pressable path (F13 does not exist on standard Mac keyboards).
+void request_frame_dump();
+std::uint64_t frame_dump_request();
 
 } // namespace lighting

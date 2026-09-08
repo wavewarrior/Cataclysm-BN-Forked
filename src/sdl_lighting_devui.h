@@ -46,6 +46,8 @@ extern bool g_dbg_lighting;
 extern bool g_dbg_lighting_shader;
 // Runtime tuning state for shader debug modes.
 extern lighting::debug_params g_dbg_params;
+// Sun-direction arrow overlay (points toward the sun at the player). F4 checkbox.
+extern bool g_sun_arrow;
 // One-shot readback of the RC cascade texture (logs stats).
 extern bool g_rc_readback;
 // Tonemap pass controls (F4 sliders).
@@ -174,6 +176,10 @@ extern float g_sound_wave_max_radius;  // max tile radius, default 48.0
 extern float g_gi_temporal; // 2nd-bounce EMA blend (0=pure spatial, 1=full replace)
 extern float g_gi_bounce2;  // 2nd-bounce mix: out = 1st + k·2nd (0=off)
 extern float g_gi_albedo;   // albedo-bleed mix (0=off): field *= lerp(1, albedo, k)
+// DIAGNOSTIC (temporary): force a FULL seen-cache clear+recast every frame.
+// Isolates incremental-clear staleness in the GPU vision pass.
+// Toggle: F4 dev panel, Effects tab, "force full seen rebuild (diag)".
+extern bool g_seen_force_full_rebuild;
 
 // Main-menu decorative-emitter tuning.
 namespace menu_emitter_tuning
@@ -227,5 +233,12 @@ bool place_test_light();
 
 /// Place a test sound at the hovered world tile. Returns true if placed.
 bool place_test_sound();
+
+// DIAGNOSTIC (temporary): dumps the full map state of the player's z-level
+// (terrain, furniture, CPU transparency cache, creatures, vehicle parts) as
+// JSON, paired with the frame dump so the raw data matches the dumped frame
+// exactly. Fires on CATA_MAP_DUMP="<frame>:<path>" or on the same frame a
+// CATA_FRAME_DUMP / F13 / /tmp/cata_dump_trigger frame dump was written.
+void maybe_dump_map( std::uint64_t frame, std::uint64_t last_dump_frame );
 
 } // namespace sdl_lighting_devui

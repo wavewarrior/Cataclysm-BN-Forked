@@ -19,6 +19,7 @@
 #    include "npc.h"
 #    include "path_info.h"
 #    include "profile.h"
+#    include "sdl_lighting_devui.h"
 #    include "shadowcasting.h"
 #    include "submap.h"
 #    include "units_angle.h"
@@ -3349,7 +3350,8 @@ auto begin_gpu_lighting(SDL_GPUDevice* const device, run_gpu_lighting_params con
         std::max(colored_source_upload_bytes, static_cast<Uint32>(sizeof(GpuColoredLightSource)));
 
     auto const seen_was_valid = s_lighting_resources.seen_valid;
-    auto const rebuild_seen = p.rebuild_seen_cache || (p.download_seen_cache && !seen_was_valid);
+    auto const rebuild_seen = p.rebuild_seen_cache || (p.download_seen_cache && !seen_was_valid)
+                              || g_seen_force_full_rebuild;
     auto seen_download_levels = std::vector<int>{};
     if (p.download_seen_cache) {
         seen_download_levels =
@@ -4489,7 +4491,8 @@ auto begin_gpu_visibility(SDL_GPUDevice* const device, run_gpu_visibility_params
         make_visibility_dispatch_plan(visibility_download_levels, cache_xy, z_count);
     auto const rebuild_seen =
         p.rebuild_seen_cache
-        || !seen_levels_valid(visibility_download_levels, p.player_x, p.player_y);
+        || !seen_levels_valid(visibility_download_levels, p.player_x, p.player_y)
+        || g_seen_force_full_rebuild;
     if (rebuild_seen && !ensure_seen_pipelines(device)) { return {}; }
     auto const visibility_download_bytes =
         static_cast<Uint32>(visibility_download_levels.size()) * uint_level_bytes;

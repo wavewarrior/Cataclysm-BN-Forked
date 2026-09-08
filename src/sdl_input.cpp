@@ -5,7 +5,11 @@
 #include <cassert>
 #include <climits>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -25,6 +29,7 @@
 #include "sdltiles.h"  // handle_resize
 #include "ui_manager.h" // ui_manager::invalidate, ui_manager::redraw_invalidated
 #include "sdl_lighting_devui.h"
+#include "lighting/gpu_device.h"
 #include "debug.h"
 
 #define dbg(x) DebugLogFL((x),DC::Main)
@@ -478,6 +483,55 @@ void CheckMessages( display_context &d )
     if( ++frame % 120 == 0 ) {
         dbg( DL::Info ) << "[input] CheckMessages called, frame=" << frame;
     }
+    // DIAGNOSTIC (temporary): /tmp/cata_dbg_mode containing "0".."17" forces that
+    // lighting debug mode (mirrors F7) and is consumed. Lets scripted verification
+    // set an exact mode without depending on F-key delivery, which is flaky under
+    // synthetic input.
+    {
+        std::error_code ec;
+        if( std::filesystem::exists( "/tmp/cata_dbg_mode", ec ) ) {
+            std::ifstream mf( "/tmp/cata_dbg_mode" );
+            int m = -1;
+            mf >> m;
+            std::filesystem::remove( "/tmp/cata_dbg_mode", ec );
+            if( m >= 0 && m < 18 ) {
+                g_current_dbg_mode = static_cast<std::uint32_t>( m );
+                g_dbg_params.debug_mode = g_current_dbg_mode;
+                dbg( DL::Info ) << "lighting debug mode " << g_current_dbg_mode << " (file)";
+            }
+        }
+    }
+    // DIAGNOSTIC (temporary): /tmp/cata_knob containing "name value" sets a
+    // lighting DebugParams knob (mirrors the F4 sliders) and is consumed. Live
+    // bisection without driving the RmlUi panel. Known names: vis_curve,
+    // vis_radius, ao_strength, ramp_enable, shadow_mask_str, sun_scale,
+    // sky_scale, gi_strength, cloud_strength, nrm_amount.
+    {
+        std::error_code ec;
+        if( std::filesystem::exists( "/tmp/cata_knob", ec ) ) {
+            std::ifstream kf( "/tmp/cata_knob" );
+            std::string kn;
+            float kv = 0.0f;
+            if( kf >> kn >> kv ) {
+                auto& dp = g_dbg_params;
+                bool ok = true;
+                if( kn == "vis_curve" ) dp.vis_curve = kv;
+                else if( kn == "vis_radius" ) dp.vis_radius = kv;
+                else if( kn == "ao_strength" ) dp.ao_strength = kv;
+                else if( kn == "ramp_enable" ) dp.ramp_enable = kv;
+                else if( kn == "shadow_mask_str" ) dp.shadow_mask_str = kv;
+                else if( kn == "sun_scale" ) dp.sun_scale = kv;
+                else if( kn == "sky_scale" ) dp.sky_scale = kv;
+                else if( kn == "gi_strength" ) dp.gi_strength = kv;
+                else if( kn == "cloud_strength" ) dp.cloud_strength = kv;
+                else if( kn == "nrm_amount" ) dp.nrm_amount = kv;
+                else if( kn == "sun_arrow" ) g_sun_arrow = kv > 0.5f;
+                else ok = false;
+                std::filesystem::remove( "/tmp/cata_knob", ec );
+                dbg( DL::Info ) << "knob " << kn << " = " << kv << ( ok ? "" : " (unknown)" );
+            }
+        }
+    }
     SDL_Event ev;
     bool quit = false;
     bool text_refresh = false;
@@ -675,6 +729,12 @@ void CheckMessages( display_context &d )
                     // F12: toggle bright-blue debug backdrop.
                     menu_emitter_tuning::blue_backdrop =
                         !menu_emitter_tuning::blue_backdrop;
+                    break;
+                } else if( lc == KEY_F( 13 ) ) {
+                    // F13: dump the next frame's swapchain (/tmp/cata_frame_<n>.bmp)
+                    // and map state (/tmp/cata_map_<n>.json) for offline analysis.
+                    lighting::request_frame_dump();
+                    dbg( DL::Info ) << "frame+map dump requested (next frame)";
                     break;
                 }
                 if( lc <= 0 ) {

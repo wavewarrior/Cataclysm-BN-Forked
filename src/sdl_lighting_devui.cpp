@@ -27,14 +27,27 @@
 #include "weather.h"
 #include "sounds.h"
 #include "sound_visualization.h"
+#include "vehicle_part.h"
+#include "vpart_range.h"
+#include "json.h"
+#include "monster.h"
+#include "npc.h"
+#include "vehicle.h"
+#include "veh_type.h"
+#include "vpart_position.h"
+#include "lighting/gpu_device.h"
+
+#include <fstream>
 #include "worldfactory.h"
 
 #include <RmlUi/Core.h>
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
 #include <cstdio>
+#include <map>
 #include <limits>
 #include <queue>
 #include <string>
@@ -46,9 +59,23 @@
 
 EmitterOverlayState s_emo;
 
+namespace
+{
+// DIAGNOSTIC (temporary): CATA_DBG_MODE=N forces a shader debug mode at startup
+// (scripted F7 sweeps can't reliably inject the key). 0 = off.
+auto dbg_mode_from_env() -> uint32_t
+{
+    if (const char* e = std::getenv( "CATA_DBG_MODE" ); e != nullptr) {
+        return static_cast<uint32_t>( std::strtoul( e, nullptr, 10 ) ) % 18u;
+    }
+    return 0u;
+}
+} // namespace
+
 bool g_dbg_lighting = true;
 bool g_dbg_lighting_shader = false;
-lighting::debug_params g_dbg_params{};
+lighting::debug_params g_dbg_params{ .debug_mode = dbg_mode_from_env() };
+bool g_sun_arrow = false;
 bool g_rc_readback = false;
 float g_tonemap_exposure = 0.35f;
 float g_tonemap_min_ev = -12.47393f;
@@ -98,7 +125,7 @@ float g_hud_part_alpha_scale = 1.0f;
 float g_hud_part_size_scale = 1.0f;
 float g_hud_part_speed_scale = 1.0f;
 bool g_shadow_debug = false;
-uint32_t g_current_dbg_mode = 0u;
+uint32_t g_current_dbg_mode = dbg_mode_from_env();
 float g_skylight_bleed = 0.5f;
 // Hover-outline (HOVER_OUTLINE_PLAN.md) — CPU-side, no shader cbuffer.
 bool g_outline_enable = true;
@@ -164,6 +191,7 @@ float g_sound_wave_min_radius = 6.0f;
 float g_gi_temporal = 0.3f;
 float g_gi_bounce2 = 0.35f;
 float g_gi_albedo = 0.6f;
+bool g_seen_force_full_rebuild = false;
 
 namespace sdl_lighting_devui
 {
@@ -216,7 +244,7 @@ auto g_sound_category = 0;        // index into sound_t enum (0=background)
 
 // Slice 8 — proxies for controls whose backing globals aren't directly bindable
 // (uint32 fields, <select> indices, size_t counts, read-only diagnostics text).
-int g_devui_dbg_mode = 0;       // <select> proxy → g_current_dbg_mode (event-applied)
+int g_devui_dbg_mode = static_cast<int>( g_current_dbg_mode ); // <select> proxy → g_current_dbg_mode (event-applied)
 int g_devui_shadow_steps = 16;  // reconciled with uint g_dbg_params.shadow_steps each frame
 int g_devui_placed = 0;         // mirrors dev_test_lights::lights.size() each frame
 int g_runic_template = 0;       // <select> proxy → runic force_template+1 (event-applied)
@@ -598,6 +626,7 @@ void devui_rml_open()
         g_hud_part_speed_scale = 1.0f;
     } );
     c.Bind( "shadow_debug", &g_shadow_debug );
+    c.Bind( "seen_force_full_rebuild", &g_seen_force_full_rebuild );
     c.Bind( "shadow_mask_str", &g_dbg_params.shadow_mask_str );
     c.Bind( "mem_dim", &g_dbg_params.mem_dim );
     c.Bind( "mem_radius", &g_dbg_params.mem_radius );
@@ -657,8 +686,8 @@ void devui_rml_open()
     c.Bind( "skylight_bleed", &g_skylight_bleed );
     c.Bind( "tonemap_exposure", &g_tonemap_exposure );
     c.Bind( "tonemap_min_ev", &g_tonemap_min_ev );
-    c.Bind( "tonemap_max_ev", &g_tonemap_max_ev );
     c.Bind( "bloom_enable", &g_bloom_enable );
+    c.Bind( "sun_arrow", &g_sun_arrow );
     c.Bind( "bloom_threshold", &g_bloom_threshold );
     c.Bind( "bloom_intensity", &g_bloom_intensity );
     // ASC-CDL colour grade + post-processing (b1/space3 in tonemap.frag).
@@ -1172,6 +1201,152 @@ void rml_tick()
     } else {
         devui_rml_close();
     }
+}
+
+// ---------------------------------------------------------------------------
+// CATA_MAP_DUMP="<frame>:<path>" — raw map-state snapshot for offline
+// correlation of the F7 debug fields against what is physically on the map.
+// Paired with CATA_FRAME_DUMP so both fire on the same frame count.
+// ---------------------------------------------------------------------------
+void maybe_dump_map( std::uint64_t frame, std::uint64_t last_dump_frame )
+{
+    std::string path;
+    if( frame == last_dump_frame ) {
+        // F13 / file-trigger on-demand dump: pair with the BMP written this frame.
+        path = "/tmp/cata_map_" + std::to_string( frame ) + ".json";
+    } else {
+        static const char* spec = std::getenv( "CATA_MAP_DUMP" );
+        if( spec == nullptr ) { return; }
+        const char* colon = std::strchr( spec, ':' );
+        if( colon == nullptr ) { return; }
+        if( std::strtoull( spec, nullptr, 10 ) != frame ) { return; }
+        path.assign( colon + 1 );
+    }
+    if( g == nullptr ) { return; }
+
+    map& mm = get_map();
+    const int z = g->u.bub_pos().z();
+    const int W = mm.getmapsize() * SEEX;
+    const int H = mm.getmapsize() * SEEY;
+    const auto& tc = mm.access_cache( z ).transparency_cache;
+
+    std::ofstream f( path, std::ios::binary );
+    if( !f ) {
+        DebugLogFL( DL::Warn, DC::Main ) << "map dump: cannot open " << path;
+        return;
+    }
+    JsonOut j( f );
+    j.start_object();
+    j.member( "frame", static_cast<long long>( frame ) );
+    j.member( "z", z );
+    j.member( "width", W );
+    j.member( "height", H );
+    j.member( "player", std::vector<int>{ g->u.bub_pos().x(), g->u.bub_pos().y(), z } );
+    j.member( "map_origin", std::vector<int>{ s_emo.map_origin_x, s_emo.map_origin_y } );
+    j.member( "draw_off_px", std::vector<int>{ s_emo.draw_off_px_x, s_emo.draw_off_px_y } );
+    j.member( "tile_px", s_emo.tile_px );
+    j.member( "screen", std::vector<int>{ s_emo.screen_w, s_emo.screen_h } );
+    j.member( "trans_at_player", s_emo.trans_at_player );
+
+    // Terrain / furniture: flat W*H arrays of int ids (row-major, y outer),
+    // plus id→name maps for the distinct ids present. Transparency: full
+    // grid, row-major, indexed x*H+y (column-major storage) — the exact
+    // field the F4 diag's trans@p reads.
+    std::map<int, std::string> ter_names;
+    std::map<int, std::string> furn_names;
+    j.member( "terrain" );
+    j.start_array();
+    for( int y = 0; y < H; ++y ) {
+        for( int x = 0; x < W; ++x ) {
+            const ter_id tid = mm.ter( tripoint_bub_ms( x, y, z ) );
+            j.write( tid.to_i() );
+            ter_names[tid.to_i()] = tid.id().str();
+        }
+    }
+    j.end_array();
+    j.member( "terrain_names" );
+    j.start_object();
+    for( const auto& [k, v] : ter_names ) {
+        j.member( std::to_string( k ), v );
+    }
+    j.end_object();
+
+    j.member( "furniture" );
+    j.start_array();
+    for( int y = 0; y < H; ++y ) {
+        for( int x = 0; x < W; ++x ) {
+            const furn_id fid = mm.furn( tripoint_bub_ms( x, y, z ) );
+            j.write( fid.to_i() );
+            if( fid.to_i() != 0 ) {
+                furn_names[fid.to_i()] = fid.id().str();
+            }
+        }
+    }
+    j.end_array();
+    j.member( "furniture_names" );
+    j.start_object();
+    for( const auto& [k, v] : furn_names ) {
+        j.member( std::to_string( k ), v );
+    }
+    j.end_object();
+
+    j.member( "transparency" );
+    j.start_array();
+    for( int y = 0; y < H; ++y ) {
+        for( int x = 0; x < W; ++x ) {
+            const int i = x * H + y;
+            j.write( i >= 0 && i < static_cast<int>( tc.size() ) ? tc[i] : -1.f );
+        }
+    }
+    j.end_array();
+
+    j.member( "creatures" );
+    j.start_array();
+    for( Creature* c : mm.get_creatures_in_radius( g->u.bub_pos(), 100, 1 ) ) {
+        if( c == nullptr ) { continue; }
+        const tripoint_bub_ms p = c->bub_pos();
+        if( p.z() != z ) { continue; }
+        j.start_object();
+        j.member( "kind", c->is_avatar() ? "avatar" : ( c->is_npc() ? "npc" : "monster" ) );
+        j.member( "x", p.x() );
+        j.member( "y", p.y() );
+        if( const monster* m = c->as_monster() ) {
+            j.member( "id", m->type ? m->type->id.str() : "" );
+        } else if( const npc* n = c->as_npc() ) {
+            j.member( "id", n->myclass.str() );
+        }
+        j.end_object();
+    }
+    j.end_array();
+
+    j.member( "vehicles" );
+    j.start_array();
+    for( const wrapped_vehicle& wv : mm.get_vehicles() ) {
+        vehicle* v = wv.v;
+        if( v == nullptr ) { continue; }
+        j.start_object();
+        j.member( "name", v->name );
+        j.member( "pos", std::vector<int>{ wv.pos.x(), wv.pos.y(), wv.pos.z() } );
+        j.member( "parts" );
+        j.start_array();
+        for( const vpart_reference& prt : v->get_all_parts() ) {
+            if( prt.part().removed ) { continue; }
+            const tripoint_bub_ms pp = prt.pos();
+            if( pp.z() != z ) { continue; }
+            j.start_object();
+            j.member( "x", pp.x() );
+            j.member( "y", pp.y() );
+            j.member( "id", prt.info().get_id().str() );
+            j.end_object();
+        }
+        j.end_array();
+        j.end_object();
+    }
+    j.end_array();
+
+    j.end_object();
+    DebugLogFL( DL::Info, DC::Main ) << "map dump: wrote " << path
+                                     << " (" << W << "x" << H << ", z=" << z << ")";
 }
 
 } // namespace sdl_lighting_devui

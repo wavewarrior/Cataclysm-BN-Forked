@@ -183,6 +183,7 @@
                 <div class="devui-section">Silhouette sun shadows</div>
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="shadow_debug"/> show shadow mask (debug blit)</label>
                 <div class="devui-row">shadow mask strength <input type="range" min="0" max="1" step="0.01" data-value="shadow_mask_str"/> <span class="devui-val">{{shadow_mask_str}}</span></div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="seen_force_full_rebuild"/> force full seen rebuild (diag)</label>
 
                 <div class="devui-section">Memory fade</div>
                 <div class="devui-row">mem dim <input type="range" min="0" max="1" step="0.01" data-value="mem_dim"/> <span class="devui-val">{{mem_dim}}</span></div>
@@ -243,6 +244,9 @@
                         <option data-for="n : dbg_mode_names" data-value="it_index">{{n}}</option>
                     </select>
                 </div>
+
+                <div class="devui-section">Overlays</div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="sun_arrow"/> sun-direction arrow</label>
 
                 <div class="devui-section">Light scales</div>
                 <div class="devui-row">emitter <input type="range" min="0" max="4" step="0.02" data-value="emitter_scale"/> <span class="devui-val">{{emitter_scale}}</span></div>

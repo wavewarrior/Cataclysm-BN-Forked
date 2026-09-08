@@ -5,6 +5,7 @@
 #include "lighting/shader_compiler.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 #define dbg(x) DebugLogFL((x), DC::SDL)
@@ -141,6 +142,24 @@ auto debug_line_pass::add_point( float x, float y,
     constexpr float arm = 0.15f; // tile units — small cross
     add_line( x - arm, y, x + arm, y, r, g, b, a );
     add_line( x, y - arm, x, y + arm, r, g, b, a );
+}
+
+auto debug_line_pass::add_arrow( float cx, float cy, float dx, float dy, float length,
+                                 float r, float g, float b, float a ) -> void
+{
+    const float mag = std::hypot( dx, dy );
+    if( mag < 1e-4f || length <= 0.0f ) {
+        return;
+    }
+    const float ux = dx / mag, uy = dy / mag; // unit direction
+    const float px = -uy, py = ux;            // unit perpendicular
+    const float hx = cx + ux * length, hy = cy + uy * length; // tip
+    constexpr float head = 0.28f; // barb length (tiles)
+    constexpr float spread = 0.5f; // barb half-angle factor
+    const float bx = hx - ux * head, by = hy - uy * head; // head base
+    add_line( cx, cy, hx, hy, r, g, b, a ); // shaft
+    add_line( hx, hy, bx + px * head * spread, by + py * head * spread, r, g, b, a );
+    add_line( hx, hy, bx - px * head * spread, by - py * head * spread, r, g, b, a );
 }
 
 auto debug_line_pass::clear() noexcept -> void

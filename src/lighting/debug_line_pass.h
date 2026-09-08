@@ -53,6 +53,12 @@ public:
     /// Buffer a point as a small cross (world-tile coords).
     auto add_point( float x, float y, float r, float g, float b, float a ) -> void;
 
+    /// Buffer an arrow from (cx,cy) along the (dx,dy) direction (need not be
+    /// unit — it is normalised) for @p length tiles, with a two-barb head.
+    /// Reusable for any vector-field visualisation (sun direction, wind, flow).
+    auto add_arrow( float cx, float cy, float dx, float dy, float length,
+                    float r, float g, float b, float a ) -> void;
+
     /// Upload buffered lines and draw them onto @p target.
     /// Camera params convert world-tile to NDC:
     ///   pixel = (tile - cam) * tile_px

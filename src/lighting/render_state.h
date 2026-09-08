@@ -440,6 +440,12 @@ public:
     // Driven from cata_tiles (populate) and render_world_pass_w (record).
     debug_line_pass& debug_lines() noexcept { return debug_lines_; }
 
+    /// The sun/sky params actually rendered this frame (cached from
+    /// begin_lighting_frame). Lets 2D overlays (e.g. the sun-direction arrow)
+    /// read the exact direction/intensity the GPU used, including any
+    /// pinned-hour or weather scaling. Zeroed before the first frame.
+    auto current_sun() const noexcept -> const sun_params & { return last_frame_inputs_.sun; }
+
     // Large multi-tile terrain decals (cosmetic overlays).
     terrain_decals::manager& decals() noexcept { return decals_; }
 

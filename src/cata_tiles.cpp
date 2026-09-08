@@ -26,6 +26,7 @@
 #include "itype.h"
 #include "json.h"
 #include "lighting/solid_overlay.h"
+#include "sdl_lighting_devui.h"
 #include "lightmap.h"
 #include "lightmap_ready.h"
 #include "line.h"
@@ -1838,6 +1839,21 @@ void cata_tiles::draw(
         dl.clear();
         if (auto* pw = g ? g->m.get_physics_world() : nullptr; pw && pw->debug_draw_enabled()) {
             pw->draw_debug(dl);
+        }
+        // Sun-direction indicator: a bright arrow at the player showing the
+        // direction light TRAVELS (away from the sun; the sun is the origin).
+        // Points along +sun_dir (light→ground). Toggled by the F4
+        // "sun-direction arrow" checkbox (g_sun_arrow); drawn whenever the sun
+        // is up so the azimuth is legible in any view. Reuses the
+        // debug_line_pass arrow primitive (also usable for wind/flow fields).
+        if (g && g_sun_arrow) {
+            const auto& sun = lighting::get_render_state().current_sun();
+            if (sun.sun_intensity > 0.01f) {
+                const auto pp = g->u.bub_pos();
+                dl.add_arrow( static_cast<float>(pp.x()), static_cast<float>(pp.y()),
+                              sun.sun_dir_x, sun.sun_dir_y, 3.0f,
+                              1.0f, 0.95f, 0.2f, 1.0f );
+            }
         }
     }
     lighting::get_render_state().clear_tile_scissor();

@@ -1536,6 +1536,9 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
     } )
     : lighting::sprite_batcher::pass_overlay_fn{} );
     rs.device().submit_frame( ctx );
+    // Pair with CATA_FRAME_DUMP: submit_frame incremented the frame counter,
+    // so this sees the same count the BMP dump compared against.
+    sdl_lighting_devui::maybe_dump_map( rs.device().frame_count(), rs.device().last_dump_frame() );
 }
 
 void refresh_display()
