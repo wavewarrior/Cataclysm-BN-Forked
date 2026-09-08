@@ -23,6 +23,14 @@
 #define dbg(x) DebugLogFL((x), DC::SDL)
 
 namespace lighting {
+// Occluder height (tiles) for full trees. The shader's sky_sun.comp marches a
+// 3D ray and blocks iff ray_h < h, so this sets how FAR a tree's shadow reaches:
+// at noon (elev_tan~1) a 3.0-tall tree casts a ~3-tile shadow, at dawn (elev_tan~0.2)
+// a ~15-tile one. Walls stay at coverage-derived ~1.0, so trees cast LONG shadows
+// and buildings SHORT — the height-aware split. Keep in sync with TREE_H in
+// sky_sun.comp.hlsl (the SDF-only fallback for tiles absent from OccBuf).
+constexpr float TREE_H = 3.0f;
+
 
 
 frame_lighting_result build_and_submit_lighting(
@@ -194,6 +202,15 @@ frame_lighting_result build_and_submit_lighting(
                         // P6b: parked vehicles are solid occluders for shadowing.
                         if (const auto vpart = m.veh_at(tp); vpart && vpart->obstacle_at_part()) {
                             h = std::max(h, 1.0f);
+                        }
+                        // Full trees (TFLAG_TREE) are opaque terrain with coverage 80,
+                        // which would cap their shadow height at 0.8 — SHORTER than a
+                        // wall's 1.0, inverting the real tree/wall relationship. Override
+                        // to TREE_H so trees cast long shadows. Young trees, shrubs and
+                        // tall grass carry TRANSPARENT (zeroed above) and lack TFLAG_TREE,
+                        // so they stay at h=0 and keep transmitting daylight.
+                        if (m.has_flag_ter(TFLAG_TREE, tp)) {
+                            h = TREE_H;
                         }
                         const float roof = (have_above && above->floor_cache[idx]) ? 1.0f : 0.0f;
                         occ[static_cast<size_t>(idx) * 2 + 0] = h;

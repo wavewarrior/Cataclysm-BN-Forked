@@ -1024,7 +1024,19 @@ float4 main(VS_OUT i): SV_Target0 {
     }
 
     // GPU total light (dithered dynamic light + un-dithered ambient floor).
-    const float3 gpu_total = min(ambient_v + dyn, float3(2.0, 2.0, 2.0)) * cloud_vis;
+    // Tree/building sun shadow: sun_contrib is already scaled by sun_shadow
+    // inside dyn, but that reduction is eaten by the 2.0 ceiling clamp below —
+    // open daylight tiles sit AT the ceiling, so cutting the sun term only
+    // removes clipped headroom and the visible pixel barely moves (the same
+    // failure the cloud comment above documents). Recover it as a POST-clamp
+    // multiplier, like cloud_vis. Partial floor (0.65, not 0): a shadow kills
+    // the direct sun but only partly blocks sky fill, so a shadowed tile keeps
+    // ~65% of its lit radiance instead of going black. The floor is a visual
+    // proxy for "lost direct sun + partial sky reduction" — deliberately NOT
+    // derived from sun_soft (edge width) or sun_intensity (fights the clamp).
+    // Gated to sun_applies so night/dusk is untouched.
+    const float sun_shad_mul = sun_applies ? lerp(0.65, 1.0, sun_occl) : 1.0;
+    const float3 gpu_total = min(ambient_v + dyn, float3(2.0, 2.0, 2.0)) * cloud_vis * sun_shad_mul;
     // What was here: a `combined` term that took the per-channel MAXIMUM of the memory
     // tint and `gpu_total`, then multiplied it onto the raw texel. It read as a blend
     // but was a SELECTOR. The CPU only ever emitted two tint values (cata_tiles.cpp

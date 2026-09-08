@@ -63,7 +63,8 @@ static const float SKY_WALL_H  = 0.60;  // occluder height that blocks a sky dir
 // Celestial (sun/moon) SDF sphere-trace. SUN_STEPS is cbuffer-driven.
 static const float SUN_START   = 0.30;  // skip the probe cell
 static const float ROOF_H      = 1.00;  // roof height (tiles) — ray clears above this
-static const float MAX_OCC_H   = 1.20;  // ray above this has cleared all occluders
+static const float MAX_OCC_H   = 3.00;  // tallest occluder (tiles) — march end = this / tan(elev)
+static const float TREE_H      = 3.00;  // height of SDF-only occluders (trees; absent from OccBuf)
 static const float SUN_FAR     = 8.00;  // trace distance where the step is fully coarse
 
 // OccBuf is tile-res, x-major occ[(x*map_h+y)*2 + c]. c0 = height, c1 = roof.
@@ -162,14 +163,30 @@ float celestial_occ_dir( float2 probe, float2 toward )
         }
         const float2 pos = probe + toward * t;
         const float  sd  = sdf_bilinear( pos );
-        if( sd < 0.05 ) {
-            shadow = 0.0;
-            break;                            // inside an occluder
+        // Height gate: the SDF is a 2D horizontal distance field, so `sd` is the
+        // MISS distance to the nearest occluder FOOTPRINT, not the vertical
+        // clearance. A ray that has climbed ABOVE an occluder (ray_h > h_eff)
+        // still reads a small `sd` while horizontally over its footprint —
+        // without this gate the penumbra feather below would darken the ray
+        // even though it flies over the wall. Occluder height: OccBuf height
+        // for walls/half-walls/furniture; SDF-only occluders (trees, absent
+        // from OccBuf) fall back to TREE_H.
+        const float ray_h = t * elev_tan;
+        if( ray_h >= MAX_OCC_H ) {
+            break;                            // above every possible occluder
         }
-        // Penumbra: the SDF distance IS the miss distance from the ray, so
-        // feather the shadow over sun_soft tiles of clearance.
-        if( sun_soft > 0.001 ) {
-            shadow = min( shadow, saturate( sd / sun_soft ) );
+        if( sd < 0.05 || sun_soft > 0.001 ) {
+            const float h     = occ_height_at( (int)pos.x, (int)pos.y );
+            const float h_eff = ( h > 0.01 ) ? h : TREE_H;
+            if( ray_h < h_eff ) {
+                if( sd < 0.05 ) {
+                    shadow = 0.0;
+                    break;                    // inside an occluder, below its top
+                }
+                // Penumbra: feather over sun_soft tiles of horizontal clearance,
+                // but only while the ray is still below the occluder's crown.
+                shadow = min( shadow, saturate( sd / sun_soft ) );
+            }
         }
         // Distance-adaptive step: 0.25 tile near the receiver growing to 1.0
         // tile at SUN_FAR — the cascade. Never overshoot the trace end.
@@ -179,7 +196,6 @@ float celestial_occ_dir( float2 probe, float2 toward )
     }
     return shadow;
 }
-
 [numthreads(8, 8, 1)]
 void main( uint3 tid : SV_DispatchThreadID )
 {
