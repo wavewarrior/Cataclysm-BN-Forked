@@ -174,11 +174,13 @@ frame_lighting_result build_and_submit_lighting(
                         // is finalized (factory empty), where that deref debugmsgs
                         // "invalid terrain id 0". Guard on the ter id being valid;
                         // until terrain loads, occ stays 0 (no occluder), correct for
-                        // the loading screen (no real map to shadow yet).
-                        float h =
-                            m.ter(tp).is_valid()
-                                ? std::clamp(static_cast<float>(m.coverage(tp)) / 100.0f, 0.0f, 1.0f)
-                                : 0.0f;
+                        // the loading screen (no real map to shadow yet). has_flag_ter
+                        // below hits the identical unguarded obj() deref, so it must
+                        // share this same guard rather than running unconditionally.
+                        const bool ter_ok = m.ter(tp).is_valid();
+                        float h = ter_ok
+                                      ? std::clamp(static_cast<float>(m.coverage(tp)) / 100.0f, 0.0f, 1.0f)
+                                      : 0.0f;
                         // map::coverage() is the ranged-COVER gameplay stat, not a
                         // light-transmission value: a window has coverage 60 (stops
                         // bullets, blocks a sightline through the frame) yet is
@@ -209,7 +211,7 @@ frame_lighting_result build_and_submit_lighting(
                         // to TREE_H so trees cast long shadows. Young trees, shrubs and
                         // tall grass carry TRANSPARENT (zeroed above) and lack TFLAG_TREE,
                         // so they stay at h=0 and keep transmitting daylight.
-                        if (m.has_flag_ter(TFLAG_TREE, tp)) {
+                        if (ter_ok && m.has_flag_ter(TFLAG_TREE, tp)) {
                             h = TREE_H;
                         }
                         const float roof = (have_above && above->floor_cache[idx]) ? 1.0f : 0.0f;
