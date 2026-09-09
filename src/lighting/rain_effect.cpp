@@ -389,8 +389,11 @@ void rain_effect::record(
         uint32_t base;
         uint32_t pad;
     } fp;
-    fp.tw = static_cast<float>(world_w);
-    fp.th = static_cast<float>(world_h);
+    // NDC divide must use the LOGICAL projection extent, not the physical
+    // world_tex dimensions — the latter is the HiDPI-backed texture (can be
+    // 2x logical), which would confine every drop to the top-left quadrant.
+    fp.tw = params.proj_w > 0.f ? params.proj_w : static_cast<float>(world_w);
+    fp.th = params.proj_h > 0.f ? params.proj_h : static_cast<float>(world_h);
     fp.base = 0u;
     fp.pad = 0u;
     SDL_PushGPUVertexUniformData(cb, 0, &fp, sizeof(fp));

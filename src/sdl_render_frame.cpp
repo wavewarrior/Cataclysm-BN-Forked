@@ -1118,6 +1118,8 @@ auto render_world_pass_w( lighting::render_state &rs,
         rp.camera_off_x    = g_vol_params.camera_off_x;
         rp.camera_off_y    = g_vol_params.camera_off_y;
         rp.tile_pixel_size = g_vol_params.tile_pixel_size;
+        rp.proj_w          = static_cast<float>( proj_w );
+        rp.proj_h          = static_cast<float>( proj_h );
 
         if( g && tilecontext && world_generator && world_generator->active_world
             && rp.tile_pixel_size > 0.f ) {

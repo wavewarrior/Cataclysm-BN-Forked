@@ -53,6 +53,14 @@ struct rain_params {
     float camera_off_x = 0.f;
     float camera_off_y = 0.f;
     float tile_pixel_size = 32.f;
+    // Logical projection extent (mirrors volumetric_pass's vp.proj_w/proj_h).
+    // The world render target is the physical/HiDPI-backed texture (can be 2x
+    // the logical size), but rain_droplet.vert's NDC divide must use the
+    // LOGICAL extent that camera_off/tile_pixel_size were derived against —
+    // using the physical target size here confines every drop's NDC to the
+    // top-left quadrant (half-scale) on a HiDPI display.
+    float proj_w = 0.f;
+    float proj_h = 0.f;
 };
 
 class rain_effect {
