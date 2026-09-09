@@ -914,6 +914,11 @@ struct canopy_defer_record {
     // extends below its tile (negative fg_offset_y), so sorting on the tile
     // bottom let a creature under the hanging leaves draw in front of them.
     int dst_h = 0;
+    // Terrain/furniture category, snapshotted so the cutout gate in
+    // draw_sprite_at (which reads canopy_capture_category_) sees the
+    // REPLAYED sprite's own category, not whatever draw_from_id_string
+    // last published before entering the interleaved creature/canopy replay.
+    TILE_CATEGORY category = C_NONE;
 };
 
 class cata_tiles {

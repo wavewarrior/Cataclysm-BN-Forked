@@ -1454,6 +1454,7 @@ void cata_tiles::draw(
                     low_frontier_mask_ = d.frontier_mask;
                     vision_overlay_outline_ = d.outline;
                     active_anim_xform_ = d.xform;
+                    canopy_capture_category_ = d.category;
                     draw_sprite_at(
                         *d.tile, d.screen_pos, d.loc_rand, /*fg:*/ true, d.rota, d.fg_tint, d.ll,
                         d.apply_visual_effects, d.overlay_count, &replay_height_3d, d.retract,
@@ -2551,7 +2552,8 @@ bool cata_tiles::draw_sprite_at(
             .frontier_mask = low_frontier_mask_,
             .outline = vision_overlay_outline_,
             .xform = active_anim_xform_,
-            .dst_h = destination.h});
+            .dst_h = destination.h,
+            .category = canopy_capture_category_});
     }
 
     // GPU-only render. Rotation is stored in sprite_instance but the HLSL
