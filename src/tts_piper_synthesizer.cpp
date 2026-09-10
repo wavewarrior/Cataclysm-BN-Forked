@@ -128,7 +128,7 @@ void tts_piper_synthesizer::worker_loop()
             piper_bin = find_piper_binary();
             bin_found = std::filesystem::exists( piper_bin );
             if( !bin_found ) {
-                DebugLog( DL::Warn, DC::NPC ) << "TTS(piper): binary not found at \""
+                DebugLog( DL::Warn, DC::Main ) << "TTS(piper): binary not found at \""
                                               << piper_bin << "\"; TTS disabled.";
             }
         }
@@ -145,7 +145,7 @@ void tts_piper_synthesizer::worker_loop()
 
         const std::string model = voice_model_path( cur.voice );
         if( model.empty() ) {
-            DebugLog( DL::Warn, DC::NPC ) << "TTS(piper): voice model missing for \"" << cur.voice
+            DebugLog( DL::Warn, DC::Main ) << "TTS(piper): voice model missing for \"" << cur.voice
                                           << "\"; skipping line.";
             continue;
         }
@@ -187,7 +187,7 @@ bool tts_piper_synthesizer::synthesize_to_wav( const std::string &bin, const std
     SDL_Process *proc = SDL_CreateProcessWithProperties( props );
     SDL_DestroyProperties( props );
     if( !proc ) {
-        DebugLog( DL::Warn, DC::NPC ) << "TTS(piper): failed to spawn: " << SDL_GetError();
+        DebugLog( DL::Warn, DC::Main ) << "TTS(piper): failed to spawn: " << SDL_GetError();
         return false;
     }
 
@@ -206,7 +206,7 @@ bool tts_piper_synthesizer::synthesize_to_wav( const std::string &bin, const std
     const bool ok = ( exitcode == 0 ) && std::filesystem::exists( wav_path ) &&
                     std::filesystem::file_size( wav_path ) > 44; // non-empty WAV
     if( !ok ) {
-        DebugLog( DL::Warn, DC::NPC ) << "TTS(piper): synthesis failed (exit " << exitcode
+        DebugLog( DL::Warn, DC::Main ) << "TTS(piper): synthesis failed (exit " << exitcode
                                       << ") for voice \"" << model << '"';
     }
     return ok;

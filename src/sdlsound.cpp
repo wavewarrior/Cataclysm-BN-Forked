@@ -662,7 +662,7 @@ auto sfx::play_tts_audio( const std::string &wav_path ) -> void
     // of resident audio for a burst of dialogue.
     auto *audio = MIX_LoadAudio( g_mixer, wav_path.c_str(), false );
     if( !audio ) {
-        dbg( DL::Warn ) << "TTS: failed to load " << wav_path << ": " << SDL_GetError();
+        DebugLogFL( DL::Warn, DC::Main ) << "TTS: failed to load " << wav_path << ": " << SDL_GetError();
         return;
     }
 
