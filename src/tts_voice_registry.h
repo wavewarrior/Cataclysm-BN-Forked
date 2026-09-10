@@ -21,7 +21,8 @@ class tts_voice_registry
 
         /// Resolve the voice pack for an NPC instance.
         /// Priority: (1) explicit registry entry, (2) npc_template voice_pack_id,
-        /// (3) npc_class voice_pack_id. Returns nullopt if none set.
+        /// (3) npc_class voice_pack_id, (4) the NPC's own gender ("male"/"female").
+        /// Always returns a value — priority 4 never fails.
         std::optional<std::string> resolve_voice( const npc &npc_instance ) const;
 
         /// Remove a previously registered voice mapping.

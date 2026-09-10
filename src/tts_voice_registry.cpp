@@ -44,7 +44,11 @@ std::optional<std::string> tts_voice_registry::resolve_voice( const npc &npc_ins
         return npc_instance.myclass->get_voice_pack_id();
     }
 
-    return std::nullopt;
+    // Priority 4: fall back to the NPC's own gender. Nothing in shipped JSON
+    // data actually sets voice_pack_id (no npc_class/npc_template does), so
+    // without this every NPC would silently get no voice at all despite TTS
+    // being enabled and both "male"/"female" packs being bundled.
+    return npc_instance.male ? "male" : "female";
 }
 
 

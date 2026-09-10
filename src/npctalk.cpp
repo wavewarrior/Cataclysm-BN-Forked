@@ -1264,13 +1264,7 @@ void npc::talk_to_u( bool radio_contact, bool enforce_first_topic )
             } while( cat != -1 && topic_category( d.topic_stack.back() ) == cat );
         }
         if( next.id == "TALK_DONE" || d.topic_stack.empty() ) {
-            d.beta->say( _( "Bye." ) );
-            if( get_option<bool>( "ENABLE_TTS" ) && g_tts_synthesizer != nullptr ) {
-                const std::string tts_text = _( "Bye." );
-                const auto voice = tts_voice_registry::instance().get_voice( myclass );
-                const std::string voice_name = voice.value_or( "default" );
-                g_tts_synthesizer->synthesize( tts_text, voice_name );
-            }
+            d.beta->say( _( "Bye." ) ); // npc::say() already handles TTS synthesis
             d.done = true;
         } else if( next.id != "TALK_NONE" ) {
             d.add_topic( next );
@@ -2123,6 +2117,19 @@ talk_topic dialogue::opt( dialogue_window &d_win, const std::string &npc_name,
 {
     std::string challenge = dynamic_line( topic );
     gen_responses( topic );
+
+    // Attempt TTS synthesis for this line. dynamic_line() encodes actions as a
+    // leading '*' (e.g. "*nods") — those aren't speech, skip them. A leading
+    // '&' means "no name prefix" but the rest IS spoken; strip the marker only.
+    if( get_option<bool>( "ENABLE_TTS" ) && g_tts_synthesizer != nullptr
+        && !challenge.empty() && challenge[0] != '*' ) {
+        std::string tts_line = challenge[0] == '&' ? challenge.substr( 1 ) : challenge;
+        parse_tags( tts_line, *alpha, *beta, topic.item_type );
+        const auto voice = tts_voice_registry::instance().resolve_voice( *beta );
+        if( voice ) {
+            g_tts_synthesizer->synthesize( tts_line, *voice );
+        }
+    }
     // Put quotes around challenge (unless it's an action)
     if( challenge[0] != '*' && challenge[0] != '&' ) {
         challenge = "\"" + challenge + "\"";
