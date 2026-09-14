@@ -311,11 +311,21 @@ lines into `src/lightmap.cpp`/`src/shadowcasting.*`. Implements **D2**.
 Acceptance: builds; `[.]`-excluded suite at baseline parity; the GPU-lighting check in
 **Verification** shows a lit scene, not black.
 
-### S3 — `c3090ca8f0` (depth 96) — COORD #9174 "redefine bubble space truth" — +11 files / +131 hunks
+### S3 — `c3090ca8f0` (depth 96) — COORD #9174 "redefine bubble space truth" — +11 files / +131 hunks (stale, see update below)
 
-`git merge c3090ca8f0`. **One commit, 131 conflict hunks — the single most expensive commit in
-main's history relative to HEAD.** It is isolated precisely so a coordinate regression is
-attributable to this stage alone. Implements **D3**.
+`git merge c3090ca8f0`. **One commit, originally measured at 131 conflict hunks against the S2
+landing point — the single most expensive commit in main's history relative to HEAD.** It is
+isolated precisely so a coordinate regression is attributable to this stage alone. Implements
+**D3**.
+
+**Update (2026-09-14, re-measured against current HEAD):** `git merge-tree --write-tree HEAD
+c3090ca8f0` (read-only) now reports **48 conflicting files**, not 11 — HEAD accumulated many
+unrelated commits (sun shadows, GI, TTS, canopy work, etc.) between when this stage was scoped
+and now, widening the conflict surface on files this stage's commit also touches
+(`character.cpp`, `game.cpp`, `map.cpp`, `mapgen.cpp`, `vehicle.cpp`, and 8
+`tests/vehicle_*`/`ranged_*` files among them). The coordinate-refactor *content* of #9174 is
+unchanged; the extra conflicts are ordinary re-basing noise from HEAD drift, not new coordinate
+work. Full current file list recorded in the S3 execution log below rather than repeated here.
 
 Adopt upstream's coordinate semantics as base truth and port HEAD's code onto it. The three HEAD
 subsystems that encode coordinate meaning and must be re-checked here:
@@ -333,6 +343,38 @@ HEAD's `set_pocket_info`/`get_pocket_info`/`clear_pocket_info`/`has_dimension_bo
 Acceptance: builds; `"[map]" "[vehicle]" "[physics]"` and the coordinate-sensitive tests pass at
 baseline parity. If this stage's conflicts prove intractable in `src/mapgen.cpp`, fall back per
 **Assumptions & contingencies**.
+
+### S3 outcome (2026-09-14) — landed as `c5384ab2df`
+
+48 conflicting files (widened from the original 11/131 estimate by HEAD drift, see the update
+above) resolved by an 8-agent fan-out plus ~30 additional HEAD-only decomposed satellite TUs
+that used the removed `map::bub_to_abs`/`abs_to_bub` member functions but never showed as git
+conflicts (they postdate the merge base). Full suite (`--rng-seed 1 --order decl "~[.]"`):
+**0 failures, 0 errors, 1 skipped** — byte-identical to the pre-S3 baseline. Stage filters
+`"[map]","[vehicle]","[physics]"`: exit 0.
+
+Real bugs found beyond the mechanical port, all fixed before landing:
+- `map::set_abs_sub` is now protected (upstream's own change); `game_movement.cpp` and
+  `tests/map_helpers.cpp` needed upstream's existing public `set_loaded_submap_z()` /
+  a new narrow `set_loaded_submap_origin()` instead.
+- `game_misc.cpp`'s `update_map(Character&)` still read `who.bub_pos()` (stale during a
+  pending shift); ported main's fix to `abs_to_map_local(m, who.abs_pos())`. This alone
+  fixed 20 of the 24 initial post-merge test failures (the entire grab/ramp/vehicle and
+  vision clusters cascaded from it).
+- `iexamine_electronics.cpp`'s portal travel converted the destination via the avatar's
+  stale pre-travel position instead of the post-`travel_to_dimension` map.
+- **Systemic in `coop_*.cpp` (~20 sites):** code that receives a network-absolute position,
+  converts it via the avatar-bubble-relative free `abs_to_bub()`, then uses the result as a
+  map-relative coordinate (`map::inbounds`/`i_at`/`ter_set`/critter lookup, or as one half of
+  a `bub_pos()` read + `setpos(bub_ms)` write pair). This silently drifts whenever the local
+  avatar's bubble origin and the loaded map's `abs_sub` aren't exactly synced — which coop's
+  proxy-NPC/reconciliation paths routinely aren't. Root cause of the 3 coop test regressions
+  this stage introduced; fixed by switching every such site to `abs_to_map_local(g->m, …)` or
+  a single-frame `abs_pos()`-based read-modify-write.
+
+Not yet re-verified against this stage: the D3/coordinate-sensitive **new-behaviour checks**
+in **Verification** (in-game GPU lightmap, save round-trip) — those need the actual game
+binary launched, not just the test suite. Do that before S4, or fold it into S4's own gate.
 
 ### S4 — `d5855ad224` (`b0382913dc^`, depth 219) — GPU follow-ups + content — +37 files / +356 hunks
 
