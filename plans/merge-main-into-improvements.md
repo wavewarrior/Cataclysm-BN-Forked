@@ -873,10 +873,10 @@ never reproducible from this tree; the gate criterion is the named failure set, 
      parallel and serial branches. Cases pass individually but fail in-suite because a vehicle
      test case runs first and pollutes the resident buffer.
 
-     **STATUS (verified 2026-09-14): fix is present in code, targets the right mechanism, but
-     is scoped too narrowly — the polluter is any test that spawns a vehicle, not just
-     `[vehicle]`-tagged ones.** Both `Phase1_parallel_caches` branches (`map_cache.cpp:976`,
-     `:1009`) gate on `vehicle_obscured_was_dirty || ch.veh_in_active_range` exactly as
+     **STATUS (verified 2026-09-14): fix is present in code and targets the right mechanism,
+     but the runtime dirty-state gate fails to catch the APC case below.** Both
+     `Phase1_parallel_caches` branches (`map_cache.cpp:976`, `:1009`) gate on
+     `vehicle_obscured_was_dirty || ch.veh_in_active_range` exactly as
      described, with the `any_of(...b.nw || b.ne)` staleness check (`:949-952`, `:985-988`)
      intact — that part works. But two same-binary, same-seed runs still show a different
      vision case failing depending on composition:
