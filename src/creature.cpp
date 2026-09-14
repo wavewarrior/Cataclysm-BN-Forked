@@ -908,6 +908,13 @@ void print_dmg_msg( Creature &target, Creature *source, const dealt_damage_insta
 namespace
 {
 
+const bodypart_str_id hitroll_bp_head( "head" );
+const bodypart_str_id hitroll_bp_torso( "torso" );
+const bodypart_str_id hitroll_bp_leg_l( "leg_l" );
+const bodypart_str_id hitroll_bp_leg_r( "leg_r" );
+const bodypart_str_id hitroll_bp_arm_l( "arm_l" );
+const bodypart_str_id hitroll_bp_arm_r( "arm_r" );
+
 auto get_stun_srength( const projectile &proj, creature_size size ) -> int
 {
     const int stun_strength = proj.has_effect( ammo_effect_BEANBAG ) ? 4
@@ -1132,25 +1139,25 @@ void Creature::deal_projectile_attack( Creature *source, item *source_weapon,
     // The torso is generally the easiest target to hit and most shots will be aiming generally for center mass.
     if( hit_value <= headshot_acc && !has_flag( MF_NOHEAD ) ) {
         // Only hit the head if the target in question actually has a head.
-        bp_hit = bodypart_str_id( "head" );
+        bp_hit = hitroll_bp_head;
     } else if( hit_value <= accuracy_critical ) {
         // On a critical non-headshot, autohit the torso.
-        bp_hit = bodypart_str_id( "torso" );
+        bp_hit = hitroll_bp_torso;
     } else if( hit_value <= accuracy_goodhit ) {
         // 80% chance to hit the torso, 5% for each limb.
-        ( !one_in( 5 ) ) ? bp_hit = bodypart_str_id( "torso" ) : ( one_in( 2 ) ? ( one_in(
-                                        2 ) ? bp_hit = bodypart_str_id( "leg_l" ) : bp_hit = bodypart_str_id( "leg_r" ) ) : ( one_in(
-                                                2 ) ? bp_hit = bodypart_str_id( "arm_l" ) : bp_hit = bodypart_str_id( "arm_r" ) ) );
+        ( !one_in( 5 ) ) ? bp_hit = hitroll_bp_torso : ( one_in( 2 ) ? ( one_in(
+                                        2 ) ? bp_hit = hitroll_bp_leg_l : bp_hit = hitroll_bp_leg_r ) : ( one_in(
+                                                2 ) ? bp_hit = hitroll_bp_arm_l : bp_hit = hitroll_bp_arm_r ) );
     } else if( hit_value <= accuracy_standard ) {
         // 50% chance to hit the torso, 12.5% for each limb.
-        ( one_in( 2 ) ) ? bp_hit = bodypart_str_id( "torso" ) : ( one_in( 2 ) ? ( one_in(
-                                       2 ) ? bp_hit = bodypart_str_id( "leg_l" ) : bp_hit = bodypart_str_id( "leg_r" ) ) : ( one_in(
-                                               2 ) ? bp_hit = bodypart_str_id( "arm_l" ) : bp_hit = bodypart_str_id( "arm_r" ) ) );
+        ( one_in( 2 ) ) ? bp_hit = hitroll_bp_torso : ( one_in( 2 ) ? ( one_in(
+                                       2 ) ? bp_hit = hitroll_bp_leg_l : bp_hit = hitroll_bp_leg_r ) : ( one_in(
+                                               2 ) ? bp_hit = hitroll_bp_arm_l : bp_hit = hitroll_bp_arm_r ) );
     } else {
         // 20% chance to hit the torso, 20% for each limb
-        ( one_in( 5 ) ) ? bp_hit = bodypart_str_id( "torso" ) : ( one_in( 2 ) ? ( one_in(
-                                       2 ) ? bp_hit = bodypart_str_id( "leg_l" ) : bp_hit = bodypart_str_id( "leg_r" ) ) : ( one_in(
-                                               2 ) ? bp_hit = bodypart_str_id( "arm_l" ) : bp_hit = bodypart_str_id( "arm_r" ) ) );
+        ( one_in( 5 ) ) ? bp_hit = hitroll_bp_torso : ( one_in( 2 ) ? ( one_in(
+                                       2 ) ? bp_hit = hitroll_bp_leg_l : bp_hit = hitroll_bp_leg_r ) : ( one_in(
+                                               2 ) ? bp_hit = hitroll_bp_arm_l : bp_hit = hitroll_bp_arm_r ) );
     }
     if( goodhit <= accuracy_standard ) {
         severity += ammo_severity_bonus;
@@ -1159,7 +1166,7 @@ void Creature::deal_projectile_attack( Creature *source, item *source_weapon,
     // Now that we know where we hit, lets cap our severity based on the hit location.
     // If we did not hit head or torso, we hit *something* else, which is likely less important.
     // This should be able to handle any rough bodyplan so long as the "torso" is centermass and the "head" is the most important/delicate thing.
-    if( bp_hit == bodypart_str_id( "head" ) ) {
+    if( bp_hit == hitroll_bp_head ) {
         // Characters have divided health pools, so cap severity
         // If a monster has the no head bonus crit flag, cap severity to 1.5x as well
         if( is_player() ||
@@ -1183,7 +1190,7 @@ void Creature::deal_projectile_attack( Creature *source, item *source_weapon,
             severity = std::min( severity, 0.8 + std::max( 0.0, ammo_severity_max_bonus ) );
         } else if( has_flag( MF_PROJECTILE_RESISTANT_1 ) ) {
             severity = std::min( severity, 1.1 + std::max( 0.0, ammo_severity_max_bonus ) );
-        } else if( bp_hit == bodypart_str_id( "torso" ) ) {
+        } else if( bp_hit == hitroll_bp_torso ) {
             if( has_flag( MF_TORSO_BONUS_MAX_CRIT_2 ) ) {
                 severity = std::min( severity, 2.0 + ammo_severity_max_bonus );
             } else if( has_flag( MF_TORSO_BONUS_MAX_CRIT_1 ) ) {

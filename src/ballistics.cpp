@@ -680,7 +680,12 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
                 rand.y() = prev_point.y();
             }
             if( in_veh == nullptr || veh_pointer_or_null( here.veh_at( rand ) ) != in_veh ) {
+                const float dmg_before_penetration = proj.impact.total_damage();
                 here.shoot( source, rand, proj, false );
+                const float dmg_after_penetration = proj.impact.total_damage();
+                if( dmg_before_penetration > dmg_after_penetration ) {
+                    apply_overpenetration_penalty( is_projectile_modify_overpenetration );
+                }
                 if( proj.impact.total_damage() <= 0 ) {
                     //If the projectile stops here move it back a square so it doesn't end up inside the vehicle
                     traj_len = i - 1;

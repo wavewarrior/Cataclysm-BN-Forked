@@ -13,20 +13,17 @@
 3. **Sprite lookup unconditional** — DONE. `ballistics.cpp:417`'s `if( tilecontext && do_animation )` now guards the entire `custom_bullet_sprite` lookup block.
 
 ### Medium — Code Quality + Performance
-4. **Bodypart string lookups per-hit** — NOT DONE. `creature.cpp:1135-1153` still calls `bodypart_str_id("head")`/`bodypart_str_id("torso")` etc. inline at runtime on every hit-location roll, not cached as a file-scope `static const`.
+4. **Bodypart string lookups per-hit** — DONE (2026-09-14). `creature.cpp`'s anonymous namespace now holds six file-scope `const bodypart_str_id hitroll_bp_*` constants, constructed once at static-init; the hit-location roll and severity-cap logic (`creature.cpp:1140-1193`) reference them instead of constructing `bodypart_str_id("head")` etc. inline per hit. Verified: build clean (only pre-existing unrelated warnings), `[ranged],[monster],[vehicle]` = 139/141 passed, 1 skipped, 1 failed-as-expected (tagged), no new failures.
 5. **furn_t/ter_t copied by value** — DONE. `map::shoot` (`map_bash.cpp:1653-1657`) now holds `furn_id furn_here = furn(p);` and `const auto &furn`/`const auto &ter` const-refs into the interned `furn_t`/`ter_t`, not value copies.
-6. **Duplicate furniture/terrain bash logic** — NOT DONE. `map_bash.cpp:1661-1756` still has two near-identical ~95-line blocks (`if( furn.bash.ranged )` / `if( ter.bash.ranged )`) with parallel `block_unaimed_chance`/`NO_PENETRATE_OBSTACLES`/laser-reduction logic duplicated verbatim at shifted line numbers.
+6. **Duplicate furniture/terrain bash logic** — NOT DONE, deliberately deferred. `map_bash.cpp` is merge-touched territory (`plans/merge-main-into-improvements.md:744-753` shows `map::bash` was already restructured by the in-flight merge); doing this dedup now would add conflict surface to a file the merge will revisit. Pick up after the merge lands/stabilizes.
 7. **Box2D/non-Box2D creature detection duplication** — DONE, moot/superseded. The file now unconditionally includes `<box2d/box2d.h>` (no `#ifdef`), and creature hit detection is a single Box2D-raycast path with no parallel non-Box2D fallback branch remaining to deduplicate against — the original duplication this item targeted was deleted outright by the tile-independence rework.
 8. **Burst-invariant recomputation** — DONE. `ranged.cpp:986-991`'s `shot_count`/`shot_half_angle`/`render_multishot`/`projectile_trajectories`/`grouped_shot_hits` are now declared once before the `while( curshot != shots )` burst loop (line 992); inside the loop they are only `.clear()`'d/`.reserve()`'d for reuse.
 
 ### Low — Cleanup
 9. **Dead declaration** — DONE. The dead `deal_projectile_attack_internal` declaration no longer exists anywhere in `src/monster.cpp`/`src/monster.h` (removed).
 10. **Lambda inside DDA loop** — DONE. `ballistics.cpp:565`'s `apply_overpenetration_penalty` lambda is declared immediately before the per-tile loop it is used in, with an explicit comment noting the closure is materialised once, not per-iteration.
-11. **Vehicle-rotation terrain-hit ad-hoc penetration logic** — NOT DONE. `ballistics.cpp:674-691`'s `obstructed_by_vehicle_rotation` branch still calls `here.shoot(source, rand, proj, false)` directly and does its own ad-hoc `if( proj.impact.total_damage() <= 0 ) { ...; break; }` stopping logic, without reusing the now-hoisted `apply_overpenetration_penalty` lambda from item 10.
+11. **Vehicle-rotation terrain-hit ad-hoc penetration logic** — DONE (2026-09-14). `ballistics.cpp:674-695`'s `obstructed_by_vehicle_rotation` branch now tracks damage before/after `here.shoot()` and calls the hoisted `apply_overpenetration_penalty( is_projectile_modify_overpenetration )` when it drops, mirroring the two existing call sites at `:729`/`:747`; the existing stop-and-rewind logic is unchanged. Verified via the same test run as item 4.
 
 ## Remaining open scope
 
-Only items 4, 6, and 11 above are still open. Renumbered execution order for the remaining work:
-1. Cache bodypart lookups (item 4) — per-shot perf.
-2. Deduplicate furniture/terrain bash logic (item 6) — code quality.
-3. Reuse the hoisted overpenetration lambda in the vehicle-rotation branch (item 11) — cleanup.
+Item 6 only, deferred until `plans/merge-main-into-improvements.md` lands/stabilizes to avoid compounding conflicts in `map_bash.cpp`.
