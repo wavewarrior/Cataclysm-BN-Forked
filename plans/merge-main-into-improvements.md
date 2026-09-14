@@ -873,33 +873,38 @@ never reproducible from this tree; the gate criterion is the named failure set, 
      parallel and serial branches. Cases pass individually but fail in-suite because a vehicle
      test case runs first and pollutes the resident buffer.
 
-     **STATUS (verified 2026-09-14): fix is present in code but the 4 named cases are not
-     fully closed, and the failure mode is more order-sensitive than "vehicle pollution."**
-     Both `Phase1_parallel_caches` branches (`map_cache.cpp:976`, `:1009`) already gate on
-     `vehicle_obscured_was_dirty || ch.veh_in_active_range` exactly as described, with the
-     `any_of(...b.nw || b.ne)` staleness check (`:949-952`, `:985-988`) and the explanatory
-     comment intact. Two runs, same binary, same `--order decl --rng-seed 1`, different
-     results:
-     - `./cata_test-tiles "[vehicle],[vision]" --order decl --rng-seed 1`: the 4 cases named
-       above at S2 (`vision_wall_obstructs_light`, `vision_single_tile_skylight`,
-       `vision_see_out_of_vehicle`, `vision_see_into_vehicle`) all **pass**. A different case,
-       **`vision_daylight`**, fails instead (`vision_test.cpp:258`, `CHECK( success )` false).
-     - `./cata_test-tiles "[vision]" --order decl --rng-seed 1` — the full `[vision]` tag,
-       **no `[vehicle]` test anywhere in the run**: `vision_daylight` passes, but
-       **`vision_single_tile_skylight` fails instead** (all 8 transforms, 8/8 assertions).
-       `vision_test.cpp` has no vehicle-touching TEST_CASE declared before it
-       (`vision_see_out_of_vehicle`/`vision_see_into_vehicle` are declared later in the
-       file), so this is not `[vehicle]`-predecessor pollution — the S2-era diagnosis that
-       *only* a preceding vehicle test can trigger this is disproven by this run alone.
+     **STATUS (verified 2026-09-14): fix is present in code, targets the right mechanism, but
+     is scoped too narrowly — the polluter is any test that spawns a vehicle, not just
+     `[vehicle]`-tagged ones.** Both `Phase1_parallel_caches` branches (`map_cache.cpp:976`,
+     `:1009`) gate on `vehicle_obscured_was_dirty || ch.veh_in_active_range` exactly as
+     described, with the `any_of(...b.nw || b.ne)` staleness check (`:949-952`, `:985-988`)
+     intact — that part works. But two same-binary, same-seed runs still show a different
+     vision case failing depending on composition:
+     - `[vehicle],[vision]` together: the 4 S2-named cases all pass; `vision_daylight` fails
+       instead (`vision_test.cpp:258`, `CHECK( success )` false).
+     - `[vision]` alone: `vision_daylight` passes, but `vision_single_tile_skylight` fails
+       instead (all 8 transforms, 8/8 assertions) — one of the 4 S2-named cases.
 
-     So the original fix does stop the specific pattern it targeted for the 4 named cases in
-     the `[vehicle],[vision]` composition, but a different vision case still breaks depending
-     on run composition/order — consistent with either a second, unrelated stale-state source,
-     or a shared root cause whose victim varies with which RNG draws/cache state happen to
-     land on a threshold edge at the point that case runs. Not re-diagnosed further this
-     session — this needs fresh investigation (start from `vision_test.cpp:258`'s
-     `success` check and what precedes each failing case in the two orderings above), not a
-     re-application of the documented fix.
+     Root cause, isolated to a 2-test reproducer: `./cata_test-tiles
+     "monsters_dont_see_through_vehicle_holes,vision_single_tile_skylight" --order decl
+     --rng-seed 1` fails identically (8/8 assertions). `monsters_dont_see_through_vehicle_holes`
+     (`tests/monster_vision_test.cpp:72`) is tagged **`[vision]`, not `[vehicle]`**, and calls
+     `get_map().add_vehicle(vproto_id("apc"), ...)` directly. So the fix's actual bug is real —
+     any prior test that spawns a vehicle leaves the same stale `vehicle_obscured` state behind,
+     and `[vehicle],[vision]`/`[vision]`-alone just happen to put a *different* vehicle-spawning
+     predecessor in front of a *different* victim case, which is why the failing case shifts
+     between runs. (Tested and ruled out as the mechanism here: pairing
+     `vision_see_wall_in_moonlight` — the `[.]`-tagged case immediately preceding
+     `vision_single_tile_skylight` in `vision_test.cpp` — with `vision_single_tile_skylight`
+     passes clean; it isn't a factor.)
+
+     Not re-diagnosed further this session past isolating the reproducer above — likely next
+     step is auditing whether `vehicle_obscured_was_dirty`'s dirty-check actually observes state
+     from a *different* `level_cache` z-level or coordinate space than the one
+     `monsters_dont_see_through_vehicle_holes` writes to (it builds underground, `origin` at
+     `(60,60,0)`), or whether the GPU-side buffer itself needs an explicit uniform-frame
+     residency flush that only certain call paths trigger. Confirm with the 2-test reproducer
+     above before trying any fix.
    - **Seen-cache rebuild flags (user WIP, committed `0aa17ed28e`)**: `rebuild_seen_cache` /
      `download_seen_cache` `true` in `build_map_cache` — required so the CPU `visibility_cache`
      the goldens compare against is filled from the GPU seen pass.
