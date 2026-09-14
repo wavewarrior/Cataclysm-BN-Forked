@@ -872,6 +872,22 @@ never reproducible from this tree; the gate criterion is the named failure set, 
      non-empty before the clear (mirrors the existing `vehicle_floor_was_dirty` pattern), both
      parallel and serial branches. Cases pass individually but fail in-suite because a vehicle
      test case runs first and pollutes the resident buffer.
+
+     **STATUS (verified 2026-09-14): fix is present in code but INSUFFICIENT.** Both
+     `Phase1_parallel_caches` branches (`map_cache.cpp:976`, `:1009`) already gate on
+     `vehicle_obscured_was_dirty || ch.veh_in_active_range` exactly as described, with the
+     `any_of(...b.nw || b.ne)` staleness check (`:949-952`, `:985-988`) and the explanatory
+     comment intact. Despite that, `./cata_test-tiles "[vehicle],[vision]" --order decl
+     --rng-seed 1` still reproduces the documented in-suite-only failure: `vision_daylight`
+     fails (`vision_test.cpp:258`, `CHECK( success )` false) when run after the `[vehicle]`
+     tests. Confirmed NOT an isolation artifact: `./cata_test-tiles
+     "vision_wall_obstructs_light,vision_single_tile_skylight,vision_see_out_of_vehicle,vision_see_into_vehicle,vision_daylight,vision_see_wall_in_moonlight"
+     --order decl --rng-seed 1` (no `[vehicle]` predecessor) passes clean — "All tests
+     passed (779 assertions in 6 test cases)" — the exact pre-fix pollution symptom.
+     So either another resident GPU/CPU buffer besides `vehicle_obscured_cache` carries the
+     same kind of stale cross-test state, or the dirty-marking gate has a gap this fix didn't
+     close. Not re-diagnosed further this session — needs its own investigation, not a
+     re-application of the documented fix.
    - **Seen-cache rebuild flags (user WIP, committed `0aa17ed28e`)**: `rebuild_seen_cache` /
      `download_seen_cache` `true` in `build_map_cache` — required so the CPU `visibility_cache`
      the goldens compare against is filled from the GPU seen pass.
