@@ -873,20 +873,32 @@ never reproducible from this tree; the gate criterion is the named failure set, 
      parallel and serial branches. Cases pass individually but fail in-suite because a vehicle
      test case runs first and pollutes the resident buffer.
 
-     **STATUS (verified 2026-09-14): fix is present in code but INSUFFICIENT.** Both
-     `Phase1_parallel_caches` branches (`map_cache.cpp:976`, `:1009`) already gate on
+     **STATUS (verified 2026-09-14): fix is present in code but the 4 named cases are not
+     fully closed, and the failure mode is more order-sensitive than "vehicle pollution."**
+     Both `Phase1_parallel_caches` branches (`map_cache.cpp:976`, `:1009`) already gate on
      `vehicle_obscured_was_dirty || ch.veh_in_active_range` exactly as described, with the
      `any_of(...b.nw || b.ne)` staleness check (`:949-952`, `:985-988`) and the explanatory
-     comment intact. Despite that, `./cata_test-tiles "[vehicle],[vision]" --order decl
-     --rng-seed 1` still reproduces the documented in-suite-only failure: `vision_daylight`
-     fails (`vision_test.cpp:258`, `CHECK( success )` false) when run after the `[vehicle]`
-     tests. Confirmed NOT an isolation artifact: `./cata_test-tiles
-     "vision_wall_obstructs_light,vision_single_tile_skylight,vision_see_out_of_vehicle,vision_see_into_vehicle,vision_daylight,vision_see_wall_in_moonlight"
-     --order decl --rng-seed 1` (no `[vehicle]` predecessor) passes clean — "All tests
-     passed (779 assertions in 6 test cases)" — the exact pre-fix pollution symptom.
-     So either another resident GPU/CPU buffer besides `vehicle_obscured_cache` carries the
-     same kind of stale cross-test state, or the dirty-marking gate has a gap this fix didn't
-     close. Not re-diagnosed further this session — needs its own investigation, not a
+     comment intact. Two runs, same binary, same `--order decl --rng-seed 1`, different
+     results:
+     - `./cata_test-tiles "[vehicle],[vision]" --order decl --rng-seed 1`: the 4 cases named
+       above at S2 (`vision_wall_obstructs_light`, `vision_single_tile_skylight`,
+       `vision_see_out_of_vehicle`, `vision_see_into_vehicle`) all **pass**. A different case,
+       **`vision_daylight`**, fails instead (`vision_test.cpp:258`, `CHECK( success )` false).
+     - `./cata_test-tiles "[vision]" --order decl --rng-seed 1` — the full `[vision]` tag,
+       **no `[vehicle]` test anywhere in the run**: `vision_daylight` passes, but
+       **`vision_single_tile_skylight` fails instead** (all 8 transforms, 8/8 assertions).
+       `vision_test.cpp` has no vehicle-touching TEST_CASE declared before it
+       (`vision_see_out_of_vehicle`/`vision_see_into_vehicle` are declared later in the
+       file), so this is not `[vehicle]`-predecessor pollution — the S2-era diagnosis that
+       *only* a preceding vehicle test can trigger this is disproven by this run alone.
+
+     So the original fix does stop the specific pattern it targeted for the 4 named cases in
+     the `[vehicle],[vision]` composition, but a different vision case still breaks depending
+     on run composition/order — consistent with either a second, unrelated stale-state source,
+     or a shared root cause whose victim varies with which RNG draws/cache state happen to
+     land on a threshold edge at the point that case runs. Not re-diagnosed further this
+     session — this needs fresh investigation (start from `vision_test.cpp:258`'s
+     `success` check and what precedes each failing case in the two orderings above), not a
      re-application of the documented fix.
    - **Seen-cache rebuild flags (user WIP, committed `0aa17ed28e`)**: `rebuild_seen_cache` /
      `download_seen_cache` `true` in `build_map_cache` — required so the CPU `visibility_cache`
