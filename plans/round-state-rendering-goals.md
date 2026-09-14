@@ -132,8 +132,7 @@ cutout_pad1 to C++ + both HLSL cbufbers.)
   stale-collider fix. DO NOT "fix" by resetting vehicle pos/vel/wall HP in the test.
 - **Phase 1.3: DONE (pending final gate).** Efficiency expectations re-baselined;
   vehicle_ramp_test_60 SKIPped (documented pre-existing x=60 ramp-climb defect).
-- NEXT: Phases 2-8 (quick fixes, SDF sun shadows, GI bounce, trees, windows/godrays,
-  normal maps, Piper TTS), then return to 1.2 + final 1.4 gate.
+- NEXT: Phase 2 (quick fixes — new work). Phases 3/4/6/7 (SDF sun shadows, GI bounce, windows/godrays, normal maps) name subsystems that ALREADY EXIST (data/shaders/lighting/src/occ_*.comp.hlsl, gi_*.comp.hlsl, vol.frag.hlsl's indoor_gate, sprite.frag.hlsl's surface_normal()/atlas_normal() — see plans/visual-fidelity-overhaul.md and plans/done/grid-decoupled-lighting.md) — treat these as a REGRESSION CHECK against the ongoing plans/merge-main-into-improvements.md merge, not new implementation. Phase 5 (trees) and Phase 8 (Piper TTS polish) are the genuinely new/incomplete items. Then return to 1.2 + final 1.4 gate.
 
 ## Key remaining goal items (original list, superseded by status above)
 1. ~~Finish + verify cut-out & canopy y-sort~~ (DONE, in-game verify pending in Phase 5)

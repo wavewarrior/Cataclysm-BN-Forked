@@ -52,23 +52,23 @@ the reference doc; individual plans under `plans/` implement each tier.
 
 ### `build_map_cache` — the cost centre
 
-Phases (verified at `map.cpp:9848-10117`):
+Phases (verified at `src/map_cache.cpp:829`, moved here from `map.cpp` by a god-file decompose since this roadmap was written):
 
 | Phase | Lines | Z-scope | Notes |
 |-------|-------|---------|-------|
-| 1a floor | 9888 | all-z | `build_floor_cache(z)` |
-| 1b outside/sheltered | 9908 | all-z, top-down | reads floor[z+1] |
-| 1c transparency | 9916 | all-z | reads outside |
-| 1d parallel-caches | 9928 | all-z | vehicle clears + dirty levels |
-| 2 suspension | 9975 | all-z | serial (support_cache_dirty) |
-| 3 vehicles | 9985 | all-z | serial (neighbour z writes) |
-| seen | 10004 | player-z | shadowcast FOV |
-| 4 lightmap | 10011 | dirty z only | sunlight + entity lights |
+| 1a floor | 898 | all-z | `build_floor_cache(z)` |
+| 1b outside/sheltered | 919 | all-z, top-down | reads floor[z+1] |
+| 1c transparency | 932 | all-z | reads outside |
+| 1d parallel-caches | 946 | all-z | vehicle clears + dirty levels |
+| 2 suspension | 1022 | all-z | serial (support_cache_dirty) |
+| 3 vehicles | 1042 | all-z | serial (neighbour z writes) |
+| seen | ~1202 | player-z | shadowcast FOV |
+| 4 lightmap | 1119-1122 (dirty-collection), 1139-1279 (GPU/CPU branch) | dirty z only | sunlight + entity lights |
 
 ### In-tree probes (ready to run)
 
-- `[build_cache][perf]` phase+z-split (`map.cpp:10111`)
-- `[shift-probe][outside|lightmap|invalidate|invalidate-bt]` (`map.cpp:9528/10039/10796/10803`)
+- `[build_cache][perf]` phase+z-split (`map_cache.cpp:1332`)
+- `[shift-probe][outside]` (`map_cache.cpp:571-583`) / `[shift-probe][lightmap]` (`map_cache.cpp:1124-1132`) / `[shift-probe][invalidate|invalidate-bt]` (`map.cpp:3590-3606`, unchanged)
 - `[render][perf]` 10-phase breakdown (`sdl_render_frame.cpp:~869`)
 - Tracy `ZoneScopedN` zones on render+sim paths
 
@@ -91,24 +91,26 @@ Phases (verified at `map.cpp:9848-10117`):
 | 1a. Per-submap incremental lightmap | `per_submap_incremental_lightmap_plan.md` | ✅ DONE — Phase A + B1/B2/B3 in code |
 | 1b. Amortise non-player-z structural rebuild | `amortise_non_player_z_rebuild_plan.md` | Not started |
 
+A GPU-compute-lightmap merge (tracked in `plans/merge-main-into-improvements.md`, stages D2/S2) has landed a parallel GPU dirty-level path in `map_cache.cpp` (`gpu_transparency_dirty`, `gpu_floor_dirty`, `add_gpu_dirty_level`, `mark_vehicle_gpu_structural_levels`) alongside the CPU `generate_lightmap_worker` fallback — this roadmap's Tier-1b/3b structural-loop items (the always-all-z floor/outside/transparency cost) are orthogonal to it and still needed regardless of which lightmap backend runs.
+
 ### Tier 2 — parallelism (do AFTER 1a/1b)
 
 | Item | Plan | Status |
 |------|------|--------|
-| 2a. Parallelise build_map_cache across z | `parallelize_build_map_cache_plan.md` | Not started |
-| 2b. Finish GI/SDF GPU-compute migration | `GI_COMPUTE_AND_PERF_PLAN.md` | In flight |
+| 2a. Parallelise build_map_cache across z | `plans/done/parallelize_build_map_cache_plan.md` | ❌ SKIPPED — negligible player-visible win (even full 21-z parallelization saves only ~14ms on a map shift) |
+| 2b. Finish GI/SDF GPU-compute migration | `plans/done/GI_COMPUTE_AND_PERF_PLAN.md` | 🟡 ~90% done — 2 blocked items (D3D12 barrier verify needs Win11 hardware; sim-span attack needs measurement data) |
 
 ### Tier 3 — memory & bubble
 
 | Item | Plan | Status |
 |------|------|--------|
 | 3a. Measure bubble cost curve | `bubble_cost_curve_plan.md` | Not started |
-| 3b. Lazy non-visible-z cache allocation | `lazy_non_visible_z_cache_plan.md` | Not started |
+| 3b. Lazy non-visible-z cache allocation | merged into `amortise_non_player_z_rebuild_plan.md` Step 0 | ✅ Merged 2026-09-14 — `lazy_non_visible_z_cache_plan.md` deleted; its Phase B (loop-skip via `calc_max_populated_zlev`) absorbed as Tier 1b's new Step 0, its Phase A/C (sparse allocation) kept only as an optional footnote there |
 
 ---
 
 ## 3. Related plans in repo
 
-- `plans/SIM_PERFORMANCE_PLAN.md` (done) — Monster AI, NPC LOD, vehicle throttling, active-item striding
-- `plans/LIGHTING_OPTIMIZATION_PLAN.md` — GPU lighting crash fix (P0-P6)
+- `plans/done/SIM_PERFORMANCE_PLAN.md` (done) — Monster AI, NPC LOD, vehicle throttling, active-item striding
+- `plans/done/LIGHTING_OPTIMIZATION_PLAN.md` (done) — GPU lighting crash fix (P0-P6)
 - `plans/done/LIGHTING_PERF_RESEARCH.md` — SDF rebuild gate research

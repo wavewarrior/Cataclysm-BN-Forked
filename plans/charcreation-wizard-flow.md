@@ -154,8 +154,9 @@ work.
 
 ### Not yet verified
 
-- STATS, SKILLS, SCENARIO, BIONICS were not re-captured after the 98% change (POINTS,
-  TRAITS, PROFESSION, OVERVIEW were).
+- RESOLVED — `plans/done/charcreation-stats-cards.md`, `plans/done/charcreation-scenario-tree.md`,
+  `plans/done/charcreation-bionics-chassis.md`, and `plans/done/charcreation-skills-matrix.md`
+  are all later passes, each with its own installed-macOS-build verification section for that tab.
 - Not re-checked at 170x48 (1366x768-class) since the shell landed. The portrait box is
   a fixed 208dp inside a 98% panel, so it no longer depends on the panel-vs-box
   clearance the old geometry sweep was about — but the claim is untested at that size.

@@ -48,9 +48,10 @@ Fix the test hang in shard 3 that prevents parallel test execution from completi
 ## Files Involved
 
 - `tests/reloading_test.cpp` - the hanging test (`automatic_reloading_action`, `reload_a_revolver`)
-- `src/game.cpp` - `process_activity()` and `execute_activity_fixed_window_skip()`
+- `src/game_activity.cpp` - `execute_activity_fixed_window_skip()` and `game::process_activity()` (line 137) both now live here; `game.cpp:906-907,982-983` retain only call sites, not the definitions
 - `src/player_activity.cpp` - `player_activity::do_turn()`
 - `tests/state_helpers.cpp` - `clear_states()` (test cleanup)
+- **Cross-reference**: `tests/state_helpers.cpp:60-64` added `coop_session::get().reset()` to `clear_states()` to fix a *different*, narrowly-scoped cross-test leak (`partner_name`/`proxy_npc_id`) — this does **not** fix the reload hang described here (confirmed by `plans/done/mouse-interactivity-followup-bugs.md:55-58`, which documents its own unrelated full-suite-hang fix, `87c1c9e13f`, for missing `PhysicsWorld::on_creature_removed()` hooks). `tests/player_helpers.cpp:130-134`'s `process_activity(player&)` remains an unbounded `do/while` loop with no timeout guard — the root cause is still unfixed.
 
 ## Commands Used
 

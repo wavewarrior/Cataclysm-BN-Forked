@@ -93,3 +93,5 @@ Measured numbers will differ from estimates; this table is a rough guide.
   `std::thread::hardware_concurrency()` and total RAM at startup.
 - **Do not raise default** until Tier 1a/1b (incremental lightmap, amortised
   rebuild) land — those make larger bubbles affordable.
+
+Re-verify `level_cache` field layout and `build_map_cache` cost assumptions after `plans/merge-main-into-improvements.md`'s 'redefine bubble space truth' merge (`c3090ca8f0`, #9174, 131 conflict hunks) lands — that merge touches map/bubble internals broadly, though it does not currently conflict with this plan's scope (confirmed: no `REALITY_BUBBLE_SIZE` or bubble-sizing mentions in the merge plan).

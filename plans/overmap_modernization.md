@@ -1,5 +1,5 @@
 ## STATUS (reviewed 2026-06-27)
-**0% DONE — KEEP (not started, gated).** `overmap.cpp` still **6,700 lines**; no `overmap_generate.cpp` / `_specials.cpp` / `_connections.cpp` / `_mongroups.cpp`; no `tests/overmap_determinism_test.cpp`. Plan is the *post-review* rewrite (real method names verified, RNG-ordering risk model sound) and matches reality. Hard-gated on Phase 0 determinism harness — explicit "abandon if non-deterministic" exit clause makes this honest, not aspirational fluff. Keep, but note the whole thing is blocked behind a non-trivial Phase 0.
+**0% DONE — KEEP (not started, gated).** `overmap.cpp` still **~6,101 lines** (as of 2026-09-14, down from 6,700 when last reviewed); no `overmap_generate.cpp` / `_specials.cpp` / `_connections.cpp` / `_mongroups.cpp`; no `tests/overmap_determinism_test.cpp`. Plan is the *post-review* rewrite (real method names verified, RNG-ordering risk model sound) and matches reality. Hard-gated on Phase 0 determinism harness — explicit "abandon if non-deterministic" exit clause makes this honest, not aspirational fluff. Keep, but note the whole thing is blocked behind Phase 0.
 
 # Overmap Decomposition — Plan
 
@@ -13,7 +13,7 @@
 
 ## Context
 
-`overmap.cpp` is ~6700 lines — second-largest gameplay-core file. The only
+`overmap.cpp` is ~6101 lines (as of 2026-09-14) — second-largest gameplay-core file. The only
 defensible win here is **decomposition for navigability and compile time**.
 There is **no perf benefit**: every target (`generate`, `place_*`,
 `build_connection`) runs at world/OMT first-load and is then cached
@@ -29,6 +29,11 @@ is RNG-safe. But promoting the **14 file-local `static` helpers** in
 reordering anything, can perturb call order and silently change every
 same-seed map. There is currently **no same-seed regression harness**. Building
 one is therefore Phase 0 and gates everything else.
+
+Scheduling conflict: `plans/merge-main-into-improvements.md` lists `overmap.cpp` among its
+high-conflict files, plus a separate 131-conflict-hunk 'redefine bubble space truth' merge
+touching overmap/coordinate internals broadly. Do not start Phase 0/1 until that merge lands
+and stabilizes, to avoid compounding conflict surface on the same file.
 
 ## Phases
 

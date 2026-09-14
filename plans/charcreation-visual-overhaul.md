@@ -237,9 +237,9 @@ measured" below for the numbers.
 - PROFESSION's affordability colours were never exercised: every profession in the
   captured states cost 0 or 1 point, so the red/green affordability channel is
   inferred from TRAITS, not verified on that tab.
-- PROFESSION's list did not scroll to its selected row (`Tourist` was the selection
-  while the list sat at the top). Pre-existing scroll-follow behaviour, not
-  introduced here.
+- FIXED — PROFESSION was rebuilt into a grouped card carousel (`plans/done/charcreation-profession-tree.md`),
+  whose Verified section confirms the band holding the already-selected profession opens with
+  the cursor centred on it — a different, since-fixed mechanism.
 - TRAITS was not captured at the narrow size. The scale's containment is
   resolution-INDEPENDENT by construction (`min-height` and the pan travel are both in
   dp, which do not scale with cell count) and the log confirms `newchartraits.rml` +
@@ -249,40 +249,20 @@ measured" below for the numbers.
   scale is suppressed entirely in freeform mode; that suppression is covered by no test
   and no capture. Likewise the ONE_POOL / TRANSFER / FREEFORM points lines were read
   but not rendered.
-- Mouse navigation remains unverified anywhere.
+- Mouse navigation remains unverified for SKILLS (row-click/steppers/RANDOMIZE — see
+  `plans/done/charcreation-skills-matrix.md`'s own 'not exercised' note) and for TRAITS'
+  DNA-strand/hover-preview specifics (see `plans/charcreation-traits-tree.md`); every other tab
+  (POINTS/SCENARIO/PROFESSION/STATS/BIONICS/OVERVIEW) now has a cited real-mouse-click
+  verification in its own archived plan.
 - The 17 icon placeholders still need real art (see "Art asset intent").
 
 ## Supported terminal sizes
 
-Scope is common PC monitor ratios, not every conceivable size. With this tileset and
-font a cell is 8px wide, so:
-
-| display | cells | preview |
-|---|---|---|
-| 1366x768 (16:9 laptop) | 170x48 | shown, clears panel by 2 cells |
-| 1920x1080 | 240x67 | shown |
-| 2560x1440 | 320x90 | shown |
-| 3440x1440 (21:9) | 430x90 | shown |
-| 3600x2260 (this machine, HiDPI) | 225x70 | shown, verified |
-
-Clearance GROWS with terminal width, because the preview box is a fixed number of
-*cells* (`prepare()` sizes it from the tile pixel size) while the panel is a
-*percentage*. So the tightest common ratio bounds the whole range, and 170x48 was
-verified in-game: box left edge at column 148 against a panel right edge at 146.
-
-`nc_prepare_preview()`'s hide threshold is now DERIVED from the panel edge rather than
-a hard-coded 150. At the measured box width (20 cells) the old constant happened to be
-safe at every size, so nothing shipped broken — but it only holds to 22 cells; from 24
-up (a larger tileset, or a smaller font making a tile span more cells) it silently let
-the panel cover the preview again. An offline sweep over box widths 14-40 and terminal
-widths 120-400 shows overlaps for the constant at box>=24 and none for the derived
-form.
-
-**Harness gotcha:** `TERMINAL_X`/`TERMINAL_Y` do nothing under the default
-`FULLSCREEN=windowedbl`, which sets `SDL_WINDOW_FULLSCREEN`; the terminal size is then
-derived from window pixels and the option is rewritten on exit. Two "different
-resolution" captures were taken before this was noticed and both silently ran at
-225x70. `FULLSCREEN=no` is required for the option to govern.
+Superseded by `plans/charcreation-wizard-flow.md`'s Phase 3 texture-composite rework —
+`nc_panel_pct`/`nc_panel_right_col` and the 72%-wide-panel hide-threshold no longer exist
+anywhere in `src/` (confirmed 2026-09-14); every `newchar*.rcss` now hardcodes `width:98%`.
+(This machinery no longer exists and would mislead a reader who takes the section at face
+value.)
 
 ## Tests
 

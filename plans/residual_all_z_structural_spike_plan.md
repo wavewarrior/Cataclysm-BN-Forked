@@ -87,6 +87,8 @@ reordering worldgen scheduling carries far more regression risk than the measure
 
 From `build_map_cache()` callers in `src/game.cpp`:
 
+Re-verify the `game.cpp` line numbers for the root-cause candidates (previously cited around 15091, 925-931, 9988, 8478, 8487) before starting — likely stale and not re-checked in the 2026-09 pass, given the `map.cpp`→`map_cache.cpp` split observed elsewhere in this codebase makes drift likely in adjacent files too.
+
 | Caller | Line | Frequency | Notes |
 |--------|------|-----------|-------|
 | `m.invalidate_map_cache(get_levz())` → `build_map_cache` | 3794-3795 | On game load | Rare |

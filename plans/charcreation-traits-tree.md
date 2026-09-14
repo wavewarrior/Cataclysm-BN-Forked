@@ -1,8 +1,8 @@
 # TRAITS step — three columns of rows
 
 Fourth creator step reworked, after SCENARIO, PROFESSION and STATS. Read
-`plans/charcreation-scenario-tree.md` for the click-intent rule and
-`plans/charcreation-stats-cards.md` for the flex/bare-text trap; neither is re-derived here.
+`plans/done/charcreation-scenario-tree.md` for the click-intent rule and
+`plans/done/charcreation-stats-cards.md` for the flex/bare-text trap; neither is re-derived here.
 
 Reference: `UI_designs/11_charcreation_mutations.png`.
 
@@ -318,5 +318,12 @@ existing 16ms tick. Every one is invisible to a compiler and to the pure-functio
 honest measure of what this screen's test coverage does and does not buy.
 
 Still unconfirmed at time of writing: that the strand actually turns and its lit pairs match the
-taken traits, that hover tracks without alternating, that arrow keys move the preview with the
-pointer at rest over the list, and that clicking a hovered option takes rather than drops it.
+taken traits, that hover tracks without alternating, and that arrow keys move the preview with the
+pointer at rest over the list.
+
+On "that clicking a hovered option takes rather than drops it": the underlying click-delivery
+mechanism (`SELECT`+`COORDINATE`+`ANY_INPUT` registration at `src/newcharacter_ui.cpp:1711-1725`)
+is code-identical to BIONICS (`:2826-2840`) and OVERVIEW (`:7471-7473`), both confirmed working
+with real mouse clicks by the user (see `plans/done/charcreation-bionics-chassis.md`,
+`plans/done/charcreation-overview-seal.md`) — only the TRAITS-specific take/drop *ordering*
+semantics remain to observe directly, not click delivery itself.

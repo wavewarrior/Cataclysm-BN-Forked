@@ -102,12 +102,12 @@ Two-layer system: game logic + SDL audio playback.
 *Things that make the system playable and useful.*
 
 #### 1.1 Permanent Sound Wave Visualization
-**Status:** Exists as debug feature. Needs promotion to production.
-- [ ] Make wavefront animation always-visible when sound occurs (configurable)
-- [ ] Color-code by sound category (combat=red, movement=amber, ambient=blue)
-- [ ] Scale wavefront size by volume
-- [ ] Persist trail for configurable duration (not just animation lifetime)
-- [ ] Toggle in options, not just F4 panel
+**Status:** Mostly promoted to production (verified 2026-09-14). `sfx::emit_sound_pulse()` fires from real gameplay events (footsteps: `game_movement.cpp:508`; melee: `melee.cpp:542,727-728`; gunfire: `ranged.cpp:2076,2086`; ballistics impacts: `ballistics.cpp:723`), and the wavefront is visible whenever the player is in `CMM_STEALTH` movement mode: `sdl_lighting_devui.cpp:1078`'s `sound_pulses_visible( bool player_in_stealth )` is called from `sdl_render_frame.cpp:947-950` with `g->u.movement_mode_is( CMM_STEALTH )` — not gated behind the F4 debug panel.
+- [x] Make wavefront animation always-visible when sound occurs — DONE (wired to real gameplay events, gated by stealth mode)
+- [ ] Color-code by sound category — NOT DONE (`dev_test_lights::sound_pulse` has no category field; every pulse renders identically regardless of source)
+- [x] Scale wavefront size by volume — DONE (`max_r` derived from `p.volume`, clamped between `g_sound_wave_min_radius`/`g_sound_wave_max_radius` at `sdl_render_frame.cpp:876-878` and `:1176-1178`)
+- [ ] Persist trail for configurable duration — PARTIAL (ring lifetime scales with volume/speed; no separate persistent trail beyond the ring's own expansion)
+- [ ] Toggle in options, not just F4 panel — NOT DONE as literally specified (visibility is gated by stealth mode instead — arguably a better design, but no options-menu toggle exists)
 
 #### 1.2 Player Noise Meter
 **Status:** Does not exist.

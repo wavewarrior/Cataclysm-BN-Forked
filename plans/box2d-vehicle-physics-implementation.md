@@ -590,23 +590,13 @@ cmake --build --preset osx-arm-slim --target cataclysm-bn-tiles cata_test-tiles
 
 ### 3. Phase 11 — Ranged Combat via Box2D Ray Casts  *(unblocked after Phase 10 Step 6)*
 
-**Depends on**: Phase 10 Step 6 complete AND external tile-independent ranged combat rework.
-
-Replace tile-traversal LOS and hit resolution with `b2World_CastRayClosest()` into the persistent world.
-
-**What to implement:**
-1. **LOS query**: `b2World_CastRayClosest(world, origin_m, target_m, filter)` → first hit body + exact impact point + surface normal. `b2Body_GetUserData(hit.bodyId)` gives the game object pointer for damage dispatch.
-2. **Penetrating rounds**: `b2World_CastRay()` with a custom callback that accumulates all hits along the ray; apply penetration falloff per-hit.
-3. **Cover calculation**: replace per-tile modifier table with fractional occlusion derived from Box2D shape geometry (fraction of ray length occluded by cover shapes).
-4. **API reference** (v3.0.0 confirmed): `b2World_CastRay`, `b2World_CastRayClosest`, `b2World_OverlapAABB`.
-
-**Gate**: do NOT start until the external ranged combat rework (tile-independent projectile path) is merged. Starting early creates merge conflicts in the exact code this phase rewrites.
+See `plans/Box2D Ranged Combat — Creature Hitboxe.md` for the full spec — this is a duplicate write-up of the same phase as the stub above; do not maintain both. Creature-body raycast hit detection has landed; terrain/vehicle raycast dispatch and LOS/cover-table retirement remain (tracked in the dedicated file, not here).
 
 ---
 
 ## Addendum — findings from the 2026-07-28 followup-bug session
 
-Three constraints discovered while fixing `plans/mouse-interactivity-followup-bugs.md`. All three
+Three constraints discovered while fixing `plans/done/mouse-interactivity-followup-bugs.md`. All three
 affect Phase 10 Step 6 and Phase 12; read before resuming either.
 
 ### 1. ~~Box2D is NOT the speed authority for ordinary driving~~ — SUPERSEDED 2026-07-29
@@ -1422,15 +1412,7 @@ This ensures passengers react to the spins this plan exists to produce, not just
 
 ## Phase 11: Ranged Combat
 
-**Depends on Phase 3. Gated on tile-independent ranged combat rework.**
-
-*Replace tile-traversal LOS with `b2World_CastRayClosest()` into persistent world.*
-
-- `b2World_CastRayClosest(world, origin, translation, filter)` — first hit body, exact impact point, surface normal
-- `b2Body_GetUserData()` → game object pointer for damage dispatch
-- `b2World_CastRay()` with custom callback for penetrating rounds
-- Cover calculation replaces per-tile modifier table with fractional occlusion from Box2D shape geometry
-- Confirmed v3.0.0 API: `b2World_CastRay`, `b2World_CastRayClosest`, `b2World_OverlapAABB`
+See `plans/Box2D Ranged Combat — Creature Hitboxe.md` for the full spec. Creature-body raycast hit detection has landed; terrain/vehicle raycast dispatch and LOS/cover-table retirement remain (tracked there, not here).
 
 ---
 
@@ -1464,10 +1446,6 @@ Systems retired after Phase 10:
 3. **Cold** (on event): AI pathfinding obstacle queries, spawn/mapgen positioning, debug draw, savegame part-position assertions
 
 Audit command before starting: `lsp references precalc` in `src/vehicle_part.h` to get the full callsite list. Any callsite not yet migrated blocks the field deletion.
-
-After Phase 11:
-- Tile-traversal LOS implementation
-- Per-tile cover modifier table
 
 ---
 

@@ -1,6 +1,6 @@
 # Visual Fidelity Overhaul — Eye-Catching Pixel Art Lighting at 60+ FPS
 
-## Status: COMPLETE (2026-07-17) — verified 59.3 fps in-game on M1 Pro
+## Status: Waves 1-2 COMPLETE (2026-07-17, verified 59.3 fps in-game on M1 Pro); Wave 3 (§9 world-locked ambient particles) was never implemented and never formally deferred — a real gap, not a deferral; §10 heat distortion is explicitly deferred; Wave 4 perf validation was not run since Wave 3 was never built.
 
 ## Context
 
@@ -230,7 +230,7 @@ Wave 4 (§11-§13): After all effects land. Measure then optimize.
 
 ## Deferred Backlog
 
-- **Baked SpriteDLight normal atlas (GK §3):** Per-sprite distance-transform dome normals baked at tileset load, sampled from a parallel normal page at runtime. Would give noticeably better per-sprite volume than the inline alpha-Sobel bevel. Blocked on the Metal 2nd-sampler spike (shadercross may now support it — needs a probe). Full spec in `plans/done/GRAVEYARD_KEEPER_VISUAL_PLAN.md §3`.
+- **Baked SpriteDLight normal atlas (GK §3):** DONE — `src/lighting/normal_gen.{h,cpp}` plus `sprite.frag.hlsl`'s `atlas_normal()` implement this via a V-offset (`nrm_atlas_v`) that routes around the Metal 2nd-sampler limitation this line originally cited as the blocker.
 - **Heat distortion near fire:** Screen-space UV warp near fire emitters (shimmering air). Needs a new post-pass reading the emitter buffer.
 - **Forward+ tile-binned light culling (LIGHTING_OPT P6):** Only needed if horde density exceeds the existing P1/P2 emitter budget.
 - **LUT bake for colour presets:** Bake the live ASC-CDL grade to a 32³ LUT PNG for instant preset switching. Spec in GK §6 A3/A4.

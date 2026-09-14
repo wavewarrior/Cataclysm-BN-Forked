@@ -41,7 +41,7 @@ This plan outlines the modernization of CBN's co-op networking and audio systems
 - [x] **Ordered Iteration** (`src/coop_server.cpp`)
   - Replace `std::unordered_map`/`unordered_set` iteration in `build_and_send_sync()` with sorted iteration.
   - Sort monster processing by stable ID before serializing.
-- [x] **Strict FP Flags** (`CMakeLists.txt`)
+- [ ] **Strict FP Flags** (`CMakeLists.txt`) — NOT ACTUALLY PRESENT (verified 2026-09-14: grepped `CMakeLists.txt` and `src/CMakeLists.txt` for `ffp-model`/`fp:strict`/`ffp-contract`, zero matches anywhere in the repository; this checklist item was marked done in error).
   - Add `-ffp-model=strict -ffp-contract=off` for COOP builds (Clang/AppleClang).
   - Add `/fp:strict` for MSVC.
 - [x] **Extended FNV-1a Hash** (`src/coop_mutation_log.h/cpp`)

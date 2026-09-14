@@ -1,6 +1,6 @@
 # Fix SIGSEGV on New Character Creation
 
-## Status: In Progress — Guard flag added, needs wiring and verification
+## Status: Done — guard wired in src/loading_ui.cpp (g_loading_types_registered), confirmed present 2026-09-14
 
 ## Crash
 

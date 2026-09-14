@@ -1,13 +1,17 @@
 # Tier 1b — Amortise non-player-z structural rebuild across frames
 
-## STATUS (reviewed 2026-06-27)
-0% implemented — no budget/time-slice/next_z code in build_map_cache; the z-loops
-(map.cpp:9897/9914/9925) still run minz..maxz every frame unconditionally. Premise PARTLY
-DATED: structural phases now use intra-z parallel_for and the lightmap is per-submap
-incremental (1a done), so the "~9ms non-player-z" baseline this plan cites is lower than when
-written — re-measure before committing effort. Risk section (solar cascade reads z+1 structure)
-remains the hard part. KEEP but re-baseline. OVERLAPS `lazy_non_visible_z_cache_plan.md`
-(both cut non-player-z structural cost) — see cluster note; pick one approach, don't ship both.
+## STATUS (reviewed 2026-09-14)
+0% implemented — no budget/time-slice/next_z code in `build_map_cache`; the z-loops
+(now `src/map_cache.cpp:898/919/932`, moved from `map.cpp` by a god-file decompose since this
+plan was written) still run minz..maxz every frame unconditionally. Premise PARTLY DATED:
+structural phases now use intra-z parallel_for and the lightmap is per-submap incremental (1a
+done), so the "~9ms non-player-z" baseline this plan cites is lower than when written —
+re-measure before committing effort. Risk section (solar cascade reads z+1 structure) remains
+the hard part. This plan now also absorbs `lazy_non_visible_z_cache_plan.md`'s Phase B
+(loop-skip via `calc_max_populated_zlev`), which that plan's own text flagged as a strictly
+simpler subset of this one's amortisation — that file has been deleted; its Phase A/C
+(sparse `level_cache` allocation) survives only as an optional footnote below. KEEP but
+re-baseline.
 
 ## Context
 
@@ -22,7 +26,8 @@ they're only needed when the player looks down a hole, or when 3D FOV needs them
 
 ## Root cause
 
-The z-loop in `build_map_cache` (`map.cpp:9887-9925`) runs `minz..maxz`
+The z-loops in `build_map_cache` (`src/map_cache.cpp:829` function, loops at `898` floor,
+`919` outside, `932` transparency) run `minz..maxz`
 unconditionally. There's no "active z" set — every level is rebuilt every time,
 regardless of whether the player can currently observe it.
 
@@ -32,6 +37,12 @@ assuming freshness. **This plan avoids that trap** by time-slicing rather than
 deferring: every z still gets rebuilt, but not all in the same frame.
 
 ## Approach
+
+### Step 0 — Skip structural-loop iteration for unpopulated z (absorbed from `lazy_non_visible_z_cache_plan.md` Phase B)
+
+Lowest-risk change; land and re-measure first, before Step 1's budget scheme.
+
+Skip structural-loop iteration entirely for `z` outside `[populated min, calc_max_populated_zlev() + range]`, using `map::calc_max_populated_zlev()` (`map.cpp:3904`). Confirmed currently unused for this purpose — its only consumer is `lightmap.cpp:1017`, which clamps the lightmap phase's `zlev_max`, not the structural loops (`map_cache.cpp:898/919/932`). Extending its use to the structural phases needs no new sparse-allocation machinery — `level_cache` stays a dense array; this step only skips *iterating* z that have no content, using the existing populated-range signal.
 
 ### Step 1 — Define rebuild budget per frame
 
@@ -59,6 +70,8 @@ if( next_z > maxz ) next_z = minz;  // wrap around
 This is the **open-world streaming canon** pattern: amortise integration across
 frames (Meta asset streaming, UE4 streaming/GC).
 
+A landed GPU dirty-level tracking mechanism (`gpu_transparency_dirty`/`gpu_floor_dirty`/`add_gpu_dirty_level`/`mark_vehicle_gpu_structural_levels` in `map_cache.cpp`, from the in-flight `plans/merge-main-into-improvements.md` merge) exists alongside the CPU structural loops — design this budget scheme to integrate with it (skip/defer the same z the GPU path already considers dirty), not duplicate a second independent dirty-tracking mechanism.
+
 ### Step 2 — Handle the look-down-a-hole case
 
 When the player looks down (z-1 is visible on screen), that z's structural
@@ -77,6 +90,8 @@ Detection:
 The budget (4) is a starting guess. At 16.6ms/frame and ~3ms per non-player-z
 (floor+outside+transparency), budget=4 = 12ms of structural work + player-z
 <2ms = 14ms. That stays under budget. Tune based on actual measurements.
+
+**Optional footnote (from `lazy_non_visible_z_cache_plan.md`, now deleted):** that plan's Phase A/C (sparse `level_cache` allocation — replacing the dense 21-entry array with NULL-initialised/allocate-on-first-access entries) is a RAM-only win the plan's own text called small (~21-63 MB depending on bubble size). Step 0 above captures the real win (loop-iteration skip) without needing this. Only worth doing if RAM pressure becomes a separate concern.
 
 ## Verification
 
