@@ -1560,7 +1560,7 @@ static void butcher_submenu( const std::vector<item *> &corpses, int corpse = -1
             you.assign_activity( std::make_unique<player_activity>(
                                      std::make_unique<butchery_activity_actor>(
                                          static_cast<butcher_type>( smenu.ret ), targets,
-                                         get_map().bub_to_abs( you.bub_pos() )
+                                         bub_to_abs( you.bub_pos() )
                                      )
                                  ) );
             break;

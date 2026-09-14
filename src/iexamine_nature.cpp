@@ -664,7 +664,7 @@ int iexamine::query_seed( const std::vector<seed_tuple> &seed_entries, int min_r
 void iexamine::plant_seed( player &p, const tripoint_bub_ms &examp, const itype_id &seed_id )
 {
     p.assign_activity( std::make_unique<player_activity>(
-                           std::make_unique<plant_seed_activity_actor>( get_map().bub_to_abs( examp ),
+                           std::make_unique<plant_seed_activity_actor>( bub_to_abs( examp ),
                                    seed_id ) ) );
 }
 
@@ -1211,7 +1211,7 @@ void iexamine::shrub_wildveggies( player &p, const tripoint_bub_ms &examp )
     ///\EFFECT_PER randomly speeds up foraging
     move_cost /= rng( std::max( 4, p.per_cur ), 4 + p.per_cur * 2 );
     p.assign_activity( std::make_unique<player_activity>(
-                           std::make_unique<forage_activity_actor>( here.bub_to_abs( examp ),
+                           std::make_unique<forage_activity_actor>( bub_to_abs( examp ),
                                    true ) ) );
     return;
 }

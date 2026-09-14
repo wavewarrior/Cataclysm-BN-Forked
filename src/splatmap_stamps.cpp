@@ -81,7 +81,7 @@ if( !sp.ready() ) {
 }
 const int base = sp.cell_base( gibs );
 
-const tripoint_abs_ms abs = get_map().bub_to_abs( tile );
+const tripoint_abs_ms abs = bub_to_abs( tile );
 
 // Local tile within the submap. Bub coords run 0..mapsize*SEEX, so both are
 // already non-negative.
@@ -145,7 +145,7 @@ auto queue_splatter( const tripoint_bub_ms &where, const field_type_id &type,
     if( !g || !tilecontext ) {
     return;
 }
-const tripoint_abs_sm sm = project_to<coords::sm>( get_map().bub_to_abs( where ) );
+const tripoint_abs_sm sm = project_to<coords::sm>( bub_to_abs( where ) );
     queue_stamps( where, type, intensity, key_of( sm ) );
 }
 

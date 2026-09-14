@@ -470,7 +470,7 @@ void map::decay_fields_and_scent( const time_duration& amount )
         if( to_proc < 1 ) {
             if( to_proc < 0 ) {
                 cur_submap->field_count = 0;
-                dbg( DL::Error ) << "map::decay_fields_and_scent: submap at " << bub_to_abs( sm_pos )
+                dbg( DL::Error ) << "map::decay_fields_and_scent: submap at " << map_local_to_abs( *this, sm_pos )
                                  << "has " << to_proc << " field_count";
             }
             // This submap has no fields
@@ -501,7 +501,7 @@ void map::decay_fields_and_scent( const time_duration& amount )
 
         if( to_proc > 0 ) {
             cur_submap->field_count = cur_submap->field_count - to_proc;
-            dbg( DL::Warn ) << "map::decay_fields_and_scent: submap at " << bub_to_abs( sm_pos )
+            dbg( DL::Warn ) << "map::decay_fields_and_scent: submap at " << map_local_to_abs( *this, sm_pos )
                             << "has " << cur_submap->field_count - to_proc << "fields, but "
                             << cur_submap->field_count << " field_count";
         }
@@ -1171,7 +1171,7 @@ bash_results map::bash_furn_success( const tripoint_bub_ms &p, const bash_params
                         // Found same center, wreck current tile
                         if( furn_obj.fluid_grid &&
                             furn_obj.fluid_grid->role == fluid_grid_role::tank ) {
-                            fluid_grid::on_tank_removed( tripoint_abs_ms( bub_to_abs( pt ) ) );
+                            fluid_grid::on_tank_removed( tripoint_abs_ms( map_local_to_abs( *this, pt ) ) );
                         }
                         spawn_items( p, item_group::items_from( recur_bash.drop_group, calendar::turn ) );
                         furn_set( pt, recur_bash.furn_set );
@@ -1183,7 +1183,7 @@ bash_results map::bash_furn_success( const tripoint_bub_ms &p, const bash_params
         soundfxvariant = "smash_cloth";
     } else {
         if( furnid.fluid_grid && furnid.fluid_grid->role == fluid_grid_role::tank ) {
-            fluid_grid::on_tank_removed( tripoint_abs_ms( bub_to_abs( p ) ) );
+            fluid_grid::on_tank_removed( tripoint_abs_ms( map_local_to_abs( *this, p ) ) );
         }
         furn_set( p, bash.furn_set );
         for( item * const &it : i_at( p ) )  {
@@ -1277,7 +1277,7 @@ bash_results map::bash_ter_furn( const tripoint_bub_ms& p, const bash_params& pa
         // Blame nearby player
         if( rl_dist( g->u.bub_pos(), p ) <= 3 ) {
             g->events().send<event_type::triggers_alarm>( g->u.getID() );
-            const auto abs = project_to<coords::sm>( bub_to_abs( p.xy() ) );
+            const auto abs = project_to<coords::sm>( map_local_to_abs( *this, p.xy() ) );
             g->timed_events.add(
                 TIMED_EVENT_WANTED, calendar::turn + 30_minutes, 0, tripoint_abs_sm( abs, p.z() ) );
         }
@@ -1637,7 +1637,7 @@ void map::shoot(
         se.id = "environment";
         se.variant = "alarm";
         sounds::sound( se );
-        const auto abs = project_to<coords::sm>( bub_to_abs( p ) );
+        const auto abs = project_to<coords::sm>( map_local_to_abs( *this, p ) );
         g->timed_events.add( TIMED_EVENT_WANTED, calendar::turn + 30_minutes, 0, abs );
     }
 

@@ -1375,7 +1375,7 @@ void spell::cast_all_effects( Creature& source, const tripoint_bub_ms& target ) 
         const int radius = range();
         for( const tripoint_bub_ms& tp :
              here.points_in_radius( target, radius ) ) {
-            const auto abs = here.bub_to_abs( tp );
+            const auto abs = bub_to_abs( tp );
             spell_ter_before[abs] = here.ter( tp );
             const field& f = here.field_at( tp );
             for( const auto& [ft, fe] : f ) {
@@ -1436,7 +1436,7 @@ void spell::cast_all_effects( Creature& source, const tripoint_bub_ms& target ) 
         const int radius = range();
         for( const tripoint_bub_ms& tp :
              here.points_in_radius( target, radius ) ) {
-            const auto abs = here.bub_to_abs( tp );
+            const auto abs = bub_to_abs( tp );
             // terrain change
             const auto it = spell_ter_before.find( abs );
             if( it != spell_ter_before.end() && here.ter( tp ) != it->second ) {

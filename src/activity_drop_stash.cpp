@@ -756,7 +756,7 @@ void drop_activity_actor::do_turn( player_activity &, Character& who )
         const bool goes_to_vehicle =
             !force_ground && here.veh_at( pos ).part_with_feature( "CARGO", false ).has_value();
         if( !goes_to_vehicle ) {
-            const tripoint_abs_ms abs = here.bub_to_abs( pos );
+            const tripoint_abs_ms abs = bub_to_abs( pos );
             std::ostringstream oss;
             JsonOut jout( oss );
             jout.start_object();

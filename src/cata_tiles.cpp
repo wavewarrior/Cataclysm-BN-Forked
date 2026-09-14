@@ -599,7 +599,7 @@ void cata_tiles::draw(
             auto local_tiles = std::unordered_set<point_bub_ms>();
             std::ranges::for_each(covered_points, [&](const tripoint_abs_ms& pos) {
                 if (pos.z() != center.z()) { return; }
-                local_tiles.insert(here.abs_to_bub(pos).xy());
+                local_tiles.insert(abs_to_bub(pos).xy());
             });
 
             if (!local_tiles.empty()) {
@@ -692,8 +692,8 @@ void cata_tiles::draw(
     const auto max_mm_reg =
         point_bub_ms(std::max(s.x + o.x(), max_visible_x), std::max(s.y + o.y(), max_visible_y));
     g->u.prepare_map_memory_region(
-        here.bub_to_abs(tripoint_bub_ms(min_mm_reg, center.z())),
-        here.bub_to_abs(tripoint_bub_ms(max_mm_reg, center.z())));
+        bub_to_abs(tripoint_bub_ms(min_mm_reg, center.z())),
+        bub_to_abs(tripoint_bub_ms(max_mm_reg, center.z())));
 
     idle_animations.set_enabled(get_option<bool>("ANIMATIONS"));
     idle_animations.prepare_for_redraw();
@@ -1744,9 +1744,9 @@ void cata_tiles::draw(
 
     if (draw_submap_grid && !iso_mode) {
         point_abs_sm sm_start = project_to<coords::sm>(
-            here.bub_to_abs(point_bub_ms(min_col, min_row) + o.raw()));
+            bub_to_abs(point_bub_ms(min_col, min_row) + o.raw()));
         point_abs_sm sm_end = project_to<coords::sm>(
-            here.bub_to_abs(point_bub_ms(max_col, max_row) + o.raw()));
+            bub_to_abs(point_bub_ms(max_col, max_row) + o.raw()));
 
         bool zlevs = here.has_zlevels();
         int mapsize = here.getmapsize();
@@ -1774,9 +1774,9 @@ void cata_tiles::draw(
             for (int sm_y = sm_start.y(); sm_y <= sm_end.y(); sm_y++) {
                 auto sm_p = point_abs_sm(sm_x, sm_y);
                 auto sm_tp = tripoint_abs_sm(sm_x, sm_y, center.z());
-                point p1 = player_to_screen(here.abs_to_bub(project_to<coords::ms>(sm_p)));
+                point p1 = player_to_screen(abs_to_bub(project_to<coords::ms>(sm_p)));
                 point p3 = player_to_screen(
-                    here.abs_to_bub(project_to<coords::ms>(sm_p + point_south_east)));
+                    abs_to_bub(project_to<coords::ms>(sm_p + point_south_east)));
                 p3 -= point(THICC, THICC); // Don't draw over other lines
 
                 // Leave a small gap to indicate omt boundaries
@@ -2018,7 +2018,7 @@ bool cata_tiles::draw_from_id_string(
             const furn_str_id fid(found_id);
             if (fid.is_valid()) {
                 const furn_t& f = fid.obj();
-                if (!f.is_movable()) { seed = simple_point_hash_new(here.bub_to_abs(pos)); }
+                if (!f.is_movable()) { seed = simple_point_hash_new(bub_to_abs(pos)); }
             }
         } break;
         case C_ITEM:
@@ -2066,7 +2066,7 @@ bool cata_tiles::draw_from_id_string(
     // only bother mixing up a hash/random value if the tile has some sprites to randomly pick
     // between or has an idle animation and idle animations are enabled
     if (has_variations && variations_enabled) {
-        if (seed_from_map_coords) { seed = simple_point_hash_new(g->m.bub_to_abs(pos)); }
+        if (seed_from_map_coords) { seed = simple_point_hash_new(bub_to_abs(pos)); }
         static const auto rot32 = [](const unsigned int x, const int k) {
             return (x << k) | (x >> (32 - k));
         };
@@ -2856,7 +2856,7 @@ template <typename T>
 auto get_map_memory_of_at(const tripoint_bub_ms& p) -> std::optional<memorized_terrain_tile> {
     if (!g->u.should_show_map_memory()) { return std::nullopt; }
 
-    const memorized_terrain_tile t = g->u.get_memorized_tile(get_map().bub_to_abs(p));
+    const memorized_terrain_tile t = g->u.get_memorized_tile(bub_to_abs(p));
     if (!string_id<T>(t.tile).is_valid()) { return std::nullopt; }
 
     return t;
@@ -2868,7 +2868,7 @@ auto get_map_memory_of_at<vpart_info>(const tripoint_bub_ms& p)
     if (!g->u.should_show_map_memory()) { return std::nullopt; }
 
     const memorized_terrain_tile t = g->u.get_memorized_tile(
-        get_map().bub_to_abs(tripoint_bub_ms(p)));
+        bub_to_abs(tripoint_bub_ms(p)));
     if (!t.tile.starts_with("vp_")) { return std::nullopt; }
 
     const auto actual_part = t.tile.substr(3);
@@ -2880,7 +2880,7 @@ auto get_map_memory_of_at<vpart_info>(const tripoint_bub_ms& p)
 bool cata_tiles::has_memory_at(const tripoint_bub_ms& p) {
     if (!g->u.should_show_map_memory()) { return false; }
 
-    const auto abs = get_map().bub_to_abs(p);
+    const auto abs = bub_to_abs(p);
     // Check overlay slot (furniture, vpart, trap) and terrain slot separately,
     // since terrain is now stored in its own slot and may be the only memory present.
     if (!g->u.get_memorized_tile(abs).tile.empty()) { return true; }
@@ -2891,7 +2891,7 @@ auto cata_tiles::get_ter_memory_at(const tripoint_bub_ms& p)
     -> std::optional<memorized_terrain_tile> {
     if (!g->u.should_show_map_memory()) { return std::nullopt; }
     const memorized_terrain_tile t = g->u.get_terrain_tile(
-        get_map().bub_to_abs(tripoint_bub_ms(p)));
+        bub_to_abs(tripoint_bub_ms(p)));
     if (t.tile.empty()) { return std::nullopt; }
     return t;
 }

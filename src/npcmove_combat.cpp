@@ -680,7 +680,7 @@ void npc::regen_ai_cache()
     map& here = get_map();
     auto i = std::begin( ai_cache.sound_alerts );
     while( i != std::end( ai_cache.sound_alerts ) ) {
-        if( sees( here.abs_to_bub( i->abs_pos ) ) ) {
+        if( sees( abs_to_bub( i->abs_pos ) ) ) {
             i = ai_cache.sound_alerts.erase( i );
             if( ai_cache.sound_alerts.size() == 1 ) { path.clear(); }
         } else {
@@ -955,7 +955,7 @@ auto npc::decide_action() -> npc_cmd_t
         if( !activity_route.empty() && !has_destination_activity() ) {
             tripoint_bub_ms final_destination;
             if( destination_point ) {
-                final_destination = here.abs_to_bub( *destination_point );
+                final_destination = abs_to_bub( *destination_point );
             } else {
                 final_destination = activity_route.back();
             }
@@ -1068,14 +1068,14 @@ void npc::execute_action( const npc_cmd_t &cmd )
 
         case npc_investigate_sound: {
             auto cur_pos = bub_pos();
-            update_path( here.abs_to_bub( ai_cache.s_abs_pos ) );
+            update_path( abs_to_bub( ai_cache.s_abs_pos ) );
             move_to_next();
             if( bub_pos() == cur_pos ) { ai_cache.stuck += 1; }
         }
         break;
 
         case npc_return_to_guard_pos: {
-            const auto local_guard_pos = here.abs_to_bub( *ai_cache.guard_pos );
+            const auto local_guard_pos = abs_to_bub( *ai_cache.guard_pos );
             update_path( local_guard_pos );
             if( bub_pos() == local_guard_pos || path.empty() ) {
                 move_pause();
@@ -1372,7 +1372,7 @@ void npc::execute_action( const npc_cmd_t &cmd )
                 debugmsg( "npc_goto_to_this_pos set to true, but no target set" );
                 break;
             }
-            update_path( get_map().abs_to_bub( goto_to_this_pos.value() ) );
+            update_path( abs_to_bub( goto_to_this_pos.value() ) );
             move_to_next();
 
             if( abs_pos() == goto_to_this_pos.value() ) {

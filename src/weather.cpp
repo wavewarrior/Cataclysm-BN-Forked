@@ -480,7 +480,7 @@ void weather_effect::lightning( int intensity )
 
             // Push a brief, wide lightning flash to the GPU emitter pipeline.
             lighting::flash_event fe{};
-            fe.pos         = get_map().bub_to_abs( g->u.bub_pos() );
+            fe.pos         = bub_to_abs( g->u.bub_pos() );
             fe.r           = 1.0f;
             fe.g           = 1.0f;
             fe.b           = 1.0f;

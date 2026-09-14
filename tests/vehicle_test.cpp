@@ -2,6 +2,7 @@
 #include "cata_utility.h"
 #include "catch/catch_amalgamated.hpp"
 #include "coordinates.h"
+#include "creature_tracker.h"
 #include "damage.h"
 #include "debug.h"
 #include "enums.h"
@@ -47,8 +48,7 @@ struct horde_vehicle_spawn_fixture {
 };
 
 auto point_has_monster(const tripoint_abs_ms& p) -> bool {
-    const auto& here = get_map();
-    return g->critter_at<monster>(here.abs_to_bub(p)) != nullptr;
+    return g->critter_tracker->find(p) != nullptr;
 }
 
 auto vehicle_points_contain_monster(const std::set<tripoint_abs_ms>& vehicle_points) -> bool {
@@ -63,7 +63,7 @@ auto make_horde_vehicle_spawn_fixture(const horde_vehicle_spawn_options& options
     auto& here = get_map();
     auto& you = get_avatar();
     const auto target_submap = tripoint_bub_sm(here.getmapsize() / 2, here.getmapsize() / 2, 0);
-    const auto target_submap_abs = here.bub_to_abs(target_submap);
+    const auto target_submap_abs = map_local_to_abs(here, target_submap);
     const auto target_submap_origin = project_to<coords::ms>(target_submap);
     const auto target_submap_end = target_submap_origin + tripoint(SEEX - 1, SEEY - 1, 0);
     const auto vehicle_origin = target_submap_origin + tripoint(SEEX / 2, SEEY / 2, 0);
@@ -94,7 +94,7 @@ auto make_horde_vehicle_spawn_fixture(const horde_vehicle_spawn_options& options
     const auto horde_spawn_blocking_terrain = ter_id("t_wall");
     std::ranges::for_each(
         here.points_in_rectangle(target_submap_origin, target_submap_end), [&](const auto& p) {
-            if (!vehicle_points.contains(here.bub_to_abs(p))) {
+            if (!vehicle_points.contains(map_local_to_abs(here, p))) {
                 here.ter_set(p, horde_spawn_blocking_terrain);
             }
         });
@@ -647,7 +647,7 @@ TEST_CASE("box2d_authority_vehicle_bashes_terrain", "[vehicle][box2d]") {
     auto* pw = here.get_physics_world();
     REQUIRE(pw != nullptr);
     const auto colliders_before = pw->terrain_body_count();
-    pw->on_submap_loaded(here, project_to<coords::sm>(here.bub_to_abs(obstacle)));
+    pw->on_submap_loaded(here, project_to<coords::sm>(bub_to_abs(obstacle)));
     REQUIRE(pw->terrain_body_count() > colliders_before);
 
     for (int turn = 0; turn < 5 && here.ter(obstacle) == before; ++turn) {
@@ -745,7 +745,7 @@ TEST_CASE("box2d_terrain_colliders_build_and_rebuild", "[vehicle][box2d]") {
     here.ter_set(wall_z0, ter_id("t_wall_wood"));
     REQUIRE_FALSE(here.passable(wall_z0));
 
-    const auto sm_z0 = project_to<coords::sm>(here.bub_to_abs(wall_z0));
+    const auto sm_z0 = project_to<coords::sm>(bub_to_abs(wall_z0));
 
     // Clear this submap first so the assertion measures a real build rather than a
     // replacement.  Another TEST_CASE may already have registered it — the bash spec
@@ -810,7 +810,7 @@ TEST_CASE("box2d_world_teardown_drops_all_terrain_colliders", "[vehicle][box2d]"
     here.ter_set(obstacle, ter_id("t_wall_wood"));
     REQUIRE(here.impassable_ter_furn(obstacle));
 
-    const auto sm = project_to<coords::sm>(here.bub_to_abs(obstacle));
+    const auto sm = project_to<coords::sm>(bub_to_abs(obstacle));
     pw->on_submap_unloaded(sm, /*submap_still_resident=*/false);
     pw->on_submap_loaded(here, sm);
     REQUIRE(pw->terrain_body_count() > 0);

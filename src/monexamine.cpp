@@ -409,7 +409,7 @@ void monexamine::shear_animal( monster &z )
                                          qual_shear ) ) );
 
     you.assign_activity( std::make_unique<player_activity>( std::make_unique<shear_activity_actor>(
-                             std::vector<tripoint_abs_ms> { get_map().bub_to_abs( z.bub_pos() ) },
+                             std::vector<tripoint_abs_ms> { z.abs_pos() },
                              you.best_quality_item( qual_shear ),
                              z.has_effect( effect_tied ) ? std::string() : std::string( "temp_tie" ) ) ) );
     if( !z.has_effect( effect_tied ) ) {
@@ -1062,7 +1062,7 @@ void monexamine::milk_source( monster &source_mon )
         const int moves = to_moves<int>( time_duration::from_minutes( milkable_ammo->second / 2 ) );
         you.assign_activity( std::make_unique<player_activity>(
                                  std::make_unique<milk_activity_actor>(
-                                     get_map().bub_to_abs( source_mon.bub_pos() ), "" ) ),
+                                     source_mon.abs_pos(), "" ) ),
                              moves );
         // pin the cow in place if it isn't already
         bool temp_tie = !source_mon.has_effect( effect_tied );

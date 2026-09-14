@@ -264,6 +264,7 @@ void iexamine::none( player &/*p*/, const tripoint_bub_ms &examp )
 /**
  * Use "gas pump."  Will pump any liquids on tile.
  */
+
 namespace
 {
 //--------------------------------------------------------------------------------------------------
@@ -695,6 +696,7 @@ static bool try_start_hacking( player &p, const tripoint_bub_ms &examp )
 /**
  * Use id/hack reader. Using an id despawns turrets.
  */
+
 /**
  * Prompt removal of rubble. Select best shovel and invoke "CLEAR_RUBBLE" on tile.
  */
@@ -850,7 +852,7 @@ static bool pick_lock( player &p, const tripoint_bub_ms &examp )
             p.mod_power_level( -bio_lockpick->power_activate );
             p.add_msg_if_player( m_info, _( "You activate your %s." ), bio_lockpick->name );
             p.assign_activity( std::make_unique<player_activity>( lockpick_activity_actor::use_bionic(
-                                   item::spawn( bio_lockpick->fake_item ), here.bub_to_abs( examp ) ) ) );
+                                   item::spawn( bio_lockpick->fake_item ), bub_to_abs( examp ) ) ) );
             return true;
         } else {
             p.add_msg_if_player( m_info, _( "You don't have enough power to activate your %s." ),
@@ -1055,6 +1057,7 @@ static bool harvest_common( player &p, const tripoint_bub_ms &examp, bool furn, 
 /**
  *  Actual planting of selected seed
  */
+
 /**
  * If it's warm enough, pick one of the player's seeds and plant it.
  */
@@ -1071,6 +1074,7 @@ static bool harvest_common( player &p, const tripoint_bub_ms &examp, bool furn, 
  * Actual harvesting of selected plant
  */
 // Highly modified fermenting vat functions
+
 
 static void pick_plant( player &p, const tripoint_bub_ms &examp,
                         const itype_id &itemType, ter_id new_ter, bool seeds = false )
@@ -1110,6 +1114,7 @@ static item *maple_tree_sap_container()
         return it.get_remaining_capacity_for_liquid( maple_sap, true ) > 0;
     }, _( "Which container?" ), PICKUP_RANGE );
 }
+
 
 void iexamine::recycle_compactor( player &, const tripoint_bub_ms &examp )
 {
@@ -1261,7 +1266,7 @@ void iexamine::trap( player &p, const tripoint_bub_ms &examp )
                 }
             } else {
                 p.assign_activity( std::make_unique<player_activity>( std::make_unique<construction_activity_actor>
-                                   ( here.bub_to_abs( examp ) ) ) );
+                                   ( bub_to_abs( examp ) ) ) );
                 return;
             }
         } else {
@@ -1303,6 +1308,7 @@ void iexamine::liquid_source( player &, const tripoint_bub_ms &examp )
     liquid_handler::handle_liquid( item::spawn( get_map().furn( examp ).obj().provides_liquids,
                                    calendar::turn, item::INFINITE_CHARGES ) );
 }
+
 
 std::vector<itype> furn_t::crafting_pseudo_item_types() const
 {
@@ -1348,6 +1354,7 @@ const units::volume MAX_FOOD_VOLUME_MILLING = units::from_liter( 100 );
 const units::volume MAX_FOOD_VOLUME = units::from_liter( 20 );
 const units::volume MAX_FOOD_VOLUME_PORTABLE = units::from_liter( 15 );
 } // namespace sm_rack
+
 
 static int getNearPumpCount( const tripoint_bub_ms &p )
 {
@@ -1474,6 +1481,7 @@ static void turnOnSelectedPump( const tripoint_bub_ms &p, int number )
         }
     }
 }
+
 
 /**
  * Given then name of one of the above functions, returns the matching function

@@ -200,10 +200,10 @@ bool cata_tiles::draw_terrain(
         const std::string& tname = t.id().str();
         if( here.check_seen_cache( p ) ) {
             if( !t->has_flag( TFLAG_NO_MEMORY ) && !t->has_flag( TFLAG_Z_TRANSPARENT ) ) {
-                g->u.memorize_tile( here.bub_to_abs( p ), tname, subtile, rotation );
-                g->u.memorize_terrain_tile( here.bub_to_abs( p ), tname, subtile, rotation );
+                g->u.memorize_tile( bub_to_abs( p ), tname, subtile, rotation );
+                g->u.memorize_terrain_tile( bub_to_abs( p ), tname, subtile, rotation );
             } else {
-                g->u.clear_memorized_tile( here.bub_to_abs( p ) );
+                g->u.clear_memorized_tile( bub_to_abs( p ) );
             }
         }
         // draw the actual terrain if there's no override
@@ -335,7 +335,7 @@ bool cata_tiles::draw_furniture(
 
         const std::string& fname = f.id().str();
         if( here.check_seen_cache( p ) ) {
-            g->u.memorize_tile( here.bub_to_abs( p ), fname, subtile, rotation );
+            g->u.memorize_tile( bub_to_abs( p ), fname, subtile, rotation );
         }
         // draw the actual furniture if there's no override
         if( !neighborhood_overridden ) {
@@ -442,7 +442,7 @@ bool cata_tiles::draw_trap(
         get_tile_values( tr_id.to_i(), neighborhood, subtile, rotation );
         const std::string trname = tr_id.id().str();
         if( here.check_seen_cache( p ) && tr_id != tr_ledge ) {
-            g->u.memorize_tile( here.bub_to_abs( p ), trname, subtile, rotation );
+            g->u.memorize_tile( bub_to_abs( p ), trname, subtile, rotation );
         }
         // draw the actual trap if there's no override
         if( !neighborhood_overridden ) {
@@ -650,9 +650,9 @@ bool cata_tiles::draw_vpart(
         // Always memorize while stationary so returning to a previous position
         // after a trip refreshes the tile rather than leaving it blank.
         if( veh.forward_velocity() ) {
-            you.clear_memorized_overlay( here.bub_to_abs( p ) );
+            you.clear_memorized_overlay( bub_to_abs( p ) );
         } else {
-            you.memorize_tile( here.bub_to_abs( p ), vpname, subtile, rotation );
+            you.memorize_tile( bub_to_abs( p ), vpname, subtile, rotation );
         }
         if( !overridden ) {
             // Vehicle smooth render offset (Box2D sub-tile residual).
@@ -716,7 +716,7 @@ bool cata_tiles::draw_vpart(
                                       std::round( to_degrees( veh.part_display_direction( veh_part, use_roof_variant ) ) ) );
             const std::string vpname = "vp_" + vp_id.str();
             if( !veh.forward_velocity() ) {
-                get_avatar().memorize_tile( here.bub_to_abs( p ), vpname, subtile, rotation );
+                get_avatar().memorize_tile( bub_to_abs( p ), vpname, subtile, rotation );
             }
             const tile_search_params tile{vpname, C_VEHICLE_PART, empty_string, subtile, rotation};
             if( !tile_iso ) {
@@ -762,7 +762,7 @@ bool cata_tiles::draw_vpart(
                                   std::round( to_degrees( veh->part_display_direction( veh_part ) ) ) );
         const std::string vpname = "vp_" + vp_id.str();
         avatar& you = get_avatar();
-        const auto abs_pos = here.bub_to_abs( p );
+        const auto abs_pos = bub_to_abs( p );
         // Projected rope segments are live draws, not persistent vehicle parts.
         if( you.get_memorized_tile( abs_pos ).tile == vpname ) {
             you.clear_memorized_overlay( abs_pos );
@@ -963,7 +963,7 @@ bool cata_tiles::draw_zone_mark(
     if( !g->is_zones_manager_open() ) { return false; }
 
     const zone_manager& mgr = zone_manager::get_manager();
-    const auto& abs = get_map().bub_to_abs( p );
+    const auto& abs = bub_to_abs( p );
     const auto zone = mgr.get_bottom_zone( abs );
 
     if( zone && zone->has_options() ) {

@@ -195,7 +195,7 @@ void Character::load( const JsonObject &data )
         if( !data.read( "posz", legacy_bub.z() ) && g != nullptr ) {
             legacy_bub.z() = g->get_levz();
         }
-        position = get_map().bub_to_abs( legacy_bub );
+        position = bub_to_abs( legacy_bub );
     }
     // stats
     data.read( "str_cur", str_cur );

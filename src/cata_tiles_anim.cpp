@@ -1060,7 +1060,7 @@ void cata_tiles::draw_zones_frame( std::multimap<point, formatted_text> &overlay
 
     // get_zone_at expects absolute coordinates
     const zone_data* zone = zone_manager::get_manager().get_zone_at(
-                                get_map().bub_to_abs( lookup_local ) );
+                                bub_to_abs( lookup_local ) );
 
     if( has_custom_points ) {
         if( zone ) {

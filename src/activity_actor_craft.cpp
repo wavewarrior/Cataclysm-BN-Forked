@@ -439,7 +439,7 @@ void craft_activity_actor::do_complete_craft( player_activity& act, Character& w
     craft_item->detach();
     if( is_long && rec ) {
         if( who.making_would_work( rec->ident(), batch_size ) ) {
-            who.last_craft->execute( get_map().abs_to_bub( location ) );
+            who.last_craft->execute( abs_to_bub( location ) );
         }
     }
 }
@@ -532,7 +532,7 @@ void construction_activity_actor::calc_all_moves( player_activity& act, Characte
     // Check if pc was lost for some reason, but actually still exists on map, e.g. save/load
     if( !pc ) {
         map& here = get_map();
-        auto local = here.abs_to_bub( target );
+        auto local = abs_to_bub( target );
         pc = here.partial_con_at( tripoint_bub_ms( local ) );
     }
     // if something goes terribly wrong we don't CTD
@@ -547,7 +547,7 @@ void construction_activity_actor::calc_all_moves( player_activity& act, Characte
 void construction_activity_actor::start( player_activity & /*act*/, Character & /*who*/ )
 {
     map& here = get_map();
-    auto local = here.abs_to_bub( target );
+    auto local = abs_to_bub( target );
     pc = here.partial_con_at( tripoint_bub_ms( local ) );
     auto& built = *pc->id;
 
@@ -578,7 +578,7 @@ void construction_activity_actor::do_turn( player_activity& act, Character& who 
     // Check if pc was lost for some reason, but actually still exists on map, e.g. save/load
     if( !pc ) {
         map& here = get_map();
-        auto local = here.abs_to_bub( target );
+        auto local = abs_to_bub( target );
         pc = here.partial_con_at( tripoint_bub_ms( local ) );
     }
 
@@ -616,7 +616,7 @@ void construction_activity_actor::finish( player_activity& act, Character& who )
     std::vector<const item *> con_items_at_player; // byproducts spawn at who.bub_pos() only
     if( g->coop_client_ ) {
         map& here = get_map();
-        const auto local = here.abs_to_bub( target );
+        const auto local = abs_to_bub( target );
         con_ter_before       = here.ter( local );
         con_furn_before      = here.furn( local );
         con_ter_above_before = here.ter( local + tripoint_above );
@@ -632,7 +632,7 @@ void construction_activity_actor::finish( player_activity& act, Character& who )
 
     if( g->coop_client_ ) {
         map& here = get_map();
-        const auto local = here.abs_to_bub( target );
+        const auto local = abs_to_bub( target );
         // Target tile terrain/furniture change.
         if( here.ter( local ) != con_ter_before || here.furn( local ) != con_furn_before ) {
             g->coop_client_->queue_terrain_change(
@@ -652,7 +652,7 @@ void construction_activity_actor::finish( player_activity& act, Character& who )
         drop_jout.member( "items" );
         drop_jout.start_array();
         bool has_new = false;
-        const tripoint_abs_ms player_abs = here.bub_to_abs( who.bub_pos() );
+        const tripoint_abs_ms player_abs = bub_to_abs( who.bub_pos() );
         for( const item * it : here.i_at( who.bub_pos() ) ) {
             // Skip items that were there before construction finished.
             using cip = const item*;
@@ -1103,7 +1103,7 @@ void butchery_activity_actor::finish( player_activity& act, Character& who )
         j.member( "az", this->placement.z() );
         j.end_object();
         g->coop_client_->queue_action( "BUTCHER", ctx.str() );
-        const auto new_abs = here.bub_to_abs( p.bub_pos() );
+        const auto new_abs = bub_to_abs( p.bub_pos() );
         for( const item * it : here.i_at( p.bub_pos() ) ) {
             if( std::ranges::find( coop_items_before, it ) == coop_items_before.end() ) {
                 std::ostringstream drop_ctx;

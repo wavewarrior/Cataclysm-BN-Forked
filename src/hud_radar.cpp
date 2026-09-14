@@ -384,7 +384,7 @@ auto hud_radar::draw( const avatar &u, const hud_runic::layout &l ) -> void
             if( ap.z() != z ) {
                 continue;
             }
-            const auto bp = m.abs_to_bub( ap );
+            const auto bp = abs_to_bub( ap );
             const auto gx = bp.x() - centre.x() + half_x;
             const auto gy = bp.y() - centre.y() + half_y;
             if( gx < 0 || gx >= tiles_x || gy < 0 || gy >= tiles_y ) {

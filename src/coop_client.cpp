@@ -227,7 +227,7 @@ auto coop_client::apply_world_seed_to_avatar() -> void
                 << world_seed_spawn_.y() << ")";
         g->m.invalidate_map_cache( levz );
         g->m.build_map_cache( levz );
-        const tripoint_bub_ms bpos = g->m.abs_to_bub( world_seed_spawn_ );
+        const tripoint_bub_ms bpos = abs_to_map_local( g->m, world_seed_spawn_ );
         g->u.setpos( bpos );
         DebugLog( DL::Info, DC::Main )
                 << "[coop] setpos: bpos=(" << bpos.x() << "," << bpos.y() << ")"
@@ -524,9 +524,9 @@ try {
         const tripoint_abs_ms target_abs{ tx, ty, tz };
 
         predicted_outcome outcome;
-        outcome.target_pos = g->m.abs_to_bub( target_abs );
+        outcome.target_pos = abs_to_map_local( g->m, target_abs );
 
-        const auto bub_target = g->m.abs_to_bub( target_abs );
+        const auto bub_target = abs_to_map_local( g->m, target_abs );
         const monster *mon = g->critter_at<monster>( bub_target );
         if( mon && mon->friendly <= 0 ) {
             outcome.target_expected_hp = mon->get_hp();
@@ -646,7 +646,7 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
                 }
                 ++ev_count;
                 const tripoint_abs_ms abs_pos{ex, ey, ez};
-                const tripoint_bub_ms bpos = g->m.abs_to_bub( abs_pos );
+                const tripoint_bub_ms bpos = abs_to_map_local( g->m, abs_pos );
                 using evt = coop_event_type;
                 if( ev_type == static_cast<int>( evt::terrain_changed ) ) {
                     const ter_id ter{ ev_val };
@@ -810,7 +810,7 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
                 if( dead || type_id.is_empty() || host_id < 0 ) { continue; }
                 received_ids.insert( host_id );
 
-                const tripoint_bub_ms bpos = g->m.abs_to_bub( apos );
+                const tripoint_bub_ms bpos = abs_to_map_local( g->m, apos );
                 const auto it = coop_monster_map_.find( host_id );
                 if( it != coop_monster_map_.end() && it->second && !it->second->is_dead() ) {
                     monster& existing = *it->second;
@@ -956,7 +956,11 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
             std::vector<reconcile_action> racts;
             racts.reserve( pending_actions_.size() );
             for( const auto& a : pending_actions_ ) { racts.emplace_back( a.seq, a.key ); }
-            const tripoint_bub_ms server_bpos = g->m.abs_to_bub( sync_proxy_apos_ );
+            // Map-relative, not avatar-relative (see coop_server.cpp's
+            // execute_player_cmd comment) — this reconciles g->u's own
+            // position, so the read frame must match setpos(bub_ms)'s
+            // map-relative write frame or the two silently diverge.
+            const tripoint_bub_ms server_bpos = abs_to_map_local( g->m, sync_proxy_apos_ );
             g->u.setpos( coop_reconcile_pos( server_bpos, last_seq_from_sync, racts ) );
             if( std::abs( dx ) > 1 || std::abs( dy ) > 1 || dz != 0 ) {
                 DebugLog( DL::Info, DC::Main )

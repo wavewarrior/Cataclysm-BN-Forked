@@ -502,7 +502,7 @@ if( m.has_flag( TFLAG_RAMP_UP, dest_loc ) ) {
                                dest_loc ).id().str();
             }
             // TODO: Figure out how to make subtile and rotation work right here
-            you.memorize_tile( m.bub_to_abs( dest_loc ), obstacle, 0, 0 );
+            you.memorize_tile( bub_to_abs( dest_loc ), obstacle, 0, 0 );
         }
     } else if( m.ter( dest_loc ) == t_door_locked || m.ter( dest_loc ) == t_door_locked_peep ||
                m.ter( dest_loc ) == t_door_locked_alarm || m.ter( dest_loc ) == t_door_locked_interior ) {
@@ -633,7 +633,7 @@ void avatar_action::swim( map &m, avatar &you, const tripoint_bub_ms &p )
     you.setpos( p );
     g->update_map( you );
 
-    cata_event_dispatch::avatar_moves( you, m, bub_to_abs( p ) );
+    cata_event_dispatch::avatar_moves( you, m, you.abs_pos() );
 
     if( m.veh_at( you.bub_pos() ).part_with_feature( VPFLAG_BOARDABLE, true ) ) {
         m.board_vehicle( you.bub_pos(), &you );
@@ -696,7 +696,7 @@ void avatar_action::autoattack( avatar &you, map &m )
     // Co-op: record the target abs pos for the MELEE relay.  Both adjacent and reach
     // attacks set this — avatar_action::move() is called in C++, never via handle_action,
     // so no MOVE packet fires for autoattack and both paths need MELEE queued.
-    coop_session::get().last_autoattack_target = get_map().bub_to_abs( best.bub_pos() );
+    coop_session::get().last_autoattack_target = bub_to_abs( best.bub_pos() );
 
     const auto diff = best.bub_pos() - you.bub_pos();
     if( std::abs( diff.x() ) <= 1 && std::abs( diff.y() ) <= 1 && diff.z() == 0 ) {

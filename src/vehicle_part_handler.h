@@ -115,7 +115,7 @@ class MapgenRemovePartHandler : public RemovePartHandler
             debugmsg( "Tried to spawn animal from vehicle part during mapgen!" );
         }
         auto part_location( const vehicle &veh, const int part ) const -> tripoint_bub_ms override {
-            return m.abs_to_bub( veh.abs_part_location( part ) );
+            return abs_to_map_local( m, veh.abs_part_location( part ) );
         }
 };
 

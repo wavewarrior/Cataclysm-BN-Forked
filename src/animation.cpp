@@ -512,6 +512,9 @@ void draw_line_of( const draw_sprite_line_options &options )
     if( path.size() < 2 ) {
         return;
     }
+    if( test_mode || !tilecontext ) {
+        return;
+    }
 
     const auto delay_ms = get_option<int>( "ANIMATION_DELAY" );
     const auto tile_dur = static_cast<float>( delay_ms ) / 1000.f;

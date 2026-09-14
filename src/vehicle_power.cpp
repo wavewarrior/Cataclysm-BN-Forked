@@ -159,7 +159,7 @@ static bool is_sm_tile_outside( const tripoint_abs_ms &pos )
     if( sm == nullptr ) {
         return false;
     }
-    return m.is_outside( m.abs_to_bub( pos ) );
+    return m.is_outside( abs_to_bub( pos ) );
 }
 
 std::vector<vehicle_part *> vehicle::lights( bool active )
@@ -222,7 +222,7 @@ int vehicle::total_solar_epower_w() const
             continue;
         }
 
-        if( !is_sm_tile_outside( g->m.bub_to_abs( bub_part_location( part ) ) ) ) {
+        if( !is_sm_tile_outside( abs_part_location( part ) ) ) {
             continue;
         }
 
@@ -248,12 +248,12 @@ int vehicle::total_wind_epower_w() const
             continue;
         }
 
-        if( !is_sm_tile_outside( here.bub_to_abs( bub_part_location( part ) ) ) ) {
+        if( !is_sm_tile_outside( abs_part_location( part ) ) ) {
             continue;
         }
 
         double windpower = get_local_windpower( weather.windspeed, cur_om_ter,
-                                                here.bub_to_abs( bub_part_location( part ) ),
+                                                abs_part_location( part ),
                                                 weather.winddirection, false );
         if( windpower <= ( weather.windspeed / 10.0 ) ) {
             continue;
@@ -271,7 +271,7 @@ int vehicle::total_water_wheel_epower_w() const
             continue;
         }
 
-        if( !is_sm_tile_over_water( g->m.bub_to_abs( bub_part_location( part ) ) ) ) {
+        if( !is_sm_tile_over_water( abs_part_location( part ) ) ) {
             continue;
         }
 

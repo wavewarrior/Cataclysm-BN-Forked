@@ -417,7 +417,7 @@ void open()
             if( here.open_door_veh( &get_avatar(), vp, openp, !outside ) ) {
                 u.moves -= 100;
                 if( g->coop_client_ ) {
-                    g->coop_client_->queue_terrain_change( here.bub_to_abs( openp ),
+                    g->coop_client_->queue_terrain_change( bub_to_abs( openp ),
                                                            here.ter( openp ).id().str(), here.furn( openp ).id().str() );
                 }
             }
@@ -432,7 +432,7 @@ void open()
     } else if( here.open_door( &u, openp, !here.is_outside( u.bub_pos() ) ) ) {
         u.moves -= 100;
         if( g->coop_client_ ) {
-            coop_emit_terrain_change( here.bub_to_abs( openp ), here.ter( openp ), here.furn( openp ) );
+            coop_emit_terrain_change( bub_to_abs( openp ), here.ter( openp ), here.furn( openp ) );
         }
     } else {
         const ter_str_id tid = here.ter( openp ).id();
@@ -461,7 +461,7 @@ void close()
         doors::close_door( get_map(), g->u, *pnt );
         if( g->coop_client_ &&
             ( here_c.ter( *pnt ) != ter_before || here_c.furn( *pnt ) != furn_before ) ) {
-            coop_emit_terrain_change( here_c.bub_to_abs( *pnt ), here_c.ter( *pnt ), here_c.furn( *pnt ) );
+            coop_emit_terrain_change( bub_to_abs( *pnt ), here_c.ter( *pnt ), here_c.furn( *pnt ) );
         }
     }
 }
@@ -646,7 +646,7 @@ void smash()
         // do activity forever. ACT_PULP stops itself
         u.assign_activity(
             std::make_unique<player_activity>(
-                std::make_unique<pulp_activity_actor>( here.bub_to_abs( smashp ) ) ),
+                std::make_unique<pulp_activity_actor>( bub_to_abs( smashp ) ) ),
             calendar::INDEFINITELY_LONG );
         return; // don't smash terrain if we've smashed a corpse
     }
@@ -717,7 +717,7 @@ void smash()
             // Emit terrain change if the bash broke through.
             if( here.ter( smashp ) != smash_ter_before || here.furn( smashp ) != smash_furn_before ) {
                 coop_emit_terrain_change(
-                    here.bub_to_abs( smashp ), here.ter( smashp ), here.furn( smashp ) );
+                    bub_to_abs( smashp ), here.ter( smashp ), here.furn( smashp ) );
             }
             // Emit debris items that appeared on the ground (glass, rubble, etc.).
             // Without this the host tile diverges and items are lost on next full resync.
@@ -728,7 +728,7 @@ void smash()
             drop_jout.start_array();
             bool has_debris = false;
             for( const tripoint_bub_ms &p : here.points_in_radius( smashp, 1 ) ) {
-                const tripoint_abs_ms abs = here.bub_to_abs( p );
+                const tripoint_abs_ms abs = bub_to_abs( p );
                 for( const item *it : here.i_at( p ) ) {
                     if( smash_items_before.count( it ) ) { continue; }
                     drop_jout.start_object();
@@ -749,7 +749,7 @@ void smash()
             // Proxy melee: queue SMASH with the absolute target position so the proxy
             // swings at the correct tile on the host side.  Terrain changes are already
             // propagated via coop_emit_terrain_change above; this is for the melee animation.
-            const tripoint_abs_ms abs_smashp = here.bub_to_abs( smashp );
+            const tripoint_abs_ms abs_smashp = bub_to_abs( smashp );
             // CL-MELEE-WEAPON: embed weapon at smash time (same pattern as FIRE ctx_json).
             std::ostringstream smash_ctx_oss;
             JsonOut smash_ctx_jout( smash_ctx_oss );

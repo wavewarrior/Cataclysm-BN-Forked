@@ -3,6 +3,7 @@
 #include "gun_mode.h"
 #include "item.h"
 #include "map.h"
+#include "map_helpers.h"
 #include "options_helpers.h"
 #include "ranged.h"
 #include "rng.h"
@@ -181,8 +182,8 @@ TEST_CASE(
     auto shots_fired = 0;
     for (const auto _ : std::views::iota(0, 5)) {
         (void)_;
-        shots_fired += turret.fire(
-            player_character, here.bub_to_abs(vehicle_origin) + tripoint_rel_ms(10, 0, 0));
+        const auto target = map_local_to_abs(here, vehicle_origin) + tripoint_rel_ms(10, 0, 0);
+        shots_fired += turret.fire(player_character, target);
     }
 
     REQUIRE(shots_fired == 15);

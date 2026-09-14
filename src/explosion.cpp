@@ -1601,7 +1601,7 @@ void explosion_funcs::regular( const queued_explosion &qe )
     // Push a transient flash event for the GPU lighting pipeline.
     {
         lighting::flash_event fe{};
-        fe.pos         = get_map().bub_to_abs( p );
+        fe.pos         = bub_to_abs( p );
         fe.r           = 1.0f;
         fe.g           = ex.fire ? 0.4f : 0.5f;
         fe.b           = 0.0f;
@@ -1749,7 +1749,7 @@ void explosion_funcs::flashbang( const queued_explosion &qe )
     // Push bright white flash for GPU lighting.
     {
         lighting::flash_event fe{};
-        fe.pos         = here.bub_to_abs( p );
+        fe.pos         = bub_to_abs( p );
         fe.r           = 1.0f;
         fe.g           = 1.0f;
         fe.b           = 1.0f;

@@ -1652,8 +1652,8 @@ void editmap::mapgen_preview( const point_abs_ms& tc, uilist& gmenu )
                     submap::swap( *destsm, *srcsm );
 
                     // TODO!: move this into the submap swap
-                    for( auto& veh : destsm->vehicles ) {
-                        veh->abs_sm_pos = here.bub_to_abs( dest_pos );
+                    for( auto &veh : destsm->vehicles ) {
+                        veh->abs_sm_pos = map_local_to_abs( here, dest_pos );
                     }
 
                     if( !destsm->spawns.empty() ) { // trigger spawnpoints
@@ -1844,13 +1844,13 @@ void editmap::edit_mapgen()
     map& here = get_map();
 
     do {
-        auto abs_pos = here.bub_to_abs( target.xy() );
-        auto omt_lpos = here.abs_to_bub( project_to<coords::ms>( project_to<coords::omt>( abs_pos ) ) );
+        auto abs_pos = bub_to_abs( target.xy() );
+        auto omt_lpos = abs_to_bub( project_to<coords::ms>( project_to<coords::omt>( abs_pos ) ) );
         auto om_ltarget = omt_lpos + tripoint_rel_ms( -1 + SEEX, -1 + SEEY, target.z() );
 
         if( target.x() != om_ltarget.x() || target.y() != om_ltarget.y() ) {
             target = om_ltarget;
-            abs_pos = here.bub_to_abs( target.xy() );
+            abs_pos = bub_to_abs( target.xy() );
         }
         target_list.clear();
         for( int x = target.x() - SEEX + 1; x < target.x() + SEEX + 1; x++ ) {

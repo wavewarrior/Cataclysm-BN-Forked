@@ -897,6 +897,7 @@ static bool magic_train( player_activity* act, player* p )
 }
 
 
+
 // TODO (https://github.com/cataclysmbn/Cataclysm-BN/issues/1612):
 // Remove that repair code after repair_activity_actor.
 
@@ -930,6 +931,7 @@ static repeat_type repeat_menu( const std::string& title, repeat_type last_selec
 
     return REPEAT_CANCEL;
 }
+
 
 
 
@@ -1024,11 +1026,10 @@ template <typename fn>
 static void cleanup_tiles( std::unordered_set<tripoint_abs_ms> &tiles, fn& cleanup )
 {
     auto it = tiles.begin();
-    map& here = get_map();
     while( it != tiles.end() ) {
         auto current = it++;
 
-        if( cleanup( here.abs_to_bub( *current ) ) ) { tiles.erase( current ); }
+        if( cleanup( abs_to_bub( *current ) ) ) { tiles.erase( current ); }
     }
 }
 
@@ -1050,7 +1051,7 @@ void activity_handlers::perform_zone_activity_turn(
         get_sorted_tiles_by_distance( abspos, unsorted_tiles );
 
     for( const auto& tile : tiles ) {
-        const tripoint_bub_ms& tile_loc = here.abs_to_bub( tile );
+        const tripoint_bub_ms tile_loc = abs_to_bub( tile );
 
         auto route = here.route(
                          p->bub_pos(), tile_loc, p->get_legacy_pathfinding_settings(),

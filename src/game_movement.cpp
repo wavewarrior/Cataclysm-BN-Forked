@@ -765,7 +765,7 @@ auto game::place_player( const tripoint_bub_ms &dest_loc, const bool keep_grab )
             if( !corpses.empty() ) {
                 u.assign_activity( std::make_unique<player_activity>(
                                        std::make_unique<butchery_activity_actor>(
-                                           BUTCHER, corpses, m.bub_to_abs( u.bub_pos() )
+                                           BUTCHER, corpses, bub_to_abs( u.bub_pos() )
                                        )
                                    ) );
             }
@@ -776,7 +776,7 @@ auto game::place_player( const tripoint_bub_ms &dest_loc, const bool keep_grab )
                         !maybe_corpse->get_mtype()->bloodType().obj().has_acid ) {
                         u.assign_activity( std::make_unique<player_activity>(
                                                std::make_unique<pulp_activity_actor>(
-                                                   m.bub_to_abs( pos ), "auto_pulp_no_acid" ) ) );
+                                                   bub_to_abs( pos ), "auto_pulp_no_acid" ) ) );
                         u.activity->moves_left = calendar::INDEFINITELY_LONG;
                         u.activity->auto_resume = true;
                         return;
@@ -1259,8 +1259,7 @@ auto game::grabbed_furn_move( const tripoint_rel_ms &dp ) -> bool
 
     sounds::sound( se );
 
-    auto *atd = active_tiles::furn_at<active_tile_data>
-                ( tripoint_abs_ms( m.bub_to_abs( fpos ) ) );
+    auto *atd = active_tiles::furn_at<active_tile_data>( bub_to_abs( fpos ) );
 
     // Swap furniture vars between tiles beforehand
     // because the furn_set call will clear the vars
@@ -1273,7 +1272,7 @@ auto game::grabbed_furn_move( const tripoint_rel_ms &dp ) -> bool
     // Ignore grab destroy checks
     m.furn_set( fdest, m.furn( fpos ), atd ? atd->clone() : nullptr, true );
     m.furn_set( fpos, f_null, nullptr, true );
-    u.clear_memorized_overlay( m.bub_to_abs( tripoint_bub_ms( fpos ) ) );
+    u.clear_memorized_overlay( bub_to_abs( tripoint_bub_ms( fpos ) ) );
 
     if( fire_intensity == 1 && !pulling_furniture ) {
         m.remove_field( fpos, fd_fire );
@@ -2205,7 +2204,7 @@ void game::vertical_move( int movez, bool force, bool peeking )
 // ——— find_stairs ———
 std::optional<tripoint_bub_ms> game::find_stairs( map &mp, const int z_after, bool peeking )
 {
-    const auto bub_pos = mp.abs_to_bub( u.abs_pos() );
+    const auto bub_pos = abs_to_map_local( mp, u.abs_pos() );
     const auto movez = tripoint_rel_ms( 0, 0, z_after - get_levz() );
     // If there are stairs on the same x and y as we currently are, use those
     if( movez.z() == -1 && mp.has_flag( TFLAG_GOES_UP, bub_pos + movez ) ) {
@@ -2224,7 +2223,7 @@ std::optional<tripoint_bub_ms> game::find_stairs( map &mp, const int z_after, bo
     int best = INT_MAX;
     if( !stairs.has_value() ) {
         for( const auto &rel : overmap_terrain_tiles() ) {
-            const auto dest = mp.abs_to_bub( project_combine( omt_start, rel ) ) + movez;
+            const auto dest = abs_to_map_local( mp, project_combine( omt_start, rel ) ) + movez;
             if( rl_dist( bub_pos, dest ) <= best &&
                 ( ( movez.z() == -1 && mp.has_flag( TFLAG_GOES_UP, dest ) ) ||
                   ( ( movez.z() == 1 && ( mp.has_flag( TFLAG_GOES_DOWN, dest ) &&
@@ -2271,7 +2270,7 @@ std::optional<tripoint_bub_ms> game::find_or_make_stairs( map &mp, const int z_a
         bool &rope_ladder,
         bool peeking )
 {
-    const auto bub_pos = mp.abs_to_bub( u.abs_pos() );
+    const auto bub_pos = abs_to_map_local( mp, u.abs_pos() );
     const int movez = z_after - bub_pos.z();
 
     // Try to find the stairs.
@@ -2412,7 +2411,7 @@ auto game::vertical_shift( const int z_after, const bool keep_grab ) -> void
         // Adjust the map's z-reference so get_levz() returns the new z-level.
         // All z-levels are loaded simultaneously in z-level builds; no map load
         // or unload is required for vertical movement.
-        m.set_abs_sub( tripoint_abs_sm( m.get_abs_sub().xy(), z_after ) );
+        m.set_loaded_submap_z( z_after );
         if( auto *pw = m.get_physics_world(); pw && z_before != z_after ) {
             pw->on_zlevel_changed( m, z_before, z_after );
         }

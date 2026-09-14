@@ -220,7 +220,7 @@ std::unique_ptr<player_activity> veh_interact::serialize_activity()
     // if we're working on an existing part, use that part as the reference point
     // otherwise (e.g. installing a new frame), just use part 0
     const vehicle_part* vpt = pt ? pt : &veh->part( 0 );
-    const tripoint_abs_ms q = here.bub_to_abs( veh->bub_part_location( *vpt ) );
+    const tripoint_abs_ms q = bub_to_abs( veh->bub_part_location( *vpt ) );
     std::unique_ptr<player_activity> res = std::make_unique <
                                            player_activity > ( std::make_unique<vehicle_activity_actor>(
                                                    q, vehicle_cursor, veh->index_of_part( vpt ), vp->get_id(), sel_cmd, time ) );
@@ -3145,3 +3145,4 @@ void act_vehicle_unload_fuel( vehicle* veh )
  * Called when the activity timer for installing parts, repairing, etc times
  * out and the action is complete.
  */
+

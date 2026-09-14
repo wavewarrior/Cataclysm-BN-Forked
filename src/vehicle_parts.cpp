@@ -580,7 +580,7 @@ bool vehicle::try_to_rack_nearby_vehicle( const std::vector<std::vector<int>> &l
         std::vector<std::set<tripoint_abs_ms>> partial_matches;
         partial_matches.assign( 4, veh_partial_match );
         for( auto rack_part : this_bike_rack ) {
-            auto rack_pos = g->m.bub_to_abs( bub_part_location( rack_part ) );
+            auto rack_pos = abs_part_location( rack_part );
             int i = 0;
             for( point offset : four_cardinal_directions ) {
                 auto search_pos = rack_pos + offset;
@@ -977,7 +977,7 @@ bool vehicle::remove_carried_vehicle( const std::vector<int> &carried_parts )
             std::string id_string = carry_names.top().substr( 0, 1 );
             if( id_string == "X" || id_string == "Y" ) {
                 veh_record = carry_names.top();
-                nbp = bub_part_location( carried_part );
+                nbp = abs_to_map_local( g->m, abs_part_location( carried_part ) );
                 x_aligned = id_string == "X";
                 break;
             }
@@ -1198,7 +1198,7 @@ bool vehicle::split_vehicles( const std::vector<std::vector <int>> &new_vehs,
                     }
                 }
             }
-            nvp = bub_part_location( parts[ split_part0 ] );
+            nvp = abs_to_map_local( g->m, abs_part_location( parts[ split_part0 ] ) );
             mnt_offset = parts[ split_part0 ].mount;
             new_vehicle = g->m.add_vehicle( vproto_id( "none" ), nvp, face.dir() );
             if( new_vehicle == nullptr ) {

@@ -377,10 +377,14 @@ class game: public submap_load_listener
          * but it's not of the requested type, returns nullptr.
          * @param allow_hallucination Whether to return monsters that are actually hallucinations.
          */
-        template <typename T = Creature>
-        T * critter_at( const tripoint_bub_ms& p, bool allow_hallucination = false );
-        template <typename T = Creature>
-        const T * critter_at( const tripoint_bub_ms& p, bool allow_hallucination = false ) const;
+        template<typename T = Creature>
+        T * critter_at( const tripoint_bub_ms &p, bool allow_hallucination = false );
+        template<typename T = Creature>
+        const T * critter_at( const tripoint_bub_ms &p, bool allow_hallucination = false ) const;
+        template<typename T = Creature>
+        auto critter_at( const tripoint_abs_ms &p, bool allow_hallucination = false ) -> T *;
+        template<typename T = Creature>
+        auto critter_at( const tripoint_abs_ms &p, bool allow_hallucination = false ) const -> const T *;
         /**
          * Returns a shared pointer to the given critter (which can be of any of the subclasses of
          * @ref Creature). The function may return an empty pointer if the given critter
@@ -430,8 +434,8 @@ class game: public submap_load_listener
          */
         size_t num_creatures() const;
         /** Redirects to the creature_tracker update_pos() function. */
-        bool update_zombie_pos( const monster& critter, const tripoint_bub_ms& pos );
-        void remove_zombie( const monster& critter );
+        auto update_zombie_pos( const monster &critter, const tripoint_abs_ms &pos ) -> bool;
+        void remove_zombie( const monster &critter );
         /** Redirects to the creature_tracker clear() function. */
         void clear_zombies();
         /** Spawns a hallucination at a determined position. */
@@ -804,12 +808,12 @@ class game: public submap_load_listener
         bool take_screenshot() const;
 
         /**
-         * The top left corner of the reality bubble (in submaps coordinates). This is the same
-         * as @ref map::abs_sub of the @ref m map.
+         * The top left corner of the reality bubble in absolute submap coordinates,
+         * derived from the avatar's absolute position.
          */
-        int get_levx() const;
-        int get_levy() const;
-        int get_levz() const;
+        auto get_levx() const -> int;
+        auto get_levy() const -> int;
+        auto get_levz() const -> int;
         /**
          * Load the main map at given location, see @ref map::load, in global, absolute submap
          * coordinates.
@@ -1401,9 +1405,9 @@ class game: public submap_load_listener
         // Read from REALITY_BUBBLE_TICK_INTERVAL in start_game() / load().
         int world_tick_interval_ = 1;
 
-        // Submap radius of the reality bubble = g_half_mapsize = 2*size+1.
+        // Submap radius of the reality bubble = g_half_mapsize = size+1.
         // Set by init_bubble_config() in start_game() / load().
-        // Default 5 matches REALITY_BUBBLE_SIZE=2 (original 11×11 grid).
+        // Default 5 matches REALITY_BUBBLE_SIZE=4 (original 11x11 grid).
         int reality_bubble_radius_ = 5;
 
     private:

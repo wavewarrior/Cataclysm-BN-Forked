@@ -1388,7 +1388,7 @@ int iuse::weather_tool( player* p, item* it, bool, const tripoint_bub_ms & )
         if( g->m.has_flag( TFLAG_SWIMMABLE, p->bub_pos() ) ) {
             const units::temperature water_temp =
                 weather.get_cur_weather_gen().get_water_temperature(
-                    tripoint_abs_ms( here.bub_to_abs( p->bub_pos() ) ), calendar::turn,
+                    tripoint_abs_ms( p->abs_pos() ), calendar::turn,
                     calendar::config, g->get_seed() );
             p->add_msg_if_player(
                 m_neutral, _( "Water temperature: %s." ), print_temperature( water_temp ) );
@@ -1792,7 +1792,7 @@ int iuse::toggle_ups_charging( player *p, item *it, bool, const tripoint_bub_ms 
 
 int iuse::report_grid_charge( player* p, item*, bool, const tripoint_bub_ms& pos )
 {
-    const tripoint_abs_ms pos_abs( get_map().bub_to_abs( pos ) );
+    const tripoint_abs_ms pos_abs( bub_to_abs( pos ) );
     const distribution_grid& gr = get_distribution_grid_tracker().grid_at( pos_abs );
     const int amt = gr.get_resource();
     const auto stat = gr.get_power_stat();
@@ -1821,8 +1821,7 @@ int iuse::report_grid_charge( player* p, item*, bool, const tripoint_bub_ms& pos
 
 int iuse::report_grid_connections( player* p, item*, bool, const tripoint_bub_ms& pos )
 {
-    tripoint_abs_omt pos_abs = project_to<coords::omt>( tripoint_abs_ms( get_map().bub_to_abs(
-                                   pos ) ) );
+    tripoint_abs_omt pos_abs = project_to<coords::omt>( tripoint_abs_ms( bub_to_abs( pos ) ) );
     std::vector<tripoint_rel_omt> connections =
         get_overmapbuffer( p->get_dimension() ).electric_grid_connectivity_at( pos_abs );
 
@@ -1847,8 +1846,7 @@ int iuse::report_grid_connections( player* p, item*, bool, const tripoint_bub_ms
 
 int iuse::modify_grid_connections( player* p, item* it, bool, const tripoint_bub_ms& pos )
 {
-    tripoint_abs_omt pos_abs = project_to<coords::omt>( tripoint_abs_ms( get_map().bub_to_abs(
-                                   pos ) ) );
+    tripoint_abs_omt pos_abs = project_to<coords::omt>( tripoint_abs_ms( bub_to_abs( pos ) ) );
     std::vector<tripoint_rel_omt> connections =
         get_overmapbuffer( p->get_dimension() ).electric_grid_connectivity_at( pos_abs );
 

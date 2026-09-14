@@ -279,7 +279,7 @@ std::string game::print_all_tile_info_text( const tripoint_bub_ms &lp,
         // --- terrain (cf. print_terrain_info) ---
         const ter_t &terrain = m.ter( lp ).obj();
         const oter_id &cur_ter_m = get_overmapbuffer( current_dimension_id_ ).ter(
-                                       tripoint_abs_omt( project_to<coords::omt>( m.bub_to_abs( lp ) ) ) );
+                                       tripoint_abs_omt( project_to<coords::omt>( bub_to_abs( lp ) ) ) );
         const nc_color location_color = cur_ter_m->get_color( uistate.overmap_show_land_use_codes );
         const int move_cost = m.move_cost( lp );
         const bool mc0 = move_cost == 0;
@@ -472,12 +472,12 @@ std::string game::print_all_tile_info_text( const tripoint_bub_ms &lp,
 
 bool game::check_zone( const zone_type_id &type, const tripoint_bub_ms &where ) const
 {
-    return zone_manager::get_manager().has( type, m.bub_to_abs( where ) );
+    return zone_manager::get_manager().has( type, bub_to_abs( where ) );
 }
 
 bool game::check_near_zone( const zone_type_id &type, const tripoint_bub_ms &where ) const
 {
-    return zone_manager::get_manager().has_near( type, m.bub_to_abs( where ) );
+    return zone_manager::get_manager().has_near( type, bub_to_abs( where ) );
 }
 
 bool game::is_zones_manager_open() const
@@ -631,7 +631,7 @@ void game::zones_manager()
         if( show_all_zones ) {
             zones = mgr.get_zones();
         } else {
-            const auto &u_abs_pos = m.bub_to_abs( u.bub_pos() );
+            const auto &u_abs_pos = u.abs_pos();
             for( zone_manager::ref_zone_data &ref : mgr.get_zones() ) {
                 const auto &zone_abs_pos = ref.get().get_center_point();
                 if( u_abs_pos.z() == zone_abs_pos.z() && rl_dist( u_abs_pos, zone_abs_pos ) <= 50 ) {
@@ -709,12 +709,12 @@ void game::zones_manager()
             const look_around_result second = look_around( /*show_window=*/false, center, *first.position,
                 true, true, false );
             if( second.position ) {
-                auto first_abs = m.bub_to_abs( tripoint_bub_ms( std::min( first.position->x(),
+                auto first_abs = bub_to_abs( tripoint_bub_ms( std::min( first.position->x(),
                                                second.position->x() ),
                                                std::min( first.position->y(), second.position->y() ),
                                                std::min( first.position->z(),
                                                    second.position->z() ) ) );
-                auto second_abs = m.bub_to_abs( tripoint_bub_ms( std::max( first.position->x(),
+                auto second_abs = bub_to_abs( tripoint_bub_ms( std::max( first.position->x(),
                                                 second.position->x() ),
                                                 std::max( first.position->y(), second.position->y() ),
                                                 std::max( first.position->z(),
@@ -748,7 +748,7 @@ void game::zones_manager()
         // row is recoloured (light_green/green) exactly as the curses body; the
         // shared .selected highlight adds the accent background.
         d.rows.clear();
-        const auto player_absolute_pos = m.bub_to_abs( u.bub_pos() );
+        const auto player_absolute_pos = u.abs_pos();
         for( int i = 0; i < zone_cnt; ++i ) {
             const auto &zone = zones[i].get();
             const bool selected = i == active_index;
@@ -971,16 +971,16 @@ void game::zones_manager()
                         static_popup message_pop;
                         message_pop.on_top( true );
                         message_pop.message( "%s", _( "Moving zone." ) );
-                        const auto zone_local_start_point = m.abs_to_bub( zone.get_start_point() );
-                        const auto zone_local_end_point = m.abs_to_bub( zone.get_end_point() );
+                        const auto zone_local_start_point = abs_to_bub( zone.get_start_point() );
+                        const auto zone_local_end_point = abs_to_bub( zone.get_end_point() );
                         // local position of the zone center, used to calculate the u.view_offset,
                         // could center the screen to the position it represents
-                        auto view_center = m.abs_to_bub( zone.get_center_point() );
+                        auto view_center = abs_to_bub( zone.get_center_point() );
                         const look_around_result result_local = look_around( false, view_center,
                                                                 zone_local_start_point, false, false,
                                                                 false, true, zone_local_end_point );
                         if( result_local.position ) {
-                            const auto new_start_point = m.bub_to_abs( *result_local.position );
+                            const auto new_start_point = bub_to_abs( *result_local.position );
                             if( new_start_point == zone.get_start_point() ) {
                                 break; // Nothing changed, don't save
                             }
@@ -1080,7 +1080,7 @@ void game::pre_print_all_tile_info( const tripoint_bub_ms &lp, const catacurses:
     // get global area info according to look_around caret position
     // TODO: fix point types
     const oter_id &cur_ter_m = get_overmapbuffer( current_dimension_id_ ).ter( tripoint_abs_omt(
-                                   project_to<coords::omt>( m.bub_to_abs( lp ) ) ) );
+                                   project_to<coords::omt>( bub_to_abs( lp ) ) ) );
     const std::string area_name = cur_ter_m->get_name();
     // The curses print_* helpers were deleted in the tiles-only rip-out; this is
     // now purely a box-sizing helper for live_view — advance `first_line` by the
@@ -1246,7 +1246,7 @@ look_around_result game::look_around( bool show_window, tripoint_bub_ms &center,
         d.header_rml = cata_text_to_rml( colorize( _( "Look Around" ), c_green ) );
         d.cursor_rml = rml_escape( string_format( _( "Cursor At: (%d,%d,%d)" ), lx, ly, lz ) );
         const oter_id &cur_ter_m = get_overmapbuffer( current_dimension_id_ ).ter(
-                                       tripoint_abs_omt( project_to<coords::omt>( m.bub_to_abs( lp ) ) ) );
+                                       tripoint_abs_omt( project_to<coords::omt>( bub_to_abs( lp ) ) ) );
         d.info_rml = cata_text_to_rml( print_all_tile_info_text( lp, cur_ter_m->get_name(), cache ) );
         const std::string ed = string_format( _( "%s - %s" ), ctxt.get_desc( "EXTENDED_DESCRIPTION" ),
                                               ctxt.get_action_name( "EXTENDED_DESCRIPTION" ) );

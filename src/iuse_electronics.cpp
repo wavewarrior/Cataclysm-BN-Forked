@@ -1762,8 +1762,8 @@ static extended_photo_def photo_def_for_camera_point(
 
     // TODO: fix point types
     const oter_id& cur_ter =
-        get_overmapbuffer( get_map().get_bound_dimension() )
-        .ter( tripoint_abs_omt( project_to<coords::omt>( g->m.bub_to_abs( aim_point ) ) ) );
+        get_overmapbuffer( get_map().get_bound_dimension() ).ter( tripoint_abs_omt( project_to<coords::omt>(
+                    bub_to_abs( aim_point ) ) ) );
     std::string overmap_desc = string_format(
                                    _( "In the background you can see a %s" ),
                                    colorize( cur_ter->get_name(), cur_ter->get_color() ) );

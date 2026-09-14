@@ -457,6 +457,7 @@ void consumption_event::deserialize( JsonIn &jsin )
  * Gather variables for saving. These variables are common to both the avatar and NPCs.
  */
 
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ///// inventory.h
 /*
@@ -524,6 +525,7 @@ void location_inventory::json_load_items( JsonIn &jsin )
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
 void time_point::serialize( JsonOut &jsout ) const
 {
     jsout.write( turn_ );

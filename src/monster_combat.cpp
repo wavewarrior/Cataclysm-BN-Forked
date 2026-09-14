@@ -641,7 +641,7 @@ void monster::die( Creature* nkiller )
     if( !is_hallucination() && has_flag( MF_QUEEN ) ) {
         // The submap coordinates of this monster, monster groups coordinates are
         // submap coordinates.
-        const auto abssub = project_to<coords::sm>( g->m.bub_to_abs( bub_pos() ) );
+        const auto abssub = project_to<coords::sm>( abs_pos() );
         // Do it for overmap above/below too
         for( const auto& p : points_in_radius( abssub, g_half_mapsize, 1 ) ) {
             // TODO: fix point types

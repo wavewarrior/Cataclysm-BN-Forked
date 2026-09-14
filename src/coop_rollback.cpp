@@ -34,7 +34,7 @@ auto coop_rollback_engine::rollback_to( int target_tick ) -> int
         }
         // Build the inverse delta and apply it to the world.
         coop_world_event rev = reverse_delta( it->event );
-        const tripoint_bub_ms bpos = g->m.abs_to_bub( rev.pos );
+        const tripoint_bub_ms bpos = abs_to_map_local( g->m, rev.pos );
 
         using evt = coop_event_type;
         if( rev.type == evt::terrain_changed ) {

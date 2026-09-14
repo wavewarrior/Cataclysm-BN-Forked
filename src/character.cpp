@@ -427,7 +427,7 @@ Character::Character()
       id(-1),
       next_climate_control_check(calendar::before_time_starts),
       last_climate_control_ret(false) {
-    if (g != nullptr) { position = get_map().bub_to_abs(tripoint_bub_ms::zero()); }
+    if (g != nullptr) { position = bub_to_abs(tripoint_bub_ms::zero()); }
 
     str_max = 0;
     dex_max = 0;
@@ -803,11 +803,11 @@ std::string Character::skin_name() const
     return _( "armor" );
 }
 
-tripoint_bub_ms Character::bub_pos() const { return get_map().abs_to_bub( position ); }
+tripoint_bub_ms Character::bub_pos() const { return abs_to_bub( position ); }
 
 tripoint_abs_ms Character::abs_pos() const { return position; }
 
-auto Character::setpos( const tripoint_bub_ms& p ) -> void { setpos( get_map().bub_to_abs( p ) ); }
+auto Character::setpos( const tripoint_bub_ms& p ) -> void { setpos( map_local_to_abs( get_map(), p ) ); }
 
 auto Character::setpos( const tripoint_abs_ms& p ) -> void
 {
@@ -994,9 +994,9 @@ bool Character::check_outbounds_activity( player_activity& act )
 {
     map& here = get_map();
     if( ( act.placement != tripoint_abs_ms::zero() && act.placement != tripoint_abs_ms::min()
-          && !here.inbounds( here.abs_to_bub( tripoint_abs_ms( act.placement ) ) ) )
+          && !here.inbounds( abs_to_bub( tripoint_abs_ms( act.placement ) ) ) )
         || ( !act.coords.empty()
-             && !here.inbounds( here.abs_to_bub( tripoint_abs_ms( act.coords.back() ) ) ) ) ) {
+             && !here.inbounds( abs_to_bub( tripoint_abs_ms( act.coords.back() ) ) ) ) ) {
 
         add_msg( m_debug,
                  "npc %s at pos %d %d, activity target is not inbounds at %d %d therefore activity "
@@ -3499,6 +3499,7 @@ void Character::place_corpse( const tripoint_abs_omt& om_target )
 
     bay.add_item_or_charges( fin, std::move( body ) );
 }
+
 
 void Character::shift_destination( point_rel_ms shift )
 {

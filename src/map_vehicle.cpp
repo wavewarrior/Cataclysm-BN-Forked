@@ -214,7 +214,7 @@ void map::add_vehicle_to_cache(vehicle* veh) {
     // Get parts
     for (const vpart_reference& vpr : veh->get_all_parts()) {
         if (vpr.part().removed) { continue; }
-        const auto p = abs_to_bub(veh->abs_part_location(vpr.part()));
+        const auto p = abs_to_map_local(*this, veh->abs_part_location(vpr.part()));
         int part = veh->part_with_feature(vpr.part_index(), VPFLAG_LADDER, true);
         if (part != -1) {
             // NOTE: This cache may need to be submapfied at some point
@@ -458,7 +458,7 @@ void map::vehmove() {
                 } else {
                     veh->of_turn = 0.001f;
                 }
-                vehicle_list.push_back(wrapped_vehicle{.pos = veh->bub_ms_location(), .v = veh});
+                vehicle_list.push_back(wrapped_vehicle{.pos = abs_to_map_local(*this, veh->abs_ms_location()), .v = veh});
             }
         }
     }
@@ -1038,8 +1038,8 @@ vehicle* map::move_vehicle(vehicle& veh, const tripoint_rel_ms& dp, const tilera
         && !veh.has_sufficient_lift(true) && dp.z() == 0) {
         veh.velocity += veh.velocity < 0 ? 2000 : -2000;
         for (const auto& p : veh.get_points()) {
-            const ter_id& pter = ter(abs_to_bub(p).xy());
-            if (pter == t_dirt || pter == t_grass) { ter_set(abs_to_bub(p).xy(), t_dirtmound); }
+            const ter_id& pter = ter(abs_to_map_local(*this, p).xy());
+            if (pter == t_dirt || pter == t_grass) { ter_set(abs_to_map_local(*this, p).xy(), t_dirtmound); }
         }
     }
 
@@ -1363,7 +1363,7 @@ void map::register_vehicle_zone(vehicle* veh, const int zlev) {
 
 bool map::deregister_vehicle_zone(zone_data& zone) {
     if (const std::optional<vpart_reference> vp =
-            veh_at(abs_to_bub(tripoint_abs_ms(zone.get_start_point())))
+            veh_at(abs_to_map_local(*this, tripoint_abs_ms(zone.get_start_point())))
                 .part_with_feature("CARGO", false)) {
         const auto bounds = vp->vehicle().loot_zones.equal_range(vp->mount());
         const auto it = std::ranges::
@@ -1401,7 +1401,7 @@ VehicleList map::get_vehicles(const tripoint_bub_sm& start, const tripoint_bub_s
         for (const auto& elem : current_submap->vehicles) {
             auto w = wrapped_vehicle{};
             w.v = elem.get();
-            w.pos = w.v->bub_ms_location();
+            w.pos = abs_to_map_local(*this, w.v->abs_ms_location());
             vehs.push_back(w);
         }
     }
@@ -1410,7 +1410,7 @@ VehicleList map::get_vehicles(const tripoint_bub_sm& start, const tripoint_bub_s
 }
 
 optional_vpart_position map::veh_at(const tripoint_abs_ms& p) const {
-    return veh_at(abs_to_bub(p));
+    return veh_at(abs_to_map_local(*this, p));
 }
 
 optional_vpart_position map::veh_at(const tripoint_bub_ms& p) const {
@@ -1455,7 +1455,7 @@ void map::board_vehicle(const tripoint_bub_ms& pos, Character* who) {
 
     auto vp = veh_at(pos).part_with_feature(VPFLAG_BOARDABLE, true);
     if (!vp) {
-        const auto abs_pos = bub_to_abs(pos);
+        const auto abs_pos = map_local_to_abs(*this, pos);
         for (auto* veh : loaded_vehicles) {
             if (veh == nullptr) { continue; }
             auto boardable_parts = veh->get_avail_parts(VPFLAG_BOARDABLE);
@@ -1618,7 +1618,7 @@ bool map::displace_vehicle(vehicle& veh, const tripoint_rel_ms& dp) {
 
             // Place passenger on the new part location.  Z must include mount
             // and terrain-topology offsets — precalc[1] is XY-only.
-            auto psgp = abs_to_bub(
+            auto psgp = abs_to_map_local(*this,
                 dest
                 + tripoint_rel_ms(veh_part.precalc[1].x(), veh_part.precalc[1].y(),
                                   veh_part.mount.z() + veh_part.z_terrain[1]));

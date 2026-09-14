@@ -277,7 +277,127 @@ static thread_local map *tl_map_context = nullptr;
 
 map &get_map() { return tl_map_context ? *tl_map_context : g->m; }
 
-scoped_map_context::scoped_map_context( map& m ) noexcept: prev_( tl_map_context )
+static auto checked_reality_bubble_size( const int reality_bubble_size ) -> int
+{
+    return std::clamp( reality_bubble_size, 0, REALITY_BUBBLE_SIZE_MAX );
+}
+
+auto reality_bubble_origin_from_player( const tripoint_abs_ms &player_pos,
+                                        const int reality_bubble_size ) -> tripoint_abs_sm
+{
+    const auto player_sm = project_to<coords::sm>( player_pos );
+    const auto half_mapsize = checked_reality_bubble_size( reality_bubble_size ) + 1;
+    return player_sm - tripoint_rel_sm( half_mapsize, half_mapsize, 0 );
+}
+
+auto reality_bubble_center_from_origin( const tripoint_abs_sm &origin,
+                                        const int reality_bubble_size ) -> tripoint_abs_sm
+{
+    const auto half_mapsize = checked_reality_bubble_size( reality_bubble_size ) + 1;
+    return origin + tripoint_rel_sm( half_mapsize, half_mapsize, 0 );
+}
+
+auto player_reality_bubble_origin() -> tripoint_abs_sm
+{
+    return reality_bubble_origin_from_player( get_avatar().abs_pos(), g_reality_bubble_size );
+}
+
+auto bub_to_abs( const tripoint_bub_ms &p ) -> tripoint_abs_ms
+{
+    const auto origin = project_to<coords::ms>( player_reality_bubble_origin() );
+    return ( p + origin.xy().raw() ).reinterpret_as<tripoint_abs_ms>();
+}
+
+auto abs_to_bub( const tripoint_abs_ms &p ) -> tripoint_bub_ms
+{
+    const auto origin = project_to<coords::ms>( player_reality_bubble_origin() );
+    return ( p - origin.xy() ).reinterpret_as<tripoint_bub_ms>();
+}
+
+auto bub_to_abs( const tripoint_bub_sm &p ) -> tripoint_abs_sm
+{
+    const auto origin = player_reality_bubble_origin();
+    return ( p + origin.xy().raw() ).reinterpret_as<tripoint_abs_sm>();
+}
+
+auto abs_to_bub( const tripoint_abs_sm &p ) -> tripoint_bub_sm
+{
+    const auto origin = player_reality_bubble_origin();
+    return ( p - origin.xy() ).reinterpret_as<tripoint_bub_sm>();
+}
+
+auto bub_to_abs( const point_bub_ms &p ) -> point_abs_ms
+{
+    const auto origin = project_to<coords::ms>( player_reality_bubble_origin() ).xy();
+    return origin + p.raw();
+}
+
+auto abs_to_bub( const point_abs_ms &p ) -> point_bub_ms
+{
+    const auto origin = project_to<coords::ms>( player_reality_bubble_origin() ).xy();
+    return ( p - origin ).reinterpret_as<point_bub_ms>();
+}
+
+auto bub_to_abs( const point_bub_sm &p ) -> point_abs_sm
+{
+    const auto origin = player_reality_bubble_origin().xy();
+    return origin + p.raw();
+}
+
+auto abs_to_bub( const point_abs_sm &p ) -> point_bub_sm
+{
+    const auto origin = player_reality_bubble_origin().xy();
+    return ( p - origin ).reinterpret_as<point_bub_sm>();
+}
+
+auto map_local_to_abs( const map &m, const tripoint_bub_ms &local ) -> tripoint_abs_ms
+{
+    const auto origin = project_to<coords::ms>( m.get_abs_sub() );
+    return ( local + origin.xy().raw() ).reinterpret_as<tripoint_abs_ms>();
+}
+
+auto abs_to_map_local( const map &m, const tripoint_abs_ms &abs ) -> tripoint_bub_ms
+{
+    const auto origin = project_to<coords::ms>( m.get_abs_sub() );
+    return ( abs - origin.xy() ).reinterpret_as<tripoint_bub_ms>();
+}
+
+auto map_local_to_abs( const map &m, const tripoint_bub_sm &local ) -> tripoint_abs_sm
+{
+    const auto origin = m.get_abs_sub();
+    return ( local + origin.xy().raw() ).reinterpret_as<tripoint_abs_sm>();
+}
+
+auto abs_to_map_local( const map &m, const tripoint_abs_sm &abs ) -> tripoint_bub_sm
+{
+    const auto origin = m.get_abs_sub();
+    return ( abs - origin.xy() ).reinterpret_as<tripoint_bub_sm>();
+}
+
+auto map_local_to_abs( const map &m, const point_bub_ms &local ) -> point_abs_ms
+{
+    const auto origin = project_to<coords::ms>( m.get_abs_sub() ).xy();
+    return origin + local.raw();
+}
+
+auto abs_to_map_local( const map &m, const point_abs_ms &abs ) -> point_bub_ms
+{
+    const auto origin = project_to<coords::ms>( m.get_abs_sub() ).xy();
+    return ( abs - origin ).reinterpret_as<point_bub_ms>();
+}
+
+auto map_local_to_abs( const map &m, const point_bub_sm &local ) -> point_abs_sm
+{
+    return m.get_abs_sub().xy() + local.raw();
+}
+
+auto abs_to_map_local( const map &m, const point_abs_sm &abs ) -> point_bub_sm
+{
+    return ( abs - m.get_abs_sub().xy() ).reinterpret_as<point_bub_sm>();
+}
+
+scoped_map_context::scoped_map_context( map &m ) noexcept
+    : prev_( tl_map_context )
 {
     tl_map_context = &m;
 }
@@ -373,9 +493,9 @@ bool map::has_dimension_bounds() const { return pocket_info_.has_value(); }
 bool map::is_out_of_bounds( const tripoint_bub_ms &p ) const
 {
     if( !pocket_info_ ) {
-    return false;  // No bounds means infinite dimension
-}
-return !pocket_info_->bounds.contains( bub_to_abs( p ) );
+        return false;  // No bounds means infinite dimension
+    }
+    return !pocket_info_->bounds.contains( map_local_to_abs( *this, p ) );
 }
 
 ter_id map::get_boundary_terrain() const
@@ -493,7 +613,7 @@ void map::on_submap_unloaded( const tripoint_abs_sm& pos, const std::string& dim
     std::erase_if( funnel_locations_, [&]( const auto & e ) { return e.first == pos; } );
 
     if( !contains_abs_sm( pos ) ) { return; }
-    const auto& local_p = abs_to_bub( pos ).xy();
+    const auto local_p = abs_to_map_local( *this, pos ).xy();
     // Index formula must match get_nonant() — see on_submap_loaded for details.
     const int grid_idx =
         zlevels
@@ -558,6 +678,7 @@ bool map::displace_water( const tripoint_bub_ms& p )
 
 // End of 3D vehicle
 
+
 /*
  * Get the terrain integer id. This is -not- a number guaranteed to remain
  * the same across revisions; it is a load order, and can change when mods
@@ -589,6 +710,7 @@ point_sm_ms l;
 const auto sm = get_submap_at( tripoint_bub_ms( p ), l );
 return &sm->get_furn_vars( l );
 }
+
 
 /*
  * Get the results of harvesting this tile's furniture or terrain
@@ -635,6 +757,7 @@ const std::set<std::string> &map::get_harvest_names( const tripoint_bub_ms& pos 
 /*
  * set terrain via string; this works for -any- terrain id
  */
+
 // Move cost: 3D
 
 // End of move cost
@@ -718,6 +841,7 @@ void map::update_submap_active_item_status( const tripoint_bub_ms& p )
 
 
 
+
 const visibility_variables &map::get_visibility_variables_cache() const
 {
     return visibility_variables_cache;
@@ -755,6 +879,7 @@ visibility_type map::get_visibility( const lit_level ll,
     }
     return VIS_HIDDEN;
 }
+
 
 // a check to see if the lower floor needs to be rendered in tiles
 bool map::dont_draw_lower_floor( const tripoint_bub_ms& p )
@@ -1811,7 +1936,7 @@ void map::loadn( const tripoint_bub_sm& grid, const bool update_vehicles, const 
     ZoneScopedN( "map_loadn" );
     ZoneValue( static_cast<uint64_t>( grid.z() + OVERMAP_DEPTH ) );
 
-    const auto grid_abs_sub = bub_to_abs( tripoint_bub_sm( grid ) );
+    const auto grid_abs_sub = map_local_to_abs( *this, tripoint_bub_sm( grid ) );
     const size_t gridn = get_nonant( tripoint_bub_sm( grid ) );
 
     // For out-of-bounds areas in bounded dimensions, use uniform boundary terrain
@@ -2009,7 +2134,8 @@ void map::handle_decayed_corpse( const item& it, const tripoint_bub_ms& pnt )
 {
     const mtype* dead_monster = it.get_corpse_mon();
     if( !dead_monster ) {
-        debugmsg( "Corpse at tripoint %s has no associated monster?!", bub_to_abs( pnt ).to_string() );
+        debugmsg( "Corpse at tripoint %s has no associated monster?!",
+                  map_local_to_abs( *this, pnt ).to_string() );
         return;
     }
 
@@ -2101,7 +2227,7 @@ void map::fill_funnels( const tripoint_bub_ms& p, const time_point& since )
     }
     if( biggest_container != items.end() ) {
         retroactively_fill_from_funnel(
-            **biggest_container, tr, since, calendar::turn, bub_to_abs( p ) );
+            **biggest_container, tr, since, calendar::turn, map_local_to_abs( *this, p ) );
     }
 }
 
@@ -2120,7 +2246,7 @@ void map::grow_plant( const tripoint_bub_ms& p )
         // TODO: Fix point types
         const oter_id ot =
             get_overmapbuffer( bound_dimension_ )
-            .ter( project_to<coords::omt>( tripoint_abs_ms( bub_to_abs( p ) ) ) );
+            .ter( project_to<coords::omt>( tripoint_abs_ms( map_local_to_abs( *this, p ) ) ) );
         dbg( DL::Error ) << "a planted item at " << p << " (within overmap terrain " << ot.id().str()
                          << ") has no seed data";
         i_clear( p );
@@ -2401,7 +2527,7 @@ void map::copy_grid( const tripoint_bub_sm& to, const tripoint_bub_sm& from )
     const auto smap = get_submap_at_grid( from );
     setsubmap( get_nonant( to ), smap );
     if( smap == nullptr ) { return; }
-    for( auto& it : smap->vehicles ) { it->abs_sm_pos = bub_to_abs( to ); }
+    for( auto& it : smap->vehicles ) { it->abs_sm_pos = map_local_to_abs( *this, to ); }
 }
 
 void map::spawn_monsters_submap_group(
@@ -2439,7 +2565,7 @@ void map::spawn_monsters_submap_group(
     if( current_submap->is_uniform ) {
         const tripoint_bub_ms upper_left{SEEX * gp.x(), SEEY * gp.y(), gp.z()};
         if( !allow_on_terrain( upper_left ) || ( !ignore_inside_checks && !is_outside( upper_left ) ) ) {
-            const auto glp = bub_to_abs( gp );
+            const auto glp = map_local_to_abs( *this, gp );
             dbg( DL::Warn ) << "Empty locations for group " << group.type.str()
                             << " at uniform submap " << gp << " global " << glp;
             return;
@@ -2468,7 +2594,7 @@ void map::spawn_monsters_submap_group(
     if( locations.empty() ) {
         // TODO: what now? there is no possible place to spawn monsters, most
         // likely because the player can see all the places.
-        const auto glp = bub_to_abs( gp );
+        const auto glp = map_local_to_abs( *this, gp );
         dbg( DL::Warn ) << "Empty locations for group " << group.type.str() << " at " << gp
                         << " global " << glp;
         // Just kill the group. It's not like we're removing existing monsters
@@ -2506,7 +2632,7 @@ void map::spawn_monsters_submap_group(
             if( group.horde ) {
                 // Give monster a random point near horde's expected destination
                 const auto rand_dest =
-                    abs_to_bub( horde_target ) + point_rel_ms( rng( 0, SEEX ), rng( 0, SEEY ) );
+                    abs_to_map_local( *this, horde_target ) + point_rel_ms( rng( 0, SEEX ), rng( 0, SEEY ) );
                 const int turns = rl_dist( p, rand_dest ) + group.interest;
                 tmp.wander_to( rand_dest, turns );
                 add_msg( m_debug, "%s targeting %d,%d,%d", tmp.disp_name(), tmp.wander_pos.x(),
@@ -2526,11 +2652,11 @@ void map::spawn_monsters_submap( const tripoint_bub_sm& gp, bool ignore_sight )
 {
     // Load unloaded monsters
     // TODO: fix point types
-    get_overmapbuffer( bound_dimension_ ).spawn_monster( bub_to_abs( gp ) );
+    get_overmapbuffer( bound_dimension_ ).spawn_monster( map_local_to_abs( *this, gp ) );
 
     // Only spawn new monsters after existing monsters are loaded.
     // TODO: fix point types
-    auto groups = get_overmapbuffer( bound_dimension_ ).groups_at( bub_to_abs( gp ) );
+    auto groups = get_overmapbuffer( bound_dimension_ ).groups_at( map_local_to_abs( *this, gp ) );
     for( auto& mgp : groups ) { spawn_monsters_submap_group( gp, *mgp, ignore_sight ); }
 
     submap* const current_submap = get_submap_at_grid( tripoint_bub_sm( gp ) );
@@ -2646,7 +2772,7 @@ bool map::inbounds( const tripoint_bub_sm& p ) const
     return inbounds_z( p.z() ) && p.x() >= 0 && p.x() < max_xy && p.y() >= 0 && p.y() < max_xy;
 }
 
-bool map::inbounds( const tripoint_abs_sm& p ) const { return inbounds( abs_to_bub( p ) ); }
+bool map::inbounds( const tripoint_abs_sm& p ) const { return inbounds( abs_to_map_local( *this, p ) ); }
 
 bool map::inbounds( const point_bub_sm& p ) const
 {
@@ -2656,7 +2782,7 @@ bool map::inbounds( const point_bub_sm& p ) const
 
 bool map::is_position_simulated( const tripoint_bub_sm& p ) const
 {
-    return submap_loader.is_simulated( bound_dimension_, bub_to_abs( p ) );
+    return submap_loader.is_simulated( bound_dimension_, map_local_to_abs( *this, p ) );
 }
 
 bool tinymap::inbounds( const tripoint_abs_sm& p ) const
@@ -2680,7 +2806,7 @@ fake_map::fake_map(
     set_abs_sub( tripoint_below_zero );
     for( const auto p : bubble_submaps() ) {
         const auto sm_pos = tripoint_bub_sm( p, fake_map_z );
-        std::unique_ptr<submap> sm = std::make_unique<submap>( bub_to_abs( sm_pos ) );
+        std::unique_ptr<submap> sm = std::make_unique<submap>( map_local_to_abs( *this, sm_pos ) );
 
         sm->set_all_ter( ter_type );
         sm->set_all_furn( fur_type );
@@ -3352,7 +3478,7 @@ std::vector<item *> map::get_active_items_in_radius(
     maxg( std::min( maxp.x() / SEEX, my_MAPSIZE - 1 ), std::min( maxp.y() / SEEY, my_MAPSIZE - 1 ) );
 
     for( const tripoint_abs_sm& abs_submap_loc : submaps_with_active_items ) {
-        const tripoint_bub_sm submap_loc = abs_to_bub( abs_submap_loc );
+        const tripoint_bub_sm submap_loc = abs_to_map_local( *this, abs_submap_loc );
         if( submap_loc.x() < ming.x() || submap_loc.y() < ming.y() || submap_loc.x() > maxg.x()
             || submap_loc.y() > maxg.y() ) {
             continue;
@@ -3379,8 +3505,8 @@ std::vector<tripoint_bub_ms> map::find_furnitures_with_flag_in_omt(
     const tripoint_bub_ms& p, const std::string& flag )
 {
     // Some stupid code to get to the corner
-    const auto omt_p = abs_to_bub( project_to<coords::ms>( project_to<coords::omt>( bub_to_abs(
-                                       p ) ) ) );
+    const auto omt_p = abs_to_map_local( *this, project_to<coords::ms>(
+            project_to<coords::omt>( map_local_to_abs( *this, p ) ) ) );
 
     std::vector<tripoint_bub_ms> furn_locs;
     for( const auto& furn_loc : points_in_rectangle(

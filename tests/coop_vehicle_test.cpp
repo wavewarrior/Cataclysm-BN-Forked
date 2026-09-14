@@ -133,7 +133,7 @@ TEST_CASE("vehicle: vehicle_state packet relays to host", "[coop][vehicle]") {
     CHECK(vid > 0);
 
     // Compute the vehicle's current abs position so we can send a delta.
-    const tripoint_abs_ms old_abs = g->m.bub_to_abs(veh->bub_ms_location());
+    const tripoint_abs_ms old_abs = bub_to_abs(veh->bub_ms_location());
 
     // Target: move the vehicle 3 tiles east.
     const tripoint_abs_ms new_abs{old_abs.x() + 3, old_abs.y(), old_abs.z()};
@@ -146,7 +146,7 @@ TEST_CASE("vehicle: vehicle_state packet relays to host", "[coop][vehicle]") {
     h.srv.coop_world_tick();
 
     // Verify the vehicle moved to the target position.
-    const tripoint_abs_ms actual_abs = g->m.bub_to_abs(veh->bub_ms_location());
+    const tripoint_abs_ms actual_abs = bub_to_abs(veh->bub_ms_location());
     CHECK(actual_abs.x() == new_abs.x());
     CHECK(actual_abs.y() == new_abs.y());
     CHECK(actual_abs.z() == new_abs.z());
@@ -162,7 +162,7 @@ TEST_CASE("vehicle: vehicle_id_map persists across multiple updates", "[coop][ve
 
     const uint32_t vid = h.srv.register_vehicle_for_test(veh);
 
-    const tripoint_abs_ms base_abs = g->m.bub_to_abs(veh->bub_ms_location());
+    const tripoint_abs_ms base_abs = bub_to_abs(veh->bub_ms_location());
 
     // Send 3 sequential updates, each moving the vehicle 1 tile further east.
     for (int i = 1; i <= 3; ++i) {
@@ -171,7 +171,7 @@ TEST_CASE("vehicle: vehicle_id_map persists across multiple updates", "[coop][ve
         h.srv.process_incoming_for_test();
         h.srv.coop_world_tick();
 
-        const tripoint_abs_ms actual = g->m.bub_to_abs(veh->bub_ms_location());
+        const tripoint_abs_ms actual = bub_to_abs(veh->bub_ms_location());
         CHECK(actual.x() == target.x());
         CHECK(actual.y() == target.y());
     }

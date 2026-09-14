@@ -392,20 +392,19 @@ monster::monster( const monster& source )
 
 monster::~monster() = default;
 
-auto monster::setpos( const tripoint_bub_ms& p ) -> void { setpos( get_map().bub_to_abs( p ) ); }
+auto monster::setpos( const tripoint_bub_ms& p ) -> void { setpos( map_local_to_abs( get_map(), p ) ); }
 
 auto monster::setpos( const tripoint_abs_ms& p ) -> void
 {
     if( p == pos_abs ) { return; }
 
-    const auto new_bub_pos = get_map().abs_to_bub( p );
     const auto wandering = is_wandering();
-    g->update_zombie_pos( *this, new_bub_pos );
+    g->update_zombie_pos( *this, p );
     pos_abs = p;
     if( auto *pw = get_map().get_physics_world() ) {
         pw->on_creature_moved( *this );
     }
-    if( has_effect( effect_ridden ) && mounted_player && mounted_player->bub_pos() != bub_pos() ) {
+    if( has_effect( effect_ridden ) && mounted_player && mounted_player->abs_pos() != pos_abs ) {
         add_msg( m_debug, "Ridden monster %s moved independently and dumped player", get_name() );
         mounted_player->forced_dismount();
     }
@@ -415,7 +414,7 @@ auto monster::setpos( const tripoint_abs_ms& p ) -> void
     }
 }
 
-tripoint_bub_ms monster::bub_pos() const { return get_map().abs_to_bub( pos_abs ); }
+tripoint_bub_ms monster::bub_pos() const { return abs_to_bub( pos_abs ); }
 
 auto monster::abs_pos() const -> tripoint_abs_ms { return pos_abs; }
 
@@ -680,7 +679,7 @@ void monster::refill_udders()
 
 auto monster::spawn( const tripoint_bub_ms& p ) -> void
 {
-    pos_abs = get_map().bub_to_abs( p );
+    pos_abs = map_local_to_abs( get_map(), p );
     unset_dest();
 }
 

@@ -247,13 +247,13 @@ void train_skill_activity_actor::do_turn( player_activity& act, Character& who )
     if( hack_type == hack_type_t::furniture ) {
         // Actor-set hack (from iexamine.cpp)
         const map& m = get_map();
-        hack_pos_bub = m.abs_to_bub( hack_position );
+        hack_pos_bub = abs_to_bub( hack_position );
         if( m.has_furn( hack_pos_bub ) ) {
             const furn_t &furniture = m.furn( hack_pos_bub ).obj();
             const std::vector<itype> item_type_list = furniture.crafting_pseudo_item_types();
             for( const itype& item_type : item_type_list ) {
                 if( item_type.get_id() == hack_tool_type_id ) {
-                    const tripoint_abs_ms abspos = m.bub_to_abs( hack_pos_bub );
+                    const tripoint_abs_ms abspos = bub_to_abs( hack_pos_bub );
                     const distribution_grid& grid = get_distribution_grid_tracker().grid_at( abspos );
                     main_tool = item::spawn_temporary( item_type.get_id(), calendar::turn, 0 );
                     main_tool->charges = grid.get_resource( true );
@@ -302,7 +302,7 @@ void train_skill_activity_actor::do_turn( player_activity& act, Character& who )
             if( hack_type == hack_type_t::furniture ) {
                 const int used_charges = hack_original_charges - skill_training_item.charges;
                 if( used_charges > 0 ) {
-                    const tripoint_abs_ms abspos = get_map().bub_to_abs( hack_pos_bub );
+                    const tripoint_abs_ms abspos = bub_to_abs( hack_pos_bub );
                     distribution_grid& grid = get_distribution_grid_tracker().grid_at( abspos );
                     grid.mod_resource( -used_charges );
                 }
@@ -327,7 +327,7 @@ void train_skill_activity_actor::do_turn( player_activity& act, Character& who )
         if( hack_type == hack_type_t::furniture ) {
             const int used_charges = hack_original_charges - skill_training_item.charges;
             if( used_charges > 0 ) {
-                const tripoint_abs_ms abspos = get_map().bub_to_abs( hack_pos_bub );
+                const tripoint_abs_ms abspos = bub_to_abs( hack_pos_bub );
                 distribution_grid& grid = get_distribution_grid_tracker().grid_at( abspos );
                 grid.mod_resource( -used_charges );
             }
@@ -758,7 +758,7 @@ void pulp_activity_actor::do_turn( player_activity& act, Character& who )
 {
     player& p = static_cast<player &>( who );
     map& here = get_map();
-    const auto& pos = here.abs_to_bub( placement );
+    const auto& pos = abs_to_bub( placement );
 
     const auto cut_power = std::
                            max( p.primary_weapon().damage_melee( DT_CUT ), p.primary_weapon().damage_melee( DT_STAB ) / 2 );

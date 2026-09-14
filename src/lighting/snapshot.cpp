@@ -400,7 +400,7 @@ std::vector<gpu_emitter> build_emitter_snapshot(event_queue& eq, float frame_ms)
         for (const flash_event& f : flashes) {
             const float frac = 1.0f - (f.elapsed_ms / f.duration_ms);
             const float radius = f.intensity * std::max(0.0f, frac);
-            const tripoint_bub_ms local = m.abs_to_bub(f.pos);
+            const tripoint_bub_ms local = abs_to_bub(f.pos);
             if (!m.inbounds(local)) { continue; }
             out.push_back(make_omni(
                 static_cast<float>( local.x() ) + 0.5f, static_cast<float>( local.y() ) + 0.5f,

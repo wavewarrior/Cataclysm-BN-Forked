@@ -496,7 +496,7 @@ void item::update_rot( const tripoint_bub_ms &pos, const temperature_flag flag,
             //Use weather if above ground, use map temp if below
             units::temperature env_temperature_raw;
             if( pos.z() >= 0 ) {
-                tripoint_abs_ms location = tripoint_abs_ms( get_map().bub_to_abs( pos ) );
+                const auto location = bub_to_abs( pos );
                 units::temperature weather_temperature = wgen.get_weather_temperature( location, time,
                     calendar::config, seed );
                 env_temperature_raw = weather_temperature + local_mod;

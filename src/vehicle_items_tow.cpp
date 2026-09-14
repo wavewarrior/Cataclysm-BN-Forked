@@ -825,8 +825,8 @@ void vehicle::do_towing_move()
         invalidate_towing( true );
         return;
     }
-    const auto tower_tow_point = g->m.bub_to_abs( bub_part_location( tow_index ) );
-    const auto towed_tow_point = g->m.bub_to_abs( towed_veh->bub_part_location( other_tow_index ) );
+    const auto tower_tow_point = abs_part_location( tow_index );
+    const auto towed_tow_point = towed_veh->abs_part_location( other_tow_index );
     // same as above, but where the pulling vehicle is pulling from
     units::angle towing_veh_angle = towed_veh->get_angle_from_targ( tower_tow_point );
     const bool reverse = towed_veh->tow_data.tow_direction == TOW_BACK;
@@ -854,16 +854,17 @@ void vehicle::do_towing_move()
         towed_veh->selfdrive( point( turn_x, accel_y ) );
     } else {
         towed_veh->skidding = true;
-        std::vector<tripoint_bub_ms> lineto = line_to( g->m.abs_to_bub( towed_tow_point ),
-                                              g->m.abs_to_bub( tower_tow_point ) );
+        const auto tower_tow_local = abs_to_bub( tower_tow_point );
+        std::vector<tripoint_bub_ms> lineto = line_to( abs_to_bub( towed_tow_point ),
+                                              tower_tow_local );
         tripoint_bub_ms nearby_destination;
         if( lineto.size() >= 2 ) {
             nearby_destination = lineto[1];
         } else {
-            nearby_destination = g->m.abs_to_bub( tower_tow_point );
+            nearby_destination = tower_tow_local;
         }
-        const int destination_delta_x = g->m.abs_to_bub( tower_tow_point ).x() - nearby_destination.x();
-        const int destination_delta_y = g->m.abs_to_bub( tower_tow_point ).y() - nearby_destination.y();
+        const int destination_delta_x = tower_tow_local.x() - nearby_destination.x();
+        const int destination_delta_y = tower_tow_local.y() - nearby_destination.y();
         const int destination_delta_z = towed_veh->bub_ms_location().z();
         const tripoint_rel_ms move_destination( clamp( destination_delta_x, -1, 1 ),
                                                 clamp( destination_delta_y, -1, 1 ),
@@ -1030,7 +1031,7 @@ bool vehicle::tow_cable_too_far() const
     debugmsg( "towing data exists but no towing part" );
         return false;
     }
-    auto towing_point = g->m.bub_to_abs( bub_part_location( index ) );
+    auto towing_point = abs_part_location( index );
     if( !tow_data.get_towed_by()->tow_data.get_towed() ) {
     debugmsg( "vehicle %s has data for a towing vehicle, but that towing vehicle does not have %s listed as towed",
               disp_name(), disp_name() );
@@ -1041,7 +1042,7 @@ bool vehicle::tow_cable_too_far() const
     debugmsg( "towing data exists but no towing part" );
         return false;
     }
-    auto towed_point = g->m.bub_to_abs( tow_data.get_towed_by()->bub_part_location( other_index ) );
+    auto towed_point = tow_data.get_towed_by()->abs_part_location( other_index );
     if( towing_point == tripoint_abs_ms::zero() || towed_point == tripoint_abs_ms::zero() ) {
     debugmsg( "towing data exists but no towing part" );
         return false;
@@ -1061,7 +1062,7 @@ if( index == -1 ) {
     debugmsg( "towing data exists but no towing part" );
         return false;
     }
-    auto towing_point = g->m.bub_to_abs( bub_part_location( index ) );
+    auto towing_point = abs_part_location( index );
     if( !tow_data.get_towed()->tow_data.get_towed_by() ) {
     debugmsg( "vehicle %s has data for a towed vehicle, but that towed vehicle does not have %s listed as tower",
               disp_name(), disp_name() );
@@ -1072,7 +1073,7 @@ if( index == -1 ) {
     debugmsg( "towing data exists but no towing part" );
         return false;
     }
-    auto towed_point = g->m.bub_to_abs( tow_data.get_towed()->bub_part_location( other_index ) );
+    auto towed_point = tow_data.get_towed()->abs_part_location( other_index );
     if( towing_point == tripoint_abs_ms::zero() || towed_point == tripoint_abs_ms::zero() ) {
     debugmsg( "towing data exists but no towing part" );
         return false;

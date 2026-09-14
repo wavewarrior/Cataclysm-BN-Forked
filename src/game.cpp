@@ -285,6 +285,18 @@ static void init_bubble_config()
     init_bubble_config( get_option<int>( "REALITY_BUBBLE_SIZE" ) );
 }
 
+static auto debug_assert_player_map_origin( const char *context, const bool check_z = true ) -> void
+{
+    const auto expected = player_reality_bubble_origin();
+    const auto actual = g->m.get_abs_sub();
+    const auto matches = check_z ? actual == expected : actual.xy() == expected.xy();
+    if( !matches ) {
+        debugmsg( "%s: player map loaded-grid origin %s does not match player reality-bubble "
+                  "origin %s",
+                  context, actual.to_string(), expected.to_string() );
+    }
+}
+
 static auto discard_monster_map_for_loaded_bubble( map &here,
         const std::string &dimension_id ) -> void
 {
@@ -543,6 +555,7 @@ void game::suggest_auto_walk_to_stairs( Character &u, map &m, const std::string 
 }
 
 // Set up all default values for a new game
+
 vehicle *game::place_vehicle_nearby(
     const vproto_id &id, const point_abs_omt &origin, int min_distance,
     int max_distance, const std::vector<std::string> &omt_search_types,
@@ -585,7 +598,7 @@ vehicle *game::place_vehicle_nearby(
                            id, tinymap_center, random_entry( angles ), rng( 50, 80 ),
                            0, false, false, true );
         if( veh ) {
-            auto abs = target_map.bub_to_abs( tinymap_center );
+            auto abs = map_local_to_abs( target_map, tinymap_center );
             const auto proj = project_remain<coords::sm>( abs );
             veh->abs_sm_pos = proj.quotient_tripoint;
             veh->sm_ms_pos = proj.remainder;
@@ -599,6 +612,7 @@ vehicle *game::place_vehicle_nearby(
 }
 
 //Make any nearby overmap npcs active, and put them in the right location.
+
 static std::string generate_memorial_filename( const std::string &char_name )
 {
     // <name>-YYYY-MM-DD-HH-MM-SS.txt
@@ -1245,7 +1259,7 @@ void game::autopilot_vehicles()
     for( wrapped_vehicle &veh : m.get_vehicles() ) {
         vehicle *&v = veh.v;
         if( v->is_following ) {
-            v->drive_to_local_target( m.bub_to_abs( u.bub_pos() ), true );
+            v->drive_to_local_target( u.abs_pos(), true );
         } else if( v->is_patrolling ) {
             v->autopilot_patrol();
         }
@@ -2285,6 +2299,7 @@ Creature *game::is_hostile_within( int distance )
     return nullptr;
 }
 //Gets Contiguious Fishable Terrain in radius starting from the tripoint
+
 /* Knockback target at t by force number of tiles in direction from s to t
    stun > 0 indicates base stun duration, and causes impact stun; stun == -1 indicates only impact stun
    dam_mult multiplies impact damage, bash effect on impact, and sound level on impact */
@@ -2340,6 +2355,49 @@ const T *game::critter_at( const tripoint_bub_ms &p, bool allow_hallucination ) 
     return const_cast<game *>( this )->critter_at<T>( p, allow_hallucination );
 }
 
+template<typename T>
+auto game::critter_at( const tripoint_abs_ms &p, bool allow_hallucination ) -> T *
+{
+    using lookup_type = std::remove_cv_t<T>;
+    constexpr auto wants_monster = std::is_base_of_v<lookup_type, monster>;
+    constexpr auto wants_player = std::is_base_of_v<lookup_type, avatar>;
+    constexpr auto wants_npc = std::is_base_of_v<lookup_type, npc>;
+    constexpr auto return_ridden_monster = std::is_same_v<lookup_type, monster> ||
+                                           std::is_same_v<lookup_type, Creature>;
+
+    if( const shared_ptr_fast<monster> mon_ptr = critter_tracker->find( p ) ) {
+        if( !allow_hallucination && mon_ptr->is_hallucination() ) {
+            return nullptr;
+        }
+        if( !mon_ptr->has_effect( effect_ridden ) || return_ridden_monster ) {
+            if constexpr( wants_monster ) {
+                return dynamic_cast<T *>( mon_ptr.get() );
+            } else {
+                return nullptr;
+            }
+        }
+    }
+    if constexpr( wants_player ) {
+        if( p == u.abs_pos() ) {
+            return dynamic_cast<T *>( &u );
+        }
+    }
+    if constexpr( wants_npc ) {
+        for( auto &cur_npc : active_npc ) {
+            if( cur_npc->abs_pos() == p && !cur_npc->is_dead() ) {
+                return dynamic_cast<T *>( cur_npc.get() );
+            }
+        }
+    }
+    return nullptr;
+}
+
+template<typename T>
+auto game::critter_at( const tripoint_abs_ms &p, bool allow_hallucination ) const -> const T *
+{
+    return const_cast<game *>( this )->critter_at<T>( p, allow_hallucination );
+}
+
 template const monster *game::critter_at<monster>( const tripoint_bub_ms &, bool ) const;
 template const npc *game::critter_at<npc>( const tripoint_bub_ms &, bool ) const;
 template const player *game::critter_at<player>( const tripoint_bub_ms &, bool ) const;
@@ -2348,6 +2406,18 @@ template avatar *game::critter_at<avatar>( const tripoint_bub_ms &, bool );
 template const Character *game::critter_at<Character>( const tripoint_bub_ms &, bool ) const;
 template Character *game::critter_at<Character>( const tripoint_bub_ms &, bool );
 template const Creature *game::critter_at<Creature>( const tripoint_bub_ms &, bool ) const;
+template const monster *game::critter_at<monster>( const tripoint_abs_ms &, bool ) const;
+template monster *game::critter_at<monster>( const tripoint_abs_ms &, bool );
+template const npc *game::critter_at<npc>( const tripoint_abs_ms &, bool ) const;
+template npc *game::critter_at<npc>( const tripoint_abs_ms &, bool );
+template const player *game::critter_at<player>( const tripoint_abs_ms &, bool ) const;
+template player *game::critter_at<player>( const tripoint_abs_ms &, bool );
+template const avatar *game::critter_at<avatar>( const tripoint_abs_ms &, bool ) const;
+template avatar *game::critter_at<avatar>( const tripoint_abs_ms &, bool );
+template const Character *game::critter_at<Character>( const tripoint_abs_ms &, bool ) const;
+template Character *game::critter_at<Character>( const tripoint_abs_ms &, bool );
+template const Creature *game::critter_at<Creature>( const tripoint_abs_ms &, bool ) const;
+template Creature *game::critter_at<Creature>( const tripoint_abs_ms &, bool );
 
 template<typename T>
 shared_ptr_fast<T> game::shared_from( const T &critter )
@@ -2357,7 +2427,7 @@ shared_ptr_fast<T> game::shared_from( const T &critter )
         return std::dynamic_pointer_cast<T>( u_shared_ptr );
     }
     if( critter.is_monster() ) {
-        if( const shared_ptr_fast<monster> mon_ptr = critter_tracker->find( critter.bub_pos() ) ) {
+        if( const shared_ptr_fast<monster> mon_ptr = critter_tracker->find( critter.abs_pos() ) ) {
             if( static_cast<const Creature *>( mon_ptr.get() ) == static_cast<const Creature *>( &critter ) ) {
                 return std::dynamic_pointer_cast<T>( mon_ptr );
             }
@@ -2505,7 +2575,7 @@ size_t game::num_creatures() const
     return critter_tracker->size() + active_npc.size() + 1; // 1 == g->u
 }
 
-bool game::update_zombie_pos( const monster &critter, const tripoint_bub_ms &pos )
+auto game::update_zombie_pos( const monster &critter, const tripoint_abs_ms &pos ) -> bool
 {
     return critter_tracker->update_pos( critter, pos );
 }
@@ -2664,7 +2734,9 @@ void game::toggle_gate( const tripoint_bub_ms &p )
     gates::toggle_gate( p, u );
 }
 
+
 // Used to set up the first Hotkey in the display set
+
 
 void game::place_player_overmap( const tripoint_abs_omt &om_dest )
 {
@@ -2722,6 +2794,7 @@ void game::place_player_overmap( const tripoint_abs_omt &om_dest )
     // load_npcs() scans around the player's absolute position, updated by place_player().
     load_npcs();
 }
+
 
 void game::resize_reality_bubble_to( int new_size )
 {
@@ -2791,11 +2864,12 @@ void game::resize_reality_bubble_to( int new_size )
     // Reload the map around the player; this fills grid[], recreates load handles,
     // rebuilds distribution_grid_tracker and fluid_grid.
     load_map( new_abs_sub, /*pump_events=*/false );
+    debug_assert_player_map_origin( "resize_reality_bubble_to" );
 
     // Adjust surviving monsters' local navigation state to the new coordinate origin.
     // Monster positions are absolute; only cached bubble-coordinate goals and paths
-    // need re-anchoring here. The tracker cache must be rebuilt after load_map()
-    // changes abs_sub, because monster::bub_pos() is derived from absolute position.
+    // need re-anchoring here. Tracker keys are absolute, but rebuilding after the
+    // bulk update keeps any stale edge-case entries normalized.
     if( grid_origin_delta_in_sm != 0 ) {
         for( monster &critter : all_monsters() ) {
             critter.shift( { grid_origin_delta_in_sm, grid_origin_delta_in_sm } );
@@ -2938,6 +3012,7 @@ const dimension_info *game::get_current_dimension_info() const
     return it != loaded_dimensions_.end() ? &it->second : nullptr;
 }
 
+
 void game::debug_hour_timer::toggle()
 {
     enabled = !enabled;
@@ -3025,25 +3100,24 @@ bool check_art_charge_req( item &it )
     return reqsmet;
 }
 
-int game::get_levx() const
+auto game::get_levx() const -> int
 {
-    return m.get_abs_sub().x();
+    return player_reality_bubble_origin().x();
 }
 
-int game::get_levy() const
+auto game::get_levy() const -> int
 {
-    return m.get_abs_sub().y();
+    return player_reality_bubble_origin().y();
 }
 
-int game::get_levz() const
+auto game::get_levz() const -> int
 {
-    return m.get_abs_sub().z();
+    return u.abs_pos().z();
 }
 
 overmap &game::get_cur_om() const
 {
-    // The player is located in the middle submap of the map.
-    const tripoint_abs_sm sm = m.get_abs_sub() + tripoint_rel_sm( g_half_mapsize, g_half_mapsize, 0 );
+    const auto sm = project_to<coords::sm>( u.abs_pos() );
     const tripoint_abs_om pos_om = project_to<coords::om>( sm );
     // TODO: fix point types
     return get_overmapbuffer( current_dimension_id_ ).get( pos_om.xy() );

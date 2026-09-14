@@ -492,7 +492,7 @@ void iexamine::gaspump( player &p, const tripoint_bub_ms &examp )
 void iexamine::translocator( player &, const tripoint_bub_ms &examp )
 {
     // TODO: fix point types
-    const tripoint_abs_omt omt_loc( project_to<coords::omt>( get_map().bub_to_abs( examp ) ) );
+    const tripoint_abs_omt omt_loc( project_to<coords::omt>( bub_to_abs( examp ) ) );
     avatar &player_character = get_avatar();
     const bool activated = player_character.translocators->knows_translocator( omt_loc );
     if( !activated ) {
@@ -1160,8 +1160,8 @@ void iexamine::cardreader( player &p, const tripoint_bub_ms &examp )
         }
         for( monster &critter : g->all_monsters() ) {
             // Check 1) same overmap coords, 2) turret, 3) hostile
-            if( project_to<coords::omt>( here.bub_to_abs( critter.bub_pos() ) ) == project_to<coords::omt>
-                ( here.bub_to_abs(
+            if( project_to<coords::omt>( bub_to_abs( critter.bub_pos() ) ) == project_to<coords::omt>
+                ( bub_to_abs(
                       examp ) ) &&
                 critter.has_flag( MF_ID_CARD_DESPAWN ) &&
                 critter.attitude_to( p ) == Attitude::A_HOSTILE ) {
@@ -1713,7 +1713,7 @@ static bool pick_lock( player &p, const tripoint_bub_ms &examp )
             p.mod_power_level( -bio_lockpick->power_activate );
             p.add_msg_if_player( m_info, _( "You activate your %s." ), bio_lockpick->name );
             p.assign_activity( std::make_unique<player_activity>( lockpick_activity_actor::use_bionic(
-                                   item::spawn( bio_lockpick->fake_item ), here.bub_to_abs( examp ) ) ) );
+                                   item::spawn( bio_lockpick->fake_item ), bub_to_abs( examp ) ) ) );
             return true;
         } else {
             p.add_msg_if_player( m_info, _( "You don't have enough power to activate your %s." ),
@@ -2092,7 +2092,7 @@ auto iexamine::fluid_grid_fixture( player &p, const tripoint_bub_ms &examp ) -> 
         return;
     }
 
-    const auto pos_abs_ms = here.bub_to_abs( examp );
+    const auto pos_abs_ms = bub_to_abs( examp );
     const auto pos_abs_omt = project_to<coords::omt>( pos_abs_ms );
 
     const auto available_liquid = std::ranges::find_if( fluid_grid.allowed_liquids,
@@ -2325,7 +2325,7 @@ void iexamine::reload_furniture( player &p, const tripoint_bub_ms &examp )
 void iexamine::use_furn_fake_item( player &p, const tripoint_bub_ms &examp )
 {
     map &m = get_map();
-    const tripoint_abs_ms abspos( m.bub_to_abs( examp ) );
+    const tripoint_abs_ms abspos( bub_to_abs( examp ) );
 
     if( !m.has_furn( examp ) ) {
         debugmsg( "lost furniture at %s", examp.to_string() );
@@ -3165,7 +3165,7 @@ void iexamine::dimensional_portal( player &p, const tripoint_bub_ms &examp )
 
 void iexamine::check_power( player &, const tripoint_bub_ms &examp )
 {
-    tripoint_abs_ms abspos( g->m.bub_to_abs( examp ) );
+    tripoint_abs_ms abspos( bub_to_abs( examp ) );
     battery_tile *battery = active_tiles::furn_at<battery_tile>( abspos );
     if( battery != nullptr ) {
         add_msg( m_info, _( "This battery stores %d kJ of electric power." ), battery->get_resource() );
@@ -3176,7 +3176,7 @@ void iexamine::check_power( player &, const tripoint_bub_ms &examp )
 
 void iexamine::power_portal( player &p, const tripoint_bub_ms &examp )
 {
-    const tripoint_abs_ms abs_pos( g->m.bub_to_abs( examp ) );
+    const tripoint_abs_ms abs_pos( bub_to_abs( examp ) );
     const std::string local_dim = g->m.get_bound_dimension();
 
     // Look up the grid_link_tile for this portal.  Access through the correct
@@ -3365,7 +3365,7 @@ void iexamine::power_portal( player &p, const tripoint_bub_ms &examp )
 
 void iexamine::portal( player &p, const tripoint_bub_ms &examp )
 {
-    const tripoint_abs_ms abs_pos( get_map().bub_to_abs( examp ) );
+    const tripoint_abs_ms abs_pos( bub_to_abs( examp ) );
 
     portal_tile *pt = active_tiles::furn_at<portal_tile>( abs_pos );
     if( pt == nullptr ) {
@@ -3457,7 +3457,7 @@ void iexamine::portal( player &p, const tripoint_bub_ms &examp )
 
     g->travel_to_dimension( pt->target_dim_id, wt_id, std::nullopt, dest_sm );
 
-    auto entry_local = get_map().abs_to_bub( pt->target_pos );
+    auto entry_local = abs_to_map_local( get_map(), pt->target_pos );
     p.setpos( entry_local );
     g->update_map( p );
 }
@@ -3496,7 +3496,7 @@ void iexamine::multicooker( player &p, const tripoint_bub_ms &pos )
     map &here = get_map();
     const furn_id furniture = here.furn( pos );
     data_vars::data_set *vars = here.furn_vars( pos );
-    const tripoint_abs_ms abspos( here.bub_to_abs( pos ) );
+    const tripoint_abs_ms abspos( bub_to_abs( pos ) );
     auto grid = get_distribution_grid_tracker().grid_at( abspos );
     int battery = grid.get_resource();
     enum {

@@ -688,7 +688,7 @@ if( phase == client_join_phase::listening ||
             if( it != vehicle_id_map_rev_.end() ) {
                 vehicle* veh = it->second;
                 if( veh ) {
-                    const tripoint_bub_ms new_bub = g->m.abs_to_bub( vs.abs_pos );
+                    const tripoint_bub_ms new_bub = abs_to_map_local( g->m, vs.abs_pos );
                     const tripoint_bub_ms old_bub = veh->bub_ms_location();
                     const tripoint_rel_ms delta{ new_bub.x() - old_bub.x(),
                                                  new_bub.y() - old_bub.y(),
@@ -812,14 +812,16 @@ auto coop_server::execute_player_cmd( npc* proxy, const player_cmd_t &cmd, const
 {
     if( !proxy ) { return; }
 using K = player_cmd_kind;
-const tripoint_bub_ms cur = proxy->bub_pos();
-switch( cmd.kind ) {
+    switch( cmd.kind ) {
     case K::move: {
         // Authoritative client position: setpos(), not move_to().
         // move_to() pathfinds and may stumble diagonally on blocked tiles.
-        const tripoint_bub_ms
-        dest{cur.x() + cmd.delta.x(), cur.y() + cmd.delta.y(), cur.z() + cmd.delta.z()};
-        if( g->m.inbounds( dest ) ) { proxy->setpos( dest ); }
+        // Read-modify-write in one frame (abs) — bub_pos() is avatar-bubble-
+        // relative while setpos(tripoint_bub_ms) is map-relative; mixing them
+        // via a bub_pos() read + bub-space arithmetic + setpos(bub_ms) write
+        // silently drifts whenever those two frames aren't identical.
+        const tripoint_abs_ms dest_abs = proxy->abs_pos() + cmd.delta;
+        if( g->m.inbounds( abs_to_map_local( g->m, dest_abs ) ) ) { proxy->setpos( dest_abs ); }
             break;
         }
         case K::pause:
@@ -840,7 +842,7 @@ switch( cmd.kind ) {
             // Proxy melee-attacks any creature at the target tile; terrain bashing
             // is propagated via TERRAIN_CHANGE by the client (C2c) so no map::bash here.
         {
-            const tripoint_bub_ms tpos = g->m.abs_to_bub( cmd.target_abs );
+            const tripoint_bub_ms tpos = abs_to_map_local( g->m, cmd.target_abs );
             if( const auto mon_ptr = g->critter_tracker->find( tpos ) ) {
                 proxy->melee_attack( *mon_ptr, true );
             } else {
@@ -872,7 +874,7 @@ switch( cmd.kind ) {
             // Proxy attacks the creature at the target tile — both adjacent and reach
             // autoattacks relay through this case (no MOVE packet fires for autoattack).
         {
-            const tripoint_bub_ms tpos = g->m.abs_to_bub( cmd.target_abs );
+            const tripoint_bub_ms tpos = abs_to_map_local( g->m, cmd.target_abs );
             if( const auto mon_ptr = g->critter_tracker->find( tpos ) ) {
                 proxy->melee_attack( *mon_ptr, true );
             } else {
@@ -902,7 +904,7 @@ for( JsonObject entry : root.get_array( "items" ) ) {
         const itype_id type( entry.get_string( "type" ) );
         const int charges = entry.get_int( "charges", 0 );
         const int qty = entry.get_int( "qty", 0 );
-        const tripoint_bub_ms bub = g->m.abs_to_bub( abs_pos );
+        const tripoint_bub_ms bub = abs_to_map_local( g->m, abs_pos );
         if( !g->m.inbounds( bub ) ) { continue; }
         auto stack = g->m.i_at( bub );
         if( charges > 0 ) {
@@ -952,7 +954,7 @@ for( JsonObject entry : root.get_array( "items" ) ) {
         const tripoint_abs_ms abs_pos{
             entry.get_int( "tx" ), entry.get_int( "ty" ), entry.get_int( "tz" )};
         const std::string item_json = entry.get_string( "data" );
-        const tripoint_bub_ms bub = g->m.abs_to_bub( abs_pos );
+        const tripoint_bub_ms bub = abs_to_map_local( g->m, abs_pos );
         if( !g->m.inbounds( bub ) ) { continue; }
         try {
             std::istringstream item_iss( item_json );
@@ -1019,7 +1021,7 @@ const tripoint_abs_ms abs_pos{
     root.get_int( "tx" ), root.get_int( "ty" ), root.get_int( "tz" )};
 const std::string ter_name  = root.get_string( "ter",  "" );
 const std::string furn_name = root.get_string( "furn", "" );
-const tripoint_bub_ms bub = g->m.abs_to_bub( abs_pos );
+const tripoint_bub_ms bub = abs_to_map_local( g->m, abs_pos );
 if( !g->m.inbounds( bub ) ) { return; }
 if( !ter_name.empty() ) {
     const ter_str_id t( ter_name );
@@ -1122,7 +1124,7 @@ if( move_cmd.kind == player_cmd_kind::move ) {
             const tripoint_abs_ms corpse_abs{
                 ctx.get_int( "ax", 0 ), ctx.get_int( "ay", 0 ), ctx.get_int( "az", 0 ) };
             map& here = get_map();
-            const auto local = here.abs_to_bub( corpse_abs );
+            const auto local = abs_to_map_local( here, corpse_abs );
             std::vector<item *> corpses_to_rm;
             for( item * const& it : here.i_at( local ) ) {
                 if( it->is_corpse() ) { corpses_to_rm.push_back( it ); }
@@ -1141,7 +1143,7 @@ if( move_cmd.kind == player_cmd_kind::move ) {
                 ctx.get_int( "ax", 0 ), ctx.get_int( "ay", 0 ), ctx.get_int( "az", 0 ) };
             const itype_id rem_type( ctx.get_string( "type", "" ) );
             map& here = get_map();
-            const auto local = here.abs_to_bub( rem_abs );
+            const auto local = abs_to_map_local( here, rem_abs );
             item* found = nullptr;
             for( item * const& it : here.i_at( local ) ) {
                 if( it->typeId() == rem_type ) { found = it; break; }
@@ -1158,7 +1160,7 @@ if( move_cmd.kind == player_cmd_kind::move ) {
             ctx.allow_omitted_members();
             const tripoint_abs_ms rem_abs{
                 ctx.get_int( "ax", 0 ), ctx.get_int( "ay", 0 ), ctx.get_int( "az", 0 ) };
-            get_map().i_clear( get_map().abs_to_bub( rem_abs ) );
+            get_map().i_clear( abs_to_map_local( get_map(), rem_abs ) );
         }
         return;
     }
@@ -1173,7 +1175,7 @@ if( move_cmd.kind == player_cmd_kind::move ) {
             const field_type_id ftype( ctx.get_string( "field", "" ) );
             const int intensity = ctx.get_int( "intensity", 1 );
             if( ftype.is_valid() ) {
-                get_map().add_field( get_map().abs_to_bub( fabs ), ftype, intensity );
+                get_map().add_field( abs_to_map_local( get_map(), fabs ), ftype, intensity );
             }
         }
         return;
@@ -1282,9 +1284,11 @@ if( move_cmd.kind == player_cmd_kind::move ) {
     } else if( key == "MOVE_UP" || key == "MOVE_DOWN" ) {
     const auto vc = parse_vertical_move_ctx( ctx_json );
         if( vc ) {
-            const tripoint_bub_ms bpos = g->m.abs_to_bub( vc->landing );
-            if( g->m.inbounds( bpos ) ) {
-                proxy->setpos( bpos );
+            // Use the absolute landing position directly (see execute_player_cmd's
+            // K::move comment) rather than round-tripping through the avatar-
+            // bubble-relative abs_to_bub()/map-relative setpos(bub_ms) pair.
+            if( g->m.inbounds( abs_to_map_local( g->m, vc->landing ) ) ) {
+                proxy->setpos( vc->landing );
                 DebugLog( DL::Info, DC::Main )
                         << "[coop] " << key << " proxy→z=" << vc->landing.z();
             } else {
@@ -1357,7 +1361,7 @@ auto coop_server::resolve_fire_at_seq(
 // A5.3: client sends tx/ty/tz as tripoint_abs_ms (globally consistent).
 // Derive target_bub for fire_gun + inbounds checks on this machine's reality bubble.
 const tripoint_abs_ms target_abs{target_ax, target_ay, target_az};
-const tripoint_bub_ms target_bub = g->m.abs_to_bub( target_abs );
+const tripoint_bub_ms target_bub = abs_to_map_local( g->m, target_abs );
 
 // A5.3 lag compensation: find the snapshot closest to the client's fire-seq and
 // temporarily reposition the creature that was at the target tile in that snapshot

@@ -494,7 +494,7 @@ void map::update_visibility_cache(const int zlev) {
 
     for (const auto p : bubble_submaps()) {
         if (sm_squares_seen[p.x() * my_MAPSIZE + p.y()] > 36) { // 25% of the submap is visible
-            const auto abs_sm = bub_to_abs(p);
+            const auto abs_sm = map_local_to_abs(*this, p);
             const auto abs_omt(project_to<coords::omt>(abs_sm));
             get_overmapbuffer(bound_dimension_).set_seen(tripoint_abs_omt(abs_omt, 0), true);
         }
@@ -712,7 +712,7 @@ void map::update_suspension_cache(const int& z) {
                 const ter_t& terrain = cur_submap->get_ter(sm_ms).obj();
                 if (terrain.has_flag(TFLAG_SUSPENDED)) {
                     auto loc = coords::project_combine(p, sm_ms);
-                    suspension_cache.emplace_back(bub_to_abs(loc));
+                    suspension_cache.emplace_back(map_local_to_abs(*this, loc));
                 }
             }
         }
@@ -721,7 +721,7 @@ void map::update_suspension_cache(const int& z) {
 
     for (auto iter = suspension_cache.begin(); iter != suspension_cache.end();) {
         const point_abs_ms absp = *iter;
-        const tripoint_bub_ms loctp(abs_to_bub(absp), z);
+        const tripoint_bub_ms loctp(abs_to_map_local(*this, absp), z);
         if (!inbounds(loctp)) {
             ++iter;
             continue;

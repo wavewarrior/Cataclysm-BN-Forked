@@ -104,7 +104,7 @@ TEST_CASE("apply_pickup_manifest — cbc full removal", "[coop][pickup]") {
     get_map().add_item(TILE, item::spawn(AMMO_ID, calendar::turn, 30));
     REQUIRE(charges_at(AMMO_ID) == 30);
 
-    const tripoint_abs_ms abs = get_map().bub_to_abs(TILE);
+    const tripoint_abs_ms abs = bub_to_abs(TILE);
     coop_server::apply_pickup_manifest(make_manifest(abs, AMMO_ID.str(), 30, 0));
 
     CHECK(count_items(AMMO_ID) == 0);
@@ -120,7 +120,7 @@ TEST_CASE("apply_pickup_manifest — cbc partial removal", "[coop][pickup]") {
     get_map().add_item(TILE, item::spawn(AMMO_ID, calendar::turn, 30));
     REQUIRE(charges_at(AMMO_ID) == 30);
 
-    const tripoint_abs_ms abs = get_map().bub_to_abs(TILE);
+    const tripoint_abs_ms abs = bub_to_abs(TILE);
     coop_server::apply_pickup_manifest(make_manifest(abs, AMMO_ID.str(), 10, 0));
 
     CHECK(charges_at(AMMO_ID) == 20);
@@ -143,7 +143,7 @@ TEST_CASE("apply_pickup_manifest — qty removes correct count", "[coop][pickup]
     }
     REQUIRE(count_items(DISCRETE_ID) == 3);
 
-    const tripoint_abs_ms abs = get_map().bub_to_abs(TILE);
+    const tripoint_abs_ms abs = bub_to_abs(TILE);
     coop_server::apply_pickup_manifest(make_manifest(abs, DISCRETE_ID.str(), 0, 2));
 
     // Exactly 1 must remain.
@@ -160,7 +160,7 @@ TEST_CASE("apply_pickup_manifest — missing type is skipped", "[coop][pickup]")
     get_map().add_item(TILE, item::spawn(DISCRETE_ID, calendar::turn, item::solitary_tag{}));
     REQUIRE(count_items(DISCRETE_ID) == 1);
 
-    const tripoint_abs_ms abs = get_map().bub_to_abs(TILE);
+    const tripoint_abs_ms abs = bub_to_abs(TILE);
     // Ask to remove a type that doesn't exist on the tile.
     coop_server::apply_pickup_manifest(make_manifest(abs, "9mm", 0, 1));
 
@@ -183,7 +183,7 @@ TEST_CASE("apply_pickup_manifest — two manifest entries same type removes two"
     }
     REQUIRE(count_items(DISCRETE_ID) == 3);
 
-    const tripoint_abs_ms abs = get_map().bub_to_abs(TILE);
+    const tripoint_abs_ms abs = bub_to_abs(TILE);
     coop_server::apply_pickup_manifest(make_manifest_2x(abs, DISCRETE_ID.str(), 0, 1));
 
     CHECK(count_items(DISCRETE_ID) == 1);
@@ -220,7 +220,7 @@ TEST_CASE("apply_pickup_manifest — second identical manifest is a no-op (race)
     get_map().add_item(TILE, item::spawn(DISCRETE_ID, calendar::turn, item::solitary_tag{}));
     REQUIRE(count_items(DISCRETE_ID) == 1);
 
-    const tripoint_abs_ms abs = get_map().bub_to_abs(TILE);
+    const tripoint_abs_ms abs = bub_to_abs(TILE);
 
     // First application: item is present, removed successfully.
     coop_server::apply_pickup_manifest(make_manifest(abs, DISCRETE_ID.str(), 0, 1));

@@ -480,7 +480,7 @@ void burrow_activity_actor::start( player_activity &, Character& who )
     map& here = get_map();
     int moves = to_moves<int>( 20_minutes );
     moves += ( 24 - std::min( who.str_cur, 24 ) ) * to_moves<int>( 150_seconds );
-    if( here.move_cost( here.abs_to_bub( target ) ) == 2 ) { moves /= 2; }
+    if( here.move_cost( abs_to_bub( target ) ) == 2 ) { moves /= 2; }
     const std::vector<npc *> helpers =
         character_funcs::get_crafting_helpers( static_cast<player &>( who ), 3 );
     moves = moves * ( 10 - static_cast<int>( helpers.size() ) ) / 10;
@@ -493,13 +493,12 @@ void burrow_activity_actor::do_turn( player_activity &, Character& who )
         progress.pop();
         return;
     }
-    map& here = get_map();
     sfx::play_activity_sound( "activity", "burrow",
-                              sfx::get_heard_volume( here.abs_to_bub( target ), 70 ) );
+                              sfx::get_heard_volume( abs_to_bub( target ), 70 ) );
     if( action_time_scale::once_every_this_tick( 1_minutes ) ) {
         //~ Sound of a Rat mutant burrowing!
         sound_event se;
-        se.origin = here.abs_to_bub( target );
+        se.origin = abs_to_bub( target );
         se.volume = 65;
         se.category = sounds::sound_t::movement;
         se.description = _( "ScratchCrunchScrabbleScurry." );
@@ -519,7 +518,7 @@ void burrow_activity_actor::finish( player_activity& act, Character& who )
     apply_mining_exertion( who, progress.get_moves_total() );
     act.set_to_null();
     who.add_msg_if_player( m_good, _( "You finish burrowing." ) );
-    here.destroy( here.abs_to_bub( target ), true );
+    here.destroy( abs_to_bub( target ), true );
 }
 
 void burrow_activity_actor::serialize( JsonOut& jsout ) const
@@ -547,7 +546,7 @@ void pickaxe_activity_actor::start( player_activity &, Character& who )
     map& here = get_map();
     int moves = to_moves<int>( 30_minutes );
     moves += ( 24 - std::min( who.str_cur, 24 ) ) * to_moves<int>( 225_seconds );
-    if( here.move_cost( here.abs_to_bub( target ) ) == 2 ) { moves /= 2; }
+    if( here.move_cost( abs_to_bub( target ) ) == 2 ) { moves /= 2; }
     const std::vector<npc *> helpers =
         character_funcs::get_crafting_helpers( static_cast<player &>( who ), 3 );
     moves = moves * ( 10 - static_cast<int>( helpers.size() ) ) / 10;
@@ -560,14 +559,13 @@ void pickaxe_activity_actor::do_turn( player_activity &, Character& who )
         progress.pop();
         return;
     }
-    map& here = get_map();
     sfx::play_activity_sound( "tool", "pickaxe",
-                              sfx::get_heard_volume( here.abs_to_bub( target ), 80 ) );
+                              sfx::get_heard_volume( abs_to_bub( target ), 80 ) );
     // each turn is too much
     if( action_time_scale::once_every_this_tick( 1_minutes ) ) {
         //~ Sound of a Pickaxe at work!
         sound_event se;
-        se.origin = here.abs_to_bub( target );
+        se.origin = abs_to_bub( target );
         se.volume = 90;
         se.category = sounds::sound_t::destructive_activity;
         se.description = _( "CHNK!  CHNK!  CHNK!" );
@@ -584,7 +582,7 @@ void pickaxe_activity_actor::do_turn( player_activity &, Character& who )
 void pickaxe_activity_actor::finish( player_activity& act, Character& who )
 {
     map& here = get_map();
-    const tripoint_bub_ms pos( here.abs_to_bub( target ) );
+    const tripoint_bub_ms pos( abs_to_bub(target) );
     apply_mining_exertion( who, progress.get_moves_total() );
     act.set_to_null();
     who.add_msg_player_or_npc( m_good, _( "You finish digging." ), _( "<npcname> finishes digging." ) );
@@ -630,7 +628,7 @@ void jackhammer_activity_actor::start( player_activity &, Character& who )
     map& here = get_map();
     int moves = to_moves<int>( 10_minutes );
     moves += ( 24 - std::min( who.str_cur, 24 ) ) * to_moves<int>( 75_seconds );
-    if( here.move_cost( here.abs_to_bub( target ) ) == 2 ) { moves /= 2; }
+    if( here.move_cost( abs_to_bub( target ) ) == 2 ) { moves /= 2; }
     const std::vector<npc *> helpers =
         character_funcs::get_crafting_helpers( static_cast<player &>( who ), 3 );
     moves = moves * ( 10 - static_cast<int>( helpers.size() ) ) / 10;
@@ -643,13 +641,12 @@ void jackhammer_activity_actor::do_turn( player_activity &, Character& who )
         progress.pop();
         return;
     }
-    map& here = get_map();
     sfx::play_activity_sound( "tool", "jackhammer",
-                              sfx::get_heard_volume( here.abs_to_bub( target ), 130 ) );
+                              sfx::get_heard_volume( abs_to_bub( target ), 130 ) );
     if( action_time_scale::once_every_this_tick( 1_minutes ) ) {
         //~ Sound of a jackhammer at work!
         sound_event se;
-        se.origin = here.abs_to_bub( target );
+        se.origin = abs_to_bub( target );
         se.volume = 130;
         se.category = sounds::sound_t::destructive_activity;
         se.description = _( "TATATATATATATAT!" );
@@ -666,7 +663,7 @@ void jackhammer_activity_actor::do_turn( player_activity &, Character& who )
 void jackhammer_activity_actor::finish( player_activity& act, Character& who )
 {
     map& here = get_map();
-    const auto& pos = here.abs_to_bub( target );
+    const auto& pos = abs_to_bub( target );
 
     if( here.has_flag_furn( TFLAG_MINEABLE, pos ) ) {
         here.destroy_furn( pos, true );
@@ -724,7 +721,7 @@ void churn_activity_actor::finish( player_activity& act, Character& who )
 {
     map& here = get_map();
     who.add_msg_if_player( _( "You finish churning up the earth here." ) );
-    here.ter_set( here.abs_to_bub( target ), t_dirtmound );
+    here.ter_set( abs_to_bub( target ), t_dirtmound );
     act.set_to_null();
     activity_handlers::resume_for_multi_activities( static_cast<player &>( who ) );
 }
@@ -751,7 +748,7 @@ std::unique_ptr<activity_actor> churn_activity_actor::deserialize( JsonIn& jsin 
 void fill_pit_activity_actor::start( player_activity &, Character& who )
 {
     map& here = get_map();
-    ter_id ter = here.ter( here.abs_to_bub( target ) );
+    ter_id ter = here.ter( abs_to_bub( target ) );
     int moves = to_moves<int>( time_duration::from_minutes( ter->fill_minutes ) );
     const std::vector<npc *> helpers =
         character_funcs::get_crafting_helpers( static_cast<player &>( who ), 3 );
@@ -767,10 +764,9 @@ void fill_pit_activity_actor::do_turn( player_activity &, Character& who )
     }
     sfx::play_activity_sound( "tool", "shovel", 100 );
     if( action_time_scale::once_every_this_tick( 1_minutes ) ) {
-        map& here = get_map();
         //~ Sound of a shovel filling a pit or mound at work!
         sound_event se;
-        se.origin = here.abs_to_bub( target );
+        se.origin = abs_to_bub( target );
         se.volume = 60;
         se.category = sounds::sound_t::activity;
         se.description = _( "hsh!" );
@@ -787,7 +783,7 @@ void fill_pit_activity_actor::do_turn( player_activity &, Character& who )
 void fill_pit_activity_actor::finish( player_activity& act, Character& who )
 {
     map& here = get_map();
-    const auto bub_pos = here.abs_to_bub( target );
+    const auto bub_pos = abs_to_bub( target );
     const ter_id old_ter = here.ter( bub_pos );
 
     here.ter_set( bub_pos, old_ter->fill_result );
@@ -841,7 +837,7 @@ void clear_rubble_activity_actor::do_turn( player_activity &, Character & )
 void clear_rubble_activity_actor::finish( player_activity& act, Character& who )
 {
     map& here = get_map();
-    const auto bub_pos = here.abs_to_bub( target );
+    const auto bub_pos = abs_to_bub( target );
     const map_bash_info& bash = here.furn( bub_pos ).obj().bash;
     who.add_msg_if_player( m_info, _( "You clear up the %s." ), here.furnname( bub_pos ) );
     here.spawn_items( bub_pos, item_group::items_from( bash.drop_group, calendar::turn ) );
@@ -880,15 +876,14 @@ void pry_nails_activity_actor::do_turn( player_activity &, Character & )
         progress.pop();
         return;
     }
-    map& here = get_map();
-    const auto bub_loc = here.abs_to_bub( target );
+    const auto bub_loc = abs_to_bub( target );
     sfx::play_activity_sound( "tool", "hammer", sfx::get_heard_volume( bub_loc, 70 ) );
 }
 
 void pry_nails_activity_actor::finish( player_activity& act, Character& who )
 {
     map& here = get_map();
-    const auto bub_loc = here.abs_to_bub( target );
+    const auto bub_loc = abs_to_bub( target );
     const ter_id type = here.ter( bub_loc );
 
     who.add_msg_if_player( _( "You pry out the nails from the terrain." ) );
@@ -933,7 +928,7 @@ void plant_seed_activity_actor::do_turn( player_activity &, Character & )
 void plant_seed_activity_actor::finish( player_activity& act, Character& who )
 {
     map& here = get_map();
-    auto examp = here.abs_to_bub( target );
+    auto examp = abs_to_bub( target );
     std::vector<detached_ptr<item>> used_seed;
     if( item::count_by_charges( seed_id ) ) {
         used_seed = who.use_charges( seed_id, 1 );
@@ -1002,7 +997,7 @@ void forage_activity_actor::finish( player_activity& act, Character& who )
     bool next_to_bush = false;
     map& here = get_map();
     for( const auto& pnt : here.points_in_radius( who.bub_pos(), 1 ) ) {
-        if( here.bub_to_abs( pnt ) == target ) {
+        if( bub_to_abs( pnt ) == target ) {
             next_to_bush = true;
             break;
         }
@@ -1040,7 +1035,7 @@ void forage_activity_actor::finish( player_activity& act, Character& who )
             debugmsg( "Invalid season" );
     }
 
-    here.ter_set( here.abs_to_bub( target ), next_ter );
+    here.ter_set( abs_to_bub( target ), next_ter );
 
     // Survival gives a bigger boost, and Perception is leveled a bit.
     // Both survival and perception affect time to forage
@@ -1224,7 +1219,7 @@ void fill_liquid_activity_actor::do_turn( player_activity& act, Character& who )
             detached_ptr<item> source;
             switch( source_type ) {
                 case LST_INFINITE_MAP:
-                    source = here.water_from( here.abs_to_bub( pos ) );
+                    source = here.water_from( abs_to_bub( pos ) );
                     charges = std::max( 1, source->charges_per_volume( volume_per_second ) );
                     source->charges = charges;
                     source = cb( std::move( source ) );
@@ -1257,7 +1252,7 @@ void fill_liquid_activity_actor::do_turn( player_activity& act, Character& who )
                 }
                 break;
             case LTT_MAP: {
-                const auto bub_loc = here.abs_to_bub( act.coords.at( 1 ) );
+                const auto bub_loc = abs_to_bub( act.coords.at( 1 ) );
                 if( iexamine::has_keg( bub_loc ) ) {
                     finished = transfer( [&bub_loc]( detached_ptr<item>&& it ) {
                         return iexamine::pour_into_keg( bub_loc, std::move( it ) );
@@ -1399,7 +1394,7 @@ std::unique_ptr<lockpick_activity_actor> lockpick_activity_actor::use_bionic(
 
 void lockpick_activity_actor::start( player_activity & /*act*/, Character & )
 {
-    const auto target = get_map().abs_to_bub( this->target );
+    const auto target = abs_to_bub( this->target );
     const ter_id ter_type = get_map().ter( target );
     const furn_id furn_type = get_map().furn( target );
     const optional_vpart_position veh = get_map().veh_at( target );
@@ -1442,7 +1437,7 @@ void lockpick_activity_actor::finish( player_activity& act, Character& who )
         return;
     }
 
-    const auto target = get_map().abs_to_bub( this->target );
+    const auto target = abs_to_bub( this->target );
     const ter_id ter_type = get_map().ter( target );
     const furn_id furn_type = get_map().furn( target );
     const optional_vpart_position veh = get_map().veh_at( target );

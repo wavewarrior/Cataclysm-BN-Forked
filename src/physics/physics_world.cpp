@@ -365,7 +365,7 @@ void PhysicsWorld::on_submap_loaded( const map &m, const tripoint_abs_sm &abs_sm
     const tripoint_abs_ms abs_corner{ abs_sm_pos.x() * SEEX,
                                        abs_sm_pos.y() * SEEY,
                                        abs_sm_pos.z() };
-    const auto bub_origin = m.abs_to_bub( abs_corner );
+    const auto bub_origin = abs_to_map_local( m, abs_corner );
 
     // Idempotency guard.  terrain_bodies_[key] below is a plain assignment, so a
     // second call for a key that already holds bodies would drop those b2BodyIds

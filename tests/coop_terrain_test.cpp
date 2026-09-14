@@ -60,7 +60,7 @@ auto make_terrain_manifest(
 TEST_CASE("apply_terrain_change — terrain set on map", "[coop][terrain]") {
     setup_world();
 
-    const tripoint_abs_ms abs = get_map().bub_to_abs(TILE);
+    const tripoint_abs_ms abs = bub_to_abs(TILE);
     REQUIRE(get_map().ter(TILE) == ter_str_id("t_grass"));
 
     coop_server::apply_terrain_change(make_terrain_manifest(abs, "t_floor", ""));
@@ -75,7 +75,7 @@ TEST_CASE("apply_terrain_change — terrain set on map", "[coop][terrain]") {
 TEST_CASE("apply_terrain_change — furniture set on map", "[coop][terrain]") {
     setup_world();
 
-    const tripoint_abs_ms abs = get_map().bub_to_abs(TILE);
+    const tripoint_abs_ms abs = bub_to_abs(TILE);
     REQUIRE(get_map().furn(TILE) == furn_str_id("f_null"));
 
     coop_server::apply_terrain_change(make_terrain_manifest(abs, "t_floor", "f_locker"));
@@ -95,7 +95,7 @@ TEST_CASE("apply_terrain_change — empty furn leaves furniture unchanged", "[co
     get_map().furn_set(TILE, furn_str_id("f_locker"));
     REQUIRE(get_map().furn(TILE) == furn_str_id("f_locker"));
 
-    const tripoint_abs_ms abs = get_map().bub_to_abs(TILE);
+    const tripoint_abs_ms abs = bub_to_abs(TILE);
     // Only terrain changes; furn field is empty
     coop_server::apply_terrain_change(make_terrain_manifest(abs, "t_floor", ""));
 
@@ -124,7 +124,7 @@ TEST_CASE("apply_terrain_change — out-of-bounds skipped", "[coop][terrain]") {
 TEST_CASE("apply_terrain_change — unknown ter id skipped", "[coop][terrain]") {
     setup_world();
 
-    const tripoint_abs_ms abs = get_map().bub_to_abs(TILE);
+    const tripoint_abs_ms abs = bub_to_abs(TILE);
     const ter_id original_ter = get_map().ter(TILE);
 
     // "t_nonexistent" is not a valid terrain id; it must NOT become t_null.

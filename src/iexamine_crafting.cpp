@@ -1000,7 +1000,7 @@ void iexamine::keg( player &p, const tripoint_bub_ms &examp )
     const auto can_disconnect_tank = disconnected_variant && p.has_amount( itype_plumber_toolkit, 1 );
     const auto notify_contents_changed = [&]( const tripoint_bub_ms & where ) {
         if( is_fluid_grid_tank( here.furn( where ).obj() ) ) {
-            fluid_grid::on_contents_changed( here.bub_to_abs( where ) );
+            fluid_grid::on_contents_changed( bub_to_abs( where ) );
         }
     };
     const auto tank_contains_only_water = [&]( const tripoint_bub_ms & where ) -> bool {
@@ -1018,7 +1018,7 @@ void iexamine::keg( player &p, const tripoint_bub_ms &examp )
         return true;
     };
     const auto transfer_tank_liquid_to_grid = [&]( const tripoint_bub_ms & where ) {
-        const auto pos_abs_omt = project_to<coords::omt>( here.bub_to_abs( where ) );
+        const auto pos_abs_omt = project_to<coords::omt>( bub_to_abs( where ) );
         auto items = here.i_at( where );
         std::ranges::for_each( items, [&]( item * it ) {
             if( it != nullptr && it->made_of( LIQUID ) ) {
@@ -1029,7 +1029,7 @@ void iexamine::keg( player &p, const tripoint_bub_ms &examp )
     };
 
     if( is_plumbed_tank ) {
-        const auto pos_abs_ms = here.bub_to_abs( examp );
+        const auto pos_abs_ms = bub_to_abs( examp );
         const auto pos_abs_omt = project_to<coords::omt>( pos_abs_ms );
         const auto clean_available = fluid_grid::liquid_charges_at( pos_abs_omt, itype_water_clean );
         const auto dirty_available = fluid_grid::liquid_charges_at( pos_abs_omt, itype_water );
@@ -1268,22 +1268,22 @@ void iexamine::keg( player &p, const tripoint_bub_ms &examp )
                 if( !connected_variant ) {
                     return;
                 }
-                const auto pos_abs_omt = project_to<coords::omt>( here.bub_to_abs( examp ) );
+                const auto pos_abs_omt = project_to<coords::omt>( bub_to_abs( examp ) );
                 if( !confirm_fluid_grid_contamination_for_items( pos_abs_omt, here.i_at( examp ) ) ) {
                     return;
                 }
                 here.furn_set( examp, *connected_variant );
-                fluid_grid::on_structure_changed( here.bub_to_abs( examp ) );
+                fluid_grid::on_structure_changed( bub_to_abs( examp ) );
                 transfer_tank_liquid_to_grid( examp );
                 add_msg( m_info, _( "You connect the %s to the fluid grid." ), keg_name );
                 return;
             } else if( selectmenu.ret == DISCONNECT_FROM_FLUID_GRID ) {
-                fluid_grid::disconnect_tank( here.bub_to_abs( examp ) );
+                fluid_grid::disconnect_tank( bub_to_abs( examp ) );
                 if( !disconnected_variant ) {
                     return;
                 }
                 here.furn_set( examp, *disconnected_variant );
-                fluid_grid::on_structure_changed( here.bub_to_abs( examp ) );
+                fluid_grid::on_structure_changed( bub_to_abs( examp ) );
                 add_msg( m_info, _( "You disconnect the %s from the fluid grid." ), keg_name );
                 return;
             } else if( selectmenu.ret < 0 ) {
@@ -1393,7 +1393,7 @@ void iexamine::keg( player &p, const tripoint_bub_ms &examp )
         selectmenu.text = _( "Select an action" );
         selectmenu.query();
 
-        const auto pos_abs_omt = project_to<coords::omt>( here.bub_to_abs( examp ) );
+        const auto pos_abs_omt = project_to<coords::omt>( bub_to_abs( examp ) );
         switch( selectmenu.ret ) {
             case DISPENSE:
                 if( liquid_handler::handle_liquid( **items.begin() ) ) {
@@ -1455,19 +1455,19 @@ void iexamine::keg( player &p, const tripoint_bub_ms &examp )
                     return;
                 }
                 here.furn_set( examp, *connected_variant );
-                fluid_grid::on_structure_changed( here.bub_to_abs( examp ) );
+                fluid_grid::on_structure_changed( bub_to_abs( examp ) );
                 transfer_tank_liquid_to_grid( examp );
                 add_msg( m_info, _( "You connect the %s to the fluid grid." ), keg_name );
                 return;
             }
 
             case DISCONNECT_FROM_FLUID_GRID:
-                fluid_grid::disconnect_tank( here.bub_to_abs( examp ) );
+                fluid_grid::disconnect_tank( bub_to_abs( examp ) );
                 if( !disconnected_variant ) {
                     return;
                 }
                 here.furn_set( examp, *disconnected_variant );
-                fluid_grid::on_structure_changed( here.bub_to_abs( examp ) );
+                fluid_grid::on_structure_changed( bub_to_abs( examp ) );
                 add_msg( m_info, _( "You disconnect the %s from the fluid grid." ), keg_name );
                 return;
 
@@ -1493,7 +1493,7 @@ detached_ptr<item> iexamine::pour_into_keg( const tripoint_bub_ms &pos,
     const auto is_plumbed = is_fluid_grid_tank( here.furn( pos ).obj() );
     const auto notify_contents_changed = [&]( const tripoint_bub_ms & where ) {
         if( is_fluid_grid_tank( here.furn( where ).obj() ) ) {
-            fluid_grid::on_contents_changed( here.bub_to_abs( where ) );
+            fluid_grid::on_contents_changed( bub_to_abs( where ) );
         }
     };
     const auto keg_name = here.name( pos );
@@ -1504,7 +1504,7 @@ detached_ptr<item> iexamine::pour_into_keg( const tripoint_bub_ms &pos,
             add_msg( _( "The %s only accepts water." ), keg_name );
             return std::move( liquid );
         }
-        const auto pos_abs_omt = project_to<coords::omt>( here.bub_to_abs( pos ) );
+        const auto pos_abs_omt = project_to<coords::omt>( bub_to_abs( pos ) );
         if( !confirm_fluid_grid_contamination( pos_abs_omt, liquid->typeId() ) ) {
             return std::move( liquid );
         }

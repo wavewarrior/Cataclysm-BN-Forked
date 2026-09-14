@@ -421,7 +421,7 @@ static const itype_id PICKUP_KNIFE_ID("knife_combat");
 static constexpr tripoint_bub_ms PICKUP_TILE{40, 40, 0};
 
 static auto run_host_pickup(coop_server& srv, coop_ctrl_server& ctrl) -> void {
-    const tripoint_abs_ms abs = g->m.bub_to_abs(PICKUP_TILE);
+    const tripoint_abs_ms abs = bub_to_abs(PICKUP_TILE);
     REQUIRE(!g->m.i_at(PICKUP_TILE).empty()); // placed in TEST_CASE before initial sync
 
     std::ostringstream oss;
@@ -974,9 +974,9 @@ static auto run_host_terrain_change(coop_server& srv, coop_ctrl_server& ctrl) ->
     // Verification run showed t_pavement persists after all trailing ticks; a t_door_o
     // → t_door_c revert was traced to CDDA door-closing game mechanics, NOT a relay bug
     // (apply_terrain_change writes correctly; the door is a valid thing for world-sim to close).
-    const tripoint_bub_ms tile_bpos_init = g->m.abs_to_bub(g->u.abs_pos()) + tripoint(0, 1, 0);
-    const tripoint_abs_ms tile_abs = g->m.bub_to_abs(tile_bpos_init);
-    const auto fresh_bpos = [&]() { return g->m.abs_to_bub(tile_abs); };
+    const tripoint_bub_ms tile_bpos_init = abs_to_bub(g->u.abs_pos()) + tripoint(0, 1, 0);
+    const tripoint_abs_ms tile_abs = bub_to_abs(tile_bpos_init);
+    const auto fresh_bpos = [&]() { return abs_to_bub(tile_abs); };
 
     REQUIRE(g->m.ter(fresh_bpos()) == ter_id("t_floor")); // build_test_map baseline
 

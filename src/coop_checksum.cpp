@@ -55,7 +55,7 @@ auto coop_world_checksum( int radius ) -> uint64_t
                         sm_pos.x() * SEEX + tx,
                         sm_pos.y() * SEEY + ty,
                         sm_pos.z()};
-                    const tripoint_bub_ms bub = g->m.abs_to_bub( abs_tile );
+                    const tripoint_bub_ms bub = abs_to_map_local( g->m, abs_tile );
                     if( !g->m.inbounds( bub ) ) {
                         continue;
                     }

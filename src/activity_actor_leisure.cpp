@@ -506,7 +506,7 @@ void shear_activity_actor::finish( player_activity & /*act*/, Character& who )
         return;
     }
 
-    const auto source_pos = here.abs_to_bub( sheep_positions[0] );
+    const auto source_pos = abs_to_bub( sheep_positions[0] );
     monster* source_mon = g->critter_at<monster>( source_pos );
     if( source_mon == nullptr ) {
         debugmsg( "could not find source creature for shearing" );
@@ -608,7 +608,7 @@ void cracking_activity_actor::finish( player_activity& act, Character& who )
 {
     auto& here = get_map();
     who.add_msg_if_player( m_good, _( "With a satisfying click, the lock on the safe opens!" ) );
-    here.furn_set( here.abs_to_bub( placement ), f_safe_c );
+    here.furn_set( abs_to_bub( placement ), f_safe_c );
     act.set_to_null();
 }
 
@@ -795,7 +795,7 @@ void travelling_activity_actor::do_turn( player_activity& act, Character& who )
             waypoint = clamp( cur_omt_mid, project_bounds<coords::ms>( next_omt ) );
         }
         map& here = get_map();
-        auto centre_sub = here.abs_to_bub( waypoint );
+        auto centre_sub = abs_to_bub( waypoint );
         if( !here.passable( centre_sub ) ) {
             tripoint_range<tripoint_bub_ms> candidates = here.points_in_radius( centre_sub, 2 );
             for( const auto& elem : candidates ) {
@@ -833,7 +833,7 @@ void start_fire_activity_actor::do_turn( player_activity& act, Character& who )
 {
     player& p = static_cast<player &>( who );
     map& here = get_map();
-    const auto bub_loc = here.abs_to_bub( placement );
+    const auto bub_loc = abs_to_bub( placement );
     if( act.get_tools().empty() || !act.get_tools().front() ) {
         p.add_msg_if_player( m_bad,
                              _( "You have lost the item you were using to start the fire." ) );
@@ -914,8 +914,7 @@ void start_fire_activity_actor::finish( player_activity& act, Character& who )
     }
     p.practice( skill_survival, index, 5 );
 
-    map& here = get_map();
-    firestarter_actor::resolve_firestarter_use( p, here.abs_to_bub( placement ) );
+    firestarter_actor::resolve_firestarter_use( p, abs_to_bub( placement ) );
     act.set_to_null();
 }
 
@@ -1046,8 +1045,7 @@ void milk_activity_actor::finish( player_activity& act, Character& who )
         debugmsg( "milking activity with no position of monster stored" );
         return;
     }
-    map& here = get_map();
-    monster* source_mon = g->critter_at<monster>( here.abs_to_bub( coords ) );
+    monster* source_mon = g->critter_at<monster>( abs_to_bub( coords ) );
     if( source_mon == nullptr ) {
         debugmsg( "could not find source creature for liquid transfer" );
         return;

@@ -206,7 +206,7 @@ map_stack::iterator map::i_rem(
     // remove from the active items cache (if it isn't there does nothing)
     current_submap->active_items.remove( *it );
     if( current_submap->active_items.empty() ) {
-        submaps_with_active_items.erase( project_to<coords::sm>( bub_to_abs( p ) ) );
+        submaps_with_active_items.erase( project_to<coords::sm>( map_local_to_abs( *this, p ) ) );
     }
 
     const auto removed_emissive = ( *it )->is_emissive();
@@ -242,7 +242,7 @@ std::vector<detached_ptr<item>> map::i_clear( const tripoint_bub_ms& p )
         current_submap->active_items.remove( it );
     }
     if( current_submap->active_items.empty() ) {
-        submaps_with_active_items.erase( project_to<coords::sm>( bub_to_abs( p ) ) );
+        submaps_with_active_items.erase( project_to<coords::sm>( map_local_to_abs( *this, p ) ) );
     }
 
     const auto had_luminance = current_submap->get_lum( l ) != 0;
@@ -461,7 +461,7 @@ void map::add_item( const tripoint_bub_ms& p, detached_ptr<item>&& new_item )
     }
 
     if( new_item->is_map() && !new_item->has_var( "reveal_map_center_omt" ) ) {
-        new_item->set_var( "reveal_map_center_omt", project_to<coords::omt>( bub_to_abs( p ) ) );
+        new_item->set_var( "reveal_map_center_omt", project_to<coords::omt>( map_local_to_abs( *this, p ) ) );
     }
 
     current_submap->is_uniform = false;
@@ -484,7 +484,7 @@ void map::add_item( const tripoint_bub_ms& p, detached_ptr<item>&& new_item )
 
     current_submap->get_items( l ).push_back( std::move( new_item ) );
     if( auto * _log = coop_mutation_log::current() ) {
-        _log->push( {coop_event_type::item_spawned, bub_to_abs( p ), 0} );
+        _log->push( {coop_event_type::item_spawned, map_local_to_abs( *this, p ), 0} );
     }
     return;
 }
@@ -654,7 +654,7 @@ std::vector<tripoint_abs_sm> map::check_submap_active_item_consistency()
             const auto sm_pos = tripoint_bub_sm( p, z );
             const submap* sm = getsubmap( get_nonant( sm_pos ) );
             if( sm == nullptr || sm->active_items.empty() ) { continue; }
-            const auto abs_pos = bub_to_abs( sm_pos );
+            const auto abs_pos = map_local_to_abs( *this, sm_pos );
             if( !submaps_with_active_items.contains( abs_pos ) ) { result.push_back( abs_pos ); }
         }
     }
@@ -720,7 +720,7 @@ void map::process_items()
             if( !submap_loader.is_simulated( bound_dimension_, tripoint_abs_sm( abs_pos ) ) ) {
                 continue;
             }
-            const auto local_pos = abs_to_bub( abs_pos );
+            const auto local_pos = abs_to_map_local( *this, abs_pos );
             submap* const current_submap = get_submap_at_grid( local_pos );
             if( current_submap == nullptr ) { continue; }
             if( current_submap->active_items.empty() ) { continue; }
@@ -1030,7 +1030,7 @@ static void use_charges_from_furn(
     static const flag_id json_flag_USES_GRID_POWER( flag_USES_GRID_POWER );
     for( const itype& itt : item_list ) {
         if( itt.has_flag( json_flag_USES_GRID_POWER ) ) {
-            const auto abspos( m->bub_to_abs( p ) );
+            const auto abspos( map_local_to_abs( *m, p ) );
             auto& grid = get_distribution_grid_tracker().grid_at( abspos );
             detached_ptr<item> furn_item =
                 item::spawn( itt.get_id(), calendar::start_of_cataclysm, grid.get_resource() );

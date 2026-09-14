@@ -98,7 +98,7 @@ TEST_CASE("apply_drop_manifest — item lands on map", "[coop][drop]") {
     REQUIRE(count_items(KNIFE_ID) == 0);
 
     const auto src = item::spawn(KNIFE_ID, calendar::turn, item::solitary_tag{});
-    const tripoint_abs_ms abs = get_map().bub_to_abs(TILE);
+    const tripoint_abs_ms abs = bub_to_abs(TILE);
     coop_server::apply_drop_manifest(serialize_item_to_manifest(*src, abs));
 
     CHECK(count_items(KNIFE_ID) == 1);
@@ -114,7 +114,7 @@ TEST_CASE("apply_drop_manifest — cbc item charges preserved", "[coop][drop]") 
     const auto src = item::spawn(AMMO_ID, calendar::turn, 17);
     REQUIRE(src->charges == 17);
 
-    const tripoint_abs_ms abs = get_map().bub_to_abs(TILE);
+    const tripoint_abs_ms abs = bub_to_abs(TILE);
     coop_server::apply_drop_manifest(serialize_item_to_manifest(*src, abs));
 
     CHECK(charges_at(AMMO_ID) == 17);
@@ -134,7 +134,7 @@ TEST_CASE("apply_drop_manifest — per-instance damage preserved", "[coop][drop]
     src->set_damage(target_damage);
     REQUIRE(src->damage() == target_damage);
 
-    const tripoint_abs_ms abs = get_map().bub_to_abs(TILE);
+    const tripoint_abs_ms abs = bub_to_abs(TILE);
     coop_server::apply_drop_manifest(serialize_item_to_manifest(*src, abs));
 
     REQUIRE(count_items(KNIFE_ID) == 1);
@@ -156,7 +156,7 @@ TEST_CASE("apply_drop_manifest — per-instance damage preserved", "[coop][drop]
 TEST_CASE("apply_drop_manifest — multiple items all land", "[coop][drop]") {
     setup_world();
 
-    const tripoint_abs_ms abs = get_map().bub_to_abs(TILE);
+    const tripoint_abs_ms abs = bub_to_abs(TILE);
     std::ostringstream oss;
     JsonOut jout(oss);
     jout.start_object();
@@ -191,7 +191,7 @@ TEST_CASE("apply_drop_manifest — multiple items all land", "[coop][drop]") {
 TEST_CASE("apply_drop_manifest — bad item data skipped gracefully", "[coop][drop]") {
     setup_world();
 
-    const tripoint_abs_ms abs = get_map().bub_to_abs(TILE);
+    const tripoint_abs_ms abs = bub_to_abs(TILE);
     // "data" contains invalid JSON — deserialize must fail without crashing.
     const std::string manifest =
         "{\"items\":[{\"tx\":" + std::to_string(abs.x()) + ",\"ty\":" + std::to_string(abs.y())

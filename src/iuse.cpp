@@ -1209,10 +1209,9 @@ int iuse::remove_all_mods( player* p, item*, bool, const tripoint_bub_ms & )
 int iuse::good_fishing_spot( const tripoint_bub_ms& pos )
 {
     int fishable_locations = g->get_fishable_locations( 60, pos ).size();
-    map& here = get_map();
-    const oter_id& cur_omt =
-        get_overmapbuffer( get_map().get_bound_dimension() )
-        .ter( tripoint_abs_omt( project_to<coords::omt>( here.bub_to_abs( pos ) ) ) );
+    const oter_id &cur_omt =
+        get_overmapbuffer( get_map().get_bound_dimension() ).ter( tripoint_abs_omt( project_to<coords::omt>(
+                    bub_to_abs( pos ) ) ) );
     std::string om_id = cur_omt.id().c_str();
     if( fishable_locations < 100 && !g->m.has_flag( "CURRENT", pos )
         && om_id.find( "river_" ) == std::string::npos && !cur_omt->is_lake()
@@ -1292,7 +1291,7 @@ int iuse::fishing_rod( player* p, item* it, bool, const tripoint_bub_ms & )
     p->activity->coord_set.reserve( fishable_locations.size() );
     std::ranges::transform(
         fishable_locations, std::inserter( p->activity->coord_set, p->activity->coord_set.end() ),
-    []( const tripoint_bub_ms & pnt ) { return g->m.bub_to_abs( pnt ); } );
+    []( const tripoint_bub_ms & pnt ) { return bub_to_abs( pnt ); } );
     return 0;
 }
 
@@ -2053,7 +2052,7 @@ void iuse::cut_log_into_planks( player& p )
     p.add_msg_if_player( _( "You cut the log into planks." ) );
 
     p.assign_activity( std::make_unique<player_activity>( std::make_unique<wood_chop_activity_actor>(
-                           wood_chop_type::PLANKS, g->m.bub_to_abs( p.bub_pos() ), moves ) ) );
+                           wood_chop_type::PLANKS, p.abs_pos(), moves ) ) );
 }
 
 int iuse::lumber( player* p, item* it, bool t, const tripoint_bub_ms & )
@@ -2136,7 +2135,7 @@ int iuse::chop_tree( player* p, item* it, bool t, const tripoint_bub_ms & )
     moves = moves * ( 10 - helpers.size() ) / 10;
 
     p->assign_activity( std::make_unique<player_activity>( std::make_unique<wood_chop_activity_actor>(
-                            wood_chop_type::TREE, g->m.bub_to_abs( pnt ), moves, it ) ) );
+                            wood_chop_type::TREE, bub_to_abs( pnt ), moves, it ) ) );
 
     return it->type->charges_to_use();
 }
@@ -2173,7 +2172,7 @@ int iuse::chop_logs( player* p, item* it, bool t, const tripoint_bub_ms & )
     moves = moves * ( 10 - helpers.size() ) / 10;
 
     p->assign_activity( std::make_unique<player_activity>( std::make_unique<wood_chop_activity_actor>(
-                            wood_chop_type::LOGS, g->m.bub_to_abs( pnt ), moves, it ) ) );
+                            wood_chop_type::LOGS, bub_to_abs( pnt ), moves, it ) ) );
 
     return it->type->charges_to_use();
 }
@@ -2386,7 +2385,7 @@ static tripoint_abs_ms process_map_connection(
     const std::optional<tripoint_bub_ms> posp_ = choose_adjacent( _( "Attach cable where?" ) );
     if( !posp_ ) { return tripoint_abs_ms_min; }
     map& here = get_map();
-    const auto posp = here.bub_to_abs( *posp_ );
+    const auto posp = bub_to_abs( *posp_ );
 
     switch( state ) {
         case state_vehicle: {
@@ -2820,7 +2819,7 @@ int item::contain_monster( const tripoint_bub_ms& target )
 auto iuse::report_fluid_grid_connections( player* p, item*, bool, const tripoint_bub_ms& pos )
 -> int
 {
-    const auto pos_abs = project_to<coords::omt>( tripoint_abs_ms( get_map().bub_to_abs( pos ) ) );
+    const auto pos_abs = project_to<coords::omt>( tripoint_abs_ms( bub_to_abs( pos ) ) );
     const auto connections = fluid_grid::grid_connectivity_at( pos_abs );
     const auto fluid_stats = fluid_grid::storage_stats_at( pos_abs );
 
@@ -2860,7 +2859,7 @@ auto iuse::report_fluid_grid_connections( player* p, item*, bool, const tripoint
 auto iuse::modify_fluid_grid_connections( player* p, item* it, bool, const tripoint_bub_ms& pos )
 -> int
 {
-    const auto pos_abs = project_to<coords::omt>( tripoint_abs_ms( get_map().bub_to_abs( pos ) ) );
+    const auto pos_abs = project_to<coords::omt>( tripoint_abs_ms( bub_to_abs( pos ) ) );
     const auto connections = fluid_grid::grid_connectivity_at( pos_abs );
 
     uilist ui;

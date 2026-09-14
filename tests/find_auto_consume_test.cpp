@@ -5,6 +5,7 @@
 #include "catch/catch_amalgamated.hpp"
 #include "character.h"
 #include "clzones.h"
+#include "map_helpers.h"
 #include "item.h"
 #include "itype.h"
 #include "map.h"
@@ -31,7 +32,7 @@ TEST_CASE("auto_consume_priority", "[auto_consume][food][zone]") {
     auto& zmgr = zone_manager::get_manager();
 
     constexpr auto zone_origin = tripoint_bub_ms{60, 60, 0};
-    auto zone_origin_absolute = here.bub_to_abs(zone_origin);
+    auto zone_origin_absolute = map_local_to_abs(here, zone_origin);
     constexpr auto zone_size = tripoint_rel_ms{6, 6, 0};
 
     avatar& you = get_avatar();

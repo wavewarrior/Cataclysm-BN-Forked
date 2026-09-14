@@ -790,7 +790,7 @@ void disassemble_activity_actor::do_turn( player_activity& act, Character& who )
             debugmsg( "Lost target of ACT_DISASSEMBLY" );
         } else {
             const itype_id rem_type = target.loc->typeId();
-            crafting::complete_disassemble( who, target, get_map().abs_to_bub( pos ) );
+            crafting::complete_disassemble( who, target, abs_to_bub( pos ) );
             if( g->coop_client_ ) {
                 std::ostringstream ctx;
                 JsonOut jd( ctx );
@@ -1207,7 +1207,7 @@ void pickup_activity_actor::do_turn( player_activity& act, Character& who )
         const tripoint_bub_ms scan_center = starting_pos.value_or( who.bub_pos() );
         std::unordered_map<const item *, tripoint_abs_ms> ptr_to_tile;
         for( const tripoint_bub_ms& p : here.points_in_radius( scan_center, 2 ) ) {
-            for( const item * it : here.i_at( p ) ) { ptr_to_tile[it] = here.bub_to_abs( p ); }
+            for( const item * it : here.i_at( p ) ) { ptr_to_tile[it] = bub_to_abs( p ); }
         }
         std::vector<PickupSnap> snaps;
         for( const pickup::pick_drop_selection& sel : target_items ) {
@@ -1487,7 +1487,7 @@ void throw_activity_actor::do_turn( player_activity& act, Character& who )
                 const field& f = fhere.field_at( tp );
                 for( const auto& [ft, fe] : f ) {
                     if( fe.get_field_intensity() > 0 ) {
-                        coop_fields_before.emplace( fhere.bub_to_abs( tp ), ft );
+                        coop_fields_before.emplace( bub_to_abs( tp ), ft );
                     }
                 }
             }
@@ -1505,7 +1505,7 @@ void throw_activity_actor::do_turn( player_activity& act, Character& who )
         // avoid relaying embedded weapons (item is held by creature, not on ground).
         if( throw_result.hit_critter == nullptr ) {
             const tripoint_bub_ms end_bub = throw_result.end_point;
-            const tripoint_abs_ms end_abs = get_map().bub_to_abs( end_bub );
+            const tripoint_abs_ms end_abs = bub_to_abs( end_bub );
             for( const item * it : get_map().i_at( end_bub ) ) {
                 if( it->typeId() != c2e_thrown_type ) { continue; }
                 // Found the landed item — emit DROP so it appears on the host map.
@@ -1540,7 +1540,7 @@ void throw_activity_actor::do_turn( player_activity& act, Character& who )
         for( const tripoint_bub_ms& tp : fhere.points_in_radius( impact, 5 ) ) {
             const field& f = fhere.field_at( tp );
             for( const auto& [ft, fe] : f ) {
-                const auto abs = fhere.bub_to_abs( tp );
+                const auto abs = bub_to_abs( tp );
                 if( fe.get_field_intensity() > 0
                     && coop_fields_before.find( {abs, ft} ) == coop_fields_before.end() ) {
                     new_fields.emplace_back( abs, std::make_pair( ft, fe.get_field_intensity() ) );
@@ -1640,7 +1640,7 @@ auto repair_item_activity_actor::get_fake_tool() const -> item*
             const std::vector<itype> item_type_list = furniture.crafting_pseudo_item_types();
             for( const itype& item_type : item_type_list ) {
                 if( item_type.get_id() == hack_tool_type_id ) {
-                    const tripoint_abs_ms abspos = m.bub_to_abs( position );
+                    const tripoint_abs_ms abspos = hack_position;
                     const distribution_grid& grid = get_distribution_grid_tracker().grid_at( abspos );
                     fake_item = item::spawn_temporary( item_type.get_id(), calendar::turn, 0 );
                     fake_item->charges = grid.get_resource( true );
@@ -1675,7 +1675,7 @@ void repair_item_activity_actor::discharge_real_power_source(
             break;
         }
         case hack_type_t::furniture: {
-            const tripoint_abs_ms abspos = m.bub_to_abs( position );
+            const tripoint_abs_ms abspos = hack_position;
             distribution_grid& grid = get_distribution_grid_tracker().grid_at( abspos );
             unfulfilled_demand = grid.mod_resource( -used_charges );
             break;
@@ -2316,13 +2316,12 @@ activity_id wood_chop_activity_actor::get_type() const
 
 void wood_chop_activity_actor::do_turn( player_activity& act, Character& who )
 {
-    map& here = get_map();
     sfx::play_activity_sound( "tool", "axe",
-                              sfx::get_heard_volume( here.abs_to_bub( act.placement ), 85 ) );
+                              sfx::get_heard_volume( abs_to_bub( act.placement ), 85 ) );
     if( action_time_scale::once_every_this_tick( 1_minutes ) ) {
         //~ Sound of a wood chopping tool at work!
         sound_event se;
-        se.origin = here.abs_to_bub( act.placement );
+        se.origin = abs_to_bub( act.placement );
         se.volume = 85;
         se.category = sounds::sound_t::activity;
         se.description = _( "CHK!" );
@@ -2343,7 +2342,7 @@ void wood_chop_activity_actor::finish( player_activity& act, Character& who )
 
     switch( chop_type ) {
         case wood_chop_type::TREE: {
-            const auto& pos = here.abs_to_bub( placement );
+            const auto& pos = abs_to_bub( placement );
 
             tripoint_rel_ms direction;
             if( !p.is_npc() ) {
@@ -2399,7 +2398,7 @@ void wood_chop_activity_actor::finish( player_activity& act, Character& who )
             p.add_msg_if_player( m_good, _( "You finish chopping down a tree." ) );
             here.collapse_at( pos, false, true, false );
             sfx::play_variant_sound(
-                "misc", "timber", sfx::get_heard_volume( here.abs_to_bub( placement ), 95 ) );
+                "misc", "timber", sfx::get_heard_volume( abs_to_bub( placement ), 95 ) );
 
             // Exertion calculation
             if( !axe ) {
@@ -2423,7 +2422,7 @@ void wood_chop_activity_actor::finish( player_activity& act, Character& who )
             break;
         }
         case wood_chop_type::LOGS: {
-            const auto& pos = here.abs_to_bub( placement );
+            const auto& pos = abs_to_bub( placement );
             int log_quan;
             int stick_quan;
             int splint_quan;
@@ -2486,12 +2485,12 @@ void wood_chop_activity_actor::finish( player_activity& act, Character& who )
             planks = std::min( planks, max_planks );
 
             if( planks > 0 ) {
-                here.spawn_item( here.abs_to_bub( placement ), itype_2x4, planks, 0, calendar::turn );
+                here.spawn_item( abs_to_bub( placement ), itype_2x4, planks, 0, calendar::turn );
                 p.add_msg_if_player( m_good, _( "You produce %d planks." ), planks );
             }
             if( scraps > 0 ) {
                 here.spawn_item(
-                    here.abs_to_bub( placement ), itype_splinter, scraps, 0, calendar::turn );
+                    abs_to_bub( placement ), itype_splinter, scraps, 0, calendar::turn );
                 p.add_msg_if_player( m_good, _( "You produce %d splinters." ), scraps );
             }
             if( planks < max_planks / 2 ) {

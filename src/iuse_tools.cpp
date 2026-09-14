@@ -1065,7 +1065,7 @@ int iuse::makemound( player* p, item* it, bool t, const tripoint_bub_ms & )
     if( g->m.has_flag( flag_PLOWABLE, pnt ) && !g->m.has_flag( flag_PLANT, pnt ) ) {
         p->add_msg_if_player( _( "You start churning up the earth here." ) );
         p->assign_activity( std::make_unique<player_activity>(
-                                std::make_unique<churn_activity_actor>( g->m.bub_to_abs( pnt ) ) ) );
+                                std::make_unique<churn_activity_actor>( bub_to_abs( pnt ) ) ) );
         return it->type->charges_to_use();
     } else {
         p->add_msg_if_player( _( "You can't churn up this ground." ) );
@@ -1422,7 +1422,7 @@ int iuse::jackhammer( player* p, item* it, bool, const tripoint_bub_ms& pos )
 
     p->assign_activity( std::make_unique<player_activity>(
                             std::make_unique <
-                            jackhammer_activity_actor > ( g->m.bub_to_abs( pnt ), safe_reference<item>( *it ) ) ) );
+                            jackhammer_activity_actor > ( bub_to_abs( pnt ), safe_reference<item>( *it ) ) ) );
     p->add_msg_if_player(
         _( "You start drilling into the %1$s with your %2$s." ), g->m.tername( pnt ), it->tname() );
 
@@ -1458,7 +1458,7 @@ int iuse::pick_lock( player* p, item* it, bool, const tripoint_bub_ms& pos )
     }
 
     you.assign_activity( std::make_unique<player_activity>(
-                             lockpick_activity_actor::use_item( duration, *it, g->m.bub_to_abs( *target ) ) ) );
+                             lockpick_activity_actor::use_item( duration, *it, bub_to_abs( *target ) ) ) );
     return it->type->charges_to_use();
 }
 
@@ -1506,7 +1506,7 @@ int iuse::pickaxe( player* p, item* it, bool, const tripoint_bub_ms& pos )
     moves = moves * ( 10 - helpers.size() ) / 10;
 
     p->assign_activity( std::make_unique<player_activity>(
-                            std::make_unique<pickaxe_activity_actor>( g->m.bub_to_abs( pnt ), safe_reference<item>( *it ) ) ) );
+                            std::make_unique<pickaxe_activity_actor>( bub_to_abs( pnt ), safe_reference<item>( *it ) ) ) );
     p->add_msg_if_player( _( "You strike the %1$s with your %2$s." ), g->m.tername( pnt ),
                           it->tname() );
     return 0; // handled when the activity finishes

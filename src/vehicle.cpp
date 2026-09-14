@@ -77,6 +77,7 @@
 #include "vehicle_functions.h"
 #include "weather.h"
 #include "ui.h"
+
 /*
  * Speed up all those if ( blarg == "structure" ) statements that are used everywhere;
  *   assemble "structure" once here instead of repeatedly later.
@@ -896,7 +897,7 @@ void vehicle::autopilot_patrol()
             autodrive_local_target = tripoint_abs_ms::zero();
             return;
         }
-        if( !g->m.inbounds( g->m.abs_to_bub( autodrive_local_target ) ) ) {
+        if( !g->m.inbounds( abs_to_map_local( g->m, autodrive_local_target ) ) ) {
             autodrive_local_target = tripoint_abs_ms::zero();
             is_patrolling = false;
             return;
@@ -954,8 +955,8 @@ std::set<point_abs_ms> vehicle::immediate_path( units::angle rotate )
     collision_vector.init( adjusted_angle );
     auto fl_bub = bub_ms_location() + coord_translate( front_left );
     auto fr_bub = bub_ms_location() + coord_translate( front_right );
-    std::vector<point_abs_ms> front_row = line_to( g->m.bub_to_abs( fl_bub ).xy(),
-                                          g->m.bub_to_abs( fr_bub ).xy() );
+    std::vector<point_abs_ms> front_row = line_to( bub_to_abs( fl_bub ).xy(),
+                                          bub_to_abs( fr_bub ).xy() );
     for( point_abs_ms elem : front_row ) {
         for( int i = 0; i < distance_to_check; ++i ) {
             collision_vector.advance( i );
@@ -1004,7 +1005,7 @@ void vehicle::drive_to_local_target( const tripoint_abs_ms &target, bool follow_
     std::set<point_abs_ms> points_to_check = immediate_path( angle );
     bool stop = false;
     for( auto pt_elem : points_to_check ) {
-        auto elem = g->m.abs_to_bub( pt_elem );
+        auto elem = abs_to_bub( pt_elem );
         if( stop ) {
             break;
         }
@@ -1071,11 +1072,11 @@ void vehicle::drive_to_local_target( const tripoint_abs_ms &target, bool follow_
     }
     if( follow_protocol ) {
         if( ( ( turn_x > 0 || turn_x < 0 ) && velocity > safe_player_follow_speed ) ||
-            rl_dist( vehpos, g->m.bub_to_abs( g->u.bub_pos() ) ) < 7 + ( ( mount_max.y() * 3 ) + 4 ) ) {
+            rl_dist( vehpos, g->u.abs_pos() ) < 7 + ( ( mount_max.y() * 3 ) + 4 ) ) {
             accel_y = 1;
         }
         if( ( velocity < std::min( safe_velocity(), safe_player_follow_speed ) && turn_x == 0 &&
-              rl_dist( vehpos, g->m.bub_to_abs( g->u.bub_pos() ) ) > 8 + ( ( mount_max.y() * 3 ) + 4 ) ) ||
+              rl_dist( vehpos, g->u.abs_pos() ) > 8 + ( ( mount_max.y() * 3 ) + 4 ) ) ||
             velocity < 45 ) {
             accel_y = -1;
         }
@@ -1264,10 +1265,12 @@ for( const vpart_reference &vp : get_all_parts() ) {
  * @param force Skip check of whether we can mount the part here.
  * @return false if the part could not be installed, true otherwise.
  */
+
 /**
  * Mark a part as removed from the vehicle.
  * @return bool true if the vehicle's 0,0 point shifted.
  */
+
 // split the current vehicle into up to 3 new vehicles that do not connect to each other
 // Split a vehicle into an old vehicle and one or more new vehicles by moving vehicle_parts
 // from one the old vehicle to the new vehicles.
@@ -1280,10 +1283,12 @@ for( const vpart_reference &vp : get_all_parts() ) {
 // @param new_mounts vector of vector of mount points. must have one vector for every vehicle*
 // in new_vehicles, and forces the part indices in new_vehs to be mounted on the new vehicle
 // at those mount points
+
 item &vehicle::part_base( int p )
 {
     return *parts[ p ].base;
 }
+
 
 
 void vehicle::update_overmap( const tripoint_abs_sm &prev_sm )
@@ -1790,6 +1795,7 @@ void vehicle::consume_fuel( int load, const int t_seconds, bool skip_electric )
 }
 
 
+
 vehicle *vehicle::find_vehicle( const tripoint_abs_ms &where )
 {
     return find_vehicle( where, MAPBUFFER_REGISTRY.get( get_map().get_bound_dimension() ) );
@@ -1798,7 +1804,7 @@ vehicle *vehicle::find_vehicle( const tripoint_abs_ms &where )
 vehicle *vehicle::find_vehicle( const tripoint_abs_ms &where, mapbuffer &mbuf )
 {
     // Is it in the reality bubble?
-    auto veh_local = g->m.abs_to_bub( where );
+    auto veh_local = abs_to_bub( where );
     if( const optional_vpart_position vp = g->m.veh_at( veh_local ) ) {
         return &vp->vehicle();
     }
@@ -2241,6 +2247,7 @@ void vehicle::slow_leak()
 // total volume of all the things
 
 
+
 bool vehicle::is_foldable() const
 {
 for( const vpart_reference &vp : get_all_parts() ) {
@@ -2282,7 +2289,7 @@ std::set<tripoint_abs_ms> &vehicle::get_points( const bool force_refresh )
         occupied_cache_time = calendar::turn;
         occupied_points.clear();
         for( const auto &p : parts ) {
-            occupied_points.insert( g->m.bub_to_abs( bub_part_location( p ) ) );
+            occupied_points.insert( abs_part_location( p ) );
         }
     }
 
@@ -2352,7 +2359,7 @@ static bool is_sm_tile_outside( const tripoint_abs_ms &pos )
         return false;
     }
 
-    return m.is_outside( m.abs_to_bub( pos ) );
+    return m.is_outside( abs_to_bub( pos ) );
 }
 
 void vehicle::update_time( const time_point &update_to )
@@ -2450,7 +2457,7 @@ void vehicle::update_time( const time_point &update_to )
         const auto &pt = parts[idx];
 
         // we need an unbroken funnel mounted on the exterior of the vehicle
-        if( pt.is_unavailable() || !is_sm_tile_outside( g->m.bub_to_abs( bub_part_location( pt ) ) ) ) {
+        if( pt.is_unavailable() || !is_sm_tile_outside( abs_part_location( pt ) ) ) {
             continue;
         }
 
@@ -2488,7 +2495,7 @@ void vehicle::update_time( const time_point &update_to )
                 continue;
             }
 
-            if( !is_sm_tile_outside( g->m.bub_to_abs( bub_part_location( part ) ) ) ) {
+            if( !is_sm_tile_outside( abs_part_location( part ) ) ) {
                 continue;
             }
 
@@ -2671,8 +2678,9 @@ std::set<int> vehicle::advance_precalc_mounts( const tripoint_abs_ms &src )
 {
     map &here = get_map();
     std::set<int> smzs;
+    const auto src_local = abs_to_map_local( here, src );
     for( vehicle_part &prt : parts ) {
-        here.clear_vehicle_point_from_cache( this, here.abs_to_bub( src ) +
+        here.clear_vehicle_point_from_cache( this, src_local +
                                              tripoint_rel_ms( prt.precalc[0].x(), prt.precalc[0].y(),
                                                      prt.mount.z() + prt.z_terrain[0] ) );
         prt.precalc[0] = prt.precalc[1];
@@ -2706,7 +2714,7 @@ bool vehicle::refresh_zones()
                 // By continuing here and not adding to new_zones, we effectively remove it
                 continue;
             }
-            auto zone_pos = g->m.bub_to_abs( bub_part_location( part_idx ) );
+            auto zone_pos = abs_part_location( part_idx );
             //Set the position of the zone to that part
             zone.set_position( std::pair<tripoint_abs_ms, tripoint_abs_ms>( zone_pos, zone_pos ), false );
             new_zones.emplace( z.first, zone );

@@ -409,6 +409,7 @@ input_context game::get_player_input( std::string& action )
 }
 
 // Establish or release a grab on a vehicle
+
 // Perform a reach attach using wielded weapon
 namespace
 {
@@ -2984,7 +2985,7 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
             if( !dir.empty() && actually_moved ) { coop_client_->queue_action( std::string( dir ) ); }
             // D4: haul relay — items dragged to the new tile need DROP + ITEM_REMOVE_ALL on host.
             if( u.is_hauling() && actually_moved ) {
-                const auto new_abs = m.bub_to_abs( u.bub_pos() );
+                const auto new_abs = bub_to_abs( u.bub_pos() );
                 for( const auto& it : m.i_at( u.bub_pos() ) ) {
                     std::ostringstream drop_ctx;
                     JsonOut jd( drop_ctx );
@@ -2997,7 +2998,7 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
                     jd.end_object();
                     coop_client_->queue_action( "DROP", drop_ctx.str() );
                 }
-                const auto old_abs = m.bub_to_abs( coop_pos_before_ );
+                const auto old_abs = bub_to_abs( coop_pos_before_ );
                 std::ostringstream rm_ctx;
                 JsonOut jr( rm_ctx );
                 jr.start_object();

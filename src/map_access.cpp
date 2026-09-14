@@ -295,7 +295,7 @@ void map::furn_set(
     if( old_t.active ) {
         current_submap->active_furniture.erase( point_sm_ms( l ) );
         // TODO: Only for g->m? Observer pattern?
-        get_distribution_grid_tracker().on_changed( bub_to_abs( p ) );
+        get_distribution_grid_tracker().on_changed( map_local_to_abs( *this, p ) );
     }
     if( new_t.active || new_active ) {
         cata::poly_serialized<active_tile_data> atd;
@@ -306,10 +306,10 @@ void map::furn_set(
             atd->set_last_updated( calendar::turn );
         }
         current_submap->active_furniture[point_sm_ms( l )] = atd;
-        get_distribution_grid_tracker().on_changed( bub_to_abs( p ) );
+        get_distribution_grid_tracker().on_changed( map_local_to_abs( *this, p ) );
     }
 
-    if( old_t.fluid_grid || new_t.fluid_grid ) { fluid_grid::on_structure_changed( bub_to_abs( p ) ); }
+    if( old_t.fluid_grid || new_t.fluid_grid ) { fluid_grid::on_structure_changed( map_local_to_abs( *this, p ) ); }
 }
 
 bool map::can_move_furniture( const tripoint_bub_ms& pos, player* p )
@@ -376,7 +376,7 @@ uint8_t map::get_known_connections(
     if( !ch.inbounds( p.xy() ) ) { return 0; }
     uint8_t val = 0;
     std::function<bool( const tripoint_bub_ms & )> is_memorized = [&]( const tripoint_bub_ms & q ) {
-        return !g->u.get_memorized_tile( bub_to_abs( q ) ).tile.empty();
+        return !g->u.get_memorized_tile( map_local_to_abs( *this, q ) ).tile.empty();
     };
 
     const bool overridden = override.contains( p );
@@ -416,7 +416,7 @@ uint8_t map::get_known_connections_f(
     uint8_t val = 0;
     avatar& player_character = get_avatar();
     std::function<bool( const tripoint_bub_ms & )> is_memorized = [&]( const tripoint_bub_ms & q ) {
-        return !player_character.get_memorized_tile( bub_to_abs( q ) ).tile.empty();
+        return !player_character.get_memorized_tile( map_local_to_abs( *this, q ) ).tile.empty();
     };
 
     const bool overridden = override.contains( p );
@@ -519,7 +519,7 @@ bool map::ter_set( const tripoint_bub_ms& p, const ter_id& new_terrain )
         set_suspension_cache_dirty( p.z() );
         if( new_t.has_flag( TFLAG_SUSPENDED ) ) {
             level_cache& ch = get_cache( p.z() );
-            ch.suspension_cache.emplace_back( bub_to_abs( p ).xy() );
+            ch.suspension_cache.emplace_back( map_local_to_abs( *this, p ).xy() );
         }
     }
 

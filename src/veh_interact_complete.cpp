@@ -99,7 +99,7 @@ void veh_interact::complete_vehicle( Character& who )
         // player/NPCs activity. check the vehicle points that were stored at beginning of activity.
         if( !who.activity->coord_set.empty() ) {
             for( const auto pt : who.activity->coord_set ) {
-                vp = here.veh_at( here.abs_to_bub( pt ) );
+                vp = here.veh_at( abs_to_bub( pt ) );
                 if( vp ) { break; }
             }
         }

@@ -238,7 +238,7 @@ return std::max( max_batches, 0.0 );
 
 auto is_outdoors_at( const tripoint_abs_ms &p ) -> bool
 {
-    return get_map().is_outside( get_map().abs_to_bub( p ) );
+    return get_map().is_outside( abs_to_bub( p ) );
 }
 
 auto rain_charges_for( double collector_area_m2, const weather_sum &weather ) -> int
