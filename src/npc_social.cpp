@@ -76,8 +76,6 @@
 #include "tileray.h"
 #include "trait_group.h"
 #include "translations.h"
-#include "tts_synthesizer.h"
-#include "tts_voice_registry.h"
 #include "units.h"
 #include "value_ptr.h"
 #include "veh_type.h"

@@ -182,6 +182,12 @@ bool tts_piper_synthesizer::synthesize_to_wav( const std::string &bin, const std
                             reinterpret_cast<void *>( const_cast<const char **>( args ) ) );
     SDL_SetNumberProperty( props, SDL_PROP_PROCESS_CREATE_STDIN_NUMBER,
                            SDL_PROCESS_STDIO_APP );
+    // SDL_ReadProcess() requires stdout to be captured as a pipe (STDIO_APP);
+    // the default (STDIO_INHERITED) leaves it un-capturable, so SDL_ReadProcess()
+    // fails immediately without waiting for piper to actually finish writing the
+    // WAV -- which looked like a spurious "exit -1" on every call.
+    SDL_SetNumberProperty( props, SDL_PROP_PROCESS_CREATE_STDOUT_NUMBER,
+                           SDL_PROCESS_STDIO_APP );
     SDL_SetBooleanProperty( props, SDL_PROP_PROCESS_CREATE_STDERR_TO_STDOUT_BOOLEAN, true );
 
     SDL_Process *proc = SDL_CreateProcessWithProperties( props );

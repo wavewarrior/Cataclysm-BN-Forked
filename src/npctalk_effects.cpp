@@ -86,8 +86,6 @@
 #include "vehicle_part.h"
 #include "vpart_position.h"
 #include "vpart_range.h"
-#include "tts_synthesizer.h"
-#include "tts_voice_registry.h"
 
 
 static const efftype_id effect_pacified( "pacified" );

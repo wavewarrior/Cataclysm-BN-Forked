@@ -93,6 +93,22 @@ bool wait_for_file( const std::filesystem::path &p, int timeout_ms = 10000 )
     return std::filesystem::exists( p );
 }
 
+/// Assert a file does NOT appear within a short window -- used to prove a
+/// second identical synthesize() call was served from cache (no subprocess
+/// re-spawned), rather than merely never having spawned one at all.
+bool file_stays_absent( const std::filesystem::path &p, int window_ms = 500 )
+{
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::milliseconds( window_ms );
+    while( std::chrono::steady_clock::now() < deadline ) {
+        if( std::filesystem::exists( p ) ) {
+            return false;
+        }
+        std::this_thread::sleep_for( std::chrono::milliseconds( 50 ) );
+    }
+    return !std::filesystem::exists( p );
+}
+
 } // namespace
 
 // [.]: spawns a real subprocess (POSIX sh script) and polls/sleeps — excluded
@@ -142,6 +158,18 @@ TEST_CASE( "tts_piper_subprocess_pipeline", "[tts][.]" )
     // The fake piper touches the sentinel iff the subprocess was spawned with
     // the right args and exited 0 with a non-empty WAV.
     REQUIRE( wait_for_file( sentinel ) );
+
+    // Regression guard: a second identical call must be served from cache
+    // (no new subprocess spawned, sentinel not re-touched). This only holds
+    // if the first call was judged a *success* internally -- catching the
+    // class of bug where the subprocess actually ran and wrote a valid WAV,
+    // but SDL_ReadProcess() failed to capture its exit code (e.g. stdout
+    // wasn't configured as a capturable pipe), making the worker treat a
+    // real success as a failure, delete the WAV, and never populate the
+    // cache.
+    std::filesystem::remove( sentinel );
+    synth.synthesize( "hello world", "testvoice" );
+    CHECK( file_stays_absent( sentinel ) );
 
     synth.shutdown();
 }
