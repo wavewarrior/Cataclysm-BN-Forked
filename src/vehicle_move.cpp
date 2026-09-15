@@ -388,10 +388,13 @@ void vehicle::stop( bool update_cache )
     }
 }
 
-bool vehicle::collision( std::vector<veh_collision> &colls,
-                         const tripoint_rel_ms &dp,
-                         bool just_detect, bool bash_floor )
+auto vehicle::collision( const vehicle_collision_options &options ) -> bool
 {
+    auto &colls = options.colls;
+    const auto &dp = options.dp;
+    auto just_detect = options.just_detect;
+    const auto bash_floor = options.bash_floor;
+    const auto *ignored_critter = options.ignored_critter;
 
     /*
      * Big TODO:
@@ -409,14 +412,32 @@ bool vehicle::collision( std::vector<veh_collision> &colls,
 
     if( dp.z() != 0 && ( dp.x() != 0 || dp.y() != 0 ) ) {
         // Split into horizontal + vertical
-        return collision( colls, tripoint_rel_ms( dp.xy(), 0 ), just_detect, bash_floor ) ||
-               collision( colls, tripoint_rel_ms( 0,    0,    dp.z() ), just_detect, bash_floor );
+        return collision( vehicle_collision_options{
+            .colls = colls,
+            .dp = tripoint_rel_ms( dp.xy(), 0 ),
+            .just_detect = just_detect,
+            .bash_floor = bash_floor,
+            .ignored_critter = ignored_critter,
+        } ) ||
+        collision( vehicle_collision_options{
+            .colls = colls,
+            .dp = tripoint_rel_ms( 0, 0, dp.z() ),
+            .just_detect = just_detect,
+            .bash_floor = bash_floor,
+            .ignored_critter = ignored_critter,
+        } );
     }
 
     if( dp.z() == -1 && !bash_floor ) {
         // First check current level, then the one below if current had no collisions
         // Bash floors on the current one, but not on the one below.
-        if( collision( colls, tripoint_rel_ms::zero(), just_detect, true ) ) {
+        if( collision( vehicle_collision_options{
+        .colls = colls,
+        .dp = tripoint_rel_ms::zero(),
+            .just_detect = just_detect,
+            .bash_floor = true,
+            .ignored_critter = ignored_critter,
+        } ) ) {
             return true;
         }
     }
@@ -451,6 +472,7 @@ bool vehicle::collision( std::vector<veh_collision> &colls,
             .just_detect = just_detect,
             .bash_floor = bash_floor,
             .vertical = vertical,
+            .ignored_critter = ignored_critter,
         } );
         if( coll.type == veh_coll_nothing ) {
             continue;
@@ -565,6 +587,9 @@ auto vehicle::part_collision( const vehicle_part_collision_options &options ) ->
     Character &player_character = get_player_character();
     const bool pl_ctrl = player_in_control( player_character );
     Creature *critter = g->critter_at( p, true );
+    if( critter == options.ignored_critter ) {
+        critter = nullptr;
+    }
     player *ph = dynamic_cast<player *>( critter );
 
     Creature *driver = pl_ctrl ? &player_character : nullptr;
@@ -1235,8 +1260,7 @@ bool vehicle::check_heli_descend( Character &who )
         if( part_info( idx ).has_flag( VPFLAG_NOCOLLIDEBELOW ) ) {
             continue;
         }
-        if( here.has_zlevels() && ( pt.z() < -OVERMAP_DEPTH ||
-                                    !here.has_flag_ter_or_furn( TFLAG_NO_FLOOR, pt ) ) ) {
+        if( pt.z() < -OVERMAP_DEPTH || !here.has_flag_ter_or_furn( TFLAG_NO_FLOOR, pt ) ) {
             who.add_msg_if_player( _( "You are already landed!" ) );
             return false;
         }
@@ -1839,7 +1863,6 @@ void vehicle::check_falling_or_floating()
     }
 
     map &here = get_map();
-    is_falling = here.has_zlevels();
 
     if( is_flying && is_aircraft() ) {
         is_falling = false;

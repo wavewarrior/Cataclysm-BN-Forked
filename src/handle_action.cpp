@@ -408,7 +408,9 @@ input_context game::get_player_input( std::string& action )
     return ctxt;
 }
 
+
 // Establish or release a grab on a vehicle
+
 
 // Perform a reach attach using wielded weapon
 namespace

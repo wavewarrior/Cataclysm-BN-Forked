@@ -443,7 +443,7 @@ message(STATUS "Searching for SDL3 library --")
             )
             FetchContent_MakeAvailable(SDL3)
             if (DYNAMIC_LINKING)
-                install(TARGETS SDL3-shared DESTINATION ${CMAKE_LIBRARY_OUTPUT_DIRECTORY} )
+                install(TARGETS SDL3-shared DESTINATION lib)
             endif ()
         else()
             message("Using system SDL3")
@@ -556,8 +556,7 @@ message(STATUS "Searching for SDL3 library --")
         get_filename_component(SHADER_NAME ${HLSL_SRC} NAME_WE)
         if (WIN32)
             list(APPEND CATA_PRECOMPILED_SHADER_OUTPUTS
-                 "${CMAKE_SOURCE_DIR}/data/shaders/${SHADER_NAME}.dxil"
-                 "${CMAKE_SOURCE_DIR}/data/shaders/${SHADER_NAME}.dxbc")
+                 "${CMAKE_SOURCE_DIR}/data/shaders/${SHADER_NAME}.dxil")
         elseif (APPLE)
             list(APPEND CATA_PRECOMPILED_SHADER_OUTPUTS
                  "${CMAKE_SOURCE_DIR}/data/shaders/${SHADER_NAME}.msl")
@@ -606,7 +605,6 @@ message(STATUS "Searching for SDL3 library --")
 
             if (WIN32)
                 set(DXIL_OUT "${CMAKE_SOURCE_DIR}/data/shaders/${SHADER_NAME}.dxil")
-                set(DXBC_OUT "${CMAKE_SOURCE_DIR}/data/shaders/${SHADER_NAME}.dxbc")
                 add_custom_command(
                     OUTPUT "${DXIL_OUT}"
                     COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_SOURCE_DIR}/data/shaders"
@@ -615,14 +613,6 @@ message(STATUS "Searching for SDL3 library --")
                     COMMENT "Compiling ${SHADER_NAME}.hlsl -> DXIL"
                     VERBATIM)
                 list(APPEND CATA_SHADER_OUTPUTS "${DXIL_OUT}")
-                add_custom_command(
-                    OUTPUT "${DXBC_OUT}"
-                    COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_SOURCE_DIR}/data/shaders"
-                    COMMAND "${SHADERCROSS_EXE}" "${HLSL_SRC}" -s hlsl -d dxbc -t ${STAGE} -o "${DXBC_OUT}"
-                    DEPENDS "${HLSL_SRC}" ${SHADERCROSS_TARGET}
-                    COMMENT "Compiling ${SHADER_NAME}.hlsl -> DXBC"
-                    VERBATIM)
-                list(APPEND CATA_SHADER_OUTPUTS "${DXBC_OUT}")
             endif ()
         endforeach ()
 
@@ -630,7 +620,7 @@ message(STATUS "Searching for SDL3 library --")
         if (SHADERCROSS_TARGET)
             add_dependencies(cata_shaders ${SHADERCROSS_TARGET})
         endif ()
-    elseif (TILES AND CATA_PRECOMPILED_SHADER_OUTPUTS)
+    elseif (CATA_PRECOMPILED_SHADER_OUTPUTS)
         set(CATA_MISSING_PRECOMPILED_SHADERS "")
         foreach (SHADER_OUT ${CATA_PRECOMPILED_SHADER_OUTPUTS})
             if (NOT EXISTS "${SHADER_OUT}")
@@ -683,7 +673,7 @@ endif()
             )
             FetchContent_MakeAvailable(SDL3_TTF)
             if (DYNAMIC_LINKING)
-                install(TARGETS SDL3_ttf-shared DESTINATION ${CMAKE_LIBRARY_OUTPUT_DIRECTORY} )
+                install(TARGETS SDL3_ttf-shared DESTINATION lib)
             endif ()
         else()
             message("Using system SDL3_ttf")
@@ -716,7 +706,7 @@ endif()
             )
             FetchContent_MakeAvailable(SDL3_IMAGE)
             if (DYNAMIC_LINKING)
-                install(TARGETS SDL3_image-shared DESTINATION ${CMAKE_LIBRARY_OUTPUT_DIRECTORY} )
+                install(TARGETS SDL3_image-shared DESTINATION lib)
             endif ()
         else()
             message("Using system SDL3_image")
@@ -749,7 +739,7 @@ if (SOUND)
             )
             FetchContent_MakeAvailable(SDL3_MIXER )
             if (DYNAMIC_LINKING)
-                install(TARGETS SDL3_mixer-shared DESTINATION ${CMAKE_LIBRARY_OUTPUT_DIRECTORY} )
+                install(TARGETS SDL3_mixer-shared DESTINATION lib)
             endif ()
         else()
             message("Using system SDL3_mixer")
@@ -1235,6 +1225,15 @@ if (APPLE AND RELEASE)
         endforeach()
     endif()
 
+    if (DYNAMIC_LINKING)
+        find_program(CATA_OSX_DYLIBBUNDLER dylibbundler REQUIRED)
+        set(CATA_OSX_BUNDLE_RUNTIME_COMMANDS
+            COMMAND "${CATA_OSX_DYLIBBUNDLER}" -od -b
+                -x "${CATA_OSX_RESOURCES_DIR}/$<TARGET_FILE_NAME:${CATA_OSX_GAME_TARGET}>"
+                -d "${CATA_OSX_RESOURCES_DIR}/lib"
+                -p "@executable_path/lib/")
+    endif()
+
     add_custom_target(osx-app
         COMMAND ${CMAKE_COMMAND} -E rm -rf "${CATA_OSX_APP_DIR}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CATA_OSX_CONTENTS_DIR}/MacOS"
@@ -1261,6 +1260,11 @@ if (APPLE AND RELEASE)
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
         DEPENDS ${CATA_OSX_GAME_TARGET} translations)
 
+    add_custom_target(osx-bundle-runtime
+        ${CATA_OSX_BUNDLE_RUNTIME_COMMANDS}
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        DEPENDS osx-app)
+
     if (GIT_VERSION)
         set(CATA_OSX_DMG_VERSION "${GIT_VERSION}")
     else()
@@ -1270,7 +1274,7 @@ if (APPLE AND RELEASE)
         COMMAND plutil -convert binary1 "${CATA_OSX_APP_DIR}/Contents/Info.plist"
         COMMAND dmgbuild -s build-data/osx/dmgsettings.py "Cataclysm BN" "CataclysmBN-${CATA_OSX_DMG_VERSION}.dmg"
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-        DEPENDS osx-app)
+        DEPENDS osx-bundle-runtime)
 endif()
 
 configure_file(

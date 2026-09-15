@@ -192,8 +192,8 @@ auto game::has_activity_skip_active_fire() -> bool
         return false;
     };
 
-    const auto zmin = m.has_zlevels() ? -OVERMAP_DEPTH : m.get_abs_sub().z();
-    const auto zmax = m.has_zlevels() ? OVERMAP_HEIGHT : m.get_abs_sub().z();
+    const auto zmin = -OVERMAP_DEPTH;
+    const auto zmax = OVERMAP_HEIGHT;
     const auto axis = std::views::iota( 0, m.getmapsize() );
     for( const auto x : axis ) {
         for( const auto y : axis ) {
@@ -435,8 +435,8 @@ auto game::run_activity_skip_batch_turns( const int skipped_turns ) -> void
 
     {
         ZoneScopedN( "activity_fixed_window_batch_submaps" );
-        const auto zmin = m.has_zlevels() ? -OVERMAP_DEPTH : m.get_abs_sub().z();
-        const auto zmax = m.has_zlevels() ? OVERMAP_HEIGHT : m.get_abs_sub().z();
+        const auto zmin = -OVERMAP_DEPTH;
+        const auto zmax = OVERMAP_HEIGHT;
         const auto axis = std::views::iota( 0, m.getmapsize() );
         for( const auto x : axis ) {
             for( const auto y : axis ) {

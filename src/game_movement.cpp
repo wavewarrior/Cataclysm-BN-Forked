@@ -690,7 +690,7 @@ auto game::place_player( const tripoint_bub_ms &dest_loc, const bool keep_grab )
     }
     // Move the player
     // Start with z-level, to make it less likely that old functions (2D ones) freak out
-    if( m.has_zlevels() && dest_loc.z() != get_levz() ) {
+    if( dest_loc.z() != get_levz() ) {
         vertical_shift( dest_loc.z(), keep_grab );
     }
 
@@ -1635,7 +1635,7 @@ void game::vertical_move( int movez, bool force, bool peeking )
     const bool can_noclip = character_funcs::can_noclip( get_avatar() );
     int move_cost = 100;
     tripoint_bub_ms stairs( u.bub_pos().x(), u.bub_pos().y(), u.bub_pos().z() + movez );
-    if( m.has_zlevels() && !force && movez == 1 && !m.has_flag( "GOES_UP", u.bub_pos() ) &&
+    if( !force && movez == 1 && !m.has_flag( "GOES_UP", u.bub_pos() ) &&
         !u.is_underwater() && !can_fly ) {
 
         // Climbing
@@ -1792,8 +1792,7 @@ void game::vertical_move( int movez, bool force, bool peeking )
         return;
     }
 
-    // Because get_levz takes z-value from the map, it will change when vertical_shift (m.has_zlevels() == true)
-    // is called or when the map is loaded on new z-level (== false).
+    // Because get_levz takes z-value from the map, it changes when vertical_shift is called.
     // This caches the z-level we start the movement on (current) and the level we're want to end.
     const int z_before = get_levz();
     const int z_after = get_levz() + movez;
@@ -1804,55 +1803,6 @@ void game::vertical_move( int movez, bool force, bool peeking )
 
     if( !u.move_effects( false ) ) {
         return;
-    }
-
-    // Check if there are monsters are using the stairs.
-    bool slippedpast = false;
-    if( !m.has_zlevels() && !coming_to_stairs.empty() && !force ) {
-        // TODO: Allow travel if zombie couldn't reach stairs, but spawn him when we go up.
-        add_msg( m_warning, _( "You try to use the stairs.  Suddenly you are blocked by a %s!" ),
-                 coming_to_stairs[0]->name() );
-        // Roll.
-        ///\EFFECT_DEX increases chance of moving past monsters on stairs
-
-        ///\EFFECT_DODGE increases chance of moving past monsters on stairs
-        int dexroll = dice( 6, u.dex_cur + u.get_skill_level( skill_dodge ) * 2 );
-        ///\EFFECT_STR increases chance of moving past monsters on stairs
-
-        ///\EFFECT_MELEE increases chance of moving past monsters on stairs
-        int strroll = dice( 3, u.str_cur + u.get_skill_level( skill_melee ) * 1.5 );
-        if( coming_to_stairs.size() > 4 ) {
-            add_msg( _( "The are a lot of them on the %s!" ), m.tername( u.bub_pos() ) );
-            dexroll /= 4;
-            strroll /= 2;
-        } else if( coming_to_stairs.size() > 1 ) {
-            add_msg( m_warning, _( "There's something else behind it!" ) );
-            dexroll /= 2;
-        }
-
-        if( dexroll < 14 || strroll < 12 ) {
-            update_stair_monsters();
-            u.moves -= 100;
-            return;
-        }
-
-        add_msg( _( "You manage to slip past!" ) );
-        slippedpast = true;
-        u.moves -= 100;
-    }
-
-    // Shift the map up or down
-
-    std::unique_ptr<map> tmp_map_ptr;
-    if( !m.has_zlevels() ) {
-        tmp_map_ptr = std::make_unique<map>();
-    }
-
-    map &maybetmp = m.has_zlevels() ? m : *( tmp_map_ptr );
-    if( m.has_zlevels() ) {
-        // We no longer need to shift the map here! What joy
-    } else {
-        maybetmp.load( tripoint_abs_sm( get_levx(), get_levy(), z_after ), false );
     }
 
     bool swimming = false;
@@ -1959,7 +1909,7 @@ void game::vertical_move( int movez, bool force, bool peeking )
     const bool special_move = climbing || swimming || can_fly;
 
     if( !force && !special_move ) {
-        const std::optional<tripoint_bub_ms> pnt = find_or_make_stairs( maybetmp, z_after, rope_ladder,
+        const std::optional<tripoint_bub_ms> pnt = find_or_make_stairs( m, z_after, rope_ladder,
             peeking );
         if( !pnt ) {
             return;
@@ -1970,54 +1920,10 @@ void game::vertical_move( int movez, bool force, bool peeking )
     if( !force ) {
         monstairz = z_before;
     }
-    // Save all monsters that can reach the stairs, remove them from the tracker,
-    // then despawn the remaining monsters. Because it's a vertical shift, all
-    // monsters are out of the bounds of the map and will despawn.
-    shared_ptr_fast<monster> stored_mount;
-    if( u.is_mounted() && !m.has_zlevels() ) {
-        // Store a *copy* of the mount, so we can remove the original monster instance
-        // from the tracker before the map shifts.
-        // Map shifting would otherwise just despawn the mount and would later respawn it.
-        stored_mount = make_shared_fast<monster>( *u.mounted_creature );
-        critter_tracker->remove( *u.mounted_creature );
-    }
-    if( !m.has_zlevels() ) {
-        const auto to = u.bub_pos();
-        for( monster &critter : all_monsters() ) {
-            // if its a ladder instead of stairs - most zombies can't climb that.
-            // unless that have a special flag to allow them to do so.
-            if( ( m.has_flag( "DIFFICULT_Z", u.bub_pos() ) && !critter.climbs() ) ||
-                critter.has_effect( effect_ridden ) ||
-                critter.has_effect( effect_tied ) ) {
-                continue;
-            }
-            int turns = critter.turns_to_reach( to.xy() );
-            if( turns < 10 && coming_to_stairs.size() < 8 && critter.will_reach( to.xy() )
-                && !slippedpast ) {
-                critter.staircount = 10 + turns;
-                critter.on_unload();
-                coming_to_stairs.push_back( make_shared_fast<monster>( critter ) );
-                remove_zombie( critter );
-            }
-        }
-        auto mons = critter_tracker->find( g->u.bub_pos() );
-        if( mons != nullptr ) {
-            critter_tracker->remove( *mons );
-        }
-        shift_monsters( tripoint_rel_sm( 0, 0, movez ) );
-    }
 
-    std::vector<shared_ptr_fast<npc>> npcs_to_bring;
     std::vector<monster *> monsters_following;
-    if( !m.has_zlevels() && std::abs( movez ) == 1 ) {
-        std::copy_if( active_npc.begin(), active_npc.end(), back_inserter( npcs_to_bring ),
-        [this]( const shared_ptr_fast<npc> &np ) {
-            return np->is_walking_with() && !np->is_mounted() && !np->in_sleep_state() &&
-                   rl_dist( np->bub_pos(), u.bub_pos() ) < 2;
-        } );
-    }
 
-    if( m.has_zlevels() && std::abs( movez ) == 1 ) {
+    if( std::abs( movez ) == 1 ) {
         bool ladder = m.has_flag( "DIFFICULT_Z", u.bub_pos() );
         for( monster &critter : all_monsters() ) {
             if( ladder && !critter.climbs() ) {
@@ -2050,11 +1956,6 @@ void game::vertical_move( int movez, bool force, bool peeking )
             if( g->slip_down() ) {
                 return;
             }
-        }
-    }
-    for( const auto &np : npcs_to_bring ) {
-        if( np->in_vehicle ) {
-            m.unboard_vehicle( np->bub_pos() );
         }
     }
 
@@ -2120,44 +2021,7 @@ void game::vertical_move( int movez, bool force, bool peeking )
 
     // Now that we know the player's destination position, we can move their mount as well
     if( u.is_mounted() ) {
-        if( stored_mount ) {
-            assert( !m.has_zlevels() );
-            stored_mount->spawn( g->u.bub_pos() );
-            if( critter_tracker->add( stored_mount ) ) {
-                u.mounted_creature = stored_mount;
-            }
-        } else {
-            u.mounted_creature->setpos( g->u.bub_pos() );
-        }
-    }
-
-    if( !npcs_to_bring.empty() ) {
-        // Would look nicer randomly scrambled
-        std::vector<tripoint_bub_ms> candidates = closest_points_first( u.bub_pos(), 1 );
-        candidates.erase( std::remove_if( candidates.begin(), candidates.end(),
-        [this]( const tripoint_bub_ms & c ) {
-            return !is_empty( c );
-        } ), candidates.end() );
-
-        for( const auto &np : npcs_to_bring ) {
-            const auto found = std::find_if( candidates.begin(), candidates.end(),
-            [this, np]( const tripoint_bub_ms & c ) {
-                return !np->is_dangerous_fields( m.field_at( c ) ) && m.tr_at( c ).is_benign();
-            } );
-            if( found != candidates.end() ) {
-                // TODO: De-uglify
-                np->setpos( *found );
-                np->place_on_map();
-                np->setpos( *found );
-                candidates.erase( found );
-            }
-
-            if( candidates.empty() ) {
-                break;
-            }
-        }
-
-        reload_npcs();
+        u.mounted_creature->setpos( g->u.bub_pos() );
     }
 
     // This ugly check is here because of stair teleport bullshit
@@ -2175,12 +2039,6 @@ void game::vertical_move( int movez, bool force, bool peeking )
     if( m.ter( stairs ) == t_manhole_cover ) {
         m.spawn_item( stairs + point( rng( -1, 1 ), rng( -1, 1 ) ), itype_manhole_cover );
         m.ter_set( stairs, t_manhole );
-    }
-
-    // Wouldn't work and may do strange things
-    if( u.is_hauling() && !m.has_zlevels() ) {
-        add_msg( _( "You cannot haul items here." ) );
-        u.stop_hauling();
     }
 
     if( u.is_hauling() ) {
@@ -2395,31 +2253,16 @@ auto game::vertical_shift( const int z_after, const bool keep_grab ) -> void
 
     scent.reset();
 
-    u.setpos( tripoint_bub_ms( u.bub_pos().xy(), z_after ) );
     const int z_before = get_levz();
-    if( !m.has_zlevels() ) {
-        m.clear_vehicle_cache( );
-        m.access_cache( z_before ).vehicle_list.clear();
-        m.access_cache( z_before ).zone_vehicles.clear();
-        m.access_cache( z_before ).map_memory_seen_cache.reset();
-        m.set_transparency_cache_dirty( z_before );
-        m.set_outside_cache_dirty( z_before );
-        m.load( tripoint_abs_sm( get_levx(), get_levy(), z_after ), true );
-        shift_monsters( tripoint_rel_sm( 0, 0, z_after - z_before ) );
-        reload_npcs();
-    } else {
-        // Adjust the map's z-reference so get_levz() returns the new z-level.
-        // All z-levels are loaded simultaneously in z-level builds; no map load
-        // or unload is required for vertical movement.
-        m.set_loaded_submap_z( z_after );
-        if( auto *pw = m.get_physics_world(); pw && z_before != z_after ) {
-            pw->on_zlevel_changed( m, z_before, z_after );
-        }
+    u.setpos( tripoint_bub_ms( u.bub_pos().xy(), z_after ) );
+    // All z-levels are loaded simultaneously; no map load or unload is
+    // required for vertical movement — only the physics world needs notifying.
+    if( auto *pw = m.get_physics_world(); pw && z_before != z_after ) {
+        pw->on_zlevel_changed( m, z_before, z_after );
     }
 
     m.spawn_monsters( true );
-    // this may be required after a vertical shift if z-levels are not enabled
-    // the critter is unloaded/loaded, and it needs to reconstruct its rider data after being reloaded.
+    // the critter may need to reconstruct its rider data after changing z-level
     validate_mounted_npcs();
     vertical_notes( z_before, z_after );
 }

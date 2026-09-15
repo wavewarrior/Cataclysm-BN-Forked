@@ -962,7 +962,7 @@ if( p.is_mounted() ) {
         p.add_msg_if_player( m_info, _( "You cannot do that while mounted." ) );
         return 0;
     }
-    map_stack items = get_map().i_at( p.bub_pos().xy() );
+    map_stack items = get_map().i_at( p.bub_pos() );
     std::vector<const item *> corpses;
 
 for( item * const& corpse_candidate : items ) {

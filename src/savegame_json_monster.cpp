@@ -250,6 +250,8 @@ for( auto &sa : type->special_attacks ) {
 
     data.read( "friendly", friendly );
     data.read( "training_level", training_level );
+    data.read( "pet_bond_level", pet_bond_level );
+    data.read( "bonded_character_id", bonded_character_id );
     data.read( "mission_id", mission_id );
     data.read( "no_extra_death_drops", no_extra_death_drops );
     data.read( "dead", dead );
@@ -321,7 +323,9 @@ for( auto &sa : type->special_attacks ) {
     if( !data.read( "last_updated", last_updated ) ) {
     last_updated = calendar::turn;
 }
-data.read( "dimension_id", dimension_id_ );
+    auto raw_dimension_id = std::string{};
+    data.read( "dimension_id", raw_dimension_id );
+    set_dimension( dimension_id( raw_dimension_id ) );
 data.read( "mounted_player_id", mounted_player_id );
 data.read( "path", path );
 data.read( "monster_flags", monster_flags );
@@ -360,6 +364,8 @@ auto monster::store( JsonOut &json, bool include_local_state ) const -> void
     json.member( "special_attacks", special_attacks );
     json.member( "friendly", friendly );
     json.member( "training_level", training_level );
+    json.member( "pet_bond_level", pet_bond_level );
+    json.member( "bonded_character_id", bonded_character_id );
     json.member( "fish_population", fish_population );
     json.member( "faction", faction.id().str() );
     json.member( "mission_id", mission_id );
@@ -401,8 +407,8 @@ auto monster::store( JsonOut &json, bool include_local_state ) const -> void
     json.member( "upgrades", upgrades );
     json.member( "upgrade_time", upgrade_time );
     json.member( "last_updated", last_updated );
-    if( !dimension_id_.empty() ) {
-    json.member( "dimension_id", dimension_id_ );
+    if( !dimension_id_.is_empty() ) {
+        json.member( "dimension_id", dimension_id_.str() );
     }
     json.member( "reproduces", reproduces );
     json.member( "baby_timer", baby_timer );

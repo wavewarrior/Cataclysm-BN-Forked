@@ -55,7 +55,7 @@
 #include "line.h"
 #include "locations.h"
 #include "magic.h"
-#include "magic_enchantment.h"
+#include "enchantments/enchantment.h"
 #include "map.h"
 #include "martialarts.h"
 #include "material.h"

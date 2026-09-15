@@ -49,7 +49,7 @@
 #include "legacy_pathfinding.h"
 #include "lightmap.h"
 #include "line.h"
-#include "magic_enchantment.h"
+#include "enchantments/enchantment.h"
 #include "make_static.h"
 #include "map.h"
 #include "map_iterator.h"
@@ -583,7 +583,7 @@ int Character::get_stamina_max() const
     const int baseMaxStamina = get_option<int>( player_max_stamina );
     int maxStamina = baseMaxStamina;
     maxStamina *= Character::mutation_value( max_stamina_modifier );
-    maxStamina += bonus_from_enchantments( maxStamina, enchant_vals::mod::STAMINA_CAP );
+    maxStamina += bonus_from_enchantments( maxStamina, enchantment_value_id( "STAMINA_CAP" ) );
     return std::max( baseMaxStamina / 10, maxStamina );
 }
 
@@ -671,7 +671,7 @@ void Character::update_stamina( int turns )
     float stamina_multiplier =
         1.0f + mutation_value( stamina_regen_modifier )
         + ( mutation_value( "max_stamina_modifier" ) - 1.0f )
-        + bonus_from_enchantments( 1.0, enchant_vals::mod::STAMINA_REGEN );
+        + bonus_from_enchantments( 1.0, enchantment_value_id( "STAMINA_REGEN" ) );
     // But mouth encumbrance interferes, even with mutated stamina.
     stamina_recovery +=
         stamina_multiplier * std::max( 1.0f, base_regen_rate - ( encumb( body_part_mouth ) / 5.0f ) );

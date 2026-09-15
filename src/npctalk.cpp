@@ -77,6 +77,7 @@
 #include "string_utils.h"
 #include "text_snippets.h"
 #include "translations.h"
+#include "type_id.h"
 #include "ui.h"
 #include "ui_manager.h"
 #include "units.h"
@@ -114,11 +115,6 @@ static const zone_type_id zone_type_npc_investigate_only( "NPC_INVESTIGATE_ONLY"
 static const zone_type_id zone_type_npc_no_investigate( "NPC_NO_INVESTIGATE" );
 
 static const skill_id skill_speech( "speech" );
-
-static const bionic_id bio_armor_eyes( "bio_armor_eyes" );
-static const bionic_id bio_deformity( "bio_deformity" );
-static const bionic_id bio_face_mask( "bio_face_mask" );
-static const bionic_id bio_voice( "bio_voice" );
 
 static const trait_id trait_DEBUG_MIND_CONTROL( "DEBUG_MIND_CONTROL" );
 static const trait_id trait_PROF_FOODP( "PROF_FOODP" );
@@ -1808,6 +1804,7 @@ int parse_mod( const dialogue &d, const std::string &attribute, const int factor
     modifier *= factor;
     return modifier;
 }
+
 
 int topic_category( const talk_topic &the_topic )
 {

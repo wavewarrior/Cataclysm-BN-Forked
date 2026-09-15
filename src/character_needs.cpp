@@ -50,7 +50,7 @@
 #include "legacy_pathfinding.h"
 #include "lightmap.h"
 #include "line.h"
-#include "magic_enchantment.h"
+#include "enchantments/enchantment.h"
 #include "make_static.h"
 #include "map.h"
 #include "map_iterator.h"
@@ -631,7 +631,9 @@ void Character::regen( int rate_multiplier )
 
     float rest = rest_quality();
     float heal_rate = healing_rate( rest ) * to_turns<int>( 5_minutes );
-    const float broken_regen_mod = clamp( mutation_value( "mending_modifier" ), 0.25f, 1.0f );
+    const float broken_regen_mod_pre = 0.25 + mutation_value( "mending_modifier" );
+    const float broken_regen_mod = clamp( broken_regen_mod_pre + bonus_from_enchantments( broken_regen_mod_pre,
+                                          enchantment_value_id( "MENDING_MULT" ) ), 0.0, 1.0 );
     if( heal_rate > 0.0f ) {
         const int heal = roll_remainder( rate_multiplier * heal_rate );
 
@@ -717,6 +719,8 @@ void Character::update_health( int external_modifiers )
         mod_healthy_mod( -50, -200 );
         effective_healthy_mod = 100;
     }
+    effective_healthy_mod += bonus_from_enchantments( effective_healthy_mod,
+                             enchantment_value_id( "HEALTHY_MULT" ) );
 
     // Health tends toward healthy_mod.
     // For small differences, it changes 4 points per day
@@ -963,7 +967,7 @@ needs_rates Character::calc_needs_rates() const
     static const std::string thirst_modifier( "thirst_modifier" );
     rates.thirst *=
         1.0f + mutation_value( thirst_modifier )
-        + bonus_from_enchantments( 1.0, enchant_vals::mod::THIRST );
+        + bonus_from_enchantments( 1.0, enchantment_value_id( "THIRST" ) );
     if( worn_with_flag( flag_SLOWS_THIRST ) ) { rates.thirst *= 0.7f; }
 
     static const std::string player_fatigue_rate( "PLAYER_FATIGUE_RATE" );
@@ -971,7 +975,7 @@ needs_rates Character::calc_needs_rates() const
     static const std::string fatigue_modifier( "fatigue_modifier" );
     rates.fatigue *=
         1.0f + mutation_value( fatigue_modifier )
-        + bonus_from_enchantments( 1.0, enchant_vals::mod::FATIGUE );
+        + bonus_from_enchantments( 1.0, enchantment_value_id( "FATIGUE" ) );
 
     // Note: intentionally not in metabolic rate
     if( has_recycler ) {

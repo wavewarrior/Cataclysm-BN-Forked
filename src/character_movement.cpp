@@ -49,7 +49,7 @@
 #include "legacy_pathfinding.h"
 #include "lightmap.h"
 #include "line.h"
-#include "magic_enchantment.h"
+#include "enchantments/enchantment.h"
 #include "make_static.h"
 #include "map.h"
 #include "map_iterator.h"
@@ -612,6 +612,8 @@ int Character::swim_speed() const
     ret = ( 440 * mutation_value( "movecost_swim_modifier" ) )
           + weight_carried() / ( 60_gram / mutation_value( "movecost_swim_modifier" ) )
           - 50 * get_skill_level( skill_swimming );
+    ret += bonus_from_enchantments( ret, enchantment_value_id( "SWIM_MOVE_COST" ) );
+
     /** @EFFECT_STR increases swim speed bonus from PAWS */
     if( has_trait( trait_PAWS ) ) { ret -= hand_bonus_mult * ( 20 + str_cur * 3 ); }
     /** @EFFECT_STR increases swim speed bonus from PAWS_LARGE */
@@ -770,6 +772,7 @@ int Character::run_cost( int base_cost, bool diag ) const
     if( !is_mounted() ) {
         if( movecost > 100 ) {
             movecost *= mutation_value( "movecost_obstacle_modifier" );
+            movecost += bonus_from_enchantments( movecost, enchantment_value_id( "OBSTACLE_MOVE_COST" ) );
             if( movecost < 100 ) { movecost = 100; }
         }
         if( has_trait( trait_M_IMMUNE ) && on_fungus ) {
@@ -792,7 +795,10 @@ int Character::run_cost( int base_cost, bool diag ) const
                 - static_cast<float>( get_part_hp_cur( bodypart_id( "leg_r" ) ) )
                 / static_cast<float>( get_part_hp_max( bodypart_id( "leg_r" ) ) ) );
         movecost *= mutation_value( "movecost_modifier" );
-        if( flatground ) { movecost *= mutation_value( "movecost_flatground_modifier" ); }
+        if( flatground ) {
+            movecost *= mutation_value( "movecost_flatground_modifier" );
+            movecost += bonus_from_enchantments( movecost, enchantment_value_id( "FLAT_MOVE_COST" ) );
+        }
         if( has_trait( trait_PADDED_FEET ) && !footwear_factor() ) { movecost *= .9f; }
         if( has_active_bionic( bio_jointservo ) ) {
             movecost *= ( move_mode == CMM_RUN ? 0.75f : 0.9f );
@@ -840,7 +846,7 @@ int Character::run_cost( int base_cost, bool diag ) const
             movecost += 10 * footwear_factor();
         }
 
-        movecost += bonus_from_enchantments( movecost, enchant_vals::mod::MOVE_COST );
+        movecost += bonus_from_enchantments( movecost, enchantment_value_id( "MOVE_COST" ) );
         movecost /= running_move_cost_modifier();
 
         if( movecost < 20.0 ) { movecost = 20.0; }
@@ -983,6 +989,8 @@ dex_dodge = std::max( 0.0f, dex_dodge );
 ret *= ( 100.0f - ( dex_dodge * 4.0f ) ) / 100.0f;
 
 ret *= mutation_value( "falling_damage_multiplier" );
+
+ret += bonus_from_enchantments( ret, enchantment_value_id( "FALL_DAMAGE_MULT" ) );
 
 // TODO: Bonus for Judo, mutations. Penalty for heavy weight (including mutations)
 return std::max( 0.0f, ret );

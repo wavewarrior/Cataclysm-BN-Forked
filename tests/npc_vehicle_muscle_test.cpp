@@ -28,7 +28,7 @@ static const itype_id fuel_type_muscle("muscle");
 static npc& create_test_npc() {
     const string_id<npc_template> test_guy("test_talker");
     const tripoint_bub_ms npc_pos(15, 15, 0);
-    const character_id model_id = get_map().place_npc(npc_pos.xy(), test_guy);
+    const character_id model_id = get_map().place_npc(npc_pos, test_guy);
     g->load_npcs();
 
     npc* model_npc = g->find_npc(model_id);

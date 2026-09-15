@@ -52,7 +52,7 @@
 #include "line.h"
 #include "locations.h"
 #include "magic.h"
-#include "magic_enchantment.h"
+#include "enchantments/enchantment.h"
 #include "map.h"
 #include "martialarts.h"
 #include "material.h"
@@ -207,7 +207,7 @@ bool item::craft_has_charges()
 
 
 double item::bonus_from_enchantments(
-    const Character& owner, double base, enchant_vals::mod value, bool round ) const
+    const Character& owner, double base, enchantment_value_id value, bool round ) const
 {
     double add = 0.0;
     double mul = 0.0;
@@ -224,7 +224,7 @@ double item::bonus_from_enchantments(
 }
 
 double item::bonus_from_enchantments_wielded(
-    double base, enchant_vals::mod value, bool round ) const
+    double base, enchantment_value_id value, bool round ) const
 {
     double add = 0.0;
     double mul = 0.0;

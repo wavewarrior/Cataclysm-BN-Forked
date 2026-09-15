@@ -66,7 +66,7 @@ struct inproc_harness {
         auto& sess = coop_session::get();
         sess.mode = coop_mode::host;
         sess.partner_name = "TestClient";
-        sess.dimension_id = g->get_current_dimension_id();
+        sess.dimension_id = g->get_current_dimension_id().str();
 
         // Create and wire sim transports (zero latency, no loss).
         auto* stx = new coop_sim_transport();

@@ -678,8 +678,6 @@ bool map::valid_move(
 if( from.z() == to.z() ) {
     // But here we need to, to prevent bashing critters
     return passable( to ) || ( bash && inbounds( to ) );
-    } else if( !zlevels ) {
-    return false;
 }
 
 const bool going_up = from.z() < to.z();

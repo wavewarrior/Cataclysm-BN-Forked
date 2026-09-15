@@ -136,7 +136,8 @@ class Item_spawn_data
          * all linked groups.
          */
         virtual bool remove_item( const itype_id &itemid ) = 0;
-        virtual bool replace_item( const itype_id &itemid, const itype_id &replacementid ) = 0;
+        virtual bool replace_item( const itype_id &itemid, const itype_id &replacementid,
+                                   const std::string &context ) = 0;
         /**
          * Replace all item ids matching the migration map in a single traversal.
          * Default implementation loops over the map and calls replace_item; subclasses
@@ -211,7 +212,8 @@ class Item_modifier
         detached_ptr<item> modify( detached_ptr<item> &&new_item ) const;
         void check_consistency( const std::string &context ) const;
         bool remove_item( const itype_id &itemid );
-        bool replace_item( const itype_id &itemid, const itype_id &replacementid );
+        bool replace_item( const itype_id &itemid, const itype_id &replacementid,
+                           const std::string &context );
         void replace_items( const std::unordered_map<itype_id, itype_id> &migration );
 
         // Currently these always have the same chance as the item group it's part of, but
@@ -261,7 +263,8 @@ class Single_item_creator : public Item_spawn_data
         detached_ptr<item>create_single( const time_point &birthday, RecursionList &rec ) const override;
         void check_consistency( const std::string &context ) const override;
         bool remove_item( const itype_id &itemid ) override;
-        bool replace_item( const itype_id &itemid, const itype_id &replacementid ) override;
+        bool replace_item( const itype_id &itemid, const itype_id &replacementid,
+                           const std::string &context ) override;
         void replace_items( const std::unordered_map<itype_id, itype_id> &migration ) override;
 
         bool has_item( const itype_id &itemid ) const override;
@@ -312,7 +315,8 @@ class Item_group : public Item_spawn_data
         bool remove_item( const itype_id &itemid ) override;
         bool remove_specific_item( const std::string &itemid );
         bool remove_specific_group( const std::string &itemid );
-        bool replace_item( const itype_id &itemid, const itype_id &replacementid ) override;
+        bool replace_item( const itype_id &itemid, const itype_id &replacementid,
+                           const std::string &context ) override;
         void replace_items( const std::unordered_map<itype_id, itype_id> &migration ) override;
         bool has_item( const itype_id &itemid ) const override;
         std::set<const itype *> every_item() const override;

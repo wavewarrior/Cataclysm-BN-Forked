@@ -313,7 +313,7 @@ distribution_grid_tracker::distribution_grid_tracker()
     : distribution_grid_tracker( MAPBUFFER, {} )
 {}
 
-distribution_grid_tracker::distribution_grid_tracker( mapbuffer &buffer, std::string dim_id )
+distribution_grid_tracker::distribution_grid_tracker( mapbuffer &buffer, dimension_id dim_id )
     : mb( buffer )
     , dimension_id_( std::move( dim_id ) )
 {
@@ -356,7 +356,7 @@ void distribution_grid_tracker::add_export_node( cross_dimension_export_node nod
         node.far_load_handle = submap_loader.request_load(
                                    load_request_source::player_base,
                                    node.target_dim_id,
-                                   target_sm,
+                                   target_sm.xy(),
                                    radius );
 
         // Keep the LOCAL source submap resident too.  Without this the source
@@ -367,7 +367,7 @@ void distribution_grid_tracker::add_export_node( cross_dimension_export_node nod
         node.local_load_handle = submap_loader.request_load(
                                      load_request_source::player_base,
                                      dimension_id_,
-                                     source_sm,
+                                     source_sm.xy(),
                                      radius );
     }
 
@@ -466,14 +466,14 @@ void distribution_grid_tracker::resume_export_node( const tripoint_abs_ms &sourc
         it->far_load_handle = submap_loader.request_load(
                                   load_request_source::player_base,
                                   it->target_dim_id,
-                                  target_sm,
+                                  target_sm.xy(),
                                   radius );
 
         const auto source_sm = project_to<coords::sm>( it->source_pos );
         it->local_load_handle = submap_loader.request_load(
                                     load_request_source::player_base,
                                     dimension_id_,
-                                    source_sm,
+                                    source_sm.xy(),
                                     radius );
 
         // Force-synchronous load of the far submap so power operations work
@@ -505,7 +505,7 @@ distribution_grid &distribution_grid_tracker::make_distribution_grid_at(
         DebugLog( DL::Warn, DC::Map ) << string_format(
                                           "make_distribution_grid_at: no overmap grid data for submap %s "
                                           "(dim '%s') — power operations will be silently dropped this tick",
-                                          sm_pos.to_string(), dimension_id_ );
+                                          sm_pos.to_string(), dimension_id_.c_str() );
         static distribution_grid empty_grid( {}, MAPBUFFER );
         return empty_grid;
     }
@@ -567,7 +567,7 @@ std::array<tripoint_abs_omt, 5> distribution_grid_tracker::get_omt_and_cardinal_
 }
 
 void distribution_grid_tracker::on_submap_loaded( const tripoint_abs_sm &pos,
-        const std::string &dim_id )
+        const dimension_id &dim_id )
 {
     ZoneScoped;
     // Each tracker only manages submaps for its own dimension.
@@ -613,7 +613,7 @@ void distribution_grid_tracker::on_submap_loaded( const tripoint_abs_sm &pos,
 }
 
 void distribution_grid_tracker::on_submap_unloaded( const tripoint_abs_sm &pos,
-        const std::string &dim_id )
+        const dimension_id &dim_id )
 {
     ZoneScoped;
     if( dim_id != dimension_id_ ) {

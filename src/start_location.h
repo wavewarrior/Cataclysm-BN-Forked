@@ -13,8 +13,8 @@
 #include "type_id.h"
 
 class JsonObject;
+class map;
 class player;
-class tinymap;
 struct tripoint;
 
 class start_location
@@ -50,7 +50,7 @@ class start_location
         /**
          * Place the player somewhere in the reality bubble (g->m).
          */
-        void place_player( player &u ) const;
+        void place_player( player &u, const int &z ) const;
         /**
          * Burn random terrain / furniture with FLAMMABLE or FLAMMABLE_ASH tag.
          * Doors and windows are excluded.
@@ -77,7 +77,7 @@ class start_location
         std::vector<std::pair<std::string, ot_match_type>> _omt_types;
         std::set<std::string> _flags;
 
-        void prepare_map( tinymap &m ) const;
+        void prepare_map( map &m, const int &z ) const;
 };
 
 namespace start_locations
@@ -91,5 +91,3 @@ void reset();
 const std::vector<start_location> &get_all();
 
 } // namespace start_locations
-
-

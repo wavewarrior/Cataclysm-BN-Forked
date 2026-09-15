@@ -44,6 +44,7 @@
 
 class Character;
 class Creature_tracker;
+class distribution_grid_tracker;
 class item;
 class monster;
 class spell_events;
@@ -172,8 +173,10 @@ class game: public submap_load_listener
         friend class advanced_inventory;
         friend class main_menu;
         friend distribution_grid_tracker &get_distribution_grid_tracker();
-        friend distribution_grid_tracker *get_distribution_grid_tracker_for( const std::string & );
-        friend distribution_grid_tracker &ensure_distribution_grid_tracker_for( const std::string & );
+        friend auto get_distribution_grid_tracker_for(
+            const dimension_id & ) -> distribution_grid_tracker *;
+        friend auto ensure_distribution_grid_tracker_for(
+            const dimension_id & ) -> distribution_grid_tracker &;
         friend map &get_map();
         friend Character &get_player_character();
         friend avatar &get_avatar();
@@ -184,8 +187,9 @@ class game: public submap_load_listener
         ~game();
 
         // submap_load_listener interface
-        void on_submap_loaded( const tripoint_abs_sm& pos, const std::string& dim_id ) override;
-        void on_submap_unloaded( const tripoint_abs_sm& pos, const std::string& dim_id ) override;
+        auto on_submap_loaded( const tripoint_abs_sm &pos, const dimension_id &dim_id ) -> void override;
+        auto on_submap_unloaded( const tripoint_abs_sm &pos,
+                                 const dimension_id &dim_id ) -> void override;
 
         /** Loads static data that does not depend on mods or similar. */
         void load_static_data();
@@ -268,6 +272,7 @@ class game: public submap_load_listener
         void draw_ter( bool draw_sounds = true );
         void draw_ter( const tripoint_bub_ms& center, bool looking = false, bool draw_sounds = true );
         auto visibility_cache_z() -> int;
+        auto refresh_player_visibility_cache_if_needed( bool player_map_cache_current = false ) -> void;
 
         class draw_callback_t
         {
@@ -315,32 +320,34 @@ class game: public submap_load_listener
         void vertical_move( int z, bool force, bool peeking = false );
         void start_hauling( const tripoint_bub_ms& pos );
         /**
-         * Moves the player to an alternate dimension.
-         *
-         * @param dim_id      Fully-qualified dimension ID string (e.g. "nether",
-         *                    "pocket_dungeon_a1b2c3d4_").  Empty string = overworld.
-         * @param world_type  The world-type metadata (region settings, boundary terrain).
-         *                    Looked up from loaded_dimensions_ if the dimension already
-         *                    exists; used to initialise dimension_info on first visit.
-         * @param bounds      Optional spatial bounds for bounded (pocket) dimensions.
-         *                    nullopt = infinite.
-         * @param load_pos    Optional submap position to center the map load on.
-         *                    If not provided, the map loads at the player's current position.
-         * @param pre_load_callback  Optional callback invoked after dimension setup but
-         *                    before load_map(). Use this to place overmap specials so that
-         *                    submap generation uses the correct overmap terrain types.
-         */
-        bool travel_to_dimension(
-            const std::string& dim_id, const world_type_id& world_type,
-            const std::optional<pocket_dimension_data> &pd_info = std::nullopt,
-            const std::optional<tripoint_abs_sm> &load_pos = std::nullopt,
-            const std::function<void()> &pre_load_callback = nullptr );
+        * Moves the player to an alternate dimension.
+        *
+        * @param dim_id      Fully-qualified dimension ID string (e.g. "nether",
+        *                    "pocket_dungeon_a1b2c3d4_").  Empty string = overworld.
+        * @param world_type  The world-type metadata (region settings, boundary terrain).
+        *                    Looked up from loaded_dimensions_ if the dimension already
+        *                    exists; used to initialise dimension_info on first visit.
+        * @param bounds      Optional spatial bounds for bounded (pocket) dimensions.
+        *                    nullopt = infinite.
+        * @param load_pos    Optional submap position to center the map load on.
+        *                    If not provided, the map loads at the player's current position.
+        * @param pre_load_callback  Optional callback invoked after dimension setup but
+        *                    before load_map(). Use this to place overmap specials so that
+        *                    submap generation uses the correct overmap terrain types.
+        */
+        bool travel_to_dimension( const dimension_id &dim_id,
+                                  const world_type_id &world_type,
+                                  const std::optional<pocket_dimension_data> &pd_info = std::nullopt,
+                                  const std::optional<tripoint_abs_sm> &load_pos = std::nullopt,
+                                  const std::function<void()> &pre_load_callback = nullptr );
 
         /**
          * Return the dimension ID the player is currently in.
          * Empty string = overworld (primary dimension).
          */
-        const std::string &get_current_dimension_id() const { return current_dimension_id_; }
+        auto get_current_dimension_id() const -> const dimension_id & { // *NOPAD*
+            return current_dimension_id_;
+        }
 
         /**
          * Return the dimension_info for the current dimension, or nullptr if not tracked
@@ -360,7 +367,7 @@ class game: public submap_load_listener
         std::optional<tripoint_bub_ms> find_or_make_stairs(
             map& mp, int z_after, bool& rope_ladder, bool peeking );
         /** Actual z-level movement part of vertical_move. Doesn't include stair finding, traps etc. */
-        auto vertical_shift( int z_after, bool keep_grab = false ) -> void;
+        auto vertical_shift( const int z_before, const int z_after ) -> void;
         /** Add goes up/down auto_notes (if turned on) */
         void vertical_notes( int z_before, int z_after );
         /** Checks to see if a player can use a computer (not illiterate, etc.) and uses if able. */
@@ -694,10 +701,10 @@ class game: public submap_load_listener
         character_id assign_npc_id();
         Creature *is_hostile_nearby();
         Creature *is_hostile_very_close();
-        // Handles shifting coordinates transparently when moving between submaps.
-        // Helper to make calling with a player pointer less verbose.
-        point_rel_sm update_map( Character& who );
-        point_rel_sm update_map( int &x, int &y );
+        // Keeps the loaded map window aligned with an absolute center.
+        auto update_map( Character &who ) -> point_rel_sm;
+        auto update_map( const tripoint_abs_ms &center ) -> point_rel_sm;
+        auto update_map( int &x, int &y ) -> point_rel_sm;
         void update_overmap_seen(); // Update which overmap tiles we can see
 
         void process_artifact( item& it, Character& who );
@@ -822,7 +829,7 @@ class game: public submap_load_listener
          * this function returns (for example, UIs that draw the map should be
          * disabled).
          */
-        void load_map( const tripoint_abs_sm& pos_sm, bool pump_events = false );
+        void load_map( const tripoint_abs_sm &pos_sm, bool pump_events = false );
         /**
          * The overmap which contains the center submap of the reality bubble.
          */
@@ -996,8 +1003,8 @@ class game: public submap_load_listener
         void butcher(); // Butcher a corpse  'B'
     public:
         // Places the player at the specified point; hurts feet, lists items etc.
-        auto place_player( const tripoint_bub_ms& dest, bool keep_grab = false ) -> point_rel_sm;
-        void place_player_overmap( const tripoint_abs_omt& om_dest );
+        auto place_player( const tripoint_bub_ms &dest, bool keep_grab = false ) -> point_rel_sm;
+        void place_player_overmap( const tripoint_abs_omt &om_dest );
 
         unsigned int get_seed() const;
         /// Adopt the host's world seed so a co-op client reproduces the same weather.
@@ -1007,13 +1014,13 @@ class game: public submap_load_listener
         void set_npcs_dirty();
         /** If invoked, dead will be cleaned this turn. */
         void set_critter_died();
-        void mon_info_update(); // Update seen monsters information
+        auto mon_info_update() -> void; // Update seen monsters information
         void cleanup_dead();    // Delete any dead NPCs/monsters
-        bool is_dangerous_tile( const tripoint_bub_ms& dest_loc ) const;
-        std::vector<std::string> get_dangerous_tile( const tripoint_bub_ms& dest_loc ) const;
-        bool prompt_dangerous_tile( const tripoint_bub_ms& dest_loc ) const;
-
+        bool is_dangerous_tile( const tripoint_bub_ms &dest_loc ) const;
+        std::vector<std::string> get_dangerous_tile( const tripoint_bub_ms &dest_loc ) const;
+        bool prompt_dangerous_tile( const tripoint_bub_ms &dest_loc ) const;
     private:
+        auto player_visibility_cache_current() const -> bool;
         void chat(); // Talk to a nearby NPC  'C'
 
         input_context get_player_input( std::string& action );
@@ -1162,7 +1169,7 @@ class game: public submap_load_listener
         pimpl<achievements_tracker> achievements_tracker_ptr;
         pimpl<memorial_logger> memorial_logger_ptr;
         pimpl<spell_events> spell_events_ptr;
-        std::map<std::string, std::unique_ptr<distribution_grid_tracker>> grid_trackers_;
+        std::map<dimension_id, std::unique_ptr<distribution_grid_tracker>> grid_trackers_;
         pimpl<weather_manager> weather_manager_ptr;
 
     public:
@@ -1177,7 +1184,7 @@ class game: public submap_load_listener
         memorial_logger &memorial();
         spell_events &spell_events_subscriber();
 
-        pimpl<Creature_tracker> critter_tracker;
+        Creature_tracker *critter_tracker = nullptr;
         pimpl<faction_manager> faction_manager_ptr;
         pimpl<drop_token_provider> token_provider_ptr;
 
@@ -1235,6 +1242,7 @@ class game: public submap_load_listener
 
         int mostseen = 0; // # of mons seen last turn; if this increases, set safe_mode to
         // SAFE_MODE_STOP
+        bool mon_info_cache_dirty = true;
 
         // P-8: per-turn Creature::sees() result cache used during parallel monster
         // planning (monmove()).  Keyed on directional (seer, target) Creature pointer
@@ -1251,11 +1259,30 @@ class game: public submap_load_listener
                 return h1 ^ ( h2 * 2654435761ULL );
             }
         };
+        auto clear_turn_los_blocker_cache() -> void;
+        // True means terrain LOS is blocked between these two positions.
+        // The key is canonicalized, so a check from either end warms both directions.
+        // It is not a creature visibility or perception result.
+        auto terrain_los_blocks_sight_between( const tripoint_bub_ms &from,
+                                               const tripoint_bub_ms &to ) -> bool;
         std::unordered_map<std::pair<const Creature *, const Creature *>, bool, TurnSightPairHash>
         turn_sight_cache_;
         std::shared_mutex turn_sight_cache_mutex_;
 
     private:
+        struct TurnLosBlockerPairHash {
+            auto operator()( const std::pair<tripoint_bub_ms, tripoint_bub_ms> &p ) const noexcept
+            -> std::size_t {
+                const auto first_hash = std::hash<tripoint_bub_ms> {}( p.first );
+                const auto second_hash = std::hash<tripoint_bub_ms> {}( p.second );
+                return first_hash ^ ( second_hash * 2654435761ULL );
+            }
+        };
+        using turn_los_blocker_cache_t =
+            std::unordered_map<std::pair<tripoint_bub_ms, tripoint_bub_ms>, bool,
+            TurnLosBlockerPairHash>;
+        turn_los_blocker_cache_t turn_los_blocker_cache_;
+        std::shared_mutex turn_los_blocker_cache_mutex_;
         shared_ptr_fast<player> u_shared_ptr;
 
         catacurses::window w_terrain_ptr;
@@ -1348,27 +1375,29 @@ class game: public submap_load_listener
     private:
         /// Sets both current_dimension_id_ and g_active_dimension_id to @p dim_id.
         /// Always use this instead of assigning the two fields separately.
-        void set_active_dimension_id( const std::string& dim_id );
+        auto set_active_dimension_id( const dimension_id &dim_id ) -> void;
+        auto rebind_critter_tracker() -> void;
 
         /// Sequenced critical section of a dimension switch: drain all load-manager
         /// work, release load handles, flush the desired set, update the active
         /// dimension ID, and clear the old dimension's distribution-grid tracker.
         /// Must only be called from travel_to_dimension() after swapping_dimensions
         /// is set and before bind_dimension().
-        void activate_dimension_state( const std::string& new_dim_id, const std::string& old_dim_id );
+        auto activate_dimension_state( const dimension_id &new_dim_id,
+                                       const dimension_id &old_dim_id ) -> void;
 
         /// Dimension ID the player is currently in.  "" = overworld (primary).
         /// Always updated via set_active_dimension_id().
-        std::string current_dimension_id_;
+        dimension_id current_dimension_id_;
 
         /// Metadata for all dimensions that currently have at least one submap loaded.
         /// Keyed by dimension_id.  The overworld ("") may be absent on fresh games.
-        std::unordered_map<std::string, dimension_info> loaded_dimensions_;
+        std::unordered_map<dimension_id, dimension_info> loaded_dimensions_;
 
         /// The dimension ID of the single "kept alive" pocket dimension.
         /// Empty = no pocket is kept.  When the player enters a new bounded pocket this
         /// slot is evicted (saved + removed from registry) and replaced with the new one.
-        std::string kept_pocket_dimension_id_;
+        dimension_id kept_pocket_dimension_id_;
 
         // Handle for the reality bubble's submap_load_manager request.
         // 0 means no request has been issued yet.

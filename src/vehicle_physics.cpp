@@ -153,6 +153,13 @@ int vehicle::engine_fuel_left( const int e, bool recurse ) const
 
 int vehicle::fuel_capacity( const itype_id &ftype ) const
 {
+    if( ftype == fuel_type_battery ) {
+        return std::accumulate( battery_parts.begin(), battery_parts.end(), 0,
+        [this]( const int lhs, const int part_index ) {
+            return lhs + cpart( part_index ).ammo_capacity();
+        } );
+    }
+
     return std::accumulate( parts.begin(), parts.end(), 0, [&ftype]( const int &lhs,
     const vehicle_part & rhs ) {
         return lhs + ( rhs.ammo_current() == ftype ? rhs.ammo_capacity() : 0 );

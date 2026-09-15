@@ -454,7 +454,10 @@ void train_pet_activity_actor::finish( player_activity &act, Character& who )
     if( !mon ) { act.set_to_null(); return; }
     mon->remove_effect( effect_well_fed );
     mon->remove_effect( effect_ai_waiting );
-    if( 4 * p.get_skill_level( skill_survival ) >= rng( 0, 100 ) ) {
+    auto const bonded = p.getID() == mon->bonded_character_id;
+    auto skill_rating = 10 * p.get_skill_level( skill_survival );
+    if( bonded ) { skill_rating *= 2; }
+    if( skill_rating >= 100 || skill_rating >= rng( 0, 100 ) ) {
         if( mon && mon->type->pet_training ) {
             mon->training_level =
                 std::min( mon->training_level + 1, mon->type->pet_training->max_level );
@@ -473,6 +476,7 @@ void train_pet_activity_actor::finish( player_activity &act, Character& who )
             _( "Training your %s takes time, it seems they are making a bit of progress at least." ),
             pet_name );
     }
+    mon->on_pet_bonding( p.as_character() );
 }
 
 void train_pet_activity_actor::serialize( JsonOut& jsout ) const

@@ -106,6 +106,9 @@ static const std::string ZOMBIE_REVIVAL_INDICATOR("zombie_revival_indicator");
 static const flag_id flag_TINT_NO_FG("TINT_NO_FG");
 static const flag_id flag_TINT_NO_BG("TINT_NO_BG");
 static const flag_id flag_TINT_NONE("TINT_NONE");
+static const flag_id flag_HIDDEN("HIDDEN");
+
+static const furn_str_id furn_f_mannequin("f_mannequin");
 
 
 namespace {
@@ -450,6 +453,7 @@ tile_type& tileset::create_tile_type(const std::string& id, tile_type&& new_tile
 }
 
 
+
 #if defined(DYNAMIC_ATLAS)
 std::tuple<bool, SDL_Surface*, SDL_Rect> tileset::get_sprite_surface(int sprite_index) const {
     const auto base_tex_key = tileset_lookup_key{
@@ -513,6 +517,11 @@ const color_tint_pair* tileset::get_tint(const std::string& tint_id) {
     return nullptr;
 }
 
+
+bool tileset::try_get_tint(const std::string& tint_id, color_tint_pair& tint) {
+    if (tints.contains(tint_id)) { tint = tints[tint_id]; return true; }
+    return false;
+}
 
 // Tuning knobs for the sprite-animation system, refreshed once per frame from options
 // (avoids re-reading 14 options per creature). File-scope keeps creature.h's
@@ -1613,9 +1622,7 @@ void cata_tiles::draw(
                 if (already_drawn.contains(point(mem_x, mem_y) - o.raw())) { continue; }
             }
 
-            const auto& _cz = here.access_cache(center.z());
-            lit_level lighting = _cz.visibility_cache[_cz.idx(mem_x, mem_y)];
-
+            lit_level lighting = lit_level::BLANK;
             int z = center.z();
             for (; z > -OVERMAP_DEPTH; z--) {
                 const auto low_override = draw_below_override.find({mem_x, mem_y, z});
@@ -1748,19 +1755,14 @@ void cata_tiles::draw(
         point_abs_sm sm_end = project_to<coords::sm>(
             bub_to_abs(point_bub_ms(max_col, max_row) + o.raw()));
 
-        bool zlevs = here.has_zlevels();
         int mapsize = here.getmapsize();
         auto mappos = here.get_abs_sub();
-        half_open_rectangle<point>
-            maprect(mappos.xy().raw(), mappos.xy().raw() + point(mapsize, mapsize));
+        half_open_rectangle<point> maprect( mappos.raw(), mappos.raw() + point( mapsize,
+                                            mapsize ) );
 
-        const auto is_map = [mappos, zlevs, maprect](const tripoint& p) {
+        const auto is_map = [maprect](const tripoint& p) {
             if (!maprect.contains(p.xy())) { return false; }
-            if (zlevs) {
-                return true;
-            } else {
-                return p.z == mappos.z();
-            }
+            return true;
         };
 
         const auto is_mapbuffer = [](const tripoint_abs_sm& p) {

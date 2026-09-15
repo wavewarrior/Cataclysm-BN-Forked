@@ -963,7 +963,7 @@ void build_om_sidebar_rml(
             dim->display_name.empty()
             ? ( dim->world_type.is_valid()
                 ? dim->world_type.obj().name.translated()
-                : dim->dimension_id )
+                : dim->id.str() )
             : dim->display_name;
     }
     std::string footer = colorize( dim_name, c_cyan );
@@ -1198,7 +1198,8 @@ static bool search( const ui_adaptor& om_ui, tripoint_abs_omt& curs, const tripo
         body +=
             "\n" + colorize( _( "Direction:" ), c_light_blue ) + " "
             + colorize(
-                string_format( "%d %s", trig_dist( orig, tripoint_abs_omt( locations[i], orig.z() ) ),
+                string_format( "%d %s",
+                               static_cast<int>( trig_dist( orig, tripoint_abs_omt( locations[i], orig.z() ) ) ),
                                direction_name_short(
                                    direction_from( orig, tripoint_abs_omt( locations[i], orig.z() ) ) ) ),
                 c_light_red );

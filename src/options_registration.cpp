@@ -1280,6 +1280,17 @@ void options_manager::add_options_graphics()
     },
     gpu_driver_default, COPT_CURSES_HIDE );
 
+#if defined(TILES)
+    add( "TEXTURE_STREAMING", graphics, translate_marker( "Texture Streaming" ),
+         translate_marker( "Use texture-streaming instead of render-to-texture for dynamic graphics. Requires restart." ),
+    {
+        { "auto", translate_marker( "Auto" ) },
+        { "on", translate_marker( "Enable" ) },
+        { "off", translate_marker( "Disable" ) }
+    },
+    "auto" );
+#endif
+
 #if defined(SDL_HINT_RENDER_BATCHING)
     add( "RENDER_BATCHING", graphics, translate_marker( "Allow render batching" ),
          translate_marker( "Use render batching for 2D render API to make it more efficient.  Requires restart." ),
@@ -1316,11 +1327,12 @@ void options_manager::add_options_graphics()
 #if defined(CATA_SDL)
     add_empty_line();
     add( "COMPUTE_ACCELERATION", graphics, translate_marker( "Compute Acceleration" ),
-         translate_marker( "Controls SDL_GPU compute device selection for lighting and visibility.  Requires restart." ),
+         translate_marker( "Controls compute backend selection for lighting, visibility, and line of sight.  Requires restart." ),
     {
         { "auto", translate_marker( "Auto" ) },
-        { "software", translate_marker( "Software" ) },
-        { "force", translate_marker( "Force hardware" ) }
+        { "gpu", translate_marker( "GPU" ) },
+        { "cpu", translate_marker( "CPU compute" ) },
+        { "gpu_software", translate_marker( "Software GPU (debug)" ) }
     },
     "auto" );
 #endif
@@ -1777,6 +1789,10 @@ void options_manager::add_options_debug()
          translate_marker( "If true, will show additional warnings for JSON data correctness." ),
          true
        );
+
+    add( "MIGRATION_CHECKS", debug, translate_marker( "Migration checks" ),
+         translate_marker( "If true, the game will report any migrated items in itemgroups. This will not function with certain mods that depend on migrations" ),
+         false );
 
     add( "FORCE_TILESET_RELOAD", debug, translate_marker( "Force tileset reload" ),
          translate_marker( "If false, the game will keep tileset in memory after first load to speed up subsequent loadings of game data.  Enable this if you're working on a tileset for the game or a mod." ),

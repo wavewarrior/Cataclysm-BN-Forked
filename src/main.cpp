@@ -67,6 +67,7 @@ class ui_adaptor;
 #if defined(CATA_SDL)
 #   include <SDL3/SDL.h>
 #   include "compute/gpu_platform.h"
+#   include "platform/sdl_video.h"
 #endif
 #include "preload_config.h"
 
@@ -652,6 +653,7 @@ int main( int argc, char* argv[] )
                                    << SDL_VERSIONNUM_MICRO( linked_ver );
 
 #if defined(CATA_SDL)
+
     if( test_mode && lua_doc_output_path.empty() && lua_types_output_path.empty() &&
         !init_sdl_platform( false ) ) {
         return 1;

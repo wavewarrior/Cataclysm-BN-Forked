@@ -14,10 +14,11 @@
 #include "submap.h"
 #include "submap_fields.h"
 #include "submap_load_manager.h"
+#include "type_id.h"
 #include "units.h"
 
 // Dimension ID used only by these tests — never appears in game data.
-static constexpr const char* TEST_DIM_ID = "sim_test_dim";
+static const dimension_id TEST_DIM_ID("sim_test_dim");
 
 // Far enough from the test map centre that it is never inside the reality bubble.
 static const tripoint_abs_sm FAR_SM_POS{200, 200, 0};
@@ -87,7 +88,7 @@ TEST_CASE(
     const auto source_pos = tripoint_abs_sm{400, 400, 0};
     const auto neighbor_pos = tripoint_abs_sm{401, 400, 0};
     const auto proper_handle =
-        submap_loader.request_load(load_request_source::reality_bubble, TEST_DIM_ID, source_pos, 0);
+        submap_loader.request_load(load_request_source::reality_bubble, TEST_DIM_ID, source_pos.xy(), 0);
     const auto cleanup = on_out_of_scope([&]() {
         loader.clear(submap_loader);
         submap_loader.release_load(proper_handle);

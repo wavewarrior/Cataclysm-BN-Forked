@@ -72,7 +72,7 @@
 #include "line.h"
 #include "locations.h"
 #include "magic.h"
-#include "magic_enchantment.h"
+#include "enchantments/enchantment.h"
 #include "map.h"
 #include "martialarts.h"
 #include "material.h"
@@ -320,7 +320,8 @@ int item::gun_range( const player *p ) const
     ret *= ranged::str_draw_range_modifier( *this, *p );
 
     // Apply enchantment bonuses to range
-    int ench_range_bonus = p->bonus_from_enchantments( ret, enchant_vals::mod::RANGED_RANGE, true );
+    int ench_range_bonus = p->bonus_from_enchantments( ret, enchantment_value_id( "RANGED_RANGE" ),
+                           true );
     ret = std::max( 1, ret + ench_range_bonus );
 
     return std::max( 0, ret );
@@ -331,13 +332,12 @@ int item::gun_speed( bool with_ammo ) const
     if( !is_gun() ) {
     return 10;
 }
-int ret = type->gun->speed;
-for( const item *mod : gunmods() ) {
-    ret += mod->type->gunmod->speed;
-}
-if( with_ammo && ammo_data() ) {
-    ret += ammo_data()->ammo->speed;
+    // If we dont have an ammo given, assume that it is a firearm.
+    int ret = ( with_ammo && ammo_data() ) ? ammo_data()->ammo->speed : 1000;
+    for( const item *mod : gunmods() ) {
+        ret += mod->type->gunmod->speed;
     }
+    ret += type->gun->speed;
     return std::max( 0, ret );
 }
 

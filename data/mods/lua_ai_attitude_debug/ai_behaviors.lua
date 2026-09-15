@@ -170,8 +170,9 @@ local function run_fetch_mode(runtime_ctx, ctx)
 
   if fetch_pos.x == ctx.pos.x and fetch_pos.y == ctx.pos.y and fetch_pos.z == ctx.pos.z then
     local stack = ctx.here:get_items_at(fetch_pos)
+    ---@type Item?
     local picked = nil
-    for _, item in ipairs(stack) do
+    for _, item in ipairs(stack:items()) do
       if item:get_type():str() == item_id then
         picked = item
         break
@@ -222,10 +223,10 @@ local function run_mine_mode(runtime_ctx, ctx)
   end
 
   -- Persist the mine center in absolute coordinates so the pattern survives map shifts.
-  local center_local = ctx.here:get_local_ms(center_abs)
+  local center_local = ctx.here:abs_to_bub(center_abs)
   local map_extent = ctx.here:get_map_size()
   if math.abs(center_local.x - ctx.pos.x) > map_extent or math.abs(center_local.y - ctx.pos.y) > map_extent then
-    center_abs = ctx.here:get_abs_ms(ctx.mon:get_pos_ms())
+    center_abs = ctx.here:bub_to_abs(ctx.mon:get_pos_ms())
     ctx.mon:set_value("lua_ai_mine_center", runtime_ctx.serialize_tripoint_abs_ms(center_abs))
     center_local = ctx.mon:get_pos_ms()
     idx = 1
@@ -276,6 +277,7 @@ end
 ---@param safe_step fun(mon: Monster, dest: TripointBubMs): boolean
 ---@return boolean
 local function run_calm_dance_turn(mon, serialize_tripoint_abs_ms, deserialize_tripoint_abs_ms, safe_step)
+  ---@type [integer, integer][]
   local dance_points = {
     { 1, 0 },
     { 1, 1 },
@@ -290,7 +292,7 @@ local function run_calm_dance_turn(mon, serialize_tripoint_abs_ms, deserialize_t
   local here = gapi.get_map()
   local anchor_abs = deserialize_tripoint_abs_ms(mon:get_value("lua_dance_anchor_abs"))
   if anchor_abs == nil then
-    anchor_abs = here:get_abs_ms(mon:get_pos_ms())
+    anchor_abs = here:bub_to_abs(mon:get_pos_ms())
     mon:set_value("lua_dance_anchor_abs", serialize_tripoint_abs_ms(anchor_abs))
   end
   if anchor_abs.z ~= mon:get_pos_ms().z then
@@ -302,13 +304,13 @@ local function run_calm_dance_turn(mon, serialize_tripoint_abs_ms, deserialize_t
   if idx < 1 or idx > #dance_points then idx = 1 end
 
   -- The anchor is stored as absolute MS, then projected back into bubble coordinates each turn.
-  local anchor_local = here:get_local_ms(anchor_abs)
+  local anchor_local = here:abs_to_bub(anchor_abs)
   local map_extent = here:get_map_size()
   if
     math.abs(anchor_local.x - mon:get_pos_ms().x) > map_extent
     or math.abs(anchor_local.y - mon:get_pos_ms().y) > map_extent
   then
-    anchor_abs = here:get_abs_ms(mon:get_pos_ms())
+    anchor_abs = here:bub_to_abs(mon:get_pos_ms())
     mon:set_value("lua_dance_anchor_abs", serialize_tripoint_abs_ms(anchor_abs))
     idx = 1
     mon:set_value("lua_dance_index", "1")
@@ -316,6 +318,7 @@ local function run_calm_dance_turn(mon, serialize_tripoint_abs_ms, deserialize_t
   end
 
   local offset = dance_points[idx]
+  if offset == nil then return false end
   local dest = TripointBubMs.new(anchor_local.x + offset[1], anchor_local.y + offset[2], anchor_local.z)
 
   if not safe_step(mon, dest) then

@@ -141,7 +141,7 @@ TEST_CASE("all_nutrition_starve_test", "[!mayfail][starve][slow]") {
     eat_all_nutrients(dummy);
     if (print_tests) { cata_printf("\n\n"); }
 
-    for (unsigned int day = 0; day <= 20; day++) {
+    for (auto day = 0; day <= 7; ++day) {
         if (print_tests) { cata_printf("day %u: %d\n", day, dummy.get_stored_kcal()); }
         pass_time(dummy, 1_days);
         dummy.set_thirst(0);

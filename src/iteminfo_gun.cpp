@@ -25,7 +25,7 @@
 #include "type_id.h"
 #include "units.h"
 #include "avatar.h"
-#include "magic_enchantment.h"
+#include "enchantments/enchantment.h"
 #include "skill.h"
 #include "martialarts.h"
 
@@ -305,7 +305,7 @@ void item::gun_info( const item *mod, std::vector<iteminfo> &info, const iteminf
             // Apply enchantment bonuses to damage display
             int base_bullet_damage = static_cast<int>( total_damage );
             int ench_damage_bonus = viewer.bonus_from_enchantments( base_bullet_damage,
-                                    enchant_vals::mod::RANGED_DAMAGE_BULLET, true );
+                                    enchantment_value_id( "RANGED_DAMAGE_" + gun_du.get_internal_name() ), true );
             int displayed_damage = total_damage + ench_damage_bonus;
 
             info.emplace_back( "GUN", "sum_of_damage", _( " = <num>" ),
@@ -334,7 +334,7 @@ void item::gun_info( const item *mod, std::vector<iteminfo> &info, const iteminf
 
         // Show enchantment bonus if present
         int ench_range_bonus = you.bonus_from_enchantments( base_gun_range,
-                               enchant_vals::mod::RANGED_RANGE, true );
+                               enchantment_value_id( "RANGED_RANGE" ), true );
         if( ench_range_bonus != 0 ) {
             info.emplace_back( "GUN", "ench_range", _( " (enchanted: <num>)" ),
                                iteminfo::no_name | iteminfo::show_plus,
@@ -441,7 +441,7 @@ void item::gun_info( const item *mod, std::vector<iteminfo> &info, const iteminf
             // Note: This isn't perfect because effective already includes some effects,
             // but it's consistent with how ranged.cpp applies enchantments
             int ench_dispersion_bonus = you.bonus_from_enchantments( effective_dispersion,
-                                        enchant_vals::mod::RANGED_DISPERSION, true );
+                                        enchantment_value_id( "RANGED_DISPERSION" ), true );
 
             if( ench_dispersion_bonus != 0 ) {
                 info.emplace_back( "GUN", "ench_dispersion", _( " (enchanted: <num>)" ),
@@ -490,7 +490,7 @@ void item::gun_info( const item *mod, std::vector<iteminfo> &info, const iteminf
         if( parts->test( iteminfo_parts::GUN_RECOIL ) ) {
             int base_recoil = loaded_mod->gun_recoil();
             int ench_recoil_bonus = you.bonus_from_enchantments( base_recoil,
-                                    enchant_vals::mod::RANGED_RECOIL, true );
+                                    enchantment_value_id( "RANGED_RECOIL" ), true );
             int effective_recoil = std::max( 0, base_recoil + ench_recoil_bonus );
 
             info.emplace_back( "GUN", _( "Effective recoil: " ), "",
@@ -532,7 +532,7 @@ void item::gun_info( const item *mod, std::vector<iteminfo> &info, const iteminf
     if( parts->test( iteminfo_parts::GUN_RELOAD_TIME ) ) {
         int base_reload_time = mod->get_reload_time();
         int ench_reload_bonus = you.bonus_from_enchantments( base_reload_time,
-                                enchant_vals::mod::RANGED_RELOAD_TIME, true );
+                                enchantment_value_id( "RANGED_RELOAD_TIME" ), true );
         int effective_reload = std::max( 25, base_reload_time + ench_reload_bonus );
 
         info.emplace_back( "GUN", _( "Reload time: " ),
@@ -601,8 +601,8 @@ void item::gun_info( const item *mod, std::vector<iteminfo> &info, const iteminf
     if( parts->test( iteminfo_parts::GUN_AIMING_STATS ) ) {
         insert_separation_line( info );
         int final_aim = ranged::aim_per_move( you, *mod, MAX_RECOIL );
-        double add = you.bonus_from_enchantments( 0, enchant_vals::mod::RANGED_AIM_SPEED, false );
-        double mul = ( you.bonus_from_enchantments( 1000, enchant_vals::mod::RANGED_AIM_SPEED,
+        double add = you.bonus_from_enchantments( 0, enchantment_value_id( "RANGED_AIM_SPEED" ), false );
+        double mul = ( you.bonus_from_enchantments( 1000, enchantment_value_id( "RANGED_AIM_SPEED" ),
                        false ) - add ) / 1000.0;
         int base_aim = final_aim;
         if( 1.0 + mul != 0.0 ) {

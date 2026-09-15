@@ -460,17 +460,15 @@ void map::decay_fields_and_scent( const time_duration& amount )
 
     // Coordinate code copied from lightmap calculations
     // TODO: Z
-    const int smz = abs_sub.z();
-    level_cache& smz_cache = get_cache( smz );
     for( const auto p : bubble_submaps() ) {
-        const auto sm_pos = tripoint_bub_sm( p, smz );
-        const auto cur_submap = get_submap_at_grid( sm_pos );
+        level_cache& smz_cache = get_cache( p.z() );
+        const auto cur_submap = get_submap_at_grid( p );
         if( cur_submap == nullptr ) { continue; }
         int to_proc = cur_submap->field_count;
         if( to_proc < 1 ) {
             if( to_proc < 0 ) {
                 cur_submap->field_count = 0;
-                dbg( DL::Error ) << "map::decay_fields_and_scent: submap at " << map_local_to_abs( *this, sm_pos )
+                dbg( DL::Error ) << "map::decay_fields_and_scent: submap at " << map_local_to_abs( *this, p )
                                  << "has " << to_proc << " field_count";
             }
             // This submap has no fields
@@ -479,7 +477,7 @@ void map::decay_fields_and_scent( const time_duration& amount )
 
         if( to_proc > 0 ) {
             for( const auto sm_ms : submap_tiles() ) {
-                const auto ms_pos = project_combine( sm_pos, sm_ms );
+                const auto ms_pos = project_combine( p, sm_ms );
 
                 field& fields = cur_submap->get_field( sm_ms );
                 if( !smz_cache.outside_cache[smz_cache.idx( ms_pos.x(), ms_pos.y() )] ) {
@@ -501,7 +499,7 @@ void map::decay_fields_and_scent( const time_duration& amount )
 
         if( to_proc > 0 ) {
             cur_submap->field_count = cur_submap->field_count - to_proc;
-            dbg( DL::Warn ) << "map::decay_fields_and_scent: submap at " << map_local_to_abs( *this, sm_pos )
+            dbg( DL::Warn ) << "map::decay_fields_and_scent: submap at " << map_local_to_abs( *this, p )
                             << "has " << cur_submap->field_count - to_proc << "fields, but "
                             << cur_submap->field_count << " field_count";
         }
@@ -710,7 +708,7 @@ void map::collapse_at(
             if( !one_in( collapse_check( tz ) ) ) { continue; }
             // if a wall collapses, walls without support from below risk collapsing and
             // propagate the collapse upwards
-            if( zlevels && wall && p == t && has_flag( TFLAG_WALL, tz ) ) { collapse_at( tz, silent ); }
+            if( wall && p == t && has_flag( TFLAG_WALL, tz ) ) { collapse_at( tz, silent ); }
             // floors without support from below risk collapsing into open air and can propagate
             // the collapse horizontally but not vertically
             if( p != t && ( has_flag( TFLAG_SUPPORTS_ROOF, t ) && has_flag( TFLAG_COLLAPSES, t ) ) ) {
@@ -719,12 +717,10 @@ void map::collapse_at(
         }
         // this tile used to support a roof, now it doesn't, which means there is only
         // open air above us
-        if( zlevels ) {
-            const tripoint_bub_ms tabove( p.xy(), p.z() + 1 );
-            ter_set( tabove, t_open_air );
-            furn_set( tabove, f_null );
-            propagate_suspension_check( tabove );
-        }
+        const tripoint_bub_ms tabove( p.xy(), p.z() + 1 );
+        ter_set( tabove, t_open_air );
+        furn_set( tabove, f_null );
+        propagate_suspension_check( tabove );
     }
     // it would be great to check if collapsing ceilings smashed through the floor, but
     // that's not handled for now
@@ -894,10 +890,6 @@ void map::smash_items(
 
 ter_id map::get_roof( const tripoint_bub_ms& p, const bool allow_air ) const
 {
-    // This function should not be called from the 2D mode
-    // Just use t_dirt instead
-    assert( zlevels );
-
     if( p.z() <= -OVERMAP_DEPTH ) {
         // Could be magma/"void" instead
         return t_rock_floor;
@@ -992,7 +984,7 @@ bash_results map::bash_ter_success( const tripoint_bub_ms &p, const bash_params 
     } else if( bash.ter_set ) {
         // If the terrain has a valid post-destroy terrain, set it
         ter_set( p, bash.ter_set );
-        follow_below |= zlevels && bash.bash_below;
+        follow_below |= bash.bash_below;
     } else if( suspended ) {
         // Its important that we change the ter value before recursing, otherwise we'll hit an infinite loop.
         // This could be prevented by assembling a visited list, but in order to avoid that cost, we're going
@@ -1003,7 +995,7 @@ bash_results map::bash_ter_success( const tripoint_bub_ms &p, const bash_params 
         tripoint_bub_ms below( p.xy(), p.z() - 1 );
         const ter_t &ter_below = ter( below ).obj();
         // Only setting the flag here because we want drops and sounds in correct order
-        follow_below |= zlevels && bash.bash_below && ter_below.roof;
+        follow_below |= bash.bash_below && ter_below.roof;
 
         ter_set( p, t_open_air );
     }
@@ -1024,12 +1016,7 @@ bash_results map::bash_ter_success( const tripoint_bub_ms &p, const bash_params 
         sounds::sound( se );
     }
 
-    if( !zlevels ) {
-        if( ter( p ) == t_open_air ) {
-            // We destroyed something, so we aren't just "plugging" air with dirt here
-            ter_set( p, t_dirt );
-        }
-    } else if( follow_below || ter( p ) == t_open_air ) {
+    if( follow_below || ter( p ) == t_open_air ) {
         const tripoint_bub_ms below( p.xy(), p.z() - 1 );
         // We may need multiple bashes in some weird cases
         // Example:
@@ -1244,11 +1231,11 @@ bash_results map::bash_ter_furn( const tripoint_bub_ms& p, const bash_params& pa
     // Floor bashing check
     // Only allow bashing floors when we want to bash floors and we're in z-level mode
     // Unless we're destroying, then it gets a little weird
-    if( smash_ter && bash->bash_below && ( !zlevels || !params.bash_floor ) ) {
+    if( smash_ter && bash->bash_below && !params.bash_floor ) {
         if( !params.destroy ) {
             smash_ter = false;
             bash = nullptr;
-        } else if( !bash->ter_set && zlevels ) {
+        } else if( !bash->ter_set ) {
             // HACK: A hack for destroy && !bash_floor
             // We have to check what would we create and cancel if it is what we have now
             tripoint_bub_ms below( p.xy(), p.z() - 1 );
@@ -1321,7 +1308,7 @@ bash_results map::bash_ter_furn( const tripoint_bub_ms& p, const bash_params& pa
 
         if( bash->str_min_supported != -1 || bash->str_max_supported != -1 ) {
             tripoint_bub_ms below( p.xy(), p.z() - 1 );
-            if( !zlevels || has_flag( TFLAG_SUPPORTS_ROOF, below ) ) {
+            if( has_flag( TFLAG_SUPPORTS_ROOF, below ) ) {
                 if( bash->str_min_supported != -1 ) { smin = bash->str_min_supported; }
                 if( bash->str_max_supported != -1 ) { smax = bash->str_max_supported; }
             }

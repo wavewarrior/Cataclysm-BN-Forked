@@ -197,6 +197,7 @@ auto defmode_name( itype &obj ) -> const char *
     } else {
         return translate_marker( "semi" );
     }
+
 }
 
 void Item_factory::load_item_blacklist( const JsonObject &json )
@@ -706,7 +707,8 @@ void islot_ammo::load( const JsonObject &jo )
     assign( jo, "dispersion", dispersion );
     assign( jo, "recoil", recoil );
     optional( jo, was_loaded, "count", def_charges, 1 );
-    optional( jo, was_loaded, "loudness", loudness, -1 );
+    assign( jo, "loudness", loudness, false, -1,
+            191 ); // Measured in dB spl. -1 means the game will auto comp the loudness.
     assign( jo, "effects", ammo_effects );
     optional( jo, was_loaded, "show_stats", force_stat_display, std::nullopt );
     optional( jo, was_loaded, "shape", shape, std::nullopt );
@@ -718,7 +720,7 @@ void islot_ammo::load( const JsonObject &jo )
     }
     assign( jo, "aimedcritmaxbonus", aimedcritmaxbonus );
     assign( jo, "aimedcritbonus", aimedcritbonus );
-    assign( jo, "speed", speed );
+    assign( jo, "speed", speed, false, 0, 299792458 ); // Capped at the speed of light.
 }
 
 void islot_ammo::deserialize( JsonIn &jsin )

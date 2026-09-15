@@ -30,7 +30,7 @@ TEST_CASE("unauthorized_robofac_turrets_attack_player", "[monster][faction]") {
     auto& you = get_avatar();
     you.remove_value("npctalk_var_dialogue_intercom_completed_robofac_intercom_3");
     auto& turret = spawn_test_monster("mon_robofac_turret_light", tripoint_bub_ms(5, 5, 0));
-    put_player_underground();
+    move_player_out_of_the_way();
 
     CHECK(turret.attitude(&you) == MATT_ATTACK);
 }
@@ -46,7 +46,7 @@ TEST_CASE("authorized_robofac_turrets_use_faction_attitude", "[monster][faction]
     authorized_turret.friendly = 0;
 
     auto& you = get_avatar();
-    put_player_underground();
+    move_player_out_of_the_way();
 
     CHECK(authorized_turret.attitude(&you) == MATT_FRIEND);
     CHECK(authorized_turret.attitude_to(robofac_turret) == Attitude::A_FRIENDLY);
@@ -76,7 +76,7 @@ TEST_CASE("authorized_robofac_turrets_alert_visible_security", "[monster][factio
     }
 
     auto& you = get_avatar();
-    put_player_underground();
+    move_player_out_of_the_way();
     const auto player_faction = mfaction_id("player");
 
     REQUIRE(east_turret.sees(attacked_turret));
@@ -141,7 +141,7 @@ TEST_CASE("monster_faction_memory_anger", "[monster][faction][anger]") {
     monster& hazmat = spawn_test_monster("mon_eyebot", hazmat_pos);
 
     avatar& p = get_avatar();
-    put_player_underground();
+    move_player_out_of_the_way();
     tank.friendly = 0;
     tank.anger = 0;
     // We can't clear faction_anger directly as it is private, but a new monster should be clean.
@@ -182,7 +182,7 @@ TEST_CASE("monster_faction_memory_zombie_attacks_tank", "[monster][faction][ange
     monster& zombie = spawn_test_monster("mon_zombie", zombie_pos);
 
     avatar& p = get_avatar();
-    put_player_underground();
+    move_player_out_of_the_way();
 
     // Ensure initial state
     tank.friendly = 0;
@@ -246,7 +246,7 @@ TEST_CASE("monster_faction_memory_friend_attacked", "[monster][faction][anger]")
     monster& zombie = spawn_test_monster("mon_zombie", zombie_pos);
 
     avatar& p = get_avatar();
-    put_player_underground();
+    move_player_out_of_the_way();
 
     // Ensure initial state
     tank1.friendly = 0;

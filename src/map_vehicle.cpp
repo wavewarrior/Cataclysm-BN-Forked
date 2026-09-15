@@ -172,16 +172,10 @@ static const std::string str_OPENCLOSE_INSIDE("OPENCLOSE_INSIDE");
 
 VehicleList map::get_vehicles() {
     if (last_full_vehicle_list_dirty) {
-        const auto sm_max = bubble_submaps().max();
-        if (!zlevels) {
-            last_full_vehicle_list = get_vehicles(
-                tripoint_bub_sm(point_bub_sm::zero(), abs_sub.z()),
-                tripoint_bub_sm(sm_max, abs_sub.z()));
-        } else {
-            last_full_vehicle_list = get_vehicles(
-                tripoint_bub_sm(point_bub_sm::zero(), -OVERMAP_DEPTH),
-                tripoint_bub_sm(sm_max, OVERMAP_HEIGHT));
-        }
+        const auto sm_max = flat_bubble_submaps().max();
+        last_full_vehicle_list = get_vehicles(
+            tripoint_bub_sm(point_bub_sm::zero(), -OVERMAP_DEPTH),
+            tripoint_bub_sm(sm_max, OVERMAP_HEIGHT));
 
         last_full_vehicle_list_dirty = false;
     }
@@ -194,8 +188,8 @@ void map::reset_vehicle_cache() {
     clear_vehicle_cache();
 
     // Cache all vehicles
-    const int zmin = zlevels ? -OVERMAP_DEPTH : abs_sub.z();
-    const int zmax = zlevels ? OVERMAP_HEIGHT : abs_sub.z();
+    const int zmin = -OVERMAP_DEPTH;
+    const int zmax = OVERMAP_HEIGHT;
     for (int zlev = zmin; zlev <= zmax; zlev++) {
         auto& ch = get_cache(zlev);
         for (const auto& elem : ch.vehicle_list) {
@@ -251,8 +245,8 @@ void map::clear_vehicle_point_from_cache(vehicle* veh, const tripoint_bub_ms& pt
 }
 
 void map::clear_vehicle_cache() {
-    const int zmin = zlevels ? -OVERMAP_DEPTH : abs_sub.z();
-    const int zmax = zlevels ? OVERMAP_HEIGHT : abs_sub.z();
+    const int zmin = -OVERMAP_DEPTH;
+    const int zmax = OVERMAP_HEIGHT;
     for (int zlev = zmin; zlev <= zmax; zlev++) {
         level_cache& ch = get_cache(zlev);
         while (!ch.veh_cached_parts.empty()) {
@@ -300,7 +294,7 @@ std::unique_ptr<vehicle> map::detach_vehicle(vehicle* veh) {
                  "submap:%d,%d,%d",
                  veh->name, veh->abs_sm_pos.x(), veh->abs_sm_pos.y(), veh->abs_sm_pos.z());
         // Try to fix by moving the vehicle here
-        z = veh->abs_sm_pos.z() = abs_sub.z();
+        z = veh->abs_sm_pos.z() = z > OVERMAP_HEIGHT ? OVERMAP_HEIGHT : -OVERMAP_DEPTH;
     }
 
     // Unboard all passengers before detaching
@@ -320,7 +314,7 @@ std::unique_ptr<vehicle> map::detach_vehicle(vehicle* veh) {
     if (current_submap == nullptr) {
         debugmsg("detach_vehicle can't find submap!  name=%s, submap:%d,%d,%d", veh->name,
                  veh->abs_sm_pos.x(), veh->abs_sm_pos.y(), veh->abs_sm_pos.z());
-        loaded_vehicles.erase(veh);
+        get_mapbuffer().unregister_vehicle( veh );
         dirty_vehicle_list.erase(veh);
         return std::unique_ptr<vehicle>();
     }
@@ -332,7 +326,7 @@ std::unique_ptr<vehicle> map::detach_vehicle(vehicle* veh) {
             reset_vehicle_cache();
             std::unique_ptr<vehicle> result = std::move(current_submap->vehicles[i]);
             current_submap->vehicles.erase(current_submap->vehicles.begin() + i);
-            loaded_vehicles.erase(veh);
+            get_mapbuffer().unregister_vehicle( veh );
             if (veh->tracking_on) { get_overmapbuffer(bound_dimension_).remove_vehicle(veh); }
             dirty_vehicle_list.erase(veh);
             veh->detach();
@@ -364,7 +358,7 @@ void map::on_vehicle_moved(
 
     const auto for_clamped_submaps =
         [&](const point_bub_sm& range_min, const point_bub_sm& range_max, const auto& callback) {
-            const auto bubble_bounds = bubble_submap_bounds();
+            const auto bubble_bounds = reality_bubble_2D_bounds();
             const auto requested = inclusive_rectangle<point_bub_sm>(range_min, range_max);
             if (!bubble_bounds.overlaps(requested)) { return; }
             for (const auto p : point_range<point_bub_sm>(
@@ -443,12 +437,12 @@ void map::vehmove() {
     VehicleList vehicle_list;
     {
         ZoneScopedN("veh_gain_moves");
-        const int zmin = zlevels ? -OVERMAP_DEPTH : abs_sub.z();
-        const int zmax = zlevels ? OVERMAP_HEIGHT : abs_sub.z();
+        const int zmin = -OVERMAP_DEPTH;
+        const int zmax = OVERMAP_HEIGHT;
         const bool outer_stride_hit = calendar::stride_due(vehicle_outer_stride);
         for (int z = zmin; z <= zmax; ++z) {
             for (vehicle* veh : get_cache(z).vehicle_list) {
-                const bool on_player_z = z == abs_sub.z();
+                const bool on_player_z = z == get_avatar().abs_pos().z();
                 const bool parked_off_z =
                     !veh->is_moving() && !veh->engine_on && !veh->is_falling && !on_player_z;
                 const bool skip_outer = parked_off_z && !outer_stride_hit;
@@ -793,8 +787,9 @@ void map::vehmove() {
     // All vehicles in vehicle_list are loaded (on_map=true); distribution-graph
     // neighbours reachable but not in the set get on_map=false as before.
     std::set<vehicle*> all_veh_ptrs;
+    auto& vehicle_buffer = get_mapbuffer();
     std::ranges::for_each(vehicle_list, [&](const wrapped_vehicle& w) {
-        if (loaded_vehicles.contains(w.v)) { all_veh_ptrs.insert(w.v); }
+        if (vehicle_buffer.has_loaded_vehicle(w.v)) { all_veh_ptrs.insert(w.v); }
     });
     std::map<vehicle*, bool> connected_vehicles;
     vehicle::enumerate_vehicles(connected_vehicles, all_veh_ptrs);
@@ -840,8 +835,8 @@ bool map::vehproceed(VehicleList& vehicle_list) {
     if (cur_veh->v == nullptr) { vehicle_list = get_vehicles(); }
 
     // confirm that veh_in_active_range is still correct for each z-level
-    int minz = zlevels ? -OVERMAP_DEPTH : abs_sub.z();
-    int maxz = zlevels ? OVERMAP_HEIGHT : abs_sub.z();
+    const int minz = -OVERMAP_DEPTH;
+    const int maxz = OVERMAP_HEIGHT;
     for (int zlev = minz; zlev <= maxz; ++zlev) {
         level_cache& cache = get_cache(zlev);
 
@@ -916,7 +911,11 @@ vehicle* map::move_vehicle(vehicle& veh, const tripoint_rel_ms& dp, const tilera
     size_t collision_attempts = 10;
     do {
         collisions.clear();
-        veh.collision(collisions, dp1, false);
+        veh.collision( vehicle_collision_options{
+            .colls = collisions,
+            .dp = dp1,
+            .just_detect = false,
+        } );
 
         // Vehicle collisions
         std::map<vehicle*, std::vector<veh_collision>> veh_collisions;
@@ -1454,19 +1453,11 @@ void map::board_vehicle(const tripoint_bub_ms& pos, Character* who) {
     }
 
     auto vp = veh_at(pos).part_with_feature(VPFLAG_BOARDABLE, true);
-    if (!vp) {
-        const auto abs_pos = map_local_to_abs(*this, pos);
-        for (auto* veh : loaded_vehicles) {
-            if (veh == nullptr) { continue; }
-            auto boardable_parts = veh->get_avail_parts(VPFLAG_BOARDABLE);
-            const auto part_it =
-                std::ranges::find_if(boardable_parts, [&](const vpart_reference& part) {
-                    return veh->abs_part_location(part.part()) == abs_pos;
-                });
-            if (part_it == boardable_parts.end()) { continue; }
-            vp = *part_it;
-            break;
-        }
+    if ( !vp ) {
+        const auto abs_pos = map_local_to_abs( *this, pos );
+        vp = get_mapbuffer().veh_at( abs_pos, {
+            .mode = mapbuffer_lookup_mode::resident_only,
+        } ).part_with_feature( VPFLAG_BOARDABLE, true );
     }
     if (!vp) {
         if (who->grab_point.x() == 0 && who->grab_point.y() == 0) {

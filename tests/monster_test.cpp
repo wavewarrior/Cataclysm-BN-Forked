@@ -317,7 +317,7 @@ static void monster_check() {
 // Write out a map of slope at which monster is moving to time required to reach their destination.
 TEST_CASE("write_slope_to_speed_map_trig", "[.][!mayfail]") {
     clear_all_state();
-    put_player_underground();
+    move_player_out_of_the_way();
     override_option opt("CIRCLEDIST", "true");
     trigdist = true;
     test_moves_to_squares("mon_zombie_dog", true);
@@ -326,7 +326,7 @@ TEST_CASE("write_slope_to_speed_map_trig", "[.][!mayfail]") {
 
 TEST_CASE("write_slope_to_speed_map_square", "[.][!mayfail]") {
     clear_all_state();
-    put_player_underground();
+    move_player_out_of_the_way();
     override_option opt("CIRCLEDIST", "false");
     trigdist = false;
     test_moves_to_squares("mon_zombie_dog", true);
@@ -337,7 +337,7 @@ TEST_CASE("write_slope_to_speed_map_square", "[.][!mayfail]") {
 // It's not necessarally the one true speed for monsters, we just want notice if it changes.
 TEST_CASE("monster_speed_square", "[speed][.][!mayfail]") {
     clear_all_state();
-    put_player_underground();
+    move_player_out_of_the_way();
     override_option opt("CIRCLEDIST", "false");
     trigdist = false;
     monster_check();
@@ -346,7 +346,7 @@ TEST_CASE("monster_speed_square", "[speed][.][!mayfail]") {
 // TODO: Figure out why this sometimes fails, seems to be RNG-dependent
 TEST_CASE("monster_speed_trig", "[speed][.][!mayfail]") {
     clear_all_state();
-    put_player_underground();
+    move_player_out_of_the_way();
     override_option opt("CIRCLEDIST", "true");
     trigdist = true;
     monster_check();
@@ -354,7 +354,7 @@ TEST_CASE("monster_speed_trig", "[speed][.][!mayfail]") {
 
 TEST_CASE("monster_move_through_vehicle_holes") {
     clear_all_state();
-    put_player_underground();
+    move_player_out_of_the_way();
     tripoint_bub_ms origin(60, 60, 0);
 
     get_map().add_vehicle(vproto_id("apc"), origin, -45_degrees, 0, 0);

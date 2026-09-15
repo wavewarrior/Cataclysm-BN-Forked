@@ -39,6 +39,11 @@ void maptile_soa<sx, sy>::swap_soa_tile( const point_sm_ms& p1, const point_sm_m
 
 void submap::swap( submap& first, submap& second )
 {
+    const auto first_item_location_offset =
+        project_to<coords::ms>( second.pos ) - project_to<coords::ms>( first.pos );
+    const auto second_item_location_offset =
+        project_to<coords::ms>( first.pos ) - project_to<coords::ms>( second.pos );
+
     std::swap( first.pos, second.pos );
     std::swap( first.ter, second.ter );
     std::swap( first.frn, second.frn );
@@ -68,6 +73,8 @@ void submap::swap( submap& first, submap& second )
 
     for( const auto& p : submap_tiles() ) {
         std::swap( first.itm[p.x()][p.y()], second.itm[p.x()][p.y()] );
+        first.itm[p.x()][p.y()].move_by( first_item_location_offset );
+        second.itm[p.x()][p.y()].move_by( second_item_location_offset );
     }
 }
 
@@ -91,6 +98,18 @@ submap::submap( const tripoint_abs_sm& position ): maptile_soa<SEEX, SEEY>( posi
 }
 
 submap::~submap() = default;
+
+auto submap::set_position( const tripoint_abs_sm &position ) -> void
+{
+    if( pos == position ) {
+        return;
+    }
+    const auto offset = project_to<coords::ms>( position ) - project_to<coords::ms>( pos );
+    for( const auto &p : submap_tiles() ) {
+        itm[p.x()][p.y()].move_by( offset );
+    }
+    pos = position;
+}
 
 void submap::update_lum_rem( const point_sm_ms& p, const item& i )
 {
@@ -349,7 +368,8 @@ void submap::rotate( int turns )
         const point_sm_ms new_pos = rotate_point( elem->sm_ms_pos );
 
         elem->sm_ms_pos = new_pos;
-        elem->set_facing( elem->turn_dir + turns * 90_degrees );
+        elem->set_facing( elem->turn_dir + turns * 90_degrees, false );
+        elem->precalc_mounts( 0, elem->turn_dir, elem->pivot_anchor[0] );
     }
 
     std::map<point_sm_ms, computer> rot_comp;

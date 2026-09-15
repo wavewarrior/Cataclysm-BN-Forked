@@ -92,8 +92,10 @@ class MapgenRemovePartHandler : public RemovePartHandler
         detached_ptr<item> add_item_or_charges( const tripoint_bub_ms &loc, detached_ptr<item> &&it,
                                                 bool permit_oob ) override {
             if( !m.inbounds( loc ) ) {
-            point_sm_ms offset;
-            if( !m.is_out_of_bounds( loc ) && m.get_submap_at( loc, offset ) != nullptr ) {
+                point_sm_ms offset;
+                const auto pocket_info = m.get_pocket_info();
+                if( !is_outside_pocket_dimension_bounds( pocket_info, map_local_to_abs( m, loc ) ) &&
+                    m.get_submap_at( loc, offset ) != nullptr ) {
                     return m.add_item_or_charges( loc, std::move( it ) );
                 }
                 if( !permit_oob ) {

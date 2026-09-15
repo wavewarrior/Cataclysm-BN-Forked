@@ -53,7 +53,7 @@ struct inproc_harness {
         auto& sess = coop_session::get();
         sess.mode = coop_mode::host;
         sess.partner_name = "TestClient";
-        sess.dimension_id = g->get_current_dimension_id();
+        sess.dimension_id = g->get_current_dimension_id().str();
 
         auto* stx = new coop_sim_transport();
         auto* ctx = new coop_sim_transport();

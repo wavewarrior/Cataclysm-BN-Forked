@@ -1265,6 +1265,10 @@ class npc: public player
         std::map<std::string, time_point> complaints;
 
         npc_short_term_cache ai_cache;
+        auto clear_transient_movement_state_after_reposition() -> void;
+        auto setpos_impl( const tripoint_abs_ms &pos, bool preserve_movement_state ) -> void;
+        auto setpos_preserving_movement_state( const tripoint_bub_ms &pos ) -> void;
+        auto setpos_preserving_movement_state( const tripoint_abs_ms &pos ) -> void;
 
         std::map<npc_need, npc_need_goal_cache> goal_cache;
         bool suppress_activity_complete_message = false;
@@ -1338,11 +1342,15 @@ class npc: public player
         /// Transient — not saved; always false after load.
         bool is_coop_remote = false;
 
-        // ID of the dimension this NPC belongs to.  Empty string = primary dimension.
-        // Set when the NPC is spawned or loaded from a non-primary dimension submap.
-        // Persisted across saves so cross-dimension processing survives reload.
-        std::string dimension_id_ = ""; // empty = primary dimension
-        const std::string &get_dimension() const override { return dimension_id_; }
+        auto get_dimension() const -> const dimension_id &override {
+            return dimension_id_;
+        }
+        auto set_dimension( const dimension_id &dim_id ) -> void override {
+            if( dimension_id_ != dim_id ) {
+                dimension_id_ = dim_id;
+                invalidate_mapbuffer_cache();
+            }
+        }
 
         /**
          * Do some cleanup and caching as npc is being unloaded from map.
@@ -1399,6 +1407,10 @@ class npc: public player
         bool could_move_onto( const tripoint_bub_ms& p ) const;
 
         std::vector<sphere> find_dangerous_explosives() const;
+
+        // ID of the dimension this NPC belongs to.  Empty = primary dimension.
+        // Persisted across saves so cross-dimension processing survives reload.
+        dimension_id dimension_id_;
 
         npc_companion_mission comp_mission;
 };

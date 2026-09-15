@@ -2307,7 +2307,7 @@ int iuse::ehandcuffs( player* p, item* it, bool t, const tripoint_bub_ms& pos )
 
     if( t ) {
 
-        if( g->m.has_flag( "SWIMMABLE", pos.xy() ) ) {
+        if( g->m.has_flag( TFLAG_SWIMMABLE, pos ) ) {
             it->unset_flag( flag_NO_UNWIELD );
             it->ammo_unset();
             it->deactivate();
@@ -2565,9 +2565,7 @@ static void emit_radio_signal( player &p, const flag_id &signal )
         return VisitResponse::NEXT;
     };
 
-    int z_min = g->m.has_zlevels() ? -OVERMAP_DEPTH : 0;
-    int z_max = g->m.has_zlevels() ? OVERMAP_HEIGHT : 0;
-    for( int zlev = z_min; zlev <= z_max; zlev++ ) {
+    for( int zlev = -OVERMAP_DEPTH; zlev <= OVERMAP_HEIGHT; zlev++ ) {
         for( auto loc : g->m.points_on_zlevel( zlev ) ) {
             // Items on ground
             map_cursor mc( loc );

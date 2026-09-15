@@ -62,10 +62,18 @@
 
 #if defined(CATA_SDL)
 #    if !defined(SDL_MAIN_HANDLED)
+#        if defined(__clang__)
+#            pragma clang diagnostic push
+#            pragma clang diagnostic ignored "-Wunused-macros"
+#        endif
 #        define SDL_MAIN_HANDLED
+#        if defined(__clang__)
+#            pragma clang diagnostic pop
+#        endif
 #    endif
 #    include "compute/gpu_platform.h"
 #    include "preload_config.h"
+#    include "platform/sdl_video.h"
 
 #    include <SDL3/SDL.h>
 #endif
@@ -78,17 +86,34 @@ namespace {
 
 bool s_sdl_platform_initialized = false;
 
+auto test_compute_accel() -> preload_config::compute_accel {
+    auto const* const env_accel = std::getenv("CATA_TEST_COMPUTE_ACCELERATION");
+    if (env_accel != nullptr && env_accel[0] != '\0') {
+        return preload_config::compute_accel_from_string(env_accel);
+    }
+
+    if (get_options().has_option("COMPUTE_ACCELERATION")) {
+        const auto accel = preload_config::compute_accel_from_string(
+            get_options().get_option("COMPUTE_ACCELERATION").getValue());
+        if (accel != preload_config::compute_accel::auto_select) {
+            return accel;
+        }
+    }
+
+    return preload_config::compute_accel::gpu_software;
+}
+
 auto init_test_sdl_gpu() -> void {
+    use_offscreen_video_driver_for_headless_sdl();
+
     if (!SDL_Init(SDL_InitFlags{SDL_INIT_VIDEO})) {
         throw std::runtime_error(string_format("SDL_Init failed: %s", SDL_GetError()));
     }
     s_sdl_platform_initialized = true;
 
     preload_config::load();
-    if (get_options().has_option("COMPUTE_ACCELERATION")) {
-        preload_config::set_compute_accel(preload_config::compute_accel_from_string(
-            get_options().get_option("COMPUTE_ACCELERATION").getValue()));
-    }
+    const auto accel = test_compute_accel();
+    preload_config::set_compute_accel(accel);
 
     cata_gpu::init();
     if (cata_gpu::get_device() == nullptr) {
@@ -369,6 +394,11 @@ int main(int argc, const char* argv[]) {
         cata_printf("                                   human-readable (default)\n");
         cata_printf("                                   github-action\n");
         return result;
+    }
+
+    if( session.configData().listTags || session.configData().listTests ||
+        session.configData().listTestNamesOnly || session.configData().listReporters ) {
+        return session.run();
     }
 
     test_mode = true;

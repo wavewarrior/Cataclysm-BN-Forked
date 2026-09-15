@@ -291,7 +291,7 @@ for( auto &i : m.tr_at( p ).trigger_components ) {
     const itype_id &item_type = std::get<0>( i );
         const int quantity = std::get<1>( i );
         const int charges = std::get<2>( i );
-        m.spawn_item( p.xy(), item_type, quantity, charges );
+        m.spawn_item( p, item_type, quantity, charges );
     }
     if( m.tr_at( p ).remove_trap_when_triggered() ) {
     m.remove_trap( p );
@@ -304,7 +304,7 @@ for( auto &i : components ) {
     const itype_id &item_type = std::get<0>( i );
         const int quantity = std::get<1>( i );
         const int charges = std::get<2>( i );
-        m.spawn_item( p.xy(), item_type, quantity, charges );
+        m.spawn_item( p, item_type, quantity, charges );
     }
 for( const tripoint_bub_ms &dest : m.points_in_radius( p, trap_radius ) ) {
         m.remove_trap( dest );

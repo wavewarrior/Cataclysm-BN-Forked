@@ -381,17 +381,13 @@ void map::drop_fields( const tripoint_bub_ms& p )
 
 void map::support_dirty( const tripoint_bub_ms& p )
 {
-    if( zlevels ) { support_cache_dirty.insert( p ); }
+    support_cache_dirty.insert( p );
 }
 
 void map::process_falling()
 {
     ZoneScoped;
 
-    if( !zlevels ) {
-        support_cache_dirty.clear();
-        return;
-    }
 
     if( !support_cache_dirty.empty() ) {
         add_msg( m_debug, "Checking %d tiles for falling objects", support_cache_dirty.size() );

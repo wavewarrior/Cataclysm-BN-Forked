@@ -19,7 +19,7 @@
 TEST_CASE( "tts_resolve_voice_falls_back_to_gender", "[tts]" )
 {
     clear_all_state();
-    npc &talker = spawn_npc( point_bub_ms( 25, 25 ), "test_talker" );
+    npc &talker = spawn_npc( tripoint_bub_ms( 25, 25, 0 ), "test_talker" );
     // Defensive: tts_voice_registry is a process-wide singleton that persists
     // across TEST_CASEs -- make sure no earlier test left an entry for this
     // NPC's class (NC_DOCTOR, per data/mods/TEST_DATA/TALK_TEST.json).
@@ -33,7 +33,7 @@ TEST_CASE( "tts_resolve_voice_falls_back_to_gender", "[tts]" )
 TEST_CASE( "tts_resolve_voice_prefers_explicit_registry_entry", "[tts]" )
 {
     clear_all_state();
-    npc &talker = spawn_npc( point_bub_ms( 25, 25 ), "test_talker" );
+    npc &talker = spawn_npc( tripoint_bub_ms( 25, 25, 0 ), "test_talker" );
     tts_voice_registry::instance().unregister_voice( talker.myclass );
 
     tts_voice_registry::instance().register_voice( talker.myclass, "custom_test_voice" );

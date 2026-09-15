@@ -927,7 +927,7 @@ class Character: public Creature, public location_visitable<Character>
         /**
          * Calculate bonus from enchantments for given base value.
          */
-        double bonus_from_enchantments( double base, enchant_vals::mod value, bool round = false ) const;
+        double bonus_from_enchantments( double base, enchantment_value_id value, bool round = false ) const;
 
         /** Returns true if the player has any martial arts buffs attached */
         bool has_mabuff( const mabuff_id& buff_id ) const;
@@ -1726,7 +1726,7 @@ for( const auto& elem : worn ) {
         efftype_id last_emote;
 
         // bio_portal_tap: persistent link to a powered portal for passive bionic charging.
-        std::string bio_portal_tap_dim_id;
+        dimension_id bio_portal_tap_dim_id;
         tripoint_abs_ms bio_portal_tap_pos;
         bool bio_portal_tap_linked = false;
 

@@ -15,6 +15,8 @@
 #include "damage.h"
 #include "debug.h"
 #include "drop_token.h"
+#include "effect.h" // for weed_msg
+#include "enchantments/enchantment.h"
 #include "enums.h"
 #include "flag.h"
 #include "game.h"
@@ -28,6 +30,7 @@
 #include "iuse_actor.h"
 #include "kill_tracker.h"
 #include "locations.h"
+#include "magic.h"
 #include "map.h"
 #include "material.h"
 #include "messages.h"
@@ -43,6 +46,7 @@
 #include "translations.h"
 #include "type_id.h"
 #include "units.h"
+#include "utils/string_to_int.h"
 #include "units_energy.h"
 #include "units_utility.h"
 #include "value_ptr.h"
@@ -570,11 +574,30 @@ void item::set_damage( int qty )
     damage_ = std::max( std::min( qty, max_damage() ), min_damage() );
 }
 
+auto item::prepare_for_location_removal() -> void
+{
+    if( !goes_bad() ) {
+        return;
+    }
+    if( is_in_preserving_container() ) {
+        mark_rot_checked_now();
+        return;
+    }
+    if( is_loaded() && has_position() ) {
+        const auto vehicle_loc = dynamic_cast<vehicle_item_location *>( loc );
+        const auto temperature = vehicle_loc != nullptr ? vehicle_loc->storage_temperature() :
+                                 rot::temperature_flag_for_location( get_map(), *this );
+        update_rot( position(), temperature, get_weather() );
+    }
+}
+
 detached_ptr<item> item::split( int qty )
 {
     const bool split_from_preserving_container = goes_bad() && is_in_preserving_container();
-    if( split_from_preserving_container ) { mark_rot_checked_now(); }
-    if( qty <= 0 || !count_by_charges() || qty >= charges ) { return detach(); }
+    prepare_for_location_removal();
+    if( qty <= 0 || !count_by_charges() || qty >= charges ) {
+        return detach();
+    }
     detached_ptr<item> res = item::spawn( *this );
     res->charges = qty;
     charges -= qty;
@@ -604,9 +627,13 @@ void item::unsafe_rejoin( item& old )
 
 bool item::attempt_detach( std::function < detached_ptr<item>( detached_ptr<item> && ) > cb )
 {
-    if( is_null() ) { return false; }
-    if( goes_bad() && is_in_preserving_container() ) { mark_rot_checked_now(); }
-    if( count_by_charges() ) { return attempt_split( 0, cb ); }
+    if( is_null() ) {
+        return false;
+    }
+    prepare_for_location_removal();
+    if( count_by_charges() ) {
+        return attempt_split( 0, cb );
+    }
     return game_object<item>::attempt_detach( cb );
 }
 
@@ -614,9 +641,9 @@ bool item::attempt_split(
     int qty, const std::function < detached_ptr<item>( detached_ptr<item> && ) > & cb )
 {
     const bool split_from_preserving_container = goes_bad() && is_in_preserving_container();
-    if( split_from_preserving_container ) { mark_rot_checked_now(); }
-    const bool split_needs_rot_actualization =
-        goes_bad() && has_position() && !split_from_preserving_container;
+    prepare_for_location_removal();
+    const bool split_needs_rot_actualization = goes_bad() && is_loaded() && has_position() &&
+            !split_from_preserving_container;
     const auto split_pos = split_needs_rot_actualization ? position() : tripoint_bub_ms::zero();
     const auto vehicle_loc = dynamic_cast<vehicle_item_location *>( loc );
     const auto split_temperature =
@@ -866,46 +893,6 @@ bool item::has_item_with_id( const itype_id& itype ) const
     } );
 }
 
-
-detached_ptr<item> item::actualize_rot(
-    detached_ptr<item>&& self, const tripoint_bub_ms& pnt, temperature_flag temperature,
-    const weather_manager& weather )
-{
-    // Guard against null or invalid items that can survive save/load cycles
-    // during dimension transitions (e.g. zombie items from deferred arena cleanup).
-    if( !self || !self->type || self->type == nullitem() ) {
-        if( self ) {
-            debugmsg( "actualize_rot: skipping item with %s type at %s",
-                      self->type ? "null-type" : "null", pnt.to_string() );
-        }
-        return std::move( self );
-    }
-    if( self->goes_bad() ) {
-        return process_rot( std::move( self ), false, pnt, nullptr, temperature, weather );
-    } else if( self->type->container && self->type->container->preserves ) {
-        // Containers like tin cans preserves all items inside, they do not rot at all.
-        return std::move( self );
-    } else if( self->type->container && self->type->container->seals ) {
-        // Items inside rot but do not vanish as the container seals them in.
-        self->contents.remove_top_items_with(
-        [&pnt, &temperature, &weather]( detached_ptr<item>&& it ) {
-            if( !it || !it->type || it->type == nullitem() ) { return std::move( it ); }
-            if( it->goes_bad() ) {
-                it = process_rot( std::move( it ), true, pnt, nullptr, temperature, weather );
-            }
-            return std::move( it );
-        } );
-        return std::move( self );
-    } else {
-        // Check and remove rotten contents, but always keep the container.
-        self->contents.remove_top_items_with(
-        [&pnt, &temperature, &weather]( detached_ptr<item>&& it ) {
-            return actualize_rot( std::move( it ), pnt, temperature, weather );
-        } );
-        return std::move( self );
-    }
-}
-
 bool item_ptr_compare_by_charges( const item* left, const item* right )
 {
     if( left->contents.empty() ) {
@@ -932,15 +919,11 @@ bool item::is_stackable() const
 // Advanced hearing protection does not make it harder for the character to hear other sounds.
 int item::get_hearing_protection( bool advanced ) const
 {
-    if( this->is_armor() ) {
-    const islot_armor* armor = find_armor_data();
-        if( armor == nullptr ) {
-            return 0;
-        }
-        return ( advanced ) ? armor->adv_hearing_protection : armor->hearing_protection;
-    } else {
+    const islot_armor *armor = find_armor_data();
+    if( armor == nullptr ) {
         return 0;
     }
+    return ( advanced ) ? armor->adv_hearing_protection : armor->hearing_protection;
 }
 
 bool item::can_put_in_bandolier( const item& obj, bool ) const
@@ -956,4 +939,62 @@ if( !ptr->can_store( *this, obj ) ) {
 }
 
 return true;
+}
+
+auto item::actualize_rot( detached_ptr<item> &&self, const tripoint_bub_ms &pnt,
+                          const temperature_flag temperature,
+                          const weather_manager &weather ) -> detached_ptr<item>
+{
+    return actualize_rot( std::move( self ), {
+        .position = bub_to_abs( pnt ),
+        .temperature = temperature,
+        .weather = &weather,
+        .local_temperature = g != nullptr && !g->new_game ? get_map().get_temperature( pnt ) : 0,
+    } );
+}
+
+auto item::actualize_rot( detached_ptr<item> &&self,
+                          const rot_context &context ) -> detached_ptr<item>
+{
+    // Guard against null or invalid items that can survive save/load cycles
+    // during dimension transitions (e.g. zombie items from deferred arena cleanup).
+    if( !self || !self->type || self->type == nullitem() ) {
+        if( self ) {
+            debugmsg( "actualize_rot: skipping item with %s type at %s",
+                      self->type ? "null-type" : "null", context.position.to_string() );
+        }
+        return std::move( self );
+    }
+    if( self->goes_bad() ) {
+        return process_rot( std::move( self ), {
+            .seals = false,
+            .carrier = nullptr,
+            .context = context,
+        } );
+    } else if( self->type->container && self->type->container->preserves ) {
+        // Containers like tin cans preserves all items inside, they do not rot at all.
+        return std::move( self );
+    } else if( self->type->container && self->type->container->seals ) {
+        // Items inside rot but do not vanish as the container seals them in.
+        self->contents.remove_top_items_with( [&context]( detached_ptr<item> &&it ) {
+            if( !it || !it->type || it->type == nullitem() ) {
+                return std::move( it );
+            }
+            if( it->goes_bad() ) {
+                it = process_rot( std::move( it ), {
+                    .seals = true,
+                    .carrier = nullptr,
+                    .context = context,
+                } );
+            }
+            return std::move( it );
+        } );
+        return std::move( self );
+    } else {
+        // Check and remove rotten contents, but always keep the container.
+        self->contents.remove_top_items_with( [&context]( detached_ptr<item> &&it ) {
+            return actualize_rot( std::move( it ), context );
+        } );
+        return std::move( self );
+    }
 }

@@ -187,6 +187,7 @@ static const efftype_id effect_music( "music" );
 static const efftype_id effect_onfire( "onfire" );
 static const efftype_id effect_paincysts( "paincysts" );
 static const efftype_id effect_pet( "pet" );
+static const efftype_id effect_pet_bonded( "pet_bonded" );
 static const efftype_id effect_poison( "poison" );
 static const efftype_id effect_ridden( "ridden" );
 static const efftype_id effect_riding( "riding" );
@@ -1106,6 +1107,7 @@ int iuse::petfood( player* p, item* it, bool, const tripoint_bub_ms & )
         }
 
         p->consume_charges( *it, 1 );
+        mon.on_pet_bonding( p->as_character() );
         return 0;
     }
 
@@ -1868,7 +1870,8 @@ int iuse::dog_whistle( player* p, item* it, bool, const tripoint_bub_ms & )
     }
     p->add_msg_if_player( _( "You blow your dog whistle." ) );
     for( monster& critter : g->all_monsters() ) {
-        if( critter.friendly != 0 && critter.has_flag( MF_DOGFOOD ) ) {
+        if( critter.friendly != 0 && ( critter.has_flag( MF_DOGFOOD ) ||
+                                       critter.has_flag( MF_DOG_WHISTLE ) ) ) {
             bool u_see = g->u.sees( critter );
             if( critter.has_effect( effect_docile ) ) {
                 if( u_see ) {
@@ -1912,7 +1915,7 @@ int iuse::blood_draw( player* p, item* it, bool, const tripoint_bub_ms & )
     const mtype* mt = nullptr;
     bool drew_blood = false;
     bool acid_blood = false;
-    for( auto& map_it : g->m.i_at( p->bub_pos().xy() ) ) {
+    for( auto& map_it : g->m.i_at( p->bub_pos() ) ) {
         if( map_it->is_corpse() ) {
             bool has_blood = false;
             mt = map_it->get_mtype();
@@ -2009,7 +2012,7 @@ int iuse::mind_splicer( player* p, item* it, bool, const tripoint_bub_ms & )
         p->add_msg_if_player( m_info, _( "You cannot do that while mounted." ) );
         return 0;
     }
-    for( auto& map_it : g->m.i_at( p->bub_pos().xy() ) ) {
+    for( auto& map_it : g->m.i_at( p->bub_pos() ) ) {
         if( map_it->typeId() == itype_rmi2_corpse
             && query_yn( _( "Use the mind splicer kit on the %s?" ),
                          colorize( map_it->tname(), map_it->color_in_inventory() ) ) ) {
@@ -2960,4 +2963,5 @@ int use_function::call( player& p, item& it, bool active, const tripoint_bub_ms&
 {
     return actor->use( p, it, active, pos );
 }
+
 

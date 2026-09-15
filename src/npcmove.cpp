@@ -1049,6 +1049,9 @@ bool npc::aim()
 
 bool npc::update_path( const tripoint_bub_ms& p, const bool no_bashing, bool force )
 {
+    ZoneScopedN( "npc_update_path" );
+    ZoneValue( rl_dist( bub_pos(), p ) );
+
     if( p == bub_pos() ) {
         path.clear();
         return true;
@@ -1064,8 +1067,12 @@ bool npc::update_path( const tripoint_bub_ms& p, const bool no_bashing, bool for
         }
     }
 
-    auto new_path = get_map().route(
-                        bub_pos(), p, get_legacy_pathfinding_settings( no_bashing ), get_legacy_path_avoid() );
+    auto new_path = [&]() {
+        ZoneScopedN( "npc_update_path_route" );
+        return get_map().route( bub_pos(), p, get_legacy_pathfinding_settings( no_bashing ),
+                                get_legacy_path_avoid() );
+    }
+    ();
     if( new_path.empty() ) {
         if( !ai_cache.sound_alerts.empty() ) {
             ai_cache.sound_alerts.erase( ai_cache.sound_alerts.begin() );
@@ -1322,7 +1329,7 @@ void npc::move_to( const tripoint_bub_ms& pt, bool no_bashing, std::set<tripoint
 
     if( moved ) {
         const auto old_pos = bub_pos();
-        setpos( p );
+        setpos_preserving_movement_state( p );
         set_underwater( g->m.is_divable( p ) );
         if( old_pos.x() - p.x() < 0 ) {
             facing = FD_RIGHT;
@@ -1353,7 +1360,8 @@ void npc::move_to( const tripoint_bub_ms& pt, bool no_bashing, std::set<tripoint
         if( in_vehicle ) { here.unboard_vehicle( old_pos ); }
 
         // Close doors behind self (if you can)
-        if( ( rules.has_flag( ally_rule::close_doors ) && is_player_ally() ) && !is_hallucination() ) {
+        if( ( rules.has_flag( ally_rule::close_doors ) &&
+              is_player_ally() ) && !is_hallucination() ) {
             doors::close_door( here, *this, old_pos );
         }
 
@@ -1573,6 +1581,7 @@ void npc::see_item_say_smth( const itype_id& object, const std::string& smth )
     }
 }
 
+
 bool npc::find_corpse_to_pulp()
 {
     Character& player_character = get_player_character();
@@ -1667,9 +1676,11 @@ bool npc::do_pulp()
 
 bool npc::do_player_activity()
 {
-    int old_moves = moves;
-    if( moves > 200 && activity
-        && ( activity->is_multi_type() || activity->id() == activity_id( "ACT_TIDY_UP" ) ) ) {
+    ZoneScopedN( "npc_do_player_activity" );
+
+    const auto old_moves = moves;
+    if( moves > 200 && activity && ( activity->is_multi_type() ||
+                                     activity->id() == activity_id( "ACT_TIDY_UP" ) ) ) {
         // a huge backlog of a multi-activity type can forever loop
         // instead; just scan the map ONCE for a task to do, and if it returns false
         // then stop scanning, abandon the activity, and kill the backlog of moves.
@@ -2118,13 +2129,6 @@ void npc::set_omt_destination()
         return;
     }
 
-    // all of the following luxuries are at ground level.
-    // so please wallow in hunger & fear if below ground.
-    if( bub_pos().z() != 0 && !get_map().has_zlevels() ) {
-        goal = no_goal_point;
-        return;
-    }
-
     tripoint_abs_omt surface_omt_loc = abs_omt_pos();
     // We need that, otherwise find_closest won't work properly
     surface_omt_loc.z() = 0;
@@ -2195,6 +2199,8 @@ void npc::set_omt_destination()
 
 void npc::go_to_omt_destination()
 {
+    ZoneScopedN( "npc_go_to_omt_destination" );
+
     map& here = get_map();
     if( ai_cache.guard_pos ) {
         if( abs_pos() == *ai_cache.guard_pos ) {
@@ -2242,6 +2248,7 @@ void npc::go_to_omt_destination()
     // TODO: fix point types
     auto sm_tri = abs_to_bub( project_to<coords::ms>( omt_path.back() ) );
     auto centre_sub = sm_tri + point( SEEX, SEEY );
+    here.clip_to_bounds( centre_sub );
     if( !here.passable( centre_sub ) ) {
         auto candidates = here.points_in_radius( centre_sub, 2 );
         for( const auto& elem : candidates ) {
@@ -2251,8 +2258,14 @@ void npc::go_to_omt_destination()
             }
         }
     }
-    path = here.route(
-               bub_pos(), centre_sub, get_legacy_pathfinding_settings(), get_legacy_path_avoid() );
+    {
+        ZoneScopedN( "npc_goto_destination_route" );
+        path = here.route(
+                   bub_pos(), centre_sub, get_legacy_pathfinding_settings(), get_legacy_path_avoid() );
+    }
+    while( !path.empty() && path.front() == bub_pos() ) {
+        path.erase( path.begin() );
+    }
     add_msg( m_debug, "%s going %s->%s", name, omt_pos.to_string(), goal.to_string() );
 
     if( !path.empty() ) {

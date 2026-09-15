@@ -4,7 +4,9 @@
 #include "avatar.h"
 #include "avatar_functions.h"
 #include "bodypart.h"
+#include "catalua.h"
 #include "character.h"
+#include "clzones.h"
 #include "character_functions.h"
 #include "clzones.h"
 #include "color.h"
@@ -1942,6 +1944,7 @@ void vehicle::interact_with( const tripoint_bub_ms& pos, int interact_part )
     const bool curtain_closed = ( curtain_part == -1 ) ? false : !parts[curtain_part].open;
     const bool has_hotplate = avail_part_with_feature( interact_part, "HOTPLATE", true ) >= 0;
     const bool has_faucet = avail_part_with_feature( interact_part, "FAUCET", true ) >= 0;
+    const bool has_shower = avail_part_with_feature( interact_part, "SHOWER", true ) >= 0;
     const bool has_towel = avail_part_with_feature( interact_part, "TOWEL", true ) >= 0;
     const bool has_crafter = avail_part_with_feature( interact_part, "CRAFTER", true ) >= 0;
     const bool has_purify = avail_part_with_feature( interact_part, "WATER_PURIFIER", true ) >= 0;
@@ -1992,6 +1995,7 @@ void vehicle::interact_with( const tripoint_bub_ms& pos, int interact_part )
         USE_HARNESS,
         RELOAD_PLANTER,
         USE_TOWEL,
+        USE_SHOWER,
         PEEK_CURTAIN,
         PICK_LOCK
     };
@@ -2038,6 +2042,7 @@ void vehicle::interact_with( const tripoint_bub_ms& pos, int interact_part )
         selectmenu.addentry( DRINK, true, 'd', _( "Have a drink" ) );
     }
     if( has_towel ) { selectmenu.addentry( USE_TOWEL, true, 't', _( "Use a towel" ) ); }
+    if( has_shower ) { selectmenu.addentry( USE_SHOWER, true, 's', _( "Take a shower" ) ); }
     if( has_crafter && fuel_left( itype_battery, true ) > 0 ) {
         selectmenu.addentry( USE_CRAFTER, true, 'T', _( "Use the integrated tools" ) );
     }
@@ -2093,7 +2098,7 @@ void vehicle::interact_with( const tripoint_bub_ms& pos, int interact_part )
         }
         case PEEK_CURTAIN: {
             add_msg( _( "You carefully peek through the curtains." ) );
-            g->peek( pos );
+            g->peek( you.bub_pos() - pos );
             return;
         }
         case USE_HOTPLATE: {
@@ -2102,6 +2107,10 @@ void vehicle::interact_with( const tripoint_bub_ms& pos, int interact_part )
         }
         case USE_TOWEL: {
             iuse::towel_common( &you, nullptr, false );
+            return;
+        }
+        case USE_SHOWER: {
+            cata::run_lua_examine( "PLUMBING_SHOWER_EXAMINE", you, pos );
             return;
         }
         case USE_AUTOCLAVE: {

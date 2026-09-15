@@ -46,7 +46,7 @@
 #include "lightmap.h"
 #include "npc_class.h"
 #include "magic.h"
-#include "magic_enchantment.h"
+#include "enchantments/enchantment.h"
 #include "make_static.h"
 #include "mapsharing.h"
 #include "martialarts.h"
@@ -453,6 +453,20 @@ tab_direction set_description( avatar &you, bool allow_reroll, points_left &poin
 
 static std::optional<std::string> query_for_template_name();
 void reset_scenario( avatar &u, const scenario *scen );
+
+static auto scenario_is_selectable( const scenario &scen, const bool cities_enabled ) -> bool
+{
+    return !scen.scen_is_blacklisted() && ( !scen.has_flag( "CITY_START" ) || cities_enabled );
+}
+
+static auto first_selectable_scenario( const std::vector<const scenario *> &scenarios,
+                                       const bool cities_enabled ) -> const scenario * // *NOPAD*
+{
+    const auto iter = std::ranges::find_if( scenarios, [cities_enabled]( const scenario * scen ) {
+        return scenario_is_selectable( *scen, cities_enabled );
+    } );
+    return iter != scenarios.end() ? *iter : scenarios.front();
+}
 
 namespace
 {
@@ -1083,12 +1097,12 @@ tab_direction set_stats( avatar &u, points_left &points )
     // on the map (like -1,0) and instead returns a dummy default value.
     auto old_pos = u.bub_pos();
     old_pos.x() = -1;
-    u.setpos( old_pos );
+    u.Character::setpos( old_pos );
     u.reset();
     // set position back to 0 to prevent out-of-bound access to lightmap
     // array in map::build_seen_cache()
     old_pos.x() = 0;
-    u.setpos( old_pos );
+    u.Character::setpos( old_pos );
 
     auto data = std::make_unique<nc_stats_session>();
     rml_doc rml;
@@ -6966,11 +6980,13 @@ tab_direction set_scenario( avatar &u, points_left &points,
             scenario_sorter.cities_enabled = wopts["CITY_SIZE"].getValue() != "0";
             std::stable_sort( sorted_scens.begin(), sorted_scens.end(), scenario_sorter );
 
-            // If city size is 0 but the current scenario requires cities reset the scenario
-            if( !scenario_sorter.cities_enabled && g->scen->has_flag( "CITY_START" ) ) {
-                reset_scenario( u, sorted_scens[0] );
+            // Reset if the current scenario is no longer selectable, such as when a mod whitelist hides it.
+            if( !scenario_is_selectable( *g->scen, scenario_sorter.cities_enabled ) ) {
+                const auto *fallback_scenario = first_selectable_scenario( sorted_scens,
+                                                scenario_sorter.cities_enabled );
+                reset_scenario( u, fallback_scenario );
                 points.init_from_options();
-                points.skill_points -= sorted_scens[cur_id]->point_cost();
+                points.skill_points -= g->scen->point_cost();
             }
 
             // Select the current scenario, if possible.

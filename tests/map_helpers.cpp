@@ -39,7 +39,7 @@ void clear_vehicles() {
 void wipe_map_terrain() {
     map& here = get_map();
     const int mapsize = here.getmapsize() * SEEX;
-    for (int z = -1; z <= OVERMAP_HEIGHT; ++z) {
+    for (int z = -2; z <= OVERMAP_HEIGHT; ++z) {
         const ter_id terrain = z == 0 ? t_grass : z < 0 ? t_rock : t_open_air;
         for (int x = 0; x < mapsize; ++x) {
             for (int y = 0; y < mapsize; ++y) {
@@ -114,10 +114,10 @@ void clear_overmap() {
 }
 
 void clear_map() {
-    // Re-anchor the reality bubble to a canonical position, not just z=0.
+    // Re-anchor the reality bubble's xy to a canonical position.
     //
-    // This previously reset only the z, inheriting abs_sub's xy from whatever the
-    // previous TEST_CASE happened to leave behind.  Anything that triggers
+    // Inheriting abs_sub's xy from whatever the previous TEST_CASE happened to
+    // leave behind causes order-dependent failures: anything that triggers
     // map::update_map() mid-test — map::board_vehicle() does, via the avatar move
     // path — shifts that anchor, and it was never wound back, so the bub<->abs
     // relationship differed per test depending on execution order.  Tests that lay
@@ -127,12 +127,9 @@ void clear_map() {
     //
     // load() rather than set_abs_sub() when the anchor actually moved: set_abs_sub
     // alone would leave grid[] pointing at the previous anchor's submaps.
-    static const point_abs_sm canonical_xy = g->m.get_abs_sub().xy();
-    const tripoint_abs_sm canonical{canonical_xy, 0};
-    if (g->m.get_abs_sub() == canonical) {
-        g->m.set_loaded_submap_origin(canonical);
-    } else {
-        g->m.load(canonical, true);
+    static const point_abs_sm canonical_xy = g->m.get_abs_sub();
+    if (g->m.get_abs_sub() != canonical_xy) {
+        g->m.load(canonical_xy, true);
     }
 
     // Clearing all z-levels is rather slow, so just clear the ones I know the
@@ -164,7 +161,16 @@ void clear_map() {
 void put_player_underground() {
     // Make sure the player doesn't block the path of the monster being tested.
     g->u.setpos( map_local_to_abs( get_map(),
-                                   tripoint_bub_ms( g_half_mapsize_x, g_half_mapsize_y, -2 ) ) );
+                                   tripoint_bub_ms( g_half_mapsize_x + SEEX - 1,
+                                           g_half_mapsize_y + SEEY - 1, -2 ) ) );
+}
+
+auto move_player_out_of_the_way() -> void
+{
+    auto &here = get_map();
+    g->u.setpos( map_local_to_abs( here,
+                                   tripoint_bub_ms( g_half_mapsize_x + SEEX - 1,
+                                           g_half_mapsize_y + SEEY - 1, g->u.abs_pos().z() ) ) );
 }
 
 monster& spawn_test_monster(const std::string& monster_type, const tripoint_bub_ms& start) {
@@ -205,8 +211,10 @@ void build_water_test_map(const ter_id& surface, const ter_id& mid, const ter_id
         }
     }
 
-    here.invalidate_map_cache(0);
-    here.build_map_cache(0, true);
+    for (const int z : {z_bottom, -1, z_surface}) {
+        here.invalidate_map_cache(z);
+        here.build_map_cache(z, true);
+    }
 }
 
 void set_time(const time_point& time) {

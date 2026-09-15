@@ -20,6 +20,7 @@
 #include "character_functions.h"
 #include "character_martial_arts.h"
 #include "character_stat.h"
+#include "character_vision.h"
 #include "clothing_utils.h"
 #include "clzones.h"
 #include "combat_feedback.h"
@@ -33,6 +34,7 @@
 #include "detached_ptr.h"
 #include "disease.h"
 #include "effect.h"
+#include "enchantments/enchantment.h"
 #include "event.h"
 #include "event_bus.h"
 #include "field.h"
@@ -51,7 +53,6 @@
 #include "legacy_pathfinding.h"
 #include "lightmap.h"
 #include "line.h"
-#include "magic_enchantment.h"
 #include "make_static.h"
 #include "map.h"
 #include "map_iterator.h"
@@ -96,6 +97,7 @@
 #include "text_snippets.h"
 #include "translations.h"
 #include "trap.h"
+#include "type_id.h"
 #include "ui.h"
 #include "ui_manager.h"
 #include "units_temperature.h"
@@ -815,6 +817,7 @@ auto Character::setpos( const tripoint_abs_ms& p ) -> void
     if( auto *pw = get_map().get_physics_world() ) {
         pw->on_creature_moved( *this );
     }
+
 }
 
 bool Character::has_alarm_clock() const
@@ -1035,6 +1038,7 @@ std::unique_ptr<player_activity> Character::clear_destination_activity()
 }
 
 player_activity &Character::get_destination_activity() const { return *destination_activity; }
+
 
 
 /** Returns true if the character has two functioning arms */
@@ -1344,6 +1348,7 @@ void Character::calc_all_parts_hp( float hp_mod, float hp_adjustment, int str_ma
 
         if( has_trait( trait_GLASSJAW ) && part.first == bodypart_str_id( "head" ) ) { new_max *= 0.8; }
 
+        new_max += bonus_from_enchantments( new_max, enchantment_value_id( "HEALTH_POINTS" ) );
         new_max = std::max( new_max, 1 );
         int new_cur = std::ceil( static_cast<float>( new_max ) * hp_ratio );
 
@@ -1362,6 +1367,7 @@ void Character::calc_all_parts_hp( float hp_mod, float hp_adjustment, int str_ma
 // occur through a function in this class which calls this function. Clothes are
 // typically added/removed with wear() and takeoff(), but direct access to the
 // 'wears' vector is still allowed due to refactor exhaustion.
+
 
 namespace vision
 {
@@ -1408,6 +1414,7 @@ for( const item * const &i : worn ) {
 }
 
 bionic_collection &Character::get_bionic_collection() const { return *my_bionics; }
+
 
 
 static auto get_enchantment_mut_visible(
@@ -1682,9 +1689,9 @@ int Character::read_speed( bool return_stat_effect ) const
     /** @EFFECT_INT increases reading speed by 3s per level above 8*/
     int ret = to_moves<int>( 1_minutes ) - to_moves<int>( 3_seconds ) * ( intel - 8 );
 
-    if( has_bionic( afs_bio_linguistic_coprocessor ) ) { ret *= .75; }
 
     ret *= mutation_value( "reading_speed_multiplier" );
+    ret += bonus_from_enchantments( ret, enchantment_value_id( "READING_SPEED" ) );
 
     if( ret < to_moves<int>( 1_seconds ) ) { ret = to_moves<int>( 1_seconds ); }
     // return_stat_effect actually matters here
@@ -2556,6 +2563,7 @@ int Character::get_char_hearing_protection( bool advanced ) const
     return ret;
 }
 
+
 void Character::cough( bool harmful, int loudness )
 {
     if( has_effect( effect_cough_suppress ) ) { return; }
@@ -2805,6 +2813,7 @@ std::string get_stat_name( character_stat Stat )
 }
 
 /// Returns the mutation category with the highest strength
+
 bool Character::wearing_something_on( const bodypart_id &bp ) const
 {
 for( auto &i : worn ) {
@@ -3233,6 +3242,8 @@ int Character::bodytemp_modifier_traits( bool overheated ) const
     for( const trait_id& iter : get_mutations() ) {
         mod += overheated ? iter->bodytemp_min : iter->bodytemp_max;
     }
+    mod += overheated ? bonus_from_enchantments( mod, enchantment_value_id( "BODYTEMP_MIN" ) ) :
+           bonus_from_enchantments( mod, enchantment_value_id( "BODYTEMP_MAX" ) );
     return mod;
 }
 
@@ -3240,6 +3251,7 @@ int Character::bodytemp_modifier_traits_floor() const
 {
     int mod = 0;
     for( const trait_id& iter : get_mutations() ) { mod += iter->bodytemp_sleep; }
+    mod += bonus_from_enchantments( mod, enchantment_value_id( "BODYTEMP_SLEEP" ) );
     return mod;
 }
 
@@ -3326,8 +3338,9 @@ void Character::on_stat_change( const std::string& stat, int value )
 int Character::adjust_for_focus( int amount ) const
 {
     int effective_focus = focus_pool;
+    effective_focus += bonus_from_enchantments( effective_focus,
+                       enchantment_value_id( "EFFECTIVE_FOCUS" ) );
     if( has_trait( trait_FASTLEARNER ) ) { effective_focus += 15; }
-    if( has_active_bionic( bio_memory ) ) { effective_focus += 10; }
     if( has_trait( trait_SLOWLEARNER ) ) { effective_focus -= 15; }
     effective_focus +=
         ( get_int() - get_option<int>( "INT_BASED_LEARNING_BASE_VALUE" ) )
@@ -3432,6 +3445,7 @@ item &Character::item_with_best_of_quality( const quality_id& qid )
     return null_item_reference();
 }
 
+
 // Used primarily for ressurection lua scripts
 // count: number of items to drop < 0 means drop all
 void Character::drop_inv( const int count )
@@ -3470,7 +3484,7 @@ void Character::place_corpse()
 void Character::place_corpse( const tripoint_abs_omt& om_target )
 {
     tinymap bay;
-    bay.load( project_to<coords::sm>( om_target ), false );
+    bay.load( project_to<coords::sm>( om_target ).xy(), false );
     point_bub_ms fin{rng( 1, SEEX * 2 - 2 ), rng( 1, SEEX * 2 - 2 )};
     // This makes no sense at all. It may find a random tile without furniture, but
     // if the first try to find one fails, it will go through all tiles of the map
@@ -3487,6 +3501,8 @@ void Character::place_corpse( const tripoint_abs_omt& om_target )
             }
         }
     }
+    omt_ms = project_combine( project_remain<coords::sm>( omt_ms ).quotient, sm_ms );
+    const auto fin = project_combine( om_target, omt_ms );
 
     std::vector<detached_ptr<item>> tmp = inv_dump_remove();
     detached_ptr<item> body = item::make_corpse( mtype_id::NULL_ID(), calendar::turn, name );
@@ -3496,9 +3512,11 @@ void Character::place_corpse( const tripoint_abs_omt& om_target )
             body->put_in( item::spawn( bio.info().itype(), calendar::turn ) );
         }
     }
-
-    bay.add_item_or_charges( fin, std::move( body ) );
+    get_mapbuffer().add_item_or_charges( fin, std::move( body ), {
+        .lookup = mapbuffer_lookup_mode::load_or_generate,
+    } );
 }
+
 
 
 void Character::shift_destination( point_rel_ms shift )
@@ -3761,6 +3779,7 @@ bool Character::block_ranged_hit( Creature* source, bodypart_id& bp_hit, damage_
     }
     return true;
 }
+
 
 // force is maximum damage to hp before scaling
 bool Character::can_reload( const item &it, const itype_id &ammo ) const

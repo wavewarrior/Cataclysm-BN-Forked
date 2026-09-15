@@ -457,6 +457,7 @@ void vehicle::refresh()
     }
 
     alternators.clear();
+    battery_parts.clear();
     engines.clear();
     reactors.clear();
     solar_panels.clear();
@@ -485,6 +486,8 @@ void vehicle::refresh()
     has_autoloaders = false;
     has_cargo_recharge = false;
     has_portal_tap_parts = false;
+    cargo_recharge_targets_dirty = true;
+    cargo_recharge_targets_.clear();
 
     // Used to sort part list so it displays properly when examining
     struct sort_veh_part_vector {
@@ -525,6 +528,9 @@ void vehicle::refresh()
 
         if( vpi.has_flag( VPFLAG_FLOATS ) ) {
             floating.push_back( p );
+        }
+        if( vp.part().is_battery() ) {
+            battery_parts.push_back( p );
         }
 
         if( vp.part().is_unavailable() ) {

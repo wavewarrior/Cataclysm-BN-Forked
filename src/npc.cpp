@@ -49,6 +49,7 @@
 #include "map.h"
 #include "map_iterator.h"
 #include "map_selector.h"
+#include "mapbuffer.h"
 #include "mapdata.h"
 #include "math_defines.h"
 #include "messages.h"
@@ -746,9 +747,31 @@ auto npc::setpos( const tripoint_bub_ms &pos ) -> void
 
 auto npc::setpos( const tripoint_abs_ms &new_pos ) -> void
 {
+    setpos_impl( new_pos, false );
+}
+
+auto npc::setpos_preserving_movement_state( const tripoint_bub_ms &pos ) -> void
+{
+    setpos_preserving_movement_state( map_local_to_abs( get_map(), pos ) );
+}
+
+auto npc::setpos_preserving_movement_state( const tripoint_abs_ms &new_pos ) -> void
+{
+    setpos_impl( new_pos, true );
+}
+
+auto npc::setpos_impl( const tripoint_abs_ms &new_pos, const bool preserve_movement_state ) -> void
+{
+    const auto old_pos = position;
     const auto pos_om_old = project_to<coords::om>( project_to<coords::sm>( position ).xy() );
     const auto pos_om_new = project_to<coords::om>( project_to<coords::sm>( new_pos ).xy() );
+    if( is_active() ) {
+        get_mapbuffer().update_active_npc_pos( *this, new_pos );
+    }
     Character::setpos( new_pos );
+    if( old_pos != new_pos && !preserve_movement_state ) {
+        clear_transient_movement_state_after_reposition();
+    }
     if( !is_fake() && pos_om_old != pos_om_new ) {
         auto &dim_ob = get_overmapbuffer( get_dimension() );
         overmap &om_old = dim_ob.get( pos_om_old );
@@ -761,6 +784,27 @@ auto npc::setpos( const tripoint_abs_ms &new_pos ) -> void
             debugmsg( "could not find npc %s on its old overmap", name );
         }
     }
+}
+
+auto npc::clear_transient_movement_state_after_reposition() -> void
+{
+    path.clear();
+    omt_path.clear();
+    clear_destination();
+    last_player_seen_pos = std::nullopt;
+    last_seen_player_turn = 999;
+    goto_to_this_pos = std::nullopt;
+    wanted_item_pos = tripoint_bub_ms::min();
+    guard_pos = tripoint_abs_ms::min();
+    goal = no_goal_point;
+    pulp_location = std::nullopt;
+    fetching_item = false;
+    ai_cache.sound_alerts.clear();
+    ai_cache.s_abs_pos = tripoint_abs_ms::zero();
+    ai_cache.stuck = 0;
+    ai_cache.guard_pos = std::nullopt;
+    ai_cache.dangerous_explosives.clear();
+    ai_cache.searched_tiles.clear();
 }
 
 void npc::travel_overmap( const tripoint_abs_sm &pos )
@@ -1986,7 +2030,9 @@ bool npc::emergency( float danger ) const
 //Active npcs are the npcs near the player that are actively simulated.
 bool npc::is_active() const
 {
-    return g->critter_at<npc>( bub_pos() ) == this;
+    return std::ranges::any_of( g->raw_npcs(), [&]( const shared_ptr_fast<npc> &guy ) {
+        return guy.get() == this;
+    } );
 }
 
 int npc::follow_distance() const
@@ -2376,17 +2422,41 @@ void npc::on_load()
 
     last_updated = calendar::turn;
 
+    auto &buffer = get_mapbuffer();
+    const auto pos = abs_pos();
+    const auto tile = buffer.get_abs_tile( pos );
+    const auto unstable = tile && ( tile->get_ter_t().has_flag( "UNSTABLE" ) ||
+                                    tile->get_furn_t().has_flag( "UNSTABLE" ) );
+
     // for spawned npcs
-    if( g->m.has_flag( "UNSTABLE", bub_pos() ) ) {
+    if( unstable ) {
         add_effect( effect_bouldering, 1_turns, bodypart_str_id::NULL_ID() );
     } else if( has_effect( effect_bouldering ) ) {
         remove_effect( effect_bouldering );
     }
-    if( g->m.veh_at( bub_pos() ).part_with_feature( VPFLAG_BOARDABLE, true ) && !in_vehicle ) {
-        g->m.board_vehicle( bub_pos(), this );
+    if( !in_vehicle ) {
+        const auto player_bubble_pos = abs_to_bub( pos );
+        if( get_dimension() == g->m.get_bound_dimension() &&
+            is_in_reality_bubble_bounds( player_bubble_pos ) ) {
+            if( g->m.veh_at( player_bubble_pos ).part_with_feature( VPFLAG_BOARDABLE, true ) ) {
+                g->m.board_vehicle( player_bubble_pos, this );
+            }
+        } else if( const auto vp = buffer.veh_at( pos ).part_with_feature( VPFLAG_BOARDABLE, true ) ) {
+            if( vp->part().has_flag( vehicle_part::passenger_flag ) ) {
+                player *psg = vp->vehicle().get_passenger( vp->part_index() );
+                debugmsg( "npc::on_load: vehicle passenger (%s) is already there",
+                          psg ? psg->name : "<null>" );
+            } else {
+                vp->part().set_flag( vehicle_part::passenger_flag );
+                vp->part().passenger_id = getID();
+                vp->vehicle().invalidate_mass();
+                setpos( pos );
+                in_vehicle = true;
+            }
+        }
     }
     if( has_effect( effect_riding ) && !mounted_creature ) {
-        if( const monster *const mon = g->critter_at<monster>( bub_pos() ) ) {
+        if( const monster *const mon = g->critter_at<monster>( pos ) ) {
             mounted_creature = g->shared_from( *mon );
         } else {
             add_msg( m_debug, "NPC is meant to be riding, though the mount is not found when %s is loaded",
@@ -2740,7 +2810,7 @@ const
 std::pair<PathfindingSettings, RouteSettings> npc::get_pathfinding_pair(
     bool no_bashing ) const
 {
-    PathfindingSettings path_settings;
+    auto path_settings = PathfindingSettings();
 
     path_settings.door_open_cost = rules.has_flag( ally_rule::avoid_doors ) ? INFINITY : 2.0;
     path_settings.mob_presence_penalty =
@@ -2760,16 +2830,24 @@ std::pair<PathfindingSettings, RouteSettings> npc::get_pathfinding_pair(
         path_settings.climb_cost = 5 / climb_success_prob;
     }
 
-    RouteSettings route_settings;
+    auto route_settings = RouteSettings();
     // TODO: Make it assign a stockfish preset instead
-    route_settings.alpha = 1.0;
-    route_settings.h_coeff = 1.0;
+    route_settings.alpha = get_option<float>( "PATHFINDING_ALPHA_DEFAULT" );
+    route_settings.h_coeff = get_option<float>( "PATHFINDING_H_COEFF_DEFAULT" );
     route_settings.max_dist = INFINITY;
-    route_settings.max_f_coeff = INFINITY;
+    route_settings.max_f_coeff = get_option<float>( "PATHFINDING_MAX_F_COEFF_DEFAULT" );
     route_settings.max_s_coeff = INFINITY;
     route_settings.f_limit_based_on_max_dist = false;
-    route_settings.search_cone_angle = 180.0;
-    route_settings.search_radius_coeff = INFINITY;
+    route_settings.search_cone_angle =
+        get_option<float>( "PATHFINDING_SEARCH_CONE_ANGLE_DEFAULT" );
+    route_settings.search_radius_coeff =
+        get_option<float>( "PATHFINDING_SEARCH_RADIUS_COEFF_DEFAULT" );
+    if( route_settings.max_f_coeff < 0.0f ) {
+        route_settings.max_f_coeff = INFINITY;
+    }
+    if( route_settings.search_radius_coeff < 0.0f ) {
+        route_settings.search_radius_coeff = INFINITY;
+    }
 
     return { path_settings, route_settings };
 }

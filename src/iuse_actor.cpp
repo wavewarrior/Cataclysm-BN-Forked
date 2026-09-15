@@ -207,6 +207,7 @@ static const flag_id flag_NO_PAINT( "NO_PAINT" );
 
 class npc;
 
+
 std::unique_ptr<iuse_actor> explosion_iuse::clone() const
 {
     return std::make_unique<explosion_iuse>( *this );
@@ -970,7 +971,7 @@ int place_npc_iuse::use( player& p, item &, bool, const tripoint_bub_ms & ) cons
         return 0;
     }
 
-    here.place_npc( target_pos.value().xy(), npc_class_id );
+    here.place_npc( target_pos.value(), npc_class_id );
     p.mod_moves( -moves );
     p.add_msg_if_player( m_info, "%s", _( summon_msg ) );
     return 1;
@@ -2000,4 +2001,5 @@ std::unique_ptr<iuse_actor> iuse_reveal_contents::clone() const
 {
     return std::make_unique<iuse_reveal_contents>( *this );
 }
+
 

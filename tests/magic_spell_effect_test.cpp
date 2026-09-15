@@ -33,9 +33,7 @@ TEST_CASE("line_attack", "[magic]") {
     spell sp(spell_id("test_line_spell"));
 
     // set up Character to test with, only need position
-    npc& c = spawn_npc(point_bub_ms::zero(), "test_talker");
-    clear_character(c);
-    c.setpos(tripoint_bub_ms::zero());
+    npc& c = spawn_npc(tripoint_bub_ms::zero(), "test_talker");
 
     // target point 5 tiles east of zero
     tripoint_bub_ms target = tripoint_bub_ms(5, 0, 0);

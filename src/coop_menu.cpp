@@ -102,7 +102,7 @@ auto start_host() -> void
     g->coop_server_owned_ = std::move( srv );
     g->coop_server_ = g->coop_server_owned_.get();
     coop_session::get().mode = coop_mode::host;
-    coop_session::get().dimension_id = g_active_dimension_id;
+    coop_session::get().dimension_id = g_active_dimension_id.str();
 
     // Get local LAN IP for display.
     // Preference order: IPv4 private (192.168/10/172.16) > other non-loopback > fallback.
@@ -213,7 +213,7 @@ if( const auto colon = ip.rfind( ':' ); colon != std::string::npos ) {
     // Session established — register on g
     g->coop_client_owned_ = std::move( cli );
     g->coop_client_ = g->coop_client_owned_.get();
-    coop_session::get().dimension_id = g_active_dimension_id;
+    coop_session::get().dimension_id = g_active_dimension_id.str();
 }
 
 } // namespace coop_menu

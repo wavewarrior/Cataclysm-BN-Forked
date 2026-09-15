@@ -612,10 +612,12 @@ void spellcasting_activity_actor::finish( player_activity& act, Character& who )
     bool target_is_valid = false;
     if( spell_being_cast.range() > 0 && !spell_being_cast.is_valid_target( target_none )
         && !spell_being_cast.has_flag( RANDOM_TARGET ) ) {
+        g->refresh_player_visibility_cache_if_needed();
         do {
             avatar& you = *p.as_avatar();
             std::vector<tripoint_bub_ms> trajectory =
                 target_handler::mode_spell( you, spell_being_cast, no_fail, no_mana );
+            g->refresh_player_visibility_cache_if_needed();
 
             if( !trajectory.empty() ) {
                 const auto traj_target = trajectory.back();

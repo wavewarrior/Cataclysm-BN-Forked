@@ -885,6 +885,7 @@ void monexamine::play_with( monster &z )
     you.assign_activity( std::make_unique<player_activity>
                          ( std::make_unique<play_with_pet_activity_actor>( pet_name ) ) );
     z.add_effect( effect_ai_waiting, time_duration::from_turns( turns ) );
+    z.on_pet_bonding( you.as_character() );
 }
 
 void monexamine::train_pet( monster &z )

@@ -222,6 +222,15 @@ local fmt_function_field = function(member, class_name)
   return ret .. "\n"
 end
 
+---@param annotations string
+---@param class_name string
+---@param annotation string
+---@return string
+local add_class_annotation = function(annotations, class_name, annotation)
+  local pattern = "(---@class " .. class_name .. " : [^\n]+\n)"
+  return (annotations:gsub(pattern, "%1" .. annotation .. "\n"))
+end
+
 --[[
     Formats ---@overload annotations and function stub for constructors ('new' function).
   ]]
@@ -299,6 +308,27 @@ doc_gen_func.impl = function()
 ---@field user Character
 ---@field bionic Bionic
 
+---@class LuaActivityOptions
+---@field type ActivityTypeId @activity type to assign
+---@field duration TimeDuration @activity duration
+---@field on_finish? string @key in game.activity_functions to run when the activity finishes
+---@field on_turn? string @key in game.activity_functions to run every turn
+---@field name? string @display/debug name, also forwarded as callback params.name
+---@field pos? TripointBubMs @activity target position; stored and forwarded as TripointAbsMs
+---@field data? table @serializable named payload forwarded as callback params.data
+---@field interruptable? boolean @whether pause can cancel this activity; defaults to true
+
+---@class LuaActivityCallbackParams
+---@field user Character
+---@field activity PlayerActivity
+---@field name string
+---@field pos? TripointAbsMs
+---@field data table
+
+---@alias LuaActivityFinishParams LuaActivityCallbackParams
+---@alias LuaActivityFinishFunction fun(params: LuaActivityCallbackParams)
+---@alias LuaActivityTurnFunction fun(params: LuaActivityCallbackParams)
+
 ---@class IuseFunctionTable
 ---@field use fun(params: ItemUseParams): integer
 ---@field can_use? fun(params: ItemUseParams): boolean
@@ -348,7 +378,11 @@ doc_gen_func.impl = function()
 ---@field bionic_functions table<string, BionicFunctionTable>
 ---@field mutation_functions table<string, table<string, function>>
 ---@field horde_behaviours table<string, function>
+---@field monster_ai_functions table<string, function>
+---@field monster_attitude_functions table<string, function>
 ---@field mapgen_functions table<string, MapgenFunction>
+---@field examine_functions table<string, fun(params: { user: Character, pos: TripointBubMs })>
+---@field activity_functions table<string, LuaActivityFinishFunction>
 ---@field hooks hooks
 ---@field current_mod string
 ---@field current_mod_path string
@@ -509,7 +543,7 @@ on_creature_performed_technique = {}
 on_creature_melee_attacked = {}
 
 ---@class OnMapgenPostprocessParams
----@field map Map
+---@field map MapgenConstructor
 ---@field omt TripointAbsOmt
 ---@field when TimePoint
 on_mapgen_postprocess = {}
@@ -563,7 +597,7 @@ on_npc_loaded = {}
     ret = ret .. "--================---- " .. section_name .. " ----================\n\n"
 
     for _, item in ipairs(section_sorted) do
-      local name = item.k -- Class or Library name
+      local name = tostring(item.k) -- Class or Library name
       local data = item.v or {}
       local comment = data.type_comment or data.lib_comment or ""
       local bases = data["#bases"] or {}
@@ -686,7 +720,15 @@ on_npc_loaded = {}
     full_ret = full_ret .. "}\n\n"
   end
 
-  -- No second pass needed anymore
+  full_ret = full_ret:gsub("%-%-%-@class (Point%u[%w]*)\n", function(name)
+    if name == "PointCoord" then return "---@class " .. name .. "\n" end
+    return "---@class " .. name .. " : PointCoord\n"
+  end)
+  full_ret = full_ret:gsub("%-%-%-@class (Tripoint%u[%w]*)\n", function(name)
+    if name == "TripointCoord" then return "---@class " .. name .. "\n" end
+    return "---@class " .. name .. " : TripointCoord\n"
+  end)
+  full_ret = add_class_annotation(full_ret, "TripointAbsOmt", "---@operator add(TripointRelOmt): TripointAbsOmt")
 
   return full_ret
 end

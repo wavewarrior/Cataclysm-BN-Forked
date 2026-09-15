@@ -239,7 +239,9 @@ void vehicle_part::deserialize( JsonIn &jsin )
     data.read( "part_color", part_color_ );
     if( data.has_member( "portal_tap_linked" ) ) {
         data.read( "portal_tap_linked", portal_tap_linked );
-        data.read( "portal_tap_dim_id", portal_tap_dim_id );
+        auto raw_portal_tap_dim_id = std::string{};
+        data.read( "portal_tap_dim_id", raw_portal_tap_dim_id );
+        portal_tap_dim_id = dimension_id( raw_portal_tap_dim_id );
         tripoint raw;
         data.read( "portal_tap_pos", raw );
         portal_tap_pos = tripoint_abs_ms( raw );
@@ -324,7 +326,7 @@ void vehicle_part::serialize( JsonOut &json ) const
     json.member( "part_color", part_color_ );
     if( portal_tap_linked ) {
     json.member( "portal_tap_linked", portal_tap_linked );
-        json.member( "portal_tap_dim_id", portal_tap_dim_id );
+        json.member( "portal_tap_dim_id", portal_tap_dim_id.str() );
         json.member( "portal_tap_pos", portal_tap_pos.raw() );
     }
     json.end_object();
@@ -468,7 +470,9 @@ void vehicle::deserialize( JsonIn &jsin )
         old_owner = faction_id( temp_old_id );
     }
     data.read( "theft_time", theft_time );
-    data.read( "dimension_id", dimension_id_ );
+    auto raw_dimension_id = std::string{};
+    data.read( "dimension_id", raw_dimension_id );
+    set_dimension( dimension_id( raw_dimension_id ) );
 
     // we persist the pivot anchor so that if the rules for finding
     // the pivot change, existing vehicles do not shift around.
@@ -663,8 +667,8 @@ for( auto const &z : loot_zones ) {
     json.member( "is_alarm_on", is_alarm_on );
     json.member( "camera_on", camera_on );
     json.member( "last_update_turn", last_update );
-    if( !dimension_id_.empty() ) {
-    json.member( "dimension_id", dimension_id_ );
+    if( !dimension_id_.is_empty() ) {
+        json.member( "dimension_id", dimension_id_.str() );
     }
     json.member( "pivot", pivot_anchor[0] );
     json.member( "is_following", is_following );

@@ -23,6 +23,7 @@
 #include "debug.h"
 #include "sound_visualization.h"
 #include "dispersion.h"
+#include "enchantments/enchantment.h"
 #include "enums.h"
 #include "event.h"
 #include "event_bus.h"
@@ -37,7 +38,6 @@
 #include "itype.h"
 #include "line.h"
 #include "magic.h"
-#include "magic_enchantment.h"
 #include "map.h"
 #include "material.h"
 #include "math_defines.h"
@@ -901,23 +901,43 @@ static int calc_gun_volume( const item& gun )
     // Inherit suppressor modifiers if relevant (e.g. KSG second mag) but still use current ammo
     const item &parent = ( gun.parent_item() != nullptr &&
                            gun.has_flag( flag_USE_PARENT_GUN ) ) ? *gun.parent_item() : gun;
+    const bool am_dat = gun.ammo_data();
     // If our ammo is subsonic, loudness mods from the gun and gunmods can reduce noise freely.
-    // If the ammo is not subsonic, loudness cannot be reduced below 120 as the bullet will make a sonic boom.
-    int noise = parent.type->gun->loudness;
-    // Check the ammo data first so that subsonic ammo is suppressable by gun mods.
-    if( gun.ammo_data() ) {
-        noise += gun.ammo_data()->ammo->loudness;
+    // If the ammo is not subsonic, loudness cannot be reduced below 120 as the bullet will still make a sonic boom.
+    // Start our noise at zero.
+    int noise = 0;
+    int speed = parent.gun_speed( am_dat );
+    bool suppressed = false;
+    if( am_dat ) {
+        noise = parent.ammo_data()->ammo->loudness;
         // Speed of sound at sea level is around 343 meters per second.
         // While it would be ideal to be based on speed of sound
         // EVERYTHING flies faster then the speed of sound so using that to force loud sounds makes little sense in the current state of affairs
         // NOTE: If supersonic ever gets implented, use it here
-        noise = std::min( 160, noise );
+        noise += parent.type->gun->loudness;
+    } else {
+        // If we dont have an ammo, assume that we are not a firearm/we are a fake monster item or something
+        noise = parent.type->gun->loudness;
     }
+    // Check the ammo data first so that subsonic ammo is suppressable by gun mods.
     for( const auto mod : parent.gunmods() ) {
+        if( mod->type->gunmod->loudness < -20 ) {
+            suppressed = true;
+        }
         noise += mod->type->gunmod->loudness;
     }
+    if( suppressed ) {
+        // Speed of sound in atmosphere @ seat level is 343 m/s
+        if( speed < 344 ) {
+            // We are suppressed and subsonic. We take the least of 100 or current noise.
+            noise = std::min( 100, noise );
+        } else {
+            // We are suppressed but still super sonic. Cap our volume to 120.
+            noise = std::min( 120, noise );
+        }
+    }
 
-
+    noise = std::min( 191, noise );
     // Cap it like it gets capped when making a sound
     noise = std::max( noise, 0 );
     return noise;
@@ -1007,13 +1027,21 @@ int ranged::fire_gun(
         projectile projectile = make_gun_projectile( gun );
 
         // Apply enchantment bonuses to projectile
-        int base_bullet_damage = static_cast<int>( projectile.impact.type_damage( DT_BULLET ) );
-        int ench_damage_bonus = who.bonus_from_enchantments(
-                                    base_bullet_damage, enchant_vals::mod::RANGED_DAMAGE_BULLET, true );
-        if( ench_damage_bonus != 0 ) { projectile.impact.add_damage( DT_BULLET, ench_damage_bonus ); }
-
-        int ench_range_bonus =
-            who.bonus_from_enchantments( projectile.range, enchant_vals::mod::RANGED_RANGE, true );
+        // Iterate over every damage type
+        for( auto &projectile_damage : projectile.impact ) {
+            int base_damage = projectile_damage.amount;
+            int base_penetrate = projectile_damage.res_pen;
+            int ench_damage_bonus = who.bonus_from_enchantments( base_damage,
+                                    enchantment_value_id( "RANGED_DAMAGE_" + projectile_damage.get_internal_name() ) );
+            int ench_penetrate_bonus = who.bonus_from_enchantments( base_damage,
+                                       enchantment_value_id( "RANGED_ARMOR_PENETRATION_" + projectile_damage.get_internal_name() ) );
+            if( ench_damage_bonus != 0 || ench_penetrate_bonus != 0 ) {
+                projectile_damage.amount += ench_damage_bonus;
+                projectile_damage.res_pen += ench_penetrate_bonus;
+            }
+        }
+        int ench_range_bonus = who.bonus_from_enchantments( projectile.range,
+                               enchantment_value_id( "RANGED_RANGE" ), true );
         // Ensure range doesn't go below 1
         projectile.range = std::max( 1, projectile.range + ench_range_bonus );
 
@@ -1950,8 +1978,9 @@ int ranged::time_to_attack( const Character& p, const item& firing, const item* 
                         info.min_time,
                         info.base_time - info.time_reduction_per_level * p.get_skill_level( skill_used ) + RAS_time );
     // Apply enchantment bonus to reload time
-    int ench_reload_bonus =
-        p.bonus_from_enchantments( base_time, enchant_vals::mod::RANGED_RELOAD_TIME, true );
+    int ench_reload_bonus = p.bonus_from_enchantments( base_time,
+                            enchantment_value_id( "RANGED_RELOAD_TIME" ),
+                            true );
     // Ensure we don't go below minimum time even with enchantments
     return std::max( info.min_time, base_time + ench_reload_bonus );
 }
@@ -2239,8 +2268,8 @@ dispersion_sources ranged::get_weapon_dispersion( const Character& who, const it
 
     // Apply enchantment bonus to dispersion
     int base_dispersion = static_cast<int>( dispersion.max() );
-    int ench_dispersion_bonus =
-        who.bonus_from_enchantments( base_dispersion, enchant_vals::mod::RANGED_DISPERSION, true );
+    int ench_dispersion_bonus = who.bonus_from_enchantments( base_dispersion,
+                                enchantment_value_id( "RANGED_DISPERSION" ), true );
     dispersion.add_range( ench_dispersion_bonus );
 
     return dispersion;
@@ -2364,8 +2393,8 @@ double ranged::recoil_vehicle( const Character& who )
 double ranged::recoil_total( const Character& who )
 {
     double base_recoil = who.recoil + recoil_vehicle( who );
-    double ench_recoil_bonus =
-        who.bonus_from_enchantments( base_recoil, enchant_vals::mod::RANGED_RECOIL );
+    double ench_recoil_bonus = who.bonus_from_enchantments( base_recoil,
+                               enchantment_value_id( "RANGED_RECOIL" ) );
     // Recoil cannot be negative
     return std::max( 0.0, base_recoil + ench_recoil_bonus );
 }
@@ -2741,8 +2770,8 @@ double ranged::aim_per_move( const Character& who, const item& gun, double recoi
     aim_speed = std::max( aim_speed, 5.0 );
     // Apply enchantment bonus to aim speed
 
-    double ench_aim_bonus =
-        who.bonus_from_enchantments( aim_speed, enchant_vals::mod::RANGED_AIM_SPEED );
+    double ench_aim_bonus = who.bonus_from_enchantments( aim_speed,
+                            enchantment_value_id( "RANGED_AIM_SPEED" ) );
 
     // To prevent a bug where aiming does not proceed at all because the aiming speed drops below
     // the game's minimum limit (5.0) due to debuffs (such as Cursed Artifacts), so applying the max

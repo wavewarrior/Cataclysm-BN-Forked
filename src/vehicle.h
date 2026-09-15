@@ -28,6 +28,7 @@ class Creature;
 class JsonIn;
 class JsonOut;
 class map;
+class mapgen_constructor;
 class monster;
 class nc_color;
 class npc;
@@ -65,6 +66,12 @@ struct rider_data {
     int prt = -1;
     bool moved = false;
 };
+
+struct cargo_recharge_target {
+    safe_reference<item> target;
+    int cargo_part = -1;
+};
+
 // collision factor for vehicle-vehicle collision; delta_v in m/s
 float get_collision_factor( float delta_v );
 
@@ -116,12 +123,21 @@ struct veh_collision {
     veh_collision() = default;
 };
 
+struct vehicle_collision_options {
+    std::vector<veh_collision> &colls;
+    tripoint_rel_ms dp;
+    bool just_detect = false;
+    bool bash_floor = false;
+    const Creature *ignored_critter = nullptr;
+};
+
 struct vehicle_part_collision_options {
     int part = 0;
     tripoint_bub_ms pos;
     bool just_detect = false;
     bool bash_floor = false;
     bool vertical = false;
+    const Creature *ignored_critter = nullptr;
 };
 // TODO!: location stuffs here
 class vehicle_stack: public item_stack
@@ -507,6 +523,11 @@ class vehicle
             map& m, float hp_percent_loss_min = 0.1f, float hp_percent_loss_max = 1.2f,
             float percent_of_parts_to_affect = 1.0f,
             tripoint_rel_ms damage_origin = tripoint_rel_ms::zero(), float damage_size = 0 );
+        auto smash( mapgen_constructor &m, float hp_percent_loss_min = 0.1f,
+                    float hp_percent_loss_max = 1.2f,
+                    float percent_of_parts_to_affect = 1.0f,
+                    tripoint_rel_ms damage_origin = tripoint_rel_ms::zero(),
+                    float damage_size = 0 ) -> void;
 
         void serialize( JsonOut& json ) const;
         void deserialize( JsonIn& jsin );
@@ -1258,9 +1279,7 @@ class vehicle
         }
 
         // Returns if any collision occurred
-        bool collision(
-            std::vector<veh_collision> &colls, const tripoint_rel_ms& dp, bool just_detect,
-            bool bash_floor = false );
+        auto collision( const vehicle_collision_options &options ) -> bool;
 
         // Handle given part collision with vehicle, monster/NPC/player or terrain obstacle
         // Returns collision, which has type, impulse, part, & target.
@@ -1300,7 +1319,10 @@ class vehicle
          * Update an item's active status, for example when adding
          * hot or perishable liquid to a container.
          */
-        void make_active( item& target );
+        void make_active( item &target );
+        /// Rebuild-on-demand cache for cargo recharge candidates.
+        auto get_cargo_recharge_targets() -> std::vector<cargo_recharge_target>;
+        auto invalidate_cargo_recharge_cache() -> void;
         /**
          * Try to add an item to part's cargo.
          */
@@ -1629,26 +1651,27 @@ class vehicle
         // Adjust the vehicle's global z-level to match its center
         void shift_zlevel();
 
-        std::vector<int> alternators;     // List of alternator indices
-        std::vector<int> engines;         // List of engine indices
-        std::vector<int> reactors;        // List of reactor indices
-        std::vector<int> solar_panels;    // List of solar panel indices
-        std::vector<int> wind_turbines;   // List of wind turbine indices
-        std::vector<int> water_wheels;    // List of water wheel indices
-        std::vector<int> sails;           // List of sail indices
-        std::vector<int> funnels;         // List of funnel indices
-        std::vector<int> emitters;        // List of emitter parts
-        std::vector<int> loose_parts;     // List of UNMOUNT_ON_MOVE parts
-        std::vector<int> wheelcache;      // List of wheels
-        std::vector<int> rotors;          // List of rotors
-        std::vector<int> balloons;        // List of balloons
-        std::vector<int> wings;           // List of wings
-        std::vector<int> propellers;      // List of propellerrs
-        std::vector<int> rail_wheelcache; // List of rail wheels
-        std::vector<int> steering;        // List of STEERABLE parts
-        std::vector<int> droppers;        // List of droppers
-        std::vector<int> tanks;           // List of FLUIDTANKs
-        std::vector<int> converters;      // List of coverters
+        std::vector<int> alternators;      // List of alternator indices
+        std::vector<int> battery_parts;    // List of battery indices
+        std::vector<int> engines;          // List of engine indices
+        std::vector<int> reactors;         // List of reactor indices
+        std::vector<int> solar_panels;     // List of solar panel indices
+        std::vector<int> wind_turbines;    // List of wind turbine indices
+        std::vector<int> water_wheels;     // List of water wheel indices
+        std::vector<int> sails;            // List of sail indices
+        std::vector<int> funnels;          // List of funnel indices
+        std::vector<int> emitters;         // List of emitter parts
+        std::vector<int> loose_parts;      // List of UNMOUNT_ON_MOVE parts
+        std::vector<int> wheelcache;       // List of wheels
+        std::vector<int> rotors;           // List of rotors
+        std::vector<int> balloons;         // List of balloons
+        std::vector<int> wings;            // List of wings
+        std::vector<int> propellers;       // List of propellerrs
+        std::vector<int> rail_wheelcache;  // List of rail wheels
+        std::vector<int> steering;         // List of STEERABLE parts
+        std::vector<int> droppers;         // List of droppers
+        std::vector<int> tanks;            // List of FLUIDTANKs
+        std::vector<int> converters;       // List of coverters
         // List of parts that will not be on a vehicle very often, or which only one will be present
         std::vector<int> speciality;
         std::vector<int> floating; // List of parts that provide buoyancy to boats
@@ -1692,6 +1715,8 @@ class vehicle
         std::map<itype_id, float> fuel_used_last_turn;
         std::unordered_multimap<tripoint_mnt_veh, zone_data> loot_zones;
         active_item_cache active_items;
+        std::vector<cargo_recharge_target> cargo_recharge_targets_;
+        bool cargo_recharge_targets_dirty = true;
         // a magic vehicle, powered by magic.gif
         bool magic = false;
         // when does the magic vehicle disappear?
@@ -1738,12 +1763,11 @@ class vehicle
         // id of the om_vehicle struct corresponding to this vehicle
         int om_id = -1;
 
-        // ID of the dimension this vehicle belongs to.  Empty string = primary dimension.
-        // Set when the vehicle is loaded from a submap (map::loadn / on_submap_loaded).
-        // Persisted across saves so cross-dimension processing survives reload.
-        std::string dimension_id_ = "";                    // empty = primary dimension
-        auto get_dimension() const -> const std::string& { // *NOPAD*
+        auto get_dimension() const -> const dimension_id & { // *NOPAD*
             return dimension_id_;
+        }
+        auto set_dimension( const dimension_id &dim_id ) -> void {
+            dimension_id_ = dim_id;
         }
         // direction, to which vehicle is turning (player control). will rotate frame on next move
         // must be a multiple of 15 degrees
@@ -1877,6 +1901,11 @@ class vehicle
 
         // Set cruise control
         void set_cruise_control_speed();
+
+    private:
+        // ID of the dimension this vehicle belongs to.  Empty = primary dimension.
+        // Persisted across saves so cross-dimension processing survives reload.
+        dimension_id dimension_id_;
 };
 
 namespace rot

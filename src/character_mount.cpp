@@ -49,7 +49,7 @@
 #include "legacy_pathfinding.h"
 #include "lightmap.h"
 #include "line.h"
-#include "magic_enchantment.h"
+#include "enchantments/enchantment.h"
 #include "make_static.h"
 #include "map.h"
 #include "map_iterator.h"
@@ -576,7 +576,6 @@ void Character::forced_dismount()
         if( g->u.is_auto_moving() || g->u.has_destination() || g->u.has_destination_activity() ) {
             g->u.clear_destination();
         }
-        g->update_map( g->u );
     }
     if( activity ) { cancel_activity(); }
     moves -= 150;

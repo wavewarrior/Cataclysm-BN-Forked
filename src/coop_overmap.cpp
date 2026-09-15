@@ -4,6 +4,7 @@
 #include "coop_proto.h"
 #include "json.h"
 #include "overmapbuffer.h"
+#include "type_id.h"
 
 #include <sstream>
 
@@ -49,7 +50,7 @@ auto parse_overmap_sync_tiles( const std::string &json_buf )
 auto apply_overmap_sync_tiles( const std::vector<tripoint_abs_omt> &tiles,
                                const std::string &dim_id ) -> void
 {
-    overmapbuffer &omb = get_overmapbuffer( dim_id );
+    overmapbuffer &omb = get_overmapbuffer( dimension_id( dim_id ) );
     for( const auto &pos : tiles ) {
         omb.set_seen( pos, true );
     }

@@ -24,7 +24,7 @@
 #include "game.h"
 #include "item.h"
 #include "itype.h"
-#include "magic_enchantment.h"
+#include "enchantments/enchantment.h"
 #include "map.h"
 #include "material.h"
 #include "memorial_logger.h"
@@ -124,58 +124,8 @@ static void destroyed_armor_msg(
 static void item_armor_enchantment_adjust(
     const Character& guy, damage_unit& du, const item& armor )
 {
-    switch( du.type ) {
-        case DT_ACID:
-            du.amount +=
-                armor.bonus_from_enchantments( guy, du.amount, enchant_vals::mod::ITEM_ARMOR_ACID );
-            break;
-        case DT_BASH:
-            du.amount +=
-                armor.bonus_from_enchantments( guy, du.amount, enchant_vals::mod::ITEM_ARMOR_BASH );
-            break;
-        case DT_BIOLOGICAL:
-            du.amount +=
-                armor.bonus_from_enchantments( guy, du.amount, enchant_vals::mod::ITEM_ARMOR_BIO );
-            break;
-        case DT_COLD:
-            du.amount +=
-                armor.bonus_from_enchantments( guy, du.amount, enchant_vals::mod::ITEM_ARMOR_COLD );
-            break;
-        case DT_DARK:
-            du.amount +=
-                armor.bonus_from_enchantments( guy, du.amount, enchant_vals::mod::ITEM_ARMOR_DARK );
-            break;
-        case DT_LIGHT:
-            du.amount +=
-                armor.bonus_from_enchantments( guy, du.amount, enchant_vals::mod::ITEM_ARMOR_LIGHT );
-            break;
-        case DT_PSI:
-            du.amount +=
-                armor.bonus_from_enchantments( guy, du.amount, enchant_vals::mod::ITEM_ARMOR_PSI );
-            break;
-        case DT_CUT:
-            du.amount +=
-                armor.bonus_from_enchantments( guy, du.amount, enchant_vals::mod::ITEM_ARMOR_CUT );
-            break;
-        case DT_ELECTRIC:
-            du.amount +=
-                armor.bonus_from_enchantments( guy, du.amount, enchant_vals::mod::ITEM_ARMOR_ELEC );
-            break;
-        case DT_HEAT:
-            du.amount +=
-                armor.bonus_from_enchantments( guy, du.amount, enchant_vals::mod::ITEM_ARMOR_HEAT );
-            break;
-        case DT_STAB:
-            du.amount +=
-                armor.bonus_from_enchantments( guy, du.amount, enchant_vals::mod::ITEM_ARMOR_STAB );
-            break;
-        case DT_BULLET:
-            du.amount +=
-                armor.bonus_from_enchantments( guy, du.amount, enchant_vals::mod::ITEM_ARMOR_BULLET );
-            break;
-        default:
-            return;
-    }
+    du.amount += armor.bonus_from_enchantments( guy, du.amount,
+                 enchantment_value_id( "ITEM_ARMOR_" + du.get_internal_name() ) );
     du.amount = std::max( 0.0f, du.amount );
 }
 
@@ -184,46 +134,8 @@ static void item_armor_enchantment_adjust(
 // affect all of them
 static void armor_enchantment_adjust( const Character& guy, damage_unit& du )
 {
-    switch( du.type ) {
-        case DT_ACID:
-            du.amount += guy.bonus_from_enchantments( du.amount, enchant_vals::mod::ARMOR_ACID );
-            break;
-        case DT_BASH:
-            du.amount += guy.bonus_from_enchantments( du.amount, enchant_vals::mod::ARMOR_BASH );
-            break;
-        case DT_BIOLOGICAL:
-            du.amount += guy.bonus_from_enchantments( du.amount, enchant_vals::mod::ARMOR_BIO );
-            break;
-        case DT_COLD:
-            du.amount += guy.bonus_from_enchantments( du.amount, enchant_vals::mod::ARMOR_COLD );
-            break;
-        case DT_DARK:
-            du.amount += guy.bonus_from_enchantments( du.amount, enchant_vals::mod::ARMOR_DARK );
-            break;
-        case DT_LIGHT:
-            du.amount += guy.bonus_from_enchantments( du.amount, enchant_vals::mod::ARMOR_LIGHT );
-            break;
-        case DT_PSI:
-            du.amount += guy.bonus_from_enchantments( du.amount, enchant_vals::mod::ARMOR_PSI );
-            break;
-        case DT_CUT:
-            du.amount += guy.bonus_from_enchantments( du.amount, enchant_vals::mod::ARMOR_CUT );
-            break;
-        case DT_ELECTRIC:
-            du.amount += guy.bonus_from_enchantments( du.amount, enchant_vals::mod::ARMOR_ELEC );
-            break;
-        case DT_HEAT:
-            du.amount += guy.bonus_from_enchantments( du.amount, enchant_vals::mod::ARMOR_HEAT );
-            break;
-        case DT_STAB:
-            du.amount += guy.bonus_from_enchantments( du.amount, enchant_vals::mod::ARMOR_STAB );
-            break;
-        case DT_BULLET:
-            du.amount += guy.bonus_from_enchantments( du.amount, enchant_vals::mod::ARMOR_BULLET );
-            break;
-        default:
-            return;
-    }
+    du.amount += guy.bonus_from_enchantments( du.amount,
+                 enchantment_value_id( "ARMOR_" + du.get_internal_name() ) );
     du.amount = std::max( 0.0f, du.amount );
 }
 

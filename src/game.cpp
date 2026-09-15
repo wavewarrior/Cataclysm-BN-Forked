@@ -24,6 +24,7 @@
 #include <locale>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <numeric>
 #include <queue>
 #include <ranges>
@@ -227,10 +228,6 @@
 #include "worldfactory.h"
 #include "location_vector.h"
 #include "monfaction.h"
-#if defined( CATA_SDL )
-#include "compute/gpu_lm.h"
-#include "compute/gpu_platform.h"
-#endif
 class computer;
 
 #include "cata_tiles.h"
@@ -285,25 +282,22 @@ static void init_bubble_config()
     init_bubble_config( get_option<int>( "REALITY_BUBBLE_SIZE" ) );
 }
 
-static auto debug_assert_player_map_origin( const char *context, const bool check_z = true ) -> void
+static auto debug_assert_player_map_origin( const char *context ) -> void
 {
-    const auto expected = player_reality_bubble_origin();
-    const auto actual = g->m.get_abs_sub();
-    const auto matches = check_z ? actual == expected : actual.xy() == expected.xy();
+    const auto matches = g->m.get_abs_sub() == player_reality_bubble_origin().xy();
     if( !matches ) {
         debugmsg( "%s: player map loaded-grid origin %s does not match player reality-bubble "
                   "origin %s",
-                  context, actual.to_string(), expected.to_string() );
+                  context, g->m.get_abs_sub().to_string(),
+                  player_reality_bubble_origin().to_string() );
     }
 }
 
 static auto discard_monster_map_for_loaded_bubble( map &here,
-        const std::string &dimension_id ) -> void
+        const dimension_id &dimension_id ) -> void
 {
     const auto origin = here.get_abs_sub();
-    const auto zmin = here.has_zlevels() ? -OVERMAP_DEPTH : origin.z();
-    const auto zmax = here.has_zlevels() ? OVERMAP_HEIGHT : origin.z();
-    const auto z_range = std::views::iota( zmin, zmax + 1 );
+    const auto z_range = std::views::iota( -OVERMAP_DEPTH, OVERMAP_HEIGHT + 1 );
     const auto xy_range = std::views::iota( 0, g_mapsize );
     std::ranges::for_each(
         cata::views::cartesian_product( z_range, xy_range, xy_range ),
@@ -416,7 +410,7 @@ static void achievement_attained( const achievement *a )
 
 // This is the main game set-up process.
 game::game() :
-    map_ptr( 1, true ),
+    map_ptr( 1 ),
     liveview( *liveview_ptr ),
     scent_ptr( *this, *map_ptr ),
     achievements_tracker_ptr( *stats_tracker_ptr, *kill_tracker_ptr, achievement_attained ),
@@ -439,13 +433,16 @@ game::game() :
     last_mouse_edge_scroll( std::chrono::steady_clock::now() ),
     fake_items( new temp_item_location( ) )
 {
+    rebind_critter_tracker();
+
     // Force thread pool startup before first turn to avoid a latency spike.
     get_thread_pool();
 
     // Create the primary dimension's grid tracker (key ""); other dimensions
     // are constructed lazily on first use.
-    grid_trackers_[""] = std::make_unique<distribution_grid_tracker>( MAPBUFFER, "" );
-    submap_loader.add_listener( grid_trackers_[""].get() );
+    grid_trackers_[dimension_id()] = std::make_unique<distribution_grid_tracker>( MAPBUFFER,
+                                     dimension_id() );
+    submap_loader.add_listener( grid_trackers_[dimension_id()].get() );
 
     first_redraw_since_waiting_started = true;
     reset_light_level();
@@ -490,6 +487,7 @@ void game_ui::init_ui()
 /*
  * Initialize more stuff after mapbuffer is loaded.
  */
+
 bool game::has_gametype() const
 {
     return gamemode && gamemode->id() != special_game_type::NONE;
@@ -499,6 +497,7 @@ special_game_type game::gametype() const
 {
     return gamemode ? gamemode->id() : special_game_type::NONE;
 }
+
 
 std::optional<tripoint_bub_ms> game::find_local_stairs_leading_to( map &mp, const int z_after )
 {
@@ -556,6 +555,7 @@ void game::suggest_auto_walk_to_stairs( Character &u, map &m, const std::string 
 
 // Set up all default values for a new game
 
+
 vehicle *game::place_vehicle_nearby(
     const vproto_id &id, const point_abs_omt &origin, int min_distance,
     int max_distance, const std::vector<std::string> &omt_search_types,
@@ -587,23 +587,23 @@ vehicle *game::place_vehicle_nearby(
     for( const tripoint_abs_omt &goal : get_overmapbuffer( current_dimension_id_ ).find_all( omt_origin,
             find_params ) ) {
         // try place vehicle there.
-        tinymap target_map;
-        target_map.load( project_to<coords::sm>( goal ), false );
-        const tripoint_bub_ms tinymap_center( SEEX, SEEY, goal.z() );
+        map target_map( 2 );
+        target_map.load( project_to<coords::sm>( goal.xy() ), false );
+        const tripoint_bub_ms target_center( SEEX, SEEY, goal.z() );
         static constexpr std::array<units::angle, 4> angles = {{
                 0_degrees, 90_degrees, 180_degrees, 270_degrees
             }
         };
         vehicle *veh = target_map.add_vehicle(
-                           id, tinymap_center, random_entry( angles ), rng( 50, 80 ),
+                           id, target_center, random_entry( angles ), rng( 50, 80 ),
                            0, false, false, true );
         if( veh ) {
-            auto abs = map_local_to_abs( target_map, tinymap_center );
+            auto abs = map_local_to_abs( target_map, target_center );
             const auto proj = project_remain<coords::sm>( abs );
             veh->abs_sm_pos = proj.quotient_tripoint;
             veh->sm_ms_pos = proj.remainder;
-            veh->dimension_id_ = target_map.get_bound_dimension();
-            get_overmapbuffer( veh->dimension_id_ ).add_vehicle( veh );
+            veh->set_dimension( target_map.get_bound_dimension() );
+            get_overmapbuffer( veh->get_dimension() ).add_vehicle( veh );
             veh->tracking_on = true;
             return veh;
         }
@@ -611,7 +611,37 @@ vehicle *game::place_vehicle_nearby(
     return nullptr;
 }
 
+static auto npc_can_place_at_abs( mapbuffer &buffer, const tripoint_abs_ms &pos ) -> bool
+{
+    const auto passable = buffer.passable( pos );
+    const auto player_blocks = buffer.get_dimension_id() == g->get_current_dimension_id() &&
+                               g->u.abs_pos() == pos;
+    return passable && *passable && !player_blocks &&
+           buffer.creature_tracker().find( pos ) == nullptr &&
+           buffer.find_active_npc( pos ) == nullptr;
+}
+
+static auto place_npc_on_absolute_mapbuffer( npc &who, mapbuffer &buffer ) -> bool
+{
+    const auto initial = who.abs_pos();
+    if( npc_can_place_at_abs( buffer, initial ) || who.is_mounted() ) {
+        return true;
+    }
+
+    for( const auto &pos : closest_points_first( initial, SEEX + 1 ) ) {
+        if( npc_can_place_at_abs( buffer, pos ) ) {
+            who.setpos( pos );
+            return true;
+        }
+    }
+
+    debugmsg( "Failed to place NPC in a valid absolute location near %s",
+              initial.to_string() );
+    return false;
+}
+
 //Make any nearby overmap npcs active, and put them in the right location.
+
 
 static std::string generate_memorial_filename( const std::string &char_name )
 {
@@ -843,6 +873,7 @@ bool game::do_turn()
     {
         ZoneScopedN( "do_turn_invalidate_visibility" );
         m.invalidate_visibility_caches();
+        mon_info_cache_dirty = true;
     }
 
     // starting a new turn, clear out temperature cache
@@ -897,7 +928,7 @@ bool game::do_turn()
 
     {
         ZoneScopedN( "do_turn_update_body" );
-        u.update_body();
+        u.update_body( action_time_scale::calendar_duration_this_tick() );
     }
 
     // Auto-save if autosave is enabled
@@ -1214,7 +1245,7 @@ bool game::do_turn()
     {
         ZoneScopedN( "do_turn_cleanup_distribution_trackers" );
         for( auto it = grid_trackers_.begin(); it != grid_trackers_.end(); ) {
-            if( !it->first.empty() && !it->second->has_tracked_submaps() ) {
+            if( !it->first.is_empty() && !it->second->has_tracked_submaps() ) {
                 submap_loader.remove_listener( it->second.get() );
                 it = grid_trackers_.erase( it );
             } else {
@@ -1253,6 +1284,7 @@ void game::set_driving_view_offset( point p )
     u.view_offset.x() += driving_view_offset.x;
     u.view_offset.y() += driving_view_offset.y;
 }
+
 
 void game::autopilot_vehicles()
 {
@@ -1465,7 +1497,7 @@ npc *game::find_npc( character_id id )
 {
     // Search all dimensions — the NPC might not be in the active dimension.
     npc *result = nullptr;
-    for_each_overmapbuffer( [&]( const std::string &, overmapbuffer & omb ) {
+    for_each_overmapbuffer( [&]( const dimension_id &, overmapbuffer & omb ) {
         if( !result ) {
             result = omb.find_npc( id ).get();
         }
@@ -2123,6 +2155,7 @@ void game::win_screen()
     popup( msg );
 }
 
+
 //Saves all factions and missions and npcs.
 //Saves per-dimension data like Weather and overmapbuffer state
 event_bus &game::events()
@@ -2253,6 +2286,7 @@ void game::draw_callback_t::operator()()
     }
 }
 
+
 std::optional<tripoint_rel_ms> game::get_veh_dir_indicator_location( bool next ) const
 {
     if( !get_option<bool>( "VEHICLE_DIR_INDICATOR" ) ) {
@@ -2300,9 +2334,11 @@ Creature *game::is_hostile_within( int distance )
 }
 //Gets Contiguious Fishable Terrain in radius starting from the tripoint
 
+
 /* Knockback target at t by force number of tiles in direction from s to t
    stun > 0 indicates base stun duration, and causes impact stun; stun == -1 indicates only impact stun
    dam_mult multiplies impact damage, bash effect on impact, and sound level on impact */
+
 
 
 template<typename T>
@@ -2340,10 +2376,9 @@ T *game::critter_at( const tripoint_bub_ms &p, bool allow_hallucination )
         }
     }
     if constexpr( wants_npc ) {
-        for( auto &cur_npc : active_npc ) {
-            if( cur_npc->bub_pos() == p && !cur_npc->is_dead() ) {
-                return dynamic_cast<T *>( cur_npc.get() );
-            }
+        if( const auto guy = MAPBUFFER_REGISTRY.get( current_dimension_id_ ).find_active_npc(
+                                 bub_to_abs( p ) ) ) {
+            return dynamic_cast<T *>( guy.get() );
         }
     }
     return nullptr;
@@ -2383,10 +2418,8 @@ auto game::critter_at( const tripoint_abs_ms &p, bool allow_hallucination ) -> T
         }
     }
     if constexpr( wants_npc ) {
-        for( auto &cur_npc : active_npc ) {
-            if( cur_npc->abs_pos() == p && !cur_npc->is_dead() ) {
-                return dynamic_cast<T *>( cur_npc.get() );
-            }
+        if( const auto guy = MAPBUFFER_REGISTRY.get( current_dimension_id_ ).find_active_npc( p ) ) {
+            return dynamic_cast<T *>( guy.get() );
         }
     }
     return nullptr;
@@ -2427,7 +2460,8 @@ shared_ptr_fast<T> game::shared_from( const T &critter )
         return std::dynamic_pointer_cast<T>( u_shared_ptr );
     }
     if( critter.is_monster() ) {
-        if( const shared_ptr_fast<monster> mon_ptr = critter_tracker->find( critter.abs_pos() ) ) {
+        if( const shared_ptr_fast<monster> mon_ptr = critter.get_mapbuffer().creature_tracker().find(
+                    critter.abs_pos() ) ) {
             if( static_cast<const Creature *>( mon_ptr.get() ) == static_cast<const Creature *>( &critter ) ) {
                 return std::dynamic_pointer_cast<T>( mon_ptr );
             }
@@ -2525,6 +2559,10 @@ monster *game::place_critter_around( const shared_ptr_fast<monster> &mon,
                                      bool forced )
 {
     std::optional<tripoint_bub_ms> where;
+    const auto center_sm = project_to<coords::sm>( center );
+    if( m.inbounds( center_sm ) && m.get_submap_at_grid( center_sm ) == nullptr ) {
+        m.load( m.get_abs_sub(), true );
+    }
     if( forced || can_place_monster( *mon, center ) ) {
         where = center;
     }
@@ -2538,8 +2576,9 @@ monster *game::place_critter_around( const shared_ptr_fast<monster> &mon,
     if( !where ) {
         return nullptr;
     }
+    mon->set_dimension( m.get_bound_dimension() );
     mon->spawn( *where );
-    return critter_tracker->add( mon ) ? mon.get() : nullptr;
+    return mon->get_mapbuffer().creature_tracker().add( mon ) ? mon.get() : nullptr;
 }
 
 monster *game::place_critter_within( const mtype_id &id,
@@ -2566,8 +2605,9 @@ monster *game::place_critter_within( const shared_ptr_fast<monster> &mon,
     if( !where ) {
         return nullptr;
     }
+    mon->set_dimension( m.get_bound_dimension() );
     mon->spawn( *where );
-    return critter_tracker->add( mon ) ? mon.get() : nullptr;
+    return mon->get_mapbuffer().creature_tracker().add( mon ) ? mon.get() : nullptr;
 }
 
 size_t game::num_creatures() const
@@ -2577,12 +2617,12 @@ size_t game::num_creatures() const
 
 auto game::update_zombie_pos( const monster &critter, const tripoint_abs_ms &pos ) -> bool
 {
-    return critter_tracker->update_pos( critter, pos );
+    return critter.get_mapbuffer().creature_tracker().update_pos( critter, pos );
 }
 
 void game::remove_zombie( const monster &critter )
 {
-    critter_tracker->remove( critter );
+    critter.get_mapbuffer().creature_tracker().remove( critter );
 }
 
 void game::erase_npc( character_id id )
@@ -2597,6 +2637,7 @@ void game::erase_npc( character_id id )
     if( auto *pw = get_map().get_physics_world() ) {
         pw->on_creature_removed( it->get() );
     }
+    ( *it )->get_mapbuffer().remove_active_npc( **it );
     active_npc.erase( it );
 }
 
@@ -2611,6 +2652,7 @@ void game::clear_zombies()
  * a monster already in the target square.
  * @return Whether or not a hallucination was successfully spawned.
  */
+
 void static delete_cyborg_item( map &m, const tripoint_bub_ms &couch_pos, item *cyborg )
 {
     // if this tile has an autodoc on a vehicle, delete the cyborg item from here
@@ -2735,7 +2777,9 @@ void game::toggle_gate( const tripoint_bub_ms &p )
 }
 
 
+
 // Used to set up the first Hotkey in the display set
+
 
 
 void game::place_player_overmap( const tripoint_abs_omt &om_dest )
@@ -2756,9 +2800,7 @@ void game::place_player_overmap( const tripoint_abs_omt &om_dest )
     }
 
     m.clear_vehicle_cache( );
-    const int minz = m.has_zlevels() ? -OVERMAP_DEPTH : get_levz();
-    const int maxz = m.has_zlevels() ? OVERMAP_HEIGHT : get_levz();
-    for( int z = minz; z <= maxz; z++ ) {
+    for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; z++ ) {
         m.clear_vehicle_list( z );
     }
     m.access_cache( get_levz() ).map_memory_seen_cache.reset();
@@ -2766,7 +2808,7 @@ void game::place_player_overmap( const tripoint_abs_omt &om_dest )
     // player will be centered in the middle of the map.
     // TODO: fix point types
     const tripoint_abs_sm map_sm_pos(
-        project_to<coords::sm>( om_dest ).raw() + point( -g_half_mapsize, -g_half_mapsize ) );
+        project_to<coords::sm>( om_dest ) + point( -g_half_mapsize, -g_half_mapsize ) );
     const tripoint_bub_ms player_pos( u.bub_pos().xy(), map_sm_pos.z() );
     const int z_before = u.bub_pos().z();
     load_map( map_sm_pos );
@@ -2794,6 +2836,7 @@ void game::place_player_overmap( const tripoint_abs_omt &om_dest )
     // load_npcs() scans around the player's absolute position, updated by place_player().
     load_npcs();
 }
+
 
 
 void game::resize_reality_bubble_to( int new_size )
@@ -2827,14 +2870,13 @@ void game::resize_reality_bubble_to( int new_size )
     {
         auto out_of_range = std::ranges::stable_partition( active_npc,
         [&]( const shared_ptr_fast<npc> &n ) {
-            const auto npc_sm = project_to<coords::sm>( n->abs_pos() );
-            if( !m.has_zlevels() && npc_sm.z() != get_levz() ) {
-                return false;  // wrong z-level — evict
-            }
-            const auto diff = npc_sm - player_abs_sm;
+            const auto diff = project_to<coords::sm>( n->abs_pos() ) - player_abs_sm;
             return std::abs( diff.x() ) <= new_half && std::abs( diff.y() ) <= new_half;
         } );
-        std::ranges::for_each( out_of_range, []( const auto & n ) { n->on_unload(); } );
+        std::ranges::for_each( out_of_range, []( const auto & n ) {
+            n->get_mapbuffer().remove_active_npc( *n );
+            n->on_unload();
+        } );
         active_npc.erase( out_of_range.begin(), out_of_range.end() );
     }
 
@@ -2849,19 +2891,17 @@ void game::resize_reality_bubble_to( int new_size )
     }
 
     // Update globals and rebuild the map grid.
-    // grid[] is cleared by resize(); submaps stay resident in the mapbuffer
+    // The non-owning submap cache is cleared by resize(); submaps stay resident in the mapbuffer
     // with their dirty flags intact and will be saved on normal eviction.
     init_bubble_config( new_size );
     m.resize( g_mapsize );
     reality_bubble_radius_ = g_half_mapsize;
 
     // Compute the new top-left abs_sub so load_map centers on the player.
-    const auto new_abs_sub = tripoint_abs_sm(
-                                 player_abs_sm.x() - g_half_mapsize,
-                                 player_abs_sm.y() - g_half_mapsize,
-                                 player_abs_sm.z() );
+    const auto new_abs_sub = player_abs_sm.xy() +
+                             point_rel_sm( -g_half_mapsize, -g_half_mapsize );
 
-    // Reload the map around the player; this fills grid[], recreates load handles,
+    // Reload the map around the player; this fills the submap cache, recreates load handles,
     // rebuilds distribution_grid_tracker and fluid_grid.
     load_map( new_abs_sub, /*pump_events=*/false );
     debug_assert_player_map_origin( "resize_reality_bubble_to" );
@@ -2888,7 +2928,7 @@ void game::resize_reality_bubble_to( int new_size )
 
     // Flush the load/eviction diff immediately so the first boundary crossing
     // after resize doesn't stall on a bulk eviction of the old bubble's submaps.
-    // on_submap_unloaded is safe here: map::on_submap_unloaded guards grid[]
+    // on_submap_unloaded is safe here: map::on_submap_unloaded guards cache
     // writes behind contains_abs_sm(), so old out-of-bubble positions are
     // skipped and only vehicle/active-item tracking is cleaned up.
     submap_loader.update_lazy_border_focus( current_dimension_id_, u.abs_pos() );
@@ -3006,11 +3046,13 @@ void game::update_performance_bubble()
     }
 }
 
+
 const dimension_info *game::get_current_dimension_info() const
 {
     auto it = loaded_dimensions_.find( current_dimension_id_ );
     return it != loaded_dimensions_.end() ? &it->second : nullptr;
 }
+
 
 
 void game::debug_hour_timer::toggle()
@@ -3036,6 +3078,7 @@ void game::debug_hour_timer::print_time()
         }
     }
 }
+
 
 //Check if an artifact's extra charge requirements are currently met
 bool check_art_charge_req( item &it )
@@ -3255,14 +3298,16 @@ item *game::add_fake_item( detached_ptr<item> &&it )
 
 namespace cata_event_dispatch
 {
-void avatar_moves( const avatar &u, const map &m, const tripoint_abs_ms &p )
+void avatar_moves( const avatar &u, const map &m, const tripoint_abs_ms &pos )
 {
     mtype_id mount_type;
     if( u.is_mounted() ) {
         mount_type = u.mounted_creature->type->id;
     }
-    g->events().send<event_type::avatar_moves>( mount_type, m.ter( abs_to_bub( p ) ).id(),
-            u.get_movement_mode(), u.is_underwater(), p.z() );
+    const auto terrain = MAPBUFFER_REGISTRY.get( m.get_bound_dimension() ).get_ter( pos,
+    { .mode = mapbuffer_lookup_mode::resident_only } ).value_or( t_null );
+    g->events().send<event_type::avatar_moves>( mount_type, terrain, u.get_movement_mode(),
+            u.is_underwater(), pos.z() );
 }
 } // namespace cata_event_dispatch
 
@@ -3275,15 +3320,15 @@ distribution_grid_tracker &get_distribution_grid_tracker()
 {
     // If a dimension tracker exists and the player is in that dimension,
     // prefer it; otherwise fall back to "".
-    const std::string &dim = g->m.get_bound_dimension();
+    const auto &dim = g->m.get_bound_dimension();
     auto it = g->grid_trackers_.find( dim );
     if( it != g->grid_trackers_.end() && it->second ) {
         return *it->second;
     }
-    return *g->grid_trackers_.at( "" );
+    return *g->grid_trackers_.at( dimension_id() );
 }
 
-distribution_grid_tracker *get_distribution_grid_tracker_for( const std::string &dim_id )
+auto get_distribution_grid_tracker_for( const dimension_id &dim_id ) -> distribution_grid_tracker *
 {
     if( !g ) {
         return nullptr;
@@ -3295,7 +3340,8 @@ distribution_grid_tracker *get_distribution_grid_tracker_for( const std::string 
     return nullptr;
 }
 
-distribution_grid_tracker &ensure_distribution_grid_tracker_for( const std::string &dim_id )
+auto ensure_distribution_grid_tracker_for(
+    const dimension_id &dim_id ) -> distribution_grid_tracker &
 {
     auto it = g->grid_trackers_.find( dim_id );
     if( it != g->grid_trackers_.end() && it->second ) {

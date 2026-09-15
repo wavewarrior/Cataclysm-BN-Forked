@@ -200,11 +200,11 @@ inline float sight_from_lookup( const float &numerator, const float &transparenc
     return numerator * transparency;
 }
 
-// ── Current source color for colored light propagation ────────────────────────
-// Set by map::apply_light_source before each castLight sequence. Read by the
-// shadowcasting template to write per-channel max-blended color energy.
-extern light_color_rgb g_current_source_color;
-
+struct light_update_callback {
+    void *context = nullptr;
+    void ( *update )( void *context, int z_index, int x, int y, int idx,
+                      float intensity, quadrant q ) = nullptr;
+};
 // ── Public shadowcasting API ──────────────────────────────────────────────────
 
 /// 2D FOV / light cast — writes to a flat float array (seen_cache, shrapnel).
@@ -220,7 +220,8 @@ void castLightAll(
     int sx, int sy,
     point_bub_ms offset, int offset_distance, float numerator,
     const light_model &model,
-    const exp_lookup *weather_lookup = nullptr );
+    const exp_lookup *weather_lookup = nullptr,
+    light_update_callback callback = {} );
 
 // ── Octant bitmasks ───────────────────────────────────────────────────────────
 // Bit i selects k_octant_xforms[i].  Used by map::apply_light_source and
@@ -233,9 +234,10 @@ inline constexpr uint8_t OCTANT_WEST  = 0x11u; ///< octants 0, 4  (xy = +1 half)
 /// 2D light cast — writes to a flat float array (lm), casting only the
 /// octants selected by @p octant_mask.  Bit i of octant_mask enables
 /// k_octant_xforms[i].  Use OCTANT_NORTH/EAST/SOUTH/WEST constants.
-/// @p color_cache   Optional per-tile colored light energy cache. If non-null,
-///                  color is propagated alongside scalar light using the same
-///                  shadowcasting recursion. Written via per-channel max blending.
+/// @p callback   Optional per-tile update hook, invoked alongside the scalar
+///               light write with the same (x, y, idx, intensity, quadrant)
+///               tuple. Used by callers that need to propagate colored light
+///               or other derived per-tile state through the same recursion.
 void castLightOctants(
     float *output_cache,
     const float *input_array,
@@ -245,7 +247,7 @@ void castLightOctants(
     const light_model &model,
     uint8_t octant_mask,
     const exp_lookup *weather_lookup = nullptr,
-    light_color_rgb *color_cache = nullptr );
+    light_update_callback callback = {} );
 
 /// 3D FOV cast across all z-levels.
 /// Only model.calc, model.check, and model.accumulate are consulted;
@@ -256,4 +258,5 @@ void cast_zlight(
     const array_of_grids_of<const char> &floor_caches,
     const array_of_grids_of<const diagonal_blocks> &blocked_caches,
     const tripoint_bub_ms &origin, int offset_distance, float numerator,
-    const light_model &model );
+    const light_model &model,
+    light_update_callback callback = {} );

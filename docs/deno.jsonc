@@ -24,6 +24,7 @@
     "fmt": {
         "semiColons": false,
         "lineWidth": 100,
+        "json.trailingCommas": "jsonc",
         "proseWrap": "preserve"
     },
     "compilerOptions": {

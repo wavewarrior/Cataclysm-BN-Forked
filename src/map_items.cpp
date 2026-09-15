@@ -647,12 +647,12 @@ std::vector<tripoint_abs_sm> map::check_submap_active_item_consistency()
     // Direction 1: every in-grid submap with active items should be in the set.
     // Lazy-border submaps are intentionally excluded: they are pre-loaded for
     // shift performance but never registered in submaps_with_active_items.
-    const int zmin = zlevels ? -OVERMAP_DEPTH : abs_sub.z();
-    const int zmax = zlevels ? OVERMAP_HEIGHT : abs_sub.z();
-    for( const auto p : bubble_submaps() ) {
+    const int zmin = -OVERMAP_DEPTH;
+    const int zmax = OVERMAP_HEIGHT;
+    for( const auto p : flat_bubble_submaps() ) {
         for( int z = zmin; z <= zmax; ++z ) {
             const auto sm_pos = tripoint_bub_sm( p, z );
-            const submap* sm = getsubmap( get_nonant( sm_pos ) );
+            const submap* sm = get_submap_at_grid( sm_pos );
             if( sm == nullptr || sm->active_items.empty() ) { continue; }
             const auto abs_pos = map_local_to_abs( *this, sm_pos );
             if( !submaps_with_active_items.contains( abs_pos ) ) { result.push_back( abs_pos ); }
@@ -678,8 +678,8 @@ void map::process_items()
     // Out-of-bubble vehicle items are handled by batch_turns_items().
     {
         ZoneScopedN( "process_items_vehicles" );
-        const int zmin = zlevels ? -OVERMAP_DEPTH : abs_sub.z();
-        const int zmax = zlevels ? OVERMAP_HEIGHT : abs_sub.z();
+        const int zmin = -OVERMAP_DEPTH;
+        const int zmax = OVERMAP_HEIGHT;
         std::set<submap *> veh_submaps;
         for( int z = zmin; z <= zmax; ++z ) {
             for( vehicle * veh : get_cache( z ).vehicle_list ) {
@@ -714,7 +714,7 @@ void map::process_items()
     {
         ZoneScopedN( "process_items_scan_active_submaps" );
         const bool stride_skip_turn = !calendar::stride_due( item_process_stride );
-        const int map_z = get_abs_sub().z();
+        const int map_z = get_avatar().abs_pos().z();
 
         for( const tripoint_abs_sm& abs_pos : submaps_with_active_items_copy ) {
             if( !submap_loader.is_simulated( bound_dimension_, tripoint_abs_sm( abs_pos ) ) ) {

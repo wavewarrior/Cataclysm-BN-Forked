@@ -26,6 +26,8 @@
 #include "dialogue.h"
 #include "disease.h"
 #include "effect.h"
+#include "enchantments/enchantment.h"
+#include "enchantments/enchantment_value.h"
 #include "emit.h"
 #include "event_statistics.h"
 #include "faction.h"
@@ -50,7 +52,6 @@
 #include "lru_cache.h"
 #include "lua_sidebar_widgets.h"
 #include "magic.h"
-#include "magic_enchantment.h"
 #include "magic_ter_furn_transform.h"
 #include "map_extras.h"
 #include "map_feature_descriptions.h"
@@ -279,6 +280,7 @@ static const std::vector<named_entry> worker_safe_finalizers = {{
         { translate_marker( "Anatomies" ), &anatomy::finalize_all },
         { translate_marker( "Mutations" ), &mutation_branch::finalize },
         { translate_marker( "Achievements" ), &achievement::finalize },
+        { translate_marker( "Enchantments" ), &enchantment::finalize_all },
     }
 };
 
@@ -796,6 +798,7 @@ void DynamicDataLoader::initialize()
     add( "SCENARIO_BLACKLIST", &scen_blacklist::load_scen_blacklist );
     add( "skill_boost", &skill_boost::load_boost );
     add( "enchantment", &enchantment::load_enchantment );
+    add( "enchantment_value", &enchantment_value::load_enchantment_values );
     add( "hit_range", &Creature::load_hit_range );
     add( "scent_type", &scent_type::load_scent_type );
     add( "disease_type", &disease_type::load_disease_type );
@@ -1136,6 +1139,7 @@ void DynamicDataLoader::unload_data()
     dreams::clear();
     emit::reset();
     enchantment::reset();
+    enchantment_value::reset();
     event_statistic::reset();
     event_transformation::reset();
     faction_template::reset();
@@ -1327,6 +1331,7 @@ void DynamicDataLoader::check_consistency( loading_ui& ui )
             {_( "Anatomies" ), &anatomy::check_consistency},
             {_( "Spells" ), &spell_type::check_consistency},
             {_( "Enchantments" ), &enchantment::check_consistency},
+            {_( "Enchantment Values" ), &enchantment_value::check_consistency},
             {_( "Transformations" ), &event_transformation::check_consistency},
             {_( "Statistics" ), &event_statistic::check_consistency},
             {_( "Scent types" ), &scent_type::check_scent_consistency},

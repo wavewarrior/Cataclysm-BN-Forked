@@ -28,6 +28,7 @@
 #include "character_martial_arts.h"
 #include "color.h"
 #include "cursesdef.h"
+#include "enchantments/enchantment.h"
 #include "filesystem.h"
 #include "fstream_utils.h"
 #include "game.h"
@@ -40,7 +41,6 @@
 #include "lightmap.h"
 #include "npc_class.h"
 #include "magic.h"
-#include "magic_enchantment.h"
 #include "make_static.h"
 #include "mapsharing.h"
 #include "martialarts.h"
@@ -119,6 +119,20 @@ static auto random_age_for_profession( const profession &prof ) -> int
         return min_age;
     }
     return rng( min_age, max_age );
+}
+
+static auto scenario_is_selectable( const scenario &scen, const bool cities_enabled ) -> bool
+{
+    return !scen.scen_is_blacklisted() && ( !scen.has_flag( flag_CITY_START ) || cities_enabled );
+}
+
+static auto first_selectable_scenario( const bool cities_enabled ) -> const scenario * // *NOPAD*
+{
+    const auto &scenarios = scenario::get_all();
+    const auto iter = std::ranges::find_if( scenarios, [cities_enabled]( const scenario & scen ) {
+        return scenario_is_selectable( scen, cities_enabled );
+    } );
+    return iter != scenarios.end() ? &( *iter ) : scenario::generic();
 }
 
 // Colors used in this file: (Most else defaults to c_light_gray)
@@ -233,20 +247,23 @@ void avatar::randomize( const bool random_scenario, points_left &points, bool pl
     }
     // if adjusting min and max height from 145 and 200, make sure to see set_description()
     init_height = rng( 145, 200 );
-    bool cities_enabled = world_generator->active_world->info->WORLD_OPTIONS["CITY_SIZE"].getValue() !=
-                          "0";
+    const auto cities_enabled =
+        world_generator->active_world->info->WORLD_OPTIONS["CITY_SIZE"].getValue() !=
+        "0";
     if( random_scenario ) {
         std::vector<const scenario *> scenarios;
         for( const auto &scen : scenario::get_all() ) {
-            if( !scen.has_flag( flag_CHALLENGE ) &&
-                ( !scen.has_flag( flag_CITY_START ) || cities_enabled ) ) {
+            if( !scen.has_flag( flag_CHALLENGE ) && scenario_is_selectable( scen, cities_enabled ) ) {
                 scenarios.emplace_back( &scen );
             }
         }
-        g->scen = random_entry( scenarios );
-    } else if( !cities_enabled ) {
-        static const string_id<scenario> wilderness_only_scenario( "wilderness" );
-        g->scen = &wilderness_only_scenario.obj();
+        if( scenarios.empty() ) {
+            g->scen = first_selectable_scenario( cities_enabled );
+        } else {
+            g->scen = random_entry( scenarios );
+        }
+    } else if( !scenario_is_selectable( *g->scen, cities_enabled ) ) {
+        g->scen = first_selectable_scenario( cities_enabled );
     }
 
     prof = g->scen->weighted_random_profession();
@@ -706,6 +723,7 @@ bool avatar::create( character_type type, const std::string &tempname )
 
     return true;
 }
+
 
 
 // --- RmlUi render path (Tier 4 screen #4: new-character creator, sliced) -----

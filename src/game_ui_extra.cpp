@@ -320,7 +320,7 @@ std::string game::print_all_tile_info_text( const tripoint_bub_ms &lp,
             const std::string sign_string = u.has_trait( trait_ILLITERATE ) ? "???" : signage;
             out.emplace_back( colorize( string_format( _( "Sign: %s" ), sign_string ), c_light_gray ) );
         }
-        if( m.has_zlevels() && lp.z() > -OVERMAP_DEPTH && !m.has_floor( lp ) ) {
+        if( lp.z() > -OVERMAP_DEPTH && !m.has_floor( lp ) ) {
             tripoint_bub_ms below( lp.xy(), lp.z() - 1 );
             std::string tile_below = m.tername( below );
             if( m.has_furn( below ) ) {
@@ -1117,9 +1117,8 @@ look_around_result game::look_around( bool show_window, tripoint_bub_ms &center,
         };
     };
 
-    // TODO: Make this `true`
     const bool allow_zlev_move = zlSwitch(
-                                     m.has_zlevels(),
+                                     true,
                                      false,
                                      true
                                  );
@@ -1475,7 +1474,7 @@ look_around_result game::look_around( bool show_window, tripoint_bub_ms &center,
     } while( action != "QUIT" && action != "CONFIRM" && action != "SELECT" && action != "TRAVEL_TO" &&
              action != "throw_blind" );
 
-    if( m.has_zlevels() && center.z() != old_levz ) {
+    if( center.z() != old_levz ) {
         m.invalidate_map_cache( old_levz );
         m.build_map_cache( old_levz );
         u.view_offset.z() = 0;

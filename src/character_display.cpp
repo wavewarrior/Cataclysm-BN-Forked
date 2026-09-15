@@ -32,6 +32,7 @@
 #include "string_id.h"
 #include "string_input_popup.h"
 #include "translations.h"
+#include "type_id.h"
 #include "ui_manager.h"
 #include "units.h"
 #include "units_utility.h"
@@ -414,6 +415,7 @@ int character_display::display_empty_handed_base_damage( const Character &you )
         return empty_hand_base_damage;
     }
 }
+
 
 
 
@@ -828,7 +830,9 @@ std::string cs_speed_text( const Character &you, const std::map<std::string, int
     if( you.has_trait( trait_id( "SUNLIGHT_DEPENDENT" ) ) && !g->is_in_sunlight( you.bub_pos() ) ) {
         pen_line( _( "Out of Sunlight" ), g->light_level( you.bub_pos().z() ) >= 12 ? 5 : 10, false );
     }
-    const float temperature_speed_modifier = you.mutation_value( "temperature_speed_modifier" );
+    float temperature_speed_modifier = you.mutation_value( "temperature_speed_modifier" );
+    temperature_speed_modifier += you.bonus_from_enchantments( temperature_speed_modifier,
+                                  enchantment_value_id( "BODYTEMP_SPEED" ) );
     if( temperature_speed_modifier != 0 ) {
         const auto player_local_temp = units::to_fahrenheit( get_weather().get_temperature(
                                            you.abs_pos() ) );
@@ -850,8 +854,10 @@ std::string cs_speed_text( const Character &you, const std::map<std::string, int
     if( quick_bonus != 0 ) {
         pen_line( _( "Mutations" ), quick_bonus, quick_bonus >= 0 );
     }
-    if( you.has_bionic( bionic_id( "bio_speed" ) ) ) {
-        pen_line( _( "Bionic Speed" ), 10, true );
+    const auto ench_speed = int( ceil( you.bonus_from_enchantments( 100,
+                                       enchantment_value_id( "SPEED" ) ) ) );
+    if( ench_speed != 0 ) {
+        pen_line( _( "Misc Speed" ), ench_speed, ench_speed > 0 );
     }
     for( const std::pair<const std::string, int> &se : speed_effects ) {
         pen_line( se.first, se.second, se.second > 0 );

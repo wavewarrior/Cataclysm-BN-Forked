@@ -33,6 +33,7 @@
 #include "debug.h"
 #include "dispersion.h"
 #include "effect.h"
+#include "enchantments/enchantment.h"
 #include "enum_conversions.h"
 #include "enums.h"
 #include "event.h"
@@ -272,7 +273,7 @@ void bionic_data::finalize_all()
 {
     bionic_factory.finalize();
     for( const bionic_data &bd : bionic_factory.get_all() ) {
-        bd.finalize();
+        const_cast<bionic_data &>( bd ).finalize();
     }
 }
 
@@ -345,6 +346,26 @@ void bionic_data::load( const JsonObject &jsobj, const std::string &src )
     assign( jsobj, "no_uninstall_reason", no_uninstall_reason, strict );
     assign( jsobj, "starting_bionic", starting_bionic, strict );
     assign( jsobj, "points", points, strict );
+    if( jsobj.has_array( "bio_enchantments" ) ) {
+        for( JsonObject jo : jsobj.get_array( "bio_enchantments" ) ) {
+            enchantment ench;
+            ench.load( jo );
+            if( !ench.id.is_empty() ) {
+                ench = ench.id.obj();
+            }
+            bool addable = false;
+            // If it can be combined with another one combine it
+            for( enchantment &oench : bio_enchantments ) {
+                if( oench.add( ench ) ) {
+                    addable = true;
+                    break;
+                }
+            }
+            if( !addable ) {
+                bio_enchantments.push_back( ench );
+            }
+        }
+    }
 
 
     activated = has_flag( flag_BIONIC_TOGGLED ) ||
@@ -352,10 +373,13 @@ void bionic_data::load( const JsonObject &jsobj, const std::string &src )
                 charge_time > 0;
 }
 
-void bionic_data::finalize() const
+void bionic_data::finalize()
 {
     if( has_flag( STATIC( flag_id( "BIONIC_FAULTY" ) ) ) ) {
     faulty_bionics.push_back( id );
+    }
+    for( enchantment &ench : bio_enchantments ) {
+        ench.finalize();
     }
 }
 
@@ -400,6 +424,9 @@ void bionic_data::check() const
         if( !eid.is_valid() ) {
             rep.warn( "uses undefined enchantment \"%s\"", eid.str() );
         }
+    }
+    for( const auto &ench : id->bio_enchantments ) {
+        ench.check();
     }
     for( const auto &it : occupied_bodyparts ) {
         if( !it.first.is_valid() ) {
@@ -661,6 +688,9 @@ bool Character::activate_bionic( bionic &bio, bool eff_only, bool *close_bionics
             bio.charge_timer = bio.info().charge_time;
         }
         if( !bio.id->enchantments.empty() ) {
+            recalculate_enchantment_cache();
+        }
+        if( !bio.id->bio_enchantments.empty() ) {
             recalculate_enchantment_cache();
         }
     }
@@ -1287,6 +1317,9 @@ bool Character::deactivate_bionic( bionic &bio, bool eff_only )
     if( !bio.id->enchantments.empty() ) {
         recalculate_enchantment_cache();
     }
+    if( !bio.id->bio_enchantments.empty() ) {
+        recalculate_enchantment_cache();
+    }
 
     // Also reset crafting inventory cache if this bionic spawned a fake item
     if( !bio.info().fake_item.is_empty() ) {
@@ -1358,9 +1391,9 @@ bool Character::burn_fuel( bionic &bio, bool start )
             } else if( is_perpetual_fuel ) {
                 current_fuel_stock = 1;
             } else if( is_cable_powered ) {
-                current_fuel_stock = std::stoi( get_value( "rem_" + fuel.str() ) );
+                current_fuel_stock = get_value_as_int( "rem_" + fuel.str() ).value_or( 0 );
             } else {
-                current_fuel_stock = std::stoi( get_value( fuel.str() ) );
+                current_fuel_stock = get_value_as_int( fuel.str() ).value_or( 0 );
             }
 
             if( !bio.has_flag( flag_SAFE_FUEL_OFF ) &&
@@ -1747,11 +1780,7 @@ void Character::process_bionic( bionic &bio )
         std::vector<itype_id> fuel_available = get_fuel_available( bio.id );
         if( bio.id->is_remote_fueled ) {
             const itype_id rem_fuel = find_remote_fuel();
-            const std::string rem_amount = get_value( "rem_" + rem_fuel.str() );
-            int rem_fuel_stock = 0;
-            if( !rem_amount.empty() ) {
-                rem_fuel_stock = std::stoi( rem_amount );
-            }
+            const auto rem_fuel_stock = get_value_as_int( "rem_" + rem_fuel.str() ).value_or( 0 );
             if( !rem_fuel.is_empty() && ( rem_fuel_stock > 0 || rem_fuel->has_flag( flag_PERPETUAL ) ) ) {
                 fuel_available.emplace_back( rem_fuel );
             }
@@ -2036,5 +2065,3 @@ void Character::process_bionic( bionic &bio )
         }
     }
 }
-
-

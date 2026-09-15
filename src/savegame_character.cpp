@@ -837,7 +837,7 @@ void avatar::store( JsonOut &json ) const
     // bio_portal_tap persistent link
     if( bio_portal_tap_linked ) {
     json.member( "bio_portal_tap_linked", bio_portal_tap_linked );
-        json.member( "bio_portal_tap_dim_id", bio_portal_tap_dim_id );
+        json.member( "bio_portal_tap_dim_id", bio_portal_tap_dim_id.str() );
         json.member( "bio_portal_tap_pos", bio_portal_tap_pos.raw() );
     }
 
@@ -934,7 +934,9 @@ void avatar::load( const JsonObject &data )
     // bio_portal_tap persistent link
     if( data.has_member( "bio_portal_tap_linked" ) ) {
         data.read( "bio_portal_tap_linked", bio_portal_tap_linked );
-        data.read( "bio_portal_tap_dim_id", bio_portal_tap_dim_id );
+        auto raw_bio_portal_tap_dim_id = std::string{};
+        data.read( "bio_portal_tap_dim_id", raw_bio_portal_tap_dim_id );
+        bio_portal_tap_dim_id = dimension_id( raw_bio_portal_tap_dim_id );
         tripoint raw;
         data.read( "bio_portal_tap_pos", raw );
         bio_portal_tap_pos = tripoint_abs_ms( raw );
@@ -1556,7 +1558,9 @@ void npc::load( const JsonObject &data )
     if( !data.read( "last_updated", last_updated ) ) {
         last_updated = calendar::turn;
     }
-    data.read( "dimension_id", dimension_id_ );
+    auto raw_dimension_id = std::string{};
+    data.read( "dimension_id", raw_dimension_id );
+    set_dimension( dimension_id( raw_dimension_id ) );
     complaints.clear();
     data.read( "complaints", complaints );
 }
@@ -1631,8 +1635,8 @@ void npc::store( JsonOut &json ) const
     json.member( "restock", restock );
 
     json.member( "last_updated", last_updated );
-    if( !dimension_id_.empty() ) {
-    json.member( "dimension_id", dimension_id_ );
+    if( !dimension_id_.is_empty() ) {
+        json.member( "dimension_id", dimension_id_.str() );
     }
     json.member( "complaints", complaints );
 }

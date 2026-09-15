@@ -367,6 +367,39 @@ void game::world_tick()
     }
 }
 
+static auto turn_los_blocker_key( const tripoint_bub_ms &from,
+                                  const tripoint_bub_ms &to ) ->
+std::pair<tripoint_bub_ms, tripoint_bub_ms>
+{
+    return from < to ? std::make_pair( from, to ) : std::make_pair( to, from );
+}
+
+auto game::clear_turn_los_blocker_cache() -> void
+{
+    auto lock = std::unique_lock<std::shared_mutex>( turn_los_blocker_cache_mutex_ );
+    turn_los_blocker_cache_.clear();
+}
+
+auto game::terrain_los_blocks_sight_between( const tripoint_bub_ms &from,
+        const tripoint_bub_ms &to ) -> bool
+{
+    const auto key = turn_los_blocker_key( from, to );
+    {
+        auto lock = std::shared_lock<std::shared_mutex>( turn_los_blocker_cache_mutex_ );
+        const auto it = turn_los_blocker_cache_.find( key );
+        if( it != turn_los_blocker_cache_.end() ) {
+            return it->second;
+        }
+    }
+
+    const auto blocks_sight = !m.sees( from, to, -1 );
+    {
+        auto lock = std::unique_lock<std::shared_mutex>( turn_los_blocker_cache_mutex_ );
+        const auto insert_result = turn_los_blocker_cache_.emplace( key, blocks_sight );
+        return insert_result.first->second;
+    }
+}
+
 // ——— auto game::monmove() ———
 auto game::monmove( const monster_activity_ai_mode mode, activity_monmove_cache *cache ) -> void
 {
@@ -379,6 +412,13 @@ auto game::monmove( const monster_activity_ai_mode mode, activity_monmove_cache 
 {
     ZoneScopedN( "monmove_cleanup_initial" );
         cleanup_dead();
+    }
+
+    // Clear per-turn terrain LOS blockers so terrain changes from earlier turns
+    // are not reused.
+    {
+        ZoneScopedN( "monmove_clear_los_blocker_cache" );
+        clear_turn_los_blocker_cache();
     }
 
     // P-8: clear the per-turn sight cache at the top of every monmove() call
@@ -1495,11 +1535,9 @@ void game::update_stair_monsters()
         return;
     }
 
-    if( m.has_zlevels() ) {
-        debugmsg( "%d monsters coming to stairs on a map with z-levels",
-                  coming_to_stairs.size() );
-        coming_to_stairs.clear();
-    }
+    debugmsg( "%d monsters coming to stairs on a map with z-levels",
+              coming_to_stairs.size() );
+    coming_to_stairs.clear();
 
     for( const tripoint_bub_ms &dest : m.points_on_zlevel( u.bub_pos().z() ) ) {
         if( ( from_below && m.has_flag( "GOES_DOWN", dest ) ) ||
@@ -1726,8 +1764,7 @@ void game::shift_monsters( const tripoint_rel_sm &shift )
             critter.shift( shift.xy() );
         }
 
-        if( ( shift.z() == 0 || m.has_zlevels() )
-            && m.get_submap_at( tripoint_bub_ms( critter.bub_pos() ) ) != nullptr ) {
+        if( m.get_submap_at( tripoint_bub_ms( critter.bub_pos() ) ) != nullptr ) {
             // The critter is on a loaded submap — keep it regardless of whether
             // it's inside the render-area grid (inbounds).  Creatures can validly
             // reside in loaded-but-OOB submaps (e.g. knocked into a lazy-border
@@ -1764,8 +1801,7 @@ void game::perhaps_add_random_npc()
         return;
     }
     // Create a new NPC?
-    // Only allow NPCs on 0 z-level, otherwise they can bug out due to lack of spots
-    if( !get_option<bool>( "RANDOM_NPC" ) || ( !m.has_zlevels() && get_levz() != 0 ) ) {
+    if( !get_option<bool>( "RANDOM_NPC" ) ) {
         return;
     }
 

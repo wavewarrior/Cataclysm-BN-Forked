@@ -26,7 +26,7 @@ static const mtype_id mon_dog("mon_dog");
 
 static const skill_id skill_survival("survival");
 
-// A position well away from the player's underground test location so
+// A position well away from the player's test location so
 // the monster's line-of-sight checks do not interfere with tests.
 static const tripoint_bub_ms mon_pos(10, 10, 0);
 
@@ -228,7 +228,7 @@ TEST_CASE("train_pet_finish removes effect_well_fed", "[pet][monster][training][
     REQUIRE(mon.has_effect(effect_well_fed));
 
     avatar& p = get_avatar();
-    put_player_underground();
+    move_player_out_of_the_way();
     // Ensure skill meets the minimum so we don't early-return before consuming well_fed.
     REQUIRE(mon.type->pet_training.has_value());
     p.set_skill_level(skill_survival, mon.type->pet_training->min_skill);
@@ -250,7 +250,7 @@ TEST_CASE(
     mon.training_level = 0;
 
     avatar& p = get_avatar();
-    put_player_underground();
+    move_player_out_of_the_way();
     // Skill 25 guarantees success: 4*25=100 >= rng(0,100) always.
     p.set_skill_level(skill_survival, 25);
 
@@ -273,7 +273,7 @@ TEST_CASE("train_pet_finish does not exceed max_level", "[pet][monster][training
     mon.add_effect(effect_well_fed, 24_hours);
 
     avatar& p = get_avatar();
-    put_player_underground();
+    move_player_out_of_the_way();
     p.set_skill_level(skill_survival, 25);
 
     player_activity act(ACT_TRAIN_PET);
@@ -294,7 +294,7 @@ TEST_CASE(
     mon.training_level = 0;
 
     avatar& p = get_avatar();
-    put_player_underground();
+    move_player_out_of_the_way();
     REQUIRE(mon.type->pet_training.has_value());
     // Set skill below the minimum required for this pet.
     p.set_skill_level(skill_survival, mon.type->pet_training->min_skill - 1);
@@ -336,7 +336,7 @@ TEST_CASE(
     REQUIRE(mon.has_effect(effect_ai_waiting));
 
     avatar& p = get_avatar();
-    put_player_underground();
+    move_player_out_of_the_way();
     REQUIRE(mon.type->pet_training.has_value());
     p.set_skill_level(skill_survival, mon.type->pet_training->min_skill);
 

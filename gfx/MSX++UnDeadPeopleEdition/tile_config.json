@@ -122125,7 +122125,8 @@
         },
         {
           "id": "vp_laser_cannon",
-          "fg": 17525
+          "fg": 17525,
+          "rotates": true
         },
         {
           "id": "vp_laser_rifle",
@@ -122137,6 +122138,7 @@
           "fg": 17527,
           "rotates": true
         },
+
         {
           "id": "vp_lever_shotgun",
           "fg": 17612,
@@ -122561,8 +122563,10 @@
         },
         {
           "id": "vp_mounted_plasma_gun",
-          "fg": 17593
+          "fg": 17593,
+          "rotates": true
         },
+
         {
           "id": "vp_mounted_rm298",
           "fg": 17594,

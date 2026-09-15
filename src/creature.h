@@ -1,5 +1,14 @@
 #pragma once
 
+#include <climits>
+#include <cstddef>
+#include <map>
+#include <optional>
+#include <set>
+#include <unordered_map>
+#include <vector>
+#include <string>
+#include <utility>
 #include "anatomy.h"
 #include "bodypart.h"
 #include "cached_options.h"
@@ -39,6 +48,7 @@ class field;
 class field_entry;
 class JsonObject;
 class JsonOut;
+class mapbuffer;
 class time_duration;
 class player;
 
@@ -295,7 +305,25 @@ class Creature
          *  that don't track dimension explicitly).
          *  Overridden by avatar (delegates to game::current_dimension_id_),
          *  npc, and monster (each store their own dimension_id_). */
-        virtual const std::string &get_dimension() const;
+        virtual auto get_dimension() const -> const dimension_id &;
+
+        /**
+         * Set this creature's dimension.  Creature subtypes that own dimension
+         * state override this; game-controlled creatures reject mismatched ids.
+         */
+        virtual auto set_dimension( const dimension_id &dim_id ) -> void;
+
+        /**
+         * Return this creature's dimension mapbuffer, creating an empty registry
+         * slot if needed.  Does not load or generate submaps.
+         */
+        auto get_mapbuffer() const -> mapbuffer &;
+
+        /**
+         * Return this creature's dimension mapbuffer only if its registry slot
+         * already exists.  Does not create a slot or load/generate submaps.
+         */
+        auto find_mapbuffer() const -> mapbuffer *;
 
         /** return the direction the creature is facing, for sdl horizontal flip **/
         FacingDirection facing = FD_RIGHT;
@@ -568,8 +596,8 @@ class Creature
         /** Removes a listed effect. No bp means to remove all effects of
          * a given type, targeted or untargeted. Returns true if anything was
          * removed. */
-        bool remove_effect( const efftype_id& eff_id );
-        virtual bool remove_effect( const efftype_id& eff_id, const bodypart_str_id& bp );
+        virtual bool remove_effect( const efftype_id& eff_id,
+                                    const bodypart_str_id& bp = bodypart_str_id::NULL_ID() );
         /** Remove all effects. */
         void clear_effects();
         /** Check if creature has the matching effect. No bp means to check if the Creature has any
@@ -597,9 +625,10 @@ class Creature
         bool resists_effect( const effect& e ) const;
 
         // Methods for setting/getting misc key/value pairs.
-        void set_value( const std::string& key, const std::string& value );
-        void remove_value( const std::string& key );
-        std::string get_value( const std::string& key ) const;
+        void set_value( const std::string &key, const std::string &value );
+        void remove_value( const std::string &key );
+        std::string get_value( const std::string &key ) const;
+        auto get_value_as_int( const std::string &key ) const -> std::optional<int>;
         auto get_values_map() const -> const std::unordered_map<std::string, std::string> &;
 
         virtual units::mass get_weight() const = 0;
@@ -1006,6 +1035,7 @@ class Creature
         virtual void process_one_effect( effect& e, bool is_new ) = 0;
         auto add_action_move_credit( int base_moves, int action_factor ) -> void;
         virtual auto action_move_factor() const -> int;
+        auto invalidate_mapbuffer_cache() const -> void;
 
         pimpl<effects_map> effects;
         // Miscellaneous key/value pairs.
@@ -1096,4 +1126,7 @@ class Creature
     private:
         int pain = 0;
         bool underwater = false;
+        mutable mapbuffer *cached_mapbuffer_ = nullptr;
+        mutable dimension_id cached_mapbuffer_dim_;
+        mutable std::size_t cached_mapbuffer_generation_ = 0;
 };

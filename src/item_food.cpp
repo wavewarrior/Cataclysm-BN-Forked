@@ -72,7 +72,7 @@
 #include "line.h"
 #include "locations.h"
 #include "magic.h"
-#include "magic_enchantment.h"
+#include "enchantments/enchantment.h"
 #include "map.h"
 #include "martialarts.h"
 #include "material.h"
@@ -407,7 +407,8 @@ void item::mod_last_rot_check( time_duration processing_duration )
     last_rot_check += processing_duration;
 }
 
-detached_ptr<item> item::process_rot( detached_ptr<item> &&self, const tripoint_bub_ms &pos )
+auto item::process_rot( detached_ptr<item> &&self,
+                        const tripoint_bub_ms &pos ) -> detached_ptr<item>
 {
     return process_rot( std::move( self ), false, pos, nullptr, temperature_flag::TEMP_NORMAL,
                         get_weather() );
@@ -455,10 +456,20 @@ void item::update_rot_from_location( const temperature_flag temperature )
     update_rot( pos, flag, get_weather() );
 }
 
-void item::update_rot( const tripoint_bub_ms &pos, const temperature_flag flag,
-                       const weather_manager &weather )
+auto item::update_rot( const tripoint_bub_ms &pos, const temperature_flag flag,
+                       const weather_manager &weather ) -> void
 {
-    const time_point now = calendar::turn;
+    update_rot( {
+        .position = bub_to_abs( pos ),
+        .temperature = flag,
+        .weather = &weather,
+        .local_temperature = g != nullptr && !g->new_game ? get_map().get_temperature( pos ) : 0,
+    } );
+}
+
+auto item::update_rot( const rot_context &context ) -> void
+{
+    const auto now = calendar::turn;
 
     // if player debug menu'd the time backward it breaks stuff, just reset the
     // last_temp_check and last_rot_check in this case
@@ -469,42 +480,42 @@ void item::update_rot( const tripoint_bub_ms &pos, const temperature_flag flag,
 
     // process rot at most once every 100_turns (10 min)
     // note we're also gated by item::processing_speed
-    constexpr time_duration smallest_interval = 10_minutes;
+    static constexpr auto smallest_interval = 10_minutes;
 
-    units::temperature temp = weather.get_temperature( bub_to_abs( pos ) );
-    temp = clip_by_temperature_flag( temp, flag );
+    const auto &weather = context.weather == nullptr ? get_weather() : *context.weather;
+    auto temp = weather.get_temperature( context.position );
+    temp = clip_by_temperature_flag( temp, context.temperature );
 
-    time_point time = last_rot_check;
+    auto time = last_rot_check;
     item_internal::scoped_goes_bad_cache _cache( this );
 
     if( now - time > 1_hours ) {
         // This code is for items that were left out of reality bubble for long time
 
-        const weather_generator &wgen = weather.get_cur_weather_gen();
-        const unsigned int seed = g->get_seed();
+        const auto &wgen = weather.get_cur_weather_gen();
+        const auto seed = g != nullptr ? g->get_seed() : 0;
         // It's a modifier, so we need to subtract 0_f
-        units::temperature local_mod = units::from_fahrenheit( g->new_game
-                                       ? 0
-                                       : get_map().get_temperature( pos ) ) - 0_f;
+        const auto local_mod = units::from_fahrenheit( g != nullptr && g->new_game ?
+                               0 : context.local_temperature ) - 0_f;
 
         // Process the past of this item since the last time it was processed
         while( now - time > 1_hours ) {
             // Get the environment temperature
-            time_duration time_delta = std::min( 1_hours, now - 1_hours - time );
+            const auto time_delta = std::min( 1_hours, now - 1_hours - time );
             time += time_delta;
 
-            //Use weather if above ground, use map temp if below
-            units::temperature env_temperature_raw;
-            if( pos.z() >= 0 ) {
-                const auto location = bub_to_abs( pos );
-                units::temperature weather_temperature = wgen.get_weather_temperature( location, time,
-                    calendar::config, seed );
-                env_temperature_raw = weather_temperature + local_mod;
-            } else {
-                env_temperature_raw = temperatures::annual_average + local_mod;
+            const auto env_temperature_raw = [&]() {
+                if( context.position.z() >= 0 ) {
+                    const auto weather_temperature = wgen.get_weather_temperature( context.position, time,
+                                                     calendar::config, seed );
+                    return weather_temperature + local_mod;
+                }
+                return temperatures::annual_average + local_mod;
             }
+            ();
 
-            units::temperature env_temperature_clipped = clip_by_temperature_flag( env_temperature_raw, flag );
+            auto env_temperature_clipped = clip_by_temperature_flag( env_temperature_raw,
+                                           context.temperature );
 
             // Calculate item rot
             rot += calc_rot( time, env_temperature_clipped );
@@ -520,10 +531,25 @@ void item::update_rot( const tripoint_bub_ms &pos, const temperature_flag flag,
     }
 }
 
-detached_ptr<item>  item::process_rot( detached_ptr<item> &&self, const bool seals,
-                                       const tripoint_bub_ms &pos,
-                                       player *carrier, const temperature_flag flag,
-                                       const weather_manager &weather )
+auto item::process_rot( detached_ptr<item> &&self, const bool seals,
+                        const tripoint_bub_ms &pos,
+                        player *carrier, const temperature_flag flag,
+                        const weather_manager &weather ) -> detached_ptr<item>
+{
+    return process_rot( std::move( self ), {
+        .seals = seals,
+        .carrier = carrier,
+        .context = rot_context {
+            .position = bub_to_abs( pos ),
+            .temperature = flag,
+            .weather = &weather,
+            .local_temperature = g != nullptr && !g->new_game ? get_map().get_temperature( pos ) : 0,
+        },
+    } );
+}
+
+auto item::process_rot( detached_ptr<item> &&self,
+                        const absolute_rot_process_options &options ) -> detached_ptr<item>
 {
     if( !self ) {
         return std::move( self );
@@ -533,9 +559,9 @@ detached_ptr<item>  item::process_rot( detached_ptr<item> &&self, const bool sea
         return std::move( self );
     }
 
-    self->update_rot( pos, flag, weather );
+    self->update_rot( options.context );
 
-    if( self->has_rotten_away() && carrier == nullptr && !seals ) {
+    if( self->has_rotten_away() && options.carrier == nullptr && !options.seals ) {
         return detached_ptr<item>();
     }
     return std::move( self );

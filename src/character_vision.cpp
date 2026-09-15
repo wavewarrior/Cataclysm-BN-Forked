@@ -18,6 +18,7 @@
 #include "character_functions.h"
 #include "character_martial_arts.h"
 #include "character_stat.h"
+#include "character_vision.h"
 #include "clothing_utils.h"
 #include "clzones.h"
 #include "combat_feedback.h"
@@ -49,7 +50,7 @@
 #include "legacy_pathfinding.h"
 #include "lightmap.h"
 #include "line.h"
-#include "magic_enchantment.h"
+#include "enchantments/enchantment.h"
 #include "make_static.h"
 #include "map.h"
 #include "map_iterator.h"
@@ -448,6 +449,7 @@ int Character::overmap_sight_range( int light_level ) const
           || ( is_mounted() && mounted_creature->has_flag( MF_MECH_RECON_VISION ) ) );
     if( has_optic ) { multiplier += 1; }
 
+    sight += bonus_from_enchantments( sight, enchantment_value_id( "OVERMAP_SIGHT" ) );
     sight = std::round( sight * multiplier );
     return std::max( sight, 3 );
 }
@@ -517,18 +519,15 @@ void Character::recalc_sight_limits()
     for( const mutation_branch * mut : cached_mutations ) {
         best_bonus_nv = std::max( best_bonus_nv, mut->night_vision_range );
     }
-    if( worn_with_flag( flag_RECON_VISION )
-        || ( is_mounted() && mounted_creature->has_flag( MF_MECH_RECON_VISION ) ) ) {
-        best_bonus_nv = std::max( best_bonus_nv, 10.0f );
-    }
+    const auto night_vision_level = character_vision::active_night_vision_bonus_level( *this );
+    best_bonus_nv = std::max( best_bonus_nv,
+                              character_vision::sight_range_bonus( night_vision_level ) );
     if( worn_with_flag( flag_GNV_EFFECT ) || has_active_bionic( bio_night_vision )
         || has_effect_with_flag( flag_EFFECT_NIGHT_VISION ) ) {
         vision_mode_cache.set( NV_GOGGLES );
-        best_bonus_nv = std::max( best_bonus_nv, 10.0f );
     }
     if( worn_with_flag( flag_GNVE_EFFECT ) ) {
         vision_mode_cache.set( ENV_GOGGLES );
-        best_bonus_nv = std::max( best_bonus_nv, 18.0f );
     }
     if( has_trait( trait_BIRD_EYE ) ) { vision_mode_cache.set( BIRD_EYE ); }
     if( has_trait( trait_URSINE_EYE ) ) { vision_mode_cache.set( URSINE_VISION ); }
@@ -586,9 +585,7 @@ float Character::get_vision_threshold( float light_level ) const
 
 bool Character::is_blind() const
 {
-    return ( worn_with_flag( flag_BLIND ) ||
-    has_effect( effect_blind ) ||
-    has_active_bionic( bio_blindfold ) );
+    return worn_with_flag( flag_BLIND ) || has_effect( effect_blind );
 }
 
 bool Character::is_invisible() const
@@ -623,6 +620,8 @@ if( worn_with_flag( flag_NATURE_CAMO )
                    here.has_flag( "MINEABLE", bub_pos() ) ) ) {
         stealth_modifier += camo_modifier;
     }
+    stealth_modifier += bonus_from_enchantments( stealth_modifier, enchantment_value_id( "STEALTH" ) );
+
     return clamp( 100 - stealth_modifier, 20, 160 );
 }
 
@@ -732,8 +731,8 @@ std::vector<Creature *> Character::get_hostile_creatures( int range ) const
 {
     return g->get_creatures_if( [this, range]( const Creature & critter ) -> bool {
         // Fixes circular distance range for ranged attacks
-        float dist_to_creature = std::round( rl_dist_exact( bub_pos().raw(), critter.bub_pos().raw() ) );
-        return this != &critter && bub_pos() != critter.bub_pos() && // TODO: get rid of fake npcs (pos() check)
+        float dist_to_creature = std::round( rl_dist_exact( abs_pos(), critter.abs_pos() ) );
+        return this != &critter && abs_pos() != critter.abs_pos() && // TODO: get rid of fake npcs (pos() check)
                 dist_to_creature <= range && critter.attitude_to( *this ) == Attitude::A_HOSTILE
                 && sees( critter );
     } );
@@ -787,8 +786,8 @@ const short tabsp = here.inbounds( bub_pos() )
                     ? cache.absorption_cache[cache.idx( bub_pos().x(), bub_pos().y() )]
                         : 0;
     // Both sides of this comparison are in mdB: volume is dB, so scale it by 100.
-    return ( ( 100 * volume ) - get_cumulative_vol_dist_loss( 3, dist, tabsp ) )
-           >= ( SOUND_MINIMUM_VOLUME_FOR_PROPAGATION - ( ( volume_multiplier * 100 ) - 100 ) );
+    return ( ( dBspl_to_mdBspl( volume ) ) - get_cumulative_vol_dist_loss( 3, dist, tabsp ) )
+           >= ( SOUND_MINIMUM_VOLUME_FOR_PROPAGATION - ( ( volume_multiplier * 500 ) - 500 ) );
 }
 
 float Character::hearing_ability() const
@@ -808,6 +807,9 @@ float Character::hearing_ability() const
 
     volume_multiplier *= Character::mutation_value( "hearing_modifier" );
 
+    volume_multiplier += bonus_from_enchantments( volume_multiplier,
+                         enchantment_value_id( "HEARING" ) );
+
     if( has_effect( effect_deaf ) ) {
         // Scale linearly up to 30 minutes
         volume_multiplier *= ( 30_minutes - get_effect_dur( effect_deaf ) ) / 30_minutes;
@@ -815,11 +817,20 @@ float Character::hearing_ability() const
 
     if( has_effect( effect_earphones ) ) { volume_multiplier *= .25; }
 
-    return volume_multiplier;
+    if( get_char_hearing_protection() > 190 ) {
+        return 0.0;
+    } else if( get_char_hearing_protection() > 0 ) {
+        const float hearing_dampening = get_char_hearing_protection();
+        volume_multiplier *= 191.0 / ( 191.0 - hearing_dampening );
+    }
+    return std::max( 0.0f, volume_multiplier );
 }
 
 bool Character::sees( const tripoint_bub_ms& t, bool, int ) const
 {
+    if( t == bub_pos() ) {
+        return true;
+    }
     const int wanted_range = rl_dist( bub_pos(), t );
     bool can_see = is_player() ? get_map().pl_sees( t, wanted_range ) : Creature::sees( t );
     // Clairvoyance is now pretty cheap, so we can check it early
@@ -843,3 +854,47 @@ bool Character::sees( const Creature& critter ) const
     return Creature::sees( critter );
 }
 
+namespace
+{
+
+auto has_mounted_recon_vision( const Character &who ) -> bool
+{
+    return who.is_mounted() && who.mounted_creature->has_flag( MF_MECH_RECON_VISION );
+}
+
+} // namespace
+
+namespace character_vision
+{
+
+auto active_night_vision_bonus_level( const Character &who ) -> night_vision_bonus_level
+{
+    if( who.worn_with_flag( flag_GNVE_EFFECT ) ) {
+        return night_vision_bonus_level::enhanced;
+    }
+    if( who.worn_with_flag( flag_RECON_VISION ) || has_mounted_recon_vision( who ) ||
+        who.has_active_bionic( bio_night_vision ) ||
+        who.has_effect_with_flag( flag_EFFECT_NIGHT_VISION ) ) {
+        return night_vision_bonus_level::standard;
+    }
+    if( who.worn_with_flag( flag_GNV_EFFECT ) ) {
+        return night_vision_bonus_level::standard_goggles;
+    }
+    return night_vision_bonus_level::none;
+}
+
+auto sight_range_bonus( const night_vision_bonus_level level ) -> float
+{
+    switch( level ) {
+        case night_vision_bonus_level::enhanced:
+            return 18.0f;
+        case night_vision_bonus_level::standard:
+        case night_vision_bonus_level::standard_goggles:
+            return 10.0f;
+        case night_vision_bonus_level::none:
+            return 0.0f;
+    }
+    return 0.0f;
+}
+
+} // namespace character_vision

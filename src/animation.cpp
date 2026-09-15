@@ -357,6 +357,7 @@ void game::draw_bullet( const tripoint_bub_ms &t, const int i,
                         const std::vector<tripoint_bub_ms> &trajectory, const char bullet,
                         const std::string &custom_sprite )
 {
+    refresh_player_visibility_cache_if_needed();
     if( !is_point_visible( t ) ) {
         return;
     }
@@ -375,6 +376,7 @@ void game::draw_bullet( const tripoint_bub_ms &t, const int i,
     // Particle interpolates via wall-clock during the normal draw pass.
     run_animation_frames( delay_ms );
 }
+
 
 namespace
 {
@@ -396,6 +398,8 @@ void draw_bullet_trajectories( const draw_bullet_trajectories_options &options )
     if( options.trajectories.empty() || !tilecontext ) {
         return;
     }
+
+    g->refresh_player_visibility_cache_if_needed();
 
     const auto proto = make_projectile_particle( options.bullet, options.custom_sprite );
     const auto delay_ms = get_option<int>( "ANIMATION_DELAY" );
@@ -490,17 +494,20 @@ void game::draw_hit_player( const Character &/*p*/, const int /*dam*/ )
 
 /* Line drawing code, not really an animation but should be separated anyway */
 void game::draw_line( const tripoint_bub_ms &p, const tripoint_bub_ms &/*center*/,
-                      const std::vector<tripoint_bub_ms> &points, bool /*noreveal*/ )
+                      const std::vector<tripoint_bub_ms> &points, bool noreveal )
 {
-    if( !u.sees( p ) ) {
+    if( !noreveal && !u.sees( p ) ) {
         return;
     }
 
     tilecontext->init_draw_line( p, points, "line_target", true );
 }
 
+
 void draw_line_of( const draw_sprite_line_options &options )
 {
+    g->refresh_player_visibility_cache_if_needed();
+
     // Build visible path from trajectory points.
     std::vector<tripoint_bub_ms> path;
     path.reserve( options.points.size() );

@@ -26,6 +26,12 @@
 
 static constexpr tripoint_bub_ms shooter_pos(60, 60, 0);
 
+static auto update_player_visibility_cache() -> void {
+    g->m.invalidate_map_cache(shooter_pos.z());
+    g->m.build_map_cache(shooter_pos.z());
+    g->m.update_visibility_cache(shooter_pos.z());
+}
+
 static void set_up_player_vision() {
     g->place_player(shooter_pos);
     g->u.worn.clear();
@@ -38,12 +44,8 @@ static void set_up_player_vision() {
 
     calendar::turn = calendar::turn_zero + 12_hours;
 
-    g->m.invalidate_map_cache(shooter_pos.z());
-    g->m.build_map_cache(shooter_pos.z());
-    g->m.update_visibility_cache(shooter_pos.z());
-    g->m.invalidate_map_cache(shooter_pos.z());
-    g->m.build_map_cache(shooter_pos.z());
-    g->m.update_visibility_cache(shooter_pos.z());
+    update_player_visibility_cache();
+    update_player_visibility_cache();
 }
 
 TEST_CASE("Aiming at a clearly visible target", "[ranged][aiming]") {
@@ -241,6 +243,7 @@ TEST_CASE("Aiming a turret from a solid vehicle", "[ranged][aiming]") {
     vehicle* veh =
         g->m.add_vehicle(vproto_id("turret_test"), shooter_pos, 0_degrees, 100, 0, false);
     REQUIRE(veh != nullptr);
+    update_player_visibility_cache();
 
     WHEN("Shooter's line of fire becomes blocked by vehicle's windshield") {
         int impassable_tiles_after =

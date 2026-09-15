@@ -64,11 +64,6 @@ template <typename T> class ret_val;
 class item_location;
 struct attack_statblock;
 
-namespace enchant_vals
-{
-enum class mod : int;
-} // namespace enchant_vals
-
 using bodytype_id = std::string;
 using faction_id = string_id<faction>;
 class item_category;
@@ -94,13 +89,26 @@ enum clothing_mod_type : int;
 #include "light_emission.h"
 
 
+static const std::string TINT_VAR_PREFIX( "tint_" );
 static const std::string TINT_COLOR_VAR_NAME( "tint_color" );
 static const std::string TINT_COLOR_FG_VAR_NAME( "tint_color_fg" );
 static const std::string TINT_COLOR_BG_VAR_NAME( "tint_color_bg" );
+
 static const std::string TINT_MODE_VAR_NAME( "tint_blend_mode" );
+static const std::string TINT_MODE_FG_VAR_NAME( "tint_blend_mode_fg" );
+static const std::string TINT_MODE_BG_VAR_NAME( "tint_blend_mode_bg" );
+
 static const std::string TINT_SATURATION_VAR_NAME( "tint_saturation" );
+static const std::string TINT_SATURATION_FG_VAR_NAME( "tint_saturation_fg" );
+static const std::string TINT_SATURATION_BG_VAR_NAME( "tint_saturation_bg" );
+
 static const std::string TINT_CONTRAST_VAR_NAME( "tint_contrast" );
+static const std::string TINT_CONTRAST_FG_VAR_NAME( "tint_contrast_fg" );
+static const std::string TINT_CONTRAST_BG_VAR_NAME( "tint_contrast_bg" );
+
 static const std::string TINT_BRIGHTNESS_VAR_NAME( "tint_brightness" );
+static const std::string TINT_BRIGHTNESS_FG_VAR_NAME( "tint_brightness_fg" );
+static const std::string TINT_BRIGHTNESS_BG_VAR_NAME( "tint_brightness_bg" );
 
 /**
  *  Value and metadata for one property of an item
@@ -268,6 +276,12 @@ class item: public location_visitable<item>, public game_object<item>
          * @return new instance containing exactly qty charges or *this after detaching
          */
         detached_ptr<item> split( int qty );
+
+        /**
+         * Update state before removing the item from its current location.
+         * This must run while @ref loc or @ref saved_loc still identifies the old location.
+         */
+        auto prepare_for_location_removal() -> void;
 
         virtual bool attempt_detach( std::function < detached_ptr<item>( detached_ptr<item> && ) > )
         override;
@@ -814,9 +828,18 @@ class item: public location_visitable<item>, public game_object<item>
          * @param weather Weather manager to supply temperature.
          * @return true if the item has rotten away and should be removed, false otherwise.
          */
-        static detached_ptr<item> actualize_rot(
-            detached_ptr<item>&& self, const tripoint_bub_ms& pnt, temperature_flag temperature,
-            const weather_manager& weather );
+        struct rot_context {
+            tripoint_abs_ms position;
+            temperature_flag temperature = temperature_flag::TEMP_NORMAL;
+            const weather_manager *weather = nullptr;
+            int local_temperature = 0;
+        };
+
+        static auto actualize_rot( detached_ptr<item> &&self, const tripoint_bub_ms &pnt,
+                                   temperature_flag temperature,
+                                   const weather_manager &weather ) -> detached_ptr<item>;
+        static auto actualize_rot( detached_ptr<item> &&self,
+                                   const rot_context &context ) -> detached_ptr<item>;
 
         /**
          * Returns rot of the item since last rot calculation.
@@ -853,10 +876,12 @@ class item: public location_visitable<item>, public game_object<item>
          * @return true if the item is fully rotten and is ready to be removed
          */
         /*@{*/
-        static detached_ptr<item> process_rot( detached_ptr<item>&& self, const tripoint_bub_ms& pos );
-        static detached_ptr<item> process_rot(
-            detached_ptr<item>&& self, bool seals, const tripoint_bub_ms& pos, player* carrier,
-            temperature_flag flag, const weather_manager& weather_generator );
+        static auto process_rot( detached_ptr<item> &&self, const tripoint_bub_ms &pos )
+        -> detached_ptr<item>;
+        static auto process_rot( detached_ptr<item> &&self, bool seals,
+                                 const tripoint_bub_ms &pos,
+                                 player *carrier, temperature_flag flag,
+                                 const weather_manager &weather_generator ) -> detached_ptr<item>;
         /*@}*/
 
         int get_comestible_fun() const;
@@ -875,9 +900,9 @@ class item: public location_visitable<item>, public game_object<item>
         void update_rot_from_location( temperature_flag temperature );
 
         /** Update @ref rot at the specified location without removing rotten-away items. */
-        void update_rot(
-            const tripoint_bub_ms& pos, temperature_flag temperature,
-            const weather_manager& weather_generator );
+        auto update_rot( const tripoint_bub_ms &pos, temperature_flag temperature,
+                         const weather_manager &weather_generator ) -> void;
+        auto update_rot( const rot_context &context ) -> void;
 
         /** Get @ref rot value relative to shelf life (or 0 if item does not spoil) */
         double get_relative_rot() const;
@@ -2293,14 +2318,14 @@ class item: public location_visitable<item>, public game_object<item>
          * Calculate bonus from enchantments that affect this item only.
          */
         double bonus_from_enchantments(
-            const Character& owner, double base, enchant_vals::mod value, bool round = false ) const;
+            const Character& owner, double base, enchantment_value_id value, bool round = false ) const;
 
         /**
          * Calculate bonus from enchantments that affect this item only,
          * assume it's wielded and all enchantments' conditions are satisfied.
          */
         double bonus_from_enchantments_wielded(
-            double base, enchant_vals::mod value, bool round = false ) const;
+            double base, enchantment_value_id value, bool round = false ) const;
 
         /** Returns the type of location where the item is found */
         item_location_type where() const;
@@ -2328,6 +2353,13 @@ class item: public location_visitable<item>, public game_object<item>
         static detached_ptr<item> process_internal(
             detached_ptr<item>&& self, player* carrier, const tripoint_bub_ms& pos, bool activate,
             bool seals, temperature_flag flag, const weather_manager& weather_generator );
+        struct absolute_rot_process_options {
+            bool seals = false;
+            player* carrier = nullptr;
+            const rot_context& context;
+        };
+        static auto process_rot( detached_ptr<item>&& self,
+                                  const absolute_rot_process_options& options ) -> detached_ptr<item>;
         auto is_in_preserving_container() const -> bool;
         auto mark_rot_checked_now() -> void;
 

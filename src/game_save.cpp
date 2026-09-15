@@ -365,8 +365,8 @@ static auto discard_monster_map_for_loaded_bubble( map &here,
         const std::string &dimension_id ) -> void
 {
     const auto origin = here.get_abs_sub();
-    const auto zmin = here.has_zlevels() ? -OVERMAP_DEPTH : origin.z();
-    const auto zmax = here.has_zlevels() ? OVERMAP_HEIGHT : origin.z();
+    const auto zmin = -OVERMAP_DEPTH;
+    const auto zmax = OVERMAP_HEIGHT;
     const auto z_range = std::views::iota( zmin, zmax + 1 );
     const auto xy_range = std::views::iota( 0, g_mapsize );
     std::ranges::for_each(
@@ -563,11 +563,11 @@ bool game::load( const save_t &name )
     // we must do it explicitly.  The world_type is recovered by matching save_prefix.
     if( !loaded_dimensions_.count( current_dimension_id_ ) ) {
         auto effective_wt = world_types::get_default();
-        if( !current_dimension_id_.empty() ) {
+        if( !current_dimension_id_.is_empty() ) {
             std::ranges::for_each( world_types::get_all(),
             [&]( const world_type & wt ) {
                 if( !wt.save_prefix.empty() &&
-                    current_dimension_id_.starts_with( wt.save_prefix ) ) {
+                    current_dimension_id_.str().starts_with( wt.save_prefix ) ) {
                     effective_wt = wt.id;
                 }
             } );
@@ -575,9 +575,9 @@ bool game::load( const save_t &name )
         const struct world_type *target_type = effective_wt.is_valid() ? &effective_wt.obj() :
                                                nullptr;
         loaded_dimensions_[current_dimension_id_] = dimension_info{
-            .dimension_id = current_dimension_id_,
+            .id           = current_dimension_id_,
             .world_type   = effective_wt,
-            .display_name = target_type ? target_type->name.translated() : current_dimension_id_,
+            .display_name = target_type ? target_type->name.translated() : current_dimension_id_.str(),
             // Restore bounds so that travel_to_dimension()'s old_is_bounded check
             // returns the correct result when the player subsequently leaves a
             // bounded pocket dimension after reload.  Without this, the loaded_

@@ -959,7 +959,7 @@ bool map::add_field(
     if( fd_type.is_dangerous() ) { set_pathfinding_cache_dirty( p ); }
 
     // Ensure blood type fields don't hang in the air
-    if( zlevels && fd_type.accelerated_decay ) { support_dirty( p ); }
+    if( fd_type.accelerated_decay ) { support_dirty( p ); }
 
     return true;
 }

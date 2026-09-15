@@ -49,7 +49,7 @@
 #include "legacy_pathfinding.h"
 #include "lightmap.h"
 #include "line.h"
-#include "magic_enchantment.h"
+#include "enchantments/enchantment.h"
 #include "make_static.h"
 #include "map.h"
 #include "map_iterator.h"
@@ -811,7 +811,7 @@ void Character::rebuild_mutation_cache()
     }
 }
 
-double Character::bonus_from_enchantments( double base, enchant_vals::mod value, bool round ) const
+double Character::bonus_from_enchantments( double base, enchantment_value_id value, bool round ) const
 {
     return enchantment_cache->calc_bonus( value, base, round );
 }

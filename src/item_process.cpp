@@ -74,7 +74,7 @@
 #include "line.h"
 #include "locations.h"
 #include "magic.h"
-#include "magic_enchantment.h"
+#include "enchantments/enchantment.h"
 #include "map.h"
 #include "martialarts.h"
 #include "material.h"
@@ -113,6 +113,7 @@
 #include "text_snippets.h"
 #include "translations.h"
 #include "type_id.h"
+#include "utils/string_to_int.h"
 #include "units.h"
 #include "units_energy.h"
 #include "units_utility.h"
@@ -858,8 +859,10 @@ detached_ptr<item> item::process_internal( detached_ptr<item> &&self, player *ca
         if( !self->has_var( "ethereal" ) ) {
             return detached_ptr<item>();
         }
-        self->set_var( "ethereal", std::stoi( self->get_var( "ethereal" ) ) - 1 );
-        const bool processed = std::stoi( self->get_var( "ethereal" ) ) <= 0;
+        const auto ethereal_counter = string_utils::string_to_int( self->get_var( "ethereal" ) ).value_or(
+                                          0 ) - 1;
+        self->set_var( "ethereal", ethereal_counter );
+        const bool processed = ethereal_counter <= 0;
         if( processed && carrier != nullptr ) {
             carrier->add_msg_if_player( _( "Your %s disappears!" ), self->tname() );
         }
@@ -997,15 +1000,15 @@ detached_ptr<item> item::process_internal( detached_ptr<item> &&self, player *ca
     // All foods that go bad have temperature
     if( ( self->is_food() || self->is_corpse() ) ) {
         ZoneScopedN( "item_process_rot" );
-        item &obj = *self;
+        auto removed_snapshot = self->is_comestible() || self->is_corpse() ?
+                                item::spawn( *self ) : detached_ptr<item>();
         self = process_rot( std::move( self ), seals, pos, carrier, flag, weather_generator );
         // If the item has rotted away, then self becomes a null pointer.
-        if( !self ) {
-            if( obj.is_comestible() ) {
-                here.rotten_item_spawn( obj, pos );
-            } else if( obj.is_corpse() ) {
-                here.handle_decayed_corpse( obj, pos );
-            }
+        if( !self && removed_snapshot ) {
+            MAPBUFFER_REGISTRY.get( here.get_bound_dimension() ).handle_rotten_away_item(
+            map_local_to_abs( here, pos ), *removed_snapshot, {
+                .mode = mapbuffer_lookup_mode::resident_only,
+            } );
         }
     }
     return std::move( self );

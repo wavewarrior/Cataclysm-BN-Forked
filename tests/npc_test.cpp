@@ -1,4 +1,5 @@
 #include "activity_actor_definitions.h"
+#include "avatar.h"
 #include "calendar.h"
 #include "catch/catch_amalgamated.hpp"
 #include "coordinates.h"
@@ -411,6 +412,30 @@ TEST_CASE("npc-movement") {
     }
 }
 
+TEST_CASE("control_npc_updates_positions_and_reality_bubble", "[npc][control]") {
+    clear_all_state();
+
+    avatar& you = get_avatar();
+    g->place_player(tripoint_bub_ms(60, 60, 0));
+    npc& follower = spawn_npc(tripoint_bub_ms(10, 10, 0), "test_talker");
+    follower.set_fac(faction_id("your_followers"));
+    follower.set_attitude(NPCATT_FOLLOW);
+    REQUIRE(follower.is_player_ally());
+
+    const auto previous_avatar_pos = you.abs_pos();
+    const auto controlled_npc_pos = follower.abs_pos();
+    const auto old_map_origin = get_map().get_abs_sub();
+    REQUIRE(previous_avatar_pos != controlled_npc_pos);
+
+    you.control_npc(follower);
+
+    CHECK(you.abs_pos() == controlled_npc_pos);
+    CHECK(follower.abs_pos() == previous_avatar_pos);
+    CHECK(get_map().get_abs_sub() == player_reality_bubble_origin().xy());
+    CHECK(get_map().get_abs_sub() != old_map_origin);
+    CHECK(get_map().inbounds(you.bub_pos()));
+}
+
 TEST_CASE("npc_can_target_player") {
     clear_all_state();
     // Set to daytime for visibiliity
@@ -424,7 +449,7 @@ TEST_CASE("npc_can_target_player") {
     clear_creatures();
 
     Character& player_character = get_player_character();
-    npc& hostile = spawn_npc(player_character.bub_pos().xy() + point_south, "thug");
+    npc& hostile = spawn_npc(player_character.bub_pos() + point_south, "thug");
     REQUIRE(rl_dist(player_character.bub_pos(), hostile.bub_pos()) <= 1);
     hostile.set_attitude(NPCATT_KILL);
     hostile.name = "Enemy NPC";

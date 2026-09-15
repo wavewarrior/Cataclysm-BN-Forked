@@ -43,7 +43,7 @@ static void print_stats(
     }
 }
 
-TEST_CASE("Weak character using melee weapons against a brute", "[.][melee][slow]") {
+TEST_CASE("Weak character using melee weapons against a brute", "[.][melee][balance]") {
     monster zed(mtype_id("mon_zombie_brute"));
     auto weapons = find_weapons();
 
@@ -53,7 +53,7 @@ TEST_CASE("Weak character using melee weapons against a brute", "[.][melee][slow
     }
 }
 
-TEST_CASE("Average character using melee weapons against a hulk", "[.][melee][slow]") {
+TEST_CASE("Average character using melee weapons against a hulk", "[.][melee][balance]") {
     monster zed(mtype_id("mon_zombie_hulk"));
     auto weapons = find_weapons();
 
@@ -63,7 +63,7 @@ TEST_CASE("Average character using melee weapons against a hulk", "[.][melee][sl
     }
 }
 
-TEST_CASE("Strong character using melee weapons against a kevlar zombie", "[.][melee][slow]") {
+TEST_CASE("Strong character using melee weapons against a kevlar zombie", "[.][melee][balance]") {
     monster zed(mtype_id("mon_zombie_kevlar_1"));
     auto weapons = find_weapons();
 

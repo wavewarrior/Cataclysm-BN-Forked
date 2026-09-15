@@ -718,18 +718,18 @@ void overmap::place_radios()
     }
 }
 
-void overmap::open( const std::string &dim_id,
-                    overmap_special_batch &enabled_specials )
+auto overmap::open( const dimension_id &dim_id,
+                    overmap_special_batch &enabled_specials ) -> void
 {
     const auto ter_reader = [&]( std::istream & fin ) {
         overmap::unserialize( fin, string_format( "overmap terrain %d.%d", loc.x(), loc.y() ) );
     };
 
-    if( g->get_active_world()->read_overmap( dim_id, loc, ter_reader ) ) {
+    if( g->get_active_world()->read_overmap( dim_id.str(), loc, ter_reader ) ) {
         const auto plr_reader = [&]( std::istream & fin ) {
             overmap::unserialize_view( fin, string_format( "overmap visibility %d.%d", loc.x(), loc.y() ) );
         };
-        g->get_active_world()->read_overmap_player_visibility( dim_id, loc, plr_reader );
+        g->get_active_world()->read_overmap_player_visibility( dim_id.str(), loc, plr_reader );
     } else { // No map exists!  Prepare neighbors, and generate one.
         auto &owning_omb = get_overmapbuffer( dim_id );
         std::vector<const overmap *> pointers;

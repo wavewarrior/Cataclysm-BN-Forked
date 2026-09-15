@@ -458,6 +458,7 @@ void consumption_event::deserialize( JsonIn &jsin )
  */
 
 
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ///// inventory.h
 /*
@@ -526,6 +527,7 @@ void location_inventory::json_load_items( JsonIn &jsin )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+
 void time_point::serialize( JsonOut &jsout ) const
 {
     jsout.write( turn_ );
@@ -582,7 +584,7 @@ void item::craft_data::deserialize( const JsonObject &obj )
 void dimension_info::serialize( JsonOut &jsout ) const
 {
     jsout.start_object();
-    jsout.member( "dimension_id", dimension_id );
+    jsout.member( "dimension_id", id.str() );
     jsout.member( "world_type", world_type );
     jsout.member( "display_name", display_name );
     if( pocket_info.has_value() ) {
@@ -595,7 +597,9 @@ void dimension_info::deserialize( JsonIn &jsin )
 {
     auto obj = jsin.get_object();
     obj.allow_omitted_members();
-    obj.read( "dimension_id", dimension_id );
+    auto raw_dimension_id = std::string{};
+    obj.read( "dimension_id", raw_dimension_id );
+    id = dimension_id( raw_dimension_id );
     obj.read( "world_type", world_type );
     obj.read( "display_name", display_name );
     if( obj.has_member( "pocket_info" ) ) {
@@ -610,7 +614,7 @@ void pocket_dimension_data::serialize( JsonOut &jsout ) const
     jsout.member( "bounds", bounds );
     jsout.member( "is_initialized", is_initialized );
     jsout.member( "terrain_generated", terrain_generated );
-    jsout.member( "return_dimension_id", return_dimension_id );
+    jsout.member( "return_dimension_id", return_dimension_id.str() );
     jsout.member( "return_world_type", return_world_type );
     jsout.member( "return_point", return_point );
     if( last_player_exit.has_value() ) {
@@ -630,7 +634,9 @@ void pocket_dimension_data::deserialize( JsonIn &jsin )
     // Current format stores explicit return dimension data.
     // Legacy compat reconstructs it from return_dimension + return_instance_id.
     if( obj.has_member( "return_dimension_id" ) || obj.has_member( "return_world_type" ) ) {
-        obj.read( "return_dimension_id", return_dimension_id );
+        auto raw_return_dimension_id = std::string{};
+        obj.read( "return_dimension_id", raw_return_dimension_id );
+        return_dimension_id = dimension_id( raw_return_dimension_id );
         obj.read( "return_world_type", return_world_type );
     } else {
         // Old format: reconstruct dimension_id and return_dimension_id
@@ -645,11 +651,11 @@ void pocket_dimension_data::deserialize( JsonIn &jsin )
         obj.read( "return_instance_id", old_return_instance );
         return_world_type = old_return_dim;
         if( old_return_dim.is_valid() ) {
-            return_dimension_id = old_return_dim.obj().save_prefix + old_return_instance + "_";
+            return_dimension_id = dimension_id( old_return_dim.obj().save_prefix + old_return_instance + "_" );
         }
         // Trim trailing "_" for the return if instance was empty (overworld return)
-        if( return_dimension_id.ends_with( "_" ) && old_return_instance.empty() ) {
-            return_dimension_id = old_return_dim.obj().save_prefix;
+        if( return_dimension_id.str().ends_with( "_" ) && old_return_instance.empty() ) {
+            return_dimension_id = dimension_id( old_return_dim.obj().save_prefix );
         }
     }
 
@@ -1217,6 +1223,7 @@ void item::serialize( JsonOut &json ) const
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ///// vehicle.h
 
+
 ////////////////// mission.h
 ////
 void mission::deserialize( JsonIn &jsin )
@@ -1296,7 +1303,9 @@ void mission::deserialize( JsonIn &jsin )
     // See player::deserialize and mission::set_player_id_legacy_0c
     legacy_no_player_id = !jo.read( "player_id", player_id ) ||
                           jo.get_bool( "legacy_no_player_id", false );
-    jo.read( "dimension_id", dimension_id_ );
+    auto raw_dimension_id = std::string{};
+    jo.read( "dimension_id", raw_dimension_id );
+    set_dimension( dimension_id( raw_dimension_id ) );
 }
 
 void mission::serialize( JsonOut &json ) const
@@ -1333,8 +1342,8 @@ void mission::serialize( JsonOut &json ) const
     json.member( "follow_up", follow_up );
     json.member( "player_id", player_id );
     json.member( "legacy_no_player_id", legacy_no_player_id );
-    if( !dimension_id_.empty() ) {
-    json.member( "dimension_id", dimension_id_ );
+    if( !dimension_id_.is_empty() ) {
+        json.member( "dimension_id", dimension_id_.str() );
     }
 
     json.end_object();
@@ -2335,7 +2344,7 @@ void submap::load( JsonIn &jsin, const std::string &member_name, int version,
             int rad_num = jsin.get_int();
             for( int i = 0; i < rad_num; ++i ) {
                 if( rad_cell < SEEX * SEEY ) {
-                    set_radiation( { 0 % SEEX, rad_cell / SEEX }, rad_strength );
+                    set_radiation( { rad_cell % SEEX, rad_cell / SEEX }, rad_strength );
                     rad_cell++;
                 }
             }

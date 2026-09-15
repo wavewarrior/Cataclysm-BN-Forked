@@ -692,8 +692,8 @@ bool game::start_game()
     {
         const auto default_wt = world_types::get_default();
         const struct world_type *wt_ptr = default_wt.is_valid() ? &default_wt.obj() : nullptr;
-        loaded_dimensions_[""] = dimension_info{
-            .dimension_id = "",
+        loaded_dimensions_[dimension_id()] = dimension_info{
+            .id = dimension_id(),
             .world_type   = default_wt,
             .display_name = wt_ptr ? wt_ptr->name.translated() : std::string{},
             .pocket_info = std::nullopt
@@ -977,8 +977,7 @@ void game::load_npcs()
         // NPCs who are out of bounds before placement would be pushed into bounds
         // This can cause NPCs to teleport around, so we don't want that
         if( sm_loc.x() < get_levx() || sm_loc.x() >= get_levx() + g_mapsize ||
-            sm_loc.y() < get_levy() || sm_loc.y() >= get_levy() + g_mapsize ||
-            ( sm_loc.z() != get_levz() && !m.has_zlevels() ) ) {
+            sm_loc.y() < get_levy() || sm_loc.y() >= get_levy() + g_mapsize ) {
             continue;
         }
 
@@ -1009,14 +1008,14 @@ void game::load_npcs()
     // tinymap disables the circle guard so all square-footprint submaps are loaded.
     for( const auto &req : submap_loader.non_bubble_requests() ) {
         const int mapsize = 2 * req.radius + 1;
-        tinymap req_map( mapsize, m.has_zlevels() );
-        req_map.bind_dimension( req.dimension_id );
+        tinymap req_map( mapsize );
+        req_map.bind_dimension( req.dim_id );
         const tripoint_abs_sm top_left{
             req.center.raw().x - req.radius,
             req.center.raw().y - req.radius,
             req.center.raw().z
         };
-        req_map.load( top_left, false );
+        req_map.load( top_left.xy(), false );
         scoped_map_context ctx( req_map );
 
         for( auto z : std::views::iota( -OVERMAP_DEPTH, OVERMAP_HEIGHT + 1 ) ) {
@@ -1586,14 +1585,14 @@ std::string game::get_dimension_prefix() const
     return current_dimension_id_;
 }
 
-void game::set_active_dimension_id( const std::string &dim_id )
+void game::set_active_dimension_id( const dimension_id &dim_id )
 {
     current_dimension_id_ = dim_id;
     g_active_dimension_id = dim_id;
 }
 
-void game::activate_dimension_state( const std::string &new_dim_id,
-                                     const std::string &old_dim_id )
+void game::activate_dimension_state( const dimension_id &new_dim_id,
+                                     const dimension_id &old_dim_id )
 {
     // Step 1: drain ALL in-flight background work before touching any shared state.
     // Workers capture dimension IDs by value at submission time, so it is safe to
@@ -1625,7 +1624,7 @@ void game::activate_dimension_state( const std::string &new_dim_id,
     }
 }
 
-bool game::travel_to_dimension( const std::string &dim_id,
+bool game::travel_to_dimension( const dimension_id &dim_id,
                                 const world_type_id &world_type,
                                 const std::optional<pocket_dimension_data> &pd_info,
                                 const std::optional<tripoint_abs_sm> &load_pos,
@@ -1638,7 +1637,7 @@ bool game::travel_to_dimension( const std::string &dim_id,
     cleanup_arenas();
 
     if( dim_id == current_dimension_id_ ) {
-        add_msg( m_debug, "[DIM] Already in dimension '%s', no-op", dim_id );
+        add_msg( m_debug, "[DIM] Already in dimension '%s', no-op", dim_id.c_str() );
         return true;
     }
 
@@ -1651,8 +1650,8 @@ bool game::travel_to_dimension( const std::string &dim_id,
             effective_wt = it->second.world_type;
         }
     }
-    if( !effective_wt.is_valid() && !dim_id.empty() ) {
-        debugmsg( "travel_to_dimension: cannot resolve world_type for unknown dim '%s'", dim_id );
+    if( !effective_wt.is_valid() && !dim_id.is_empty() ) {
+        debugmsg( "travel_to_dimension: cannot resolve world_type for unknown dim '%s'", dim_id.c_str() );
         return false;
     }
 
@@ -1667,7 +1666,7 @@ bool game::travel_to_dimension( const std::string &dim_id,
     // bounded pocket to avoid evicting when memory pressure calls for cleanup.
 
     // Snapshot the old dimension state before any mutation.
-    const std::string old_dim_id = here.get_bound_dimension();
+    const dimension_id old_dim_id = here.get_bound_dimension();
     const tripoint_abs_sm current_abs_sm( here.get_abs_sub() );
 
     {
@@ -1714,7 +1713,7 @@ bool game::travel_to_dimension( const std::string &dim_id,
     // Update kept_pocket_dimension_id_: marks which bounded pocket to preserve
     // against memory-pressure eviction; cleared when entering a new pocket.
     {
-        const bool old_is_bounded = !old_dim_id.empty() &&
+        const bool old_is_bounded = !old_dim_id.is_empty() &&
                                     loaded_dimensions_.count( old_dim_id ) &&
                                     loaded_dimensions_.at( old_dim_id ).pocket_info.has_value();
         if( old_is_bounded && !pd_info.has_value() ) {
@@ -1744,7 +1743,7 @@ bool game::travel_to_dimension( const std::string &dim_id,
         }
     }
 
-    add_msg( m_debug, "[DIM] Switched active dimension: '%s' → '%s'", old_dim_id, dim_id );
+    add_msg( m_debug, "[DIM] Switched active dimension: '%s' \xe2\x86\x92 '%s'", old_dim_id.c_str(), dim_id.c_str() );
 
     // bind_dimension() redirects all subsequent loadn() / generation calls to
     // the target MAPBUFFER_REGISTRY slot.  Submaps for old_dim_id stay in their
@@ -1759,9 +1758,9 @@ bool game::travel_to_dimension( const std::string &dim_id,
 
     if( !loaded_dimensions_.count( dim_id ) ) {
         loaded_dimensions_[dim_id] = dimension_info{
-            .dimension_id        = dim_id,
+            .id                  = dim_id,
             .world_type          = effective_wt,
-            .display_name        = target_type ? target_type->name.translated() : dim_id,
+            .display_name        = target_type ? target_type->name.translated() : dim_id.str(),
             .pocket_info         = pd_info
         };
     }
@@ -1807,8 +1806,8 @@ bool game::travel_to_dimension( const std::string &dim_id,
         player.load_map_memory();
 
         {
-            auto const zmin = here.has_zlevels() ? -OVERMAP_DEPTH : here.get_abs_sub().z();
-            auto const zmax = here.has_zlevels() ? OVERMAP_HEIGHT : here.get_abs_sub().z();
+            auto const zmin = -OVERMAP_DEPTH;
+            auto const zmax = OVERMAP_HEIGHT;
             for( auto z = zmin; z <= zmax; z++ ) {
                 here.access_cache( z ).map_memory_seen_cache.reset();
                 here.invalidate_map_cache( z );

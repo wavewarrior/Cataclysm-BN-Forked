@@ -38,7 +38,7 @@
 #include "itype.h"
 #include "line.h"
 #include "magic.h"
-#include "magic_enchantment.h"
+#include "enchantments/enchantment.h"
 #include "map.h"
 #include "material.h"
 #include "math_defines.h"
@@ -206,8 +206,10 @@ target_handler::trajectory target_ui::run()
     }
 
     map& here = get_map();
+    // Target lists and saved-target reacquisition use Character::sees before
+    // the targeting UI gets its first redraw.
+    g->refresh_player_visibility_cache_if_needed();
     // Load settings
-    allow_zlevel_shift = here.has_zlevels();
     snap_to_target = get_option<bool>( "SNAP_TO_TARGET" );
     if( mode == TargetMode::Turrets ) {
         // Due to how cluttered the display would become, disable it by default
@@ -494,7 +496,7 @@ target_handler::trajectory target_ui::run()
             activity->action = timed_out_action;
             activity->snap_to_target = snap_to_target;
             activity->shifting_view = shifting_view;
-            activity->aiming_at_critter = !!dst_critter;
+            activity->aiming_at_critter = dst_critter != nullptr || you->last_target.lock() != nullptr;
             break;
         }
         case ExitCode::Reload: {
@@ -685,7 +687,16 @@ bool target_ui::handle_cursor_movement( const std::string& action, bool& skip_re
 
 bool target_ui::set_cursor_pos( const tripoint_bub_ms& new_pos )
 {
-    if( dst == new_pos ) { return false; }
+    const auto refresh_dst_critter = [this]() {
+        if( src != dst ) {
+            Creature* const cr = g->critter_at( dst, true );
+            dst_critter = cr && pl_sees( *cr ) ? cr : nullptr;
+        } else {
+            dst_critter = nullptr;
+        }
+    };
+
+    if( dst == new_pos ) { refresh_dst_critter(); return false; }
     if( status == Status::OutOfAmmo && new_pos != src ) {
         // range == 0, no sense in moving cursor
         return false;
@@ -758,16 +769,7 @@ bool target_ui::set_cursor_pos( const tripoint_bub_ms& new_pos )
     }
 
     // Cache creature under cursor
-    if( src != dst ) {
-        Creature* cr = g->critter_at( dst, true );
-        if( cr && pl_sees( *cr ) ) {
-            dst_critter = cr;
-        } else {
-            dst_critter = nullptr;
-        }
-    } else {
-        dst_critter = nullptr;
-    }
+    refresh_dst_critter();
 
     // Update mode-specific stuff
     if( mode == TargetMode::Fire ) {
@@ -942,13 +944,12 @@ tripoint_bub_ms target_ui::choose_initial_target()
 
 bool target_ui::try_reacquire_target( bool critter, tripoint_bub_ms& new_dst )
 {
-    if( critter ) {
-        // Try to re-acquire the creature
-        shared_ptr_fast<Creature> cr = you->last_target.lock();
-        if( cr && pl_sees( *cr ) && dist_fn( cr->bub_pos() ) <= range ) {
-            new_dst = cr->bub_pos();
-            return true;
-        }
+    // Prefer creature identity over the saved tile.  If aiming_at_critter was
+    // lost for one UI pass, last_target still tells us what the aim was tracking.
+    const auto cr = you->last_target.lock();
+    if( cr && pl_sees( *cr ) && dist_fn( cr->bub_pos() ) <= range ) {
+        new_dst = cr->bub_pos();
+        return true;
     }
 
     if( !you->last_target_pos.has_value() ) {
@@ -1401,11 +1402,11 @@ void target_ui::draw_terrain_overlay()
         // Draw a highlighted trajectory only if we can see the endpoint.
         // Provides feedback to the player, but avoids leaking information
         // about tiles they can't see.
-        g->draw_line( dst, center, this_z );
+        g->draw_line( dst, center, this_z, true );
     }
 
-    // Since draw_line does nothing if destination is not visible,
-    // cursor also disappears. Draw it explicitly.
+    // TILES draw_line uses a target endpoint sprite.  Keep the cursor explicit
+    // so aiming at empty tiles and z-level edges has the normal cursor marker.
     if( dst.z() == center.z() ) { g->draw_cursor( dst ); }
 
     // Draw spell AOE

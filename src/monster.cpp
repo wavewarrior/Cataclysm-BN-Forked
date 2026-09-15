@@ -35,6 +35,7 @@
 #include "locations.h"
 #include "make_static.h"
 #include "map.h"
+#include "mapbuffer.h"
 #include "map_iterator.h"
 #include "mapdata.h"
 #include "mattack_common.h"
@@ -108,6 +109,7 @@ static const efftype_id effect_no_sight( "no_sight" );
 static const efftype_id effect_onfire( "onfire" );
 static const efftype_id effect_pacified( "pacified" );
 static const efftype_id effect_pet( "pet" );
+static const efftype_id effect_pet_bonding( "pet_bonding" );
 static const efftype_id effect_tpollen( "tpollen" );
 static const efftype_id effect_paralyzepoison( "paralyzepoison" );
 static const efftype_id effect_poison( "poison" );
@@ -380,6 +382,10 @@ monster::monster( const monster& source )
     path = source.path;
     effect_cache = source.effect_cache;
     summon_time_limit = source.summon_time_limit;
+    training_level = source.training_level;
+    bonded_character_id = source.bonded_character_id;
+    pet_bond_level = source.pet_bond_level;
+    monster_flags = source.monster_flags;
 
     set_tied_item( item::spawn( *source.tied_item ) );
     set_tack_item( item::spawn( *source.tack_item ) );
@@ -437,7 +443,10 @@ void monster::poly( const mtype_id& id )
     reproduces = type->reproduces;
 
     // HACK: We should know if the monster is in the bubble instead of checking it like this
-    if( g->critter_tracker->temporary_id( *this ) >= 0 ) { g->critter_tracker->update_faction( *this ); }
+    auto &tracker = get_mapbuffer().creature_tracker();
+    if( tracker.temporary_id( *this ) >= 0 ) {
+        tracker.update_faction( *this );
+    }
 }
 
 bool monster::can_upgrade() const
@@ -961,9 +970,9 @@ std::string monster::extended_description() const
         [this,
          &ss]( std::string_view format, const std::vector<flag_description>&& flags_names,
     std::string_view if_empty = "" ) {
-        std::string flag_descriptions = enumerate_as_string(
-        flags_names.begin(), flags_names.end(), [this]( const flag_description & fd ) {
-            return type->has_flag( fd.first ) ? fd.second : "";
+        std::string flag_descriptions = enumerate_as_string( flags_names.begin(),
+        flags_names.end(), [this]( const flag_description & fd ) {
+            return type->has_flag( fd.first ) || monster_flags.contains( fd.first ) ? fd.second : "";
         } );
         if( !flag_descriptions.empty() ) {
             ss += string_format( format, flag_descriptions ) + "\n";
@@ -1027,6 +1036,18 @@ std::string monster::extended_description() const
 
     if( !type->has_flag( m_flag::MF_NOHEAD ) ) { ss += std::string( _( "It has a head." ) ) + "\n"; }
 
+    if( bonded_character_id == g->u.getID() ) {
+        ss += string_format( _( "It regards you as family. (%s)\n" ), pet_bond_level );
+    } else if( pet_bond_level > 5 ) {
+        ss += string_format( _( "It really likes you. (%s)\n" ), pet_bond_level );
+    } else if( pet_bond_level > 2 ) {
+        ss += string_format( _( "It likes you. (%s)\n" ), pet_bond_level );
+    } else if( pet_bond_level > 0 ) {
+        ss += string_format( _( "It is curious about you. (%s)\n" ), pet_bond_level );
+    } else {
+        ss += string_format( _( "It is unsure about you. (%s)\n" ), pet_bond_level );
+    }
+
     if( training_level > 0 && type->pet_training ) {
         const auto training_adj = []( float ratio ) -> const std::string {
             if( ratio > 1.5f )
@@ -1052,6 +1073,9 @@ std::string monster::extended_description() const
             ss += string_format( _( "It is %s more agile than normal." ), training_adj( dodge_ratio ) )
                   + "\n";
         }
+    }
+    if( monster_flags.contains( m_flag::MF_COMBAT_MOUNT ) ) {
+        ss += _( "It has been trained for combat and will not be scared easily.\n" );
     }
 
     ss += "--\n";
@@ -2660,13 +2684,36 @@ void monster::make_ally( const monster& z )
 void monster::make_pet()
 {
     friendly = -1;
-    g->critter_tracker->update_faction( *this );
+    get_mapbuffer().creature_tracker().update_faction( *this );
     add_effect( effect_pet, 1_turns );
 }
 
 bool monster::is_pet() const { return ( friendly == -1 && has_effect( effect_pet ) ); }
 
-bool monster::is_hallucination() const { return hallucination; }
+void monster::on_pet_bonding( Character *ch )
+{
+    if( has_effect( effect_pet_bonding ) && !one_in( 3 ) ) {
+        // Prevent spamming bond, this should raise over time.
+        // Still give a chance to increase as it may not be obvious.
+        return;
+    }
+
+    if( pet_bond_level >= pet_bond_max_level ) {
+        return;
+    }
+
+    add_effect( effect_pet_bonding, time_duration::from_hours( 8 ) );
+    pet_bond_level = std::clamp( pet_bond_level + 1, 0, pet_bond_max_level );
+    if( pet_bond_level == pet_bond_max_level ) {
+        bonded_character_id = ch->getID();
+        ch->add_msg_if_player( m_good, _( "%s has bonded with you!" ), get_name() );
+    }
+}
+
+bool monster::is_hallucination() const
+{
+    return hallucination;
+}
 
 field_type_id monster::bloodType() const
 {

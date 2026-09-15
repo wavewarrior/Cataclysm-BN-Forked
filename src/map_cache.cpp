@@ -196,7 +196,7 @@ void map::set_transparency_cache_dirty(const int zlev) {
         // absorption cache will also be invalidated.
         cache.absorption_cache_dirty.set();
         ++cache.transparency_generation;
-        for (const auto p : bubble_submaps()) {
+        for (const auto p : flat_bubble_submaps()) {
             auto* sm = get_submap_at_grid(tripoint_bub_sm(p, zlev));
             if (sm) { sm->transparency_dirty = true; }
         }
@@ -218,7 +218,7 @@ void map::set_outside_cache_dirty(const int zlev) {
     if (inbounds_z(zlev)) {
         level_cache& ch = get_cache(zlev);
         ch.outside_cache_dirty.set();
-        for (const auto p : bubble_submaps()) {
+        for (const auto p : flat_bubble_submaps()) {
             auto* sm = get_submap_at_grid(tripoint_bub_sm(p, zlev));
             if (sm) { sm->outside_dirty = true; }
         }
@@ -269,7 +269,7 @@ void map::set_suspension_cache_dirty(const int zlev) {
 void map::set_floor_cache_dirty(const int zlev) {
     if (inbounds_z(zlev)) {
         get_cache(zlev).floor_cache_dirty.set();
-        for (const auto p : bubble_submaps()) {
+        for (const auto p : flat_bubble_submaps()) {
             auto* sm = get_submap_at_grid(tripoint_bub_sm(p, zlev));
             if (sm) { sm->floor_dirty = true; }
         }
@@ -492,7 +492,7 @@ void map::update_visibility_cache(const int zlev) {
         }
     }
 
-    for (const auto p : bubble_submaps()) {
+    for (const auto p : flat_bubble_submaps()) {
         if (sm_squares_seen[p.x() * my_MAPSIZE + p.y()] > 36) { // 25% of the submap is visible
             const auto abs_sm = map_local_to_abs(*this, p);
             const auto abs_omt(project_to<coords::omt>(abs_sm));
@@ -541,7 +541,7 @@ void map::build_outside_cache(const int zlev) {
     if (zlev >= OVERMAP_HEIGHT) {
         // Base case: open sky at the top — every tile is outside, nothing above.
         std::fill(ch.outside_cache.begin(), ch.outside_cache.end(), true);
-        for (const auto p : bubble_submaps()) {
+        for (const auto p : flat_bubble_submaps()) {
             auto* sm = get_submap_at_grid(tripoint_bub_sm(p, zlev));
             if (sm) {
                 std::ranges::fill(std::span(&sm->outside_cache[0][0], SEEX * SEEY), true);
@@ -660,7 +660,7 @@ bool map::build_floor_cache(const int zlev) {
     if (rebuild_all) { std::fill(floor_cache.begin(), floor_cache.end(), true); }
 
     // Delegate to per-submap rebuild, then copy into the flat render cache.
-    for (const auto p : bubble_submaps()) {
+    for (const auto p : flat_bubble_submaps()) {
         if (!rebuild_all
             && !ch.floor_cache_dirty.test(static_cast<size_t>(ch.bidx(p.x(), p.y())))) {
             continue;
@@ -692,7 +692,7 @@ bool map::build_floor_cache(const int zlev) {
 
     ch.floor_cache_dirty.reset();
     ch.has_any_floor = std::ranges::any_of(floor_cache, [](char c) { return c != 0; });
-    return zlevels;
+    return true;
 }
 
 void map::update_suspension_cache(const int& z) {
@@ -700,7 +700,7 @@ void map::update_suspension_cache(const int& z) {
     if (!ch.suspension_cache_dirty) { return; }
     std::list<point_abs_ms>& suspension_cache = ch.suspension_cache;
     if (!ch.suspension_cache_initialized) {
-        for (const auto p : bubble_submaps()) {
+        for (const auto p : flat_bubble_submaps()) {
             const submap* cur_submap = get_submap_at_grid(tripoint_bub_sm(p, z));
 
             if (cur_submap == nullptr) {
@@ -846,8 +846,8 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
         (z == zlev ? _z_player : _z_other) +=
             std::chrono::duration<double, std::milli>(_bc::now() - t).count();
     };
-    const int minz = zlevels ? -OVERMAP_DEPTH : zlev;
-    const int maxz = zlevels ? OVERMAP_HEIGHT : zlev;
+    const int minz = -OVERMAP_DEPTH;
+    const int maxz = OVERMAP_HEIGHT;
     flush_lightmap_cpu_read_counters();
     const auto valid_lm_levels =
         std::ranges::count_if(std::views::iota(minz, maxz + 1), [this](const int z) {
