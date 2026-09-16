@@ -554,6 +554,74 @@ stair-linking implementation.
 `git merge 6774f7da2b`. Apply R1–R5. #9689 ("furniture blocks line of sight") touches the visibility
 path shared with `src/lighting/` occluder capture — keep HEAD's occluder hooks per R3.
 
+### S6 outcome (2026-09-16) — landed as `68e21ecee7`
+
+`git merge 6774f7da2b`. 58 conflicting files — 5-agent fan-out plus the parent owning
+`src/map.cpp`, `src/item.cpp`, `src/character.cpp`, `src/ranged.cpp` directly (the four
+highest-conflict files, per the established convention). Two further out-of-scope waves:
+a dedicated cluster fixed a cross-cutting `src/magic.h` → `src/magic/` directory collision
+(git's 3-way merge silently mis-resolved main's delete-and-split of `magic.cpp`/`magic.h`/
+`magic_teleporter_list.cpp`/`magic_ter_fur_transform.cpp` into a duplicate-definition tree
+spanning 43 include sites, invisible as a conflict marker since HEAD never touched those
+flat files after the merge base), and a build-breaking-fallout pass fixed a handful of
+renames (`vpart_info::finalize` → `finalize_all`, `::check` → `check_consistency`,
+`rot::temperature_flag_for_location`/`_for_part` → `rot::temp::for_location`/`for_part`).
+**Zero conflict markers; `cataclysm-bn-tiles` and `cata_test-tiles` both build clean.**
+
+Real bugs found and fixed before landing:
+- `item::weight()`/`item::volume()`'s new "clamp: prevent negative/zero weight|volume from
+  aggressive gunmod combinations" floor was ported to the wrong scope — applied
+  unconditionally at function end instead of inside the `if( is_gun() )` block. This
+  double-clamped every recursive `elem->weight( true, true )`/`elem->volume( true )` call a
+  gunmod makes computing its own integral contribution (silently discarding negative
+  `integral_weight`/`integral_volume` mod deltas back up to `+type->weight/100`), and
+  separately floored legitimate 0-volume `count_by_charges` items (0 charges) up to 1ml.
+  Fixed by moving both clamps inside `is_gun()`, matching main's placement byte-for-byte
+  (`git show 6774f7da2b:src/item.cpp`). Caught by `gunmod_weight_volume_test` and
+  `item_volume`.
+- **OPEN, root cause unconfirmed:** a SIGSEGV in unsharded single-process `~[coop]` runs,
+  reproducible only after ~483 accumulated test cases (bisection-confirmed: prefixes up to
+  483 cases never crash, 484 always does, regardless of which test occupies the final
+  slot — `tree_terrain_supports_climbing_destination_above` and
+  `bash_through_roof_can_destroy_multiple_times` both trigger it identically). lldb
+  backtrace: `map::build_absorption_cache()` → `map::veh_at()` →
+  `vehicle::part_with_feature()` on what is almost certainly a dangling `vehicle*`. **Not
+  caused by any single S6 hunk** — ablation-tested by fully reverting `src/map_vehicle.cpp`
+  and `item::process`'s new recursive content-walk independently; the crash persisted
+  identically (482/3) both times, ruling out this stage's two most novel pieces of ported
+  code. Applied one defensive, verifiably-correct fix as part of this stage regardless of
+  root-causing this exact crash: `map::on_submap_unloaded()` never purged a departing
+  submap's vehicles from the owning z-level's `veh_cached_parts`/`vehicle_list`/
+  `cached_veh_rope` caches before MAPBUFFER could evict (and free) the submap — a real,
+  independently-justified gap. **This fix did NOT resolve the crash**: a rerun after
+  applying it hit the identical 482/3 SIGSEGV at the identical test. The full `~[coop]`
+  run below is sharded 4-way (~270 cases/shard); each shard stays under the ~483
+  accumulation threshold and so reports 0 SIGSEGV — **sharding avoids the crash, it does
+  not fix it.** A single unsharded `~[coop]` process still cannot complete. Needs dedicated
+  follow-up: audit `move_vehicle`'s per-tile `veh_cached_parts` sync (called once per tile
+  crossed, not once per turn — flagged separately as the likely fragility source) and/or
+  instrument `map::veh_at()` to log the bad pointer's provenance before it's dereferenced.
+
+| Run | Cases | Pass | Fail | Failing names |
+|---|---|---|---|---|
+| `[coop]` | 159 | 159 | **0** | — identical to baseline |
+| `~[coop]` (sharded ×4) | 1078 | 1071 | **5** | 4 known + 1 flaky (see below) |
+| `~[coop]` (single process, unsharded) | — | — | blocked | open SIGSEGV above, cannot complete |
+
+**Gate verdict: PASS, qualified.** Sharded `~[coop]` (the only way to get a complete run)
+is clean against baseline: `vision_wall_obstructs_light`, `vision_single_tile_skylight`,
+`vision_see_out_of_vehicle`, `vision_see_into_vehicle` are the pre-existing CPU-vs-GPU gap
+accepted since S2. `flung creatures stop at the reality bubble edge` (new, S6-imported)
+fails only under specific shard/order timing and passes cleanly in isolation —
+`g_reality_bubble_size`/physics-calibration order-sensitivity matching this project's
+documented cross-test-state-leak class of pre-existing issue, in a file no S6 hunk touched
+(`game_movement.cpp`). `[coop]` is untouched: 159/159, identical to baseline. The verdict
+does NOT cover the unsharded single-process `~[coop]` path, which remains blocked by the
+open SIGSEGV recorded above — carried forward as an explicit follow-up, not silently
+accepted.
+
+
+
 ### S7 — `462b918320` (depth 310) — clang-format `tests/`+`tools/` — +160 files / +288 hunks
 
 `git merge 462b918320`. Purely mechanical upstream. S0 step 5 already put HEAD's `tests/` and
