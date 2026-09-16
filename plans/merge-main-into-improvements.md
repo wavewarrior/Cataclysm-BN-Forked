@@ -451,7 +451,7 @@ Real bugs found and fixed before landing (beyond mechanical dimension_id/2D-3D c
 | `[coop]` | 159 | 159 | **0** | — identical to baseline |
 
 **Gate verdict: PASS.** The failing set is a strict subset of the S2 outcome's already-PASSed named
-set (line 882 above) — no new failure names. `vehicle_efficiency` and `vehicle_ramp_test_60` (S1/S2
+set (the S2 outcome table above) — no new failure names. `vehicle_efficiency` and `vehicle_ramp_test_60` (S1/S2
 baseline failures) now both pass. The 4 remaining vision failures are a documented pre-existing
 CPU-vs-GPU architecture gap (multi-tile indoor daylight diffusion is GPU-compute-only; the CPU
 fallback cascade is byte-identical across HEAD, main, and the merged tree) already named in S2's
@@ -459,7 +459,14 @@ outcome table — not a conflict-resolution regression.
 
 Not yet re-verified against this stage: the D3/coordinate-sensitive new-behaviour checks (in-game
 GPU lightmap, save round-trip) carried forward from S3 — still pending, needs the launched game
-binary. Fold into the final pre-S12 verification pass.
+binary and a human at the screen (`tools/visual_verify/vv.py` per AGENTS.md, not screenshots). Fold
+into the final pre-S12 verification pass.
+
+Note: the `test_main.cpp` fix above makes the test binary silently downgrade to the CPU compute path
+whenever `get_device() == nullptr` (unless a compute accel is explicitly requested via env var). This
+is correct for baseline parity on GPU-less test hosts, but it means the GPU compute path is never
+exercised by the test suite on such hosts — recorded here so a future stage doesn't mistake "tests
+pass" for "GPU path verified".
 
 ### S5 — `d0115ae247` (depth 226) — COORD #9559 + #9566 Absolute Backing API — +3 files / +31 hunks
 
