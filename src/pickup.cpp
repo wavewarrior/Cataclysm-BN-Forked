@@ -911,7 +911,7 @@ if( static_cast<int>( here.size() ) <= min && min != -1 ) {
                 d.info_title_rml = cata_text_to_rml( colorize( string_format( "< %s >", sel.display_name() ),
                                                      sel.color_in_inventory() ) );
                 item *loc = *stacked_here[matches[selected]].front();
-                const temperature_flag temperature = rot::temperature_flag_for_location( get_map(), *loc );
+                const temperature_flag temperature = rot::temp::for_location( get_map(), *loc );
                 d.info_body_rml = cata_text_to_rml( format_item_info( sel.info( temperature ), {} ) );
             } else {
                 d.info_title_rml.clear();

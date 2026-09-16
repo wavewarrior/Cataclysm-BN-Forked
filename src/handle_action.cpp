@@ -8,6 +8,7 @@
 #include "avatar.h"
 #include "avatar_action.h"
 #include "avatar_functions.h"
+#include "bodypart.h"
 #include "bionics.h"
 #include "bionics_ui.h"
 #include "calendar.h"
@@ -54,7 +55,7 @@
 #include "iuse.h"
 #include "lightmap.h"
 #include "line.h"
-#include "magic.h"
+#include "magic/magic.h"
 #include "make_static.h"
 #include "map.h"
 #include "map_selector.h"
@@ -65,6 +66,7 @@
 #include "mtype.h"
 #include "mutation.h"
 #include "mutation_ui.h"
+#include "npc.h"
 #include "options.h"
 #include "output.h"
 #include "overmap_ui.h"
@@ -89,6 +91,7 @@
 #include "string_utils.h"
 #include "throw_radial.h"
 #include "translations.h"
+#include "travel/travel_destination.h"
 #include "ui.h"
 #include "ui_manager.h"
 #include "units.h"
@@ -111,6 +114,7 @@
 #include <initializer_list>
 #include <optional>
 #include <set>
+#include <algorithm>
 #include <unordered_set>
 #include <sstream>
 #include <utility>
@@ -154,6 +158,7 @@ static const itype_id itype_pistol_lanyard( "pistol_lanyard" );
 static const skill_id skill_melee( "melee" );
 
 static const quality_id qual_CUT( "CUT" );
+
 
 static const bionic_id bio_remote( "bio_remote" );
 
@@ -412,6 +417,7 @@ input_context game::get_player_input( std::string& action )
 // Establish or release a grab on a vehicle
 
 
+
 // Perform a reach attach using wielded weapon
 namespace
 {
@@ -570,13 +576,13 @@ bool game::handle_action()
             const std::optional<tripoint_bub_ms> mouse_pos = ctxt.get_coordinates( w_terrain );
             if( !mouse_pos ) {
                 return false;
-            } else if( !u.sees( *mouse_pos ) ) {
-                // Not clicked in visible terrain
-                return false;
             }
             mouse_target = mouse_pos;
 
             if( act == ACTION_SELECT ) {
+                if( !avatar_knows_travel_destination( u, *mouse_target ) ) {
+                    return false;
+                }
                 // Note: The following has the potential side effect of
                 // setting auto-move destination state in addition to setting
                 // act.
@@ -1706,6 +1712,10 @@ bool game::handle_action()
 
             case ACTION_AUTOATTACK:
                 avatar_action::autoattack( u, m );
+                break;
+
+            case ACTION_TOGGLE_MANUAL_COMBAT_MODE:
+                avatar_action::toggle_manual_combat_mode();
                 break;
 
             default:

@@ -132,7 +132,7 @@
 #include "loading_ui.h"
 #include "locations.h"
 #include "npc.h"
-#include "magic.h"
+#include "magic/magic.h"
 #include "map.h"
 #include "physics/physics_world.h"
 #include "map_functions.h"
@@ -604,6 +604,7 @@ bool game::load( const save_t &name )
     }
 
     safe_mode = get_option<bool>( "SAFEMODE" ) ? SAFE_MODE_ON : SAFE_MODE_OFF;
+    manual_combat_mode = false;
     mostseen = 0; // ...and mostseen is 0, we haven't seen any monsters yet.
 
     init_autosave();

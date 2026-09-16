@@ -107,7 +107,7 @@ bool run( item& loc, const std::function<int()> &func_pos_x, const std::function
 
     int info_area_scroll_pos = 0;
     constexpr int info_area_scroll_step = 3;
-    temperature_flag temperature = rot::temperature_flag_for_location( get_map(), itm );
+    temperature_flag temperature = rot::temp::for_location( get_map(), itm );
     std::vector<iteminfo> item_info_vals = itm.info( temperature );
     std::vector<iteminfo> dummy_compare;
     item_info_data

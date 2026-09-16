@@ -65,7 +65,7 @@
 #include "iuse.h"
 #include "iuse_actor.h"
 #include "line.h"
-#include "magic_teleporter_list.h"
+#include "magic/magic_teleporter_list.h"
 #include "map.h"
 #include "map_iterator.h"
 #include "map_selector.h"

@@ -1908,7 +1908,3 @@ class vehicle
         dimension_id dimension_id_;
 };
 
-namespace rot
-{
-temperature_flag temperature_flag_for_part( const vehicle& veh, size_t part );
-} // namespace rot

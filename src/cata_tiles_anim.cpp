@@ -1,6 +1,7 @@
 #include "cata_tiles.h"
 #include "cata_tiles_internal.h"
 #include "sdl_lighting_devui.h"
+#include "travel/travel_destination.h"
 #include "lighting/solid_overlay.h"
 
 #include "cata_utility.h"
@@ -892,7 +893,8 @@ void cata_tiles::draw_line()
 {
     if( line_trajectory.empty() ) { return; }
     static std::string line_overlay = "animation_line";
-    if( !is_target_line || g->u.sees( tripoint_bub_ms( line_pos ) ) ) {
+    const auto target_known = avatar_knows_travel_destination( g->u, line_pos );
+    if( should_draw_travel_line_overlay( is_target_line, target_known ) ) {
         for( auto it = line_trajectory.begin(); it != line_trajectory.end() - 1; ++it ) {
             draw_from_id_string(
             {line_overlay, C_NONE, empty_string, 0, 0}, *it, std::nullopt, std::nullopt,

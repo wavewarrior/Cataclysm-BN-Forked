@@ -32,6 +32,8 @@ class target_ui
             Fire,
             Throw,
             ThrowBlind,
+            ThrowCreature,
+            ThrowVehicle,
             Turrets,
             TurretManual,
             Reach,
@@ -45,8 +47,10 @@ class target_ui
         TargetMode mode = TargetMode::Fire;
         // Weapon being fired/thrown
         item *relevant = nullptr;
-        // Cached selection range from player's position
+        // Cached selection range from the targeting source.
         int range = 0;
+        // Clamp cursor selection to live reality-bubble bounds.
+        bool limit_to_reality_bubble = false;
         // Turret being manually fired
         turret_data *turret = nullptr;
         // Turrets being fired (via vehicle controls)
@@ -63,6 +67,8 @@ class target_ui
         aim_activity_actor *activity = nullptr;
         // Generator of AoE shapes
         std::optional<shape_factory> shape_gen;
+        // Preferred initial cursor position.
+        std::optional<tripoint_bub_ms> initial_target;
 
         // Initialize UI and run the event loop
         target_handler::trajectory run();
@@ -84,7 +90,7 @@ class target_ui
         const itype *ammo = nullptr;
         // Current trajectory
         std::vector<tripoint_bub_ms> traj;
-        // Aiming source (player's position)
+        // Aiming source.
         tripoint_bub_ms src;
         // Aiming destination (cursor position)
         // Use set_cursor_pos() to modify

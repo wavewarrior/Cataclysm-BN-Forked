@@ -1475,10 +1475,13 @@ class atm_activity_actor: public activity_actor
 class play_with_pet_activity_actor: public activity_actor
 {
     private:
+        weak_ptr_fast<monster> pet;
         std::string pet_name;
 
     public:
-        explicit play_with_pet_activity_actor( const std::string& name ): pet_name( name ) {}
+        play_with_pet_activity_actor( const weak_ptr_fast<monster> &m, const std::string& name )
+            : pet( m ),
+              pet_name( name ) {}
 
         activity_id get_type() const override { return activity_id( "ACT_PLAY_WITH_PET" ); }
 

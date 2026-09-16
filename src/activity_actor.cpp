@@ -37,12 +37,13 @@
 #include "item_group.h"
 #include "item_hauling.h"
 #include "itype.h"
+#include "material.h"
 #include "iuse.h"
 #include "iuse_actor.h"
 #include "json.h"
 #include "line.h"
 #include "locations.h"
-#include "magic.h"
+#include "magic/magic.h"
 #include "map.h"
 #include "map_iterator.h"
 #include "map_selector.h"
@@ -81,6 +82,7 @@
 
 #include <cmath>
 #include <list>
+#include "string_utils.h"
 #include <memory>
 #include <string>
 #include <utility>
@@ -318,7 +320,8 @@ void aim_activity_actor::finish( player_activity& act, Character& who )
         if( stamina_cost_per_shot > 0 ) { who.mod_stamina( -stamina_cost_per_shot * shots_fired ); }
     }
 
-    if( !get_option<bool>( "AIM_AFTER_FIRING" ) ) {
+    if( !get_option<bool>( "AIM_AFTER_FIRING" ) ||
+        who.recoil <= ranged::calculate_aim_cap( who, fin_trajectory.back() ) ) {
         restore_view();
         return;
     }
@@ -1817,12 +1820,40 @@ void repair_item_activity_actor::finish( player_activity& act, Character& who )
         const std::pair<float, float> chance = actor->repair_chance( p, fix, action_type );
         if( chance.first <= 0.0f ) { action_type = repair_item_actor::RT_PRACTICE; }
 
+        const int items_needed = actor->get_material_amt_needed( fix, true );
+        const auto valid_materials = actor->get_valid_materials( fix );
+        const auto &crafting_inv = p.crafting_inventory();
+        auto listed_components = std::set<itype_id> {};
+        auto material_list = std::vector<std::string> {};
+
+        for( const auto &mat : valid_materials ) {
+            const itype_id component_id = mat.obj().repaired_with();
+            if( listed_components.find( component_id ) != listed_components.end() ) {
+                continue;
+            }
+            listed_components.emplace( component_id );
+            int nearby_amount = 0;
+            if( item::count_by_charges( component_id ) ) {
+                if( crafting_inv.has_charges( component_id, 1 ) ) {
+                    nearby_amount = crafting_inv.charges_of( component_id );
+                }
+            } else if( crafting_inv.has_amount( component_id, 1, false, is_crafting_component ) ) {
+                nearby_amount = crafting_inv.amount_of( component_id, false );
+            }
+            std::string color = nearby_amount < items_needed ? "red" : "light_blue";
+            material_list.emplace_back( string_format( _( "%s (<color_%s>%d</color>)" ),
+                                        item::nname( component_id ), color, nearby_amount ) );
+        }
+        const std::string material_list_string = join( material_list, ", " );
+
         std::string title = string_format(
                                 _( "%s %s\n" ), repair_item_actor::action_description( action_type ), fix.tname() );
         title += string_format(
                      _( "Charges: <color_light_blue>%s/%s</color> %s (%s per use)\n" ),
                      used_tool->ammo_remaining(), used_tool->ammo_capacity(),
                      item::nname( used_tool->ammo_current() ), used_tool->ammo_required() );
+        title += string_format( _( "Materials available: %s\n" ), material_list_string );
+        title += string_format( _( "Materials needed: <color_light_blue>%d</color>\n" ), items_needed );
         title += string_format(
                      _( "Skill used: <color_light_blue>%s (%s)</color>\n" ), actor->used_skill->name(), level );
         title += string_format(

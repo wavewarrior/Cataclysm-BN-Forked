@@ -621,7 +621,8 @@ int Character::item_handling_cost( const item& it, bool penalties, int base_cost
     int mv = base_cost;
     if( penalties ) {
         // 40 moves per liter, up to 200 at 5 liters
-        mv += std::min( 200, it.volume() / 20_ml );
+        const auto volume_moves = it.volume() / 20_ml;
+        mv += static_cast<int>( std::min( volume_moves, decltype( volume_moves ) { 200 } ) );
     }
 
     if( primary_weapon().typeId() == itype_e_handcuffs ) {

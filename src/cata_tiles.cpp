@@ -66,6 +66,7 @@
 #include "tile_light_mode.h"
 #include "tileray.h"
 #include "translations.h"
+#include "travel/travel_destination.h"
 #include "trap.h"
 #include "type_id.h"
 #include "units_temperature.h"

@@ -71,7 +71,7 @@
 #include "iuse_actor.h"
 #include "line.h"
 #include "locations.h"
-#include "magic.h"
+#include "magic/magic.h"
 #include "enchantments/enchantment.h"
 #include "map.h"
 #include "martialarts.h"
@@ -125,7 +125,13 @@
 
 void item::unset_flags()
 {
+    const bool affects_processing = item_tags.count( flag_RADIO_ACTIVATION ) ||
+                                    item_tags.count( flag_ETHEREAL_ITEM ) ||
+                                    item_tags.count( flag_PROCESSING );
     item_tags.clear();
+    if( affects_processing ) {
+        invalidate_processing_cache_upwards();
+    }
 }
 
 bool item::has_fault( const fault_id &fault ) const
@@ -189,7 +195,12 @@ for( auto const& [vit_id, amount] : food_item.vitamins ) {
 void item::set_flag( const flag_id &flag )
 {
     if( flag.is_valid() ) {
-        item_tags.insert( flag );
+        const bool affects_processing = flag == flag_RADIO_ACTIVATION || flag == flag_ETHEREAL_ITEM ||
+                                        flag == flag_PROCESSING;
+        const bool inserted = item_tags.insert( flag ).second;
+        if( inserted && affects_processing ) {
+            invalidate_processing_cache_upwards();
+        }
     } else {
         debugmsg( "Attempted to set invalid flag_id %s", flag.str() );
     }
@@ -197,7 +208,12 @@ void item::set_flag( const flag_id &flag )
 
 void item::unset_flag( const flag_id &flag )
 {
-    item_tags.erase( flag );
+    const bool affects_processing = flag == flag_RADIO_ACTIVATION || flag == flag_ETHEREAL_ITEM ||
+                                    flag == flag_PROCESSING;
+    const bool erased = item_tags.erase( flag ) > 0;
+    if( erased && affects_processing ) {
+        invalidate_processing_cache_upwards();
+    }
 }
 
 void item::set_flag_recursive( const flag_id &flag )

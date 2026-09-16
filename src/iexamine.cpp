@@ -66,7 +66,7 @@
 #include "iuse.h"
 #include "iuse_actor.h"
 #include "line.h"
-#include "magic_teleporter_list.h"
+#include "magic/magic_teleporter_list.h"
 #include "map.h"
 #include "map_iterator.h"
 #include "map_selector.h"
@@ -256,9 +256,11 @@ void iexamine::none( player &/*p*/, const tripoint_bub_ms &examp )
 /**
  * Pick an appropriate item and apply diamond coating if possible.
  */
+
 /**
  * UI FOR LAB_FINALE NANO FABRICATOR.
  */
+
 /**
  * UI FOR LAB_FINALE SUPERALLOY FORGE.
  */

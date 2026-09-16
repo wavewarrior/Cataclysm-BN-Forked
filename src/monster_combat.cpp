@@ -129,6 +129,22 @@ static const species_id PLANT( "PLANT" );
 static const species_id ROBOT( "ROBOT" );
 static const species_id ZOMBIE( "ZOMBIE" );
 
+namespace
+{
+
+auto adjacent_grabber_for( const monster &target ) -> Creature *
+{
+    for( const auto &p : get_map().points_in_radius( target.bub_pos(), 1, 0 ) ) {
+        Creature *const grabber = g->critter_at<Creature>( p );
+        if( grabber != nullptr && grabber != &target && grabber->has_effect( effect_grabbing ) ) {
+            return grabber;
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
+
 static const trait_id trait_ANIMALDISCORD( "ANIMALDISCORD" );
 static const trait_id trait_ANIMALDISCORD2( "ANIMALDISCORD2" );
 static const trait_id trait_ANIMALEMPATH( "ANIMALEMPATH" );
@@ -630,6 +646,12 @@ void monster::die( Creature* nkiller )
                 _( "The last enemy holding <npcname> collapses!" ) );
             p->remove_effect( effect_grabbed );
         }
+    }
+    if( has_effect( effect_grabbed ) ) {
+        if( Creature *const grabber = adjacent_grabber_for( *this ) ) {
+            grabber->remove_effect( effect_grabbing );
+        }
+        remove_effect( effect_grabbed );
     }
     if( !is_hallucination() ) {
         for( detached_ptr<item> &it : inv.clear() ) {

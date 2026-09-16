@@ -445,8 +445,8 @@ int Character::overmap_sight_range( int light_level ) const
     float multiplier = mutation_value( "overmap_multiplier" );
     // Binoculars double your sight range.
     const bool has_optic =
-        ( has_item_with_flag( flag_ZOOM ) || has_bionic( bio_eye_optic )
-          || ( is_mounted() && mounted_creature->has_flag( MF_MECH_RECON_VISION ) ) );
+        ( has_item_with_flag( flag_ZOOM ) || ( is_mounted() &&
+                                              mounted_creature->has_flag( MF_MECH_RECON_VISION ) ) );
     if( has_optic ) { multiplier += 1; }
 
     sight += bonus_from_enchantments( sight, enchantment_value_id( "OVERMAP_SIGHT" ) );
@@ -456,14 +456,21 @@ int Character::overmap_sight_range( int light_level ) const
 
 int Character::clairvoyance() const
 {
-    if( vision_mode_cache[VISION_CLAIRVOYANCE_SUPER] ) { return MAX_CLAIRVOYANCE; }
-
-    if( vision_mode_cache[VISION_CLAIRVOYANCE_PLUS] ) { return 8; }
-
-    if( vision_mode_cache[VISION_CLAIRVOYANCE] ) { return 3; }
-
     // 0 would mean we have clairvoyance of own tile
-    return -1;
+    int max = -1;
+    if( vision_mode_cache[VISION_CLAIRVOYANCE_SUPER] ) {
+        max = MAX_CLAIRVOYANCE;
+    } else if( vision_mode_cache[VISION_CLAIRVOYANCE_PLUS] ) {
+        max = 8;
+    } else if( vision_mode_cache[VISION_CLAIRVOYANCE] ) {
+        max = 3;
+    }
+
+    int ench = bonus_from_enchantments( 0.0, enchantment_value_id( "CLAIRVOYANCE" ) );
+    if( ench > 0 ) {
+        max = std::max( ench, max );
+    }
+    return max;
 }
 
 bool Character::sight_impaired() const
@@ -515,13 +522,7 @@ void Character::recalc_sight_limits()
     // Debug-only NV
     if( has_trait( trait_DEBUG_NIGHTVISION ) ) { vision_mode_cache.set( DEBUG_NIGHTVISION ); }
 
-    float best_bonus_nv = 0.0f;
-    for( const mutation_branch * mut : cached_mutations ) {
-        best_bonus_nv = std::max( best_bonus_nv, mut->night_vision_range );
-    }
-    const auto night_vision_level = character_vision::active_night_vision_bonus_level( *this );
-    best_bonus_nv = std::max( best_bonus_nv,
-                              character_vision::sight_range_bonus( night_vision_level ) );
+    const float best_bonus_nv = night_vision_sight_range();
     if( worn_with_flag( flag_GNV_EFFECT ) || has_active_bionic( bio_night_vision )
         || has_effect_with_flag( flag_EFFECT_NIGHT_VISION ) ) {
         vision_mode_cache.set( NV_GOGGLES );
@@ -660,13 +661,13 @@ float Character::active_light() const
 
     lumination = std::max( lumination, mut_lum );
 
-    if( lumination < 300 && has_active_bionic( bio_flashlight ) ) {
-        lumination = 300;
-    } else if( lumination < 25 && has_artifact_with( AEP_GLOW ) ) {
+    lumination = std::max( lumination, float( bonus_from_enchantments( 0,
+                           enchantment_value_id( "LUMINATION" ) ) ) );
+
+    if( lumination < 25 && has_artifact_with( AEP_GLOW ) ) {
         lumination = 25;
     } else if( lumination < 5
-               && ( has_effect( effect_glowing ) || has_effect( effect_glowy_led )
-                    || has_active_bionic( bio_tattoo_led ) ) ) {
+               && ( has_effect( effect_glowing ) || has_effect( effect_glowy_led ) ) ) {
         lumination = 5;
     }
     return lumination;
@@ -832,10 +833,10 @@ bool Character::sees( const tripoint_bub_ms& t, bool, int ) const
         return true;
     }
     const int wanted_range = rl_dist( bub_pos(), t );
-    bool can_see = is_player() ? get_map().pl_sees( t, wanted_range ) : Creature::sees( t );
     // Clairvoyance is now pretty cheap, so we can check it early
-    if( wanted_range < MAX_CLAIRVOYANCE && wanted_range < clairvoyance() ) { return true; }
+    if( wanted_range < clairvoyance() ) { return true; }
 
+    bool can_see = is_player() ? get_map().pl_sees( t, wanted_range ) : Creature::sees( t );
     if( can_see && wanted_range > unimpaired_range() ) { can_see = false; }
 
     return can_see;

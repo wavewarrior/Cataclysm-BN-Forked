@@ -26,6 +26,7 @@
 #include "character_turn.h"
 #include "coordinates.h"
 #include "creature.h"
+#include "creature_throw.h"
 #include "creature_tracker.h"
 #include "debug.h"
 #include "event.h"
@@ -82,6 +83,7 @@ static const efftype_id effect_contacts( "contacts" );
 static const efftype_id effect_downed( "downed" );
 static const efftype_id effect_drunk( "drunk" );
 static const efftype_id effect_grabbed( "grabbed" );
+static const efftype_id effect_grabbing( "grabbing" );
 static const efftype_id effect_incorporeal( "incorporeal" );
 static const efftype_id effect_jetpack( "jetpack" );
 static const efftype_id effect_mending( "mending" );
@@ -123,6 +125,52 @@ static const trait_id trait_VINES3( "VINES3" );
 
 static const itype_id itype_grapnel( "grapnel" );
 static const itype_id itype_rope_30( "rope_30" );
+
+namespace
+{
+
+auto fling_bash_damage( const Creature &c, const float flvel ) -> int
+{
+    return creature_throw::flung_creature_bash_damage( c.get_size(),
+            static_cast<int>( to_gram( c.get_weight() ) ), flvel );
+}
+
+auto avatar_grabbed_creature() -> Creature *
+{
+    avatar &you = get_avatar();
+    if( !you.has_effect( effect_grabbing ) ) {
+        return nullptr;
+    }
+
+    for( const auto &p : get_map().points_in_radius( you.bub_pos(), 1, 0 ) ) {
+        Creature *const target = g->critter_at<Creature>( p );
+        if( target != nullptr && target != &you && target->has_effect( effect_grabbed ) ) {
+            return target;
+        }
+    }
+
+    you.remove_effect( effect_grabbing );
+    return nullptr;
+}
+
+auto can_drag_grabbed_creature( const avatar &you, const Creature &target ) -> bool
+{
+    const auto size_delta = static_cast<int>( target.get_size() ) - static_cast<int>( you.get_size() );
+    return size_delta <= 0 || x_in_y( you.get_str(), std::max( you.get_str() + size_delta * 4, 1 ) );
+}
+
+auto can_recover_from_fling( Creature &critter ) -> bool
+{
+    if( monster *const mon = critter.as_monster() ) {
+        return mon->flies();
+    }
+    if( Character *const ch = critter.as_character() ) {
+        return character_funcs::can_fly( *ch );
+    }
+    return false;
+}
+
+} // namespace
 
 
 // ——— walk_move ———
@@ -225,6 +273,20 @@ bool game::walk_move( const tripoint_bub_ms &dest_loc, const bool via_ramp )
         pulling = false;
         shifting_furniture = false;
         grabbed_vehicle = nullptr;
+    }
+
+    Creature *const dragged_creature = avatar_grabbed_creature();
+    if( dragged_creature != nullptr ) {
+        if( dest_loc.z() != u.bub_pos().z() ) {
+            add_msg( m_warning, _( "You let go of %s." ), dragged_creature->disp_name() );
+            dragged_creature->remove_effect( effect_grabbed );
+            u.remove_effect( effect_grabbing );
+        } else if( !can_drag_grabbed_creature( u, *dragged_creature ) ) {
+            add_msg( m_warning, _( "You struggle to drag %s, but can't move them." ),
+                     dragged_creature->disp_name() );
+            u.moves -= 100;
+            return false;
+        }
     }
 
     if( ( m.impassable( dest_loc ) && !character_funcs::can_noclip( u ) ) && !pushing &&
@@ -540,6 +602,11 @@ bool game::walk_move( const tripoint_bub_ms &dest_loc, const bool via_ramp )
     oldpos = oldpos - ms_shift;
     // Sprite-animation move trigger (both endpoints now in the post-shift frame).
     u.anim_on_move( oldpos, u.bub_pos() );
+
+    if( dragged_creature != nullptr && dragged_creature->has_effect( effect_grabbed ) &&
+        dragged_creature->bub_pos() != oldpos && critter_at( oldpos ) == nullptr ) {
+        dragged_creature->setpos( oldpos );
+    }
 
     if( pulling && u.get_grab_type() == OBJECT_FURNITURE ) {
         const auto shifted_furn_pos = grabbed_furn_pos - ms_shift;
@@ -1437,6 +1504,9 @@ void game::fling_creature( Creature *c, const units::angle &dir, float flvel, bo
             pt.x() = c->bub_pos().x() + tdir.dx();
             pt.y() = c->bub_pos().y() + tdir.dy();
         }
+        if( !is_in_reality_bubble_bounds( pt ) ) {
+            break;
+        }
         float force = 0;
 
         if( m.obstructed_by_vehicle_rotation( prev_point, pt ) ) {
@@ -1479,7 +1549,7 @@ void game::fling_creature( Creature *c, const units::angle &dir, float flvel, bo
             c->impact( damage, pt );
             if( m.is_bashable( pt ) ) {
                 // Only go through if we successfully make the tile passable
-                m.bash( pt, flvel );
+                m.bash( pt, fling_bash_damage( *c, flvel ) );
                 thru = m.passable( pt );
             } else {
                 thru = false;
@@ -1527,6 +1597,10 @@ void game::fling_creature( Creature *c, const units::angle &dir, float flvel, bo
         }
     }
 
+    if( can_recover_from_fling( *c ) ) {
+        return;
+    }
+
     // Fall down to the ground - always on the last reached tile
     if( !m.has_flag( "SWIMMABLE", c->bub_pos() ) ) {
         const trap_id trap_under_creature = m.tr_at( c->bub_pos() ).loadid;
@@ -1542,7 +1616,8 @@ void game::fling_creature( Creature *c, const units::angle &dir, float flvel, bo
             if( force > 0 ) {
                 int dmg = c->impact( force, c->bub_pos() );
                 // TODO: Make landing damage the floor
-                m.bash( c->bub_pos(), dmg / 4, false, false, false );
+                m.bash( c->bub_pos(), std::max( dmg / 4, fling_bash_damage( *c, flvel ) / 4 ), false,
+                        false, false );
             }
             // Always apply traps to creature i.e. bear traps, tele traps etc.
             m.creature_on_trap( *c, false );

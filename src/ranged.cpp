@@ -37,7 +37,7 @@
 #include "item_reload_option.h"
 #include "itype.h"
 #include "line.h"
-#include "magic.h"
+#include "magic/magic.h"
 #include "map.h"
 #include "material.h"
 #include "math_defines.h"
@@ -368,6 +368,20 @@ auto gunmod_find_with( item& it, std::function < auto( const item* )->bool > pre
     return res != gunmods.end() ? *res : nullptr;
 }
 
+auto clamp_range_to_reality_bubble( const tripoint_bub_ms &src, const int range ) -> int
+{
+    auto &here = get_map();
+    const auto bubble_edge_x = SEEX * here.getmapsize() - 1;
+    const auto bubble_edge_y = SEEY * here.getmapsize() - 1;
+    const auto max_range = static_cast<int>( std::round( std::max( {
+        rl_dist_exact( src, tripoint_bub_ms( 0, 0, src.z() ) ),
+        rl_dist_exact( src, tripoint_bub_ms( bubble_edge_x, 0, src.z() ) ),
+        rl_dist_exact( src, tripoint_bub_ms( 0, bubble_edge_y, src.z() ) ),
+        rl_dist_exact( src, tripoint_bub_ms( bubble_edge_x, bubble_edge_y, src.z() ) ),
+    } ) ) );
+    return std::min( std::max( 1, range ), max_range );
+}
+
 } // namespace
 
 #include "target_ui.h"
@@ -399,7 +413,35 @@ target_handler::trajectory target_handler::mode_throw(
     return ui.run();
 }
 
-target_handler::trajectory target_handler::mode_reach( avatar& you, item& weapon )
+target_handler::trajectory target_handler::mode_throw_creature( avatar &you,
+        const Creature &thrown_creature, int range )
+{
+    target_ui ui = target_ui();
+    ui.you = &you;
+    ui.mode = target_ui::TargetMode::ThrowCreature;
+    ui.range = clamp_range_to_reality_bubble( thrown_creature.bub_pos(), std::max( 1, range ) );
+    ui.limit_to_reality_bubble = true;
+    ui.initial_target = thrown_creature.bub_pos();
+
+    restore_on_out_of_scope<tripoint_rel_ms> view_offset_prev( you.view_offset );
+    return ui.run();
+}
+
+target_handler::trajectory target_handler::mode_throw_vehicle( avatar &you,
+        const tripoint_bub_ms &grabbed_part_pos, int range )
+{
+    target_ui ui = target_ui();
+    ui.you = &you;
+    ui.mode = target_ui::TargetMode::ThrowVehicle;
+    ui.range = clamp_range_to_reality_bubble( grabbed_part_pos, std::max( 1, range ) );
+    ui.limit_to_reality_bubble = true;
+    ui.initial_target = grabbed_part_pos;
+
+    restore_on_out_of_scope<tripoint_rel_ms> view_offset_prev( you.view_offset );
+    return ui.run();
+}
+
+target_handler::trajectory target_handler::mode_reach( avatar &you, item &weapon )
 {
     target_ui ui = target_ui();
     ui.you = &you;
@@ -1425,9 +1467,7 @@ int throwing_dispersion(
     return std::max( 0, dispersion );
 }
 
-namespace
-{
-auto throw_damage_projectile( const item& it, const int skill, const int str ) -> projectile
+auto throw_damage_projectile( const item &it, const int skill, const int str ) -> projectile
 {
     const units::mass weight = it.weight();
 
@@ -1449,16 +1489,26 @@ auto throw_damage_projectile( const item& it, const int skill, const int str ) -
 
     return proj;
 }
-} // namespace
 
 auto throw_damage( const item& it, const int skill, const int str ) -> int
 {
     return throw_damage_projectile( it, skill, str ).impact.total_damage();
 }
 
-dealt_projectile_attack throw_item(
-    Character& who, const tripoint_bub_ms& target, detached_ptr<item>&& to_throw,
-    std::optional<tripoint_bub_ms> blind_throw_from_pos )
+auto throw_stamina_cost( const Character &thrower, const item &item ) -> int
+{
+    // Previously calculated as 2_gram * std::max( 1, str_cur )
+    // using 16_gram normalizes it to 8 str. Same effort expenditure
+    // for being able to throw farther.
+    const int weight_cost = item.weight() / ( 16_gram );
+    const int encumbrance_cost = roll_remainder(
+                                     ( thrower.encumb( body_part_arm_l ) + thrower.encumb( body_part_arm_r ) ) * 2.0f );
+    return weight_cost + encumbrance_cost - thrower.get_skill_level( skill_throw ) + 50;
+}
+
+dealt_projectile_attack throw_item( Character &who, const tripoint_bub_ms &target,
+                                    detached_ptr<item> &&to_throw,
+                                    std::optional<tripoint_bub_ms> blind_throw_from_pos )
 {
     item& thrown = *to_throw;
 
@@ -1469,13 +1519,6 @@ dealt_projectile_attack throw_item(
     const units::volume volume = thrown.volume();
     const units::mass weight = thrown.weight();
 
-    // Previously calculated as 2_gram * std::max( 1, str_cur )
-    // using 16_gram normalizes it to 8 str. Same effort expenditure
-    // for being able to throw farther.
-    const int weight_cost = weight / ( 16_gram );
-    const int encumbrance_cost = roll_remainder(
-                                     ( who.encumb( body_part_arm_l ) + who.encumb( body_part_arm_r ) ) * 2.0f );
-    const int stamina_cost = ( weight_cost + encumbrance_cost - throwing_skill + 50 ) * -1;
 
     bool throw_assist = false;
     int throw_assist_str = 0;
@@ -1487,7 +1530,10 @@ dealt_projectile_attack throw_item(
             mons->use_mech_power( -3 );
         }
     }
-    if( !throw_assist ) { who.mod_stamina( stamina_cost ); }
+    if( !throw_assist ) {
+        const int stamina_cost = throw_stamina_cost( who, thrown ) * -1;
+        who.mod_stamina( stamina_cost );
+    }
 
     const skill_id& skill_used = skill_throw;
     int skill_level = std::min( MAX_SKILL, who.get_skill_level( skill_throw ) );
@@ -1621,6 +1667,9 @@ void do_aim( avatar& you, const item& relevant, const double min_recoil )
         // Increase aim at the cost of moves
         you.mod_moves( -1 );
         you.recoil = std::max( min_recoil, you.recoil - aim_amount );
+    } else {
+        // If aim is already maxed, we're just waiting, so pass the turn.
+        you.set_moves( 0 );
     }
 }
 
@@ -1690,9 +1739,8 @@ bool pl_sees( const Creature& cr )
     return u.sees( cr ) || u.sees_with_infrared( cr ) || u.sees_with_specials( cr );
 }
 
-// Handle capping aim level when the player cannot see the target tile or there is nothing to aim
-// at.
-double calculate_aim_cap( const Character& p, const tripoint_bub_ms& target )
+// Handle capping aim level when the player cannot see the target tile or there is nothing to aim at.
+double ranged::calculate_aim_cap( const Character &p, const tripoint_bub_ms &target )
 {
     double min_recoil = 0.0;
     const Creature* victim = g->critter_at( target, true );
@@ -1799,9 +1847,9 @@ std::vector<std::string> aim_lines(
     dispersion_sources dispersion = ranged::get_weapon_dispersion( p, weapon );
     dispersion.add_range( ranged::recoil_vehicle( p ) );
 
-    const double min_recoil = calculate_aim_cap( p, pos );
-    const double effective_recoil =
-        ranged::effective_dispersion( p, p.primary_weapon().sight_dispersion() );
+    const double min_recoil = ranged::calculate_aim_cap( p, pos );
+    const double effective_recoil = ranged::effective_dispersion( p,
+                                    p.primary_weapon().sight_dispersion() );
     const double min_dispersion = std::max( min_recoil, effective_recoil );
     const double steadiness_range = MAX_RECOIL - min_dispersion;
     const double steady_score = std::max( 0.0, predicted_recoil - min_dispersion );

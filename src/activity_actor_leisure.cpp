@@ -42,7 +42,7 @@
 #include "json.h"
 #include "line.h"
 #include "locations.h"
-#include "magic.h"
+#include "magic/magic.h"
 #include "map.h"
 #include "map_iterator.h"
 #include "map_selector.h"
@@ -422,6 +422,7 @@ std::unique_ptr<activity_actor> atm_activity_actor::deserialize( JsonIn & /*jsin
 void play_with_pet_activity_actor::finish( player_activity & /*act*/, Character& who )
 {
     player& p = dynamic_cast<player &>( who );
+    if( auto mon = pet.lock() ) { mon->remove_effect( effect_ai_waiting ); }
     p.add_morale( MORALE_PLAY_WITH_PET, rng( 3, 10 ), 10, 5_hours, 25_minutes );
     p.add_msg_if_player( m_good, _( "Playing with your %s has lifted your spirits a bit." ), pet_name );
 }
@@ -438,7 +439,7 @@ std::unique_ptr<activity_actor> play_with_pet_activity_actor::deserialize( JsonI
     JsonObject data = jsin.get_object();
     std::string name;
     data.read( "pet_name", name );
-    auto act = std::make_unique<play_with_pet_activity_actor>( name );
+    auto act = std::make_unique<play_with_pet_activity_actor>( weak_ptr_fast<monster>(), name );
     return act;
 }
 

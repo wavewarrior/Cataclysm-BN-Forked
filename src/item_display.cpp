@@ -71,7 +71,7 @@
 #include "iuse_actor.h"
 #include "line.h"
 #include "locations.h"
-#include "magic.h"
+#include "magic/magic.h"
 #include "enchantments/enchantment.h"
 #include "map.h"
 #include "martialarts.h"
@@ -464,7 +464,7 @@ std::string item::tname( unsigned int quantity, bool with_prefix, unsigned int t
             tagtext += _( " (fresh)" );
         }
         if( is_loaded() ) {
-            const auto temp = rot::temperature_flag_for_location( get_map(), *this );
+            const auto temp = rot::temp::for_location( get_map(), *this );
             if( temp == temperature_flag::TEMP_FREEZER ) {
                 tagtext += _( " (frozen)" );
             } else if( temp == temperature_flag::TEMP_FRIDGE || temp == temperature_flag::TEMP_ROOT_CELLAR ) {
@@ -532,7 +532,11 @@ std::string item::tname( unsigned int quantity, bool with_prefix, unsigned int t
         tagtext += string_format( " (%s)", group_id_str );
     } else if( has_var( "NANOFAB_ITEM_ID" ) ) {
         itype_id item = itype_id( get_var( "NANOFAB_ITEM_ID" ) );
-        tagtext += string_format( " (%s [%d])", nname( item ), std::max( 1, item->volume / 250_ml ) * 5 );
+        const auto volume_ratio = item->volume / 250_ml;
+        const auto min_charge_units = decltype( volume_ratio ) { 1 };
+        const auto max_charge_units = decltype( volume_ratio ) { INT_MAX / 5 };
+        const auto charge_units = std::clamp( volume_ratio, min_charge_units, max_charge_units );
+        tagtext += string_format( " (%s [%d])", nname( item ), static_cast<int>( charge_units * 5 ) );
     }
 
     if( already_used_by_player( you ) ) {

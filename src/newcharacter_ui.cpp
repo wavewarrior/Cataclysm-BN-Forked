@@ -45,7 +45,7 @@
 #include "json.h"
 #include "lightmap.h"
 #include "npc_class.h"
-#include "magic.h"
+#include "magic/magic.h"
 #include "enchantments/enchantment.h"
 #include "make_static.h"
 #include "mapsharing.h"
@@ -5370,7 +5370,7 @@ tab_direction set_profession( avatar &u, points_left &points,
 
 int skill_increment_cost( const Character &u, const skill_id &skill )
 {
-    return std::max( 1, ( u.get_skill_level( skill ) + 1 ) / 2 );
+    return std::max( 1, ( u.get_skill_level( skill, true ) + 1 ) / 2 );
 }
 
 namespace
@@ -5826,7 +5826,7 @@ tab_direction set_skills( avatar &u, points_left &points )
             return;
         }
         const skill_id id = skills[flat_idx]->ident();
-        const int level = u.get_skill_level( id );
+        const int level = u.get_skill_level( id, true );
         if( dir < 0 ) {
             if( level > 0 ) {
                 u.mod_skill_level( id, level == 2 ? -2 : -1 );
@@ -5878,8 +5878,8 @@ tab_direction set_skills( avatar &u, points_left &points )
                 const skill_id id = skills[si]->ident();
                 // The profession's grant counts: this describes the character being built, not the
                 // half-built object in memory. Same rule the chassis applies to profession CBMs.
-                total += u.get_skill_level( id ) + prof_bonus_of( id );
-                invested += u.get_skill_level( id );
+                total += u.get_skill_level( id, true ) + prof_bonus_of( id );
+                invested += u.get_skill_level( id, true );
             }
             strongest = std::max( strongest, total );
             sectors.push_back( { .col = g.art.col, .levels = total } );
@@ -5981,7 +5981,7 @@ tab_direction set_skills( avatar &u, points_left &points )
         const auto build_row = [&]( int flat_idx, bool is_cursor ) {
             const Skill *sk = skills[flat_idx];
             const skill_id id = sk->ident();
-            const int level = u.get_skill_level( id );
+            const int level = u.get_skill_level( id, true );
             const int bonus = prof_bonus_of( id );
             const int cost = skill_increment_cost( u, id );
             nc_skill_row r;
@@ -6055,7 +6055,7 @@ tab_direction set_skills( avatar &u, points_left &points )
         if( sel_flat >= 0 ) {
             const Skill *sk = skills[sel_flat];
             const skill_id id = sk->ident();
-            const int level = u.get_skill_level( id );
+            const int level = u.get_skill_level( id, true );
             const int bonus = prof_bonus_of( id );
             const int cost = skill_increment_cost( u, id );
             const cat_group &g = groups[col_head_of[cur_col][cur_row[cur_col]]];
@@ -6088,7 +6088,7 @@ tab_direction set_skills( avatar &u, points_left &points )
             }
             int gtotal = 0;
             for( const int si : g.skills ) {
-                gtotal += u.get_skill_level( skills[si]->ident() ) +
+                gtotal += u.get_skill_level( skills[si]->ident(), true ) +
                           prof_bonus_of( skills[si]->ident() );
             }
             add_fact( _( "Category" ), g.name, g.art.col,
@@ -8479,6 +8479,9 @@ void reset_scenario( avatar &u, const scenario *scen )
     const profession_id &default_prof = *std::min_element( permitted.begin(), permitted.end(),
                                         psorter );
 
+    const auto previous_hair_style = selected_cosmetic_trait( u, type_hair_style );
+    const auto previous_hair_color = selected_cosmetic_trait( u, type_hair_color );
+
     u.random_start_location = true;
     u.str_max = 8;
     u.dex_max = 8;
@@ -8497,6 +8500,8 @@ void reset_scenario( avatar &u, const scenario *scen )
     u.clear_skills();
     u.clear_bionics();
     newcharacter::add_traits( u );
+    restore_cosmetic_trait( u, type_hair_color, previous_hair_color );
+    restore_or_default_hair_style( u, previous_hair_style );
 }
 
 namespace newcharacter

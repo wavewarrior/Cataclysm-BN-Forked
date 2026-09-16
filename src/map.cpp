@@ -110,6 +110,7 @@
 #include "profile.h"
 #include "projectile.h"
 #include "rng.h"
+#include "rot.h"
 #include "safe_reference.h"
 #include "scent_map.h"
 #include "sounds.h"
@@ -724,6 +725,27 @@ void map::on_submap_unloaded( const tripoint_abs_sm &pos, const dimension_id &di
     if( !contains_abs_sm( pos ) ) {
         return;
     }
+    // A submap leaving the tracked grid may still hold vehicles in its
+    // vehicles list. If we don't purge them from this z-level's
+    // veh_cached_parts/vehicle_list/cached_veh_rope now, MAPBUFFER may later
+    // evict the submap (and free its vehicles) while this map's caches still
+    // hold dangling pointers to them - a stale entry that survives silently
+    // until something reads it (e.g. map::veh_at() during
+    // build_absorption_cache), at which point it segfaults on a freed
+    // vehicle far from the actual leak.
+    if( submap* sm = MAPBUFFER_REGISTRY.get( dim_id ).lookup_submap_in_memory( pos );
+        sm != nullptr && !sm->vehicles.empty() ) {
+        level_cache& ch = get_cache( pos.z() );
+        bool removed_any = false;
+        for( const auto& veh : sm->vehicles ) {
+            if( ch.vehicle_list.erase( veh.get() ) > 0 ) { removed_any = true; }
+            ch.zone_vehicles.erase( veh.get() );
+        }
+        if( removed_any ) {
+            last_full_vehicle_list_dirty = true;
+            reset_vehicle_cache();
+        }
+    }
     cache_submap_at_grid( abs_to_map_local( *this, pos ), nullptr );
 }
 
@@ -1236,11 +1258,19 @@ struct pq_item_comp {
     const int initial_visit_distance = range * range; // Large unreachable value
 
     // Fill positions that are visitable with initial_visit_distance
-for( const tripoint_bub_ms &p : points_in_radius( f, range ) ) {
-    const tripoint_bub_ms tp = { p.xy(), f.z() };
-    const int tp_cost = move_cost( tp );
+    for( const tripoint_bub_ms &p : points_in_radius( f, range ) ) {
+        const tripoint_bub_ms tp = { p.xy(), f.z() };
+        const int tp_cost = move_cost( tp );
+        const auto &veh = veh_at( tp );
+        const auto &veh_wall = veh.obstacle_at_part();
+        // Move cost is in right bounds
+        const bool bad_move_cost = tp_cost < cost_min || tp_cost > cost_max;
+        // It lacks floor in terrain or in veh
+        const bool no_floor = !has_floor_or_support( tp ) && ( veh_wall || !veh );
         // rejection conditions
-        if( tp_cost < cost_min || tp_cost > cost_max || !has_floor_or_support( tp ) ) { continue; }
+        if( bad_move_cost || no_floor || veh_wall ) {
+            continue;
+        }
         // set initial cost for grid point
         auto origin_relative = tp - f;
         origin_relative += origin_offset;

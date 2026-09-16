@@ -51,7 +51,7 @@ static void filesystem_test_group(
     std::string writebuf = s3;
     std::string writebuf2 = s2;
     std::string readbuf;
-    const auto reader = [&readbuf](std::istream& s) { s >> readbuf; };
+    const auto reader = [&readbuf](std::istream& s) { safe_getline( s, readbuf ); };
     const auto writer = [&writebuf](std::ostream& s) { s << writebuf; };
     const auto writer2 = [&writebuf2](std::ostream& s) { s << writebuf2; };
 

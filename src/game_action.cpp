@@ -603,7 +603,7 @@ bool game::npc_menu( npc &who, const bool &force )
         u.mod_moves( -100 );
     } else if( choice == attack ) {
         if( who.is_enemy() || query_yn( _( "You may be attacked!  Proceed?" ) ) ) {
-            u.melee_attack( who, true );
+            avatar_action::melee_attack_while_handling_manual_combat_mode( u, who );
             who.on_attacked( u );
         }
     } else if( choice == disarm ) {

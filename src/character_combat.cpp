@@ -381,9 +381,10 @@ void Character::on_dodge( Creature* source, int difficulty )
     // dodging throws of our aim unless we are either skilled at dodging or using a small weapon
     const item& weapon = primary_weapon();
     if( is_armed() && weapon.is_gun() ) {
-        recoil +=
-            std::max( weapon.volume() / 250_ml - get_skill_level( skill_dodge ), 0 ) * rng( 0, 100 );
-        recoil = std::min( MAX_RECOIL, recoil );
+        const auto dodge_volume_recoil = weapon.volume() / 250_ml - get_skill_level( skill_dodge );
+        const auto volume_recoil = std::max( dodge_volume_recoil, decltype( dodge_volume_recoil ) { 0 } );
+        recoil += static_cast<int>( std::min( volume_recoil,
+                                              static_cast<decltype( volume_recoil )>( MAX_RECOIL ) ) ) * rng( 0, 100 );
     }
 
     // Even if we are not to train still call practice to prevent skill rust
@@ -394,7 +395,7 @@ void Character::on_dodge( Creature* source, int difficulty )
 
     // For adjacent attackers check for techniques usable upon successful dodge
     if( source && square_dist( bub_pos(), source->bub_pos() ) == 1 ) {
-        matec_id tec = pick_technique( *source, primary_weapon(), false, true, false );
+        matec_id tec = pick_technique( *source, used_weapon(), false, true, false );
 
         if( tec != tec_none && !is_dead_state() ) {
             if( get_stamina() < get_stamina_max() / 3 ) {

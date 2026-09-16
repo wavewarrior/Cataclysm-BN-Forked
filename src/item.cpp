@@ -1,5 +1,6 @@
 #include "item.h"
 
+
 #include "action_time_scale.h"
 #include "active_tile_data_def.h"
 #include "ammo.h"
@@ -30,8 +31,9 @@
 #include "iuse_actor.h"
 #include "kill_tracker.h"
 #include "locations.h"
-#include "magic.h"
+#include "magic/magic.h"
 #include "map.h"
+
 #include "material.h"
 #include "messages.h"
 #include "mtype.h"
@@ -372,6 +374,7 @@ void item::convert( const itype_id& new_type )
 {
     type = &*new_type;
     relic_data = type->relic_data;
+    invalidate_processing_cache_upwards();
 }
 
 void item::deactivate()
@@ -381,19 +384,9 @@ void item::deactivate()
     }
 
     active = false;
-    if( is_tool() ) { type->tool->turns_active = 0; }
-
-    // Is not placed in the world, so either a template of some kind or a temporary item.
-    if( !has_position() ) { return; }
-    switch( where() ) {
-        case item_location_type::map:
-            get_map().make_inactive( *this );
-            break;
-        case item_location_type::vehicle:
-            get_map().veh_at( abs_pos() )->vehicle().make_inactive( *this );
-            break;
-        default:
-            break;
+    invalidate_processing_cache_upwards();
+    if( is_tool() ) {
+        type->tool->turns_active = 0;
     }
 }
 
@@ -406,15 +399,37 @@ void item::activate()
     if( type->countdown_interval > 0 ) { set_counter( type->countdown_interval ); }
 
     active = true;
+    invalidate_processing_cache_upwards();
+}
 
-    // Is not placed in the world, so either a template of some kind or a temporary item.
-    if( !has_position() ) { return; }
-    switch( where() ) {
+auto item::invalidate_processing_cache_upwards() -> void
+{
+    auto *top = this;
+    for( auto *current = this; current != nullptr; current = current->parent_item() ) {
+        current->contents.invalidate_processing_cache();
+        top = current;
+    }
+
+    if( !top->has_position() ) {
+        return;
+    }
+
+    switch( top->where() ) {
         case item_location_type::map:
-            get_map().make_active( *this );
+            if( top->needs_processing() ) {
+                get_map().make_active( *top );
+            } else {
+                get_map().make_inactive( *top );
+            }
             break;
         case item_location_type::vehicle:
-            get_map().veh_at( abs_pos() )->vehicle().make_active( *this );
+            if( const auto vp = get_map().veh_at( top->bub_pos() ) ) {
+                if( top->needs_processing() ) {
+                    vp->vehicle().make_active( *top );
+                } else {
+                    vp->vehicle().make_inactive( *top );
+                }
+            }
             break;
         default:
             break;
@@ -576,19 +591,54 @@ void item::set_damage( int qty )
 
 auto item::prepare_for_location_removal() -> void
 {
-    if( !goes_bad() ) {
-        return;
-    }
     if( is_in_preserving_container() ) {
         mark_rot_checked_now();
         return;
     }
-    if( is_loaded() && has_position() ) {
-        const auto vehicle_loc = dynamic_cast<vehicle_item_location *>( loc );
-        const auto temperature = vehicle_loc != nullptr ? vehicle_loc->storage_temperature() :
-                                 rot::temperature_flag_for_location( get_map(), *this );
-        update_rot( bub_pos(), temperature, get_weather() );
+    const auto contents_need_location = !contents.empty() && contents.has_processing_items() &&
+                                        !( type->container && type->container->preserves );
+    if( !goes_bad() && !contents_need_location ) {
+        return;
     }
+    if( !is_loaded() || !has_position() ) {
+        return;
+    }
+
+    auto storage_temperature = temperature_flag::TEMP_NORMAL;
+    const auto vehicle_loc = dynamic_cast<vehicle_item_location *>( loc );
+    if( vehicle_loc != nullptr ) {
+        storage_temperature = vehicle_loc->storage_temperature();
+    } else if( where() == item_location_type::map ) {
+        auto &buffer = MAPBUFFER_REGISTRY.get( loc->get_dimension( this ) );
+        const auto tile = buffer.get_abs_tile( loc->abs_pos( this ), {
+            .mode = mapbuffer_lookup_mode::resident_only,
+        } );
+        if( tile ) {
+            const auto &furn = tile->get_furn_t();
+            storage_temperature = rot::temp::for_tile( {
+                .root_cellar = tile->get_ter() == t_rootcellar,
+                .fridge = furn.has_flag( TFLAG_FRIDGE ),
+                .freezer = furn.has_flag( TFLAG_FREEZER ),
+            } );
+        } else {
+            storage_temperature = rot::temp::for_location( get_map(), *this );
+        }
+    } else {
+        storage_temperature = rot::temp::for_location( get_map(), *this );
+    }
+    const auto pos = bub_pos();
+
+    if( goes_bad() ) {
+        update_rot( pos, storage_temperature, get_weather() );
+    }
+    if( !contents_need_location ) {
+        return;
+    }
+
+    const auto seals = is_in_sealing_container() || ( type->container && type->container->seals );
+    contents.remove_top_items_with( [pos, storage_temperature, seals]( detached_ptr<item> &&it ) {
+        return item::actualize_rot( std::move( it ), pos, storage_temperature, get_weather(), seals );
+    } );
 }
 
 detached_ptr<item> item::split( int qty )
@@ -646,11 +696,9 @@ bool item::attempt_split(
             !split_from_preserving_container;
     const auto split_pos = split_needs_rot_actualization ? bub_pos() : tripoint_bub_ms::zero();
     const auto vehicle_loc = dynamic_cast<vehicle_item_location *>( loc );
-    const auto split_temperature =
-        !split_needs_rot_actualization ? temperature_flag::TEMP_NORMAL
-        : vehicle_loc != nullptr
-        ? vehicle_loc->storage_temperature()
-        : rot::temperature_flag_for_location( get_map(), *this );
+    const auto split_temperature = !split_needs_rot_actualization ? temperature_flag::TEMP_NORMAL :
+                                   vehicle_loc != nullptr ? vehicle_loc->storage_temperature() :
+                                   rot::temp::for_location( get_map(), *this );
     detached_ptr<item> det = unsafe_split( qty );
     if( det && split_from_preserving_container ) { det->mark_rot_checked_now(); }
     if( det && split_needs_rot_actualization ) {
@@ -729,20 +777,43 @@ int item::charges_per_volume( const units::volume& vol ) const
             debugmsg( "Item '%s' with zero volume", tname() );
             return INFINITE_CHARGES;
         }
-        // Type cast to prevent integer overflow with large volume containers like the cargo
-        // dimension
-        return vol * static_cast<int64_t>( type->stack_size ) / type->volume;
+        if( type->stack_size > 0 && vol > units::volume_max / type->stack_size ) {
+            return INFINITE_CHARGES;
+        }
+        const auto result = vol * static_cast<decltype( units::to_milliliter( vol ) )>(
+                                type->stack_size ) / type->volume;
+        return static_cast<int>( std::min( result, static_cast<decltype( result )>( INFINITE_CHARGES ) ) );
     } else {
         units::volume my_volume = volume();
         if( my_volume == 0_ml ) {
             debugmsg( "Item '%s' with zero volume", tname() );
             return INFINITE_CHARGES;
         }
-        return vol / my_volume;
+        const auto result = vol / my_volume;
+        return static_cast<int>( std::min( result, static_cast<decltype( result )>( INFINITE_CHARGES ) ) );
     }
 }
 
-bool item::display_stacked_with( const item& rhs, bool check_components ) const
+namespace
+{
+
+auto bionic_component_type_ids( const item &corpse ) -> std::vector<itype_id>
+{
+    using namespace std::views;
+    namespace ranges = std::ranges;
+    auto result = corpse.get_components()
+                  | filter( &item::is_bionic )
+                  | transform( &item::typeId )
+                  | ranges::to<std::vector>();
+    ranges::sort( result, []( const itype_id & lhs, const itype_id & rhs ) {
+        return lhs < rhs;
+    } );
+    return result;
+}
+
+} // namespace
+
+bool item::display_stacked_with( const item &rhs, bool check_components ) const
 {
     return !count_by_charges() && stacks_with( rhs, check_components );
 }
@@ -762,7 +833,13 @@ bool item::stacks_with( const item& rhs, bool check_components, bool skip_type_c
     if( is_favorite != rhs.is_favorite ) { return false; }
 
     if( is_corpse() || rhs.is_corpse() ) {
-        return this->is_corpse() && rhs.is_corpse() && ( *this->get_mtype() == *rhs.get_mtype() );
+        if( !is_corpse() || !rhs.is_corpse() || ( *get_mtype() != *rhs.get_mtype() ) ||
+            get_var( "bionics_scanned_by", -1 ) != rhs.get_var( "bionics_scanned_by", -1 ) ||
+            has_flag( flag_CBM_SCANNED ) != rhs.has_flag( flag_CBM_SCANNED ) ) {
+            return false;
+        }
+        return !has_flag( flag_CBM_SCANNED ) ||
+               bionic_component_type_ids( *this ) == bionic_component_type_ids( rhs );
     }
 
     if( damage_ != rhs.damage_ ) { return false; }
@@ -891,6 +968,7 @@ bool item::has_item_with_id( const itype_id& itype ) const
     return std::ranges::any_of( item_contents, [&]( const item * itm ) {
         return itm->typeId() == itype;
     } );
+
 }
 
 bool item_ptr_compare_by_charges( const item* left, const item* right )
@@ -899,6 +977,7 @@ bool item_ptr_compare_by_charges( const item* left, const item* right )
         return false;
     } else if( right->contents.empty() ) {
         return true;
+
     } else {
         return right->contents.front().charges < left->contents.front().charges;
     }
@@ -945,16 +1024,29 @@ auto item::actualize_rot( detached_ptr<item> &&self, const tripoint_bub_ms &pnt,
                           const temperature_flag temperature,
                           const weather_manager &weather ) -> detached_ptr<item>
 {
+    return actualize_rot( std::move( self ), pnt, temperature, weather, false );
+}
+
+auto item::actualize_rot( detached_ptr<item> &&self, const tripoint_bub_ms &pnt,
+                          const temperature_flag temperature,
+                          const weather_manager &weather, const bool seals ) -> detached_ptr<item>
+{
     return actualize_rot( std::move( self ), {
         .position = bub_to_abs( pnt ),
         .temperature = temperature,
         .weather = &weather,
         .local_temperature = g != nullptr && !g->new_game ? get_map().get_temperature( pnt ) : 0,
-    } );
+    }, seals );
 }
 
 auto item::actualize_rot( detached_ptr<item> &&self,
                           const rot_context &context ) -> detached_ptr<item>
+{
+    return actualize_rot( std::move( self ), context, false );
+}
+
+auto item::actualize_rot( detached_ptr<item> &&self,
+                          const rot_context &context, const bool seals ) -> detached_ptr<item>
 {
     // Guard against null or invalid items that can survive save/load cycles
     // during dimension transitions (e.g. zombie items from deferred arena cleanup).
@@ -967,34 +1059,21 @@ auto item::actualize_rot( detached_ptr<item> &&self,
     }
     if( self->goes_bad() ) {
         return process_rot( std::move( self ), {
-            .seals = false,
+            .seals = seals,
             .carrier = nullptr,
             .context = context,
         } );
     } else if( self->type->container && self->type->container->preserves ) {
-        // Containers like tin cans preserves all items inside, they do not rot at all.
-        return std::move( self );
-    } else if( self->type->container && self->type->container->seals ) {
-        // Items inside rot but do not vanish as the container seals them in.
-        self->contents.remove_top_items_with( [&context]( detached_ptr<item> &&it ) {
-            if( !it || !it->type || it->type == nullitem() ) {
-                return std::move( it );
-            }
-            if( it->goes_bad() ) {
-                it = process_rot( std::move( it ), {
-                    .seals = true,
-                    .carrier = nullptr,
-                    .context = context,
-                } );
-            }
-            return std::move( it );
-        } );
-        return std::move( self );
-    } else {
-        // Check and remove rotten contents, but always keep the container.
-        self->contents.remove_top_items_with( [&context]( detached_ptr<item> &&it ) {
-            return actualize_rot( std::move( it ), context );
-        } );
+        // Containers like tin cans preserve all items inside; they do not rot at all.
         return std::move( self );
     }
+
+    const auto child_seals = seals || ( self->type->container && self->type->container->seals );
+    // Check and remove rotten contents, but always keep the container.
+    // If this item or an ancestor seals its contents, nested rotten contents rot but stay contained.
+    self->contents.remove_top_items_with( [&context, child_seals]( detached_ptr<item> &&it ) {
+        return actualize_rot( std::move( it ), context, child_seals );
+    } );
+    return std::move( self );
 }
+

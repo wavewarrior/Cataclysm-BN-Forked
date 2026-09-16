@@ -71,7 +71,7 @@
 #include "iuse_actor.h"
 #include "line.h"
 #include "locations.h"
-#include "magic.h"
+#include "magic/magic.h"
 #include "enchantments/enchantment.h"
 #include "map.h"
 #include "martialarts.h"
@@ -1389,6 +1389,7 @@ std::vector<iteminfo> item::info( const iteminfo_query &parts_ref, int batch,
     container_info( info, parts, batch, debug );
     contents_info( info, parts, batch, debug );
     combat_info( info, parts, batch, debug );
+    throw_info( info, parts, batch, debug );
 
     magazine_info( info, parts, batch, debug );
     ammo_info( info, parts, batch, debug );

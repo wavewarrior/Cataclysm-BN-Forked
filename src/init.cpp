@@ -51,8 +51,8 @@
 #include "loading_ui.h"
 #include "lru_cache.h"
 #include "lua_sidebar_widgets.h"
-#include "magic.h"
-#include "magic_ter_furn_transform.h"
+#include "magic/magic.h"
+#include "magic/magic_ter_furn_transform.h"
 #include "map_extras.h"
 #include "map_feature_descriptions.h"
 #include "mapbuffer.h"
@@ -251,7 +251,7 @@ static const std::vector<named_entry> worker_safe_finalizers = {{
         { translate_marker( "Sidebar widgets" ), &widget::finalize_all },
         { translate_marker( "Items" ), []() { item_controller->finalize(); } },
         { translate_marker( "Crafting requirements" ), []() { requirement_data::finalize(); } },
-        { translate_marker( "Vehicle parts" ), &vpart_info::finalize },
+        { translate_marker( "Vehicle parts" ), &vpart_info::finalize_all },
         { translate_marker( "Traps" ), &trap::finalize },
         { translate_marker( "Terrain" ), &set_ter_ids },
         { translate_marker( "Furniture" ), &finalize_furn },
@@ -814,7 +814,7 @@ void DynamicDataLoader::initialize()
         item_action_generator::generator().load_item_action( jo );
     } );
 
-    add( "vehicle_part",  &vpart_info::load );
+    add( "vehicle_part",  &vpart_info::load_vehicle_parts );
     add( "vehicle_color_palette",  &VehiclePalette::load_palette );
     add( "vehicle",  &vehicle_prototype::load );
     add( "vehicle_group",  &VehicleGroup::load );
@@ -1294,7 +1294,7 @@ void DynamicDataLoader::check_consistency( loading_ui& ui )
             {_( "Items" ), []() { item_controller->check_definitions(); }},
             {_( "Materials" ), &materials::check},
             {_( "Engine faults" ), &fault::check_consistency},
-            {_( "Vehicle parts" ), &vpart_info::check},
+            {_( "Vehicle parts" ), &vpart_info::check_consistency},
             {_( "Vehicle palettes" ), &VehiclePalette::check_definitions},
             {_( "Vehicle groups" ), &VehicleGroup::check},
             {_( "Mapgen definitions" ), &check_mapgen_definitions},
@@ -1644,6 +1644,8 @@ auto init::check_mods_for_errors( loading_ui &ui, const std::vector<mod_id> &opt
             load_and_finalize_packs( ui, _( "Checking mods" ), mods_list );
         } catch( const std::exception& err ) {
             std::cerr << "Error loading data: " << err.what() << '\n';
+        } catch( const JsonError &err ) {
+            debugmsg( "(json-error)\n%s", err.what() );
         }
 
         std::string world_name = world_generator->active_world->info->world_name;

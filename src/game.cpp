@@ -135,7 +135,7 @@
 #include "loading_ui.h"
 #include "locations.h"
 #include "npc.h"
-#include "magic.h"
+#include "magic/magic.h"
 #include "map.h"
 #include "physics/physics_world.h"
 #include "map_functions.h"
@@ -208,6 +208,7 @@
 #include "tileray.h"
 #include "timed_event.h"
 #include "translations.h"
+#include "travel/travel_destination.h"
 #include "trap.h"
 #include "ui.h"
 #include "ui_manager.h"
@@ -585,6 +586,7 @@ void game::suggest_auto_walk_to_stairs( Character &u, map &m, const std::string 
 }
 
 // Set up all default values for a new game
+
 
 
 vehicle *game::place_vehicle_nearby(
@@ -1809,6 +1811,7 @@ input_context get_default_mode_input_context()
     ctxt.register_action( "safemode" );
     ctxt.register_action( "autosafe" );
     ctxt.register_action( "autoattack" );
+    ctxt.register_action( "toggle_manual_combat_mode" );
     ctxt.register_action( "ignore_enemy" );
     ctxt.register_action( "whitelist_enemy" );
     ctxt.register_action( "save" );
@@ -2187,6 +2190,7 @@ void game::win_screen()
     // TODO: Print starting stats, traits, skills, all mods ever used, easiest of settings
     popup( msg );
 }
+
 
 
 //Saves all factions and missions and npcs.
@@ -2811,7 +2815,9 @@ void game::toggle_gate( const tripoint_bub_ms &p )
 
 
 
+
 // Used to set up the first Hotkey in the display set
+
 
 
 
@@ -3071,6 +3077,7 @@ void game::update_performance_bubble()
         resize_reality_bubble_to( target );
     }
 }
+
 
 
 const dimension_info *game::get_current_dimension_info() const

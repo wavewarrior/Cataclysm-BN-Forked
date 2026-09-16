@@ -20,7 +20,6 @@
 #include "character_functions.h"
 #include "character_martial_arts.h"
 #include "character_stat.h"
-#include "character_vision.h"
 #include "clothing_utils.h"
 #include "clzones.h"
 #include "combat_feedback.h"
@@ -236,6 +235,19 @@ static const skill_id skill_throw( "throw" );
 static const species_id HUMAN( "HUMAN" );
 static const species_id ROBOT( "ROBOT" );
 
+namespace
+{
+
+auto grab_strength_from( const Creature &grabber ) -> int
+{
+    if( const monster *const mon = grabber.as_monster() ) {
+        return mon->get_grab_strength();
+    }
+    return std::max( 1, grabber.get_effect_int( effect_grabbing ) );
+}
+
+} // namespace
+
 static const trait_id trait_ACIDBLOOD( "ACIDBLOOD" );
 static const trait_id trait_ACIDPROOF( "ACIDPROOF" );
 static const trait_id trait_ADRENALINE( "ADRENALINE" );
@@ -256,7 +268,6 @@ static const trait_id trait_WOOLALLERGY( "WOOLALLERGY" );
 
 static const bionic_id bio_ads( "bio_ads" );
 static const bionic_id bio_blindfold( "bio_blindfold" );
-static const bionic_id bio_climate( "bio_climate" );
 static const bionic_id bio_cloak( "bio_cloak" );
 static const bionic_id bio_earplugs( "bio_earplugs" );
 static const bionic_id bio_ears( "bio_ears" );
@@ -302,8 +313,6 @@ static const trait_id trait_ELECTRORECEPTORS( "ELECTRORECEPTORS" );
 static const trait_id trait_FASTLEARNER( "FASTLEARNER" );
 static const trait_id trait_GILLS_CEPH( "GILLS_CEPH" );
 static const trait_id trait_GILLS( "GILLS" );
-static const trait_id trait_HEAVYSLEEPER( "HEAVYSLEEPER" );
-static const trait_id trait_HEAVYSLEEPER2( "HEAVYSLEEPER2" );
 static const trait_id trait_HIBERNATE( "HIBERNATE" );
 static const trait_id trait_HOARDER( "HOARDER" );
 static const trait_id trait_HOLLOW_BONES( "HOLLOW_BONES" );
@@ -341,7 +350,6 @@ static const trait_id trait_ROOTS2( "ROOTS2" );
 static const trait_id trait_ROOTS3( "ROOTS3" );
 static const trait_id trait_SAVANT( "SAVANT" );
 static const trait_id trait_SEESLEEP( "SEESLEEP" );
-static const trait_id trait_SHELL( "SHELL" );
 static const trait_id trait_SHELL2( "SHELL2" );
 static const trait_id trait_SHOUT2( "SHOUT2" );
 static const trait_id trait_SHOUT3( "SHOUT3" );
@@ -818,6 +826,7 @@ auto Character::setpos( const tripoint_abs_ms& p ) -> void
         pw->on_creature_moved( *this );
     }
 
+
 }
 
 bool Character::has_alarm_clock() const
@@ -850,11 +859,9 @@ void Character::react_to_felt_pain( int intensity )
     if( has_effect( effect_sleep ) && !has_effect( effect_narcosis ) ) {
         int pain_thresh = rng( 3, 5 );
 
-        if( has_trait( trait_HEAVYSLEEPER ) ) {
-            pain_thresh += 2;
-        } else if( has_trait( trait_HEAVYSLEEPER2 ) ) {
-            pain_thresh += 5;
-        }
+        pain_thresh += bonus_from_enchantments( pain_thresh, enchantment_value_id( "SLEEP_PAIN_THRESH" ) );
+
+        pain_thresh = std::max( 1, pain_thresh );
 
         if( intensity >= pain_thresh ) { wake_up(); }
     }
@@ -1357,6 +1364,23 @@ void Character::calc_all_parts_hp( float hp_mod, float hp_adjustment, int str_ma
     }
 }
 
+float Character::night_vision_sight_range() const
+{
+    float best = 0;
+    if( worn_with_flag( flag_GNVE_EFFECT ) ) {
+        best = 18.0;
+    } else if( worn_with_flag( flag_RECON_VISION ) || is_mounted() &&
+               mounted_creature->has_flag( MF_MECH_RECON_VISION ) ||
+               worn_with_flag( flag_GNV_EFFECT ) || has_effect_with_flag( flag_EFFECT_NIGHT_VISION ) ) {
+        best = 10.0;
+    }
+    for( const mutation_branch *mut : cached_mutations ) {
+        best = std::max( best, mut->night_vision_range );
+    }
+    return std::max( best, float( bonus_from_enchantments( 0,
+                                  enchantment_value_id( "NIGHT_VISION" ) ) ) );
+}
+
 // This must be called when any of the following change:
 // - effects
 // - bionics
@@ -1367,6 +1391,7 @@ void Character::calc_all_parts_hp( float hp_mod, float hp_adjustment, int str_ma
 // occur through a function in this class which calls this function. Clothes are
 // typically added/removed with wear() and takeoff(), but direct access to the
 // 'wears' vector is still allowed due to refactor exhaustion.
+
 
 
 namespace vision
@@ -1414,6 +1439,7 @@ for( const item * const &i : worn ) {
 }
 
 bionic_collection &Character::get_bionic_collection() const { return *my_bionics; }
+
 
 
 
@@ -1547,12 +1573,40 @@ SkillLevel &Character::get_skill_level_object( const skill_id& ident )
 
 int Character::get_skill_level( const skill_id& ident ) const
 {
-    return _skills->get_skill_level( ident );
+    return get_skill_level( ident, false );
+}
+
+int Character::get_skill_level( const skill_id &ident, const bool no_enchant ) const
+{
+    int skill_level = _skills->get_skill_level( ident );
+    if( no_enchant ) {
+        return skill_level;
+    }
+    auto ench_id = enchantment_value_id( "SKILL_LEVEL_" + to_upper_case( ident.str() ) );
+    if( ench_id.is_valid() ) {
+        skill_level += bonus_from_enchantments( skill_level, ench_id );
+    }
+    return std::max( 0, skill_level );
 }
 
 int Character::get_skill_level( const skill_id& ident, const item& context ) const
 {
-    return _skills->get_skill_level( ident, context );
+    return get_skill_level( ident, context, false );
+}
+
+int Character::get_skill_level( const skill_id &ident, const item &context,
+                                const bool no_enchant ) const
+{
+    int skill_level = _skills->get_skill_level( ident, context );
+    if( no_enchant ) {
+        return skill_level;
+    }
+    const auto id = context.is_null() ? ident : context.contextualize_skill( ident );
+    auto ench_id = enchantment_value_id( "SKILL_LEVEL_" + to_upper_case( id.str() ) );
+    if( ench_id.is_valid() ) {
+        skill_level += bonus_from_enchantments( skill_level, ench_id );
+    }
+    return std::max( 0, skill_level );
 }
 
 void Character::set_skill_level( const skill_id& ident, const int level )
@@ -1606,8 +1660,13 @@ int Character::rust_rate() const
 
 void Character::practice( const skill_id& id, int amount, int cap, bool suppress_warning )
 {
-    SkillLevel& level = get_skill_level_object( id );
-    const Skill& skill = id.obj();
+    auto ench_id = enchantment_value_id( "SKILL_EXP_" + to_upper_case( id.str() ) );
+    if( ench_id.is_valid() ) {
+        amount += bonus_from_enchantments( amount, ench_id );
+    }
+
+    SkillLevel &level = get_skill_level_object( id );
+    const Skill &skill = id.obj();
     std::string skill_name = skill.name();
 
     if( !level.can_train() && !in_sleep_state() ) {
@@ -1898,6 +1957,7 @@ void Character::reset()
     Creature::reset();
 }
 
+
 /*
  * Innate stats setters
  */
@@ -2177,32 +2237,33 @@ if( tmp.count_by_charges() && tmp.charges > 1 ) {
     tmp.charges = 1;
 }
 
-/** @EFFECT_STR determines maximum weight that can be thrown */
-if( ( tmp.weight() / 100_gram ) > static_cast<int>( str_cur * 15 ) ) {
-        return 0;
-    }
-    // Increases as weight decreases until 150 g, then decreases again
-    /** @EFFECT_STR increases throwing range, vs item weight (high or low) */
-    int str_override = str_cur;
+    auto str_override = str_cur;
     if( is_mounted() ) {
     auto mons = mounted_creature.get();
         str_override = mons->mech_str_addition() != 0 ? mons->mech_str_addition() : str_cur;
     }
-    const int divisor =
-        tmp.weight() >= 150_gram
-        ? tmp.weight() / 100_gram
-        : 10 - static_cast<int>( tmp.weight() / 15_gram );
+
+    /** @EFFECT_STR determines maximum weight that can be thrown */
+    const auto max_throw_weight = str_override * 15 + std::max( 0, str_override - 8 ) * 5;
+    if( ( tmp.weight() / 100_gram ) > max_throw_weight ) {
+        return 0;
+    }
+    // Increases as weight decreases until 150 g, then decreases again
+    /** @EFFECT_STR increases throwing range, vs item weight (high or low) */
+    const int divisor = tmp.weight() >= 150_gram
+                        ? tmp.weight() / 100_gram
+                        : 10 - static_cast<int>( tmp.weight() / 15_gram );
     int ret = ( str_override * 10 ) / divisor;
     ret -= tmp.volume() / 1_liter;
     static const std::set<material_id> affected_materials = { material_id( "iron" ), material_id( "steel" ) };
     if( has_active_bionic( bio_railgun ) && tmp.made_of_any( affected_materials ) ) {
-    ret *= 2;
-}
-if( ret < 1 ) {
-    return 1;
-}
-// Cap at double our strength + skill
-/** @EFFECT_STR caps throwing range */
+        ret *= 2;
+    }
+    if( ret < 1 ) {
+        return 1;
+    }
+    // Cap at triple our strength + skill
+    /** @EFFECT_STR caps throwing range */
 
 /** @EFFECT_THROW caps throwing range */
 return std::min( ret, str_override * 3 + get_skill_level( skill_throw ) );
@@ -2564,6 +2625,7 @@ int Character::get_char_hearing_protection( bool advanced ) const
 }
 
 
+
 void Character::cough( bool harmful, int loudness )
 {
     if( has_effect( effect_cough_suppress ) ) { return; }
@@ -2813,6 +2875,7 @@ std::string get_stat_name( character_stat Stat )
 }
 
 /// Returns the mutation category with the highest strength
+
 
 bool Character::wearing_something_on( const bodypart_id &bp ) const
 {
@@ -3255,24 +3318,22 @@ int Character::bodytemp_modifier_traits_floor() const
     return mod;
 }
 
-int Character::temp_corrected_by_climate_control( int temperature ) const
+int Character::temp_corrected_by_climate_control( int temperature )
 {
-    const int variation = int( BODYTEMP_NORM * 0.5 );
-    if( temperature < BODYTEMP_SCORCHING + variation
-        && temperature > BODYTEMP_FREEZING - variation ) {
-        if( temperature > BODYTEMP_SCORCHING ) {
-            temperature = BODYTEMP_VERY_HOT;
-        } else if( temperature > BODYTEMP_VERY_HOT ) {
-            temperature = BODYTEMP_HOT;
-        } else if( temperature > BODYTEMP_HOT ) {
-            temperature = BODYTEMP_NORM;
-        } else if( temperature < BODYTEMP_FREEZING ) {
-            temperature = BODYTEMP_VERY_COLD;
-        } else if( temperature < BODYTEMP_VERY_COLD ) {
-            temperature = BODYTEMP_COLD;
-        } else if( temperature < BODYTEMP_COLD ) {
-            temperature = BODYTEMP_NORM;
+    if( temperature > BODYTEMP_NORM ) {
+        temperature -= bonus_from_enchantments( temperature,
+                                                enchantment_value_id( "CLIMATE_CONTROL_COOLING" ) );
+        if( in_climate_control() ) {
+            temperature -= 1250;
         }
+        return std::max( BODYTEMP_NORM, temperature );
+    } else {
+        if( in_climate_control() ) {
+            temperature += 1250;
+        }
+        temperature += bonus_from_enchantments( temperature,
+                                                enchantment_value_id( "CLIMATE_CONTROL_HEATING" ) );
+        return std::min( BODYTEMP_NORM, temperature );
     }
     return temperature;
 }

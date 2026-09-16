@@ -148,11 +148,11 @@ void Item_factory::finalize_pre( itype &obj )
         obj.price_post = obj.price;
     }
     // use base volume if integral volume unspecified
-    if( obj.integral_volume < 0_ml ) {
+    if( obj.integral_volume == -1_ml ) {
         obj.integral_volume = obj.volume;
     }
     // use base weight if integral weight unspecified
-    if( obj.integral_weight < 0_gram ) {
+    if( obj.integral_weight == -1_gram ) {
         obj.integral_weight = obj.weight;
     }
     // for ammo and comestibles stack size defaults to count of initial charges
@@ -184,12 +184,6 @@ void Item_factory::finalize_pre( itype &obj )
     erase_if( obj.item_tags, []( const flag_id & f ) {
         return f.str().starts_with( "LIGHT_" );
     } );
-
-    // Set max volume for containers to prevent integer overflow
-    if( obj.container && obj.container->contains > 10000_liter ) {
-        debugmsg( obj.id.str() + " storage volume is too large, reducing to 10000 liters" );
-        obj.container->contains = 10000_liter;
-    }
 
     if( obj.ammo ) {
         // for ammo not specifying loudness (or an explicit zero) derive value from other properties

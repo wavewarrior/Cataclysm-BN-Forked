@@ -220,7 +220,6 @@ bool Character::in_climate_control()
 {
     bool regulated_area = false;
     // Check
-    if( has_active_bionic( bio_climate ) ) { return true; }
     map& here = get_map();
     if( has_trait( trait_M_SKIN3 ) && here.has_flag_ter_or_furn( "FUNGUS", bub_pos() )
         && in_sleep_state() ) {

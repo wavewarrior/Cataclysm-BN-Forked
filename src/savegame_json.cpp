@@ -76,8 +76,8 @@
 #include "kill_tracker.h"
 #include "light_emission.h"
 #include "lru_cache.h"
-#include "magic.h"
-#include "magic_teleporter_list.h"
+#include "magic/magic.h"
+#include "magic/magic_teleporter_list.h"
 #include "map.h"
 #include "map_memory.h"
 #include "mapdata.h"
@@ -998,7 +998,13 @@ void item::io( Archive &archive )
     archive.io( "item_counter", item_counter, static_cast<decltype( item_counter )>( 0 ) );
     archive.io( "rot", rot, 0_turns );
     archive.io( "last_rot_check", last_rot_check, calendar::start_of_cataclysm );
+    if constexpr( !Archive::is_input::value ) {
+        erase_if( techniques, []( const matec_id & technique ) { return !technique.is_valid(); } );
+    }
     archive.io( "techniques", techniques, io::empty_default_tag() );
+    if constexpr( Archive::is_input::value ) {
+        erase_if( techniques, []( const matec_id & technique ) { return !technique.is_valid(); } );
+    }
     {
         auto serialized_melee = std::vector<damage_instance_serialization::serialized_damage_unit> {};
         auto serialized_ranged = std::vector<damage_instance_serialization::serialized_damage_unit> {};

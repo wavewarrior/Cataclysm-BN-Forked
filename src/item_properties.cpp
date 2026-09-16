@@ -71,7 +71,7 @@
 #include "iuse_actor.h"
 #include "line.h"
 #include "locations.h"
-#include "magic.h"
+#include "magic/magic.h"
 #include "enchantments/enchantment.h"
 #include "map.h"
 #include "martialarts.h"
@@ -261,14 +261,17 @@ if( is_gun() ) {
     }
 
     if( is_gun() ) {
-    for( const item *elem : gunmods() ) {
+        for( const item *elem : gunmods() ) {
             ret += elem->weight( true, true );
         }
         if( !magazine_integral() && magazine_current() ) {
             ret += std::max( magazine_current()->weight(), 0_gram );
         }
+
+        // clamp: prevent negative/zero weight from aggressive mod combinations
+        ret = std::max( ret, type->weight / 100 );
     } else if( include_contents ) {
-    ret += contents.item_weight_modifier();
+        ret += contents.item_weight_modifier();
     }
 
     return ret;
@@ -381,19 +384,26 @@ if( count_by_charges() || made_of( LIQUID ) ) {
     }
 
     if( is_gun() ) {
-    for( const item *elem : gunmods() ) {
+        // apply volume multipliers from gunmods (multiplicative, before additive)
+        for( const item *mod : gunmods() ) {
+            ret *= mod->type->gunmod->volume_multiplier;
+        }
+
+        for( const item *elem : gunmods() ) {
             ret += elem->volume( true );
         }
 
-        // TODO: implement stock_length property for guns
+        // COLLAPSIBLE_STOCK flag (replaced by volume_multiplier above but can use both for whatever reason)
         if( has_flag( flag_COLLAPSIBLE_STOCK ) ) {
-            // consider only the base size of the gun (without mods)
             ret -= ( type->volume / 3 );
         }
 
         if( gunmod_find( itype_barrel_small ) ) {
             ret -= type->gun->barrel_volume;
         }
+
+        // clamp: prevent negative/zero volume from aggressive mod combinations
+        ret = std::max( ret, type->volume / 100 );
     }
 
     return ret;

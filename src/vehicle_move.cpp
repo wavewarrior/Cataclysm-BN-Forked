@@ -908,6 +908,7 @@ auto vehicle::part_collision( const vehicle_part_collision_options &options ) ->
 
             if( critter->is_hallucination() ) {
                 critter->die( driver );
+                impulse_veh = 0;
                 smashed = true;
                 break;
             }
@@ -1863,6 +1864,8 @@ void vehicle::check_falling_or_floating()
     }
 
     map &here = get_map();
+
+    is_falling = true;
 
     if( is_flying && is_aircraft() ) {
         is_falling = false;

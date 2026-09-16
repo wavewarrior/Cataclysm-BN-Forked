@@ -1,10 +1,25 @@
 #pragma once
 
+#include <optional>
 #include <string>
 
 #include "type_id.h"
 
+class avatar;
 class Character;
+
+/** Mutation type idents for the cosmetic traits reset_scenario preserves. */
+extern const std::string type_hair_style;
+extern const std::string type_hair_color;
+
+/** Returns the character's currently-selected trait of a cosmetic mutation type, if any. */
+auto selected_cosmetic_trait( const Character &c,
+                              const std::string &mutation_type ) -> std::optional<trait_id>;
+/** Re-selects a previously selected cosmetic trait if the current scenario allows it. */
+auto restore_cosmetic_trait( Character &c, const std::string &mutation_type,
+                             const std::optional<trait_id> &trait ) -> void;
+/** Restores a saved hair style, or falls back to the gender default. */
+auto restore_or_default_hair_style( avatar &u, const std::optional<trait_id> &hair_style ) -> void;
 
 struct points_left {
     int stat_points = 0;

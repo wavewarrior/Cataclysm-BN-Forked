@@ -147,14 +147,17 @@ void cancel_aim_processing();
 // Generic activity: maximum search distance for zones, constructions, etc.
 const int ACTIVITY_SEARCH_DISTANCE = 60;
 
-static double get_capacity_fraction( int capacity, int volume )
+static auto get_capacity_fraction( const units::volume capacity,
+                                   const units::volume volume ) -> double
 {
     // fraction of capacity the item would occupy
     // fr = 1 is for capacity smaller than is size of item
     // in such case, let's assume player does the trip for full cost with item in hands
     double fr = 1;
 
-    if( capacity > volume ) { fr = static_cast<double>( volume ) / capacity; }
+    if( capacity > volume ) {
+        fr = units::to_milliliter<double>( volume ) / units::to_milliliter<double>( capacity );
+    }
 
     return fr;
 }
@@ -178,12 +181,9 @@ static int move_cost_inv( const item& it, const tripoint_bub_ms& src, const trip
     const int mc_per_tile = 100;
 
     // only free inventory capacity
-    const int inventory_capacity = units::to_milliliter(
-                                       g->u.volume_capacity() - g->u.volume_carried() );
+    const auto inventory_capacity = g->u.volume_capacity() - g->u.volume_carried();
 
-    const int item_volume = units::to_milliliter( it.volume() );
-
-    const double fr = get_capacity_fraction( inventory_capacity, item_volume );
+    const double fr = get_capacity_fraction( inventory_capacity, it.volume() );
 
     // approximation of movement cost between source and destination
     const int move_cost = mc_per_tile * rl_dist( src, dest ) * fr;
@@ -207,12 +207,7 @@ static int move_cost_cart(
     // typical flat ground move cost
     const int mc_per_tile = 100;
 
-    // only free cart capacity
-    const int cart_capacity = units::to_milliliter( capacity );
-
-    const int item_volume = units::to_milliliter( it.volume() );
-
-    const double fr = get_capacity_fraction( cart_capacity, item_volume );
+    const double fr = get_capacity_fraction( capacity, it.volume() );
 
     // approximation of movement cost between source and destination
     const int move_cost = mc_per_tile * rl_dist( src, dest ) * fr;

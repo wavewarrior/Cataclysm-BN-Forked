@@ -422,6 +422,7 @@ int character_display::display_empty_handed_base_damage( const Character &you )
 
 
 
+
 static bool handle_player_display_action( Character &you, unsigned int &line,
         player_display_tab &curtab, input_context &ctxt,
         const ui_adaptor &ui_tip, const ui_adaptor &ui_info,
@@ -761,7 +762,7 @@ std::vector<cs_row> cs_skills_rows( Character &you, unsigned line, bool active,
         const bool training = level.isTraining();
         const bool rusting = level.isRusting();
         int exercise = level.exercise();
-        int level_num = level.level();
+        int level_num = you.get_skill_level( aSkill->ident() );
         bool locked = false;
         if( you.has_active_bionic( bionic_id( "bio_cqb" ) ) && is_cqb_skill( aSkill->ident() ) ) {
             level_num = 5;

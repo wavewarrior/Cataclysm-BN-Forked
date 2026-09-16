@@ -37,7 +37,7 @@
 #include "item_reload_option.h"
 #include "itype.h"
 #include "line.h"
-#include "magic.h"
+#include "magic/magic.h"
 #include "enchantments/enchantment.h"
 #include "map.h"
 #include "material.h"
@@ -81,6 +81,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <ranges>
 #include <iterator>
 #include <map>
 #include <memory>
@@ -280,6 +281,9 @@ target_handler::trajectory target_ui::run()
 
     // Initialize cursor position
     src = you->bub_pos();
+    if( ( mode == TargetMode::ThrowCreature || mode == TargetMode::ThrowVehicle ) && initial_target ) {
+        src = *initial_target;
+    }
     update_target_list();
 
     if( activity && activity->abort_if_no_targets && targets.empty() ) {
@@ -298,7 +302,7 @@ target_handler::trajectory target_ui::run()
             attack_was_confirmed = false;
         }
     } else {
-        initial_dst = choose_initial_target();
+        initial_dst = initial_target.value_or( choose_initial_target() );
     }
     set_cursor_pos( initial_dst );
     sync_aim_angle_from_dst();
@@ -735,6 +739,14 @@ bool target_ui::set_cursor_pos( const tripoint_bub_ms& new_pos )
                 src
                 + tripoint_rel_ms( clamp( delta.x(), -range, range ), clamp( delta.y(), -range, range ),
                                    clamp( delta.z(), -range, range ) );
+        }
+        if( limit_to_reality_bubble && !is_in_reality_bubble_bounds( valid_pos ) ) {
+            using namespace std::views;
+            const auto reversed_traj = new_traj | reverse;
+            const auto clamped_it = std::ranges::find_if( reversed_traj, []( const tripoint_bub_ms & p ) {
+                return is_in_reality_bubble_bounds( p );
+            } );
+            valid_pos = clamped_it != std::ranges::end( reversed_traj ) ? *clamped_it : src;
         }
     } else {
         new_traj.push_back( src );
@@ -1312,7 +1324,7 @@ bool target_ui::action_aim()
 {
     set_last_target();
     apply_aim_turning_penalty();
-    const double min_recoil = calculate_aim_cap( *you, dst );
+    const double min_recoil = ranged::calculate_aim_cap( *you, dst );
     for( int i = 0; i < 10; ++i ) { do_aim( *you, *relevant, min_recoil ); }
 
     // We've changed pc.recoil, update penalty
@@ -1334,7 +1346,7 @@ bool target_ui::action_aim_and_shoot( const std::string& action )
     int aim_threshold = it->threshold;
     set_last_target();
     apply_aim_turning_penalty();
-    const double min_recoil = calculate_aim_cap( *you, dst );
+    const double min_recoil = ranged::calculate_aim_cap( *you, dst );
     do {
         do_aim( *you, relevant ? *relevant : null_item_reference(), min_recoil );
     } while(
@@ -1656,6 +1668,10 @@ std::string target_ui::uitext_title()
             return string_format( _( "Throwing %s" ), relevant->tname() );
         case TargetMode::ThrowBlind:
             return string_format( _( "Blind throwing %s" ), relevant->tname() );
+        case TargetMode::ThrowCreature:
+            return _( "Throwing creature" );
+        case TargetMode::ThrowVehicle:
+            return _( "Shoving vehicle" );
         default:
             return _( "Set target" );
     }
@@ -1663,8 +1679,11 @@ std::string target_ui::uitext_title()
 
 std::string target_ui::uitext_fire()
 {
-    if( mode == TargetMode::Throw || mode == TargetMode::ThrowBlind ) {
+    if( mode == TargetMode::Throw || mode == TargetMode::ThrowBlind ||
+        mode == TargetMode::ThrowCreature ) {
         return to_translation( "[Hotkey] to throw", "to throw" ).translated();
+    } else if( mode == TargetMode::ThrowVehicle ) {
+        return to_translation( "[Hotkey] to shove", "to shove" ).translated();
     } else if( mode == TargetMode::Reach ) {
         return to_translation( "[Hotkey] to attack", "to attack" ).translated();
     } else if( mode == TargetMode::Spell ) {

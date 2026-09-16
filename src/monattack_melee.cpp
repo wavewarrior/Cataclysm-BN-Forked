@@ -560,9 +560,9 @@ bool mattack::absorb_meat( monster *z )
             if( current_item_material == material_id( "flesh" ) ||
                 current_item_material == material_id( "hflesh" ) ) {
                 //We have something meaty! Calculate how much it will heal the monster
-                const int ml_of_meat = units::to_milliliter<int>( current_item->volume() );
-                const int total_charges = current_item->count();
-                const int ml_per_charge = ml_of_meat / total_charges;
+                const auto ml_of_meat = units::to_milliliter( current_item->volume() );
+                const auto total_charges = current_item->count();
+                const auto ml_per_charge = ml_of_meat / total_charges;
                 //We have a max size of meat here to avoid absorbing whole corpses.
                 if( ml_per_charge > max_meat_absorbed * 1000 ) {
                     add_msg( m_info, _( "The %1$s quivers hungrily in the direction of the %2$s." ), z->name(),
@@ -964,8 +964,10 @@ bool mattack::thrown_by_judo( monster *z )
         ///\EFFECT_DEX increases chance judo-throwing a monster
 
         ///\EFFECT_UNARMED increases chance of judo-throwing monster, vs their melee skill
-        if( ( ( foe->dex_cur + foe->get_skill_level( skill_unarmed ) ) > ( z->type->melee_skill + rng( 0,
-                3 ) ) ) ) {
+        const auto unarmed_skill = foe->get_skill_level( skill_unarmed );
+        const auto size_penalty = static_cast<int>( z->type->size ) * 2;
+        if( ( foe->dex_cur + unarmed_skill ) > ( z->type->melee_skill + size_penalty + rng( 0,
+                3 ) ) ) {
             target->add_msg_if_player( m_good, _( "but you grab its arm and flip it to the ground!" ) );
 
             // most of the time, when not isolated
@@ -980,10 +982,9 @@ bool mattack::thrown_by_judo( monster *z )
                 foe->check_dead_state();
             }
             // Monster is down,
-            z->add_effect( effect_downed, 5_turns );
-            const int min_damage = 10 + foe->get_skill_level( skill_unarmed );
-            const int max_damage = 20 + foe->get_skill_level( skill_unarmed );
-            // Deal moderate damage
+            z->add_effect( effect_downed, 3_turns );
+            const auto min_damage = 3 + unarmed_skill / 2;
+            const auto max_damage = 8 + unarmed_skill;
             const auto damage = rng( min_damage, max_damage );
             z->apply_damage( foe, bodypart_id( "torso" ), damage );
             z->check_dead_state();

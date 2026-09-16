@@ -63,7 +63,8 @@
 #include "iuse.h"
 #include "iuse_actor.h"
 #include "line.h"
-#include "magic.h"
+#include "magic/magic.h"
+#include "material.h"
 #include "map.h"
 #include "map_iterator.h"
 #include "mapdata.h"
@@ -87,7 +88,7 @@
 #include "rng.h"
 #include "skill.h"
 #include "sounds.h"
-#include "spell_targeting.h"
+#include "magic/spell_targeting.h"
 #include "string_formatter.h"
 #include "string_id.h"
 #include "text_snippets.h"
@@ -98,6 +99,7 @@
 #include "vehicle.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
+#include "string_utils.h"
 
 enum creature_size : int;
 
@@ -933,6 +935,7 @@ static repeat_type repeat_menu( const std::string& title, repeat_type last_selec
 
     return REPEAT_CANCEL;
 }
+
 
 
 

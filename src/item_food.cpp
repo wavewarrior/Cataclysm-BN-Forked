@@ -71,7 +71,7 @@
 #include "iuse_actor.h"
 #include "line.h"
 #include "locations.h"
-#include "magic.h"
+#include "magic/magic.h"
 #include "enchantments/enchantment.h"
 #include "map.h"
 #include "martialarts.h"
@@ -195,6 +195,16 @@ auto item::is_in_preserving_container() const -> bool
 {
     for( const item *parent = parent_item(); parent != nullptr; parent = parent->parent_item() ) {
         if( parent->type && parent->type->container && parent->type->container->preserves ) {
+            return true;
+        }
+    }
+    return false;
+}
+
+auto item::is_in_sealing_container() const -> bool
+{
+    for( const item *parent = parent_item(); parent != nullptr; parent = parent->parent_item() ) {
+        if( parent->type && parent->type->container && parent->type->container->seals ) {
             return true;
         }
     }
@@ -451,7 +461,7 @@ void item::update_rot_from_location( const temperature_flag temperature )
     auto flag = temperature;
     if( is_loaded() && has_position() ) {
         pos = bub_pos();
-        flag = rot::temperature_flag_for_location( get_map(), *this );
+        flag = rot::temp::for_location( get_map(), *this );
     }
     update_rot( pos, flag, get_weather() );
 }

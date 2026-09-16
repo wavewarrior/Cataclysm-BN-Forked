@@ -621,6 +621,10 @@ class Character: public Creature, public location_visitable<Character>
          */
         float get_vision_threshold( float light_level ) const;
         /**
+         * Returns the vision range of night vision
+         */
+        float night_vision_sight_range() const;
+        /**
          * Flag encumbrance for updating.
          */
         void flag_encumbrance();
@@ -668,6 +672,18 @@ class Character: public Creature, public location_visitable<Character>
         /** Returns a random valid technique */
         matec_id pick_technique(
             Creature& t, const item& weap, bool crit, bool dodge_counter, bool block_counter );
+        struct technique_query_options {
+            Creature &target;
+            const item &weapon;
+            bool critical_hit = false;
+            bool dodge_counter = false;
+            bool block_counter = false;
+            bool use_weighting = true;
+            bool allow_counter_techniques = false;
+            bool allow_defensive_techniques = false;
+        };
+        /** Returns all valid techniques for the current combat context */
+        std::vector<matec_id> get_valid_techniques( const technique_query_options &options );
         void perform_technique(
             const ma_technique& technique, Creature& t, damage_instance& di, int &move_cost );
 
@@ -1589,8 +1605,12 @@ for( const auto& elem : worn ) {
         std::vector<overlay_entry> get_overlay_ids() const;
 
         // --------------- Skill Stuff ---------------
+        // These are calling the following with no_enchant = false -> for catalua bindings
         int get_skill_level( const skill_id& ident ) const;
         int get_skill_level( const skill_id& ident, const item& context ) const;
+
+        int get_skill_level( const skill_id &ident, const bool no_enchant ) const;
+        int get_skill_level( const skill_id &ident, const item &context, const bool no_enchant ) const;
 
         const SkillLevelMap &get_all_skills() const;
         SkillLevel &get_skill_level_object( const skill_id& ident );
@@ -2057,7 +2077,7 @@ for( const auto& elem : worn ) {
          * the floor **/
         int bodytemp_modifier_traits_floor() const;
         /** Value of the body temperature corrected by climate control **/
-        int temp_corrected_by_climate_control( int temperature ) const;
+        int temp_corrected_by_climate_control( int temperature );
 
         bool in_sleep_state() const override;
 

@@ -72,7 +72,7 @@
 #include "line.h"
 #include "light_emission.h"
 #include "locations.h"
-#include "magic.h"
+#include "magic/magic.h"
 #include "enchantments/enchantment.h"
 #include "map.h"
 #include "martialarts.h"
@@ -540,9 +540,11 @@ bool item::is_brewable() const
 
 bool item::is_food_container() const
 {
-    return ( !contents.empty() && contents.front().is_food() ) ||
-    ( is_craft() &&
-    craft_data_->making->create_result()->is_food_container() );
+    namespace ranges = std::ranges;
+    return ranges::any_of( contents.all_items_top(), []( const item * contained_item ) {
+        return contained_item != nullptr &&
+        ( contained_item->is_food() || contained_item->is_food_container() );
+    } ) || ( is_craft() && craft_data_->making->create_result()->is_food_container() );
 }
 
 bool item::is_med_container() const
@@ -560,17 +562,27 @@ const mtype *item::get_mtype() const
     return corpse;
 }
 
+namespace
+{
+
 template<typename Item>
-static Item *get_food_impl( Item *it )
+auto get_food_impl( Item *it ) -> Item * // *NOPAD*
 {
     if( it->is_food() ) {
         return it;
-    } else if( it->is_food_container() && !it->contents.empty() ) {
-        return &it->contents.front();
-    } else {
-        return nullptr;
     }
+    for( auto *const contained_item : it->contents.all_items_top() ) {
+        if( contained_item == nullptr ) {
+            continue;
+        }
+        if( auto *food = get_food_impl( contained_item ) ) {
+            return food;
+        }
+    }
+    return nullptr;
 }
+
+} // namespace
 
 item *item::get_food()
 {

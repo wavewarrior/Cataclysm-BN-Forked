@@ -73,7 +73,7 @@
 #include "iuse_actor.h"
 #include "line.h"
 #include "locations.h"
-#include "magic.h"
+#include "magic/magic.h"
 #include "enchantments/enchantment.h"
 #include "map.h"
 #include "martialarts.h"
@@ -146,18 +146,24 @@ static const trait_id trait_TOLERANCE( "TOLERANCE" );
 bool item::needs_processing() const
 {
     return is_active() || has_flag( flag_RADIO_ACTIVATION ) || has_flag( flag_ETHEREAL_ITEM ) ||
-    ( !contents.empty() && is_container() && contents.front().needs_processing() ) ||
+    ( !contents.empty() && contents.has_processing_items() ) ||
     ( magazine_current() && magazine_current()->needs_processing() ) ||
     is_artifact() || is_relic() || goes_bad();
 }
 
 int item::processing_speed() const
 {
-    if( is_corpse() || is_food() || is_food_container() ) {
-    return to_turns<int>( 10_minutes );
+    auto speed = is_corpse() || is_food() || is_food_container() ? to_turns<int>( 10_minutes ) : 1;
+    for( const item *contained_item : contents.processing_items() ) {
+        if( contained_item != nullptr ) {
+            speed = std::min( speed, contained_item->processing_speed() );
+        }
     }
-    // Unless otherwise indicated, update every turn.
-    return 1;
+    if( const item *magazine = magazine_current(); magazine != nullptr &&
+        magazine->needs_processing() ) {
+        speed = std::min( speed, magazine->processing_speed() );
+    }
+    return speed;
 }
 
 
@@ -828,20 +834,71 @@ detached_ptr<item> item::process( detached_ptr<item> &&self, player *carrier,
     if( !self ) {
         return std::move( self );
     }
-    const bool preserves = self->type->container && self->type->container->preserves;
-    const bool seals = self->type->container && self->type->container->seals;
-    item &obj = *self;
+    const auto preserves = self->type->container && self->type->container->preserves;
+    const auto seals = self->type->container && self->type->container->seals;
+    auto &obj = *self;
+    using namespace std::views;
+    namespace ranges = std::ranges;
 
-    obj.remove_items_with( [&]( detached_ptr<item> &&it ) {
-        if( preserves ) {
+    struct content_processing_options {
+        bool parent_preserves = false;
+        bool parent_seals = false;
+    };
+
+    const auto processing_items = []( const auto & contents ) {
+        return contents.processing_items()
+        | filter( []( const item * content_item ) { return content_item != nullptr; } )
+        | transform( []( item * content_item ) { return cache_reference<item>( *content_item ); } )
+        | ranges::to<std::vector>();
+    };
+
+    auto process_content = [&]( auto &&process_content, detached_ptr<item> &&it,
+    const content_processing_options & opts ) -> detached_ptr<item> {
+        if( !it )
+        {
+            return std::move( it );
+        }
+
+        const auto content_preserves = opts.parent_preserves ||
+        ( it->type->container && it->type->container->preserves );
+        const auto content_seals = opts.parent_seals ||
+        ( it->type->container && it->type->container->seals );
+
+        for( const cache_reference<item> &content_item : processing_items( it->contents ) )
+        {
+            if( !content_item ) {
+                continue;
+            }
+            content_item->attempt_detach( [&]( detached_ptr<item> &&nested ) {
+                return process_content( process_content, std::move( nested ), {
+                    .parent_preserves = content_preserves,
+                    .parent_seals = content_seals
+                } );
+            } );
+        }
+
+        if( content_preserves )
+        {
             it->last_rot_check = calendar::turn;
         }
-        it = it->process_internal( std::move( it ), carrier, pos, activate, seals, flag,
-                                   weather_generator );
-        return VisitResponse::NEXT;
-    } );
-    detached_ptr<item> res = process_internal( std::move( self ), carrier, pos, activate, seals, flag,
-                             weather_generator );
+        return process_internal( std::move( it ), carrier, pos, activate, content_seals, flag,
+                                 weather_generator );
+    };
+
+    for( const cache_reference<item> &content_item : processing_items( obj.contents ) ) {
+        if( !content_item ) {
+            continue;
+        }
+        content_item->attempt_detach( [&]( detached_ptr<item> &&it ) {
+            return process_content( process_content, std::move( it ), {
+                .parent_preserves = preserves,
+                .parent_seals = seals
+            } );
+        } );
+    }
+
+    auto res = process_internal( std::move( self ), carrier, pos, activate, seals, flag,
+                                 weather_generator );
     return res;
 }
 

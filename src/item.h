@@ -416,57 +416,56 @@ class item: public location_visitable<item>, public game_object<item>
         /*@}*/
 
         /* type specific helper functions for info() that should probably be in itype() */
-        void basic_info(
-            std::vector<iteminfo> &info, const iteminfo_query* parts, int batch, bool debug ) const;
-        void med_info(
-            const item* med_item, std::vector<iteminfo> &info, const iteminfo_query* parts, int batch,
-            bool debug ) const;
-        void food_info(
-            const item* food_item, std::vector<iteminfo> &info, const iteminfo_query* parts, int batch,
-            bool debug, temperature_flag temperature ) const;
-        void magazine_info(
-            std::vector<iteminfo> &info, const iteminfo_query* parts, int batch, bool debug ) const;
-        void ammo_info(
-            std::vector<iteminfo> &info, const iteminfo_query* parts, int batch, bool debug ) const;
-        void gun_info(
-            const item* mod, std::vector<iteminfo> &info, const iteminfo_query* parts, int batch,
-            bool debug ) const;
-        void gunmod_info(
-            std::vector<iteminfo> &info, const iteminfo_query* parts, int batch, bool debug ) const;
-        void armor_protection_info(
-            std::vector<iteminfo> &info, const iteminfo_query* parts, int batch, bool debug ) const;
-        void armor_info(
-            std::vector<iteminfo> &info, const iteminfo_query* parts, int batch, bool debug ) const;
-        void animal_armor_info(
-            std::vector<iteminfo> &info, const iteminfo_query* parts, int batch, bool debug ) const;
-        void armor_fit_info(
-            std::vector<iteminfo> &info, const iteminfo_query* parts, int batch, bool debug ) const;
-        void book_info(
-            std::vector<iteminfo> &info, const iteminfo_query* parts, int batch, bool debug ) const;
-        void battery_info(
-            std::vector<iteminfo> &info, const iteminfo_query* parts, int batch, bool debug ) const;
-        void container_info(
-            std::vector<iteminfo> &info, const iteminfo_query* parts, int batch, bool debug ) const;
-        void tool_info(
-            std::vector<iteminfo> &info, const iteminfo_query* parts, int batch, bool debug ) const;
-        void component_info(
-            std::vector<iteminfo> &info, const iteminfo_query* parts, int batch, bool debug ) const;
-        void repair_info(
-            std::vector<iteminfo> &info, const iteminfo_query* parts, int batch, bool debug ) const;
-        void disassembly_info(
-            std::vector<iteminfo> &info, const iteminfo_query* parts, int batch, bool debug ) const;
-        void qualities_info(
-            std::vector<iteminfo> &info, const iteminfo_query* parts, int batch, bool debug ) const;
-        void bionic_info(
-            std::vector<iteminfo> &info, const iteminfo_query* parts, int batch, bool debug ) const;
-        void combat_info(
-            std::vector<iteminfo> &info, const iteminfo_query* parts, int batch, bool debug ) const;
-        void damage_statblock_info(
-            std::vector<iteminfo> &info, damage_instance attack, bool line_by_line ) const;
-        void contents_info(
-            std::vector<iteminfo> &info, const iteminfo_query* parts, int batch, bool debug ) const;
-        void final_info(
-            std::vector<iteminfo> &info, const iteminfo_query& parts, int batch, bool debug ) const;
+        void basic_info( std::vector<iteminfo> &info, const iteminfo_query *parts, int batch,
+                         bool debug ) const;
+        void med_info( const item *med_item, std::vector<iteminfo> &info, const iteminfo_query *parts,
+                       int batch, bool debug ) const;
+        void food_info( const item *food_item, std::vector<iteminfo> &info, const iteminfo_query *parts,
+                        int batch, bool debug, temperature_flag temperature ) const;
+        void magazine_info( std::vector<iteminfo> &info, const iteminfo_query *parts, int batch,
+                            bool debug ) const;
+        void ammo_info( std::vector<iteminfo> &info, const iteminfo_query *parts, int batch,
+                        bool debug ) const;
+        void gun_info( const item *mod, std::vector<iteminfo> &info, const iteminfo_query *parts, int batch,
+                       bool debug ) const;
+        void gunmod_info( std::vector<iteminfo> &info, const iteminfo_query *parts, int batch,
+                          bool debug ) const;
+        void armor_protection_info( std::vector<iteminfo> &info, const iteminfo_query *parts, int batch,
+                                    bool debug ) const;
+        void armor_info( std::vector<iteminfo> &info, const iteminfo_query *parts, int batch,
+                         bool debug ) const;
+        void animal_armor_info( std::vector<iteminfo> &info, const iteminfo_query *parts, int batch,
+                                bool debug ) const;
+        void armor_fit_info( std::vector<iteminfo> &info, const iteminfo_query *parts, int batch,
+                             bool debug ) const;
+        void book_info( std::vector<iteminfo> &info, const iteminfo_query *parts, int batch,
+                        bool debug ) const;
+        void battery_info( std::vector<iteminfo> &info, const iteminfo_query *parts, int batch,
+                           bool debug ) const;
+        void container_info( std::vector<iteminfo> &info, const iteminfo_query *parts, int batch,
+                             bool debug ) const;
+        void tool_info( std::vector<iteminfo> &info, const iteminfo_query *parts, int batch,
+                        bool debug ) const;
+        void component_info( std::vector<iteminfo> &info, const iteminfo_query *parts, int batch,
+                             bool debug ) const;
+        void repair_info( std::vector<iteminfo> &info, const iteminfo_query *parts, int batch,
+                          bool debug ) const;
+        void disassembly_info( std::vector<iteminfo> &info, const iteminfo_query *parts, int batch,
+                               bool debug ) const;
+        void qualities_info( std::vector<iteminfo> &info, const iteminfo_query *parts, int batch,
+                             bool debug ) const;
+        void bionic_info( std::vector<iteminfo> &info, const iteminfo_query *parts, int batch,
+                          bool debug ) const;
+        void combat_info( std::vector<iteminfo> &info, const iteminfo_query *parts, int batch,
+                          bool debug ) const;
+        void throw_info( std::vector<iteminfo> &info, const iteminfo_query *parts, int batch,
+                         bool debug ) const;
+        void damage_statblock_info( std::vector<iteminfo> &info, damage_instance attack,
+                                    bool line_by_line ) const;
+        void contents_info( std::vector<iteminfo> &info, const iteminfo_query *parts, int batch,
+                            bool debug ) const;
+        void final_info( std::vector<iteminfo> &info, const iteminfo_query &parts, int batch,
+                         bool debug ) const;
 
         /**
          * Calculate all burning calculations, but don't actually apply them to item.
@@ -1206,6 +1205,7 @@ class item: public location_visitable<item>, public game_object<item>
          * Whether the item should be processed (by calling @ref process).
          */
         bool needs_processing() const;
+        auto invalidate_processing_cache_upwards() -> void;
         /**
          * The rate at which an item should be processed, in number of turns between updates.
          */
@@ -2358,9 +2358,15 @@ class item: public location_visitable<item>, public game_object<item>
             player* carrier = nullptr;
             const rot_context& context;
         };
+        static auto actualize_rot( detached_ptr<item> &&self, const tripoint_bub_ms &pnt,
+                                   temperature_flag temperature,
+                                   const weather_manager &weather, bool seals ) -> detached_ptr<item>;
+        static auto actualize_rot( detached_ptr<item> &&self,
+                                   const rot_context &context, bool seals ) -> detached_ptr<item>;
         static auto process_rot( detached_ptr<item>&& self,
                                   const absolute_rot_process_options& options ) -> detached_ptr<item>;
         auto is_in_preserving_container() const -> bool;
+        auto is_in_sealing_container() const -> bool;
         auto mark_rot_checked_now() -> void;
 
         /** Helper for checking reloadability. **/

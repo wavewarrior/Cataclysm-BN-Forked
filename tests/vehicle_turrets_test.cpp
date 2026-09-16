@@ -32,34 +32,21 @@
 static std::vector<const vpart_info*> turret_types() {
     std::vector<const vpart_info*> res;
 
-    for (const auto& e : vpart_info::all()) {
-        if (e.second.has_flag("TURRET")) { res.push_back(&e.second); }
+    for (const auto& vp : vpart_info::get_all()) {
+        if (vp.has_flag("TURRET")) { res.push_back(&vp); }
     }
 
     return res;
 }
 
-static auto biggest_tank(const ammotype& ammo) -> const vpart_info* {
+static auto biggest_tank(const itype_id& ammo) -> const vpart_info* {
     std::vector<const vpart_info*> res;
 
-    for (const auto& e : vpart_info::all()) {
-        const auto& vp = e.second;
-        if (!item::spawn_temporary(vp.item)->is_watertight_container()) { continue; }
-
-        // vpart_info::fuel_type is the tank's *declared default* fuel, and every
-        // generic tank in data/json/vehicleparts/tanks.json leaves it unset.  So
-        // requiring `fuel->ammo->type == ammo` matched only tanks hard-wired to one
-        // fuel and rejected every general-purpose container — for any ammo at all.
-        // That is what made the water cannon and both flamethrowers look like they
-        // had no tank available: a plain watertight tank is exactly what you would
-        // load water or napalm into.
-        //
-        // Accept a tank when it either declares a matching fuel, or declares none
-        // and is therefore general purpose.
-        const itype* fuel = &*vp.fuel_type;
-        const bool declares_match = fuel->ammo && fuel->ammo->type == ammo;
-        const bool general_purpose = vp.fuel_type.is_null();
-        if (declares_match || general_purpose) { res.push_back(&vp); }
+    for (const auto& vp : vpart_info::get_all()) {
+        // can_reload_with covers both tanks hard-wired to this ammo and plain
+        // general-purpose watertight containers (whose fuel_type is unset), which
+        // the old `fuel->ammo->type == ammo` check silently rejected.
+        if (item::spawn_temporary( vp.item )->can_reload_with( ammo ) ) { res.push_back( &vp ); }
     }
 
     if (res.empty()) { return nullptr; }
@@ -91,21 +78,12 @@ TEST_CASE("vehicle_turret", "[vehicle][gun][magazine][.]") {
                     >= 0);
             veh->charge_battery(10000);
 
-            // Take the ammotype from the gun's accepted set, NOT by reinterpreting
-            // ammo_default()'s string.  ammo_default() returns an itype_id — an ammo
-            // *item* — while ammotype names an ammo *category*, and they are separate
-            // id namespaces.  The old `ammotype( ...ammo_default().str() )` only
-            // happened to work for guns whose default ammo item id coincides with an
-            // ammotype name; for the rest it produced an invalid ammotype, so
-            // ammo_set() silently failed and the turret was never ready.  Visible in
-            // the log as "Tried to get invalid ammunition: gas_fungicidal" and
-            // "Tried to set invalid ammo [100] for m249".
-            const auto& accepted = veh->turret_query(veh->part(idx)).base().ammo_types();
-            // A gun may accept several ammotypes and `accepted` is a std::set, so this
-            // takes the lowest-sorted one.  That is fine because biggest_tank() now
-            // accepts general-purpose tanks, so it resolves for any liquid ammo rather
-            // than only for ammo with a purpose-built tank.
-            const auto ammo = accepted.empty() ? ammotype::NULL_ID() : *accepted.begin();
+            // Upstream #9626: feed the turret the gun's default ammo *item* (itype_id)
+            // rather than reinterpreting ammo_default()'s string as an ammotype — the
+            // two are separate id namespaces, and the reinterpret produced invalid
+            // ammotypes for guns whose default ammo id doesn't name a category.
+            auto& gun = veh->part( idx ).get_base();
+            const auto ammo = gun.ammo_default();
 
             if (veh->part_flag(idx, "USE_TANKS")) {
                 auto* tank = biggest_tank(ammo);
@@ -114,10 +92,10 @@ TEST_CASE("vehicle_turret", "[vehicle][gun][magazine][.]") {
 
                 auto tank_idx = veh->install_part(tripoint_mnt_veh::zero(), tank->get_id(), true);
                 REQUIRE(tank_idx >= 0);
-                REQUIRE(veh->part(tank_idx).ammo_set(ammo->default_ammotype()));
+                REQUIRE(veh->part(tank_idx).ammo_set(ammo));
 
-            } else if (ammo) {
-                veh->part(idx).ammo_set(ammo->default_ammotype());
+            } else if (!ammo.is_null()) {
+                veh->part(idx).ammo_set(ammo);
             }
 
             auto qry = veh->turret_query(veh->part(idx));

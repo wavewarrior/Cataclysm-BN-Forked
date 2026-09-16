@@ -71,7 +71,7 @@
 #include "iuse_actor.h"
 #include "line.h"
 #include "locations.h"
-#include "magic.h"
+#include "magic/magic.h"
 #include "enchantments/enchantment.h"
 #include "map.h"
 #include "martialarts.h"
@@ -340,7 +340,9 @@ int item::get_avg_coverage() const
     const islot_armor *armor = find_armor_data();
     if( !armor ) {
         // handle wearable guns (e.g. shoulder strap) as special case
-        return is_gun() ? std::min( volume() / 500_ml, 100 ) : 0;
+        const auto volume_coverage = volume() / 500_ml;
+        const auto max_coverage = decltype( volume_coverage ) { 100 };
+        return is_gun() ? static_cast<int>( std::min( volume_coverage, max_coverage ) ) : 0;
     }
     int avg_coverage = 0;
     int avg_ctr = 0;
@@ -606,14 +608,15 @@ body_part_set item::get_covered_body_parts( const side s ) const
 {
     body_part_set res;
 
-    if( is_gun() ) {
-        // Currently only used for guns with the should strap mod, other guns might
-        // go on another bodypart.
-        res.set( bodypart_str_id( "torso" ) );
-    }
-
     const islot_armor* armor = find_armor_data();
-    if( armor == nullptr ) { return res; }
+    if( armor == nullptr ) {
+        // Mods currently cannot set armor data
+        // So for the two strap mods, force it to use torso
+        // But as there are worn guns now, this is inapplicable to all guns
+        // Only those without armor data
+        if( is_gun() ) { res.set( bodypart_str_id( "torso" ) ); }
+        return res;
+    }
 
     for( const armor_portion_data& data : armor->data ) { res.unify_set( data.covers ); }
 

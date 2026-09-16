@@ -1,6 +1,7 @@
 #include "game.h" // IWYU pragma: associated
 
 #include <algorithm>
+#include <cstdint>
 #include <map>
 #include <ranges>
 #include <sstream>
@@ -89,6 +90,7 @@ void game::serialize( std::ostream &fout )
     json.member( "initial_season", static_cast<int>( calendar_config._initial_season ) );
     json.member( "auto_travel_mode", auto_travel_mode );
     json.member( "run_mode", static_cast<int>( safe_mode ) );
+    json.member( "manual_combat_mode", manual_combat_mode );
     json.member( "mostseen", mostseen );
     json.member( "show_zone_overlay", show_zone_overlay );
     // current map coordinates
@@ -356,6 +358,8 @@ auto game::unserialize( std::istream &fin ) -> bool
         if( get_option<bool>( "SAFEMODE" ) && safe_mode == SAFE_MODE_OFF ) {
             safe_mode = SAFE_MODE_ON;
         }
+        manual_combat_mode = false;
+        data.read( "manual_combat_mode", manual_combat_mode );
 
         // Silently discard old grscent/typescent flat-array data; scent now lives on submaps.
         {
@@ -584,7 +588,7 @@ void overmap::unserialize( std::istream &fin, const std::string &file_path )
             while( !jsin.end_array() ) {
                 const auto entry = jsin.get_object();
                 auto origin = tripoint_om_omt{};
-                auto capacity_ml = 0;
+                auto capacity_ml = std::int64_t{ 0 };
                 entry.read( "pos", origin );
                 entry.read( "capacity_ml", capacity_ml );
 
@@ -596,8 +600,10 @@ void overmap::unserialize( std::istream &fin, const std::string &file_path )
                 std::ranges::for_each( std::views::iota( size_t{ 0 }, liquids.size() ),
                 [&]( size_t i ) {
                     const auto liquid_entry = liquids.get_array( i );
-                    const auto liquid_type = itype_id( liquid_entry.get_string( 0 ) );
-                    const auto volume_ml = liquid_entry.get_int( 1 );
+                    auto liquid_entry_iter = liquid_entry.begin();
+                    const auto liquid_type = itype_id( ( *liquid_entry_iter ).get_string() );
+                    ++liquid_entry_iter;
+                    const auto volume_ml = ( *liquid_entry_iter ).get_int64();
                     if( volume_ml > 0 ) {
                         state.stored_by_type[liquid_type] += units::from_milliliter( volume_ml );
                     }
@@ -1193,7 +1199,7 @@ void overmap::serialize( std::ostream &fout ) const
     std::ranges::for_each( fluid_storage, [&]( const auto & entry ) {
         json.start_object();
         json.member( "pos", entry.first );
-        json.member( "capacity_ml", units::to_milliliter<int>( entry.second.capacity ) );
+        json.member( "capacity_ml", units::to_milliliter( entry.second.capacity ) );
         json.member( "liquids" );
         json.start_array();
         std::ranges::for_each( entry.second.stored_by_type, [&]( const auto & liquid_entry ) {
@@ -1202,7 +1208,7 @@ void overmap::serialize( std::ostream &fout ) const
             }
             json.start_array();
             json.write( liquid_entry.first );
-            json.write( units::to_milliliter<int>( liquid_entry.second ) );
+            json.write( units::to_milliliter( liquid_entry.second ) );
             json.end_array();
         } );
         json.end_array();

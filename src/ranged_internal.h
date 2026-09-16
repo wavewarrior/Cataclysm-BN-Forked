@@ -23,7 +23,6 @@ class player;
 auto occupied_tile_fraction( creature_size target_size ) -> double;
 auto do_aim( avatar& you, const item& relevant, const double min_recoil ) -> void;
 auto pl_sees( const Creature& cr ) -> bool;
-auto calculate_aim_cap( const Character& p, const tripoint_bub_ms& target ) -> double;
 auto aim_lines( const Character& p, int bar_width, input_context& ctxt, item& weapon,
                 const double target_size, const tripoint_bub_ms& pos, double predicted_recoil,
                 item* load_loc ) -> std::vector<std::string>;
