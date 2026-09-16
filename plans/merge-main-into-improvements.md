@@ -473,6 +473,82 @@ pass" for "GPU path verified".
 `git merge d0115ae247`. Cheap despite the upstream diff size (72 files, +2,916/−1,789) — HEAD barely
 touches the same lines. Adopt main's API. Implements **D3**.
 
+### S5 outcome (2026-09-16) — landed as `7b0a970bbd`
+
+`git merge d0115ae247`. 32 conflicting files (widened from the estimated 3/31 by the same HEAD-drift
+pattern as every prior stage), resolved by a 5-agent fan-out plus the parent owning `src/map.cpp`
+directly (38 hunks, the highest-conflict file). Followed by two further waves: a 3-agent wave for
+build-breaking fallout in files the merge auto-merged cleanly but which referenced now-deleted
+members, and a 2-agent wave for test regressions surfaced after the build went green. **Zero
+conflict markers; `cataclysm-bn-tiles` and `cata_test-tiles` both build clean.**
+
+Real bugs found and fixed before landing:
+- `map::get_submap_at_grid` memoized NEGATIVE mapbuffer lookups as permanently-valid cache entries —
+  `if( index ) { cache_submap_at_grid( gridp, sm ); }` wrote a cached null pointer as "valid" on a
+  single miss, pinning that grid slot to null until the next `on_submap_loaded`/`on_submap_unloaded`
+  for that exact position. `map::loadn` never explicitly repopulates the grid cache (it relies on the
+  lazy fallback), and its own `set_transparency_cache_dirty` call walks `get_submap_at_grid` *before*
+  the just-loaded submap is wired in, poisoning the slot at load time. Every later `add_item` on that
+  tile then silently `return`ed on the null pointer — items vanished with no crash, no log. Root-caused
+  via a stderr probe proving the mapbuffer had the submap resident while the grid cache returned null.
+  Fixed by only memoizing positive hits (`if( sm != nullptr && index )`). One 1-line fix cleared all 7
+  cascading test failures across `active_item_cache_test.cpp` (5), `item_tname_test.cpp`, and
+  `reload_on_location_test.cpp`.
+- The auto-merge silently deleted HEAD's entire local submap grid-cache facility from `map.h`
+  (`cached_submaps_`/`cached_submap_valid_` members, `submap_cache_size`/`submap_cache_index`/
+  `cache_submap_at_grid`/`clear_submap_cache`/`getsubmap`/`get_submap_at_grid`/`add_roofs`
+  declarations) by taking main's side of an unconflicted hunk, while HEAD's `map.cpp` still defined
+  and called all of them — a declaration-only silent break invisible to `git diff` on the conflicted
+  file list. Surfaced independently by three different resolution clusters within minutes of each
+  other. Restored all declarations, all five missing out-of-line definitions (which had been resolved
+  away as "moved to a satellite file" when they were genuinely deleted), the two `.assign()` sizing
+  calls in the constructor/`resize()`, and the cache-population/invalidation calls in
+  `on_submap_loaded`/`on_submap_unloaded`.
+- `map::furn_set`'s declaration in `map.h` lost its 4th `ignore_grabbed` parameter the same way,
+  while `map_access.cpp`'s definition (and two `game_movement.cpp` call sites) still had it.
+- `map::pocket_info_` moved from `map` to `mapbuffer` in this stage (dimension bounds are dimension-
+  level metadata, not per-map-bubble state — a genuine architectural improvement). This broke every
+  S4-era call site that referenced the old `map::pocket_info_` member directly
+  (`is_outside_pocket_dimension_bounds( pocket_info_, ... )` in `map_terrain.cpp`, `map_bash.cpp`,
+  `map_access.cpp`, `map_items.cpp`, `vehicle_part_handler.h`) — swept to
+  `get_mapbuffer().is_outside_pocket_dimension_bounds( ... )` everywhere.
+- `map::has_floor_or_support` had been kept as HEAD's legacy `!valid_move( p, p-1z, false, true )`
+  form. A newly-imported test (`tree_terrain_supports_climbing_destination_above`) exposed that this
+  form mishandles ledge-trapped terrain (`t_open_air` carries `"trap": "tr_ledge"`, which short-
+  circuits `valid_move`'s impassable-terrain-below rejection). Restored main's rewrite,
+  `has_floor(p) || supports_above(p-1z)`, which sidesteps `valid_move` entirely for exactly this
+  reason.
+- `game_setup.cpp`/`game_misc.cpp`/`game_save.cpp` auto-merged cleanly but still called the deleted
+  centre+radius submap-load-handle API (`reality_bubble_handle_`, `lazy_border_handle_`,
+  `request_load(source, dim, center, radius)`). Ported to main's absolute begin/end region API
+  (`game::release_active_load_regions()`/`update_active_load_regions()`, `map::has_active_load_
+  region()`) per a hand-written port recipe covering `load_map`, `travel_to_dimension`, `unload_npcs`/
+  `create_starting_npcs`, and `update_map`.
+- Global sweeps for renames this stage introduced that weren't caught by any conflict marker:
+  `item::position()` → `bub_pos()`/`abs_pos()` (game_object.h rename) across 8 files;
+  `vitamin::all()` map→vector iteration (`.first` → `.id`) across 2 files; stale Catch2 v2
+  `#include "catch/catch.hpp"` in 2 newly-added test files; `VehiclePalette::check` (a non-static
+  const member) → `check_definitions` (the static one matching the `std::function<void()>` callback
+  list) in `init.cpp`; a dead `RETAINED_OMT_CACHE_MULTIPLIER` option registration left registering the
+  pre-rename key while every consumer read the renamed `RETAINED_OMT_CACHE_LENGTH`.
+
+| Run | Cases | Pass | Fail | Failing names |
+|---|---|---|---|---|
+| `~[coop]` | 1007 | 1002 | **5** | `vision_wall_obstructs_light`, `vision_single_tile_skylight`, `vision_see_out_of_vehicle`, `vision_see_into_vehicle`, `omt_pillar_post_pass_links_generated_stairs` |
+| `[coop]` | 159 | 159 | **0** | — identical to baseline |
+
+**Gate verdict: PASS, with one new named failure carrying explicit justification** (the strict-subset
+rule does not silently apply here). The 4 vision failures are the pre-existing CPU-vs-GPU gap already
+accepted at S2's outcome. `omt_pillar_post_pass_links_generated_stairs` is a NEW name not present at
+any prior stage's baseline — verified NOT a merge-resolution regression: `git show
+d0115ae247:src/mapbuffer.cpp`'s own `run_omt_pillar_post_pass` has the identical `/* TODO: Make
+mapgen stairs sane so this dead code can be used or reworked. */` block commented out, byte-for-byte,
+in main's own tree at this exact commit — main's own test for this feature fails there too. This is
+an upstream-ships-it-failing import, not a defect this merge introduced; recorded here rather than
+silently folded into the accepted set. Revisit if a later stage's main checkpoint completes the
+stair-linking implementation.
+
+
 ### S6 — `6774f7da2b` (`96efbbc240^`, depth 308) — content incl. #9689 — +12 files / +54 hunks
 
 `git merge 6774f7da2b`. Apply R1–R5. #9689 ("furniture blocks line of sight") touches the visibility
