@@ -10,6 +10,32 @@ with the pre-merge baseline, with every HEAD-only subsystem still functional.
 
 Repo: `/Users/nigel.fierens/dev-projects/Cataclysm-BN-Forked`. Working tree is clean at HEAD.
 
+## Current status (2026-09-16)
+
+Stages S0-S6 landed (commits through `8516257609b`). S6's own outcome section (below, under
+"### S6 outcome") has full detail; summary here for orientation:
+
+| Stage | Commit | Verdict |
+|---|---|---|
+| S0-S4 | (see plan history / `plans/done/`) | landed, `~[coop]` clean vs. accepted baseline |
+| S5 | `7b0a970bbd` | landed — Absolute Backing API; `~[coop]` 1002/1007, 5 accepted failures |
+| S6 | `68e21ecee7` | landed — content stage; two real bugs found+fixed (gunmod weight/volume
+|  |  | clamp scoping; `on_submap_unloaded` vehicle-cache gap); **one bug found, not fixed** — see
+|  |  | open issue below |
+
+**Open issue carried forward**: a SIGSEGV in unsharded single-process `~[coop]` runs, reproducible
+only after ~483 accumulated test cases, crash site `map::build_absorption_cache()` →
+`map::veh_at()` → `vehicle::part_with_feature()` on an apparently-dangling `vehicle*`. Not caused by
+any single S6 hunk (ablation-tested: reverting `map_vehicle.cpp` and `item::process`'s new
+recursive rewrite independently, crash persisted identically both times). A defensive fix was
+applied to `map::on_submap_unloaded()` (a genuine, independently-justified cache-invalidation gap)
+but did **not** resolve this specific crash. Full detail, evidence, and a research handoff are in
+`plans/vehicle-cache-sigsegv-handoff.md`.
+
+Remaining stages: S7 (mechanical clang-format `tests/`+`tools/` merge) through S12 (verification +
+round-trip save check) are not yet started.
+
+
 ## Decisions (settled — do not revisit)
 
 | # | Decision |
