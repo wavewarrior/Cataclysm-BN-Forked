@@ -19,9 +19,7 @@ Stages S0-S6 landed (commits through `8516257609b`). S6's own outcome section (b
 |---|---|---|
 | S0-S4 | (see plan history / `plans/done/`) | landed, `~[coop]` clean vs. accepted baseline |
 | S5 | `7b0a970bbd` | landed — Absolute Backing API; `~[coop]` 1002/1007, 5 accepted failures |
-| S6 | `68e21ecee7` | landed — content stage; two real bugs found+fixed (gunmod weight/volume
-|  |  | clamp scoping; `on_submap_unloaded` vehicle-cache gap); **one bug found, not fixed** — see
-|  |  | open issue below |
+| S6 | `68e21ecee7` | landed — content stage; two real bugs found+fixed (gunmod weight/volume clamp scoping; `on_submap_unloaded` vehicle-cache gap); **one bug found, not fixed** — see open issue below |
 
 **Open issue carried forward**: a SIGSEGV in unsharded single-process `~[coop]` runs, reproducible
 only after ~483 accumulated test cases, crash site `map::build_absorption_cache()` →
