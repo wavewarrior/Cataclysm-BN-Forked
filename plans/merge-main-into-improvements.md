@@ -384,6 +384,83 @@ the CPU path), plus content. Largest hunk count of any stage but no new architec
 #9487 touches the CPU-path colour lane that HEAD's `tint` reads, so re-verify the GPU-lighting check
 after this stage.
 
+### S4 outcome (2026-09-15/16) — landed as `d3f6f57b95`
+
+`git merge d5855ad224`. 150 conflicting files resolved by a multi-wave agent fan-out (8-agent
+cluster split for conflict resolution, followed by three further waves of 2-4 agent clusters to
+chase post-merge compile fallout in `game_*.cpp`/`map_*.cpp`/`cata_tiles*.cpp` satellite TUs, plus a
+final 4-agent wave for regression-test root-causing). **Zero conflict markers; `cataclysm-bn-tiles`
+and `cata_test-tiles` both build clean** (both binaries at repo root, matching the S3 binary-path
+correction).
+
+Real bugs found and fixed before landing (beyond mechanical dimension_id/2D-3D coordinate porting):
+- `src/lightmap.cpp`'s `build_transparency_caches`: the auto-merge left a dangling, incomplete
+  duplicate of the per-zlevel GPU batch loop (lines 880-932) whose `{` was never closed, so a later
+  unrelated `}` silently closed it instead, leaving the whole rest of the function one brace-depth
+  too deep and producing 19 cascading "function definition is not allowed here" errors. Deleted the
+  dead duplicate; the complete/correct loop (which actually populates `level_states`) already existed
+  right after it.
+- `src/character.cpp`'s `place_corpse(tripoint_abs_omt)` was garbled into a chimera of HEAD's
+  tinymap-load implementation and main's rewritten submap-view implementation, referencing
+  undeclared locals (`omt_ms`, `sm_ms`) and redefining `fin`. Took main's complete rewrite wholesale
+  (pure logic change, no rendering/coop hooks involved).
+- Three functions were declared in headers and called from multiple TUs but had no definition
+  anywhere in the merged tree — `game::rebind_critter_tracker`, `game::refresh_player_visibility_
+  cache_if_needed`, `vehicle::get_cargo_recharge_targets` (main-only new functions whose bodies were
+  dropped when HEAD's game.cpp/vehicle.cpp decomposition into satellite TUs didn't carry them over).
+  Ported all three from main's pre-merge `game.cpp`/`vehicle.cpp` into the correct satellite files.
+- `map::set_transparency_cache_dirty(int)` was defined twice (`map.cpp` and `map_cache.cpp`,
+  duplicate-symbol link error); kept `map_cache.cpp`'s version, the only one with the
+  `++cache.transparency_generation` line the GPU staleness-gate work depends on.
+- `is_out_of_bounds(p)` (removed by main) was mechanically but **incorrectly** first suggested as
+  `!inbounds(p)` (reality-bubble bounds) — caught before agents applied it repo-wide. Correct
+  replacement is `is_outside_pocket_dimension_bounds( pocket_info_, map_local_to_abs( *this, p ) )`,
+  which preserves the old pocket-dimension-only semantics (false for every ordinary infinite
+  dimension).
+
+22 test regressions surfaced post-build, root-caused and fixed by a 4-agent parallel wave:
+- `tests/test_main.cpp`'s merged `init_test_sdl_gpu()` forced `compute_accel::gpu_software`, and
+  `compute_backend.h::selected_backend()` only falls back to CPU for `auto_select` — so on this
+  windowless host the suite stayed stuck on a null GPU device, `build_transparency_caches` returned
+  without building the cache, and every lighting-dependent test (crafting speed, several others)
+  read `ambient_light_at() == 0`. Fixed by downgrading to CPU when `get_device() == nullptr` unless
+  a compute accel is explicitly requested via env var.
+- `src/map_items.cpp`'s `use_charges` dropped upstream's fresh-component-rot fix (#9448): missing
+  `if( tmp->charges > 0 )` guards around two `ret.push_back` sites let a 0-charge phantom item
+  displace the real fresh component during vehicle-kitchen/autoclave crafting.
+- `src/character_mutation.cpp`'s `recalculate_enchantment_cache` kept HEAD's cache-only-rebuild
+  version; main's version additionally calls `activate_effects`/`deactivate_removed_effects`
+  immediately against an old-cache snapshot. Ported main's version wholesale.
+- `src/game_setup.cpp`/`game_world_tick.cpp`: HEAD's `load_npcs`/`unload_npcs` never called
+  `mapbuffer::add_active_npc`/`remove_active_npc`, which main's `game::critter_at<npc>` (taken by
+  the merge) requires for position-based NPC lookup — `active_npcs_by_location_` was permanently
+  empty, silently failing every position-based NPC lookup while id-based lookups kept working.
+  Wired registration symmetrically at all 6 activation/deactivation sites.
+- `src/player.cpp`'s `setpos(tripoint_abs_ms)` assigned `position` directly, bypassing
+  `Character::setpos`'s Box2D physics creature-registration hook — the avatar had zero collision
+  bodies in the physics world, so every ranged attack against it silently dealt 0 damage.
+- `src/lightmap.cpp`'s `map::pl_sees` took main's version, which returns `false` whenever
+  `visibility_cache_dirty` (always true in the GPU-less test binary); restored HEAD's dirty-cache
+  geometry fallback (`sees(player_pos, t, -1)`).
+- `src/map_items.cpp` was missing main's `map::i_rem(tripoint_bub_ms, item*)` overload, which
+  `active_item_cache`-aware removal depends on to update the active-items submap registry.
+
+| Run | Cases | Pass | Fail | Failing names |
+|---|---|---|---|---|
+| `~[coop]` | 1003 | 997 | **4** | `vision_wall_obstructs_light`, `vision_single_tile_skylight`, `vision_see_out_of_vehicle`, `vision_see_into_vehicle` |
+| `[coop]` | 159 | 159 | **0** | — identical to baseline |
+
+**Gate verdict: PASS.** The failing set is a strict subset of the S2 outcome's already-PASSed named
+set (line 882 above) — no new failure names. `vehicle_efficiency` and `vehicle_ramp_test_60` (S1/S2
+baseline failures) now both pass. The 4 remaining vision failures are a documented pre-existing
+CPU-vs-GPU architecture gap (multi-tile indoor daylight diffusion is GPU-compute-only; the CPU
+fallback cascade is byte-identical across HEAD, main, and the merged tree) already named in S2's
+outcome table — not a conflict-resolution regression.
+
+Not yet re-verified against this stage: the D3/coordinate-sensitive new-behaviour checks (in-game
+GPU lightmap, save round-trip) carried forward from S3 — still pending, needs the launched game
+binary. Fold into the final pre-S12 verification pass.
+
 ### S5 — `d0115ae247` (depth 226) — COORD #9559 + #9566 Absolute Backing API — +3 files / +31 hunks
 
 `git merge d0115ae247`. Cheap despite the upstream diff size (72 files, +2,916/−1,789) — HEAD barely
