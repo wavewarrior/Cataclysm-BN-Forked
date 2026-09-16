@@ -1265,7 +1265,7 @@ void Item_factory::load( islot_comestible &slot, const JsonObject &jo, const std
         if( relative.has_int( "vitamins" ) ) {
             // allows easy specification of 'fortified' comestibles
             for( auto &v : vitamin::all() ) {
-                slot.default_nutrition.vitamins[ v.first ] += relative.get_int( "vitamins" );
+                slot.default_nutrition.vitamins[ v.id ] += relative.get_int( "vitamins" );
             }
         } else if( relative.has_array( "vitamins" ) ) {
             for( JsonArray pair : relative.get_array( "vitamins" ) ) {

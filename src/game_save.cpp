@@ -529,20 +529,13 @@ bool game::load( const save_t &name )
     u.recalc_hp();
     u.set_save_id( name.decoded_name() );
     u.name = name.decoded_name();
-    // Set the correct bubble radius BEFORE unserialize() so the submap_loader
-    // request uses the right radius and update_map() does not null active grid slots.
+    // Set the correct bubble size BEFORE unserialize() so the submap_loader
+    // request uses the right bounds and update_map() does not clear active cached slots.
     init_bubble_config();
     reality_bubble_radius_ = g_half_mapsize;
-    // If a stale request exists from a previous load in the same session, release
-    // it so load_map_at() recreates it with the correct (possibly changed) radius.
-    if( reality_bubble_handle_ != 0 ) {
-        submap_loader.release_load( reality_bubble_handle_ );
-        reality_bubble_handle_ = 0;
-    }
-    if( lazy_border_handle_ != 0 ) {
-        submap_loader.release_load( lazy_border_handle_ );
-        lazy_border_handle_ = 0;
-    }
+    // If a stale region exists from a previous load in the same session, release
+    // it so load_map_at() recreates it with the correct bounds.
+    release_active_load_regions();
     fire_loader.clear( submap_loader );
     auto unserialized = false;
     const auto load_save = [&]( std::istream & fin ) { unserialized = unserialize( fin ); };
@@ -583,7 +576,7 @@ bool game::load( const save_t &name )
             // bounded pocket dimension after reload.  Without this, the loaded_
             // dimensions_ entry has nullopt bounds even though the dimension IS
             // bounded.
-            .pocket_info = get_map().get_pocket_info()
+            .pocket_info = get_map().get_mapbuffer().get_pocket_info()
         };
     }
 

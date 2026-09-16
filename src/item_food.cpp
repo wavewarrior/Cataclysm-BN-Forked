@@ -450,7 +450,7 @@ void item::update_rot_from_location( const temperature_flag temperature )
     auto pos = tripoint_bub_ms::zero();
     auto flag = temperature;
     if( is_loaded() && has_position() ) {
-        pos = position();
+        pos = bub_pos();
         flag = rot::temperature_flag_for_location( get_map(), *this );
     }
     update_rot( pos, flag, get_weather() );

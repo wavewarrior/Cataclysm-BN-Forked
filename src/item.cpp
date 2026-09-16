@@ -390,7 +390,7 @@ void item::deactivate()
             get_map().make_inactive( *this );
             break;
         case item_location_type::vehicle:
-            get_map().veh_at( tripoint_bub_ms( position() ) )->vehicle().make_inactive( *this );
+            get_map().veh_at( abs_pos() )->vehicle().make_inactive( *this );
             break;
         default:
             break;
@@ -414,7 +414,7 @@ void item::activate()
             get_map().make_active( *this );
             break;
         case item_location_type::vehicle:
-            get_map().veh_at( tripoint_bub_ms( position() ) )->vehicle().make_active( *this );
+            get_map().veh_at( abs_pos() )->vehicle().make_active( *this );
             break;
         default:
             break;
@@ -587,7 +587,7 @@ auto item::prepare_for_location_removal() -> void
         const auto vehicle_loc = dynamic_cast<vehicle_item_location *>( loc );
         const auto temperature = vehicle_loc != nullptr ? vehicle_loc->storage_temperature() :
                                  rot::temperature_flag_for_location( get_map(), *this );
-        update_rot( position(), temperature, get_weather() );
+        update_rot( bub_pos(), temperature, get_weather() );
     }
 }
 
@@ -644,7 +644,7 @@ bool item::attempt_split(
     prepare_for_location_removal();
     const bool split_needs_rot_actualization = goes_bad() && is_loaded() && has_position() &&
             !split_from_preserving_container;
-    const auto split_pos = split_needs_rot_actualization ? position() : tripoint_bub_ms::zero();
+    const auto split_pos = split_needs_rot_actualization ? bub_pos() : tripoint_bub_ms::zero();
     const auto vehicle_loc = dynamic_cast<vehicle_item_location *>( loc );
     const auto split_temperature =
         !split_needs_rot_actualization ? temperature_flag::TEMP_NORMAL

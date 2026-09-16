@@ -415,7 +415,7 @@ item *game_menus::inv::container_for( avatar& you, const item& liquid, int radiu
         }
 
         if( location.where() == item_location_type::character ) {
-            Character* character = g->critter_at<Character>( location.position() );
+            Character* character = g->critter_at<Character>( location.abs_pos() );
             if( character == nullptr ) {
                 debugmsg( "Invalid location supplied to the liquid filter: no character found." );
                 return false;
@@ -617,7 +617,7 @@ class comestible_inventory_preset: public inventory_selector_preset
             ? ( *loc ).get_contained()
             : *loc;
 
-            if( loc->made_of( LIQUID ) && !g->m.has_flag( flag_LIQUIDCONT, loc->position() ) ) {
+            if( loc->made_of( LIQUID ) && !g->m.has_flag( flag_LIQUIDCONT, loc->bub_pos() ) ) {
             return _( "Can't drink spilt liquids" );
             }
 

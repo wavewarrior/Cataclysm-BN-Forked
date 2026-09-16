@@ -814,12 +814,12 @@ void DynamicDataLoader::initialize()
         item_action_generator::generator().load_item_action( jo );
     } );
 
-    add( "vehicle_part", &vpart_info::load );
-    add( "vehicle_color_palette", &VehiclePalette::load );
-    add( "vehicle", &vehicle_prototype::load );
-    add( "vehicle_group", &VehicleGroup::load );
-    add( "vehicle_placement", &VehiclePlacement::load );
-    add( "vehicle_spawn", &VehicleSpawn::load );
+    add( "vehicle_part",  &vpart_info::load );
+    add( "vehicle_color_palette",  &VehiclePalette::load_palette );
+    add( "vehicle",  &vehicle_prototype::load );
+    add( "vehicle_group",  &VehicleGroup::load );
+    add( "vehicle_placement",  &VehiclePlacement::load );
+    add( "vehicle_spawn",  &VehicleSpawn::load );
 
     add( "requirement", []( const JsonObject & jo ) { requirement_data::load_requirement( jo ); } );
     add( "trap", &trap::load_trap );
@@ -1295,7 +1295,7 @@ void DynamicDataLoader::check_consistency( loading_ui& ui )
             {_( "Materials" ), &materials::check},
             {_( "Engine faults" ), &fault::check_consistency},
             {_( "Vehicle parts" ), &vpart_info::check},
-            {_( "Vehicle palettes" ), &VehiclePalette::check},
+            {_( "Vehicle palettes" ), &VehiclePalette::check_definitions},
             {_( "Vehicle groups" ), &VehicleGroup::check},
             {_( "Mapgen definitions" ), &check_mapgen_definitions},
             {_( "Mapgen palettes" ), &mapgen_palette::check_definitions},

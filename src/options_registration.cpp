@@ -1763,11 +1763,12 @@ void options_manager::add_options_performance()
         //                        "fires to be simulated correctly. "
         //                        "0 disables out-of-bubble fire spread loading entirely. " ),
         //      0, 250, 25 );
-        add( "RETAINED_OMT_CACHE_MULTIPLIER", page_id,
+        add( "RETAINED_OMT_CACHE_LENGTH", page_id,
              translate_marker( "Retained Map Cache" ),
-             translate_marker( "Keep more map data loaded to reduce lag when moving around the same general area, "
-                               "at the cost of memory usage." ),
-             1, 20, is_android ? 1 : 3 );
+             translate_marker( "Side length of the extra overmap-terrain MRU cache. "
+                               "The retained cache budget is this value squared; lazy border "
+                               "loading is budgeted separately." ),
+             4, 50, is_android ? 10 : 24 );
         add( "POWER_PORTAL_LOAD_RADIUS", page_id,
              translate_marker( "Power portal load radius (submaps)" ),
              translate_marker( "Radius in submaps around each end of a power-portal link that is "

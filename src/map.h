@@ -14,6 +14,7 @@
 #include <optional>
 #include <ranges>
 #include <shared_mutex>
+#include <span>
 #include <set>
 #include <source_location>
 #include <string>
@@ -119,6 +120,13 @@ struct map_stack_options {
     tripoint_abs_ms location;
     mapbuffer *origin = nullptr;
     map *local_origin = nullptr;
+};
+
+struct map_move_furn_options {
+    Character *mover = nullptr;
+    bool pulling = false;
+    bool move_contents = true;
+    bool move_fire = true;
 };
 
 class map_stack : public item_stack
@@ -471,6 +479,8 @@ struct level_cache {
 
     // per-tile map-memory seen bitset (size: cache_x * cache_y), indexed [x + y * cache_x]
     cata_dynamic_bitset             map_memory_seen_cache;
+    std::vector<tripoint_bub_ms>     map_memory_seen_cache_dirty_points;
+    bool                            map_memory_seen_cache_dirty_all = true;
 
     bool veh_in_active_range = false;
     std::vector<bool>               veh_exists_at;
@@ -784,31 +794,6 @@ class map : public submap_load_listener
          */
         auto resize( int new_mapsize ) -> void;
 
-        // Dimension Bounds (for bounded pocket dimensions)
-        /**
-         * Set the dimension bounds for this map.
-         * Out-of-bounds areas will be rendered as boundary terrain and are impassable.
-         */
-        void set_pocket_info( const pocket_dimension_data &info );
-        /**
-         * Get the current dimension bounds (if any).
-         * Returns the full bounds structure for secondary world capture.
-         */
-        std::optional<pocket_dimension_data> get_pocket_info() const;
-
-        /**
-         * Clear the dimension bounds (for infinite dimensions).
-         */
-        void clear_pocket_info();
-        /**
-         * Check if the map has dimension bounds set.
-         */
-        bool has_dimension_bounds() const;
-        /**
-         * Get the boundary terrain ID for out-of-bounds areas.
-         * Only valid if has_dimension_bounds() is true.
-         */
-        ter_id get_boundary_terrain() const;
         /**
          * Return the dimension ID this map is currently bound to.
          * An empty string means the primary (default) dimension.
@@ -895,6 +880,10 @@ class map : public submap_load_listener
         /*@}*/
 
         void set_memory_seen_cache_dirty( const tripoint_bub_ms &p );
+        auto set_memory_seen_cache_dirty( int zlev ) -> void;
+        auto is_memory_seen_cache_dirty_all( int zlev ) const -> bool;
+        auto take_memory_seen_cache_dirty_points( int zlev ) -> std::vector<tripoint_bub_ms>;
+        auto mark_memory_seen_cache_dirty_all_clean( int zlev ) -> void;
 
         void invalidate_map_cache( const int zlev );
 
@@ -1233,17 +1222,11 @@ class map : public submap_load_listener
         std::string obstacle_name( const tripoint_bub_ms &p );
         bool has_furn( const tripoint_bub_ms &p ) const;
         furn_id furn( const tripoint_bub_ms &p ) const;
-        /**
-        * Sets the furniture at given position.
-        *
-        * @param p Position within the map
-        * @param new_furniture Id of new furniture
-        * @param new_active Override default active tile of new furniture
-        * @param ignore_grabbed Ignore destruction of grabbed tile, useful when player is moved afterwards
-        */
         void furn_set( const tripoint_bub_ms &p, const furn_id &new_furniture,
                        const cata::poly_serialized<active_tile_data> &new_active = nullptr,
                        const bool ignore_grabbed = false );
+        auto move_furn( const tripoint_bub_ms &from, const tripoint_bub_ms &to,
+        const map_move_furn_options &options = {} ) -> bool;
         std::string furnname( const tripoint_bub_ms &p );
         bool can_move_furniture( const tripoint_bub_ms &pos, player *p = nullptr );
 
@@ -2015,6 +1998,27 @@ class map : public submap_load_listener
             return abs_sub;
         }
 
+        auto active_submap_views() const -> std::span<const mapbuffer_abs_submap_view> {
+            return active_submaps_.submaps();
+        }
+
+        auto active_submap_views( const int zlev ) const
+        -> std::span<const mapbuffer_abs_submap_view> {
+            return active_submaps_.submaps( zlev );
+        }
+
+        auto active_submap_view( const tripoint_abs_sm &pos ) const
+        -> std::optional<mapbuffer_abs_submap_view> {
+            return active_submaps_.get_submap_view( pos );
+        }
+
+        auto has_active_load_region() const -> bool {
+            return static_cast<bool>( active_load_region_ );
+        }
+        auto update_active_load_region( const point_abs_sm &begin,
+                                        const point_abs_sm &end ) -> void;
+        auto release_active_load_region() -> void;
+
         bool inbounds_z( const int z ) const {
             return z >= -OVERMAP_DEPTH && z <= OVERMAP_HEIGHT;
         }
@@ -2088,12 +2092,6 @@ class map : public submap_load_listener
                 loadn( grid_pos, update_vehicles );
                 actualize_loaded_grid( grid_pos );
             }
-
-            // Note: we want it in a separate loop! It is a post-load cleanup
-            // Since we're adding roofs, we want it to go up (from lowest to highest)
-            for( const auto gridz : std::views::iota( -OVERMAP_DEPTH, OVERMAP_HEIGHT + 1 ) ) {
-                add_roofs( tripoint_bub_sm( grid, gridz ) );
-            }
         }
         /**
          * Apply the dimension boundary terrain overlay to the edge tiles of @p sm at
@@ -2104,10 +2102,6 @@ class map : public submap_load_listener
          */
         auto apply_boundary_overlay( submap &sm,
                                      const tripoint_abs_sm &pos ) -> void;
-        /**
-         * Hacks in missing roofs. Should be removed when 3D mapgen is done.
-         */
-        void add_roofs( const tripoint_bub_sm &grid );
         void player_in_field( player &u );
         void monster_in_field( monster &z );
 
@@ -2255,18 +2249,25 @@ class map : public submap_load_listener
          * anchor.
          */
         point_abs_sm abs_sub;
+        mapbuffer_bounds_view active_submaps_;
+        mapbuffer_load_region active_load_region_;
         mutable std::vector<submap *> cached_submaps_;
         mutable std::vector<bool> cached_submap_valid_;
 
         auto set_abs_sub( const point_abs_sm &p ) -> void {
             abs_sub = p;
             clear_submap_cache();
+            refresh_active_submap_view();
         }
 
         auto submap_cache_size() const -> std::size_t;
         auto submap_cache_index( const tripoint_bub_sm &gridp ) const -> std::optional<std::size_t>;
         auto cache_submap_at_grid( const tripoint_bub_sm &gridp, submap *sm ) const -> void;
         auto clear_submap_cache() const -> void;
+
+
+        auto refresh_active_submap_view() -> void;
+        auto validate_active_submap_view_complete( const char *context ) const -> void;
 
     public:
         /**
@@ -2283,18 +2284,14 @@ class map : public submap_load_listener
         field &get_field( const tripoint_bub_ms &p );
 
         /**
-         * Get a cached non-owning submap pointer by flat cache index.
-         */
-        auto getsubmap( std::size_t grididx ) const -> submap *;
-        /**
          * Compatibility map-local lookup. Absolute data lookup belongs on
          * mapbuffer; simulation membership belongs on submap_load_manager.
          */
         submap *get_submap_at( const tripoint_bub_ms &p ) const;
         /**
-         * Compatibility map-local lookup with submap-local offset.
+         * Get a cached non-owning submap pointer by flat cache index.
          */
-        submap *get_submap_at( const tripoint_bub_ms &p, point_sm_ms &offset_p ) const;
+        auto getsubmap( std::size_t grididx ) const -> submap *;
         /**
          * Get submap pointer at given grid coordinates.  For coordinates
          * inside the reality bubble grid, returns the local cached pointer directly.
@@ -2302,6 +2299,14 @@ class map : public submap_load_listener
          * (may return nullptr if the submap is not loaded in memory).
          */
         submap *get_submap_at_grid( const tripoint_bub_sm &gridp ) const;
+        /**
+         * Fill in roofs for a submap after a shift or load, based on the terrain below.
+         */
+        void add_roofs( const tripoint_bub_sm &grid );
+        /**
+         * Compatibility map-local lookup with submap-local offset.
+         */
+        submap *get_submap_at( const tripoint_bub_ms &p, point_sm_ms &offset_p ) const;
     private:
         /** Caclulate the greatest populated zlevel in the loaded submaps and save in the level cache.
          * fills the map::max_populated_zlev and returns it
@@ -2389,7 +2394,7 @@ class map : public submap_load_listener
         /**
         * Runs a functor over given submaps
         * over submaps in the area, getting next submap only when the current one "runs out" rather than every time.
-        * gp in the functor is Grid (like `get_submap_at_grid`) coordinate of the submap,
+        * gp in the functor is the map-local submap coordinate,
         * Will silently clip the area to map bounds.
         * @param start Starting point_bub_ms & for function
         * @param end End point_bub_ms & for function
@@ -2403,11 +2408,6 @@ class map : public submap_load_listener
          * Holds caches for visibility, light, transparency and vehicles
          */
         std::array< std::unique_ptr<level_cache>, OVERMAP_LAYERS > caches;
-
-        /**
-         * Set of submaps that contain active items in absolute coordinates.
-         */
-        std::set<tripoint_abs_sm> submaps_with_active_items;
 
         /**
          * Flat list of all funnel trap locations in this dimension's loaded submaps.
@@ -2456,9 +2456,6 @@ class map : public submap_load_listener
         // !value || value->first != the loaded-grid origin means cache is invalid
         std::optional<std::pair<tripoint_abs_sm, int>> max_populated_zlev = std::nullopt;
 
-        // Dimension info for bounded pocket dimensions (nullopt for infinite dimensions)
-        std::optional<pocket_dimension_data> pocket_info_;
-
         // The dimension ID this map is bound to (empty = primary dimension)
         dimension_id bound_dimension_;
 
@@ -2506,7 +2503,7 @@ class map : public submap_load_listener
 
         // Just exposed for unit test introspection.
         const std::set<tripoint_abs_sm> &get_submaps_with_active_items() const {
-            return submaps_with_active_items;
+            return get_mapbuffer().get_submaps_with_active_items();
         }
         // Clips the area to map bounds
         tripoint_range<tripoint_bub_ms> points_in_rectangle(

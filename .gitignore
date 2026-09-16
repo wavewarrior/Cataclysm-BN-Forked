@@ -250,3 +250,6 @@ __cmake_systeminformation/
 
 # Stoneshard asset extraction dump (never committed)
 stoneshard-extract/
+
+# Session scratch cache (merge-tree dumps, temp diagnostics)
+.cache_runs/

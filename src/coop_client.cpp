@@ -744,10 +744,10 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
                         const int z = jin.get_int();
                         jin.end_array();
                         sm_pos = tripoint_abs_sm{x, y, z};
-                        new_sm = std::make_unique<submap>( sm_pos );
+                        new_sm = std::make_unique<submap>( sm_pos, dimension_id() );
                     } else if( new_sm ) {
                         // All other members are submap payload: terrain, furniture, items, etc.
-                        new_sm->load( jin, tile_key, version, project_to<coords::ms>( sm_pos ) );
+                        new_sm->load( jin, tile_key, version, project_to<coords::ms>( sm_pos ), dimension_id() );
                     } else {
                         jin.skip_value();
                     }

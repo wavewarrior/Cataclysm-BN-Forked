@@ -27,7 +27,7 @@ TEST_CASE("nonperishable_food_does_not_enter_active_item_cache", "[item]") {
     const auto loc = tripoint_bub_ms{60, 60, 0};
     g->m.i_clear(loc);
     const auto abs_loc =
-        g->m.get_abs_sub() + tripoint_rel_sm(loc.x() / SEEX, loc.y() / SEEY, loc.z());
+        tripoint_abs_sm( g->m.get_abs_sub(), loc.z() ) + tripoint_rel_sm(loc.x() / SEEX, loc.y() / SEEY, 0);
     const auto baseline_active_submaps = g->m.get_submaps_with_active_items();
 
     auto sugar = item::spawn("sugar");

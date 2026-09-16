@@ -67,13 +67,65 @@ auto setup_adjacent_pit_move(const ter_id& terrain) -> adjacent_pit_move {
 auto add_absolute_test_submap( mapbuffer &buffer, const tripoint_abs_sm &pos,
                                const ter_id &terrain ) -> submap *
 {
-    auto sm = std::make_unique<submap>( pos );
+    auto sm = std::make_unique<submap>( pos, buffer.get_dimension_id() );
     sm->set_all_ter( terrain );
     REQUIRE( buffer.add_submap( pos, sm ) );
     return buffer.lookup_submap_in_memory( pos );
 }
 
+auto mapgen_item_count_in_radius( mapgen_constructor &tm, const point_omt_ms &center,
+                                  const size_t radius ) -> size_t
+{
+    auto result = size_t{ 0 };
+    for( const auto &candidate : tm.points_in_radius( center, radius ) ) {
+        result += tm.i_at( candidate ).size();
+    }
+    return result;
+}
+
 } // namespace
+
+TEST_CASE( "mapgen_items_stay_on_sealed_container_tiles", "[mapgen][item][regression]" )
+{
+    clear_all_state();
+    auto &buffer = MAPBUFFER_REGISTRY.get( mapbuffer_registry::primary_dimension_id() );
+    auto tm = mapgen_constructor( buffer );
+    const auto target = point_omt_ms( SEEX, SEEY );
+    const auto furniture_id = furn_id( GENERATE( "f_vending_c", "f_crate_c" ) );
+    tm.reset_scratch_omt( tripoint_abs_omt( 11, 13, 0 ), ter_id( "t_floor" ), furn_id( "f_null" ),
+                          trap_id( "tr_null" ) );
+    tm.furn_set( target, furniture_id );
+    REQUIRE( tm.has_flag( "SEALED", target ) );
+    REQUIRE( tm.has_flag( "CONTAINER", target ) );
+
+    SECTION( "mapgen spawn_item places the item on the sealed target tile" ) {
+        const auto item_id = itype_id( "sheet_metal" );
+
+        tm.spawn_item( target, item_id );
+
+        auto target_items = tm.i_at( target );
+        REQUIRE( target_items.size() == 1 );
+        CHECK( target_items.only_item().typeId() == item_id );
+        CHECK( mapgen_item_count_in_radius( tm, target, 2 ) == 1 );
+    }
+
+    SECTION( "mapgen add_item_or_charges merges charges on the sealed target tile" ) {
+        const auto item_id = itype_id( "nail" );
+        auto first_stack = item::spawn( item_id );
+        first_stack->charges = 10;
+        CHECK_FALSE( tm.add_item_or_charges( target, std::move( first_stack ) ) );
+        auto second_stack = item::spawn( item_id );
+        second_stack->charges = 15;
+        CHECK_FALSE( tm.add_item_or_charges( target, std::move( second_stack ) ) );
+
+        auto target_items = tm.i_at( target );
+        REQUIRE( target_items.size() == 1 );
+        const auto &stacked_item = target_items.only_item();
+        CHECK( stacked_item.typeId() == item_id );
+        CHECK( stacked_item.charges == 25 );
+        CHECK( mapgen_item_count_in_radius( tm, target, 2 ) == 1 );
+    }
+}
 
 TEST_CASE("moving_between_adjacent_pit_traps") {
     SECTION("regular pit movement skips warning, escape check, and repeated damage") {
@@ -363,7 +415,8 @@ TEST_CASE( "mapbuffer_resident_lookup_uses_absolute_coordinates" )
     CHECK( buffer.get_ter( tile_pos, resident_only ) == t_console );
     CHECK( buffer.has_computer( tile_pos, resident_only ) );
     CHECK( buffer.partial_con_at( tile_pos, resident_only ) == nullptr );
-    CHECK( buffer.partial_con_set( tile_pos, std::make_unique<partial_con>( tile_pos ),
+    CHECK( buffer.partial_con_set( tile_pos, std::make_unique<partial_con>(
+                                       tile_pos, buffer.get_dimension_id() ),
                                    resident_only ) );
     CHECK( buffer.partial_con_at( tile_pos, resident_only ) != nullptr );
     CHECK( buffer.partial_con_remove( tile_pos, resident_only ) );
@@ -432,7 +485,8 @@ TEST_CASE( "mapbuffer_resident_lookup_uses_absolute_coordinates" )
     } ) == nullptr );
     CHECK_FALSE( buffer.delete_computer( missing_tile, resident_only ) );
     CHECK( buffer.partial_con_at( missing_tile, resident_only ) == nullptr );
-    CHECK_FALSE( buffer.partial_con_set( missing_tile, std::make_unique<partial_con>( missing_tile ),
+    CHECK_FALSE( buffer.partial_con_set( missing_tile, std::make_unique<partial_con>(
+            missing_tile, buffer.get_dimension_id() ),
                                          resident_only ) );
     CHECK_FALSE( buffer.partial_con_remove( missing_tile, resident_only ) );
 }
@@ -451,13 +505,16 @@ TEST_CASE( "mapbuffer_simulated_lookup_uses_load_manager_membership" )
     } );
     auto *const sm = add_absolute_test_submap( buffer, sm_pos, ter_id( "t_rock" ) );
     REQUIRE( sm != nullptr );
+    const auto request_begin = sm_pos.xy();
+    const auto request_end = request_begin + point_rel_sm( 1, 1 );
 
     const auto lazy_handle = submap_loader.request_load( load_request_source::lazy_border,
-                             dim_id, sm_pos.xy(), 0 );
+                             dim_id, request_begin, request_end );
     CHECK( buffer.get_submap( sm_pos ) == nullptr );
     submap_loader.release_load( lazy_handle );
 
-    full_handle = submap_loader.request_load( load_request_source::script, dim_id, sm_pos.xy(), 0 );
+    full_handle = submap_loader.request_load( load_request_source::script, dim_id, request_begin,
+                  request_end );
     CHECK( buffer.get_submap( sm_pos ) == sm );
 }
 
@@ -643,6 +700,55 @@ TEST_CASE( "placed_monsters_inherit_bound_dimension" )
 static std::ostream& operator<<(std::ostream& os, const ter_id& tid) {
     os << tid.id().c_str();
     return os;
+}
+
+TEST_CASE( "tree_terrain_supports_climbing_destination_above" )
+{
+    clear_all_state();
+    auto &here = get_map();
+
+    static const ter_str_id t_tree( "t_tree" );
+    static const ter_str_id t_open_air( "t_open_air" );
+    const auto tree_pos = tripoint_bub_ms( 65, 65, 0 );
+    const auto climb_destination = tree_pos + tripoint_above;
+
+    here.ter_set( tree_pos, t_tree );
+    here.ter_set( climb_destination, t_open_air );
+
+    CHECK( here.supports_above( tree_pos ) );
+    CHECK( here.has_floor_or_support( climb_destination ) );
+}
+
+TEST_CASE( "omt_pillar_post_pass_links_generated_stairs" )
+{
+    clear_all_state();
+    auto &here = get_map();
+
+    static const ter_str_id t_floor( "t_floor" );
+    static const ter_str_id t_open_air( "t_open_air" );
+    static const ter_str_id t_stairs_down( "t_stairs_down" );
+    static const ter_str_id t_stairs_up( "t_stairs_up" );
+
+    const auto stairs_up_pos = tripoint_bub_ms( 65, 65, 0 );
+    const auto missing_down_pos = stairs_up_pos + tripoint_above;
+    here.ter_set( stairs_up_pos, t_stairs_up );
+    here.ter_set( missing_down_pos, t_open_air );
+
+    auto &buffer = here.get_mapbuffer();
+    buffer.run_omt_pillar_post_pass(
+        project_to<coords::omt>( map_local_to_abs( here, stairs_up_pos ) ).xy() );
+
+    CHECK( here.ter( missing_down_pos ) == t_stairs_down );
+
+    const auto stairs_down_pos = tripoint_bub_ms( 66, 65, 1 );
+    const auto missing_up_pos = stairs_down_pos + tripoint_below;
+    here.ter_set( stairs_down_pos, t_stairs_down );
+    here.ter_set( missing_up_pos, t_floor );
+
+    buffer.run_omt_pillar_post_pass(
+        project_to<coords::omt>( map_local_to_abs( here, stairs_down_pos ) ).xy() );
+
+    CHECK( here.ter( missing_up_pos ) == t_stairs_up );
 }
 
 TEST_CASE("bash_through_roof_can_destroy_multiple_times") {

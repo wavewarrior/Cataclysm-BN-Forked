@@ -714,7 +714,7 @@ void inventory_column::set_stack_favorite( const item* location, bool favorite )
             g->u.inv_set_stack_favorite( position, !selected_item->is_favorite ); // in inventory
         }
     } else if( location->where() == item_location_type::map ) {
-        auto items = g->m.i_at( location->position() );
+        auto items = g->m.i_at( location->bub_pos() );
 
         for( auto& item : items ) {
             if( item->stacks_with( *selected_item ) ) { to_favorite.push_back( item ); }
@@ -722,7 +722,7 @@ void inventory_column::set_stack_favorite( const item* location, bool favorite )
         for( auto& item : to_favorite ) { item->set_favorite( favorite ); }
     } else if( location->where() == item_location_type::vehicle ) {
         const std::optional<vpart_reference> vp =
-            g->m.veh_at( location->position() ).part_with_feature( "CARGO", true );
+            g->m.veh_at( location->abs_pos() ).part_with_feature( "CARGO", true );
         assert( vp );
 
         auto items = vp->vehicle().get_items( vp->part_index() );
@@ -1167,7 +1167,7 @@ void inventory_selector::add_items(
         if( custom_category == nullptr ) {
             nat_category = &loc->get_category();
         } else if( nat_category == nullptr && preset.is_shown( loc ) ) {
-            nat_category = naturalize_category( *custom_category, loc->position() );
+            nat_category = naturalize_category( *custom_category, loc->bub_pos() );
         }
 
         add_entry( target_column, std::move( locations ), nat_category );

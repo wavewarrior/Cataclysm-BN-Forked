@@ -2082,7 +2082,7 @@ void options_manager::cache_to_globals()
     parallel_map_cache        = ::get_option<bool>( "PARALLEL_MAP_CACHE" );
     parallel_scent_update     = ::get_option<bool>( "PARALLEL_SCENT_UPDATE" );
     lazy_border_enabled = ::get_option<bool>( "LAZY_BORDER" );
-    retained_omt_cache_multiplier = ::get_option<int>( "RETAINED_OMT_CACHE_MULTIPLIER" );
+    retained_omt_cache_length = ::get_option<int>( "RETAINED_OMT_CACHE_LENGTH" );
 
     merge_comestible_mode = ( [] {
         const auto opt = ::get_option<std::string>( "MERGE_COMESTIBLES" );

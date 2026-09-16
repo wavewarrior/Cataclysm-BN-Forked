@@ -212,7 +212,7 @@ bool map::has_furn( const tripoint_bub_ms& p ) const { return furn( p ) != f_nul
 
 furn_id map::furn( const tripoint_bub_ms &p ) const
 {
-    if( is_outside_pocket_dimension_bounds( pocket_info_, map_local_to_abs( *this, p ) ) ) {
+    if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) {
     return f_null;
 }
 
@@ -229,7 +229,7 @@ void map::furn_set(
     const tripoint_bub_ms& p, const furn_id& new_furniture,
     const cata::poly_serialized<active_tile_data> &new_active, bool ignore_grab_check )
 {
-    if( is_outside_pocket_dimension_bounds( pocket_info_, map_local_to_abs( *this, p ) ) ) { return; }
+    if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) { return; }
 
     point_sm_ms l;
     submap* const current_submap = get_submap_at( p, l );
@@ -355,8 +355,8 @@ std::string map::furnname( const tripoint_bub_ms& p )
 ter_id map::ter( const tripoint_bub_ms& p ) const
 {
     // Check dimension bounds first - out-of-bounds areas show boundary terrain
-    if( is_outside_pocket_dimension_bounds( pocket_info_, map_local_to_abs( *this, p ) ) ) {
-    return get_boundary_terrain();
+    if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) {
+    return get_mapbuffer().get_boundary_terrain();
     }
 
     point_sm_ms l;
@@ -477,7 +477,7 @@ bool map::is_harvestable( const tripoint_bub_ms& pos ) const
 
 bool map::ter_set( const tripoint_bub_ms& p, const ter_id& new_terrain )
 {
-    if( is_outside_pocket_dimension_bounds( pocket_info_, map_local_to_abs( *this, p ) ) ) { return false; }
+    if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) { return false; }
 
     point_sm_ms l;
     submap* const current_submap = get_submap_at( tripoint_bub_ms( p ), l );
@@ -607,7 +607,7 @@ for( const tripoint_bub_ms &p : points_in_radius( center, 1 ) ) {
 int map::move_cost( const tripoint_bub_ms& p, const vehicle* ignored_vehicle ) const
 {
     // Dimension bounds are always impassable
-    if( is_outside_pocket_dimension_bounds( pocket_info_, map_local_to_abs( *this, p ) ) ) {
+    if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) {
     return 0;
 }
 
@@ -864,7 +864,17 @@ bool map::has_floor_or_support( const tripoint_bub_ms &p ) const
     if( p.z() < -OVERMAP_DEPTH || p.z() > OVERMAP_HEIGHT ) {
     return false;
 }
-const tripoint_bub_ms below( p.xy(), p.z() - 1 );
-return !valid_move( p, below, false, true );
+
+    if( has_floor( p ) ) {
+    return true;
+}
+// Nothing below the lowest level to hang from.
+if( p.z() <= -OVERMAP_DEPTH ) {
+    return false;
+}
+// An impassable terrain/furniture/vehicle below supports the tile above it.
+// Deliberately not routed through valid_move(): open air carries tr_ledge, and
+// ledges bypass valid_move()'s "solid tile below blocks the drop" rule.
+return supports_above( tripoint_bub_ms( p.xy(), p.z() - 1 ) );
 }
 

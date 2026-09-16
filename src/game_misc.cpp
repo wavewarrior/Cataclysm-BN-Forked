@@ -1629,36 +1629,14 @@ point_rel_sm game::update_map( int &x, int &y )
     }
     _sh_lap( _sh_shift );
 
-    // Keep the reality bubble request center in sync with the shifted map.
+    // Keep the reality bubble request bounds in sync with the shifted map.
     // Distribution-grid tracker updates are fully incremental via
     // on_submap_loaded/unloaded; the old full-rebuild has been removed.
-    if( reality_bubble_handle_ != 0 ) {
-        const auto origin = m.get_abs_sub();
-        const point_abs_sm new_center(
-            origin.x() + reality_bubble_radius_, origin.y() + reality_bubble_radius_ );
-        submap_loader.update_request( reality_bubble_handle_, new_center );
-        // Dynamically manage lazy border based on cached option.
-        //
-        // The centre is the BUBBLE centre, not a lead offset in the direction of
-        // travel. Leading it looks like it should buy the preloader a crossing of
-        // slack, but compute_lazy_border_omts() defines the ring as "the OMT
-        // footprint of centre±radius, expanded by one OMT, minus that footprint" —
-        // so a leading centre swallows the very OMT the next shift needs into the
-        // excluded interior. Any change here must be measured against the `regen=`
-        // counter in the [shift][perf] line below, not reasoned about.
-        if( lazy_border_enabled ) {
-            if( lazy_border_handle_ == 0 ) {
-                lazy_border_handle_ = submap_loader.request_load(
-                                          load_request_source::lazy_border,
-                                          m.get_bound_dimension(), new_center,
-                                          reality_bubble_radius_ );
-            } else {
-                submap_loader.update_request( lazy_border_handle_, new_center );
-            }
-        } else if( lazy_border_handle_ != 0 ) {
-            submap_loader.release_load( lazy_border_handle_ );
-            lazy_border_handle_ = 0;
-        }
+    if( m.has_active_load_region() ) {
+        ZoneScopedN( "update_map_submap_loader" );
+        const auto bubble_begin = player_reality_bubble_origin().xy();
+        const auto bubble_end = bubble_begin + point_rel_sm( g_mapsize, g_mapsize );
+        update_active_load_regions( m.get_bound_dimension(), bubble_begin, bubble_end );
         // Ensure trackers exist for all active dimensions before firing events.
         for( const auto &dim_id : submap_loader.active_dimensions() ) {
             ensure_distribution_grid_tracker_for( dim_id );

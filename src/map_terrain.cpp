@@ -614,7 +614,7 @@ void map::adjust_radiation( const tripoint_bub_ms& p, const int delta )
 
 int map::get_temperature( const tripoint_bub_ms &p ) const
 {
-    if( is_outside_pocket_dimension_bounds( pocket_info_, map_local_to_abs( *this, p ) ) ) {
+    if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) {
     return 0;
 }
 
@@ -627,7 +627,7 @@ return sm->get_temperature();
 
 void map::set_temperature( const tripoint_bub_ms& p, int new_temperature )
 {
-    if( is_outside_pocket_dimension_bounds( pocket_info_, map_local_to_abs( *this, p ) ) ) { return; }
+    if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) { return; }
 
     submap* sm = get_submap_at( p );
     if( !sm ) { return; }
@@ -643,7 +643,7 @@ bool map::can_see_trap_at( const tripoint_bub_ms& p, const Character& c ) const
 
 const trap &map::tr_at( const tripoint_bub_ms &p ) const
 {
-    if( is_outside_pocket_dimension_bounds( pocket_info_, map_local_to_abs( *this, p ) ) ) {
+    if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) {
     return tr_null.obj();
     }
 
@@ -663,7 +663,7 @@ const trap &map::tr_at( const tripoint_bub_ms &p ) const
 
 partial_con *map::partial_con_at( const tripoint_bub_ms& p )
 {
-    if( is_outside_pocket_dimension_bounds( pocket_info_, map_local_to_abs( *this, p ) ) ) { return nullptr; }
+    if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) { return nullptr; }
     point_sm_ms l;
     submap* const current_submap = get_submap_at( p, l );
     if( current_submap == nullptr ) { return nullptr; }
@@ -674,7 +674,7 @@ partial_con *map::partial_con_at( const tripoint_bub_ms& p )
 
 void map::partial_con_remove( const tripoint_bub_ms& p )
 {
-    if( is_outside_pocket_dimension_bounds( pocket_info_, map_local_to_abs( *this, p ) ) ) { return; }
+    if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) { return; }
     point_sm_ms l;
     submap* const current_submap = get_submap_at( tripoint_bub_ms( p ), l );
     if( current_submap == nullptr ) { return; }
@@ -683,7 +683,7 @@ void map::partial_con_remove( const tripoint_bub_ms& p )
 
 void map::partial_con_set( const tripoint_bub_ms& p, std::unique_ptr<partial_con> con )
 {
-    if( is_outside_pocket_dimension_bounds( pocket_info_, map_local_to_abs( *this, p ) ) ) { return; }
+    if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) { return; }
     point_sm_ms l;
     submap* const current_submap = get_submap_at( tripoint_bub_ms( p ), l );
     if( current_submap == nullptr ) { return; }
@@ -794,7 +794,7 @@ void map::remove_trap( const tripoint_bub_ms& p )
  */
 const field &map::field_at( const tripoint_bub_ms &p ) const
 {
-    if( is_outside_pocket_dimension_bounds( pocket_info_, map_local_to_abs( *this, p ) ) ) {
+    if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) {
     nulfield = field();
         return nulfield;
     }
@@ -815,7 +815,7 @@ const field &map::field_at( const tripoint_bub_ms &p ) const
  */
 field &map::field_at( const tripoint_bub_ms& p )
 {
-    if( is_outside_pocket_dimension_bounds( pocket_info_, map_local_to_abs( *this, p ) ) ) {
+    if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) {
         nulfield = field();
         return nulfield;
     }
@@ -892,7 +892,7 @@ int map::get_field_intensity( const tripoint_bub_ms& p, const field_type_id& typ
 
 bool map::has_field_at( const tripoint_bub_ms& p, bool check_bounds )
 {
-    if( check_bounds && is_outside_pocket_dimension_bounds( pocket_info_, map_local_to_abs( *this, p ) ) ) { return false; }
+    if( check_bounds && get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) { return false; }
     point_sm_ms l;
     const submap* sm = get_submap_at( tripoint_bub_ms( p ), l );
     return sm != nullptr && sm->field_count > 0;

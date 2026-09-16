@@ -498,6 +498,37 @@ special_game_type game::gametype() const
     return gamemode ? gamemode->id() : special_game_type::NONE;
 }
 
+auto game::release_active_load_regions() -> void
+{
+    m.release_active_load_region();
+    lazy_border_region_.release();
+}
+
+auto game::update_active_load_regions( const dimension_id &dim_id,
+                                       const point_abs_sm &begin,
+                                       const point_abs_sm &end ) -> void
+{
+    m.update_active_load_region( begin, end );
+    auto &buffer = MAPBUFFER_REGISTRY.get( dim_id );
+    if( lazy_border_enabled ) {
+        const auto lazy_border_width = point_rel_sm( 2, 2 );
+        const auto lazy_begin = begin - lazy_border_width;
+        const auto lazy_end = end + lazy_border_width;
+        if( !lazy_border_region_ ) {
+            lazy_border_region_ = mapbuffer_load_region( {
+                .buffer = buffer,
+                .source = load_request_source::lazy_border,
+                .begin = lazy_begin,
+                .end = lazy_end,
+            } );
+        } else {
+            lazy_border_region_.update( lazy_begin, lazy_end );
+        }
+    } else {
+        lazy_border_region_.release();
+    }
+}
+
 
 std::optional<tripoint_bub_ms> game::find_local_stairs_leading_to( map &mp, const int z_after )
 {
@@ -584,8 +615,9 @@ vehicle *game::place_vehicle_nearby(
 
     // if player spawns underground, park their car on the surface.
     const tripoint_abs_omt omt_origin( origin, 0 );
-    for( const tripoint_abs_omt &goal : get_overmapbuffer( current_dimension_id_ ).find_all( omt_origin,
-            find_params ) ) {
+    for( const tripoint_abs_omt &goal : get_overmapbuffer(
+             current_dimension_id_ ).find_all( omt_origin,
+                     find_params ) ) {
         // try place vehicle there.
         map target_map( 2 );
         target_map.load( project_to<coords::sm>( goal.xy() ), false );
@@ -614,7 +646,8 @@ vehicle *game::place_vehicle_nearby(
 static auto npc_can_place_at_abs( mapbuffer &buffer, const tripoint_abs_ms &pos ) -> bool
 {
     const auto passable = buffer.passable( pos );
-    const auto player_blocks = buffer.get_dimension_id() == g->get_current_dimension_id() &&
+    const auto player_blocks = buffer.get_dimension_id() ==
+                               g->get_current_dimension_id() &&
                                g->u.abs_pos() == pos;
     return passable && *passable && !player_blocks &&
            buffer.creature_tracker().find( pos ) == nullptr &&
@@ -2560,7 +2593,7 @@ monster *game::place_critter_around( const shared_ptr_fast<monster> &mon,
 {
     std::optional<tripoint_bub_ms> where;
     const auto center_sm = project_to<coords::sm>( center );
-    if( m.inbounds( center_sm ) && m.get_submap_at_grid( center_sm ) == nullptr ) {
+    if( m.inbounds( center_sm ) && !m.active_submap_view( map_local_to_abs( m, center_sm ) ) ) {
         m.load( m.get_abs_sub(), true );
     }
     if( forced || can_place_monster( *mon, center ) ) {
@@ -2803,7 +2836,7 @@ void game::place_player_overmap( const tripoint_abs_omt &om_dest )
     for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; z++ ) {
         m.clear_vehicle_list( z );
     }
-    m.access_cache( get_levz() ).map_memory_seen_cache.reset();
+    m.set_memory_seen_cache_dirty( get_levz() );
     // offset because load_map expects the coordinates of the top left corner, but the
     // player will be centered in the middle of the map.
     // TODO: fix point types
@@ -2880,15 +2913,8 @@ void game::resize_reality_bubble_to( int new_size )
         active_npc.erase( out_of_range.begin(), out_of_range.end() );
     }
 
-    // Release submap loader handles so load_map() recreates them with the new radius.
-    if( reality_bubble_handle_ != 0 ) {
-        submap_loader.release_load( reality_bubble_handle_ );
-        reality_bubble_handle_ = 0;
-    }
-    if( lazy_border_handle_ != 0 ) {
-        submap_loader.release_load( lazy_border_handle_ );
-        lazy_border_handle_ = 0;
-    }
+    // Release submap loader requests so load_map() recreates them with the new bounds.
+    release_active_load_regions();
 
     // Update globals and rebuild the map grid.
     // The non-owning submap cache is cleared by resize(); submaps stay resident in the mapbuffer
@@ -2901,7 +2927,7 @@ void game::resize_reality_bubble_to( int new_size )
     const auto new_abs_sub = player_abs_sm.xy() +
                              point_rel_sm( -g_half_mapsize, -g_half_mapsize );
 
-    // Reload the map around the player; this fills the submap cache, recreates load handles,
+    // Reload the map around the player; this fills the submap cache, recreates load requests,
     // rebuilds distribution_grid_tracker and fluid_grid.
     load_map( tripoint_abs_sm( new_abs_sub, player_abs_sm.z() ), /*pump_events=*/false );
     debug_assert_player_map_origin( "resize_reality_bubble_to" );

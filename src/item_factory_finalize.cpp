@@ -447,10 +447,10 @@ void Item_factory::finalize_pre( itype &obj )
 
             // For comestibles composed of multiple edible materials we calculate the average.
             for( const auto &v : vitamin::all() ) {
-                if( !vitamins.contains( v.first ) ) {
+                if( !vitamins.contains( v.id ) ) {
                     for( const auto &m : mat ) {
-                        double amount = m->vitamin( v.first ) * healthy / mat.size();
-                        vitamins[v.first] += std::ceil( amount );
+                        double amount = m->vitamin( v.id ) * healthy / mat.size();
+                        vitamins[v.id] += std::ceil( amount );
                     }
                 }
             }

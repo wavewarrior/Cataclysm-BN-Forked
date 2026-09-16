@@ -558,17 +558,12 @@ void game::load_map( const tripoint_abs_sm &pos_sm, const bool pump_events )
     // If the dimension has changed, release the old reality-bubble request and
     // flush prev_desired_ so update() does not evict freshly-generated submaps
     // for the new dimension (use-after-free via stale m.grid pointers).
-    if( reality_bubble_handle_ != 0 && new_dim_id != old_dim_id ) {
+    if( m.has_active_load_region() && new_dim_id != old_dim_id ) {
         // Drain any in-flight submap load-manager tasks for the old dimension before
-        // releasing handles and switching — workers must not race with the
+        // releasing regions and switching — workers must not race with the
         // new dimension's mapbuffer setup.
         submap_loader.drain_lazy_loads();
-        submap_loader.release_load( reality_bubble_handle_ );
-        reality_bubble_handle_ = 0;
-        if( lazy_border_handle_ != 0 ) {
-            submap_loader.release_load( lazy_border_handle_ );
-            lazy_border_handle_ = 0;
-        }
+        release_active_load_regions();
         fire_loader.clear( submap_loader );
         submap_loader.flush_prev_desired();
     }
@@ -611,35 +606,12 @@ void game::load_map( const tripoint_abs_sm &pos_sm, const bool pump_events )
     submap_loader.add_listener( this );
     submap_loader.add_listener( &m );
 
-    // The load-manager center is the middle of the loaded region, not the
-    // top-left corner.  pos_sm is the top-left corner (abs_sub), so offset
-    // by reality_bubble_radius_ in each horizontal direction.
-    const point_abs_sm bubble_center = pos_sm.xy() + point_rel_sm( reality_bubble_radius_,
-                                         reality_bubble_radius_ );
+    // Reality bubble region: pos_sm is the top-left corner (abs_sub); the region
+    // extends g_mapsize submaps in each horizontal direction from there.
 
-    // Create or update the reality bubble request.
-    if( reality_bubble_handle_ == 0 ) {
-        reality_bubble_handle_ = submap_loader.request_load(
-                                     load_request_source::reality_bubble,
-                                     new_dim_id, bubble_center, reality_bubble_radius_ );
-    } else {
-        submap_loader.update_request( reality_bubble_handle_, bubble_center );
-    }
-
-    // Lazy border: one OMT-space layer kept in memory but not simulated.
-    if( lazy_border_enabled ) {
-        if( lazy_border_handle_ == 0 ) {
-            lazy_border_handle_ = submap_loader.request_load(
-                                      load_request_source::lazy_border,
-                                      new_dim_id, bubble_center,
-                                      reality_bubble_radius_ );
-        } else {
-            submap_loader.update_request( lazy_border_handle_, bubble_center );
-        }
-    } else if( lazy_border_handle_ != 0 ) {
-        submap_loader.release_load( lazy_border_handle_ );
-        lazy_border_handle_ = 0;
-    }
+    const auto bubble_begin = pos_sm.xy();
+    const auto bubble_end = bubble_begin + point_rel_sm( g_mapsize, g_mapsize );
+    update_active_load_regions( new_dim_id, bubble_begin, bubble_end );
     // map::loadn() now uses MAPBUFFER_REGISTRY.get(bound_dimension_), so
     // the load manager can safely fire on_submap_loaded/unloaded events.
     // Ensure a distribution_grid_tracker exists for every active dimension before
@@ -1011,18 +983,26 @@ void game::load_npcs()
     // Each request gets a temporary tinymap providing the NPC context for that region.
     // tinymap disables the circle guard so all square-footprint submaps are loaded.
     for( const auto &req : submap_loader.non_bubble_requests() ) {
-        const int mapsize = 2 * req.radius + 1;
+        const auto request_size = point_rel_sm( req.end.x() - req.begin.x(),
+                                                req.end.y() - req.begin.y() );
+        if( request_size.x() <= 0 || request_size.y() <= 0 ) {
+            continue;
+        }
+        const auto request_center = req.begin + point_rel_sm( request_size.x() / 2,
+                                    request_size.y() / 2 );
+        const auto search_distance = std::max( request_size.x(), request_size.y() ) / 2 + 1;
+        // tinymap is square; cover the whole rectangular request footprint.
+        const int mapsize = std::max( request_size.x(), request_size.y() );
         tinymap req_map( mapsize );
         req_map.bind_dimension( req.dim_id );
-        const point_abs_sm top_left( req.center.x() - req.radius,
-                                     req.center.y() - req.radius );
+        const point_abs_sm top_left = req.begin;
         req_map.load( top_left, false );
         scoped_map_context ctx( req_map );
 
         for( auto z : std::views::iota( -OVERMAP_DEPTH, OVERMAP_HEIGHT + 1 ) ) {
-            const tripoint_abs_sm center_z( req.center.raw().x, req.center.raw().y, z );
-            for( const auto &temp : get_overmapbuffer( current_dimension_id_ ).get_npcs_near( center_z,
-                    req.radius ) ) {
+            const tripoint_abs_sm center_z( request_center.x(), request_center.y(), z );
+            for( const auto &temp : get_overmapbuffer( current_dimension_id_ ).get_npcs_near(
+                     center_z, search_distance ) ) {
                 temp->set_dimension( current_dimension_id_ );
                 const auto id = temp->getID();
                 const auto already_active = std::ranges::any_of( active_npc,
@@ -1608,16 +1588,9 @@ void game::activate_dimension_state( const dimension_id &new_dim_id,
     // drain while the global still names the old dimension.
     submap_loader.drain_lazy_loads();
 
-    // Step 2: release load handles — must happen before bind_dimension() (see caller
+    // Step 2: release load regions — must happen before bind_dimension() (see caller
     // comment at the bind_dimension() call site for the ordering rationale).
-    if( reality_bubble_handle_ != 0 ) {
-        submap_loader.release_load( reality_bubble_handle_ );
-        reality_bubble_handle_ = 0;
-    }
-    if( lazy_border_handle_ != 0 ) {
-        submap_loader.release_load( lazy_border_handle_ );
-        lazy_border_handle_ = 0;
-    }
+    release_active_load_regions();
 
     // Step 3: flush the stale desired set.  Asserts fully drained (lazy + presave).
     submap_loader.flush_prev_desired();
@@ -1789,10 +1762,10 @@ bool game::travel_to_dimension( const dimension_id &dim_id,
 
     // Clear stale bounds then install the new ones before load_map() so that
     // loadn() knows which submaps are out-of-bounds for bounded dimensions.
-    here.clear_pocket_info();
+    here.get_mapbuffer().clear_pocket_info();
     get_overmapbuffer( current_dimension_id_ ).clear_pocket_info();
     if( pd_info ) {
-        here.set_pocket_info( *pd_info );
+        here.get_mapbuffer().set_pocket_info( *pd_info );
         get_overmapbuffer( current_dimension_id_ ).set_pocket_info( *pd_info );
     }
 
@@ -1821,7 +1794,7 @@ bool game::travel_to_dimension( const dimension_id &dim_id,
             auto const zmin = -OVERMAP_DEPTH;
             auto const zmax = OVERMAP_HEIGHT;
             for( auto z = zmin; z <= zmax; z++ ) {
-                here.access_cache( z ).map_memory_seen_cache.reset();
+                here.set_memory_seen_cache_dirty( z );
                 here.invalidate_map_cache( z );
             }
         }

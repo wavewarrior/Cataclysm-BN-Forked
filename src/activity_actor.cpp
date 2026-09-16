@@ -430,7 +430,7 @@ bool aim_activity_actor::load_RAS_weapon()
     const auto ammo_location_is_valid = [&]() -> bool {
         if( !you.ammo_location ) { return false; }
     if( !gun->can_reload_with( you.ammo_location->typeId() ) ) { return false; }
-        if( square_dist( you.bub_pos(), you.ammo_location->position() ) > 1 ) { return false; }
+        if( square_dist( you.abs_pos(), you.ammo_location->abs_pos() ) > 1 ) { return false; }
         return true;
     };
     item_reload_option opt =
@@ -1091,7 +1091,7 @@ std::unique_ptr<activity_actor> hacking_activity_actor::deserialize( JsonIn& jsi
 
 void move_items_activity_actor::do_turn( player_activity& act, Character& who )
 {
-    const auto dest = relative_destination + who.bub_pos();
+    const auto dest = relative_destination + who.abs_pos();
 
     while( who.moves > 0 && !target_items.empty() ) {
         safe_reference<item> target = std::move( target_items.back() );
@@ -1118,7 +1118,7 @@ void move_items_activity_actor::do_turn( player_activity& act, Character& who )
             continue;
         }
 
-        const tripoint_bub_ms src = target->position();
+        const auto src = target->abs_pos();
         detached_ptr<item> newit = quantity == 0 ? target->detach() : target->split( quantity );
 
         const int distance = src.z() == dest.z() ? std::max( rl_dist( src, dest ), 1 ) : 1;
@@ -1127,9 +1127,9 @@ void move_items_activity_actor::do_turn( player_activity& act, Character& who )
         std::vector<detached_ptr<item>> vec;
         vec.push_back( std::move( newit ) );
         if( to_vehicle ) {
-            put_into_vehicle_or_drop( who, item_drop_reason::deliberate, vec, dest );
+            put_into_vehicle_or_drop( who, item_drop_reason::deliberate, vec, abs_to_bub( dest ) );
         } else {
-            drop_on_map( who, item_drop_reason::deliberate, vec, dest );
+            drop_on_map( who, item_drop_reason::deliberate, vec, abs_to_bub( dest ) );
         }
     }
 
@@ -1757,7 +1757,7 @@ void repair_item_activity_actor::finish( player_activity& act, Character& who )
         const repair_item_actor::attempt_hint attempt = actor->repair( p, *used_tool, *fix_location );
         if( attempt != repair_item_actor::AS_CANT ) {
             if( ploc && ploc->where() == item_location_type::map ) {
-                used_tool->ammo_consume( used_tool->ammo_required(), ploc->position() );
+                used_tool->ammo_consume( used_tool->ammo_required(), ploc->bub_pos() );
             } else {
                 p.consume_charges( *used_tool, used_tool->ammo_required() );
             }

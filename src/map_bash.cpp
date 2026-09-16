@@ -1391,9 +1391,10 @@ bash_results map::bash( const tripoint_bub_ms& p, const bash_params& bsh,
     bash_results result;
 
     // Dimension bounds cannot be bashed - show message from boundary terrain
-    if( is_outside_pocket_dimension_bounds( pocket_info_, map_local_to_abs( *this, p ) ) ) {
-        if( !bsh.silent && pocket_info_ ) {
-            const ter_t& boundary_ter = pocket_info_->bounds.boundary_terrain.obj();
+    if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) {
+        const auto &pocket_info = get_mapbuffer().get_pocket_info();
+        if( !bsh.silent && pocket_info ) {
+            const ter_t& boundary_ter = pocket_info->bounds.boundary_terrain.obj();
             if( !boundary_ter.bash.sound_fail.empty() ) {
                 add_msg( m_info, boundary_ter.bash.sound_fail.translated() );
             }
@@ -1515,7 +1516,7 @@ bash_results &bash_results::operator|=( const bash_results& other )
 void map::destroy( const tripoint_bub_ms& p, const bool silent )
 {
     // Dimension bounds cannot be destroyed
-    if( is_outside_pocket_dimension_bounds( pocket_info_, map_local_to_abs( *this, p ) ) ) { return; }
+    if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) { return; }
 
     // Break if it takes more than 25 destructions to remove to prevent infinite loops
     // Example: A bashes to B, B bashes to A leads to A->B->A->...
