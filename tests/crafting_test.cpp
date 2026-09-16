@@ -842,77 +842,74 @@ TEST_CASE("debug hammerspace", "[crafting]") {
     }
 }
 
-TEST_CASE( "craft catch-up uses activity progress scale", "[crafting][speed]" )
-{
+TEST_CASE("craft catch-up uses activity progress scale", "[crafting][speed]") {
     clear_all_state();
-    const auto global_scale = override_option( "TIME_ACTION_SCALE", "50" );
-    const auto activity_scale = override_option( "ACTIVITY_PROGRESS_SCALE", "50" );
-    static const auto test_recipe = recipe_id( "nodachi" );
+    const auto global_scale = override_option("TIME_ACTION_SCALE", "50");
+    const auto activity_scale = override_option("ACTIVITY_PROGRESS_SCALE", "50");
+    static const auto test_recipe = recipe_id("nodachi");
 
-    auto &dummy = get_avatar();
+    auto& dummy = get_avatar();
     clear_avatar();
-    set_time( midday );
-    dummy.set_mutation( trait_DEBUG_HS );
+    set_time(midday);
+    dummy.set_mutation(trait_DEBUG_HS);
     dummy.set_body();
-    dummy.set_mutation( trait_DEBUG_STORAGE );
-    dummy.i_add( item::spawn( itype_id( "atomic_lamp" ) ) );
-    REQUIRE( character_funcs::can_see_fine_details( dummy ) );
+    dummy.set_mutation(trait_DEBUG_STORAGE);
+    dummy.i_add(item::spawn(itype_id("atomic_lamp")));
+    REQUIRE(character_funcs::can_see_fine_details(dummy));
 
-    const auto &recipe = *test_recipe;
-    auto command = craft_command( &recipe, 1, false, &dummy );
-    auto *craft_item = dummy.start_craft( command, dummy.bub_pos() );
+    const auto& recipe = *test_recipe;
+    auto command = craft_command(&recipe, 1, false, &dummy);
+    auto* craft_item = dummy.start_craft(command, dummy.bub_pos());
 
-    REQUIRE( craft_item );
-    REQUIRE( dummy.activity );
-    REQUIRE( dummy.activity->id() == activity_id( "ACT_CRAFT" ) );
-    REQUIRE( craft_item->get_counter() == 0 );
+    REQUIRE(craft_item);
+    REQUIRE(dummy.activity);
+    REQUIRE(dummy.activity->id() == activity_id("ACT_CRAFT"));
+    REQUIRE(craft_item->get_counter() == 0);
 
     const auto elapsed_turns = 10;
-    calendar::turn += time_duration::from_turns( elapsed_turns );
-    dummy.activity->init_all_moves( dummy );
+    calendar::turn += time_duration::from_turns(elapsed_turns);
+    dummy.activity->init_all_moves(dummy);
 
-    const auto base_total_moves = std::max( 1, recipe.batch_time( 1, 1.0f, 0 ) );
+    const auto base_total_moves = std::max(1, recipe.batch_time(1, 1.0f, 0));
     const auto expected_progress = elapsed_turns * 25.0 / base_total_moves * 10'000'000.0;
-    const auto expected_counter = std::min(
-                                      static_cast<int>( expected_progress ), 10'000'000 );
-    CHECK( craft_item->get_counter() == expected_counter );
+    const auto expected_counter = std::min(static_cast<int>(expected_progress), 10'000'000);
+    CHECK(craft_item->get_counter() == expected_counter);
 }
 
-TEST_CASE( "craft progress uses activity scale", "[crafting][speed]" )
-{
+TEST_CASE("craft progress uses activity scale", "[crafting][speed]") {
     clear_all_state();
-    const auto global_scale = override_option( "TIME_ACTION_SCALE", "50" );
-    const auto player_scale = override_option( "PLAYER_ACTION_SCALE", "50" );
-    const auto activity_scale = override_option( "ACTIVITY_PROGRESS_SCALE", "100" );
-    static const auto test_recipe = recipe_id( "nodachi" );
+    const auto global_scale = override_option("TIME_ACTION_SCALE", "50");
+    const auto player_scale = override_option("PLAYER_ACTION_SCALE", "50");
+    const auto activity_scale = override_option("ACTIVITY_PROGRESS_SCALE", "100");
+    static const auto test_recipe = recipe_id("nodachi");
 
-    auto &dummy = get_avatar();
+    auto& dummy = get_avatar();
     clear_avatar();
-    set_time( midday );
-    dummy.set_mutation( trait_DEBUG_HS );
+    set_time(midday);
+    dummy.set_mutation(trait_DEBUG_HS);
     dummy.set_body();
-    dummy.set_mutation( trait_DEBUG_STORAGE );
-    dummy.i_add( item::spawn( itype_id( "atomic_lamp" ) ) );
-    REQUIRE( character_funcs::can_see_fine_details( dummy ) );
+    dummy.set_mutation(trait_DEBUG_STORAGE);
+    dummy.i_add(item::spawn(itype_id("atomic_lamp")));
+    REQUIRE(character_funcs::can_see_fine_details(dummy));
 
-    const auto &recipe = *test_recipe;
-    auto command = craft_command( &recipe, 1, false, &dummy );
-    auto *craft_item = dummy.start_craft( command, dummy.bub_pos() );
+    const auto& recipe = *test_recipe;
+    auto command = craft_command(&recipe, 1, false, &dummy);
+    auto* craft_item = dummy.start_craft(command, dummy.bub_pos());
 
-    REQUIRE( craft_item );
-    REQUIRE( dummy.activity );
-    REQUIRE( dummy.activity->id() == activity_id( "ACT_CRAFT" ) );
-    REQUIRE( craft_item->get_counter() == 0 );
+    REQUIRE(craft_item);
+    REQUIRE(dummy.activity);
+    REQUIRE(dummy.activity->id() == activity_id("ACT_CRAFT"));
+    REQUIRE(craft_item->get_counter() == 0);
 
-    dummy.set_moves( 25 );
-    dummy.activity->do_turn( dummy );
+    dummy.set_moves(25);
+    dummy.activity->do_turn(dummy);
 
-    const auto base_total_moves = std::max( 1, recipe.batch_time( 1, 1.0f, 0 ) );
+    const auto base_total_moves = std::max(1, recipe.batch_time(1, 1.0f, 0));
     const auto expected_progress = 50.0 / base_total_moves * 10'000'000.0;
-    const auto expected_counter = std::min(
-                                      static_cast<int>( std::round( expected_progress ) ), 10'000'000 );
-    CHECK( craft_item->get_counter() == expected_counter );
-    CHECK( dummy.get_moves() == 0 );
+    const auto expected_counter =
+        std::min(static_cast<int>(std::round(expected_progress)), 10'000'000);
+    CHECK(craft_item->get_counter() == expected_counter);
+    CHECK(dummy.get_moves() == 0);
 }
 
 TEST_CASE("oven electric grid", "[crafting][overmap][grids][slow]") {
@@ -1049,8 +1046,7 @@ TEST_CASE("tool selection ui", "[crafting][ui]") {
     }
 }
 
-namespace
-{
+namespace {
 
 struct vehicle_craft_fixture_options {
     vpart_id work_part;
@@ -1059,22 +1055,20 @@ struct vehicle_craft_fixture_options {
 };
 
 struct vehicle_craft_fixture {
-    avatar *you = nullptr;
-    map *here = nullptr;
-    vehicle *veh = nullptr;
+    avatar* you = nullptr;
+    map* here = nullptr;
+    vehicle* veh = nullptr;
     int work_part = -1;
     int freezer_part = -1;
     tripoint_bub_ms vehicle_pos = tripoint_bub_ms::zero();
     tripoint_bub_ms stand_pos = tripoint_bub_ms::zero();
 };
 
-auto old_world_craft_turn() -> time_point
-{
+auto old_world_craft_turn() -> time_point {
     return calendar::start_of_cataclysm + 19_days + 12_hours;
 }
 
-auto setup_vehicle_rot_test_at( const time_point turn ) -> void
-{
+auto setup_vehicle_rot_test_at(const time_point turn) -> void {
     clear_all_state();
     calendar::turn = turn;
     get_weather().temperature = 18_c;
@@ -1082,44 +1076,42 @@ auto setup_vehicle_rot_test_at( const time_point turn ) -> void
     clear_avatar();
 }
 
-auto install_part_on_frame( vehicle &veh, const tripoint_mnt_veh &mount,
-                            const vpart_id &part ) -> int
-{
-    REQUIRE( veh.install_part( mount, vpart_id( "frame_vertical" ), true ) >= 0 );
-    const auto part_index = veh.install_part( mount, part, true );
-    REQUIRE( part_index >= 0 );
+auto install_part_on_frame(vehicle& veh, const tripoint_mnt_veh& mount, const vpart_id& part)
+    -> int {
+    REQUIRE(veh.install_part(mount, vpart_id("frame_vertical"), true) >= 0);
+    const auto part_index = veh.install_part(mount, part, true);
+    REQUIRE(part_index >= 0);
     return part_index;
 }
 
-auto make_vehicle_craft_fixture( const vehicle_craft_fixture_options &opts ) ->
-vehicle_craft_fixture
-{
-    auto &you = get_avatar();
-    auto &here = get_map();
-    const auto vehicle_pos = tripoint_bub_ms( 60, 60, 0 );
-    auto *veh = here.add_vehicle( vproto_id( "none" ), vehicle_pos, 0_degrees, 0, 0 );
-    REQUIRE( veh != nullptr );
+auto make_vehicle_craft_fixture(const vehicle_craft_fixture_options& opts)
+    -> vehicle_craft_fixture {
+    auto& you = get_avatar();
+    auto& here = get_map();
+    const auto vehicle_pos = tripoint_bub_ms(60, 60, 0);
+    auto* veh = here.add_vehicle(vproto_id("none"), vehicle_pos, 0_degrees, 0, 0);
+    REQUIRE(veh != nullptr);
 
-    const auto work_part = install_part_on_frame( *veh, tripoint_mnt_veh::zero(), opts.work_part );
+    const auto work_part = install_part_on_frame(*veh, tripoint_mnt_veh::zero(), opts.work_part);
     auto freezer_part = -1;
-    if( opts.install_battery ) {
-        static_cast<void>( install_part_on_frame( *veh, tripoint_mnt_veh( 1, 0, 0 ),
-                           vpart_id( "storage_battery" ) ) );
-        veh->charge_battery( 5000 );
+    if (opts.install_battery) {
+        static_cast<void>(
+            install_part_on_frame(*veh, tripoint_mnt_veh(1, 0, 0), vpart_id("storage_battery")));
+        veh->charge_battery(5000);
     }
-    if( opts.install_freezer ) {
-        freezer_part = install_part_on_frame( *veh, tripoint_mnt_veh( -1, 0, 0 ),
-                                              vpart_id( "minifreezer" ) );
-        veh->part( freezer_part ).enabled = true;
+    if (opts.install_freezer) {
+        freezer_part =
+            install_part_on_frame(*veh, tripoint_mnt_veh(-1, 0, 0), vpart_id("minifreezer"));
+        veh->part(freezer_part).enabled = true;
     }
 
-    here.add_vehicle_to_cache( veh );
-    here.build_map_cache( vehicle_pos.z(), true );
-    REQUIRE( here.veh_at( vehicle_pos ) );
+    here.add_vehicle_to_cache(veh);
+    here.build_map_cache(vehicle_pos.z(), true);
+    REQUIRE(here.veh_at(vehicle_pos));
 
-    const auto stand_pos = vehicle_pos + tripoint( 0, 1, 0 );
-    you.setpos( stand_pos );
-    REQUIRE_FALSE( here.veh_at( stand_pos ) );
+    const auto stand_pos = vehicle_pos + tripoint(0, 1, 0);
+    you.setpos(stand_pos);
+    REQUIRE_FALSE(here.veh_at(stand_pos));
 
     return vehicle_craft_fixture{
         .you = &you,
@@ -1132,72 +1124,65 @@ vehicle_craft_fixture
     };
 }
 
-auto add_fresh_meat_to_part( vehicle_craft_fixture &fixture, const int part ) -> void
-{
-    auto meat = item::spawn( "meat" );
-    REQUIRE( meat->goes_bad() );
-    INFO( "spawned meat bday_turn=" << to_turn<int>( meat->birthday() )
-          << " now=" << to_turn<int>( calendar::turn ) );
-    REQUIRE_FALSE( fixture.veh->add_item( part, std::move( meat ) ) );
+auto add_fresh_meat_to_part(vehicle_craft_fixture& fixture, const int part) -> void {
+    auto meat = item::spawn("meat");
+    REQUIRE(meat->goes_bad());
+    INFO("spawned meat bday_turn="
+         << to_turn<int>(meat->birthday()) << " now=" << to_turn<int>(calendar::turn));
+    REQUIRE_FALSE(fixture.veh->add_item(part, std::move(meat)));
 }
 
-auto add_fresh_meat_to_work_part( vehicle_craft_fixture &fixture ) -> void
-{
-    add_fresh_meat_to_part( fixture, fixture.work_part );
+auto add_fresh_meat_to_work_part(vehicle_craft_fixture& fixture) -> void {
+    add_fresh_meat_to_part(fixture, fixture.work_part);
 }
 
-auto add_inventory_cooking_tools( avatar &you ) -> void
-{
-    you.i_add( item::spawn( "hotplate", calendar::turn, 20 ) );
-    you.i_add( item::spawn( "pot", calendar::turn ) );
+auto add_inventory_cooking_tools(avatar& you) -> void {
+    you.i_add(item::spawn("hotplate", calendar::turn, 20));
+    you.i_add(item::spawn("pot", calendar::turn));
 }
 
-auto keep_meat_frozen_then_move_to_work_part( vehicle_craft_fixture &fixture ) -> void
-{
-    REQUIRE( fixture.freezer_part >= 0 );
+auto keep_meat_frozen_then_move_to_work_part(vehicle_craft_fixture& fixture) -> void {
+    REQUIRE(fixture.freezer_part >= 0);
     calendar::turn += 19_days;
 
-    auto frozen_items = fixture.veh->get_items( fixture.freezer_part );
-    REQUIRE( frozen_items.size() == 1 );
-    auto &frozen = frozen_items.only_item();
-    INFO( "POST-FREEZE meat bday_turn=" << to_turn<int>( frozen.birthday() )
-          << " relative_rot=" << frozen.get_relative_rot()
-          << " rot_turns=" << to_turns<int>( frozen.get_rot() )
-          << " now=" << to_turn<int>( calendar::turn ) );
-    REQUIRE( frozen.get_rot() == 0_turns );
-    REQUIRE( frozen.attempt_detach( [&fixture]( detached_ptr<item> &&it ) {
-        return fixture.veh->add_item( fixture.work_part, std::move( it ) );
-    } ) );
+    auto frozen_items = fixture.veh->get_items(fixture.freezer_part);
+    REQUIRE(frozen_items.size() == 1);
+    auto& frozen = frozen_items.only_item();
+    INFO("POST-FREEZE meat bday_turn="
+         << to_turn<int>(frozen.birthday()) << " relative_rot=" << frozen.get_relative_rot()
+         << " rot_turns=" << to_turns<int>(frozen.get_rot())
+         << " now=" << to_turn<int>(calendar::turn));
+    REQUIRE(frozen.get_rot() == 0_turns);
+    REQUIRE(frozen.attempt_detach([&fixture](detached_ptr<item>&& it) {
+        return fixture.veh->add_item(fixture.work_part, std::move(it));
+    }));
 
-    REQUIRE( fixture.veh->get_items( fixture.freezer_part ).empty() );
-    REQUIRE( fixture.veh->get_items( fixture.work_part ).size() == 1 );
+    REQUIRE(fixture.veh->get_items(fixture.freezer_part).empty());
+    REQUIRE(fixture.veh->get_items(fixture.work_part).size() == 1);
 }
 
-auto find_cooked_meat_result( const vehicle_craft_fixture &fixture ) -> item *
-{
-    auto *result = static_cast<item *>( nullptr );
-    fixture.you->visit_items( [&result]( item * it ) {
-        if( it->typeId() == itype_id( "meat_cooked" ) ) {
+auto find_cooked_meat_result(const vehicle_craft_fixture& fixture) -> item* {
+    auto* result = static_cast<item*>(nullptr);
+    fixture.you->visit_items([&result](item* it) {
+        if (it->typeId() == itype_id("meat_cooked")) {
             result = it;
             return VisitResponse::ABORT;
         }
         return VisitResponse::NEXT;
-    } );
+    });
 
-    for( const auto &p : { fixture.vehicle_pos, fixture.stand_pos } ) {
-        if( result != nullptr ) {
-            break;
-        }
-        for( auto *it : fixture.here->i_at( p ) ) {
-            if( it->typeId() == itype_id( "meat_cooked" ) ) {
+    for (const auto& p : {fixture.vehicle_pos, fixture.stand_pos}) {
+        if (result != nullptr) { break; }
+        for (auto* it : fixture.here->i_at(p)) {
+            if (it->typeId() == itype_id("meat_cooked")) {
                 result = it;
                 break;
             }
         }
     }
-    if( result == nullptr ) {
-        for( auto *it : fixture.veh->get_items( fixture.work_part ) ) {
-            if( it->typeId() == itype_id( "meat_cooked" ) ) {
+    if (result == nullptr) {
+        for (auto* it : fixture.veh->get_items(fixture.work_part)) {
+            if (it->typeId() == itype_id("meat_cooked")) {
                 result = it;
                 break;
             }
@@ -1206,90 +1191,85 @@ auto find_cooked_meat_result( const vehicle_craft_fixture &fixture ) -> item *
     return result;
 }
 
-auto craft_cooked_meat_at_vehicle( const vehicle_craft_fixture &fixture ) -> item *
-{
-    auto &you = *fixture.you;
-    const auto rid = recipe_id( "meat_cooked" );
-    const auto &rec = rid.obj();
-    you.set_skill_level( rec.skill_used, std::max( rec.difficulty, 2 ) );
-    you.learn_recipe( &rec );
-    set_time( calendar::turn );
+auto craft_cooked_meat_at_vehicle(const vehicle_craft_fixture& fixture) -> item* {
+    auto& you = *fixture.you;
+    const auto rid = recipe_id("meat_cooked");
+    const auto& rec = rid.obj();
+    you.set_skill_level(rec.skill_used, std::max(rec.difficulty, 2));
+    you.learn_recipe(&rec);
+    set_time(calendar::turn);
 
     you.invalidate_crafting_inventory();
-    REQUIRE( you.crafting_inventory().has_components( itype_id( "meat" ), 1 ) );
+    REQUIRE(you.crafting_inventory().has_components(itype_id("meat"), 1));
 
-    you.make_craft( rid, 1, fixture.vehicle_pos );
-    REQUIRE( you.activity );
+    you.make_craft(rid, 1, fixture.vehicle_pos);
+    REQUIRE(you.activity);
     auto guard = 0;
-    while( you.activity && you.activity->id() == activity_id( "ACT_CRAFT" ) ) {
+    while (you.activity && you.activity->id() == activity_id("ACT_CRAFT")) {
         you.moves = 100;
-        you.activity->do_turn( you );
+        you.activity->do_turn(you);
         guard += 1;
-        REQUIRE( guard <= 100000 );
+        REQUIRE(guard <= 100000);
     }
 
-    auto *result = find_cooked_meat_result( fixture );
-    REQUIRE( result != nullptr );
+    auto* result = find_cooked_meat_result(fixture);
+    REQUIRE(result != nullptr);
     return result;
 }
 
-auto check_cooked_meat_is_fresh( item &result ) -> void
-{
-    INFO( "result relative_rot = " << result.get_relative_rot() );
-    INFO( "result rot turns = " << to_turns<int>( result.get_rot() ) );
-    CHECK_FALSE( result.rotten() );
-    CHECK( result.get_relative_rot() < 0.5 );
+auto check_cooked_meat_is_fresh(item& result) -> void {
+    INFO("result relative_rot = " << result.get_relative_rot());
+    INFO("result rot turns = " << to_turns<int>(result.get_rot()));
+    CHECK_FALSE(result.rotten());
+    CHECK(result.get_relative_rot() < 0.5);
 }
 
 } // namespace
 
 // REPRO for issue #9254: cooking in a vehicle kitchen with a fresh vehicle-stored
 // component should NOT produce a rotten result.
-TEST_CASE( "vehicle kitchen craft preserves fresh component rot", "[crafting][rot]" )
-{
-    setup_vehicle_rot_test_at( old_world_craft_turn() );
-    auto fixture = make_vehicle_craft_fixture( {
-        .work_part = vpart_id( "kitchen_unit" ),
+TEST_CASE("vehicle kitchen craft preserves fresh component rot", "[crafting][rot]") {
+    setup_vehicle_rot_test_at(old_world_craft_turn());
+    auto fixture = make_vehicle_craft_fixture({
+        .work_part = vpart_id("kitchen_unit"),
         .install_battery = true,
-    } );
-    add_fresh_meat_to_work_part( fixture );
+    });
+    add_fresh_meat_to_work_part(fixture);
 
-    auto &result = *craft_cooked_meat_at_vehicle( fixture );
+    auto& result = *craft_cooked_meat_at_vehicle(fixture);
 
-    check_cooked_meat_is_fresh( result );
+    check_cooked_meat_is_fresh(result);
 }
 
 // AUTOCLAVE variant of the BN9254 test above: the autoclave part is
 // CARGO+AUTOCLAVE on one tile, so any phantom from map::use_charges precedes the
 // real component. Cooking tools come from inventory so the vehicle has no battery.
-TEST_CASE( "vehicle autoclave craft preserves fresh component rot", "[crafting][rot]" )
-{
-    setup_vehicle_rot_test_at( old_world_craft_turn() );
-    auto fixture = make_vehicle_craft_fixture( {
-        .work_part = vpart_id( "autoclave" ),
-    } );
-    add_fresh_meat_to_work_part( fixture );
-    add_inventory_cooking_tools( *fixture.you );
+TEST_CASE("vehicle autoclave craft preserves fresh component rot", "[crafting][rot]") {
+    setup_vehicle_rot_test_at(old_world_craft_turn());
+    auto fixture = make_vehicle_craft_fixture({
+        .work_part = vpart_id("autoclave"),
+    });
+    add_fresh_meat_to_work_part(fixture);
+    add_inventory_cooking_tools(*fixture.you);
 
-    auto &result = *craft_cooked_meat_at_vehicle( fixture );
+    auto& result = *craft_cooked_meat_at_vehicle(fixture);
 
-    check_cooked_meat_is_fresh( result );
+    check_cooked_meat_is_fresh(result);
 }
 
 // REPRO for issue #9440: cooking with a frozen ingredient kept fresh for 19 days
 // in a powered vehicle freezer near a kitchen should NOT produce a rotten result.
-TEST_CASE( "vehicle kitchen craft preserves frozen component rot", "[crafting][rot]" )
-{
-    setup_vehicle_rot_test_at( calendar::start_of_cataclysm + 12_hours );
-    auto fixture = make_vehicle_craft_fixture( {
-        .work_part = vpart_id( "kitchen_unit" ),
+TEST_CASE("vehicle kitchen craft preserves frozen component rot", "[crafting][rot]") {
+    setup_vehicle_rot_test_at(calendar::start_of_cataclysm + 12_hours);
+    auto fixture = make_vehicle_craft_fixture({
+        .work_part = vpart_id("kitchen_unit"),
         .install_battery = true,
         .install_freezer = true,
-    } );
-    add_fresh_meat_to_part( fixture, fixture.freezer_part );
-    keep_meat_frozen_then_move_to_work_part( fixture );
+    });
+    add_fresh_meat_to_part(fixture, fixture.freezer_part);
+    keep_meat_frozen_then_move_to_work_part(fixture);
 
-    auto &result = *craft_cooked_meat_at_vehicle( fixture );
+    auto& result = *craft_cooked_meat_at_vehicle(fixture);
 
-    check_cooked_meat_is_fresh( result );
+    check_cooked_meat_is_fresh(result);
 }

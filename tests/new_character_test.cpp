@@ -81,14 +81,13 @@ static avatar get_sanitized_player() {
     return ret;
 }
 
-static auto load_scenario_whitelist( const std::string &scenario_id ) -> void
-{
-    const auto json = std::string( R"({ "subtype": "whitelist", "scenarios": [ ")" ) +
-                      scenario_id + R"(" ] })";
-    auto stream = std::istringstream( json );
-    auto jsin = JsonIn( stream );
+static auto load_scenario_whitelist(const std::string& scenario_id) -> void {
+    const auto json =
+        std::string(R"({ "subtype": "whitelist", "scenarios": [ ")") + scenario_id + R"(" ] })";
+    auto stream = std::istringstream(json);
+    auto jsin = JsonIn(stream);
     auto jo = jsin.get_object();
-    scen_blacklist::load_scen_blacklist( jo, "test" );
+    scen_blacklist::load_scen_blacklist(jo, "test");
     scenario::check_definitions();
 }
 
@@ -154,33 +153,32 @@ TEST_CASE("default_character_respects_scenario_whitelist", "[new_character][scen
     CHECK(g->scen->ident() == whitelisted_scenario);
 }
 
-TEST_CASE( "scenario_reset_preserves_or_defaults_hair_style", "[new_character][scenario][traits]" )
-{
+TEST_CASE("scenario_reset_preserves_or_defaults_hair_style", "[new_character][scenario][traits]") {
     clear_all_state();
 
-    const auto *target_scenario = &string_id<scenario>( "wilderness" ).obj();
-    const auto default_hair_style = trait_id( "hair_medium" );
-    const auto bald_hair_style = trait_id( "HAIR_BALD" );
+    const auto* target_scenario = &string_id<scenario>("wilderness").obj();
+    const auto default_hair_style = trait_id("hair_medium");
+    const auto bald_hair_style = trait_id("HAIR_BALD");
 
     auto ch = get_sanitized_player();
     ch.male = true;
     ch.prof = profession::generic();
     g->scen = scenario::generic();
 
-    SECTION( "uses the default hair style when no hair style is selected" ) {
-        reset_scenario( ch, target_scenario );
+    SECTION("uses the default hair style when no hair style is selected") {
+        reset_scenario(ch, target_scenario);
 
-        CHECK( ch.has_trait( default_hair_style ) );
-        CHECK( !ch.has_trait( bald_hair_style ) );
+        CHECK(ch.has_trait(default_hair_style));
+        CHECK(!ch.has_trait(bald_hair_style));
     }
 
-    SECTION( "preserves explicitly selected bald hair style" ) {
-        ch.set_mutation( bald_hair_style );
+    SECTION("preserves explicitly selected bald hair style") {
+        ch.set_mutation(bald_hair_style);
 
-        reset_scenario( ch, target_scenario );
+        reset_scenario(ch, target_scenario);
 
-        CHECK( ch.has_trait( bald_hair_style ) );
-        CHECK( !ch.has_trait( default_hair_style ) );
+        CHECK(ch.has_trait(bald_hair_style));
+        CHECK(!ch.has_trait(default_hair_style));
     }
 
     g->scen = scenario::generic();

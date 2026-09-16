@@ -168,7 +168,7 @@ TEST_CASE("item rigidity", "[item][iteminfo][rigidity]") {
 
 TEST_CASE("throwing ratings and costs", "[item][iteminfo][throwing]") {
     clear_all_state();
-    const auto q = q_vec( { iteminfo_parts::BASE_THROW } );
+    const auto q = q_vec({iteminfo_parts::BASE_THROW});
 
     test_info_equals(
         "test_rock", q,
@@ -177,7 +177,7 @@ TEST_CASE("throwing ratings and costs", "[item][iteminfo][throwing]") {
         "<color_c_white>Throw damage</color>: Bash: <color_c_yellow>9</color>\n"
         "Throw range: <color_c_yellow>13</color>\n"
         "Moves per throw: <color_c_yellow>70</color>\n"
-        "Stamina cost: <color_c_yellow>91</color>\n" );
+        "Stamina cost: <color_c_yellow>91</color>\n");
 }
 
 TEST_CASE("weapon attack ratings and moves", "[item][iteminfo][weapon]") {
@@ -258,7 +258,8 @@ TEST_CASE("techniques when wielded", "[item][iteminfo][weapon]") {
         "test_halligan", q,
         "--\n"
         "<color_c_white>Techniques when wielded</color>:"
-        " <color_c_light_blue>Brutal Strike</color>: <color_c_cyan>Stun 1 turn, knockback 1 tile, crit only</color>,"
+        " <color_c_light_blue>Brutal Strike</color>: <color_c_cyan>Stun 1 turn, knockback 1 tile, "
+        "crit only</color>,"
         " <color_c_light_blue>Sweep Attack</color>: <color_c_cyan>Down 2 turns</color>, and"
         " <color_c_light_blue>Block</color>: <color_c_cyan>Medium blocking ability</color>\n");
 }
@@ -974,7 +975,8 @@ TEST_CASE("item description flags", "[item][iteminfo]") {
     test_info_equals(
         "test_halligan", q,
         "--\n"
-        "* This item can be clipped on to a <color_c_cyan>belt loop</color> of the appropriate size.\n"
+        "* This item can be clipped on to a <color_c_cyan>belt loop</color> of the appropriate "
+        "size.\n"
         "* As a weapon, this item is <color_c_green>well-made</color> and will"
         " <color_c_cyan>withstand the punishment of combat</color>.\n");
 

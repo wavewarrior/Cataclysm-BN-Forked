@@ -26,17 +26,17 @@ TEST_CASE("active_item_cache_ignores_expired_references", "[item]") {
 
 TEST_CASE("active_item_cache_tracks_bionic_scannable_corpses", "[item]") {
     auto cache = active_item_cache();
-    auto corpse = item::make_corpse( mtype_id( "mon_zombie_soldier" ), calendar::turn, "" );
-    REQUIRE( corpse->is_corpse() );
-    REQUIRE( corpse->needs_processing() );
+    auto corpse = item::make_corpse(mtype_id("mon_zombie_soldier"), calendar::turn, "");
+    REQUIRE(corpse->is_corpse());
+    REQUIRE(corpse->needs_processing());
 
-    cache.add( *corpse );
-    auto scannable_corpses = cache.get_special( special_item_type::bionic_scannable_corpse );
-    REQUIRE( scannable_corpses.size() == 1 );
-    CHECK( scannable_corpses.front() == corpse.get() );
+    cache.add(*corpse);
+    auto scannable_corpses = cache.get_special(special_item_type::bionic_scannable_corpse);
+    REQUIRE(scannable_corpses.size() == 1);
+    CHECK(scannable_corpses.front() == corpse.get());
 
-    cache.remove( corpse.get() );
-    CHECK( cache.get_special( special_item_type::bionic_scannable_corpse ).empty() );
+    cache.remove(corpse.get());
+    CHECK(cache.get_special(special_item_type::bionic_scannable_corpse).empty());
 }
 
 TEST_CASE("nonperishable_food_does_not_enter_active_item_cache", "[item]") {
@@ -130,108 +130,108 @@ TEST_CASE("stack_clear_updates_active_item_cache", "[item]") {
 TEST_CASE("nested_processing_flag_changes_invalidate_container_cache", "[item]") {
     clear_all_state();
 
-    auto backpack = item::spawn( "backpack" );
-    backpack->put_in( item::spawn( "rock" ) );
-    item &stored = backpack->contents.front();
+    auto backpack = item::spawn("backpack");
+    backpack->put_in(item::spawn("rock"));
+    item& stored = backpack->contents.front();
 
-    REQUIRE_FALSE( backpack->needs_processing() );
+    REQUIRE_FALSE(backpack->needs_processing());
 
-    stored.set_flag( flag_RADIO_ACTIVATION );
-    CHECK( backpack->needs_processing() );
+    stored.set_flag(flag_RADIO_ACTIVATION);
+    CHECK(backpack->needs_processing());
 
-    stored.unset_flag( flag_RADIO_ACTIVATION );
-    CHECK_FALSE( backpack->needs_processing() );
+    stored.unset_flag(flag_RADIO_ACTIVATION);
+    CHECK_FALSE(backpack->needs_processing());
 
-    stored.set_flag( flag_ETHEREAL_ITEM );
-    CHECK( backpack->needs_processing() );
+    stored.set_flag(flag_ETHEREAL_ITEM);
+    CHECK(backpack->needs_processing());
 
     stored.unset_flags();
-    CHECK_FALSE( backpack->needs_processing() );
+    CHECK_FALSE(backpack->needs_processing());
 }
 
 TEST_CASE("nested_processing_food_flag_changes_invalidate_container_cache", "[item]") {
     clear_all_state();
 
-    auto backpack = item::spawn( "backpack" );
-    backpack->put_in( item::spawn( "bread" ) );
-    item &stored = backpack->contents.front();
+    auto backpack = item::spawn("backpack");
+    backpack->put_in(item::spawn("bread"));
+    item& stored = backpack->contents.front();
     stored.deactivate();
 
-    REQUIRE_FALSE( stored.is_active() );
-    REQUIRE( backpack->needs_processing() );
+    REQUIRE_FALSE(stored.is_active());
+    REQUIRE(backpack->needs_processing());
 
-    stored.set_flag( flag_PROCESSING );
-    CHECK_FALSE( backpack->needs_processing() );
+    stored.set_flag(flag_PROCESSING);
+    CHECK_FALSE(backpack->needs_processing());
 
-    stored.unset_flag( flag_PROCESSING );
-    CHECK( backpack->needs_processing() );
+    stored.unset_flag(flag_PROCESSING);
+    CHECK(backpack->needs_processing());
 
-    stored.set_flag( flag_PROCESSING );
-    CHECK_FALSE( backpack->needs_processing() );
+    stored.set_flag(flag_PROCESSING);
+    CHECK_FALSE(backpack->needs_processing());
 
     stored.unset_flags();
-    CHECK( backpack->needs_processing() );
+    CHECK(backpack->needs_processing());
 }
 
 TEST_CASE("active_item_cache_moves_items_when_processing_speed_changes", "[item]") {
     clear_all_state();
 
-    auto backpack = item::spawn( "backpack" );
-    backpack->put_in( item::spawn( "sashimi" ) );
-    REQUIRE( backpack->needs_processing() );
-    REQUIRE( backpack->processing_speed() == to_turns<int>( 10_minutes ) );
+    auto backpack = item::spawn("backpack");
+    backpack->put_in(item::spawn("sashimi"));
+    REQUIRE(backpack->needs_processing());
+    REQUIRE(backpack->processing_speed() == to_turns<int>(10_minutes));
 
     auto cache = active_item_cache();
-    cache.add( *backpack );
-    CHECK( cache.count().total == 1 );
+    cache.add(*backpack);
+    CHECK(cache.count().total == 1);
 
-    auto active = item::spawn( "firecracker_act", calendar::start_of_cataclysm,
-                               item::default_charges_tag() );
+    auto active =
+        item::spawn("firecracker_act", calendar::start_of_cataclysm, item::default_charges_tag());
     active->activate();
-    backpack->put_in( std::move( active ) );
-    REQUIRE( backpack->needs_processing() );
-    CHECK( backpack->processing_speed() == 1 );
+    backpack->put_in(std::move(active));
+    REQUIRE(backpack->needs_processing());
+    CHECK(backpack->processing_speed() == 1);
 
-    cache.add( *backpack );
-    CHECK( cache.count().total == 1 );
+    cache.add(*backpack);
+    CHECK(cache.count().total == 1);
 }
 
 TEST_CASE("content_removal_helpers_invalidate_processing_cache", "[item]") {
     clear_all_state();
-    const auto loc = tripoint_bub_ms{ 60, 60, 0 };
-    g->m.i_clear( loc );
+    const auto loc = tripoint_bub_ms{60, 60, 0};
+    g->m.i_clear(loc);
 
-    SECTION( "spill contents" ) {
-        auto backpack = item::spawn( "backpack" );
-        auto active = item::spawn( "firecracker_act", calendar::start_of_cataclysm,
-                                   item::default_charges_tag() );
+    SECTION("spill contents") {
+        auto backpack = item::spawn("backpack");
+        auto active = item::
+            spawn("firecracker_act", calendar::start_of_cataclysm, item::default_charges_tag());
         active->activate();
-        backpack->put_in( std::move( active ) );
+        backpack->put_in(std::move(active));
 
-        REQUIRE( backpack->needs_processing() );
-        backpack->contents.spill_contents( loc );
-        CHECK_FALSE( backpack->needs_processing() );
+        REQUIRE(backpack->needs_processing());
+        backpack->contents.spill_contents(loc);
+        CHECK_FALSE(backpack->needs_processing());
     }
 
-    SECTION( "handle casings" ) {
-        auto backpack = item::spawn( "backpack" );
-        auto casing = item::spawn( "rock" );
-        casing->set_flag( flag_CASING );
-        casing->set_flag( flag_RADIO_ACTIVATION );
-        backpack->put_in( std::move( casing ) );
+    SECTION("handle casings") {
+        auto backpack = item::spawn("backpack");
+        auto casing = item::spawn("rock");
+        casing->set_flag(flag_CASING);
+        casing->set_flag(flag_RADIO_ACTIVATION);
+        backpack->put_in(std::move(casing));
 
-        REQUIRE( backpack->needs_processing() );
-        backpack->contents.casings_handle( []( detached_ptr<item> && /*it*/ ) {
+        REQUIRE(backpack->needs_processing());
+        backpack->contents.casings_handle([](detached_ptr<item>&& /*it*/) {
             return detached_ptr<item>();
-        } );
-        CHECK_FALSE( backpack->needs_processing() );
+        });
+        CHECK_FALSE(backpack->needs_processing());
     }
 
-    SECTION( "same-size top content mutation" ) {
-        auto backpack = item::spawn( "backpack" );
-        auto radio = item::spawn( "rock" );
-        radio->set_flag( flag_RADIO_ACTIVATION );
-        backpack->put_in( std::move( radio ) );
+    SECTION("same-size top content mutation") {
+        auto backpack = item::spawn("backpack");
+        auto radio = item::spawn("rock");
+        radio->set_flag(flag_RADIO_ACTIVATION);
+        backpack->put_in(std::move(radio));
 
         REQUIRE( backpack->needs_processing() );
         backpack->contents.remove_top_items_with( []( detached_ptr<item> &&it ) {
@@ -244,13 +244,13 @@ TEST_CASE("content_removal_helpers_invalidate_processing_cache", "[item]") {
         CHECK_FALSE( backpack->needs_processing() );
     }
 
-    SECTION( "same-size nested content mutation" ) {
-        auto backpack = item::spawn( "backpack" );
-        auto inner_bag = item::spawn( "bag_plastic" );
-        auto radio = item::spawn( "rock" );
-        radio->set_flag( flag_RADIO_ACTIVATION );
-        inner_bag->put_in( std::move( radio ) );
-        backpack->put_in( std::move( inner_bag ) );
+    SECTION("same-size nested content mutation") {
+        auto backpack = item::spawn("backpack");
+        auto inner_bag = item::spawn("bag_plastic");
+        auto radio = item::spawn("rock");
+        radio->set_flag(flag_RADIO_ACTIVATION);
+        inner_bag->put_in(std::move(radio));
+        backpack->put_in(std::move(inner_bag));
 
         REQUIRE( backpack->needs_processing() );
         backpack->contents.front().contents.remove_top_items_with( []( detached_ptr<item> &&it ) {

@@ -4,9 +4,9 @@
 #include "catch/catch_amalgamated.hpp"
 #include "character_functions.h"
 #include "flag.h"
+#include "game.h"
 #include "item.h"
 #include "itype.h"
-#include "game.h"
 #include "map.h"
 #include "map_helpers.h"
 #include "map_selector.h"
@@ -469,7 +469,6 @@ TEST_CASE("active night vision tiers allow fine detail vision in darkness", "[re
         CHECK(character_funcs::fine_detail_vision_mod(dummy) == character_funcs::FINE_VISION_PERFECT);
         CHECK(character_funcs::can_see_fine_details(dummy));
     }
-
 
 }
 

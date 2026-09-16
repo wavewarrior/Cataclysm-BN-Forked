@@ -38,67 +38,65 @@
 
 class Creature;
 
-TEST_CASE( "hallucination_npcs_do_not_drop_inventory", "[npc][hallucination]" )
-{
+TEST_CASE("hallucination_npcs_do_not_drop_inventory", "[npc][hallucination]") {
     clear_all_state();
-    auto &here = get_map();
+    auto& here = get_map();
 
-    const auto npc_pos = tripoint_bub_ms( 60, 60, 0 );
-    npc &hallucination_npc = spawn_npc( npc_pos, "test_talker" );
+    const auto npc_pos = tripoint_bub_ms(60, 60, 0);
+    npc& hallucination_npc = spawn_npc(npc_pos, "test_talker");
     hallucination_npc.hallucination = true;
-    hallucination_npc.i_add( item::spawn( "rock" ) );
+    hallucination_npc.i_add(item::spawn("rock"));
 
-    REQUIRE( here.i_at( npc_pos ).empty() );
+    REQUIRE(here.i_at(npc_pos).empty());
 
-    hallucination_npc.die( &get_avatar() );
+    hallucination_npc.die(&get_avatar());
 
-    CHECK( hallucination_npc.is_dead() );
-    CHECK( here.i_at( npc_pos ).empty() );
-    CHECK_FALSE( get_avatar().has_item_with_id( itype_id( "rock" ) ) );
+    CHECK(hallucination_npc.is_dead());
+    CHECK(here.i_at(npc_pos).empty());
+    CHECK_FALSE(get_avatar().has_item_with_id(itype_id("rock")));
 }
 
-TEST_CASE( "hallucination_npcs_do_not_push_real_npcs", "[npc][hallucination]" )
-{
+TEST_CASE("hallucination_npcs_do_not_push_real_npcs", "[npc][hallucination]") {
     clear_all_state();
-    build_test_map( ter_id( "t_floor" ) );
+    build_test_map(ter_id("t_floor"));
 
-    const auto hallucination_pos = tripoint_bub_ms( 50, 50, 0 );
-    const auto bystander_pos = tripoint_bub_ms( 51, 50, 0 );
-    npc &bystander = spawn_npc( bystander_pos, "test_talker" );
-    npc &hallucination_npc = spawn_npc( hallucination_pos, "test_talker" );
+    const auto hallucination_pos = tripoint_bub_ms(50, 50, 0);
+    const auto bystander_pos = tripoint_bub_ms(51, 50, 0);
+    npc& bystander = spawn_npc(bystander_pos, "test_talker");
+    npc& hallucination_npc = spawn_npc(hallucination_pos, "test_talker");
     hallucination_npc.hallucination = true;
-    REQUIRE( hallucination_npc.is_hallucination() );
-    REQUIRE( hallucination_npc.bub_pos() == hallucination_pos );
-    REQUIRE( bystander.bub_pos() == bystander_pos );
+    REQUIRE(hallucination_npc.is_hallucination());
+    REQUIRE(hallucination_npc.bub_pos() == hallucination_pos);
+    REQUIRE(bystander.bub_pos() == bystander_pos);
 
-    hallucination_npc.move_to( bystander_pos, true, nullptr );
+    hallucination_npc.move_to(bystander_pos, true, nullptr);
 
-    CHECK( hallucination_npc.bub_pos() == hallucination_pos );
-    CHECK( bystander.bub_pos() == bystander_pos );
+    CHECK(hallucination_npc.bub_pos() == hallucination_pos);
+    CHECK(bystander.bub_pos() == bystander_pos);
 }
 
-TEST_CASE( "hallucination_npcs_do_not_board_real_vehicles", "[npc][hallucination]" )
-{
+TEST_CASE("hallucination_npcs_do_not_board_real_vehicles", "[npc][hallucination]") {
     clear_all_state();
-    auto &here = get_map();
-    build_test_map( ter_id( "t_pavement" ) );
+    auto& here = get_map();
+    build_test_map(ter_id("t_pavement"));
     clear_vehicles();
 
-    const auto npc_pos = tripoint_bub_ms( 63, 59, 0 );
-    const auto seat_pos = tripoint_bub_ms( 63, 60, 0 );
-    auto *veh_ptr = here.add_vehicle( vproto_id( "bicycle_test" ), seat_pos, 0_degrees, 0, 0 );
-    REQUIRE( veh_ptr != nullptr );
-    REQUIRE( here.veh_at( seat_pos ).part_with_feature( VPFLAG_BOARDABLE, true ).has_value() );
+    const auto npc_pos = tripoint_bub_ms(63, 59, 0);
+    const auto seat_pos = tripoint_bub_ms(63, 60, 0);
+    auto* veh_ptr = here.add_vehicle(vproto_id("bicycle_test"), seat_pos, 0_degrees, 0, 0);
+    REQUIRE(veh_ptr != nullptr);
+    REQUIRE(here.veh_at(seat_pos).part_with_feature(VPFLAG_BOARDABLE, true).has_value());
 
-    npc &hallucination_npc = spawn_npc( npc_pos, "test_talker" );
+    npc& hallucination_npc = spawn_npc(npc_pos, "test_talker");
     hallucination_npc.hallucination = true;
-    REQUIRE( hallucination_npc.is_hallucination() );
-    hallucination_npc.move_to( seat_pos, true, nullptr );
+    REQUIRE(hallucination_npc.is_hallucination());
+    hallucination_npc.move_to(seat_pos, true, nullptr);
 
-    CHECK( hallucination_npc.bub_pos() == seat_pos );
-    CHECK_FALSE( hallucination_npc.in_vehicle );
-    CHECK( veh_ptr->get_passenger( here.veh_at( seat_pos ).part_with_feature( VPFLAG_BOARDABLE,
-                                   true )->part_index() ) == nullptr );
+    CHECK(hallucination_npc.bub_pos() == seat_pos);
+    CHECK_FALSE(hallucination_npc.in_vehicle);
+    CHECK(veh_ptr->get_passenger(
+              here.veh_at(seat_pos).part_with_feature(VPFLAG_BOARDABLE, true)->part_index())
+          == nullptr);
 }
 
 static void on_load_test(npc& who, const time_duration& from, const time_duration& to) {

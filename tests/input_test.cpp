@@ -73,15 +73,22 @@ TEST_CASE("deleted local keybindings fall back to global bindings", "[input][key
     CHECK(read_user_keybindings().find("\"is_deleted\": true") != std::string::npos);
 }
 
-TEST_CASE( "manual combat default bindings reserve backtab for the toggle", "[input][keybindings]" )
-{
-    const auto autoattack_key = inp_mngr.get_first_char_for_action( "autoattack", "DEFAULTMODE" );
-    const auto toggle_key = inp_mngr.get_first_char_for_action( "toggle_manual_combat_mode",
-                            "DEFAULTMODE" );
-    const auto removed_manual_attack_key = inp_mngr.get_first_char_for_action( "manual_attack",
-                                           "DEFAULTMODE" );
+TEST_CASE("manual combat default bindings reserve backtab for the toggle", "[input][keybindings]") {
+    const auto autoattack_key = inp_mngr.get_first_char_for_action("autoattack", "DEFAULTMODE");
+    const auto toggle_key = inp_mngr.get_first_char_for_action(
+        "toggle_manual_combat_mode",
+        "DEFAUL"
+        "TMOD"
+        "E");
+    const auto removed_manual_attack_key = inp_mngr.get_first_char_for_action(
+        "manual_attack",
+        "DEF"
+        "AUL"
+        "TMO"
+        "D"
+        "E");
 
-    CHECK( autoattack_key == inp_mngr.get_keycode( "TAB" ) );
-    CHECK( toggle_key == inp_mngr.get_keycode( "BACKTAB" ) );
-    CHECK( removed_manual_attack_key == 0 );
+    CHECK(autoattack_key == inp_mngr.get_keycode("TAB"));
+    CHECK(toggle_key == inp_mngr.get_keycode("BACKTAB"));
+    CHECK(removed_manual_attack_key == 0);
 }

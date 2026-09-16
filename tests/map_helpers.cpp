@@ -161,17 +161,16 @@ void clear_map() {
 
 void put_player_underground() {
     // Make sure the player doesn't block the path of the monster being tested.
-    g->u.setpos( map_local_to_abs( get_map(),
-                                   tripoint_bub_ms( g_half_mapsize_x + SEEX - 1,
-                                           g_half_mapsize_y + SEEY - 1, -2 ) ) );
+    g->u.setpos(map_local_to_abs(
+        get_map(), tripoint_bub_ms(g_half_mapsize_x + SEEX - 1, g_half_mapsize_y + SEEY - 1, -2)));
 }
 
-auto move_player_out_of_the_way() -> void
-{
-    auto &here = get_map();
-    g->u.setpos( map_local_to_abs( here,
-                                   tripoint_bub_ms( g_half_mapsize_x + SEEX - 1,
-                                           g_half_mapsize_y + SEEY - 1, g->u.abs_pos().z() ) ) );
+auto move_player_out_of_the_way() -> void {
+    auto& here = get_map();
+    g->u.setpos(map_local_to_abs(
+        here,
+        tripoint_bub_ms(
+            g_half_mapsize_x + SEEX - 1, g_half_mapsize_y + SEEY - 1, g->u.abs_pos().z())));
 }
 
 monster& spawn_test_monster(const std::string& monster_type, const tripoint_bub_ms& start) {

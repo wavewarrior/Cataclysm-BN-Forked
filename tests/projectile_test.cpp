@@ -41,30 +41,27 @@ static tripoint_bub_ms projectile_end_point(
     return attack.end_point;
 }
 
-static auto centered_projectile_test_pos( const int dx, const int dy, const int z = 0 )
--> tripoint_bub_ms
-{
-    return tripoint_bub_ms( g_half_mapsize_x + dx, g_half_mapsize_y + dy, z );
+static auto centered_projectile_test_pos(const int dx, const int dy, const int z = 0)
+    -> tripoint_bub_ms {
+    return tripoint_bub_ms(g_half_mapsize_x + dx, g_half_mapsize_y + dy, z);
 }
 
-static auto clear_projectile_test_line( map &here, const tripoint_bub_ms &from,
-                                        const tripoint_bub_ms &to ) -> void
-{
-    REQUIRE( from.y() == to.y() );
-    REQUIRE( from.z() == to.z() );
+static auto clear_projectile_test_line(
+    map& here, const tripoint_bub_ms& from, const tripoint_bub_ms& to) -> void {
+    REQUIRE(from.y() == to.y());
+    REQUIRE(from.z() == to.z());
 
-    const auto min_x = std::min( from.x(), to.x() );
-    const auto max_x = std::max( from.x(), to.x() );
-    for( const auto x : std::views::iota( min_x, max_x + 1 ) ) {
-        const auto pt = tripoint_bub_ms( x, from.y(), from.z() );
-        REQUIRE( here.inbounds( pt ) );
-        here.ter_set( pt, ter_id( "t_dirt" ) );
-        here.furn_set( pt, furn_id( "f_null" ) );
+    const auto min_x = std::min(from.x(), to.x());
+    const auto max_x = std::max(from.x(), to.x());
+    for (const auto x : std::views::iota(min_x, max_x + 1)) {
+        const auto pt = tripoint_bub_ms(x, from.y(), from.z());
+        REQUIRE(here.inbounds(pt));
+        here.ter_set(pt, ter_id("t_dirt"));
+        here.furn_set(pt, furn_id("f_null"));
     }
 }
 
-TEST_CASE( "projectiles_through_obstacles", "[projectile]" )
-{
+TEST_CASE("projectiles_through_obstacles", "[projectile]") {
     clear_all_state();
     // Move the player out of the way of the test area
     get_avatar().setpos(tripoint_bub_ms{2, 2, 0});
@@ -177,11 +174,11 @@ TEST_CASE("adjacent_friendly_fire_prevention", "[projectile][ballistics]") {
 
     // Set up a centered test area with shooter, adjacent friendly NPC, and target.
     // Positions near map center so spawned NPCs are within load_npcs radius (4 submaps).
-    const auto shooter_pos = centered_projectile_test_pos( 0, 0 );
-    const auto friendly_pos = centered_projectile_test_pos( 1, 0 );
-    const auto target_pos = centered_projectile_test_pos( 5, 0 );
+    const auto shooter_pos = centered_projectile_test_pos(0, 0);
+    const auto friendly_pos = centered_projectile_test_pos(1, 0);
+    const auto target_pos = centered_projectile_test_pos(5, 0);
 
-    clear_projectile_test_line( here, shooter_pos, target_pos );
+    clear_projectile_test_line(here, shooter_pos, target_pos);
 
     // Set up avatar as shooter before NPCs are spawned, so the reality bubble is
     // re-centred on a known position first (matches the sibling tests below).
@@ -228,14 +225,14 @@ TEST_CASE("npc_adjacent_friendly_fire_prevention", "[projectile][ballistics]") {
 
     // Set up a centered test area with NPC shooter, adjacent friendly NPC, and target.
     // Positions near map center so spawned NPCs are within load_npcs radius (4 submaps).
-    const auto shooter_pos = centered_projectile_test_pos( 0, 0 );
-    const auto friendly_pos = centered_projectile_test_pos( 1, 0 );
-    const auto target_pos = centered_projectile_test_pos( 5, 0 );
+    const auto shooter_pos = centered_projectile_test_pos(0, 0);
+    const auto friendly_pos = centered_projectile_test_pos(1, 0);
+    const auto target_pos = centered_projectile_test_pos(5, 0);
 
-    clear_projectile_test_line( here, shooter_pos, target_pos );
+    clear_projectile_test_line(here, shooter_pos, target_pos);
 
     // Move player out of the way before NPCs are spawned.
-    get_avatar().setpos( centered_projectile_test_pos( 0, 2 ) );
+    get_avatar().setpos(centered_projectile_test_pos(0, 2));
 
     // Create NPC shooter
     auto& shooter = spawn_npc(shooter_pos, "thug");
@@ -287,17 +284,17 @@ TEST_CASE("npc_protects_adjacent_player", "[projectile][ballistics]") {
 
     // Set up a centered test area with NPC shooter, adjacent player, and target.
     // Positions near map center so spawned NPCs are within load_npcs radius (4 submaps).
-    const auto shooter_pos = centered_projectile_test_pos( 0, 0 );
-    const auto player_pos = centered_projectile_test_pos( 1, 0 );
-    const auto target_pos = centered_projectile_test_pos( 5, 0 );
+    const auto shooter_pos = centered_projectile_test_pos(0, 0);
+    const auto player_pos = centered_projectile_test_pos(1, 0);
+    const auto target_pos = centered_projectile_test_pos(5, 0);
 
-    clear_projectile_test_line( here, shooter_pos, target_pos );
+    clear_projectile_test_line(here, shooter_pos, target_pos);
 
     // Set up player at adjacent position before NPCs are spawned.
-    auto &player = get_avatar();
-    player.setpos( player_pos );
+    auto& player = get_avatar();
+    player.setpos(player_pos);
     player.set_body();
-    REQUIRE( g->critter_at( player_pos ) == &player );
+    REQUIRE(g->critter_at(player_pos) == &player);
 
     // Create NPC shooter
     auto& shooter = spawn_npc(shooter_pos, "thug");
@@ -340,14 +337,14 @@ TEST_CASE("monster_adjacent_ally_fire_prevention", "[projectile][ballistics]") {
     map& here = get_map();
 
     // Set up a centered test area away from the map edge.
-    const auto shooter_pos = centered_projectile_test_pos( 0, 0 );
-    const auto ally_pos = centered_projectile_test_pos( 1, 0 );
-    const auto target_pos = centered_projectile_test_pos( 5, 0 );
+    const auto shooter_pos = centered_projectile_test_pos(0, 0);
+    const auto ally_pos = centered_projectile_test_pos(1, 0);
+    const auto target_pos = centered_projectile_test_pos(5, 0);
 
-    clear_projectile_test_line( here, shooter_pos, target_pos );
+    clear_projectile_test_line(here, shooter_pos, target_pos);
 
     // Move player out of the way
-    get_avatar().setpos( centered_projectile_test_pos( 0, 2 ) );
+    get_avatar().setpos(centered_projectile_test_pos(0, 2));
 
     // Create two monsters from the same faction
     monster& shooter = spawn_test_monster("mon_zombie", shooter_pos);
@@ -386,26 +383,26 @@ TEST_CASE("hostile_npc_adjacent_ally_fire_prevention", "[projectile][ballistics]
 
     // Set up a centered test area with hostile NPC shooter, allied hostile NPC, and target.
     // Positions near map center so spawned NPCs are within load_npcs radius (4 submaps).
-    const auto shooter_pos = centered_projectile_test_pos( 0, 0 );
-    const auto ally_pos = centered_projectile_test_pos( 1, 0 );
-    const auto target_pos = centered_projectile_test_pos( 5, 0 );
+    const auto shooter_pos = centered_projectile_test_pos(0, 0);
+    const auto ally_pos = centered_projectile_test_pos(1, 0);
+    const auto target_pos = centered_projectile_test_pos(5, 0);
 
-    clear_projectile_test_line( here, shooter_pos, target_pos );
+    clear_projectile_test_line(here, shooter_pos, target_pos);
 
     // Move player out of the way before NPCs are spawned.
-    get_avatar().setpos( centered_projectile_test_pos( 0, 2 ) );
+    get_avatar().setpos(centered_projectile_test_pos(0, 2));
 
     // Create two hostile NPCs from the same faction.
-    auto &shooter = spawn_npc( shooter_pos, "thug" );
-    shooter.set_fac( faction_id( "hells_raiders" ) );
-    shooter.set_attitude( NPCATT_KILL );
+    auto& shooter = spawn_npc(shooter_pos, "thug");
+    shooter.set_fac(faction_id("hells_raiders"));
+    shooter.set_attitude(NPCATT_KILL);
 
     auto& ally = spawn_npc(ally_pos, "thug");
     ally.set_fac(faction_id("hells_raiders"));
     ally.set_attitude(NPCATT_KILL);
 
-    REQUIRE( g->critter_at( shooter_pos ) == &shooter );
-    REQUIRE( g->critter_at( ally_pos ) == &ally );
+    REQUIRE(g->critter_at(shooter_pos) == &shooter);
+    REQUIRE(g->critter_at(ally_pos) == &ally);
 
     // Verify they're friendly to each other (same faction)
     REQUIRE(shooter.attitude_to(ally) == Attitude::A_FRIENDLY);
@@ -442,18 +439,18 @@ TEST_CASE("friendly_monster_iff_respects_adjacent_player", "[projectile][monster
 
     // Set up test area: friendly monster, adjacent player, hostile behind the player.
     // This tests that IFF checks still apply when player is adjacent to friendly monster
-    const auto monster_pos = centered_projectile_test_pos( 0, 0 );
-    const auto player_pos = centered_projectile_test_pos( 1, 0 );
-    const auto hostile_pos = centered_projectile_test_pos( 2, 0 );
+    const auto monster_pos = centered_projectile_test_pos(0, 0);
+    const auto player_pos = centered_projectile_test_pos(1, 0);
+    const auto hostile_pos = centered_projectile_test_pos(2, 0);
 
-    clear_projectile_test_line( here, monster_pos, hostile_pos );
+    clear_projectile_test_line(here, monster_pos, hostile_pos);
 
     // Set up player at adjacent position before spawning monsters so player-derived
     // bubble coordinates stay aligned with this centered test area.
-    auto &player = get_avatar();
-    player.setpos( player_pos );
+    auto& player = get_avatar();
+    player.setpos(player_pos);
     player.set_body();
-    REQUIRE( g->critter_at( player_pos ) == &player );
+    REQUIRE(g->critter_at(player_pos) == &player);
 
     // Create friendly monster
     monster& friendly_mon = spawn_test_monster("mon_zombie", monster_pos);

@@ -11,9 +11,9 @@
 #include "units.h"
 #include "value_ptr.h"
 
-#include <initializer_list>
 #include <algorithm>
 #include <cstdint>
+#include <initializer_list>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -44,8 +44,8 @@ TEST_CASE("large_item_storage_volumes", "[item][volume]") {
     const auto volume_above_legacy_int_limit = units::from_milliliter( legacy_int_limit_ml + 1 );
     CHECK( units::to_milliliter( volume_above_legacy_int_limit ) == legacy_int_limit_ml + 1 );
 
-    const item &large_container = *item::spawn_temporary( "test_large_container" );
-    CHECK( large_container.get_container_capacity() == 3000000_liter );
+    const item& large_container = *item::spawn_temporary("test_large_container");
+    CHECK(large_container.get_container_capacity() == 3000000_liter);
 }
 
 TEST_CASE("charge_volume_calculation_uses_wide_intermediate", "[item][volume]") {
@@ -54,11 +54,11 @@ TEST_CASE("charge_volume_calculation_uses_wide_intermediate", "[item][volume]") 
     REQUIRE( battery.count_by_charges() );
 
     const auto volume_with_int_overflowing_product = units::from_milliliter(
-                static_cast<std::int64_t>( std::numeric_limits<int>::max() ) / 2 + 1 );
-    CHECK( battery.charges_per_volume( volume_with_int_overflowing_product ) ==
-           units::to_milliliter( volume_with_int_overflowing_product ) );
-    CHECK( battery.charges_per_volume( units::volume_max ) == item::INFINITE_CHARGES );
-    CHECK( battery.type->charges_per_volume( units::volume_max ) == item::INFINITE_CHARGES );
+        static_cast<std::int64_t>(std::numeric_limits<int>::max()) / 2 + 1);
+    CHECK(battery.charges_per_volume(volume_with_int_overflowing_product)
+          == units::to_milliliter(volume_with_int_overflowing_product));
+    CHECK(battery.charges_per_volume(units::volume_max) == item::INFINITE_CHARGES);
+    CHECK(battery.type->charges_per_volume(units::volume_max) == item::INFINITE_CHARGES);
 }
 
 TEST_CASE("simple_item_layers", "[item]") {
@@ -333,76 +333,75 @@ TEST_CASE("stacking_corpses", "[item]") {
     }
 }
 
-TEST_CASE( "gunmod_weight_volume_test", "[item][gunmod]" )
-{
+TEST_CASE("gunmod_weight_volume_test", "[item][gunmod]") {
     // All test items are defined in data/mods/TEST_DATA/items.json
     // glock_19: weight=600g, volume=500ml
     // test_mod_neg_int: integral_weight=-100g, integral_volume=-100ml
     // test_mod_mult: weight_multiplier=0.90, volume_multiplier=0.90
     // test_mod_clamp: integral_weight=-999g, integral_volume=-999ml
 
-    SECTION( "negative integral modifier reduces gun weight and volume" ) {
-        detached_ptr<item> gun = item::spawn( "glock_19" );
-        REQUIRE( gun );
+    SECTION("negative integral modifier reduces gun weight and volume") {
+        detached_ptr<item> gun = item::spawn("glock_19");
+        REQUIRE(gun);
 
         const units::mass w0 = gun->weight();
         const units::volume v0 = gun->volume();
-        INFO( "base weight: " << w0 << "  base volume: " << v0 );
+        INFO("base weight: " << w0 << "  base volume: " << v0);
 
-        detached_ptr<item> mod = item::spawn( "test_mod_neg_int" );
-        REQUIRE( gun->is_gunmod_compatible( *mod ).success() );
-        gun->put_in( std::move( mod ) );
+        detached_ptr<item> mod = item::spawn("test_mod_neg_int");
+        REQUIRE(gun->is_gunmod_compatible(*mod).success());
+        gun->put_in(std::move(mod));
 
-        CHECK( gun->weight() == w0 - 100_gram );
-        CHECK( gun->volume() == v0 - 100_ml );
+        CHECK(gun->weight() == w0 - 100_gram);
+        CHECK(gun->volume() == v0 - 100_ml);
     }
 
-    SECTION( "multiplier modifier reduces gun weight and volume" ) {
-        detached_ptr<item> gun = item::spawn( "glock_19" );
-        REQUIRE( gun );
+    SECTION("multiplier modifier reduces gun weight and volume") {
+        detached_ptr<item> gun = item::spawn("glock_19");
+        REQUIRE(gun);
 
         const units::mass w0 = gun->weight();
         const units::volume v0 = gun->volume();
 
-        detached_ptr<item> mod = item::spawn( "test_mod_mult" );
-        REQUIRE( gun->is_gunmod_compatible( *mod ).success() );
-        gun->put_in( std::move( mod ) );
+        detached_ptr<item> mod = item::spawn("test_mod_mult");
+        REQUIRE(gun->is_gunmod_compatible(*mod).success());
+        gun->put_in(std::move(mod));
 
-        CHECK( gun->weight() == w0 * 9 / 10 );
-        CHECK( gun->volume() == v0 * 9 / 10 );
+        CHECK(gun->weight() == w0 * 9 / 10);
+        CHECK(gun->volume() == v0 * 9 / 10);
     }
 
-    SECTION( "both mods together apply multiplicative then additive" ) {
-        detached_ptr<item> gun = item::spawn( "glock_19" );
-        REQUIRE( gun );
+    SECTION("both mods together apply multiplicative then additive") {
+        detached_ptr<item> gun = item::spawn("glock_19");
+        REQUIRE(gun);
 
         const units::mass w0 = gun->weight();
         const units::volume v0 = gun->volume();
 
-        detached_ptr<item> mod_mult = item::spawn( "test_mod_mult" );
-        REQUIRE( gun->is_gunmod_compatible( *mod_mult ).success() );
-        gun->put_in( std::move( mod_mult ) );
+        detached_ptr<item> mod_mult = item::spawn("test_mod_mult");
+        REQUIRE(gun->is_gunmod_compatible(*mod_mult).success());
+        gun->put_in(std::move(mod_mult));
 
-        detached_ptr<item> mod_neg = item::spawn( "test_mod_neg_int" );
-        REQUIRE( gun->is_gunmod_compatible( *mod_neg ).success() );
-        gun->put_in( std::move( mod_neg ) );
+        detached_ptr<item> mod_neg = item::spawn("test_mod_neg_int");
+        REQUIRE(gun->is_gunmod_compatible(*mod_neg).success());
+        gun->put_in(std::move(mod_neg));
 
-        CHECK( gun->weight() == w0 * 9 / 10 - 100_gram );
-        CHECK( gun->volume() == v0 * 9 / 10 - 100_ml );
+        CHECK(gun->weight() == w0 * 9 / 10 - 100_gram);
+        CHECK(gun->volume() == v0 * 9 / 10 - 100_ml);
     }
 
-    SECTION( "clamping at 1 percent prevents near-zero values" ) {
-        detached_ptr<item> gun = item::spawn( "glock_19" );
-        REQUIRE( gun );
+    SECTION("clamping at 1 percent prevents near-zero values") {
+        detached_ptr<item> gun = item::spawn("glock_19");
+        REQUIRE(gun);
 
         const units::mass w0 = gun->weight();
         const units::volume v0 = gun->volume();
 
-        detached_ptr<item> mod = item::spawn( "test_mod_clamp" );
-        REQUIRE( gun->is_gunmod_compatible( *mod ).success() );
-        gun->put_in( std::move( mod ) );
+        detached_ptr<item> mod = item::spawn("test_mod_clamp");
+        REQUIRE(gun->is_gunmod_compatible(*mod).success());
+        gun->put_in(std::move(mod));
 
-        CHECK( gun->weight() == std::max( w0 - 999_gram, w0 / 100 ) );
-        CHECK( gun->volume() == std::max( v0 - 999_ml, v0 / 100 ) );
+        CHECK(gun->weight() == std::max(w0 - 999_gram, w0 / 100));
+        CHECK(gun->volume() == std::max(v0 - 999_ml, v0 / 100));
     }
 }

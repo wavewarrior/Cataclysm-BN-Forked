@@ -33,7 +33,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
 using efficiency_stat = statistics<int>;
 
 const efftype_id effect_blind("blind");

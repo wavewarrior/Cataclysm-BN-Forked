@@ -1,6 +1,6 @@
 #include "avatar.h"
-#include "calendar.h"
 #include "cached_options.h"
+#include "calendar.h"
 #include "cata_utility.h"
 #include "catch/catch_amalgamated.hpp"
 #include "coordinates.h"
@@ -81,15 +81,14 @@ TEST_CASE("opening_floor_invalidates_below_seen_cache", "[vision][zlevel]") {
     CHECK(here.access_cache(hole_pos.z() - 1).seen_cache_dirty);
 }
 
-TEST_CASE( "solid_floor_blocks_directly_below_visibility", "[vision][zlevel]" )
-{
+TEST_CASE("solid_floor_blocks_directly_below_visibility", "[vision][zlevel]") {
     clear_all_state();
 
-    map &here = get_map();
+    map& here = get_map();
 
-    const ter_id t_floor( "t_floor" );
+    const ter_id t_floor("t_floor");
 
-    g->place_player( tripoint_bub_ms( 60, 60, 1 ) );
+    g->place_player(tripoint_bub_ms(60, 60, 1));
 
     calendar::turn = calendar::turn_zero + 12_hours;
     g->reset_light_level();
@@ -97,18 +96,18 @@ TEST_CASE( "solid_floor_blocks_directly_below_visibility", "[vision][zlevel]" )
     const auto player_pos = g->u.bub_pos();
     const auto below_pos = player_pos + tripoint_below;
 
-    here.ter_set( player_pos, t_floor );
-    here.ter_set( below_pos, t_floor );
+    here.ter_set(player_pos, t_floor);
+    here.ter_set(below_pos, t_floor);
 
-    here.invalidate_map_cache( player_pos.z() );
-    here.invalidate_map_cache( below_pos.z() );
-    here.build_map_cache( player_pos.z() );
-    here.update_visibility_cache( player_pos.z() );
+    here.invalidate_map_cache(player_pos.z());
+    here.invalidate_map_cache(below_pos.z());
+    here.build_map_cache(player_pos.z());
+    here.update_visibility_cache(player_pos.z());
 
-    const level_cache &below_cache = here.access_cache( below_pos.z() );
-    CHECK( below_cache.seen_cache[below_cache.idx( below_pos.x(), below_pos.y() )] == 0.0f );
-    CHECK( below_cache.visibility_cache[below_cache.idx( below_pos.x(),
-                                                         below_pos.y() )] == lit_level::BLANK );
+    const level_cache& below_cache = here.access_cache(below_pos.z());
+    CHECK(below_cache.seen_cache[below_cache.idx(below_pos.x(), below_pos.y())] == 0.0f);
+    CHECK(below_cache.visibility_cache[below_cache.idx(below_pos.x(), below_pos.y())]
+          == lit_level::BLANK);
 }
 
 TEST_CASE("opening_floor_rebuilds_below_visibility", "[vision][zlevel]") {

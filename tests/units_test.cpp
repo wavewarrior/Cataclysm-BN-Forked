@@ -54,14 +54,14 @@ TEST_CASE("units_have_correct_ratios", "[units]") {
 
 TEST_CASE("large_volume_json_round_trip", "[units][volume]") {
     const auto large_volume = units::from_milliliter(
-                                  static_cast<std::int64_t>( std::numeric_limits<int>::max() ) + 1 );
-    const auto serialized_volume = serialize_wrapper( [&]( JsonOut & jsout ) {
-        jsout.write( large_volume );
-    } );
+        static_cast<std::int64_t>(std::numeric_limits<int>::max()) + 1);
+    const auto serialized_volume = serialize_wrapper([&](JsonOut& jsout) {
+        jsout.write(large_volume);
+    });
 
-    CHECK( units::from_liter( 3000000 ) == 3000000_liter );
-    CHECK( serialized_volume == "\"2147483648 ml\"" );
-    CHECK( parse_volume_quantity( serialized_volume ) == large_volume );
+    CHECK(units::from_liter(3000000) == 3000000_liter);
+    CHECK(serialized_volume == "\"2147483648 ml\"");
+    CHECK(parse_volume_quantity(serialized_volume) == large_volume);
 }
 
 static units::energy parse_energy_quantity(const std::string& json) {

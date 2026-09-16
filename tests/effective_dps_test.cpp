@@ -19,10 +19,7 @@ struct itype;
 
 static constexpr auto deterministic_dps_seed = 0U;
 
-static auto reset_dps_rng() -> void
-{
-    rng_set_engine_seed( deterministic_dps_seed );
-}
+static auto reset_dps_rng() -> void { rng_set_engine_seed(deterministic_dps_seed); }
 
 // Run a large number of trials of a player attacking a monster with a given weapon,
 // and return the average damage done per second.
