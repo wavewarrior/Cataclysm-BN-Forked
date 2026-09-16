@@ -2374,6 +2374,7 @@ talk_effect_t::talk_effect_t( const JsonObject &jo )
     }
 }
 
+
 talk_response::talk_response()
 {
     truefalse_condition = []( const dialogue & ) {

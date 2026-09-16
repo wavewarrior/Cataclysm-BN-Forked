@@ -70,8 +70,8 @@
 #include "map.h"
 #include "map_iterator.h"
 #include "map_selector.h"
-#include "map_functions.h"
-#include "map_utils.h"
+#include "map/utils/map_functions.h"
+#include "map/utils/map_utils.h"
 #include "mapdata.h"
 #include "mapbuffer.h"
 #include "mapbuffer_registry.h"
@@ -710,6 +710,7 @@ static bool try_start_hacking( player &p, const tripoint_bub_ms &examp )
 /**
  * If player has amorphous trait, slip through the bars.
  */
+
 static std::pair<itype_id, const deploy_tent_actor *> find_tent_itype( const furn_str_id &id )
 {
     const itype_id &iid = id->deployed_item;
@@ -890,6 +891,7 @@ static bool pick_lock( player &p, const tripoint_bub_ms &examp )
 * Transform the examined object into the object specified by its transforms_into property. If the new object has a message property,
 * it is displayed as if the notify examine_action was used.
 */
+
 /**
  * Spawn 1d4 wyrms and sink pedestal into ground.
  */
@@ -1079,6 +1081,7 @@ static bool harvest_common( player &p, const tripoint_bub_ms &examp, bool furn, 
  * Actual harvesting of selected plant
  */
 // Highly modified fermenting vat functions
+
 
 
 static void pick_plant( player &p, const tripoint_bub_ms &examp,
@@ -1505,6 +1508,7 @@ static void turnOnSelectedPump( const tripoint_bub_ms &p, int number )
         }
     }
 }
+
 
 
 

@@ -68,8 +68,8 @@
 #include "map.h"
 #include "map_iterator.h"
 #include "map_selector.h"
-#include "map_functions.h"
-#include "map_utils.h"
+#include "map/utils/map_functions.h"
+#include "map/utils/map_utils.h"
 #include "mapdata.h"
 #include "mapbuffer.h"
 #include "mapbuffer_registry.h"
@@ -1380,7 +1380,7 @@ void iexamine::deployed_furniture( player &p, const tripoint_bub_ms &pos )
     }
     p.add_msg_if_player( m_info, _( "You take down the %s." ),
                          here.furn( pos ).obj().name() );
-    take_down_deployed_furniture( pos, pos );
+    map_funcs::take_down_deployed_furniture( pos, pos );
 }
 
 static std::pair<itype_id, const deploy_tent_actor *> find_tent_itype( const furn_str_id &id )
@@ -1876,7 +1876,7 @@ void iexamine::transform( player &p, const tripoint_bub_ms &pos )
             case 2: {
                 add_msg( m_info, _( "You take down the %s." ),
                          g->m.furnname( pos ) );
-                take_down_deployed_furniture( pos, pos );
+                map_funcs::take_down_deployed_furniture( pos, pos );
                 return;
             }
             case 3: {
@@ -3081,7 +3081,7 @@ void iexamine::ledge( player &p, const tripoint_bub_ms &examp_bub )
         case ledge_action::pull_up_rope: {
             p.add_msg_if_player( m_info, _( "You pull up the %s." ),
                                  below_rope_name.value_or( std::string{} ) );
-            take_down_deployed_furniture( buffer, below_rope, p.abs_pos() );
+            map_funcs::take_down_deployed_furniture( buffer, below_rope, p.abs_pos() );
             break;
         }
         case ledge_action::spin_web_bridge: {

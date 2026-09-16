@@ -84,7 +84,7 @@
 #include "lightmap.h"
 #include "line.h"
 #include "map_feature_descriptions.h"
-#include "map_functions.h"
+#include "map/utils/map_functions.h"
 #include "map_iterator.h"
 #include "map_load_stats.h"
 #include "map_memory.h"

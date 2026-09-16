@@ -920,6 +920,7 @@ class npc: public player
         /** Is the item safe or does the NPC trust you enough? */
         bool will_accept_from_player( const item& it ) const;
 
+        void wake_up() override;
         bool wants_to_sell( const item& it ) const;
         bool wants_to_sell( const item & /*it*/, int at_price, int market_price ) const;
         bool wants_to_buy( const item& it ) const;
@@ -1034,6 +1035,7 @@ class npc: public player
         /// Calls good_escape_direction() (RNG + path-mutating) for npc_flee — exactly once per
         /// action decision. Use at every execute_action() call site where action may be npc_flee.
         auto resolve_cmd( npc_action action ) -> npc_cmd_t; // *NOPAD*
+        void execute_action( const std::string &action_str );
         void process_turn() override;
         auto action_move_factor() const -> int override;
         /**
@@ -1278,7 +1280,9 @@ class npc: public player
         std::optional<tripoint_bub_ms> last_player_seen_pos; // Where we last saw the player
         // Player orders a friendly NPC to move to this position
         std::optional<tripoint_abs_ms> goto_to_this_pos;
-        int last_seen_player_turn = 0;   // Timeout to forgetting
+        // When the npc wants to sleep it doesn't have to recalculate every turn
+        std::optional<tripoint_abs_ms> sleep_at_this_pos;
+        int last_seen_player_turn = 0; // Timeout to forgetting
         tripoint_bub_ms wanted_item_pos; // The square containing an item we want
         tripoint_abs_ms guard_pos; // These are the local coordinates that a guard will return to inside
         // of their goal tripoint

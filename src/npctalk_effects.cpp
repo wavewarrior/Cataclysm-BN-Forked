@@ -1021,6 +1021,7 @@ void talk_effect_t::parse_string_effect( const std::string &effect_id, const Jso
             WRAP( npc_die ),
             WRAP( npc_thankful ),
             WRAP( clear_overrides ),
+            WRAP( go_to_sleep ),
             WRAP( nothing )
 #undef WRAP
         }

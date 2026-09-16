@@ -68,8 +68,8 @@
 #include "map.h"
 #include "map_iterator.h"
 #include "map_selector.h"
-#include "map_functions.h"
-#include "map_utils.h"
+#include "map/utils/map_functions.h"
+#include "map/utils/map_utils.h"
 #include "mapdata.h"
 #include "mapbuffer.h"
 #include "mapbuffer_registry.h"
@@ -658,7 +658,7 @@ void iexamine::fireplace( player &p, const tripoint_bub_ms &examp )
             }
             p.add_msg_if_player( m_info, _( "You take down the %s." ),
                                  here.furnname( examp ) );
-            take_down_deployed_furniture( examp, examp );
+            map_funcs::take_down_deployed_furniture( examp, examp );
             return;
         }
         case 4: {

@@ -5,7 +5,7 @@
 #include "bodypart.h"
 #include "cached_options.h"
 #include "calendar.h"
-#include "cata_algo.h"
+#include "utils/algo.h"
 #include "catalua_coord.h"
 #include "catalua_hooks.h"
 #include "catalua_sol.h"
@@ -864,6 +864,9 @@ auto npc::decide_action() -> npc_cmd_t
                      ai_cache.s_abs_pos.x(), ai_cache.s_abs_pos.y() );
         }
     } else {
+        if( sleep_at_this_pos.has_value() ) {
+            action = npc_sleep;
+        }
         // No present danger
         deactivate_combat_cbms();
 
@@ -905,6 +908,10 @@ auto npc::decide_action() -> npc_cmd_t
                      return_guard_pos.x(), return_guard_pos.y() );
             action = npc_return_to_guard_pos;
         }
+    }
+
+    if( action == npc_undecided && sleep_at_this_pos.has_value() ) {
+        action = npc_sleep;
     }
 
     if( action == npc_undecided && is_walking_with() && goto_to_this_pos ) {
@@ -1072,6 +1079,28 @@ void npc::execute_action( const npc_cmd_t &cmd )
         break;
 
         case npc_sleep: {
+            auto sleep_or_move = [this, &player_character]( tripoint_abs_ms target_pos ) {
+                // TODO: Handle empty path better
+                if( target_pos == abs_pos() || path.empty() ) {
+                    sleep_at_this_pos = std::nullopt;
+                    move_pause();
+                    if( !has_effect( effect_lying_down ) ) {
+                        activate_bionic_by_id( bio_soporific );
+                        add_effect( effect_lying_down, 30_minutes, bodypart_str_id::NULL_ID(), 1 );
+                        if( player_character.sees( *this ) && !player_character.in_sleep_state() ) {
+                            add_msg( _( "%s lies down to sleep." ), name );
+                        }
+                    }
+                } else {
+                    move_to_next();
+                }
+            };
+
+            if( sleep_at_this_pos.has_value() ) {
+                sleep_or_move( *sleep_at_this_pos );
+                break;
+            }
+
             // TODO: Allow stims when not too tired
             // Find a nice spot to sleep
             int best_sleepy = character_funcs::rate_sleep_spot( *this, bub_pos() );
@@ -1088,19 +1117,8 @@ void npc::execute_action( const npc_cmd_t &cmd )
             }
             if( is_walking_with() ) { complain_about( "napping", 30_minutes, _( "<warn_sleep>" ) ); }
             update_path( best_spot );
-            // TODO: Handle empty path better
-            if( best_spot == bub_pos() || path.empty() ) {
-                move_pause();
-                if( !has_effect( effect_lying_down ) ) {
-                    activate_bionic_by_id( bio_soporific );
-                    add_effect( effect_lying_down, 30_minutes, bodypart_str_id::NULL_ID(), 1 );
-                    if( player_character.sees( *this ) && !player_character.in_sleep_state() ) {
-                        add_msg( _( "%s lies down to sleep." ), name );
-                    }
-                }
-            } else {
-                move_to_next();
-            }
+            sleep_at_this_pos = bub_to_abs( best_spot );
+            sleep_or_move( *sleep_at_this_pos );
         }
         break;
 

@@ -138,7 +138,7 @@
 #include "magic/magic.h"
 #include "map.h"
 #include "physics/physics_world.h"
-#include "map_functions.h"
+#include "map/utils/map_functions.h"
 #include "map_item_stack.h"
 #include "map_iterator.h"
 #include "map_selector.h"
@@ -3077,6 +3077,7 @@ void game::update_performance_bubble()
         resize_reality_bubble_to( target );
     }
 }
+
 
 
 

@@ -4,7 +4,7 @@
 #include "avatar.h"
 #include "avatar_action.h"
 #include "calendar.h"
-#include "cata_algo.h"
+#include "utils/algo.h"
 #include "character.h"
 #include "character_functions.h"
 #include "clzones.h"
@@ -33,7 +33,7 @@
 #include "map.h"
 #include "map_iterator.h"
 #include "map_selector.h"
-#include "map_utils.h"
+#include "map/utils/map_utils.h"
 #include "mapdata.h"
 #include "messages.h"
 #include "monster.h"
@@ -694,6 +694,7 @@ std::vector<detached_ptr<item>> obtain_and_tokenize_items( player& p, std::list<
         items.pop_front();
     }
 
+    p.recalculate_enchantment_cache();
     return res;
 }
 

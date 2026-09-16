@@ -2877,6 +2877,7 @@ std::string get_stat_name( character_stat Stat )
 /// Returns the mutation category with the highest strength
 
 
+
 bool Character::wearing_something_on( const bodypart_id &bp ) const
 {
 for( auto &i : worn ) {

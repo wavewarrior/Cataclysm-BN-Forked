@@ -1,3 +1,4 @@
+
 #include "action_time_scale.h"
 #include "active_item_cache.h"
 #include "activity_actor_definitions.h"
@@ -6,7 +7,6 @@
 #include "bodypart.h"
 #include "cached_options.h"
 #include "calendar.h"
-#include "cata_algo.h"
 #include "catalua.h"
 #include "catalua_impl.h"
 #include "catalua_coord.h"
@@ -74,6 +74,7 @@
 #include "visitable.h"
 #include "vpart_position.h"
 #include "vpart_range.h"
+#include "utils/algo.h"
 
 #include <algorithm>
 #include <cfloat>
@@ -85,6 +86,7 @@
 #include <numeric>
 #include <ostream>
 #include <tuple>
+#include <unordered_map>
 #include <unordered_set>
 
 static const activity_id ACT_PULP( "ACT_PULP" );
@@ -160,6 +162,43 @@ static constexpr float NPC_DANGER_VERY_LOW = 5.0f;
 static constexpr float NPC_DANGER_MAX = 150.0f;
 static constexpr float MAX_FLOAT = 5000000000.0f;
 
+
+static const std::unordered_map<std::string, npc_action> npc_action_map = {
+    {"npc_pause", npc_pause},
+    {"npc_reload", npc_reload},
+    {"npc_sleep", npc_sleep},
+    {"npc_pickup", npc_pickup},
+    {"npc_heal", npc_heal},
+    {"npc_use_painkiller", npc_use_painkiller},
+    {"npc_drop_items", npc_drop_items},
+    {"npc_flee", npc_flee},
+    {"npc_melee", npc_melee},
+    {"npc_shoot", npc_shoot},
+    {"npc_look_for_player",  npc_look_for_player},
+    {"npc_heal_player",  npc_heal_player},
+    {"npc_follow_player",  npc_follow_player},
+    {"npc_follow_embarked", npc_follow_embarked},
+    {"npc_talk_to_player",  npc_talk_to_player},
+    {"npc_mug_player", npc_mug_player},
+    {"npc_goto_to_this_pos", npc_goto_to_this_pos},
+    {"npc_goto_destination", npc_goto_destination},
+    {"npc_avoid_friendly_fire", npc_avoid_friendly_fire},
+    {"npc_escape_explosion", npc_escape_explosion},
+    {"npc_reach_attack", npc_reach_attack},
+    {"npc_aim", npc_aim},
+    {"npc_investigate_sound", npc_investigate_sound},
+    {"npc_return_to_guard_pos", npc_return_to_guard_pos},
+    {"npc_player_activity", npc_player_activity},
+};
+
+void npc::execute_action( const std::string &action_str )
+{
+    if( const auto _act = npc_action_map.find( action_str ); _act != npc_action_map.end() ) {
+        execute_action( resolve_cmd( _act->second ) );
+    } else {
+        debugmsg( "Unknown npc action %s", action_str );
+    }
+}
 
 namespace
 {
