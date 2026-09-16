@@ -359,7 +359,7 @@ static prewarm_result run_prewarm_load_for_world( std::string world_name,
         loader.finalize_worker_phases( ui );
 
         // Resolve Lua callbacks for bionics and mutations
-        cata::resolve_lua_bionic_and_mutation_callbacks();
+        cata::resolve_extra_lua_callbacks();
 
         // Run mod finalize scripts
         for( const mod_id& mod : available ) {
@@ -1441,7 +1441,7 @@ static void load_and_finalize_packs(
     loader.finalize_loaded_data( ui );
     const auto t_finalize_1 = std::chrono::steady_clock::now();
 
-    cata::resolve_lua_bionic_and_mutation_callbacks();
+    cata::resolve_extra_lua_callbacks();
 
     for( const mod_id& mod : available ) {
         if( mod->lua_api_version ) {

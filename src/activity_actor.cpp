@@ -75,6 +75,7 @@
 #include "type_id.h"
 #include "ui.h"
 #include "uistate.h"
+#include "units.h"
 #include "veh_interact.h"
 #include "vehicle.h"
 #include "vehicle_part.h"
@@ -2124,10 +2125,10 @@ void reload_activity_actor::finish( player_activity& act, Character& who )
         if( reloadable.has_flag( flag_RELOAD_ONE ) && !ammo.has_flag( flag_SPEEDLOADER ) ) {
             for( int i = 0; i != qty; ++i ) { msg = _( "You insert one %2$s into the %1$s." ); }
         }
-        if( reloadable.type->gun->reload_noise_volume > 0 ) {
+        if( reloadable.type->gun->reload_noise_volume > 0_dB ) {
             sound_event se;
             se.origin = p.bub_pos();
-            se.volume = reloadable.type->gun->reload_noise_volume;
+            se.volume = units::to_decibel( reloadable.type->gun->reload_noise_volume );
             se.category = sounds::sound_t::activity;
             se.description = reloadable.type->gun->reload_noise;
             se.id = "reload";

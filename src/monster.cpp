@@ -71,9 +71,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>

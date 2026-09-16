@@ -1025,22 +1025,10 @@ if( can_shatter() ) {
     }
 
     if( parts->test( iteminfo_parts::BASE_RIGIDITY ) ) {
-    if( const islot_armor *armor = find_armor_data() ) {
-            if( !type->rigid ) {
-                info.emplace_back( "BASE",
-                                   _( "* This item is <info>not rigid</info>.  Its"
-                                      " volume and encumbrance increase with contents." ) );
-            } else {
-                bool any_encumb_increase = std::ranges::any_of( armor->data,
-                []( armor_portion_data data ) {
-                    return data.encumber != data.max_encumber;
-                } );
-                if( any_encumb_increase ) {
-                    info.emplace_back( "BASE",
-                                       _( "* This item is <info>not rigid</info>.  Its"
-                                          " volume and encumbrance increase with contents." ) );
-                }
-            }
+    if( is_non_rigid() ) {
+            info.emplace_back( "BASE",
+                               _( "* This item is <info>not rigid</info>.  Its"
+                                  " volume and encumbrance increase with contents." ) );
         }
     }
 

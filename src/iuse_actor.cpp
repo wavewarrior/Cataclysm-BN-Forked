@@ -259,7 +259,7 @@ void explosion_iuse::load( const JsonObject& obj )
     if( fields_max_intensity == 0 ) { fields_max_intensity = fields_type.obj().get_max_intensity(); }
     obj.read( "emp_blast_radius", emp_blast_radius );
     obj.read( "scrambler_blast_radius", scrambler_blast_radius );
-    obj.read( "sound_volume", sound_volume );
+    assign( obj, "sound_volume", sound_volume );
     obj.read( "sound_msg", sound_msg );
     obj.read( "no_deactivate_msg", no_deactivate_msg );
 }
@@ -267,10 +267,10 @@ void explosion_iuse::load( const JsonObject& obj )
 int explosion_iuse::use( player& p, item& it, bool t, const tripoint_bub_ms& pos ) const
 {
     if( t ) {
-    if( sound_volume >= 0 ) {
+    if( sound_volume >= 0_dB ) {
             sound_event se;
             se.origin = pos;
-            se.volume = sound_volume;
+            se.volume = units::to_decibel( sound_volume );
             se.category = sounds::sound_t::alarm;
             se.movement_noise = true;
             se.description = sound_msg.empty() ? _( "Tick." ) : _( sound_msg );

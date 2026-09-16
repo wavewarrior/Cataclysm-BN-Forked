@@ -2816,6 +2816,7 @@ void game::toggle_gate( const tripoint_bub_ms &p )
 
 
 
+
 // Used to set up the first Hotkey in the display set
 
 

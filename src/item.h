@@ -1,6 +1,7 @@
 #pragma once
 
 #include "calendar.h"
+#include "catalua_icallback_actor.h"
 #include "coordinates.h"
 #include "damage.h"
 #include "data_vars.h"
@@ -32,6 +33,7 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+
 
 class Character;
 class JsonIn;
@@ -1617,6 +1619,9 @@ class item: public location_visitable<item>, public game_object<item>
 
         /**If item made out of glass, or has the SHATTERS flag?*/
         bool can_shatter() const;
+
+        /** If the item is non-rigid: either has rigid = false or max_encumber higher than encumber */
+        bool is_non_rigid() const;
 
         /**
          * @name Item properties

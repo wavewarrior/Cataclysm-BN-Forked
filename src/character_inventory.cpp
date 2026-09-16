@@ -350,8 +350,6 @@ void Character::inv_set_stack_favorite( int position, bool favorite )
     inv.set_stack_favorite( position, favorite );
 }
 
-units::volume Character::inv_volume() const { return inv.volume(); }
-
 void Character::inv_unsort() { inv.unsort(); }
 
 detached_ptr<item> Character::inv_remove_item( item* it ) { return inv.remove_item( it ); }

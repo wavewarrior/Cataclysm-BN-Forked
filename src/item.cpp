@@ -972,6 +972,7 @@ bool item::has_item_with_id( const itype_id& itype ) const
         return itm->typeId() == itype;
     } );
 
+
 }
 
 bool item_ptr_compare_by_charges( const item* left, const item* right )

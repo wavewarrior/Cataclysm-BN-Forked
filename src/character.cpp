@@ -1443,6 +1443,7 @@ bionic_collection &Character::get_bionic_collection() const { return *my_bionics
 
 
 
+
 static auto get_enchantment_mut_visible(
     const trait_id &, const Character &,
     const enchantment &, const enchantment_source &src

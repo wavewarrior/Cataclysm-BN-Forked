@@ -418,6 +418,7 @@ input_context game::get_player_input( std::string& action )
 
 
 
+
 // Perform a reach attach using wielded weapon
 namespace
 {
