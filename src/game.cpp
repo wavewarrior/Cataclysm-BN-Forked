@@ -2903,7 +2903,7 @@ void game::resize_reality_bubble_to( int new_size )
 
     // Reload the map around the player; this fills the submap cache, recreates load handles,
     // rebuilds distribution_grid_tracker and fluid_grid.
-    load_map( new_abs_sub, /*pump_events=*/false );
+    load_map( tripoint_abs_sm( new_abs_sub, player_abs_sm.z() ), /*pump_events=*/false );
     debug_assert_player_map_origin( "resize_reality_bubble_to" );
 
     // Adjust surviving monsters' local navigation state to the new coordinate origin.

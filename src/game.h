@@ -367,7 +367,11 @@ class game: public submap_load_listener
         std::optional<tripoint_bub_ms> find_or_make_stairs(
             map& mp, int z_after, bool& rope_ladder, bool peeking );
         /** Actual z-level movement part of vertical_move. Doesn't include stair finding, traps etc. */
-        auto vertical_shift( const int z_before, const int z_after ) -> void;
+        auto vertical_shift( const int z_after, const bool keep_grab = false ) -> void;
+        /** Post-move counterpart of vertical_shift: notifies subsystems of a z-level change
+         *  that has ALREADY happened (called from the player::setpos hook). Unlike
+         *  vertical_shift it must not move the player or touch grab state. */
+        auto vertical_shift_notify( const int z_before, const int z_after ) -> void;
         /** Add goes up/down auto_notes (if turned on) */
         void vertical_notes( int z_before, int z_after );
         /** Checks to see if a player can use a computer (not illiterate, etc.) and uses if able. */

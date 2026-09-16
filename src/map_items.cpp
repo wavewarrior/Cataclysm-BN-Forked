@@ -185,16 +185,40 @@ static const std::string str_OPENCLOSE_INSIDE( "OPENCLOSE_INSIDE" );
 
 static location_vector<item> nulitems( new fake_item_location() );
 
+// Declared in map.cpp (external linkage); resident-only mapbuffer lookup options.
+auto resident_item_lookup() -> mapbuffer_lookup_options;
+// Declared in map.cpp (external linkage); decides whether item mutations at an
+// absolute position can be routed through the mapbuffer instead of this map.
+auto can_delegate_item_mutation_to_mapbuffer( const map &m, const tripoint_abs_ms &p,
+        const submap *sm ) -> bool;
+
 map_stack map::i_at( const tripoint_bub_ms& p )
 {
+    const auto abs_pos = map_local_to_abs( *this, p );
     point_sm_ms l;
     submap* const current_submap = get_submap_at( p, l );
     if( current_submap == nullptr ) {
         nulitems.clear();
-        return map_stack{&nulitems, p, this};
+        return map_stack( {
+            .stack = &nulitems,
+            .location = abs_pos,
+            .local_origin = this,
+        } );
     }
 
-    return map_stack{&current_submap->get_items( l ), p, this};
+    if( can_delegate_item_mutation_to_mapbuffer( *this, abs_pos, current_submap ) ) {
+        return map_stack( {
+            .stack = &current_submap->get_items( l ),
+            .location = abs_pos,
+            .origin = &get_mapbuffer(),
+        } );
+    }
+
+    return map_stack( {
+        .stack = &current_submap->get_items( l ),
+        .location = abs_pos,
+        .local_origin = this,
+    } );
 }
 
 map_stack::iterator map::i_rem(
@@ -220,16 +244,36 @@ map_stack::iterator map::i_rem(
 
 detached_ptr<item> map::i_rem( const tripoint_bub_ms& p, item* it )
 {
-    map_stack map_items = i_at( p );
-    detached_ptr<item> res;
-    map_items.remove_top_items_with( [&res, it]( detached_ptr<item>&& e ) {
-        if( &*e == it ) {
-            res = std::move( e );
-            return detached_ptr<item>();
-        }
-        return std::move( e );
-    } );
-    return res;
+    point_sm_ms l;
+    submap* const current_submap = get_submap_at( p, l );
+    if( current_submap == nullptr ) {
+        return detached_ptr<item>();
+    }
+
+    const auto abs_pos = map_local_to_abs( *this, p );
+    if( can_delegate_item_mutation_to_mapbuffer( *this, abs_pos, current_submap ) ) {
+        return get_mapbuffer().remove_item( abs_pos, it,
+                                            resident_item_lookup() );
+    }
+
+    auto& items = current_submap->get_items( l );
+    if( std::ranges::find( items, it ) == items.end() ) {
+        return detached_ptr<item>();
+    }
+
+    // remove from the active items cache (if it isn't there does nothing)
+    current_submap->active_items.remove( it );
+    if( current_submap->active_items.empty() ) {
+        submaps_with_active_items.erase( project_to<coords::sm>( abs_pos ) );
+    }
+
+    const auto removed_emissive = it->is_emissive();
+    current_submap->update_lum_rem( l, *it );
+    if( removed_emissive ) {
+        invalidate_lightmap_caches();
+    }
+
+    return items.remove( it );
 }
 
 std::vector<detached_ptr<item>> map::i_clear( const tripoint_bub_ms& p )
@@ -325,7 +369,7 @@ void map::spawn_item(
     if( item_is_blacklisted( type_id ) ) { return; }
 
     // Skip spawning items in dimension-bounded out-of-bounds areas
-    if( is_out_of_bounds( tripoint_bub_ms( p ) ) ) { return; }
+    if( is_outside_pocket_dimension_bounds( pocket_info_, map_local_to_abs( *this, p ) ) ) { return; }
 
     for( size_t i = 0; i < quantity; i++ ) {
         // spawn the item
@@ -355,7 +399,7 @@ detached_ptr<item> map::add_item_or_charges(
     // Checks if item would not be destroyed if added to this tile
     auto valid_tile = [&]( const tripoint_bub_ms & e ) {
         // Cannot add items to dimension-bounded out-of-bounds areas or unloaded submaps
-        if( is_out_of_bounds( e ) ) { return false; }
+        if( is_outside_pocket_dimension_bounds( pocket_info_, map_local_to_abs( *this, e ) ) ) { return false; }
 
         // Some tiles destroy items (e.g. lava)
         if( has_flag( "DESTROY_ITEM", e ) ) { return false; }
@@ -410,7 +454,7 @@ detached_ptr<item> map::add_item_or_charges(
         const pathfinding_settings
         setting( 0, max_dist, max_path_length, 0, false, true, false, false, false );
         for( const auto& e : tiles ) {
-            if( is_out_of_bounds( e ) ) { continue; }
+            if( is_outside_pocket_dimension_bounds( pocket_info_, map_local_to_abs( *this, e ) ) ) { continue; }
             // must be a path to the target tile
             if( route( pos, e, setting ).empty() ) { continue; }
             if( obj->made_of( LIQUID ) || !obj->has_flag( flag_DROP_ACTION_ONLY_IF_LIQUID ) ) {
@@ -1135,7 +1179,11 @@ std::vector<detached_ptr<item>> map::use_charges( const tripoint_bub_ms &origin,
             tmp->charges = faupart->vehicle().drain( ftype, quantity );
             // TODO: Handle water poison when crafting starts respecting it
             quantity -= tmp->charges;
-            ret.push_back( std::move( tmp ) );
+            // Don't return a 0-charge phantom for types the tanks can't provide:
+            // it would replace the real component during crafting (#9440)
+            if( tmp->charges > 0 ) {
+                ret.push_back( std::move( tmp ) );
+            }
 
             if( quantity == 0 ) { return ret; }
         }
@@ -1149,7 +1197,9 @@ std::vector<detached_ptr<item>> map::use_charges( const tripoint_bub_ms &origin,
             detached_ptr<item> tmp = item::spawn( type, calendar::start_of_cataclysm );
             tmp->charges = autoclavepart->vehicle().drain( ftype, quantity );
             quantity -= tmp->charges;
-            ret.push_back( std::move( tmp ) );
+            if( tmp->charges > 0 ) {
+                ret.push_back( std::move( tmp ) );
+            }
 
             if( quantity == 0 ) { return ret; }
         }

@@ -32,7 +32,7 @@ static auto update_map_after_player_setpos( player &who,
         g->update_map( who );
     }
     if( old_pos.z() != new_pos.z() ) {
-        g->vertical_shift( old_pos.z(), new_pos.z() );
+        g->vertical_shift_notify( old_pos.z(), new_pos.z() );
     }
 }
 
@@ -92,7 +92,10 @@ auto player::setpos( const tripoint_bub_ms &p ) -> void
 auto player::setpos( const tripoint_abs_ms &p ) -> void
 {
     const auto old_pos = position;
-    position = p;
+    // Must delegate to Character::setpos rather than assigning `position` directly:
+    // that is where the physics creature-body hook lives, and skipping it leaves
+    // the avatar with no Box2D hitbox, so projectile raycasts never see it.
+    Character::setpos( p );
     update_map_after_player_setpos( *this, old_pos );
 }
 

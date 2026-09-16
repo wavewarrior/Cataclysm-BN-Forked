@@ -757,6 +757,7 @@ mutation_category_id Character::get_highest_category() const
 
 void Character::recalculate_enchantment_cache()
 {
+    const enchantment old_ench_sources = *enchantment_cache;
     // start by resetting the cache
     *enchantment_cache = enchantment();
     enchantment_sources.clear();
@@ -782,6 +783,12 @@ void Character::recalculate_enchantment_cache()
                 enchantment_sources.emplace_back( &ench, &mut_map );
             }
         }
+        for( const enchantment& ench : mut.mut_enchantments ) {
+            if( ench.is_active( *this, mut.activated && mut_map.second.powered ) ) {
+                enchantment_cache->force_add( ench );
+                enchantment_sources.emplace_back( &ench, &mut_map );
+            }
+        }
     }
 
     for( const bionic& bio : get_bionic_collection() ) {
@@ -795,9 +802,22 @@ void Character::recalculate_enchantment_cache()
                 enchantment_sources.emplace_back( &ench, &bio );
             }
         }
+        for( const enchantment& ench : bid->bio_enchantments ) {
+            if( ench.is_active( *this, bio.powered &&
+                                bid->has_flag( STATIC( flag_id( "BIONIC_TOGGLED" ) ) ) ) ) {
+                enchantment_cache->force_add( ench );
+                enchantment_sources.emplace_back( &ench, &bio );
+            }
+        }
     }
 
+    enchantment_cache->activate_effects( *this );
+    enchantment_cache->deactivate_removed_effects( *this, old_ench_sources );
+
     rebuild_mutation_cache();
+
+    // Enchantments can give HP now, so recalc it
+    recalc_hp();
 }
 
 void Character::rebuild_mutation_cache()

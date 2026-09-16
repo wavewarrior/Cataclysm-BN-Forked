@@ -709,18 +709,6 @@ void map::on_submap_unloaded( const tripoint_abs_sm &pos, const dimension_id &di
     cache_submap_at_grid( abs_to_map_local( *this, pos ), nullptr );
 }
 
-void map::set_transparency_cache_dirty( const int zlev )
-{
-    if( inbounds_z( zlev ) ) {
-        get_cache( zlev ).transparency_cache_dirty.set();
-        // If we are invalidating the entire transparency cache for this zlevel, the sound absorption cache will also be invalidated.
-        get_cache( zlev ).absorption_cache_dirty.set();
-        for( const auto p : flat_bubble_submaps() ) {
-            auto *sm = get_submap_at_grid( tripoint_bub_sm( p, zlev ) );
-            if( sm ) { sm->transparency_dirty = true; }
-        }
-    }
-}
 
 static submap null_submap( tripoint_abs_sm::zero() );
 

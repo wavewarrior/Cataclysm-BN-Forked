@@ -86,9 +86,10 @@ namespace {
 
 bool s_sdl_platform_initialized = false;
 
-auto test_compute_accel() -> preload_config::compute_accel {
+auto test_compute_accel(bool* explicit_env = nullptr) -> preload_config::compute_accel {
     auto const* const env_accel = std::getenv("CATA_TEST_COMPUTE_ACCELERATION");
     if (env_accel != nullptr && env_accel[0] != '\0') {
+        if (explicit_env != nullptr) { *explicit_env = true; }
         return preload_config::compute_accel_from_string(env_accel);
     }
 
@@ -112,7 +113,8 @@ auto init_test_sdl_gpu() -> void {
     s_sdl_platform_initialized = true;
 
     preload_config::load();
-    const auto accel = test_compute_accel();
+    bool accel_from_env = false;
+    const auto accel = test_compute_accel(&accel_from_env);
     preload_config::set_compute_accel(accel);
 
     cata_gpu::init();
@@ -121,12 +123,22 @@ auto init_test_sdl_gpu() -> void {
         // must not: the test binary is windowless, so under D2 there is no
         // lighting::gpu_device to adopt, and cata_gpu's own probe needs compute shader blobs
         // (data/shaders/*.msl) that the slim macOS preset does not build. A null device is
-        // upstream's own documented "device creation failed" contract, and
-        // compute_backend.h::selected_backend() already degrades to backend::cpu_compute on
-        // it — which is exactly the lightmap path the pre-merge baseline suite exercised.
-        // Throwing would make every one of the ~1085 cases unrunnable on this platform.
+        // upstream's own documented "device creation failed" contract.
+        // selected_backend() only degrades to backend::cpu_compute on a null device when the
+        // accel is auto_select — with an explicit gpu/gpu_software request it stays on the GPU
+        // path, which then bails out of build_transparency_caches without building the cache
+        // (lighting-dependent tests like the crafting ones fail). So drop the requested accel
+        // to cpu here, which is exactly the lightmap path the pre-merge baseline suite
+        // exercised. Throwing would make every one of the ~1085 cases unrunnable on this
+        // platform.
+        // An explicit CATA_TEST_COMPUTE_ACCELERATION=gpu* request is honoured as-is (it
+        // reproduces the stuck-GPU-path behaviour on purpose, e.g. for regression
+        // attribution); only the implicit default is downgraded.
         DebugLog(DL::Warn, DC::Main)
             << "SDL_GPU unavailable for tests; falling back to the CPU compute path";
+        if (!accel_from_env) {
+            preload_config::set_compute_accel(preload_config::compute_accel::cpu);
+        }
     }
 }
 
@@ -397,7 +409,7 @@ int main(int argc, const char* argv[]) {
     }
 
     if( session.configData().listTags || session.configData().listTests ||
-        session.configData().listTestNamesOnly || session.configData().listReporters ) {
+        session.configData().listReporters ) {
         return session.run();
     }
 

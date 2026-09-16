@@ -2098,7 +2098,7 @@ void vehicle::interact_with( const tripoint_bub_ms& pos, int interact_part )
         }
         case PEEK_CURTAIN: {
             add_msg( _( "You carefully peek through the curtains." ) );
-            g->peek( you.bub_pos() - pos );
+            g->peek( pos );
             return;
         }
         case USE_HOTPLATE: {

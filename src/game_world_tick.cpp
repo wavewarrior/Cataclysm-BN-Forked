@@ -112,6 +112,7 @@ void game::cleanup_dead()
                     remove_npc_follower( ( *it )->getID() );
                     get_overmapbuffer( ( *it )->get_dimension() ).remove_npc( ( *it )->getID() );
                 }
+                ( *it )->get_mapbuffer().remove_active_npc( **it );
                 it = active_npc.erase( it );
             } else {
                 it++;
@@ -136,7 +137,7 @@ static int lod_dist( const tripoint_bub_ms &a, const tripoint_bub_ms &b )
 int game::tier_assign_all()
 {
     if( !monster_lod_enabled ) {
-        const std::string &player_dim_lod = m.get_bound_dimension();
+        const dimension_id &player_dim_lod = m.get_bound_dimension();
         int count = 0;
         int cross_dim = 0;
         for( monster &mon : all_monsters() ) {
@@ -166,7 +167,7 @@ int game::tier_assign_all()
     const int tier12_dist  = std::max( lod_tier_coarse_dist, tier01_dist + 1 );
     const int demote_cd    = lod_demotion_cooldown;
 
-    const std::string &player_dim = m.get_bound_dimension();
+    const dimension_id &player_dim = m.get_bound_dimension();
 
     for( monster &mon : all_monsters() ) {
         int8_t new_tier;
@@ -232,15 +233,15 @@ void game::world_tick()
     auto total_emitter_active_submaps = int64_t{ 0 };
     auto total_fire_request_submaps = int64_t{ 0 };
     auto total_field_count = int64_t{ 0 };
-    MAPBUFFER_REGISTRY.for_each( [&]( const std::string & dim, mapbuffer & mb ) {
+    MAPBUFFER_REGISTRY.for_each( [&]( const dimension_id & dim, mapbuffer & mb ) {
         ZoneScopedN( "world_tick_dimension" );
-        ZoneText( dim.c_str(), dim.size() );
+        ZoneText( dim.str().c_str(), dim.str().size() );
 
         // When pocket simulation is disabled, skip all non-primary dimensions.
         // The primary dimension always uses dim == "" (empty string).
         // none/minimal/moderate distinctions are deferred to a future PR —
         // for now any setting other than "off" runs the full simulation path.
-        if( pocket_simulation_level == pocket_sim_level::off && !dim.empty() ) {
+        if( pocket_simulation_level == pocket_sim_level::off && !dim.is_empty() ) {
             return;
         }
 
@@ -283,7 +284,7 @@ void game::world_tick()
                 // Primary dimension only: m.emit_field() operates in primary-map coordinates.
                 // emitter_cache holds the positions of EMITTER furniture, lazily rebuilt on first
                 // use after furniture changes and iterated directly on subsequent ticks.
-                if( do_emits && dim.empty() ) {
+                if( do_emits && dim.is_empty() ) {
                     if( !sm_ptr->emitter_cache.has_value() ) {
                         ++total_emitter_dirty_submaps;
                         ZoneScopedN( "field_emits_rebuild" );

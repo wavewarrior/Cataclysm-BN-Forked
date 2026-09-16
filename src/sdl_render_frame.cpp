@@ -214,7 +214,7 @@ int px = 0, py = 0;
 std::uint64_t gen = 0;
 if( g && world_generator && world_generator->active_world ) {
     const int z = g->u.bub_pos().z();
-        const point origin = g->m.get_abs_sub().raw().xy();
+        const point origin = g->m.get_abs_sub().raw();
         // Read generation from the current level's cache.
         const auto &cache = g->m.get_cache_ref( z );
         // Fold in outside_generation: sky_vis comes from outside_cache, which is
@@ -327,7 +327,7 @@ if( g && world_generator && world_generator->active_world ) {
             << "[flash][gpu] rebuild: struct=" << rebuild.structure
             << " vis=" << rebuild.vis
             << " rc=" << rc_rebuild
-            << " origin=" << ( g ? g->m.get_abs_sub().raw().xy().to_string() : "?" )
+            << " origin=" << ( g ? g->m.get_abs_sub().raw().to_string() : "?" )
             << " px=" << px << " py=" << py
             << " gen=" << ( g ? std::to_string( gen ) : "?" )
             << " cam_xy0=" << cam_x0 << "," << cam_y0

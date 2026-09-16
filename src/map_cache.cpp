@@ -733,7 +733,7 @@ void map::update_suspension_cache(const int& z) {
             ++iter;
             continue;
         }
-        const ter_t& terrain = ter(loctp.xy()).obj();
+        const ter_t& terrain = ter(loctp).obj();
         if (terrain.has_flag(TFLAG_SUSPENDED)) {
             if (!is_suspension_valid(loctp)) {
                 support_dirty(loctp);
@@ -1143,8 +1143,9 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
         for (const int z : dirty_lightmap_levels) {
             auto& c = get_cache(z);
             std::fill(c.sm.begin(), c.sm.end(), 0.0f);
-            std::fill(c.light_source_buffer.begin(), c.light_source_buffer.end(),
-                      level_cache::buffered_light_source{});
+            std::fill(c.light_source_buffer.begin(), c.light_source_buffer.end(), 0.0f);
+            std::fill(c.colored_light_source_buffer.begin(), c.colored_light_source_buffer.end(), 0.0f);
+            std::fill(c.light_source_color_buffer.begin(), c.light_source_color_buffer.end(), 0u);
             c.light_source_points.clear();
             std::ranges::fill(c.lm, 0.0f);
             // The GPU lighting pass does not write the fork's CPU coloured-light lane, so
@@ -1257,8 +1258,10 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
                     for (const int z : dirty_lightmap_levels) {
                         auto& c = get_cache(z);
                         std::fill(c.sm.begin(), c.sm.end(), 0.0f);
-                        std::fill(c.light_source_buffer.begin(), c.light_source_buffer.end(),
-                                  level_cache::buffered_light_source{});
+                        std::fill(c.light_source_buffer.begin(), c.light_source_buffer.end(), 0.0f);
+                        std::fill(c.colored_light_source_buffer.begin(), c.colored_light_source_buffer.end(),
+                                  0.0f);
+                        std::fill(c.light_source_color_buffer.begin(), c.light_source_color_buffer.end(), 0u);
                         c.light_source_points.clear();
                         // lm must be zeroed because build_sunlight_cache only writes outdoor tiles.
                         std::ranges::fill(c.lm, 0.0f);

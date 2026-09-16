@@ -130,6 +130,45 @@ static auto is_cargo_recharge_candidate( const item &it ) -> bool
     return it.has_flag( flag_RECHARGE ) || it.has_flag( flag_USE_UPS );
 }
 
+auto vehicle::invalidate_cargo_recharge_cache() -> void
+{
+    cargo_recharge_targets_dirty = true;
+}
+
+auto vehicle::get_cargo_recharge_targets() -> std::vector<cargo_recharge_target>
+{
+    if( cargo_recharge_targets_dirty ) {
+        cargo_recharge_targets_.clear();
+        for( const vpart_reference &vp : get_parts_including_carried( VPFLAG_CARGO ) ) {
+            for( item *&outer : get_items( static_cast<int>( vp.part_index() ) ) ) {
+                outer->visit_items( [this, &vp]( item * it ) {
+                    if( !is_cargo_recharge_candidate( *it ) ) {
+                        return VisitResponse::NEXT;
+                    }
+                    cargo_recharge_targets_.push_back( cargo_recharge_target{
+                        .target = safe_reference<item>( *it ),
+                        .cargo_part = static_cast<int>( vp.part_index() ),
+                    } );
+                    return VisitResponse::SKIP;
+                } );
+            }
+        }
+        cargo_recharge_targets_dirty = false;
+    }
+
+    std::erase_if( cargo_recharge_targets_, [this]( const cargo_recharge_target & entry ) {
+        if( !entry.target || entry.cargo_part < 0 ||
+            static_cast<size_t>( entry.cargo_part ) >= parts.size() ) {
+            return true;
+        }
+
+        item &target = *entry.target;
+        return !is_cargo_recharge_candidate( target );
+    } );
+
+    return cargo_recharge_targets_;
+}
+
 using battery_charge_buckets = std::array<std::vector<int>, battery_charge_bucket_count>;
 
 auto battery_charge_level( const vehicle_part &part ) -> int

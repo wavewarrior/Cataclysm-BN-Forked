@@ -497,7 +497,7 @@ TEST_CASE( "luna_rejects_duplicate_member_registration", "[lua]" )
     auto lib = luna::begin_lib( lua, "duplicate_member_test" );
     luna::set_fx( lib, "same_name", []() -> int { return 1; } );
     CHECK_THROWS_WITH( luna::set_fx( lib, "same_name", []() -> int { return 2; } ),
-                       Catch::Contains( "Duplicate Lua binding registration" ) );
+                       Catch::Matchers::ContainsSubstring( "Duplicate Lua binding registration" ) );
     luna::finalize_lib( lib );
 }
 

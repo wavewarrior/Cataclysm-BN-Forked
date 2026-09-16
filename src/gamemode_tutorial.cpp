@@ -148,7 +148,7 @@ bool tutorial_game::init()
     you.i_add( item::spawn( "lighter", calendar::start_of_cataclysm ) );
     you.set_skill_level( skill_gun, 5 );
     you.set_skill_level( skill_melee, 5 );
-    g->load_map( project_to<coords::sm>( lp_abs.xy() ) );
+    g->load_map( project_to<coords::sm>( lp_abs ) );
     const auto z = you.bub_pos().z();
     you.setpos( tripoint_bub_ms( 2, 4, z ) );
     return true;

@@ -183,17 +183,18 @@ TEST_CASE("adjacent_friendly_fire_prevention", "[projectile][ballistics]") {
 
     clear_projectile_test_line( here, shooter_pos, target_pos );
 
+    // Set up avatar as shooter before NPCs are spawned, so the reality bubble is
+    // re-centred on a known position first (matches the sibling tests below).
+    auto& shooter = get_avatar();
+    shooter.setpos(shooter_pos);
+    shooter.set_body();
+
     // Create friendly NPC at adjacent position
     auto& ally = spawn_npc(friendly_pos, "thug");
     ally.set_fac(faction_id("your_followers"));
     ally.set_attitude(NPCATT_FOLLOW);
     REQUIRE(g->critter_at(friendly_pos) == &ally);
     REQUIRE(ally.is_player_ally());
-
-    // Set up avatar as shooter
-    auto& shooter = get_avatar();
-    shooter.setpos(shooter_pos);
-    shooter.set_body();
 
     // Create a gun for the projectile
     auto gun_ptr = item::spawn(itype_id("glock_19"));

@@ -2261,10 +2261,37 @@ auto game::vertical_shift( const int z_after, const bool keep_grab ) -> void
         pw->on_zlevel_changed( m, z_before, z_after );
     }
 
+    // spawn_monsters / validate_mounted_npcs / vertical_notes / update_overmap_seen
+    // are performed by vertical_shift_notify(), which u.setpos() above triggers via
+    // the player::setpos hook — doing them here too would run them twice per move.
+}
+
+// ——— vertical_shift_notify ———
+// Post-move counterpart of vertical_shift, for z-level changes that have already
+// been applied to the player (the player::setpos hook in player.cpp).
+// Body preserved from upstream main's game::vertical_shift( z_before, z_after );
+// it deliberately does NOT move the player or touch grab state.
+// (Main's body also called debug_assert_player_map_origin, which is file-local
+// to game.cpp and cannot be reached from this TU.)
+auto game::vertical_shift_notify( const int z_before, const int z_after ) -> void
+{
+    if( z_after < -OVERMAP_DEPTH || z_after > OVERMAP_HEIGHT ) {
+        debugmsg( "Tried to get z-level %d outside allowed range of %d-%d",
+                  z_after, -OVERMAP_DEPTH, OVERMAP_HEIGHT );
+        return;
+    }
+
+    if( z_before == z_after ) {
+        return;
+    }
+
+    scent.reset();
+
     m.spawn_monsters( true );
     // the critter may need to reconstruct its rider data after changing z-level
     validate_mounted_npcs();
     vertical_notes( z_before, z_after );
+    update_overmap_seen();
 }
 
 

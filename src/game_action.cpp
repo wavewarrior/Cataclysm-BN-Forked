@@ -142,7 +142,7 @@ void game::knockback( std::vector<tripoint_bub_ms> &traj, int stun, int dam_mult
             add_msg( _( "%s was stunned!" ), targ->name() );
         }
         for( size_t i = 1; i < traj.size(); i++ ) {
-            if( m.impassable( traj[i].xy() ) || m.obstructed_by_vehicle_rotation( tp, traj[i] ) ) {
+            if( m.impassable( traj[i] ) || m.obstructed_by_vehicle_rotation( tp, traj[i] ) ) {
                 targ->setpos( traj[i - 1] );
                 force_remaining = traj.size() - i;
                 if( stun != 0 ) {
@@ -207,7 +207,7 @@ void game::knockback( std::vector<tripoint_bub_ms> &traj, int stun, int dam_mult
             add_msg( _( "%s was stunned!" ), targ->name );
         }
         for( size_t i = 1; i < traj.size(); i++ ) {
-            if( m.impassable( traj[i].xy() ) ||
+            if( m.impassable( traj[i] ) ||
                 m.obstructed_by_vehicle_rotation( tp, traj[i] ) ) {  // oops, we hit a wall!
                 targ->setpos( traj[i - 1] );
                 force_remaining = traj.size() - i;
@@ -2112,7 +2112,7 @@ for( const auto &dim_id : submap_loader.active_dimensions() ) {
     // Destroy trackers for non-primary dimensions with no remaining tracked submaps.
     {
         for( auto it = grid_trackers_.begin(); it != grid_trackers_.end(); ) {
-            if( !it->first.empty() && !it->second->has_tracked_submaps() ) {
+            if( !it->first.is_empty() && !it->second->has_tracked_submaps() ) {
                 submap_loader.remove_listener( it->second.get() );
                 it = grid_trackers_.erase( it );
             } else {

@@ -362,7 +362,7 @@ static void init_bubble_config()
 
 
 static auto discard_monster_map_for_loaded_bubble( map &here,
-        const std::string &dimension_id ) -> void
+        const dimension_id &dim_id ) -> void
 {
     const auto origin = here.get_abs_sub();
     const auto zmin = -OVERMAP_DEPTH;
@@ -373,7 +373,7 @@ static auto discard_monster_map_for_loaded_bubble( map &here,
         cata::views::cartesian_product( z_range, xy_range, xy_range ),
     [&]( auto tup ) {
         const auto [gz, gx, gy] = tup;
-        get_overmapbuffer( dimension_id ).discard_monster_map(
+        get_overmapbuffer( dim_id ).discard_monster_map(
             tripoint_abs_sm{ origin.x() + gx, origin.y() + gy, gz } );
     } );
 }
@@ -894,7 +894,7 @@ void game::quickload()
     if( active_world->info->save_exists( save_t::from_save_id( u.get_save_id() ) ) ) {
         // Clear all registered dimension slots before reloading (see the same pattern in
         // game::unload_ui_state() for rationale — multiple dimensions may be active).
-        MAPBUFFER_REGISTRY.for_each( []( const std::string &, mapbuffer & buf ) {
+        MAPBUFFER_REGISTRY.for_each( []( const dimension_id &, mapbuffer & buf ) {
             buf.clear();
         } );
         get_overmapbuffer( current_dimension_id_ ).clear();

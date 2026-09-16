@@ -15,7 +15,7 @@
 auto coop_world_checksum( int radius ) -> uint64_t
 {
     auto h = COOP_FNV_OFFSET;
-    const tripoint_abs_sm abs_sub = g->m.get_abs_sub();
+    const tripoint_abs_sm abs_sub( g->m.get_abs_sub(), g->get_levz() );
 
     // 1. Terrain + furniture in the sync radius (submap grid).
     for( int dy = -radius; dy <= radius; ++dy ) {

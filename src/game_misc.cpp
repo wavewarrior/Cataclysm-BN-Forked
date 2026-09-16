@@ -553,6 +553,34 @@ auto game::visibility_cache_z() -> int
 {
     return is_looking ? u.bub_pos().z() : ter_view_p.z();
 }
+auto game::refresh_player_visibility_cache_if_needed( const bool player_map_cache_current ) -> void
+{
+#if defined( CATA_SDL )
+    ZoneScopedN( "refresh_player_visibility_cache_if_needed" );
+
+    const auto zlev = u.bub_pos().z();
+    const auto needs_visibility_refresh = [&]() {
+        if( !m.get_visibility_variables_cache().variables_set ) {
+            return true;
+        }
+        return m.visibility_caches_dirty();
+    };
+
+    if( !needs_visibility_refresh() ) {
+        return;
+    }
+
+    if( !player_map_cache_current ) {
+        m.build_map_cache( zlev );
+    }
+    if( needs_visibility_refresh() ) {
+        m.update_visibility_cache( zlev );
+    }
+#else
+    ( void )player_map_cache_current;
+#endif
+}
+
 
 void game::draw_ter( const tripoint_bub_ms &center, const bool looking,
                      const bool /* draw_sounds */ )
@@ -1605,9 +1633,9 @@ point_rel_sm game::update_map( int &x, int &y )
     // Distribution-grid tracker updates are fully incremental via
     // on_submap_loaded/unloaded; the old full-rebuild has been removed.
     if( reality_bubble_handle_ != 0 ) {
-        const auto &origin = m.get_abs_sub();
-        const tripoint_abs_sm new_center(
-            origin.x() + reality_bubble_radius_, origin.y() + reality_bubble_radius_, origin.z() );
+        const auto origin = m.get_abs_sub();
+        const point_abs_sm new_center(
+            origin.x() + reality_bubble_radius_, origin.y() + reality_bubble_radius_ );
         submap_loader.update_request( reality_bubble_handle_, new_center );
         // Dynamically manage lazy border based on cached option.
         //
@@ -1639,7 +1667,7 @@ point_rel_sm game::update_map( int &x, int &y )
         submap_loader.update();
         // Destroy trackers for non-primary dimensions with no remaining tracked submaps.
         for( auto it = grid_trackers_.begin(); it != grid_trackers_.end(); ) {
-            if( !it->first.empty() && !it->second->has_tracked_submaps() ) {
+            if( !it->first.is_empty() && !it->second->has_tracked_submaps() ) {
                 submap_loader.remove_listener( it->second.get() );
                 it = grid_trackers_.erase( it );
             } else {

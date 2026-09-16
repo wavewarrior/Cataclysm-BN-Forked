@@ -586,6 +586,7 @@ units::mass ret = Creature::weight_capacity();
 /** @EFFECT_STR increases carrying capacity */
 ret += get_str() * 4_kilogram;
 ret *= mutation_value( "weight_capacity_modifier" );
+ret += bonus_from_enchantments( ret / 1_gram, enchantment_value_id( "CARRY_WEIGHT" ) ) * 1_gram;
 
 units::mass worn_weight_bonus = 0_gram;
 for( const item * const &it : worn ) {
@@ -644,7 +645,8 @@ if( has_trait( trait_SHELL2 ) && !has_active_mutation( trait_SHELL2 ) ) {
     ret += 6_liter;
 }
 
-ret = ret * mutation_value( "packmule_modifier" );
+ret *= mutation_value( "packmule_modifier" );
+ret += bonus_from_enchantments( ret / 1_ml, enchantment_value_id( "CARRY_STORAGE" ) ) * 1_ml;
 
 return std::max( ret, 0_ml );
 }

@@ -1332,8 +1332,8 @@ void cata_tiles::draw(
             // center.z(), so the last iteration wins and the index is unambiguous.
             if (z == center.z() && splatmap::active()) {
                 record_splat_frame(
-                    draw_points, z, here.get_abs_sub(), tile_width, tile_height,
-                    lighting::get_render_state().tile_sprite_count(), here,
+                    draw_points, z, tripoint_abs_sm( here.get_abs_sub(), z ), tile_width,
+                    tile_height, lighting::get_render_state().tile_sprite_count(), here,
                     SDL_Rect{dest.x, dest.y, width, height},
                     [this](point_bub_ms p) { return player_to_screen(p); });
             }

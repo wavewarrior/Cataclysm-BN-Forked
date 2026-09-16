@@ -1,4 +1,4 @@
-#include "catch/catch.hpp"
+#include "catch/catch_amalgamated.hpp"
 
 #include "filesystem.h"
 #include "path_info.h"

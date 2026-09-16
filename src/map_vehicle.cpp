@@ -212,7 +212,7 @@ void map::add_vehicle_to_cache(vehicle* veh) {
         int part = veh->part_with_feature(vpr.part_index(), VPFLAG_LADDER, true);
         if (part != -1) {
             // NOTE: This cache may need to be submapfied at some point
-            cached_veh_rope[p.xy()] = std::make_pair(veh, static_cast<int>(part));
+            cached_veh_rope[p] = std::make_pair(veh, static_cast<int>(part));
         }
         level_cache& ch = get_cache(p.z());
         ch.veh_in_active_range = true;
@@ -240,7 +240,7 @@ void map::clear_vehicle_point_from_cache(vehicle* veh, const tripoint_bub_ms& pt
     if (it != ch.veh_cached_parts.end() && it->second.first == veh) {
         if (inbounds(pt)) { ch.veh_exists_at[ch.idx(pt.x(), pt.y())] = false; }
         ch.veh_cached_parts.erase(it);
-        cached_veh_rope.erase(pt.xy());
+        cached_veh_rope.erase(pt);
     }
 }
 
@@ -1037,8 +1037,8 @@ vehicle* map::move_vehicle(vehicle& veh, const tripoint_rel_ms& dp, const tilera
         && !veh.has_sufficient_lift(true) && dp.z() == 0) {
         veh.velocity += veh.velocity < 0 ? 2000 : -2000;
         for (const auto& p : veh.get_points()) {
-            const ter_id& pter = ter(abs_to_map_local(*this, p).xy());
-            if (pter == t_dirt || pter == t_grass) { ter_set(abs_to_map_local(*this, p).xy(), t_dirtmound); }
+            const ter_id& pter = ter(abs_to_map_local(*this, p));
+            if (pter == t_dirt || pter == t_grass) { ter_set(abs_to_map_local(*this, p), t_dirtmound); }
         }
     }
 

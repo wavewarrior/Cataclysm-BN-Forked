@@ -213,14 +213,14 @@ auto coop_client::apply_world_seed_to_avatar() -> void
     // compute the top-left submap corner and call load_map() to reposition abs_sub.
     const int levz = g->get_levz();
         auto lev = project_to<coords::sm>( world_seed_spawn_ );
-        const tripoint_abs_sm abs_sub_before = g->m.get_abs_sub();
+        const point_abs_sm abs_sub_before = g->m.get_abs_sub();
         lev.x() -= g_half_mapsize;
         lev.y() -= g_half_mapsize;
         DebugLog( DL::Info, DC::Main )
                 << "[coop] load_map: abs_sub_before=(" << abs_sub_before.x() << ","
                 << abs_sub_before.y() << ") lev=(" << lev.x() << "," << lev.y() << ")";
         g->load_map( lev, /*pump_events=*/true );
-        const tripoint_abs_sm abs_sub_after = g->m.get_abs_sub();
+        const point_abs_sm abs_sub_after = g->m.get_abs_sub();
         DebugLog( DL::Info, DC::Main )
                 << "[coop] load_map: abs_sub_after=(" << abs_sub_after.x() << ","
                 << abs_sub_after.y() << ") spawn=(" << world_seed_spawn_.x() << ","

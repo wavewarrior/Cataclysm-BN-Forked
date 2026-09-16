@@ -478,7 +478,7 @@ void game::setup( bool load_world_modfiles )
     // which is wiped by load_world_modfiles → unload_data below.
     // Leaving stale overmaps in the registry after that wipe causes dangling-pointer
     // crashes (settings->id) in save_all_overmapbuffers() on the next session.
-    for_each_overmapbuffer( []( const std::string &, overmapbuffer & buf ) {
+    for_each_overmapbuffer( []( const dimension_id &, overmapbuffer & buf ) {
         buf.clear();
     } );
 
@@ -521,6 +521,9 @@ void game::setup( bool load_world_modfiles )
     sounds::reset_sounds();
     clear_zombies();
     coming_to_stairs.clear();
+    for( const auto &guy : active_npc ) {
+        guy->get_mapbuffer().remove_active_npc( *guy );
+    }
     active_npc.clear();
     faction_manager_ptr->clear();
     mission::clear_all();
@@ -549,8 +552,8 @@ void game::load_map( const tripoint_abs_sm &pos_sm, const bool pump_events )
 {
     // Bind the map to the target dimension BEFORE m.load() so loadn() uses the
     // correct MAPBUFFER_REGISTRY slot for submap lookups and generation.
-    const std::string new_dim_id = get_dimension_prefix();
-    const std::string old_dim_id = m.get_bound_dimension();
+    const dimension_id new_dim_id = current_dimension_id_;
+    const dimension_id old_dim_id = m.get_bound_dimension();
 
     // If the dimension has changed, release the old reality-bubble request and
     // flush prev_desired_ so update() does not evict freshly-generated submaps
@@ -579,7 +582,7 @@ void game::load_map( const tripoint_abs_sm &pos_sm, const bool pump_events )
     // and also rebuilds the tracker bounds — both calls are required.
     fluid_grid::bind_dimension( new_dim_id );
 
-    m.load( pos_sm, true, pump_events );
+    m.load( pos_sm.xy(), true, pump_events );
 
     // Repopulate the distribution-grid tracker for the current dimension.
     // With dimension-aware generation, each dimension's submaps live in their own
@@ -611,8 +614,8 @@ void game::load_map( const tripoint_abs_sm &pos_sm, const bool pump_events )
     // The load-manager center is the middle of the loaded region, not the
     // top-left corner.  pos_sm is the top-left corner (abs_sub), so offset
     // by reality_bubble_radius_ in each horizontal direction.
-    const tripoint_abs_sm bubble_center = pos_sm + point_rel_sm( reality_bubble_radius_,
-                                          reality_bubble_radius_ );
+    const point_abs_sm bubble_center = pos_sm.xy() + point_rel_sm( reality_bubble_radius_,
+                                         reality_bubble_radius_ );
 
     // Create or update the reality bubble request.
     if( reality_bubble_handle_ == 0 ) {
@@ -650,7 +653,7 @@ void game::load_map( const tripoint_abs_sm &pos_sm, const bool pump_events )
     submap_loader.update();
     // Destroy trackers for non-primary dimensions that have no remaining tracked submaps.
     for( auto it = grid_trackers_.begin(); it != grid_trackers_.end(); ) {
-        if( !it->first.empty() && !it->second->has_tracked_submaps() ) {
+        if( !it->first.is_empty() && !it->second->has_tracked_submaps() ) {
             submap_loader.remove_listener( it->second.get() );
             it = grid_trackers_.erase( it );
         } else {
@@ -769,7 +772,7 @@ bool game::start_game()
     m.invalidate_map_cache( get_levz() );
     m.build_map_cache( get_levz() );
     // Do this after the map cache has been built!
-    start_loc.place_player( u );
+    start_loc.place_player( u, lev.z() );
     update_map( u );
     // ...but then rebuild it, because we want visibility cache to avoid spawning monsters in sight
     m.invalidate_map_cache( get_levz() );
@@ -961,6 +964,7 @@ void game::load_npcs()
     std::vector<shared_ptr_fast<npc>> just_added;
     for( const auto &temp : get_overmapbuffer( current_dimension_id_ ).get_npcs_near_player(
              radius ) ) {
+        temp->set_dimension( current_dimension_id_ );
         const character_id &id = temp->getID();
         const auto found = std::find_if( active_npc.begin(), active_npc.end(),
         [id]( const shared_ptr_fast<npc> &n ) {
@@ -993,7 +997,7 @@ void game::load_npcs()
         // it was on the overmap. Kill it.
         if( temp->marked_for_death ) {
             temp->die( nullptr );
-        } else {
+        } else if( temp->get_mapbuffer().add_active_npc( temp ) ) {
             active_npc.push_back( temp );
             just_added.push_back( temp );
             if( auto *pw = m.get_physics_world() ) {
@@ -1010,18 +1014,16 @@ void game::load_npcs()
         const int mapsize = 2 * req.radius + 1;
         tinymap req_map( mapsize );
         req_map.bind_dimension( req.dim_id );
-        const tripoint_abs_sm top_left{
-            req.center.raw().x - req.radius,
-            req.center.raw().y - req.radius,
-            req.center.raw().z
-        };
-        req_map.load( top_left.xy(), false );
+        const point_abs_sm top_left( req.center.x() - req.radius,
+                                     req.center.y() - req.radius );
+        req_map.load( top_left, false );
         scoped_map_context ctx( req_map );
 
         for( auto z : std::views::iota( -OVERMAP_DEPTH, OVERMAP_HEIGHT + 1 ) ) {
             const tripoint_abs_sm center_z( req.center.raw().x, req.center.raw().y, z );
             for( const auto &temp : get_overmapbuffer( current_dimension_id_ ).get_npcs_near( center_z,
                     req.radius ) ) {
+                temp->set_dimension( current_dimension_id_ );
                 const auto id = temp->getID();
                 const auto already_active = std::ranges::any_of( active_npc,
                 [id]( const shared_ptr_fast<npc> &n ) {
@@ -1038,7 +1040,7 @@ void game::load_npcs()
                 }
                 if( temp->marked_for_death ) {
                     temp->die( nullptr );
-                } else {
+                } else if( temp->get_mapbuffer().add_active_npc( temp ) ) {
                     active_npc.push_back( temp );
                     just_added.push_back( temp );
                     if( auto *pw = m.get_physics_world() ) {
@@ -1060,6 +1062,7 @@ void game::load_npcs()
 void game::unload_npcs()
 {
     for( const auto &npc : active_npc ) {
+        npc->get_mapbuffer().remove_active_npc( *npc );
         npc->on_unload();
         if( auto *pw = get_map().get_physics_world() ) {
             pw->on_creature_removed( npc.get() );
@@ -1069,7 +1072,7 @@ void game::unload_npcs()
     active_npc.clear();
 }
 
-void game::on_submap_loaded( const tripoint_abs_sm &/*pos*/, const std::string &/*dim_id*/ )
+void game::on_submap_loaded( const tripoint_abs_sm &/*pos*/, const dimension_id &/*dim_id*/ )
 {
     // Schedule an NPC activation scan on the next do_turn().  Any NPCs whose
     // authoritative submap position falls within the newly-simulated submap
@@ -1078,7 +1081,7 @@ void game::on_submap_loaded( const tripoint_abs_sm &/*pos*/, const std::string &
     set_npcs_dirty();
 }
 
-void game::on_submap_unloaded( const tripoint_abs_sm &pos, const std::string &/*dim_id*/ )
+void game::on_submap_unloaded( const tripoint_abs_sm &pos, const dimension_id &/*dim_id*/ )
 {
     // Deactivate any NPCs whose absolute position falls in the evicted submap.
     // abs_pos() returns position directly (no map lookup), so this is safe to call here.
@@ -1088,6 +1091,7 @@ void game::on_submap_unloaded( const tripoint_abs_sm &pos, const std::string &/*
     };
     std::ranges::for_each( active_npc | std::views::filter( in_evicted ),
     []( const shared_ptr_fast<npc> &n ) {
+        n->get_mapbuffer().remove_active_npc( *n );
         n->on_unload();
     } );
     std::erase_if( active_npc, in_evicted );
@@ -1470,21 +1474,21 @@ bool game::cleanup_at_end()
     // Clear dimension tracking state before clearing MAPBUFFER and item types.
     // Metadata must be cleared so stale pointers are not accessed after unload_data().
     fire_loader.clear( submap_loader );
-    kept_pocket_dimension_id_.clear();
+    kept_pocket_dimension_id_ = dimension_id();
     loaded_dimensions_.clear();
 
     // Clear all registered dimension slots.  With multiple simultaneous dimensions
     // (overworld + pocket + nether, etc.) there may be more than two active buffers,
     // so clearing only primary and the player's current dimension would leave orphaned
     // submap data in memory and potentially dangling itype* pointers after unload_data().
-    MAPBUFFER_REGISTRY.for_each( []( const std::string &, mapbuffer & buf ) {
+    MAPBUFFER_REGISTRY.for_each( []( const dimension_id &, mapbuffer & buf ) {
         buf.clear();
     } );
     // Clear ALL dimension overmapbuffers, not just the active one.
     // Without this, dimensions the player visited (e.g. pocket dimensions) leave
     // live overmaps in the registry whose settings pointers dangle after
     // the unload_data() call below clears region_settings_map.
-    for_each_overmapbuffer( []( const std::string &, overmapbuffer & buf ) {
+    for_each_overmapbuffer( []( const dimension_id &, overmapbuffer & buf ) {
         buf.clear();
     } );
 
@@ -1582,7 +1586,7 @@ std::set<character_id> game::get_follower_list()
 
 std::string game::get_dimension_prefix() const
 {
-    return current_dimension_id_;
+    return current_dimension_id_.str();
 }
 
 void game::set_active_dimension_id( const dimension_id &dim_id )
@@ -1590,6 +1594,11 @@ void game::set_active_dimension_id( const dimension_id &dim_id )
     current_dimension_id_ = dim_id;
     g_active_dimension_id = dim_id;
 }
+auto game::rebind_critter_tracker() -> void
+{
+    critter_tracker = &MAPBUFFER_REGISTRY.get( current_dimension_id_ ).creature_tracker();
+}
+
 
 void game::activate_dimension_state( const dimension_id &new_dim_id,
                                      const dimension_id &old_dim_id )
@@ -1667,7 +1676,7 @@ bool game::travel_to_dimension( const dimension_id &dim_id,
 
     // Snapshot the old dimension state before any mutation.
     const dimension_id old_dim_id = here.get_bound_dimension();
-    const tripoint_abs_sm current_abs_sm( here.get_abs_sub() );
+    const tripoint_abs_sm current_abs_sm = player_reality_bubble_origin();
 
     {
         ZoneScopedN( "travel_unload" );
@@ -1722,7 +1731,7 @@ bool game::travel_to_dimension( const dimension_id &dim_id,
             add_msg( m_debug, "[DIM] Marking pocket '%s' as kept", old_dim_id );
         } else if( pd_info.has_value() ) {
             // Entering any pocket → forget the previous kept marker.
-            kept_pocket_dimension_id_.clear();
+            kept_pocket_dimension_id_ = dimension_id();
         }
     }
 
@@ -1798,7 +1807,10 @@ bool game::travel_to_dimension( const dimension_id &dim_id,
         // Load at the destination position if provided; fall back to the old position.
         // Loading at the destination avoids a costly incremental map shift in update_map()
         // when the destination is far from the current position.
-        load_map( load_pos.value_or( current_abs_sm ), false );
+        const tripoint_abs_sm target_load_origin = load_pos.value_or( current_abs_sm );
+        player.setpos( project_to<coords::ms>( target_load_origin +
+                                   tripoint_rel_sm( g_half_mapsize, g_half_mapsize, 0 ) ) );
+        load_map( target_load_origin, false );
 
         add_msg( m_debug, "[DIM] Loaded new dimension '%s' map", dim_id );
 
@@ -1813,7 +1825,7 @@ bool game::travel_to_dimension( const dimension_id &dim_id,
                 here.invalidate_map_cache( z );
             }
         }
-        here.build_map_cache( here.get_abs_sub().z() );
+        here.build_map_cache( target_load_origin.z() );
 
         load_npcs();
         here.spawn_monsters( true );

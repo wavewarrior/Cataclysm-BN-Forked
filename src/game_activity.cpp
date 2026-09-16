@@ -209,8 +209,8 @@ auto game::has_activity_skip_active_fire() -> bool
 
     auto has_fire = false;
     const auto current_dim = m.get_bound_dimension();
-    MAPBUFFER_REGISTRY.for_each( [&]( const std::string & dim, mapbuffer & mb ) {
-        if( has_fire || ( pocket_simulation_level == pocket_sim_level::off && !dim.empty() ) ) {
+    MAPBUFFER_REGISTRY.for_each( [&]( const dimension_id & dim, mapbuffer & mb ) {
+        if( has_fire || ( pocket_simulation_level == pocket_sim_level::off && !dim.is_empty() ) ) {
             return;
         }
         mb.for_each_submap( [&]( std::pair<const tripoint_abs_sm, std::unique_ptr<submap>> &entry ) {
@@ -453,8 +453,8 @@ auto game::run_activity_skip_batch_turns( const int skipped_turns ) -> void
         }
 
         const auto current_dim = m.get_bound_dimension();
-        MAPBUFFER_REGISTRY.for_each( [&]( const std::string & dim, mapbuffer & mb ) {
-            if( pocket_simulation_level == pocket_sim_level::off && !dim.empty() ) {
+        MAPBUFFER_REGISTRY.for_each( [&]( const dimension_id & dim, mapbuffer & mb ) {
+            if( pocket_simulation_level == pocket_sim_level::off && !dim.is_empty() ) {
                 return;
             }
             mb.for_each_submap( [&]( std::pair<const tripoint_abs_sm, std::unique_ptr<submap>> &entry ) {

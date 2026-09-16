@@ -977,8 +977,7 @@ TEST_CASE("box2d_map_load_does_not_accumulate_colliders", "[!shouldfail][vehicle
 
     const auto home = here.get_abs_sub();
     // Far enough that no submap of one bubble is a submap of the other.
-    const auto away = home + tripoint_rel_sm(3 * MAPSIZE, 3 * MAPSIZE, 0);
-    REQUIRE(away.z() == home.z());
+    const auto away = home + point_rel_sm(3 * MAPSIZE, 3 * MAPSIZE);
 
     // A fresh test world is open field, and open ground correctly gets no collider,
     // so the bubble needs real obstacles or there is nothing to count.  These live in

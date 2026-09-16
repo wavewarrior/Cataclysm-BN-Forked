@@ -409,7 +409,7 @@ static void apply_surf_blend_effect(
                     static_cast<uint8_t>( std::min<int>( base.r + target.r, 255 ) ),
                     static_cast<uint8_t>( std::min<int>( base.g + target.g, 255 ) ),
                     static_cast<uint8_t>( std::min<int>( base.b + target.b, 255 ) ),
-                    static_cast<uint8_t>( std::min<int>( base.a + target.a, 255 ) )};
+                    base.a};
                 break;
             }
             case tint_blend_mode::subtract: {
@@ -1387,6 +1387,7 @@ void tileset_loader::load(
     }
 #if defined(DYNAMIC_ATLAS)
     ts.tileset_atlas = std::make_unique<dynamic_atlas>( 4096, 4096, ts.tile_width, ts.tile_height );
+    ts.tileset_atlas->start_batch();
 #endif
     if( config.has_array( "depth_extrude_presets" ) ) {
         for( const JsonObject& obj : config.get_array( "depth_extrude_presets" ) ) {
@@ -1514,6 +1515,7 @@ void tileset_loader::load(
 
     ts.tileset_id = tileset_id;
 #if defined(DYNAMIC_ATLAS)
+    ts.tileset_atlas->end_batch();
     ts.tileset_atlas->readback_load();
 #endif
 }

@@ -739,7 +739,7 @@ bool cata_tiles::draw_vpart(
                        tile, p, bgCol, fgCol, lit_level::MEMORIZED, true, z_drop, false, height_3d );
         }
     } else if( here.has_rope_at( p ) ) {
-        auto veh_pair = here.get_rope_at( p.xy() );
+        auto veh_pair = here.get_rope_at( p );
         vehicle* veh = veh_pair.first;
         int veh_part = veh_pair.second;
 

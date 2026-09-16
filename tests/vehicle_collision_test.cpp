@@ -115,7 +115,7 @@ TEST_CASE("vehicle_collision_hits_occupant_with_stale_in_vehicle_flag", "[vehicl
     // Properly board an NPC on seat A.
     const auto seat_a_pos = veh->bub_part_location(seat_a);
     const string_id<npc_template> test_guy("test_talker");
-    const character_id model_id = here.place_npc(tripoint_bub_ms(15, 15, 0).xy(), test_guy);
+    const character_id model_id = here.place_npc(tripoint_bub_ms(15, 15, 0), test_guy);
     g->load_npcs();
     npc* seated_rider = g->find_npc(model_id);
     REQUIRE(seated_rider != nullptr);
@@ -129,7 +129,7 @@ TEST_CASE("vehicle_collision_hits_occupant_with_stale_in_vehicle_flag", "[vehicl
     // This mirrors the real desync class documented at
     // map_vehicle.cpp's "Part/passenger position mismatch" debug detector.
     const auto seat_b_pos = veh->bub_part_location(seat_b);
-    const character_id stray_id = here.place_npc(tripoint_bub_ms(16, 15, 0).xy(), test_guy);
+    const character_id stray_id = here.place_npc(tripoint_bub_ms(16, 15, 0), test_guy);
     g->load_npcs();
     npc* stray_rider = g->find_npc(stray_id);
     REQUIRE(stray_rider != nullptr);

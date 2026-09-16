@@ -373,24 +373,24 @@ float map::get_transparency( const tripoint_bub_ms& p ) const
 }
 
 bool map::is_last_ter_wall(
-    const bool no_furn, const point_bub_ms& p, const point_bub_ms& max, const direction dir ) const
+    const bool no_furn, const tripoint_bub_ms& p, const tripoint_bub_ms& max, const direction dir ) const
 {
-    point mov;
+    tripoint_rel_ms mov;
     switch( dir ) {
         case direction::NORTH:
-            mov.y = -1;
+            mov = tripoint_rel_ms::north();
             break;
         case direction::SOUTH:
-            mov.y = 1;
+            mov = tripoint_rel_ms::south();
             break;
         case direction::WEST:
-            mov.x = -1;
+            mov = tripoint_rel_ms::west();
             break;
         case direction::EAST:
-            mov.x = 1;
+            mov = tripoint_rel_ms::east();
             break;
         default:
-            break;
+            return false;
     }
     auto p2( p );
     bool result = true;
@@ -408,8 +408,8 @@ bool map::is_last_ter_wall(
             loop = false;
             if( !has_flag_ter( "WALL", p2 ) ) { result = false; }
         }
-        p2.x() += mov.x;
-        p2.y() += mov.y;
+        p2.x() += mov.x();
+        p2.y() += mov.y();
     }
     return result;
 }
@@ -506,13 +506,13 @@ void map::decay_fields_and_scent( const time_duration& amount )
     }
 }
 
-point_bub_ms map::random_outdoor_tile()
+tripoint_bub_ms map::random_outdoor_tile()
 {
-    std::vector<point_bub_ms> options;
+    std::vector<tripoint_bub_ms> options;
     for( const tripoint_bub_ms& p : points_on_zlevel() ) {
-        if( is_outside( p.xy() ) ) { options.push_back( p.xy() ); }
+        if( is_outside( p ) ) { options.push_back( p ); }
     }
-    return random_entry( options, point_bub_ms::north_west() );
+    return random_entry( options, tripoint_bub_ms::north_west() );
 }
 
 bool map::has_item_with( const tripoint_bub_ms& p,
@@ -1391,7 +1391,7 @@ bash_results map::bash( const tripoint_bub_ms& p, const bash_params& bsh,
     bash_results result;
 
     // Dimension bounds cannot be bashed - show message from boundary terrain
-    if( is_out_of_bounds( tripoint_bub_ms( p ) ) ) {
+    if( is_outside_pocket_dimension_bounds( pocket_info_, map_local_to_abs( *this, p ) ) ) {
         if( !bsh.silent && pocket_info_ ) {
             const ter_t& boundary_ter = pocket_info_->bounds.boundary_terrain.obj();
             if( !boundary_ter.bash.sound_fail.empty() ) {
@@ -1515,7 +1515,7 @@ bash_results &bash_results::operator|=( const bash_results& other )
 void map::destroy( const tripoint_bub_ms& p, const bool silent )
 {
     // Dimension bounds cannot be destroyed
-    if( is_out_of_bounds( tripoint_bub_ms( p ) ) ) { return; }
+    if( is_outside_pocket_dimension_bounds( pocket_info_, map_local_to_abs( *this, p ) ) ) { return; }
 
     // Break if it takes more than 25 destructions to remove to prevent infinite loops
     // Example: A bashes to B, B bashes to A leads to A->B->A->...

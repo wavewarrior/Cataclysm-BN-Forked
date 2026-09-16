@@ -226,7 +226,7 @@ auto coop_server::send_initial_sync() -> bool
 {
     // Reset tile-sync state so the first regular coop_world_tick
     // does not send another full blast.
-    last_sync_origin_ = g->m.get_abs_sub();
+    last_sync_origin_ = tripoint_abs_sm( g->m.get_abs_sub(), g->get_levz() );
     sync_tick_counter_ = 0;
     // Reuse build_and_send_sync logic: push to send_q_ then flush directly.
     // The receiver thread is not yet running, so we must drain send_q_ here.
@@ -1424,7 +1424,7 @@ auto coop_server::build_and_send_sync( bool force_full ) -> void
     //   (a) force_full — initial join, resync_request
     //   (b) map-origin shift — host crossed a submap boundary
     //   (c) 30-second safety net — catches any events the log missed
-    const tripoint_abs_sm abs_sub = g->m.get_abs_sub();
+    const tripoint_abs_sm abs_sub( g->m.get_abs_sub(), g->get_levz() );
     ++sync_tick_counter_;
     const bool origin_changed = ( abs_sub != last_sync_origin_ );
     const bool periodic = ( sync_tick_counter_ % TILE_RESYNC_INTERVAL == 0 );

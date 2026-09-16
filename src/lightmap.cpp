@@ -921,59 +921,6 @@ auto map::build_transparency_caches( const int minz, const int maxz ) -> std::ve
                 .rebuild_all = rebuild_all,
                 .resident_output_complete = true,
                 .resident_level_was_valid = cata_gpu::lighting_transparency_level_is_valid( zlev ),
-        };
-
-        auto level_states = std::vector<transparency_level_batch_state> {};
-        auto refs = std::vector<cata_gpu::transparency_submap_ref> {};
-        auto ref_levels = std::vector<int> {};
-        auto *resident_buffer = static_cast<SDL_GPUBuffer *>( nullptr );
-        auto cache_size = 0;
-
-        auto *const gpu_device = cata_gpu::get_device();
-        for( const auto zlev : std::views::iota( minz, maxz + 1 ) ) {
-            auto &map_cache = get_cache( zlev );
-            auto &transparency_cache = map_cache.transparency_cache;
-
-            if( map_cache.transparency_cache_dirty.none() ) {
-                continue;
-            }
-
-            dirty_levels.push_back( zlev );
-            const auto rebuild_all = map_cache.transparency_cache_dirty.all();
-            if( rebuild_all ) {
-                std::fill( transparency_cache.begin(), transparency_cache.end(),
-                           static_cast<float>( LIGHT_TRANSPARENCY_OPEN_AIR ) );
-            }
-
-            if( gpu_device == nullptr ) {
-                debugmsg( "SDL_GPU transparency is required, but no GPU device is available" );
-                return dirty_levels;
-            }
-
-            const auto resident_output = cata_gpu::prepare_lighting_transparency_output( {
-                .device = gpu_device,
-                .cache_x = map_cache.cache_x,
-                .cache_y = map_cache.cache_y,
-                .z_count = OVERMAP_LAYERS,
-                .zlev = zlev,
-            } );
-            if( resident_output.buffer == nullptr ) {
-                debugmsg( "SDL_GPU transparency resident output allocation failed; see debug.log for details" );
-                return dirty_levels;
-            }
-            if( resident_buffer == nullptr ) {
-                resident_buffer = resident_output.buffer;
-                cache_size = map_cache.cache_x * map_cache.cache_y * OVERMAP_LAYERS;
-            } else if( resident_buffer != resident_output.buffer ) {
-                debugmsg( "SDL_GPU transparency resident buffer changed during batched dispatch" );
-                return dirty_levels;
-            }
-
-            auto state = transparency_level_batch_state {
-                .zlev = zlev,
-                .rebuild_all = rebuild_all,
-                .resident_output_complete = true,
-                .resident_level_was_valid = cata_gpu::lighting_transparency_level_is_valid( zlev ),
             };
 
             refs.reserve( refs.size() + static_cast<size_t>( map_cache.cache_mapsize *
@@ -2367,10 +2314,17 @@ bool map::pl_sees( const tripoint_bub_ms &t, const int max_range ) const
         return get_visibility( ll, visibility_variables_cache ) == VIS_CLEAR;
     }
 
-    // Normal SDL gameplay should consume the pre-refreshed visibility_cache.
-    // If a caller asks before the game/UI refresh point, avoid geometry-only
-    // visibility because it produces false safe-mode and monster-info warnings.
-    return false;
+    ZoneScopedN( "pl_sees_dirty_visibility_fallback" );
+    const auto player_pos = g->u.bub_pos();
+    if( !sees( player_pos, t, -1 ) ) {
+        return false;
+    }
+
+    // Transitional SDL path: normal gameplay should consume GPU-generated
+    // visibility_cache.  If a caller asks before that cache is refreshed, avoid
+    // consulting stale CPU lm data; answer geometry only until this becomes a
+    // sparse GPU visibility query.
+    return true;
 #else
     const auto variables = make_visibility_variables( t.z() );
     return get_visibility( apparent_light_at( t, variables ), variables ) == VIS_CLEAR;
