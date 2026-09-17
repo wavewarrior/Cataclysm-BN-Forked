@@ -747,3 +747,64 @@ is worth opening, using the same measurement discipline rather than a fresh opin
   rails/ramp opt-outs only — re-checked this session and *not* yet the case (Phase 10 Step 6 and
   Phase 12 both still show as blocked/pending in the plan's own status table,
   `plans/box2d-vehicle-physics-implementation.md:673-679`), so stage D's full scope stands as written.
+
+## Stage D closure: rails, deliberately dual (2026-09-18)
+
+D1 (rails under authority) was attempted and reverted. `plans/vehicle-continuous-program.md`'s own
+pre-decided falsifier for stage D fires: rail motion cannot be restored under single Box2D position
+authority without inventing a heuristic no existing test calibrates. The exclusion
+(`v.box2d_position_authority = !v.can_use_rails();`, `src/physics/physics_world.cpp`) stays.
+
+**What was tried, in order, each verified against `tests/vehicle_rails_test.cpp`'s 11 cases (all
+pass on `main`, all 11 fail identically under every attempt below):**
+
+1. Hoist `vehicle_movement::process_movement_on_rails()` and the `turn_dir` correction from after the
+   authority early-return to before it (the plan's literal D1 text), with no other change. **11/11
+   fail**, byte-identical wrong `got_pos` across every test case.
+2. Add the heading push into the Box2D body (`face.init(turn_dir)`, `physics_angle`, a new
+   `PhysicsWorld::set_body_angle()`), gated on `is_on_rails`. **11/11 fail, byte-identical to (1).**
+3. Widen the gate to `is_on_rails || rpres.do_turn` (fixing the chicken-and-egg trap where
+   `is_on_rails()` requiring an already-quantized heading can never become true if nothing quantizes
+   it first). **11/11 fail, byte-identical to (1) and (2).**
+4. Isolate the variable: revert every `vehicle_move.cpp` change, keep only
+   `box2d_position_authority = true`. **11/11 fail, byte-identical to (1)-(3).** This proves the
+   three heading-sync attempts were never the deciding factor.
+5. Hoist the correction one level higher still, *above* `vehicle_wheel_traction()`'s own
+   `is_on_rails()` read (`src/vehicle_move.cpp:1622`, before stage D touched it), so traction cannot
+   see a stale heading either. **11/11 fail** — but the failure signature changed: `got_dir` now
+   matches `expected_dir` exactly (e.g. 315°) on every logged turn, while `on_rails:0` holds for
+   *every* logged turn regardless, and the vehicle's tile anchor (`bub_ms_location()`) drifts tens of
+   tiles from `expected_pos` while nominally driving in a straight line.
+
+**Root cause, confirmed by reading (not inferring) `vehicle_movement::scan_rails_at_shift()` and
+`scan_rails_from_veh_internal()` (`src/vehicle_move.cpp:2196-2290`):** the rail scan's tile positions
+come from `veh.bub_ms_location()` (the committed tile anchor) plus a static lateral offset from
+`veh.rail_profile`/`veh.pivot_point()` — it reads only the tile anchor and the heading, never
+`physics_angle` or precalc, so attempt (2)'s body-rotation push could not have mattered (confirmed by
+(4) showing it didn't). The heading was never the problem; attempt (5) proves the heading synced
+correctly. What derails the vehicle is the *tile anchor path*: `map::vehmove()`'s readback walk
+advances the anchor one axis-clamped step at a time
+(`step = {clamp(px-at.x(),-1,1), clamp(py-at.y(),-1,1), 0}`, `src/map_vehicle.cpp:835-836`) toward
+`(px,py) = lround(physics_pos)`, a target produced by a full-second continuous Box2D integration
+(`step_turn(1.0f)`). A free rigid body integrating a nominally-diagonal velocity for a whole second
+has no reason to keep its x and y displacement in exact lockstep — floating-point sub-tile drift
+between the two axes is invisible to any other consumer of `physics_pos`, but a rail is a single
+line of tiles one exact diagonal step wide. The scanned logs show the walk alternating single-axis
+steps (e.g. `(59,78)→(60,78)→(60,77)→(61,77)→(61,76)`, x-then-y-then-x…) instead of the pure
+diagonal steps the track requires, and the anchor leaves the rail line within the first couple of
+turns every time — this is exactly the "a free rigid-body integrator cannot express the constraint"
+failure the original exclusion comment named, now demonstrated for the *position* half of the
+constraint rather than the heading half the plan's D1 text focused on.
+
+**Why this is the falsifier, not an unfixed ordering bug:** fixing it would mean either (a) forcing
+`physics_pos`'s two axes to stay in exact integer lockstep while `is_on_rails`, a heuristic with no
+existing rail-physics calibration to check it against, or (b) replacing the generic axis-clamped
+readback walk with a rail-aware walk that snaps to the track line — a second, parallel movement
+model with its own untested tile-selection logic. Both are exactly the shape the falsifier names:
+"inventing balance constants no test can validate."
+
+**Disposition:** rails keep the tile-step mover permanently (not just until a future attempt).
+`v.box2d_position_authority = !v.can_use_rails();` is the single, intentional reconciliation point;
+the readback walk in `map::vehmove()` is the other. Ramps, which do not require exact per-tile
+diagonal alignment, are unaffected by this closure and remain in scope for D2 if attempted. Stages
+A-C and E still deliver the program's other four outcomes per the plan's own falsifier text.
