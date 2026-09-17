@@ -41,8 +41,6 @@
 #include "rml_screen.h"
 #include "rml_util.h"
 
-static const bionic_id bio_infolink( "bio_infolink" );
-
 namespace npc_factions
 {
 std::vector<faction_template> all_templates;
@@ -495,9 +493,9 @@ int npc::follower_interaction_flag() const
 {
     static const flag_id json_flag_TWO_WAY_RADIO( "TWO_WAY_RADIO" );
     const bool u_has_radio = g->u.has_item_with_flag( json_flag_TWO_WAY_RADIO, true ) ||
-                             g->u.has_bionic( bio_infolink );
+                             g->u.has_enchantment_flag( enchantment_flag_id( "RADIO" ) );
     const bool guy_has_radio = has_item_with_flag( json_flag_TWO_WAY_RADIO, true ) ||
-                               has_bionic( bio_infolink );
+                               has_enchantment_flag( enchantment_flag_id( "RADIO" ) );
     const tripoint_abs_omt player_abspos = get_player_character().abs_omt_pos();
     if( rl_dist( player_abspos, abs_omt_pos() ) > 3 ||
             ( rl_dist( g->u.bub_pos(), bub_pos() ) > SEEX * 2 || !g->u.sees( bub_pos() ) ) ) {
@@ -537,9 +535,9 @@ std::string npc::faction_info_text() const
     } else {
         static const flag_id json_flag_TWO_WAY_RADIO( "TWO_WAY_RADIO" );
         const bool u_has_radio = g->u.has_item_with_flag( json_flag_TWO_WAY_RADIO, true ) ||
-                                 g->u.has_bionic( bio_infolink );
+                                 g->u.has_enchantment_flag( enchantment_flag_id( "RADIO" ) );
         const bool guy_has_radio = has_item_with_flag( json_flag_TWO_WAY_RADIO, true ) ||
-                                   has_bionic( bio_infolink );
+                                   has_enchantment_flag( enchantment_flag_id( "RADIO" ) );
         if( u_has_radio && guy_has_radio ) {
             can_see = _( "Not within radio range" );
         } else if( guy_has_radio && !u_has_radio ) {

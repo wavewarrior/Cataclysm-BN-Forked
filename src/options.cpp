@@ -2002,6 +2002,7 @@ void options_manager::cache_to_globals()
     setDebugLogClasses( classes );
 
     json_report_strict = test_mode || ::get_option<bool>( "STRICT_JSON_CHECKS" );
+    log_activity_skip_state = ::get_option<bool>( "LOG_ACTIVITY_SKIP_STATE" );
     display_mod_source = ::get_option<bool>( "MOD_SOURCE" );
     display_object_ids = ::get_option<bool>( "SHOW_IDS" );
     trigdist = ::get_option<bool>( "CIRCLEDIST" );

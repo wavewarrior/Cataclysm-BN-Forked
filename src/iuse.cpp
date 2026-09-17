@@ -344,7 +344,6 @@ static const mtype_id mon_spore( "mon_spore" );
 static const mtype_id mon_vortex( "mon_vortex" );
 static const mtype_id mon_wasp( "mon_wasp" );
 
-static const bionic_id bio_digestion( "bio_digestion" );
 static const bionic_id bio_eye_optic( "bio_eye_optic" );
 static const bionic_id bio_shock( "bio_shock" );
 
@@ -486,7 +485,7 @@ int iuse::blech( player* p, item* it, bool, const tripoint_bub_ms & )
 
 int iuse::blech_because_unclean( player* p, item* it, bool, const tripoint_bub_ms & )
 {
-    if( !p->is_npc() && !p->has_bionic( bio_digestion ) ) {
+    if( !p->is_npc() && !p->has_enchantment_flag( enchantment_flag_id( "CONSUME_UNCLEAN" ) ) ) {
         if( it->made_of( LIQUID ) ) {
             if( !p->query_yn( _( "This looks unclean, sure you want to drink it?" ) ) ) { return 0; }
         } else { // Assume that if a blech consumable isn't a drink, it will be eaten.
@@ -1089,7 +1088,7 @@ int iuse::petfood( player* p, item* it, bool, const tripoint_bub_ms & )
             p->add_msg_if_player( _( petfood.feed ), mon.get_name() );
         }
 
-        mon.make_pet();
+        mon.make_pet( *p->as_character() );
 
         // Apply well_fed effect to improve monster productivity
         // This effect increases reproduction rate, milk production, growth speed, and HP recovery
@@ -2486,7 +2485,7 @@ static void set_cable_active( player* const who, item* const it,
     data.set_vars( it );
     it->activate();
     it->attempt_detach( [&who]( detached_ptr<item>&& e ) {
-        return item::process( std::move( e ), who, who->bub_pos(), false );
+        return item::process( std::move( e ), who, who->bub_pos(), false, 1 );
     } );
     who->mod_moves( -15 );
 };

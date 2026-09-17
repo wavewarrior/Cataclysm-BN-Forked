@@ -845,7 +845,7 @@ std::vector<detached_ptr<item>> Character::use_charges( const itype_id &what, in
             qty -= std::min( qty, power_drain );
             return res;
         }
-        if( has_power() && has_active_bionic( bio_ups ) ) {
+        if( has_power() && has_active_bionic( bio_ups ) && filter( null_item_reference() ) ) {
             int bio = std::min( units::to_kilojoule( get_power_level() ), qty );
             mod_power_level( units::from_kilojoule( -bio ) );
             qty -= std::min( qty, bio );

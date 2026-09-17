@@ -21,6 +21,7 @@
 #include "crafting_quality.h"
 #include "debug.h"
 #include "distribution_grid.h"
+#include "enchantments/enchanter.h"
 #include "enums.h"
 #include "event.h"
 #include "event_bus.h"
@@ -613,11 +614,12 @@ void dig_activity_actor::finish( player_activity& act, Character& who )
     here.spawn_items( byproducts_location,
                       item_group::items_from( item_group_id( byproducts_item_group ), calendar::turn ) );
 
-    const int act_exertion = act.moves_total;
+    const int act_exertion = moves_total;
 
     who.mod_stored_kcal( std::min( -1, -act_exertion / to_moves<int>( 80_seconds ) ) );
     who.mod_thirst( std::max( 1, act_exertion / to_moves<int>( 12_minutes ) ) );
     who.mod_fatigue( std::max( 1, act_exertion / to_moves<int>( 6_minutes ) ) );
+    who.mod_stamina( std::min( -1, -act_exertion / to_moves<int>( 10_seconds ) ) );
     if( grave ) {
         who.add_msg_if_player( m_good, _( "You finish exhuming a grave." ) );
     } else {
@@ -696,11 +698,12 @@ void dig_channel_activity_actor::finish( player_activity& act, Character& who )
     here.spawn_items( byproducts_location,
                       item_group::items_from( item_group_id( byproducts_item_group ), calendar::turn ) );
 
-    const int act_exertion = act.moves_total;
+    const int act_exertion = moves_total;
 
     who.mod_stored_kcal( std::min( -1, -act_exertion / to_moves<int>( 80_seconds ) ) );
     who.mod_thirst( std::max( 1, act_exertion / to_moves<int>( 12_minutes ) ) );
     who.mod_fatigue( std::max( 1, act_exertion / to_moves<int>( 6_minutes ) ) );
+    who.mod_stamina( std::min( -1, -act_exertion / to_moves<int>( 10_seconds ) ) );
     who.add_msg_if_player( m_good, _( "You finish digging up %s." ), here.ter( location )->name() );
 
     act.set_to_null();
@@ -2432,7 +2435,7 @@ void wood_chop_activity_actor::finish( player_activity& act, Character& who )
             p.add_msg_if_player( m_good, _( "You finish chopping down a tree." ) );
             here.collapse_at( pos, false, true, false );
             sfx::play_variant_sound(
-                "misc", "timber", sfx::get_heard_volume( abs_to_bub( placement ), 95 ) );
+                "misc", "timber", sfx::get_heard_volume( abs_to_bub( placement ), 95 ), false );
 
             // Exertion calculation
             if( !axe ) {
@@ -2450,6 +2453,7 @@ void wood_chop_activity_actor::finish( player_activity& act, Character& who )
             p.mod_stored_kcal( std::min( -1, -act_exertion / to_moves<int>( 80_seconds ) ) );
             p.mod_thirst( std::max( 1, act_exertion / to_moves<int>( 12_minutes ) ) );
             p.mod_fatigue( std::max( 1, act_exertion / to_moves<int>( 6_minutes ) ) );
+            p.mod_stamina( std::min( -1, -act_exertion / to_moves<int>( 10_seconds ) ) );
 
             activity_handlers::resume_for_multi_activities( p );
             act.set_to_null();
@@ -2506,6 +2510,7 @@ void wood_chop_activity_actor::finish( player_activity& act, Character& who )
             p.mod_stored_kcal( std::min( -1, -act_exertion / to_moves<int>( 80_seconds ) ) );
             p.mod_thirst( std::max( 1, act_exertion / to_moves<int>( 12_minutes ) ) );
             p.mod_fatigue( std::max( 1, act_exertion / to_moves<int>( 6_minutes ) ) );
+            p.mod_stamina( std::min( -1, -act_exertion / to_moves<int>( 10_seconds ) ) );
 
             activity_handlers::resume_for_multi_activities( p );
             act.set_to_null();
@@ -2568,3 +2573,94 @@ std::unique_ptr<activity_actor> wood_chop_activity_actor::deserialize( JsonIn& j
 
 // ---- train_activity_actor ----
 
+// ---- enchant_activity_actor ----
+
+void enchant_activity_actor::start( player_activity &act, Character & )
+{
+    if( !target ) {
+        debugmsg( "Lost object being enchanted" );
+        act.set_to_null();
+        return;
+    }
+    const std::string name = string_format( "Enchant %s", target->display_name() );
+    progress.emplace( name, moves_total );
+}
+
+void enchant_activity_actor::do_turn( player_activity &act, Character & )
+{
+    if( !target ) {
+        debugmsg( "Lost object being enchanted" );
+        act.set_to_null();
+        return;
+    }
+
+    if( progress.front().complete() ) {
+        progress.pop();
+        return;
+    }
+}
+
+void enchant_activity_actor::finish( player_activity &act, Character &who )
+{
+    if( !target ) {
+        debugmsg( "Lost object being enchanted" );
+        act.set_to_null();
+        return;
+    }
+    if( !furn.is_valid() ) {
+        debugmsg( "The furniture that was used is invalid" );
+        act.set_to_null();
+        return;
+    }
+    enchant_info info;
+    bool found_info = false;
+    for( const enchant_info &ench_info : furn->enchanter ) {
+        if( ench_info.id == enchanter_id ) {
+            info = ench_info;
+            found_info = true;
+            break;
+        }
+    }
+    if( !found_info ) {
+        debugmsg( "The enchantment could not be found in furniture definition." );
+        act.set_to_null();
+        return;
+    }
+
+    auto total_reqs =
+        enchanter::total_requirements( info )
+        * std::max(
+            1, ( info.volume_batch_effect ? int( target->base_volume() / info.volume_per_batch ) : 1 ) );
+    for( const auto &comp : total_reqs.get_components() ) { who.consume_items( comp ); }
+    for( const auto &comp : total_reqs.get_tools() ) { who.consume_tools( comp ); }
+    target->add_enchantment( info.to_enchant_with );
+    target->set_var( info.count_var, target->get_var<int>( info.count_var, 0 ) + 1 );
+    if( info.applied_flag_id.is_valid() ) { target->set_flag( info.applied_flag_id ); }
+    act.set_to_null();
+}
+
+void enchant_activity_actor::serialize( JsonOut &jsout ) const
+{
+    jsout.start_object();
+
+    jsout.member( "progress", progress );
+    jsout.member( "target_obj", target );
+    jsout.member( "furn", furn );
+    jsout.member( "enchanter_id", enchanter_id );
+
+    jsout.end_object();
+}
+
+std::unique_ptr<activity_actor> enchant_activity_actor::deserialize( JsonIn &jsin )
+{
+    std::unique_ptr<enchant_activity_actor> actor( new enchant_activity_actor() );
+
+    JsonObject data = jsin.get_object();
+
+    data.read( "progress", actor->progress );
+    data.read( "target_obj", actor->target );
+    data.read( "furn", actor->furn );
+    data.read( "enchanter_id", actor->enchanter_id );
+
+    return actor;
+}

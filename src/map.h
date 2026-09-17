@@ -409,8 +409,13 @@ struct level_cache {
     bool visibility_cache_dirty = true;
     // Set by build_floor_cache; true when at least one tile has a floor.
     bool has_any_floor = true;
+    bool has_any_vehicle_floor = false;
     bool suspension_cache_initialized = false;
     bool suspension_cache_dirty = false;
+    // Vehicle floor cache dirty: set when vehicle below moves
+    bool vehicle_floor_cache_dirty = false;
+    // Vehicle cache dirty: set when vehicle here moves
+    bool vehicle_caches_dirty = false;
     std::list<point_abs_ms> suspension_cache;
 
     // ---- 12 tile-coordinate arrays (size: cache_x * cache_y) ----
@@ -867,6 +872,7 @@ class map : public submap_load_listener
         void set_outside_cache_dirty( const tripoint_bub_ms &p );
 
         void set_floor_cache_dirty( const int zlev );
+        void set_vehicle_cache_dirty( const int zlev );
         // Point-level: marks only the tile's own submap (no horizontal neighbour dependency).
         void set_floor_cache_dirty( const tripoint_bub_ms &p );
 
@@ -885,6 +891,7 @@ class map : public submap_load_listener
         auto take_memory_seen_cache_dirty_points( int zlev ) -> std::vector<tripoint_bub_ms>;
         auto mark_memory_seen_cache_dirty_all_clean( int zlev ) -> void;
 
+        auto is_map_cache_valid( const int zlev ) -> bool;
         void invalidate_map_cache( const int zlev );
 
         /// Mark a single submap's lightmap_dirty bit.  Used by game::place_player
@@ -2376,13 +2383,13 @@ class map : public submap_load_listener
         // or can just return air because we bashed down an entire floor tile
         ter_id get_roof( const tripoint_bub_ms &p, bool allow_air ) const;
 
-        void process_items();
+        void process_items( int turns = 1 );
     private:
         // Iterates over every item on the map, passing each item to the provided function.
         auto process_items_in_submap( submap &current_submap, const tripoint_bub_sm &gridp,
-                                      std::vector<item *> &active_items ) -> void;
-        void process_items_in_vehicles( submap &current_submap );
-        void process_items_in_vehicle( vehicle &cur_veh, submap &current_submap );
+                                      std::vector<item *> &active_items, int turns = 1 ) -> void;
+        void process_items_in_vehicles( submap &current_submap, int turns = 1 );
+        void process_items_in_vehicle( vehicle &cur_veh, submap &current_submap, int turns = 1 );
 
         /** Enum used by functors in `function_over` to control execution. */
         enum iteration_state {

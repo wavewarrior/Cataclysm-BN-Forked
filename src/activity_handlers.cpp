@@ -247,6 +247,7 @@ bool activity_handlers::resume_for_multi_activities( player& p )
     return false;
 }
 
+
 static bool check_butcher_cbm( const int roll )
 {
     // Success rate for dissection rolls, simple percentage roll
@@ -903,6 +904,7 @@ static bool magic_train( player_activity* act, player* p )
 
 
 
+
 // TODO (https://github.com/cataclysmbn/Cataclysm-BN/issues/1612):
 // Remove that repair code after repair_activity_actor.
 
@@ -936,6 +938,7 @@ static repeat_type repeat_menu( const std::string& title, repeat_type last_selec
 
     return REPEAT_CANCEL;
 }
+
 
 
 

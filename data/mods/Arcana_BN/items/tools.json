@@ -137,9 +137,7 @@
     "looks_like": "small_relic",
     "color": "yellow",
     "flags": [ "MAGIC_FOCUS", "USE_PLAYER_ENERGY", "NO_SALVAGE" ],
-    "relic_data": {
-      "passive_effects": [ { "has": "WIELD", "condition": "ALWAYS", "values": [ { "value": "MANA_REGEN", "multiply": 0.25 } ] } ]
-    },
+    "relic_data": { "passive_effects": [ { "conditions": [ "WIELD" ], "values": [ { "value": "MANA_REGEN", "multiply": 0.25 } ] } ] },
     "use_action": [
       "MEDITATE",
       {
@@ -159,7 +157,7 @@
     "weapon_category": [ "KNIVES" ],
     "name": { "str": "silver athame" },
     "description": "An ornate silver dagger, seemingly made for ritual purposes.  It seems sharper than silver has any right to be.  It can be used to perform a ritual converting your life force into blood essence.  Doing so will take 5 minutes, inflicting blood loss and damage at the end, as well as potential consequences if overused…",
-    "weight": "1302 g",
+    "weight": "600 g",
     "volume": "750 ml",
     "price": "240 USD",
     "price_postapoc": "20 USD",
@@ -209,8 +207,7 @@
     "relic_data": {
       "passive_effects": [
         {
-          "has": "WIELD",
-          "condition": "ACTIVE",
+          "conditions": [ "WIELD", "ACTIVE" ],
           "hit_you_effect": [
             {
               "id": "arcana_react_sun_sword_daze",
@@ -346,8 +343,7 @@
     "relic_data": {
       "passive_effects": [
         {
-          "has": "WIELD",
-          "condition": "ALWAYS",
+          "conditions": [ "WIELD" ],
           "values": [ { "value": "MOVE_COST", "add": -25 } ],
           "hit_you_effect": [
             {
@@ -1034,7 +1030,7 @@
     "weapon_category": [ "DUELING_SWORDS" ],
     "name": { "str": "shrike's misericorde" },
     "description": "An ornate silver weapon featuring a thin blade and two flintlock barrels built into the guard.  Its strikes inflict victims with a deathly chill.  Activating it will transform it into a more compact form, allowing its user to load and fire it.  Its pistol form will impart a freezing effect on shots fired from it, including otherworldly damage that can bypass mundane armor, though robots and certain supernatural monsters will only suffer the bullet's normal damage.",
-    "weight": "2 kg",
+    "weight": "1250 g",
     "volume": "1500 ml",
     "price": "1000 USD",
     "price_postapoc": "50 USD",
@@ -1063,8 +1059,7 @@
     "relic_data": {
       "passive_effects": [
         {
-          "has": "WIELD",
-          "condition": "ALWAYS",
+          "conditions": [ "WIELD" ],
           "hit_you_effect": [
             {
               "id": "arcana_react_shrike_misericorde_chill",
@@ -1109,8 +1104,7 @@
     "relic_data": {
       "passive_effects": [
         {
-          "has": "WIELD",
-          "condition": "ALWAYS",
+          "conditions": [ "WIELD" ],
           "hit_you_effect": [
             {
               "id": "arcana_react_bane_staff_venom",
@@ -1168,6 +1162,7 @@
     "repairs_like": "candle_warding",
     "symbol": ",",
     "color": "white",
+    "light_color": "#b8ffc0",
     "use_action": [
       {
         "target": "candle_warding",
@@ -1242,11 +1237,10 @@
     "relic_data": {
       "passive_effects": [
         {
-          "has": "WIELD",
-          "condition": "ALWAYS",
+          "conditions": [ "WIELD" ],
           "mutations": [ "SCHIZOPHRENIC" ],
-          "ench_effects": [ { "effect": "arcana_clairvoyance_hidden", "intensity": 1 } ],
           "values": [
+            { "value": "CLAIRVOYANCE", "max": 40 },
             { "value": "INTELLIGENCE", "add": 4 },
             { "value": "PERCEPTION", "add": 2 },
             { "value": "MANA_REGEN", "multiply": 0.25 }
@@ -1419,6 +1413,26 @@
         "tool_quality": 20,
         "cost_scaling": 0,
         "move_cost": 1000
+      },
+      {
+        "type": "sew_advanced",
+        "materials": [
+          "iron",
+          "steel",
+          "budget_steel",
+          "hardsteel",
+          "aluminum",
+          "copper",
+          "bronze",
+          "brass",
+          "silver",
+          "gold",
+          "platinum",
+          "superalloy",
+          "glass"
+        ],
+        "skill": "fabrication",
+        "clothing_mods": [ "steel_padded", "hard_steel_padded", "alloy_padded", "resized_large", "resized_small" ]
       }
     ],
     "flags": [ "ALLOWS_REMOTE_USE", "NO_SALVAGE" ]
@@ -1553,7 +1567,12 @@
     "max_charges": 24,
     "ammo": "essence_blood_type",
     "relic_data": {
-      "passive_effects": [ { "has": "WIELD", "condition": "ACTIVE", "hit_you_effect": [ { "id": "arcana_react_drain_life", "once_in": 5 } ] } ]
+      "passive_effects": [
+        {
+          "conditions": [ "WIELD", "ACTIVE" ],
+          "hit_you_effect": [ { "id": "arcana_react_drain_life", "once_in": 5, "hit_self": true } ]
+        }
+      ]
     },
     "use_action": [
       {
@@ -1609,9 +1628,11 @@
     "relic_data": {
       "passive_effects": [
         {
-          "has": "WIELD",
-          "condition": "ALWAYS",
-          "hit_you_effect": [ { "id": "arcana_react_drain_life", "once_in": 5 }, { "id": "arcana_react_moonstone_touch", "once_in": 10 } ],
+          "conditions": [ "WIELD" ],
+          "hit_you_effect": [
+            { "id": "arcana_react_drain_life", "once_in": 5, "hit_self": true },
+            { "id": "arcana_react_moonstone_touch", "once_in": 10 }
+          ],
           "hit_me_effect": [
             {
               "id": "arcana_react_shadowy_shield",
@@ -1622,9 +1643,8 @@
           ]
         },
         {
-          "has": "WIELD",
-          "condition": "ACTIVE",
-          "values": [ { "value": "ARMOR_COLD", "multiply": -0.5 } ],
+          "conditions": [ "WIELD", "ACTIVE" ],
+          "values": [ { "value": "ARMOR_COLD", "multiply": -1.0 }, { "value": "CLIMATE_CONTROL_HEATING", "add": 1500 } ],
           "ench_effects": [ { "effect": "cold_ward", "intensity": 1 } ]
         }
       ]
@@ -1682,8 +1702,7 @@
     "relic_data": {
       "passive_effects": [
         {
-          "has": "WIELD",
-          "condition": "ALWAYS",
+          "conditions": [ "WIELD" ],
           "values": [ { "value": "INTELLIGENCE", "add": 4 }, { "value": "MANA_REGEN", "multiply": 0.5 } ]
         }
       ],
@@ -1758,10 +1777,9 @@
     "relic_data": {
       "passive_effects": [
         {
-          "has": "WIELD",
-          "condition": "ALWAYS",
+          "conditions": [ "WIELD" ],
           "mutations": [ "ARCANA_STAFF_EFFECT" ],
-          "hit_you_effect": [ { "id": "arcana_react_sanguine_staff_drain" } ]
+          "hit_you_effect": [ { "id": "arcana_react_sanguine_staff_drain", "hit_self": true }, { "id": "arcana_react_sanguine_staff_drain_2" } ]
         }
       ],
       "recharge_scheme": [
@@ -1816,11 +1834,10 @@
     "relic_data": {
       "passive_effects": [
         {
-          "has": "WIELD",
-          "condition": "ACTIVE",
+          "conditions": [ "WIELD", "ACTIVE" ],
           "mutations": [ "ARCANA_BERSERK_EFFECT" ],
           "values": [ { "value": "STRENGTH", "add": 4 }, { "value": "DEXTERITY", "add": 2 } ],
-          "hit_you_effect": [ { "id": "arcana_react_drain_life_improved" } ],
+          "hit_you_effect": [ { "id": "arcana_react_drain_life_improved", "hit_self": true }, { "id": "arcana_react_drain_life_improved_2" } ],
           "intermittent_activation": { "effects": [ { "frequency": "3 minutes", "spell_effects": [ { "id": "arcana_react_evil_mimic" } ] } ] },
           "ench_effects": [ { "effect": "arcana_evil_mimic_active", "intensity": 1 } ]
         }
@@ -1880,11 +1897,10 @@
     "relic_data": {
       "passive_effects": [
         {
-          "has": "WIELD",
-          "condition": "ACTIVE",
+          "conditions": [ "WIELD", "ACTIVE" ],
           "mutations": [ "ARCANA_BERSERK_EFFECT" ],
           "values": [ { "value": "STRENGTH", "add": 4 }, { "value": "DEXTERITY", "add": 2 } ],
-          "hit_you_effect": [ { "id": "arcana_react_drain_life_improved" } ],
+          "hit_you_effect": [ { "id": "arcana_react_drain_life_improved", "hit_self": true }, { "id": "arcana_react_drain_life_improved_2" } ],
           "intermittent_activation": { "effects": [ { "frequency": "3 minutes", "spell_effects": [ { "id": "arcana_react_evil_mimic" } ] } ] },
           "ench_effects": [ { "effect": "arcana_evil_mimic_active", "intensity": 1 } ]
         }

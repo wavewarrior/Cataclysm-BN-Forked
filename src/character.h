@@ -122,7 +122,7 @@ enum npc_ai_info : size_t {
     num_npc_ai_info,
 };
 
-enum character_movemode : int { CMM_WALK = 0, CMM_RUN, CMM_CROUCH, CMM_STEALTH, CMM_COUNT };
+enum character_movemode : int { CMM_WALK = 0, CMM_RUN, CMM_CROUCH, CMM_STEALTH, CMM_PRONE, CMM_COUNT };
 
 template <> struct enum_traits<character_movemode> {
     static constexpr auto last = character_movemode::CMM_COUNT;
@@ -598,7 +598,7 @@ class Character: public Creature, public location_visitable<Character>
         /** Processes human-specific effects of an effect. */
         void process_one_effect( effect& it, bool is_new ) override;
         /** Process active items */
-        void process_items();
+        void process_items( int turns = 1 );
 
         /** Recalculates HP after a change to max strength */
         void recalc_hp();
@@ -940,6 +940,10 @@ class Character: public Creature, public location_visitable<Character>
         void recalculate_enchantment_cache();
         void rebuild_mutation_cache();
 
+        /**
+         * Checks weather we have an enchantment flag
+         */
+        bool has_enchantment_flag( enchantment_flag_id value ) const;
         /**
          * Calculate bonus from enchantments for given base value.
          */
@@ -1674,7 +1678,6 @@ for( const auto& elem : worn ) {
         bool is_rad_immune() const;
         /** Returns true if the player is immune to throws */
         bool is_throw_immune() const;
-
         /**
          * Returns >0 if character is sitting/lying and relatively inactive.
          * 1 represents sleep on comfortable bed, so anything above that should be rare.
@@ -2075,7 +2078,7 @@ for( const auto& elem : worn ) {
          * the floor **/
         int bodytemp_modifier_traits_floor() const;
         /** Value of the body temperature corrected by climate control **/
-        int temp_corrected_by_climate_control( int temperature );
+        int temp_corrected_by_climate_control( int temperature, bodypart_id id );
 
         bool in_sleep_state() const override;
 

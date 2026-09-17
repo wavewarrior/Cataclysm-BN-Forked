@@ -304,13 +304,17 @@ std::string game::print_all_tile_info_text( const tripoint_bub_ms &lp,
                 out.emplace_back( colorize( fd, c_light_gray ) );
             }
         }
-        const int coverage = m.coverage( lp );
-        if( coverage > 0 ) {
-            out.emplace_back( colorize( string_format( _( "Cover: %d%%" ), coverage ), c_dark_gray ) );
+        const int concealment = m.coverage( lp );
+        if( concealment > 0 ) {
+            out.emplace_back( colorize( string_format( _( "Concealment: %d%%" ), concealment ),
+                                        c_dark_gray ) );
         }
-        const int block_chance = m.obstacle_coverage( u.bub_pos(), lp );
-        if( block_chance > 0 ) {
-            out.emplace_back( colorize( string_format( _( "Block: %d%%" ), block_chance ), c_dark_gray ) );
+        const map_bash_info &bash = m.has_furn( lp ) ? m.furn( lp ).obj().bash : m.ter(
+                                        lp ).obj().bash;
+        const units::probability cover = bash.ranged ? bash.ranged->block_unaimed_chance : 0_pct;
+        if( cover > 0_pct ) {
+            out.emplace_back( colorize( string_format( _( "Cover: %d%%" ), cover / 1_pct ),
+                                        c_dark_gray ) );
         }
         const std::string feats = m.features( lp );
         if( !feats.empty() ) {
@@ -1685,10 +1689,34 @@ void game::reset_zoom()
     rescale_tileset( tileset_zoom );
 }
 
+auto game::reapply_overmap_zoom() -> void
+{
+    // a failed in-game tileset reload can leave a context with no tileset loaded
+    // Tiles-only fork: use_tiles / use_tiles_overmap are always true, so the check is dropped.
+    if( overmap_tilecontext &&
+        overmap_tilecontext->current_tileset() ) {
+        overmap_tilecontext->set_draw_scale( overmap_tileset_zoom );
+    }
+}
+
+auto game::reset_overmap_zoom() -> void
+{
+    overmap_tileset_zoom = DEFAULT_TILESET_ZOOM;
+    reapply_overmap_zoom();
+}
+
 void game::set_zoom( const float level )
 {
     if( tileset_zoom != level ) {
         tileset_zoom = level;
+        rescale_tileset( tileset_zoom );
+    }
+}
+
+auto game::reapply_zoom() -> void
+{
+    // rescale unconditionally: a shared overmap context may have changed the scale behind our back
+    if( tilecontext ) {
         rescale_tileset( tileset_zoom );
     }
 }

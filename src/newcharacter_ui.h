@@ -24,6 +24,7 @@ tab_direction set_points( avatar &u, points_left &points );
 tab_direction set_stats( avatar &u, points_left &points );
 tab_direction set_traits( avatar &u, points_left &points );
 tab_direction set_bionics( avatar &u, points_left &points );
+tab_direction set_magic( avatar &u, points_left &points );
 tab_direction set_scenario( avatar &u, points_left &points, tab_direction direction );
 tab_direction set_profession( avatar &u, points_left &points, tab_direction direction );
 tab_direction set_skills( avatar &u, points_left &points );

@@ -245,6 +245,11 @@
     "context": [  ]
   },
   {
+    "id": "DESTROY_ON_DROP",
+    "type": "json_flag",
+    "context": [  ]
+  },
+  {
     "id": "DIAMOND",
     "type": "json_flag",
     "context": [ "GENERIC", "TOOL" ],
@@ -1043,14 +1048,21 @@
     "type": "json_flag",
     "context": [ "ARMOR", "TOOL_ARMOR" ],
     "//": "Defines the main exo that all other parts attach to.",
-    "info": "This is a suit of power armor."
+    "info": "This is a power armor exoskeleton."
   },
   {
     "id": "POWERARMOR_EXTERNAL",
     "type": "json_flag",
     "context": [ "ARMOR", "TOOL_ARMOR" ],
     "//": "Defines the other parts that activate simultaneously with the exo.",
-    "info": "This is a piece of power armor."
+    "info": "This integrates with a power armor exoskeleton."
+  },
+  {
+    "id": "POWERARMOR_PLATING",
+    "type": "json_flag",
+    "context": [ "ARMOR", "TOOL_ARMOR" ],
+    "//": "Defines the plating that can be worn simultaneously with the exo.",
+    "info": "This is a set of armor plating for a power armor exoskeleton."
   },
   {
     "id": "POWERARMOR_MOD",
@@ -1155,6 +1167,12 @@
     "type": "json_flag",
     "context": [ "generic", "TOOL" ],
     "info": "This item contains a nanofabricator recipe."
+  },
+  {
+    "id": "SECRET_ENCHANTMENTS",
+    "type": "json_flag",
+    "context": [ "generic" ],
+    "//": "Hides enchantments from info menu"
   },
   {
     "id": "BIONIC_FAULTY",
@@ -1643,6 +1661,12 @@
     "context": [  ]
   },
   {
+    "id": "DRONE_CAM",
+    "type": "json_flag",
+    "context": [  ],
+    "info": "This item <good>allows you to view</good> the position of enemies <info>marked by friendly drones</info>."
+  },
+  {
     "id": "FAKE_MILL",
     "type": "json_flag",
     "context": [  ]
@@ -2025,6 +2049,11 @@
   },
   {
     "id": "POWERED",
+    "type": "json_flag",
+    "context": [  ]
+  },
+  {
+    "id": "COMPONENT",
     "type": "json_flag",
     "context": [  ]
   },
@@ -2628,5 +2657,15 @@
     "id": "NO_PAINT",
     "type": "json_flag",
     "context": [  ]
+  },
+  {
+    "id": "ERASE_ALL_BEFORE_PLACING_TERRAIN",
+    "type": "json_flag",
+    "context": [ "mapgen" ]
+  },
+  {
+    "id": "CRAFT_WITH_FULL_MAG",
+    "type": "json_flag",
+    "context": [ "GENERIC" ]
   }
 ]

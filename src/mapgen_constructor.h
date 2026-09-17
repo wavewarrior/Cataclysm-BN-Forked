@@ -12,6 +12,7 @@
 
 #include "calendar.h"
 #include "coordinates.h"
+#include "data_vars.h"
 #include "map.h"
 #include "mapgen_functions.h"
 #include "point.h"
@@ -80,6 +81,8 @@ class mapgen_constructor
         auto has_flag_ter( const ter_bitflags flag, const point_omt_ms &p ) const -> bool;
         auto has_flag_furn( const std::string &flag, const point_omt_ms &p ) const -> bool;
         auto has_flag_furn( ter_bitflags flag, const point_omt_ms &p ) const -> bool;
+        auto ter_vars( const point_omt_ms &p ) const -> data_vars::data_set*;
+        auto furn_vars( const point_omt_ms &p ) const -> data_vars::data_set*;
         auto passable( const point_omt_ms &p ) const -> bool;
         auto impassable( const point_omt_ms &p ) const -> bool;
         auto move_cost( const point_omt_ms &p, const vehicle *ignored_vehicle = nullptr ) const -> int;
@@ -99,12 +102,14 @@ class mapgen_constructor
                         int intensity = INT_MAX, const time_duration &age = 0_turns,
                         bool hit_player = true ) -> bool;
         auto remove_field( const point_omt_ms &p, const field_type_id &field_to_remove ) -> void;
+        auto remove_all_fields( const point_omt_ms &p ) -> void;
         auto add_splatter_trail( const field_type_id &type, const point_omt_ms &from,
                                  const point_omt_ms &to ) -> void;
         auto add_computer( const point_omt_ms &p, const std::string &name,
                            int security ) -> computer *;
         auto set_signage( const point_omt_ms &p, const std::string &message ) const -> void;
         auto set_graffiti( const point_omt_ms &p, const std::string &contents ) -> void;
+        auto delete_graffiti( const point_omt_ms &p ) -> void;
         auto i_at( const point_omt_ms &p ) -> map_stack;
         auto i_clear( const point_omt_ms &p ) -> std::vector<detached_ptr<item>>;
         auto add_item( const point_omt_ms &p, detached_ptr<item> &&new_item ) -> void;
@@ -123,6 +128,7 @@ class mapgen_constructor
         auto place_items( const item_group_id &loc, int chance, const point_omt_ms &p1,
                           const point_omt_ms &p2, bool ongrass, const time_point &turn,
                           int magazine = 0, int ammo = 0 ) -> std::vector<item *>;
+        auto edit_item_for_spawn_rate( item &itm ) -> int;
         auto item_category_spawn_rate( const item &itm ) -> float;
         auto flammable_items_at( const point_omt_ms &p, int threshold = 0 ) -> bool;
 
@@ -176,7 +182,8 @@ class mapgen_constructor
                           units::angle dir, int init_veh_fuel = -1,
                           int init_veh_status = -1, bool merge_wrecks = true,
                           std::optional<bool> locked = std::nullopt,
-                          std::optional<bool> has_keys = std::nullopt ) -> vehicle *;
+                          std::optional<bool> has_keys = std::nullopt,
+                          bool place_beyond_bounds = false ) -> vehicle *;
         auto add_vehicle( std::unique_ptr<vehicle> veh,
                           const bool merge_wrecks ) -> std::unique_ptr<vehicle>;
         auto detach_vehicle( vehicle *veh ) -> std::unique_ptr<vehicle>;
@@ -191,6 +198,10 @@ class mapgen_constructor
         auto bash( const point_omt_ms &p, int str,
                    bool destroy = false, bool bash_floor = false,
                    const vehicle *bashing_vehicle = nullptr ) -> void;
+        auto bash_ter_furn( const point_omt_ms &p, bool destroy ) -> void;
+        auto bash_field( const point_omt_ms &p ) -> void;
+        auto bash_vehicle( const point_omt_ms &p, int str ) -> void;
+        auto bash_items( const point_omt_ms &p ) -> void;
         auto destroy( const point_omt_ms &p ) -> void;
         auto create_anomaly( const point_omt_ms &p, artifact_natural_property prop,
                              bool create_rubble = true ) -> void;

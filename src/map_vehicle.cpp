@@ -223,11 +223,11 @@ void map::add_vehicle_to_cache(vehicle* veh) {
         }
         level_cache& ch = get_cache(p.z());
         ch.veh_in_active_range = true;
+        set_vehicle_cache_dirty(p.z());
 
-        // DANGER: Unlike what you think where you can just use vpr.has_flag( VPFLAG_NOCOLLIDE )
-        // THAT DOES NOT WORK DO NOT TRY AND CHANGE THIS MESS
         if (!ch.veh_cached_parts.contains(p)
-            || (!veh->part_info(vpr.part_index()).has_flag(VPFLAG_NOCOLLIDE))) {
+            || !veh->part_info(vpr.part_index()).has_flag(VPFLAG_NOCOLLIDE)
+            || ch.veh_cached_parts.at(p).first == veh) {
             ch.veh_cached_parts[p] = std::make_pair(veh, static_cast<int>(vpr.part_index()));
         }
         if (inbounds(p)) { ch.veh_exists_at[ch.idx(p.x(), p.y())] = true; }
@@ -244,6 +244,7 @@ void map::clear_vehicle_point_from_cache(vehicle* veh, const tripoint_bub_ms& pt
 
     level_cache& ch = get_cache(pt.z());
     auto it = ch.veh_cached_parts.find(pt);
+    set_vehicle_cache_dirty(pt.z());
     if (it != ch.veh_cached_parts.end() && it->second.first == veh) {
         if (inbounds(pt)) { ch.veh_exists_at[ch.idx(pt.x(), pt.y())] = false; }
         ch.veh_cached_parts.erase(it);
@@ -278,6 +279,7 @@ void map::clear_vehicle_cache() {
             ch.veh_cached_parts.erase(part);
         }
         ch.veh_in_active_range = false;
+        set_vehicle_cache_dirty(zlev);
     }
     cached_veh_rope.clear();
 }
@@ -286,6 +288,7 @@ void map::clear_vehicle_list(const int zlev) {
     auto& ch = get_cache(zlev);
     ch.vehicle_list.clear();
     ch.zone_vehicles.clear();
+    set_vehicle_cache_dirty(zlev);
 
     last_full_vehicle_list_dirty = true;
 }
@@ -296,6 +299,7 @@ void map::update_vehicle_list(const submap* const to, const int zlev) {
     level_cache& ch = get_cache(zlev);
     for (const auto& elem : to->vehicles) {
         ch.vehicle_list.insert(elem.get());
+        set_vehicle_cache_dirty(zlev);
         if (!elem->loot_zones.empty()) { ch.zone_vehicles.insert(elem.get()); }
     }
 
@@ -404,6 +408,9 @@ void map::on_vehicle_moved(
     // cache effects.  Keep that cleanup path active even if this movement is a
     // removal of the last vehicle on the level.
     ch.veh_in_active_range = true;
+
+    // Vehicle
+    set_vehicle_cache_dirty(smz);
     invalidate_lightmap_caches();
     m_solar.last_built_hour = -1;
     set_seen_cache_dirty(smz);

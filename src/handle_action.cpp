@@ -45,6 +45,7 @@
 #include "gates.h"
 #include "gun_mode.h"
 #include "help.h"
+#include "iexamine.h"
 #include "input.h"
 #include "int_id.h"
 #include "item.h"
@@ -91,6 +92,7 @@
 #include "string_utils.h"
 #include "throw_radial.h"
 #include "translations.h"
+#include "type_id.h"
 #include "travel/travel_destination.h"
 #include "ui.h"
 #include "ui_manager.h"
@@ -414,12 +416,35 @@ input_context game::get_player_input( std::string& action )
 }
 
 
+static auto jump() -> void
+{
+    auto &you = get_avatar();
+    if( !iexamine::can_start_jump_over_tile( you, true ) ) {
+        return;
+    }
+
+    const auto allowed = [&you]( const tripoint_bub_ms & pos ) {
+        return iexamine::can_jump_over_tile( you, pos );
+    };
+    const auto jump_target = choose_adjacent_highlight(
+                                 _( "Jump across where?" ),
+                                 _( "There is no adjacent tile you can jump across." ),
+                                 allowed );
+    if( !jump_target ) {
+        return;
+    }
+
+    iexamine::jump_over_tile( you, *jump_target );
+}
+
 // Establish or release a grab on a vehicle
 
 
 
 
+
 // Perform a reach attach using wielded weapon
+
 namespace
 {
 /// ACTION_THROW_QUICKSLOT, shared by game::handle_action() and
@@ -718,6 +743,10 @@ bool game::handle_action()
                 u.toggle_crouch_mode();
                 break;
 
+            case ACTION_TOGGLE_PRONE:
+                u.toggle_prone_mode();
+                break;
+
             case ACTION_OPEN_MOVEMENT:
                 open_movement_mode_menu();
                 break;
@@ -949,6 +978,14 @@ bool game::handle_action()
                     examine( *mouse_target );
                 } else {
                     examine();
+                }
+                break;
+
+            case ACTION_JUMP:
+                if( mouse_target && iexamine::can_jump_over_tile( u, *mouse_target ) ) {
+                    iexamine::jump_over_tile( u, *mouse_target );
+                } else {
+                    jump();
                 }
                 break;
 

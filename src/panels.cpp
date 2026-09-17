@@ -451,6 +451,7 @@ std::string window_panel::get_name() const
     return name;
 }
 
+
 static nc_color value_color( int stat )
 {
     nc_color valuecolor = c_light_gray;

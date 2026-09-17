@@ -297,6 +297,7 @@ void train_skill_activity_actor::do_turn( player_activity& act, Character& who )
         int training_skill_fatigue = atoi( p.get_value( "training_iuse_skill_fatigue" ).c_str() );
 
         p.mod_fatigue( training_skill_fatigue );
+        p.mod_stamina( -training_skill_fatigue * 36 );
         if( skill_training_item.ammo_remaining() > 0 ) {
             skill_training_item.ammo_consume( 1, p.bub_pos() );
             if( hack_type == hack_type_t::furniture ) {
@@ -612,12 +613,12 @@ void spellcasting_activity_actor::finish( player_activity& act, Character& who )
     bool target_is_valid = false;
     if( spell_being_cast.range() > 0 && !spell_being_cast.is_valid_target( target_none )
         && !spell_being_cast.has_flag( RANDOM_TARGET ) ) {
-        g->refresh_player_visibility_cache_if_needed();
+        g->refresh_player_visibility_cache_if_needed( true );
         do {
             avatar& you = *p.as_avatar();
             std::vector<tripoint_bub_ms> trajectory =
                 target_handler::mode_spell( you, spell_being_cast, no_fail, no_mana );
-            g->refresh_player_visibility_cache_if_needed();
+            g->refresh_player_visibility_cache_if_needed( true );
 
             if( !trajectory.empty() ) {
                 const auto traj_target = trajectory.back();
@@ -1449,6 +1450,7 @@ deserialize_functions = {
     {activity_id( "ACT_DISSECT" ), &butchery_activity_actor::deserialize},
     {activity_id( "ACT_DROP" ), &drop_activity_actor::deserialize},
     {activity_id( "ACT_EAT_MENU" ), &consume_menu_activity_actor::deserialize},
+    {activity_id( "ACT_ENCHANT" ), &enchant_activity_actor::deserialize},
     {activity_id( "ACT_FETCH_REQUIRED" ), &generic_multi_activity_actor::deserialize},
     {activity_id( "ACT_FERTILIZE_PLOT" ), &fertilize_plot_activity_actor::deserialize},
     {activity_id( "ACT_FIELD_DRESS" ), &butchery_activity_actor::deserialize},

@@ -260,6 +260,21 @@ inline int fold_and_print(
                w, begin, width, base_color, string_format( mes, std::forward<Args>( args )... ) );
 }
 /**
+ * Same as @ref fold_and_print, but starts printing at line @p begin_line of the
+ * folded text instead of the first line, for scrollable text panes.
+ */
+int fold_and_print_from(
+    const catacurses::window &w, point begin, int width, int begin_line,
+    const nc_color &base_color, const std::string &text );
+template <typename... Args>
+inline int fold_and_print_from(
+    const catacurses::window &w, point begin, const int width, const int begin_line,
+    const nc_color &base_color, const char *const mes, Args&&... args )
+{
+    return fold_and_print_from(
+               w, begin, width, begin_line, base_color, string_format( mes, std::forward<Args>( args )... ) );
+}
+/**
  * Prints a single line of text. The text is automatically trimmed to fit into the given
  * width. The function handles @ref color_tags correctly.
  *
@@ -712,11 +727,12 @@ void draw_subtab(
 //   │ TAB1 │ │ TAB2 │
 // ┌─┴──────┴─┘      └───────────┐
 void draw_tabs(
-    const catacurses::window &, const std::vector<std::string> &tab_texts, size_t current_tab );
+    const catacurses::window &, const std::vector<std::string> &tab_texts, size_t current_tab,
+    int max_tab_width = -1 );
 // As above, but specify current tab by its label rather than position
 void draw_tabs(
     const catacurses::window &, const std::vector<std::string> &tab_texts,
-    const std::string& current_tab );
+    const std::string& current_tab, int max_tab_width = -1 );
 
 // This overload of draw_tabs is intended for use when you track the current
 // tab via some other value (like an enum) linked to each tab.  Expected use
@@ -730,7 +746,7 @@ void draw_tabs(
 // draw_tabs( w, tabs, current_tab );
 template <typename TabList, typename CurrentTab>
 void draw_tabs( const catacurses::window& w, const TabList& tab_list,
-                const CurrentTab& current_tab )
+                const CurrentTab& current_tab, int max_tab_width = -1 )
 requires std::is_same_v <
 CurrentTab, std::remove_const_t<typename TabList::value_type::first_type >> {
     std::vector<std::string> tab_text;
@@ -742,7 +758,7 @@ CurrentTab, std::remove_const_t<typename TabList::value_type::first_type >> {
         return pair.first == current_tab;
     } );
     assert( current_tab_it != tab_list.end() );
-    draw_tabs( w, tab_text, std::distance( tab_list.begin(), current_tab_it ) );
+    draw_tabs( w, tab_text, std::distance( tab_list.begin(), current_tab_it ), max_tab_width );
 }
 
 // Similar to the above, but where the order of tabs is specified separately
@@ -750,7 +766,7 @@ CurrentTab, std::remove_const_t<typename TabList::value_type::first_type >> {
 template <typename TabList, typename TabKeys, typename CurrentTab>
 void draw_tabs(
     const catacurses::window& w, const TabList& tab_list, const TabKeys& keys,
-    const CurrentTab& current_tab )
+    const CurrentTab& current_tab, int max_tab_width = -1 )
 requires std::is_same_v <
 CurrentTab, std::remove_const_t<typename TabList::value_type::first_type >> {
     std::vector<typename TabList::value_type> ordered_tab_list;
@@ -760,7 +776,7 @@ CurrentTab, std::remove_const_t<typename TabList::value_type::first_type >> {
         assert( it != tab_list.end() );
         ordered_tab_list.push_back( *it );
     }
-    draw_tabs( w, ordered_tab_list, current_tab );
+    draw_tabs( w, ordered_tab_list, current_tab, max_tab_width );
 }
 
 // Legacy function, use class scrollbar instead!

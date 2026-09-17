@@ -935,18 +935,32 @@ bool item::is_artifact() const
     return !!type->artifact;
 }
 
-bool item::is_relic() const
+bool item::is_relic( bool not_itype ) const
 {
-    return !!relic_data;
+    return !!relic_data || ( !not_itype && type->relic_data );
 }
 
-const std::vector<enchantment> &item::get_enchantments() const
+bool item::add_enchantment( const enchantment_id &ench )
 {
-    if( !is_relic() ) {
+    if( !ench.is_valid() ) {
+        return false;
+    }
+    if( !relic_data ) {
+        relic_data = cata::make_value<relic>();
+    }
+    relic_data->add_passive_effect( ench.obj() );
+    return true;
+}
+
+const std::vector<enchantment> &item::get_enchantments( bool dynamic ) const
+{
+    if( dynamic && is_relic( true ) ) {
+        return relic_data->get_enchantments();
+    } else if( !dynamic && type->relic_data ) {
+        return type->relic_data->get_enchantments();
+    }
     static const std::vector<enchantment> fallback;
     return fallback;
-}
-return relic_data->get_enchantments();
 }
 
 const material_type &item::get_random_material() const

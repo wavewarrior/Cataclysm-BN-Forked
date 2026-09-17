@@ -108,8 +108,7 @@ TEST_CASE(
     CHECK_FALSE(static_cast<bool>(g->u.activity));
 
     auto& timer_after = g->m.i_at(item_pos).only_item();
-    CHECK(timer_after.get_counter() <= starting_counter - to_turns<int>(duration));
-    CHECK(timer_after.get_counter() >= starting_counter - to_turns<int>(duration) - 1);
+    CHECK(timer_after.get_counter() == starting_counter - to_turns<int>(duration));
 }
 
 TEST_CASE(
@@ -141,10 +140,6 @@ TEST_CASE(
     "[activity][fixed_window]") {
     const auto no_autosave = override_option("AUTOSAVE", "false");
 
-    SECTION("player tile field") {
-        expect_fixed_window_skip_blocked_by([] { g->m.add_field(g->u.bub_pos(), fd_acid, 1); });
-    }
-
     SECTION("active fire in simulated submap") {
         expect_fixed_window_skip_blocked_by([] {
             g->m.add_field(g->u.bub_pos() + point_east, fd_fire, 1);
@@ -156,7 +151,7 @@ TEST_CASE(
             auto* veh =
                 g->m.add_vehicle(vproto_id("car"), g->u.bub_pos() + tripoint_east, 0_degrees, 0, 0);
             REQUIRE(veh != nullptr);
-            veh->engine_on = true;
+            veh->is_following = true;
         });
     }
 

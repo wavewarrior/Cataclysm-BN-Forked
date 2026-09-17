@@ -30,6 +30,7 @@
 #include "field_type.h"
 #include "fire_spread_loader.h"
 #include "fluid_grid.h"
+#include "explosion_queue.h"
 #include "game_constants.h"
 #include "map.h"
 #include "mapbuffer.h"
@@ -38,6 +39,7 @@
 #include "messages.h"
 #include "mission.h"
 #include "monster.h"
+#include "monster_hallucination.h"
 #include "monster_action.h"
 #include "monster_plan.h"
 #include "mtype.h"
@@ -107,6 +109,7 @@ void game::cleanup_dead()
     if( npc_is_dead ) {
         for( auto it = active_npc.begin(); it != active_npc.end(); ) {
             if( ( *it )->is_dead() ) {
+                explosion_handler::get_explosion_queue().invalidate_source( it->get() );
                 if( !( *it )->is_manually_erased() ) {
                     // Normal death path — npc::erase() was not called, so do cleanup here.
                     remove_npc_follower( ( *it )->getID() );
@@ -873,6 +876,12 @@ if( use_activity_cache ) {
                     critter.process_turn();
                 }
             }
+
+            if( monster_hallucination::needs_lifecycle_expiry( critter ) &&
+                one_in( monster_hallucination::expiry_one_in ) ) {
+                critter.die( nullptr );
+                continue;
+            }
             // Field damage always applies, even on strided turns.
             m.creature_in_field( critter );
             // Daily events stay unconditional (already time-throttled):
@@ -1339,6 +1348,7 @@ void game::npcmove()
             if( !guy.has_effect( effect_npc_suspend ) )
             {
                 guy.process_turn();
+                guy.process_items();
             }
         }
 
@@ -1453,6 +1463,7 @@ void game::sleep_skip_npc_process()
         m.creature_in_field( guy );
         if( !guy.has_effect( effect_npc_suspend ) ) {
             guy.process_turn();
+            guy.process_items();
         }
         guy.npc_update_body();
     }

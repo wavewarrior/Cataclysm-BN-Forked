@@ -136,6 +136,17 @@ static const activity_id ACT_WAIT_STAMINA( "ACT_WAIT_STAMINA" );
 static const bionic_id bio_eye_optic( "bio_eye_optic" );
 static const bionic_id bio_infolink( "bio_infolink" );
 
+static const enchantment_flag_id ench_flag_BLIND( "BLIND" );
+static const enchantment_flag_id ench_flag_ELECTROSENSE( "ELECTROSENSE" );
+static const enchantment_flag_id ench_flag_VIEW_DRONE_CAM( "VIEW_DRONE_CAM" );
+static const enchantment_flag_id ench_flag_UNDERWATER_SIGHT( "UNDERWATER_SIGHT" );
+static const enchantment_flag_id ench_flag_NEARSIGHTED( "NEARSIGHTED" );
+static const enchantment_flag_id ench_flag_SLEEP_SIGHT( "SLEEP_SIGHT" );
+static const enchantment_flag_id ench_flag_INFRARED_VISION( "INFRARED_VISION" );
+static const enchantment_flag_id ench_flag_SONAR( "SONAR" );
+
+static const enchantment_value_id ench_val_GROUNDED_CREATURE_SIGHT( "GROUNDED_CREATURE_SIGHT" );
+
 static const matec_id WBLOCK_1( "WBLOCK_1" );
 static const matec_id WBLOCK_2( "WBLOCK_2" );
 static const matec_id WBLOCK_3( "WBLOCK_3" );
@@ -163,6 +174,7 @@ static const efftype_id effect_disabled( "disabled" );
 static const efftype_id effect_disinfected( "disinfected" );
 static const efftype_id effect_downed( "downed" );
 static const efftype_id effect_drunk( "drunk" );
+static const efftype_id effect_drone_marker( "drone_marker" );
 static const efftype_id effect_took_antinarcoleptic( "took_antinarcoleptic" );
 static const efftype_id effect_earphones( "earphones" );
 static const efftype_id effect_foodpoison( "foodpoison" );
@@ -232,6 +244,7 @@ static const skill_id skill_throw( "throw" );
 
 static const species_id HUMAN( "HUMAN" );
 static const species_id ROBOT( "ROBOT" );
+static const species_id ROBOT_FLYING( "ROBOT_FLYING" );
 
 static const trait_id trait_ACIDBLOOD( "ACIDBLOOD" );
 static const trait_id trait_ACIDPROOF( "ACIDPROOF" );
@@ -476,16 +489,12 @@ int Character::clairvoyance() const
 bool Character::sight_impaired() const
 {
     return ( ( ( has_effect( effect_boomered ) || has_effect( effect_no_sight ) ||
-    has_effect( effect_darkness ) ) &&
-    ( !( has_trait( trait_PER_SLIME_OK ) ) ) ) ||
-    ( is_underwater() && !has_bionic( bio_membrane ) && !has_trait( trait_MEMBRANE ) &&
-    !worn_with_flag( flag_SWIM_GOGGLES ) && !has_trait( trait_PER_SLIME_OK ) &&
-    !has_trait( trait_CEPH_EYES ) && !has_trait( trait_SEESLEEP ) ) ||
-    ( ( has_trait( trait_MYOPIC ) || has_trait( trait_URSINE_EYE ) ) &&
-    !worn_with_flag( flag_FIX_NEARSIGHT ) &&
-    !has_effect( effect_contacts ) &&
-    !has_bionic( bio_eye_optic ) ) ||
-    has_trait( trait_PER_SLIME ) );
+                 has_effect( effect_darkness ) ) && !has_trait( trait_PER_SLIME_OK ) ) ||
+             ( is_underwater() && !worn_with_flag( flag_SWIM_GOGGLES ) &&
+               !has_enchantment_flag( ench_flag_UNDERWATER_SIGHT ) ) ||
+             ( has_enchantment_flag( ench_flag_NEARSIGHTED ) &&
+               !worn_with_flag( flag_FIX_NEARSIGHT ) && !has_effect( effect_contacts ) ) ||
+             has_trait( trait_PER_SLIME ) );
 }
 
 void Character::recalc_sight_limits()
@@ -494,7 +503,7 @@ void Character::recalc_sight_limits()
     vision_mode_cache.reset();
 
     // Set sight_max.
-    if( is_blind() || ( in_sleep_state() && !has_trait( trait_SEESLEEP ) )
+    if( is_blind() || ( in_sleep_state() && !has_enchantment_flag( ench_flag_SLEEP_SIGHT ) )
         || has_effect( effect_narcosis ) ) {
         sight_max = 0;
     } else if( has_effect( effect_boomered ) && ( !( has_trait( trait_PER_SLIME_OK ) ) ) ) {
@@ -502,14 +511,13 @@ void Character::recalc_sight_limits()
         vision_mode_cache.set( BOOMERED );
     } else if(
         has_effect( effect_in_pit ) || has_effect( effect_no_sight )
-        || ( is_underwater() && !has_bionic( bio_membrane ) && !has_trait( trait_MEMBRANE )
-             && !worn_with_flag( flag_SWIM_GOGGLES ) && !has_trait( trait_CEPH_EYES )
-             && !has_trait( trait_PER_SLIME_OK ) ) ) {
+        || ( is_underwater() && !worn_with_flag( flag_SWIM_GOGGLES )
+             && !has_enchantment_flag( ench_flag_UNDERWATER_SIGHT ) ) ) {
         sight_max = 1;
     } else if( has_active_mutation( trait_SHELL2 ) ) {
         // You can kinda see out a bit.
         sight_max = 2;
-    } else if( ( has_trait( trait_MYOPIC ) || has_trait( trait_URSINE_EYE ) )
+    } else if( has_enchantment_flag( ench_flag_NEARSIGHTED )
                && !worn_with_flag( flag_FIX_NEARSIGHT ) && !has_effect( effect_contacts ) ) {
         sight_max = 4;
     } else if( has_trait( trait_PER_SLIME ) ) {
@@ -540,11 +548,13 @@ void Character::recalc_sight_limits()
     if( vision_mode_cache[BIRD_EYE] ) { nv_range++; }
 
     // Not exactly a sight limit thing, but related enough
-    if( has_active_bionic( bio_infrared ) || has_trait( trait_INFRARED ) || has_trait( trait_LIZ_IR )
+    if( has_enchantment_flag( ench_flag_INFRARED_VISION )
         || worn_with_flag( flag_IR_EFFECT )
         || ( is_mounted() && mounted_creature->has_flag( MF_MECH_RECON_VISION ) ) ) {
         vision_mode_cache.set( IR_VISION );
     }
+
+    // NOTE: Enchant this eventually, makes no sense to have set values
 
     if( has_artifact_with( AEP_SUPER_CLAIRVOYANCE )
         || has_effect_with_flag( flag_EFFECT_SUPER_CLAIRVOYANCE ) ) {
@@ -586,7 +596,8 @@ float Character::get_vision_threshold( float light_level ) const
 
 bool Character::is_blind() const
 {
-    return worn_with_flag( flag_BLIND ) || has_effect( effect_blind );
+    return worn_with_flag( flag_BLIND ) || has_effect( effect_blind ) ||
+           has_enchantment_flag( ench_flag_BLIND );
 }
 
 bool Character::is_invisible() const
@@ -612,6 +623,10 @@ int const crouching_bonus = 30;
 if( g->u.is_crouching() ) {
     stealth_modifier += crouching_bonus;
 };
+int const prone_bonus = 50;
+if( g->u.movement_mode_is( CMM_PRONE ) ) {
+    stealth_modifier += prone_bonus;
+}
 map &here = get_map();
 int const camo_modifier = 50;
 if( worn_with_flag( flag_NATURE_CAMO )
@@ -679,24 +694,35 @@ bool Character::sees_with_specials( const Creature& critter ) const
     if( bub_pos().z() != critter.bub_pos().z() ) { return false; }
 
     // electroreceptors grants vision of robots and electric monsters through walls
-    if( ( has_trait( trait_ELECTRORECEPTORS ) || has_active_bionic( bio_electrosense ) )
-        && ( critter.in_species( ROBOT ) || critter.has_flag( MF_ELECTRIC ) ) ) {
+    if( has_enchantment_flag( ench_flag_ELECTROSENSE ) &&
+        ( critter.in_species( ROBOT ) || critter.in_species( ROBOT_FLYING ) ||
+          critter.has_flag( MF_ELECTRIC ) || critter.has_flag( MF_ELECTRONIC ) ) ) {
         return true;
     }
 
-    if( critter.digging() && has_active_bionic( bio_ground_sonar ) ) {
+    if( critter.digging() && has_enchantment_flag( ench_flag_SONAR ) ) {
         // Bypass the check below, the bionic sonar also bypasses the sees(point) check because
         // walls don't block sonar which is transmitted in the ground, not the air.
         // TODO: this might need checks whether the player is in the air, or otherwise not connected
         // to the ground. It also might need a range check.
         return true;
     }
+    // Friendly eyebots can designate targets for the player
+    if( critter.has_effect( effect_drone_marker ) && ( has_item_with_flag( flag_DRONE_CAM ) ||
+            has_enchantment_flag( ench_flag_VIEW_DRONE_CAM ) ) ) {
+        return true;
+    }
 
     const int dist = rl_dist( bub_pos(), critter.bub_pos() );
-    return (
-               dist <= 5
-               && ( has_active_mutation( trait_ANTENNAE )
-                    || ( has_active_bionic( bio_ground_sonar ) && !critter.has_flag( MF_FLIES ) ) ) );
+
+    // Distance cannot be 0, so this is always safe
+    if( dist <= bonus_from_enchantments( 0, ench_val_GROUNDED_CREATURE_SIGHT ) &&
+        !critter.has_flag( MF_FLIES ) ) {
+        return true;
+    }
+
+    // TODO: Add more range based enchantments here ( I.E. Limited Electrosense ranges )
+    return false;
 }
 
 bool Character::sees_with_infrared( const Creature& critter ) const
@@ -846,9 +872,9 @@ bool Character::sees( const Creature& critter ) const
 {
     // This handles only the player/npc specific stuff (monsters don't have traits or bionics).
     const int dist = rl_dist( bub_pos(), critter.bub_pos() );
-    if( bub_pos().z() == critter.bub_pos().z() && dist <= 5
-        && ( has_active_mutation( trait_ANTENNAE )
-             || ( has_active_bionic( bio_ground_sonar ) && !critter.has_flag( MF_FLIES ) ) ) ) {
+    if( bub_pos().z() == critter.bub_pos().z() &&
+        dist <= bonus_from_enchantments( 0, ench_val_GROUNDED_CREATURE_SIGHT ) &&
+        !critter.has_flag( MF_FLIES ) ) {
         return true;
     }
 

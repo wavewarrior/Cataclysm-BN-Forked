@@ -556,6 +556,9 @@ class monster: public Creature, public location_visitable<monster>
         void make_ally( const monster& z );
         // makes this monster a pet of the player
         void make_pet();
+
+        void make_pet( Character &actor );
+
         // check if this monster is a pet of the player
         bool is_pet() const;
 
@@ -695,6 +698,10 @@ class monster: public Creature, public location_visitable<monster>
 
         // Ammunition if we use a gun.
         std::map<itype_id, int> ammo;
+        auto ammo_slot_items( const itype_id &ammo_id ) const -> std::vector<itype_id>;
+        auto ammo_capacity_for_slot( const itype_id &ammo_id ) const -> int;
+        auto ammo_count_for_slot( const itype_id &ammo_id ) const -> int;
+        auto loaded_ammo_for_slot( const itype_id &ammo_id ) const -> itype_id;
 
         /**
          * Convert this monster into an item (see @ref mtype::revert_to_itype).
@@ -767,7 +774,10 @@ class monster: public Creature, public location_visitable<monster>
         void add_faction_anger( mfaction_id target_faction, int amount );
         auto get_faction_anger( mfaction_id target_faction ) const -> int;
 
+        const lua_monster_callback_actor *get_lua_callbacks() const;
+
         std::set<m_flag> monster_flags;
+
 
     private:
         auto action_move_factor() const -> int override;

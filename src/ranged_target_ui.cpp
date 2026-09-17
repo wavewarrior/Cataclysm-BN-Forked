@@ -209,7 +209,7 @@ target_handler::trajectory target_ui::run()
     map& here = get_map();
     // Target lists and saved-target reacquisition use Character::sees before
     // the targeting UI gets its first redraw.
-    g->refresh_player_visibility_cache_if_needed();
+    g->refresh_player_visibility_cache_if_needed( true );
     // Load settings
     snap_to_target = get_option<bool>( "SNAP_TO_TARGET" );
     if( mode == TargetMode::Turrets ) {
@@ -567,10 +567,8 @@ void target_ui::init_window_and_input()
     ctxt.register_action( "zoom_out" );
     ctxt.register_action( "zoom_in" );
     ctxt.register_action( "TOGGLE_MOVE_CURSOR_VIEW" );
-    if( allow_zlevel_shift ) {
-        ctxt.register_action( "LEVEL_UP" );
-        ctxt.register_action( "LEVEL_DOWN" );
-    }
+    ctxt.register_action( "LEVEL_UP" );
+    ctxt.register_action( "LEVEL_DOWN" );
     if( mode == TargetMode::Fire || mode == TargetMode::TurretManual
         || ( mode == TargetMode::Shape && relevant->is_gun() ) ) {
         ctxt.register_action( "SWITCH_MODE" );
@@ -1472,9 +1470,7 @@ std::string target_ui::panel_text()
             label_range = colorize( label_range, c_red );
         }
         std::string row = label_range;
-        if( allow_zlevel_shift ) {
-            row += "  " + string_format( _( "Elevation: %d" ), dst.z() - src.z() );
-        }
+        row += "  " + string_format( _( "Elevation: %d" ), dst.z() - src.z() );
         row += "  " + string_format( _( "Targets: %d" ), targets.size() );
         L.push_back( row );
     }

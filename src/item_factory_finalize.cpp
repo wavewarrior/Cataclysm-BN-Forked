@@ -580,6 +580,25 @@ void Item_factory::finalize_post( itype &obj,
             obj.repair.insert( it->second.begin(), it->second.end() );
         }
     }
+    if( !obj.magazines.empty() ) {
+        for( const auto &[mag, mags_like] : magazines_like ) {
+            for( const auto [ammotype, mags] : obj.magazines ) {
+                if( mags.contains( mag ) ) {
+                    obj.magazines[ammotype].insert( mags_like.begin(), mags_like.end() );
+                }
+            }
+        }
+    }
+    if( obj.mod && !obj.mod->magazine_adaptor.empty() ) {
+        for( const auto &[mag, mags_like] : magazines_like ) {
+            for( const auto [ammotype, mags] : obj.mod->magazine_adaptor ) {
+                if( mags.contains( mag ) ) {
+                    obj.mod->magazine_adaptor[ammotype].insert( mags_like.begin(), mags_like.end() );
+                }
+            }
+        }
+    }
+
 
     if( obj.comestible ) {
         for( const std::pair<diseasetype_id, int> elem : obj.comestible->contamination ) {

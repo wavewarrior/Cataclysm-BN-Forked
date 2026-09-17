@@ -11,6 +11,7 @@
 #include "mission.h"
 #include "mutation.h"
 #include "profession.h"
+#include "string_id.h"
 #include "translations.h"
 #include "type_id_implement.h"
 #include "rng.h"
@@ -77,12 +78,15 @@ void scenario::load( const JsonObject &jo, const std::string & )
     optional( jo, was_loaded, "forced_bionics", _forced_bionics, auto_flags_reader<bionic_id> {} );
     optional( jo, was_loaded, "forbidden_bionics", _forbidden_bionics, auto_flags_reader<bionic_id> {} );
     optional( jo, was_loaded, "forbids_bionics", _forbids_bionics );
+    optional( jo, was_loaded, "spells", _allowed_spells, auto_flags_reader<spell_id> {} );
+    optional( jo, was_loaded, "forbidden_spells", _forbidden_spells, auto_flags_reader<spell_id> {} );
+    optional( jo, was_loaded, "forbids_spells", _forbids_spells );
     optional( jo, was_loaded, "allowed_locs", _allowed_locs, auto_flags_reader<start_location_id> {} );
     if( _allowed_locs.empty() ) {
         jo.throw_error( "at least one starting location (member \"allowed_locs\") must be defined" );
     }
     optional( jo, was_loaded, "flags", flags, auto_flags_reader<> {} );
-    optional( jo, was_loaded, "map_extra", _map_extra, "mx_null" );
+    optional( jo, was_loaded, "map_extra", _map_extra, string_id<map_extra>::NULL_ID() );
     optional( jo, was_loaded, "missions", _missions, auto_flags_reader<mission_type_id> {} );
 
     if( jo.has_string( "vehicle" ) ) {
@@ -155,6 +159,15 @@ static void check_bionics( const std::set<bionic_id> &bionics, const string_id<s
     }
 }
 
+static void check_spells( const std::set<spell_id> &spells, const string_id<scenario> &ident )
+{
+    for( auto &t : spells ) {
+        if( !t.is_valid() ) {
+            debugmsg( "spell %s for scenario %s does not exist", t.c_str(), ident.c_str() );
+        }
+    }
+}
+
 void scenario::check_definition() const
 {
 for( auto &p : professions ) {
@@ -188,11 +201,14 @@ for( auto &l : _allowed_locs ) {
     check_bionics( _allowed_bionics, id );
     check_bionics( _forced_bionics, id );
     check_bionics( _forbidden_bionics, id );
-    MapExtras::get_function( _map_extra ); // triggers a debug message upon invalid input
+    check_spells( _allowed_spells, id );
+    check_spells( _forbidden_spells, id );
+    if( has_map_extra() && !_map_extra.is_valid() ) {
+        debugmsg( "map extra %s for scenario %s does not exist", _map_extra.c_str(), id.c_str() );
+    }
 
-    check_bionics( _forbidden_bionics, id );
-for( auto &m : _missions ) {
-    if( !m.is_valid() ) {
+    for( auto &m : _missions ) {
+        if( !m.is_valid() ) {
             debugmsg( "starting mission %s for scenario %s does not exist", m.c_str(), id.c_str() );
         }
 
@@ -437,6 +453,12 @@ bool scenario::bionicquery( const bionic_id &bionic ) const
     ( !is_forbidden_bionic( bionic ) && bionic->starting_bionic );
 }
 
+bool scenario::spellquery( const spell_id &spell ) const
+{
+    return _allowed_spells.contains( spell ) ||
+           ( !is_forbidden_spell( spell ) && spell->starting_spell );
+}
+
 std::set<trait_id> scenario::get_locked_traits() const
 {
     return _forced_traits;
@@ -462,9 +484,19 @@ bool scenario::is_forbidden_bionic( const bionic_id &bionic ) const
     return _forbidden_bionics.contains( bionic );
 }
 
+bool scenario::is_forbidden_spell( const spell_id &spell ) const
+{
+    return _forbidden_spells.contains( spell );
+}
+
 bool scenario::forbids_bionics() const
 {
     return _forbids_bionics;
+}
+
+bool scenario::forbids_spells() const
+{
+    return _forbids_spells;
 }
 
 bool scenario::has_flag( const std::string &flag ) const
@@ -484,9 +516,9 @@ bool scenario::can_pick( const scenario &current_scenario, const int points ) co
 }
 bool scenario::has_map_extra() const
 {
-    return _map_extra != "mx_null";
+    return _map_extra != string_id<map_extra>::NULL_ID();
 }
-const std::string &scenario::get_map_extra() const
+const string_id<map_extra> &scenario::get_map_extra() const
 {
     return _map_extra;
 }

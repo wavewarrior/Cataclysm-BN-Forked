@@ -2169,6 +2169,7 @@ void map::loadn( const tripoint_bub_sm& grid, const bool update_vehicles, const 
             set_pathfinding_cache_dirty( grid.z() );
             set_suspension_cache_dirty( grid.z() );
             get_cache( grid.z() ).lightmap_dirty.set();
+            set_vehicle_cache_dirty( grid.z() );
         }
     }
     // Overlay boundary terrain on the edge tiles of this submap if it sits at the
@@ -2760,23 +2761,33 @@ static void vehicle_caching_internal_above(
         const tripoint_bub_ms& part_pos = v->bub_part_location( vp.part() );
         const int tile_idx = zch_above.idx( part_pos.x(), part_pos.y() );
         zch_above.vehicle_floor_cache[tile_idx] = true;
+        zch_above.has_any_vehicle_floor = true;
     }
 }
 
 void map::do_vehicle_caching( int z )
 {
     level_cache& ch = get_cache( z );
+    if( ch.vehicle_list.empty() && inbounds_z( z + 1 ) ) {
+        get_cache( z + 1 ).vehicle_floor_cache_dirty = false;
+    }
     for( vehicle * v : ch.vehicle_list ) {
         for( const vpart_reference& vp : v->get_all_parts() ) {
             const tripoint_bub_ms& part_pos = v->bub_part_location( vp.part() );
             if( !inbounds( part_pos ) || vp.part().removed ) { continue; }
             vehicle_caching_internal( get_cache( part_pos.z() ), vp, v );
             if( part_pos.z() < OVERMAP_HEIGHT ) {
-                vehicle_caching_internal_above( get_cache( part_pos.z() + 1 ), vp, v );
+                level_cache &ch_above = get_cache( part_pos.z() + 1 );
+                vehicle_caching_internal_above( ch_above, vp, v );
+                ch_above.vehicle_floor_cache_dirty = false;
             }
         }
     }
+    ch.vehicle_caches_dirty = false;
 }
+
+
+
 
 
 
@@ -3445,6 +3456,19 @@ bool map::check_and_set_seen_cache( const tripoint_bub_ms& p ) const
     return false;
 }
 
+bool map::is_map_cache_valid( const int zlev )
+{
+    if( inbounds_z( zlev ) ) {
+        level_cache &ch = get_cache( zlev );
+        // NOTE: Purposely excludes visibility cache, that is handled seperately in the game loop
+        return ch.floor_cache_dirty.any() || ch.transparency_cache_dirty.any() ||
+               ch.absorption_cache_dirty.any() || ch.sound_wall_cache_dirty.any() ||
+               ch.seen_cache_dirty || ch.lightmap_dirty.any() || ch.outside_cache_dirty.any() ||
+               ch.suspension_cache_dirty;
+    }
+    return false;
+}
+
 void map::invalidate_map_cache( const int zlev )
 {
     // [shift-probe] invalidate_map_cache sets every dirty bitset .all() for a level,
@@ -3473,6 +3497,7 @@ void map::invalidate_map_cache( const int zlev )
         ch.seen_cache_dirty = true;
         ch.lightmap_dirty.set();
         ch.lm_cpu_cache_valid = false;
+        set_vehicle_cache_dirty( zlev );
         ++ch.lm_cpu_cache_generation;
         mark_visibility_cache_dirty( zlev );
         ch.outside_cache_dirty.set();

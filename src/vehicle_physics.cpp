@@ -580,7 +580,7 @@ int vehicle::safe_velocity( const bool fueled ) const
     }
 }
 
-bool vehicle::do_environmental_effects()
+bool vehicle::do_environmental_effects( const int turns )
 {
     bool needed = false;
     // check for smoking parts
@@ -592,7 +592,7 @@ bool vehicle::do_environmental_effects()
             needed = true;
             if( get_weather().weather_id->rains &&
                 get_weather().weather_id->precip != precip_class::very_light ) {
-                vp.part().blood--;
+                vp.part().blood -= std::min( vp.part().blood, turns );
             }
         }
     }

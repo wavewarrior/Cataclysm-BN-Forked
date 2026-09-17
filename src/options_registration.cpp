@@ -385,9 +385,13 @@ void options_manager::add_options_general()
          true, COPT_NO_SOUND_HIDE
        );
 
+    const auto soundpacks = build_soundpacks_list();
+    const auto bundled_soundpack = "otopack bn";
+    const auto default_soundpack = SOUNDPACKS.contains( bundled_soundpack ) ? bundled_soundpack :
+                                   "basic";
     add( "SOUNDPACKS", general, translate_marker( "Choose soundpack" ),
          translate_marker( "Choose the soundpack you want to use.  Requires restart." ),
-         build_soundpacks_list(), "basic", COPT_NO_SOUND_HIDE
+         soundpacks, default_soundpack, COPT_NO_SOUND_HIDE
        ); // populate the options dynamically
 
     get_option( "SOUNDPACKS" ).setPrerequisite( "SOUND_ENABLED" );
@@ -1345,9 +1349,13 @@ void options_manager::add_options_performance()
         this->add_empty_line( performance );
     };
     const static bool is_android = false;
-    add_option_group( performance, Group( "rem_act_perf", to_translation( "Sleep Boost" ),
-                                          to_translation( "Skip expensive processing while the player sleeps." ) ),
+    add_option_group( performance, Group( "rem_act_perf", to_translation( "Activity Boost" ),
+                                          to_translation( "Skip expensive processing while the player does activities ( slow path only )." ) ),
     [&]( auto & page_id ) {
+        add( "ACTIVITY_SKIP_VISIBILITY", page_id,
+             translate_marker( "Skip Activity Visibility Calculations" ),
+             translate_marker( "Turns recaclculation of visibility cache on or off during activity slow paths" ),
+             true );
         add( "SLEEP_SKIP_VEH", page_id, translate_marker( "Skip Vehicle Movement" ),
              translate_marker( "Turns off vehicle movement and autodrive while sleeping" ),
              true );
@@ -1356,13 +1364,13 @@ void options_manager::add_options_performance()
              false );
         add( "SLEEP_SKIP_MON", page_id, translate_marker( "Skip Monster Movement" ),
              translate_marker( "Monsters do not move while the player is sleeping" ),
-             is_android ? false : true );
+             is_android ? true : false );
         add( "SLEEP_SKIP_NPC", page_id, translate_marker( "Skip NPC Movement" ),
              translate_marker( "NPCs are forced to sleep alongside the player, skipping movement "
                                "but still processing rest recovery (fatigue reduction, healing, etc.).  "
                                "NPCs with non-interruptible activities (e.g. surgery) are frozen "
                                "for the turn instead." ),
-             is_android ? false : true );
+             is_android ? true : false );
     } );
 
     add_empty_line();
@@ -1812,6 +1820,10 @@ void options_manager::add_options_debug()
          false
        );
 
+    add( "LOG_ACTIVITY_SKIP_STATE", debug, translate_marker( "Log Reason for No Activity Skip State" ),
+         translate_marker( "Logs the rough reason for when activity skip state returns, used for debugging slow activities." ),
+         false );
+
     add_empty_line();
 
     add_option_group( debug, Group( "debug_log", to_translation( "Logging" ),
@@ -1915,6 +1927,9 @@ void options_manager::add_options_debug()
     add( "LIMITED_BAYONETS", debug, translate_marker( "New bayonet system" ),
          translate_marker( "If true, bayonets replace weapon attack instead of adding to it.  WIP feature, weakens bayonets heavily at the moment." ),
          false );
+    add( "NEW_ARMOR_CALCULATION", debug, translate_marker( "New armor damage calculation" ),
+         translate_marker( "If true, armor will be able to take damage from attacks that don't penetrate it, but attacks in general damage armor less frequently." ),
+         true );
 
     add_empty_line();
 
@@ -2386,8 +2401,16 @@ void options_manager::add_options_world_default()
          0, 1000, 100, COPT_NO_HIDE, "%i%%"
        );
 
-    add( "GROWTH_SCALING", world_default, translate_marker( "Growth scaling percentage" ),
+    add( "GROWTH_SCALING", world_default, translate_marker( "Crop growth scaling percentage" ),
          translate_marker( "Sets the time of crop growth in percents.  '50' is two times faster than default, '200' is two times longer.  '0' automatically scales growth time to match the world's season length." ),
+         0, 1000, 0, COPT_NO_HIDE, "%i%%"
+       );
+
+    add( "ANIMAL_LIFE_CYCLE_SCALING", world_default,
+         translate_marker( "Animal life cycle scaling" ),
+         translate_marker( "Sets the time of animal reproduction and growth in percents.  "
+                           "'50' is two times faster than default, '200' is two times longer.  "
+                           "'0' automatically scales animal life cycle time to match the world's season length." ),
          0, 1000, 0, COPT_NO_HIDE, "%i%%"
        );
 

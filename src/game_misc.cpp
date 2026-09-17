@@ -553,7 +553,8 @@ auto game::visibility_cache_z() -> int
 {
     return is_looking ? u.bub_pos().z() : ter_view_p.z();
 }
-auto game::refresh_player_visibility_cache_if_needed( const bool player_map_cache_current ) -> void
+auto game::refresh_player_visibility_cache_if_needed( const bool player_map_cache_current,
+        const bool skip_lightmap ) -> void
 {
 #if defined( CATA_SDL )
     ZoneScopedN( "refresh_player_visibility_cache_if_needed" );
@@ -571,13 +572,14 @@ auto game::refresh_player_visibility_cache_if_needed( const bool player_map_cach
     }
 
     if( !player_map_cache_current ) {
-        m.build_map_cache( zlev );
+        m.build_map_cache( zlev, skip_lightmap );
     }
     if( needs_visibility_refresh() ) {
         m.update_visibility_cache( zlev );
     }
 #else
     ( void )player_map_cache_current;
+    ( void )skip_lightmap;
 #endif
 }
 
@@ -1419,6 +1421,13 @@ bool game::is_dangerous_tile( const tripoint_bub_ms &dest_loc ) const
 
 bool game::prompt_dangerous_tile( const tripoint_bub_ms &dest_loc ) const
 {
+    return prompt_dangerous_tile( dest_loc, _( "Really step into %s?" ), true );
+}
+
+bool game::prompt_dangerous_tile( const tripoint_bub_ms &dest_loc,
+                                  std::string_view query_message,
+                                  const bool allow_ledge_examine ) const
+{
     static const iexamine_function ledge_examine = iexamine_function_from_string( "ledge" );
     std::vector<std::string> harmful_stuff = get_dangerous_tile( dest_loc );
 
@@ -1426,8 +1435,9 @@ bool game::prompt_dangerous_tile( const tripoint_bub_ms &dest_loc ) const
         return true;
     }
 
-    if( !( harmful_stuff.size() == 1 && m.tr_at( dest_loc ).loadid == tr_ledge ) ) {
-        return query_yn( _( "Really step into %s?" ), enumerate_as_string( harmful_stuff ) ) ;
+    if( !allow_ledge_examine ||
+        !( harmful_stuff.size() == 1 && m.tr_at( dest_loc ).loadid == tr_ledge ) ) {
+        return query_yn( query_message.data(), enumerate_as_string( harmful_stuff ) );
     }
 
     if( !u.is_mounted() ) {
@@ -1439,8 +1449,8 @@ bool game::prompt_dangerous_tile( const tripoint_bub_ms &dest_loc ) const
     } else {
         auto crit = u.mounted_creature.get();
         if( crit->has_flag( MF_MOUNTABLE_LEDGE ) ) {
-            return query_yn( _( "Really step into %s?" ),
-                             enumerate_as_string( harmful_stuff ) ) ; // mount can climb down ledges
+            return query_yn( query_message.data(),
+                             enumerate_as_string( harmful_stuff ) ); // mount can climb down ledges
         }
     }
 

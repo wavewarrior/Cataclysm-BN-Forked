@@ -983,6 +983,11 @@ bool game::do_turn()
     {
         ZoneScopedN( "do_turn_pre_action_updates" );
         perhaps_add_random_npc();
+        if( ( ( !u.activity || !*u.activity || u.activity->complete() ) && !u.in_sleep_state() ) ||
+            !get_option<bool>( "ACTIVITY_SKIP_VISIBILITY" ) ) {
+            // If map cache needs to be updated visibility cache will handle it.
+            refresh_player_visibility_cache_if_needed( true, true );
+        }
         process_voluntary_act_interrupt();
         process_activity();
         update_performance_bubble();
@@ -1108,6 +1113,14 @@ bool game::do_turn()
         m.process_items();
     }
     {
+        // Deferred drains must run before monmove()'s cleanup_dead() frees their sources.
+        ZoneScopedN( "do_turn_explosions_after_items" );
+        auto &explosions = explosion_handler::get_explosion_queue();
+        if( explosions.take_deferred_drain_request() ) {
+            explosions.execute();
+        }
+    }
+    {
         ZoneScopedN( "do_turn_creature_in_field" );
         m.creature_in_field( u );
     }
@@ -1201,6 +1214,7 @@ bool game::do_turn()
     {
         ZoneScopedN( "do_turn_player_process_turn" );
         u.process_turn();
+        u.process_items();
     }
 
     {
@@ -1746,12 +1760,14 @@ input_context get_default_mode_input_context()
     ctxt.register_action( "reset_move" );
     ctxt.register_action( "toggle_run" );
     ctxt.register_action( "toggle_crouch" );
+    ctxt.register_action( "toggle_prone" );
     ctxt.register_action( "open_movement" );
     ctxt.register_action( "open" );
     ctxt.register_action( "close" );
     ctxt.register_action( "smash" );
     ctxt.register_action( "loot" );
     ctxt.register_action( "examine" );
+    ctxt.register_action( "jump" );
     ctxt.register_action( "advinv" );
     ctxt.register_action( "pickup" );
     ctxt.register_action( "pickup_all" );
@@ -2674,6 +2690,7 @@ void game::erase_npc( character_id id )
     if( auto *pw = get_map().get_physics_world() ) {
         pw->on_creature_removed( it->get() );
     }
+    explosion_handler::get_explosion_queue().invalidate_source( it->get() );
     ( *it )->get_mapbuffer().remove_active_npc( **it );
     active_npc.erase( it );
 }
@@ -3230,6 +3247,20 @@ std::vector<npc *> game::get_npcs_if( const std::function<bool( const npc & )> &
     for( npc &guy : all_npcs() ) {
         if( pred( guy ) ) {
             result.push_back( &guy );
+        }
+    }
+    return result;
+}
+
+std::vector<weak_ptr_fast<npc>> game::get_npcs_pointers_if( const std::function<bool( const npc & )>
+                             &pred )
+{
+    std::vector<weak_ptr_fast<npc>> result;
+    for( weak_ptr_fast<npc> guy : *all_npcs().items ) {
+        if( shared_ptr_fast<npc> true_guy = guy.lock() ) {
+            if( pred( *true_guy ) ) {
+                result.push_back( guy );
+            }
         }
     }
     return result;

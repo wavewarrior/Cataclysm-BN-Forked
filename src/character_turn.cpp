@@ -79,6 +79,7 @@ static const trait_id trait_DEBUG_STORAGE( "DEBUG_STORAGE" );
 
 static const trait_flag_str_id trait_flag_MUTATION_FLIGHT( "MUTATION_FLIGHT" );
 
+static const efftype_id effect_bleed( "bleed" );
 static const efftype_id effect_bloodworms( "bloodworms" );
 static const efftype_id effect_brainworms( "brainworms" );
 static const efftype_id effect_darkness( "darkness" );
@@ -103,6 +104,7 @@ static const efftype_id effect_stim( "stim" );
 static const efftype_id effect_tapeworm( "tapeworm" );
 static const efftype_id effect_thirsty( "thirsty" );
 
+static const skill_id skill_firstaid( "firstaid" );
 static const skill_id skill_swimming( "swimming" );
 static const skill_id skill_traps( "traps" );
 
@@ -219,7 +221,6 @@ void Character::process_turn()
     if( activity->targets.empty() ) {
         drop_invalid_inventory();
     }
-    process_items();
     // Didn't just pick something up
     last_item = itype_id( "null" );
 
@@ -913,12 +914,12 @@ static bool needs_elec_charges( item *it )
     }
 }
 
-void Character::process_items()
+void Character::process_items( int turns )
 {
     ZoneScoped;
 
-    auto process_item = [this]( detached_ptr<item> &&ptr ) {
-        return item::process( std::move( ptr ), as_player(), bub_pos(), false );
+    auto process_item = [this, &turns]( detached_ptr<item> &&ptr ) {
+        return item::process( std::move( ptr ), as_player(), bub_pos(), false, turns );
     };
     if( primary_weapon().needs_processing() ) {
         primary_weapon().attempt_detach( process_item );
@@ -1178,6 +1179,29 @@ void do_pause( Character &who )
             who.add_msg_player_or_npc( m_warning,
                                        _( "You attempt to put out the fire on you!" ),
                                        _( "<npcname> attempts to put out the fire on them!" ) );
+        }
+    } else if( who.has_effect( effect_bleed ) ) {
+        // Try to staunch bleeding if we're not busy being set on fire.
+        // Todo: possibly convert it to only affect one bodypart at a time in exchange for more effectiveness?
+        time_duration total_removed = 0_turns;
+        time_duration total_left = 0_turns;
+        for( const body_part bp : all_body_parts ) {
+            effect &eff = who.get_effect( effect_bleed, convert_bp( bp ) );
+            if( eff.is_null() ) {
+                continue;
+            }
+
+            total_left += eff.get_duration();
+            const time_duration dur_removed = 5_turns + 10_turns * who.get_skill_level( skill_firstaid );
+            eff.mod_duration( -dur_removed );
+            total_removed += dur_removed;
+        }
+
+        if( total_removed > 0_turns ) {
+            who.add_msg_player_or_npc( m_warning,
+                                       _( "You put pressure on your bleeding wounds." ),
+                                       _( "<npcname> puts pressure on their bleeding wounds." ) );
+            who.practice( skill_firstaid, 1, 2 );
         }
     }
 

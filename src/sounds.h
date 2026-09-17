@@ -474,8 +474,9 @@ void load_sound_effects( const JsonObject &jsobj );
 void load_sound_effect_preload( const JsonObject &jsobj );
 void load_playlist( const JsonObject &jsobj );
 void play_variant_sound( const std::string &id, const std::string &variant, int volume,
-                         units::angle angle, int distance = 0, double pitch_min = -1.0, double pitch_max = -1.0 );
-void play_variant_sound( const std::string &id, const std::string &variant, int volume );
+                         units::angle angle, int distance = 0, double pitch_min = -1.0, double pitch_max = -1.0, const bool stacks = false );
+void play_variant_sound( const std::string &id, const std::string &variant, int volume,
+                         const bool stacks = true );
 void play_ambient_variant_sound( const std::string &id, const std::string &variant, int volume,
                                  channel channel, int fade_in_duration, double pitch = -1.0, int loops = -1 );
 void play_activity_sound( const std::string &id, const std::string &variant, int volume );

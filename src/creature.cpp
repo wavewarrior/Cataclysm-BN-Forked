@@ -576,9 +576,10 @@ bool Creature::sees( const Creature &critter ) const
         return false;
     }
     if( ch != nullptr ) {
-        if( ch->is_crouching() ) {
+        if( ch->is_crouching() || ch->movement_mode_is( CMM_PRONE ) ) {
             const int coverage = here.obstacle_coverage( bub_pos(), critter.bub_pos() );
-            if( coverage < 30 ) {
+            const int threshold = ch->movement_mode_is( CMM_PRONE ) ? 15 : 30;
+            if( coverage < threshold ) {
                 return sees( critter.bub_pos(), critter.is_avatar() ) && visible( ch );
             }
             float size_modifier = 1.0;
@@ -995,7 +996,6 @@ auto get_stun_srength( const projectile &proj, creature_size size ) -> int
 void Creature::deal_projectile_attack( Creature *source, item *source_weapon,
                                        dealt_projectile_attack &attack, bool is_graze )
 {
-
     const double missed_by = attack.missed_by;
     if( missed_by >= 1.0 ) {
         // Total miss — spawn MISS SCT at target position.
@@ -1296,6 +1296,10 @@ void Creature::deal_projectile_attack( Creature *source, item *source_weapon,
 
     // If we have a shield, it might passively block ranged impacts
     block_ranged_hit( source, bp_hit, impact );
+    // If the shield negated something like an acid splash, remove that here.
+    if( proj.has_effect( ammo_effect_BLINDS_EYES ) && impact.total_damage() <= 0 ) {
+        proj.remove_effect( ammo_effect_BLINDS_EYES );
+    }
     // If the projectile survives, both it and the launcher get credit for the kill.
     dealt_dam = deal_damage( source, bp_hit, impact, source_weapon, attack.proj.get_drop(), false,
                              is_graze );
@@ -1355,15 +1359,16 @@ void Creature::deal_projectile_attack( Creature *source, item *source_weapon,
 
     // at least `dealt_dam` doesn't get mutated after this point
     const int total_damage = dealt_dam.total_damage();
-    const int env_resist = get_env_resist( bp_hit );
 
-    const bool should_blind = proj.has_effect( ammo_effect_BLINDS_EYES );
-    const int blind_strength = should_blind ? total_damage - env_resist : 0;
+    const bool should_blind = proj.has_effect( ammo_effect_BLINDS_EYES ) &&
+                              ( bp_hit == bodypart_str_id( "head" ) || bp_hit == bodypart_str_id( "eyes" ) );
+    const int blind_strength = should_blind ? total_damage - get_env_resist( body_part_eyes ) : 0;
     if( should_blind ) {
         const auto blind_duration = blind_strength > 0 ? rng( 3_turns, 10_turns ) : rng( 1_turns, 3_turns );
         // TODO: Change this to require bp_eyes
         add_env_effect( effect_blind, body_part_eyes, 5, blind_duration );
     }
+    const int env_resist = get_env_resist( bp_hit );
 
     const int sap_strength = proj.has_effect( ammo_effect_APPLY_SAP ) ? total_damage - env_resist : 0;
     if( sap_strength > 0 ) {
@@ -1415,6 +1420,13 @@ void Creature::deal_projectile_attack( Creature *source, item *source_weapon,
     check_dead_state();
     attack.hit_critter = this;
     attack.missed_by = goodhit;
+    if( sourceplayer || sourcenpc ) {
+        cata::run_hooks( "on_creature_attacked_by_character", [ &, this]( auto & params ) {
+            params["char"] = source;
+            params["target"] = this;
+            params["success"] = true;
+        } );
+    }
 }
 
 void Creature::deal_projectile_attack( Creature *source, dealt_projectile_attack &attack,
@@ -1535,6 +1547,22 @@ void Creature::deal_damage_handle_type( const damage_unit &du, bodypart_id bp, i
         case DT_BULLET:
             // Volatile enemies sometimes go up
             set_volatiles_on_fire( 16 );
+            // Cause bleed if high damage goes through armor and enemy is made of flesh
+            if( adjusted_damage > 15 ) {
+                if( !is_immune_effect( effect_bleed ) ) {
+                    add_effect( effect_bleed, 1_minutes * rng( 1, adjusted_damage ), bp.id() );
+                }
+            }
+            break;
+
+        case DT_CUT:
+        case DT_STAB:
+            // Cause bleed if high damage goes through armor and enemy is made of flesh
+            if( adjusted_damage > 15 ) {
+                if( !is_immune_effect( effect_bleed ) ) {
+                    add_effect( effect_bleed, 1_minutes * rng( 1, adjusted_damage ), bp.id() );
+                }
+            }
             break;
 
         case DT_ACID:

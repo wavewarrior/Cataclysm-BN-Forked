@@ -41,7 +41,10 @@
 #include "type_id.h"
 
 static const bionic_id bio_ads( "bio_ads" );
+static const bionic_id bio_cqb( "bio_cqb" );
 static const bionic_id bio_ods( "bio_ods" );
+
+static const enchantment_flag_id ench_flag_NO_DAMAGE_WAKE( "NO_DAMAGE_WAKE" );
 static const efftype_id effect_adrenaline( "adrenaline" );
 static const efftype_id effect_bandaged( "bandaged" );
 static const efftype_id effect_blind( "blind" );
@@ -285,30 +288,76 @@ bool Character::armor_absorb( damage_unit& du, item& armor, const bodypart_id& b
     if( rng( 1, 100 ) > armor.get_coverage( bp ) ) { return false; }
     // If the attack has already been negated by other armor, don't bother.
     if( du.amount <= 0 ) { return false; }
-    armor.mitigate_damage( du );
-    // We're indestructible, bail out here.
-    if( armor.has_flag( flag_UNBREAKABLE ) ) { return false; }
+    // This triggers if the "New armor damage calculation" setting is enabled.
+    if( get_option<bool>( "NEW_ARMOR_CALCULATION" ) ) {
+        // Don't damage armor as much when bypassed by armor piercing
+        // Most armor piercing damage comes from bypassing armor, not forcing through
+        const int raw_dmg = du.amount * std::min( 1.0f, du.damage_multiplier );
+        armor.mitigate_damage( du );
+        // We're indestructible, bail out here.
+        if( armor.has_flag( flag_UNBREAKABLE ) ) {
+            return false;
+        }
 
-    // Don't damage armor as much when bypassed by armor piercing
-    // Most armor piercing damage comes from bypassing armor, not forcing through
-    const int raw_dmg = du.amount * std::min( 1.0f, du.damage_multiplier );
+        // This is some weird type that doesn't damage armors
+        if( armor.damage_resist( du.type, true ) > 1000 ) {
+            return false;
+        }
 
-    // This is some weird type that doesn't damage armors
-    if( armor.damage_resist( du.type, true ) > 1000 ) {
-        return false;
+        // Scale chance of article taking damage based on the number of parts it covers.
+        // This represents large articles being able to take more punishment
+        // before becoming ineffective or being destroyed.
+        const int num_parts_covered = armor.get_covered_body_parts().count();
+        if( !one_in( num_parts_covered ) ) {
+            return false;
+        }
+        const int armor_chip_resist = armor.chip_resistance( !armor.has_flag( flag_STURDY ) );
+        const bool armor_resisted = raw_dmg >= armor_chip_resist ? rng( 1,
+                                    raw_dmg ) <= armor_chip_resist : !one_in( 100 );
+        // Base chance to avoid armor damage is 50/67% (if sturdy), or if chip resist exceeds 1d<damage> (floor of 1%)
+        if( !one_in( armor.has_flag( flag_STURDY ) ? 3 : 2 ) || armor_resisted ) {
+            return false;
+        }
     }
+    // This triggers if the "New armor damage calculation" setting is false.
+    else {
+        armor.mitigate_damage( du );
+        // We're indestructible, bail out here.
+        if( armor.has_flag( flag_UNBREAKABLE ) ) {
+            return false;
+        }
 
-    // Scale chance of article taking damage based on the number of parts it covers.
-    // This represents large articles being able to take more punishment
-    // before becoming ineffective or being destroyed.
-    const int num_parts_covered = armor.get_covered_body_parts().count();
-    if( !one_in( num_parts_covered ) ) { return false; }
+        // We want armor's own resistance to this type, not the resistance it grants
+        const int armors_own_resist = armor.damage_resist( du.type, true );
+        if( armors_own_resist > 1000 ) {
+            // This is some weird type that doesn't damage armors
+            return false;
+        }
 
-    const int dmg_percent = std::max( raw_dmg - armor.chip_resistance( !armor.has_flag( flag_STURDY ) ),
-                                      1 );
-    // Chance to avoid armor damage is 50/67% (if sturdy) + 100 - ( raw_dmg - chip_resist )%
-    if( !one_in( armor.has_flag( flag_STURDY ) ? 3 : 2 ) || !x_in_y( dmg_percent, 100 ) ) {
-        return false;
+        // Scale chance of article taking damage based on the number of parts it covers.
+        // This represents large articles being able to take more punishment
+        // before becoming ineffective or being destroyed.
+        const int num_parts_covered = armor.get_covered_body_parts().count();
+        if( !one_in( num_parts_covered ) ) {
+            return false;
+        }
+
+        // Don't damage armor as much when bypassed by armor piercing
+        // Most armor piercing damage comes from bypassing armor, not forcing through
+        const int raw_dmg = du.amount * std::min( 1.0f, du.damage_multiplier );
+        if( raw_dmg > armors_own_resist ) {
+            // If damage is above armor value, the chance to avoid armor damage is
+            // 50% + 50% * 1/dmg
+            if( one_in( raw_dmg ) || one_in( 2 ) ) {
+                return false;
+            }
+        }  else {
+            // Sturdy items and power armors never take chip damage.
+            // Other armors have 0.5% of getting damaged from hits below their armor value.
+            if( armor.has_flag( flag_STURDY ) || !one_in( 200 ) ) {
+                return false;
+            }
+        }
     }
 
     const material_type& material = armor.get_random_material();
@@ -381,11 +430,15 @@ void Character::on_dodge( Creature* source, int difficulty )
         const auto volume_recoil = std::max( dodge_volume_recoil, decltype( dodge_volume_recoil ) { 0 } );
         recoil += static_cast<int>( std::min( volume_recoil,
                                               static_cast<decltype( volume_recoil )>( MAX_RECOIL ) ) ) * rng( 0, 100 );
+        recoil = std::min( MAX_RECOIL, recoil );
     }
 
     // Even if we are not to train still call practice to prevent skill rust
     difficulty = std::max( difficulty, 0 );
-    as_player()->practice( skill_dodge, difficulty * 2, difficulty );
+    // Practice dodge skill except when using CQB bionic
+    if( !has_active_bionic( bio_cqb ) ) {
+        as_player()->practice( skill_dodge, difficulty * 2, difficulty );
+    }
 
     martial_arts_data->ma_ondodge_effects( *this );
 
@@ -801,7 +854,10 @@ void Character::on_hurt( Creature* source, bool disturb /*= true*/ )
     }
 
     if( disturb ) {
-        if( has_effect( effect_sleep ) && !has_effect( effect_narcosis ) ) { wake_up(); }
+        if( has_effect( effect_sleep ) && !has_effect( effect_narcosis ) &&
+            !has_enchantment_flag( ench_flag_NO_DAMAGE_WAKE ) ) {
+            wake_up();
+        }
         if( !is_npc() && !has_effect( effect_narcosis ) ) {
             if( source != nullptr ) {
                 g->cancel_activity_or_ignore_query(

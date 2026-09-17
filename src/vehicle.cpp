@@ -1,5 +1,6 @@
 #include "vehicle.h"
 #include "detached_ptr.h"
+#include "type_id.h"
 #include "units_mass.h"
 #include "vehicle_part.h" // IWYU pragma: associated
 #include "vpart_position.h" // IWYU pragma: associated
@@ -1211,6 +1212,8 @@ void vehicle::drive_to_local_target( const tripoint_abs_ms &target, bool follow_
         safe_player_follow_speed = 358;
     } else if( g->u.is_crouching() ) {
         safe_player_follow_speed = 89;
+    } else if( g->u.movement_mode_is( CMM_PRONE ) ) {
+        safe_player_follow_speed = 45;
     }
     if( follow_protocol ) {
         if( ( ( turn_x > 0 || turn_x < 0 ) && velocity > safe_player_follow_speed ) ||
@@ -2359,6 +2362,44 @@ void vehicle::do_engine_damage( size_t e, int strain )
     }
 }
 
+void vehicle::idle_turns( const int turns )
+{
+    power_parts( turns );
+    // Validate muscle engines - auto-disable if conditions are not met
+    validate_muscle_engines();
+    if( engine_on && total_power_w() > 0 ) {
+        bool no_electric_power = true;
+        int idle_rate = alternator_load;
+        if( idle_rate < 10 ) {
+            idle_rate = 10;    // minimum idle is 1% of full throttle
+        }
+        // Helicopters use extra power just to stay in the air
+        // 100 means 10% of power
+        /*
+            TODO: Consider different formula for idling aircraft, may need a formula to determine this
+            Possibly something like total lift / total engine power, maybe some factors for hovering efficiency of different types
+            Also consider adding a hover efficiency field
+        */
+        if( is_rotorcraft() && is_flying_in_air() ) {
+            const auto rotor_newtons = std::max( 0.0,
+                                                 to_newton( total_mass() ) - total_balloon_lift() - total_wing_lift() );
+            const auto rotor_capacity = rotor_newtons / thrust_of_rotorcraft( true );
+            idle_rate = std::max( 10, int( std::floor( 100 * rotor_capacity ) ) );
+            no_electric_power = false;
+        }
+        if( has_engine_type_not( fuel_type_muscle, true ) ) {
+            consume_fuel( idle_rate, turns, no_electric_power );
+        }
+    } else {
+        if( engine_on && g->u.sees( bub_ms_location() ) &&
+            ( has_engine_type_not( fuel_type_muscle, true ) && has_engine_type_not( fuel_type_animal, true ) &&
+              has_engine_type_not( fuel_type_wind, true ) && has_engine_type_not( fuel_type_mana, true ) ) ) {
+            add_msg( _( "The %s's engine dies!" ), name );
+        }
+        engine_on = false;
+    }
+}
+
 void vehicle::idle( bool on_map )
 {
     power_parts();
@@ -2413,7 +2454,7 @@ void vehicle::idle( bool on_map )
     if( !on_map ) {
         return;
     } else {
-        update_time( calendar::turn );
+        update_time( calendar::turn, false );
     }
 
     process_emitters();
@@ -2612,7 +2653,7 @@ static bool is_sm_tile_outside( const tripoint_abs_ms &pos )
     return m.is_outside( abs_to_bub( pos ) );
 }
 
-void vehicle::update_time( const time_point &update_to )
+void vehicle::update_time( const time_point &update_to, const bool batched )
 {
     const time_point update_from = last_update;
     if( update_to < update_from ) {
@@ -2627,6 +2668,12 @@ void vehicle::update_time( const time_point &update_to )
     }
     time_duration elapsed = update_to - last_update;
     last_update = update_to;
+    if( batched ) {
+        idle_turns( elapsed / 1_turns );
+        if( check_environmental_effects ) {
+            check_environmental_effects = do_environmental_effects( elapsed / 1_turns );
+        }
+    }
 
     if( !converters.empty() ) {
         for( int p : converters ) {

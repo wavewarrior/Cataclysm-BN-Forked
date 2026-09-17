@@ -322,12 +322,12 @@ void vehicle::update_alternator_load()
     }
 }
 
-void vehicle::power_parts()
+void vehicle::power_parts( int turns )
 {
     update_alternator_load();
     // Things that drain energy: engines and accessories.
-    int engine_epower = total_engine_epower_w();
-    int epower = engine_epower + total_accessory_epower_w() + total_alternator_epower_w();
+    int engine_epower = total_engine_epower_w() * turns;
+    int epower = ( engine_epower + total_accessory_epower_w() + total_alternator_epower_w() ) * turns;
 
     int delta_energy_bat = power_to_energy_bat( epower, 1_turns );
     int storage_deficit_bat = std::max( 0, fuel_capacity( fuel_type_battery ) -
@@ -347,7 +347,7 @@ void vehicle::power_parts()
             // Keep track whether or not the vehicle has any reactors activated
             reactor_online = true;
             // the amount of energy the reactor generates each turn
-            const int gen_energy_bat = power_to_energy_bat( part_epower_w( elem ), 1_turns );
+            const int gen_energy_bat = power_to_energy_bat( part_epower_w( elem ), 1_turns * turns );
             if( parts[ elem ].is_unavailable() ) {
                 continue;
             } else if( parts[ elem ].info().has_flag( str_PERPETUAL ) ) {

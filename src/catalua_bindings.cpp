@@ -21,6 +21,7 @@
 #include "enums.h"
 #include "field_type.h"
 #include "game.h"
+#include "hsv_color.h"
 #include "itype.h"
 #include "line.h"
 #include "map.h"
@@ -475,6 +476,28 @@ void cata::detail::reg_colors( sol::state &lua )
     }
 
     luna::finalize_enum( et );
+    {
+        sol::usertype<RGBColor> ut =
+            luna::new_usertype<RGBColor>(
+                lua,
+                luna::no_bases,
+                luna::no_constructor
+            );
+
+        luna::set( ut, "name", &RGBColor::friendly_name );
+
+        DOC( "RGB Color Getters." );
+        luna::userlib lib = luna::begin_lib( lua, "rgb_colors" );
+
+        DOC( "Get RGB Color from string" );
+        luna::set_fx( lib, "try_parse", &RGBColor::try_parse );
+        DOC( "Get random RGB Color from fuzzy match string" );
+        luna::set_fx( lib, "get_random", &RGBColor::random_named );
+        DOC( "Get RGBColor -> string mapping" );
+        luna::set_fx( lib, "get_all_named_colors", &RGBColor::get_all_named_colors );
+
+        luna::finalize_lib( lib );
+    }
 }
 
 void cata::detail::reg_enums( sol::state &lua )
@@ -616,6 +639,12 @@ void cata::detail::reg_hooks_examples( sol::state &lua )
     DOC( "Return false to prevent monster interaction actions from running.  " );
     DOC_PARAMS( "params" );
     luna::set_fx( lib, "on_try_monster_interaction", []( const sol::table & ) {} );
+
+    DOC( "Called when the player swaps control to an npc.  " );
+    DOC( "The hook receives a table with keys:  " );
+    DOC( "* `npc` (NPC): The NPC being controlled.  " );
+    DOC_PARAMS( "params" );
+    luna::set_fx( lib, "on_control_npc", []( const sol::table & ) {} );
 
     DOC( "Called just before the dialogue window opens and the first topic is chosen.  " );
     DOC( "The hook receives a table with keys:  " );

@@ -47,3 +47,7 @@ const SDL_Renderer_Ptr &get_sdl_renderer();
 const SDL_Window_Ptr &get_sdl_window();
 bool handle_resize( int w, int h );
 
+/// Installs the renderer returned by get_sdl_renderer(); tests must provide one
+/// before loading tilesets (the game sets it up in init_interface()).
+auto set_sdl_renderer( SDL_Renderer_Ptr r ) -> void;
+

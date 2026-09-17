@@ -165,12 +165,32 @@ auto game::has_activity_skip_relevant_vehicle() -> bool
 {
     return std::ranges::any_of( m.get_vehicles(), []( const wrapped_vehicle & wrapped ) {
         const vehicle *veh = wrapped.v;
-        return veh != nullptr &&
-               ( veh->is_moving() || veh->vertical_velocity != 0 || veh->skidding ||
-                 veh->is_falling || veh->engine_on || veh->is_autodriving ||
-                 veh->is_following || veh->is_patrolling || veh->autopilot_on ||
-                 veh->is_alarm_on || veh->check_environmental_effects ||
-                 veh->total_accessory_epower_w() < 0 );
+        if( !log_activity_skip_state ) {
+            return veh != nullptr &&
+                   ( veh->is_moving() || veh->vertical_velocity != 0 || veh->skidding ||
+                     veh->is_falling || veh->is_autodriving || veh->is_following ||
+                     veh->is_patrolling || veh->autopilot_on || veh->is_alarm_on );
+        }
+        if( veh == nullptr ) {
+            return false;
+        }
+        if( veh->is_moving() || veh->vertical_velocity != 0 || veh->is_falling ) {
+            add_msg( "Vehicles are actively moving, cannot skip time" );
+            return true;
+        }
+        if( veh->skidding ) {
+            add_msg( "Vehicles are skidding, cannot skip time" );
+            return true;
+        }
+        if( veh->is_autodriving || veh->is_following || veh->is_patrolling || veh->autopilot_on ) {
+            add_msg( "Vehicles are autodriving, cannot skip time" );
+            return true;
+        }
+        if( veh->is_alarm_on ) {
+            add_msg( "Vehicle alarm is actively going off..." );
+            return true;
+        }
+        return false;
     } );
 }
 
@@ -235,28 +255,62 @@ auto game::has_activity_skip_active_fire() -> bool
 auto game::can_activity_fixed_window_skip( const time_duration &duration ) -> bool
 {
     if( new_game || queue_screenshot || uquit == QUIT_WATCH ) {
+        if( log_activity_skip_state ) {
+            add_msg( "Preparing quitting or screenshot, skip state impossible" );
+        }
         return false;
     }
     if( duration <= 0_turns || !get_weather().weather_id ||
         get_weather().nextweather <= calendar::turn ) {
+        if( log_activity_skip_state ) {
+            add_msg( "Need to process weather" );
+        }
         return false;
     }
-    if( !u.activity || !*u.activity || u.activity->complete() || u.has_destination() ||
-        u.is_mounted() ) {
+    if( debug_infinite_speed_can_freeze_time() ) {
+        if( log_activity_skip_state ) {
+            add_msg( "Time is frozen" );
+        }
         return false;
     }
-    if( u.activity->id() == ACT_AUTODRIVE || !u.activity->rooted() ||
-        !u.activity->has_idle_bubble_effect() || u.activity->has_special_turns() ||
-        !u.activity->assistants().empty() ) {
-        return false;
+    if( !u.in_sleep_state() ) {
+        if( !u.activity || !*u.activity || u.activity->complete() || u.has_destination() ||
+            u.is_mounted() ) {
+            if( log_activity_skip_state ) {
+                if( !u.activity || !*u.activity || u.activity->complete() ) {
+                    add_msg( "Activity is null" );
+                }
+                if( u.has_destination() ) {
+                    add_msg( "You have autowalk target" );
+                }
+                if( u.is_mounted() ) {
+                    add_msg( "You are currently mounted on something" );
+                }
+            }
+            return false;
+        }
+        if( u.activity->id() == ACT_AUTODRIVE || !u.activity->rooted() ||
+            !u.activity->has_idle_bubble_effect() || u.activity->has_special_turns() ||
+            !u.activity->assistants().empty() ) {
+            if( log_activity_skip_state ) {
+                add_msg( "The activity does not support skip state, or you have assistants" );
+            }
+            return false;
+        }
     }
     if( u.in_vehicle && u.controlling_vehicle ) {
+        if( log_activity_skip_state ) {
+            add_msg( "You are controlling a vehicle" );
+        }
         return false;
     }
     if( m.field_at( u.bub_pos() ).field_count() > 0 ) {
         return false;
     }
     if( has_activity_skip_active_fire() ) {
+        if( log_activity_skip_state ) {
+            add_msg( "Fire is being processed, cannot skip time" );
+        }
         return false;
     }
     if( has_activity_skip_relevant_vehicle() ) {
@@ -264,9 +318,15 @@ auto game::can_activity_fixed_window_skip( const time_duration &duration ) -> bo
     }
     if( const std::optional<time_point> event_time = timed_events.next_event_time();
         event_time && *event_time <= calendar::turn + duration ) {
+        if( log_activity_skip_state ) {
+            add_msg( "Upcoming timed event, cannot skip time" );
+        }
         return false;
     }
     if( has_activity_skip_blocking_npc_state() ) {
+        if( log_activity_skip_state ) {
+            add_msg( "New NPCs generated, cannot skip time" );
+        }
         return false;
     }
     return true;
@@ -287,7 +347,10 @@ auto game::execute_activity_fixed_window_skip( const time_duration &duration ) -
      */
     u.moves = 0;
 for( const auto turn_index : std::views::iota( 0, dur_turns ) ) {
-        if( is_game_over() || !u.activity || !*u.activity ) {
+        if( is_game_over() || ( ( !u.activity || !*u.activity ) && !u.in_sleep_state() ) ) {
+            if( log_activity_skip_state ) {
+                add_msg( "Activity lost, cannot skip time" );
+            }
             break;
         }
 
@@ -323,6 +386,9 @@ for( const auto turn_index : std::views::iota( 0, dur_turns ) ) {
         npcs_dirty = false;
         if( npcs_dirty || critter_tracker->size() != monster_count ) {
             activity_fixed_window_force_normal_turn_ = true;
+            if( log_activity_skip_state ) {
+                add_msg( "NPC added, cannot skip time" );
+            }
             break;
         }
 
@@ -336,18 +402,28 @@ for( const auto turn_index : std::views::iota( 0, dur_turns ) ) {
 
         process_activity();
 
-        if( !u.activity || !*u.activity || u.activity->complete() ) {
+        if( ( ( !u.activity || !*u.activity ) && !u.in_sleep_state() ) ) {
+            if( log_activity_skip_state ) {
+                add_msg( "Lost activity, cannot skip time" );
+            }
             break;
         }
         if( is_game_over() ) {
+            if( log_activity_skip_state ) {
+                add_msg( "You died, cannot skip time" );
+            }
             break;
         }
         if( npcs_dirty || critter_tracker->size() != monster_count ) {
             activity_fixed_window_force_normal_turn_ = true;
+            if( log_activity_skip_state ) {
+                add_msg( "NPC or monster added, cannot skip time" );
+            }
             break;
         }
-        const auto activity_continues = u.activity && *u.activity &&
-                                        u.activity->id() == starting_activity;
+        const auto activity_continues = ( u.activity && *u.activity &&
+                                          u.activity->id() == starting_activity ) ||
+                                        u.in_sleep_state();
 
         if( m.has_field_at( u.bub_pos() ) ) {
             m.creature_in_field( u );
@@ -373,6 +449,9 @@ for( const auto turn_index : std::views::iota( 0, dur_turns ) ) {
                 monmove( monster_activity_ai_mode::activity_skip, &activity_monsters );
                 if( critter_tracker->size() != monster_count ) {
                     activity_fixed_window_force_normal_turn_ = true;
+                    if( log_activity_skip_state ) {
+                        add_msg( "Monster added, cannot skip time" );
+                    }
                     break;
                 }
             }
@@ -381,6 +460,9 @@ for( const auto turn_index : std::views::iota( 0, dur_turns ) ) {
                 npcs_dirty = false;
                 if( npcs_dirty || critter_tracker->size() != monster_count ) {
                     activity_fixed_window_force_normal_turn_ = true;
+                    if( log_activity_skip_state ) {
+                        add_msg( "NPC or monster added, cannot skip time" );
+                    }
                     break;
                 }
             }
@@ -402,7 +484,7 @@ for( const auto turn_index : std::views::iota( 0, dur_turns ) ) {
         u.volume = 0;
         npcs_dirty = false;
 
-        if( !activity_continues || u.activity->complete() ) {
+        if( !activity_continues || ( !u.in_sleep_state() && u.activity->complete() ) ) {
             break;
         }
         // A5.2: activity yield cap — send a sync every COOP_ACTIVITY_YIELD_INTERVAL turns so
@@ -470,9 +552,14 @@ auto game::run_activity_skip_batch_turns( const int skipped_turns ) -> void
     }
 
     {
-        ZoneScopedN( "activity_fixed_window_flush_items" );
-        m.process_items();
+        ZoneScopedN( "do_map_process_items" );
+        m.process_items( skipped_turns );
     }
+    {
+        ZoneScopedN( "do_player_process_items" );
+        u.process_items( skipped_turns );
+    }
+
     explosion_handler::get_explosion_queue().execute();
     cleanup_dead();
     Pathfinding::clear_d_maps();
@@ -498,12 +585,26 @@ auto game::try_activity_fixed_window_skip() -> bool
 {
     ZoneScopedN( "activity_fixed_window_try" );
     if( activity_fixed_window_force_normal_turn_ ) {
-    activity_fixed_window_force_normal_turn_ = false;
-    return false;
-}
-if( !u.activity || !*u.activity || calendar::turn < next_activity_fixed_window_check_ ) {
-    return false;
-}
+        activity_fixed_window_force_normal_turn_ = false;
+        if( log_activity_skip_state ) {
+            add_msg( "Forced Normal Turn" );
+        }
+        return false;
+    }
+    if( ( !u.activity || !*u.activity ) && !u.in_sleep_state() ) {
+        if( log_activity_skip_state ) {
+            add_msg( "No Activity" );
+        }
+        return false;
+    }
+    if( calendar::turn < next_activity_fixed_window_check_ ) {
+        if( log_activity_skip_state ) {
+            add_msg(
+                string_format( "Before Next Fixed Window Check in %s turns",
+                               ( next_activity_fixed_window_check_ - calendar::turn ) / 1_turns ) );
+        }
+        return false;
+    }
 const auto duration = activity_fixed_window_duration();
 if( !can_activity_fixed_window_skip( duration ) ) {
     next_activity_fixed_window_check_ = calendar::turn + 1_minutes;
@@ -512,6 +613,9 @@ if( !can_activity_fixed_window_skip( duration ) ) {
 const auto skipped_turns = execute_activity_fixed_window_skip( duration );
 if( skipped_turns <= 0 ) {
     next_activity_fixed_window_check_ = calendar::turn + 1_minutes;
+    if( log_activity_skip_state ) {
+        add_msg( "No Turns Were Skipped" );
+    }
     return false;
 }
 TracyPlot( "Activity Fixed Window Skipped Turns", int64_t{ skipped_turns } );

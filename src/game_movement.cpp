@@ -78,6 +78,7 @@
 
 // File-local string-IDs — mirror the declarations in game.cpp
 static const efftype_id effect_blind( "blind" );
+static const efftype_id effect_bleed( "bleed" );
 static const efftype_id effect_bouldering( "bouldering" );
 static const efftype_id effect_contacts( "contacts" );
 static const efftype_id effect_downed( "downed" );
@@ -114,7 +115,6 @@ static const trait_flag_str_id trait_flag_MUTATION_SWIM( "MUTATION_SWIM" );
 static const bionic_id bio_probability_travel( "bio_probability_travel" );
 
 static const itype_id itype_manhole_cover( "manhole_cover" );
-static const itype_id itype_rm13_armor_on( "rm13_armor_on" );
 static const itype_id itype_swim_fins( "swim_fins" );
 
 static const skill_id skill_dodge( "dodge" );
@@ -509,19 +509,18 @@ bool game::walk_move( const tripoint_bub_ms &dest_loc, const bool via_ramp )
             u.mod_fatigue( 1 );
         }
     }
-    if( !u.has_artifact_with( AEP_STEALTH ) && !u.has_trait( trait_id( "DEBUG_SILENT" ) ) ) {
+    if( !u.has_artifact_with( AEP_STEALTH ) &&
+        !u.has_enchantment_flag( enchantment_flag_id( "SILENT" ) ) ) {
         int volume = u.is_stealthy() ? 30 : 50;
         volume *= u.mutation_value( "noise_modifier" );
+        volume += u.bonus_from_enchantments( volume, enchantment_value_id( "NOISE" ) );
         if( volume > 0 ) {
-            if( u.is_wearing( itype_rm13_armor_on ) ) {
-                volume = 20;
-            } else if( u.has_bionic( bionic_id( "bio_ankles" ) ) ) {
-                volume = 70;
-            }
             if( u.movement_mode_is( CMM_RUN ) ) {
                 volume += 10;
             } else if( u.is_crouching() ) {
                 volume -= 10;
+            } else if( u.movement_mode_is( CMM_PRONE ) ) {
+                volume -= 20;
             }
             sound_event se;
             se.origin = dest_loc;
@@ -679,12 +678,16 @@ auto game::place_player( const tripoint_bub_ms &dest_loc, const bool keep_grab )
             u.mounted_creature->apply_damage( nullptr, bodypart_id( "torso" ), rng( 1, 10 ) );
         } else {
             const bodypart_id bp = u.get_random_body_part();
+            const auto damaged_bp = bp->main_part.id();
             if( u.deal_damage( nullptr, bp, damage_instance( DT_CUT, rng( 1, 10 ) ) ).total_damage() > 0 ) {
                 //~ 1$s - bodypart name in accusative, 2$s is terrain name.
                 add_msg( m_bad, _( "You cut your %1$s on the %2$s!" ),
-                         body_part_name_accusative( bp->token ),
+                         body_part_name_accusative( damaged_bp ),
                          m.has_flag_ter( "SHARP", dest_loc ) ? m.tername( dest_loc ) : m.furnname(
                              dest_loc ) );
+                if( one_in( 2 ) && !u.is_immune_effect( effect_bleed ) ) {
+                    u.add_effect( effect_bleed, rng( 2_minutes, 5_minutes ), bp.id() );
+                }
             }
         }
     }
@@ -766,10 +769,11 @@ auto game::place_player( const tripoint_bub_ms &dest_loc, const bool keep_grab )
                             vp1 ) ) {
         u.stop_hauling();
     }
+    const tripoint_abs_ms abs_dest_loc = bub_to_abs( dest_loc );
     u.setpos( dest_loc );
     if( u.is_mounted() ) {
         monster *mon = u.mounted_creature.get();
-        mon->setpos( dest_loc );
+        mon->setpos( abs_dest_loc );
         mon->process_triggers();
         m.creature_in_field( *mon );
     }
@@ -1805,8 +1809,13 @@ void game::vertical_move( int movez, bool force, bool peeking )
                         get_avatar().mutation_spend_resources( tid );
                     }
                 }
-                add_msg( m_info, _( "There is something above blocking your way." ) );
-                return;
+                if( dest.z() > OVERMAP_HEIGHT ) {
+                    add_msg( m_info, _( "It would be unsafe to try and ascend further." ) );
+                    return;
+                } else {
+                    add_msg( m_info, _( "There is something above blocking your way." ) );
+                    return;
+                }
             } else {
                 if( dest.z() > OVERMAP_HEIGHT ) {
                     add_msg( m_info, _( "Tried to move outside of zlevel world bounds." ) );
@@ -1981,7 +1990,8 @@ void game::vertical_move( int movez, bool force, bool peeking )
     // Find the corresponding staircase
     bool rope_ladder = false;
     // TODO: Remove the stairfinding, make the mapgen gen aligned maps
-    const bool special_move = climbing || swimming || can_fly;
+    // Don't check can_fly here, flight was handled earlier and doing that would just embed you in a wall instead
+    const bool special_move = climbing || swimming;
 
     if( !force && !special_move ) {
         const std::optional<tripoint_bub_ms> pnt = find_or_make_stairs( m, z_after, rope_ladder,
@@ -2336,9 +2346,9 @@ auto game::vertical_shift( const int z_after, const bool keep_grab ) -> void
         pw->on_zlevel_changed( m, z_before, z_after );
     }
 
-    // spawn_monsters / validate_mounted_npcs / vertical_notes / update_overmap_seen
-    // are performed by vertical_shift_notify(), which u.setpos() above triggers via
-    // the player::setpos hook — doing them here too would run them twice per move.
+    // spawn_monsters / vertical_notes / update_overmap_seen are performed by
+    // vertical_shift_notify(), which u.setpos() above triggers via the
+    // player::setpos hook — doing them here too would run them twice per move.
 }
 
 // ——— vertical_shift_notify ———
@@ -2363,8 +2373,6 @@ auto game::vertical_shift_notify( const int z_before, const int z_after ) -> voi
     scent.reset();
 
     m.spawn_monsters( true );
-    // the critter may need to reconstruct its rider data after changing z-level
-    validate_mounted_npcs();
     vertical_notes( z_before, z_after );
     update_overmap_seen();
 }

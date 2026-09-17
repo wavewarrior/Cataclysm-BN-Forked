@@ -28,6 +28,8 @@
 #include "effect.h"
 #include "enchantments/enchantment.h"
 #include "enchantments/enchantment_value.h"
+#include "enchantments/enchantment_flag.h"
+#include "enchantments/enchantment_condition.h"
 #include "emit.h"
 #include "event_statistics.h"
 #include "faction.h"
@@ -59,6 +61,7 @@
 #include "mapdata.h"
 #include "mapgen.h"
 #include "mapgen_async.h"
+#include "mapgen_color_palette.h"
 #include "martialarts.h"
 #include "material.h"
 #include "mission.h"
@@ -799,6 +802,8 @@ void DynamicDataLoader::initialize()
     add( "skill_boost", &skill_boost::load_boost );
     add( "enchantment", &enchantment::load_enchantment );
     add( "enchantment_value", &enchantment_value::load_enchantment_values );
+    add( "enchantment_flag", &enchantment_flag::load_enchantment_flags );
+    add( "enchantment_condition", &enchantment_condition::load_enchantment_conditions );
     add( "hit_range", &Creature::load_hit_range );
     add( "scent_type", &scent_type::load_scent_type );
     add( "disease_type", &disease_type::load_disease_type );
@@ -911,6 +916,7 @@ void DynamicDataLoader::initialize()
     add( "construction_category", &construction_categories::load );
     add( "construction_group", &construction_groups::load );
     add( "construction", &constructions::load );
+    add( "mapgen_color_palette",  &MapgenColorPalette::load_palette );
     add( "mapgen", &load_mapgen );
     add( "overmap_land_use_code", &overmap_land_use_codes::load );
     add( "overmap_connection", &overmap_connections::load );
@@ -1140,6 +1146,8 @@ void DynamicDataLoader::unload_data()
     emit::reset();
     enchantment::reset();
     enchantment_value::reset();
+    enchantment_flag::reset();
+    enchantment_condition::reset();
     event_statistic::reset();
     event_transformation::reset();
     faction_template::reset();
@@ -1153,6 +1161,7 @@ void DynamicDataLoader::unload_data()
     json_trait_flag::reset();
     MapExtras::reset();
     map_feature_descriptions::reset_map_feature_descriptions();
+    MapgenColorPalette::reset();
     mapgen_palette::reset();
     materials::reset();
     mission_type::reset();
@@ -1298,6 +1307,7 @@ void DynamicDataLoader::check_consistency( loading_ui& ui )
             {_( "Vehicle palettes" ), &VehiclePalette::check_definitions},
             {_( "Vehicle groups" ), &VehicleGroup::check},
             {_( "Mapgen definitions" ), &check_mapgen_definitions},
+            { _( "Mapgen Color palettes" ), &MapgenColorPalette::check_definitions },
             {_( "Mapgen palettes" ), &mapgen_palette::check_definitions},
             {_( "Monster types" ), []() { MonsterGenerator::generator().check_monster_definitions(); }},
             {_( "Monster groups" ), &MonsterGroupManager::check_group_definitions},
@@ -1332,6 +1342,8 @@ void DynamicDataLoader::check_consistency( loading_ui& ui )
             {_( "Spells" ), &spell_type::check_consistency},
             {_( "Enchantments" ), &enchantment::check_consistency},
             {_( "Enchantment Values" ), &enchantment_value::check_consistency},
+            { _( "Enchantment Flags" ), &enchantment_flag::check_consistency },
+            { _( "Enchantment Conditions" ), &enchantment_condition::check_consistency },
             {_( "Transformations" ), &event_transformation::check_consistency},
             {_( "Statistics" ), &event_statistic::check_consistency},
             {_( "Scent types" ), &scent_type::check_scent_consistency},

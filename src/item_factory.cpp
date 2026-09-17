@@ -21,6 +21,8 @@
 #include "calendar.h"
 #include "cata_utility.h"
 #include "catacharset.h"
+#include "catalua.h"
+#include "catalua_impl.h"
 #include "color.h"
 #include "coordinates.h"
 #include "damage.h"
@@ -42,6 +44,7 @@
 #include "json.h"
 #include "light_emission.h"
 #include "sounds.h"
+#include "type_id.h"
 
 class player;
 
@@ -199,6 +202,7 @@ auto defmode_name( itype &obj ) -> const char *
     }
 
 
+
 }
 
 void Item_factory::load_item_blacklist( const JsonObject &json )
@@ -307,6 +311,7 @@ void Item_factory::init()
     add_iuse( "BLECH_BECAUSE_UNCLEAN", &iuse::blech_because_unclean );
     add_iuse( "BOLTCUTTERS", &iuse::boltcutters );
     add_iuse( "C4", &iuse::c4 );
+    add_iuse( "C4_BREACHING", &iuse::c4_breaching );
     add_iuse( "TOW_ATTACH", &iuse::tow_attach );
     add_iuse( "CABLE_ATTACH", &iuse::cable_attach );
     add_iuse( "CAMERA", &iuse::camera );
@@ -1405,6 +1410,16 @@ void Item_factory::load( islot_magazine &slot, const JsonObject &jo, const std::
     assign( jo, "reliability", slot.reliability, strict, 0, 10 );
     assign( jo, "reload_time", slot.reload_time, strict, 0 );
     assign( jo, "linkage", slot.linkage, strict );
+
+    if( jo.has_string( "reloads_like" ) ) {
+        itype_id source = itype_id( jo.get_string( "reloads_like" ) );
+        if( magazines_like.contains( source ) ) {
+            magazines_like[source].insert( itype_id( jo.get_string( "id" ) ) );
+        } else {
+            magazines_like[source] = { itype_id( jo.get_string( "id" ) ) };
+
+        }
+    }
 }
 
 void Item_factory::load_magazine( const JsonObject &jo, const std::string &src )
@@ -1956,6 +1971,7 @@ void Item_factory::clear()
     gun_tools.clear();
     repair_actions.clear();
     repair_tools.clear();
+    magazines_like.clear();
     tool_subtypes.clear();
 
     item_blacklist.clear();
@@ -2188,7 +2204,7 @@ bool Item_factory::load_string( std::vector<std::string> &vec, const JsonObject 
 
 namespace
 {
-auto load_active( std::vector<ItemFn> &xs, const JsonObject &obj ) -> bool
+auto load_postprocessors( std::vector<ItemFn> &xs, const JsonObject &obj ) -> bool
 {
     const bool result = obj.has_bool( "active" ) && obj.get_bool( "active" );
     if( result ) {
@@ -2196,6 +2212,52 @@ auto load_active( std::vector<ItemFn> &xs, const JsonObject &obj ) -> bool
             it->activate();
             return std::move( it );
         } );
+    }
+    if( obj.has_string( "postprocessor" ) ) {
+        const std::string postprocess = obj.get_string( "postprocessor" );
+        xs.emplace_back( [postprocess]( detached_ptr<item> &&it ) {
+            auto &loader = DynamicDataLoader::get_instance();
+            if( !loader.is_data_finalized() ) {
+                // We ignore these functions during checks
+                return std::move( it );
+            }
+            auto &state = *loader.lua.get();
+            auto func = cata::get_lua_callback( state, "itemgroup_postprocessors", postprocess );
+            if( !func ) {
+                debugmsg( "Lua callback %s for `itemgroup_postprocessors does not exist.", postprocess );
+                return std::move( it );
+            }
+            auto params = state.lua.create_table();
+            params["item"] = &*it;
+            sol::protected_function_result res = func( params );
+
+            check_func_result( res );
+            return std::move( it );
+        } );
+        return true;
+    } else if( obj.has_array( "postprocessor" ) ) {
+        for( const std::string postprocess : obj.get_array( "postprocessor" ) ) {
+            xs.emplace_back( [postprocess]( detached_ptr<item> &&it ) {
+                auto &loader = DynamicDataLoader::get_instance();
+                if( !loader.is_data_finalized() ) {
+                    // We ignore these functions during checks
+                    return std::move( it );
+                }
+                auto &state = *loader.lua.get();
+                auto func = cata::get_lua_callback( state, "itemgroup_postprocessors", postprocess );
+                if( !func ) {
+                    debugmsg( "Lua callback %s for `itemgroup_postprocessors does not exist.", postprocess );
+                    return std::move( it );
+                }
+                auto params = state.lua.create_table();
+                params["item"] = &*it;
+                sol::protected_function_result res = func( params );
+
+                check_func_result( res );
+                return std::move( it );
+            } );
+        }
+        return true;
     }
     return result;
 }
@@ -2245,7 +2307,7 @@ void Item_factory::add_entry( Item_group &ig, const JsonObject &obj )
     use_modifier |= load_sub_ref( modifier.ammo, obj, "ammo", ig );
     use_modifier |= load_sub_ref( modifier.container, obj, "container", ig );
     use_modifier |= load_sub_ref( modifier.contents, obj, "contents", ig );
-    use_modifier |= load_active( modifier.postprocess_fns, obj );
+    use_modifier |= load_postprocessors( modifier.postprocess_fns, obj );
 
     std::vector<std::string> custom_flags;
     use_modifier |= load_string( custom_flags, obj, "custom-flags" );

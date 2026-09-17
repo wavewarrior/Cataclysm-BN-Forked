@@ -286,8 +286,8 @@ double item::average_dps( const player& guy, const attack_statblock& attack ) co
 int item::attack_cost() const
 {
     int base = 65 + ( volume() / 62.5_ml + weight() / 60_gram ) / count();
-    int bonus = bonus_from_enchantments_wielded( base, enchantment_value_id( "ITEM_ATTACK_COST" ),
-                true );
+    int bonus = bonus_from_enchantments( base, enchantment_value_id( "ITEM_ATTACK_COST" ),
+                                         true );
     return std::max( 0, base + bonus );
 }
 
@@ -313,11 +313,6 @@ int item::damage_melee( const attack_statblock& attack, damage_type dt ) const
             if( has_flag( flag_REDUCED_BASHING ) ) { res *= 0.5; }
             break;
 
-        case DT_CUT:
-        case DT_STAB:
-            if( has_flag( flag_DIAMOND ) ) { res *= 1.3; }
-            break;
-
         default:
             break;
     }
@@ -334,8 +329,8 @@ int item::damage_melee( const attack_statblock& attack, damage_type dt ) const
     }
 
     auto internal_name = damage_unit( dt, 0.0 ).get_internal_name();
-    res += bonus_from_enchantments_wielded( res, enchantment_value_id( "ITEM_DAMAGE_" + internal_name ),
-                                            true );
+    res += bonus_from_enchantments( res, enchantment_value_id( "ITEM_DAMAGE_" + internal_name ),
+                                    true );
     // Apply melee damage bonus
     const auto& bonus = get_melee_damage_bonus();
     res += bonus.type_damage( dt );
@@ -362,16 +357,11 @@ for( const auto& attack : type->attacks ) {
                     if( has_flag( flag_REDUCED_BASHING ) ) { du.amount *= 0.5; }
                     break;
 
-                case DT_CUT:
-                case DT_STAB:
-                    if( has_flag( flag_DIAMOND ) ) { du.amount *= 1.3; }
-                    break;
-
                 default:
                     break;
             }
 
-            du.amount += bonus_from_enchantments_wielded( du.amount,
+            du.amount += bonus_from_enchantments( du.amount,
                          enchantment_value_id( "ITEM_DAMAGE_" + du.get_internal_name() ), true );
             // Apply melee damage bonus
             du.amount += bonus.type_damage( du.type );

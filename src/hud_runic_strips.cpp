@@ -203,6 +203,8 @@ auto move_mode_word( const avatar &u ) -> std::string
     return _( "STEALTH" );
     } else if( u.movement_mode_is( CMM_CROUCH ) ) {
     return _( "CROUCHING" );
+    } else if( u.movement_mode_is( CMM_PRONE ) ) {
+    return _( "PRONE" );
     }
     return _( "WALKING" );
 }

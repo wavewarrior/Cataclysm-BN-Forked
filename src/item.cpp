@@ -6,6 +6,7 @@
 #include "ammo.h"
 #include "bodypart.h"
 #include "cached_item_options.h"
+#include "calendar.h"
 #include "cata_utility.h"
 #include "catalua_icallback_actor.h"
 #include "character.h"
@@ -190,10 +191,7 @@ item::item( const itype* type, time_point turn, int qty )
         snip_id = SNIPPET.random_id_from_category( type->snippet_category );
     }
 
-    // item always has any relic properties from itype.
-    if( type->relic_data ) { relic_data = type->relic_data; }
-
-    for( const auto& func : type->use_methods | std::views::values ) {
+    for( const auto &func : type->use_methods | std::views::values ) {
         const auto actor = func.get_actor_ptr();
         if( actor != nullptr ) { actor->on_spawned( *this ); }
     }
@@ -373,7 +371,6 @@ detached_ptr<item> item::make_corpse(
 void item::convert( const itype_id& new_type )
 {
     type = &*new_type;
-    relic_data = type->relic_data;
     invalidate_processing_cache_upwards();
 }
 
@@ -823,8 +820,12 @@ bool item::display_stacked_with( const item &rhs, bool check_components ) const
 
 bool item::stacks_with( const item& rhs, bool check_components, bool skip_type_check ) const
 {
-    if( !skip_type_check && type != rhs.type ) { return false; }
-    if( is_relic() && rhs.is_relic() && !( *relic_data == *rhs.relic_data ) ) { return false; }
+    if( !skip_type_check && type != rhs.type ) {
+        return false;
+    }
+    if( is_relic( true ) && rhs.is_relic( true ) && !( *relic_data == *rhs.relic_data ) ) {
+        return false;
+    }
     if( is_money() && charges != 0 && rhs.charges != 0 ) {
         // Dealing with nonempty cash cards
         return true;
@@ -973,6 +974,7 @@ bool item::has_item_with_id( const itype_id& itype ) const
     } );
 
 
+
 }
 
 bool item_ptr_compare_by_charges( const item* left, const item* right )
@@ -1080,4 +1082,5 @@ auto item::actualize_rot( detached_ptr<item> &&self,
     } );
     return std::move( self );
 }
+
 

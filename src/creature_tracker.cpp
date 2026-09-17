@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "debug.h"
+#include "explosion_queue.h"
 #include "map.h"
 #include "mongroup.h"
 #include "monster.h"
@@ -322,6 +323,8 @@ bool Creature_tracker::kill_marked_for_death()
 
 void Creature_tracker::remove_dead()
 {
+    // Queued explosions must not keep raw source pointers to destroyed monsters.
+    auto &explosions = explosion_handler::get_explosion_queue();
     // Can't use game::all_monsters() as it would not contain *dead* monsters.
     for( auto iter = monsters_list.begin(); iter != monsters_list.end(); ) {
         const monster &critter = **iter;
@@ -329,6 +332,7 @@ void Creature_tracker::remove_dead()
             if( auto *pw = get_map().get_physics_world() ) {
                 pw->on_creature_removed( &critter );
             }
+            explosions.invalidate_source( &critter );
             remove_from_location_map( critter );
             iter = monsters_list.erase( iter );
         } else {
@@ -336,5 +340,8 @@ void Creature_tracker::remove_dead()
         }
     }
 
+    for( const auto &mon_ptr : removed_ ) {
+        explosions.invalidate_source( mon_ptr.get() );
+    }
     removed_.clear();
 }

@@ -80,6 +80,7 @@ std::string io::enum_to_string<action_id>( action_id data )
             PAIR( ACTION_RESET_MOVE )
             PAIR( ACTION_TOGGLE_RUN )
             PAIR( ACTION_TOGGLE_CROUCH )
+            PAIR( ACTION_TOGGLE_PRONE )
             PAIR( ACTION_OPEN_MOVEMENT )
             PAIR( ACTION_TOGGLE_MAP_MEMORY )
             PAIR( ACTION_CENTER )
@@ -96,6 +97,7 @@ std::string io::enum_to_string<action_id>( action_id data )
             PAIR( ACTION_CLOSE )
             PAIR( ACTION_SMASH )
             PAIR( ACTION_EXAMINE )
+            PAIR( ACTION_JUMP )
             PAIR( ACTION_PICKUP )
             PAIR( ACTION_PICKUP_ALL )
             PAIR( ACTION_PICKUP_FEET )
@@ -310,6 +312,8 @@ std::string action_ident( action_id act )
             return "toggle_run";
         case ACTION_TOGGLE_CROUCH:
             return "toggle_crouch";
+        case ACTION_TOGGLE_PRONE:
+            return "toggle_prone";
         case ACTION_OPEN_MOVEMENT:
             return "open_movement";
         case ACTION_OPEN:
@@ -320,6 +324,8 @@ std::string action_ident( action_id act )
             return "smash";
         case ACTION_EXAMINE:
             return "examine";
+        case ACTION_JUMP:
+            return "jump";
         case ACTION_ADVANCEDINV:
             return "advinv";
         case ACTION_PICKUP:
@@ -900,6 +906,8 @@ bool can_interact_at( action_id action, const tripoint_bub_ms &p )
             return can_move_vertical_at( p, -1 );
         case ACTION_EXAMINE:
             return can_examine_at( p );
+        case ACTION_JUMP:
+            return iexamine::can_jump_over_tile( get_avatar(), p );
         case ACTION_PICKUP:
         case ACTION_PICKUP_ALL:
         case ACTION_PICKUP_FEET:
@@ -1013,6 +1021,10 @@ action_id handle_action_menu()
     // If we're already crouching, make it simple to toggle crouching to off.
     if( g->u.movement_mode_is( CMM_CROUCH ) ) {
         action_weightings[ACTION_TOGGLE_CROUCH] = 300;
+    }
+    // If we're already prone, make it simple to toggle prone to off.
+    if( g->u.movement_mode_is( CMM_PRONE ) ) {
+        action_weightings[ACTION_TOGGLE_PRONE] = 300;
     }
 
     map &here = get_map();
@@ -1171,7 +1183,7 @@ action_id handle_action_menu()
             register_lua_action_entries( category_id );
         } else if( category_id == "interact" ) {
             register_actions( {
-                ACTION_EXAMINE, ACTION_SMASH, ACTION_MOVE_DOWN, ACTION_MOVE_UP,
+                ACTION_EXAMINE, ACTION_JUMP, ACTION_SMASH, ACTION_MOVE_DOWN, ACTION_MOVE_UP,
                 ACTION_OPEN, ACTION_CLOSE, ACTION_CHAT, ACTION_PICKUP,
                 ACTION_PICKUP_ALL, ACTION_PICKUP_FEET, ACTION_GRAB, ACTION_HAUL, ACTION_BUTCHER, ACTION_LOOT,
             } );
@@ -1179,7 +1191,7 @@ action_id handle_action_menu()
         } else if( category_id == "combat" ) {
             register_actions( {
                 ACTION_CYCLE_MOVE, ACTION_RESET_MOVE, ACTION_TOGGLE_RUN, ACTION_TOGGLE_CROUCH,
-                ACTION_OPEN_MOVEMENT, ACTION_FIRE, ACTION_RELOAD_ITEM, ACTION_RELOAD_WEAPON,
+                ACTION_TOGGLE_PRONE, ACTION_OPEN_MOVEMENT, ACTION_FIRE, ACTION_RELOAD_ITEM, ACTION_RELOAD_WEAPON,
                 ACTION_RELOAD_WIELDED, ACTION_CAST_SPELL, ACTION_CAST_LAST_SPELL,
                 ACTION_SELECT_FIRE_MODE,
                 ACTION_SELECT_DEFAULT_AMMO, ACTION_THROW, ACTION_FIRE_BURST, ACTION_PICK_STYLE,

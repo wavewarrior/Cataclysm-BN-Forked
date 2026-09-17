@@ -801,10 +801,12 @@ static time_duration safecracking_time( const player &p )
  * Time per attempt affected by perception and mechanics. 5 minutes per attempt minimum.
  * Small chance of just guessing the combo without listening device.
  */
+
 /**
  * Attempt to "hack" the gunsafe's electronic lock and open it.
  * Also allow for trying to pry it open as an alternative.
  */
+
 static item *find_best_lock_picking_tool( player &p )
 {
     std::vector<item *> picklocks = p.items_with( []( const item & it ) {
@@ -878,6 +880,7 @@ static bool pick_lock( player &p, const tripoint_bub_ms &examp )
 /**
  * Checks whether PC has a crowbar then calls iuse.crowbar.
  */
+
 /**
 * Checks whether PC has picklocks then calls pick_lock iuse function OR assigns ACT_LOCKPICK
 */
@@ -1512,6 +1515,7 @@ static void turnOnSelectedPump( const tripoint_bub_ms &p, int number )
 
 
 
+
 /**
  * Given then name of one of the above functions, returns the matching function
  * pointer. If no match is found, defaults to iexamine::none but prints out a
@@ -1618,6 +1622,7 @@ iexamine_function iexamine_function_from_string( const std::string &function_nam
             { "migo_nerve_cluster", &iexamine::migo_nerve_cluster },
             { "cardreader_plutgen", &iexamine::cardreader_plutgen },
             { "multicooker", &iexamine::multicooker },
+            { "enchanter", &iexamine::enchanter },
         }
     };
 

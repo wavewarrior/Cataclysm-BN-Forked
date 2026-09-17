@@ -164,6 +164,7 @@ std::string enum_to_string<m_flag>( m_flag data )
         case MF_REVIVES_HEALTHY: return "REVIVES_HEALTHY";
         case MF_NO_NECRO: return "NO_NECRO";
         case MF_PACIFIST: return "PACIFIST";
+        case MF_KEEP_DISTANCE: return "KEEP_DISTANCE";
         case MF_PUSH_MON: return "PUSH_MON";
         case MF_PUSH_VEH: return "PUSH_VEH";
         case MF_AVOID_DANGER_1: return "PATH_AVOID_DANGER_1";
@@ -211,6 +212,7 @@ std::string enum_to_string<m_flag>( m_flag data )
         case MF_FACTION_MEMORY: return "FACTION_MEMORY";
         case MF_COMBAT_MOUNT: return "COMBAT_MOUNT";
         case MF_CANT_TRAIN: return "CANT_TRAIN";
+        case MF_POLICE_EYEBOT: return "POLICE_EYEBOT";
         // *INDENT-ON*
         case m_flag::MF_MAX:
             break;
@@ -798,6 +800,7 @@ void mtype::load( const JsonObject &jo, const std::string &src )
     assign( jo, "speed", speed, strict, 0 );
     assign( jo, "aggression", agro, strict, -100, 100 );
     assign( jo, "morale", morale, strict );
+    assign( jo, "tracking_distance", tracking_distance, strict, 0 );
 
     assign( jo, "mountable_weight_ratio", mountable_weight_ratio, strict );
 
@@ -1685,6 +1688,17 @@ for( const auto &mon : mon_templates->get_all() ) {
                 debugmsg( "item_id %s of monster %s is not a valid item id",
                           mon.baby_egg.c_str(), mon.id.c_str() );
             }
+        }
+    }
+}
+
+void MonsterGenerator::resolve_lua_monster_callbacks(
+    const std::map<std::string, std::unique_ptr<lua_monster_callback_actor>> &actors )
+{
+    for( const mtype &mt : mon_templates->get_all() ) {
+        auto it = actors.find( mt.id.str() );
+        if( it != actors.end() ) {
+            mt.lua_callbacks = it->second.get();
         }
     }
 }

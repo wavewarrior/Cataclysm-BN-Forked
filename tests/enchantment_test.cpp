@@ -8,12 +8,14 @@
 #include "player.h"
 #include "player_helpers.h"
 #include "state_helpers.h"
+#include "weather.h"
 
 static trait_id trait_CARNIVORE("CARNIVORE");
 static efftype_id effect_debug_clairvoyance("debug_clairvoyance");
 
 static void advance_turn(Character& guy) {
     guy.process_turn();
+    guy.process_items();
     calendar::turn += 1_turns;
 }
 
@@ -815,8 +817,57 @@ TEST_CASE("Armor enchantments", "[magic][enchantment][armor]") {
     }
 }
 
-TEST_CASE( "Skill enchantments", "[magic][enchantment][skill]" )
-{
+TEST_CASE("Effect Immunity Enchantments", "[magic][enchantment][effects]") {
+    clear_all_state();
+    Character& guy = get_player_character();
+    clear_character(*guy.as_player(), true);
+
+    auto antitoxin = efftype_id("antitoxin");
+    REQUIRE(!guy.has_effect(antitoxin));
+
+    SECTION("Armor item with enchantment that prevents gaining antitoxin effect") {
+        wear_item(guy, "test_socks_of_toxicity");
+
+        guy.add_effect(antitoxin, 1_turns, bodypart_str_id::NULL_ID());
+        CHECK(!guy.has_effect(antitoxin));
+    }
+
+    SECTION("Lacking armor item antitoxin effect is gained") {
+        guy.add_effect(antitoxin, 1_turns, bodypart_str_id::NULL_ID());
+        CHECK(guy.has_effect(antitoxin));
+    }
+}
+
+TEST_CASE("Enchantment Cancels Flags", "[magic][enchantment][flags]") {
+    clear_all_state();
+    Character& guy = get_player_character();
+    clear_character(*guy.as_player(), true);
+
+    const auto& nearsighted = enchantment_flag_id("NEARSIGHTED");
+    REQUIRE(!guy.has_enchantment_flag(nearsighted));
+
+    WHEN("Character receives nearsight relic") {
+        wear_item(guy, "test_socks_of_nearsight");
+        wear_item(guy, "test_socks_of_nearsight");
+        THEN("They have nearsight") { REQUIRE(guy.has_enchantment_flag(nearsighted)); }
+        AND_WHEN("They gain one fix nearsight relic") {
+            wear_item(guy, "test_socks_of_anti_nearsight");
+            THEN("They still have nearsight") { REQUIRE(guy.has_enchantment_flag(nearsighted)); }
+            AND_WHEN("They gain two fix nearsight relics") {
+                wear_item(guy, "test_socks_of_anti_nearsight");
+                THEN("They lose nearsight") { REQUIRE(!guy.has_enchantment_flag(nearsighted)); }
+                AND_WHEN("They gain three fix nearsight relics") {
+                    wear_item(guy, "test_socks_of_anti_nearsight");
+                    THEN("They have fix nearsight") {
+                        REQUIRE(guy.has_enchantment_flag(enchantment_flag_id("FIX_NEARSIGHTED")));
+                    }
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("Skill enchantments", "[magic][enchantment][skill]") {
     clear_all_state();
     Character &guy = get_player_character();
     clear_character( *guy.as_player(), true );
@@ -846,5 +897,39 @@ TEST_CASE( "Skill enchantments", "[magic][enchantment][skill]" )
 
         REQUIRE( guy.get_skill_level( skill_id( "barter" ) ) == 6 );
         REQUIRE( guy.get_skill_level( skill_id( "speech" ) ) == 2 );
+    }
+}
+
+TEST_CASE("Climate Control enchantments", "[magic][enchantment]") {
+    clear_all_state();
+    Character& guy = get_player_character();
+    clear_character(*guy.as_player(), true);
+
+    REQUIRE(guy.temp_corrected_by_climate_control(BODYTEMP_COLD, bodypart_id("hand_l"))
+            == BODYTEMP_COLD);
+
+    SECTION("One climate control heating item") {
+        // This is pretty much cross-path parent enchantment testing here
+        wear_item(guy, "test_relic_socks_of_hand_climate");
+
+        REQUIRE(guy.temp_corrected_by_climate_control(BODYTEMP_COLD, bodypart_id("hand_l"))
+                == BODYTEMP_COLD + 500);
+    }
+
+    SECTION("Two climate control heating items") {
+        // This is pretty much cross-path parent enchantment testing here
+        wear_item(guy, "test_relic_socks_of_hand_climate");
+        wear_item(guy, "test_relic_socks_of_hand_cold_climate");
+
+        REQUIRE(guy.temp_corrected_by_climate_control(BODYTEMP_COLD, bodypart_id("hand_l"))
+                == BODYTEMP_COLD + 1000);
+    }
+
+    SECTION("Base enchantments dont stack") {
+        // This is pretty much cross-path parent enchantment testing here
+        wear_item(guy, "test_relic_socks_of_climate");
+
+        REQUIRE(guy.temp_corrected_by_climate_control(BODYTEMP_COLD, bodypart_id("hand_l"))
+                == BODYTEMP_COLD + 500);
     }
 }

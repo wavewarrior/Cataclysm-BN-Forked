@@ -83,6 +83,7 @@ static const quality_id qual_LIFT( "LIFT" );
 static const quality_id qual_SELF_JACK( "SELF_JACK" );
 
 static const trait_id trait_DEBUG_HS( "DEBUG_HS" );
+static const trait_id trait_DEBUG_HT( "DEBUG_HT" );
 
 static const activity_id ACT_VEHICLE( "ACT_VEHICLE" );
 
@@ -216,7 +217,7 @@ std::unique_ptr<player_activity> veh_interact::serialize_activity()
         default:
             break;
     }
-    if( you.has_trait( trait_DEBUG_HS ) ) { time = 1; }
+    if( you.has_trait( trait_DEBUG_HT ) ) { time = 1; }
     // if we're working on an existing part, use that part as the reference point
     // otherwise (e.g. installing a new frame), just use part 0
     const vehicle_part* vpt = pt ? pt : &veh->part( 0 );
@@ -1983,7 +1984,7 @@ void veh_interact::do_siphon()
         hide_ui( true );
         const item& base = pt.get_base();
         const int idx = veh->find_part( base ); // TODO!: Wtf is this way of finding the part number?
-        liquid_handler::handle_liquid( veh, idx, 0 );
+        liquid_handler::handle_liquid( veh, idx, 1 );
     };
 
     overview( sel, act );

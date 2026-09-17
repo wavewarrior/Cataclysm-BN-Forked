@@ -46,6 +46,7 @@ class DefaultRemovePartHandler : public RemovePartHandler
         }
         void set_floor_cache_dirty( const int z ) override {
             get_map().set_floor_cache_dirty( z );
+            get_map().set_vehicle_cache_dirty( z - 1 );
         }
         void removed( vehicle &veh, const int part ) override {
             avatar &player_character = get_avatar();

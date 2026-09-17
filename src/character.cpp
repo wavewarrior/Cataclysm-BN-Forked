@@ -136,7 +136,7 @@ static const activity_id ACT_TRY_SLEEP( "ACT_TRY_SLEEP" );
 static const activity_id ACT_WAIT_STAMINA( "ACT_WAIT_STAMINA" );
 
 static const bionic_id bio_eye_optic( "bio_eye_optic" );
-static const bionic_id bio_infolink( "bio_infolink" );
+static const bionic_id bio_cqb( "bio_cqb" );
 
 static const matec_id WBLOCK_1( "WBLOCK_1" );
 static const matec_id WBLOCK_2( "WBLOCK_2" );
@@ -164,6 +164,7 @@ static const efftype_id effect_deaf( "deaf" );
 static const efftype_id effect_disabled( "disabled" );
 static const efftype_id effect_disinfected( "disinfected" );
 static const efftype_id effect_downed( "downed" );
+static const efftype_id effect_drone_marker( "drone_marker" );
 static const efftype_id effect_drunk( "drunk" );
 static const efftype_id effect_took_antinarcoleptic( "took_antinarcoleptic" );
 static const efftype_id effect_earphones( "earphones" );
@@ -234,6 +235,7 @@ static const skill_id skill_throw( "throw" );
 
 static const species_id HUMAN( "HUMAN" );
 static const species_id ROBOT( "ROBOT" );
+static const species_id ROBOT_FLYING( "ROBOT_FLYING" );
 
 namespace
 {
@@ -256,7 +258,6 @@ static const trait_id trait_ANTLERS( "ANTLERS" );
 static const trait_id trait_ASTHMA( "ASTHMA" );
 static const trait_id trait_BADBACK( "BADBACK" );
 static const trait_id trait_CF_HAIR( "CF_HAIR" );
-static const trait_id trait_GLASSJAW( "GLASSJAW" );
 static const trait_id trait_DEBUG_NODMG( "DEBUG_NODMG" );
 static const trait_id trait_DEBUG_STAMINA( "DEBUG_STAMINA" );
 static const trait_id trait_DEFT( "DEFT" );
@@ -289,7 +290,6 @@ static const bionic_id bio_ods( "bio_ods" );
 static const bionic_id bio_railgun( "bio_railgun" );
 static const bionic_id bio_recycler( "bio_recycler" );
 static const bionic_id bio_shock_absorber( "bio_shock_absorber" );
-static const bionic_id bio_storage( "bio_storage" );
 static const bionic_id bio_synaptic_regen( "bio_synaptic_regen" );
 static const bionic_id bio_tattoo_led( "bio_tattoo_led" );
 static const bionic_id bio_tools( "bio_tools" );
@@ -382,6 +382,22 @@ static const trait_flag_str_id flag_NON_THRESH( "NON_THRESH" );
 
 static const activity_id ACT_ASSIST( "ACT_ASSIST" );
 
+static const enchantment_flag_id ench_flag_NO_THERMAL_WAKE( "NO_THERMAL_WAKE" );
+static const enchantment_flag_id ench_flag_NO_DAMAGE_WAKE( "NO_DAMAGE_WAKE" );
+static const enchantment_flag_id ench_flag_FIRE_FIELD_IMMUNE( "FIRE_FIELD_IMMUNE" );
+static const enchantment_flag_id ench_flag_BLIND( "BLIND" );
+static const enchantment_flag_id ench_flag_ELECTROSENSE( "ELECTROSENSE" );
+static const enchantment_flag_id ench_flag_VIEW_DRONE_CAM( "VIEW_DRONE_CAM" );
+static const enchantment_flag_id ench_flag_UNDERWATER_SIGHT( "UNDERWATER_SIGHT" );
+static const enchantment_flag_id ench_flag_NEARSIGHTED( "NEARSIGHTED" );
+static const enchantment_flag_id ench_flag_ALARMCLOCK( "ALARMCLOCK" );
+static const enchantment_flag_id ench_flag_WATCH( "WATCH" );
+static const enchantment_flag_id ench_flag_SLEEP_SIGHT( "SLEEP_SIGHT" );
+static const enchantment_flag_id ench_flag_INFRARED_VISION( "INFRARED_VISION" );
+static const enchantment_flag_id ench_flag_SONAR( "SONAR" );
+
+static const enchantment_value_id ench_val_GROUNDED_CREATURE_SIGHT( "GROUNDED_CREATURE_SIGHT" );
+
 namespace io
 {
 
@@ -395,6 +411,8 @@ template <> std::string enum_to_string<character_movemode>( character_movemode d
             return "run";
         case character_movemode::CMM_CROUCH:
             return "crouch";
+        case character_movemode::CMM_PRONE:
+            return "prone";
         case character_movemode::CMM_STEALTH:
             return "stealth";
             // *INDENT-ON*
@@ -827,26 +845,25 @@ auto Character::setpos( const tripoint_abs_ms& p ) -> void
     }
 
 
+
 }
 
 bool Character::has_alarm_clock() const
 {
-    map& here = get_map();
-    return (
-               has_item_with_flag( flag_ALARMCLOCK, true )
-               || ( here.veh_at( bub_pos() )
-                    && !here.veh_at( bub_pos() )->vehicle().get_avail_parts( "ALARMCLOCK" ).empty() )
-               || has_bionic( bio_infolink ) );
+    map &here = get_map();
+    return ( has_item_with_flag( flag_ALARMCLOCK, true ) ||
+             ( here.veh_at( bub_pos() ) &&
+               !here.veh_at( bub_pos() )->vehicle().get_avail_parts( "ALARMCLOCK" ).empty() ) ||
+             has_enchantment_flag( ench_flag_ALARMCLOCK ) );
 }
 
 bool Character::has_watch() const
 {
-    map& here = get_map();
-    return (
-               has_item_with_flag( flag_WATCH, true )
-               || ( here.veh_at( bub_pos() )
-                    && !here.veh_at( bub_pos() )->vehicle().get_avail_parts( "WATCH" ).empty() )
-               || has_bionic( bio_infolink ) );
+    map &here = get_map();
+    return ( has_item_with_flag( flag_WATCH, true ) ||
+             ( here.veh_at( bub_pos() ) &&
+               !here.veh_at( bub_pos() )->vehicle().get_avail_parts( "WATCH" ).empty() ) ||
+             has_enchantment_flag( ench_flag_WATCH ) );
 }
 
 void Character::react_to_felt_pain( int intensity )
@@ -1353,9 +1370,10 @@ void Character::calc_all_parts_hp( float hp_mod, float hp_adjustment, int str_ma
         float hp_ratio = static_cast<float>( bp.get_hp_cur() ) / bp.get_hp_max();
         int new_max = ( part.first->base_hp + str_max * 3 + hp_adjustment ) * hp_mod;
 
-        if( has_trait( trait_GLASSJAW ) && part.first == bodypart_str_id( "head" ) ) { new_max *= 0.8; }
-
-        new_max += bonus_from_enchantments( new_max, enchantment_value_id( "HEALTH_POINTS" ) );
+        const auto ench = enchantment_value_id( "HEALTH_POINTS_" + to_upper_case( part.first.str() ) );
+        if( ench.is_valid() ) {
+            new_max += bonus_from_enchantments( new_max, ench, true );
+        }
         new_max = std::max( new_max, 1 );
         int new_cur = std::ceil( static_cast<float>( new_max ) * hp_ratio );
 
@@ -1391,6 +1409,8 @@ float Character::night_vision_sight_range() const
 // occur through a function in this class which calls this function. Clothes are
 // typically added/removed with wear() and takeoff(), but direct access to the
 // 'wears' vector is still allowed due to refactor exhaustion.
+
+
 
 
 
@@ -1439,6 +1459,7 @@ for( const item * const &i : worn ) {
 }
 
 bionic_collection &Character::get_bionic_collection() const { return *my_bionics; }
+
 
 
 
@@ -1959,6 +1980,7 @@ void Character::reset()
 }
 
 
+
 /*
  * Innate stats setters
  */
@@ -2008,7 +2030,9 @@ float Character::get_dodge_base() const
 {
     /** @EFFECT_DEX increases dodge base */
     /** @EFFECT_DODGE increases dodge_base */
-    return get_dex() / 4.0f + get_skill_level( skill_dodge );
+    return get_dex() / 4.0f + ( has_active_bionic( bionic_id( bio_cqb ) ) ? std::max( get_skill_level(
+                                    skill_dodge ), BIO_CQB_LEVEL ) : get_skill_level(
+                                    skill_dodge ) );
 }
 float Character::get_hit_base() const
 {
@@ -2110,12 +2134,16 @@ bool Character::is_immune_field( const field_type_id& fid ) const
 {
     // Obviously this makes us invincible
     if( has_trait( trait_DEBUG_NODMG ) ) {
-    return true;
-}
-// Check to see if we are immune
-const field_type &ft = fid.obj();
-for( const trait_id &t : ft.immunity_data_traits ) {
-    if( has_trait( t ) ) {
+        return true;
+    }
+    if( enchantment_cache->is_immune_field( fid ) ) {
+        return true;
+    }
+
+    // Check to see if we are immune
+    const field_type &ft = fid.obj();
+    for( const trait_id &t : ft.immunity_data_traits ) {
+        if( has_trait( t ) ) {
             return true;
         }
     }
@@ -2131,7 +2159,7 @@ if( ft.has_elec ) {
     return is_elec_immune();
     }
     if( ft.has_fire ) {
-    return has_active_bionic( bio_heatsink ) || is_wearing( itype_rm13_armor_on );
+        return has_enchantment_flag( ench_flag_FIRE_FIELD_IMMUNE );
     }
     if( ft.has_acid ) {
     return !is_on_ground() && get_env_resist( bodypart_id( "foot_l" ) ) >= 15 &&
@@ -2151,6 +2179,10 @@ bool Character::is_elec_immune() const { return is_immune_damage( DT_ELECTRIC );
 
 bool Character::is_immune_effect( const efftype_id& eff ) const
 {
+    if( enchantment_cache->is_immune_effect( eff ) ) {
+        return true;
+    }
+
     if( eff == effect_downed ) {
         return is_throw_immune() || ( has_trait( trait_LEG_TENT_BRACE ) && footwear_factor() == 0 );
     } else if( eff == effect_onfire ) {
@@ -2627,6 +2659,7 @@ int Character::get_char_hearing_protection( bool advanced ) const
 
 
 
+
 void Character::cough( bool harmful, int loudness )
 {
     if( has_effect( effect_cough_suppress ) ) { return; }
@@ -2876,6 +2909,7 @@ std::string get_stat_name( character_stat Stat )
 }
 
 /// Returns the mutation category with the highest strength
+
 
 
 
@@ -3320,11 +3354,11 @@ int Character::bodytemp_modifier_traits_floor() const
     return mod;
 }
 
-int Character::temp_corrected_by_climate_control( int temperature )
+int Character::temp_corrected_by_climate_control( int temperature, bodypart_id id )
 {
     if( temperature > BODYTEMP_NORM ) {
         temperature -= bonus_from_enchantments( temperature,
-                                                enchantment_value_id( "CLIMATE_CONTROL_COOLING" ) );
+                                                enchantment_value_id( "CLIMATE_CONTROL_COOLING_" + to_upper_case( id.id().str() ) ) );
         if( in_climate_control() ) {
             temperature -= 1250;
         }
@@ -3334,7 +3368,7 @@ int Character::temp_corrected_by_climate_control( int temperature )
             temperature += 1250;
         }
         temperature += bonus_from_enchantments( temperature,
-                                                enchantment_value_id( "CLIMATE_CONTROL_HEATING" ) );
+                                                enchantment_value_id( "CLIMATE_CONTROL_HEATING_" + to_upper_case( id.id().str() ) ) );
         return std::min( BODYTEMP_NORM, temperature );
     }
     return temperature;

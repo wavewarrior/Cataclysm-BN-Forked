@@ -763,7 +763,13 @@ void Character::recalculate_enchantment_cache()
     enchantment_sources.clear();
 
     visit_items( [&]( const item * it ) {
-        for( const enchantment& ench : it->get_enchantments() ) {
+        for( const enchantment& ench : it->get_enchantments( true ) ) {
+            if( ench.is_active( *this, *it ) ) {
+                enchantment_cache->force_add( ench );
+                enchantment_sources.emplace_back( &ench, it );
+            }
+        }
+        for( const enchantment& ench : it->get_enchantments( false ) ) {
             if( ench.is_active( *this, *it ) ) {
                 enchantment_cache->force_add( ench );
                 enchantment_sources.emplace_back( &ench, it );
@@ -811,6 +817,14 @@ void Character::recalculate_enchantment_cache()
         }
     }
 
+    for( const auto &[eff_type, eff_by_part] : get_effects() ) {
+        const effect &eff = eff_by_part.begin()->second;
+        for( const enchantment &ench : eff.get_enchantments() ) {
+            if( ench.is_active( *this, true ) ) {
+                enchantment_cache->force_add( ench );
+            }
+        }
+    }
     enchantment_cache->activate_effects( *this );
     enchantment_cache->deactivate_removed_effects( *this, old_ench_sources );
 
@@ -818,6 +832,9 @@ void Character::recalculate_enchantment_cache()
 
     // Enchantments can give HP now, so recalc it
     recalc_hp();
+
+    // Enchantments can also give encumbrance
+    reset_encumbrance();
 }
 
 void Character::rebuild_mutation_cache()
@@ -834,6 +851,11 @@ void Character::rebuild_mutation_cache()
 double Character::bonus_from_enchantments( double base, enchantment_value_id value, bool round ) const
 {
     return enchantment_cache->calc_bonus( value, base, round );
+}
+
+bool Character::has_enchantment_flag( enchantment_flag_id flag ) const
+{
+    return enchantment_cache->has_flag( flag );
 }
 
 bool Character::crossed_threshold() const

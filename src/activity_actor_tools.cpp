@@ -473,6 +473,7 @@ static void apply_mining_exertion( Character& who, int moves )
     who.mod_stored_kcal( std::min( -1, -act_exertion / to_moves<int>( 45_seconds ) ) );
     who.mod_thirst( std::max( 1, act_exertion / to_moves<int>( 6_minutes ) ) );
     who.mod_fatigue( std::max( 1, act_exertion / to_moves<int>( 3_minutes ) ) );
+    who.mod_stamina( std::min( -1, -act_exertion / to_moves<int>( 5_seconds ) ) );
 }
 
 void burrow_activity_actor::start( player_activity &, Character& who )
@@ -793,6 +794,7 @@ void fill_pit_activity_actor::finish( player_activity& act, Character& who )
     who.mod_stored_kcal( std::min( -1, -act_exertion / to_moves<int>( 20_seconds ) ) );
     who.mod_thirst( std::max( 1, act_exertion / to_moves<int>( 3_minutes ) ) );
     who.mod_fatigue( std::max( 1, act_exertion / to_moves<int>( 90_seconds ) ) );
+    who.mod_stamina( std::min( -1, -act_exertion / to_moves<int>( 15_seconds ) ) );
     who.add_msg_if_player( m_good, _( "You finish filling up %s." ), old_ter->name() );
     act.set_to_null();
 }
@@ -1153,6 +1155,7 @@ void hand_crank_activity_actor::do_turn( player_activity& act, Character& who )
 
     if( action_time_scale::once_every_this_tick( charge_interval ) ) {
         who.mod_fatigue( fatigue_amount );
+        who.mod_stamina( -fatigue_amount * 36 );
         if( hand_crank_item.ammo_capacity() > hand_crank_item.ammo_remaining() ) {
             const auto current = hand_crank_item.ammo_remaining();
             const auto capacity = hand_crank_item.ammo_capacity();

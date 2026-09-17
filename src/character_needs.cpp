@@ -140,6 +140,8 @@ static const matec_id WBLOCK_1( "WBLOCK_1" );
 static const matec_id WBLOCK_2( "WBLOCK_2" );
 static const matec_id WBLOCK_3( "WBLOCK_3" );
 
+static const enchantment_flag_id ench_flag_NO_THERMAL_WAKE( "NO_THERMAL_WAKE" );
+
 static const efftype_id effect_adrenaline( "adrenaline" );
 static const efftype_id effect_ai_waiting( "ai_waiting" );
 static const efftype_id effect_alarm_clock( "alarm_clock" );
@@ -431,7 +433,7 @@ std::pair<std::string, nc_color> Character::get_thirst_description() const
         hydration_string = _( "Dehydrated" );
     } else if( thirst > thirst_levels::very_thirsty ) {
         hydration_color = c_yellow;
-        hydration_string = _( "Very thirsty" );
+        hydration_string = _( "Very Thirsty" );
     } else if( thirst > thirst_levels::thirsty ) {
         hydration_color = c_yellow;
         hydration_string = _( "Thirsty" );
@@ -1464,7 +1466,7 @@ void Character::update_bodytemp( const map& m, const weather_manager& weather )
         }
 
         // Climate Control eases the effects of high and low ambient temps
-        bp_conv = temp_corrected_by_climate_control( bp_conv );
+        bp_conv = temp_corrected_by_climate_control( bp_conv, bp );
 
         int bonus_fire_warmth = best_fire * 500;
 
@@ -1704,11 +1706,13 @@ void Character::update_bodytemp( const map& m, const weather_manager& weather )
         // AND you have frostbite, then that also prevents you from sleeping
         if( in_sleep_state() ) {
             int curr_temperature = bp_stats.get_temp_cur();
-            if( bp == body_part_torso && curr_temperature <= BODYTEMP_COLD ) {
+            if( bp == body_part_torso && curr_temperature <= BODYTEMP_COLD &&
+                !has_enchantment_flag( ench_flag_NO_THERMAL_WAKE ) ) {
                 add_msg( m_warning, _( "Your shivering prevents you from sleeping." ) );
                 wake_up();
             } else if( bp != body_part_torso && curr_temperature <= BODYTEMP_VERY_COLD
-                       && has_effect( effect_frostbite ) ) {
+                       && has_effect( effect_frostbite ) &&
+                       !has_enchantment_flag( ench_flag_NO_THERMAL_WAKE ) ) {
                 add_msg( m_warning,
                          _( "You are too cold.  Your frostbite prevents you from "
                             "sleeping." ) );

@@ -1,4 +1,5 @@
 #include "mutation_data.h" // IWYU pragma: associated
+#include "generic_readers.h"
 #include "mutation.h" // IWYU pragma: associated
 
 #include <array>
@@ -293,6 +294,7 @@ void mutation_branch::load( const JsonObject &jo, const std::string & )
     optional( jo, was_loaded, "visibility", visibility, 0 );
     optional( jo, was_loaded, "ugliness", ugliness, 0 );
     optional( jo, was_loaded, "starting_trait", startingtrait, false );
+    optional( jo, was_loaded, "random_starting_trait", randomstartingtrait, startingtrait );
     optional( jo, was_loaded, "mixed_effect", mixed_effect, false );
     optional( jo, was_loaded, "active", activated, false );
     optional( jo, was_loaded, "starts_active", starts_active, false );
@@ -458,6 +460,8 @@ void mutation_branch::load( const JsonObject &jo, const std::string & )
     optional( jo, was_loaded, "changes_to", replacements, trait_reader{} );
     optional( jo, was_loaded, "leads_to", additions, trait_reader{} );
     optional( jo, was_loaded, "flags", flags, auto_flags_reader<trait_flag_str_id> {} );
+    optional( jo, was_loaded, "allowed_items", allowed_items, auto_flags_reader<flag_id> {} );
+    optional( jo, was_loaded, "restricts_gear", restricts_gear, bodypart_reader{} );
     optional( jo, was_loaded, "types", types, string_reader{} );
     optional( jo, was_loaded, "enchantments", enchantments );
     if( jo.has_array( "mut_enchantments" ) ) {
@@ -533,14 +537,6 @@ void mutation_branch::load( const JsonObject &jo, const std::string & )
         std::string part_id = ec.next_string();
         int enc = ec.next_int();
         encumbrance_covered[get_body_part_token( part_id )] = enc;
-    }
-
-    for( const std::string line : jo.get_array( "restricts_gear" ) ) {
-        restricts_gear.insert( get_body_part_token( line ) );
-    }
-
-    for( const std::string line : jo.get_array( "allowed_items" ) ) {
-        allowed_items.insert( flag_id( line ) );
     }
 
     for( JsonObject ao : jo.get_array( "armor" ) ) {
@@ -642,8 +638,12 @@ void mutation_branch::check_consistency()
         for( const enchantment_id &ench : mdata.enchantments ) {
             ench->check();
         }
+        std::set<enchantment_condition_type> incompatible_cond_types = {
+            enchantment_condition_type::ITEM,
+            enchantment_condition_type::ITEM_CHARACTER
+        };
         for( const auto &ench : mdata.mut_enchantments ) {
-            ench.check();
+            ench.check( incompatible_cond_types );
         }
         for( const auto &flag : mdata.flags ) {
             if( !flag.is_valid() ) {

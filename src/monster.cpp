@@ -7,6 +7,7 @@
 #include "bodypart.h"
 #include "catalua.h"
 #include "catalua_hooks.h"
+#include "catalua_icallback_actor.h"
 #include "catalua_impl.h"
 #include "catalua_sol.h"
 #include "character.h"
@@ -27,8 +28,10 @@
 #include "game_constants.h"
 #include "int_id.h"
 #include "init.h"
+
 #include "item.h"
 #include "item_category.h"
+#include "item_factory.h"
 #include "item_group.h"
 #include "itype.h"
 #include "line.h"
@@ -47,6 +50,7 @@
 #include "mondefense.h"
 #include "monfaction.h"
 #include "mongroup.h"
+#include "mattack_actors.h"
 #include "morale_types.h"
 #include "mtype.h"
 #include "mutation.h"
@@ -67,6 +71,7 @@
 #include "text_snippets.h"
 #include "translations.h"
 #include "trap.h"
+#include "units_utility.h"
 #include "weather.h"
 
 #include <algorithm>
@@ -94,12 +99,50 @@ static const efftype_id effect_corroding( "corroding" );
 static const efftype_id effect_dazed( "dazed" );
 static const efftype_id effect_deaf( "deaf" );
 static const efftype_id effect_docile( "docile" );
+
+namespace
+{
+
+auto compatible_ammo_for_gun( const gun_actor &gun_attack ) -> std::vector<itype_id>
+{
+    namespace ranges = std::ranges;
+
+    if( !gun_attack.ammo_types.empty() ) {
+        return gun_attack.ammo_types;
+    }
+
+    const auto gun = item::spawn_temporary( gun_attack.gun_type );
+    if( !gun ) {
+        return {};
+    }
+
+    auto compatible_ammo = std::vector<itype_id> {};
+    const auto default_ammo = gun->ammo_default();
+    if( !default_ammo.is_null() ) {
+        compatible_ammo.push_back( default_ammo );
+    }
+
+    const auto gun_ammo_types = gun->ammo_types();
+    for( const auto *const ammo_item : item_controller->find( [&gun_ammo_types](
+    const itype & candidate ) {
+    return candidate.ammo != nullptr && gun_ammo_types.contains( candidate.ammo->type );
+    } ) ) {
+        if( !ranges::contains( compatible_ammo, ammo_item->get_id() ) ) {
+            compatible_ammo.push_back( ammo_item->get_id() );
+        }
+    }
+
+    return compatible_ammo;
+}
+
+} // namespace
 static const efftype_id effect_downed( "downed" );
 static const efftype_id effect_emp( "emp" );
 static const efftype_id effect_feral_infighting_punishment( "feral_infighting_punishment" );
 static const efftype_id effect_feral_killed_recently( "feral_killed_recently" );
 static const efftype_id effect_grabbed( "grabbed" );
 static const efftype_id effect_grabbing( "grabbing" );
+static const efftype_id effect_has_bag( "has_bag" );
 static const efftype_id effect_heavysnare( "heavysnare" );
 static const efftype_id effect_hit_by_player( "hit_by_player" );
 static const efftype_id effect_in_pit( "in_pit" );
@@ -117,6 +160,7 @@ static const efftype_id effect_paralyzepoison( "paralyzepoison" );
 static const efftype_id effect_poison( "poison" );
 static const efftype_id effect_ridden( "ridden" );
 static const efftype_id effect_run( "run" );
+static const efftype_id effect_saddled( "monster_saddled" );
 static const efftype_id effect_smoke( "smoke" );
 static const efftype_id effect_stunned( "stunned" );
 static const efftype_id effect_supercharged( "supercharged" );
@@ -379,6 +423,7 @@ monster::monster( const monster& source )
     lastseen_turn = source.lastseen_turn;
     staircount = source.staircount;
     ammo = source.ammo;
+    upgrade_time = source.upgrade_time;
 
     for( const item * const& it : source.corpse_components ) {
         corpse_components.push_back( item::spawn( *it ) );
@@ -496,7 +541,18 @@ void monster::allow_upgrade() { upgrade_time = 0; }
 // Checking for return value of -1 is necessary.
 int monster::next_upgrade_time()
 {
-    if( type->age_grow > 0 ) { return type->age_grow; }
+    if( type->age_grow > 0 ) {
+        const int scaling = get_option<int>( "ANIMAL_LIFE_CYCLE_SCALING" );
+        if( type->has_flag( MF_ANIMAL ) && scaling == 0 ) {
+            return std::max( 1, static_cast<int>( std::ceil( type->age_grow *
+                                                  calendar::season_ratio() ) ) );
+        }
+        if( type->has_flag( MF_ANIMAL ) ) {
+            return std::max( 1, static_cast<int>( std::ceil( type->age_grow * scaling /
+                                                  100.0 ) ) );
+        }
+        return type->age_grow;
+    }
     const int scaled_half_life = type->half_life * get_option<float>( "MONSTER_UPGRADE_FACTOR" );
     int day = 1; // 1 day of guaranteed evolve time
     for( int i = 0; i < get_option<int>( "EVOLVE_MAX_ITERS" ); i++ ) {
@@ -578,11 +634,22 @@ void monster::try_reproduce()
 {
     // This can happen if the monster type has changed (from reproducing to non-reproducing monster)
     if( !type->baby_timer ) { return; }
+    time_duration baby_timer_scaling = *type->baby_timer;
+    const int scaling = get_option<int>( "ANIMAL_LIFE_CYCLE_SCALING" );
+    if( type->has_flag( MF_ANIMAL ) && scaling == 0 ) {
+        baby_timer_scaling = time_duration::from_days( std::max( 1,
+                             static_cast<int>( std::ceil( to_days<int>( *type->baby_timer ) *
+                                               calendar::season_ratio() ) ) ) );
+    } else if( type->has_flag( MF_ANIMAL ) ) {
+        baby_timer_scaling = time_duration::from_days( std::max( 1,
+                             static_cast<int>( std::ceil( to_days<int>( *type->baby_timer ) *
+                                               scaling / 100.0 ) ) ) );
+    }
 
     if( !baby_timer ) {
         // Assume this is a freshly spawned monster (because baby_timer is not set yet), set the
         // point when it reproduce to somewhere in the future.
-        baby_timer.emplace( calendar::turn + *type->baby_timer );
+        baby_timer.emplace( calendar::turn + baby_timer_scaling );
     }
 
     bool season_spawn = false;
@@ -616,7 +683,7 @@ void monster::try_reproduce()
         chance += 2;
 
         if( ( season_match && female && one_in( chance ) ) ) { reproduce(); }
-        *baby_timer += *type->baby_timer;
+        *baby_timer += baby_timer_scaling;
     }
 }
 
@@ -708,6 +775,68 @@ auto monster::spawn( const tripoint_bub_ms& p ) -> void
 {
     pos_abs = map_local_to_abs( get_map(), p );
     unset_dest();
+}
+
+auto monster::ammo_slot_items( const itype_id &ammo_id ) const -> std::vector<itype_id>
+{
+    namespace ranges = std::ranges;
+
+    auto slot_items = std::vector<itype_id> { ammo_id };
+    for( const auto &[special_name, special_attack] : type->special_attacks ) {
+        static_cast<void>( special_name );
+        if( special_attack->id != "gun" ) {
+            continue;
+        }
+        const auto *const gun_attack = dynamic_cast<const gun_actor *>( special_attack.get() );
+        if( gun_attack == nullptr ) {
+            continue;
+        }
+        const auto compatible_ammo = compatible_ammo_for_gun( *gun_attack );
+        if( !ranges::contains( compatible_ammo, ammo_id ) ) {
+            continue;
+        }
+        for( const auto &compatible_ammo_id : compatible_ammo ) {
+            if( !ranges::contains( slot_items, compatible_ammo_id ) ) {
+                slot_items.push_back( compatible_ammo_id );
+            }
+        }
+    }
+    return slot_items;
+}
+
+auto monster::ammo_capacity_for_slot( const itype_id &ammo_id ) const -> int
+{
+    if( const auto iter = type->starting_ammo.find( ammo_id ); iter != type->starting_ammo.end() ) {
+        return iter->second;
+    }
+    return 0;
+}
+
+auto monster::ammo_count_for_slot( const itype_id &ammo_id ) const -> int
+{
+    auto total_ammo = 0;
+    for( const auto &slot_ammo_id : ammo_slot_items( ammo_id ) ) {
+        if( const auto iter = ammo.find( slot_ammo_id ); iter != ammo.end() ) {
+            total_ammo += iter->second;
+        }
+    }
+    return total_ammo;
+}
+
+auto monster::loaded_ammo_for_slot( const itype_id &ammo_id ) const -> itype_id
+{
+    auto selected_ammo = itype_id {};
+    auto selected_count = 0;
+    for( const auto &slot_ammo_id : ammo_slot_items( ammo_id ) ) {
+        const auto current_count = ammo.contains( slot_ammo_id ) ? ammo.at( slot_ammo_id ) : 0;
+        const auto prefer_current = current_count > selected_count ||
+                                    ( current_count == selected_count && slot_ammo_id == ammo_id );
+        if( prefer_current ) {
+            selected_ammo = slot_ammo_id;
+            selected_count = current_count;
+        }
+    }
+    return selected_count > 0 ? selected_ammo : itype_id {};
 }
 
 std::string monster::get_name() const { return name( 1 ); }
@@ -1054,16 +1183,21 @@ std::string monster::extended_description() const
 
     if( !type->has_flag( m_flag::MF_NOHEAD ) ) { ss += std::string( _( "It has a head." ) ) + "\n"; }
 
-    if( bonded_character_id == g->u.getID() ) {
-        ss += string_format( _( "It regards you as family. (%s)\n" ), pet_bond_level );
-    } else if( pet_bond_level > 5 ) {
-        ss += string_format( _( "It really likes you. (%s)\n" ), pet_bond_level );
-    } else if( pet_bond_level > 2 ) {
-        ss += string_format( _( "It likes you. (%s)\n" ), pet_bond_level );
-    } else if( pet_bond_level > 0 ) {
-        ss += string_format( _( "It is curious about you. (%s)\n" ), pet_bond_level );
-    } else {
-        ss += string_format( _( "It is unsure about you. (%s)\n" ), pet_bond_level );
+    if( is_pet() ) {
+        if( bonded_character_id == g->u.getID() ) {
+            ss += string_format( _( "It regards you as family. (%s)\n" ), pet_bond_level );
+        } else if( pet_bond_level > 5 ) {
+            ss += string_format( _( "It really likes you. (%s)\n" ), pet_bond_level );
+        } else if( pet_bond_level > 2 ) {
+            ss += string_format( _( "It likes you. (%s)\n" ), pet_bond_level );
+        } else if( pet_bond_level > 0 ) {
+            ss += string_format( _( "It is curious about you. (%s)\n" ), pet_bond_level );
+        } else {
+            ss += string_format( _( "It is unsure about you. (%s)\n" ), pet_bond_level );
+        }
+        ss += string_format( _( "It carries %s / %s\n" ),
+                             static_cast<int>( convert_weight( get_carried_weight() ) ),
+                             static_cast<int>( convert_weight( weight_capacity() ) ) );
     }
 
     if( training_level > 0 && type->pet_training ) {
@@ -1280,11 +1414,18 @@ auto monster::shift( point_rel_sm sm_shift ) -> void
 
 detached_ptr<item> monster::set_tack_item( detached_ptr<item>&& to )
 {
-    if( to && to->typeId() != itype_id::NULL_ID() ) { has_processable_items = true; }
+    if( to && to->typeId() != itype_id::NULL_ID() ) {
+        has_processable_items = true;
+        add_effect( effect_saddled, 1_turns );
+    }
     return tack_item.swap( std::move( to ) );
 }
 
-detached_ptr<item> monster::remove_tack_item() { return set_tack_item( detached_ptr<item>() ); }
+detached_ptr<item> monster::remove_tack_item()
+{
+    remove_effect( effect_saddled );
+    return set_tack_item( detached_ptr<item>() );
+}
 
 item *monster::get_tack_item() const
 {
@@ -1308,11 +1449,21 @@ return nullptr;
 
 detached_ptr<item> monster::set_armor_item( detached_ptr<item>&& to )
 {
-    if( to && to->typeId() != itype_id::NULL_ID() ) { has_processable_items = true; }
+    if( to && to->typeId() != itype_id::NULL_ID() ) {
+        has_processable_items = true;
+        add_effect( effect_monster_armor, 1_turns );
+    }
     return armor_item.swap( std::move( to ) );
 }
 
-detached_ptr<item> monster::remove_armor_item() { return set_armor_item( detached_ptr<item>() ); }
+detached_ptr<item> monster::remove_armor_item()
+{
+    if( armor_item ) {
+        armor_item->erase_var( "pet_armor" );
+        remove_effect( effect_monster_armor );
+    }
+    return set_armor_item( detached_ptr<item>() );
+}
 
 item *monster::get_armor_item() const
 {
@@ -1322,11 +1473,18 @@ return nullptr;
 
 detached_ptr<item> monster::set_storage_item( detached_ptr<item>&& to )
 {
-    if( to && to->typeId() != itype_id::NULL_ID() ) { has_processable_items = true; }
+    if( to && to->typeId() != itype_id::NULL_ID() ) {
+        has_processable_items = true;
+        add_effect( effect_has_bag, 1_turns );
+    }
     return storage_item.swap( std::move( to ) );
 }
 
-detached_ptr<item> monster::remove_storage_item() { return set_storage_item( detached_ptr<item>() ); }
+detached_ptr<item> monster::remove_storage_item()
+{
+    remove_effect( effect_has_bag );
+    return set_storage_item( detached_ptr<item>() );
+}
 
 item *monster::get_storage_item() const
 {
@@ -1481,18 +1639,6 @@ auto monster::attitude( const Character* u ) const -> monster_attitude
     if( has_effect( effect_pacified ) ) { return MATT_ZLAVE; }
 
     const auto *np = u == nullptr ? nullptr : u->as_npc();
-    if( np != nullptr ) {
-        const auto faction_att = faction.obj().attitude( np->get_monster_faction() );
-        if( faction_att == MFA_FRIENDLY ) {
-            return MATT_FRIEND;
-        }
-        if( faction_att == MFA_NEUTRAL ) {
-            return MATT_IGNORE;
-        }
-        if( faction_att == MFA_HATE ) {
-            return MATT_ATTACK;
-        }
-    }
 
     int effective_anger  = anger;
     int effective_morale = morale;
@@ -1602,6 +1748,17 @@ auto monster::attitude( const Character* u ) const -> monster_attitude
         if( effective_anger < 10 && faction_att == MFA_NEUTRAL ) {
             return MATT_IGNORE;
         }
+    } else if( u != nullptr && u->is_npc() ) {
+        const auto faction_att = faction.obj().attitude( np->get_monster_faction() );
+        if( faction_att == MFA_HATE ) {
+            return MATT_ATTACK;
+        }
+        if( effective_anger < 10 && faction_att == MFA_FRIENDLY ) {
+            return MATT_FRIEND;
+        }
+        if( effective_anger < 10 && faction_att == MFA_NEUTRAL ) {
+            return MATT_IGNORE;
+        }
     }
 
     if( effective_morale < 0 ) {
@@ -1623,6 +1780,10 @@ auto monster::attitude( const Character* u ) const -> monster_attitude
     if( u != nullptr && !aggro_character && !u->is_monster() &&
         !( has_flag( MF_FACTION_MEMORY ) && effective_anger >= 10 ) ) {
         return MATT_IGNORE;
+    }
+
+    if( has_flag( MF_KEEP_DISTANCE ) && rl_dist( bub_pos(), goal ) < type->tracking_distance ) {
+        return MATT_FLEE;
     }
 
     return MATT_ATTACK;
@@ -1812,6 +1973,10 @@ bool monster::is_immune_effect( const efftype_id& effect ) const
     }
 
     if( effect == effect_tpollen ) { return type->in_species( PLANT ); }
+
+    if( effect == effect_blind ) {
+        return !has_flag( MF_SEES );
+    }
 
     // Used by screecher zombies to prevent dazing monsters that can't hear
     if( effect == effect_deaf ) { return !has_flag( MF_HEARS ); }
@@ -2377,7 +2542,10 @@ void monster::process_turn()
             }
         }
     }
-
+    if( is_pet() ) {
+        // Only pets can upgrade in range of the player, monsters only upgrade on load.
+        try_upgrade( false );
+    }
     Creature::process_turn();
 }
 
@@ -2491,7 +2659,7 @@ static void process_item_valptr( item* ptr, monster& mon )
 {
     if( ptr && ptr->needs_processing() ) {
         ptr->attempt_detach( [&mon]( detached_ptr<item>&& it ) {
-            return item::process( std::move( it ), nullptr, mon.bub_pos(), false );
+            return item::process( std::move( it ), nullptr, mon.bub_pos(), false, 1 );
         } );
     }
 }
@@ -2502,7 +2670,7 @@ void monster::process_items()
     if( !inv.empty() ) {
         inv.remove_with( [this]( detached_ptr<item>&& it ) {
             if( it->needs_processing() ) {
-                return item::process( std::move( it ), nullptr, bub_pos(), false );
+                return item::process( std::move( it ), nullptr, bub_pos(), false, 1 );
             }
             return std::move( it );
         } );
@@ -2577,6 +2745,12 @@ void monster::process_one_effect( effect& it, bool is_new )
             apply_damage( nullptr, bodypart_id( "torso" ), dam );
         } else {
             it.set_duration( 0_turns );
+        }
+    } else if( id == effect_bleed ) {
+        int intense = it.get_intensity();
+        if( one_in( 36 / intense ) ) {
+            apply_damage( nullptr, bodypart_id( "torso" ), 1 );
+            bleed();
         }
     } else if( id == effect_run ) {
         effect_cache[FLEEING] = true;
@@ -2717,6 +2891,19 @@ void monster::make_pet()
     friendly = -1;
     get_mapbuffer().creature_tracker().update_faction( *this );
     add_effect( effect_pet, 1_turns );
+}
+
+void monster::make_pet( Character &actor )
+{
+    // There is another call of make_pet in spawn_monsters_submap so the original call remains
+    make_pet();
+    if( const auto _lua_callbacks = type->lua_callbacks ) {
+        _lua_callbacks->call_on_tame( actor, *this );
+    }
+
+    cata::run_hooks( "on_monster_tame", [&](
+    auto & params ) { params["avatar"] = &actor; params["monster"] = *this; }
+                   );
 }
 
 bool monster::is_pet() const { return ( friendly == -1 && has_effect( effect_pet ) ); }
@@ -3089,4 +3276,12 @@ auto monster::get_faction_anger( mfaction_id target_faction ) const -> int
 
 auto it = faction_anger.find( target_faction );
 return ( it != faction_anger.end() ) ? it->second : 0;
+}
+
+const lua_monster_callback_actor *monster::get_lua_callbacks() const
+{
+    if( type && type->lua_callbacks ) {
+        return type->lua_callbacks;
+    }
+    return nullptr;
 }

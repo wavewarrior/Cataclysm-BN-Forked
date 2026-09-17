@@ -668,6 +668,9 @@ int Character::swim_speed() const
     // Crouching movement mode while swimming means slower swim style, like breaststroke
     if( is_crouching() ) { ret += 50; }
 
+    // Prone movement mode while swimming means very slow swimming style, like treading water
+    if( move_mode == CMM_PRONE ) { ret += 150; }
+
     if( ret < 30 ) { ret = 30; }
     return ret;
 }

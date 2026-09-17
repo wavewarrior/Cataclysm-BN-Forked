@@ -9,6 +9,8 @@
 #include "catalua_hooks.h"
 #include "catalua_sol.h"
 #include "computer.h"
+#include "coordinates.h"
+#include "data_vars.h"
 #include "debug.h"
 #include "field.h"
 #include "field_type.h"
@@ -392,6 +394,29 @@ auto mapgen_constructor::has_flag_furn( const ter_bitflags flag,
     return sm != nullptr && sm->get_furn( local ).obj().has_flag( flag );
 }
 
+auto mapgen_constructor::ter_vars( const point_omt_ms &p ) const -> data_vars::data_set *
+{
+    const auto [sm, local] = tile_at( p );
+
+    if( sm != nullptr ) {
+        return &sm->get_ter_vars( local );
+    }
+
+    return nullptr;
+}
+
+
+auto mapgen_constructor::furn_vars( const point_omt_ms &p ) const -> data_vars::data_set *
+{
+    const auto [sm, local] = tile_at( p );
+
+    if( sm != nullptr ) {
+        return &sm->get_furn_vars( local );
+    }
+
+    return nullptr;
+}
+
 auto mapgen_constructor::passable( const point_omt_ms &p ) const -> bool
 {
     return move_cost( p ) > 0;
@@ -571,6 +596,17 @@ auto mapgen_constructor::remove_field( const point_omt_ms &p,
     }
 }
 
+auto mapgen_constructor::remove_all_fields( const point_omt_ms &p ) -> void
+{
+    const auto [sm, local] = tile_at( p );
+    if( sm != nullptr ) {
+        field field = sm->get_field( local );
+        for( auto iter = field.begin(); iter != field.end(); iter++ ) {
+            remove_field( p, iter->first );
+        }
+    }
+}
+
 auto mapgen_constructor::add_splatter_trail( const field_type_id &type, const point_omt_ms &from,
         const point_omt_ms &to ) -> void
 {
@@ -606,6 +642,14 @@ auto mapgen_constructor::set_graffiti( const point_omt_ms &p,
     const auto [sm, local] = tile_at( p );
     if( sm != nullptr ) {
         sm->set_graffiti( local, contents );
+    }
+}
+
+auto mapgen_constructor::delete_graffiti( const point_omt_ms &p ) -> void
+{
+    const auto [sm, local] = tile_at( p );
+    if( sm != nullptr ) {
+        sm->delete_graffiti( local );
     }
 }
 
@@ -763,10 +807,44 @@ auto mapgen_constructor::put_items_from_loc( const item_group_id &loc, const poi
     return ret;
 }
 
+auto mapgen_constructor::edit_item_for_spawn_rate( item &itm ) -> int
+{
+    const auto cat_rate = item_category_spawn_rate( itm );
+    if( !itm.count_by_charges() ) {
+        float rng = rng_float( 0.0f, 1.0f );
+        if( cat_rate <= 1.0f && ( rng > cat_rate || cat_rate == 0.0f ) ) {
+            return 0;
+        } else if( cat_rate > 1.0f ) {
+            const int new_count = roll_remainder( cat_rate );
+            return new_count;
+        }
+    } else if( cat_rate != 0 ) {
+        const float initial_charges = itm.charges;
+        const int new_charges = roll_remainder( initial_charges * cat_rate );
+        if( new_charges == 0 ) {
+            return 0;
+        }
+        itm.set_charges( new_charges );
+        return 1;
+    }
+    return 1;
+}
+
 auto mapgen_constructor::item_category_spawn_rate( const item &itm ) -> float
 {
-    const auto cat_id = item_category_id( itm.get_category_id() );
-    return cat_id.is_valid() ? cat_id->get_spawn_rate() : 1.0f;
+    const std::string &cat = itm.get_category().id.c_str();
+    float spawn_rate = get_option<float>( "SPAWN_RATE_" + cat );
+
+    // strictly search for canned foods only in the first check
+    if( itm.goes_bad_after_opening( true ) ) {
+        float spawn_rate_mod = get_option<float>( "SPAWN_RATE_perishables_canned" );
+        spawn_rate *= spawn_rate_mod;
+    } else if( itm.goes_bad() ) {
+        float spawn_rate_mod = get_option<float>( "SPAWN_RATE_perishables" );
+        spawn_rate *= spawn_rate_mod;
+    }
+
+    return spawn_rate;
 }
 
 auto mapgen_constructor::flammable_items_at( const point_omt_ms &p, const int threshold ) -> bool
@@ -828,9 +906,15 @@ auto mapgen_constructor::place_items( const item_group_id &loc, const int chance
         }
         auto initial = item_group::items_from( loc, turn );
         std::ranges::for_each( initial, [&]( detached_ptr<item> &itm ) {
-            const auto cat_rate = item_category_spawn_rate( *itm );
-            if( cat_rate <= 1.0f && rng_float( 0.1f, 1.0f ) > cat_rate ) {
+            const auto new_count = edit_item_for_spawn_rate( *itm );
+            if( new_count == 0 ) {
                 return;
+            }
+            for( int iter = 1; iter < new_count; iter++ ) {
+                auto placed = add_item_or_charges( p, item::spawn( *itm ) );
+                if( placed ) {
+                    res.push_back( &*placed );
+                }
             }
             auto placed = add_item_or_charges( p, std::move( itm ) );
             if( placed ) {
@@ -1181,7 +1265,7 @@ auto mapgen_constructor::add_spawn( const mtype_id &type, const int count,
 auto mapgen_constructor::add_vehicle( const std::variant<vgroup_id, vproto_id> &type_,
                                       const point_omt_ms &p, const units::angle dir,
                                       const int veh_fuel, const int veh_status, const bool /*merge_wrecks*/,
-                                      std::optional<bool> locked, std::optional<bool> has_keys ) -> vehicle *
+                                      std::optional<bool> locked, std::optional<bool> has_keys, bool place_beyond_bounds ) -> vehicle *
 {
     const auto type = std::visit( []( const auto & v ) -> vproto_id {
         using T = std::decay_t<decltype( v )>;
@@ -1193,7 +1277,7 @@ auto mapgen_constructor::add_vehicle( const std::variant<vgroup_id, vproto_id> &
             return v;
         }
     }, type_ );
-    if( !is_inside_omt_tile_bounds( p ) || !type.is_valid() ) {
+    if( ( !is_inside_omt_tile_bounds( p ) && !place_beyond_bounds ) || !type.is_valid() ) {
         return nullptr;
     }
     auto veh = std::make_unique<vehicle>( type, veh_fuel, veh_status, locked, has_keys );
@@ -1404,18 +1488,99 @@ auto mapgen_constructor::make_rubble( const point_omt_ms &p,
     make_rubble( p, rubble_type, t_dirt, false );
 }
 
-auto mapgen_constructor::bash( const point_omt_ms &p, const int /*str*/,
+auto mapgen_constructor::bash( const point_omt_ms &p, const int str,
                                const bool destroy, const bool /*bash_floor*/,
                                const vehicle * /*bashing_vehicle*/ ) -> void
 {
-    if( has_furn( p ) ) {
-        furn_set( p, f_null );
+    bool bashed_sealed = false;
+    if( has_flag( "SEALED", p ) ) {
+        bash_ter_furn( p, destroy );
+        bashed_sealed = true;
+    }
+
+    bash_field( p );
+
+    // Don't bash items inside terrain/furniture with SEALED flag
+    if( !bashed_sealed ) {
+        bash_items( p );
+    }
+
+    const vehicle *veh = veh_pointer_or_null( veh_at( p ) );
+    if( veh != nullptr ) {
+        bash_vehicle( p, str );
+    } else if( !bashed_sealed ) {
+        // If we still didn't bash anything solid (a vehicle) or a tile with SEALED flag, bash ter/furn
+        bash_ter_furn( p, destroy );
+    }
+
+    return;
+}
+
+void mapgen_constructor::bash_items( const point_omt_ms &p )
+{
+    auto bashed_items = i_clear( p );
+    if( bashed_items.empty() ) {
         return;
     }
-    if( destroy || ter( p ).obj().bash.str_max != -1 ) {
-        ter_set( p, t_dirt );
+
+    for( auto &bashed_item : bashed_items ) {
+        // the check for active suppresses Molotovs smashing themselves with their own explosion
+        if( bashed_item->can_shatter() && !bashed_item->is_active() && one_in( 2 ) ) {
+            spawn_items( p, bashed_item->contents.clear_items() );
+        } else {
+            add_item( p, std::move( bashed_item ) );
+        }
     }
 }
+
+void mapgen_constructor::bash_vehicle( const point_omt_ms &p, int str )
+{
+    // Smash vehicle if present
+    if( const optional_vpart_position vp = veh_at( p ) ) {
+        vp->vehicle().damage( vp->part_index(), str, DT_BASH, true );
+    }
+}
+
+void mapgen_constructor::bash_field( const point_omt_ms &p )
+{
+    remove_field( p, fd_web );
+}
+
+void mapgen_constructor::bash_ter_furn( const point_omt_ms &p, bool destroy )
+{
+    const auto &ter_obj = ter( p ).obj();
+    const auto &furn_obj = furn( p ).obj();
+    bool smash_ter = false;
+    const map_bash_info *bash = nullptr;
+
+    if( furn_obj.id && furn_obj.bash.str_max != -1 ) {
+        bash = &furn_obj.bash;
+    } else if( ter_obj.bash.str_max != -1 ) {
+        bash = &ter_obj.bash;
+        smash_ter = true;
+    }
+
+    if( bash == nullptr || ( bash->destroy_only && !destroy ) ) {
+        // Nothing bashable here
+        return;
+    }
+
+    spawn_items( p, item_group::items_from( bash->drop_group, calendar::turn ) );
+    if( smash_ter ) {
+        if( bash->ter_set ) {
+            ter_set( p, bash->ter_set );
+        } else if( destroy ) {
+            ter_set( p, t_dirt );
+        }
+    } else {
+        if( bash->furn_set ) {
+            furn_set( p, bash->furn_set );
+        } else if( destroy ) {
+            furn_set( p, f_null );
+        }
+    }
+}
+
 
 auto mapgen_constructor::destroy( const point_omt_ms &p ) -> void
 {

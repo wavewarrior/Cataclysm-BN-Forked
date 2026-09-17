@@ -280,6 +280,11 @@ void map::set_floor_cache_dirty(const int zlev) {
     set_absorption_cache_dirty(zlev - 1);
 }
 
+void map::set_vehicle_cache_dirty(const int zlev) {
+    if (inbounds_z(zlev)) { get_cache(zlev).vehicle_caches_dirty = true; }
+    if (inbounds_z(zlev + 1)) { get_cache(zlev + 1).vehicle_floor_cache_dirty = true; }
+}
+
 void map::set_floor_cache_dirty(const tripoint_bub_ms& p) {
     if (!inbounds(p)) { return; }
     level_cache& ch = get_cache(p.z());
@@ -823,6 +828,7 @@ static void vehicle_caching_internal_above(
         const tripoint_bub_ms& part_pos = v->bub_part_location(vp.part());
         const int tile_idx = zch_above.idx(part_pos.x(), part_pos.y());
         zch_above.vehicle_floor_cache[tile_idx] = true;
+        zch_above.has_any_vehicle_floor = true;
     }
 }
 
@@ -875,7 +881,7 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
         levels.erase(std::ranges::unique(levels).begin(), levels.end());
     };
     auto level_has_vehicle_floor = [](const level_cache& ch) {
-        return std::ranges::any_of(ch.vehicle_floor_cache, [](const char c) { return c != '\0'; });
+        return ch.has_any_vehicle_floor;
     };
 
     // Refresh the shared weather-transparency lookup table once, serially,
@@ -957,6 +963,7 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
                 // All three must be cleared unconditionally — not gated on veh_in_active_range —
                 // to prevent stale entries from surviving after the vehicle is gone.
                 std::fill(ch.vehicle_floor_cache.begin(), ch.vehicle_floor_cache.end(), '\0');
+                ch.has_any_vehicle_floor = false;
                 const diagonal_blocks fill = {false, false};
                 std::fill(ch.vehicle_obscured_cache.begin(), ch.vehicle_obscured_cache.end(), fill);
                 std::fill(ch.vehicle_obstructed_cache.begin(), ch.vehicle_obstructed_cache.end(),
@@ -993,6 +1000,7 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
                 // All three must be cleared unconditionally — not gated on veh_in_active_range —
                 // to prevent stale entries from surviving after the vehicle is gone.
                 std::fill(ch.vehicle_floor_cache.begin(), ch.vehicle_floor_cache.end(), '\0');
+                ch.has_any_vehicle_floor = false;
                 const diagonal_blocks fill = {false, false};
                 std::fill(ch.vehicle_obscured_cache.begin(), ch.vehicle_obscured_cache.end(), fill);
                 std::fill(ch.vehicle_obstructed_cache.begin(), ch.vehicle_obstructed_cache.end(),

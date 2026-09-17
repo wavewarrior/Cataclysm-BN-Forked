@@ -409,6 +409,10 @@ class Item_factory
 
         std::set<std::string> repair_actions;
 
+        // items who's magazines act like another magazine
+        // I.E. Heavy Battery -> [ Enhanced Heavy Battery, Disposable Heavy Battery ]
+        std::map<itype_id, std::set<itype_id>> magazines_like;
+
         // Pre-built material → repair-tools index; populated once in finalize()
         // and reused for any post-freeze items added via add_item_type().
         std::unordered_map<material_id, std::set<itype_id>> repair_mat_index_;

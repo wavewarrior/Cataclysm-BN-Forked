@@ -209,40 +209,55 @@ bool item::craft_has_charges()
 double item::bonus_from_enchantments(
     const Character& owner, double base, enchantment_value_id value, bool round ) const
 {
-    double add = 0.0;
-    double mul = 0.0;
-    for( const enchantment& ench : get_enchantments() ) {
+    double ret = 0.0;
+    for( const enchantment& ench : get_enchantments( true ) ) {
         if( ench.is_active( owner, *this ) ) {
-            add += ench.get_value_add( value );
-            mul += ench.get_value_multiply( value );
+            ret += ench.calc_bonus( value, base, round );
         }
     }
-    // TODO: this part duplicates enchantment::calc_bonus()
-    double ret = add + base * mul;
-    if( round ) { ret = trunc( ret ); }
+    for( const enchantment& ench : get_enchantments( false ) ) {
+        if( ench.is_active( owner, *this ) ) {
+            ret += ench.calc_bonus( value, base, round );
+        }
+    }
+    // In case of floating point errors
+    if( round ) {
+        ret = trunc( ret );
+    }
     return ret;
 }
 
-double item::bonus_from_enchantments_wielded(
+double item::bonus_from_enchantments(
     double base, enchantment_value_id value, bool round ) const
 {
-    double add = 0.0;
-    double mul = 0.0;
-    for( const enchantment& ench : get_enchantments() ) {
-        if( ench.is_active_when_wielded() ) {
-            add += ench.get_value_add( value );
-            mul += ench.get_value_multiply( value );
+    // Check if it has the value first, because these enchantments
+    // Are more limited in scope then most enchantments
+    // Thus it can cause unwanted errors if `has_value` is not checked first
+    double ret = 0.0;
+    for( const enchantment& ench : get_enchantments( true ) ) {
+        if( ench.has_value( value ) && ench.is_active( *this ) ) {
+            ret += ench.calc_bonus( value, base, round );
         }
     }
-    // TODO: this part duplicates enchantment::calc_bonus()
-    double ret = add + base * mul;
-    if( round ) { ret = trunc( ret ); }
+    for( const enchantment& ench : get_enchantments( false ) ) {
+        if( ench.has_value( value ) && ench.is_active( *this ) ) {
+            ret += ench.calc_bonus( value, base, round );
+        }
+    }
+    // In case of floating point errors
+    if( round ) {
+        ret = trunc( ret );
+    }
     return ret;
 }
 
 const std::vector<relic_recharge> &item::get_relic_recharge_scheme() const
 {
-    return relic_data->get_recharge_scheme();
+    if( is_relic( true ) ) {
+        return relic_data->get_recharge_scheme();
+    } else {
+        return type->relic_data->get_recharge_scheme();
+    }
 }
 
 bool item::can_contain( const item& it ) const
