@@ -558,13 +558,14 @@ int vehicle::install_part( const tripoint_mnt_veh &dp, vehicle_part &&new_part )
     refresh();
     map &here = get_map();
     here.invalidate_lightmap_caches();
-    // Keep the Box2D collider in step with the footprint.  This is what gives a bare
-    // vproto-"none" chassis its collision geometry: map::add_vehicle() registers it with
-    // the physics world while it still has zero parts, so no polygon could be built then.
-    // No-op for a vehicle the physics world does not know about, e.g. anything mapgen is
-    // still assembling.
-    if( physics::PhysicsWorld *phys = here.get_physics_world() ) {
-        phys->on_vehicle_parts_changed( *this );
+    // Keep the Box2D collider, per-tile cache and mapbuffer footprint index in step
+    // with the footprint.  This is what gives a bare vproto-"none" chassis its
+    // collision geometry: map::add_vehicle() registers it with the physics world
+    // while it still has zero parts, so no polygon could be built then.  A no-op for
+    // a vehicle the map does not know about yet, e.g. anything mapgen is still
+    // assembling (attach() has not run).
+    if( attached ) {
+        here.vehicle_footprint_changed( *this );
     }
     coeff_air_changed = true;
     return parts.size() - 1;
@@ -752,7 +753,7 @@ bool vehicle::merge_rackable_vehicle( vehicle *carry_veh, const std::vector<int>
         add_msg( _( "You load the %1$s on the rack" ), carry_veh->name );
         map &here = get_map();
         carry_veh->part_removal_cleanup();
-        here.dirty_vehicle_list.insert( this );
+        here.dirty_vehicle_list.insert( handle() );
         here.set_transparency_cache_dirty( abs_sm_pos.z() );
         here.set_seen_cache_dirty( tripoint_bub_ms::zero() );
         refresh();
@@ -917,7 +918,7 @@ void vehicle::part_removal_cleanup()
             here.destroy_vehicle( this );
             return;
         } else {
-            here.add_vehicle_to_cache( this );
+            here.vehicle_footprint_changed( *this );
         }
     }
     shift_if_needed();
@@ -1060,7 +1061,7 @@ bool vehicle::remove_carried_vehicle( const std::vector<int> &carried_parts )
             new_vehicle->toggle_tracking(); //turn on tracking for our newly created vehicle
             new_vehicle->remove_tracked_flag(); //remove our tracking flags now that the vehicle isn't carried
         }
-        g->m.dirty_vehicle_list.insert( this );
+        g->m.dirty_vehicle_list.insert( handle() );
         part_removal_cleanup();
     } else {
         //~ %s is the vehicle being loaded onto the bicycle rack
@@ -1303,7 +1304,7 @@ bool vehicle::split_vehicles( const std::vector<std::vector <int>> &new_vehs,
         new_vehicle->zones_dirty = true;
 
         map &here = get_map();
-        here.dirty_vehicle_list.insert( new_vehicle );
+        here.dirty_vehicle_list.insert( new_vehicle->handle() );
         here.set_transparency_cache_dirty( abs_sm_pos.z() );
         here.set_seen_cache_dirty( tripoint_bub_ms::zero() );
         if( !new_labels.empty() ) {

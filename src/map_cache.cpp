@@ -1049,8 +1049,10 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
         };
         for (int z = minz; z <= maxz; z++) {
             if (get_cache(z).veh_in_active_range) {
-                for (const vehicle* const veh : get_cache(z).vehicle_list) {
-                    mark_vehicle_gpu_structural_levels(veh);
+                for (const vehicle_handle handle : get_cache(z).vehicle_list) {
+                    if (const vehicle* const veh = resolve_vehicle(handle); veh != nullptr) {
+                        mark_vehicle_gpu_structural_levels(veh);
+                    }
                 }
                 do_vehicle_caching(z);
             }

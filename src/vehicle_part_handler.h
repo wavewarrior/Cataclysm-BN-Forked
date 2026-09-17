@@ -68,7 +68,7 @@ class DefaultRemovePartHandler : public RemovePartHandler
                     g->u.grab( OBJECT_NONE );
                 }
             }
-            here.dirty_vehicle_list.insert( &veh );
+            here.dirty_vehicle_list.insert( veh.handle() );
         }
         void spawn_animal_from_part( item &base, const tripoint_bub_ms &loc ) override {
             base.release_monster( loc, 1 );
@@ -111,7 +111,7 @@ class MapgenRemovePartHandler : public RemovePartHandler
         void set_transparency_cache_dirty( const int /*z*/ ) override {}
         void set_floor_cache_dirty( const int /*z*/ ) override {}
         void removed( vehicle &veh, const int /*part*/ ) override {
-            m.dirty_vehicle_list.insert( &veh );
+            m.dirty_vehicle_list.insert( veh.handle() );
         }
         void spawn_animal_from_part( item &/*base*/, const tripoint_bub_ms &/*loc*/ ) override {
             debugmsg( "Tried to spawn animal from vehicle part during mapgen!" );

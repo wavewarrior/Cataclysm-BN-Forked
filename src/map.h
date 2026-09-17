@@ -46,6 +46,7 @@
 #include "type_id.h"
 #include "units.h"
 #include "sounds.h"
+#include "vehicle_handle.h"
 #include "vpart_position.h"
 
 
@@ -489,9 +490,9 @@ struct level_cache {
 
     bool veh_in_active_range = false;
     std::vector<bool>               veh_exists_at;
-    std::map<tripoint_bub_ms, std::pair<vehicle *, int>> veh_cached_parts;
-    std::set<vehicle *> vehicle_list;
-    std::set<vehicle *> zone_vehicles;
+    std::map<tripoint_bub_ms, std::pair<vehicle_handle, int>> veh_cached_parts;
+    std::set<vehicle_handle> vehicle_list;
+    std::set<vehicle_handle> zone_vehicles;
 
     // stores cached sound absorption amounts of tiles
     // In 100ths of decibels
@@ -1147,8 +1148,22 @@ class map : public submap_load_listener
 
         // Vehicles: Common to 2D and 3D
         VehicleList get_vehicles();
+    private:
         void add_vehicle_to_cache( vehicle * );
+    public:
+        // Precise per-tile cache invalidation for a single vehicle part.  Used both by
+        // the choke-point methods below and by fine-grained in-place mutations
+        // (part removal, single-part reposition) that only need to drop one tile
+        // rather than re-derive a vehicle's whole footprint.
         void clear_vehicle_point_from_cache( vehicle *veh, const tripoint_bub_ms &pt );
+        /// The only sanctioned way to make a vehicle visible to the world's indices.
+        void register_vehicle( vehicle &veh );
+        /// The full removal sequence: physics, per-part cache, list/zone membership,
+        /// rope cache, mapbuffer footprint, overmap tracking, occupant unboarding and
+        /// footprint-dirty marking — all of it before the caller destroys the object.
+        void unregister_vehicle( vehicle &veh );
+        /// Parts added, removed, merged, split or re-anchored: footprint-derived indices only.
+        void vehicle_footprint_changed( vehicle &veh );
         void reset_vehicle_cache( );
         void clear_vehicle_cache( );
         void clear_vehicle_list( int zlev );
@@ -1991,7 +2006,7 @@ class map : public submap_load_listener
          * Used for infrared.
          */
         bool pl_line_of_sight( const tripoint_bub_ms &t, int max_range ) const;
-        std::set<vehicle *> dirty_vehicle_list;
+        std::set<vehicle_handle> dirty_vehicle_list;
 
         /**
          * Legacy accessor for the loaded-grid origin.
@@ -2450,7 +2465,7 @@ class map : public submap_load_listener
          */
         VehicleList last_full_vehicle_list;
         bool last_full_vehicle_list_dirty = true;
-        std::map<tripoint_bub_ms, std::pair<vehicle *, int> > cached_veh_rope;
+        std::map<tripoint_bub_ms, std::pair<vehicle_handle, int> > cached_veh_rope;
 
         // Note: no bounds check
         level_cache &get_cache( int zlev ) const {

@@ -216,7 +216,7 @@ void veh_interact::complete_vehicle( Character& who )
             for( const auto& sk : vpinfo.install_skills ) {
                 who.practice( sk.first, veh_utils::calc_xp_gain( vpinfo, sk.first, who ) );
             }
-            here.add_vehicle_to_cache( veh );
+            here.vehicle_footprint_changed( *veh );
             break;
         }
 

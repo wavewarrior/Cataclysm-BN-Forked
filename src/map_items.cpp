@@ -729,7 +729,9 @@ void map::process_items( int turns )
         const int zmax = OVERMAP_HEIGHT;
         std::set<submap *> veh_submaps;
         for( int z = zmin; z <= zmax; ++z ) {
-            for( vehicle * veh : get_cache( z ).vehicle_list ) {
+            for( const vehicle_handle handle : get_cache( z ).vehicle_list ) {
+                vehicle *const veh = resolve_vehicle( handle );
+                if( veh == nullptr ) { continue; }
                 submap* sm =
                     MAPBUFFER_REGISTRY.get( bound_dimension_ )
                     .lookup_submap_in_memory( veh->abs_sm_pos );

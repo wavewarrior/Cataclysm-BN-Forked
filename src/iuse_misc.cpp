@@ -949,7 +949,7 @@ int iuse::unfold_generic( player* p, item* it, bool, const tripoint_bub_ms & )
         }
     }
 
-    g->m.add_vehicle_to_cache( veh );
+    here.vehicle_footprint_changed( *veh );
 
     std::string unfold_msg = it->get_var( "unfold_msg" );
     if( unfold_msg.empty() ) {

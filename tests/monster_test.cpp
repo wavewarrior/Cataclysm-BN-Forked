@@ -569,7 +569,6 @@ TEST_CASE("monster_vertical_melee_respects_floors", "[monster][z-level]") {
         REQUIRE(veh != nullptr);
         veh->install_part(tripoint_mnt_veh::zero(), vpart_frame_vertical);
         veh->install_part(tripoint_mnt_veh::zero(), vpart_seat);
-        here.add_vehicle_to_cache(veh);
 
         CHECK_FALSE(grabber.attack_at(you.bub_pos()));
     }
@@ -625,7 +624,6 @@ TEST_CASE("physical_clear_path_respects_vehicle_floors", "[map][z-level]") {
         REQUIRE(veh != nullptr);
         veh->install_part(tripoint_mnt_veh::zero(), vpart_id("frame_vertical"));
         veh->install_part(tripoint_mnt_veh::zero(), vpart_id("seat"));
-        here.add_vehicle_to_cache(veh);
 
         CHECK_FALSE(map_funcs::physical_clear_path({
             .m = here,
@@ -642,7 +640,6 @@ TEST_CASE("physical_clear_path_respects_vehicle_floors", "[map][z-level]") {
         REQUIRE(veh != nullptr);
         veh->install_part(tripoint_mnt_veh::zero(), vpart_id("frame_vertical"));
         veh->install_part(tripoint_mnt_veh::zero(), vpart_id("windshield"));
-        here.add_vehicle_to_cache(veh);
 
         CHECK(here.veh_at(obstacle_pos).obstacle_at_part().has_value());
         CHECK_FALSE(map_funcs::physical_clear_path({
@@ -746,7 +743,6 @@ TEST_CASE("zombie_technician_pull_uses_physical_clear_path", "[monster][z-level]
         REQUIRE(veh != nullptr);
         veh->install_part(tripoint_mnt_veh::zero(), vpart_id("frame_vertical"));
         veh->install_part(tripoint_mnt_veh::zero(), vpart_id("seat"));
-        here.add_vehicle_to_cache(veh);
 
         CHECK_FALSE(mattack::pull_metal_weapon(&technician));
         CHECK(you.primary_weapon().typeId() == flaregun_id);

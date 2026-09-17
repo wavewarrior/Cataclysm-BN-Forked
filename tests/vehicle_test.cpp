@@ -285,7 +285,6 @@ TEST_CASE("detaching_opaque_vehicle_invalidates_transparency_cache", "[vehicle][
     REQUIRE(board >= 0);
 
     const auto board_pos = veh_ptr->bub_part_location(board);
-    here.add_vehicle_to_cache(veh_ptr);
     here.build_map_cache(board_pos.z(), true);
     REQUIRE_FALSE(here.is_transparent(board_pos));
 

@@ -735,15 +735,8 @@ void map::on_submap_unloaded( const tripoint_abs_sm &pos, const dimension_id &di
     // vehicle far from the actual leak.
     if( submap* sm = MAPBUFFER_REGISTRY.get( dim_id ).lookup_submap_in_memory( pos );
         sm != nullptr && !sm->vehicles.empty() ) {
-        level_cache& ch = get_cache( pos.z() );
-        bool removed_any = false;
         for( const auto& veh : sm->vehicles ) {
-            if( ch.vehicle_list.erase( veh.get() ) > 0 ) { removed_any = true; }
-            ch.zone_vehicles.erase( veh.get() );
-        }
-        if( removed_any ) {
-            last_full_vehicle_list_dirty = true;
-            reset_vehicle_cache();
+            unregister_vehicle( *veh );
         }
     }
     cache_submap_at_grid( abs_to_map_local( *this, pos ), nullptr );
@@ -1666,13 +1659,8 @@ void map::shift_vehicle_z( vehicle& veh, int z_shift )
     update_vehicle_list( dst_submap, dst.z() );
 
     level_cache& ch = get_cache( src.z() );
-    for( const vehicle * elem : ch.vehicle_list ) {
-        if( elem == &veh ) {
-            ch.vehicle_list.erase( &veh );
-            ch.zone_vehicles.erase( &veh );
-            break;
-        }
-    }
+    ch.vehicle_list.erase( veh.handle() );
+    ch.zone_vehicles.erase( veh.handle() );
 
     veh.abs_sm_pos = dst;
     get_mapbuffer().refresh_vehicle_footprint( &veh );
@@ -1732,7 +1720,9 @@ void map::shift( const point_rel_sm& sp )
     }
 #endif
     for( const auto gridz : std::views::iota( zmin, zmax + 1 ) ) {
-        for( auto * veh : get_cache( gridz ).vehicle_list ) { veh->zones_dirty = true; }
+        for( const vehicle_handle handle : get_cache( gridz ).vehicle_list ) {
+            if( vehicle *const veh = resolve_vehicle( handle ); veh != nullptr ) { veh->zones_dirty = true; }
+        }
     }
 
     const half_open_rectangle<point_bub_ms>
@@ -2202,12 +2192,7 @@ void map::loadn( const tripoint_bub_sm& grid, const bool update_vehicles, const 
                 veh->attach();
                 iter++;
             } else {
-                reset_vehicle_cache();
-                get_mapbuffer().unregister_vehicle( veh );
-                if( veh->tracking_on ) {
-                    get_overmapbuffer( bound_dimension_ ).remove_vehicle( veh );
-                }
-                dirty_vehicle_list.erase( veh );
+                unregister_vehicle( *veh );
                 iter = veh_vec.erase( iter );
             }
         }
@@ -2217,10 +2202,8 @@ void map::loadn( const tripoint_bub_sm& grid, const bool update_vehicles, const 
             auto& map_cache = get_cache( grid.z() );
             for( const auto& veh : tmpsub->vehicles ) {
                 // Only add if not tracking already.
-                if( !map_cache.vehicle_list.contains( veh.get() ) ) {
-                    map_cache.vehicle_list.insert( veh.get() );
-                    if( !veh->loot_zones.empty() ) { map_cache.zone_vehicles.insert( veh.get() ); }
-                    add_vehicle_to_cache( veh.get() );
+                if( !map_cache.vehicle_list.contains( veh->handle() ) ) {
+                    register_vehicle( *veh );
                 }
             }
         }
@@ -2779,7 +2762,9 @@ void map::do_vehicle_caching( int z )
     if( ch.vehicle_list.empty() && inbounds_z( z + 1 ) ) {
         get_cache( z + 1 ).vehicle_floor_cache_dirty = false;
     }
-    for( vehicle * v : ch.vehicle_list ) {
+    for( const vehicle_handle handle : ch.vehicle_list ) {
+        vehicle *const v = resolve_vehicle( handle );
+        if( v == nullptr ) { continue; }
         for( const vpart_reference& vp : v->get_all_parts() ) {
             const tripoint_bub_ms& part_pos = v->bub_part_location( vp.part() );
             if( !inbounds( part_pos ) || vp.part().removed ) { continue; }
@@ -3314,6 +3299,7 @@ bool map::has_rope_at( tripoint_bub_ms pt ) const
     if( cached_veh_rope.contains( pt ) ) {
         auto veh_pair = get_rope_at( pt );
         vehicle *veh = veh_pair.first;
+        if( veh == nullptr ) { return false; }
         int veh_part = veh_pair.second;
         return veh->part( veh_part ).info().ladder_length() >= veh->bub_ms_location().z() - pt.z();
     }
@@ -3321,7 +3307,8 @@ bool map::has_rope_at( tripoint_bub_ms pt ) const
 }
 std::pair<vehicle *, int> map::get_rope_at( const tripoint_bub_ms &pt ) const
 {
-    return cached_veh_rope.at( pt );
+    const auto &entry = cached_veh_rope.at( pt );
+    return { resolve_vehicle( entry.first ), entry.second };
 }
 
 level_cache &map::access_cache( int zlev )

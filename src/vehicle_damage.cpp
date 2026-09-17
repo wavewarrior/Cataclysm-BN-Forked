@@ -408,7 +408,7 @@ void vehicle::shift_parts( const tripoint_rel_veh &delta )
     pivot_anchor[0] -= delta;
     refresh();
     //Need to also update the map after this
-    g->m.reset_vehicle_cache( );
+    g->m.vehicle_footprint_changed( *this );
 }
 
 /**

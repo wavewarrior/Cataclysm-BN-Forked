@@ -29,6 +29,7 @@
 #include "point.h"
 #include "submap_load_manager.h"
 #include "type_id.h"
+#include "vehicle_handle.h"
 #include "vpart_position.h"
 
 class submap;
@@ -760,7 +761,7 @@ class mapbuffer
     private:
         using submap_map_t = std::unordered_map<tripoint_abs_sm, std::unique_ptr<submap>>;
         struct vehicle_footprint_entry {
-            vehicle *veh = nullptr;
+            vehicle_handle veh;
             std::size_t part_index = 0;
         };
 
@@ -786,7 +787,7 @@ class mapbuffer
         auto register_submap_vehicles( const tripoint_abs_sm &p, submap &sm ) -> void;
         auto unregister_submap_vehicles( const tripoint_abs_sm &p ) -> void;
         auto index_vehicle_footprint_unlocked( vehicle &veh ) -> void;
-        auto unindex_vehicle_footprint_unlocked( const vehicle *veh ) -> void;
+        auto unindex_vehicle_footprint_unlocked( vehicle_handle handle ) -> void;
         auto indexed_vehicle_part_at_unlocked( const tripoint_abs_ms &p )
         -> optional_vpart_position;
         auto vehicle_part_at_loaded_tile( const tripoint_abs_ms &p ) -> optional_vpart_position;
@@ -913,10 +914,10 @@ class mapbuffer
         Creature_tracker creature_tracker_;
         std::list<shared_ptr_fast<npc>> active_npcs_;
         std::unordered_map<tripoint_abs_ms, shared_ptr_fast<npc>> active_npcs_by_location_;
-        std::set<vehicle *> loaded_vehicles_;
+        std::set<vehicle_handle> loaded_vehicles_;
         std::unordered_map<tripoint_abs_ms, std::vector<vehicle_footprint_entry>>
                 vehicle_footprint_by_location_;
-        std::unordered_map<const vehicle *, std::vector<tripoint_abs_ms>>
+        std::unordered_map<vehicle_handle, std::vector<tripoint_abs_ms>>
                 vehicle_footprint_locations_;
         std::set<tripoint_abs_sm> submaps_with_active_items_;
         std::set<tripoint_abs_sm> submaps_with_luminous_items_;

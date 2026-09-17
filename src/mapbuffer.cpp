@@ -1260,7 +1260,7 @@ auto mapbuffer::register_submap_vehicles(
         }
         veh->abs_sm_pos = p;
         veh->set_dimension( dimension_id_ );
-        loaded_vehicles_.insert( veh.get() );
+        loaded_vehicles_.insert( veh->handle() );
         index_vehicle_footprint_unlocked( *veh );
     }
 }
@@ -1268,9 +1268,10 @@ auto mapbuffer::register_submap_vehicles(
 auto mapbuffer::unregister_submap_vehicles( const tripoint_abs_sm &p ) -> void
 {
     for( auto iter = loaded_vehicles_.begin(); iter != loaded_vehicles_.end(); ) {
-        const auto *const veh = *iter;
+        const vehicle_handle handle = *iter;
+        const vehicle *const veh = resolve_vehicle( handle );
         if( veh == nullptr || veh->abs_sm_pos == p ) {
-            unindex_vehicle_footprint_unlocked( veh );
+            unindex_vehicle_footprint_unlocked( handle );
             iter = loaded_vehicles_.erase( iter );
         } else {
             ++iter;
@@ -1278,9 +1279,9 @@ auto mapbuffer::unregister_submap_vehicles( const tripoint_abs_sm &p ) -> void
     }
 }
 
-auto mapbuffer::unindex_vehicle_footprint_unlocked( const vehicle *veh ) -> void
+auto mapbuffer::unindex_vehicle_footprint_unlocked( vehicle_handle handle ) -> void
 {
-    const auto locations_iter = vehicle_footprint_locations_.find( veh );
+    const auto locations_iter = vehicle_footprint_locations_.find( handle );
     if( locations_iter == vehicle_footprint_locations_.end() ) {
         return;
     }
@@ -1292,7 +1293,7 @@ auto mapbuffer::unindex_vehicle_footprint_unlocked( const vehicle *veh ) -> void
         }
 
         std::erase_if( footprint_iter->second, [&]( const vehicle_footprint_entry & entry ) {
-            return entry.veh == veh;
+            return entry.veh == handle;
         } );
         if( footprint_iter->second.empty() ) {
             vehicle_footprint_by_location_.erase( footprint_iter );
@@ -1304,12 +1305,12 @@ auto mapbuffer::unindex_vehicle_footprint_unlocked( const vehicle *veh ) -> void
 
 auto mapbuffer::index_vehicle_footprint_unlocked( vehicle &veh ) -> void
 {
-    unindex_vehicle_footprint_unlocked( &veh );
+    unindex_vehicle_footprint_unlocked( veh.handle() );
     if( veh.part_count() <= 0 ) {
         return;
     }
 
-    auto &locations = vehicle_footprint_locations_[&veh];
+    auto &locations = vehicle_footprint_locations_[veh.handle()];
     for( const auto &vpr : veh.get_all_parts() ) {
         if( vpr.part().removed ) {
             continue;
@@ -1317,7 +1318,7 @@ auto mapbuffer::index_vehicle_footprint_unlocked( vehicle &veh ) -> void
 
         const auto pos = veh.abs_part_location( vpr.part() );
         vehicle_footprint_by_location_[pos].push_back( vehicle_footprint_entry {
-            .veh = &veh,
+            .veh = veh.handle(),
             .part_index = vpr.part_index(),
         } );
         locations.push_back( pos );
@@ -1334,8 +1335,11 @@ auto mapbuffer::indexed_vehicle_part_at_unlocked(
 
     auto &entries = footprint_iter->second;
     std::erase_if( entries, [&]( const vehicle_footprint_entry & entry ) {
-        const auto *const veh = entry.veh;
-        if( veh == nullptr || !loaded_vehicles_.contains( const_cast<vehicle *>( veh ) ) ) {
+        if( !loaded_vehicles_.contains( entry.veh ) ) {
+            return true;
+        }
+        vehicle *const veh = resolve_vehicle( entry.veh );
+        if( veh == nullptr ) {
             return true;
         }
         if( entry.part_index >= static_cast<std::size_t>( veh->part_count() ) ) {
@@ -1354,7 +1358,8 @@ auto mapbuffer::indexed_vehicle_part_at_unlocked(
     auto *selected = static_cast<vehicle_footprint_entry *>( nullptr );
     for( auto &entry : entries ) {
         const auto part_index = static_cast<int>( entry.part_index );
-        if( selected == nullptr || !entry.veh->part_info( part_index ).has_flag( VPFLAG_NOCOLLIDE ) ) {
+        vehicle *const veh = resolve_vehicle( entry.veh );
+        if( selected == nullptr || !veh->part_info( part_index ).has_flag( VPFLAG_NOCOLLIDE ) ) {
             selected = &entry;
         }
     }
@@ -1362,7 +1367,11 @@ auto mapbuffer::indexed_vehicle_part_at_unlocked(
     if( selected == nullptr ) {
         return optional_vpart_position( std::nullopt );
     }
-    return optional_vpart_position( vpart_position( *selected->veh, selected->part_index ) );
+    vehicle *const selected_veh = resolve_vehicle( selected->veh );
+    if( selected_veh == nullptr ) {
+        return optional_vpart_position( std::nullopt );
+    }
+    return optional_vpart_position( vpart_position( *selected_veh, selected->part_index ) );
 }
 
 mapbuffer::mapbuffer() = default;
@@ -2104,7 +2113,7 @@ auto mapbuffer::remove_active_npc( const npc &guy ) -> void
 auto mapbuffer::has_loaded_vehicle( const vehicle *veh ) const -> bool
 {
     auto lk = std::lock_guard<std::recursive_mutex>( submaps_mutex_ );
-    return loaded_vehicles_.contains( const_cast<vehicle *>( veh ) );
+    return veh != nullptr && loaded_vehicles_.contains( veh->handle() );
 }
 
 auto mapbuffer::register_vehicle( vehicle *veh ) -> void
@@ -2115,15 +2124,18 @@ auto mapbuffer::register_vehicle( vehicle *veh ) -> void
 
     auto lk = std::lock_guard<std::recursive_mutex>( submaps_mutex_ );
     veh->set_dimension( dimension_id_ );
-    loaded_vehicles_.insert( veh );
+    loaded_vehicles_.insert( veh->handle() );
     index_vehicle_footprint_unlocked( *veh );
 }
 
 auto mapbuffer::unregister_vehicle( vehicle *veh ) -> void
 {
+    if( veh == nullptr ) {
+        return;
+    }
     std::lock_guard<std::recursive_mutex> lk( submaps_mutex_ );
-    unindex_vehicle_footprint_unlocked( veh );
-    loaded_vehicles_.erase( veh );
+    unindex_vehicle_footprint_unlocked( veh->handle() );
+    loaded_vehicles_.erase( veh->handle() );
 }
 
 auto mapbuffer::refresh_vehicle_footprint( vehicle *veh ) -> void
@@ -2133,7 +2145,7 @@ auto mapbuffer::refresh_vehicle_footprint( vehicle *veh ) -> void
     }
 
     std::lock_guard<std::recursive_mutex> lk( submaps_mutex_ );
-    if( !loaded_vehicles_.contains( veh ) ) {
+    if( !loaded_vehicles_.contains( veh->handle() ) ) {
         return;
     }
     index_vehicle_footprint_unlocked( *veh );

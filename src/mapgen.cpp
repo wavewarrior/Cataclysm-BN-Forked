@@ -6054,11 +6054,7 @@ vehicle *map::add_vehicle( const std::variant<vgroup_id, vproto_id> &type_,
         place_on_submap->is_uniform = false;
         invalidate_max_populated_zlev( placed_vehicle_sm.z() );
 
-        auto& ch = get_cache( placed_vehicle_sm.z() );
-        ch.vehicle_list.insert( placed_vehicle );
-        add_vehicle_to_cache( placed_vehicle );
-        get_mapbuffer().register_vehicle( placed_vehicle );
-        if( phys_world ) { phys_world->on_vehicle_added( *placed_vehicle ); }
+        register_vehicle( *placed_vehicle );
 
         // debugmsg ("grid[%d]->vehicles.size=%d veh.parts.size=%d", nonant,
         // grid[nonant]->vehicles.size(),veh.parts.size());

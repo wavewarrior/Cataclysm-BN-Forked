@@ -479,7 +479,7 @@ auto vehicle::collision( const vehicle_collision_options &options ) -> bool
         }
         if( info.has_flag( VPFLAG_NOCOLLIDE ) ) {
             if( coll.type == veh_coll_veh_nocollide ) {
-                g->m.add_vehicle_to_cache( static_cast<vehicle *>( coll.target ) );
+                g->m.vehicle_footprint_changed( *static_cast<vehicle *>( coll.target ) );
             }
             continue;
         }

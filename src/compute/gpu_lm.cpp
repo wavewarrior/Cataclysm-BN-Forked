@@ -2188,11 +2188,12 @@ auto find_vehicle_for_optics_origin(map const& m, tripoint_bub_ms const& origin)
     if (vp) { return &vp->vehicle(); }
 
     auto const& origin_cache = m.get_cache_ref(origin.z());
-    auto const it = std::ranges::find_if(origin_cache.vehicle_list, [&](vehicle* const candidate) {
-        if (candidate == nullptr) { return false; }
-        return !candidate->get_parts_at(origin, std::string{}, part_status_flag::any).empty();
+    auto const it = std::ranges::find_if(origin_cache.vehicle_list, [&](vehicle_handle const candidate) {
+        vehicle* const veh = resolve_vehicle(candidate);
+        if (veh == nullptr) { return false; }
+        return !veh->get_parts_at(origin, std::string{}, part_status_flag::any).empty();
     });
-    return it != origin_cache.vehicle_list.end() ? *it : nullptr;
+    return it != origin_cache.vehicle_list.end() ? resolve_vehicle(*it) : nullptr;
 }
 
 auto collect_vehicle_optics(map const& m, tripoint_bub_ms const& origin, int const target_z)

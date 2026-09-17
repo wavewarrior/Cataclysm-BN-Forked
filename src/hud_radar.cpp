@@ -376,7 +376,8 @@ auto hud_radar::draw( const avatar &u, const hud_runic::layout &l ) -> void
     // gate is `alpha > 0`, NOT `c != none`: `classify` legitimately returns `none`
     // for a visible tile that is open air, and a gantry over a shaft is exactly
     // the case where the vehicle is the only thing worth drawing there.
-    for( vehicle *v : cache.vehicle_list ) {
+    for( const vehicle_handle handle : cache.vehicle_list ) {
+        vehicle *const v = resolve_vehicle( handle );
         if( v == nullptr ) {
             continue;
         }

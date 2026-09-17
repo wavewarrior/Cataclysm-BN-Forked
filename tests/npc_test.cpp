@@ -393,7 +393,6 @@ TEST_CASE("npc-movement") {
                 REQUIRE(veh != nullptr);
                 veh->install_part(tripoint_mnt_veh::zero(), vpart_frame_vertical);
                 veh->install_part(tripoint_mnt_veh::zero(), vpart_seat);
-                here.add_vehicle_to_cache(veh);
             }
             // spawn npcs
             if (type == 'A' || type == 'R' || type == 'W' || type == 'M' || type == 'B'

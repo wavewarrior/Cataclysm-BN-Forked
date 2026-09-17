@@ -192,9 +192,20 @@ void map::reset_vehicle_cache() {
     const int zmax = OVERMAP_HEIGHT;
     for (int zlev = zmin; zlev <= zmax; zlev++) {
         auto& ch = get_cache(zlev);
-        for (const auto& elem : ch.vehicle_list) {
+        for( auto it = ch.vehicle_list.begin(); it != ch.vehicle_list.end(); ) {
+            const vehicle_handle handle = *it;
+            vehicle *const elem = resolve_vehicle( handle );
+            if( elem == nullptr ) {
+                // Stale handle: the vehicle behind it is already gone. Drop it here
+                // rather than dereferencing — that dereference was the dangling-
+                // vehicle* crash chain this handle indirection exists to prevent.
+                it = ch.vehicle_list.erase( it );
+                ch.zone_vehicles.erase( handle );
+                continue;
+            }
             elem->adjust_zlevel(0, tripoint_rel_ms::zero());
             add_vehicle_to_cache(elem);
+            ++it;
         }
     }
 }
@@ -205,6 +216,7 @@ void map::add_vehicle_to_cache(vehicle* veh) {
         return;
     }
 
+    const vehicle_handle handle = veh->handle();
     // Get parts
     for (const vpart_reference& vpr : veh->get_all_parts()) {
         if (vpr.part().removed) { continue; }
@@ -218,7 +230,7 @@ void map::add_vehicle_to_cache(vehicle* veh) {
             const auto len = veh->part(part).info().ladder_length();
             const auto min_z = std::max(p.z() - len, -OVERMAP_DEPTH);
             for (const auto z : std::views::iota(min_z, p.z() + 1)) {
-                cached_veh_rope[tripoint_bub_ms(p.xy(), z)] = std::make_pair(veh, static_cast<int>(part));
+                cached_veh_rope[tripoint_bub_ms(p.xy(), z)] = std::make_pair(handle, static_cast<int>(part));
             }
         }
         level_cache& ch = get_cache(p.z());
@@ -227,8 +239,8 @@ void map::add_vehicle_to_cache(vehicle* veh) {
 
         if (!ch.veh_cached_parts.contains(p)
             || !veh->part_info(vpr.part_index()).has_flag(VPFLAG_NOCOLLIDE)
-            || ch.veh_cached_parts.at(p).first == veh) {
-            ch.veh_cached_parts[p] = std::make_pair(veh, static_cast<int>(vpr.part_index()));
+            || ch.veh_cached_parts.at(p).first == handle) {
+            ch.veh_cached_parts[p] = std::make_pair(handle, static_cast<int>(vpr.part_index()));
         }
         if (inbounds(p)) { ch.veh_exists_at[ch.idx(p.x(), p.y())] = true; }
     }
@@ -242,10 +254,11 @@ void map::clear_vehicle_point_from_cache(vehicle* veh, const tripoint_bub_ms& pt
         return;
     }
 
+    const vehicle_handle handle = veh->handle();
     level_cache& ch = get_cache(pt.z());
     auto it = ch.veh_cached_parts.find(pt);
     set_vehicle_cache_dirty(pt.z());
-    if (it != ch.veh_cached_parts.end() && it->second.first == veh) {
+    if (it != ch.veh_cached_parts.end() && it->second.first == handle) {
         if (inbounds(pt)) { ch.veh_exists_at[ch.idx(pt.x(), pt.y())] = false; }
         ch.veh_cached_parts.erase(it);
         // The rope-ladder cache stores the whole hanging column (see add_vehicle_to_cache),
@@ -256,10 +269,10 @@ void map::clear_vehicle_point_from_cache(vehicle* veh, const tripoint_bub_ms& pt
         // vehicle's lower tiles, and only this vehicle's entries are removed. Index-free on
         // purpose: part indices may be stale here (this can run mid-part_removal_cleanup).
         if (const auto top = cached_veh_rope.find(pt);
-            top != cached_veh_rope.end() && top->second.first == veh) {
+            top != cached_veh_rope.end() && top->second.first == handle) {
             for (const auto z : std::views::iota(-OVERMAP_DEPTH, pt.z() + 1)) {
                 const auto col_it = cached_veh_rope.find(tripoint_bub_ms(pt.xy(), z));
-                if (col_it != cached_veh_rope.end() && col_it->second.first == veh) {
+                if (col_it != cached_veh_rope.end() && col_it->second.first == handle) {
                     cached_veh_rope.erase(col_it);
                 }
             }
@@ -288,6 +301,13 @@ void map::clear_vehicle_list(const int zlev) {
     auto& ch = get_cache(zlev);
     ch.vehicle_list.clear();
     ch.zone_vehicles.clear();
+    // Strengthened so the four vehicle indices (vehicle_list/zone_vehicles here,
+    // veh_cached_parts/veh_exists_at, and the rope column cache) can no longer
+    // disagree about which vehicles are still resident at this z-level.
+    ch.veh_cached_parts.clear();
+    std::ranges::fill( ch.veh_exists_at, false );
+    ch.veh_in_active_range = false;
+    std::erase_if( cached_veh_rope, [zlev]( const auto &kv ) { return kv.first.z() == zlev; } );
     set_vehicle_cache_dirty(zlev);
 
     last_full_vehicle_list_dirty = true;
@@ -298,12 +318,102 @@ void map::update_vehicle_list(const submap* const to, const int zlev) {
     // Update vehicle data
     level_cache& ch = get_cache(zlev);
     for (const auto& elem : to->vehicles) {
-        ch.vehicle_list.insert(elem.get());
+        ch.vehicle_list.insert(elem->handle());
         set_vehicle_cache_dirty(zlev);
-        if (!elem->loot_zones.empty()) { ch.zone_vehicles.insert(elem.get()); }
+        if (!elem->loot_zones.empty()) { ch.zone_vehicles.insert(elem->handle()); }
     }
 
     last_full_vehicle_list_dirty = true;
+}
+
+void map::register_vehicle( vehicle &veh )
+{
+    const int z = veh.abs_sm_pos.z();
+    if( z >= -OVERMAP_DEPTH && z <= OVERMAP_HEIGHT ) {
+        level_cache &ch = get_cache( z );
+        ch.vehicle_list.insert( veh.handle() );
+        set_vehicle_cache_dirty( z );
+        if( !veh.loot_zones.empty() ) {
+            ch.zone_vehicles.insert( veh.handle() );
+        }
+    }
+    last_full_vehicle_list_dirty = true;
+    add_vehicle_to_cache( &veh );
+    get_mapbuffer().register_vehicle( &veh );
+    if( auto *pw = get_physics_world(); pw ) {
+        pw->on_vehicle_added( veh );
+    }
+}
+
+void map::vehicle_footprint_changed( vehicle &veh )
+{
+    add_vehicle_to_cache( &veh );
+    get_mapbuffer().refresh_vehicle_footprint( &veh );
+    if( auto *pw = get_physics_world(); pw ) {
+        pw->on_vehicle_parts_changed( veh );
+    }
+}
+
+void map::unregister_vehicle( vehicle &veh )
+{
+    if( auto *pw = get_physics_world(); pw ) {
+        pw->on_vehicle_removed( &veh );
+    }
+
+    // Unboard all passengers before detaching
+    for( auto const &part : veh.get_avail_parts( VPFLAG_BOARDABLE ) ) {
+        player *passenger = part.get_passenger();
+        if( passenger ) { unboard_vehicle( part, passenger ); }
+    }
+    veh.invalidate_towing( true );
+
+    struct detached_vehicle_footprint {
+        tripoint_abs_sm min;
+        tripoint_abs_sm max;
+    };
+    auto footprints = std::array<std::optional<detached_vehicle_footprint>, OVERMAP_LAYERS> {};
+
+    const vehicle_handle handle = veh.handle();
+    // Erase at the vehicle's own anchor z unconditionally: a zero-part vehicle (the
+    // loadn() "bugged no-part vehicle" purge) has no parts for the loop below to walk,
+    // so without this it would never leave vehicle_list/zone_vehicles at all.
+    if( const int anchor_z = veh.abs_sm_pos.z(); anchor_z >= -OVERMAP_DEPTH && anchor_z <= OVERMAP_HEIGHT ) {
+        level_cache &anchor_ch = get_cache( anchor_z );
+        anchor_ch.vehicle_list.erase( handle );
+        anchor_ch.zone_vehicles.erase( handle );
+    }
+    for( const vpart_reference &vp : veh.get_all_parts() ) {
+        if( vp.part().removed ) { continue; }
+        const tripoint_abs_ms abs_part = veh.abs_part_location( vp.part() );
+        clear_vehicle_point_from_cache( &veh, abs_to_map_local( *this, abs_part ) );
+
+        const auto part_sm = project_to<coords::sm>( abs_part );
+        if( !inbounds_z( part_sm.z() ) ) { continue; }
+        auto &footprint = footprints[part_sm.z() + OVERMAP_DEPTH];
+        if( !footprint ) {
+            footprint = detached_vehicle_footprint{ .min = part_sm, .max = part_sm };
+        } else {
+            footprint->min.x() = std::min( footprint->min.x(), part_sm.x() );
+            footprint->min.y() = std::min( footprint->min.y(), part_sm.y() );
+            footprint->max.x() = std::max( footprint->max.x(), part_sm.x() );
+            footprint->max.y() = std::max( footprint->max.y(), part_sm.y() );
+        }
+        level_cache &ch = get_cache( part_sm.z() );
+        ch.vehicle_list.erase( handle );
+        ch.zone_vehicles.erase( handle );
+    }
+
+    get_mapbuffer().unregister_vehicle( &veh );
+    if( veh.tracking_on ) {
+        get_overmapbuffer( bound_dimension_ ).remove_vehicle( &veh );
+    }
+    dirty_vehicle_list.erase( handle );
+    last_full_vehicle_list_dirty = true;
+
+    for( const auto &footprint : footprints ) {
+        if( !footprint ) { continue; }
+        on_vehicle_moved( abs_to_bub( footprint->min ), abs_to_bub( footprint->max ), footprint->min.z() );
+    }
 }
 
 std::unique_ptr<vehicle> map::detach_vehicle(vehicle* veh) {
@@ -311,8 +421,6 @@ std::unique_ptr<vehicle> map::detach_vehicle(vehicle* veh) {
         debugmsg("map::detach_vehicle was passed nullptr");
         return std::unique_ptr<vehicle>();
     }
-
-    if (auto* pw = get_physics_world(); pw) { pw->on_vehicle_removed(veh); }
 
     int z = veh->abs_sm_pos.z();
     if (z < -OVERMAP_DEPTH || z > OVERMAP_HEIGHT) {
@@ -322,41 +430,14 @@ std::unique_ptr<vehicle> map::detach_vehicle(vehicle* veh) {
         // Try to fix by moving the vehicle here
         z = veh->abs_sm_pos.z() = z > OVERMAP_HEIGHT ? OVERMAP_HEIGHT : -OVERMAP_DEPTH;
     }
+    (void)z;
 
-    struct detached_vehicle_footprint {
-        tripoint_abs_sm min;
-        tripoint_abs_sm max;
-    };
+    // Full removal from every world index happens here, unconditionally, before we
+    // even try to locate the owning submap — so both the "submap not found" and the
+    // "vehicle not found in submap" branches below get complete cleanup instead of
+    // the partial cleanup either used to perform.
+    unregister_vehicle( *veh );
 
-    auto footprints = std::array<std::optional<detached_vehicle_footprint>, OVERMAP_LAYERS> {};
-    for (const vpart_reference& vp : veh->get_all_parts()) {
-        if (vp.part().removed) { continue; }
-        const auto part_sm = project_to<coords::sm>(veh->abs_part_location(vp.part()));
-        if (!inbounds_z(part_sm.z())) { continue; }
-        auto& footprint = footprints[part_sm.z() + OVERMAP_DEPTH];
-        if (!footprint) {
-            footprint = detached_vehicle_footprint{.min = part_sm, .max = part_sm};
-            continue;
-        }
-        footprint->min.x() = std::min(footprint->min.x(), part_sm.x());
-        footprint->min.y() = std::min(footprint->min.y(), part_sm.y());
-        footprint->max.x() = std::max(footprint->max.x(), part_sm.x());
-        footprint->max.y() = std::max(footprint->max.y(), part_sm.y());
-    }
-
-    const auto mark_detached_vehicle_footprint_dirty = [&]() {
-        for (const auto& footprint : footprints) {
-            if (!footprint) { continue; }
-            on_vehicle_moved(abs_to_bub(footprint->min), abs_to_bub(footprint->max), footprint->min.z());
-        }
-    };
-
-    // Unboard all passengers before detaching
-    for (auto const& part : veh->get_avail_parts(VPFLAG_BOARDABLE)) {
-        player* passenger = part.get_passenger();
-        if (passenger) { unboard_vehicle(part, passenger); }
-    }
-    veh->invalidate_towing(true);
     // During mapgen, submaps are held in the local tinymap grid but have not yet been
     // transferred to MAPBUFFER (that happens at the end of generate()).  Fall back to
     // the grid lookup so wreck-merging works correctly during generation.
@@ -368,23 +449,12 @@ std::unique_ptr<vehicle> map::detach_vehicle(vehicle* veh) {
     if (current_submap == nullptr) {
         debugmsg("detach_vehicle can't find submap!  name=%s, submap:%d,%d,%d", veh->name,
                  veh->abs_sm_pos.x(), veh->abs_sm_pos.y(), veh->abs_sm_pos.z());
-        get_mapbuffer().unregister_vehicle( veh );
-        dirty_vehicle_list.erase(veh);
-        mark_detached_vehicle_footprint_dirty();
         return std::unique_ptr<vehicle>();
     }
-    level_cache& ch = get_cache(z);
     for (size_t i = 0; i < current_submap->vehicles.size(); i++) {
         if (current_submap->vehicles[i].get() == veh) {
-            ch.vehicle_list.erase(veh);
-            ch.zone_vehicles.erase(veh);
-            reset_vehicle_cache();
             std::unique_ptr<vehicle> result = std::move(current_submap->vehicles[i]);
             current_submap->vehicles.erase(current_submap->vehicles.begin() + i);
-            get_mapbuffer().unregister_vehicle( veh );
-            if (veh->tracking_on) { get_overmapbuffer(bound_dimension_).remove_vehicle(veh); }
-            dirty_vehicle_list.erase(veh);
-            mark_detached_vehicle_footprint_dirty();
             veh->detach();
             veh->refresh_position();
             return result;
@@ -504,7 +574,9 @@ void map::vehmove() {
         const int zmax = OVERMAP_HEIGHT;
         const bool outer_stride_hit = calendar::stride_due(vehicle_outer_stride);
         for (int z = zmin; z <= zmax; ++z) {
-            for (vehicle* veh : get_cache(z).vehicle_list) {
+            for (const vehicle_handle veh_handle : get_cache(z).vehicle_list) {
+                vehicle *const veh = resolve_vehicle(veh_handle);
+                if (veh == nullptr) { continue; }
                 const bool on_player_z = z == get_avatar().abs_pos().z();
                 const bool parked_off_z =
                     !veh->is_moving() && !veh->engine_on && !veh->is_falling && !on_player_z;
@@ -838,10 +910,14 @@ void map::vehmove() {
     {
         ZoneScopedN("veh_cleanup");
         auto temp = dirty_vehicle_list;
-        for (const auto& elem : temp) {
-            auto same_ptr = [elem](const struct wrapped_vehicle& tgt) { return elem == tgt.v; };
-            if (std::ranges::find_if(vehicle_list, same_ptr) != vehicle_list.end()) {
-                elem->part_removal_cleanup();
+        for (const vehicle_handle elem : temp) {
+            auto same_handle = [elem](const struct wrapped_vehicle& tgt) {
+                return tgt.v != nullptr && elem == tgt.v->handle();
+            };
+            if (std::ranges::find_if(vehicle_list, same_handle) != vehicle_list.end()) {
+                if (vehicle *const veh = resolve_vehicle(elem); veh != nullptr) {
+                    veh->part_removal_cleanup();
+                }
             }
         }
         dirty_vehicle_list.clear();
@@ -1401,8 +1477,9 @@ auto map::vehicle_vehicle_collision(
 }
 
 bool map::check_vehicle_zones(const int zlev) {
-    for (auto veh : get_cache(zlev).zone_vehicles) {
-        if (veh->zones_dirty) { return true; }
+    for (const vehicle_handle handle : get_cache(zlev).zone_vehicles) {
+        const vehicle *const veh = resolve_vehicle(handle);
+        if (veh != nullptr && veh->zones_dirty) { return true; }
     }
     return false;
 }
@@ -1410,7 +1487,9 @@ bool map::check_vehicle_zones(const int zlev) {
 std::vector<zone_data*> map::get_vehicle_zones(const int zlev) {
     std::vector<zone_data*> veh_zones;
     bool rebuild = false;
-    for (auto veh : get_cache(zlev).zone_vehicles) {
+    for (const vehicle_handle handle : get_cache(zlev).zone_vehicles) {
+        vehicle *const veh = resolve_vehicle(handle);
+        if (veh == nullptr) { continue; }
         if (veh->refresh_zones()) { rebuild = true; }
         for (auto& zone : veh->loot_zones) { veh_zones.emplace_back(&zone.second); }
     }
@@ -1420,7 +1499,7 @@ std::vector<zone_data*> map::get_vehicle_zones(const int zlev) {
 
 void map::register_vehicle_zone(vehicle* veh, const int zlev) {
     auto& ch = get_cache(zlev);
-    ch.zone_vehicles.insert(veh);
+    ch.zone_vehicles.insert(veh->handle());
 }
 
 bool map::deregister_vehicle_zone(zone_data& zone) {
@@ -1435,7 +1514,7 @@ bool map::deregister_vehicle_zone(zone_data& zone) {
         if (it != bounds.second) {
             vp->vehicle().loot_zones.erase(it);
             if (vp->vehicle().loot_zones.empty()) {
-                get_cache(vp->vehicle().abs_sm_pos.z()).zone_vehicles.erase(&vp->vehicle());
+                get_cache(vp->vehicle().abs_sm_pos.z()).zone_vehicles.erase(vp->vehicle().handle());
             }
             return true;
         }
@@ -1496,8 +1575,20 @@ const vehicle* map::veh_at_internal(const tripoint_bub_ms& p, int& part_num) con
 
     const auto it = ch.veh_cached_parts.find(p);
     if (it != ch.veh_cached_parts.end()) {
-        part_num = it->second.second;
-        return it->second.first;
+        if (vehicle *const veh = resolve_vehicle(it->second.first); veh != nullptr) {
+            part_num = it->second.second;
+            return veh;
+        }
+        // Stale handle: the vehicle behind it was freed without this exact tile
+        // being cleared (e.g. a mapbuffer eviction outrunning cache cleanup).
+        // Self-heal rather than dereference a freed pointer — an expected,
+        // handled state now, not a bug to report.
+        level_cache& mutable_ch = const_cast<level_cache&>(ch);
+        mutable_ch.veh_exists_at[mutable_ch.idx(p.x(), p.y())] = false;
+        mutable_ch.veh_cached_parts.erase(p);
+        const_cast<map*>(this)->set_vehicle_cache_dirty(p.z());
+        part_num = -1;
+        return nullptr;
     }
 
     debugmsg("vehicle part cache indicated vehicle not found: %d %d %d", p.x(), p.y(), p.z());
@@ -1807,13 +1898,8 @@ bool map::displace_vehicle(vehicle& veh, const tripoint_rel_ms& dp) {
         // that z-level
         if (src.z() != dest.z()) {
             level_cache& ch2 = get_cache(src.z());
-            for (const vehicle* elem : ch2.vehicle_list) {
-                if (elem == &veh) {
-                    ch2.vehicle_list.erase(&veh);
-                    ch2.zone_vehicles.erase(&veh);
-                    break;
-                }
-            }
+            ch2.vehicle_list.erase(veh.handle());
+            ch2.zone_vehicles.erase(veh.handle());
         }
         veh.check_is_heli_landed();
     }

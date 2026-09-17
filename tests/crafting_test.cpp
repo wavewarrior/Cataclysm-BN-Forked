@@ -1105,7 +1105,6 @@ auto make_vehicle_craft_fixture(const vehicle_craft_fixture_options& opts)
         veh->part(freezer_part).enabled = true;
     }
 
-    here.add_vehicle_to_cache(veh);
     here.build_map_cache(vehicle_pos.z(), true);
     REQUIRE(here.veh_at(vehicle_pos));
 

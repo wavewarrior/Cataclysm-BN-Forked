@@ -135,7 +135,6 @@ TEST_CASE("vehicle_collision_hits_occupant_with_stale_in_vehicle_flag", "[vehicl
     REQUIRE(veh->install_part(tripoint_mnt_veh(1, 0, 0), vpart_id("frame_vertical")) >= 0);
     const int seat_b = veh->install_part(tripoint_mnt_veh(1, 0, 0), vpart_id("seat"));
     REQUIRE(seat_b >= 0);
-    here.add_vehicle_to_cache(veh);
 
     // Properly board an NPC on seat A.
     const auto seat_a_pos = veh->bub_part_location(seat_a);

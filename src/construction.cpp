@@ -2033,9 +2033,8 @@ void construct::done_vehicle( const tripoint_bub_ms &p )
         veh->install_part( tripoint_mnt_veh( tripoint_zero ), vpart_from_item( u.lastconsumed ) );
     }
 
-    // Update the vehicle cache immediately,
-    // or the vehicle will be invisible for the first couple of turns.
-    m.add_vehicle_to_cache( veh );
+    // Vehicle is already visible: map::add_vehicle() registered it and
+    // vehicle::install_part() re-derived its footprint above.
 }
 
 void construct::done_deconstruct( const tripoint_bub_ms &p )
