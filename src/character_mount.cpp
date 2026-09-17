@@ -391,6 +391,9 @@ void Character::mount_creature( monster& z )
     z.mounted_player_id = getID();
     if( z.has_effect( effect_harnessed ) ) {
         z.remove_effect( effect_harnessed );
+        if( const auto vp = g->m.veh_at( pnt ) ) {
+            vp->vehicle().clear_pet_ref( vp->part_index() );
+        }
         add_msg_if_player( m_info, _( "You remove the %s's harness." ), z.get_name() );
     }
     mounted_creature = mons;

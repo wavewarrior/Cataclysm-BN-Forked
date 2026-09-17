@@ -40,6 +40,7 @@
 #include "ui.h"
 #include "units.h"
 #include "value_ptr.h"
+#include "vehicle.h"
 
 
 static const quality_id qual_shear( "SHEAR" );
@@ -1294,6 +1295,9 @@ bool monexamine::add_armor( monster &z )
 void monexamine::remove_harness( monster &z )
 {
     z.remove_effect( effect_harnessed );
+    if( const auto vp = g->m.veh_at( z.bub_pos() ) ) {
+        vp->vehicle().clear_pet_ref( vp->part_index() );
+    }
     add_msg( m_info, _( "You unhitch %s from the vehicle." ), z.get_name() );
 }
 

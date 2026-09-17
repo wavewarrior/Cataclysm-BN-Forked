@@ -1828,6 +1828,7 @@ void vehicle::use_harness( int part, const tripoint_bub_ms& pos )
 
     m.add_effect( effect_harnessed, 1_turns, bodypart_str_id::NULL_ID() );
     m.setpos( pos );
+    parts[part].animal_ref = g->shared_from( m );
     //~ %1$s: monster name, %2$s: vehicle name
     add_msg( m_info, _( "You harness your %1$s to %2$s." ), m.get_name(), disp_name() );
     if( m.has_effect( effect_tied ) ) {

@@ -1734,6 +1734,7 @@ void monster::execute_action( const monster_action_t &action )
             return;
         } else if( !harness_part && has_effect( effect_harnessed ) ) {
             remove_effect( effect_harnessed );
+            if( vp2 ) { vp2->vehicle().clear_pet_ref( vp2->part_index() ); }
         }
     }
 

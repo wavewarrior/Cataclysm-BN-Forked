@@ -895,6 +895,9 @@ class vehicle
         player *get_passenger( int p ) const;
         // get monster on a boardable part at p
         monster *get_pet( int p ) const;
+        /// Drop the cached animal_ref for the boardable part at mount p, when its
+        /// harness/mount is released. Safe to call even if nothing was cached.
+        void clear_pet_ref( int p );
 
         bool enclosed_at( const tripoint_bub_ms& pos ); // not const because it calls refresh_insides
         // Returns the location of the vehicle in global map square coordinates.

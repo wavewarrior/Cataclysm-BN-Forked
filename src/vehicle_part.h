@@ -14,11 +14,13 @@
 #include "type_id.h"
 #include "visitable.h"
 #include "location_ptr.h"
+#include "memory_fast.h"
 
 class vehicle;
 class item_location;
 class vehicle_cursor;
 class npc;
+class monster;
 
 /**
  * Structure, describing vehicle part (i.e., wheel, seat)
@@ -270,6 +272,12 @@ struct vehicle_part {
 
         /** ID of player passenger */
         character_id passenger_id;
+
+        /** Boarded/harnessed animal, when this part currently has one. Not
+         *  serialized; rebuilt at load and revalidated against position on
+         *  every read (see vehicle::get_pet), so a missed clear here is
+         *  harmless rather than a dangling reference. */
+        mutable weak_ptr_fast<monster> animal_ref;
 
         /** door is open */
         bool open = false;

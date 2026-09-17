@@ -1074,10 +1074,31 @@ player *vehicle::get_passenger( int p ) const
 monster *vehicle::get_pet( int p ) const
 {
     p = part_with_feature( p, VPFLAG_BOARDABLE, false );
-    if( p >= 0 ) {
-        return g->critter_at<monster>( bub_part_location( p ), true );
+    if( p < 0 ) {
+        return nullptr;
     }
-    return nullptr;
+    // Resolve via the cached weak-ref first (no map query): validated against
+    // the animal's own tracked position, not re-derived from the map, so this
+    // stays correct while occupant position writes are deferred (commit_occupants).
+    if( const auto mon = parts[p].animal_ref.lock(); mon && mon->bub_pos() == bub_part_location( p ) ) {
+        return mon.get();
+    }
+    // Cold path: nothing cached (not yet harnessed post-load) or the ref went
+    // stale (a clear site was missed) — fall back to the map and repair the
+    // cache so subsequent calls take the fast path above.
+    monster *const found = g->critter_at<monster>( bub_part_location( p ), true );
+    if( found != nullptr ) {
+        parts[p].animal_ref = g->shared_from( *found );
+    }
+    return found;
+}
+
+void vehicle::clear_pet_ref( int p )
+{
+    p = part_with_feature( p, VPFLAG_BOARDABLE, false );
+    if( p >= 0 ) {
+        parts[p].animal_ref = weak_ptr_fast<monster>();
+    }
 }
 
 tripoint_abs_ms vehicle::abs_ms_location() const
