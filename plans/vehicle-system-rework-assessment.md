@@ -808,3 +808,47 @@ model with its own untested tile-selection logic. Both are exactly the shape the
 the readback walk in `map::vehmove()` is the other. Ramps, which do not require exact per-tile
 diagonal alignment, are unaffected by this closure and remain in scope for D2 if attempted. Stages
 A-C and E still deliver the program's other four outcomes per the plan's own falsifier text.
+
+## Stage F: convergence report (2026-09-18)
+
+Re-derived every metric in `plans/vehicle-continuous-program.md`'s stage F table against the tree at
+HEAD (`4f70007046`, A-C landed, D closed dual, E deferred):
+
+|Metric|Expected|Actual|Met?|
+|---|---|---|---|
+|Position representations|three|Six: `abs_sm_pos`/`sm_ms_pos` (save anchor), `physics_pos`/`physics_angle` (physics transform), `render_offset_x/y` (render residual) — plus `of_turn`, `of_turn_carry`, `angular_velocity_rads` (legacy motion fields), never retired because D3 was gated on D1's completion|**No** — direct consequence of D's dual closure, not a new gap|
+|Raw-`vehicle *` index holders|one registry + handle-valued indices|`src/physics/physics_world.h` still holds two: `vehicle_bodies_` (the registry) and `authority_revoked_by_unload_` (kept because rails still self-opt-out — D1's own closure requires this). `src/coop_server.h` still holds a third, independent pair (`vehicle_id_map_`/`vehicle_id_map_rev_`, a pre-existing test-seam map never in this program's A4 scope). `map.h`/`mapbuffer.h` hold only transient `vehicle *` parameters, no persistent holders|**No** — one expected, two (rails) to three (+coop) present; both are explained, neither is new|
+|Authority opt-out sites|zero|One real opt-out: `src/physics/physics_world.cpp:131`, `v.box2d_position_authority = !v.can_use_rails();` (D1's closure). Every other hit is the declaration, the two `on_vehicle_*` writers, or a read-only test assertion|**No** — the one opt-out is D's documented, intentional disposition|
+|Occupant position writes per vehicle per turn|1|1, verified by `tests/vehicle_occupant_commit_test.cpp`'s Gate B case (a): 10 turns, `Creature::position_writes` increments by exactly 1 per occupant per turn|**Yes**|
+|`on_vehicle_moved` per vehicle per turn|1|1 for a moving vehicle, 0 for a parked one — verified by `tests/vehicle_test.cpp`'s `vehicle_move_notifications_per_turn` (12/12 assertions)|**Yes**|
+|Vehicle test population|≥ 104 + 7|111 (104 baseline + 2 from A5 + 4 from Gate B + 1 from C1 = 7 added this program)|**Yes**|
+
+**Full acceptance suite** (repo root, `cata_test-tiles` mtime newer than the build that produced it,
+scratch `--user-dir` per run):
+
+- All four `~[.]` shards: shards 0-2 pass with zero failures (143795 / 1607747 / 70247 assertions);
+  shard 3 has exactly 5 failures + 1 `[!shouldfail]` — `flung creatures stop at the reality bubble
+  edge`, `vision_wall_obstructs_light`, `vision_single_tile_skylight`, `vision_see_out_of_vehicle`,
+  `vision_see_into_vehicle` — the same 5 pre-existing failures documented before this program began.
+- Unsharded `~[coop]`: **1110 cases, 1103 passed, the same 5 failures, 1 skipped, 1 failed as
+  expected — zero SIGSEGV.** This is a materially better result than the pre-program baseline: prior
+  sessions recorded unsharded `~[coop]` reliably SIGSEGV-ing at case ~483
+  (`map::veh_at()`→`vehicle::part_with_feature()` on a dangling `vehicle*`, an open item this program
+  did not set out to fix directly). Stage A's handle-based registry — every raw `vehicle*` index
+  converted to a generation-checked `vehicle_handle`, resolved through one choke point instead of 13
+  unsynchronised holders — removed the dangling-pointer class of bug this crash belonged to. Not
+  proven root-caused (no bisection was run to confirm which specific stage-A commit fixed it, and the
+  crash was never reproduced on the post-A tree to compare against), but the crash is gone under the
+  same command that reliably produced it before.
+- `tests/vehicle_drag_test.cpp`: unchanged constants (file never touched this program); passes in
+  every run above.
+
+**Overall disposition:** A, B, C delivered and gated as specified. D closed dual (rails keep the
+tile-step mover; see the closure record above) — D2-D4 were never attempted since they build on D1's
+full completion. E deferred (Windows-only `visual_verify` tooling on this macOS session; large,
+independent GPU render-pipeline addition that does not block A-D per the plan's own text). The
+program's headline goals — the vehicle-cache SIGSEGV class of bug, the per-turn occupant-write and
+cache-invalidation cost, and continuous position/rotation as a *renderable* concept — are delivered
+for A-C; D and E remain open, each with a recorded, evidence-based reason rather than a silent gap.
+Whether to open continuous terrain collision (removing the tile walk entirely) is, per the plan's own
+text, a separate balance project with its own oracle problem and was correctly left unopened.
