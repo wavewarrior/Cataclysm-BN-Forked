@@ -10,9 +10,9 @@ with the pre-merge baseline, with every HEAD-only subsystem still functional.
 
 Repo: `/Users/nigel.fierens/dev-projects/Cataclysm-BN-Forked`. Working tree is clean at HEAD.
 
-## Current status (2026-09-16)
+## Current status (2026-09-17)
 
-Stages S0-S6 landed (commits through `8516257609b`). S6's own outcome section (below, under
+Stages S0-S11 landed (commits through `5ea9b1a7c9`). S6's own outcome section (below, under
 "### S6 outcome") has full detail; summary here for orientation:
 
 | Stage | Commit | Verdict |
@@ -20,6 +20,8 @@ Stages S0-S6 landed (commits through `8516257609b`). S6's own outcome section (b
 | S0-S4 | (see plan history / `plans/done/`) | landed, `~[coop]` clean vs. accepted baseline |
 | S5 | `7b0a970bbd` | landed — Absolute Backing API; `~[coop]` 1002/1007, 5 accepted failures |
 | S6 | `68e21ecee7` | landed — content stage; two real bugs found+fixed (gunmod weight/volume clamp scoping; `on_submap_unloaded` vehicle-cache gap); **one bug found, not fixed** — see open issue below |
+| S7-S10 | `288fd9aeb4` | landed — mechanical clang-format merge, S2 gate `~[.]` clean vs. accepted baseline (5 pre-existing failures), `[coop]` clean |
+| S11 | `5ea9b1a7c9` | landed — `origin/main` content-tail merge (`c3090ca8f0`, depth 96) plus 16 parallel decomposition-conflict batches. 3 of 4 `~[.]` shards (0, 1, 3) plus `[coop]` verified clean: same 5-test failure set already accepted as baseline (flung creatures stop at the reality bubble edge, vision_wall_obstructs_light, vision_single_tile_skylight, vision_see_out_of_vehicle, vision_see_into_vehicle) — zero new failures in the ~941 cases covered. Shard 2 (314 cases) hangs consistently, confirmed on a clean serial re-run — it stalls partway through the `martial arts` test case (test #23 in shard 2's declared order), a different symptom from the shard-3/`automatic_reloading_action` hang `plans/test-hang-investigation-handoff.md` documents (that one produces output for minutes before stalling; this one is a flat stall). Very likely the same class of pre-existing cross-test global-state pollution (`cbn-cross-test-state-leak` skill) now landing in a different shard slot because this merge changed total test counts/partitioning — not attributable to any S11 hunk (no code this merge touched is a plausible generic-hang cause), and out of scope to fix here. One real regression found and fixed during verification: landing upstream's itemgroup-postprocessor feature exposed a load-order bug (`mod.genome` set in `main.lua` but usable from `finalize`/`check_consistency`, which run before `main.lua`); fixed by moving the require+assignment into `preload.lua`. |
 
 **Open issue carried forward**: a SIGSEGV in unsharded single-process `~[coop]` runs, reproducible
 only after ~483 accumulated test cases, crash site `map::build_absorption_cache()` →
@@ -30,8 +32,9 @@ applied to `map::on_submap_unloaded()` (a genuine, independently-justified cache
 but did **not** resolve this specific crash. Full detail, evidence, and a research handoff are in
 `plans/vehicle-cache-sigsegv-handoff.md`.
 
-Remaining stages: S7 (mechanical clang-format `tests/`+`tools/` merge) through S12 (verification +
-round-trip save check) are not yet started.
+Remaining stages: S12 (Adopt main's strong `dimension_id`, D4) through verification + round-trip
+save check are not yet started.
+
 
 
 ## Decisions (settled — do not revisit)
