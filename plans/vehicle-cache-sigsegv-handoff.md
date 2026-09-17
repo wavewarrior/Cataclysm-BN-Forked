@@ -29,7 +29,8 @@ found to trigger it) simply moves the crash to whichever test now lands in that 
 (`bash_through_roof_can_destroy_multiple_times` reproduced identically). This is the signature of
 **resource accumulation**, not a pairwise state leak between two specific tests.
 
-Sharding avoids it entirely and should NOT be read as evidence of a fix:
+Sharding avoided it entirely at S10 and should NOT be read as evidence of a fix (**no longer true
+since S11 — sharding now reproduces it too, in shard 2; see "New evidence" below**):
 
 ```sh
 mkdir -p /tmp/s6shard{0,1,2,3}
@@ -205,5 +206,7 @@ separate analysis pass this session) concluded:
 3. Only after root-causing: decide whether the per-tile → per-turn cache-membership batching
    (architecture section above) is worth doing as a follow-on hardening pass, separate from this
    fix.
-4. Re-run the unsharded single-process `~[coop]` repro (not sharded — sharding hides this bug) as
-   the acceptance test. It must complete to zero SIGSEGV before this handoff doc can be closed.
+4. Re-run the unsharded single-process `~[coop]` repro (**no longer true since S11 that sharding
+   hides this bug** — shard 2 of `~[.]` now reproduces it directly and much faster, see "New
+   evidence"/Repro above — but the unsharded run remains the final acceptance test) as the
+   acceptance test. It must complete to zero SIGSEGV before this handoff doc can be closed.
