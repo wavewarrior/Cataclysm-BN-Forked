@@ -22,6 +22,7 @@ Stages S0-S11 landed (commits through `5ea9b1a7c9`). S6's own outcome section (b
 | S6 | `68e21ecee7` | landed — content stage; two real bugs found+fixed (gunmod weight/volume clamp scoping; `on_submap_unloaded` vehicle-cache gap); **one bug found, not fixed** — see open issue below |
 | S7-S10 | `288fd9aeb4` | landed — mechanical clang-format merge, S2 gate `~[.]` clean vs. accepted baseline (5 pre-existing failures), `[coop]` clean |
 | S11 | `5ea9b1a7c9` | landed with a **known regression** — `origin/main` content-tail merge (`c3090ca8f0`, depth 96) plus 16 parallel decomposition-conflict batches. 3 of 4 `~[.]` shards (0, 1, 3) plus `[coop]` verified clean: same 5-test failure set already accepted as baseline (`flung creatures stop at the reality bubble edge`, `vision_wall_obstructs_light`, `vision_single_tile_skylight`, `vision_see_out_of_vehicle`, `vision_see_into_vehicle`), confirmed by running all 5 in isolation too. **Shard 2 (314 cases) SIGSEGVs at case #22 (`tree_terrain_supports_climbing_destination_above`), reproduced on a clean serial re-run, in `map::build_absorption_cache(int)` via `wipe_map_terrain`/`clear_map`/`build_map_cache` — the exact frame chain already carried forward from S6 as an open, unfixed issue (`plans/vehicle-cache-sigsegv-handoff.md`). Checked against S10 in a scratch worktree at `288fd9aeb4`: S10's shard 2 (311 cases) passes clean (0 failures, no SIGSEGV) in 75s, and the same test passes standalone at S10. The same test ALSO passes standalone on the S11 binary — so this is not an outright broken path, it's S11 lowering the crash's accumulation threshold from ~483 test cases down to ~22 within a shard.** Root cause not yet isolated to a specific S11 hunk; needs a bisection pass before the next stage. One real regression found and fixed during this verification pass: landing upstream's itemgroup-postprocessor feature exposed a load-order bug (`mod.genome` set in `main.lua` but usable from `finalize`/`check_consistency`, which run before `main.lua`); fixed by moving the require+assignment into `preload.lua`. |
+| S12 | (no code change; docs only) | landed — D4 sweep (adopt main's strong `dimension_id` type) audited against HEAD and found **already fully complete**: `src/type_id.h:51-52` already has `using dimension_id = string_id<dimension>;`, `dimension_info.h`'s `id` field is already `dimension_id`-typed, and every measured sweep-surface symbol (`get_dimension()`, `current_dimension`, `get_bound_dimension`, `travel_to_dimension`, `bind_dimension`, `pocket_info_`, `is_out_of_bounds`, etc.) is already `dimension_id`-typed at every call site checked. The one remaining `std::string dimension_id` field (`coop_session.h:54`) is a deliberate cross-thread boundary (comment: "safe to read from background threads"), matching the documented `.str()`/`dimension_id(...)` string-boundary exception exactly — not a sweep miss. `savegame.cpp` and the JSON (de)serialization path already use `.str()` to write and `dimension_id(...)` to reconstruct, consistently. No code changes made. |
 
 **Open issue carried forward**: a SIGSEGV in unsharded single-process `~[coop]` runs, reproducible
 only after ~483 accumulated test cases, crash site `map::build_absorption_cache()` →
@@ -32,8 +33,12 @@ applied to `map::on_submap_unloaded()` (a genuine, independently-justified cache
 but did **not** resolve this specific crash. Full detail, evidence, and a research handoff are in
 `plans/vehicle-cache-sigsegv-handoff.md`.
 
-Remaining stages: S12 (Adopt main's strong `dimension_id`, D4) through verification + round-trip
-save check are not yet started.
+Remaining: (1) bisect and fix the S11-lowered vehicle-cache SIGSEGV threshold regression
+(`plans/vehicle-cache-sigsegv-handoff.md` — now has a 15s repro instead of requiring the full
+unsharded `~[coop]` suite), and (2) the save-load round-trip acceptance check — blocked, not done:
+GUI automation could not drive this build's SDL window via any tested input method (AX, keyboard,
+mouse — see the blocked todo item for the exact attempts). Needs either a working input-delivery
+method or a manual run by a human.
 
 
 
