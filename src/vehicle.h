@@ -11,6 +11,7 @@
 #include "point.h"
 #include "tileray.h"
 #include "type_id.h"
+#include "vehicle_handle.h"
 
 #include <array>
 #include <functional>
@@ -475,12 +476,20 @@ class vehicle
         vehicle();
         ~vehicle();
 
+        /// Stable identity for every index that used to store a raw vehicle*.
+        auto handle() const -> vehicle_handle {
+            return self_handle_;
+        }
+
     private:
         void copy_static_from( const vehicle & );
         vehicle( const vehicle & ) = delete;
         vehicle( vehicle && ) = delete;
         vehicle &operator=( vehicle && ) = delete;
         vehicle &operator=( const vehicle & ) = delete;
+
+        /// Set by attach() below at construction; cleared by detach() at destruction.
+        vehicle_handle self_handle_;
 
     public:
         /** Disable or enable refresh() ; used to speed up performance when creating a vehicle */

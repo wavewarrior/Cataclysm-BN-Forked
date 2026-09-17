@@ -462,6 +462,7 @@ vehicle::vehicle(
     }
     precalc_mounts( 0, pivot_rotation[0], pivot_anchor[0] );
     refresh();
+    self_handle_ = vehicle_registry::get().attach( *this );
 }
 
 vehicle::vehicle() : vehicle( vproto_id() )
@@ -470,7 +471,10 @@ vehicle::vehicle() : vehicle( vproto_id() )
     sm_ms_pos = point_sm_ms::zero();
 }
 
-vehicle::~vehicle() = default;
+vehicle::~vehicle()
+{
+    vehicle_registry::get().detach( self_handle_ );
+}
 
 bool vehicle::player_in_control( const Character &who ) const
 {
