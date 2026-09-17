@@ -2190,6 +2190,7 @@ void map::loadn( const tripoint_bub_sm& grid, const bool update_vehicles, const 
                 veh->abs_sm_pos = grid_abs_sub;
                 veh->set_dimension( bound_dimension_ );
                 veh->attach();
+                veh->rebuild_occupant_refs();
                 iter++;
             } else {
                 unregister_vehicle( *veh );

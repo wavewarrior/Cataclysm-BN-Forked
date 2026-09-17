@@ -898,6 +898,15 @@ class vehicle
         /// Drop the cached animal_ref for the boardable part at mount p, when its
         /// harness/mount is released. Safe to call even if nothing was cached.
         void clear_pet_ref( int p );
+        /// Publish every occupant's tile from its seat. Called once per vehicle
+        /// per turn from map::vehmove(); the only sanctioned writer of occupant
+        /// position (see Creature::check_position_write_owner()).
+        void commit_occupants();
+        /// Re-derive every occupant's animal_ref/boarded_vehicle/boarded_part
+        /// after load: none of the three are serialized. Character occupants
+        /// resolve by passenger_id; monsters (no persistent id) resolve by the
+        /// part's own tile, exactly once, mirroring get_pet()'s cold path.
+        void rebuild_occupant_refs();
 
         bool enclosed_at( const tripoint_bub_ms& pos ); // not const because it calls refresh_insides
         // Returns the location of the vehicle in global map square coordinates.
@@ -1815,6 +1824,10 @@ class vehicle
         /// applies physics_pos to the tile grid (Phase 10 Step 5).
         /// Set by on_vehicle_added(), cleared by on_vehicle_removed().
         bool box2d_position_authority = false;
+        /// True only inside commit_occupants(): the sole window in which a
+        /// boarded creature's own setpos() is a legitimate write rather than
+        /// one check_position_write_owner() should reject.
+        bool committing_occupants = false;
         int extra_drag = 0;
         // last time point the fluid was inside tanks was checked for processing
         time_point last_fluid_check = calendar::turn_zero;

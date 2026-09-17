@@ -1298,6 +1298,8 @@ void monexamine::remove_harness( monster &z )
     if( const auto vp = g->m.veh_at( z.bub_pos() ) ) {
         vp->vehicle().clear_pet_ref( vp->part_index() );
     }
+    z.boarded_vehicle = vehicle_handle();
+    z.boarded_part = -1;
     add_msg( m_info, _( "You unhitch %s from the vehicle." ), z.get_name() );
 }
 

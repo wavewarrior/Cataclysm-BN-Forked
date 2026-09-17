@@ -52,6 +52,15 @@ bool player_has_item_of_type(const std::string& type) {
 void clear_character(player& dummy, bool debug_storage) {
     character_funcs::normalize(dummy);
 
+    // A vehicle boarded by a previous TEST_CASE (or its now-orphaned handle)
+    // must not leak into this one: Creature::check_position_write_owner()
+    // would otherwise reject this test's own setpos() calls as writes
+    // outside a vehicle commit path that no longer exists.
+    dummy.in_vehicle = false;
+    dummy.controlling_vehicle = false;
+    dummy.boarded_vehicle = vehicle_handle();
+    dummy.boarded_part = -1;
+
     // Remove first worn item until there are none left.
     std::vector<detached_ptr<item>> temp;
     while (dummy.takeoff(dummy.i_at(-2), &temp));

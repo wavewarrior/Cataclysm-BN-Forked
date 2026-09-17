@@ -1084,10 +1084,13 @@ monster *vehicle::get_pet( int p ) const
         return mon.get();
     }
     // Cold path: nothing cached (not yet harnessed post-load) or the ref went
-    // stale (a clear site was missed) — fall back to the map and repair the
-    // cache so subsequent calls take the fast path above.
+    // stale (a clear site was missed) — fall back to the map. Only cache the
+    // result when it is friendly: a hostile monster merely standing on a
+    // boardable tile (e.g. one about to be run over) must never be adopted
+    // as this vehicle's pet, or it would be exempted from collision here and
+    // dragged around as an occupant by commit_occupants().
     monster *const found = g->critter_at<monster>( bub_part_location( p ), true );
-    if( found != nullptr ) {
+    if( found != nullptr && found->friendly != 0 ) {
         parts[p].animal_ref = g->shared_from( *found );
     }
     return found;
@@ -1098,6 +1101,31 @@ void vehicle::clear_pet_ref( int p )
     p = part_with_feature( p, VPFLAG_BOARDABLE, false );
     if( p >= 0 ) {
         parts[p].animal_ref = weak_ptr_fast<monster>();
+    }
+}
+
+void vehicle::rebuild_occupant_refs()
+{
+    for( const vpart_reference &vp : get_avail_parts( VPFLAG_BOARDABLE ) ) {
+        const int p = static_cast<int>( vp.part_index() );
+        vehicle_part &part = parts[p];
+        if( part.has_flag( vehicle_part::passenger_flag ) ) {
+            if( player *psg = g->critter_by_id<player>( part.passenger_id ); psg != nullptr ) {
+                psg->boarded_vehicle = handle();
+                psg->boarded_part = p;
+            }
+            continue;
+        }
+        // Monsters have no persistent id; re-derive by tile, mirroring
+        // get_pet()'s own cold path, including the friendly-only adoption
+        // guard (a hostile monster merely standing on the tile is not ours).
+        const tripoint_bub_ms part_pos = bub_part_location( p );
+        if( monster *mon = g->critter_at<monster>( part_pos, true );
+            mon != nullptr && mon->friendly != 0 && mon->has_effect( effect_harnessed ) ) {
+            part.animal_ref = g->shared_from( *mon );
+            mon->boarded_vehicle = handle();
+            mon->boarded_part = p;
+        }
     }
 }
 

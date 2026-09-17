@@ -1161,13 +1161,17 @@ bool vehicle::find_and_split_vehicles( int exclude )
 void vehicle::relocate_passengers( const std::vector<Character *> &passengers )
 {
     const auto boardables = get_avail_parts( "BOARDABLE" );
+    committing_occupants = true;
     for( auto *passenger : passengers ) {
         for( const vpart_reference &vp : boardables ) {
             if( get_passenger( static_cast<int>( vp.part_index() ) ) == passenger ) {
+                passenger->boarded_vehicle = handle();
+                passenger->boarded_part = static_cast<int>( vp.part_index() );
                 passenger->setpos( vp.pos() );
             }
         }
     }
+    committing_occupants = false;
 }
 
 bool vehicle::split_vehicles( const std::vector<std::vector <int>> &new_vehs,

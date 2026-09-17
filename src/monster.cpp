@@ -467,6 +467,8 @@ auto monster::setpos( const tripoint_abs_ms& p ) -> void
 {
     if( p == pos_abs ) { return; }
 
+    check_position_write_owner();
+    ++position_writes;
     const auto wandering = is_wandering();
     g->update_zombie_pos( *this, p );
     pos_abs = p;

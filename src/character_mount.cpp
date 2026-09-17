@@ -394,6 +394,8 @@ void Character::mount_creature( monster& z )
         if( const auto vp = g->m.veh_at( pnt ) ) {
             vp->vehicle().clear_pet_ref( vp->part_index() );
         }
+        z.boarded_vehicle = vehicle_handle();
+        z.boarded_part = -1;
         add_msg_if_player( m_info, _( "You remove the %s's harness." ), z.get_name() );
     }
     mounted_creature = mons;

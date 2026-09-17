@@ -2182,6 +2182,26 @@ void Creature::set_killer( Creature *nkiller )
     }
 }
 
+void Creature::check_position_write_owner()
+{
+    if( boarded_part < 0 ) {
+        return;
+    }
+    vehicle *const veh = resolve_vehicle( boarded_vehicle );
+    if( veh == nullptr || veh->committing_occupants ) {
+        // Either the vehicle already died (drop ownership silently) or this
+        // write is the vehicle's own sanctioned commit -- let it through.
+        if( veh == nullptr ) {
+            boarded_part = -1;
+            boarded_vehicle = vehicle_handle();
+        }
+        return;
+    }
+    debugmsg( "position of %s written outside its vehicle's commit path", get_name().c_str() );
+    boarded_part = -1;
+    boarded_vehicle = vehicle_handle();
+}
+
 int Creature::get_num_blocks() const
 {
     return num_blocks + num_blocks_bonus;

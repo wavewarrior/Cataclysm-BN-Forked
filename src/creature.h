@@ -20,6 +20,7 @@
 #include "translations.h"
 #include "type_id.h"
 #include "units.h"
+#include "vehicle_handle.h"
 
 #include <array>
 #include <climits>
@@ -571,6 +572,16 @@ class Creature
         virtual void setpos( const tripoint_bub_ms& pos ) = 0;
         virtual void setpos( const tripoint_abs_ms& pos );
 
+        /// Vehicle whose seat currently owns this creature's position, and the
+        /// part index of that seat. boarded_part < 0 means "not owned by a
+        /// vehicle". Never a raw vehicle* -- that would be a dangling holder.
+        vehicle_handle boarded_vehicle;
+        int boarded_part = -1;
+
+        /// Diagnostic: incremented once per leaf setpos() write. Read by the
+        /// occupant-commit gate test and the stage F convergence metric.
+        unsigned position_writes = 0;
+
         bool is_loaded() const;
         virtual bool is_simulated() const;
 
@@ -1028,6 +1039,11 @@ class Creature
     protected:
         weak_ptr_fast<Creature> killer; // whoever killed us. this should be NULL unless we are dead
         void set_killer( Creature* nkiller );
+
+        /// While boarded, the owning vehicle is the only legitimate writer of
+        /// this creature's position. Logs and drops ownership on any other
+        /// write; a no-op when the vehicle has already died.
+        void check_position_write_owner();
 
         /**
          * Processes one effect on the Creature.

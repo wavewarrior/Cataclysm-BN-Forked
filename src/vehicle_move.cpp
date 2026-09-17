@@ -670,8 +670,22 @@ auto vehicle::part_collision( const vehicle_part_collision_options &options ) ->
     }
 
     if( is_body_collision ) {
-        // critters on a BOARDABLE part in this vehicle aren't colliding
-        if( ovp && ( &ovp->vehicle() == this ) && get_pet( ovp->part_index() ) ) {
+        // critters on a BOARDABLE part in this vehicle aren't colliding.
+        // Identity over any boardable part of this vehicle, not the specific
+        // part at the impact tile (ovp->part_index()) -- same reasoning as
+        // the player/NPC branch above: part/position can be transiently
+        // inconsistent mid-displace_vehicle (e.g. a ramp z-transition).
+        // Checks animal_ref directly rather than calling get_pet(): get_pet's
+        // cold-path fallback queries the map and must not run here, or the
+        // very monster this collision is against could get read off its own
+        // impact tile and (if not already known-unfriendly) considered.
+        const auto rides_this_vehicle_as_pet = [this, critter]() {
+            for( const vehicle_part &vp : parts ) {
+                if( !vp.removed && vp.animal_ref.lock().get() == critter ) { return true; }
+            }
+            return false;
+        };
+        if( rides_this_vehicle_as_pet() ) {
             return ret;
         }
         // we just ran into a fish, so move it out of the way
@@ -2068,9 +2082,14 @@ units::angle map::shake_vehicle( vehicle &veh, const int velocity_before,
                                             _( "<npcname> is hurled from the %s's seat by "
                                                "the power of the impact!" ), veh.name );
                 unboard_vehicle( part_pos );
-            } else if( get_player_character().sees( part_pos ) ) {
-                add_msg( m_bad, _( "%s is hurled from %s's by the power of the impact!" ),
-                         pet->disp_name( false, true ), veh.name );
+            } else if( pet != nullptr ) {
+                veh.clear_pet_ref( ps );
+                pet->boarded_vehicle = vehicle_handle();
+                pet->boarded_part = -1;
+                if( get_player_character().sees( part_pos ) ) {
+                    add_msg( m_bad, _( "%s is hurled from %s's by the power of the impact!" ),
+                             pet->disp_name( false, true ), veh.name );
+                }
             }
             ///\EFFECT_STR reduces distance thrown from seat in a vehicle impact
             g->fling_creature( rider, direction + rng_float( -30_degrees, 30_degrees ),
@@ -2079,6 +2098,79 @@ units::angle map::shake_vehicle( vehicle &veh, const int velocity_before,
     }
 
     return coll_turn;
+}
+
+auto vehicle::commit_occupants() -> void
+{
+    const bool has_occupant = std::ranges::any_of( parts, []( const vehicle_part & vp ) {
+        return vp.has_flag( vehicle_part::passenger_flag ) || vp.animal_ref.lock();
+    } );
+    if( !has_occupant ) {
+        return;
+    }
+
+    committing_occupants = true;
+    for( const vpart_reference &vp : get_avail_parts( VPFLAG_BOARDABLE ) ) {
+        const int p = static_cast<int>( vp.part_index() );
+        Creature *occupant = get_passenger( p );
+        if( occupant == nullptr ) {
+            // parts[p].animal_ref directly, not get_pet(p): get_pet's cold-path
+            // fallback queries the map and would adopt whatever monster
+            // happens to be standing on an as-yet-unlinked boardable tile.
+            occupant = parts[p].animal_ref.lock().get();
+        }
+        if( occupant == nullptr ) {
+            continue;
+        }
+        const tripoint_bub_ms target = bub_part_location( p );
+        if( occupant->bub_pos() == target ) {
+            continue;
+        }
+
+        if( Creature *blocker = g->critter_at( target ); blocker != nullptr && blocker != occupant ) {
+            // Someone not aboard this vehicle is standing in the seat's target
+            // tile. Push them clear along the vehicle's heading, same as the
+            // fish-displacement path in part_collision().
+            tripoint_bub_ms end_pos = blocker->bub_pos();
+            tripoint_bub_ms start_pos;
+            for( int tries = 0; g->critter_at( end_pos, true ) != nullptr && tries < 8; ++tries ) {
+                start_pos = end_pos;
+                calc_ray_end( face.dir(), 2, start_pos, end_pos );
+            }
+            if( g->critter_at( end_pos, true ) == nullptr ) {
+                blocker->setpos( end_pos );
+            } else {
+                add_msg( m_debug, "commit_occupants: could not clear %s from %d,%d,%d",
+                          blocker->get_name(), target.x(), target.y(), target.z() );
+            }
+        }
+
+        if( g->critter_at( target ) == nullptr ) {
+            occupant->setpos( target );
+            continue;
+        }
+
+        // Target tile still occupied (couldn't clear it): try any other free
+        // tile of this vehicle's own footprint before giving up.
+        bool placed = false;
+        for( const vpart_reference &alt : get_avail_parts( VPFLAG_BOARDABLE ) ) {
+            const tripoint_bub_ms alt_pos = bub_part_location( static_cast<int>( alt.part_index() ) );
+            if( g->critter_at( alt_pos ) == nullptr ) {
+                occupant->setpos( alt_pos );
+                placed = true;
+                break;
+            }
+        }
+        if( !placed ) {
+            // No free seat tile anywhere on this vehicle: unboard in place
+            // rather than leave the occupant linked to a seat it cannot
+            // physically reach.
+            add_msg( m_debug, "commit_occupants: no free seat tile for %s, unboarding",
+                      occupant->get_name() );
+            get_map().unboard_vehicle( occupant->bub_pos() );
+        }
+    }
+    committing_occupants = false;
 }
 
 namespace vehicle_movement

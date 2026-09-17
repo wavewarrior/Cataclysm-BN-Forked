@@ -904,6 +904,16 @@ void map::vehmove() {
         }
     }
 
+    // Commit every vehicle's occupants to their seat tiles exactly once per
+    // turn -- the sole sanctioned writer of boarded-creature position (see
+    // Creature::check_position_write_owner()). Runs after the physics
+    // readback so occupants land on the tile the vehicle actually settled
+    // at, and before veh_cleanup/build_map_cache/monmove() can see a stale
+    // occupant position.
+    for (const wrapped_vehicle& w : get_vehicles()) {
+        if (w.v != nullptr) { w.v->commit_occupants(); }
+    }
+
 
     // Process item removal on the vehicles that were modified this turn.
     // Use a copy because part_removal_cleanup can modify the container.
@@ -1629,8 +1639,17 @@ void map::board_vehicle(const tripoint_bub_ms& pos, Character* who) {
     vp->vehicle().invalidate_mass();
 
     who->setpos(pos);
+    who->boarded_vehicle = vp->vehicle().handle();
+    who->boarded_part = static_cast<int>(vp->part_index());
     who->in_vehicle = true;
-    if (who->is_avatar()) { g->update_map(g->u); }
+    if (who->is_avatar()) {
+        // update_map() re-confirms bubble-relative coordinates via its own
+        // setpos() call; that is bookkeeping, not a movement, so it must not
+        // trip check_position_write_owner() now that who is boarded.
+        vp->vehicle().committing_occupants = true;
+        g->update_map(g->u);
+        vp->vehicle().committing_occupants = false;
+    }
 }
 
 void map::unboard_vehicle(const vpart_reference& vp, Character* passenger, bool dead_passenger) {
@@ -1643,6 +1662,8 @@ void map::unboard_vehicle(const vpart_reference& vp, Character* passenger, bool 
         return;
     }
     passenger->in_vehicle = false;
+    passenger->boarded_vehicle = vehicle_handle();
+    passenger->boarded_part = -1;
     // Only make vehicle go out of control if the driver is the one unboarding.
     if (passenger->controlling_vehicle) { vp.vehicle().skidding = true; }
     passenger->controlling_vehicle = false;
@@ -1661,6 +1682,8 @@ void map::unboard_vehicle(const tripoint_bub_ms& p, bool dead_passenger) {
         passenger = g->critter_at<player>(p);
         if (passenger) {
             passenger->in_vehicle = false;
+            passenger->boarded_vehicle = vehicle_handle();
+            passenger->boarded_part = -1;
             passenger->controlling_vehicle = false;
         }
         return;
@@ -1668,6 +1691,7 @@ void map::unboard_vehicle(const tripoint_bub_ms& p, bool dead_passenger) {
     passenger = vp->get_passenger();
     unboard_vehicle(*vp, passenger, dead_passenger);
 }
+
 
 bool map::displace_vehicle(vehicle& veh, const tripoint_rel_ms& dp) {
     const auto src = veh.abs_ms_location();
@@ -1725,65 +1749,10 @@ bool map::displace_vehicle(vehicle& veh, const tripoint_rel_ms& dp) {
     const bool remote = veh.remote_controlled(g->u);
 
 
-    // record every passenger and pet inside
-    std::vector<rider_data> riders = veh.get_riders();
-
-    bool need_update = false;
-    bool z_change = false;
-    int z_to = 0;
-    // Move passengers and pets
-    bool complete = false;
-    // loop until everyone has moved or for each passenger
-    for (size_t i = 0; !complete && i < riders.size(); i++) {
-        complete = true;
-        for (rider_data& r : riders) {
-            if (r.moved) { continue; }
-            const int prt = r.prt;
-
-            Creature* psg = r.psg;
-            const tripoint_bub_ms part_pos = veh.bub_part_location(prt);
-            if (psg == nullptr) {
-                debugmsg("Empty passenger for part #%d at %d,%d,%d player at %d,%d,%d?", prt,
-                         part_pos.x(), part_pos.y(), part_pos.z(), g->u.bub_pos().x(),
-                         g->u.bub_pos().y(), g->u.bub_pos().z());
-                veh.part(prt).remove_flag(vehicle_part::passenger_flag);
-                r.moved = true;
-                continue;
-            }
-
-            if (psg->bub_pos() != part_pos) {
-                add_msg(
-                    m_debug,
-                    "Part/passenger position mismatch: part #%d at %d,%d,%d "
-                    "passenger at %d,%d,%d",
-                    prt, part_pos.x(), part_pos.y(), part_pos.z(), psg->bub_pos().x(),
-                    psg->bub_pos().y(), psg->bub_pos().z());
-            }
-            const vehicle_part& veh_part = veh.part(prt);
-
-            // Place passenger on the new part location.  Z must include mount
-            // and terrain-topology offsets — precalc[1] is XY-only.
-            auto psgp = abs_to_map_local(*this,
-                dest
-                + tripoint_rel_ms(veh_part.precalc[1].x(), veh_part.precalc[1].y(),
-                                  veh_part.mount.z() + veh_part.z_terrain[1]));
-            // someone is in the way so try again
-            if (g->critter_at(psgp)) {
-                complete = false;
-                continue;
-            }
-            if (psg->is_avatar()) {
-                // If passenger is you, we need to update the map
-                need_update = true;
-                z_change = psgp.z() != part_pos.z();
-                z_to = psgp.z();
-            }
-
-            psg->setpos(psgp);
-            r.moved = true;
-        }
-    }
-
+    // Occupant positions are no longer written here, once per crossed tile:
+    // vehicle::commit_occupants(), called once per vehicle per turn from
+    // map::vehmove() after the whole readback walk completes, is now the
+    // sole sanctioned writer (see check_position_write_owner()).
     // Capture the old footprint in absolute submap coordinates BEFORE parts
     // are updated by advance_precalc_mounts.  The player may shift the map
     // origin below, so bubble coordinates would be stale by on_vehicle_moved().
@@ -1880,27 +1849,17 @@ bool map::displace_vehicle(vehicle& veh, const tripoint_rel_ms& dp) {
         vehicle_moved_marked = true;
     };
 
-    // Bubble coordinates are still valid here, and update_map() below would
-    // invalidate them, so mark now when the map origin is about to shift.
-    if (need_update && !z_change && src.z() == dest.z()) { mark_vehicle_moved(); }
-
-    if (need_update) { g->update_map(g->u); }
+    // Membership stays per tile: add this vehicle's new footprint to the cache
+    // immediately, same as before occupant commits were deferred.
     add_vehicle_to_cache(&veh);
 
-    if (z_change || src.z() != dest.z()) {
-        if (z_change) {
-            g->vertical_shift(z_to);
-            // vertical moves can flush the caches, so make sure we're still in the cache
-            add_vehicle_to_cache(&veh);
-        }
+    if (src.z() != dest.z()) {
         update_vehicle_list(dst_submap, dest.z());
         // delete the vehicle from the source z-level vehicle cache set if it is no longer on
         // that z-level
-        if (src.z() != dest.z()) {
-            level_cache& ch2 = get_cache(src.z());
-            ch2.vehicle_list.erase(veh.handle());
-            ch2.zone_vehicles.erase(veh.handle());
-        }
+        level_cache& ch2 = get_cache(src.z());
+        ch2.vehicle_list.erase(veh.handle());
+        ch2.zone_vehicles.erase(veh.handle());
         veh.check_is_heli_landed();
     }
     if (veh.is_flying_in_air()) { veh.check_is_heli_landed(); }

@@ -839,13 +839,15 @@ auto Character::setpos( const tripoint_bub_ms& p ) -> void { setpos( map_local_t
 
 auto Character::setpos( const tripoint_abs_ms& p ) -> void
 {
+    check_position_write_owner();
+    if( boarded_part < 0 ) {
+        in_vehicle = false;
+    }
     position = p;
+    ++position_writes;
     if( auto *pw = get_map().get_physics_world() ) {
         pw->on_creature_moved( *this );
     }
-
-
-
 }
 
 bool Character::has_alarm_clock() const
