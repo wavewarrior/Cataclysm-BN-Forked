@@ -1552,6 +1552,14 @@ void map::load( const point_abs_sm &w, const bool update_vehicle, const bool pum
     // reset_vehicle_cache().
     if( phys_world ) { phys_world->clear_world_bodies(); }
     clear_submap_cache();
+    // Every z-level's vehicle_list/zone_vehicles is cleared here (mirroring map::shift()'s
+    // pre-shift clear) so the loadn() calls below repopulate it from only the submaps that
+    // remain resident in the new bubble, before reset_vehicle_cache() rebuilds
+    // veh_cached_parts/cached_veh_rope from it. Without this, entries for submaps no longer
+    // in the reloaded bubble survive the rebuild and dangle once MAPBUFFER evicts them.
+    for( const auto z : std::views::iota( -OVERMAP_DEPTH, OVERMAP_HEIGHT + 1 ) ) {
+        clear_vehicle_list( z );
+    }
     funnel_locations_.clear();
     set_abs_sub( w );
     for( const auto p : bubble_submaps() ) {
