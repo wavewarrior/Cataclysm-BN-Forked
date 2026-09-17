@@ -25,6 +25,7 @@
 #include "vehicle_part.h"
 #include "vehicle_wait.h"
 #include "vpart_position.h"
+#include "vpart_range.h"
 
 #include <algorithm>
 #include <memory>
@@ -292,6 +293,77 @@ TEST_CASE("detaching_opaque_vehicle_invalidates_transparency_cache", "[vehicle][
     here.build_map_cache(board_pos.z(), true);
 
     CHECK(here.is_transparent(board_pos));
+}
+
+TEST_CASE("vehicle_handle_invalidated_by_destroy", "[vehicle][cache]") {
+    clear_all_state();
+    auto& here = get_map();
+    build_test_map(ter_id("t_pavement"));
+
+    const auto origin = tripoint_bub_ms(60, 60, 0);
+    auto* veh_ptr = here.add_vehicle(vproto_id("none"), origin, 0_degrees, 0, 0);
+    REQUIRE(veh_ptr != nullptr);
+    const auto frame =
+        veh_ptr->install_part(tripoint_mnt_veh::zero(), vpart_id("frame_horizontal"), true);
+    REQUIRE(frame >= 0);
+
+    const auto tile = veh_ptr->bub_part_location(frame);
+    const vehicle_handle recorded = veh_ptr->handle();
+    REQUIRE(recorded.is_set());
+    REQUIRE(here.veh_at(tile));
+
+    here.destroy_vehicle(veh_ptr);
+
+    CHECK(!here.veh_at(tile));
+    CHECK(resolve_vehicle(recorded) == nullptr);
+}
+
+TEST_CASE("vehicle_handle_invalidated_by_bubble_reanchor", "[vehicle][cache]") {
+    clear_all_state();
+    auto& here = get_map();
+    build_test_map(ter_id("t_pavement"));
+
+    const point_abs_sm original_abs_sub = here.get_abs_sub();
+    const auto origin = tripoint_bub_ms(60, 60, 0);
+    auto* veh_ptr = here.add_vehicle(vproto_id("none"), origin, 0_degrees, 0, 0);
+    REQUIRE(veh_ptr != nullptr);
+    const auto frame =
+        veh_ptr->install_part(tripoint_mnt_veh::zero(), vpart_id("frame_horizontal"), true);
+    REQUIRE(frame >= 0);
+
+    std::vector<tripoint_bub_ms> tiles;
+    for (const vpart_reference& vp : veh_ptr->get_all_parts()) {
+        if (vp.part().removed) { continue; }
+        tiles.push_back(veh_ptr->bub_part_location(vp.part()));
+    }
+    REQUIRE(!tiles.empty());
+    const vehicle_handle recorded = veh_ptr->handle();
+    REQUIRE(recorded.is_set());
+    for (const auto& t : tiles) { REQUIRE(here.veh_at(t)); }
+
+    const tripoint_abs_sm veh_sm_pos = veh_ptr->abs_sm_pos;
+
+    // Re-anchor the reality bubble far away from the vehicle's submap, mirroring
+    // the path map::shift() already handles correctly (map::load() is the one
+    // A0 had to fix: it never cleared vehicle_list/zone_vehicles per z before).
+    const point_abs_sm far_away = original_abs_sub + point_rel_sm(1000, 1000);
+    here.load(far_away, true);
+
+    for (const auto& t : tiles) { CHECK(!here.veh_at(t)); }
+
+    // load() alone does not evict the old submap from MAPBUFFER (that is a
+    // separate, distance/LRU-driven process) -- the vehicle object can still
+    // be resolved at this point. Force the eviction explicitly to prove the
+    // handle is invalidated once the owning submap is actually freed -- the
+    // exact scenario map::on_submap_unloaded's dangling-pointer purge guards.
+    here.get_mapbuffer().unload_omt(project_to<coords::omt>(veh_sm_pos), false);
+    CHECK(resolve_vehicle(recorded) == nullptr);
+
+    // Restore the bubble so this test does not leak its reanchor into
+    // whichever TEST_CASE the harness runs next (clear_map()'s canonical-
+    // anchor logic assumes nothing but map::shift()/board_vehicle() moves it
+    // mid-suite).
+    here.load(original_abs_sub, true);
 }
 
 TEST_CASE("destroy_grabbed_vehicle_section") {
