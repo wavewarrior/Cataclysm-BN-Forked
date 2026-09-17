@@ -1,9 +1,15 @@
 # Handoff: vehicle-cache SIGSEGV in `~[coop]` single-process runs
 
-## Status: OPEN — root cause not found, not fixed
+## Status: OPEN — root cause not found, not fixed. PRIORITY RAISED (2026-09-17): S11 merge dropped
+the accumulation threshold from ~483 to ~22 (see "New evidence" section below) — the crash now
+surfaces inside a single sharded `~[.]` run, not only in the unsharded `~[coop]` repro.
 
 ## Repro
 
+Cheap (since S11, ~15s): `./cata_test-tiles "~[.]" --order decl --rng-seed 1 --shard-count 4
+--shard-index 2 --user-dir=/tmp/repro2` — SIGSEGVs at case #22.
+
+Original (unsharded, ~[coop], slower but the eventual acceptance test):
 ```sh
 cd /Users/nigel.fierens/dev-projects/Cataclysm-BN-Forked
 rm -rf test_user_dir
@@ -137,6 +143,26 @@ fix regardless (it closes a real hole), but do not mistake it for the fix to thi
   against vehicles actually owned by currently-resident submaps, would name the leaking pointer's
   provenance directly in one repro run instead of further ablation. This is the fastest path to a
   definitive root cause and was recommended but not executed this session.
+
+## New evidence (S11 merge, 2026-09-17): accumulation threshold dropped from ~483 to ~22
+
+`git diff 288fd9aeb4 5ea9b1a7c9 -- src/map_vehicle.cpp` shows S11 (`origin/main` merge) added
+`set_vehicle_cache_dirty(z)` calls to `add_vehicle_to_cache`, `clear_vehicle_point_from_cache`,
+`clear_vehicle_cache`, `clear_vehicle_list`, `update_vehicle_list`, and `on_vehicle_moved` — none of
+these called it before. Confirmed via a scratch worktree at `288fd9aeb4`: `~[.]` shard 2 (4-way
+split, `--rng-seed 1`) passes clean (311/311, 75s, no crash) at S10; the same shard on the S11
+binary SIGSEGVs at case #22 (`tree_terrain_supports_climbing_destination_above`), identical stack to
+the one above. The crashing test also passes standalone on both binaries — this is not a newly
+broken code path, S11 made the existing race far easier to hit.
+
+**Plausible mechanism**: more `set_vehicle_cache_dirty()` call sites means `build_absorption_cache`
+(and whatever else gates on the dirty flag) reruns far more often per test than before, so a
+dangling `vehicle*` left by an earlier bug has many more chances to be dereferenced before this
+session's tests finish. This is consistent with, not contradictory to, the leads above — it doesn't
+point at a new bug, it raises this ticket's priority (the crash is no longer a ~483-case corner
+case; it now surfaces inside a single 314-case shard) and gives a fast, cheap regression gate:
+**re-run `~[.]` shard 2 (`--shard-count 4 --shard-index 2 --rng-seed 1 --order decl`) after any fix
+attempt — it now reproduces in ~15s instead of requiring the full unsharded ~[coop] repro.**
 
 ## Vehicle-physics architecture context (informs, but is not the fix)
 
