@@ -558,14 +558,20 @@ int vehicle::install_part( const tripoint_mnt_veh &dp, vehicle_part &&new_part )
     refresh();
     map &here = get_map();
     here.invalidate_lightmap_caches();
-    // Keep the Box2D collider, per-tile cache and mapbuffer footprint index in step
-    // with the footprint.  This is what gives a bare vproto-"none" chassis its
-    // collision geometry: map::add_vehicle() registers it with the physics world
-    // while it still has zero parts, so no polygon could be built then.  A no-op for
-    // a vehicle the map does not know about yet, e.g. anything mapgen is still
-    // assembling (attach() has not run).
-    if( attached ) {
+    // Keep the Box2D collider, per-tile cache and mapbuffer footprint index in
+    // step with the footprint once this vehicle is actually registered
+    // (map::add_vehicle()/register_vehicle() has run). Gate on has_loaded_vehicle,
+    // not the `attached` flag: add_vehicle_to_map()'s wreck-fusion transfer loop
+    // calls install_part() on a vehicle that is attach()-flagged but not yet
+    // placed in any submap — publishing its footprint there would make the
+    // very next collision check in that same loop see the vehicle's own
+    // just-added part as a foreign obstacle (self-collision).
+    if( here.get_mapbuffer().has_loaded_vehicle( this ) ) {
         here.vehicle_footprint_changed( *this );
+    } else if( physics::PhysicsWorld *phys = here.get_physics_world() ) {
+        // Self-guards on an unregistered vehicle (see on_vehicle_parts_changed);
+        // a no-op along the not-yet-placed path above.
+        phys->on_vehicle_parts_changed( *this );
     }
     coeff_air_changed = true;
     return parts.size() - 1;
