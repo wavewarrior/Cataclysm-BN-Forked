@@ -6,8 +6,12 @@ surfaces inside a single sharded `~[.]` run, not only in the unsharded `~[coop]`
 
 ## Repro
 
-Cheap (since S11, ~15s): `./cata_test-tiles "~[.]" --order decl --rng-seed 1 --shard-count 4
---shard-index 2 --user-dir=/tmp/repro2` — SIGSEGVs at case #22.
+Cheap (since S11): `timeout 90 ./cata_test-tiles "~[.]" --order decl --rng-seed 1 --shard-count 4
+--shard-index 2 --user-dir=/tmp/repro2` — SIGSEGVs at case #22 within a 90s bounded run. **The
+process does not exit on its own after the crash** (the signal handler's backtrace-repeat loop
+runs indefinitely) — always wrap with `timeout`, or the invoking shell/job will appear to hang for
+the full job timeout instead of completing. Exact wall-clock time to the crash was not measured;
+only "happens well inside 90s" is confirmed.
 
 Original (unsharded, ~[coop], slower but the eventual acceptance test):
 ```sh
@@ -161,8 +165,10 @@ dangling `vehicle*` left by an earlier bug has many more chances to be dereferen
 session's tests finish. This is consistent with, not contradictory to, the leads above — it doesn't
 point at a new bug, it raises this ticket's priority (the crash is no longer a ~483-case corner
 case; it now surfaces inside a single 314-case shard) and gives a fast, cheap regression gate:
-**re-run `~[.]` shard 2 (`--shard-count 4 --shard-index 2 --rng-seed 1 --order decl`) after any fix
-attempt — it now reproduces in ~15s instead of requiring the full unsharded ~[coop] repro.**
+**re-run `timeout 90 ./cata_test-tiles "~[.]" --shard-count 4 --shard-index 2 --rng-seed 1 --order
+decl --user-dir=<scratch dir>` after any fix attempt — it reproduces well within a 90s bounded run
+instead of requiring the full unsharded ~[coop] repro. The process never exits on its own after the
+crash; always wrap with `timeout`.**
 
 ## Vehicle-physics architecture context (informs, but is not the fix)
 
