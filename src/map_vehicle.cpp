@@ -471,6 +471,21 @@ void map::on_vehicle_moved(
     const tripoint_bub_sm& sm_min, const tripoint_bub_sm& sm_max, const int& smz) {
     ZoneScoped;
 
+    if (batching_vehicle_moves_) {
+        const auto [it, inserted] =
+            pending_vehicle_move_bounds_.try_emplace(smz, sm_min.xy(), sm_max.xy());
+        if (!inserted) {
+            auto& bounds = it->second;
+            bounds.first = point_bub_sm(std::min(bounds.first.x(), sm_min.x()),
+                                        std::min(bounds.first.y(), sm_min.y()));
+            bounds.second = point_bub_sm(std::max(bounds.second.x(), sm_max.x()),
+                                         std::max(bounds.second.y(), sm_max.y()));
+        }
+        return;
+    }
+
+    ++vehicle_move_notifications_;
+
     if (!inbounds_z(smz)) { return; }
 
     auto& ch = get_cache(smz);
@@ -539,8 +554,35 @@ void map::on_vehicle_moved(
     }
 }
 
+auto map::take_vehicle_move_notifications() -> unsigned
+{
+    const unsigned count = vehicle_move_notifications_;
+    vehicle_move_notifications_ = 0;
+    return count;
+}
+
+void map::begin_vehicle_move_batch()
+{
+    batching_vehicle_moves_ = true;
+    pending_vehicle_move_bounds_.clear();
+}
+
+void map::flush_vehicle_move_batch()
+{
+    // Clear the flag first: the replayed on_vehicle_moved() calls below must
+    // take the normal (non-batching) path.
+    batching_vehicle_moves_ = false;
+    auto pending = std::move(pending_vehicle_move_bounds_);
+    pending_vehicle_move_bounds_.clear();
+    for (const auto& [smz, bounds] : pending) {
+        on_vehicle_moved(tripoint_bub_sm(bounds.first, smz), tripoint_bub_sm(bounds.second, smz),
+                          smz);
+    }
+}
+
 void map::vehmove() {
     ZoneScoped;
+    begin_vehicle_move_batch();
     // Advance the persistent physics world one full game turn (1 s).
     //
     // A prior revision deliberately stepped only 1/60 s here, on the theory that
@@ -903,6 +945,12 @@ void map::vehmove() {
                 veh.physics_pos.y - std::lround(veh.physics_pos.y));
         }
     }
+
+    // Stage C2: replay one real on_vehicle_moved() per z, from the unioned
+    // bounds accumulated during the readback walk above, before anything
+    // below (including commit_occupants()'s g->update_map() side effect)
+    // can observe the caches this turn's moves are supposed to have dirtied.
+    flush_vehicle_move_batch();
 
     // Commit every vehicle's occupants to their seat tiles exactly once per
     // turn -- the sole sanctioned writer of boarded-creature position (see

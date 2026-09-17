@@ -1120,3 +1120,47 @@ TEST_CASE("box2d_map_load_does_not_accumulate_colliders", "[!shouldfail][vehicle
     // Revisiting must reproduce the original count, not add to it.
     CHECK(count_home_again == count_home);
 }
+
+TEST_CASE("vehicle_move_notifications_per_turn", "[vehicle][perf]") {
+    clear_all_state();
+    build_test_map(ter_id("t_pavement"));
+    map& here = get_map();
+
+    const tripoint_bub_ms origin(60, 60, 0);
+    vehicle* veh_ptr = here.add_vehicle(vproto_id("car"), origin, 0_degrees, 1, 0);
+    REQUIRE(veh_ptr != nullptr);
+    vehicle& veh = *veh_ptr;
+    veh.check_falling_or_floating();
+    veh.box2d_position_authority = false;
+    veh.tags.insert("IN_CONTROL_OVERRIDE");
+    veh.engine_on = true;
+
+    // ~10 m/s cruise, matching the plan's measurement target.
+    veh.cruise_velocity = 1000;
+    veh.velocity = 1000;
+
+    // Discard the notifications produced by add_vehicle()/the initial cache
+    // build so the recorded counts below reflect only vehmove()'s own churn.
+    here.take_vehicle_move_notifications();
+
+    std::vector<unsigned> per_turn_counts;
+    for (int turn = 0; turn < 10; ++turn) {
+        here.vehmove();
+        per_turn_counts.push_back(here.take_vehicle_move_notifications());
+    }
+
+    CAPTURE(per_turn_counts);
+    // Stage C2 batches the whole readback walk into one on_vehicle_moved()
+    // replay per z per turn, regardless of how many tiles were crossed --
+    // measured before C2: ~5-6 per turn at this cruise speed (2,2,7,5,6,5,6,
+    // 6,5,6 recorded pre-batching).
+    for (const unsigned count : per_turn_counts) {
+        CHECK(count == 1);
+    }
+
+    // A parked vehicle (no movement this turn) must emit zero notifications.
+    veh.cruise_velocity = 0;
+    veh.velocity = 0;
+    here.vehmove();
+    CHECK(here.take_vehicle_move_notifications() == 0);
+}

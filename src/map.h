@@ -1179,6 +1179,10 @@ class map : public submap_load_listener
         void destroy_vehicle( vehicle *veh );
         // Vehicle movement
         void vehmove();
+        /// Diagnostic for the per-turn cache-churn gate (stage C). Returns the
+        /// count of on_vehicle_moved() invocations since the last call, and
+        /// resets it to zero.
+        auto take_vehicle_move_notifications() -> unsigned;
         // Selects a vehicle to move, returns false if no moving vehicles
         bool vehproceed( VehicleList &vehicle_list );
 
@@ -2466,6 +2470,17 @@ class map : public submap_load_listener
         VehicleList last_full_vehicle_list;
         bool last_full_vehicle_list_dirty = true;
         std::map<tripoint_bub_ms, std::pair<vehicle_handle, int> > cached_veh_rope;
+        /// Diagnostic for the per-turn cache-churn gate (stage C).
+        unsigned vehicle_move_notifications_ = 0;
+        /// Stage C2: while true, on_vehicle_moved() only unions bounds into
+        /// pending_vehicle_move_bounds_ instead of touching caches; the batch
+        /// owner (map::vehmove()) replays one real call per z on flush.
+        bool batching_vehicle_moves_ = false;
+        std::map<int, std::pair<point_bub_sm, point_bub_sm> > pending_vehicle_move_bounds_;
+        /// Stage C2: batch scope around vehmove()'s readback walk. Both
+        /// private; map::vehmove() is the only caller.
+        void begin_vehicle_move_batch();
+        void flush_vehicle_move_batch();
 
         // Note: no bounds check
         level_cache &get_cache( int zlev ) const {
