@@ -30,8 +30,8 @@ struct sky_sun_params {
     float sun_dir_x; // sun travel direction (toward_sun = -sun_dir)
     float sun_dir_y;
     float sun_sin_elev;         // sun elevation sine (2b heightfield; unused 2a)
-    float shadow_k;             // sphere-trace cone hardness (sprite shadow_k)
-    std::uint32_t shadow_steps; // sun march iteration cap
+    float ssp_pad0 = 0.0f;          // reserved (was shadow_k — never read by the shader)
+    std::uint32_t ssp_pad1 = 0u;    // reserved (was shadow_steps — never read)
     // P5b: sky/sun quality knobs (was ss_pad).
     std::uint32_t sky_dirs = 8;     // hemisphere directions per tile
     float sky_reach = 10.0f;        // sky march max distance (tiles)
@@ -65,12 +65,30 @@ public:
 
     bool ready() const noexcept { return pipeline_ != nullptr && sky_buf_ != nullptr; }
 
+    // Stage 1 (gpu-daylight black-scene plan): count of successful record()
+    // dispatches this run. Distinguishes "never ran" from "ran and produced a
+    // genuinely dark result" — see debug_params::sky_valid.
+    std::uint64_t dispatches() const noexcept { return dispatches_; }
+
     // The sky/sun radiance buffer. Bound by the sprite pass as SkyBuf
     // (fragment storage buffer slot 6 ⇒ t8). Tile-res, x-major
     // sky[(x*map_h+y)*4 + c]: rgb = sky-access, a = sun-occ. Always non-null
     // after a successful init (even if the pipeline failed), so the sprite's
     // all-or-none storage-buffer bind always has a valid handle.
     SDL_GPUBuffer* sky_buffer() const noexcept { return sky_buf_; }
+
+    // Stage 5 (gpu-daylight black-scene plan): one-shot GPU readback for the
+    // gameplay/render conformance check. rgb_mean/a_mean are the mean sky-
+    // access / sun-occlusion over the runtime region — used to confirm the
+    // pass actually produced non-trivial output, distinct from Stage 1's
+    // per-frame sky_valid (which only confirms the pass RAN, not what it
+    // wrote). Synchronous (SDL_WaitForGPUIdle) — call at most once, never
+    // per frame.
+    struct sky_means {
+        float rgb_mean = 0.0f;
+        float a_mean = 0.0f;
+    };
+    sky_means readback_means( std::uint32_t runtime_w, std::uint32_t runtime_h ) const;
 
     // Run the compute pass on `cb`: one dispatch reading occ_buf (t0) — the
     // unified coverage occluder field (2 floats/tile: height + roof bit) — and
@@ -91,6 +109,7 @@ private:
     SDL_GPUBuffer* sky_buf_ = nullptr; // compute W | graphics R
     std::uint32_t max_w_ = 0;
     std::uint32_t max_h_ = 0;
+    std::uint64_t dispatches_ = 0;
 };
 
 } // namespace lighting

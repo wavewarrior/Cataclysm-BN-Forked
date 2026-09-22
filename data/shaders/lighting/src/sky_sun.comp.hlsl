@@ -44,8 +44,8 @@ cbuffer SkySunParams : register(b0, space2) {
     float sun_dir_x;    // celestial travel direction (toward = -dir)
     float sun_dir_y;
     float sun_sin_elev; // celestial elevation sine (drives the 3D climb)
-    float shadow_k;     // (reserved; penumbra softness lever)
-    uint  shadow_steps; // (reserved)
+    float ssp_pad0;     // reserved (was shadow_k — never read here; see sky_sun_pass.h)
+    uint  ssp_pad1;     // reserved (was shadow_steps — never read here)
     uint  sky_dirs;     // hemisphere directions per tile (P5b — F4 knob)
     float sky_reach;    // sky march max distance in tiles (P5b)
     uint  sun_steps;    // celestial march steps (P5b)
@@ -56,6 +56,10 @@ cbuffer SkySunParams : register(b0, space2) {
 
 // Sky-dome sampling. SKY_DIRS/SKY_REACH are cbuffer-driven (P5b — F4 knobs).
 // The march-micro constants keep static const (geometric, not quality/perf tradeoffs).
+// SKY_WALL_H/ROOF_H mirror src/lighting/tile_occlusion.h, the single
+// C++-side authority for what counts as an occluder and how tall it is
+// (gpu-daylight black-scene plan, Stage 3). Keep the two in lockstep by hand;
+// this file has no way to include a C++ header.
 static const int   SKY_STEPS   = 16;    // max march steps per direction
 static const float SKY_STEP    = 0.70;  // tile units per step
 static const float SKY_START   = 0.60;  // skip the tile's own cell
@@ -63,8 +67,11 @@ static const float SKY_WALL_H  = 0.60;  // occluder height that blocks a sky dir
 // Celestial (sun/moon) SDF sphere-trace. SUN_STEPS is cbuffer-driven.
 static const float SUN_START   = 0.30;  // skip the probe cell
 static const float ROOF_H      = 1.00;  // roof height (tiles) — ray clears above this
-static const float MAX_OCC_H   = 3.00;  // tallest occluder (tiles) — march end = this / tan(elev)
-static const float TREE_H      = 3.00;  // height of SDF-only occluders (trees; absent from OccBuf)
+static const float MAX_OCC_H   = 1.25;  // tallest occluder (tiles) — march end = this / tan(elev).
+                                        // Walls/vehicles cap at 1.0 (tile_occlusion.h) and roofs at
+                                        // ROOF_H; trees carry NO height since Phase 2.3 (their sun
+                                        // shadow is the screen-space silhouette mask), so 1.25 is
+                                        // margin, not a former TREE_H=3.0 reach.
 static const float SUN_FAR     = 8.00;  // trace distance where the step is fully coarse
 
 // OccBuf is tile-res, x-major occ[(x*map_h+y)*2 + c]. c0 = height, c1 = roof.
@@ -167,17 +174,23 @@ float celestial_occ_dir( float2 probe, float2 toward )
         // MISS distance to the nearest occluder FOOTPRINT, not the vertical
         // clearance. A ray that has climbed ABOVE an occluder (ray_h > h_eff)
         // still reads a small `sd` while horizontally over its footprint —
-        // without this gate the penumbra feather below would darken the ray
-        // even though it flies over the wall. Occluder height: OccBuf height
-        // for walls/half-walls/furniture; SDF-only occluders (trees, absent
-        // from OccBuf) fall back to TREE_H.
+        // even though it flies over the wall. Occluder height comes from OccBuf
+        // for walls/half-walls/furniture/vehicles. Trees carry NO OccBuf height
+        // (Phase 2.3, tile_occlusion.h): their sun shadow is the screen-space
+        // silhouette mask, so the march must NOT shadow them here — a tree tile
+        // reads h == 0 and falls through like open ground. h == 0 therefore
+        // means open ground / a tree (must NOT shadow, fallback 0.0) OR a roofed
+        // interior tile (floor transmits, so its OccBuf height is zeroed even
+        // though the roof above still blocks the sun — fallback ROOF_H).
         const float ray_h = t * elev_tan;
         if( ray_h >= MAX_OCC_H ) {
             break;                            // above every possible occluder
         }
         if( sd < 0.05 || sun_soft > 0.001 ) {
-            const float h     = occ_height_at( (int)pos.x, (int)pos.y );
-            const float h_eff = ( h > 0.01 ) ? h : TREE_H;
+            const float h = occ_height_at( (int)pos.x, (int)pos.y );
+            const float h_eff = ( h > 0.01 )
+                                 ? h
+                                 : ( roof_at( (int)pos.x, (int)pos.y ) > 0.5 ? ROOF_H : 0.0 );
             if( ray_h < h_eff ) {
                 if( sd < 0.05 ) {
                     shadow = 0.0;

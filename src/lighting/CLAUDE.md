@@ -2,7 +2,7 @@
 
 **Phase**: 2i-B (bridge removed, GPU-only rendering)
 **Backend**: SDL_GPU / SPIRV-Cross on D3D12 (Win11), Vulkan, Metal
-**Last verified against source**: 2026-08-24 (struct sizes, register layout, pass order, removed items)
+**Last verified against source**: 2026-09-21 (file map, SDF backend, `debug_params` size, GPU JFA status corrected — gpu-daylight-black-scene-bisect-plan Stage 6)
 
 ---
 
@@ -16,12 +16,13 @@
 | `gpu_atlas.cpp/h` | GPU mirror of SDL_Texture atlas pages |
 | `font_engine.cpp/h` | SDL_Surface→GPU glyph upload; per-glyph texture cache |
 | `gpu_geometry.cpp/h` | 1×1 white texture (shared by UI rects and solid fills) |
-| `shader_compiler.cpp/h` | HLSL→SPIRV-Cross compile; embedded `SPRITE_VERT_HLSL` in `sprite_batcher.cpp` |
+| `shader_compiler.cpp/h` | HLSL→SPIRV-Cross compile. Sprite/shadow shader SOURCE lives on disk under `data/shaders/lighting/src/` (`load_lighting_shader_source`), not embedded in this file — verified 2026-09-21. |
 | `occluder_capture.cpp/h` | Per-frame sprite-alpha footprints feeding the SDF seed |
 | `palette_ramp.cpp/h` | Procedural per-palette shade ramps + OkLab row lookup |
 | `gi_compute_pass.cpp/h` | GPU compute GI (2 dispatches) → `gi_buf_` |
 | `sky_sun_pass.cpp/h` | GPU sky/sun coverage march (Stage 2a/2b) → `SkyBuf` |
-| `sdf_pass.cpp/h` | Chebyshev SDF (CPU BFS) + occluder seeding |
+| `sdf_pass.cpp/h` | Upload/storage for the SDF pipeline: CPU transparency/occluder capture + GPU transfer. The distance field ITSELF is `gpu_sdf_pass.cpp/h` (GPU JFA: seed → flood → resolve on the 8x-supersampled grid) — verified 2026-09-21; sdf_pass no longer computes a CPU distance transform. |
+| `gpu_sdf_pass.cpp/h` | GPU JFA SDF: `occ_base`/`occ_raster` seed → `jfa_seed`/`jfa_flood`/`jfa_resolve` on the SS-grid (Rong & Tan I3D 2006) — the live distance field `sprite.frag`/`sky_sun.comp` sphere-trace |
 | `normal_gen.cpp/h` | Surface normals for per-pixel Lambert |
 | `splatmap_pass.cpp/h` | Decal stamps into per-submap splatmap textures |
 | `sound_wave_pass.cpp/h` | Sound-pulse discs (stealth) |
@@ -226,16 +227,19 @@ Formula: `x' = x*cos - y*sin`, `y' = x*sin + y*cos`
 
 ---
 
-## Shadow march + dither model (2026-05-30)
+## Shadow march + dither model (2026-05-30; SDF backend corrected 2026-09-21)
 
-Fragment shader (`SPRITE_FRAG_HLSL` in `sprite_batcher.cpp`):
+Fragment shader (`sprite.frag.hlsl`, loaded from
+`data/shaders/lighting/src/` — NOT embedded in `sprite_batcher.cpp`):
 
-- **Bilinear SDF sampling.** `sdf_bilinear()` 4-taps the tile-resolution SDF.
-  The CPU SDF is a **Chebyshev** BFS (`sdf_pass.cpp:compute_sdf_cpu`) → integer
-  per-tile jumps; raw nearest reads gave diamond-faceted sawtooth penumbrae.
-  Bilinear smooths them. Cell-origin convention (`floor`/`frac`) — matches the
-  old `(int)p.x`, so shadows stay glued to occluder edges. Residual faint
-  squarish directionality is inherent to Chebyshev (Euclidean DT = future).
+- **Bilinear SDF sampling.** `sdf_bilinear()` 4-taps the SS-grid SDF.
+  The SDF is now a **GPU JFA** (Jump Flooding Algorithm — `gpu_sdf_pass.cpp`,
+  `occ_base`/`occ_raster` seed → `jfa_seed`/`jfa_flood`/`jfa_resolve`),
+  producing a round Euclidean-approximate distance field, not the old CPU
+  Chebyshev BFS integer per-tile jumps this section originally described.
+  Bilinear still smooths the SS-grid's discrete steps. Cell-origin convention
+  (`floor`/`frac`) — matches the old `(int)p.x`, so shadows stay glued to
+  occluder edges.
 - **One shared `trace_shadow(origin, dir, dist, k, steps)`** for BOTH emitters
   and the sun (sun was a hardcoded k=4/16/8.0 copy). Sun passes `dist=8.0`
   (directional reach) + the `shadow_k`/`shadow_steps` knobs, keeps its
@@ -258,10 +262,11 @@ Fragment shader (`SPRITE_FRAG_HLSL` in `sprite_batcher.cpp`):
   than the 8-subcell SDF grid, so sub-tile shadow curvature survives. `light_quant`
   = 0 restores per-screen-pixel evaluation. `i.uv`, `i.world_pos` and the AO taps
   are deliberately NOT snapped.
-- **Knobs** in `debug_params` (**256 bytes** as of 2026-08-24 — 176 → 208 on
-  2026-08-01 with the grid-decoupled knobs, then → 256 with normal-mapping, AO,
-  shadow-mask, sway, specular and cloud-shadow knobs; `static_assert` at
-  sprite_batcher.cpp:61 enforces 256):
+- **Knobs** in `debug_params` (**272 bytes** as of 2026-09-21 — 176 → 208 on
+  2026-08-01 with the grid-decoupled knobs, → 256 with normal-mapping/AO/
+  shadow-mask/sway/specular/cloud-shadow knobs, then → 272 with the Stage 1
+  `sky_valid` validity sentinel (gpu-daylight black-scene plan) reusing a
+  former reserved pad; `static_assert` at sprite_batcher.cpp:61 enforces 272):
   `dither_amt` (0=off), `dither_bands`, `light_quant`, `occ_soft_gain`,
   `self_eps_tall`, `ramp_enable`, `ramp_steps`, `ramp_chroma`,
   `nrm_amount`/`nrm_relief`/`nrm_elev`, `ao_strength`, `shadow_mask_str`,
@@ -321,20 +326,25 @@ Win11/D3D12. The older CPU diffusion path was already deleted in Phase 4.
 - **Future (Stage 2)**: add the directional cascade hierarchy for sun/sky on this
   proven-parity compute base; promote gather constants to F4 knobs.
 
-## Intended direction (grilled 2026-06-01 — see plans/done/LIGHTING_REWORK_PLAN.md, archived after Stage 1 shipped)
+## Intended direction — status update (2026-09-21)
 
-The CPU **Chebyshev BFS SDF** and CPU **per-tile diffusion GI** above are
-**interim, not the design target** — they produce squarish penumbra + blocky
-bounce. Approved retarget: **GPU JFA SDF** (Euclidean → round) and **Radiance
-Cascades GI** (Bilinear-Fix), both as fragment ping-pong on a new **RGBA16F RT
-backbone** (reuse `ui_composite_target` machinery + the stubbed
-`sprite_batcher.color_target_format`). Sequencing: a pre-backbone cleanup commit
-first — extract the `refresh_display` SDF/GI/vis block → `lighting/frame_build`,
-add the dirty-gate (busted while F4 panel visible), and single-source the shaders
-(externalize the live HLSL, delete the dead `data/shaders/lighting/src/*.hlsl`
-copies). Then backbone + AgX tonemap (mandatory together) → JFA → RC → bloom/LUT.
-Single-thread emitter collect is ratified (no dedicated thread). Full rationale +
-roadmap in `plans/done/LIGHTING_REWORK_PLAN.md`.
+The retarget this section originally proposed (grilled 2026-06-01, see
+`plans/done/LIGHTING_REWORK_PLAN.md`) is PARTIALLY SHIPPED:
+
+- **GPU JFA SDF — SHIPPED.** `gpu_sdf_pass.cpp` (`occ_base`/`occ_raster` seed →
+  `jfa_seed`/`jfa_flood`/`jfa_resolve`) replaced the CPU Chebyshev BFS. `sdf_pass.cpp`
+  is now upload/storage plumbing only, not a distance-transform implementation.
+  RGBA16F world-target backbone + AgX tonemap also shipped (see `render_state.cpp`'s
+  `world_target_`/`tonemap_`).
+- **Radiance Cascades GI — SHIPPED (Stage 7, gpu-daylight-black-scene-bisect-plan,
+  2026-09-21).** `gi_bounce.comp.hlsl`/`gi_bounce2.comp.hlsl` (the fixed 16-ray
+  gather + EMA temporal filter) are deleted. The bounce is now
+  `rc_build.comp.hlsl` → `rc_merge.comp.hlsl` → `rc_resolve.comp.hlsl` (5
+  cascades, `RC_CASCADES` in `src/lighting/rc_params.h`), driven by
+  `gi_compute_pass.{h,cpp}`. `gi_field.comp.hlsl` (the per-tile direct-radiance
+  gather RC consumes as its emitter texture) is UNCHANGED — only the bounce
+  moved. The sprite-visible contract is identical: `gi_out_buf_`/`GiBuf`, same
+  tile-res x-major layout, same binding slot.
 
 ## Known invariants & gotchas
 
@@ -352,6 +362,32 @@ Both run INSIDE a `redraw_invalidated()` cycle, which since 2i-B-7g clears only 
 
 **5. SDL_Renderer still alive.**
 `copy_surface_to_dynamic_atlas` still creates SDL_Textures (used as lookup keys for `find_gpu_texture_full`). Cannot delete SDL_Renderer until atlas switches to a pure GPU key. Target: phase 2i-B-7f.
+
+**6. Each optional lighting pass is gated on ONLY its own readiness (Stage 2, gpu-daylight
+black-scene plan, 2026-09-21).**
+In `flush_and_gather_rc` (`sdl_render_frame.cpp`), the SDF/sky-sun/GI dispatches are three
+independently-guarded blocks, each checking only its own pipeline's `ready()` plus the shared
+`sdf_populated` prerequisite — never a sibling's. They used to share one conjunction that
+included `rs.gi().ready()`, so a GI pipeline failure silently took the sky/sun pass (and
+therefore all outdoor daylight) down with it, even though sky/sun consumes no GI data. Every
+`rc_rebuild` frame logs `[lighting][passes] rc=1 sdf=<ran|skip:reason> sky=<...> gi=<...>
+map=WxH` — grep that before assuming a rendering fault when only one layer looks wrong; it names
+the first unmet conjunct for anything skipped.
+
+**7. One source of truth for "this tile blocks light" (Stage 3, gpu-daylight black-scene plan,
+2026-09-21).**
+`lighting::classify_tile_occlusion` (`tile_occlusion.h`) is now the ONLY place that decides
+whether a tile blocks light and how tall its occluder is — `frame_build.cpp`'s OccBuf build and
+`cata_tiles.cpp`'s SDF-footprint seeding (`push_occluder_footprint`) both call it instead of
+re-deriving the rule locally. The governing distinction: `map::coverage()` supplies HEIGHT
+(ranged-cover gameplay stat), the `transparency_cache` decides whether the tile blocks LIGHT at
+all. A window has coverage 60 (stops bullets) yet is transparent — do not gate light-blocking on
+coverage alone, that is the exact bug (interior blackout at the `SKY_WALL_H = 0.60` threshold)
+this classifier exists to prevent. `sky_sun.comp.hlsl`'s `SKY_WALL_H`/`ROOF_H` mirror this
+header's constants by hand (a shader cannot include a C++ header) — keep them in lockstep.
+Trees carry NO OccBuf height since Phase 2.3: their sun shadow is the screen-space silhouette
+mask (`shadow.vert/.frag`, `shadow_mask_str` ships ON), the SOLE sun-shadow source for tall
+sprites — the SDF march shadows only walls/roofs/furniture/vehicles now.
 
 ---
 

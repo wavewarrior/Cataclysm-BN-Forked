@@ -11,6 +11,7 @@
 #include "item.h"
 #include "lighting/dev_test_lights.h"
 #include "map.h"
+#include "mapdata.h"
 #include "map_iterator.h"
 #include "monster.h"
 #include "npc.h"
@@ -23,7 +24,9 @@
 #include "worldfactory.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <utility>
 
 // Runtime-tunable menu-emitter knobs, owned by sdltiles.cpp. F-key handlers
 // there mutate these; the snapshot reads them when pushing the decorative
@@ -149,8 +152,7 @@ static emitter_pos face_offset(const level_cache& mc, int lx, int ly) {
     return {cx + dx / len * PUSH, cy + dy / len * PUSH};
 }
 
-// Non-const map& required for i_at() and get_vehicles().
-static void collect_zlev(map& m, int zlev, std::vector<gpu_emitter>& out) {
+static void collect_zlev(map& m, int zlev, const sun_params& sun, std::vector<gpu_emitter>& out) {
     const int mapsize = m.getmapsize();
     // Step 4b: terrain/furniture/field/item emitters sitting inside their own opaque
     // tile are pushed onto the wall face. Creatures are excluded — they never stand
@@ -175,6 +177,76 @@ static void collect_zlev(map& m, int zlev, std::vector<gpu_emitter>& out) {
                         out.push_back(make_omni(
                             ep.x, ep.y, zlev, static_cast<float>(t_id->light_emitted), tc.r, tc.g,
                             tc.b));
+                    }
+
+                    // Window portals: a lit window acts as a directional area light
+                    // pointing into the room it opens onto, strength modulated by how
+                    // directly the sun hits the window's outward-facing side. This is
+                    // NOT a physically-traced GI bounce - it's the standard "fake area
+                    // light at the window" technique many engines use because a single
+                    // window tile is too small an aperture for a tile-resolution SDF
+                    // sphere-trace to reliably carry usable light deep into a room.
+                    if (t_id->has_flag(TFLAG_CONNECT_TO_WALL) && t_id->has_flag("WINDOW")
+                        && t_id->transparent
+                        && (sun.sun_intensity > 0.05f || sun.sky_intensity > 0.05f)) {
+                        static constexpr std::array<std::pair<int, int>, 4> cardinals = {
+                            {{0, -1}, {0, 1}, {-1, 0}, {1, 0}}};
+                        auto out_dx = 0.0f;
+                        auto out_dy = 0.0f;
+                        auto has_outside = false;
+                        auto has_inside = false;
+                        for (const auto& [dx, dy] : cardinals) {
+                            const int nx = lx + dx;
+                            const int ny = ly + dy;
+                            if (nx < 0 || ny < 0 || nx >= mc.cache_x || ny >= mc.cache_y) {
+                                continue;
+                            }
+                            const bool n_outside = mc.outside_cache[mc.idx(nx, ny)] != 0;
+                            if (n_outside && !has_outside) {
+                                out_dx = static_cast<float>(dx);
+                                out_dy = static_cast<float>(dy);
+                                has_outside = true;
+                            }
+                            if (!n_outside) { has_inside = true; }
+                        }
+                        if (has_outside && has_inside) {
+                            // sun_dir is the direction light TRAVELS (sun -> ground -> shadow),
+                            // despite sprite_batcher.h's misleading "direction sun comes FROM"
+                            // comment — see sprite_batcher.cpp's make_sun_params derivation
+                            // (toward_sun = -sun_dir). A window is lit BRIGHTEST when its
+                            // outward face points toward the sun (direct beam through the
+                            // glass), but ANY outward-facing window also admits diffuse sky
+                            // light regardless of facing - a north window is not pitch dark.
+                            // Without this ambient floor, every window on a wall the sun
+                            // isn't currently hitting contributes exactly zero.
+                            const float sun_angle = std::max(
+                                0.0f, -(out_dx * sun.sun_dir_x + out_dy * sun.sun_dir_y));
+                            const float direct = 45.0f * sun_angle * sun.sun_intensity;
+                            const float ambient = 18.0f * sun.sky_intensity;
+                            const float lum = direct + ambient;
+                            if (lum > 0.5f) {
+                                // Blend colour toward sky tint as the direct term shrinks, so a
+                                // shaded window still reads cooler than a sun-facing one - but
+                                // never PURE sky-blue: a real outdoor scene under daylight has
+                                // sunlit ground/walls/foliage bouncing warm light in through any
+                                // window regardless of which way it faces, not just north-sky
+                                // scatter. `w`'s floor is that warm ground-bounce contribution;
+                                // 100% `direct/lum` sky_r/g/b (at floor 0) previously made every
+                                // non-sun-facing window (most windows, most of the time) inject
+                                // strongly blue light while the outdoor sun read warm - measured
+                                // in-game via a real house at noon: sky_r/g/b=(0.50,0.60,0.90) vs
+                                // sun_r/g/b=(1.00,0.95,0.80), a stark cold/warm mismatch.
+                                constexpr float WARM_FLOOR = 0.35f;
+                                const float w =
+                                    std::max(direct / std::max(lum, 0.001f), WARM_FLOOR);
+                                const float r = sun.sun_r * w + sun.sky_r * (1.0f - w);
+                                const float g = sun.sun_g * w + sun.sky_g * (1.0f - w);
+                                const float b = sun.sun_b * w + sun.sky_b * (1.0f - w);
+                                out.push_back(make_cone(
+                                    ep.x, ep.y, zlev, lum, r, g, b, -out_dx, -out_dy,
+                                    units::to_radians(80_degrees)));
+                            }
+                        }
                     }
 
                     const furn_id f_id = cur->get_furn({sx, sy});
@@ -258,7 +330,8 @@ static void collect_zlev(map& m, int zlev, std::vector<gpu_emitter>& out) {
     }
 }
 
-std::vector<gpu_emitter> build_emitter_snapshot(event_queue& eq, float frame_ms) {
+std::vector<gpu_emitter> build_emitter_snapshot(event_queue& eq, float frame_ms,
+                                                 const sun_params& sun) {
     std::vector<gpu_emitter> out;
     out.reserve(1024);
 
@@ -352,7 +425,7 @@ std::vector<gpu_emitter> build_emitter_snapshot(event_queue& eq, float frame_ms)
         }
     }
 
-    collect_zlev(m, zlev, out);
+    collect_zlev(m, zlev, sun, out);
 
     // Player personal light (torch, flashlight, worn items, mutations) +
     // on-fire glow. Folded in here after dropping collect_character() for

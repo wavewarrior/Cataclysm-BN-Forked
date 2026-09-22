@@ -170,12 +170,17 @@ extern float g_sound_wave_speed;       // tiles/sec expansion rate, default 12.0
 extern float g_sound_wave_min_radius; // min tile radius, default 6.0
 extern float g_sound_wave_max_radius;  // max tile radius, default 48.0
 
-// GI compute pass tuning (Phase 4: 2nd bounce + temporal + albedo bleed).
-// Static globals (NOT debug_params): the DebugParams cbuffer is wire-stable
-// with the sprite shader, so new GI knobs ride here like the sound-wave knobs.
-extern float g_gi_temporal; // 2nd-bounce EMA blend (0=pure spatial, 1=full replace)
-extern float g_gi_bounce2;  // 2nd-bounce mix: out = 1st + k·2nd (0=off)
+// GI compute pass tuning. Static global (NOT debug_params): the DebugParams
+// cbuffer is wire-stable with the sprite shader, so new GI knobs ride here
+// like the sound-wave knobs. Stage 7 (gpu-daylight black-scene plan) retired
+// g_gi_temporal/g_gi_bounce2 (the old EMA-bounce knobs) when the bounce
+// became Radiance Cascades, which has no temporal filter to tune.
 extern float g_gi_albedo;   // albedo-bleed mix (0=off): field *= lerp(1, albedo, k)
+// Multi-bounce radiance feedback (default 0.3): re-injects last rebuild's
+// fully cascaded GI as an extra surface-radiance source in gi_field.comp,
+// so daylight through a window keeps walking deeper into a room across
+// successive rebuilds instead of stopping at the first sphere-traced hit.
+extern float g_gi_feedback;
 // DIAGNOSTIC (temporary): force a FULL seen-cache clear+recast every frame.
 // Isolates incremental-clear staleness in the GPU vision pass.
 // Toggle: F4 dev panel, Effects tab, "force full seen rebuild (diag)".

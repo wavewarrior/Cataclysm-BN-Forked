@@ -26,6 +26,7 @@
 #include "itype.h"
 #include "json.h"
 #include "lighting/solid_overlay.h"
+#include "lighting/tile_occlusion.h"
 #include "sdl_lighting_devui.h"
 #include "lightmap.h"
 #include "lightmap_ready.h"
@@ -2263,9 +2264,25 @@ void cata_tiles::push_occluder_footprint(const occluder_footprint_options& opts)
         (t <= LIGHT_TRANSPARENCY_SOLID)
             ? 1.0f
             : std::clamp(1.0f - std::exp(-(t - LIGHT_TRANSPARENCY_OPEN_AIR)), 0.0f, 1.0f);
-    // Nothing to seed. Leaving the tile uncaptured lets occ_base fall back to the
-    // tile-square TransBuf seed, which for a transmitting tile is "open" anyway.
-    if (blk <= 0.0f) { return; }
+    // Stage 3 (gpu-daylight black-scene plan): whether this tile is allowed to
+    // seed the SDF at all is now the SAME hard binary rule every other lighting
+    // consumer uses (lighting::classify_tile_occlusion), not a soft `blk <= 0`
+    // threshold on the Beer-Lambert weight above. A soft threshold let terrain
+    // transmitting only marginally more than open air still get "captured",
+    // lose its tile-square fallback, and deposit JFA seed coverage — the open-
+    // ground SDF-seeding hazard this stage removes at its source. `blk` itself
+    // is kept, now purely as the soft per-quad DARKENING weight for tiles that
+    // DO block (hedges/smoke dapple; hard occluders stay exact at 1.0).
+    const lighting::tile_occlusion_query occ_q{
+        .transparency = t,
+        .terrain_valid = true,
+    };
+    if (!lighting::classify_tile_occlusion(occ_q).blocks_light) {
+        // Nothing to seed. Leaving the tile uncaptured lets occ_base fall back to
+        // the tile-square TransBuf seed, which for a transmitting tile is "open"
+        // anyway.
+        return;
+    }
 
     // Quad geometry in TILE units, relative to this tile's own screen square, exactly
     // as sprite.vert draws it (centre + size + rotation about the centre).
@@ -2609,7 +2626,8 @@ bool cata_tiles::draw_sprite_at(
              .flash_r = flash_r,
              .flash_g = flash_g,
              .flash_b = flash_b,
-             .cutout = cutout_flag});
+             .cutout = cutout_flag,
+             .caster = is_fg ? entity_caster_ : 0.0f});
         // Step 2: capture this sprite's alpha footprint for the SDF seed. Foreground
         // only — the BACKGROUND layer of a wall tile is the floor underneath it, which
         // is opaque across the whole square and would re-create the very tile-square

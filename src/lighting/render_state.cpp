@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <cstring>
 #include <span>
+#include <string>
 
 #define dbg(x) DebugLogFL((x), DC::SDL)
 
@@ -137,13 +138,26 @@ void render_state::init(SDL_Window* host_window) {
     // x-major), sized to the same max map extent as the SDF; the sprite reads it
     // as GiBuf. Emitter + SDF buffers carry COMPUTE_STORAGE_READ so the field
     // pass can gather them.
-    gi_.init(device_, static_cast<std::uint32_t>(rt_tiles), static_cast<std::uint32_t>(rt_tiles));
+    // Stage 1 (gpu-daylight black-scene plan): a false init() here used to fail
+    // silently — ready() gates record(), so the pass just never runs and the
+    // effect it owns quietly vanishes. Collect failures and log them together
+    // once, loudly, after every optional pass has had a chance to init.
+    std::vector<std::string> degraded_passes;
+    if( !gi_.init(
+                device_, static_cast<std::uint32_t>(rt_tiles),
+                static_cast<std::uint32_t>(rt_tiles) ) ) {
+        degraded_passes.emplace_back( "gi" );
+    }
 
     // GPU compute sky/sun directional skylight pass (Stage 2a/2b). Same max tile
     // extent as the SDF/GI; sky_buffer() feeds sprite.frag as SkyBuf (rgb
     // directional sky-access + a celestial occlusion). Reads sdf_'s unified
     // coverage occluder buffer (occ_buffer(), which carries COMPUTE_STORAGE_READ).
-    sky_.init(device_, static_cast<std::uint32_t>(rt_tiles), static_cast<std::uint32_t>(rt_tiles));
+    if( !sky_.init(
+                device_, static_cast<std::uint32_t>(rt_tiles),
+                static_cast<std::uint32_t>(rt_tiles) ) ) {
+        degraded_passes.emplace_back( "sky_sun" );
+    }
 
     // UI compositor target. Sized to the PHYSICAL (drawable) swapchain pixels
     // so the composite blit is 1:1; the resize hook in sdltiles keeps it in
@@ -256,8 +270,27 @@ void render_state::init(SDL_Window* host_window) {
 
         // GPU JFA SDF pass (P3): seed → flood → resolve on SS-grid. Same max tile
         // extent as the CPU SDF; jfa_sdf_buffer() is scratch output for A/B vs CPU DT.
-        gpu_sdf_.init(
-            device_, static_cast<std::uint32_t>(rt_tiles), static_cast<std::uint32_t>(rt_tiles));
+        if( !gpu_sdf_.init(
+                    device_, static_cast<std::uint32_t>(rt_tiles),
+                    static_cast<std::uint32_t>(rt_tiles) ) ) {
+            degraded_passes.emplace_back( "gpu_sdf" );
+        }
+    }
+    // Stage 1 (gpu-daylight black-scene plan): one loud line naming every
+    // optional pass whose init() failed, instead of each one silently going
+    // ready()==false and quietly dropping its effect. NOTE: this does not cover
+    // sdf_.init() (the core CPU/GPU SDF upload path) — its signature is `void`,
+    // so it has no failure to report; a future signature change should add it
+    // here rather than leaving it the one silent exception.
+    if( !degraded_passes.empty() ) {
+        std::string joined;
+        for( std::size_t i = 0; i < degraded_passes.size(); ++i ) {
+            if( i > 0 ) { joined += ", "; }
+            joined += degraded_passes[i];
+        }
+        DebugLogFL( DL::Error, DC::Main )
+                << "[lighting] DEGRADED: " << joined
+                << " — world lighting will be incomplete";
     }
 }
 
@@ -344,43 +377,7 @@ void render_state::set_tile_scissor(const SDL_Rect* rect) { tile_batcher_.set_sc
 
 void render_state::clear_tile_scissor() { tile_batcher_.set_scissor(nullptr); }
 
-namespace
-{
-const bool g_diag_face_amt = std::getenv( "CBN_DIAG_SEG_LIGHTING" ) != nullptr;
-std::uint64_t s_face_total = 0;
-std::uint64_t s_face_wall = 0;
-std::uint64_t s_face_other = 0;
-// Exposed-edge count histogram for wall/window sprites: index = how many of the tile's
-// four edges cata_tiles found exposed. A straight wall run scores 2 (its outer face and
-// its interior face), a corner 2 perpendicular, a free-standing pillar 4.
-std::uint64_t s_face_edges[5] = { 0, 0, 0, 0, 0 };
-// PER-FRAME, not cumulative. A cumulative total cannot answer "how many walls were on
-// screen": dividing it by an ASSUMED frame count is how you talk yourself into "about one
-// wall per frame" when the real figure could be thirty, which is the difference between
-// "nothing to light" and "lights only a tenth of the walls present".
-std::uint64_t s_frame_no = 0;
-std::uint64_t s_pf_total = 0;
-std::uint64_t s_pf_wall = 0;
-std::uint64_t s_pf_wall_max = 0;
-} // namespace
-
 void render_state::begin_lighting_frame(const frame_light_inputs& in) {
-    if( g_diag_face_amt ) {
-        // Report the frame that just ENDED, then reset. Frame 0 is the pre-first-frame
-        // state and is deliberately reported too, so a scene that queues no walls at all
-        // is visible as a zero rather than as a missing line.
-        s_pf_wall_max = std::max( s_pf_wall_max, s_pf_wall );
-        if( s_frame_no % 30u == 0u ) {
-            DebugLogFL( DL::Info, DC::Main )
-                    << "[faceframe] frame=" << s_frame_no
-                    << " sprites_this_frame=" << s_pf_total
-                    << " walls_this_frame=" << s_pf_wall
-                    << " walls_max_any_frame=" << s_pf_wall_max;
-        }
-        ++s_frame_no;
-        s_pf_total = 0;
-        s_pf_wall = 0;
-    }
     // Cache for flush_shadow_casters: the silhouette-shadow batcher is stamped
     // separately (own pass, before Pass W) with the same tile geometry + sun so
     // the vertex shear tracks the sun. No lighting storage buffers there.
@@ -424,10 +421,26 @@ void render_state::begin_lighting_frame(const frame_light_inputs& in) {
     const Uint32 sw = sdf_ready ? static_cast<Uint32>(sdf_.map_w()) : 0u;
     const Uint32 sh = sdf_ready ? static_cast<Uint32>(sdf_.map_h()) : 0u;
 
-    tile_batcher_.set_lighting_resources(
-        in.tile_pixel_size, in.z_level, ne, in.ambient, in.camera_off_x, in.camera_off_y, sw, sh,
-        ebuf, sbuf, gpu_sampler_, kvis, gibuf, &in.sun, &in.debug, skybuf, ramp_buf_,
-        pal_index_buf_);
+    tile_batcher_.set_lighting_resources({
+        .tile_pixel_size = in.tile_pixel_size,
+        .z_level = in.z_level,
+        .emitter_count = ne,
+        .ambient = in.ambient,
+        .cam_off_x = in.camera_off_x,
+        .cam_off_y = in.camera_off_y,
+        .sdf_map_w = sw,
+        .sdf_map_h = sh,
+        .emitter_buf = ebuf,
+        .sdf_buf = sbuf,
+        .data_sampler = gpu_sampler_,
+        .sky_vis_buf = kvis,
+        .gi_buf = gibuf,
+        .sky_buf = skybuf,
+        .ramp_buf = ramp_buf_,
+        .pal_index_buf = pal_index_buf_,
+        .sp = &in.sun,
+        .dbg = &in.debug,
+    });
 
     // Silhouette sun-shadow mask (Phase 2): bind it as the tile batcher's 2nd
     // fragment storage texture (sprite.frag ShadowMask, t2/space2). Always
@@ -832,43 +845,6 @@ void render_state::append_slice(
 
 void render_state::queue_tile_sprite(SDL_GPUTexture* atlas_tex, const sprite_instance& inst) {
     if (!device_.ready() || !atlas_tex) { return; }
-    // DIAGNOSTIC (temporary, CBN_DIAG_SEG_LIGHTING): is the per-sprite facing lane
-    // actually populated at runtime? Both the vertical-face arc and the relaxed sun
-    // gates key on it, so if cata_tiles never sets it BOTH features are silently inert
-    // and every pixel A/B measures nothing. Counted here rather than probed in the
-    // shader because a fragment dump that drops varying consumption kills D3D12
-    // pipeline creation and reports a black frame instead of a reading.
-    if( g_diag_face_amt ) {
-        ++s_face_total;
-        ++s_pf_total;
-        // DECODE exactly as sprite.frag does. The amount is packed into [0.25, 0.75] so
-        // interpolation drift cannot carry floor() across an integer boundary; reading the
-        // raw fraction instead (as this probe first did) mis-buckets every window, which
-        // packs to exactly 0.55 and fails a `> 0.55` test on the undecoded value.
-        const float mask_f = std::floor( inst.face_amt );
-        const float dec = ( inst.face_amt - mask_f - 0.25f ) * 2.0f;
-        if( dec > 0.55f ) {
-            ++s_face_wall;
-            ++s_pf_wall;
-            unsigned mask = static_cast<unsigned>( mask_f + 0.5f );
-            unsigned pc = 0;
-            for( ; mask != 0u; mask >>= 1u ) { pc += ( mask & 1u ); }
-            ++s_face_edges[std::min<unsigned>( pc, 4u )];
-        } else if( dec > 0.0f ) {
-            ++s_face_other;
-        }
-        if( s_face_total % 200000u == 1u ) {
-            DebugLogFL( DL::Info, DC::Main )
-                    << "[facediag] sprites=" << s_face_total
-                    << " face>0.55(walls/windows)=" << s_face_wall
-                    << " 0<face<=0.55(furniture)=" << s_face_other
-                    << " edges0=" << s_face_edges[0]
-                    << " edges1=" << s_face_edges[1]
-                    << " edges2=" << s_face_edges[2]
-                    << " edges3=" << s_face_edges[3]
-                    << " edges4=" << s_face_edges[4];
-        }
-    }
     if (avatar_route_) {
         // Character-creator portrait: its own queue, flushed into avatar_target_ by
         // composite_avatar_pass. Checked BEFORE unlit_overlay_route_ so the portrait
@@ -997,10 +973,16 @@ void render_state::flush_shadow_casters(
     // storage buffers (count=0, sdf_map_w/h=0, all buffers null) so
     // bind_lighting_resources no-ops — shadow.frag reads only the atlas. The
     // sampler is forwarded so set_lighting_resources' null-guard is satisfied.
-    shadow_batcher_.set_lighting_resources(
-        in.tile_pixel_size, in.z_level, 0u, in.ambient, in.camera_off_x, in.camera_off_y, 0u, 0u,
-        /*emitter*/ nullptr, /*sdf*/ nullptr, gpu_sampler_,
-        /*sky_vis*/ nullptr, /*gi*/ nullptr, &in.sun, &in.debug);
+    shadow_batcher_.set_lighting_resources({
+        .tile_pixel_size = in.tile_pixel_size,
+        .z_level = in.z_level,
+        .ambient = in.ambient,
+        .cam_off_x = in.camera_off_x,
+        .cam_off_y = in.camera_off_y,
+        .data_sampler = gpu_sampler_,
+        .sp = &in.sun,
+        .dbg = &in.debug,
+    });
 
     // Clear to opaque black (alpha 1): shadow.frag writes alpha=1 and the
     // batcher MAX-blends alpha, so the mask stays opaque → the Phase-1 debug
@@ -1011,14 +993,17 @@ void render_state::flush_shadow_casters(
         cb, shadow_mask_->texture(), shadow_mask_->width(), shadow_mask_->height(), clear_mask,
         proj_w, proj_h, shadow_mask_->format());
 
-    // Drain the TALL subset of the (still-populated) tile queue as sheared
-    // coverage. Same dst_h > 1.5*tile_px test the vertex shader uses for the
-    // "lit on top" tall-sprite path. Drain WITHOUT clearing — Pass W re-drains
-    // the full set right after.
+    // Drain the caster subset of the (still-populated) tile queue as sheared
+    // coverage: TALL art (same dst_h > 1.5*tile_px test the vertex shader uses
+    // for the "lit on top" path — trees, tall furniture) plus any sprite that
+    // opted in via the creature caster flag (cutout_pad0, set for in-world
+    // creatures by draw_critter_at — ordinary 1-tile creature art fails the
+    // tall test but must still cast, Phase 2.3). Drain WITHOUT clearing —
+    // Pass W re-drains the full set right after.
     const float tall_threshold = in.tile_pixel_size * 1.5f;
     SDL_GPUTexture* bound = nullptr;
     for (const tile_sprite_draw& s : tile_sprite_queue_) {
-        if (s.inst.dst_h <= tall_threshold) { continue; }
+        if (s.inst.dst_h <= tall_threshold && s.inst.cutout_pad0 <= 0.5f) { continue; }
         // Hover-outline silhouette copies (pad2 > 0.5) must NOT cast shadows —
         // 8 offset casters would draw a black halo around the creature.
         if (s.inst.pad2 > 0.5f) { continue; }

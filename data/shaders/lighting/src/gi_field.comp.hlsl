@@ -36,6 +36,10 @@ StructuredBuffer<float>   Emitters : register(t0, space0);
 StructuredBuffer<float>   SdfBuf   : register(t1, space0);
 StructuredBuffer<float>   SkyBuf   : register(t2, space0);
 StructuredBuffer<float>   AlbedoBuf : register(t3, space0);
+// Radiance feedback (gi_feedback knob): last rebuild's fully RC-cascaded
+// gi_out_buf_, re-read here as an extra surface-radiance source. See the
+// gi_feedback comment below and the field write at the end of main().
+StructuredBuffer<float>   PrevGiBuf : register(t4, space0);
 RWStructuredBuffer<float> FieldBuf : register(u0, space1);
 #include "attenuation.hlsl"
 cbuffer GiParams : register(b0, space2) {
@@ -45,8 +49,15 @@ cbuffer GiParams : register(b0, space2) {
     float current_z;      // probe z-plane (skip off-plane emitters)
     float shadow_k;       // sphere-trace cone hardness (sprite shadow_k knob)
     uint  shadow_steps;   // per-emitter march cap
-    float gi_temporal;    // (unused here — shared gi_params push)
-    float gi_bounce2;     // (unused here — shared gi_params push)
+    // Stage 7 (gpu-daylight black-scene plan) retired gi_bounce2's EMA slot;
+    // rc_pad1 stays reserved/unread. gi_temporal's old slot is now
+    // gi_feedback (below) - a *different*, deliberately re-added mechanism:
+    // multi-bounce radiance feedback, since a single RC bounce alone did not
+    // carry sunlight through windows into deep interiors. 0 = off (default,
+    // matches gi_albedo's convention). See PrevGiBuf / the feedback add in
+    // main().
+    float gi_feedback;    // was rc_pad0 / gi_temporal - now read, see above
+    float rc_pad1;         // reserved: was gi_bounce2
     // P2 sun/sky surface-radiance injection (matches sprite.frag sun/sky colour).
     float sun_r, sun_g, sun_b, sun_intensity;
     float sky_r, sky_g, sky_b, sky_intensity;
@@ -152,6 +163,21 @@ void main( uint3 tid : SV_DispatchThreadID )
         const float  sun_occ    = SkyBuf[o + 3u];
         gi += float3( sky_r, sky_g, sky_b ) * sky_intensity * sky_access;
         gi += float3( sun_r, sun_g, sun_b ) * sun_intensity * sun_occ;
+    }
+    // Multi-bounce radiance feedback: last rebuild's fully RC-cascaded GI
+    // (already spread across the whole reality bubble by rc_merge/rc_resolve)
+    // is re-injected here as an extra surface-radiance source, tinted by this
+    // tile's own albedo below exactly like any other source. RC re-cascades
+    // this combined field on the NEXT rebuild, so light that reached a tile
+    // once keeps walking further on each successive rebuild - the indoor
+    // "bounce off the near wall, then off the far wall, then reach the
+    // player" accumulation the old EMA + gi_bounce2 pass gave across frames,
+    // without adding a second bounce pass of our own. gi_feedback stays a
+    // fraction below 1 so the series 1/(1-k) converges instead of amplifying
+    // without bound.
+    if( gi_feedback > 0.001 ) {
+        const float3 prev = float3( PrevGiBuf[o + 0u], PrevGiBuf[o + 1u], PrevGiBuf[o + 2u] );
+        gi += prev * gi_feedback;
     }
     // Albedo bleed: tint the field by the tile's surface colour so the bounce
     // pass propagates coloured light (a red carpet tints the room). Neutral

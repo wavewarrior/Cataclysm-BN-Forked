@@ -802,6 +802,17 @@ bool cata_tiles::draw_critter_at(
     // composite silhouette behind the whole range (body + worn items).
     const std::size_t outline_start =
         do_outline ? lighting::get_render_state().tile_sprite_count() : 0;
+    // Every sprite enqueued while drawing this creature (body + worn overlays)
+    // is a silhouette sun-shadow caster (Phase 2.3): ordinary 1-tile creature
+    // art fails flush_shadow_casters' tall test, so it opts in explicitly via
+    // sprite_instance::cutout_pad0. Cleared before returning; UI character
+    // previews (draw_entity_with_overlays called directly with
+    // as_independent_entity=true) never pass through here and never cast.
+    entity_caster_ = 1.0f;
+    struct caster_reset {
+        float &flag;
+        ~caster_reset() { flag = 0.0f; }
+    } caster_reset_guard{ entity_caster_ };
     bool result;
     bool is_player;
     bool sees_player;

@@ -9,6 +9,7 @@
 #include "lighting/render_state.h"
 #include "lighting/sdf_pass.h"
 #include "lighting/snapshot.h"
+#include "lighting/tile_occlusion.h"
 #include "lightmap.h"
 #include "map.h"
 #include "profile.h"
@@ -23,15 +24,6 @@
 #define dbg(x) DebugLogFL((x), DC::SDL)
 
 namespace lighting {
-// Occluder height (tiles) for full trees. The shader's sky_sun.comp marches a
-// 3D ray and blocks iff ray_h < h, so this sets how FAR a tree's shadow reaches:
-// at noon (elev_tan~1) a 3.0-tall tree casts a ~3-tile shadow, at dawn (elev_tan~0.2)
-// a ~15-tile one. Walls stay at coverage-derived ~1.0, so trees cast LONG shadows
-// and buildings SHORT — the height-aware split. Keep in sync with TREE_H in
-// sky_sun.comp.hlsl (the SDF-only fallback for tiles absent from OccBuf).
-constexpr float TREE_H = 3.0f;
-
-
 
 frame_lighting_result build_and_submit_lighting(
     render_state& rs, lighting_rebuild_flags rebuild, bool want_hud_snapshot, float skylight_bleed,
@@ -45,7 +37,7 @@ frame_lighting_result build_and_submit_lighting(
 
     auto snapshot = [&]() {
         ZoneScopedN("light_emitter_snapshot");
-        return lighting::build_emitter_snapshot(rs.emitter_events(), FRAME_MS);
+        return lighting::build_emitter_snapshot(rs.emitter_events(), FRAME_MS, rs.current_sun());
     }();
 
     // Phase 4: compute transparency + occ + sky_vis from the current map cache.
@@ -178,45 +170,43 @@ frame_lighting_result build_and_submit_lighting(
                         // below hits the identical unguarded obj() deref, so it must
                         // share this same guard rather than running unconditionally.
                         const bool ter_ok = m.ter(tp).is_valid();
-                        float h = ter_ok
-                                      ? std::clamp(static_cast<float>(m.coverage(tp)) / 100.0f, 0.0f, 1.0f)
-                                      : 0.0f;
-                        // map::coverage() is the ranged-COVER gameplay stat, not a
-                        // light-transmission value: a window has coverage 60 (stops
-                        // bullets, blocks a sightline through the frame) yet is
-                        // TRANSPARENT to light. Because coverage 60 lands exactly on
-                        // sky_sun.comp's SKY_WALL_H = 0.60 blocking threshold, every
-                        // window read as a solid wall and no daylight reached any
-                        // interior — sprite.frag's own comment ("a roofed tile lit
-                        // only through window directions gets partial sky FROM the
-                        // opening") describes behaviour this silently prevented.
-                        //
-                        // Coverage supplies the occluder's HEIGHT (full wall ~1,
-                        // half-wall ~0.5); the transparency cache — the same field
-                        // the game's own LOS/vision trusts, and which already
-                        // discounts glass, bars and chain-link — decides whether it
-                        // blocks LIGHT at all. Anything that transmits (> SOLID)
-                        // stops casting a sun/sky shadow.
-                        if (static_cast<int>(mc.transparency_cache.size()) > idx &&
-                            mc.transparency_cache[idx] > LIGHT_TRANSPARENCY_SOLID) {
-                            h = 0.0f;
+                        // Stage 3 (gpu-daylight black-scene plan): height, blocking and
+                        // the window/coverage-vs-transparency split are now decided in
+                        // ONE place — lighting::classify_tile_occlusion — instead of
+                        // being re-derived here AND in cata_tiles.cpp's SDF-seeding
+                        // early-out. See tile_occlusion.h for the full rule set.
+                        const auto vpart = m.veh_at(tp);
+                        const lighting::tile_occlusion_query occ_q{
+                            .transparency =
+                                ( static_cast<int>( mc.transparency_cache.size() ) > idx )
+                                    ? mc.transparency_cache[idx]
+                                    : LIGHT_TRANSPARENCY_SOLID,
+                            .coverage = ter_ok ? m.coverage( tp ) : 0,
+                            .is_tree = ter_ok && m.has_flag_ter( TFLAG_TREE, tp ),
+                            .is_vehicle_obstacle =
+                                static_cast<bool>( vpart ) && vpart->obstacle_at_part(),
+                            .floor_above = have_above && above->floor_cache[idx],
+                            .outside = false,
+                            .terrain_valid = ter_ok,
+                        };
+                        const lighting::tile_occlusion occl =
+                            lighting::classify_tile_occlusion( occ_q );
+                        occ[static_cast<size_t>(idx) * 2 + 0] = occl.height;
+                        occ[static_cast<size_t>(idx) * 2 + 1] = occl.roofed ? 1.0f : 0.0f;
+                    }
+                }
+                if( std::getenv( "CBN_DIAG_SEG_LIGHTING" ) ) {
+                    static int rf_n = 0;
+                    ++rf_n;
+                    if( rf_n <= 2 || rf_n % 60 == 0 ) {
+                        int roofed = 0;
+                        for( int i = 0; i < total; ++i ) {
+                            if( occ[static_cast<size_t>( i ) * 2 + 1] > 0.5f ) { ++roofed; }
                         }
-                        // P6b: parked vehicles are solid occluders for shadowing.
-                        if (const auto vpart = m.veh_at(tp); vpart && vpart->obstacle_at_part()) {
-                            h = std::max(h, 1.0f);
-                        }
-                        // Full trees (TFLAG_TREE) are opaque terrain with coverage 80,
-                        // which would cap their shadow height at 0.8 — SHORTER than a
-                        // wall's 1.0, inverting the real tree/wall relationship. Override
-                        // to TREE_H so trees cast long shadows. Young trees, shrubs and
-                        // tall grass carry TRANSPARENT (zeroed above) and lack TFLAG_TREE,
-                        // so they stay at h=0 and keep transmitting daylight.
-                        if (ter_ok && m.has_flag_ter(TFLAG_TREE, tp)) {
-                            h = TREE_H;
-                        }
-                        const float roof = (have_above && above->floor_cache[idx]) ? 1.0f : 0.0f;
-                        occ[static_cast<size_t>(idx) * 2 + 0] = h;
-                        occ[static_cast<size_t>(idx) * 2 + 1] = roof;
+                        DebugLogFL( DL::Info, DC::Main )
+                                << "[roofdiag] n=" << rf_n << " zlev=" << zlev
+                                << " have_above=" << have_above << " total=" << total
+                                << " roofed=" << roofed;
                     }
                 }
             }
@@ -281,7 +271,8 @@ frame_lighting_result build_and_submit_lighting(
                     const bool changed = nz != fb_last_nz;
                     fb_last_nz = nz;
                     if( changed || fb_n <= 2 )
-                        dbg( DL::Info ) << "[fbdiag] n=" << fb_n << " total=" << total
+                        DebugLogFL(DL::Info, DC::Main)
+                                    << "[fbdiag] n=" << fb_n << " total=" << total
                                     << " outside_cache.size=" << have
                                     << " copy_ran=" << ( have >= total ? "yes" : "NO (dead)" )
                                     << " outside_true=" << trues

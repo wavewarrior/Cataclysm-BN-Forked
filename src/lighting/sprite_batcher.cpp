@@ -1,6 +1,7 @@
 #include "sprite_batcher.h"
 
 #include "debug.h"
+#include "lighting/frag_slots.h"
 #include "shader_compiler.h"
 
 #include <algorithm>
@@ -247,44 +248,37 @@ public:
     sun_params lp_sun = {};     // Phase 8: sun/sky params
     debug_params lp_debug = {}; // Debug viz + tuning knobs (DebugParams cbuffer)
 
-    void set_lighting_resources(
-        float tile_pixel_size, float z_level, Uint32 count, float ambient, float cam_off_x = 0.0f,
-        float cam_off_y = 0.0f, Uint32 sdf_map_w = 0u, Uint32 sdf_map_h = 0u,
-        SDL_GPUBuffer* emitter_buf = nullptr, SDL_GPUBuffer* sdf_buf = nullptr,
-        SDL_GPUSampler* data_sampler = nullptr, SDL_GPUBuffer* sky_vis_buf = nullptr,
-        SDL_GPUBuffer* gi_buf = nullptr, const sun_params* sp = nullptr,
-        const debug_params* dbg = nullptr, SDL_GPUBuffer* sky_buf = nullptr,
-        SDL_GPUBuffer* ramp_buf = nullptr, SDL_GPUBuffer* pal_index_buf = nullptr) noexcept {
+    void set_lighting_resources(const sprite_batcher::lighting_resources& r) noexcept {
         // data_sampler is vestigial now that all lighting data (emitters,
         // SDF, sky-vis) lives in storage buffers — Atlas is the only
         // sampler texture and carries its own sampler from set_texture().
         // Kept for signature stability; fall back to default if null.
-        if (!data_sampler) { data_sampler = default_sampler; }
-        lp_emitter_buf = emitter_buf;
-        lp_sdf_buf = sdf_buf;
-        lp_sky_vis_buf = sky_vis_buf;
-        lp_gi_buf = gi_buf;
-        lp_sky_buf = sky_buf;
-        lp_ramp_buf = ramp_buf;
-        lp_pal_index_buf = pal_index_buf;
+        SDL_GPUSampler* data_sampler = r.data_sampler ? r.data_sampler : default_sampler;
+        lp_emitter_buf = r.emitter_buf;
+        lp_sdf_buf = r.sdf_buf;
+        lp_sky_vis_buf = r.sky_vis_buf;
+        lp_gi_buf = r.gi_buf;
+        lp_sky_buf = r.sky_buf;
+        lp_ramp_buf = r.ramp_buf;
+        lp_pal_index_buf = r.pal_index_buf;
         lp_data_sampler = data_sampler;
-        lp.tile_pixel_size = tile_pixel_size;
-        lp.current_z = z_level;
-        lp.emitter_count = emitter_buf ? count : 0u;
-        lp.ambient = ambient;
-        lp.camera_off_x = cam_off_x;
-        lp.camera_off_y = cam_off_y;
-        lp.sdf_map_w = sdf_buf ? sdf_map_w : 0u;
-        lp.sdf_map_h = sdf_buf ? sdf_map_h : 0u;
+        lp.tile_pixel_size = r.tile_pixel_size;
+        lp.current_z = r.z_level;
+        lp.emitter_count = r.emitter_buf ? r.emitter_count : 0u;
+        lp.ambient = r.ambient;
+        lp.camera_off_x = r.cam_off_x;
+        lp.camera_off_y = r.cam_off_y;
+        lp.sdf_map_w = r.sdf_buf ? r.sdf_map_w : 0u;
+        lp.sdf_map_h = r.sdf_buf ? r.sdf_map_h : 0u;
         // Silhouette-shadow shear inputs for the VERTEX stage (shadow.vert).
         // Derived from the same sun_params the fragment stage uses, so the
         // shear direction tracks the sun exactly. cot(elev)=cos/sin from
         // sun_sin_elev, clamped away from the horizon so dawn/dusk shadows
         // stay finite (sin=0.15 → cot≈6.6 = ~6.6× sprite-height reach).
-        if (sp) {
-            lp.sun_dir_x = sp->sun_dir_x;
-            lp.sun_dir_y = sp->sun_dir_y;
-            const float se = std::clamp(sp->sun_sin_elev, 0.15f, 1.0f);
+        if (r.sp) {
+            lp.sun_dir_x = r.sp->sun_dir_x;
+            lp.sun_dir_y = r.sp->sun_dir_y;
+            const float se = std::clamp(r.sp->sun_sin_elev, 0.15f, 1.0f);
             lp.sun_cot_elev = std::sqrt(1.0f - se * se) / se;
         } else {
             lp.sun_dir_x = 0.0f;
@@ -292,8 +286,8 @@ public:
             lp.sun_cot_elev = 0.0f;
         }
         lp.lp_sun_pad = 0.0f;
-        if (sp) {
-            lp_sun = *sp;
+        if (r.sp) {
+            lp_sun = *r.sp;
         } else {
             lp_sun = {};
         }
@@ -302,8 +296,8 @@ public:
         // sun_scale=1, sky_scale=1, shadow_k=8, shadow_steps=16,
         // debug_mode=0) so the shader behaves identically to the pre-
         // debug-widget code path.
-        if (dbg) {
-            lp_debug = *dbg;
+        if (r.dbg) {
+            lp_debug = *r.dbg;
         } else {
             lp_debug = {};
         }
@@ -405,6 +399,25 @@ public:
             << " uniform_buffers=" << f.resources.num_uniform_buffers
             << " (sprite frag expects samplers=1 st=1 sb=7 ub=3; shadow frag expects "
                "samplers=1 st=0 sb=0 ub=0)";
+        // Stage 4 (gpu-daylight black-scene plan): the comment above only
+        // asked a human to notice a wrong count. For the sprite pipeline
+        // specifically (both the tile and UI batchers share sprite.frag.hlsl),
+        // assert it — the same failure mode set_lighting_resources's layout
+        // note already flags (DXC strips a fragment storage buffer/texture the
+        // shader never reads, shifting the t-range and corrupting the D3D12
+        // root signature) now fails loudly at startup instead of silently
+        // shipping a broken binding table.
+        if (std::strcmp(desc.frag_name, "sprite.frag.hlsl") == 0
+            && (f.resources.num_storage_buffers != FRAG_SBUF_COUNT
+                || f.resources.num_storage_textures != FRAG_STORAGE_TEX_COUNT)) {
+            DebugLogFL(DL::Error, DC::Main)
+                << "sprite_batcher [" << (label ? label : "?")
+                << "]: frag binding layout mismatch — storage_buffers="
+                << f.resources.num_storage_buffers << " (expected " << FRAG_SBUF_COUNT
+                << ") storage_textures=" << f.resources.num_storage_textures
+                << " (expected " << FRAG_STORAGE_TEX_COUNT << ")";
+            throw std::runtime_error("sprite frag binding layout mismatch");
+        }
 
         // Build the pipeline for the configured (swapchain) target format.
         // Other formats (e.g. the RGBA16F HDR world target) are built
@@ -746,10 +759,10 @@ public:
                     } else {
                         ++s_diag_unlit;
                     }
-                    if (s.is_lit && s_diag_first_lit) {
+                    if (s.is_lit && (s_diag_first_lit || s_diag_lit % 300 == 1)) {
                         s_diag_first_lit = false;
                         DebugLogFL(DL::Info, DC::Main)
-                            << "[segdiag] first LIT segment: sun_intensity="
+                            << "[segdiag] LIT segment #" << s_diag_lit << ": sun_intensity="
                             << lp_sun_use.sun_intensity << " sky_intensity="
                             << lp_sun_use.sky_intensity << " sdf_map_w=" << lp_use.sdf_map_w
                             << " emitter_count=" << lp_use.emitter_count
@@ -842,10 +855,10 @@ private:
         // zero an earlier slot.
         if (lp_emitter_buf && lp_sdf_buf && lp_sky_vis_buf && lp_gi_buf && lp_sky_buf && lp_ramp_buf
             && lp_pal_index_buf) {
-            SDL_GPUBuffer* sbufs[7] =
+            SDL_GPUBuffer* sbufs[FRAG_SBUF_COUNT] =
                 {lp_emitter_buf, lp_sdf_buf,  lp_sky_vis_buf,  lp_gi_buf,
                  lp_sky_buf,     lp_ramp_buf, lp_pal_index_buf};
-            SDL_BindGPUFragmentStorageBuffers(rp, /*first_slot=*/0, sbufs, 7);
+            SDL_BindGPUFragmentStorageBuffers(rp, /*first_slot=*/0, sbufs, FRAG_SBUF_COUNT);
         }
     }
 };
@@ -882,16 +895,8 @@ void sprite_batcher::set_texture(SDL_GPUTexture* atlas, SDL_GPUSampler* sampler,
 
 void sprite_batcher::set_scissor(const SDL_Rect* rect) { p->set_scissor(rect); }
 
-void sprite_batcher::set_lighting_resources(
-    float tile_pixel_size, float z_level, Uint32 emitter_count, float ambient, float cam_off_x,
-    float cam_off_y, Uint32 sdf_map_w, Uint32 sdf_map_h, SDL_GPUBuffer* emitter_buf,
-    SDL_GPUBuffer* sdf_buf, SDL_GPUSampler* data_sampler, SDL_GPUBuffer* sky_vis_buf,
-    SDL_GPUBuffer* gi_buf, const sun_params* sp, const debug_params* dbg, SDL_GPUBuffer* sky_buf,
-    SDL_GPUBuffer* ramp_buf, SDL_GPUBuffer* pal_index_buf) {
-    p->set_lighting_resources(
-        tile_pixel_size, z_level, emitter_count, ambient, cam_off_x, cam_off_y, sdf_map_w,
-        sdf_map_h, emitter_buf, sdf_buf, data_sampler, sky_vis_buf, gi_buf, sp, dbg, sky_buf,
-        ramp_buf, pal_index_buf);
+void sprite_batcher::set_lighting_resources(const lighting_resources& r) {
+    p->set_lighting_resources(r);
 }
 
 void sprite_batcher::draw(const sprite_instance& inst) { p->draw(inst); }

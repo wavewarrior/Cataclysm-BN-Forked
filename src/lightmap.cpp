@@ -1592,8 +1592,17 @@ void map::generate_lightmap_worker( const int zlev )
                         return prev_map_cache.floor_cache[idx] || prev_map_cache.vehicle_floor_cache[idx];
                     };
                     const int cur_idx = map_cache.idx( p.x(), p.y() );
-                    auto direct_sky = [&]( const point_bub_ms & tile ) {
-                        return top_floor || has_direct_sunlight_at( tile, zlev );
+                    auto sky_open = [&]( const point_bub_ms & tile ) {
+                        // Open to the sky — NOT necessarily in direct sun. A window whose
+                        // outside ground sits in a solar shadow (very often the building's
+                        // OWN shadow: every window on the off-sun side) must still admit
+                        // diffuse daylight, or whole rooms read pitch-dark at noon and the
+                        // player's sight range collapses with them. The magnitude is not
+                        // decided here: source_light below reads the neighbour's own lm,
+                        // which already carries full daylight for direct-sun ground and the
+                        // SOLAR_SHADOW_SCATTER fraction for shadowed ground.
+                        return top_floor ||
+                               direct_sunlight_state_at( tile, zlev ) != direct_sunlight_state::none;
                     };
                     auto inbounds_light_neighbour = [&]( const auto & neighbour ) {
                         if( neighbour.x() < 0 || neighbour.y() < 0 ||
@@ -1602,13 +1611,9 @@ void map::generate_lightmap_worker( const int zlev )
                         }
                         return true;
                     };
-                    auto direct_light_neighbour = [&]( const auto & neighbour ) {
-                        return inbounds_light_neighbour( neighbour ) &&
-                               direct_sky( neighbour );
-                    };
                     auto open_sky_neighbour = [&]( const auto & neighbour ) {
                         return inbounds_light_neighbour( neighbour ) &&
-                               direct_sky( neighbour );
+                               sky_open( neighbour );
                     };
 
                     if( !outside_cache[cur_idx] || ( !top_floor && has_floor_above( cur_idx ) ) ) {
@@ -1622,7 +1627,7 @@ void map::generate_lightmap_worker( const int zlev )
                         // also has no floor above.
                         for( int i = 0; i < 4; ++i ) {
                             const auto neighbour = p.xy() + point( dir_x[i], dir_y[i] );
-                            if( !direct_light_neighbour( neighbour ) ) {
+                            if( !open_sky_neighbour( neighbour ) ) {
                                 continue;
                             }
                             const bool nb_has_open_sky_neighbour = std::ranges::any_of(
@@ -2499,6 +2504,15 @@ void map::build_seen_cache( const tripoint_bub_ms &origin, const int target_z )
             // Always set the origin tile so blind-spot fill can use it as origin_vis source
             // regardless of which target_z is currently being built.
             origin_cache.seen_cache[origin_cache.idx( origin.x(), origin.y() )] = VISIBILITY_FULL;
+            if( std::getenv( "CBN_DIAG_SEEN_CACHE" ) ) {
+                static int n = 0;
+                if( ++n <= 20 ) {
+                    DebugLogFL( DL::Info, DC::Main )
+                        << "[castzdiag] at cast_zlight: g_max_view_distance=" << g_max_view_distance
+                        << " g_half_mapsize=" << g_half_mapsize
+                        << " g_reality_bubble_size=" << g_reality_bubble_size;
+                }
+            }
             cast_zlight( seen_caches, transparency_caches, floor_caches, blocked_caches,
                          origin, 0, 1.0f, k_sight_model );
         } else {

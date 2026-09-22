@@ -30,6 +30,12 @@
 #include "ui_manager.h" // ui_manager::invalidate, ui_manager::redraw_invalidated
 #include "sdl_lighting_devui.h"
 #include "lighting/gpu_device.h"
+#include "lighting/dev_test_lights.h"
+#include "avatar.h"
+#include "game.h"
+#include "map.h"
+#include "mapdata.h"
+#include "coordinates.h"
 #include "debug.h"
 
 #define dbg(x) DebugLogFL((x),DC::Main)
@@ -505,7 +511,8 @@ void CheckMessages( display_context &d )
     // lighting DebugParams knob (mirrors the F4 sliders) and is consumed. Live
     // bisection without driving the RmlUi panel. Known names: vis_curve,
     // vis_radius, ao_strength, ramp_enable, shadow_mask_str, sun_scale,
-    // sky_scale, gi_strength, cloud_strength, nrm_amount.
+    // sky_scale, gi_strength, cloud_strength, nrm_amount, gi_albedo,
+    // gi_feedback.
     {
         std::error_code ec;
         if( std::filesystem::exists( "/tmp/cata_knob", ec ) ) {
@@ -525,10 +532,82 @@ void CheckMessages( display_context &d )
                 else if( kn == "gi_strength" ) dp.gi_strength = kv;
                 else if( kn == "cloud_strength" ) dp.cloud_strength = kv;
                 else if( kn == "nrm_amount" ) dp.nrm_amount = kv;
+                else if( kn == "gi_albedo" ) g_gi_albedo = kv;
+                else if( kn == "gi_feedback" ) g_gi_feedback = kv;
+                else if( kn == "rc_readback" ) g_rc_readback = kv > 0.5f;
                 else if( kn == "sun_arrow" ) g_sun_arrow = kv > 0.5f;
                 else ok = false;
                 std::filesystem::remove( "/tmp/cata_knob", ec );
                 dbg( DL::Info ) << "knob " << kn << " = " << kv << ( ok ? "" : " (unknown)" );
+            }
+        }
+    }
+    // DIAGNOSTIC (temporary): /tmp/cata_build_gi_scene (any content) triggers a
+    // one-shot procedural test scene near the player, built to exercise the
+    // Radiance Cascades GI pipeline end to end:
+    //   - A 7x7 enclosed room with three primary-colour walls (temple palette
+    //     t_rock_red/green/blue) and a plain wall+door on the fourth side, so
+    //     GI colour bleed from each wall is independently visible.
+    //   - A static dev_test_lights point light at the room centre (these feed
+    //     BOTH direct lighting and the GI gather, unlike the mouse-follow
+    //     cursor light), so the coloured bounce is visible regardless of
+    //     time of day.
+    //   - An isolated tree and a short wall segment placed a few tiles west,
+    //     in the open, for a side-by-side sun-shadow-length comparison
+    //     (trees render ~3 tiles tall, ordinary walls ~1 tile tall).
+    // The player is teleported just inside the room's doorway so a single
+    // screenshot captures the whole coloured-bounce chamber.
+    {
+        std::error_code ec;
+        if( std::filesystem::exists( "/tmp/cata_build_gi_scene", ec ) ) {
+            std::filesystem::remove( "/tmp/cata_build_gi_scene", ec );
+            if( g != nullptr && g->u.bub_pos().x() >= 0 ) {
+                const tripoint_bub_ms base = g->u.bub_pos();
+                const int z = base.z();
+                const int x0 = base.x() + 3;  // west wall (green)
+                const int x1 = base.x() + 9;  // east wall (plain + door)
+                const int y0 = base.y() - 3;  // north wall (red)
+                const int y1 = base.y() + 3;  // south wall (blue)
+                map &here = get_map();
+                for( int x = x0; x <= x1; ++x ) {
+                    for( int y = y0; y <= y1; ++y ) {
+                        const tripoint_bub_ms p( x, y, z );
+                        if( y == y0 ) {
+                            here.ter_set( p, t_rock_red );
+                        } else if( y == y1 ) {
+                            here.ter_set( p, t_rock_blue );
+                        } else if( x == x0 ) {
+                            here.ter_set( p, t_rock_green );
+                        } else if( x == x1 ) {
+                            here.ter_set( p, ( y == base.y() ) ? t_door_c : t_wall );
+                        } else {
+                            here.ter_set( p, t_floor );
+                        }
+                    }
+                }
+                dev_test_lights::lights.push_back( dev_test_lights::light{
+                    static_cast<float>( ( x0 + x1 ) / 2 ), static_cast<float>( base.y() ),
+                    static_cast<float>( z ) + 0.5f, 10.0f, 3.0f, 1.0f, 1.0f, 0.92f
+                } );
+                // Isolated tree + short wall segment west of the room, in the
+                // open, for a tree-vs-building shadow-length comparison.
+                const tripoint_bub_ms tree_p( base.x() - 6, base.y(), z );
+                here.ter_set( tree_p, t_grass );
+                here.ter_set( tripoint_bub_ms( base.x() - 6, base.y() - 1, z ), t_tree );
+                for( int wx = base.x() - 7; wx <= base.x() - 5; ++wx ) {
+                    here.ter_set( tripoint_bub_ms( wx, base.y() + 4, z ), t_grass );
+                }
+                here.ter_set( tripoint_bub_ms( base.x() - 6, base.y() + 4, z ), t_wall );
+                // If seated in a vehicle, unboard first — a boarded character's position
+                // is re-derived from the vehicle's seat every tick, silently reverting
+                // setpos() and making the teleport (and this whole scene) invisible.
+                if( g->u.in_vehicle ) {
+                    here.unboard_vehicle( g->u.bub_pos() );
+                }
+                g->u.setpos( tripoint_bub_ms( x1 - 1, base.y(), z ) );
+                dbg( DL::Info ) << "[giscene] built room x=" << x0 << ".." << x1
+                                << " y=" << y0 << ".." << y1 << " z=" << z
+                                << " lights=" << dev_test_lights::lights.size();
             }
         }
     }

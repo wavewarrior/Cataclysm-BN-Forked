@@ -362,6 +362,7 @@ void map::set_absorption_cache_dirty(const int zlev) {
 
 void map::update_visibility_cache(const int zlev) {
     ZoneScopedN("update_visibility_cache");
+    static const bool s_diag_seen_vars = std::getenv("CBN_DIAG_SEEN_CACHE") != nullptr;
     const auto player_pos = g->u.bub_pos();
     visibility_variables_cache.variables_set = true; // Not used yet
     visibility_variables_cache.g_light_level = static_cast<int>(g->light_level(zlev));
@@ -386,6 +387,18 @@ void map::update_visibility_cache(const int zlev) {
     visibility_variables_cache.u_is_boomered = g->u.has_effect(effect_boomered);
     visibility_variables_cache.visibility_scale_factor =
         60.0f / static_cast<float>(g_max_view_distance);
+    if (s_diag_seen_vars) {
+        static int vvc_n = 0;
+        if (++vvc_n <= 20) {
+            DebugLogFL(DL::Info, DC::Main)
+                << "[vvcdiag] u_clairvoyance=" << visibility_variables_cache.u_clairvoyance
+                << " u_unimpaired_range=" << visibility_variables_cache.u_unimpaired_range
+                << " vision_threshold=" << visibility_variables_cache.vision_threshold
+                << " visibility_scale_factor=" << visibility_variables_cache.visibility_scale_factor
+                << " g_light_level=" << visibility_variables_cache.g_light_level
+                << " g_max_view_distance=" << g_max_view_distance;
+        }
+    }
 
     auto sm_squares_seen = std::vector<int>(static_cast<size_t>(my_MAPSIZE) * my_MAPSIZE, 0);
 
@@ -516,30 +529,7 @@ void map::update_visibility_cache(const int zlev) {
 void map::build_outside_cache(const int zlev) {
     ZoneScopedN("build_outside_cache");
     auto& ch = get_cache(zlev);
-    // DIAGNOSTIC (temporary, CBN_DIAG_SEG_LIGHTING). Measured in-game: outside_cache is
-    // FALSE for all 32400 tiles while the player stands outdoors in bright daylight,
-    // which zeroes SkyVisBuf and gates sprite.frag's entire sun term off
-    // (`sky_vis > 0.05`) -- daylight ends up shadowless. Two very different causes
-    // produce that identical symptom and guessing between them has already been wrong
-    // once this session, so measure: (a) this function early-returns on
-    // `outside_cache_dirty.none()` and the cache is simply never built, or (b) it DOES
-    // build but every tile reads roofed because the z+1 floor cache claims a floor
-    // overhead. Reports the early-out, and below, the resulting true-counts.
-    const bool diag_oc = std::getenv("CBN_DIAG_SEG_LIGHTING") != nullptr;
-    static int diag_oc_n = 0;
-    // Filter to the low levels: the recursion runs z=0 -> z=10 and then UNWINDS,
-    // so z=0 is built LAST and a plain call-count cap logs only the sky levels.
-    const bool diag_log = diag_oc && zlev <= 1 && ++diag_oc_n <= 8;
     if (ch.outside_cache_dirty.none()) {
-        if (diag_log) {
-            size_t t = 0;
-            for (size_t i = 0; i < ch.outside_cache.size(); ++i) {
-                t += ch.outside_cache[i] ? 1u : 0u;
-            }
-            DebugLogFL(DL::Info, DC::Main)
-                << "[ocdiag] z=" << zlev << " EARLY-OUT (dirty.none) outside_true=" << t << "/"
-                << ch.outside_cache.size();
-        }
         return;
     }
 
@@ -617,22 +607,6 @@ void map::build_outside_cache(const int zlev) {
         for (int smx = 0; smx < my_MAPSIZE; ++smx) { process_smx(smx); }
     }
 
-    if (diag_log) {
-        size_t ot = 0;
-        for (size_t i = 0; i < ch.outside_cache.size(); ++i) {
-            ot += ch.outside_cache[i] ? 1u : 0u;
-        }
-        size_t ft = 0;
-        size_t fsz = 0;
-        if (above) {
-            fsz = above->floor_cache.size();
-            for (size_t i = 0; i < fsz; ++i) { ft += above->floor_cache[i] ? 1u : 0u; }
-        }
-        DebugLogFL(DL::Info, DC::Main)
-            << "[ocdiag] z=" << zlev << " BUILT rebuild_all=" << rebuild_all
-            << " outside_true=" << ot << "/" << ch.outside_cache.size()
-            << " have_above=" << (above ? "yes" : "no") << " above_floor_true=" << ft << "/" << fsz;
-    }
     // Tell the render side this cache actually changed; the lighting structure
     // snapshot keys on it so a snapshot taken before the first build cannot stick.
     // Content-gated: see level_cache::outside_checksum for why a bump-on-work would
@@ -1216,16 +1190,57 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
     const auto need_seen_rebuild =
         seen_cache_dirty || force_seen_rebuild_for_gpu_residency || m_last_seen_cache_origin != p;
     TracyPlot("Map Need Seen Rebuild", need_seen_rebuild ? int64_t{1} : int64_t{0});
-    if (need_seen_rebuild) {
-        if (gpu_device != nullptr) {
-            // The GPU visibility pass owns the resident seen data; force the next
-            // update_visibility_cache() to re-read it instead of trusting the origin.
-            m_last_seen_cache_origin = tripoint_bub_ms(tripoint_min);
-        } else {
-            build_seen_cache(p, zlev);
-            m_last_seen_cache_origin = p;
+    static const bool s_diag_seen = std::getenv("CBN_DIAG_SEEN_CACHE") != nullptr;
+    auto log_seen_field = [&](const char* tag) {
+        if (!s_diag_seen) { return; }
+        auto& zc = get_cache(zlev);
+        int nonzero = 0;
+        float maxv = 0.0f;
+        for (float v : zc.seen_cache) {
+            if (v > 0.0f) { ++nonzero; }
+            maxv = std::max(maxv, v);
         }
-        // seen_cache changed (or will be updated by the GPU pass); mark visibility stale.
+        std::ostringstream ladder;
+        for (const int d : {0, 1, 3, 5, 9, 10, 11, 12, 13, 14, 15, 19}) {
+            const auto x = std::min(p.x() + d, zc.cache_x - 1);
+            ladder << " e" << d << "=" << zc.seen_cache[zc.idx(x, p.y())];
+        }
+        for (const int d : {0, 1, 3, 5, 9, 10, 11, 12, 13, 14, 15, 19}) {
+            const auto y = std::max(p.y() - d, 0);
+            ladder << " n" << d << "=" << zc.seen_cache[zc.idx(p.x(), y)];
+        }
+        DebugLogFL(DL::Info, DC::Main)
+            << "[seenfield] " << tag << " nonzero=" << nonzero << "/" << zc.seen_cache.size()
+            << " max=" << maxv << " ladder:" << ladder.str();
+    };
+    if (s_diag_seen) {
+        DebugLogFL(DL::Info, DC::Main)
+            << "[seenrebuild] seen_cache_dirty=" << seen_cache_dirty
+            << " force_gpu_residency=" << force_seen_rebuild_for_gpu_residency
+            << " origin_changed=" << (m_last_seen_cache_origin != p)
+            << " need_seen_rebuild=" << need_seen_rebuild << " p=" << p.x() << "," << p.y();
+    }
+    if (need_seen_rebuild) {
+        // BUGFIX (gpu-daylight black-scene plan): this used to skip CPU
+        // build_seen_cache() whenever a GPU device was present, on the
+        // assumption that a GPU visibility compute pass
+        // (cata_gpu::begin_gpu_visibility / finish_gpu_visibility,
+        // src/compute/gpu_lm.cpp) would populate seen_cache instead. That
+        // pass is never actually dispatched anywhere in the codebase (it has
+        // zero callers) - checked directly. The result: on every GPU build,
+        // level_cache::seen_cache stayed at its default (0.0 = "not seen")
+        // for the entire map except a handful of tiles, apparent_light_at()
+        // read that as "nothing is visible", and the renderer fell back to
+        // desaturated map-memory art for ~99% of the on-screen viewport even
+        // in bright daylight - the black/dark-scene bug this plan traces.
+        // Always run the CPU shadowcast; it is the same call the non-GPU
+        // branch already made unconditionally, so this is not new cost on
+        // that path, only restored cost on the GPU path where it was wrongly
+        // skipped.
+        build_seen_cache(p, zlev);
+        log_seen_field("after_cpu_build_seen_cache");
+        m_last_seen_cache_origin = p;
+        // seen_cache changed; mark visibility stale.
         get_cache(zlev).visibility_cache_dirty = true;
     }
     _lap(_ph_seen);
@@ -1241,6 +1256,7 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
                     debugmsg("SDL_GPU lighting completion failed; see debug.log for details");
                     return;
                 }
+                log_seen_field("after_finish_gpu_lighting");
                 // The GPU path never enters generate_lightmap_worker, which is where the CPU
                 // path latches lightmap readiness.  Latch it here too, or
                 // lightmap_ever_generated() stays false for the whole run and sprite lighting

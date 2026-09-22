@@ -120,10 +120,15 @@ struct sprite_instance {
     // character readable through the leaves (Stardew/Graveyard-Keeper style).
     // 0 (default) = exact no-op for every other sprite.
     float cutout;
+    // Silhouette sun-shadow caster opt-in: 1 = in-world creature sprite —
+    // flush_shadow_casters stamps it into the screen-space shadow mask even
+    // though its art is not TALL (dst_h <= 1.5*tile). Set by
+    // texture::enqueue_tile_sprite from tile_sprite_options::caster (populated
+    // in cata_tiles::draw_critter_at). 0 for every non-creature sprite.
+    float cutout_pad0;
     // Reserved pads: keep the struct a multiple of 16 bytes (112 B = 28 floats)
     // for the GPU StructuredBuffer stride. Never written; must stay in lockstep
     // with the HLSL SpriteInstance declarations.
-    float cutout_pad0;
     float cutout_pad1;
     float cutout_pad2;
 };
@@ -165,7 +170,10 @@ struct pipeline_desc {
 // so the rest of the codebase compiles without the SDL_gpu.h surface.
 // Phase 8: sun + skylight parameters.  Wire-stable with SunParams cbuffer (b1, space3).
 struct sun_params {
-    float sun_dir_x, sun_dir_y; // direction sun comes FROM (normalized 2D)
+    // Direction light TRAVELS (sun -> ground -> shadow), a unit 2D vector.
+    // NOT "direction sun comes from" despite the name — toward_sun = -sun_dir.
+    // See make_sun_params() in sprite_batcher.cpp for the derivation.
+    float sun_dir_x, sun_dir_y;
     float sun_sin_elev;         // sin(elevation): 0=horizon, 1=zenith
     float sun_intensity;        // 0=night, 1=noon
     float sun_r, sun_g, sun_b;  // sun color RGB
@@ -175,12 +183,12 @@ struct sun_params {
 };
 
 // Debug visualisation + runtime tuning knobs (DebugParams cbuffer at
-// register(b2, space3); 48 bytes; wire-stable). debug_mode dispatches per-
+// register(b2, space3); 272 bytes; wire-stable). debug_mode dispatches per-
 // component visualisations in the fragment shader; emitter/sun/sky_scale
 // multiply the corresponding contributions; shadow_k and shadow_steps tune
 // the shared sphere-trace (emitter + sun); dither_amt/dither_bands tune the
 // world-locked ordered (Bayer) dither. Defaults are the shipping look
-// (scale=1, k=8, steps=16, dither on at 6 bands).
+// (scale=1, k=8, steps=16, dither on at 32 bands).
 struct debug_params {
     uint32_t debug_mode = 0u;
     float debug_opacity = 0.6f;
@@ -196,26 +204,29 @@ struct debug_params {
     // read as blotching rather than as dither. 32 keeps the mean-preserving
     // stipple while dropping the step below visual threshold.
     float dither_bands = 32.0f;
-    // 1-bounce indirect multiplier (0=off); Alt+F8/F9 to tune. GI is computed at
-    // ONE VALUE PER MAP TILE and bilinearly upsampled (gi_bounce.comp.hlsl +
-    // sprite.frag's indirect_bilinear), so its error is tile-scale soft blobs.
-    // 0.60 made those blobs the dominant large-scale structure in the image;
-    // 0.35 keeps colour bleed without letting the low-res term drive the look.
-    // The real fix is a higher-resolution / temporally-filtered GI pass.
-    float gi_strength = 0.35f;
+    // 1-bounce indirect multiplier (0=off); Alt+F8/F9 to tune. Was 0.35, tuned down
+    // from 0.60 against the OLD tile-resolution `gi_bounce.comp.hlsl` pass, whose
+    // error was tile-scale soft blobs that 0.60 made the dominant large-scale image
+    // structure. Stage 7 (gpu-daylight-black-scene-bisect-plan) replaced that pass
+    // with Radiance Cascades — exactly the "higher-resolution... GI pass" this
+    // comment used to say was the real fix — verified smooth/continuous with no
+    // blocky steps or cascade seams (see the plan doc's visual-inspection rounds).
+    // With the blob problem gone, 0.35 was just leaving window-portal-lit interiors
+    // and colour bleed reading too dim relative to the un-scaled direct sun term.
+    // Raised to 0.7, the value RC's cleaner output can actually carry without
+    // reintroducing a dominant low-frequency artifact.
+    float gi_strength = 0.7f;
     // Vision rework knobs (Stoneshard-style). All default ON so the effect ships;
     // set any to its off-value to bisect live. Wire-stable with DebugParams cbuffer.
     float vis_curve = 1.0f;    // vision-edge falloff exponent (0=off → no falloff)
     float mem_dim = 0.35f;     // memorized-tile brightness floor (effect 3)
-    float mem_desat = 0.70f;   // memorized-tile desaturation 0..1 (effect 3)
+    float dbg_pad_a = 0.0f;    // reserved (was mem_desat — desat moved to the tileset memory FX)
     float night_floor = 0.02f; // ambient floor at night   (effect 4)
     float day_floor = 0.05f;   // ambient floor at noon     (effect 4)
-    // Tone grade (Stoneshard wash) + radial vision bubble. Applied to LIT world
-    // tiles only (tint≈0). Full-strength defaults; each knob disables at its
-    // off-value (grade_desat/cool=0, grade_bright=1, vis_radius=0).
-    float grade_desat = 0.55f;  // 0=full colour … 1=greyscale
-    float grade_cool = 0.20f;   // blend toward cool teal tint (0=off)
-    float grade_bright = 0.80f; // brightness multiplier on lit world tiles
+    float dbg_pad_b = 0.0f;    // reserved (was grade_desat — grade moved to the tonemap ASC-CDL
+                               // stage, sdl_lighting_devui.cpp)
+    float dbg_pad_c = 0.0f;    // reserved (was grade_cool)
+    float dbg_pad_d = 0.0f;    // reserved (was grade_bright)
     // Radial player-distance falloff radius (tiles; 0 = off). Read by the Step 5b
     // sub-tile vision carve. Ships at 0: the carve's LOS term is the point of the
     // effect, and a 16-tile radial dim would silently darken daylight scenes.
@@ -227,11 +238,12 @@ struct debug_params {
     float nrm_amount = 0.9f;   // normal Lambert blend: 0=flat(off) .. 1=full
     float nrm_relief = -2.0f;  // tilt magnitude; SIGNED — negative flips global relief dir
     float nrm_elev = 0.3f;     // implied light height; LOWER=more grazing=stronger relief
-    float sdf_sharp = 0.0f;    // SDF sample: 0=bilinear(smooth) .. 1=nearest(tight/grid-snap)
+    float dbg_pad_e = 0.0f;    // reserved (was sdf_sharp — SDF sampling is hardwired bilinear)
     float ao_strength = 0.35f; // A4 ambient occlusion: 0=off .. 1=full SDF-cavity darkening (ships
                                // ON)
-    float shadow_mask_str = 0.0f; // Phase 2 silhouette sun-shadow mask on ground: 0=off(default) ..
-                                  // 1=full
+    float shadow_mask_str = 1.0f; // silhouette sun-shadow mask on ground (Phase 2.3: shipped ON;
+                                  // 0=off). The mask is the SOLE sun-shadow source for tall
+                                  // sprites (trees/creatures) — see tile_occlusion.h.
     // Foliage sway (vertex stage; sprite.vert reads these via DebugParams b2/space1).
     float sway_amp = 3.0f;  // wind displacement amplitude in pixels (0=off)
     float sway_freq = 1.2f; // wind oscillation frequency (Hz-ish)
@@ -324,7 +336,13 @@ struct debug_params {
     // stays 16-byte aligned.
     float sun_soft = 0.35f;
     float cutout_pad1 = 0.0f; // reserved: keeps DebugParams a multiple of 16 bytes
-    float cloud_pad0 = 0.0f;  // reserved: keeps DebugParams a multiple of 16 bytes
+    // Validity sentinel for the directional lighting layer (Stage 1, gpu-daylight
+    // black-scene plan): 1.0 when sky_sun_pass is ready AND has dispatched at
+    // least once this run, 0.0 otherwise ("no data yet" vs a genuinely dark
+    // buffer — see sprite.frag.hlsl's magenta debug tint and
+    // assemble_light_inputs in sdl_render_frame.cpp). Occupies a former pad
+    // slot; the struct stays the same size.
+    float sky_valid = 0.0f;
     float cloud_pad1 = 0.0f;  // reserved: keeps DebugParams a multiple of 16 bytes
 };
 
@@ -404,16 +422,32 @@ public:
     // gi_buf:       compute GI output — fragment storage slot 3 → t5/space2.
     // sky_buf:      sky_sun.comp output — fragment storage slot 4 → t6/space2.
     // sp:           sun+sky params pointer (nullptr = no sun)
-    void set_lighting_resources(
-        float tile_pixel_size, float z_level, Uint32 emitter_count, float ambient,
-        float cam_off_x = 0.0f, float cam_off_y = 0.0f, Uint32 sdf_map_w = 0u,
-        Uint32 sdf_map_h = 0u, SDL_GPUBuffer* emitter_buf = nullptr,
-        SDL_GPUBuffer* sdf_buf = nullptr, SDL_GPUSampler* data_sampler = nullptr,
-        SDL_GPUBuffer* sky_vis_buf = nullptr, SDL_GPUBuffer* gi_buf = nullptr,
-        const sun_params* sp = nullptr, const debug_params* dbg = nullptr,
-        SDL_GPUBuffer* sky_buf = nullptr,
+    //
+    // Stage 4 (gpu-daylight black-scene plan): an options struct, per this
+    // repo's own ">3 parameters" rule — this call had grown to 18 positional
+    // arguments. Clean cutover: no positional overload kept.
+    struct lighting_resources {
+        float tile_pixel_size = 32.0f;
+        float z_level = 0.0f;
+        Uint32 emitter_count = 0u;
+        float ambient = 0.05f;
+        float cam_off_x = 0.0f;
+        float cam_off_y = 0.0f;
+        Uint32 sdf_map_w = 0u;
+        Uint32 sdf_map_h = 0u;
+        SDL_GPUBuffer* emitter_buf = nullptr;
+        SDL_GPUBuffer* sdf_buf = nullptr;
+        SDL_GPUSampler* data_sampler = nullptr;
+        SDL_GPUBuffer* sky_vis_buf = nullptr;
+        SDL_GPUBuffer* gi_buf = nullptr;
+        SDL_GPUBuffer* sky_buf = nullptr;
         // Step 7 palette shade ramps — fragment storage slots 5/6 → t7/t8.
-        SDL_GPUBuffer* ramp_buf = nullptr, SDL_GPUBuffer* pal_index_buf = nullptr);
+        SDL_GPUBuffer* ramp_buf = nullptr;
+        SDL_GPUBuffer* pal_index_buf = nullptr;
+        const sun_params* sp = nullptr;
+        const debug_params* dbg = nullptr;
+    };
+    void set_lighting_resources(const lighting_resources& r);
 
     // Silhouette sun-shadow mask (Phase 2). Now the sole fragment storage-read
     // texture, bound at slot 0 (t1/space2) for sprite.frag. Set separately from

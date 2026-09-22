@@ -120,12 +120,12 @@ cbuffer DebugParams: register(b2, space3) {
     float gi_strength;   // 1-bounce indirect light multiplier (0=off)
     float vis_curve;     // vision-edge falloff exponent (0=off → no falloff)
     float mem_dim;       // memorized-tile brightness floor
-    float mem_desat;     // memorized-tile desaturation 0..1
+    float dbg_pad_a;     // reserved (was mem_desat — desat moved to the tileset memory FX)
     float night_floor;   // ambient floor at night (sun_intensity=0)
     float day_floor;     // ambient floor at noon  (sun_intensity=1)
-    float grade_desat;   // tone grade: 0=full colour, 1=greyscale
-    float grade_cool;    // tone grade: blend toward cool teal tint
-    float grade_bright;  // tone grade: brightness multiplier (lit world tiles)
+    float dbg_pad_b;     // reserved (was grade_desat — grade moved to the tonemap ASC-CDL stage)
+    float dbg_pad_c;     // reserved (was grade_cool)
+    float dbg_pad_d;     // reserved (was grade_bright)
     float vis_radius;    // radial player-distance falloff radius (tiles; 0=off)
     float player_x;      // player map-tile centre x (radial origin)
     float player_y;      // player map-tile centre y
@@ -133,11 +133,11 @@ cbuffer DebugParams: register(b2, space3) {
     float nrm_amount;    // A1 normal Lambert blend: 0=flat(off) .. 1=full
     float nrm_relief;  // A1 normal tilt magnitude; SIGNED (negative flips global relief direction)
     float nrm_elev;    // A1 implied light height above plane; LOWER=more grazing=stronger relief
-    float sdf_sharp;   // SDF sample sharpness: 0=bilinear(smooth) .. 1=nearest(tight, grid-snapped)
+    float dbg_pad_e;   // reserved (was sdf_sharp — SDF sampling is hardwired bilinear)
     float ao_strength; // A4 ambient occlusion: 0=off .. 1=full SDF-cavity darkening of the ambient
                        // fills
-    float shadow_mask_str; // Phase 2: silhouette sun-shadow mask strength on ground (0=off/default
-                           // .. 1=full)
+    float shadow_mask_str; // silhouette sun-shadow mask strength on ground (shipped ON at 1.0
+                           // since Phase 2.3; 0=off)
     // Tail mirrors the C++ debug_params layout. sway_* / anim_time are vertex-stage
     // only — declared here purely so spec_strength lands at the right cbuffer offset.
     float sway_amp;      // (vertex-only padding here)
@@ -189,7 +189,7 @@ cbuffer DebugParams: register(b2, space3) {
     float cutout_feather;
     float sun_soft;
     float cutout_pad1;
-    float cloud_pad0;
+    float sky_valid; // Stage 1: 1.0 = SkyBuf has data this run, 0.0 = pass never dispatched
     float cloud_pad1;
 };
 struct VS_OUT {
@@ -263,11 +263,7 @@ float sdf_bilinear(float2 p) {
     const float c = sdf_texel(x0, y0 + 1);
     const float d = sdf_texel(x0 + 1, y0 + 1);
     const float bil = lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
-    // sdf_sharp biases bilinear→nearest. With the SS grid this is rarely needed
-    // (the field is already fine), but kept as a live tightness lever.
-    if (sdf_sharp <= 0.001) { return bil; }
-    const float nr = sdf_texel((int)floor(g.x + 0.5), (int)floor(g.y + 0.5));
-    return lerp(bil, nr, saturate(sdf_sharp));
+    return bil;
 }
 // Stage 2b: the wall-only sun SDF + its bilinear sampler are GONE. The sun (and
 // moon) shadow is now the unified coverage occluder marched in 3D by
@@ -886,6 +882,15 @@ float4 main(VS_OUT i): SV_Target0 {
             : sky_vis;
     const float sun_occl =
         is_face ? max(sky_dir.a, sky_bilinear(shade_pos + sun_step).a) : sky_dir.a;
+    // Screen-space silhouette shadow visibility (Phase 2.3, shipped ON): sheared
+    // sprite copies of every tall caster (trees/creatures — shadow.vert/.frag,
+    // Graveyard Keeper style) land in ShadowMask; this is the SOLE sun-shadow
+    // source for those sprites (their OccBuf height is zeroed so the SDF march
+    // ignores them). Tall fragments and vertical faces are exempt: a caster must
+    // not darken itself, and a wall face's shadow already comes from the SDF.
+    const float sun_mask_vis = (frag_is_tall || is_face)
+                                   ? 1.0
+                                   : saturate(1.0 - sun_mask_cov * shadow_mask_str);
 
     // ---- Passing cloud shadows (procedural, animated) -----------------------
     // Sampled at shade_pos — the same world-locked, art-texel-quantised position
@@ -939,15 +944,15 @@ float4 main(VS_OUT i): SV_Target0 {
         const float3 sun_L = normalize(float3(toward_sun, sun_sin_elev));
         const float sun_lambert = saturate(
             lerp(flat_sun, saturate(dot(normal, sun_L)), nrm_amount));
-        // Silhouette mask darkens the GROUND sun term (knob-gated; 0=identity).
-        // Tall sprites skip it (mask_term=1) so trees/walls stay lit on top.
-        // NOTE (Phase 2.2): trees still ALSO cast via the SDF (sun_shadow) here →
-        // a temporary double shadow until 2.3 drops trees from the sun SDF.
+        // Silhouette mask darkens the GROUND sun term (shipped ON since Phase 2.3;
+        // knob-gated, 0=identity). Tall sprites skip it (mask_term=1) so trees/
+        // walls stay lit on top. Trees no longer ALSO cast via the SDF — Phase 2.3
+        // zeroed their OccBuf height (tile_occlusion.h), so the silhouette is
+        // their ONLY sun shadow and the old double-shadow warning is resolved.
         // `frag_is_tall` is sprite ART height, so it is false for every wall; a
         // vertical face must be exempted explicitly or the ground silhouette mask
         // darkens the very surface this block exists to light.
-        const float mask_term =
-            (frag_is_tall || is_face) ? 1.0 : saturate(1.0 - sun_mask_cov * shadow_mask_str);
+        const float mask_term = sun_mask_vis;
         sun_contrib =
             float3(sun_r, sun_g, sun_b) * sun_intensity * sun_lambert * sun_shadow * sun_sky_vis
             * mask_term;
@@ -975,7 +980,7 @@ float4 main(VS_OUT i): SV_Target0 {
     // that reads as 3D here. AO modulates ONLY the directionless fills (ambient
     // floor + sky + GI) below — emitter/sun already self-shadow in the march,
     // so AO must not touch them or crevices double-darken. ao_strength=0 → exact
-    // no-op (off, the committed default).
+    // no-op; it ships ON at 0.35 (sprite_batcher.h).
     float ao = 1.0;
     if (ao_strength > 0.001 && sdf_map_w > 0u) {
         const float aor = 1.5;          // tap radius in tiles
@@ -1014,7 +1019,12 @@ float4 main(VS_OUT i): SV_Target0 {
     // open neighbours on the CPU, added here before dither so it bands with the
     // rest of the dynamic light.
     if (gi_strength > 0.001 && sdf_map_w > 0u) {
-        dyn += gi_strength * indirect_bilinear(shade_pos) * ao;
+        // No `* ao` here: gi_field.comp's own gather already ray-marches SDF
+        // occlusion per direction to build this term, so scene AO on top of it
+        // double-penalizes exactly the corners bounce light should fill in.
+        // AO stays applied to sky_contrib/amb_floor above (genuine ambient/direct
+        // terms with no occlusion-aware gather of their own).
+        dyn += gi_strength * indirect_bilinear(shade_pos);
     }
     if (dither_amt > 0.001) {
         const float bands = max(dither_bands, 1.0);
@@ -1022,20 +1032,24 @@ float4 main(VS_OUT i): SV_Target0 {
         const float3 dithered = floor(dyn * bands + bthr) / bands;
         dyn = lerp(dyn, dithered, saturate(dither_amt));
     }
-
     // GPU total light (dithered dynamic light + un-dithered ambient floor).
-    // Tree/building sun shadow: sun_contrib is already scaled by sun_shadow
-    // inside dyn, but that reduction is eaten by the 2.0 ceiling clamp below —
-    // open daylight tiles sit AT the ceiling, so cutting the sun term only
-    // removes clipped headroom and the visible pixel barely moves (the same
-    // failure the cloud comment above documents). Recover it as a POST-clamp
-    // multiplier, like cloud_vis. Partial floor (0.65, not 0): a shadow kills
-    // the direct sun but only partly blocks sky fill, so a shadowed tile keeps
-    // ~65% of its lit radiance instead of going black. The floor is a visual
-    // proxy for "lost direct sun + partial sky reduction" — deliberately NOT
-    // derived from sun_soft (edge width) or sun_intensity (fights the clamp).
+    // Tree/building/silhouette sun shadow: sun_contrib is already scaled by
+    // sun_shadow and mask_term inside dyn, but that reduction is eaten by the
+    // 2.0 ceiling clamp below — open daylight tiles sit AT the ceiling, so
+    // cutting the sun term only removes clipped headroom and the visible pixel
+    // barely moves (the same failure the cloud comment above documents).
+    // Recover it as a POST-clamp multiplier, like cloud_vis. The occlusion
+    // signal is the MIN of the two shadow sources — the SDF march (walls/roofs,
+    // SkyBuf.a) and the screen-space silhouette mask (trees/creatures, Phase
+    // 2.3) — each already exempting what it must not darken. Partial floor
+    // rather than 0: a shadow kills the direct sun but only partly blocks sky
+    // fill. The floor itself scales with sun_intensity so a dawn/overcast sun
+    // (which contributes almost nothing) cannot stamp near-noon-strength
+    // shadows onto the scene — at full sun the floor is 0.65, at no sun 1.0.
     // Gated to sun_applies so night/dusk is untouched.
-    const float sun_shad_mul = sun_applies ? lerp(0.65, 1.0, sun_occl) : 1.0;
+    const float shad_floor = lerp(1.0, 0.65, saturate(sun_intensity));
+    const float sun_shad_mul =
+        sun_applies ? lerp(shad_floor, 1.0, min(sun_occl, sun_mask_vis)) : 1.0;
     const float3 gpu_total = min(ambient_v + dyn, float3(2.0, 2.0, 2.0)) * cloud_vis * sun_shad_mul;
     // What was here: a `combined` term that took the per-channel MAXIMUM of the memory
     // tint and `gpu_total`, then multiplied it onto the raw texel. It read as a blend
@@ -1220,6 +1234,16 @@ float4 main(VS_OUT i): SV_Target0 {
     // view 15 encodes the frontier feather in vis_overlay_a — that IS the thing it
     // exists to show — and views 9-14 rely on texel.a for sprite silhouettes, which
     // would become solid quads.
+    // Stage 1 (gpu-daylight black-scene plan): "no data yet" must never look
+    // identical to "correctly dark". A tile taking the live gpu_lit path while
+    // the lighting grid is active (sdf_map_w > 0) but SkyBuf was never
+    // populated this run (sky_valid < 0.5, set by assemble_light_inputs from
+    // sky_sun_pass::ready()/dispatches()) blends halfway to magenta so a dead
+    // directional-lighting pass is visually unmistakable instead of merely dark.
+    if (sdf_map_w > 0u && sky_valid < 0.5 && mode_gpu_lit) {
+        final_rgb = lerp(final_rgb, float3(1.0, 0.0, 1.0), 0.5);
+    }
+
     float dbg_opaque = 0.0;
     if (dbg_active) {
         float3 vis = float3(0, 0, 0);

@@ -69,12 +69,12 @@ cbuffer DebugParams: register(b2, space1) {
     float gi_strength;
     float vis_curve;
     float mem_dim;
-    float mem_desat;
+    float dbg_pad_a;     // reserved (was mem_desat)
     float night_floor;
     float day_floor;
-    float grade_desat;
-    float grade_cool;
-    float grade_bright;
+    float dbg_pad_b;     // reserved (was grade_desat)
+    float dbg_pad_c;     // reserved (was grade_cool)
+    float dbg_pad_d;     // reserved (was grade_bright)
     float vis_radius;
     float player_x;
     float player_y;
@@ -82,7 +82,7 @@ cbuffer DebugParams: register(b2, space1) {
     float nrm_amount;
     float nrm_relief;
     float nrm_elev;
-    float sdf_sharp;
+    float dbg_pad_e;     // reserved (was sdf_sharp)
     float ao_strength;
     float shadow_mask_str;
     float sway_amp;      // wind displacement amplitude (pixels); 0 = sway off

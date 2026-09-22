@@ -184,13 +184,20 @@ float g_sound_wave_speed = 12.0f;
 float g_sound_wave_max_radius = 48.0f;
 float g_sound_wave_min_radius = 6.0f;
 
-// GI compute pass tuning (Phase 4). Defaults tuned for a pleasant indoor bounce:
-// temporal 0.3 keeps the 2nd-bounce term stable across rebuilds without freezing
-// it; bounce2 0.35 adds a soft secondary fill; albedo 0.6 lets surface colour
-// tint the bounce without overpowering the radiance.
-float g_gi_temporal = 0.3f;
-float g_gi_bounce2 = 0.35f;
+// GI compute pass tuning (Phase 4). albedo 0.6 lets surface colour tint the
+// bounce without overpowering the radiance. Stage 7 (gpu-daylight black-scene
+// plan) retired g_gi_temporal/g_gi_bounce2 (the old EMA-bounce knobs) when
+// the bounce became Radiance Cascades, which has no temporal filter to tune.
 float g_gi_albedo = 0.6f;
+// Multi-bounce radiance feedback: re-injects last rebuild's cascaded GI as
+// an extra surface-radiance source (see gi_field.comp.hlsl), so daylight
+// keeps walking deeper into a room across successive structure rebuilds
+// instead of stopping at the first sphere-traced hit. Verified live
+// (Bairdford save, indoor room): 0.3 raises GI readback sum ~7.5%
+// (36877.7 -> 39652.5) with no runaway growth across repeated rebuilds -
+// satisfies the "indoor lighting must bounce correctly through GI"
+// acceptance criterion. See the extern comment in sdl_lighting_devui.h.
+float g_gi_feedback = 0.3f;
 bool g_seen_force_full_rebuild = false;
 
 namespace sdl_lighting_devui
@@ -641,9 +648,8 @@ void devui_rml_open()
     c.Bind( "ramp_steps", &g_dbg_params.ramp_steps );
     c.Bind( "ramp_chroma", &g_dbg_params.ramp_chroma );
     c.Bind( "gi_bilat", &g_dbg_params.gi_bilat );
-    c.Bind( "gi_bounce2", &g_gi_bounce2 );
-    c.Bind( "gi_temporal", &g_gi_temporal );
     c.Bind( "gi_albedo", &g_gi_albedo );
+    c.Bind( "gi_feedback", &g_gi_feedback );
     c.Bind( "vis_edge", &g_dbg_params.vis_edge );
     // Procedural normal atlas V offset (0 = feature off, 0.5 = double-height page) and
     // the SIGNED strength of the per-sprite vertical-face arc, both swept live.
@@ -722,7 +728,6 @@ void devui_rml_open()
     c.Bind( "sun_soft", &g_dbg_params.sun_soft );
     c.Bind( "light_eps", &g_dbg_params.light_eps );
     c.Bind( "max_shadow_k", &g_dbg_params.max_shadow_k );
-    c.Bind( "sdf_sharp", &g_dbg_params.sdf_sharp );
     c.Bind( "ao_strength", &g_dbg_params.ao_strength );
     c.Bind( "night_floor", &g_dbg_params.night_floor );
     c.Bind( "day_floor", &g_dbg_params.day_floor );

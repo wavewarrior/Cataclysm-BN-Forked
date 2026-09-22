@@ -45,8 +45,14 @@ bool sky_sun_pass::init(gpu_device& dev, std::uint32_t max_w, std::uint32_t max_
     // Allocate the buffer FIRST, before checking the pipeline. The sprite's
     // SkyBuf bind reads sky_buffer() unconditionally (all-or-none storage-buffer
     // bind), so a valid zeroed buffer must exist even if the pipeline failed on
-    // this backend; ready() gates record(), so a failed pipeline just leaves the
-    // sky reading as zero (dark — same as "no data yet").
+    // this backend; ready() gates record(), so a failed pipeline leaves the sky
+    // reading as zero. That is NOT treated as an ordinary "no data yet" — a
+    // zeroed SkyBuf is visually indistinguishable from a correctly-dark one, so
+    // Stage 1 (gpu-daylight black-scene plan) makes the distinction explicit:
+    // assemble_light_inputs publishes debug_params::sky_valid from
+    // ready() && dispatches() > 0, and sprite.frag tints a live gpu_lit tile
+    // toward magenta whenever the lighting grid is active but sky_valid is 0 —
+    // a dead pass is unmistakable instead of merely dark.
     // COMPUTE_STORAGE_READ: gi_field.comp reads SkyBuf to inject sun/sky surface
     // radiance into the GI field (P2 — daylight bounce). GRAPHICS_STORAGE_READ:
     // sprite.frag reads it as the direct SkyBuf term.
@@ -162,6 +168,63 @@ void sky_sun_pass::record(
     SDL_BindGPUComputeStorageBuffers( p, /*first_slot=*/0, ro, 2 );
     SDL_DispatchGPUCompute( p, gx, gy, 1 );
     SDL_EndGPUComputePass( p );
+    ++dispatches_;
+}
+
+sky_sun_pass::sky_means sky_sun_pass::readback_means(
+    std::uint32_t runtime_w, std::uint32_t runtime_h ) const {
+    sky_means out{};
+    if( !sky_buf_ || !dev_ || !dev_->ready() || runtime_w == 0 || runtime_h == 0 ) {
+        return out;
+    }
+    SDL_GPUDevice* d = dev_->raw();
+    const std::uint32_t floats = max_w_ * max_h_ * FLOATS_PER_TILE;
+    const std::uint32_t bytes = floats * static_cast<std::uint32_t>( sizeof( float ) );
+    SDL_GPUTransferBufferCreateInfo tbci{};
+    tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
+    tbci.size = bytes;
+    SDL_GPUTransferBuffer* tb = SDL_CreateGPUTransferBuffer( d, &tbci );
+    if( !tb ) { return out; }
+    SDL_GPUCommandBuffer* cb = SDL_AcquireGPUCommandBuffer( d );
+    if( !cb ) {
+        SDL_ReleaseGPUTransferBuffer( d, tb );
+        return out;
+    }
+    SDL_GPUCopyPass* cp = SDL_BeginGPUCopyPass( cb );
+    SDL_GPUBufferRegion rd{};
+    rd.buffer = sky_buf_;
+    rd.offset = 0;
+    rd.size = bytes;
+    SDL_GPUTransferBufferLocation rdst{};
+    rdst.transfer_buffer = tb;
+    rdst.offset = 0;
+    SDL_DownloadFromGPUBuffer( cp, &rd, &rdst );
+    SDL_EndGPUCopyPass( cp );
+    SDL_SubmitGPUCommandBuffer( cb );
+    SDL_WaitForGPUIdle( d ); // synchronous — one-shot conformance check only
+
+    const float* px = static_cast<const float*>( SDL_MapGPUTransferBuffer( d, tb, false ) );
+    if( !px ) {
+        SDL_ReleaseGPUTransferBuffer( d, tb );
+        return out;
+    }
+    // sky_buf_ is x-major sky[(x*max_h_+y)*4 + c]: rgb = sky-access, a = sun-occ.
+    double rgb_sum = 0.0;
+    double a_sum = 0.0;
+    const std::uint64_t n = static_cast<std::uint64_t>( runtime_w ) * runtime_h;
+    for( std::uint32_t x = 0; x < runtime_w; ++x ) {
+        for( std::uint32_t y = 0; y < runtime_h; ++y ) {
+            const std::uint32_t idx = ( x * max_h_ + y ) * FLOATS_PER_TILE;
+            rgb_sum += ( px[idx + 0] + px[idx + 1] + px[idx + 2] ) / 3.0;
+            a_sum += px[idx + 3];
+        }
+    }
+    SDL_UnmapGPUTransferBuffer( d, tb );
+    SDL_ReleaseGPUTransferBuffer( d, tb );
+
+    out.rgb_mean = n > 0 ? static_cast<float>( rgb_sum / static_cast<double>( n ) ) : 0.0f;
+    out.a_mean = n > 0 ? static_cast<float>( a_sum / static_cast<double>( n ) ) : 0.0f;
+    return out;
 }
 
 } // namespace lighting

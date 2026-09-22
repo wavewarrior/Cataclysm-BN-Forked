@@ -255,6 +255,12 @@ public:
         /// shader soft-holes the leaves around the player so the character
         /// stays visible through them. 0 (default) = no-op.
         float cutout = 0.0f;
+        /// Silhouette sun-shadow caster flag: 1 = this sprite (an in-world
+        /// creature) is stamped into the screen-space shadow mask regardless of
+        /// its art height. Tall art (dst_h > 1.5*tile) casts unconditionally;
+        /// ordinary 1-tile creature sprites need this explicit opt-in. Set from
+        /// cata_tiles::draw_critter_at; carried in sprite_instance::cutout_pad0.
+        float caster = 0.0f;
     };
 
     /// Phase 2i-B-5 GPU draw path. Enqueues exactly one tile sprite
@@ -321,6 +327,7 @@ public:
         s.flash_g = opts.flash_g;
         s.flash_b = opts.flash_b;
         s.cutout = opts.cutout;
+        s.cutout_pad0 = opts.caster;
         lighting::get_render_state().queue_tile_sprite(opts.atlas_tex, s);
         return true;
     }
@@ -1415,6 +1422,12 @@ protected:
     // 0 = normal sprite; negative = memorized tile carrying -(dist from
     // player in tiles). Set per-tile in draw_from_id_string.
     mutable float gpu_light_mul = 0.0f;
+    /// Silhouette sun-shadow caster flag for the sprite currently being drawn:
+    /// 1 while inside draw_critter_at (in-world creatures, body + overlays),
+    /// 0 otherwise. Forwarded into sprite_instance::cutout_pad0 by
+    /// draw_sprite_at so flush_shadow_casters stamps creature sprites into the
+    /// screen-space shadow mask regardless of art height (Phase 2.3).
+    mutable float entity_caster_ = 0.0f;
     /// Lighting composite mode for the sprite currently being drawn. Set
     /// per-tile in `draw_from_id_string` and forwarded into the
     /// `sprite_instance` by `draw_sprite_at`. See src/tile_light_mode.h.

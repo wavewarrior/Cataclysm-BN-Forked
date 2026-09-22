@@ -36,6 +36,7 @@
 #include "lighting/rmlui_layer.h"
 #include "lighting/render_state.h"
 #include "lighting/sdf_pass.h"
+#include "lightmap.h"
 #include "weather.h"
 #include "weather_type.h"
 #include "worldfactory.h"
@@ -477,13 +478,26 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     // otherwise the fragment shadow march reads an uninitialised buffer and all
     // emitter/sun shadows break. Runs first so SDL_GPU sees the write before the
     // sky/GI reads below and inserts the write→read barrier on sdf_storage_.
-    if( rc_rebuild && rs.sdf().populated() && rs.sdf().sdf_buffer()
-        && rs.gpu_sdf().ready() && rs.sdf().trans_buffer() ) {
-    rs.gpu_sdf().record( ctx.cmd_buffer, rs.sdf().trans_buffer(),
-                             rs.sdf().sdf_buffer(),
-                             static_cast<std::uint32_t>( rs.sdf().map_w() ),
-                             static_cast<std::uint32_t>( rs.sdf().map_h() ),
+    //
+    // Stage 2 (gpu-daylight black-scene plan): sky/sun and GI below are now
+    // gated the SAME way — each independently, on only its OWN unmet inputs.
+    // They used to share one conjunction that included rs.gi().ready(), so a
+    // GI pipeline failure silently took the sky/sun pass down with it even
+    // though sky/sun consumes no GI data. A pass may now be culled only by its
+    // own readiness, never by an unrelated sibling's.
+    const bool sdf_populated = rc_rebuild && rs.sdf().populated() && rs.sdf().sdf_buffer();
+    const std::uint32_t map_w =
+        sdf_populated ? static_cast<std::uint32_t>( rs.sdf().map_w() ) : 0u;
+    const std::uint32_t map_h =
+        sdf_populated ? static_cast<std::uint32_t>( rs.sdf().map_h() ) : 0u;
+
+    bool sdf_ran = false;
+    std::string sdf_reason = "rc_or_sdf_buf";
+    if( sdf_populated && rs.gpu_sdf().ready() && rs.sdf().trans_buffer() ) {
+        rs.gpu_sdf().record( ctx.cmd_buffer, rs.sdf().trans_buffer(),
+                             rs.sdf().sdf_buffer(), map_w, map_h,
                              rs.occluders(), g_dbg_params.occ_soft_gain );
+        sdf_ran = true;
         // Step 2/3 diagnostic: the seed's new input. Fires only on an SDF rebuild,
         // not per frame, so it is safe at Info level. `partial` is the positive
         // control for occ_soft_gain: those are the quads the knob scales, and only a
@@ -501,47 +515,82 @@ auto flush_and_gather_rc( lighting::render_state &rs,
                 << " captured_tiles=" << captured
                 << " grid=" << occ.width() << "x" << occ.height()
                 << " soft_gain=" << g_dbg_params.occ_soft_gain;
+    } else if( sdf_populated ) {
+        sdf_reason = !rs.gpu_sdf().ready() ? "gpu_sdf_ready" : "trans_buf";
     }
 
-    // Sky/sun + GI are the optional compute layers ON TOP of the SDF; they need
-    // their own pipelines created (gi().ready()) and consume the SDF write above.
-    if( rc_rebuild && rs.sdf().populated() && rs.gi().ready()
-        && rs.collector() && rs.sdf().sdf_buffer() ) {
-    const std::uint32_t map_w = static_cast<std::uint32_t>( rs.sdf().map_w() );
-        const std::uint32_t map_h = static_cast<std::uint32_t>( rs.sdf().map_h() );
+    // Celestial light params drive BOTH the sky/sun pass and the GI daylight
+    // injection, so derive them once whenever either might run. Weather-
+    // independent (intensity/colour applied fragment-side); cheap, so no wait
+    // on assemble_light_inputs.
+    const lighting::sun_params sp =
+        sdf_populated ? make_celestial_params( calendar::turn, celestial_hour() )
+                      : lighting::sun_params{};
 
-        // Celestial light params drive BOTH the sky/sun pass and the GI daylight
-        // injection, so derive them once. Weather-independent (intensity/colour
-        // applied fragment-side); cheap, so no wait on assemble_light_inputs.
-        const float sun_hour = celestial_hour();
-        const lighting::sun_params sp = make_celestial_params( calendar::turn, sun_hour );
+    // Stage 2a/2b: directional sky/sun pass. Marches the unified coverage
+    // occluder field (OccBuf: height + roof) in 3D toward the celestial light →
+    // sky-access + sun occlusion in sky_buffer(), read by sprite.frag as SkyBuf.
+    // Recorded BEFORE GI below: gi_field.comp also reads SkyBuf (P2 daylight
+    // bounce), so SDL_GPU must see this write before that read to insert the
+    // compute-write→compute-read barrier — sky/sun stays first in RECORD ORDER
+    // even though the two blocks are now gated independently of each other.
+    bool sky_ran = false;
+    std::string sky_reason = "rc_or_sdf_buf";
+    if( sdf_populated && rs.sky().ready() && rs.sdf().occ_buffer() ) {
+        lighting::sky_sun_params kp{};
+        kp.map_w        = map_w;
+        kp.map_h        = map_h;
+        kp.sun_dir_x    = sp.sun_dir_x;
+        kp.sun_dir_y    = sp.sun_dir_y;
+        kp.sun_sin_elev = sp.sun_sin_elev;
+        // (former shadow_k/shadow_steps slots are reserved pads — the shader
+        // never read them; see sky_sun_pass.h.)
+        // P5b: F4-tunable sky/sun quality knobs.
+        kp.sky_dirs     = static_cast<std::uint32_t>( std::max( 1.0f, g_dbg_params.sky_dirs ) );
+        kp.sky_reach    = g_dbg_params.sky_reach;
+        kp.sun_steps    = static_cast<std::uint32_t>( std::max( 1.0f, g_dbg_params.sun_steps ) );
+        kp.sun_penumbra = static_cast<std::uint32_t>( std::max( 1.0f, g_dbg_params.sun_penumbra ) );
+        kp.sdf_ss       = static_cast<std::uint32_t>( lighting::SDF_SUPERSAMPLE );
+        kp.sun_soft     = g_dbg_params.sun_soft;
+        rs.sky().record( ctx.cmd_buffer, rs.sdf().occ_buffer(), rs.sdf().sdf_buffer(),
+                         map_w, map_h, kp );
+        sky_ran = true;
+    } else if( sdf_populated ) {
+        sky_reason = !rs.sky().ready() ? "sky_ready" : "occ_buf";
+    }
 
-        // Stage 2a/2b: directional sky/sun pass FIRST. Marches the unified coverage
-        // occluder field (OccBuf: height + roof) in 3D toward the celestial light →
-        // sky-access + sun occlusion in sky_buffer(), read by sprite.frag as SkyBuf.
-        // Recorded BEFORE the GI pass: gi_field.comp also reads SkyBuf (P2 daylight
-        // bounce), so SDL_GPU must see the write here before the read below to
-        // insert the compute-write→compute-read barrier.
-        if( rs.sky().ready() && rs.sdf().occ_buffer() ) {
-            lighting::sky_sun_params kp{};
-            kp.map_w        = map_w;
-            kp.map_h        = map_h;
-            kp.sun_dir_x    = sp.sun_dir_x;
-            kp.sun_dir_y    = sp.sun_dir_y;
-            kp.sun_sin_elev = sp.sun_sin_elev;
-            kp.shadow_k     = g_dbg_params.shadow_k;
-            kp.shadow_steps = g_dbg_params.shadow_steps;
-            // P5b: F4-tunable sky/sun quality knobs.
-            kp.sky_dirs     = static_cast<std::uint32_t>( std::max( 1.0f, g_dbg_params.sky_dirs ) );
-            kp.sky_reach    = g_dbg_params.sky_reach;
-            kp.sun_steps    = static_cast<std::uint32_t>( std::max( 1.0f, g_dbg_params.sun_steps ) );
-            kp.sun_penumbra = static_cast<std::uint32_t>( std::max( 1.0f, g_dbg_params.sun_penumbra ) );
-            kp.sdf_ss       = static_cast<std::uint32_t>( lighting::SDF_SUPERSAMPLE );
-            kp.sun_soft     = g_dbg_params.sun_soft;
-            rs.sky().record( ctx.cmd_buffer, rs.sdf().occ_buffer(), rs.sdf().sdf_buffer(),
-                             map_w, map_h, kp );
+    // Stage 5 (gpu-daylight black-scene plan): the one-shot readback confirms
+    // not just that the sky pass RAN (Stage 1's sky_valid) but that it wrote
+    // something non-trivial, by reading SkyBuf content back and comparing
+    // against the gameplay light level the HUD already reports. Fires once,
+    // ~120 frames after the first gameplay frame (letting the map cache
+    // settle), never per frame — readback_means stalls the GPU. Deliberately
+    // narrow: it only catches "gameplay bright, SkyBuf ~0" (the sky pass
+    // producing nothing); a sun-only darkening that still leaves sky fill on
+    // screen is Stage 1's sky_valid sentinel's job, not this one's.
+    if( g && !forced_celestial_hour() && rs.sky().ready() ) {
+        static int gp_frames = 0;
+        static bool reported = false;
+        if( !reported && ++gp_frames == 120 ) {
+            reported = true;
+            const float gameplay = g->natural_light_level( g->u.bub_pos().z() );
+            const auto m = rs.sky().readback_means(
+                static_cast<std::uint32_t>( rs.sdf().map_w() ),
+                static_cast<std::uint32_t>( rs.sdf().map_h() ) );
+            if( gameplay > LIGHT_AMBIENT_LIT && m.rgb_mean + m.a_mean < 0.01f ) {
+                DebugLogFL( DL::Error, DC::Main )
+                        << "[lighting][conformance] gameplay light " << gameplay
+                        << " > LIGHT_AMBIENT_LIT but SkyBuf mean (rgb=" << m.rgb_mean
+                        << " a=" << m.a_mean << ") is ~0 — daylight is not reaching the screen";
+            }
         }
+    }
 
+    // GI: gated independently of sky/sun readiness — a dead sky pass must not
+    // disable indirect light, and vice versa (the bug this stage fixes).
+    bool gi_ran = false;
+    std::string gi_reason = "rc_or_sdf_buf";
+    if( sdf_populated && rs.gi().ready() && rs.collector() ) {
         lighting::gi_params rp{};
         rp.emitter_count = static_cast<std::uint32_t>( std::max( 0, rs.collector()->last_count() ) );
         rp.map_w         = map_w;
@@ -551,9 +600,13 @@ auto flush_and_gather_rc( lighting::render_state &rs,
         rp.shadow_steps  = g_dbg_params.shadow_steps;
         // P2: sun/sky surface-radiance injection. gi_field.comp adds
         // sky_color*SkyBuf.rgb + sun_color*SkyBuf.a to each tile's field so the
-        // bounce pass propagates daylight into shadowed/indoor neighbours. Colour
-        // mirrors the sprite's direct sun/sky terms (no weather mult — matches the
-        // weather-independent sky pass; bounce is a soft fill, exactness non-critical).
+        // bounce pass propagates daylight into shadowed/indoor neighbours.
+        // DELIBERATE (product decision, 2026-09-22): GI takes the RAW celestial
+        // values, NOT the weather-multiplied ones the sprite's direct terms get.
+        // Weather-coupling the bounce is too heavy for what it buys and breeds
+        // edge cases that make lighting read inconsistent (a soft indoor fill
+        // flickering with every weather transition); the bounce is a fill term,
+        // exactness non-critical. Do not "fix" this by feeding in.sun here.
         rp.sun_r         = sp.sun_r;
         rp.sun_g         = sp.sun_g;
         rp.sun_b         = sp.sun_b;
@@ -562,17 +615,32 @@ auto flush_and_gather_rc( lighting::render_state &rs,
         rp.sky_g         = sp.sky_g;
         rp.sky_b         = sp.sky_b;
         rp.sky_intensity = sp.sky_intensity;
-        // Phase 4: 2nd-bounce + temporal + albedo-bleed knobs (F4-tunable).
-        rp.gi_temporal = g_gi_temporal;
-        rp.gi_bounce2  = g_gi_bounce2;
+        // Stage 7 (gpu-daylight black-scene plan): gi_bounce2 (the old
+        // EMA-bounce knob) retired with the bounce → Radiance Cascades swap,
+        // which has no temporal filter to tune. gi_albedo (bleed) is
+        // unaffected and stays. gi_temporal's old slot is repurposed as
+        // gi_feedback: multi-bounce radiance feedback (see gi_field.comp.hlsl).
         rp.gi_albedo   = g_gi_albedo;
-        // Three compute dispatches (field gather → 1st-bounce march → 2nd-bounce
-        // march + combine) on the render CB. SDL_GPU inserts the compute→graphics
-        // barrier so the sprite pass reads the finished gi_out_buffer().
+        rp.gi_feedback = g_gi_feedback;
+        // Radiance Cascades: field gather → cascade build → cascade merge →
+        // cascade-0 resolve, on the render CB. SDL_GPU inserts the compute→
+        // graphics barrier so the sprite pass reads the finished gi_out_buffer().
         rs.gi().record( ctx.cmd_buffer,
                         rs.collector()->emitter_buffer(), rs.sdf().sdf_buffer(),
                         rs.sky().sky_buffer(), rs.sdf().albedo_buffer(),
                         map_w, map_h, rp );
+        gi_ran = true;
+    } else if( sdf_populated ) {
+        gi_reason = !rs.gi().ready() ? "gi_ready" : "collector";
+    }
+
+    if( rc_rebuild ) {
+        DebugLogFL( DL::Info, DC::Main )
+                << "[lighting][passes] rc=1"
+                << " sdf=" << ( sdf_ran ? "ran" : ( "skip:" + sdf_reason ) )
+                << " sky=" << ( sky_ran ? "ran" : ( "skip:" + sky_reason ) )
+                << " gi=" << ( gi_ran ? "ran" : ( "skip:" + gi_reason ) )
+                << " map=" << map_w << "x" << map_h;
     }
 
     if( g_rc_readback ) {
@@ -699,6 +767,11 @@ if( g && tilecontext && in.tile_pixel_size > 0.0f ) {
 
     in.debug = g_dbg_params;
     in.debug.anim_time = std::fmod( static_cast<float>( SDL_GetTicks() ) / 1000.0f, 1000.0f );
+    // Stage 1 (gpu-daylight black-scene plan): published so a live gpu_lit tile
+    // can be told apart from a dead sky/sun pass instead of both reading as
+    // plain dark — see sprite.frag.hlsl's magenta tint and sky_sun_pass.h.
+    in.debug.sky_valid =
+        ( rs.sky().ready() && rs.sky().dispatches() > 0 ) ? 1.0f : 0.0f;
     if( g ) {
     in.debug.player_x = static_cast<float>( g->u.bub_pos().x() ) + 0.5f;
         in.debug.player_y = static_cast<float>( g->u.bub_pos().y() ) + 0.5f;
@@ -835,8 +908,15 @@ auto draw_lighting_overlays( lighting::render_state &rs,
                              << ") snap=" << s_emo.snap.size();
         }
         for( const auto &e : s_emo.snap ) {
-            const float sx  = ( e.pos_x + s_emo.cam_off_x ) * tp + s_emo.op_x;
-            const float sy  = ( e.pos_y + s_emo.cam_off_y ) * tp + s_emo.op_y;
+            // cam_off = op/tile - map_origin already bakes in the pixel offset
+            // (cata_tiles.h: "camera_off = op / tile_width - o"), so the screen
+            // transform is a SINGLE (pos + cam_off) * tile_px — adding op again
+            // here double-counted it, shifting every marker by a full op_x/op_y
+            // (the HUD-bar/sidebar pixel offset) off its true tile. Confirmed
+            // empirically: the player cross sat exactly op_y (128px) south of
+            // the player's real screen position.
+            const float sx  = ( e.pos_x + s_emo.cam_off_x ) * tp;
+            const float sy  = ( e.pos_y + s_emo.cam_off_y ) * tp;
             const float rpx = e.radius * tp;
             const float cr  = e.r > 0.01f ? e.r : 1.0f;
             const float cg  = e.g > 0.01f ? e.g : 1.0f;
@@ -852,8 +932,8 @@ auto draw_lighting_overlays( lighting::render_state &rs,
 
         // Player cross (bright green) at map-coord player pos.
         {
-            const float px = ( s_emo.player_x + s_emo.cam_off_x ) * tp + s_emo.op_x;
-            const float py = ( s_emo.player_y + s_emo.cam_off_y ) * tp + s_emo.op_y;
+            const float px = ( s_emo.player_x + s_emo.cam_off_x ) * tp;
+            const float py = ( s_emo.player_y + s_emo.cam_off_y ) * tp;
             rs.queue_ui_rect( px - 12.f, py - 1.f, 24.f, 2.f, 0.f, 1.f, 0.f, 1.f );
             rs.queue_ui_rect( px - 1.f, py - 12.f, 2.f, 24.f, 0.f, 1.f, 0.f, 1.f );
         }
