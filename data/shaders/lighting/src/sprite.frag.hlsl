@@ -825,7 +825,12 @@ float4 main(VS_OUT i): SV_Target0 {
     // open tile sees most of the hemisphere (~1); an alcove/overhang self-shades;
     // a roofed tile lit only through window directions gets partial sky FROM the
     // opening — the unified indoor/outdoor merge, no CPU bleed flood-fill needed.
-    float3 sky_contrib = float3(sky_r, sky_g, sky_b) * sky_intensity * sky_dir.rgb;
+    // Phase 1 (coop-priority-gk-lighting): with the SDF sun march disabled
+    // (sky_valid < 0.5, buffers stay zeroed), fall back to the flat open/roofed
+    // sky_vis field instead of a dead directional SkyBuf.rgb sample — matches
+    // the CPU-lightmap ambient the rest of the composite already degrades to.
+    const float3 sky_access = (sky_valid > 0.5) ? sky_dir.rgb : sky_vis.xxx;
+    float3 sky_contrib = float3(sky_r, sky_g, sky_b) * sky_intensity * sky_access;
     // Sun direct: directional soft shadow via the SAME shared trace as
     // emitters, so it honours shadow_k / shadow_steps and matches their
     // softness (was a hardcoded copy: k=4, 16 steps, reach 8.0). 8.0 = the
@@ -880,8 +885,16 @@ float4 main(VS_OUT i): SV_Target0 {
         is_face
             ? max(sky_vis, (sdf_map_w > 0u) ? saturate(skyvis_bilinear(shade_pos + sun_step)) : 0.0)
             : sky_vis;
-    const float sun_occl =
-        is_face ? max(sky_dir.a, sky_bilinear(shade_pos + sun_step).a) : sky_dir.a;
+    // Phase 1 (coop-priority-gk-lighting): sun_occl is read TWICE downstream —
+    // once here as sun_shadow (direct sun term) and again, raw, as the
+    // post-clamp sun_shad_mul floor further below. Gating only the first read
+    // (as originally scoped) would leave sun_shad_mul reading a permanently-zero
+    // SkyBuf.a and clamping the whole scene to shad_floor (0.65-1.0) even though
+    // the march is intentionally off — the opposite of "sun stays lit". Gate at
+    // the source instead: fully lit (1.0) when the SDF sun march did not run.
+    const float sun_occl = ( sky_valid > 0.5 )
+        ? ( is_face ? max(sky_dir.a, sky_bilinear(shade_pos + sun_step).a) : sky_dir.a )
+        : 1.0;
     // Screen-space silhouette shadow visibility (Phase 2.3, shipped ON): sheared
     // sprite copies of every tall caster (trees/creatures — shadow.vert/.frag,
     // Graveyard Keeper style) land in ShadowMask; this is the SOLE sun-shadow
@@ -1234,15 +1247,6 @@ float4 main(VS_OUT i): SV_Target0 {
     // view 15 encodes the frontier feather in vis_overlay_a — that IS the thing it
     // exists to show — and views 9-14 rely on texel.a for sprite silhouettes, which
     // would become solid quads.
-    // Stage 1 (gpu-daylight black-scene plan): "no data yet" must never look
-    // identical to "correctly dark". A tile taking the live gpu_lit path while
-    // the lighting grid is active (sdf_map_w > 0) but SkyBuf was never
-    // populated this run (sky_valid < 0.5, set by assemble_light_inputs from
-    // sky_sun_pass::ready()/dispatches()) blends halfway to magenta so a dead
-    // directional-lighting pass is visually unmistakable instead of merely dark.
-    if (sdf_map_w > 0u && sky_valid < 0.5 && mode_gpu_lit) {
-        final_rgb = lerp(final_rgb, float3(1.0, 0.0, 1.0), 0.5);
-    }
 
     float dbg_opaque = 0.0;
     if (dbg_active) {

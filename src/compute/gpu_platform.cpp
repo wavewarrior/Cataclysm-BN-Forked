@@ -555,7 +555,8 @@ auto init() -> void {
                "hardware and a working system Vulkan loader";
         return;
 #else
-        auto const require_gpu_device = accel == compute_accel::gpu || require_software_device;
+        auto const require_gpu_device = ( accel == compute_accel::gpu || require_software_device )
+                                         && preload_config::get_require_gpu_device();
         auto const level = require_gpu_device ? DL::Error : DL::Warn;
         DebugLog(level, DC::Main) << "SDL_GPU: device creation failed; "
                                   << (require_gpu_device ? "selected GPU compute backend is "

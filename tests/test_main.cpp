@@ -86,10 +86,10 @@ namespace {
 
 bool s_sdl_platform_initialized = false;
 
-auto test_compute_accel(bool* explicit_env = nullptr) -> preload_config::compute_accel {
+auto test_compute_accel(bool* is_explicit = nullptr) -> preload_config::compute_accel {
     auto const* const env_accel = std::getenv("CATA_TEST_COMPUTE_ACCELERATION");
     if (env_accel != nullptr && env_accel[0] != '\0') {
-        if (explicit_env != nullptr) { *explicit_env = true; }
+        if (is_explicit != nullptr) { *is_explicit = true; }
         return preload_config::compute_accel_from_string(env_accel);
     }
 
@@ -97,10 +97,14 @@ auto test_compute_accel(bool* explicit_env = nullptr) -> preload_config::compute
         const auto accel = preload_config::compute_accel_from_string(
             get_options().get_option("COMPUTE_ACCELERATION").getValue());
         if (accel != preload_config::compute_accel::auto_select) {
+            if (is_explicit != nullptr) { *is_explicit = true; }
             return accel;
         }
     }
 
+    // Implicit default: try software GPU compute for test determinism, but this is a soft
+    // best-effort guess, not a hard requirement (see set_require_gpu_device() below) — the
+    // caller already has a working fallback to cpu when this device fails to materialise.
     return preload_config::compute_accel::gpu_software;
 }
 
@@ -113,9 +117,15 @@ auto init_test_sdl_gpu() -> void {
     s_sdl_platform_initialized = true;
 
     preload_config::load();
-    bool accel_from_env = false;
-    const auto accel = test_compute_accel(&accel_from_env);
+    bool accel_explicit = false;
+    const auto accel = test_compute_accel(&accel_explicit);
     preload_config::set_compute_accel(accel);
+    // Only an EXPLICIT request (env var or an OPTIONS COMPUTE_ACCELERATION override) should log
+    // DL::Error on failure; the implicit gpu_software default guess above has a working fallback
+    // right below, so its failure is expected and must log DL::Warn — otherwise every run on a
+    // machine without a software Vulkan driver fails Catch2's "error logged" gate despite all
+    // 159 [coop] cases (and the rest of the suite) passing.
+    preload_config::set_require_gpu_device(accel_explicit);
 
     cata_gpu::init();
     if (cata_gpu::get_device() == nullptr) {
@@ -136,7 +146,7 @@ auto init_test_sdl_gpu() -> void {
         // attribution); only the implicit default is downgraded.
         DebugLog(DL::Warn, DC::Main)
             << "SDL_GPU unavailable for tests; falling back to the CPU compute path";
-        if (!accel_from_env) {
+        if (!accel_explicit) {
             preload_config::set_compute_accel(preload_config::compute_accel::cpu);
         }
     }

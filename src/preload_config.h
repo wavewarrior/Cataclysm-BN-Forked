@@ -23,6 +23,12 @@ auto save()  -> void;
 auto get_compute_accel()                -> compute_accel;
 auto set_compute_accel( compute_accel ) -> void;
 
+// See state_t::require_gpu_device in preload_config.cpp. Defaults true; callers with their own
+// graceful fallback for a soft/implicit accel guess set this false before init() runs so a
+// failed device creation logs DL::Warn instead of DL::Error.
+auto get_require_gpu_device()      -> bool;
+auto set_require_gpu_device( bool ) -> void;
+
 auto get_gpu_backend_override()                   -> std::string_view;
 auto set_gpu_backend_override( std::string_view ) -> void;
 

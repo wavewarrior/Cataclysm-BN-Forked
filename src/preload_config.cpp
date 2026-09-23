@@ -18,6 +18,12 @@ struct state_t {
     std::string gpu_backend;
     bool gpu_backend_override_set = false;
     tristate texture_streaming { tristate::auto_select };
+    // True (default) preserves today's behaviour: an explicit gpu/gpu_software selection that
+    // fails to create a device is a hard error (DL::Error). Callers with their own working
+    // fallback for an IMPLICIT/best-effort selection — e.g. tests/test_main.cpp's default guess
+    // of gpu_software, which gracefully downgrades to cpu on failure — set this false first, so
+    // the same failure logs at DL::Warn instead of tripping Catch2's "error logged" failure gate.
+    bool require_gpu_device = true;
 };
 
 state_t s_state;
@@ -82,6 +88,9 @@ auto save() -> void
 
 auto get_compute_accel() -> compute_accel                         { return s_state.accel; }
 auto set_compute_accel( compute_accel val ) -> void               { s_state.accel = val; }
+
+auto get_require_gpu_device() -> bool                             { return s_state.require_gpu_device; }
+auto set_require_gpu_device( bool val ) -> void                   { s_state.require_gpu_device = val; }
 
 auto get_gpu_backend_override() -> std::string_view               { return s_state.gpu_backend; }
 auto set_gpu_backend_override( std::string_view s ) -> void

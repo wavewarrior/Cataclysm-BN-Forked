@@ -536,7 +536,7 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     // even though the two blocks are now gated independently of each other.
     bool sky_ran = false;
     std::string sky_reason = "rc_or_sdf_buf";
-    if( sdf_populated && rs.sky().ready() && rs.sdf().occ_buffer() ) {
+    if( g_sky_sun_enable && sdf_populated && rs.sky().ready() && rs.sdf().occ_buffer() ) {
         lighting::sky_sun_params kp{};
         kp.map_w        = map_w;
         kp.map_h        = map_h;
@@ -555,6 +555,8 @@ auto flush_and_gather_rc( lighting::render_state &rs,
         rs.sky().record( ctx.cmd_buffer, rs.sdf().occ_buffer(), rs.sdf().sdf_buffer(),
                          map_w, map_h, kp );
         sky_ran = true;
+    } else if( !g_sky_sun_enable ) {
+        sky_reason = "disabled";
     } else if( sdf_populated ) {
         sky_reason = !rs.sky().ready() ? "sky_ready" : "occ_buf";
     }
@@ -590,7 +592,7 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     // disable indirect light, and vice versa (the bug this stage fixes).
     bool gi_ran = false;
     std::string gi_reason = "rc_or_sdf_buf";
-    if( sdf_populated && rs.gi().ready() && rs.collector() ) {
+    if( g_gi_enable && sdf_populated && rs.gi().ready() && rs.collector() ) {
         lighting::gi_params rp{};
         rp.emitter_count = static_cast<std::uint32_t>( std::max( 0, rs.collector()->last_count() ) );
         rp.map_w         = map_w;
@@ -630,6 +632,8 @@ auto flush_and_gather_rc( lighting::render_state &rs,
                         rs.sky().sky_buffer(), rs.sdf().albedo_buffer(),
                         map_w, map_h, rp );
         gi_ran = true;
+    } else if( !g_gi_enable ) {
+        gi_reason = "disabled";
     } else if( sdf_populated ) {
         gi_reason = !rs.gi().ready() ? "gi_ready" : "collector";
     }

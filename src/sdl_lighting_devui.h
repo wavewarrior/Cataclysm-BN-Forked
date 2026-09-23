@@ -56,6 +56,9 @@ extern float g_tonemap_min_ev;
 extern float g_tonemap_max_ev;
 // Bloom post controls (F4 sliders).
 extern bool g_bloom_enable;
+// Phase 1 (coop-priority-gk-lighting): SDF sun-march compute dispatch gate.
+// Disabled by default; keep code, allow runtime A/B via F4 without rebuilding.
+extern bool g_sky_sun_enable;
 extern float g_bloom_threshold;
 extern float g_bloom_intensity;
 // ASC-CDL colour grade + post-processing controls (F4 sliders).
@@ -77,6 +80,8 @@ extern float g_grade_grain;
 extern float g_grade_ca;
 // Volumetric sun-shaft controls.
 extern bool g_vol_enable;
+// Phase 1 (coop-priority-gk-lighting): GI (indirect bounce) compute dispatch gate.
+extern bool g_gi_enable;
 extern float g_vol_density;
 extern float g_vol_intensity;
 extern float g_vol_shadow;

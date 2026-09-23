@@ -150,18 +150,35 @@ auto coop_client::receive_world_seed() -> bool
     // is only needed for save/load paths, which guests never exercise.
     //
     // If the client has the named world installed, set_active_world is called
-    // for completeness (LAN case where both players share the same world).
-    // If not (different machine, or no world installed), gameplay is unaffected:
-    // the missing world is logged and the client continues.  This also correctly
-    // handles a host with no active world (e.g. a freshly initialised game state).
-    if( !data->world_name.empty() ) {
-        WORLDINFO* world = world_generator->get_world( data->world_name );
-        if( world ) {
-            world_generator->set_active_world( world );
+    // for completeness (LAN case where both players share the same world). If not
+    // (different machine, or no world installed), a throwaway local world is bootstrapped
+    // below instead — game::setup() (called unconditionally right after this by
+    // coop_menu.cpp's start_join()) has no null check on the active world and crashes
+    // without one.
+    if( !data->world_name.empty() && world_generator->has_world( data->world_name ) ) {
+        world_generator->set_active_world( world_generator->get_world( data->world_name ) );
+    } else {
+        // Bootstrap a throwaway local world so game::setup() has a mod list to load from.
+        // start_join() (coop_menu.cpp) calls g->setup() unconditionally right after this
+        // returns, which calls init::load_world_modfiles(ui, get_active_world(), ...) with
+        // NO null check — leaving world_generator->active_world unset (the prior behaviour
+        // here) is a guaranteed SIGSEGV, not the "gameplay is unaffected" the comment above
+        // claimed. The guest never saves through this world (see Track A above), so its
+        // exact name/identity doesn't matter — only that SOME world with a sane default mod
+        // list exists for content loading. make_new_world(false, "") skips the interactive
+        // wizard; WORLDINFO's constructor already seeds active_mod_order from
+        // mod_manager::get_default_mods(), matching what an unconfigured "Play Now" client
+        // would use.
+        DebugLog( DL::Info, DC::Main )
+                << "[coop] receive_world_seed: world '" << data->world_name
+                << "' not found locally — bootstrapping a local world for content loading";
+        WORLDINFO* bootstrapped = world_generator->make_new_world( false, "" );
+        if( bootstrapped ) {
+            world_generator->set_active_world( bootstrapped );
         } else {
-            DebugLog( DL::Info, DC::Main )
-                    << "[coop] receive_world_seed: world '" << data->world_name
-                    << "' not found locally — world data will arrive via sync";
+            DebugLog( DL::Error, DC::Main )
+                    << "[coop] receive_world_seed: failed to bootstrap a local world; "
+                       "game::setup() will likely crash";
         }
     }
 
