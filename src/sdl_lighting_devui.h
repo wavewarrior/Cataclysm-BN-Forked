@@ -78,15 +78,18 @@ extern float g_grade_contrast;
 extern float g_grade_vignette;
 extern float g_grade_grain;
 extern float g_grade_ca;
-// Volumetric sun-shaft controls.
-extern bool g_vol_enable;
 // Phase 1 (coop-priority-gk-lighting): GI (indirect bounce) compute dispatch gate.
 extern bool g_gi_enable;
-extern float g_vol_density;
-extern float g_vol_intensity;
-extern float g_vol_shadow;
-extern float g_vol_reach;
-extern float g_vol_indoor;
+// Window light shafts (Step 6b, atmospheric-lighting-coherence plan).
+extern bool g_shaft_enable;
+extern float g_shaft_intensity;
+extern float g_shaft_length_scale;
+extern float g_shaft_width;
+// Dust motes drifting inside the light shafts above (Step 6c).
+extern bool g_dust_enable;
+extern float g_dust_density;
+extern float g_dust_size;
+extern float g_dust_drift;
 // High-fidelity rain effect controls.
 extern bool g_rain_enable;
 extern float g_rain_intensity;

@@ -44,7 +44,11 @@ struct gpu_emitter {
     // Typically derived from the emitter's world position for stable noise.
     uint32_t flicker_seed;
 
-    float pad0, pad1, pad2; // Padding to reach 64 bytes.
+    // Step 5 (atmospheric-lighting-coherence plan): per-emitter flicker amplitude,
+    // 0.0=steady (lamps, headlights, electric/ambiguous sources) .. ~0.15=fire/torch
+    // breathe. Set in snapshot.cpp's collect_zlev per-source branches. Was pad0.
+    float flicker_amp;
+    float pad1, pad2; // Padding to reach 64 bytes.
 };
 static_assert(sizeof(gpu_emitter) == 64, "gpu_emitter must be 64 bytes (wire-stable)");
 

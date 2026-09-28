@@ -107,6 +107,8 @@
                 <div class="devui-row">roll speed <input type="range" min="0" max="300" step="1" data-value="crt_roll_speed"/> <span class="devui-val">{{crt_roll_speed}}</span></div>
                 <div class="devui-row">flicker <input type="range" min="0" max="1" step="0.01" data-value="crt_flicker"/> <span class="devui-val">{{crt_flicker}}</span></div>
                 <div class="devui-row">vignette <input type="range" min="0" max="1" step="0.01" data-value="crt_vignette"/> <span class="devui-val">{{crt_vignette}}</span></div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="crt_world"/> world CRT (map scanlines)</label>
+                <div class="devui-note">(also draws the CRT scanlines/vignette over the map, reusing the sliders above)</div>
 
                 <div class="devui-section">World text (SCT)</div>
                 <div class="devui-row">wt font px <input type="range" min="8" max="64" step="1" data-value="wt_px"/> <span class="devui-val">{{wt_px}}</span></div>
@@ -125,10 +127,15 @@
                 <div class="devui-row">ramp enable <input type="range" min="0" max="1" step="0.01" data-value="ramp_enable"/> <span class="devui-val">{{ramp_enable}}</span></div>
                 <div class="devui-row">ramp steps <input type="range" min="2" max="16" step="1" data-value="ramp_steps"/> <span class="devui-val">{{ramp_steps}}</span></div>
                 <div class="devui-row">ramp chroma <input type="range" min="0" max="1" step="0.01" data-value="ramp_chroma"/> <span class="devui-val">{{ramp_chroma}}</span></div>
+                <div class="devui-row">vision overshoot guard <input type="range" min="0" max="1" step="0.01" data-value="guard_amount"/> <span class="devui-val">{{guard_amount}}</span></div>
+                <div class="devui-note">(caps how far GPU light exceeds CPU vision on a just-visible tile; 0 = off)</div>
                 <div class="devui-row">gi bilat <input type="range" min="0" max="1" step="0.01" data-value="gi_bilat"/> <span class="devui-val">{{gi_bilat}}</span></div>
                 <div class="devui-row">vis edge <input type="range" min="0" max="1" step="0.01" data-value="vis_edge"/> <span class="devui-val">{{vis_edge}}</span></div>
                 <div class="devui-row">nrm atlas v <input type="range" min="0" max="0.5" step="0.5" data-value="nrm_atlas_v"/> <span class="devui-val">{{nrm_atlas_v}}</span></div>
                 <div class="devui-row">face arc <input type="range" min="-3" max="3" step="0.05" data-value="face_arc"/> <span class="devui-val">{{face_arc}}</span></div>
+                <div class="devui-section">Light motion</div>
+                <div class="devui-row">light flicker <input type="range" min="0" max="1" step="0.01" data-value="flicker_gain"/> <span class="devui-val">{{flicker_gain}}</span></div>
+                <div class="devui-note">(fire/torch breathe; 0 = steady)</div>
 
                 <div class="devui-section">Cursor light (dev)</div>
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="cursor_enable"/> omni light follows cursor</label>
@@ -144,13 +151,19 @@
                 <div class="devui-row">normal elev <input type="range" min="0.05" max="1.5" step="0.01" data-value="nrm_elev"/> <span class="devui-val">{{nrm_elev}}</span></div>
                 <div class="devui-row">entity relief <input type="range" min="0" max="1" step="0.01" data-value="nrm_entity_amount"/> <span class="devui-val">{{nrm_entity_amount}}</span></div>
 
-                <div class="devui-section">Volumetric sun shafts (C2)</div>
-                <label class="devui-row"><input type="checkbox" value="1" data-checked="vol_enable"/> volumetric</label>
-                <div class="devui-row">vol density <input type="range" min="0" max="2" step="0.02" data-value="vol_density"/> <span class="devui-val">{{vol_density}}</span></div>
-                <div class="devui-row">vol intensity <input type="range" min="0" max="4" step="0.04" data-value="vol_intensity"/> <span class="devui-val">{{vol_intensity}}</span></div>
-                <div class="devui-row">vol reach <input type="range" min="1" max="24" step="0.5" data-value="vol_reach"/> <span class="devui-val">{{vol_reach}}</span></div>
-                <div class="devui-row">vol shadow <input type="range" min="0" max="1" step="0.01" data-value="vol_shadow"/> <span class="devui-val">{{vol_shadow}}</span></div>
-                <div class="devui-row">vol indoor <input type="range" min="0" max="1" step="0.01" data-value="vol_indoor"/> <span class="devui-val">{{vol_indoor}}</span></div>
+                <div class="devui-section">Window light shafts</div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="shaft_enable"/> light shafts</label>
+                <div class="devui-row">shaft intensity <input type="range" min="0" max="2" step="0.02" data-value="shaft_intensity"/> <span class="devui-val">{{shaft_intensity}}</span></div>
+                <div class="devui-row">shaft length scale <input type="range" min="0" max="3" step="0.05" data-value="shaft_length_scale"/> <span class="devui-val">{{shaft_length_scale}}</span></div>
+                <div class="devui-row">shaft width <input type="range" min="0.05" max="2" step="0.05" data-value="shaft_width"/> <span class="devui-val">{{shaft_width}}</span></div>
+                <div class="devui-note">(faked 2D beam sprites through visible windows, along each window's own facing; bloom supplies the halo)</div>
+
+                <div class="devui-section">Dust motes</div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="dust_enable"/> dust motes</label>
+                <div class="devui-row">dust density <input type="range" min="0" max="2" step="0.02" data-value="dust_density"/> <span class="devui-val">{{dust_density}}</span></div>
+                <div class="devui-row">dust size <input type="range" min="0" max="2" step="0.02" data-value="dust_size"/> <span class="devui-val">{{dust_size}}</span></div>
+                <div class="devui-row">dust drift <input type="range" min="0" max="1" step="0.01" data-value="dust_drift"/> <span class="devui-val">{{dust_drift}}</span></div>
+                <div class="devui-note">(particles drift along the same window beams as the light shafts above, independently of the shaft toggle)</div>
 
                 <div class="devui-section">High-fidelity rain</div>
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="rain_enable"/> rain</label>
@@ -300,9 +313,12 @@
                 <div class="devui-row"><span class="devui-btn" data-event-click="rc_readback">RC cascade readback (log)</span></div>
                 <div class="devui-row">shadow k <input type="range" min="0" max="32" step="0.5" data-value="shadow_k"/> <span class="devui-val">{{shadow_k}}</span></div>
                 <div class="devui-row">shadow steps <input type="range" min="1" max="64" step="1" data-value="shadow_steps"/> <span class="devui-val">{{shadow_steps}}</span></div>
-                <label class="devui-row"><input type="checkbox" value="1" data-checked="sky_sun_enable"/> sky/sun SDF march</label>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="sky_sun_enable"/> sky/sun + window portals</label>
+                <div class="devui-note">(daylight seeping through windows; needs the march enabled)</div>
                 <div class="devui-row">sky dirs <input type="range" min="1" max="32" step="1" data-value="sky_dirs"/> <span class="devui-val">{{sky_dirs}}</span></div>
                 <div class="devui-row">sky reach <input type="range" min="1" max="30" step="0.5" data-value="sky_reach"/> <span class="devui-val">{{sky_reach}}</span></div>
+                <div class="devui-row">window portal dirs <input type="range" min="1" max="32" step="1" data-value="portal_dirs"/> <span class="devui-val">{{portal_dirs}}</span></div>
+                <div class="devui-row">window portal reach <input type="range" min="1" max="20" step="0.5" data-value="portal_reach"/> <span class="devui-val">{{portal_reach}}</span></div>
                 <div class="devui-row">sun steps <input type="range" min="1" max="64" step="1" data-value="sun_steps"/> <span class="devui-val">{{sun_steps}}</span></div>
                 <div class="devui-row">sun penumbra <input type="range" min="1" max="12" step="1" data-value="sun_penumbra"/> <span class="devui-val">{{sun_penumbra}}</span></div>
                 <div class="devui-row">sun soft <input type="range" min="0" max="2" step="0.01" data-value="sun_soft"/> <span class="devui-val">{{sun_soft}}</span></div>

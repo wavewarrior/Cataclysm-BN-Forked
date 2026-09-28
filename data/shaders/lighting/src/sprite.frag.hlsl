@@ -36,7 +36,7 @@
 //   slot0.xyz = pos       slot0.w = radius
 //   slot1.xyz = color     slot1.w = falloff
 //   slot2.xy  = cone_dir  slot2.z = cone_half_angle  slot2.w = asfloat(shape)
-//   slot3.x   = asfloat(flicker_seed)   slot3.yzw = pad0/1/2
+//   slot3.x   = asfloat(flicker_seed)   slot3.y = flicker_amp (Step 5)   slot3.zw = pad1/2
 #include "attenuation.hlsl"
 
 struct GpuEmitter {
@@ -120,10 +120,10 @@ cbuffer DebugParams: register(b2, space3) {
     float gi_strength;   // 1-bounce indirect light multiplier (0=off)
     float vis_curve;     // vision-edge falloff exponent (0=off → no falloff)
     float mem_dim;       // memorized-tile brightness floor
-    float dbg_pad_a;     // reserved (was mem_desat — desat moved to the tileset memory FX)
+    float portal_reach;  // Step 3: sky-portal scan march reach, tiles (-> compute push, sky_sun.comp.hlsl). Was dbg_pad_a.
     float night_floor;   // ambient floor at night (sun_intensity=0)
     float day_floor;     // ambient floor at noon  (sun_intensity=1)
-    float dbg_pad_b;     // reserved (was grade_desat — grade moved to the tonemap ASC-CDL stage)
+    float portal_dirs;   // Step 3: sky-portal scan direction count (-> uint in compute push). Was dbg_pad_b.
     float dbg_pad_c;     // reserved (was grade_cool)
     float dbg_pad_d;     // reserved (was grade_bright)
     float vis_radius;    // radial player-distance falloff radius (tiles; 0=off)
@@ -188,9 +188,9 @@ cbuffer DebugParams: register(b2, space3) {
     float cutout_radius;
     float cutout_feather;
     float sun_soft;
-    float cutout_pad1;
+    float guard_amount; // Step 2: soft-knee anti-overshoot guard on gpu_total vs CPU raw_light; 0=off (exact prior frame), 1=full cap
     float sky_valid; // Stage 1: 1.0 = SkyBuf has data this run, 0.0 = pass never dispatched
-    float cloud_pad1;
+    float flicker_gain; // Step 5: fire/torch flicker master gain; 0=frozen (deterministic A/B). Was cloud_pad1.
 };
 struct VS_OUT {
     float4 pos : SV_Position;
@@ -227,6 +227,13 @@ struct VS_OUT {
     // Canopy cut-out marker (SpriteInstance::cutout): 1 = overhanging terrain
     // canopy. Per-instance constant, so interpolation across the quad is exact.
     float cutout : TEXCOORD13;
+    // Per-instance shadow-caster flag (SpriteInstance::cutout_pad0), mirrored
+    // from sprite.vert.hlsl. Opens the radial macro-normal gate below for
+    // 1-tile item/creature sprites.
+    float caster : TEXCOORD14;
+    // Raw continuous CPU lightmap scalar (SpriteInstance::cutout_pad1), mirrored
+    // from sprite.vert.hlsl. 0 = not set. See frontier_cov below.
+    float raw_light : TEXCOORD9;
 };
 // SDF supersample factor — MUST match lighting::SDF_SUPERSAMPLE (sdf_pass.h).
 // SdfBuf is the SS-finer grid: dims (sdf_map_w*SDF_SS) x (sdf_map_h*SDF_SS),
@@ -405,6 +412,22 @@ float cloud_fbm(float2 p) {
     }
     return sum;
 }
+// --- Step 5 per-emitter flicker helpers -------------------------------------
+// Cheap 1D hash-based value noise keyed on the emitter's flicker_seed plus a slow
+// time coordinate, so it reads as a fire/torch BREATHE rather than per-frame white
+// noise. Two integer-second hash samples smoothly interpolated by the fractional
+// time. Mirrors the C++-side corr_vnoise (src/lighting/noise_utils.h) in spirit —
+// this file has no way to include a C++ header, so it is not literally shared code.
+float flicker_hash(float n) { return frac(sin(n) * 43758.5453123); }
+float flicker_noise(uint seed, float t) {
+    const float base = (float)(seed % 4096u) * 0.6180339887; // golden-ratio decorrelation
+    const float ti = floor(t);
+    const float tf = t - ti;
+    const float a = flicker_hash(base + ti);
+    const float b = flicker_hash(base + ti + 1.0);
+    return lerp(a, b, smoothstep(0.0, 1.0, tf));
+}
+
 // --- Step 7 palette shade ramp helpers -------------------------------------
 float luma(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
 float3 unpack_rgba8(uint p) {
@@ -635,7 +658,11 @@ float4 main(VS_OUT i): SV_Target0 {
     // diamond grid and made ground shading look non-directional.
     const float2 r_offset = (i.uv - i.center_uv) / i.uv_half;
     const float3 radial_n = normalize(float3(r_offset, 1.0));
-    const bool apply_radial_n = frag_is_tall_n && (i.face_amt <= 0.001f);
+    // Also gated OPEN for 1-tile shadow casters (sprite_instance::cutout_pad0,
+    // forwarded as i.caster): items and creatures are discrete objects, not a
+    // tiling ground plane, so the per-sprite radial bump reads as directional
+    // relief instead of a repeating checkerboard.
+    const bool apply_radial_n = ( frag_is_tall_n || i.caster > 0.5f ) && (i.face_amt <= 0.001f);
     const float3 normal_macro =
         apply_radial_n ? normalize(lerp(base_n, radial_n, saturate(nrm_radial_amount))) : base_n;
     // Vertical-face arc. The alpha-shape bevel in surface_normal() CANNOT shade a sprite
@@ -775,6 +802,8 @@ float4 main(VS_OUT i): SV_Target0 {
         const float2 e_cone_dir = e.cone_shape.xy;
         const float e_cone_ha = e.cone_shape.z;
         const uint e_shape = asuint(e.cone_shape.w);
+        const uint e_flicker_seed = asuint(e.misc.x);
+        const float e_flicker_amp = e.misc.y;
 
         const float2 dv = e_pos.xy - shade_pos;
         const float dist = length(dv);
@@ -814,7 +843,14 @@ float4 main(VS_OUT i): SV_Target0 {
             (spec_strength > 0.001)
                 ? spec_strength * sky_vis * wet_spec(normal, normalize(float3(sh_dir, nrm_elev)))
                 : 0.0;
-        emitter_light += rgb * atten * shadow * cone * (lambert + e_spec);
+        // Step 5: fire/torch breathe. flicker_amp is 0 for every non-flame source
+        // (lamps, headlights, ambiguous/mixed sources default steady — see
+        // snapshot.cpp), so flicker_mul is an exact 1.0 no-op there regardless of
+        // flicker_gain. flicker_gain=0 freezes ALL light for a deterministic A/B.
+        const float flicker_mul =
+            1.0 + e_flicker_amp * flicker_gain
+                * (flicker_noise(e_flicker_seed, anim_time * 1.6) * 2.0 - 1.0);
+        emitter_light += rgb * atten * shadow * cone * (lambert + e_spec) * flicker_mul;
     }
     // Phase 8 + Stage 2a: directional skylight + sun. sky_sun.comp provides
     // per-tile directional sky-access (rgb) + sun occlusion (a); sample it once
@@ -899,9 +935,16 @@ float4 main(VS_OUT i): SV_Target0 {
     // sprite copies of every tall caster (trees/creatures — shadow.vert/.frag,
     // Graveyard Keeper style) land in ShadowMask; this is the SOLE sun-shadow
     // source for those sprites (their OccBuf height is zeroed so the SDF march
-    // ignores them). Tall fragments and vertical faces are exempt: a caster must
-    // not darken itself, and a wall face's shadow already comes from the SDF.
-    const float sun_mask_vis = (frag_is_tall || is_face)
+    // ignores them). Casters are exempt so they cannot darken themselves: same
+    // bug shape as the wall-face fix above (`frag_is_tall` alone reads sprite
+    // ART height, false for every 1-tile sprite) — a player/monster/item is
+    // typically 1 tile tall, so `frag_is_tall` was false for it too, and the
+    // shadow this fragment CASTS on the ground behind it was ALSO being
+    // sampled and applied back onto its own body, i.e. the caster's shadow
+    // rendered on top of the caster. `i.caster` (cutout_pad0, already used for
+    // the radial-normal gate above) is the correct "this is a discrete
+    // shadow-casting sprite, not ground" signal regardless of its height.
+    const float sun_mask_vis = (frag_is_tall || is_face || i.caster > 0.5f)
                                    ? 1.0
                                    : saturate(1.0 - sun_mask_cov * shadow_mask_str);
 
@@ -1027,7 +1070,13 @@ float4 main(VS_OUT i): SV_Target0 {
     // makes dark areas sparkle). Ordered dither is mean-preserving, so no
     // global brightness shift. Anchored to world PIXELS (world_pos *
     // tile_pixel_size) → pattern sticks to terrain, no shimmer on scroll.
-    float3 dyn = emitter_light + sky_contrib * ao + sun_contrib;
+    // emitter_light is deliberately NOT summed in here (see gpu_total below) —
+    // folding it in pre-clamp meant a local point light's contribution was
+    // silently discarded whenever ambient+sky+sun already saturated the 2.0
+    // ceiling, which is routine in open daylight. Recovered as a post-clamp
+    // additive term instead, the same "recover after the clamp" idiom already
+    // used here for sun_shad_mul and cloud_vis.
+    float3 dyn = sky_contrib * ao + sun_contrib;
     // 1-bounce indirect fill (fake GI): colored light diffused off surfaces into
     // open neighbours on the CPU, added here before dither so it bands with the
     // rest of the dynamic light.
@@ -1061,9 +1110,37 @@ float4 main(VS_OUT i): SV_Target0 {
     // shadows onto the scene — at full sun the floor is 0.65, at no sun 1.0.
     // Gated to sun_applies so night/dusk is untouched.
     const float shad_floor = lerp(1.0, 0.65, saturate(sun_intensity));
-    const float sun_shad_mul =
+    const float sun_shad_mul_raw =
         sun_applies ? lerp(shad_floor, 1.0, min(sun_occl, sun_mask_vis)) : 1.0;
-    const float3 gpu_total = min(ambient_v + dyn, float3(2.0, 2.0, 2.0)) * cloud_vis * sun_shad_mul;
+    // Step 3 (atmospheric-lighting-coherence plan): sun-shadow darkening only where
+    // the sky is actually visible from this fragment, so it stops double-darkening an
+    // interior tile lit purely through a window portal — sky_contrib above already
+    // carries that light in, and this term must not re-darken it at zero sky vis.
+    const float sun_shad_mul = lerp(1.0, sun_shad_mul_raw, sun_sky_vis);
+    float3 gpu_total =
+        min(ambient_v + dyn, float3(2.0, 2.0, 2.0)) * cloud_vis * sun_shad_mul + emitter_light;
+    // Step 2 (atmospheric-lighting-coherence plan): soft-knee guard tying GPU
+    // brightness back to the CPU's own per-tile light value. i.raw_light is the
+    // CPU lightmap scalar (VS_OUT, sprite.vert.hlsl; populated at cata_tiles.cpp,
+    // pinned by tests/sprite_instance_wire_test.cpp) but was never read here
+    // until now. A tile that has JUST crossed CPU visibility can still receive
+    // full-strength GPU brightness; this only tames that overshoot and never
+    // darkens a tile the CPU itself already reports as well-lit. raw_light==0.0
+    // is overloaded (off-map/non-tile sprites AND genuinely pitch-dark tiles),
+    // so gating on `> 0.0` means the guard can never black out a legitimately
+    // dark VIS_CLEAR tile.
+    if (i.raw_light > 0.0 && mode_gpu_lit) {
+        // Mirrors LIGHT_AMBIENT_LOW / LIGHT_AMBIENT_LIT, src/lightmap.h:18,22.
+        static const float CPU_LOW = 3.5;
+        static const float CPU_LIT = 10.0;
+        static const float GUARD_FLOOR = 1.0;
+        const float cpu_norm = saturate((i.raw_light - CPU_LOW) / (CPU_LIT - CPU_LOW));
+        const float cap = lerp(GUARD_FLOOR, 2.0, cpu_norm);
+        const float g = luma(gpu_total);
+        if (g > cap) {
+            gpu_total *= lerp(1.0, cap / max(g, 1e-4), guard_amount);
+        }
+    }
     // What was here: a `combined` term that took the per-channel MAXIMUM of the memory
     // tint and `gpu_total`, then multiplied it onto the raw texel. It read as a blend
     // but was a SELECTOR. The CPU only ever emitted two tint values (cata_tiles.cpp
@@ -1151,17 +1228,37 @@ float4 main(VS_OUT i): SV_Target0 {
     // inside an `if` — D3D12 strips an unread fragment storage buffer and the hole
     // breaks the root signature.
     {
-        const uint pal_row = PalIdxBuf[pal_index_of(texel.rgb)];
+        const uint pal_raw = PalIdxBuf[pal_index_of(texel.rgb)];
+        // Step 1a: low 13 bits are the row index (room to grow past
+        // PALETTE_ROWS=512); high 8 bits (<<24) are the OkLab-match confidence baked
+        // in palette_ramp.cpp. Bits 13-23 stay reserved/zero.
+        const uint pal_row = pal_raw & 0x1FFFu;
+        const float pal_conf = float((pal_raw >> 24) & 0xFFu) / 255.0;
         const float steps_n = max(ramp_steps, 2.0);
+        // Step 1b: pull shade_f toward the ramp's identity step (see
+        // palette_ramp.cpp's identity-step overwrite) as this tile's own lit luma
+        // approaches the daylight reference (1.0), so a fully-lit tile recovers its
+        // authored colour instead of reading through the interpolated value curve.
+        static const float RAMP_SHADOW_VALUE = 0.28; // ramp_gen_params::shadow_value
+        static const float RAMP_LIGHT_VALUE = 1.10;  // ramp_gen_params::light_value
+        const float identity_t =
+            saturate((1.0 - RAMP_SHADOW_VALUE) / (RAMP_LIGHT_VALUE - RAMP_SHADOW_VALUE));
+        const float identity_shade_f = identity_t * (steps_n - 1.0);
+        const float lit_luma = saturate(luma(rad_lit));
+        const float identity_pull = saturate(1.0 - abs(lit_luma - 1.0) * 2.0) * 0.5;
         const float shade_f =
-            saturate(luma(rad_lit)) * (steps_n - 1.0)
+            lerp(lit_luma * (steps_n - 1.0), identity_shade_f, identity_pull)
             + (dither_threshold(shade_pos * texels_per_tile) - 0.5);
         const uint shade_i = (uint)clamp(shade_f + 0.5, 0.0, steps_n - 1.0);
         const float3 ramped = unpack_rgba8(RampBuf[pal_row * (uint)steps_n + shade_i]);
         // Normalised light chroma, scaled so neutral white light is a no-op (x1).
         const float3 lit_chroma = normalize(max(rad_lit, 1e-4)) * 1.7320508;
         const float3 ramp_rgb = lerp(ramped, ramped * lit_chroma, ramp_chroma);
-        const float ramp_mask = saturate(ramp_enable) * ((sdf_map_w > 0u) ? 1.0 : 0.0);
+        // Step 1a: low-confidence LUT cells (the tileset colour is poorly
+        // represented by any kept palette row) fall back toward the plain-multiply
+        // result instead of snapping to a foreign, often darker, row.
+        const float ramp_mask =
+            saturate(ramp_enable) * pal_conf * ((sdf_map_w > 0u) ? 1.0 : 0.0);
         lit_rgb = lerp(lit_rgb, ramp_rgb, ramp_mask);
     }
 

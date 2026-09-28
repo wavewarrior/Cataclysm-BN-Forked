@@ -65,7 +65,7 @@ namespace
 // (scripted F7 sweeps can't reliably inject the key). 0 = off.
 auto dbg_mode_from_env() -> uint32_t
 {
-    if (const char* e = std::getenv( "CATA_DBG_MODE" ); e != nullptr) {
+    if( const char * e = std::getenv( "CATA_DBG_MODE" ); e != nullptr ) {
         return static_cast<uint32_t>( std::strtoul( e, nullptr, 10 ) ) % 18u;
     }
     return 0u;
@@ -81,7 +81,13 @@ float g_tonemap_exposure = 0.35f;
 float g_tonemap_min_ev = -12.47393f;
 float g_tonemap_max_ev = 4.026069f;
 bool g_bloom_enable = false;
-bool g_sky_sun_enable = false;
+// Step 3 (atmospheric-lighting-coherence plan): shipped ON. Measured on
+// osx-arm-slim, a ~180x180-tile scene: rc-rebuild frame_period avg was
+// 26.39ms (~37.9 fps) with the portal scan OFF and 26.39-26.61ms (~37.5-
+// 37.9 fps) with it ON — no measurable regression, so the window-portal
+// daylight scan (Step 3) and window light shafts (Step 6) it feeds both
+// ship enabled by default.
+bool g_sky_sun_enable = true;
 float g_bloom_threshold = 1.0f;
 float g_bloom_intensity = 0.5f;
 float g_grade_cdl_slope_r = 1.0f;
@@ -100,13 +106,15 @@ float g_grade_contrast = 1.05f;
 float g_grade_vignette = 0.15f;
 float g_grade_grain = 0.025f;
 float g_grade_ca = 0.0015f;
-bool g_vol_enable = false;
 bool g_gi_enable = false;
-float g_vol_density = 0.3f;
-float g_vol_intensity = 1.0f;
-float g_vol_shadow = 0.0f;
-float g_vol_reach = 8.0f;
-float g_vol_indoor = 0.0f;
+bool g_shaft_enable = true;
+float g_shaft_intensity = 0.6f;
+float g_shaft_length_scale = 1.0f;
+float g_shaft_width = 0.5f;
+bool g_dust_enable = true;
+float g_dust_density = 0.5f;
+float g_dust_size = 0.5f;
+float g_dust_drift = 0.1f;
 bool g_rain_enable = true;
 float g_rain_intensity = 0.5f;
 float g_spec_strength = 0.0f; // wet specular glint (0=off); × rain intensity per-frame
@@ -253,7 +261,8 @@ auto g_sound_category = 0;        // index into sound_t enum (0=background)
 
 // Slice 8 — proxies for controls whose backing globals aren't directly bindable
 // (uint32 fields, <select> indices, size_t counts, read-only diagnostics text).
-int g_devui_dbg_mode = static_cast<int>( g_current_dbg_mode ); // <select> proxy → g_current_dbg_mode (event-applied)
+int g_devui_dbg_mode = static_cast<int>
+                       ( g_current_dbg_mode ); // <select> proxy → g_current_dbg_mode (event-applied)
 int g_devui_shadow_steps = 16;  // reconciled with uint g_dbg_params.shadow_steps each frame
 int g_devui_placed = 0;         // mirrors dev_test_lights::lights.size() each frame
 int g_runic_template = 0;       // <select> proxy → runic force_template+1 (event-applied)
@@ -589,13 +598,15 @@ void devui_rml_open()
     c.Bind( "cam_smooth", &camera_dbg::smooth_speed );
     c.Bind( "cam_lookahead", &camera_dbg::look_ahead );
     c.Bind( "cam_deadzone", &camera_dbg::dead_zone );
-    c.Bind( "vol_enable", &g_vol_enable );
     c.Bind( "gi_enable", &g_gi_enable );
-    c.Bind( "vol_density", &g_vol_density );
-    c.Bind( "vol_intensity", &g_vol_intensity );
-    c.Bind( "vol_reach", &g_vol_reach );
-    c.Bind( "vol_shadow", &g_vol_shadow );
-    c.Bind( "vol_indoor", &g_vol_indoor );
+    c.Bind( "shaft_enable", &g_shaft_enable );
+    c.Bind( "shaft_intensity", &g_shaft_intensity );
+    c.Bind( "shaft_length_scale", &g_shaft_length_scale );
+    c.Bind( "shaft_width", &g_shaft_width );
+    c.Bind( "dust_enable", &g_dust_enable );
+    c.Bind( "dust_density", &g_dust_density );
+    c.Bind( "dust_size", &g_dust_size );
+    c.Bind( "dust_drift", &g_dust_drift );
     c.Bind( "rain_enable", &g_rain_enable );
     c.Bind( "rain_intensity", &g_rain_intensity );
     c.Bind( "spec_strength", &g_spec_strength );
@@ -650,10 +661,12 @@ void devui_rml_open()
     c.Bind( "ramp_enable", &g_dbg_params.ramp_enable );
     c.Bind( "ramp_steps", &g_dbg_params.ramp_steps );
     c.Bind( "ramp_chroma", &g_dbg_params.ramp_chroma );
+    c.Bind( "guard_amount", &g_dbg_params.guard_amount );
     c.Bind( "gi_bilat", &g_dbg_params.gi_bilat );
     c.Bind( "gi_albedo", &g_gi_albedo );
     c.Bind( "gi_feedback", &g_gi_feedback );
     c.Bind( "vis_edge", &g_dbg_params.vis_edge );
+    c.Bind( "flicker_gain", &g_dbg_params.flicker_gain );
     // Procedural normal atlas V offset (0 = feature off, 0.5 = double-height page) and
     // the SIGNED strength of the per-sprite vertical-face arc, both swept live.
     c.Bind( "nrm_atlas_v", &g_dbg_params.nrm_atlas_v );
@@ -727,6 +740,8 @@ void devui_rml_open()
     // P5b: sky/sun quality knobs (sky_sun.comp cbuffer, read each frame)
     c.Bind( "sky_dirs", &g_dbg_params.sky_dirs );
     c.Bind( "sky_reach", &g_dbg_params.sky_reach );
+    c.Bind( "portal_dirs", &g_dbg_params.portal_dirs );
+    c.Bind( "portal_reach", &g_dbg_params.portal_reach );
     c.Bind( "sun_steps", &g_dbg_params.sun_steps );
     c.Bind( "sun_penumbra", &g_dbg_params.sun_penumbra );
     c.Bind( "sun_soft", &g_dbg_params.sun_soft );
@@ -764,6 +779,7 @@ void devui_rml_open()
     c.Bind( "crt_roll_speed", &crtp.roll_speed );
     c.Bind( "crt_flicker", &crtp.flicker );
     c.Bind( "crt_vignette", &crtp.vignette_alpha );
+    c.Bind( "crt_world", &crtp.crt_world );
     c.Bind( "wt_px", &rmlui_layer::world_text_px() );
     c.Bind( "wt_dx", &rmlui_layer::world_text_dx() );
     c.Bind( "wt_dy", &rmlui_layer::world_text_dy() );
@@ -1224,9 +1240,9 @@ void maybe_dump_map( std::uint64_t frame, std::uint64_t last_dump_frame )
         // F13 / file-trigger on-demand dump: pair with the BMP written this frame.
         path = "/tmp/cata_map_" + std::to_string( frame ) + ".json";
     } else {
-        static const char* spec = std::getenv( "CATA_MAP_DUMP" );
+        static const char *spec = std::getenv( "CATA_MAP_DUMP" );
         if( spec == nullptr ) { return; }
-        const char* colon = std::strchr( spec, ':' );
+        const char *colon = std::strchr( spec, ':' );
         if( colon == nullptr ) { return; }
         if( std::strtoull( spec, nullptr, 10 ) != frame ) { return; }
         path.assign( colon + 1 );
@@ -1250,11 +1266,11 @@ void maybe_dump_map( std::uint64_t frame, std::uint64_t last_dump_frame )
     j.member( "z", z );
     j.member( "width", W );
     j.member( "height", H );
-    j.member( "player", std::vector<int>{ g->u.bub_pos().x(), g->u.bub_pos().y(), z } );
-    j.member( "map_origin", std::vector<int>{ s_emo.map_origin_x, s_emo.map_origin_y } );
-    j.member( "draw_off_px", std::vector<int>{ s_emo.draw_off_px_x, s_emo.draw_off_px_y } );
+    j.member( "player", std::vector<int> { g->u.bub_pos().x(), g->u.bub_pos().y(), z } );
+    j.member( "map_origin", std::vector<int> { s_emo.map_origin_x, s_emo.map_origin_y } );
+    j.member( "draw_off_px", std::vector<int> { s_emo.draw_off_px_x, s_emo.draw_off_px_y } );
     j.member( "tile_px", s_emo.tile_px );
-    j.member( "screen", std::vector<int>{ s_emo.screen_w, s_emo.screen_h } );
+    j.member( "screen", std::vector<int> { s_emo.screen_w, s_emo.screen_h } );
     j.member( "trans_at_player", s_emo.trans_at_player );
 
     // Terrain / furniture: flat W*H arrays of int ids (row-major, y outer),
@@ -1311,7 +1327,7 @@ void maybe_dump_map( std::uint64_t frame, std::uint64_t last_dump_frame )
 
     j.member( "creatures" );
     j.start_array();
-    for( Creature* c : mm.get_creatures_in_radius( g->u.bub_pos(), 100, 1 ) ) {
+    for( Creature * c : mm.get_creatures_in_radius( g->u.bub_pos(), 100, 1 ) ) {
         if( c == nullptr ) { continue; }
         const tripoint_bub_ms p = c->bub_pos();
         if( p.z() != z ) { continue; }
@@ -1319,9 +1335,9 @@ void maybe_dump_map( std::uint64_t frame, std::uint64_t last_dump_frame )
         j.member( "kind", c->is_avatar() ? "avatar" : ( c->is_npc() ? "npc" : "monster" ) );
         j.member( "x", p.x() );
         j.member( "y", p.y() );
-        if( const monster* m = c->as_monster() ) {
+        if( const monster * m = c->as_monster() ) {
             j.member( "id", m->type ? m->type->id.str() : "" );
-        } else if( const npc* n = c->as_npc() ) {
+        } else if( const npc * n = c->as_npc() ) {
             j.member( "id", n->myclass.str() );
         }
         j.end_object();
@@ -1335,7 +1351,7 @@ void maybe_dump_map( std::uint64_t frame, std::uint64_t last_dump_frame )
         if( v == nullptr ) { continue; }
         j.start_object();
         j.member( "name", v->name );
-        j.member( "pos", std::vector<int>{ wv.pos.x(), wv.pos.y(), wv.pos.z() } );
+        j.member( "pos", std::vector<int> { wv.pos.x(), wv.pos.y(), wv.pos.z() } );
         j.member( "parts" );
         j.start_array();
         for( const vpart_reference& prt : v->get_all_parts() ) {

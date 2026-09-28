@@ -44,8 +44,8 @@ cbuffer SkySunParams : register(b0, space2) {
     float sun_dir_x;    // celestial travel direction (toward = -dir)
     float sun_dir_y;
     float sun_sin_elev; // celestial elevation sine (drives the 3D climb)
-    float ssp_pad0;     // reserved (was shadow_k — never read here; see sky_sun_pass.h)
-    uint  ssp_pad1;     // reserved (was shadow_steps — never read here)
+    float portal_reach; // Step 3: sky-portal scan march reach, tiles (roofed probes only). Was ssp_pad0.
+    uint  portal_dirs;  // Step 3: sky-portal scan direction count (roofed probes only). Was ssp_pad1.
     uint  sky_dirs;     // hemisphere directions per tile (P5b — F4 knob)
     float sky_reach;    // sky march max distance in tiles (P5b)
     uint  sun_steps;    // celestial march steps (P5b)
@@ -110,6 +110,35 @@ float sky_admit( float2 origin, float2 dir )
         }
     }
     return 0.0;                                // no open sky reachable
+}
+
+// Step 3 (atmospheric-lighting-coherence plan): denser distance-weighted sky-portal
+// scan for ROOFED probes only. sky_admit's coarse SKY_DIRS-direction dome average
+// (default 8) chronically misses a 1-tile window — none of the evenly-spaced angles
+// happens to thread the opening — so a roofed interior with a window reads ~0 sky
+// access at noon. This scans a denser fan of `portal_dirs` directions out to
+// `reach` tiles and returns a distance-weighted SOFT contribution (nearer opening =
+// brighter) instead of sky_admit's hard binary, so a single found portal still
+// reads as a believable gradient rather than a flat wash.
+float sky_portal_dir( float2 origin, float2 dir, float reach )
+{
+    float t = SKY_START;
+    [loop] for( int s = 0; s < SKY_STEPS; ++s ) {
+        const float2 pos = origin + dir * t;
+        const int px = (int)floor( pos.x );
+        const int py = (int)floor( pos.y );
+        if( occ_height_at( px, py ) >= SKY_WALL_H ) {
+            return 0.0;                     // tall wall blocks this direction
+        }
+        if( roof_at( px, py ) < 0.5 ) {
+            return 1.0 / ( 1.0 + t );       // reached open sky — soft, nearer = brighter
+        }
+        t += SKY_STEP;
+        if( t > reach ) {
+            break;
+        }
+    }
+    return 0.0;                             // no open sky reachable within `reach`
 }
 
 // SDF bilinear sampler — same p-0.5 centre convention as sprite.frag's
@@ -219,14 +248,29 @@ void main( uint3 tid : SV_DispatchThreadID )
     }
     const float2 probe = float2( (float)tileX + 0.5, (float)tileY + 0.5 );
 
+    // Step 3: roofed probes get the denser portal scan (window-hunting); open/
+    // outdoor probes keep the cheap SKY_DIRS-direction dome average — they are
+    // already looking straight at the sky from most angles, so the coarse average
+    // is both correct and cheap there.
     float sky = 0.0;
-    const uint sd = max( sky_dirs, 1u );
-    [loop] for( int d = 0; d < (int)sd; ++d ) {
-        const float  ang = 6.2831853 * ( (float)d + 0.5 ) / (float)sd;
-        const float2 dir = float2( cos( ang ), sin( ang ) );
-        sky += sky_admit( probe, dir );
+    if( roof_at( tileX, tileY ) >= 0.5 ) {
+        const uint pd = max( portal_dirs, 1u );
+        const float preach = max( portal_reach, 1.0 );
+        [loop] for( int d = 0; d < (int)pd; ++d ) {
+            const float  ang = 6.2831853 * ( (float)d + 0.5 ) / (float)pd;
+            const float2 dir = float2( cos( ang ), sin( ang ) );
+            sky += sky_portal_dir( probe, dir, preach );
+        }
+        sky /= (float)pd;
+    } else {
+        const uint sd = max( sky_dirs, 1u );
+        [loop] for( int d = 0; d < (int)sd; ++d ) {
+            const float  ang = 6.2831853 * ( (float)d + 0.5 ) / (float)sd;
+            const float2 dir = float2( cos( ang ), sin( ang ) );
+            sky += sky_admit( probe, dir );
+        }
+        sky /= (float)sd;
     }
-    sky /= (float)sd;
 
     const float2 sun_toward = -float2( sun_dir_x, sun_dir_y );
     const float  sun_ang0   = atan2( sun_toward.y, sun_toward.x );

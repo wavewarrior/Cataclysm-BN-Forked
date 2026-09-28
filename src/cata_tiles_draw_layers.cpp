@@ -597,9 +597,24 @@ bool cata_tiles::draw_field_or_item(
             const lit_level lit = it_overridden ? lit_level::LIT : ll;
             const bool nv = !it_overridden;
 
-            const tile_search_params tile{disp_id, C_ITEM, it_category, 0, 0};
-            ret_draw_items =
-                draw_from_id_string( tile, p, bgCol, fgCol, lit, nv, z_drop, false, height_3d );
+            {
+                // Dropped items are also silhouette sun-shadow casters (Phase
+                // 2.3 extension): opt in via sprite_instance::cutout_pad0 the
+                // same way draw_critter_at does, so 1-tile item art casts a
+                // sheared shadow and receives the radial macro-normal. Scoped
+                // to the item draw only — fields (smoke/fire) must stay
+                // excluded, and the highlight overlay below must NOT inherit
+                // this flag or it would cast its own sheared shadow.
+                entity_caster_ = 1.0f;
+                struct caster_reset {
+                    float &flag;
+                    ~caster_reset() { flag = 0.0f; }
+                } caster_reset_guard{ entity_caster_ };
+
+                const tile_search_params tile{disp_id, C_ITEM, it_category, 0, 0};
+                ret_draw_items =
+                    draw_from_id_string( tile, p, bgCol, fgCol, lit, nv, z_drop, false, height_3d );
+            }
             if( ret_draw_items && hilite ) { draw_item_highlight( p ); }
         }
     }

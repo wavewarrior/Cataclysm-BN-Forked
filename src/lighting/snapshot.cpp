@@ -11,8 +11,8 @@
 #include "item.h"
 #include "lighting/dev_test_lights.h"
 #include "map.h"
-#include "mapdata.h"
 #include "map_iterator.h"
+#include "mapdata.h"
 #include "monster.h"
 #include "npc.h"
 #include "submap.h"
@@ -65,8 +65,8 @@ namespace lighting {
 // grid-decoupled lighting plan lets a carried light follow its sprite's sub-tile
 // slide instead of snapping to the tile centre. Callers that genuinely sit at a
 // tile centre pass `x + 0.5f` to keep the previous behaviour exactly.
-static gpu_emitter make_omni(float px, float py, int lz, float radius, float r, float g,
-                             float b) {
+static gpu_emitter make_omni(
+    float px, float py, int lz, float radius, float r, float g, float b, float flicker_amp = 0.0f) {
     gpu_emitter e{};
     e.pos_x = px;
     e.pos_y = py;
@@ -77,6 +77,7 @@ static gpu_emitter make_omni(float px, float py, int lz, float radius, float r, 
     //   lum=120 (indoor lamp) → 11 tiles
     //   lum=400 (bright)      → 20 tiles
     e.radius = 3.0f * std::sqrt(std::max(0.f, radius));
+    e.flicker_amp = flicker_amp;
     e.r = r;
     e.g = g;
     e.b = b;
@@ -99,8 +100,8 @@ static gpu_emitter make_omni(float px, float py, int lz, float radius, float r, 
 
 static gpu_emitter make_cone(
     float px, float py, int lz, float radius, float r, float g, float b, float dir_x, float dir_y,
-    float half_angle_rad) {
-    gpu_emitter e = make_omni(px, py, lz, radius, r, g, b);
+    float half_angle_rad, float flicker_amp = 0.0f) {
+    gpu_emitter e = make_omni(px, py, lz, radius, r, g, b, flicker_amp);
     e.cone_dir_x = dir_x;
     e.cone_dir_y = dir_y;
     e.cone_half_angle = half_angle_rad;
@@ -122,7 +123,9 @@ static gpu_emitter with_tile_seed(gpu_emitter e, int lx, int ly) {
 // light, normalise, and push 0.45 tile that way. No transparent neighbour (fully
 // enclosed) → leave at the centre. Uses the same `> LIGHT_TRANSPARENCY_SOLID` test
 // the rest of the engine uses for "is this a wall".
-struct emitter_pos { float x, y; };
+struct emitter_pos {
+    float x, y;
+};
 static emitter_pos face_offset(const level_cache& mc, int lx, int ly) {
     const float cx = static_cast<float>(lx) + 0.5f;
     const float cy = static_cast<float>(ly) + 0.5f;
@@ -174,9 +177,9 @@ static void collect_zlev(map& m, int zlev, const sun_params& sun, std::vector<gp
                     const ter_id t_id = cur->get_ter({sx, sy});
                     if (t_id->light_emitted > 0) {
                         const light_color_rgb tc = light_color_from_json(t_id->light_color);
-                        out.push_back(make_omni(
-                            ep.x, ep.y, zlev, static_cast<float>(t_id->light_emitted), tc.r, tc.g,
-                            tc.b));
+                        out.push_back(
+                            make_omni(ep.x, ep.y, zlev, static_cast<float>(t_id->light_emitted),
+                                      tc.r, tc.g, tc.b));
                     }
 
                     // Window portals: a lit window acts as a directional area light
@@ -219,10 +222,14 @@ static void collect_zlev(map& m, int zlev, const sun_params& sun, std::vector<gp
                             // light regardless of facing - a north window is not pitch dark.
                             // Without this ambient floor, every window on a wall the sun
                             // isn't currently hitting contributes exactly zero.
-                            const float sun_angle = std::max(
-                                0.0f, -(out_dx * sun.sun_dir_x + out_dy * sun.sun_dir_y));
-                            const float direct = 45.0f * sun_angle * sun.sun_intensity;
-                            const float ambient = 18.0f * sun.sky_intensity;
+                            const float sun_angle =
+                                std::max(0.0f, -(out_dx * sun.sun_dir_x + out_dy * sun.sun_dir_y));
+                            // Bumped 5x (45→225, 18→90) at user request: the window
+                            // "flood the room with sunlight" look reads stronger than a
+                            // physically-plausible portal light would be. Not physically
+                            // accurate by design.
+                            const float direct = 225.0f * sun_angle * sun.sun_intensity;
+                            const float ambient = 90.0f * sun.sky_intensity;
                             const float lum = direct + ambient;
                             if (lum > 0.5f) {
                                 // Blend colour toward sky tint as the direct term shrinks, so a
@@ -242,9 +249,9 @@ static void collect_zlev(map& m, int zlev, const sun_params& sun, std::vector<gp
                                 const float r = sun.sun_r * w + sun.sky_r * (1.0f - w);
                                 const float g = sun.sun_g * w + sun.sky_g * (1.0f - w);
                                 const float b = sun.sun_b * w + sun.sky_b * (1.0f - w);
-                                out.push_back(make_cone(
-                                    ep.x, ep.y, zlev, lum, r, g, b, -out_dx, -out_dy,
-                                    units::to_radians(80_degrees)));
+                                out.push_back(
+                                    make_cone(ep.x, ep.y, zlev, lum, r, g, b, -out_dx, -out_dy,
+                                              units::to_radians(80_degrees)));
                             }
                         }
                     }
@@ -252,20 +259,27 @@ static void collect_zlev(map& m, int zlev, const sun_params& sun, std::vector<gp
                     const furn_id f_id = cur->get_furn({sx, sy});
                     if (f_id->light_emitted > 0) {
                         const light_color_rgb fc = light_color_from_json(f_id->light_color);
-                        out.push_back(make_omni(
-                            ep.x, ep.y, zlev, static_cast<float>(f_id->light_emitted), fc.r, fc.g,
-                            fc.b));
+                        out.push_back(
+                            make_omni(ep.x, ep.y, zlev, static_cast<float>(f_id->light_emitted),
+                                      fc.r, fc.g, fc.b));
                     }
 
                     // Fields — plain range-based for; std::ranges::for_each not
                     // usable here due to MSVC's stricter range-concept checks.
                     for (const auto& [ftype, fentry] : cur->get_field({sx, sy})) {
-                        (void)ftype;
                         const int fe_lum = fentry.light_emitted();
                         if (fe_lum > 0) {
                             const light_color_rgb fc = fentry.light_color();
-                            out.push_back(make_omni(
-                                ep.x, ep.y, zlev, static_cast<float>(fe_lum), fc.r, fc.g, fc.b));
+                            // Step 5: actual open-flame field types breathe; every other
+                            // field-based light (chem glow, etc.) stays steady.
+                            const float flicker =
+                                (ftype == fd_fire || ftype == fd_fire_vent
+                                 || ftype == fd_flame_burst)
+                                    ? 0.15f
+                                    : 0.0f;
+                            out.push_back(
+                                make_omni(ep.x, ep.y, zlev, static_cast<float>(fe_lum), fc.r, fc.g,
+                                          fc.b, flicker));
                         }
                     }
 
@@ -318,20 +332,20 @@ static void collect_zlev(map& m, int zlev, const sun_params& sun, std::vector<gp
                 const float face_rad = units::to_radians(v->face.dir());
                 out.push_back(make_cone(
                     static_cast<float>(lx) + 0.5f, static_cast<float>(ly) + 0.5f, zlev,
-                    static_cast<float>(vp.bonus), r, g, b, std::cos(face_rad),
-                    std::sin(face_rad), half_rad));
+                    static_cast<float>(vp.bonus), r, g, b, std::cos(face_rad), std::sin(face_rad),
+                    half_rad));
             } else if (vp.has_flag(VPFLAG_CIRCLE_LIGHT) || vp.has_flag(VPFLAG_DOME_LIGHT)
                        || vp.has_flag(VPFLAG_AISLE_LIGHT) || vp.has_flag(VPFLAG_ATOMIC_LIGHT)) {
-                out.push_back(make_omni(
-                    static_cast<float>(lx) + 0.5f, static_cast<float>(ly) + 0.5f, zlev,
-                    static_cast<float>(vp.bonus), r, g, b));
+                out.push_back(
+                    make_omni(static_cast<float>(lx) + 0.5f, static_cast<float>(ly) + 0.5f, zlev,
+                              static_cast<float>(vp.bonus), r, g, b));
             }
         }
     }
 }
 
-std::vector<gpu_emitter> build_emitter_snapshot(event_queue& eq, float frame_ms,
-                                                 const sun_params& sun) {
+std::vector<gpu_emitter> build_emitter_snapshot(
+    event_queue& eq, float frame_ms, const sun_params& sun) {
     std::vector<gpu_emitter> out;
     out.reserve(1024);
 
@@ -393,13 +407,13 @@ std::vector<gpu_emitter> build_emitter_snapshot(event_queue& eq, float frame_ms,
         const float lum = c.active_light();
         if (lum <= 0.0f) { return; }
         const tripoint_bub_ms pos = c.bub_pos();
-        if (!m.inbounds(pos)) { return; }
+        if (pos.z() != zlev || !m.inbounds(pos)) { return; }
         const emitter_pos ep = slid(c, pos);
         out.push_back(
-            with_tile_seed(make_omni(ep.x, ep.y, pos.z(), lum, 0, 0, 0), pos.x(), pos.y()));
+            with_tile_seed(make_omni(ep.x, ep.y, pos.z(), lum, 1.0f, 0.9f, 0.7f), pos.x(), pos.y()));
         if (c.has_effect(snapshot_effect_onfire)) {
             out.push_back(with_tile_seed(
-                make_omni(ep.x, ep.y, pos.z(), 6.0f, 1.0f, 0.5f, 0.0f), pos.x(), pos.y()));
+                make_omni(ep.x, ep.y, pos.z(), 6.0f, 1.0f, 0.5f, 0.0f, 0.15f), pos.x(), pos.y()));
         }
     };
 
@@ -413,11 +427,11 @@ std::vector<gpu_emitter> build_emitter_snapshot(event_queue& eq, float frame_ms,
     for (const monster& critter : g->all_monsters()) {
         if (critter.is_hallucination()) { continue; }
         const tripoint_bub_ms mp = critter.bub_pos();
-        if (!m.inbounds(mp)) { continue; }
+        if (mp.z() != zlev || !m.inbounds(mp)) { continue; }
         const emitter_pos ep = slid(critter, mp);
         if (critter.has_effect(snapshot_effect_onfire)) {
             out.push_back(with_tile_seed(
-                make_omni(ep.x, ep.y, mp.z(), 6.0f, 1.0f, 0.5f, 0.0f), mp.x(), mp.y()));
+                make_omni(ep.x, ep.y, mp.z(), 6.0f, 1.0f, 0.5f, 0.0f, 0.15f), mp.x(), mp.y()));
         }
         if (critter.type->luminance > 0) {
             out.push_back(with_tile_seed(
@@ -441,7 +455,7 @@ std::vector<gpu_emitter> build_emitter_snapshot(event_queue& eq, float frame_ms,
         }
         if (pc.has_effect(snapshot_effect_onfire)) {
             out.push_back(with_tile_seed(
-                make_omni(ep.x, ep.y, pp.z(), 6.0f, 1.0f, 0.5f, 0.0f), pp.x(), pp.y()));
+                make_omni(ep.x, ep.y, pp.z(), 6.0f, 1.0f, 0.5f, 0.0f, 0.15f), pp.x(), pp.y()));
         }
     }
 
@@ -475,9 +489,9 @@ std::vector<gpu_emitter> build_emitter_snapshot(event_queue& eq, float frame_ms,
             const float radius = f.intensity * std::max(0.0f, frac);
             const tripoint_bub_ms local = abs_to_bub(f.pos);
             if (!m.inbounds(local)) { continue; }
-            out.push_back(make_omni(
-                static_cast<float>( local.x() ) + 0.5f, static_cast<float>( local.y() ) + 0.5f,
-                local.z(), radius, f.r, f.g, f.b));
+            out.push_back(
+                make_omni(static_cast<float>(local.x()) + 0.5f,
+                          static_cast<float>(local.y()) + 0.5f, local.z(), radius, f.r, f.g, f.b));
         }
     }
 

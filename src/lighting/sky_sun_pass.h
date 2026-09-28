@@ -29,9 +29,11 @@ struct sky_sun_params {
     std::uint32_t map_h;
     float sun_dir_x; // sun travel direction (toward_sun = -sun_dir)
     float sun_dir_y;
-    float sun_sin_elev;         // sun elevation sine (2b heightfield; unused 2a)
-    float ssp_pad0 = 0.0f;          // reserved (was shadow_k — never read by the shader)
-    std::uint32_t ssp_pad1 = 0u;    // reserved (was shadow_steps — never read)
+    float sun_sin_elev;        // sun elevation sine (2b heightfield; unused 2a)
+    float portal_reach = 8.0f; // Step 3: sky-portal scan march reach, tiles (roofed probes). Was
+                               // ssp_pad0.
+    std::uint32_t portal_dirs = 16u; // Step 3: sky-portal scan direction count (roofed probes). Was
+                                     // ssp_pad1.
     // P5b: sky/sun quality knobs (was ss_pad).
     std::uint32_t sky_dirs = 8;     // hemisphere directions per tile
     float sky_reach = 10.0f;        // sky march max distance (tiles)
@@ -88,7 +90,7 @@ public:
         float rgb_mean = 0.0f;
         float a_mean = 0.0f;
     };
-    sky_means readback_means( std::uint32_t runtime_w, std::uint32_t runtime_h ) const;
+    sky_means readback_means(std::uint32_t runtime_w, std::uint32_t runtime_h) const;
 
     // Run the compute pass on `cb`: one dispatch reading occ_buf (t0) — the
     // unified coverage occluder field (2 floats/tile: height + roof bit) — and

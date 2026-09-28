@@ -39,7 +39,7 @@ cbuffer GradeParams : register( b1, space3 )
     float  vignette_amount; // 0=off .. 1=strong edge darkening
     float  grain_amount;    // 0=off .. ~0.03=subtle
     float  ca_amount;       // chromatic aberration UV offset (0=off .. ~0.003=subtle)
-    float  gp_pad0;         // align Row 4 to 16 bytes
+    float  crt_world_amount; // Step 7: world-space CRT scanline+vignette strength, 0=off. Was gp_pad0.
 };
 
 struct VS_OUT {
@@ -153,5 +153,22 @@ float4 main( VS_OUT i ) : SV_Target0
         c.rgb += ( noise - 0.5 ) * grain_scale;
     }
 
+    // --- World CRT scanlines + vignette (Step 7, atmospheric-lighting-coherence
+    // plan) --- Single knob (crt_world_amount = crt_world ? scanline_alpha : 0,
+    // set at the tonemap fill site) reusing the RmlUi HUD CRT's own alpha slider
+    // so the two read consistently; scanline PITCH is a fixed constant here (no
+    // spare uniform slot to carry a second value) rather than a second CRT
+    // system — see rmlui_layer.h's crt_params::crt_world comment. 0 (the
+    // crt_world default) is an exact no-op.
+    if( crt_world_amount > 0.0001 ) {
+        const float WORLD_SCANLINE_PITCH = 4.0;
+        float line_phase = frac( i.pos.y / WORLD_SCANLINE_PITCH );
+        float scan = 1.0 - step( 0.5, line_phase ) * crt_world_amount;
+        c.rgb *= scan;
+        float2 wvc = i.uv - 0.5;
+        float wvd = dot( wvc, wvc );
+        float wvf = 1.0 - smoothstep( 0.3, 1.0, wvd * 2.0 ) * crt_world_amount;
+        c.rgb *= wvf;
+    }
     return c;
 }

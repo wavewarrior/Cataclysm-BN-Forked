@@ -1,5 +1,3 @@
-#include <cmath>
-#include <cstdlib>
 #include "render_state.h"
 
 #include "debug.h"
@@ -11,7 +9,9 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <span>
 #include <string>
@@ -125,8 +125,8 @@ void render_state::init(SDL_Window* host_window) {
         bci.usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
         bci.size = static_cast<Uint32>(PALETTE_ROWS * 16 * sizeof(std::uint32_t));
         ramp_buf_ = SDL_CreateGPUBuffer(device_.raw(), &bci);
-        bci.size = static_cast<Uint32>(PALETTE_LUT_SIDE * PALETTE_LUT_SIDE * PALETTE_LUT_SIDE
-                                       * sizeof(std::uint32_t));
+        bci.size = static_cast<Uint32>(
+            PALETTE_LUT_SIDE * PALETTE_LUT_SIDE * PALETTE_LUT_SIDE * sizeof(std::uint32_t));
         pal_index_buf_ = SDL_CreateGPUBuffer(device_.raw(), &bci);
         if (!ramp_buf_ || !pal_index_buf_) {
             dbg(DL::Error) << "render_state: palette ramp buffer alloc failed: " << SDL_GetError();
@@ -143,20 +143,18 @@ void render_state::init(SDL_Window* host_window) {
     // effect it owns quietly vanishes. Collect failures and log them together
     // once, loudly, after every optional pass has had a chance to init.
     std::vector<std::string> degraded_passes;
-    if( !gi_.init(
-                device_, static_cast<std::uint32_t>(rt_tiles),
-                static_cast<std::uint32_t>(rt_tiles) ) ) {
-        degraded_passes.emplace_back( "gi" );
+    if (!gi_.init(device_, static_cast<std::uint32_t>(rt_tiles),
+                  static_cast<std::uint32_t>(rt_tiles))) {
+        degraded_passes.emplace_back("gi");
     }
 
     // GPU compute sky/sun directional skylight pass (Stage 2a/2b). Same max tile
     // extent as the SDF/GI; sky_buffer() feeds sprite.frag as SkyBuf (rgb
     // directional sky-access + a celestial occlusion). Reads sdf_'s unified
     // coverage occluder buffer (occ_buffer(), which carries COMPUTE_STORAGE_READ).
-    if( !sky_.init(
-                device_, static_cast<std::uint32_t>(rt_tiles),
-                static_cast<std::uint32_t>(rt_tiles) ) ) {
-        degraded_passes.emplace_back( "sky_sun" );
+    if (!sky_.init(device_, static_cast<std::uint32_t>(rt_tiles),
+                   static_cast<std::uint32_t>(rt_tiles))) {
+        degraded_passes.emplace_back("sky_sun");
     }
 
     // UI compositor target. Sized to the PHYSICAL (drawable) swapchain pixels
@@ -244,10 +242,6 @@ void render_state::init(SDL_Window* host_window) {
         // additively into world_target (world_fmt) before the tonemap resolve.
         bloom_.init(device_, world_fmt, static_cast<std::uint32_t>(pw),
                     static_cast<std::uint32_t>(ph));
-        // Volumetric "lit fog" sun shafts (Step-6 / C2): a fullscreen additive
-        // pass into world_target (world_fmt), driven before bloom. Owns no
-        // textures, so no resize hook is needed.
-        volumetric_.init(device_, world_fmt);
 
         // High-fidelity rain effect: world-targeted falling droplets + splashes.
         rain_.init(device_, world_fmt, static_cast<std::uint32_t>(pw),
@@ -256,24 +250,30 @@ void render_state::init(SDL_Window* host_window) {
         // composited into world_target between the terrain and entity halves of
         // Pass W. No-ops (ready() == false) when gfx/splatmap/stamps.json is
         // missing or lists no loadable stamps.
-        splatmap_.init( device_, world_fmt );
+        splatmap_.init(device_, world_fmt);
         // Large multi-tile terrain decals (cosmetic overlays)
-        decals_.init( device_ );
+        decals_.init(device_);
         // GPU sound wave visualization pass (expanding ring wavefronts).
         sound_waves_.init(device_, world_fmt);
+        // Decorative "smoke and mirrors" light glow (additive radial gradient).
+        emitter_glow_.init(device_, world_fmt);
+        // Window light-shaft god-rays (Step 6b) — additive beam sprites through
+        // visible windows, replacing the removed SDF volumetric_pass.
+        godray_shafts_.init(device_, world_fmt);
+        // Dust motes drifting inside the light shafts (Step 6c).
+        dust_motes_.init(device_, world_fmt);
         // Box2D debug overlay line pass (world-target format, line-list topology).
-        debug_lines_.init( device_, world_fmt );
+        debug_lines_.init(device_, world_fmt);
         // Atmospheric HUD particle effects (Phase 8).
-        hud_particles_.init( device_, device_.swapchain_format(),
-                             static_cast<std::uint32_t>( pw ),
-                             static_cast<std::uint32_t>( ph ) );
+        hud_particles_
+            .init(device_, device_.swapchain_format(), static_cast<std::uint32_t>(pw),
+                  static_cast<std::uint32_t>(ph));
 
         // GPU JFA SDF pass (P3): seed → flood → resolve on SS-grid. Same max tile
         // extent as the CPU SDF; jfa_sdf_buffer() is scratch output for A/B vs CPU DT.
-        if( !gpu_sdf_.init(
-                    device_, static_cast<std::uint32_t>(rt_tiles),
-                    static_cast<std::uint32_t>(rt_tiles) ) ) {
-            degraded_passes.emplace_back( "gpu_sdf" );
+        if (!gpu_sdf_.init(device_, static_cast<std::uint32_t>(rt_tiles),
+                           static_cast<std::uint32_t>(rt_tiles))) {
+            degraded_passes.emplace_back("gpu_sdf");
         }
     }
     // Stage 1 (gpu-daylight black-scene plan): one loud line naming every
@@ -282,15 +282,14 @@ void render_state::init(SDL_Window* host_window) {
     // sdf_.init() (the core CPU/GPU SDF upload path) — its signature is `void`,
     // so it has no failure to report; a future signature change should add it
     // here rather than leaving it the one silent exception.
-    if( !degraded_passes.empty() ) {
+    if (!degraded_passes.empty()) {
         std::string joined;
-        for( std::size_t i = 0; i < degraded_passes.size(); ++i ) {
-            if( i > 0 ) { joined += ", "; }
+        for (std::size_t i = 0; i < degraded_passes.size(); ++i) {
+            if (i > 0) { joined += ", "; }
             joined += degraded_passes[i];
         }
-        DebugLogFL( DL::Error, DC::Main )
-                << "[lighting] DEGRADED: " << joined
-                << " — world lighting will be incomplete";
+        DebugLogFL(DL::Error, DC::Main)
+            << "[lighting] DEGRADED: " << joined << " — world lighting will be incomplete";
     }
 }
 
@@ -308,11 +307,13 @@ void render_state::shutdown() noexcept {
     gi_.shutdown();
     sky_.shutdown();
     bloom_.shutdown();
-    volumetric_.shutdown();
     rain_.shutdown();
     splatmap_.shutdown();
     decals_.shutdown();
     sound_waves_.shutdown();
+    emitter_glow_.shutdown();
+    godray_shafts_.shutdown();
+    dust_motes_.shutdown();
     hud_particles_.shutdown();
     debug_lines_.shutdown();
     gpu_sdf_.shutdown();
@@ -360,7 +361,7 @@ void render_state::queue_ui_rect(
     s.tint_b = b;
     s.tint_a = a;
     // Legacy GeometryRenderer UI rect.
-    s.light_mode = static_cast<float>( sprite_light_mode::unlit );
+    s.light_mode = static_cast<float>(sprite_light_mode::unlit);
     // Route into the current adaptor's retained slice if we're inside a
     // redraw_cb. Otherwise fall through to the composited output (e.g.
     // background fills queued outside the ui_manager redraw loop).
@@ -520,7 +521,7 @@ void render_state::clear_tile_queue() noexcept {
     // The cut index and quad list index into the queue we just dropped, so they
     // must go with it: a frame where cata_tiles::draw() does not re-record them
     // falls back to the single-pass Pass W.
-    splat_cut_ = static_cast<std::size_t>( -1 );
+    splat_cut_ = static_cast<std::size_t>(-1);
     splat_quads_.clear();
     decal_draws_.clear();
 }
@@ -632,10 +633,8 @@ void render_state::build_palette_ramps(int steps) {
     palette_steps_ = data.steps;
 
     // One transfer buffer, one copy pass, two uploads.
-    const Uint32 ramp_bytes =
-        static_cast<Uint32>(data.ramp.size() * sizeof(std::uint32_t));
-    const Uint32 index_bytes =
-        static_cast<Uint32>(data.index.size() * sizeof(std::uint32_t));
+    const Uint32 ramp_bytes = static_cast<Uint32>(data.ramp.size() * sizeof(std::uint32_t));
+    const Uint32 index_bytes = static_cast<Uint32>(data.index.size() * sizeof(std::uint32_t));
     SDL_GPUTransferBufferCreateInfo tbci{};
     tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
     tbci.size = ramp_bytes + index_bytes;
@@ -675,13 +674,13 @@ void render_state::build_palette_ramps(int steps) {
 
     DebugLogFL(DL::Info, DC::Main)
         << "palette ramps built: rows=" << data.palette_size << " steps=" << data.steps
-        << " unique_colours=" << data.unique_colours
-        << " kept_min_count=" << data.kept_min_count
-        << " tail_pixels=" << data.tail_pixels << "/" << data.total_pixels
-        << " tail_pct="
-        << (data.total_pixels ? (100.0 * static_cast<double>(data.tail_pixels)
-                                 / static_cast<double>(data.total_pixels))
-                              : 0.0);
+        << " unique_colours=" << data.unique_colours << " kept_min_count=" << data.kept_min_count
+        << " tail_pixels=" << data.tail_pixels << "/" << data.total_pixels << " tail_pct="
+        << (data.total_pixels
+                ? (100.0 * static_cast<double>(data.tail_pixels)
+                   / static_cast<double>(data.total_pixels))
+                : 0.0)
+        << " coverage_pct=" << data.coverage_pct << " mean_snap_dist=" << data.mean_snap_dist;
 }
 SDL_GPUTexture* render_state::create_rgba_gpu_texture(int w, int h) {
     if (!device_.ready() || w <= 0 || h <= 0) { return nullptr; }
@@ -899,7 +898,7 @@ void render_state::build_outline_ring(
             s.inst.extrude_px = 0.0f;     // outline copies must not darken or lean
             s.inst.extrude_dark = 0.0f;
             s.inst.extrude_lean = 0.0f;
-            s.inst.face_amt = 0.0f;       // outline copies are flat silhouettes, no facing arc
+            s.inst.face_amt = 0.0f; // outline copies are flat silhouettes, no facing arc
             ring.push_back(s);
         }
     }
@@ -955,8 +954,8 @@ void render_state::flush_avatar_sprites(sprite_batcher& dst, SDL_GPUSampler* sam
     avatar_sprite_queue_.clear();
 }
 
-void render_state::set_splat_frame(std::size_t cut, std::vector<splat_quad> quads,
-                                   const SDL_Rect& map_viewport) {
+void render_state::set_splat_frame(
+    std::size_t cut, std::vector<splat_quad> quads, const SDL_Rect& map_viewport) {
     splat_cut_ = cut;
     splat_quads_ = std::move(quads);
     splat_map_viewport_ = map_viewport;

@@ -28,7 +28,7 @@
 | `sound_wave_pass.cpp/h` | Sound-pulse discs (stealth) |
 | `emitter_collector.cpp/h` | Per-frame emitter gather |
 | `frame_build.cpp/h` | Per-frame lighting data build |
-| `bloom/volumetric/tonemap/debug_line_pass, hud_particle_effect, menu_plexus, solid_overlay, snapshot` | Auxiliary GPU passes |
+| `bloom/godray_shaft/dust_mote/tonemap/debug_line_pass, hud_particle_effect, menu_plexus, solid_overlay, snapshot` | Auxiliary GPU passes |
 | `rmlui_*.cpp/h` | RmlUI (HTML panel) layer rendered to GPU |
 | `../sdl_render_frame.cpp/h` | `refresh_display()` frame orchestration + pass helpers |
 | `../sdl_overmap_draw.cpp` | `draw_om()` overmap draw |

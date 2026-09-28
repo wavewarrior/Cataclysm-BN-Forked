@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -32,6 +33,9 @@
 #include "splatmap_stamps.h" // splatmap::active
 #include "tile_light_mode.h"
 #include "lighting/dev_test_lights.h"
+#include "lighting/gpu_emitter.h"
+#include "lighting/godray_shaft_pass.h"
+#include "lighting/dust_mote_effect.h"
 #include "lighting/frame_build.h"
 #include "lighting/rmlui_layer.h"
 #include "lighting/render_state.h"
@@ -64,16 +68,12 @@ static const char *g_phase_name[10] = {
     "overlays", "ui_a", "world_w", "tonemap", "swap_b"
 };
 
-// Per-frame volumetric inputs: written in assemble_light_inputs, consumed in
-// render_world_pass_w. Both live in this TU, so file-local (was a dev-UI global).
-static lighting::vol_params g_vol_params;
-
 /// True while a REPLACE-mode lighting debug view is selected (F7 modes 6 and up).
 ///
 /// Those views overwrite the scene with a visualisation whose PIXEL VALUES carry the
 /// meaning — view 16 is a flat categorical hue per composite branch, views 6/7/10/13/14
 /// are single-channel colormaps. Any full-frame filter that smears or regrades them
-/// destroys exactly the thing being inspected, so bloom, volumetric fog and the spatial
+/// destroys exactly the thing being inspected, so bloom and the spatial
 /// post effects are skipped while one is active. Measured on view 16: a flat (0,1,0)
 /// sits right at the default bloom threshold of 1.0, so it was thresholded and blurred
 /// into neighbouring undrawn black, producing green pixels as dim as G=13 and
@@ -321,7 +321,7 @@ if( g && world_generator && world_generator->active_world ) {
         cam_h  = tilecontext->get_screentile_height();
     }
     lighting::frame_lighting_result fr =
-        lighting::build_and_submit_lighting( rs, rebuild, g_dbg_lighting,
+        lighting::build_and_submit_lighting( rs, rebuild, /*want_hud_snapshot=*/true,
             g_skylight_bleed, cam_x0, cam_y0, cam_w, cam_h );
     rc_rebuild = fr.built_pertile;
     DebugLogFL( DL::Info, DC::Main )
@@ -338,10 +338,11 @@ if( g && world_generator && world_generator->active_world ) {
     s_emo.sdf_W_at_submit    = fr.sdf_W;
     s_emo.sdf_size_at_submit = fr.sdf_size;
 }
-if( g_dbg_lighting ) {
-    s_emo.snap = std::move( fr.snapshot_copy );
-    }
-    return rc_rebuild;
+// s_emo.snap is now consumed every frame by the emitter_glow_pass (decorative
+// light-glow overlay), not just the g_dbg_lighting debug crosshair overlay
+// further below — so this must stay unconditional.
+s_emo.snap = std::move( fr.snapshot_copy );
+return rc_rebuild;
 }
 
 // Stage 2b.2: the directional celestial light is the sun by day, the moon by
@@ -463,6 +464,51 @@ static auto celestial_hour() -> float
     return forced ? *forced : ( g ? hour_of_day<float>( calendar::turn ) : 12.0f );
 }
 
+// Step 4 (atmospheric-lighting-coherence plan): time-of-day base colour grade.
+// Piecewise-linear over anchors so the transition never pops: neutral by day, a
+// warm bump either side at dawn/dusk (peak placed at the CENTRE of each window so
+// it ramps in and out smoothly on both sides), and a slightly cool, desaturated,
+// higher-contrast night. Folded in as the BASE at the grade fill site; the F4
+// sliders stay a trim on top (temperature/tint additive, saturation multiplicative,
+// contrast additive), so an all-default slider set reproduces this curve exactly
+// and a non-default slider set still composes with it.
+struct tod_grade {
+    float temperature = 0.0f;
+    float tint = 0.0f;
+    float saturation_mul = 1.0f;
+    float contrast = 0.0f;
+};
+
+static auto time_of_day_grade( float hour ) -> tod_grade
+{
+    struct anchor { float h; tod_grade g; };
+    static constexpr tod_grade NIGHT{ -0.06f, 0.02f, 0.85f, 0.03f };
+    static constexpr tod_grade DAWN_DUSK{ 0.10f, -0.02f, 1.10f, 0.0f };
+    static constexpr tod_grade DAY{ 0.0f, 0.0f, 1.0f, 0.0f };
+    static const std::array<anchor, 7> anchors{ {
+            { 2.0f, NIGHT }, { 5.0f, NIGHT }, { 6.5f, DAWN_DUSK }, { 8.0f, DAY },
+            { 18.0f, DAY }, { 19.5f, DAWN_DUSK }, { 21.0f, NIGHT },
+        } };
+    // Wrap hour into [2, 26) so it always falls between two adjacent anchors,
+    // including across the midnight seam (anchors[0] doubles as the h=26 wrap).
+    float h = hour;
+    if( h < anchors.front().h ) { h += 24.0f; }
+    for( std::size_t i = 0; i + 1 < anchors.size(); ++i ) {
+        const anchor &a = anchors[i];
+        const anchor &b = anchors[i + 1];
+        if( h <= b.h ) {
+            const float t = ( b.h > a.h ) ? ( h - a.h ) / ( b.h - a.h ) : 0.0f;
+            return tod_grade{
+                std::lerp( a.g.temperature, b.g.temperature, t ),
+                std::lerp( a.g.tint, b.g.tint, t ),
+                std::lerp( a.g.saturation_mul, b.g.saturation_mul, t ),
+                std::lerp( a.g.contrast, b.g.contrast, t ),
+            };
+        }
+    }
+    return NIGHT; // h in (21, 26]: interpolates NIGHT->NIGHT (the wrap), always flat
+}
+
 auto flush_and_gather_rc( lighting::render_state &rs,
                           lighting::frame_context &ctx, bool rc_rebuild ) -> void
 {
@@ -494,7 +540,7 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     bool sdf_ran = false;
     std::string sdf_reason = "rc_or_sdf_buf";
     if( sdf_populated && rs.gpu_sdf().ready() && rs.sdf().trans_buffer() ) {
-        rs.gpu_sdf().record( ctx.cmd_buffer, rs.sdf().trans_buffer(),
+    rs.gpu_sdf().record( ctx.cmd_buffer, rs.sdf().trans_buffer(),
                              rs.sdf().sdf_buffer(), map_w, map_h,
                              rs.occluders(), g_dbg_params.occ_soft_gain );
         sdf_ran = true;
@@ -516,7 +562,7 @@ auto flush_and_gather_rc( lighting::render_state &rs,
                 << " grid=" << occ.width() << "x" << occ.height()
                 << " soft_gain=" << g_dbg_params.occ_soft_gain;
     } else if( sdf_populated ) {
-        sdf_reason = !rs.gpu_sdf().ready() ? "gpu_sdf_ready" : "trans_buf";
+    sdf_reason = !rs.gpu_sdf().ready() ? "gpu_sdf_ready" : "trans_buf";
     }
 
     // Celestial light params drive BOTH the sky/sun pass and the GI daylight
@@ -525,7 +571,7 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     // on assemble_light_inputs.
     const lighting::sun_params sp =
         sdf_populated ? make_celestial_params( calendar::turn, celestial_hour() )
-                      : lighting::sun_params{};
+        : lighting::sun_params{};
 
     // Stage 2a/2b: directional sky/sun pass. Marches the unified coverage
     // occluder field (OccBuf: height + roof) in 3D toward the celestial light →
@@ -537,14 +583,15 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     bool sky_ran = false;
     std::string sky_reason = "rc_or_sdf_buf";
     if( g_sky_sun_enable && sdf_populated && rs.sky().ready() && rs.sdf().occ_buffer() ) {
-        lighting::sky_sun_params kp{};
-        kp.map_w        = map_w;
-        kp.map_h        = map_h;
-        kp.sun_dir_x    = sp.sun_dir_x;
-        kp.sun_dir_y    = sp.sun_dir_y;
-        kp.sun_sin_elev = sp.sun_sin_elev;
-        // (former shadow_k/shadow_steps slots are reserved pads — the shader
-        // never read them; see sky_sun_pass.h.)
+    lighting::sky_sun_params kp{};
+    kp.map_w        = map_w;
+    kp.map_h        = map_h;
+    kp.sun_dir_x    = sp.sun_dir_x;
+    kp.sun_dir_y    = sp.sun_dir_y;
+    kp.sun_sin_elev = sp.sun_sin_elev;
+    // Step 3: sky-portal scan knobs (roofed probes only).
+    kp.portal_reach = g_dbg_params.portal_reach;
+    kp.portal_dirs  = static_cast<std::uint32_t>( std::max( 1.0f, g_dbg_params.portal_dirs ) );
         // P5b: F4-tunable sky/sun quality knobs.
         kp.sky_dirs     = static_cast<std::uint32_t>( std::max( 1.0f, g_dbg_params.sky_dirs ) );
         kp.sky_reach    = g_dbg_params.sky_reach;
@@ -556,9 +603,9 @@ auto flush_and_gather_rc( lighting::render_state &rs,
                          map_w, map_h, kp );
         sky_ran = true;
     } else if( !g_sky_sun_enable ) {
-        sky_reason = "disabled";
-    } else if( sdf_populated ) {
-        sky_reason = !rs.sky().ready() ? "sky_ready" : "occ_buf";
+    sky_reason = "disabled";
+} else if( sdf_populated ) {
+    sky_reason = !rs.sky().ready() ? "sky_ready" : "occ_buf";
     }
 
     // Stage 5 (gpu-daylight black-scene plan): the one-shot readback confirms
@@ -570,15 +617,23 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     // narrow: it only catches "gameplay bright, SkyBuf ~0" (the sky pass
     // producing nothing); a sun-only darkening that still leaves sky fill on
     // screen is Stage 1's sky_valid sentinel's job, not this one's.
-    if( g && !forced_celestial_hour() && rs.sky().ready() ) {
-        static int gp_frames = 0;
-        static bool reported = false;
-        if( !reported && ++gp_frames == 120 ) {
+    // Requires an actual LOADED WORLD, not just `g` truthy: `g` exists at the
+    // main menu too (AGENTS.md), where weather_manager::weather_id is still
+    // its default NULL_ID() until a game starts. Without this gate,
+    // natural_light_level() -> get_weather().weather_id->light_modifier hits
+    // generic_factory<weather_type>::obj() on an invalid id, firing a
+    // debugmsg popup at the main menu ("invalid weather_type id null") that
+    // reads as "the game crashes" even though it is technically non-fatal.
+    if( g && world_generator && world_generator->active_world
+        && !forced_celestial_hour() && rs.sky().ready() ) {
+    static int gp_frames = 0;
+    static bool reported = false;
+    if( !reported && ++gp_frames == 120 ) {
             reported = true;
             const float gameplay = g->natural_light_level( g->u.bub_pos().z() );
             const auto m = rs.sky().readback_means(
-                static_cast<std::uint32_t>( rs.sdf().map_w() ),
-                static_cast<std::uint32_t>( rs.sdf().map_h() ) );
+                               static_cast<std::uint32_t>( rs.sdf().map_w() ),
+                               static_cast<std::uint32_t>( rs.sdf().map_h() ) );
             if( gameplay > LIGHT_AMBIENT_LIT && m.rgb_mean + m.a_mean < 0.01f ) {
                 DebugLogFL( DL::Error, DC::Main )
                         << "[lighting][conformance] gameplay light " << gameplay
@@ -593,8 +648,8 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     bool gi_ran = false;
     std::string gi_reason = "rc_or_sdf_buf";
     if( g_gi_enable && sdf_populated && rs.gi().ready() && rs.collector() ) {
-        lighting::gi_params rp{};
-        rp.emitter_count = static_cast<std::uint32_t>( std::max( 0, rs.collector()->last_count() ) );
+    lighting::gi_params rp{};
+    rp.emitter_count = static_cast<std::uint32_t>( std::max( 0, rs.collector()->last_count() ) );
         rp.map_w         = map_w;
         rp.map_h         = map_h;
         rp.current_z     = g ? static_cast<float>( g->u.bub_pos().z() ) : 0.0f;
@@ -633,13 +688,13 @@ auto flush_and_gather_rc( lighting::render_state &rs,
                         map_w, map_h, rp );
         gi_ran = true;
     } else if( !g_gi_enable ) {
-        gi_reason = "disabled";
-    } else if( sdf_populated ) {
-        gi_reason = !rs.gi().ready() ? "gi_ready" : "collector";
+    gi_reason = "disabled";
+} else if( sdf_populated ) {
+    gi_reason = !rs.gi().ready() ? "gi_ready" : "collector";
     }
 
     if( rc_rebuild ) {
-        DebugLogFL( DL::Info, DC::Main )
+    DebugLogFL( DL::Info, DC::Main )
                 << "[lighting][passes] rc=1"
                 << " sdf=" << ( sdf_ran ? "ran" : ( "skip:" + sdf_reason ) )
                 << " sky=" << ( sky_ran ? "ran" : ( "skip:" + sky_reason ) )
@@ -753,21 +808,6 @@ if( g && tilecontext && in.tile_pixel_size > 0.0f ) {
         }
     }
     in.sun.sp_pad = g_dbg_lighting_shader ? 1.0f : 0.0f;
-
-    g_vol_params.tile_pixel_size = in.tile_pixel_size;
-    g_vol_params.camera_off_x    = in.camera_off_x;
-    g_vol_params.camera_off_y    = in.camera_off_y;
-    g_vol_params.current_z       = in.z_level;
-    g_vol_params.sun_dir_x       = in.sun.sun_dir_x;
-    g_vol_params.sun_dir_y       = in.sun.sun_dir_y;
-    g_vol_params.sun_intensity   = in.sun.sun_intensity;
-    g_vol_params.sun_r           = in.sun.sun_r;
-    g_vol_params.sun_g           = in.sun.sun_g;
-    g_vol_params.sun_b           = in.sun.sun_b;
-    g_vol_params.shadow_k        = in.debug.shadow_k;
-    g_vol_params.shadow_steps    = in.debug.shadow_steps;
-    g_vol_params.sdf_map_w       = static_cast<std::uint32_t>( rs.sdf().map_w() );
-    g_vol_params.sdf_map_h       = static_cast<std::uint32_t>( rs.sdf().map_h() );
 
     in.debug = g_dbg_params;
     in.debug.anim_time = std::fmod( static_cast<float>( SDL_GetTicks() ) / 1000.0f, 1000.0f );
@@ -1020,7 +1060,13 @@ auto composite_avatar_pass( lighting::render_state &rs, lighting::frame_context 
 auto render_world_pass_w( lighting::render_state &rs,
                           lighting::frame_context &ctx, int proj_w, int proj_h ) -> void
 {
-    constexpr float clear_black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    // Void backdrop behind every transparent sprite pixel (grass gaps, tree/fence
+    // cutouts, broken windows, sway animation edges, …). MUST stay a plain clear
+    // color, not a sprite edit: sprites keep their real alpha untouched so blend/
+    // sway effects are unaffected; only what shows THROUGH them changes. Qud
+    // Viridian palette's documented background teal (#0f3b3a), not pure black, so
+    // GPU lighting's multiply-by-texel-color has a non-zero base to work with.
+    constexpr float clear_void[4] = { 15.0f / 255.0f, 59.0f / 255.0f, 58.0f / 255.0f, 1.0f };
     lighting::ui_composite_target *wt = rs.world_target();
     if( !wt || !wt->texture() ) {
         return;
@@ -1065,7 +1111,7 @@ auto render_world_pass_w( lighting::render_state &rs,
 
     rs.tile_batcher().begin_pass( ctx.cmd_buffer, wt->texture(),
                                   wt->width(), wt->height(),
-                                  clear_black,
+                                  clear_void,
                                   static_cast<std::uint32_t>( proj_w ),
                                   static_cast<std::uint32_t>( proj_h ),
                                   wt->format() );
@@ -1170,19 +1216,195 @@ auto render_world_pass_w( lighting::render_state &rs,
                                  cam_x, cam_y, tp, tp );
     }
 
-    if( g_vol_enable && rs.volumetric().ready() && !diagnostic_view_active() ) {
-        lighting::vol_params vp = g_vol_params;
-        vp.vol_density   = g_vol_density;
-        vp.vol_intensity = g_vol_intensity;
-        vp.vol_reach     = g_vol_reach;
-        vp.vol_shadow    = g_vol_shadow;
-        vp.vol_indoor    = g_vol_indoor;
-        vp.proj_w = static_cast<float>( proj_w );
-        vp.proj_h = static_cast<float>( proj_h );
-        rs.volumetric().record( ctx.cmd_buffer, wt->texture(),
-                                wt->width(), wt->height(),
-                                rs.sdf().sdf_buffer(), rs.sdf().sky_vis_buffer(),
-                                vp );
+    // Decorative "smoke and mirrors" light glow (emitter_glow_pass) — draws a
+    // SMALL, genuinely HDR-bright core per light source BEFORE bloom runs, so
+    // the existing bloom pass (extract-above-threshold -> Kawase blur ->
+    // additive composite) does the soft halo spreading itself, exactly like
+    // it already does for every other bright thing in the scene. This is the
+    // literal "replicate what bloom does" approach: no separate huge fake
+    // radial-gradient quad — a compact overdriven core that bloom's own
+    // threshold (g_bloom_threshold, default 1.0) picks up and smears.
+    // Deliberately independent of the real GPU lighting term: a
+    // physically-derived point light can be nearly invisible against broad
+    // daylight even after excluding it from the ambient ceiling clamp, but a
+    // fire/torch should still visually read as a light source. See
+    // emitter_glow_pass.h.
+    if( !s_emo.snap.empty() ) {
+        const float tp = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
+        // Cull to the player's z-level and a generous on-screen radius so the
+        // instance list stays small regardless of how many emitters exist in
+        // the loaded reality bubble.
+        constexpr float CULL_RADIUS_TILES = 48.f;
+        std::vector<lighting::emitter_glow_instance> glow_instances;
+        glow_instances.reserve( 64 );
+        // Gate on the SAME CPU visibility_cache that terrain/furniture drawing
+        // uses (cata_tiles.cpp), so a torch/lamp behind a wall or outside the
+        // player's current sight range cannot paint a glow blob straight
+        // through it. Without this the decorative glow pass ignored fog of
+        // war entirely (it only knew the emitter's world position, not
+        // whether the player can currently see that tile).
+        map &glow_map = get_map();
+        const visibility_variables &glow_vis_cache = glow_map.get_visibility_variables_cache();
+        for( const auto &e : s_emo.snap ) {
+            // Only real, localized point lights get a glow sprite. CONE
+            // (headlights, window-light portals) and DIRECTIONAL (sun proxy)
+            // emitters can carry an enormous `radius` for the real lighting
+            // math's reach — that is NOT a visible light bulb size, and a
+            // glow sprite sized off it would wash the whole screen.
+            if( e.shape != static_cast<std::uint32_t>( lighting::emitter_shape::OMNI ) ) {
+                continue;
+            }
+            if( static_cast<int>( e.pos_z ) != s_emo.player_z ) { continue; }
+            const float dx = e.pos_x - static_cast<float>( s_emo.player_x );
+            const float dy = e.pos_y - static_cast<float>( s_emo.player_y );
+            if( dx * dx + dy * dy > CULL_RADIUS_TILES * CULL_RADIUS_TILES ) { continue; }
+            if( e.radius <= 0.01f ) { continue; }
+            const int ex = static_cast<int>( e.pos_x );
+            const int ey = static_cast<int>( e.pos_y );
+            const level_cache &glow_lc = glow_map.access_cache( static_cast<int>( e.pos_z ) );
+            const point_bub_ms epos( ex, ey );
+            const lit_level ell = glow_lc.inbounds( epos ) ? glow_lc.visibility_cache[glow_lc.idx( ex, ey )]
+                                  : lit_level::BLANK;
+            if( glow_map.get_visibility( ell, glow_vis_cache ) != VIS_CLEAR ) { continue; }
+            const float sx = ( e.pos_x + s_emo.cam_off_x ) * tp;
+            const float sy = ( e.pos_y + s_emo.cam_off_y ) * tp;
+            // 0,0,0 encodes "uncolored white" (gpu_emitter.h convention).
+            const float cr = e.r > 0.01f ? e.r : 1.0f;
+            const float cg = e.g > 0.01f ? e.g : 1.0f;
+            const float cb = e.b > 0.01f ? e.b : 1.0f;
+            // Cosmetic scale only — NOT physically derived. Small, tile-ish
+            // radius (the core, not the felt light reach) — bloom supplies
+            // the extended soft tail, this quad must not do that itself.
+            const float radius_tiles = std::clamp( e.radius, 1.0f, 10.0f );
+            const float core_tiles = std::clamp( radius_tiles / 4.0f, 0.6f, 2.0f );
+            // HDR overdrive: well above bloom's threshold (1.0 default) so
+            // the extract pass actually has bright material to bloom, scaled
+            // modestly by how big/strong the real light is.
+            const float peak = std::clamp( radius_tiles / 3.0f, 1.5f, 6.0f );
+            glow_instances.push_back( { .x = sx, .y = sy,
+                                        .radius_px = core_tiles * tp,
+                                        .r = cr, .g = cg, .b = cb,
+                                        .strength = peak, .pad0 = 0.f } );
+        }
+        if( !glow_instances.empty() ) {
+            rs.emitter_glow().record( {
+                .cb = ctx.cmd_buffer,
+                .target = wt->texture(),
+                .proj_w = static_cast<std::uint32_t>( proj_w ),
+                .proj_h = static_cast<std::uint32_t>( proj_h ),
+                .instances = &glow_instances,
+            } );
+        }
+    }
+
+    // Window light shafts + dust motes (Step 6, atmospheric-lighting-coherence
+    // plan). Replaces the removed SDF volumetric_pass with two fake-2D-
+    // volumetric "smoke and mirrors" passes: additive gradient BEAM sprites
+    // through visible windows (godray_shaft_pass) + a dust-mote particle system
+    // drifting inside those beams (dust_mote_effect). Source data: the per-
+    // window CONE emitters already built CPU-side (lighting::snapshot.cpp's
+    // make_cone calls) — no new detection pass. Same VIS_CLEAR visibility gate
+    // as the emitter-glow builder above, so a shaft/mote can only appear where
+    // the player already sees the window (the emitter-glow-pass FoW lesson).
+    if( ( g_shaft_enable || g_dust_enable ) && !s_emo.snap.empty() && !diagnostic_view_active() ) {
+        const float tp = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
+        constexpr float CULL_RADIUS_TILES = 48.f;
+        // Elevation-based reach only (NOT direction — see below): a lower sun
+        // makes for a longer, more raking beam, same cot(elev) idiom as
+        // sprite_batcher.cpp's shadow shear (:281-282), floored the same way
+        // so a near-horizon/absent sun cannot make an unbounded beam.
+        const float se = std::clamp( rs.current_sun().sun_sin_elev, 0.15f, 1.0f );
+        const float cot_elev = std::sqrt( std::max( 0.f, 1.0f - se * se ) ) / se;
+        std::vector<lighting::godray_shaft_instance> shaft_instances;
+        std::vector<lighting::dust_mote_shaft_source> dust_sources;
+        shaft_instances.reserve( 32 );
+        dust_sources.reserve( 32 );
+        map &shaft_map = get_map();
+        const visibility_variables &shaft_vis_cache = shaft_map.get_visibility_variables_cache();
+        for( const auto &e : s_emo.snap ) {
+            if( e.shape != static_cast<std::uint32_t>( lighting::emitter_shape::CONE ) ) { continue; }
+            if( static_cast<int>( e.pos_z ) != s_emo.player_z ) { continue; }
+            const float dx = e.pos_x - static_cast<float>( s_emo.player_x );
+            const float dy = e.pos_y - static_cast<float>( s_emo.player_y );
+            if( dx * dx + dy * dy > CULL_RADIUS_TILES * CULL_RADIUS_TILES ) { continue; }
+            if( e.radius <= 0.01f ) { continue; }
+            const int ex = static_cast<int>( e.pos_x );
+            const int ey = static_cast<int>( e.pos_y );
+            const level_cache &shaft_lc = shaft_map.access_cache( static_cast<int>( e.pos_z ) );
+            const point_bub_ms epos( ex, ey );
+            const lit_level ell = shaft_lc.inbounds( epos ) ? shaft_lc.visibility_cache[shaft_lc.idx( ex, ey )]
+                                  : lit_level::BLANK;
+            if( shaft_map.get_visibility( ell, shaft_vis_cache ) != VIS_CLEAR ) { continue; }
+
+            // Beam direction: the emitter's OWN cone_dir — for a window this is
+            // already "into the room" (snapshot.cpp's -out_dx/-out_dy, the wall's
+            // outward normal reversed); for a flashlight/headlight CONE (also
+            // caught here, since this pass reuses the CONE-emitter list wholesale
+            // per plan — no new detection) it is the direction that light
+            // actually points. Deliberately NOT the global sun direction: that
+            // would point every non-sun-facing window's beam the same wrong way
+            // and would vanish outright at night.
+            const float dir_x = e.cone_dir_x;
+            const float dir_y = e.cone_dir_y;
+            const float cr = e.r > 0.01f ? e.r : 1.0f;
+            const float cg = e.g > 0.01f ? e.g : 1.0f;
+            const float cb = e.b > 0.01f ? e.b : 1.0f;
+            const float base_len_tiles = std::clamp( g_shaft_length_scale * 1.5f * cot_elev, 1.0f, 12.0f );
+            const float strength = std::clamp( e.radius / 6.0f, 0.1f, 2.0f ) * g_shaft_intensity;
+
+            if( g_shaft_enable && strength > 0.01f ) {
+                const float sx = ( e.pos_x + s_emo.cam_off_x ) * tp;
+                const float sy = ( e.pos_y + s_emo.cam_off_y ) * tp;
+                shaft_instances.push_back( { .cx = sx, .cy = sy,
+                                             .dir_x = dir_x, .dir_y = dir_y,
+                                             .length_px = base_len_tiles * tp,
+                                             .half_width_px = std::max( 1.0f, g_shaft_width * tp ),
+                                             .r = cr, .g = cg, .b = cb,
+                                             .strength = strength } );
+            }
+            if( g_dust_enable && strength > 0.01f ) {
+                dust_sources.push_back( { .world_x = e.pos_x, .world_y = e.pos_y,
+                                          .dir_x = dir_x, .dir_y = dir_y,
+                                          .length_tiles = base_len_tiles,
+                                          .r = cr, .g = cg, .b = cb,
+                                          .strength = strength } );
+            }
+        }
+        if( g_shaft_enable && rs.godray_shafts().ready() && !shaft_instances.empty() ) {
+            rs.godray_shafts().record( {
+                .cb = ctx.cmd_buffer,
+                .target = wt->texture(),
+                .proj_w = static_cast<std::uint32_t>( proj_w ),
+                .proj_h = static_cast<std::uint32_t>( proj_h ),
+                .anim_time = std::fmod( static_cast<float>( SDL_GetTicks() ) / 1000.0f, 1000.0f ),
+                .instances = &shaft_instances,
+            } );
+        }
+        if( g_dust_enable && rs.dust_motes().ready() ) {
+            // Real-dt spawn accumulator (mirrors hud_particle_effect.cpp:424-455):
+            // motes age/drift in real seconds, not sim ticks, so their motion
+            // stays framerate-independent.
+            static float s_dust_last_s = -1.0f;
+            const float now_s = static_cast<float>( SDL_GetTicks() ) / 1000.0f;
+            const float dust_dt = s_dust_last_s >= 0.0f
+                                  ? std::clamp( now_s - s_dust_last_s, 0.0f, 0.25f ) : 0.0f;
+            s_dust_last_s = now_s;
+            const lighting::dust_mote_params dp{
+                .camera_off_x = s_emo.cam_off_x,
+                .camera_off_y = s_emo.cam_off_y,
+                .tile_pixel_size = tp,
+                .proj_w = static_cast<float>( proj_w ),
+                .proj_h = static_cast<float>( proj_h ),
+                .dt = dust_dt,
+                .density = g_dust_density,
+                .size = g_dust_size,
+                .drift = g_dust_drift,
+                .sun_dir_x = rs.current_sun().sun_dir_x,
+                .sun_dir_y = rs.current_sun().sun_dir_y,
+            };
+            rs.dust_motes().record( ctx.cmd_buffer, wt->texture(), wt->width(), wt->height(), dp,
+                                    &dust_sources );
+        }
     }
 
     if( g_bloom_enable && rs.bloom().ready() && !diagnostic_view_active() ) {
@@ -1199,9 +1421,13 @@ auto render_world_pass_w( lighting::render_state &rs,
         rp.active          = true;
         rp.intensity       = weather_rain_intensity();
         rp.wind_angle      = 270.f; // wind from west (left-to-right on screen)
-        rp.camera_off_x    = g_vol_params.camera_off_x;
-        rp.camera_off_y    = g_vol_params.camera_off_y;
-        rp.tile_pixel_size = g_vol_params.tile_pixel_size;
+        // Step 6a (atmospheric-lighting-coherence plan): repointed from the removed
+        // g_vol_params to s_emo, which carries the identical per-frame camera_off_x/y
+        // + tile_pixel_size (filled earlier this frame, see s_emo.cam_off_x/y/tile_px
+        // above) — same values, one fewer per-frame struct.
+        rp.camera_off_x    = s_emo.cam_off_x;
+        rp.camera_off_y    = s_emo.cam_off_y;
+        rp.tile_pixel_size = s_emo.tile_px;
         rp.proj_w          = static_cast<float>( proj_w );
         rp.proj_h          = static_cast<float>( proj_h );
 
@@ -1312,10 +1538,11 @@ auto tonemap_pass_t( lighting::render_state &rs,
         grade.cdl_power_r  = g_grade_cdl_power_r;
         grade.cdl_power_g  = g_grade_cdl_power_g;
         grade.cdl_power_b  = g_grade_cdl_power_b;
-        grade.temperature      = g_grade_temperature;
-        grade.tint             = g_grade_tint;
-        grade.saturation       = g_grade_saturation;
-        grade.contrast         = g_grade_contrast;
+        const tod_grade tod = time_of_day_grade( celestial_hour() );
+        grade.temperature      = tod.temperature + g_grade_temperature;
+        grade.tint              = tod.tint + g_grade_tint;
+        grade.saturation       = tod.saturation_mul * g_grade_saturation;
+        grade.contrast          = tod.contrast + g_grade_contrast;
         grade.vignette_amount  = g_grade_vignette;
         grade.grain_amount     = g_grade_grain;
         // Chromatic aberration: the static grade value plus the damage punch.
@@ -1329,6 +1556,10 @@ auto tonemap_pass_t( lighting::render_state &rs,
         // "subtle" static default, without tearing the tiles apart.
         constexpr float damage_ca_scale = 0.006f;
         grade.ca_amount        = g_grade_ca + hud_shake::intensity() * damage_ca_scale;
+        // Step 7: single knob reusing the RmlUi HUD CRT's own scanline_alpha
+        // slider — crt_world is a checkbox, not a separate intensity control.
+        grade.crt_world_amount =
+            rmlui_layer::crt().crt_world ? rmlui_layer::crt().scanline_alpha : 0.0f;
         // Diagnostic views must reach the screen UNGRADED. Modes 6+ REPLACE the scene
         // with a categorical or single-channel visualisation whose whole value is that
         // its pixel values mean something exact; chromatic aberration splits a class
@@ -1342,6 +1573,7 @@ auto tonemap_pass_t( lighting::render_state &rs,
             grade.ca_amount = 0.0f;
             grade.grain_amount = 0.0f;
             grade.vignette_amount = 0.0f;
+            grade.crt_world_amount = 0.0f;
         }
         rs.tonemap().record( ctx.cmd_buffer, wt->texture(), rs.gpu_sampler(),
                              wldr->texture(), wldr->width(), wldr->height(),

@@ -53,7 +53,8 @@ struct rain_params {
     float camera_off_x = 0.f;
     float camera_off_y = 0.f;
     float tile_pixel_size = 32.f;
-    // Logical projection extent (mirrors volumetric_pass's vp.proj_w/proj_h).
+    // Logical projection extent (mirrors the proj_w/proj_h pattern used by every
+    // fullscreen-reconstruct pass, e.g. godray_shaft_pass / tonemap_pass).
     // The world render target is the physical/HiDPI-backed texture (can be 2x
     // the logical size), but rain_droplet.vert's NDC divide must use the
     // LOGICAL extent that camera_off/tile_pixel_size were derived against —

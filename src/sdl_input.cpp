@@ -512,7 +512,10 @@ void CheckMessages( display_context &d )
     // bisection without driving the RmlUi panel. Known names: vis_curve,
     // vis_radius, ao_strength, ramp_enable, shadow_mask_str, sun_scale,
     // sky_scale, gi_strength, cloud_strength, nrm_amount, gi_albedo,
-    // gi_feedback.
+    // gi_feedback, rc_readback, sun_arrow, guard_amount, portal_dirs,
+    // portal_reach, sky_sun_enable, flicker_gain, shaft_enable,
+    // shaft_intensity, shaft_length_scale, shaft_width, dust_enable,
+    // dust_density, dust_size, dust_drift, crt_world.
     {
         std::error_code ec;
         if( std::filesystem::exists( "/tmp/cata_knob", ec ) ) {
@@ -536,6 +539,20 @@ void CheckMessages( display_context &d )
                 else if( kn == "gi_feedback" ) g_gi_feedback = kv;
                 else if( kn == "rc_readback" ) g_rc_readback = kv > 0.5f;
                 else if( kn == "sun_arrow" ) g_sun_arrow = kv > 0.5f;
+                else if( kn == "guard_amount" ) dp.guard_amount = kv;
+                else if( kn == "portal_dirs" ) dp.portal_dirs = kv;
+                else if( kn == "portal_reach" ) dp.portal_reach = kv;
+                else if( kn == "sky_sun_enable" ) g_sky_sun_enable = kv > 0.5f;
+                else if( kn == "flicker_gain" ) dp.flicker_gain = kv;
+                else if( kn == "shaft_enable" ) g_shaft_enable = kv > 0.5f;
+                else if( kn == "shaft_intensity" ) g_shaft_intensity = kv;
+                else if( kn == "shaft_length_scale" ) g_shaft_length_scale = kv;
+                else if( kn == "shaft_width" ) g_shaft_width = kv;
+                else if( kn == "dust_enable" ) g_dust_enable = kv > 0.5f;
+                else if( kn == "dust_density" ) g_dust_density = kv;
+                else if( kn == "dust_size" ) g_dust_size = kv;
+                else if( kn == "dust_drift" ) g_dust_drift = kv;
+                else if( kn == "crt_world" ) rmlui_layer::crt().crt_world = kv > 0.5f;
                 else ok = false;
                 std::filesystem::remove( "/tmp/cata_knob", ec );
                 dbg( DL::Info ) << "knob " << kn << " = " << kv << ( ok ? "" : " (unknown)" );

@@ -16,28 +16,30 @@
 
 #include "bloom_pass.h"
 #include "debug_line_pass.h"
+#include "dust_mote_effect.h"
 #include "emitter_collector.h"
+#include "emitter_glow_pass.h"
 #include "event_queue.h"
 #include "font_engine.h"
 #include "gi_compute_pass.h"
+#include "godray_shaft_pass.h"
 #include "gpu_atlas.h"
 #include "gpu_device.h"
 #include "gpu_geometry.h"
 #include "gpu_sdf_pass.h"
+#include "hud_particle_effect.h"
 #include "occluder_capture.h"
 #include "palette_ramp.h"
 #include "rain_effect.h"
-#include "hud_particle_effect.h"
 #include "sdf_pass.h"
+#include "sky_sun_pass.h"
 #include "sound_wave_pass.h"
 #include "splatmap_pass.h"
-#include "sky_sun_pass.h"
 #include "sprite_batcher.h"
-#include "tonemap_pass.h"
-#include "ui_composite_target.h"
-#include "ui_adaptor_draw_slices.h"
 #include "terrain_decals.h"
-#include "volumetric_pass.h"
+#include "tonemap_pass.h"
+#include "ui_adaptor_draw_slices.h"
+#include "ui_composite_target.h"
 
 #include <memory>
 #include <vector>
@@ -194,14 +196,14 @@ public:
     // Same mechanism as set_unlit_overlay_route, and checked BEFORE it: the two
     // are never enabled together, and the avatar must not reach the shared UI
     // slice.
-    void set_avatar_route( bool on ) noexcept { avatar_route_ = on; }
+    void set_avatar_route(bool on) noexcept { avatar_route_ = on; }
     bool avatar_sprites_empty() const noexcept { return avatar_sprite_queue_.empty(); }
     // Drains AND clears: unlike the composited UI queues (which ui_manager owns),
     // the portrait is re-queued on every redraw that shows it, so a stale frame
     // must not persist into a step that has no preview.
-    void flush_avatar_sprites( sprite_batcher &dst, SDL_GPUSampler *sampler );
+    void flush_avatar_sprites(sprite_batcher& dst, SDL_GPUSampler* sampler);
     // Standalone texture for the portrait. nullptr until init() succeeds.
-    ui_composite_target *avatar_target() noexcept { return avatar_target_.get(); }
+    ui_composite_target* avatar_target() noexcept { return avatar_target_.get(); }
     // Bumped whenever avatar_target_ is (re)allocated. RmlUi caches textures by
     // source string, so the decorator source carries this counter — otherwise a
     // window resize would leave the document sampling a destroyed texture.
@@ -397,10 +399,6 @@ public:
     // and the tonemap resolve; composites additively into world_target.
     bloom_pass& bloom() noexcept { return bloom_; }
 
-    // Volumetric sun-shaft "lit fog" (Step-6 / C2). Driven from
-    // refresh_display inside the Pass-W-ran block, before bloom.
-    volumetric_pass& volumetric() noexcept { return volumetric_; }
-
     // High-fidelity rain effect (droplets + splat map). Driven from
     // refresh_display between world pass and tonemap; draws droplets onto
     // world_target then runs a fullscreen splat fade/accumulate pass.
@@ -414,8 +412,8 @@ public:
     // tile_sprite_queue_ index of the terrain/entity boundary (SIZE_MAX = no
     // cut this frame → Pass W stays single-pass), `quads` are the visible
     // submaps' composite rects in logical projection px.
-    void set_splat_frame(std::size_t cut, std::vector<splat_quad> quads,
-                         const SDL_Rect& map_viewport);
+    void set_splat_frame(
+        std::size_t cut, std::vector<splat_quad> quads, const SDL_Rect& map_viewport);
     std::size_t splat_cut() const noexcept { return splat_cut_; }
     const std::vector<splat_quad>& splat_quads() const noexcept { return splat_quads_; }
     // The map drawing area in logical projection px. Terrain decals scissor to
@@ -426,13 +424,21 @@ public:
     // cata_tiles builds this because only it knows which tiles are visible:
     // a decal must never paint over unexplored space. Cleared per frame, so a
     // frame where cata_tiles does not draw renders no decals.
-    void set_decal_draws(std::vector<terrain_decal_draw> draws) {
-        decal_draws_ = std::move(draws);
-    }
+    void set_decal_draws(std::vector<terrain_decal_draw> draws) { decal_draws_ = std::move(draws); }
     const std::vector<terrain_decal_draw>& decal_draws() const noexcept { return decal_draws_; }
     // GPU shader-based sound wave visualization (expanding ring wavefronts).
     // Driven from refresh_display inside the world pass, after tiles.
     sound_wave_pass& sound_waves() noexcept { return sound_waves_; }
+    // Decorative "smoke and mirrors" light glow (additive radial gradient per
+    // visible emitter). Driven from render_world_pass_w, after tiles/bloom.
+    emitter_glow_pass& emitter_glow() noexcept { return emitter_glow_; }
+    // Window light-shaft "god-rays" (Step 6b, atmospheric-lighting-coherence
+    // plan). Driven from render_world_pass_w, before bloom — replaces the
+    // removed SDF volumetric_pass.
+    godray_shaft_pass& godray_shafts() noexcept { return godray_shafts_; }
+    // Dust motes drifting inside the light shafts above (Step 6c). Driven
+    // from render_world_pass_w, after shafts, before bloom.
+    dust_mote_effect& dust_motes() noexcept { return dust_motes_; }
     // Atmospheric HUD particle effects (embers, dust, pollen, snow).
     // Driven from composite_swapchain_pass_b after RmlUi renders.
     hud_particle_effect& hud_particles() noexcept { return hud_particles_; }
@@ -444,7 +450,7 @@ public:
     /// begin_lighting_frame). Lets 2D overlays (e.g. the sun-direction arrow)
     /// read the exact direction/intensity the GPU used, including any
     /// pinned-hour or weather scaling. Zeroed before the first frame.
-    auto current_sun() const noexcept -> const sun_params & { return last_frame_inputs_.sun; }
+    auto current_sun() const noexcept -> const sun_params& { return last_frame_inputs_.sun; }
 
     // Large multi-tile terrain decals (cosmetic overlays).
     terrain_decals::manager& decals() noexcept { return decals_; }
@@ -561,7 +567,6 @@ private:
     sky_sun_pass sky_;
     bloom_pass bloom_;
     hud_particle_effect hud_particles_;
-    volumetric_pass volumetric_;
     rain_effect rain_;
     splatmap_pass splatmap_;
     terrain_decals::manager decals_;
@@ -569,11 +574,14 @@ private:
     // Per-frame splatmap state (see set_splat_frame). Reset by
     // clear_frame_queues() / clear_tile_queue() so a frame where cata_tiles
     // does not draw falls back to the single-pass Pass W.
-    std::size_t splat_cut_ = static_cast<std::size_t>( -1 );
+    std::size_t splat_cut_ = static_cast<std::size_t>(-1);
     std::vector<splat_quad> splat_quads_;
-    SDL_Rect splat_map_viewport_{ 0, 0, 0, 0 };
+    SDL_Rect splat_map_viewport_{0, 0, 0, 0};
     std::vector<terrain_decal_draw> decal_draws_;
     sound_wave_pass sound_waves_;
+    emitter_glow_pass emitter_glow_;
+    godray_shaft_pass godray_shafts_;
+    dust_mote_effect dust_motes_;
     gpu_sdf_pass gpu_sdf_;
     debug_line_pass debug_lines_;
 };

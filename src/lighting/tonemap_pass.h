@@ -29,9 +29,12 @@ struct grade_params {
     float vignette_amount = 0.15f; // subtle default
     float grain_amount = 0.025f;   // subtle default
     float ca_amount = 0.0015f;     // very subtle default
-    float gp_pad0 = 0.0f;          // align Row 4 to 16 bytes
+    // Step 7 (atmospheric-lighting-coherence plan): world-space CRT scanline +
+    // vignette strength, 0..1. 0 (the default) is an exact no-op — bit-
+    // identical to before this field existed. Was gp_pad0.
+    float crt_world_amount = 0.0f;
 };
-static_assert( sizeof( grade_params ) == 80, "grade_params is wire-stable with GradeParams cbuffer" );
+static_assert(sizeof(grade_params) == 80, "grade_params is wire-stable with GradeParams cbuffer");
 
 class gpu_device;
 
@@ -63,7 +66,7 @@ public:
     void record(
         SDL_GPUCommandBuffer* cb, SDL_GPUTexture* src, SDL_GPUSampler* sampler, SDL_GPUTexture* dst,
         std::uint32_t dst_w, std::uint32_t dst_h, float exposure, float min_ev, float max_ev,
-        float ramp_enable, const grade_params& grade );
+        float ramp_enable, const grade_params& grade);
 
 private:
     gpu_device* dev_ = nullptr;

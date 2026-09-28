@@ -174,12 +174,12 @@ struct sun_params {
     // NOT "direction sun comes from" despite the name — toward_sun = -sun_dir.
     // See make_sun_params() in sprite_batcher.cpp for the derivation.
     float sun_dir_x, sun_dir_y;
-    float sun_sin_elev;         // sin(elevation): 0=horizon, 1=zenith
-    float sun_intensity;        // 0=night, 1=noon
-    float sun_r, sun_g, sun_b;  // sun color RGB
-    float sky_r, sky_g, sky_b;  // sky ambient RGB
-    float sky_intensity;        // overall sky brightness
-    float sp_pad;               // deprecated; debug visualisation moved to debug_params
+    float sun_sin_elev;        // sin(elevation): 0=horizon, 1=zenith
+    float sun_intensity;       // 0=night, 1=noon
+    float sun_r, sun_g, sun_b; // sun color RGB
+    float sky_r, sky_g, sky_b; // sky ambient RGB
+    float sky_intensity;       // overall sky brightness
+    float sp_pad;              // deprecated; debug visualisation moved to debug_params
 };
 
 // Debug visualisation + runtime tuning knobs (DebugParams cbuffer at
@@ -220,11 +220,10 @@ struct debug_params {
     // set any to its off-value to bisect live. Wire-stable with DebugParams cbuffer.
     float vis_curve = 1.0f;    // vision-edge falloff exponent (0=off → no falloff)
     float mem_dim = 0.35f;     // memorized-tile brightness floor (effect 3)
-    float dbg_pad_a = 0.0f;    // reserved (was mem_desat — desat moved to the tileset memory FX)
+    float portal_reach = 8.0f; // Step 3: sky-portal scan march reach, tiles. Was dbg_pad_a.
     float night_floor = 0.02f; // ambient floor at night   (effect 4)
     float day_floor = 0.05f;   // ambient floor at noon     (effect 4)
-    float dbg_pad_b = 0.0f;    // reserved (was grade_desat — grade moved to the tonemap ASC-CDL
-                               // stage, sdl_lighting_devui.cpp)
+    float portal_dirs = 16.0f; // Step 3: sky-portal scan direction count. Was dbg_pad_b.
     float dbg_pad_c = 0.0f;    // reserved (was grade_cool)
     float dbg_pad_d = 0.0f;    // reserved (was grade_bright)
     // Radial player-distance falloff radius (tiles; 0 = off). Read by the Step 5b
@@ -335,7 +334,8 @@ struct debug_params {
     // clearance-to-lightness mapping. Occupies a former pad slot — the struct
     // stays 16-byte aligned.
     float sun_soft = 0.35f;
-    float cutout_pad1 = 0.0f; // reserved: keeps DebugParams a multiple of 16 bytes
+    float guard_amount = 0.5f; // Step 2: soft-knee gpu_total/raw_light overshoot guard, [0,1],
+                               // 0=off. Occupies a former pad slot.
     // Validity sentinel for the directional lighting layer (Stage 1, gpu-daylight
     // black-scene plan): 1.0 when sky_sun_pass is ready AND has dispatched at
     // least once this run, 0.0 otherwise ("no data yet" vs a genuinely dark
@@ -343,7 +343,7 @@ struct debug_params {
     // assemble_light_inputs in sdl_render_frame.cpp). Occupies a former pad
     // slot; the struct stays the same size.
     float sky_valid = 0.0f;
-    float cloud_pad1 = 0.0f;  // reserved: keeps DebugParams a multiple of 16 bytes
+    float flicker_gain = 1.0f; // Step 5: fire/torch flicker master gain; 0=frozen. Was cloud_pad1.
 };
 
 // Returns sun/sky params interpolated from a 24h LUT for the given hour (0..24).

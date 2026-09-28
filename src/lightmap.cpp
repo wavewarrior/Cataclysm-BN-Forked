@@ -334,16 +334,16 @@ auto color_is_set( const RGBColor &color ) -> bool
 auto pack_rgb( const RGBColor &color ) -> uint32_t
 {
     return ( static_cast<uint32_t>( color.r ) << 16 ) |
-           ( static_cast<uint32_t>( color.g ) << 8 ) |
-           static_cast<uint32_t>( color.b );
+    ( static_cast<uint32_t>( color.g ) << 8 ) |
+    static_cast<uint32_t>( color.b );
 }
 
 auto color_rgb_from_optional( const std::optional<RGBColor> &color ) -> std::optional<uint32_t>
 {
     if( !color || !color_is_set( *color ) ) {
-        return std::nullopt;
-    }
-    return pack_rgb( *color );
+    return std::nullopt;
+}
+return pack_rgb( *color );
 }
 
 auto item_light_color( const item &itm ) -> std::optional<uint32_t>
@@ -354,7 +354,7 @@ auto item_light_color( const item &itm ) -> std::optional<uint32_t>
 auto field_light_color( const field_entry &entry ) -> std::optional<uint32_t>
 {
     return color_rgb_from_optional(
-               entry.get_field_type().obj().get_light_color( entry.get_field_intensity() - 1 ) );
+           entry.get_field_type().obj().get_light_color( entry.get_field_intensity() - 1 ) );
 }
 
 auto map_data_light_color( const map_data_common_t &data ) -> std::optional<uint32_t>
@@ -365,15 +365,15 @@ auto map_data_light_color( const map_data_common_t &data ) -> std::optional<uint
 auto vehicle_light_color( const vpart_reference &part ) -> std::optional<uint32_t>
 {
     if( part.info().light_color && color_is_set( *part.info().light_color ) ) {
-        return pack_rgb( *part.info().light_color );
+    return pack_rgb( *part.info().light_color );
     }
 
     const auto [bg, fg] = part.part().get_color( true );
     if( color_is_set( fg ) ) {
-        return pack_rgb( fg );
+    return pack_rgb( fg );
     }
     if( color_is_set( bg ) ) {
-        return pack_rgb( bg );
+    return pack_rgb( bg );
     }
     return std::nullopt;
 }
@@ -429,23 +429,23 @@ auto write_colored_light_cache( level_cache &cache, const int idx, const float i
                                 const uint32_t color_rgb ) -> void
 {
     atomic_colored_light_max( cache.colored_light_cache[idx],
-                              packed_colored_light_value( intensity, color_rgb ) );
+    packed_colored_light_value( intensity, color_rgb ) );
 }
 
 auto cpu_colored_light_allows_direction( const cpu_colored_light_3d_context &ctx, const int x,
         const int y ) -> bool
 {
     if( !ctx.directional ) {
-        return true;
-    }
-    const auto dx = static_cast<float>( x - ctx.source.x() );
+    return true;
+}
+const auto dx = static_cast<float>( x - ctx.source.x() );
     const auto dy = static_cast<float>( y - ctx.source.y() );
     const auto dist_xy_sq = dx * dx + dy * dy;
     if( dist_xy_sq <= 0.0001f ) {
-        return false;
-    }
-    const auto cone_dot = ( dx * ctx.dir_x + dy * ctx.dir_y ) / std::sqrt( dist_xy_sq );
-    return cone_dot >= ctx.cone_cos;
+    return false;
+}
+const auto cone_dot = ( dx * ctx.dir_x + dy * ctx.dir_y ) / std::sqrt( dist_xy_sq );
+return cone_dot >= ctx.cone_cos;
 }
 
 auto update_cpu_colored_light_cache( void *context, const int, const int, const int,
@@ -1649,6 +1649,53 @@ void map::generate_lightmap_worker( const int zlev )
                         }
                     }
 
+                    // Window-portal light propagation (item #10): mirrors the GPU's
+                    // cosmetic window "flood" emitter (src/lighting/snapshot.cpp
+                    // collect_zlev), computed independently here as pure deterministic
+                    // game-state math so sight_range near a lit window matches what the
+                    // renderer shows. A window set in a wall, with one genuinely-outside
+                    // neighbour and one genuinely-inside neighbour, injects extra
+                    // directional daylight beyond what ordinary transparency propagation
+                    // already provides. Headless/coop-safe: no GPU state is read.
+                    {
+                        const ter_id win_t = cur_submap->get_ter( sm_ms );
+                        if( win_t->has_flag( TFLAG_CONNECT_TO_WALL ) && win_t->has_flag( "WINDOW" )
+                            && win_t->transparent ) {
+                            int out_i = -1;
+                            bool win_has_inside = false;
+                            for( int i = 0; i < 4; ++i ) {
+                                const auto neighbour = p.xy() + point( dir_x[i], dir_y[i] );
+                                if( !inbounds_light_neighbour( neighbour ) ) {
+                                    continue;
+                                }
+                                const int nb_idx = map_cache.idx( neighbour.x(), neighbour.y() );
+                                if( outside_cache[nb_idx] ) {
+                                    if( out_i < 0 ) {
+                                        out_i = i;
+                                    }
+                                } else {
+                                    win_has_inside = true;
+                                }
+                            }
+                            if( out_i >= 0 && win_has_inside ) {
+                                const auto out_nb = p.xy() + point( dir_x[out_i], dir_y[out_i] );
+                                const int out_idx = map_cache.idx( out_nb.x(), out_nb.y() );
+                                // Boost, not physically accurate by design (mirrors the GPU
+                                // emitter's own non-physical "flood the room" intent) — but
+                                // still derived from the real neighbour's own current lm[],
+                                // so a shaded/overcast/night window boosts less than a
+                                // sun-drenched one, same as the renderer.
+                                constexpr float WINDOW_FLOOD_BOOST = 3.0f;
+                                const float window_light =
+                                    std::min( natural_light, lm[out_idx] ) * WINDOW_FLOOD_BOOST;
+                                if( window_light > 0.5f
+                                    && light_transparency( p ) > LIGHT_TRANSPARENCY_SOLID ) {
+                                    local.dir_lights.push_back( { p, dir_d[out_i], window_light } );
+                                }
+                            }
+                        }
+                    }
+
                     if( cur_submap->get_lum( sm_ms ) && has_items( p ) ) {
                         // Inline add_light_from_items to split arc (deferred) from point (safe).
                         auto items = i_at( p );
@@ -1972,12 +2019,12 @@ lit_level map::light_at( const tripoint_bub_ms &p ) const
     return lit_level::DARK;    // Out of bounds
 }
 
-    const auto &map_cache = get_cache_ref( p.z() );
-    record_cpu_lm_read( map_cache.lm_cpu_cache_valid, cpu_lm_light_reads_valid,
-                        cpu_lm_light_reads_stale );
-    const auto &lm = map_cache.lm;
-    const auto &sm = map_cache.sm;
-    if( sm[map_cache.idx( p.x(), p.y() )] >= LIGHT_SOURCE_BRIGHT ) {
+const auto &map_cache = get_cache_ref( p.z() );
+record_cpu_lm_read( map_cache.lm_cpu_cache_valid, cpu_lm_light_reads_valid,
+                    cpu_lm_light_reads_stale );
+const auto &lm = map_cache.lm;
+const auto &sm = map_cache.sm;
+if( sm[map_cache.idx( p.x(), p.y() )] >= LIGHT_SOURCE_BRIGHT ) {
         return lit_level::BRIGHT;
     }
 
@@ -2000,11 +2047,11 @@ float map::ambient_light_at( const tripoint_bub_ms &p,
     return 0.0f;
 }
 
-    const auto &map_cache = get_cache_ref( p.z() );
-    if( map_cache.lm_cpu_cache_valid ) {
-        const auto key = ambient_cache_key{
-            .owner = this,
-            .x = p.x(),
+const auto &map_cache = get_cache_ref( p.z() );
+if( map_cache.lm_cpu_cache_valid ) {
+    const auto key = ambient_cache_key{
+        .owner = this,
+        .x = p.x(),
             .y = p.y(),
             .z = p.z(),
             .turn = to_turns<int>( calendar::turn - calendar::turn_zero ),
@@ -2313,28 +2360,28 @@ bool map::pl_sees( const tripoint_bub_ms &t, const int max_range ) const
     return false;
 }
 
-    if( max_range >= 0 && square_dist( t, g->u.bub_pos() ) > max_range ) {
+if( max_range >= 0 && square_dist( t, g->u.bub_pos() ) > max_range ) {
         return false;    // Out of range!
     }
 
 #if defined( CATA_SDL )
     const auto &map_cache = get_cache_ref( t.z() );
     if( !map_cache.visibility_cache_dirty && visibility_variables_cache.variables_set ) {
-        const auto ll = map_cache.visibility_cache[map_cache.idx( t.x(), t.y() )];
+    const auto ll = map_cache.visibility_cache[map_cache.idx( t.x(), t.y() )];
         return get_visibility( ll, visibility_variables_cache ) == VIS_CLEAR;
     }
 
     ZoneScopedN( "pl_sees_dirty_visibility_fallback" );
     const auto player_pos = g->u.bub_pos();
     if( !sees( player_pos, t, -1 ) ) {
-        return false;
-    }
+    return false;
+}
 
-    // Transitional SDL path: normal gameplay should consume GPU-generated
-    // visibility_cache.  If a caller asks before that cache is refreshed, avoid
-    // consulting stale CPU lm data; answer geometry only until this becomes a
-    // sparse GPU visibility query.
-    return true;
+// Transitional SDL path: normal gameplay should consume GPU-generated
+// visibility_cache.  If a caller asks before that cache is refreshed, avoid
+// consulting stale CPU lm data; answer geometry only until this becomes a
+// sparse GPU visibility query.
+return true;
 #else
     const auto variables = make_visibility_variables( t.z() );
     return get_visibility( apparent_light_at( t, variables ), variables ) == VIS_CLEAR;
@@ -2347,7 +2394,7 @@ bool map::pl_line_of_sight( const tripoint_bub_ms &t, const int max_range ) cons
     return false;
 }
 
-    if( max_range >= 0 && square_dist( t, g->u.bub_pos() ) > max_range ) {
+if( max_range >= 0 && square_dist( t, g->u.bub_pos() ) > max_range ) {
         // Out of range!
         return false;
     }
@@ -2508,9 +2555,9 @@ void map::build_seen_cache( const tripoint_bub_ms &origin, const int target_z )
                 static int n = 0;
                 if( ++n <= 20 ) {
                     DebugLogFL( DL::Info, DC::Main )
-                        << "[castzdiag] at cast_zlight: g_max_view_distance=" << g_max_view_distance
-                        << " g_half_mapsize=" << g_half_mapsize
-                        << " g_reality_bubble_size=" << g_reality_bubble_size;
+                            << "[castzdiag] at cast_zlight: g_max_view_distance=" << g_max_view_distance
+                            << " g_half_mapsize=" << g_half_mapsize
+                            << " g_reality_bubble_size=" << g_reality_bubble_size;
                 }
             }
             cast_zlight( seen_caches, transparency_caches, floor_caches, blocked_caches,

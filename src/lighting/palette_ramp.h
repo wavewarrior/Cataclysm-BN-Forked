@@ -23,8 +23,7 @@
 
 struct SDL_Surface;
 
-namespace lighting
-{
+namespace lighting {
 
 /// Procedural ramp generation. Defaults are the standard pixel-art convention.
 struct ramp_gen_params {
@@ -32,23 +31,39 @@ struct ramp_gen_params {
     float shadow_hue_shift = -0.055f; // fraction of the hue circle at step 0
     float light_hue_shift = 0.030f;   // at the brightest step
     float shadow_value = 0.28f;       // value multiplier at step 0
-    float light_value = 1.30f;        // at the brightest step
+    float light_value = 1.10f;        // at the brightest step (was 1.30 — over-brightened
+                                      // highlights by 30%; see Step 1b, atmospheric-
+                                      // lighting-coherence plan)
     float shadow_sat = 1.20f;         // saturation multiplier at step 0
     float light_sat = 0.72f;          // at the brightest step
+    // Step 1a: OkLab distance (in srgb_to_oklab units) beyond which a LUT cell's
+    // nearest-row match is considered untrustworthy and the shader falls back toward
+    // a plain multiply instead of the ramp. 0.35 was picked empirically — OkLab L/a/b
+    // components are each roughly unit range, so 0.35 is a moderate perceptual gap.
+    float conf_max = 0.35f;
 };
 struct palette_ramp_data {
     std::vector<std::uint32_t> ramp;  // palette_size * steps, RGBA8 (0xAABBGGRR)
-    std::vector<std::uint32_t> index; // 32*32*32, palette row per quantised RGB
+    std::vector<std::uint32_t> index; // 32*32*32, palette row (low 13 bits) | confidence
+                                      // (high 8 bits, Step 1a) per quantised RGB
     int palette_size = 0;
     int steps = 0;
     // Coverage diagnostics — is PALETTE_ROWS actually enough for this tileset?
     // A large tail_pixels/total_pixels ratio, or a kept_min_count that is still
     // high, means the histogram is truncating colours the art genuinely uses and
     // PALETTE_ROWS should go up (the buffers are tiny).
-    std::uint64_t total_pixels = 0;  // opaque pixels histogrammed
-    std::uint64_t tail_pixels = 0;   // pixels whose colour did NOT make the palette
+    std::uint64_t total_pixels = 0; // opaque pixels histogrammed
+    std::uint64_t tail_pixels = 0;  // pixels whose colour did NOT make the palette
     std::uint32_t unique_colours = 0;
     std::uint32_t kept_min_count = 0; // frequency of the least-frequent KEPT row
+    // Step 1a: fraction (0..100) of the 32^3 OkLab LUT whose nearest-row match is
+    // confident (best_d <= conf_max), i.e. the ramp is trustworthy rather than
+    // falling back to plain multiply. Low coverage means PALETTE_ROWS or conf_max
+    // needs tuning for this tileset.
+    float coverage_pct = 0.0f;
+    // Step 1a: mean OkLab distance (sqrt of the squared L/a/b distance) from a LUT
+    // cell to its nearest kept row, averaged over the whole 32^3 grid.
+    float mean_snap_dist = 0.0f;
 };
 
 /// Number of palette rows kept. Measured on MSX++UnDeadPeopleEdition: at 256 rows the
@@ -64,17 +79,16 @@ inline constexpr int PALETTE_ROWS = 512;
 inline constexpr int PALETTE_LUT_SIDE = 32;
 
 /// Accumulates colours from every tileset sheet, then bakes ramps + the lookup.
-class palette_accumulator
-{
-    public:
-        auto reset() -> void { hist_.clear(); }
-        /// Histogram every pixel with alpha >= 128, keyed on RGB888.
-        auto add_surface( const SDL_Surface &s ) -> void;
-        auto build( const ramp_gen_params &gen ) const -> palette_ramp_data;
-        auto empty() const -> bool { return hist_.empty(); }
+class palette_accumulator {
+public:
+    auto reset() -> void { hist_.clear(); }
+    /// Histogram every pixel with alpha >= 128, keyed on RGB888.
+    auto add_surface(const SDL_Surface& s) -> void;
+    auto build(const ramp_gen_params& gen) const -> palette_ramp_data;
+    auto empty() const -> bool { return hist_.empty(); }
 
-    private:
-        std::unordered_map<std::uint32_t, std::uint32_t> hist_; // RGB888 -> count
+private:
+    std::unordered_map<std::uint32_t, std::uint32_t> hist_; // RGB888 -> count
 };
 
 } // namespace lighting

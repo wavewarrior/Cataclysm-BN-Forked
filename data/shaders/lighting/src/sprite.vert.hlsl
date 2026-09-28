@@ -17,7 +17,8 @@ struct SpriteInstance {
     // character stays visible through the leaves. Unread by the vertex stage.
     float cutout;
     // Reserved pads: keep the struct a multiple of 16 bytes (112 B = 28 floats)
-    // for the GPU StructuredBuffer stride. Unread.
+    // for the GPU StructuredBuffer stride. cutout_pad0 doubles as the
+    // shadow-caster flag (see `caster` below); cutout_pad1/2 remain unread.
     float cutout_pad0;
     float cutout_pad1;
     float cutout_pad2;
@@ -185,6 +186,15 @@ struct VS_OUT {
     // canopy, the fragment soft-holes the leaves around the player. Per-instance
     // constant, so interpolation across the quad is exact.
     float cutout : TEXCOORD13;
+    // Per-instance shadow-caster flag (SpriteInstance::cutout_pad0), forwarded
+    // so the fragment shader can open the radial macro-normal gate for 1-tile
+    // item/creature sprites. Per-instance constant, so interpolation is exact.
+    float caster : TEXCOORD14;
+    // Raw continuous CPU lightmap scalar (SpriteInstance::cutout_pad1), 0 = not
+    // set / no-op. Per-instance constant, so interpolation across the quad is
+    // exact. Drives the seen/memory frontier blend from real brightness instead
+    // of the neighbour-bit reconstruction alone.
+    float raw_light : TEXCOORD9;
 };
 static const float2 quad_uv[6] =
     {float2(0.0, 0.0), float2(1.0, 0.0), float2(0.0, 1.0),
@@ -294,5 +304,7 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
     o.center_uv = float2(s.src_u + 0.5 * s.src_uw, s.src_v + 0.5 * s.src_vh);
     o.uv_half = float2(0.5 * s.src_uw, 0.5 * s.src_vh);
     o.cutout = s.cutout;
+    o.caster = s.cutout_pad0;
+    o.raw_light = s.cutout_pad1;
     return o;
 }

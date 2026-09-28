@@ -1,9 +1,9 @@
 #pragma once
 #ifndef CATA_SRC_LIGHTING_RMLUI_LAYER_H
-#define CATA_SRC_LIGHTING_RMLUI_LAYER_H
+#    define CATA_SRC_LIGHTING_RMLUI_LAYER_H
 
-#include <string>
-#include <vector>
+#    include <string>
+#    include <vector>
 
 // RmlUi UI layer — sibling of imgui_layer, bolted beside the SDL_GPU renderer.
 // Own RenderInterface (its own pipeline + premult blend), own input handling,
@@ -92,6 +92,13 @@ struct crt_params {
     float roll_speed = 8.0f;         // px/sec downward scroll (0 = static)
     float flicker = 0.05f;           // opacity-pulse amplitude (0..1)
     float vignette_alpha = 0.5f;     // corner darkness on .panel (0..1)
+    // Step 7 (atmospheric-lighting-coherence plan): also draw the same
+    // scanline + vignette look over the WORLD (map), reusing scanline_alpha/
+    // pitch — not a second effect. false => world frame is bit-identical to
+    // today (crt_world_amount folds to 0 in tonemap.frag.hlsl). The RmlUi HUD
+    // CRT above is untouched either way and cannot double-apply: the tonemap
+    // pass runs on world_target only, resolved before UI compositing.
+    bool crt_world = false;
 };
 crt_params& crt();
 
@@ -173,20 +180,20 @@ void world_text_add(float screen_x, float screen_y, const std::string& utf8, uns
 
 // Options for submitting a combat text item.
 struct combat_text_options {
-    float x = 0.f;           // initial screen X (logical px)
-    float y = 0.f;           // initial screen Y (logical px)
-    std::string text;        // text to display
+    float x = 0.f;                   // initial screen X (logical px)
+    float y = 0.f;                   // initial screen Y (logical px)
+    std::string text;                // text to display
     unsigned int rgba = 0xFFFFFFFFu; // 0xRRGGBBAA
-    float font_scale = 1.0f; // 1.0 = normal, 1.5 = crit
+    float font_scale = 1.0f;         // 1.0 = normal, 1.5 = crit
     float lifetime_ms = 1200.f;
-    float vx = 0.f;          // horizontal velocity px/sec (scatter)
-    float vy = -30.f;        // vertical velocity px/sec (negative = up)
-    float ay = 5.f;          // vertical acceleration px/sec^2 (gravity)
+    float vx = 0.f;   // horizontal velocity px/sec (scatter)
+    float vy = -30.f; // vertical velocity px/sec (negative = up)
+    float ay = 5.f;   // vertical acceleration px/sec^2 (gravity)
 };
 
 // Submit a floating combat text item.
-auto combat_text_add( const combat_text_options &opts ) -> void;
-auto combat_text_tick( float dt_ms ) -> void;
+auto combat_text_add(const combat_text_options& opts) -> void;
+auto combat_text_tick(float dt_ms) -> void;
 auto combat_text_active() -> bool;
 
 // True if any world-text items are queued this frame (render-gate input).
