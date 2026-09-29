@@ -1671,14 +1671,6 @@ void map::generate_lightmap_worker( const int zlev )
                     // already provides. Headless/coop-safe: no GPU state is read.
 {
                         const ter_id win_t = cur_submap->get_ter( sm_ms );
-                        const bool is_probe_tile = diag_probe_on && win_t->has_flag( "WINDOW" );
-                        if( is_probe_tile ) {
-                            DebugLogFL( DL::Info, DC::Main )
-                                    << "[windiag] gate p=(" << p.x() << "," << p.y() << ") ter=" << win_t.id().str()
-                                    << " connect_wall=" << win_t->has_flag( TFLAG_CONNECT_TO_WALL )
-                                    << " window_flag=" << win_t->has_flag( "WINDOW" )
-                                    << " transparent=" << win_t->transparent;
-                        }
                         if( win_t->has_flag( TFLAG_CONNECT_TO_WALL ) && win_t->has_flag( "WINDOW" )
                             && win_t->transparent ) {
                             int out_i = -1;
@@ -1697,10 +1689,6 @@ void map::generate_lightmap_worker( const int zlev )
                                     win_has_inside = true;
                                 }
                             }
-                            if( is_probe_tile ) {
-                                DebugLogFL( DL::Info, DC::Main )
-                                        << "[windiag] out_i=" << out_i << " win_has_inside=" << win_has_inside;
-                            }
                             if( out_i >= 0 && win_has_inside ) {
                                 const auto out_nb = p.xy() + point( dir_x[out_i], dir_y[out_i] );
                                 const int out_idx = map_cache.idx( out_nb.x(), out_nb.y() );
@@ -1712,16 +1700,6 @@ void map::generate_lightmap_worker( const int zlev )
                                 constexpr float WINDOW_FLOOD_BOOST = 3.0f;
                                 const float window_light =
                                     std::min( natural_light, lm[out_idx] ) * WINDOW_FLOOD_BOOST;
-                                if( is_probe_tile ) {
-                                    DebugLogFL( DL::Info, DC::Main )
-                                            << "[windiag] out_nb=(" << out_nb.x() << "," << out_nb.y()
-                                            << ") lm[out_idx]=" << lm[out_idx]
-                                            << " natural_light=" << natural_light
-                                            << " window_light=" << window_light
-                                            << " transparency(p)=" << light_transparency( p )
-                                            << " pushed=" << ( window_light > 0.5f
-                                                    && light_transparency( p ) > LIGHT_TRANSPARENCY_SOLID );
-                                }
                                 if( window_light > 0.5f
                                     && light_transparency( p ) > LIGHT_TRANSPARENCY_SOLID ) {
                                     local.dir_lights.push_back( { p, dir_d[out_i], window_light } );
