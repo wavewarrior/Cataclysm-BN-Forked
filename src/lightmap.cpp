@@ -11,6 +11,7 @@
 #include <ranges>
 #include <cstdint>
 #include <cstdlib>
+#include <filesystem>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -1541,7 +1542,18 @@ void map::generate_lightmap_worker( const int zlev )
 
     constexpr std::array<int, 4> dir_x = { {  0, -1, 1, 0 } };    //    [0]
     constexpr std::array<int, 4> dir_y = { { -1,  0, 0, 1 } };    // [1][X][2]
-    constexpr std::array<int, 4> dir_d = { { 90, 0, 180, 270 } }; //    [3]
+    // BUGFIX (atmospheric-lighting-coherence plan, window-portal light injection
+    // investigation): apply_directional_light's `direction` names describe light
+    // TRAVEL direction (90=goes south, 0=goes west, 180=goes east, 270=goes north).
+    // A source at neighbour index i must shine THROUGH p toward the OPPOSITE side
+    // (e.g. a west neighbour's light must travel east, into the room) — west (i=1)
+    // and east (i=2) were swapped here, so every west/east-facing window/opening
+    // (both the general skylight-bleed injection above and the window-specific
+    // WINDOW_FLOOD_BOOST below, both of which read this same table) shone its
+    // boosted luminance back out into open air instead of into the room, leaving
+    // interiors pinned at the bare LIGHT_AMBIENT_LOW floor regardless of outdoor
+    // brightness. North (i=0) and south (i=3) were already correct.
+    constexpr std::array<int, 4> dir_d = { { 90, 180, 0, 270 } }; //    [3]
 
     const float natural_light = g->natural_light_level( zlev );
 
@@ -1657,8 +1669,16 @@ void map::generate_lightmap_worker( const int zlev )
                     // neighbour and one genuinely-inside neighbour, injects extra
                     // directional daylight beyond what ordinary transparency propagation
                     // already provides. Headless/coop-safe: no GPU state is read.
-                    {
+{
                         const ter_id win_t = cur_submap->get_ter( sm_ms );
+                        const bool is_probe_tile = diag_probe_on && win_t->has_flag( "WINDOW" );
+                        if( is_probe_tile ) {
+                            DebugLogFL( DL::Info, DC::Main )
+                                    << "[windiag] gate p=(" << p.x() << "," << p.y() << ") ter=" << win_t.id().str()
+                                    << " connect_wall=" << win_t->has_flag( TFLAG_CONNECT_TO_WALL )
+                                    << " window_flag=" << win_t->has_flag( "WINDOW" )
+                                    << " transparent=" << win_t->transparent;
+                        }
                         if( win_t->has_flag( TFLAG_CONNECT_TO_WALL ) && win_t->has_flag( "WINDOW" )
                             && win_t->transparent ) {
                             int out_i = -1;
@@ -1677,6 +1697,10 @@ void map::generate_lightmap_worker( const int zlev )
                                     win_has_inside = true;
                                 }
                             }
+                            if( is_probe_tile ) {
+                                DebugLogFL( DL::Info, DC::Main )
+                                        << "[windiag] out_i=" << out_i << " win_has_inside=" << win_has_inside;
+                            }
                             if( out_i >= 0 && win_has_inside ) {
                                 const auto out_nb = p.xy() + point( dir_x[out_i], dir_y[out_i] );
                                 const int out_idx = map_cache.idx( out_nb.x(), out_nb.y() );
@@ -1688,6 +1712,16 @@ void map::generate_lightmap_worker( const int zlev )
                                 constexpr float WINDOW_FLOOD_BOOST = 3.0f;
                                 const float window_light =
                                     std::min( natural_light, lm[out_idx] ) * WINDOW_FLOOD_BOOST;
+                                if( is_probe_tile ) {
+                                    DebugLogFL( DL::Info, DC::Main )
+                                            << "[windiag] out_nb=(" << out_nb.x() << "," << out_nb.y()
+                                            << ") lm[out_idx]=" << lm[out_idx]
+                                            << " natural_light=" << natural_light
+                                            << " window_light=" << window_light
+                                            << " transparency(p)=" << light_transparency( p )
+                                            << " pushed=" << ( window_light > 0.5f
+                                                    && light_transparency( p ) > LIGHT_TRANSPARENCY_SOLID );
+                                }
                                 if( window_light > 0.5f
                                     && light_transparency( p ) > LIGHT_TRANSPARENCY_SOLID ) {
                                     local.dir_lights.push_back( { p, dir_d[out_i], window_light } );

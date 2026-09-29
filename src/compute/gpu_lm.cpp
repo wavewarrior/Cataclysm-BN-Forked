@@ -1101,6 +1101,7 @@ enum class light_source_kind : int {
     vehicle,
     character,
     monster,
+    window_daylight,
 };
 
 struct source_collection_stats {
@@ -1111,6 +1112,7 @@ struct source_collection_stats {
     int vehicle_sources = 0;
     int character_sources = 0;
     int monster_sources = 0;
+    int window_daylight_sources = 0;
 };
 
 struct source_collection {
@@ -1184,6 +1186,9 @@ auto increment_source_stat(source_collection_stats& stats, light_source_kind con
             break;
         case light_source_kind::monster:
             ++stats.monster_sources;
+            break;
+        case light_source_kind::window_daylight:
+            ++stats.window_daylight_sources;
             break;
     }
 }
@@ -1536,6 +1541,66 @@ auto add_static_emitter_sources(source_accumulator& acc) -> void {
     }
 }
 
+// Window-portal light propagation (item #10), GPU-lighting-path port. The CPU
+// fallback in lightmap.cpp's generate_lightmap_worker has an equivalent block,
+// but that function is DEAD CODE whenever a GPU device is present (see
+// map_cache.cpp's `gpu_device != nullptr` branch) — this is the actual live
+// path on any machine with a working GPU. A window (CONNECT_TO_WALL + WINDOW +
+// transparent terrain) with one genuinely-outside cardinal neighbour and one
+// genuinely-inside one gets a plain isotropic point source placed at the
+// INSIDE neighbour tile — the same mechanism torches/lamps/fires already use
+// (add_source + normal shadowcast falloff), not the directional/cone path:
+// a wide-cone directional source placed at the window itself lit only that
+// one tile and did not propagate (cone-lit sources appear tuned for narrow
+// vehicle-headlight beams, not room floods). Luminance uses the scene-wide
+// natural_light_level rather than a per-tile lm[] read: collect_sources runs
+// before this frame's GPU dispatch, so a neighbour's lm[] would be last
+// frame's (stale) value; natural_light_level is already the authoritative
+// global "how bright is it outside right now".
+auto add_window_daylight_sources(source_accumulator& acc) -> void {
+    ZoneScopedN("gpu_lm_collect_window_daylight");
+    if (g == nullptr) { return; }
+    static constexpr std::array<point, 4> cardinals = {
+        point_north, point_west, point_east, point_south
+    };
+    constexpr float WINDOW_FLOOD_BOOST = 3.0f;
+    for (auto const z : acc.dirty_levels) {
+        auto const natural_light = g->natural_light_level(z);
+        if (natural_light <= LIGHT_AMBIENT_LOW) { continue; }
+        auto const& lc = acc.m.get_cache_ref(z);
+        for (auto const& view : acc.m.active_submap_views(z)) {
+            auto const grid = abs_to_bub(view.abs_pos());
+            auto const& sm = view.get_submap();
+            for (auto const sm_ms : submap_tiles()) {
+                auto const pos = project_combine(grid, sm_ms);
+                if (!lc.inbounds(pos.xy())) { continue; }
+                auto const terrain = sm.get_ter(sm_ms);
+                if (!terrain->has_flag(TFLAG_CONNECT_TO_WALL) || !terrain->has_flag("WINDOW")
+                    || !terrain->transparent) {
+                    continue;
+                }
+                point inside_dir;
+                bool has_outside = false;
+                bool has_inside = false;
+                for (auto const& d : cardinals) {
+                    auto const nb = pos.xy() + d;
+                    if (!lc.inbounds(nb)) { continue; }
+                    if (lc.outside_cache[lc.idx(nb.x(), nb.y())]) {
+                        has_outside = true;
+                    } else {
+                        has_inside = true;
+                        inside_dir = d;
+                    }
+                }
+                if (!has_outside || !has_inside) { continue; }
+                auto const luminance = natural_light * WINDOW_FLOOD_BOOST;
+                auto const inside_pos = tripoint_bub_ms(pos.xy() + inside_dir, pos.z());
+                add_source(acc, inside_pos, luminance, light_source_kind::window_daylight);
+            }
+        }
+    }
+}
+
 auto add_field_sources(source_accumulator& acc) -> void {
     ZoneScopedN("gpu_lm_collect_field_sources");
     for (auto const z : acc.dirty_levels) {
@@ -1789,6 +1854,7 @@ auto collect_sources(
     add_vehicle_sources(acc);
     add_character_sources(acc);
     add_monster_sources(acc);
+    add_window_daylight_sources(acc);
 
     return source_collection{
         .sources = std::move(acc.sources),
