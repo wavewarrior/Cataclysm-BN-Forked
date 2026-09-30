@@ -2340,22 +2340,6 @@ void game::draw_callback_t::operator()()
 }
 
 
-std::optional<tripoint_rel_ms> game::get_veh_dir_indicator_location( bool next ) const
-{
-    if( !get_option<bool>( "VEHICLE_DIR_INDICATOR" ) ) {
-    return std::nullopt;
-}
-const optional_vpart_position vp = m.veh_at( u.bub_pos() );
-if( !vp ) {
-    return std::nullopt;
-}
-vehicle *const veh = &vp->vehicle();
-rl_vec2d face = next ? veh->dir_vec() : veh->face_vec();
-float r = 10.0;
-return tripoint_rel_ms( static_cast<int>( r * face.x ), static_cast<int>( r * face.y ),
-                        u.bub_pos().z() );
-}
-
 //Gets the next free ID, also used for player ID's.
 character_id game::assign_npc_id()
 {

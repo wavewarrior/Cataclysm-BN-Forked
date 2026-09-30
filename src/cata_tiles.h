@@ -1307,6 +1307,9 @@ class cata_tiles
         -> void;
         auto void_aim_cone() -> void;
         auto draw_aim_cone() -> void;
+        /// Intended-path overlay for a driven vehicle: fill, vehicle-width edges
+        /// bending toward the steer target, sight line and an end pip.
+        auto draw_vehicle_path( const vehicle &veh ) -> void;
         auto init_draw_throw_arc( const tripoint_bub_ms& src, const tripoint_bub_ms& dst, float charge )
         -> void;
         auto void_throw_arc() -> void;

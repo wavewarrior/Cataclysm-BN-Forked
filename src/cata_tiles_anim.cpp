@@ -2,6 +2,9 @@
 #include "cata_tiles_internal.h"
 #include "sdl_lighting_devui.h"
 #include "travel/travel_destination.h"
+#include "units_angle.h"
+#include "vehicle.h"
+#include "vpart_position.h"
 #include "lighting/solid_overlay.h"
 
 #include "cata_utility.h"
@@ -28,6 +31,7 @@
 #include <numbers>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -512,6 +516,113 @@ return ( p >= lo && p <= lo + 1.0f ) ? slab_range{ -inf, inf } :
                               pip + 2.0f, pip + 2.0f }, aim_shade_col );
     lighting::overlay_rect( { tip_x - pip * 0.5f, tip_y - pip * 0.5f, pip, pip },
                             rays[fan_segs / 2].blocked ? aim_blocked_col : aim_hit_col );
+}
+
+/// The intended path of a driven vehicle, drawn with the aim readout's own palette:
+/// a translucent fill as wide as the vehicle, two edge lines that bend toward the
+/// steer target, a sight line down the middle, and an end pip that goes orange when
+/// an obstacle clips the path. Replaces the old one-tile facing cursor.
+auto cata_tiles::draw_vehicle_path( const vehicle &veh ) -> void
+{
+    // Draw the band on the frame the player actually sees: the composite's eased
+    // pose when this vehicle is composited, else its committed layout.
+    vehicle_render_frame f;
+    bool have_frame = false;
+    for( const composite_slot &slot : composite_slots_ ) {
+        if( slot.veh != &veh ) { continue; }
+        f = slot.frame;
+        have_frame = true;
+        break;
+    }
+    if( !have_frame ) { f = make_vehicle_render_frame( veh ); }
+
+    const vehicle_path_band band = make_vehicle_path_band( {
+        .frame = f,
+        .steer_angle = static_cast<float>( units::to_radians( veh.turn_dir ) ),
+        .velocity = veh.velocity } );
+
+    const map &here = get_map();
+    const int z = veh.bub_ms_location().z();
+    // Clip at the first sample whose band touches an impassable tile that is not
+    // this vehicle. Sample 0 is the vehicle's own edge, so start at 1.
+    const auto blocked_at = []( const map & m, const vehicle & v, const vehicle_render_point & p,
+    const int zz ) {
+        const tripoint_bub_ms t( tripoint( static_cast<int>( std::lround( p.x ) ),
+                                           static_cast<int>( std::lround( p.y ) ), zz ) );
+        if( !m.inbounds( t ) || !m.impassable( t ) ) { return false; }
+        return veh_pointer_or_null( m.veh_at( t ) ) != &v;
+    };
+    int clip = band.samples - 1;
+    bool blocked = false;
+    for( int i = 1; i < band.samples; ++i ) {
+        if( blocked_at( here, veh, band.left[ i ], z )
+            || blocked_at( here, veh, band.centre[ i ], z )
+            || blocked_at( here, veh, band.right[ i ], z ) ) {
+            clip = i;
+            blocked = true;
+            break;
+        }
+    }
+
+    // Band points are bubble-tile positions; player_to_screen returns a tile's
+    // TOP-LEFT, so half a tile rides it to the tile centre.
+    const point_bub_ms anchor = veh.bub_ms_location().xy();
+    const point base = player_to_screen( anchor );
+    const auto tw = static_cast<float>( tile_width );
+    const auto th = static_cast<float>( tile_height );
+    const auto to_px = [&]( const vehicle_render_point & p ) {
+        return SDL_FPoint {
+            static_cast<float>( base.x ) + ( p.x - static_cast<float>( anchor.x() ) + 0.5f ) * tw,
+            static_cast<float>( base.y ) + ( p.y - static_cast<float>( anchor.y() ) + 0.5f ) * th };
+    };
+
+    std::array<SDL_FPoint, vehicle_path_band::samples> centre_px{};
+    std::array<SDL_FPoint, vehicle_path_band::samples> left_px{};
+    std::array<SDL_FPoint, vehicle_path_band::samples> right_px{};
+    for( int i = 0; i <= clip; ++i ) {
+        centre_px[ i ] = to_px( band.centre[ i ] );
+        left_px[ i ] = to_px( band.left[ i ] );
+        right_px[ i ] = to_px( band.right[ i ] );
+    }
+    const auto span = std::span<const SDL_FPoint>( centre_px.data(), clip + 1 );
+
+    // Fill: one rotated quad per consecutive centre pair, sized to the band width.
+    // Quads are the only primitive the sprite pipeline draws, and adjacent pairs
+    // share an endpoint, so the strip reads continuous.
+    const auto band_px = band.width * tw;
+    for( int i = 0; i < clip; ++i ) {
+        const float dx = centre_px[ i + 1 ].x - centre_px[ i ].x;
+        const float dy = centre_px[ i + 1 ].y - centre_px[ i ].y;
+        const float seg = std::sqrt( dx * dx + dy * dy );
+        if( seg <= 0.0f ) { continue; }
+        lighting::overlay_quad( {
+            .centre = {
+                ( centre_px[ i ].x + centre_px[ i + 1 ].x ) * 0.5f,
+                ( centre_px[ i ].y + centre_px[ i + 1 ].y ) * 0.5f
+            },
+            .w = seg,
+            .h = band_px,
+            .rotation = std::atan2( dy, dx ),
+            .color = aim_fill_col } );
+    }
+
+    // Vehicle-width edges, then the sight line down the middle. 2px: a 1px quad at
+    // an arbitrary angle straddles two pixel rows and blends to half brightness.
+    lighting::overlay_polyline( { .points = std::span<const SDL_FPoint>( left_px.data(), clip + 1 ),
+                                  .thickness = 2.0f, .color = aim_edge_col } );
+    lighting::overlay_polyline( { .points = std::span<const SDL_FPoint>( right_px.data(), clip + 1 ),
+                                  .thickness = 2.0f, .color = aim_edge_col } );
+    lighting::overlay_polyline( { .points = span, .thickness = 2.0f, .color = aim_sight_col } );
+
+    // End pip: red on a clear path, orange where an obstacle clipped it. Same
+    // dark surround as the aim reticle so it stays legible on a lit floor and on
+    // a black wall.
+    const auto pip = std::max( 4.0f, tw * 0.20f );
+    const SDL_FPoint end_px = centre_px[ clip ];
+    lighting::overlay_rect( { end_px.x - pip * 0.5f - 1.0f, end_px.y - pip * 0.5f - 1.0f,
+                              pip + 2.0f, pip + 2.0f }, aim_shade_col );
+    lighting::overlay_rect( { end_px.x - pip * 0.5f, end_px.y - pip * 0.5f, pip, pip },
+                            blocked ? aim_blocked_col : aim_hit_col );
 }
 auto cata_tiles::draw_particle_overlay( const particle &p ) -> void
 {

@@ -652,8 +652,8 @@ void options_manager::add_options_interface()
          true
        );
 
-    add( "VEHICLE_DIR_INDICATOR", interface, translate_marker( "Draw vehicle facing indicator" ),
-         translate_marker( "If true, when controlling a vehicle, a white 'X' ( in curses version ) or a crosshair ( in tiles version ) at distance 10 from the center will display its current facing." ),
+    add( "VEHICLE_DIR_INDICATOR", interface, translate_marker( "Draw vehicle path indicator" ),
+         translate_marker( "If true, when driving a vehicle, draws its intended path: two lines as wide as the vehicle that bend toward the steering direction and stop at the first obstacle." ),
          true
        );
 

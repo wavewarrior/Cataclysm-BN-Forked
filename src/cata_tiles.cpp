@@ -1895,15 +1895,11 @@ void cata_tiles::draw(
         const auto pos = tripoint_bub_ms( g->ter_view_p.xy(), center.z() );
         draw_from_id_string( tile, pos, std::nullopt, std::nullopt, lit_level::LIT, false, 0, false );
     }
-    if( g->u.controlling_vehicle ) {
-        if( auto indicator_offset = g->get_veh_dir_indicator_location( true ) ) {
-            const tile_search_params tile{"cursor", C_NONE, empty_string, 0, 0};
-            const auto pos =
-                indicator_offset->xy()
-                + tripoint_bub_ms( g->u.bub_pos().x(), g->u.bub_pos().y(), center.z() );
-            draw_from_id_string(
-                tile, pos, std::nullopt, std::nullopt, lit_level::LIT, false, 0, false );
-        }
+    // The intended path replaces the old one-tile facing cursor: it says where the
+    // vehicle will actually go (steer target, speed, obstacle) instead of where its
+    // nose points. A coasting or partner-driven vehicle shows no path.
+    if( !tile_iso && get_option<bool>( "VEHICLE_DIR_INDICATOR" ) ) {
+        if( const vehicle *veh = driven_vehicle_for_render() ) { draw_vehicle_path( *veh ); }
     }
 
     const bool draw_submap_grid =

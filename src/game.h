@@ -306,14 +306,6 @@ class game: public submap_load_listener
         // when force_redraw is true, redraw all panel instead of just animated panels
         // mostly used after UI updates
         void draw_panels( bool force_draw = false );
-        /**
-         * Returns the location where the indicator should go relative to the reality bubble,
-         * or nothing to indicate no indicator should be drawn.
-         * Based on the vehicle the player is driving, if any.
-         * @param next If true, bases it on the vehicle the vehicle will turn to next turn,
-         * instead of the one it is currently facing.
-         */
-        std::optional<tripoint_rel_ms> get_veh_dir_indicator_location( bool next ) const;
 
         /**
          * Moves the player vertically.
