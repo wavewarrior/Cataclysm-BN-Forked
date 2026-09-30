@@ -1,28 +1,40 @@
 /**
- * Vehicle sync integration tests.
+ * Co-op vehicle tests.
  *
- * Exercises the vehicle_state packet relay from client → host through
- * coop_sim_transport, verifying that the server's vehicle_id_map_ /
- * vehicle_id_map_rev_ lookup and map::displace_vehicle() pipeline works
- * end-to-end.
+ * Covers the client -> host driving relays (VEH_CONTROL, VEH_DRIVE), the proxy
+ * boarding that makes it a real driver, and the host's cruise thrust for a proxy
+ * driver, plus the legacy vehicle_state relay still in place.
  *
  * Tags: [coop][vehicle]
  */
-
 #include "avatar.h"
 #include "catch/catch_amalgamated.hpp"
+#include "character.h"
 #include "coop_client.h"
 #include "coop_server.h"
 #include "coop_session.h"
 #include "coop_sim_transport.h"
 #include "game.h"
+#include "json.h"
 #include "map.h"
 #include "map_helpers.h"
 #include "npc.h"
+#include "player_cmd.h"
+#include "skill.h"
 #include "state_helpers.h"
 #include "type_id.h"
+#include "units_utility.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_handle.h"
+#include "vehicle_part.h"
+#include "vpart_position.h"
+#include "vpart_range.h"
+
+#include <array>
+#include <cmath>
+#include <sstream>
+#include <vector>
 
 namespace {
 
@@ -44,6 +56,7 @@ struct inproc_harness {
     coop_sim_transport* srv_tx = nullptr;
     coop_sim_transport* cli_tx = nullptr;
     npc* proxy = nullptr;
+    tripoint_abs_ms u_start;
 
     auto setup() -> void {
         clear_all_state();
@@ -83,6 +96,7 @@ struct inproc_harness {
             coop_mode_guard mcli(coop_mode::client);
             cli.coop_world_tick();
         }
+        u_start = g->u.abs_pos();
     }
 
     auto tick() -> void {
@@ -90,9 +104,18 @@ struct inproc_harness {
             coop_mode_guard mcli(coop_mode::client);
             cli.coop_world_tick();
         }
+        restore_host_avatar();
         srv.process_incoming_for_test();
         srv.coop_world_tick();
         srv.flush_send_queue_for_test();
+    }
+
+    /// In-process artifact: host and client share one `g`, so the client's sync
+    /// reconciliation teleports the HOST avatar onto the proxy's tile.  Put it back where
+    /// it started, otherwise a car spawned next to the proxy collides with that body every
+    /// server tick and a real host would never see that.
+    auto restore_host_avatar() -> void {
+        if (!g->u.in_vehicle && g->u.abs_pos() != u_start) { g->u.setpos(u_start); }
     }
 
     ~inproc_harness() {
@@ -106,6 +129,54 @@ struct inproc_harness {
     }
 };
 
+/// Spawn an undamaged, full-tank car_test clear of the proxy and the host avatar
+/// (mounts span x -3..2, y -1..2), so neither creature body blocks it.
+auto spawn_drivable_car(inproc_harness& h) -> vehicle* {
+    const tripoint_bub_ms at =
+        abs_to_map_local(g->m, h.proxy->abs_pos()) + tripoint_rel_ms(5, 5, 0);
+    vehicle* veh = g->m.add_vehicle(vproto_id("car_test"), at, 0_degrees, 100, 0);
+    REQUIRE(veh != nullptr);
+    return veh;
+}
+
+/// Bubble position of the vehicle's first available CONTROLS part (zero when none).
+auto controls_pos(vehicle& veh) -> tripoint_bub_ms {
+    for (const vpart_reference& vp : veh.get_avail_parts("CONTROLS")) { return vp.pos(); }
+    return tripoint_bub_ms::zero();
+}
+
+/// Finds a BOARDABLE part with a vehicle-free neighbour.  `tile_out` is the boardable
+/// tile, `delta_out` the offset from it to that free neighbour.
+auto boardable_with_free_neighbour(
+    vehicle& veh, tripoint_bub_ms& tile_out, tripoint_rel_ms& delta_out) -> bool {
+    static const std::array<tripoint_rel_ms, 8> offs = {
+        {tripoint_rel_ms::north(), tripoint_rel_ms::south(), tripoint_rel_ms::east(),
+         tripoint_rel_ms::west(), tripoint_rel_ms::north_east(), tripoint_rel_ms::north_west(),
+         tripoint_rel_ms::south_east(), tripoint_rel_ms::south_west()}};
+    for (const vpart_reference& vp : veh.get_avail_parts(VPFLAG_BOARDABLE)) {
+        for (const tripoint_rel_ms& n : offs) {
+            if (!g->m.veh_at(vp.pos() + n)) {
+                tile_out = vp.pos();
+                delta_out = n;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// Boards the proxy at the controls and hands it control through the VEH_CONTROL relay.
+auto proxy_take_control(inproc_harness& h, vehicle& veh) -> void {
+    const tripoint_bub_ms ctrl = controls_pos(veh);
+    REQUIRE(ctrl != tripoint_bub_ms::zero());
+    h.proxy->setpos(map_local_to_abs(g->m, ctrl));
+    g->m.board_vehicle(ctrl, h.proxy);
+    REQUIRE(h.proxy->in_vehicle);
+    h.proxy->set_skill_level(skill_id("driving"), 10);
+    h.cli.queue_action("VEH_CONTROL", R"({"on":true,"engine":true})");
+    h.tick();
+}
+
 /// Build a vehicle_state JSON packet (type 42) for the given vid and abs position.
 auto make_vehicle_state_json(uint32_t vid, int ax, int ay, int az) -> std::string {
     return R"({"t":42,"d":{"vid":)" + std::to_string(vid) + R"(,"ax":)" + std::to_string(ax)
@@ -116,9 +187,77 @@ auto make_vehicle_state_json(uint32_t vid, int ax, int ay, int az) -> std::strin
 } // namespace
 
 // ---------------------------------------------------------------------------
-// Vehicle sync tests
+// Step 5: client-driven vehicle relays (VEH_CONTROL / VEH_DRIVE / proxy boarding)
 // ---------------------------------------------------------------------------
 
+TEST_CASE("vehicle: client takes control via VEH_CONTROL relay", "[coop][vehicle]") {
+    inproc_harness h;
+    h.setup();
+    vehicle* veh = spawn_drivable_car(h);
+
+    proxy_take_control(h, *veh);
+
+    CHECK(veh->player_in_control(*h.proxy));
+    CHECK(h.proxy->controlling_vehicle);
+    CHECK(veh->engine_on);
+}
+
+TEST_CASE("vehicle: client pre-steers via VEH_DRIVE relay", "[coop][vehicle]") {
+    inproc_harness h;
+    h.setup();
+    vehicle* veh = spawn_drivable_car(h);
+
+    proxy_take_control(h, *veh);
+    h.cli.queue_action("VEH_DRIVE", R"({"x":1,"y":0,"z":0})");
+    h.tick();
+
+    CHECK(lround(units::to_degrees(normalize(veh->turn_dir))) == 15);
+    CHECK(lround(units::to_degrees(normalize(veh->face.dir()))) == 0);
+}
+
+TEST_CASE("vehicle: proxy driver gets cruise control", "[coop][vehicle]") {
+    inproc_harness h;
+    h.setup();
+    vehicle* veh = spawn_drivable_car(h);
+
+    proxy_take_control(h, *veh);
+    // Cruise is the only thrust path a proxy driver reaches: pldrive with cruise_on
+    // delegates to cruise_thrust (which only sets cruise_velocity), and the velocity
+    // itself comes from gain_moves()'s cruise thrust - dead without a driver.
+    REQUIRE(veh->cruise_on);
+    h.cli.queue_action("VEH_DRIVE", R"({"x":0,"y":-1,"z":0})");
+    h.tick();
+    CHECK(veh->cruise_velocity > 0);
+    h.tick();
+    h.tick();
+
+    CHECK(veh->velocity > 0);
+}
+
+TEST_CASE("vehicle: proxy move command boards a vehicle", "[coop][vehicle]") {
+    inproc_harness h;
+    h.setup();
+    vehicle* veh = spawn_drivable_car(h);
+
+    tripoint_bub_ms seat;
+    tripoint_rel_ms delta;
+    REQUIRE(boardable_with_free_neighbour(*veh, seat, delta));
+    h.proxy->setpos(map_local_to_abs(g->m, seat + delta));
+    REQUIRE(!h.proxy->in_vehicle);
+
+    player_cmd_t cmd;
+    cmd.kind = player_cmd_kind::move;
+    cmd.delta = tripoint_rel_ms(-delta.raw());
+    h.srv.execute_player_cmd(h.proxy, cmd, 1);
+
+    CHECK(h.proxy->in_vehicle);
+    CHECK(h.proxy->bub_pos() == seat);
+}
+
+
+// ----------------------------------------------------------------------------------
+// Legacy vehicle_state relay tests
+// ----------------------------------------------------------------------------------
 TEST_CASE("vehicle: vehicle_state packet relays to host", "[coop][vehicle]") {
     inproc_harness h;
     h.setup();

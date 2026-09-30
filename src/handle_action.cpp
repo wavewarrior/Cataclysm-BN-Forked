@@ -3026,10 +3026,17 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
     // The local action already executed above for instant visual feedback
     // (local prediction).  The host mirrors via execute_client_action().
     if( coop_client_ ) {
-        // Build a typed command and forward it to the host proxy.
-        // Fire is queued from inside modal_fiber_ above; burst-fire below.
-        const auto move_cmd = make_player_move_cmd( act, iso_rotate::yes );
-        if( move_cmd.kind == player_cmd_kind::move ) {
+    // Build a typed command and forward it to the host proxy.
+    // Fire is queued from inside modal_fiber_ above; burst-fire below.
+    const auto move_cmd = make_player_move_cmd( act, iso_rotate::yes );
+        if( veh_ctrl && move_cmd.kind == player_cmd_kind::move ) {
+            // D1: driving — the local pldrive() above gave instant feedback; the host
+            // runs the authoritative pldrive() on the proxy.  Steering/throttle use the
+            // unrotated vehicle axes, same as the local pldrive() call above.
+            const auto d = get_delta_from_movement_action( act, iso_rotate::no );
+            coop_client_->queue_action( "VEH_DRIVE",
+                                        string_format( R"({"x":%d,"y":%d,"z":0})", d.x(), d.y() ) );
+        } else if( move_cmd.kind == player_cmd_kind::move ) {
             // Only queue if the move actually succeeded — blocked moves leave
             // g->u at coop_pos_before_ and cause wall-flicker on replay.
             const bool actually_moved = ( u.bub_pos().raw() != coop_pos_before_.raw() );
@@ -3102,9 +3109,12 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
                 coop_client_->queue_action( "FIRE", ctx_oss.str() );
             }
         } else if( act == ACTION_MOVE_UP || act == ACTION_MOVE_DOWN ) {
-            // Queue only if vertical_move() actually changed z — it can fail (no stairs,
-            // blocked, etc.). coop_pos_before_ captures the pre-action bub_pos (existing local).
-            if( u.bub_pos().z() != coop_pos_before_.z() ) {
+            if( controlled_vehicle != nullptr && controlled_vehicle->is_aircraft() ) {
+                // D1: aircraft altitude — the local pldrive(above/below) above is mirrored
+                // on the host as a z-axis VEH_DRIVE.
+                coop_client_->queue_action( "VEH_DRIVE", string_format( R"({"x":0,"y":0,"z":%d})",
+                                            act == ACTION_MOVE_UP ? 1 : -1 ) );
+            } else if( u.bub_pos().z() != coop_pos_before_.z() ) {
                 const auto ap = u.abs_pos();
                 const auto ctx =
                     "{\"ax\":" + std::to_string( ap.x() ) +

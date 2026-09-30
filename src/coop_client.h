@@ -15,6 +15,14 @@
 class monster;
 class vehicle;
 
+/// Snapshot of the client's own driving state, compared edge-wise each tick so a
+/// take-control / engine-toggle is relayed to the host exactly once.
+struct coop_control_state {
+    bool controlling = false;
+    bool engine_on = false;
+    auto operator==( const coop_control_state & ) const -> bool = default; // *NOPAD*
+};
+
 /// Client-side co-op thin path.
 struct coop_client {
         coop_client() = default;
@@ -80,6 +88,8 @@ struct coop_client {
 
     private:
         auto apply_sync( const std::string& json_buf ) -> void;
+        /// The client's current driving state, read from the local avatar.
+        auto current_control_state() const -> coop_control_state;
         auto handle_disconnect() -> void;
         auto send_death_drop() -> void;
 
@@ -114,6 +124,9 @@ struct coop_client {
         std::unordered_map<const vehicle *, uint32_t> coop_vehicle_map_inv_;
         std::unordered_map<uint32_t, vehicle *>        coop_vehicle_map_;
         int coop_vehicle_stationary_ticks_ = 0;
+
+        /// Driving state at the last comparison; nullopt until the first tick or sync.
+        std::optional<coop_control_state> last_control_state_;
 
         // F1: host activity string received from sync — used for F5 team speed-up
         std::string host_activity_str_;

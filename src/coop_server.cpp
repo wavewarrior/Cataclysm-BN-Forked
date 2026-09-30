@@ -35,6 +35,10 @@
 #include "player_activity.h"
 #include "string_formatter.h"
 #include "translations.h"
+#include "veh_type.h"
+#include "vehicle_part.h"
+#include "vehicle_driver.h"
+#include "vpart_position.h"
 #include "vehicle.h"
 
 #include <SDL3_net/SDL_net.h>
@@ -821,7 +825,19 @@ using K = player_cmd_kind;
         // via a bub_pos() read + bub-space arithmetic + setpos(bub_ms) write
         // silently drifts whenever those two frames aren't identical.
         const tripoint_abs_ms dest_abs = proxy->abs_pos() + cmd.delta;
-        if( g->m.inbounds( abs_to_map_local( g->m, dest_abs ) ) ) { proxy->setpos( dest_abs ); }
+            const tripoint_bub_ms dest = abs_to_map_local( g->m, dest_abs );
+            if( !g->m.inbounds( dest ) ) { break; }
+            // Driving needs a real boarded proxy: unboard first (writing the position of a
+            // boarded creature outside commit_occupants trips check_position_write_owner),
+            // then board if the destination is a boardable vehicle tile.
+            if( proxy->in_vehicle ) { g->m.unboard_vehicle( proxy->bub_pos() ); }
+            proxy->setpos( dest_abs );
+            // board_vehicle debugmsgs (fatal in tests) when the seat already carries a
+            // passenger, so only board an empty one.
+            if( auto vp = g->m.veh_at( dest ).part_with_feature( VPFLAG_BOARDABLE, true );
+                vp && vp->vehicle().get_passenger( vp->part_index() ) == nullptr ) {
+                g->m.board_vehicle( dest, proxy );
+            }
             break;
         }
         case K::pause:
@@ -1096,6 +1112,85 @@ if( move_cmd.kind == player_cmd_kind::move ) {
     }
     if( key == "USE" ) {
     execute_player_cmd( proxy, make_player_use_cmd(), seq );
+        return;
+    }
+    if( key == "VEH_CONTROL" ) {
+    // D1: the client took or let go of the controls (and maybe turned the engine
+    // on/off).  Mirror it on the proxy so the host's sim sees a driver.
+    // NOTE: single-player never assigns `engine_on = true` after the start loop
+    // (src-wide grep): is_engine_on() is "part available && enabled", and
+    // vehicle::start_engines() enables every unbroken engine first
+    // (vehicle_use.cpp:1243-1247).  We therefore mirror that enable-all guard and
+    // derive engine_on from how many engines actually started.
+    bool on = false;
+    bool engine = false;
+    try {
+        if( !ctx_json.empty() ) {
+                std::istringstream iss( ctx_json );
+                JsonIn jin( iss );
+                JsonObject ctx = jin.get_object();
+                ctx.allow_omitted_members();
+                on = ctx.get_bool( "on", false );
+                engine = ctx.get_bool( "engine", false );
+            }
+        } catch( const JsonError & ) {
+            DebugLog( DL::Error, DC::Main ) << "[coop] VEH_CONTROL: bad ctx";
+            return;
+        }
+        const optional_vpart_position vp = g->m.veh_at( proxy->bub_pos() );
+        if( !vp || !proxy->in_vehicle ) {
+            proxy->controlling_vehicle = false;
+            return;
+        }
+        vehicle &veh = vp->vehicle();
+        const bool at_controls = veh.avail_part_with_feature( vp->part_index(), "CONTROLS", true ) >= 0;
+        proxy->controlling_vehicle = on && at_controls;
+        if( proxy->controlling_vehicle && engine && !veh.engine_on ) {
+            const auto part_is_ready = [&]( const int idx ) {
+                const vehicle_part &pt = veh.get_part_hack( idx );
+                return pt.enabled && !pt.is_broken();
+            };
+            if( !std::any_of( veh.engines.begin(), veh.engines.end(), part_is_ready ) ) {
+                for( const int idx : veh.engines ) {
+                    if( !veh.get_part_hack( idx ).is_broken() ) { veh.toggle_specific_part( idx, true ); }
+                }
+            }
+            int started = 0;
+            for( size_t e = 0; e < veh.engines.size(); ++e ) {
+                if( veh.is_engine_on( static_cast<int>( e ) )
+                    && veh.start_engine( static_cast<int>( e ) ) ) {
+                    ++started;
+                }
+            }
+            veh.engine_on = started > 0;
+        } else if( !engine && veh.engine_on && proxy->controlling_vehicle ) {
+            veh.engine_on = false;
+        }
+        return;
+    }
+    if( key == "VEH_DRIVE" ) {
+    // D1: throttle/steer/vertical input from the client's driver seat.
+    int dx = 0;
+    int dy = 0;
+    int dz = 0;
+    try {
+        if( !ctx_json.empty() ) {
+                std::istringstream iss( ctx_json );
+                JsonIn jin( iss );
+                JsonObject ctx = jin.get_object();
+                ctx.allow_omitted_members();
+                dx = ctx.get_int( "x", 0 );
+                dy = ctx.get_int( "y", 0 );
+                dz = ctx.get_int( "z", 0 );
+            }
+        } catch( const JsonError & ) {
+            DebugLog( DL::Error, DC::Main ) << "[coop] VEH_DRIVE: bad ctx";
+            return;
+        }
+        vehicle *veh = veh_pointer_or_null( g->m.veh_at( proxy->bub_pos() ) );
+        if( veh != nullptr && veh->player_in_control( *proxy ) ) {
+            veh->pldrive( *proxy, tripoint_rel_veh{ dx, dy, dz } );
+        }
         return;
     }
     if( key == "MELEE" ) {

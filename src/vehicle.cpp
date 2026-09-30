@@ -76,6 +76,7 @@
 #include "translations.h"
 #include "units_utility.h"
 #include "veh_type.h"
+#include "vehicle_driver.h"
 #include "vehicle_palette.h"
 #include "vehicle_functions.h"
 #include "weather.h"
@@ -3228,7 +3229,7 @@ void vehicle::gain_moves()
 {
     fuel_used_last_turn.clear();
     check_falling_or_floating();
-    const bool pl_control = player_in_control( g->u );
+    const bool pl_control = vehicle_driver( *this ) != nullptr;
     if( is_moving() || is_falling ) {
         if( !loose_parts.empty() ) {
             shed_loose_parts();
@@ -3250,7 +3251,7 @@ void vehicle::gain_moves()
         of_turn = .001;
     }
     of_turn_carry = 0;
-    // cruise control TODO: enable for NPC?
+    // cruise control: applies to whichever character drives (avatar or co-op proxy)
     if( ( pl_control || is_following || is_patrolling ) && cruise_on && cruise_velocity != velocity ) {
         thrust( ( cruise_velocity ) > velocity ? 1 : -1 );
     }

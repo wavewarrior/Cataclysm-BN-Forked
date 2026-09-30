@@ -258,6 +258,15 @@ auto coop_client::apply_world_seed_to_avatar() -> void
             << " pos_override=" << ( !has_saved_position ? "yes" : "no" );
 }
 
+auto coop_client::current_control_state() const -> coop_control_state
+{
+    const auto vp = get_map().veh_at( g->u.bub_pos() );
+    if( !g->u.controlling_vehicle || !vp ) {
+        return {};
+    }
+    return coop_control_state{ .controlling = true, .engine_on = vp->vehicle().engine_on };
+}
+
 auto coop_client::coop_world_tick() -> void
 {
     if( !coop_session::get().is_client() ) { return; }
@@ -277,6 +286,16 @@ if( reconnect_attempts_remaining_ > 0 && !transport_ ) {
     }
 
     if( !transport_ ) { return; }
+
+    // D1: relay a driving-state change once (edge-triggered).  apply_sync() re-baselines
+    // last_control_state_ against the host-applied state, so a local revert for one tick
+    // is corrected by the host echo rather than ping-ponging.
+    const auto cur = current_control_state();
+    if( last_control_state_ && cur != *last_control_state_ ) {
+        queue_action( "VEH_CONTROL", string_format( R"({"on":%s,"engine":%s})",
+                      cur.controlling ? "true" : "false", cur.engine_on ? "true" : "false" ) );
+    }
+    last_control_state_ = cur;
 
 // 1. Send the oldest unsent pending action.  Actions remain in pending_actions_
 //    until the server echoes last_seq ≥ action.seq in a sync packet; they are
@@ -986,6 +1005,10 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
             }
         }
     }
+
+    // D1: the host has now applied our controls (or told us otherwise); compare the
+    // next tick against the post-sync state so only a local change is relayed.
+    last_control_state_ = current_control_state();
 
     // Process turns for the delta between turn_before and the new calendar::turn.
     // During fast-forward the host may advance up to COOP_ACTIVITY_YIELD_INTERVAL turns in
