@@ -202,50 +202,47 @@ auto debug_line_pass::upload( SDL_GPUCommandBuffer *cb ) -> bool
 
 // ---- Per-frame record ----------------------------------------------------
 
-auto debug_line_pass::record(
-    SDL_GPUCommandBuffer *cb, SDL_GPUTexture *target,
-    std::uint32_t target_w, std::uint32_t target_h,
-    float cam_x, float cam_y,
-    float tile_w, float tile_h ) -> void
-{
-    if( !ready() || !cb || !target || lines_.empty() ) {
+auto debug_line_pass::record(const debug_line_record_options& opts) -> void {
+    const std::uint32_t target_w = opts.target_w;
+    const std::uint32_t target_h = opts.target_h;
+    if (!ready() || !opts.cb || !opts.target || lines_.empty() || opts.proj_w == 0
+        || opts.proj_h == 0) {
         return;
     }
 
-    if( !upload( cb ) ) {
-        return;
-    }
+    if (!upload(opts.cb)) { return; }
 
     const auto count = static_cast<Uint32>(
         std::min( lines_.size(), static_cast<std::size_t>( MAX_LINES ) ) );
 
     // Begin render pass on world target — LOAD to preserve tiles, STORE to keep.
     SDL_GPUColorTargetInfo ct{};
-    ct.texture = target;
+    ct.texture = opts.target;
     ct.load_op = SDL_GPU_LOADOP_LOAD;
     ct.store_op = SDL_GPU_STOREOP_STORE;
-    SDL_GPURenderPass *rp = SDL_BeginGPURenderPass( cb, &ct, 1, nullptr );
-    if( !rp ) {
-        return;
-    }
+    SDL_GPURenderPass* rp = SDL_BeginGPURenderPass(opts.cb, &ct, 1, nullptr);
+    if (!rp) { return; }
 
     // Push camera uniform (vertex slot 0).
     struct FrameParams {
         float cam_x, cam_y;
         float tile_w, tile_h;
-        float target_w, target_h;
+        float proj_w, proj_h;
         float pad0, pad1;
     };
-    const FrameParams fp {
-        .cam_x = cam_x,         .cam_y = cam_y,
-        .tile_w = tile_w,       .tile_h = tile_h,
-        .target_w = static_cast<float>( target_w ),
-        .target_h = static_cast<float>( target_h ),
-        .pad0 = 0.f,            .pad1 = 0.f,
+    const FrameParams fp{
+        .cam_x = opts.cam_x,
+        .cam_y = opts.cam_y,
+        .tile_w = opts.tile_w,
+        .tile_h = opts.tile_h,
+        .proj_w = static_cast<float>(opts.proj_w),
+        .proj_h = static_cast<float>(opts.proj_h),
+        .pad0 = 0.f,
+        .pad1 = 0.f,
     };
 
-    SDL_BindGPUGraphicsPipeline( rp, pipeline_ );
-    SDL_PushGPUVertexUniformData( cb, 0, &fp, sizeof( fp ) );
+    SDL_BindGPUGraphicsPipeline(rp, pipeline_);
+    SDL_PushGPUVertexUniformData(opts.cb, 0, &fp, sizeof(fp));
 
     const SDL_GPUViewport vp { 0.0f, 0.0f,
                                static_cast<float>( target_w ),

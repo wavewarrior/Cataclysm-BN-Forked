@@ -28,6 +28,21 @@ struct debug_line_vertex {
 };
 static_assert( sizeof( debug_line_vertex ) == 32 );
 
+/// Options for record(): the NDC transform comes from the proj_* fields, the
+/// render-pass viewport from the target_* fields.
+struct debug_line_record_options {
+    SDL_GPUCommandBuffer* cb = nullptr;
+    SDL_GPUTexture* target = nullptr;
+    std::uint32_t target_w = 0; ///< PHYSICAL texture px — viewport only
+    std::uint32_t target_h = 0;
+    std::uint32_t proj_w = 0; ///< LOGICAL projection px — same space as tile_w and sprite dst
+    std::uint32_t proj_h = 0;
+    float cam_x = 0.0f; ///< tile-space camera origin (pixel = (tile - cam) * tile_w)
+    float cam_y = 0.0f;
+    float tile_w = 32.0f; ///< logical px per tile
+    float tile_h = 32.0f;
+};
+
 class debug_line_pass {
 public:
     debug_line_pass() = default;
@@ -59,14 +74,12 @@ public:
     auto add_arrow( float cx, float cy, float dx, float dy, float length,
                     float r, float g, float b, float a ) -> void;
 
-    /// Upload buffered lines and draw them onto @p target.
+    /// Upload buffered lines and draw them onto @p opts.target.
     /// Camera params convert world-tile to NDC:
     ///   pixel = (tile - cam) * tile_px
-    ///   ndc   = pixel / (target * 0.5) - 1.0
-    auto record( SDL_GPUCommandBuffer *cb, SDL_GPUTexture *target,
-                 std::uint32_t target_w, std::uint32_t target_h,
-                 float cam_x, float cam_y,
-                 float tile_w, float tile_h ) -> void;
+    ///   ndc   = pixel / (proj * 0.5) - 1.0
+    /// NDC comes from the proj_* fields; the viewport from the target_* fields.
+    auto record(const debug_line_record_options& opts) -> void;
 
     /// Reset the per-frame line buffer.
     auto clear() noexcept -> void;

@@ -1218,7 +1218,7 @@ auto render_world_pass_w( lighting::render_state &rs,
         const float tp = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
         // cam = tile-space camera origin so that:
         //   pixel = (tile - cam) * tile_px
-        //   ndc   = pixel / (target * 0.5) - 1
+        //   ndc   = pixel / (proj * 0.5) - 1
         //
         // camera_off is DEFINED as `op / tile_width - o` (cata_tiles.h:1331), so
         // -camera_off is already the effective origin
@@ -1229,9 +1229,11 @@ auto render_world_pass_w( lighting::render_state &rs,
         // because op_x is 0 in non-iso mode, which hid the same error there.
         const float cam_x = -s_emo.cam_off_x;
         const float cam_y = -s_emo.cam_off_y;
-        rs.debug_lines().record( ctx.cmd_buffer, wt->texture(),
-                                 wt->width(), wt->height(),
-                                 cam_x, cam_y, tp, tp );
+        rs.debug_lines().record( { .cb = ctx.cmd_buffer, .target = wt->texture(),
+                                   .target_w = wt->width(), .target_h = wt->height(),
+                                   .proj_w = static_cast<std::uint32_t>( proj_w ),
+                                   .proj_h = static_cast<std::uint32_t>( proj_h ),
+                                   .cam_x = cam_x, .cam_y = cam_y, .tile_w = tp, .tile_h = tp } );
     }
 
     // Decorative "smoke and mirrors" light glow (emitter_glow_pass) — draws a

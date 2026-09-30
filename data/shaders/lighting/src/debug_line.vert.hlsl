@@ -13,7 +13,7 @@ StructuredBuffer<LineSegment> Lines : register( t0, space0 );
 cbuffer FrameParams : register( b0, space1 ) {
     float cam_x, cam_y;       // camera origin (tile units)
     float tile_w, tile_h;     // tile size (pixels)
-    float target_w, target_h; // render target size (pixels)
+    float proj_w, proj_h;     // logical projection size (px), same space as tile_w
     float pad0, pad1;
 };
 
@@ -31,11 +31,11 @@ VS_OUT main( uint vid : SV_VertexID, uint iid : SV_InstanceID )
     const float wy = ( vid == 0 ) ? seg.ay : seg.by;
 
     // World-tile → screen-pixel → NDC.
-    // Matches sprite.vert.hlsl's: ndc = dst_px / target * 2 - 1
+    // Matches sprite.vert.hlsl's: ndc = dst_px / proj * 2 - 1
     const float px = ( wx - cam_x ) * tile_w;
     const float py = ( wy - cam_y ) * tile_h;
-    const float ndc_x =  ( px / target_w ) * 2.0 - 1.0;
-    const float ndc_y = -( ( py / target_h ) * 2.0 - 1.0 );
+    const float ndc_x =  ( px / proj_w ) * 2.0 - 1.0;
+    const float ndc_y = -( ( py / proj_h ) * 2.0 - 1.0 );
 
     VS_OUT o;
     o.pos    = float4( ndc_x, ndc_y, 0.0, 1.0 );

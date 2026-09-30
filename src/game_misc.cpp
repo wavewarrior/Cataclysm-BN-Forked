@@ -1806,7 +1806,10 @@ void game::toggle_box2d_debug_draw()
 {
     if( auto *pw = m.get_physics_world() ) {
         const auto enabled = pw->toggle_debug_draw();
-        add_msg( string_format( "Box2D debug overlay %s", enabled ? "enabled" : "disabled" ) );
+        add_msg( enabled
+                 ? string_format( "Box2D debug overlay enabled (%zu bodies, %zu terrain)",
+                                  pw->world_body_count(), pw->terrain_body_count() )
+                 : std::string( "Box2D debug overlay disabled" ) );
     } else {
         add_msg( "Box2D not active (no physics world)" );
     }
