@@ -731,6 +731,9 @@ permanent instead of finishing it: document the contract, keep exactly one recon
 
 ## Stage E — continuous rendering (parallel with A–D, blocks only F)
 
+Driven/partner-driven subset (composite, continuous pose, riders) is delivered by
+`plans/vehicle-drive-composite-path.md`; E for all vehicles remains open.
+
 Today a vehicle cannot be drawn at an arbitrary angle: `draw_from_id_string` collapses a vehicle
 part's rotation to 4-way (`true_rota = 3 - face.dir4();`, `src/cata_tiles.cpp:2013`), fed from a
 whole-degree rounding of `part_display_direction` (`src/cata_tiles_draw_layers.cpp:643-644`,

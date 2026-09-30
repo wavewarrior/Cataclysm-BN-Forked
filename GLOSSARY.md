@@ -29,3 +29,33 @@ A frame on which the cached lighting fields (distance field, sky access, and GI 
 recomputed because the world's structure changed: terrain, z-level, a bubble shift, or camera
 drift. Frames that reuse those caches are not rebuilds.
 _Avoid_: dirty, invalidate (as nouns)
+
+## Vehicles
+
+**Heading**
+The direction a vehicle currently points.
+_Avoid_: facing, face, direction
+
+**Steer target**
+The heading a vehicle will turn to once it moves.
+_Avoid_: turn_dir, intended heading, turn target
+
+**Pre-steer**
+A steer target set while the vehicle is stopped; it changes nothing until the vehicle moves.
+_Avoid_: stationary turn
+
+**Driven vehicle**
+The vehicle whose controls the avatar is operating, in person or by remote.
+_Avoid_: controlled vehicle, player vehicle
+
+**Partner-driven vehicle**
+In co-op, the vehicle whose controls the other player is operating.
+_Avoid_: remote vehicle, proxy vehicle
+
+**Rolling**
+A vehicle with any nonzero speed.
+_Avoid_: moving (ambiguous with grab/drag), in motion
+
+**Coasting**
+A rolling vehicle that no one is driving.
+_Avoid_: freewheeling, drifting
