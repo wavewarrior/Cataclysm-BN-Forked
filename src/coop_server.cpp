@@ -1081,10 +1081,9 @@ if( move_cmd.kind == player_cmd_kind::move ) {
     if( key == "VEH_CONTROL" ) {
     // D1: the client took or let go of the controls (and maybe turned the engine
     // on/off).  Mirror it on the proxy so the host's sim sees a driver.
-    // NOTE: single-player never assigns `engine_on = true` after the start loop
-    // (src-wide grep): is_engine_on() is "part available && enabled", and
-    // vehicle::start_engines() enables every unbroken engine first
-    // (vehicle_use.cpp:1243-1247).  We therefore mirror that enable-all guard and
+    // Mirrors start_engines_activity_actor::finish(): is_engine_on() is "part
+    // available && enabled" and the actor's start loop enables every unbroken engine
+    // first (vehicle_use.cpp:1243-1247), so we apply the same enable-all guard and
     // derive engine_on from how many engines actually started.
     bool on = false;
     bool engine = false;

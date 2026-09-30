@@ -941,6 +941,12 @@ void start_engines_activity_actor::finish( player_activity& act, Character& who 
         }
     }
 
+    // Did any engines start? This flag is what gates total_power_w(), so leaving it
+    // false gives the vehicle 0 W and thrust() refuses to move it.
+    veh->engine_on = started > 0;
+    // init working engine noise
+    sfx::do_vehicle_engine_sfx();
+
     if( started == 0 ) {
         if( attempted == 0 ) {
             add_msg( _( "No engines are running." ) );
@@ -961,9 +967,11 @@ void start_engines_activity_actor::finish( player_activity& act, Character& who 
         }
     }
 
+    // The engine refused to start while parked: let go again, as the pre-actor
+    // handler did. vehicle::start_engines() already announced taking control.
     if( take_control && !veh->engine_on && !veh->velocity ) {
-        p.controlling_vehicle = true;
-        add_msg( _( "You take control of the %s." ), veh->name );
+        p.controlling_vehicle = false;
+        add_msg( _( "You let go of the controls." ) );
     }
 }
 

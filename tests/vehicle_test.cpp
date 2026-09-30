@@ -19,6 +19,7 @@
 #include "monster.h"
 #include "options_helpers.h"
 #include "overmapbuffer.h"
+#include "player_activity.h"
 #include "state_helpers.h"
 #include "type_id.h"
 #include "units_utility.h"
@@ -1275,6 +1276,122 @@ TEST_CASE("rolling_steering_turns_vehicle", "[vehicle][steering]") {
     get_map().vehmove();
 
     CHECK(deg_of(veh.face.dir()) == 15);
+}
+
+namespace {
+
+/// Pavement + car_test at (65,65,0) with the avatar boarded on the CONTROLS tile and
+/// actually in control, so `player_in_control` holds for real (no IN_CONTROL_OVERRIDE).
+/// (65,65) keeps every part tile in the avatar's centre submap: boarding's
+/// update_map() then does not shift the bubble out from under the pointers.
+auto make_driving_fixture() -> vehicle* {
+    clear_all_state();
+    build_test_map(ter_id("t_pavement"));
+    map& here = get_map();
+    vehicle* veh =
+        here.add_vehicle(vproto_id("car_test"), tripoint_bub_ms(65, 65, 0), 0_degrees, 100, 0);
+    REQUIRE(veh != nullptr);
+    const auto controls = veh->bub_part_location(
+        veh->get_avail_parts("CONTROLS").begin()->part_index());
+    avatar& you = get_avatar();
+    you.setpos(controls);
+    here.board_vehicle(controls, &you);
+    REQUIRE(you.in_vehicle);
+    REQUIRE(veh->avail_part_with_feature(here.veh_at(you.bub_pos())->part_index(), "CONTROLS", true)
+            >= 0);
+    you.controlling_vehicle = true;
+    you.set_skill_level(skill_id("driving"), 10);
+    veh->engine_on = true;
+    REQUIRE(veh->player_in_control(you));
+    return veh;
+}
+
+} // namespace
+
+// The in-game repro, end to end: a mint-condition car has its engine OFF, the driver
+// takes control and starts the engines through the real activity, and only then can
+// the throttle move it. Guards `start_engines_activity_actor::finish`, which must
+// record on the vehicle how many engines actually started: with `engine_on` left
+// false, total_power_w() is 0, so thrust() refuses to do anything and the HUD reads
+// "SPD 0/0 km/h / ENG OFF" no matter how many times the driver presses Up.
+TEST_CASE("starting_engines_from_the_controls_lets_the_car_roll", "[vehicle][steering]") {
+    const auto reverse_steering = override_option("REVERSE_STEERING", "false");
+    vehicle* veh_ptr = make_driving_fixture();
+    vehicle& veh = *veh_ptr;
+    avatar& you = get_avatar();
+    // Back to the state a freshly spawned car is in: engine off, not yet controlled.
+    veh.engine_on = false;
+    you.controlling_vehicle = false;
+    CAPTURE(veh.fuel_left(itype_id("battery")), veh.fuel_left(itype_id("gasoline")));
+
+    // The real key press: ACTION_CONTROL_VEHICLE -> vehicle::start_engines( true ).
+    veh.start_engines(true);
+    REQUIRE(you.activity);
+    // Bounded instead of process_activity() so a completion regression reports a
+    // failure rather than spinning.
+    for (int i = 0; i < 200 && you.activity; ++i) {
+        you.moves = you.get_speed();
+        you.activity->do_turn(you);
+    }
+    CAPTURE(veh.engine_on, veh.velocity);
+    REQUIRE_FALSE(you.activity);
+
+    CHECK(veh.engine_on);
+    CHECK(you.controlling_vehicle);
+    CHECK(veh.max_velocity() > 0);
+
+    veh.cruise_on = true;
+    veh.cruise_velocity = 0;
+    you.set_moves(100);
+    veh.pldrive(you, tripoint_rel_veh{0, -1, 0});
+    CHECK(veh.cruise_velocity > 0);
+
+    for (int turn = 0; turn < 3; ++turn) { get_map().vehmove(); }
+    CHECK(veh.velocity > 0);
+}
+
+// The in-game repro: stopped, engine on, cruise on, one Up press, then turns go by.
+// Must reach a positive speed. Guards the Step 2 thrust-from-stop change and the
+// Step 5 cruise-driver lookup through the real player_in_control path.
+TEST_CASE("pulling_away_with_cruise_accelerates", "[vehicle][steering]") {
+    const auto reverse_steering = override_option("REVERSE_STEERING", "false");
+    vehicle* veh_ptr = make_driving_fixture();
+    vehicle& veh = *veh_ptr;
+    avatar& you = get_avatar();
+    veh.cruise_on = true;
+    veh.cruise_velocity = 0;
+
+    you.set_moves(100);
+    veh.pldrive(you, tripoint_rel_veh{0, -1, 0});
+    CHECK(veh.cruise_velocity > 0);
+
+    for (int turn = 0; turn < 3; ++turn) { get_map().vehmove(); }
+    CHECK(veh.velocity > 0);
+}
+
+// Same, with a pre-steer queued first: the queued steer target must survive the
+// first thrust and the vehicle must still roll.
+TEST_CASE("pulling_away_with_cruise_after_presteer_accelerates", "[vehicle][steering]") {
+    const auto reverse_steering = override_option("REVERSE_STEERING", "false");
+    vehicle* veh_ptr = make_driving_fixture();
+    vehicle& veh = *veh_ptr;
+    avatar& you = get_avatar();
+    veh.cruise_on = true;
+    veh.cruise_velocity = 0;
+
+    you.set_moves(100);
+    veh.pldrive(you, tripoint_rel_veh{1, 0, 0});
+    CHECK(deg_of(veh.face.dir()) == 0);
+    CHECK(deg_of(veh.turn_dir) == 15);
+
+    you.set_moves(100);
+    veh.pldrive(you, tripoint_rel_veh{0, -1, 0});
+    CHECK(veh.cruise_velocity > 0);
+    CHECK(deg_of(veh.turn_dir) == 15);
+
+    for (int turn = 0; turn < 3; ++turn) { get_map().vehmove(); }
+    CHECK(veh.velocity > 0);
+    CHECK(deg_of(veh.turn_dir) == 15);
 }
 
 namespace {
