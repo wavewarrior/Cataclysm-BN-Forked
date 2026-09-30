@@ -36,7 +36,7 @@
 //   slot0.xyz = pos       slot0.w = radius
 //   slot1.xyz = color     slot1.w = falloff
 //   slot2.xy  = cone_dir  slot2.z = cone_half_angle  slot2.w = asfloat(shape)
-//   slot3.x   = asfloat(flicker_seed)   slot3.y = flicker_amp (Step 5)   slot3.zw = pad1/2
+//   slot3.x   = asfloat(flicker_seed)   slot3.y = flicker_amp (Step 5)   slot3.zw = window_portal/window_direct (CPU-only, unread here)
 #include "attenuation.hlsl"
 
 struct GpuEmitter {

@@ -37,6 +37,7 @@
 #include "lighting/godray_shaft_pass.h"
 #include "lighting/dust_mote_effect.h"
 #include "lighting/frame_build.h"
+#include "lighting/overmap_view_flag.h"
 #include "lighting/rmlui_layer.h"
 #include "lighting/render_state.h"
 #include "lighting/sdf_pass.h"
@@ -1229,7 +1230,7 @@ auto render_world_pass_w( lighting::render_state &rs,
     // daylight even after excluding it from the ambient ceiling clamp, but a
     // fire/torch should still visually read as a light source. See
     // emitter_glow_pass.h.
-    if( g_glow_enable && !s_emo.snap.empty() ) {
+    if( g_glow_enable && !s_emo.snap.empty() && !lighting::overmap_view_open ) {
         const float tp = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
         // Cull to the player's z-level and a generous on-screen radius so the
         // instance list stays small regardless of how many emitters exist in
@@ -1320,9 +1321,14 @@ auto render_world_pass_w( lighting::render_state &rs,
     // make_cone calls) — no new detection pass. Same VIS_CLEAR visibility gate
     // as the emitter-glow builder above, so a shaft/mote can only appear where
     // the player already sees the window (the emitter-glow-pass FoW lesson).
-    if( ( g_shaft_enable || g_dust_enable ) && !s_emo.snap.empty() && !diagnostic_view_active() ) {
+    if( ( g_shaft_enable || g_dust_enable ) && !s_emo.snap.empty() && !diagnostic_view_active()
+        && !lighting::overmap_view_open ) {
         const float tp = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
         constexpr float CULL_RADIUS_TILES = 48.f;
+        // Minimum direct-sun term (snapshot.cpp: 225 * cos(facing) * sun_intensity)
+        // for a window to cast a visible shaft. Rejects grazing sun (beam parallel
+        // to the wall), night and overcast; those windows keep their room light.
+        constexpr float k_min_direct = 6.0f;
         // Elevation-based reach only (NOT direction — see below): a lower sun
         // makes for a longer, more raking beam, same cot(elev) idiom as
         // sprite_batcher.cpp's shadow shear (:281-282), floored the same way
@@ -1349,17 +1355,25 @@ auto render_world_pass_w( lighting::render_state &rs,
             const lit_level ell = shaft_lc.inbounds( epos ) ? shaft_lc.visibility_cache[shaft_lc.idx( ex, ey )]
                                   : lit_level::BLANK;
             if( shaft_map.get_visibility( ell, shaft_vis_cache ) != VIS_CLEAR ) { continue; }
+            // Window cones only draw a shaft when the window sits in a wall run
+            // (cone_dir is then the wall's inward normal) and the sun actually
+            // shines through the glass. Flashlight/headlight cones carry
+            // window_portal == 0 and pass untouched.
+            if( e.window_portal > 0.f
+                && ( e.window_portal < lighting::WINDOW_PORTAL_WALL || e.window_direct < k_min_direct ) ) {
+                continue;
+            }
 
-            // Beam direction: the emitter's OWN cone_dir — for a window this is
-            // already "into the room" (snapshot.cpp's -out_dx/-out_dy, the wall's
-            // outward normal reversed); for a flashlight/headlight CONE (also
-            // caught here, since this pass reuses the CONE-emitter list wholesale
-            // per plan — no new detection) it is the direction that light
-            // actually points. Deliberately NOT the global sun direction: that
-            // would point every non-sun-facing window's beam the same wrong way
-            // and would vanish outright at night.
-            const float dir_x = e.cone_dir_x;
-            const float dir_y = e.cone_dir_y;
+            // Beam direction. A window shaft is sunlight through the glass, so it
+            // runs along the direction sunlight travels (sun_dir, the same vector
+            // the sun debug arrow draws), not the wall normal. The gate above
+            // guarantees window_direct > 0, i.e. inward_normal . sun_dir > 0, so
+            // this always points into the room; windows the sun does not reach
+            // (and every window at night) were culled there. Flashlight/headlight
+            // CONEs keep their own cone_dir, the way that light actually points.
+            const bool sun_beam = e.window_portal >= lighting::WINDOW_PORTAL_WALL;
+            const float dir_x = sun_beam ? rs.current_sun().sun_dir_x : e.cone_dir_x;
+            const float dir_y = sun_beam ? rs.current_sun().sun_dir_y : e.cone_dir_y;
             const float cr = e.r > 0.01f ? e.r : 1.0f;
             const float cg = e.g > 0.01f ? e.g : 1.0f;
             const float cb = e.b > 0.01f ? e.b : 1.0f;

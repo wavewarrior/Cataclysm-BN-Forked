@@ -216,18 +216,24 @@ cmake --build --preset linux-full --target cataclysm-bn-tiles cata_test-tiles
 deno task docs:gen
 ```
 
-- **Binary path (HARD — verify before trusting ANY test result)**: on `osx-arm-slim` both
-  `cataclysm-bn-tiles` **and `cata_test-tiles` link to the REPO ROOT**, not to
-  `out/build/<preset>/`. The `out/build/osx-arm-slim/tests/cata_test-tiles` path is a
-  months-old leftover that still runs, still exits 0/1, and silently reports results for
-  code that no longer exists — a stale binary here produced a full phantom diagnosis of a
-  "missing sidebar widget" that did not exist, because the July build asserted `== 30`
-  while the tree asserted `== 31`. Always run `./cata_test-tiles` on this preset, and
-  `stat` the binary's mtime against the build you just ran before believing a failure:
+- **Binary path (HARD — verify before trusting ANY test result)**: where
+  `cataclysm-bn-tiles` and `cata_test-tiles` land depends on the build type the cache was
+  **first** configured with. `CMakeLists.txt:256-265` sets `CMAKE_RUNTIME_OUTPUT_DIRECTORY`
+  to the repo root only when `CMAKE_BUILD_TYPE` is `Debug`, and it is a `CACHE` variable, so
+  once a Debug configure writes it, every later build of that preset keeps going to the root
+  until the cache is cleared. Debug → `./cataclysm-bn-tiles`, `./cata_test-tiles`.
+  RelWithDebInfo/Release (the current `osx-arm-slim`) → `out/build/<preset>/src/` and
+  `out/build/<preset>/tests/`. Whichever location is NOT live holds a leftover that still
+  runs, still exits 0/1, and silently reports results for code that no longer exists. A stale
+  binary once produced a full phantom diagnosis of a "missing sidebar widget" that did not
+  exist: the old build asserted `== 30` while the tree asserted `== 31`. Never trust either
+  path's reputation; compare mtimes against the build you just ran:
   ```sh
-  ls -l ./cata_test-tiles out/build/osx-arm-slim/tests/cata_test-tiles
-  ./cata_test-tiles "[filter]" --rng-seed 1
+  ls -lT ./cata_test-tiles out/build/osx-arm-slim/tests/cata_test-tiles \
+         ./cataclysm-bn-tiles out/build/osx-arm-slim/src/cataclysm-bn-tiles
+  <newest>/cata_test-tiles "[filter]" --rng-seed 1
   ```
+  The same applies to the game binary before any in-game check.
 
 - **Commit**: Commit **ATOMICALLY**. **MUST** Follow [Conventional Commits](./docs/en/contribute/changelog_guidelines.md). **MUST NOT** add body/footer unless critical.
 
@@ -298,9 +304,10 @@ diffs as numbers plus an ASCII delta grid, so frames stay on disk. Measured: a 6
 ## Testing & QA
 
 - **Framework**: Catch2 v3 (amalgamated, bundled in `tests/catch/`).
-- **Binary**: `./out/build/<preset>/tests/cata_test-tiles` — run with optional filter string, e.g. `"[item]"` or `"~[.]"`.
-  **On `osx-arm-slim` this path is a stale leftover: the fresh test binary links to `./cata_test-tiles` in the repo root.**
-  Check the mtime before trusting a result — see the binary-path rule under "WHEN working on code changes".
+- **Binary**: `out/build/<preset>/tests/cata_test-tiles` for RelWithDebInfo/Release caches,
+  `./cata_test-tiles` for caches first configured as Debug. Run it with an optional filter
+  string, e.g. `"[item]"` or `"~[.]"`. Check the mtime before trusting a result; see the
+  binary-path rule under "WHEN working on code changes".
 - **Pre-existing failures** (current tree, not caused by your diff): `translation_text_style_check`
   and `translation_text_style_check_error_recovery` in `tests/json_test.cpp`. Both are `[.]`-tagged
   (excluded by default; a bare `"[json]"` filter opts them IN) and expect a debugmsg they never get,

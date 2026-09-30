@@ -22,6 +22,7 @@
 #include "ime.h"
 #include "input.h"
 #include "int_id.h"
+#include "lighting/overmap_view_flag.h"
 #include "lighting/rmlui_layer.h"
 #include "line.h"
 #include "map.h"
@@ -1537,6 +1538,10 @@ static tripoint_abs_omt display( const tripoint_abs_omt &orig,
     on_out_of_scope restore_stdscr_backdrop( []() {
         cata_cursesport::set_window_transparent_backdrop( catacurses::stdscr, false );
     } );
+    // World-only overlays (emitter glow, godray shafts, dust motes) stay off while
+    // the overmap is on screen; see lighting/overmap_view_flag.h.
+    restore_on_out_of_scope<bool> restore_overmap_view( lighting::overmap_view_open );
+    lighting::overmap_view_open = true;
 
     ui_adaptor ui;
     ui.on_screen_resize( []( ui_adaptor & ui ) {

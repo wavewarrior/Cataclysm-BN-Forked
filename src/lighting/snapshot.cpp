@@ -155,12 +155,34 @@ static emitter_pos face_offset(const level_cache& mc, int lx, int ly) {
     return {cx + dx / len * PUSH, cy + dy / len * PUSH};
 }
 
+namespace {
+
+/// Neighbour class for the window-portal wall-axis probe in collect_zlev.
+enum class portal_nb { outside, wall, floor, missing };
+
+} // namespace
+
 static void collect_zlev(map& m, int zlev, const sun_params& sun, std::vector<gpu_emitter>& out) {
     const int mapsize = m.getmapsize();
     // Step 4b: terrain/furniture/field/item emitters sitting inside their own opaque
     // tile are pushed onto the wall face. Creatures are excluded — they never stand
     // inside a wall, and their positions already carry the sprite slide offset.
     const level_cache& mc = m.access_cache(zlev);
+    // Neighbour class for the window wall-axis probe. WALL is tested BEFORE outside:
+    // outside_cache is dilated (a tile is outside when any tile in the 3x3 above is
+    // open sky, submap::rebuild_outside_cache), so on a footprint-only roof the
+    // perimeter walls flanking a window read outside. WALL = blocks light outright
+    // (transparency 0 is solid) or is part of a wall run (walls, windows and doors
+    // connect to walls); anything else is OUTSIDE ground or roofed room FLOOR.
+    const auto classify_nb = [&](int x, int y) -> portal_nb {
+        if (x < 0 || y < 0 || x >= mc.cache_x || y >= mc.cache_y) { return portal_nb::missing; }
+        const int i = mc.idx(x, y);
+        if (mc.transparency_cache[i] <= LIGHT_TRANSPARENCY_SOLID
+            || m.ter(tripoint_bub_ms{x, y, zlev})->has_flag(TFLAG_CONNECT_TO_WALL)) {
+            return portal_nb::wall;
+        }
+        return mc.outside_cache[i] != 0 ? portal_nb::outside : portal_nb::floor;
+    };
 
     for (int smx = 0; smx < mapsize; ++smx) {
         for (int smy = 0; smy < mapsize; ++smy) {
@@ -198,19 +220,36 @@ static void collect_zlev(map& m, int zlev, const sun_params& sun, std::vector<gp
                         auto out_dy = 0.0f;
                         auto has_outside = false;
                         auto has_inside = false;
+                        // A window embedded in a wall run: outside on one side, room
+                        // floor straight across, wall on both flanks. Its outward
+                        // direction is then the wall's normal, so the shaft built from
+                        // cone_dir runs perpendicular to the wall and into the room.
+                        // Otherwise (glazed corner, open flank) fall back to the first
+                        // outside cardinal: still a room light, never a shaft.
+                        auto wall_axis = false;
                         for (const auto& [dx, dy] : cardinals) {
                             const int nx = lx + dx;
                             const int ny = ly + dy;
                             if (nx < 0 || ny < 0 || nx >= mc.cache_x || ny >= mc.cache_y) {
                                 continue;
                             }
-                            const bool n_outside = mc.outside_cache[mc.idx(nx, ny)] != 0;
-                            if (n_outside && !has_outside) {
+                            if (mc.outside_cache[mc.idx(nx, ny)] == 0) {
+                                has_inside = true;
+                                continue;
+                            }
+                            if (!has_outside) {
                                 out_dx = static_cast<float>(dx);
                                 out_dy = static_cast<float>(dy);
                                 has_outside = true;
                             }
-                            if (!n_outside) { has_inside = true; }
+                            if (!wall_axis && classify_nb(nx, ny) == portal_nb::outside
+                                && classify_nb(lx - dx, ly - dy) == portal_nb::floor
+                                && classify_nb(lx - dy, ly + dx) == portal_nb::wall
+                                && classify_nb(lx + dy, ly - dx) == portal_nb::wall) {
+                                out_dx = static_cast<float>(dx);
+                                out_dy = static_cast<float>(dy);
+                                wall_axis = true;
+                            }
                         }
                         if (has_outside && has_inside) {
                             // sun_dir is the direction light TRAVELS (sun -> ground -> shadow),
@@ -249,9 +288,13 @@ static void collect_zlev(map& m, int zlev, const sun_params& sun, std::vector<gp
                                 const float r = sun.sun_r * w + sun.sky_r * (1.0f - w);
                                 const float g = sun.sun_g * w + sun.sky_g * (1.0f - w);
                                 const float b = sun.sun_b * w + sun.sky_b * (1.0f - w);
-                                out.push_back(
-                                    make_cone(ep.x, ep.y, zlev, lum, r, g, b, -out_dx, -out_dy,
-                                              units::to_radians(80_degrees)));
+                                gpu_emitter cone = make_cone(
+                                    ep.x, ep.y, zlev, lum, r, g, b, -out_dx, -out_dy,
+                                    units::to_radians(80_degrees));
+                                cone.window_portal =
+                                    wall_axis ? WINDOW_PORTAL_WALL : WINDOW_PORTAL_UNCLASSIFIED;
+                                cone.window_direct = direct;
+                                out.push_back(cone);
                             }
                         }
                     }

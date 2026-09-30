@@ -48,9 +48,19 @@ struct gpu_emitter {
     // 0.0=steady (lamps, headlights, electric/ambiguous sources) .. ~0.15=fire/torch
     // breathe. Set in snapshot.cpp's collect_zlev per-source branches. Was pad0.
     float flicker_amp;
-    float pad1, pad2; // Padding to reach 64 bytes.
+    // Window-portal CONE tag (snapshot.cpp collect_zlev), read CPU-side only by the
+    // godray shaft/dust builder; the shader ignores both lanes (slot3.zw). Were pad1/pad2.
+    // window_portal: 0 = not a window, 0.5 = window whose wall axis could not be
+    // classified (light only), 1 = window embedded in a wall run (cone_dir is the
+    // wall's inward normal). window_direct: the direct-sun term through the glass.
+    float window_portal;
+    float window_direct;
 };
 static_assert(sizeof(gpu_emitter) == 64, "gpu_emitter must be 64 bytes (wire-stable)");
+
+// gpu_emitter::window_portal values.
+inline constexpr auto WINDOW_PORTAL_UNCLASSIFIED = 0.5f;
+inline constexpr auto WINDOW_PORTAL_WALL = 1.0f;
 
 // Per-frame emitter budget.
 // Estimate: my_MAPSIZE=11 → ~132×132 tiles/z-level; 1–3% emitting ≈ 500–5K.
