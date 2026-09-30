@@ -30,7 +30,7 @@ RWStructuredBuffer<float> RcAtlas  : register(u0, space1);
 
 // RC_CASCADES mirrors src/lighting/rc_params.h — a shader cannot include a
 // C++ header; keep the two in lockstep by hand.
-static const uint RC_CASCADES = 5u;
+static const uint RC_CASCADES = 4u;
 
 cbuffer RcParams : register(b0, space2) {
     uint  map_w;      // cascade-0 (tile) grid width

@@ -16,7 +16,7 @@ StructuredBuffer<float>   RcAtlas : register(t0, space0);
 StructuredBuffer<float>   SdfBuf  : register(t1, space0);
 RWStructuredBuffer<float> GiOut   : register(u0, space1);
 
-static const uint RC_CASCADES = 5u;
+static const uint RC_CASCADES = 4u;
 
 cbuffer RcParams : register(b0, space2) {
     uint  map_w;

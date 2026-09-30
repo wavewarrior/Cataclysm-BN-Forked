@@ -27,12 +27,12 @@
 namespace lighting {
 
 /// Number of cascades. Reach = RC_C0_PROBE_SPACING * (4^RC_CASCADES - 1) / 3
-/// tiles; 5 reaches 341 tiles, comfortably beyond the ~180-tile reality
-/// bubble. Drop to 4 (reach 85 tiles, still > the 46x26 viewport) if the
-/// frame-cost verification (Stage 7 item 12) misses budget — trade reach,
-/// never RC_C0_DIRS or RC_C0_PROBE_SPACING (those govern near-field contact
-/// shadow quality, the property RC is adopted for).
-inline constexpr std::uint32_t RC_CASCADES = 5u;
+/// tiles; 4 cascades reach 85 tiles, which covers the 90x47 viewport's width
+/// but not its full diagonal (~101). A fifth (reach 341) only carried GI arriving
+/// from >85 tiles away; dropped by the lighting-precision-simplification plan, step 5.
+/// Trade reach, never RC_C0_DIRS or RC_C0_PROBE_SPACING (those govern near-field
+/// contact shadow quality, the property RC is adopted for).
+inline constexpr std::uint32_t RC_CASCADES = 4u;
 /// Cascade-0 probe spacing, in tiles. One probe per tile — matches the
 /// pre-Stage-7 GI resolution exactly.
 inline constexpr float RC_C0_PROBE_SPACING = 1.0f;

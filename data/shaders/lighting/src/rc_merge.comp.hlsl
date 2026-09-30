@@ -34,7 +34,7 @@
 
 RWStructuredBuffer<float> RcAtlas : register(u0, space1);
 
-static const uint RC_CASCADES = 5u;
+static const uint RC_CASCADES = 4u;
 static const uint RC_BRANCH   = 4u;
 
 cbuffer RcParams : register(b0, space2) {
