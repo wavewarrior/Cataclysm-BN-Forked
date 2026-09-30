@@ -62,7 +62,7 @@ emitter_collector::~emitter_collector() {
 void emitter_collector::submit(
     std::vector<gpu_emitter> snapshot, std::vector<uint8_t> transparency, std::vector<float> sdf,
     std::vector<uint8_t> sky_vis, int runtime_w, int runtime_h, std::vector<float> occ,
-    std::vector<float> albedo) {
+    std::vector<float> albedo, int view_count) {
     pending_ = std::move(snapshot);
     pending_transparency_ = std::move(transparency);
     pending_sdf_ = std::move(sdf);
@@ -71,6 +71,7 @@ void emitter_collector::submit(
     pending_sky_vis_ = std::move(sky_vis);
     pending_runtime_w_ = runtime_w;
     pending_runtime_h_ = runtime_h;
+    pending_view_count_ = view_count;
     have_pending_ = true;
 }
 
@@ -86,8 +87,10 @@ void emitter_collector::flush_to_render_cb(SDL_GPUCommandBuffer* cb) {
     std::vector<uint8_t> sky_vis = std::move(pending_sky_vis_);
     const int runtime_w = pending_runtime_w_;
     const int runtime_h = pending_runtime_h_;
+    const int view_count = pending_view_count_;
     pending_runtime_w_ = 0;
     pending_runtime_h_ = 0;
+    pending_view_count_ = -1;
     have_pending_ = false;
 
     if (!xfer_ || !emitter_buf_) { return; }
@@ -147,6 +150,8 @@ void emitter_collector::flush_to_render_cb(SDL_GPUCommandBuffer* cb) {
     SDL_EndGPUCopyPass(cp);
 
     last_count_.store(count, std::memory_order_relaxed);
+    last_view_count_.store(view_count < 0 ? count : std::min(view_count, count),
+                           std::memory_order_relaxed);
 }
 
 } // namespace lighting

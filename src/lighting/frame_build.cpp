@@ -318,10 +318,18 @@ frame_lighting_result build_and_submit_lighting(
         // the emit[0] HUD line.
         result.snapshot_copy = snapshot;
     }
+    // After the HUD copy (glow/shafts/dust want the full list): put emitters that can
+    // reach the camera rect first so sprite shading loops only over those. GI keeps
+    // the full count (it probes off-view tiles).
+    const auto view_count = have_world
+        ? partition_emitters_by_view(
+              snapshot, {.x0 = cam_x0, .y0 = cam_y0, .w = cam_w, .h = cam_h})
+        : static_cast<int>(snapshot.size());
     rs.collector()->submit(
         std::move(snapshot), std::move(transparency), {}, // P3.3: SDF is GPU-only (JFA), no CPU
                                                           // upload needed
-        std::move(sky_vis), sdf_runtime_w, sdf_runtime_h, std::move(occ), std::move(albedo));
+        std::move(sky_vis), sdf_runtime_w, sdf_runtime_h, std::move(occ), std::move(albedo),
+        view_count);
 
     dbg(DL::Debug) << "[lighting] frame_build COMPLETE";
 

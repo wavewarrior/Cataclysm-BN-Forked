@@ -418,7 +418,9 @@ void render_state::begin_lighting_frame(const frame_light_inputs& in) {
     // so the fragment storage-buffer slot always has a valid handle; reads as
     // zero (dark) until the first dispatch. Same all-or-none rationale as gibuf.
     SDL_GPUBuffer* skybuf = sky_.sky_buffer();
-    const Uint32 ne = collector_ ? static_cast<Uint32>(collector_->last_count()) : 0u;
+    // View count, not last_count(): emitters past it cannot reach the camera rect
+    // (frame_build partitions them to the tail). GI keeps the full count.
+    const Uint32 ne = collector_ ? static_cast<Uint32>(collector_->last_view_count()) : 0u;
     const Uint32 sw = sdf_ready ? static_cast<Uint32>(sdf_.map_w()) : 0u;
     const Uint32 sh = sdf_ready ? static_cast<Uint32>(sdf_.map_h()) : 0u;
 

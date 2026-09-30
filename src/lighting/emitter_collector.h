@@ -42,7 +42,10 @@ public:
         // Stage 2b: unified coverage occluder, tile-res, 2 floats/tile.
         std::vector<float> occ = {},
         // GI albedo bleed: tile-res, 4 floats/tile (rgb 0..1 + pad).
-        std::vector<float> albedo = {});
+        std::vector<float> albedo = {},
+        // Leading entries of `snapshot` that can light the camera rect
+        // (partition_emitters_by_view); -1 = all of them.
+        int view_count = -1);
 
     // GRAPHICS_STORAGE_READ buffer handle, sized for MAX_EMITTERS
     // entries. SDL_GPU's cycle=true on upload swaps the underlying
@@ -52,6 +55,12 @@ public:
 
     // Number of emitters in the last completed upload.
     int last_count() const noexcept { return last_count_.load(std::memory_order_relaxed); }
+
+    // Emitters that can light the camera rect; the first N slots of
+    // emitter_buffer(). Sprite shading loops over these only.
+    int last_view_count() const noexcept {
+        return last_view_count_.load(std::memory_order_relaxed);
+    }
 
     // Drains any pending snapshot and records a copy pass on the
     // caller's render command buffer. Same-CB copy→sample ordering
@@ -72,12 +81,14 @@ private:
     std::vector<uint8_t> pending_sky_vis_;
     int pending_runtime_w_ = 0;
     int pending_runtime_h_ = 0;
+    int pending_view_count_ = -1;
     bool have_pending_ = false;
 
     SDL_GPUTransferBuffer* xfer_ = nullptr;
     SDL_GPUBuffer* emitter_buf_ = nullptr;
 
     std::atomic<int> last_count_ = 0;
+    std::atomic<int> last_view_count_ = 0;
 };
 
 } // namespace lighting

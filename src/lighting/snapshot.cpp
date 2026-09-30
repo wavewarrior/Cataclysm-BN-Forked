@@ -626,4 +626,22 @@ std::vector<gpu_emitter> build_emitter_snapshot(
     return out;
 }
 
+auto partition_emitters_by_view(std::vector<gpu_emitter>& emitters,
+                                const emitter_view_rect& view) -> int {
+    if (view.w <= 0 || view.h <= 0) { return static_cast<int>(emitters.size()); }
+    const auto margin = static_cast<float>(EMITTER_VIEW_MARGIN_TILES);
+    const auto rx0 = static_cast<float>(view.x0) - margin;
+    const auto ry0 = static_cast<float>(view.y0) - margin;
+    const auto rx1 = static_cast<float>(view.x0 + view.w) + margin;
+    const auto ry1 = static_cast<float>(view.y0 + view.h) + margin;
+    const auto reaches_view = [&](const gpu_emitter& e) {
+        const auto dx = std::max({rx0 - e.pos_x, 0.0f, e.pos_x - rx1});
+        const auto dy = std::max({ry0 - e.pos_y, 0.0f, e.pos_y - ry1});
+        // Strict: point_light_atten is exactly 0 at dist == radius.
+        return dx * dx + dy * dy < e.radius * e.radius;
+    };
+    const auto culled = std::ranges::stable_partition(emitters, reaches_view);
+    return static_cast<int>(std::distance(emitters.begin(), culled.begin()));
+}
+
 } // namespace lighting
