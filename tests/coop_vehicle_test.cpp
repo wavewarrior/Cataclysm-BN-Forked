@@ -1,12 +1,15 @@
 /**
  * Co-op vehicle tests.
  *
- * Covers the client -> host driving relays (VEH_CONTROL, VEH_DRIVE), the proxy
- * boarding that makes it a real driver, and the host's cruise thrust for a proxy
- * driver, plus the legacy vehicle_state relay still in place.
+ * Step 5 covers the client -> host driving relays (VEH_CONTROL, VEH_DRIVE) and the
+ * proxy boarding that makes it a real driver, plus the host's cruise thrust for a
+ * proxy driver.
+ * Step 6 covers the host -> client vehicle pose stream (the `"vehicles"` sync member):
+ * JSON round-trip, applying a pose to this side's copy, and the host-driven flag.
  *
  * Tags: [coop][vehicle]
  */
+
 #include "avatar.h"
 #include "catch/catch_amalgamated.hpp"
 #include "character.h"
@@ -14,6 +17,7 @@
 #include "coop_server.h"
 #include "coop_session.h"
 #include "coop_sim_transport.h"
+#include "coop_vehicle_sync.h"
 #include "game.h"
 #include "json.h"
 #include "map.h"
@@ -177,13 +181,6 @@ auto proxy_take_control(inproc_harness& h, vehicle& veh) -> void {
     h.tick();
 }
 
-/// Build a vehicle_state JSON packet (type 42) for the given vid and abs position.
-auto make_vehicle_state_json(uint32_t vid, int ax, int ay, int az) -> std::string {
-    return R"({"t":42,"d":{"vid":)" + std::to_string(vid) + R"(,"ax":)" + std::to_string(ax)
-         + R"(,"ay":)" + std::to_string(ay) + R"(,"az":)" + std::to_string(az)
-         + R"(,"face_x":0,"face_y":1,"velocity":0}})";
-}
-
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -254,82 +251,130 @@ TEST_CASE("vehicle: proxy move command boards a vehicle", "[coop][vehicle]") {
     CHECK(h.proxy->bub_pos() == seat);
 }
 
+// ---------------------------------------------------------------------------
+// Step 6: host -> client vehicle pose stream
+// ---------------------------------------------------------------------------
 
-// ----------------------------------------------------------------------------------
-// Legacy vehicle_state relay tests
-// ----------------------------------------------------------------------------------
-TEST_CASE("vehicle: vehicle_state packet relays to host", "[coop][vehicle]") {
-    inproc_harness h;
-    h.setup();
+TEST_CASE("vehicle: pose json round trip", "[coop][vehicle]") {
+    std::vector<coop_vehicle_pose> out = {
+        {
+            .vid = 7,
+            .anchor = tripoint_abs_ms(120, -40, 1),
+            .frac_x = 0.25f,
+            .frac_y = -0.5f,
+            .angle = 0.2618f,
+            .face_deg = 15,
+            .steer_deg = 30,
+            .velocity = 500,
+            .cruise_velocity = 179,
+            .engine_on = true,
+            .authority = true,
+            .host_driving = true,
+        },
+        {
+            .vid = 8,
+            .anchor = tripoint_abs_ms(-3, 0, -2),
+            .frac_x = 0.0f,
+            .frac_y = 0.0f,
+            .angle = 0.0f,
+            .face_deg = 270,
+            .steer_deg = -90,
+            .velocity = -120,
+            .cruise_velocity = 0,
+            .engine_on = false,
+            .authority = false,
+            .host_driving = false,
+        },
+    };
 
-    // Spawn a bicycle at a known position.
-    const tripoint_bub_ms spawn_bub{50, 50, 0};
-    vehicle* veh = g->m.add_vehicle(vproto_id("bicycle"), spawn_bub, 0_degrees, 0, 0);
-    REQUIRE(veh != nullptr);
+    std::ostringstream oss;
+    {
+        JsonOut jout(oss);
+        jout.start_object();
+        jout.member("vehicles");
+        write_coop_vehicle_poses(jout, out);
+        jout.end_object();
+    }
 
-    // Register it in the server's vehicle ID maps.
-    const uint32_t vid = h.srv.register_vehicle_for_test(veh);
-    CHECK(vid > 0);
+    std::istringstream iss(oss.str());
+    JsonIn jin(iss);
+    jin.start_object();
+    const std::string key = jin.get_member_name();
+    CHECK(key == "vehicles");
+    const std::vector<coop_vehicle_pose> in = read_coop_vehicle_poses(jin);
 
-    // Compute the vehicle's current abs position so we can send a delta.
-    const tripoint_abs_ms old_abs = bub_to_abs(veh->bub_ms_location());
-
-    // Target: move the vehicle 3 tiles east.
-    const tripoint_abs_ms new_abs{old_abs.x() + 3, old_abs.y(), old_abs.z()};
-
-    // Inject a vehicle_state packet into the server's transport inbox.
-    h.cli_tx->send(make_vehicle_state_json(vid, new_abs.x(), new_abs.y(), new_abs.z()));
-
-    // Process incoming + server tick (no full world sim needed for vehicle relay).
-    h.srv.process_incoming_for_test();
-    h.srv.coop_world_tick();
-
-    // Verify the vehicle moved to the target position.
-    const tripoint_abs_ms actual_abs = bub_to_abs(veh->bub_ms_location());
-    CHECK(actual_abs.x() == new_abs.x());
-    CHECK(actual_abs.y() == new_abs.y());
-    CHECK(actual_abs.z() == new_abs.z());
+    REQUIRE(in.size() == out.size());
+    CHECK(in[0] == out[0]);
+    CHECK(in[1] == out[1]);
 }
 
-TEST_CASE("vehicle: vehicle_id_map persists across multiple updates", "[coop][vehicle]") {
-    inproc_harness h;
-    h.setup();
-
-    const tripoint_bub_ms spawn_bub{50, 50, 0};
-    vehicle* veh = g->m.add_vehicle(vproto_id("bicycle"), spawn_bub, 0_degrees, 0, 0);
+TEST_CASE("vehicle: apply pose moves and rotates copy", "[coop][vehicle]") {
+    clear_all_state();
+    build_test_map(ter_id("t_pavement"));
+    vehicle* veh =
+        g->m.add_vehicle(vproto_id("car_test"), tripoint_bub_ms(60, 60, 0), 0_degrees, 100, 0);
     REQUIRE(veh != nullptr);
 
-    const uint32_t vid = h.srv.register_vehicle_for_test(veh);
+    const tripoint_abs_ms base = veh->abs_ms_location();
+    const float angle = units::to_radians(15_degrees);
+    const coop_vehicle_pose pose = {
+        .vid = 1,
+        .anchor = tripoint_abs_ms(base.x() + 3, base.y(), base.z()),
+        .frac_x = 0.25f,
+        .frac_y = 0.0f,
+        .angle = angle,
+        .face_deg = 15,
+        .steer_deg = 30,
+        .velocity = 500,
+        .cruise_velocity = 0,
+        .engine_on = true,
+        .authority = true,
+        .host_driving = false,
+    };
 
-    const tripoint_abs_ms base_abs = bub_to_abs(veh->bub_ms_location());
+    CHECK(apply_coop_vehicle_pose(g->m, *veh, pose));
 
-    // Send 3 sequential updates, each moving the vehicle 1 tile further east.
-    for (int i = 1; i <= 3; ++i) {
-        const tripoint_abs_ms target{base_abs.x() + i, base_abs.y(), base_abs.z()};
-        h.cli_tx->send(make_vehicle_state_json(vid, target.x(), target.y(), target.z()));
-        h.srv.process_incoming_for_test();
-        h.srv.coop_world_tick();
+    CHECK(veh->abs_ms_location().x() == base.x() + 3);
+    CHECK(veh->box2d_position_authority);
+    CHECK(veh->physics_angle == Catch::Approx(angle).margin(1e-6f));
+    CHECK(lround(units::to_degrees(normalize(veh->face.dir()))) == 15);
+    CHECK(lround(units::to_degrees(normalize(veh->turn_dir))) == 30);
+    CHECK(veh->velocity == 500);
+    CHECK(veh->engine_on);
 
-        const tripoint_abs_ms actual = bub_to_abs(veh->bub_ms_location());
-        CHECK(actual.x() == target.x());
-        CHECK(actual.y() == target.y());
+    // Part layout must match the authoritative refresh_precalc formula.
+    const float c = std::cos(angle);
+    const float s = std::sin(angle);
+    for (const int p : veh->all_standalone_parts()) {
+        const vehicle_part& vp = veh->cpart(p);
+        const float mx = static_cast<float>(vp.mount.x());
+        const float my = static_cast<float>(vp.mount.y());
+        const point_rel_ms want{std::lround(mx * c - my * s), std::lround(mx * s + my * c)};
+        CHECK(vp.precalc[0] == want);
     }
 }
 
-TEST_CASE("vehicle: unknown vid is silently ignored", "[coop][vehicle]") {
+TEST_CASE("vehicle: host sync flags the host-driven vehicle", "[coop][vehicle]") {
     inproc_harness h;
     h.setup();
+    vehicle* veh = spawn_drivable_car(h);
 
-    // Send a vehicle_state packet with a vid that is NOT registered.
-    // This must not crash or assert — the server silently ignores unknown vids.
-    h.cli_tx->send(make_vehicle_state_json(9999, 60, 60, 0));
+    const tripoint_bub_ms ctrl = controls_pos(*veh);
+    REQUIRE(ctrl != tripoint_bub_ms::zero());
+    // Standing on the controls tile with controlling_vehicle is what player_in_control
+    // checks; boarding is unnecessary and would fight the harness's reconcile.
+    g->u.setpos(map_local_to_abs(g->m, ctrl));
+    g->u.set_skill_level(skill_id("driving"), 10);
+    g->u.controlling_vehicle = true;
+    REQUIRE(veh->player_in_control(g->u));
+    h.u_start = g->u.abs_pos();
 
-    // Tick should complete without crash.
-    h.srv.process_incoming_for_test();
     h.srv.coop_world_tick();
-    h.srv.process_incoming_for_test();
-    h.srv.coop_world_tick();
+    h.srv.flush_send_queue_for_test();
+    {
+        coop_mode_guard mcli(coop_mode::client);
+        h.cli.coop_world_tick();
+    }
 
-    // If we got here, the unknown vid was handled gracefully.
-    SUCCEED();
+    CHECK(h.cli.host_driven_vehicle() == veh);
 }

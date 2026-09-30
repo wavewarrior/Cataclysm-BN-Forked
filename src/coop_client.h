@@ -4,6 +4,8 @@
 #include "coordinates.h"
 #include "coop_reconcile.h"
 #include "coop_rollback.h"
+#include "coop_vehicle_sync.h"
+#include "vehicle_handle.h"
 
 #include "coop_net_transport.h"
 #include <memory>
@@ -85,11 +87,17 @@ struct coop_client {
         /// Called each frame from the render loop or coop_world_tick.
         auto interpolate_host_pos() -> tripoint_abs_ms;
         auto attempt_reconnect( const std::string& ip, uint16_t port ) -> bool;
+        /// Vehicle the host avatar drives, resolved from the streamed pose; nullptr when none.
+        auto host_driven_vehicle() const -> const vehicle *; // *NOPAD*
 
     private:
         auto apply_sync( const std::string& json_buf ) -> void;
         /// The client's current driving state, read from the local avatar.
         auto current_control_state() const -> coop_control_state;
+        /// This side's copy of a host-streamed vehicle: mapped handle if it still resolves,
+        /// else looked up by pose anchor (a full tile sync replaced the objects), else the
+        /// mapping is dropped.
+        auto resolve_coop_vehicle( const coop_vehicle_pose &pose ) -> vehicle *; // *NOPAD*
         auto handle_disconnect() -> void;
         auto send_death_drop() -> void;
 
@@ -120,13 +128,12 @@ struct coop_client {
         // H5: host-assigned monster ID → local monster pointer.
         std::unordered_map<int, monster *> coop_monster_map_;
 
-        // E1: vehicle tracking — populated from initial-sync vehicle-ID map sent by host
-        std::unordered_map<const vehicle *, uint32_t> coop_vehicle_map_inv_;
-        std::unordered_map<uint32_t, vehicle *>        coop_vehicle_map_;
-        int coop_vehicle_stationary_ticks_ = 0;
-
         /// Driving state at the last comparison; nullopt until the first tick or sync.
         std::optional<coop_control_state> last_control_state_;
+
+        // Step 6: host-streamed vehicle poses — handle by host vid, plus the host-driven one.
+        std::unordered_map<std::uint32_t, vehicle_handle> coop_vehicle_handles_;
+        vehicle_handle host_driven_vehicle_;
 
         // F1: host activity string received from sync — used for F5 team speed-up
         std::string host_activity_str_;

@@ -38,6 +38,7 @@
 #include "veh_type.h"
 #include "vehicle_part.h"
 #include "vehicle_driver.h"
+#include "coop_vehicle_sync.h"
 #include "vpart_position.h"
 #include "vehicle.h"
 
@@ -372,19 +373,6 @@ auto coop_server::dispatch_packet( const std::string& buf ) -> void
         } else if( t == coop_pkt::disconnect ) {
             DebugLog( DL::Info, DC::Main ) << "[coop] dispatch: client sent disconnect";
             running_ = false;
-        } else if( t == coop_pkt::vehicle_state ) {
-            JsonObject d = pkt.get_object( "d" );
-            d.allow_omitted_members();
-            pending_veh_state_t vs;
-            vs.vid      = static_cast<uint32_t>( d.get_int( "vid", 0 ) );
-            vs.abs_pos  = tripoint_abs_ms{ d.get_int( "ax", 0 ), d.get_int( "ay", 0 ),
-                                           d.get_int( "az", 0 ) };
-            vs.face_x   = d.get_int( "face_x", 0 );
-            vs.face_y   = d.get_int( "face_y", 1 );
-            vs.vel      = d.get_int( "velocity", 0 );
-            vs.valid    = true;
-            std::scoped_lock lk{ pending_veh_mtx_ };
-            pending_veh_state_ = vs;
         } else if( t == coop_pkt::trade_offer ) {
             JsonObject d = pkt.get_object( "d" );
             d.allow_omitted_members();
@@ -679,37 +667,13 @@ if( phase == client_join_phase::listening ||
     client_death_announced_ = false; // reset if partner respawns
 }
 
-// E1: apply pending vehicle state from client (main-thread safe)
-{
-    pending_veh_state_t vs;
-    {
-        std::scoped_lock lk{ pending_veh_mtx_ };
-        vs = pending_veh_state_;
-        pending_veh_state_.valid = false;
-    }
-    if( vs.valid ) {
-            auto it = vehicle_id_map_rev_.find( vs.vid );
-            if( it != vehicle_id_map_rev_.end() ) {
-                vehicle* veh = it->second;
-                if( veh ) {
-                    const tripoint_bub_ms new_bub = abs_to_map_local( g->m, vs.abs_pos );
-                    const tripoint_bub_ms old_bub = veh->bub_ms_location();
-                    const tripoint_rel_ms delta{ new_bub.x() - old_bub.x(),
-                                                 new_bub.y() - old_bub.y(),
-                                                 new_bub.z() - old_bub.z() };
-                    if( delta != tripoint_rel_ms{} ) { g->m.displace_vehicle( *veh, delta ); }
-                    veh->velocity = vs.vel;
-                }
-            }
-        }
-    }
 
-    // F2: process pending trade offer from client
+// F2: process pending trade offer from client
+{
+    std::optional<std::string> trade_offer;
     {
-        std::optional<std::string> trade_offer;
-        {
-            std::scoped_lock lk{ action_mtx_ };
-            trade_offer = std::move( pending_trade_offer_json_ );
+        std::scoped_lock lk{ action_mtx_ };
+        trade_offer = std::move( pending_trade_offer_json_ );
             pending_trade_offer_json_.reset();
         }
         if( trade_offer.has_value() && !trade_offer->empty() ) {
@@ -1505,6 +1469,16 @@ if( cid_at_target >= 0 ) {
     if( lag_target && !lag_target->is_dead() ) { lag_target->setpos( lag_original_bub ); }
 }
 
+auto coop_server::vehicle_id_for( const vehicle &veh ) -> std::uint32_t
+{
+    if( const auto it = vehicle_ids_.find( veh.handle() ); it != vehicle_ids_.end() ) {
+        return it->second;
+    }
+    const std::uint32_t vid = next_vehicle_id_++;
+    vehicle_ids_.emplace( veh.handle(), vid );
+    return vid;
+}
+
 auto coop_server::build_and_send_sync( bool force_full ) -> void
 {
     std::ostringstream oss;
@@ -1612,6 +1586,45 @@ auto coop_server::build_and_send_sync( bool force_full ) -> void
         jout.end_object();
     }
     jout.end_array();
+
+    // Step 6: host-authoritative pose of every vehicle within 5x5 submaps of either
+    // participant, plus the vehicles they are standing on, so the client can render
+    // continuous motion and know which vehicle the partner drives.  Centred on the two
+    // avatars rather than on `abs_sub`: that is the corner of the loaded grid, not the
+    // view centre, so a box around it misses the cars both players can actually see.
+    // Sent after "tiles" so the client applies snapshots before poses.
+    std::erase_if( vehicle_ids_, []( const auto & kv ) {
+        return resolve_vehicle( kv.first ) == nullptr;
+    } );
+    std::vector<coop_vehicle_pose> veh_poses;
+    const npc *px = g->critter_by_id<npc>( coop_session::get().proxy_npc_id );
+    const vehicle *watched[2] = { nullptr, nullptr };
+    if( px != nullptr ) {
+        if( const optional_vpart_position pxvp = g->m.veh_at( px->bub_pos() ) ) {
+            watched[0] = &pxvp->vehicle();
+        }
+    }
+    if( const optional_vpart_position uvp = g->m.veh_at( g->u.bub_pos() ) ) {
+        watched[1] = &uvp->vehicle();
+    }
+    const tripoint_abs_sm host_c = project_to<coords::sm>( g->u.abs_pos() );
+    const tripoint_abs_sm proxy_c =
+        px != nullptr ? project_to<coords::sm>( px->abs_pos() ) : host_c;
+    for( const wrapped_vehicle &w : g->m.get_vehicles() ) {
+        if( w.v == nullptr ) { continue; }
+        const tripoint_abs_sm vap = project_to<coords::sm>( w.v->abs_ms_location() );
+        bool in_area = vap.z() == host_c.z()
+                       && std::abs( vap.x() - host_c.x() ) <= 2
+                       && std::abs( vap.y() - host_c.y() ) <= 2;
+        in_area = in_area || ( vap.z() == proxy_c.z()
+                               && std::abs( vap.x() - proxy_c.x() ) <= 2
+                               && std::abs( vap.y() - proxy_c.y() ) <= 2 );
+        if( !in_area && w.v != watched[0] && w.v != watched[1] ) { continue; }
+        veh_poses.push_back( make_coop_vehicle_pose( *w.v, vehicle_id_for( *w.v ),
+                             w.v->player_in_control( g->u ) ) );
+    }
+    jout.member( "vehicles" );
+    write_coop_vehicle_poses( jout, veh_poses );
 
     // Proxy canonical position — client uses this to reconcile local prediction
     // if the two diverge beyond a threshold (e.g. blocked terrain).
@@ -1893,9 +1906,7 @@ auto coop_server::reset_client_state() -> void
     // ID tracking.
     monster_id_map_.clear();
     next_monster_id_ = 1;
-    client_known_vehicles_.clear();
-    vehicle_id_map_.clear();
-    vehicle_id_map_rev_.clear();
+    vehicle_ids_.clear();
     next_vehicle_id_ = 1;
     last_confirmed_seq_ = 0;
     position_history_.clear();
@@ -1909,10 +1920,6 @@ auto coop_server::reset_client_state() -> void
         pending_bionics_.clear();
         has_bionics_update_ = false;
         pending_mark_ = {};
-    }
-    {
-        std::scoped_lock lk{ pending_veh_mtx_ };
-        pending_veh_state_ = {};
     }
     // Partner session state.
     coop_session::get().partner_hp_pct = 100;

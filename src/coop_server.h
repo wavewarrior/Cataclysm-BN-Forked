@@ -4,6 +4,7 @@
 #include "coop_proto.h"
 #include "coordinates.h"
 #include "player_cmd.h"
+#include "vehicle_handle.h"
 
 #include <SDL3_net/SDL_net.h>
 #include <atomic>
@@ -122,14 +123,8 @@ struct coop_server {
         auto flush_send_queue_for_test() -> void;
         /// Test seam: drain transport_ inbox and dispatch each packet (no receiver thread).
         auto process_incoming_for_test() -> void;
-        /// Test seam: register a vehicle pointer in the vehicle_id_map_ / vehicle_id_map_rev_
-        /// so vehicle_state packets can look it up.  Returns the assigned vid.
-        auto register_vehicle_for_test( vehicle *veh ) -> uint32_t {
-            const auto vid = next_vehicle_id_++;
-            vehicle_id_map_.emplace( veh, vid );
-            vehicle_id_map_rev_.emplace( vid, veh );
-            return vid;
-        }
+        /// Stable per-session id for `veh`, assigned on first use (Step 6 pose stream).
+        auto vehicle_id_for( const vehicle &veh ) -> std::uint32_t;
         /// C3: client's last-reported HP percentage (0–100).  Thread-safe read.
         auto client_hp_pct() const -> int { return client_hp_pct_.load(); }
         /// C3: true if the client's avatar reported dead on the last tick.
@@ -229,7 +224,6 @@ struct coop_server {
 
         bool net_initialized_ = false;
 
-        std::unordered_set<std::string> client_known_vehicles_;
         // Position-based tile dirty gate: resend tiles only when host moves to a new submap.
         // Sentinel {INT_MIN,INT_MIN,INT_MIN} forces a full sync on first tick.
         tripoint_abs_sm last_sync_origin_{
@@ -268,21 +262,9 @@ struct coop_server {
         /// Test seam: when true, next coop_world_tick() pushes a synthetic terrain event
         /// directly into the mutation log (see queue_test_event_for_resync()).
         bool pending_test_event_for_resync_ = false;
-        // E1: vehicle tracking — pointer stable while vehicle is alive in current map
-        std::unordered_map<const vehicle *, uint32_t> vehicle_id_map_;
-        std::unordered_map<uint32_t, vehicle *> vehicle_id_map_rev_;
-        uint32_t next_vehicle_id_ = 1;
-        // E1: latest vehicle state from client — receiver writes, world_tick applies
-        struct pending_veh_state_t {
-            uint32_t vid = 0;
-            tripoint_abs_ms abs_pos{};
-            int face_x = 0;
-            int face_y = 1;
-            int vel = 0;
-            bool valid = false;
-        };
-        mutable std::mutex pending_veh_mtx_;
-        pending_veh_state_t pending_veh_state_;
+        // Step 6: pose stream — host-assigned ids keyed by vehicle handle (survives submap swaps).
+        std::unordered_map<vehicle_handle, std::uint32_t> vehicle_ids_;
+        std::uint32_t next_vehicle_id_ = 1;
         // F1: extended client vitals — receiver writes, guarded by chat_mtx_
         std::atomic<int> client_stamina_pct_{100};
         std::string client_activity_str_;   ///< guarded by chat_mtx_

@@ -267,6 +267,29 @@ auto coop_client::current_control_state() const -> coop_control_state
     return coop_control_state{ .controlling = true, .engine_on = vp->vehicle().engine_on };
 }
 
+auto coop_client::resolve_coop_vehicle( const coop_vehicle_pose &pose ) -> vehicle *
+{
+    if( const auto it = coop_vehicle_handles_.find( pose.vid ); it != coop_vehicle_handles_.end() ) {
+        if( vehicle *veh = resolve_vehicle( it->second ); veh != nullptr ) {
+            return veh;
+        }
+    }
+    // A full tile sync replaced the vehicle objects: re-find by anchor.
+    for( const wrapped_vehicle &w : get_map().get_vehicles() ) {
+        if( w.v != nullptr && w.v->abs_ms_location() == pose.anchor ) {
+            coop_vehicle_handles_[pose.vid] = w.v->handle();
+            return w.v;
+        }
+    }
+    coop_vehicle_handles_.erase( pose.vid );
+    return nullptr;
+}
+
+auto coop_client::host_driven_vehicle() const -> const vehicle *
+{
+    return resolve_vehicle( host_driven_vehicle_ );
+}
+
 auto coop_client::coop_world_tick() -> void
 {
     if( !coop_session::get().is_client() ) { return; }
@@ -287,19 +310,19 @@ if( reconnect_attempts_remaining_ > 0 && !transport_ ) {
 
     if( !transport_ ) { return; }
 
-    // D1: relay a driving-state change once (edge-triggered).  apply_sync() re-baselines
-    // last_control_state_ against the host-applied state, so a local revert for one tick
-    // is corrected by the host echo rather than ping-ponging.
-    const auto cur = current_control_state();
-    if( last_control_state_ && cur != *last_control_state_ ) {
-        queue_action( "VEH_CONTROL", string_format( R"({"on":%s,"engine":%s})",
-                      cur.controlling ? "true" : "false", cur.engine_on ? "true" : "false" ) );
+// D1: relay a driving-state change once (edge-triggered).  apply_sync() re-baselines
+// last_control_state_ against the host-applied state, so a local revert for one tick
+// is corrected by the host echo rather than ping-ponging.
+const auto cur = current_control_state();
+if( last_control_state_ && cur != *last_control_state_ ) {
+    queue_action( "VEH_CONTROL", string_format( R"({"on":%s,"engine":%s})",
+                  cur.controlling ? "true" : "false", cur.engine_on ? "true" : "false" ) );
     }
     last_control_state_ = cur;
 
-// 1. Send the oldest unsent pending action.  Actions remain in pending_actions_
-//    until the server echoes last_seq ≥ action.seq in a sync packet; they are
-//    discarded in apply_sync().  One per tick matches the server's drain rate.
+    // 1. Send the oldest unsent pending action.  Actions remain in pending_actions_
+    //    until the server echoes last_seq ≥ action.seq in a sync packet; they are
+    //    discarded in apply_sync().  One per tick matches the server's drain rate.
 for( auto& act : pending_actions_ ) {
     if( act.sent ) { continue; }
         if( !transport_->send( build_action_packet( {act.seq, act.key, act.ctx_json} ) ) ) {
@@ -311,27 +334,6 @@ for( auto& act : pending_actions_ ) {
         break;
     }
 
-    // E1: push vehicle state to host while client is driving.
-    if( g->u.controlling_vehicle ) {
-    const auto vp = get_map().veh_at( g->u.bub_pos() );
-        if( vp ) {
-            const vehicle& veh = vp->vehicle();
-            const auto vid_it = coop_vehicle_map_inv_.find( &veh );
-            if( vid_it != coop_vehicle_map_inv_.end() ) {
-                const bool moving = veh.velocity != 0;
-                if( moving ) { coop_vehicle_stationary_ticks_ = 0; }
-                else         { ++coop_vehicle_stationary_ticks_; }
-                if( coop_vehicle_stationary_ticks_ < 3 ) {
-                    const auto abs = veh.abs_ms_location();
-                    const auto msg = string_format(
-                                         R"({"t":42,"vid":%u,"ax":%d,"ay":%d,"az":%d,"face_x":%d,"face_y":%d,"velocity":%d})",
-                                         vid_it->second, abs.x(), abs.y(), abs.z(),
-                                         veh.face.dx(), veh.face.dy(), veh.velocity );
-                    transport_->send( msg );
-                }
-            }
-        }
-    }
     // F5: team speed-up — reduce moves_left when both doing the same activity.
     if( g->u.activity && !host_activity_str_.empty() ) {
     if( to_lower_case( host_activity_str_ ) ==
@@ -873,6 +875,28 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
                 if( received_ids.contains( kv.first ) ) { return false; }
                 if( kv.second && !kv.second->is_dead() ) { g->despawn_monster( *kv.second ); }
                 return true;
+            } );
+        } else if( key == "vehicles" ) {
+            // Step 6: host-authoritative vehicle poses.  Comes after "tiles" in the
+            // packet, so any full-submap snapshot has already replaced the objects.
+            const auto poses = read_coop_vehicle_poses( jin );
+            std::unordered_set<std::uint32_t> received_vids;
+            host_driven_vehicle_ = {};
+            for( const coop_vehicle_pose &pose : poses ) {
+                vehicle *veh = resolve_coop_vehicle( pose );
+                if( veh == nullptr ) {
+                    continue; // snapshot for this vehicle not in hand yet; next tile sync brings it
+                }
+                received_vids.insert( pose.vid );
+                if( apply_coop_vehicle_pose( g->m, *veh, pose ) ) {
+                    g->m.vehicle_footprint_changed( *veh );
+                }
+                if( pose.host_driving ) {
+                    host_driven_vehicle_ = veh->handle();
+                }
+            }
+            std::erase_if( coop_vehicle_handles_, [&]( const auto & kv ) {
+                return !received_vids.contains( kv.first );
             } );
         } else if( key == "proxy_ax" ) {
             sync_proxy_apos_.x() = jin.get_int();

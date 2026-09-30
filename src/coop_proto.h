@@ -18,14 +18,12 @@ enum class coop_pkt : uint8_t {
     client_status = 13, ///< activity, stamina, mood (client → host, per tick)
 
     sync = 20,         ///< tile + monster + entity bulk update (host → client)
-    vehicle_sync = 21, ///< vehicle state delta (host → client)
     overmap_sync = 22, ///< overmap chunk (host → client)
 
     resync_request = 25, ///< client detected hash mismatch; host responds with forced full sync
     ///< (client → host)
     chat = 30,           ///< free-form text (bidirectional, any time)
 
-    vehicle_state  = 42, ///< driven vehicle position/heading/velocity (client → host, per tick while driving)
     trade_offer    = 43, ///< one player offers an item to the other (bidirectional; "from" field disambiguates)
     trade_accept   = 44, ///< recipient confirms trade; transfer executes
     trade_reject   = 45, ///< recipient declines trade
