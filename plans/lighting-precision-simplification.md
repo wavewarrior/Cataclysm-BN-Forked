@@ -254,3 +254,81 @@ Drafts — verify each against the code at the Critical-files anchors before wri
 - **`noise_ms` > 1.0 ms even at 120 s windows:** tier-B gates compare 3 launches per variant by median-of-medians.
 - **`AUTOSAVE_MINUTES` default 5** (`options_registration.cpp:326-329`): the harness copies the config and sets it to 0, so autosave cannot fire; the WAL post-check stays as the tripwire if the option name ever moves.
 - **No Xcode GPU capture / RenderDoc automation in this environment:** cost attribution is knob-ablation frame-time only; spill-count claims are avoided (step 4 justifies its array shrink by construction + end-to-end timing).
+
+## Execution log (macOS / Metal / M1 Pro, 2026-09-30) — all accepted steps Windows-unverified
+
+### Measurement conditions (discovered during step 0/1; they supersede the plan's assumptions)
+
+- **Present mode:** Metal rejects MAILBOX (`Present mode not supported`); with `CATA_MEASURE_IMMEDIATE=1` the log shows `present=immediate ret=1`. In gameplay the GPU-bound frame is ~50 ms either way (immediate 50.8 vs default-vsync 45.2 ms on the 73-wide layout); present mode is not the lever.
+- **Viewport:** the terrain viewport is 73x47 until the main UI redraws after `rmlui_layer::init` opens the RmlUi HUD (`panels.cpp:786-829` → `mark_main_ui_adaptor_resize`), then 90x47 (shipping layout, HUD floats over the map). An idle game never triggers that redraw until the first input event — **pre-existing startup bug, follow-up: the HUD/viewport is wrong until the player touches the mouse/keyboard.** All numbers below are at 90x47.
+- **Idle does not redraw the world:** at 90x47 an idle game reuses the retained world target (`render_world_pass_w` early-out) at ~11 ms/frame and never runs sprite.frag. Measurement uses the new file knob `force_world_redraw 1` (commit `chore(lighting): force-world-redraw measurement knob`), which keeps the input loop redrawing every iteration. **Implication: at idle the shader optimisations below pay off only on frames where the world redraws** (movement, animation, any input).
+- **Noise:** within one session the bracketing base phases swing 63–78 ms; across launches base medians spread ~3.6 ms. Terms are therefore reported against the mean of the two bracketing base phases; differences < ~3 ms are unresolved. BMP dumps are deterministic: same-binary null diffs 0.0010–0.036 % pixels.
+- **GI ships disabled** (`g_gi_enable = false`); GI-targeted steps are measured with `gi_enable 1` plus a one-shot `force_rc_rebuild` pulse (populates GiBuf; GI on vs off changes 3.2 % of pixels).
+- Radiance-cascade shaders (`rc_build/merge/resolve.comp.hlsl`, `rc_shared.hlsl`) were untracked (`/data/shaders/` is gitignored) — committed as `chore(lighting): track radiance cascade shaders` so steps 3/5 are reproducible from git. `emitter_glow.*.hlsl` remain untracked (outside this plan).
+
+### Step 1 — term attribution (bin = steps 2–4, `force_world_redraw 1`, bracketed)
+
+|Term|Δ vs bracketing base|
+|---|---|
+|`max_shadow_k 1` (K-trace)|**−24.7 ms**|
+|`light_eps 0.05`|−10.4 ms (visible; not in scope)|
+|`shadow_steps 1`|−9.4 ms|
+|`vis_curve 0` (G_LOS)|−0.9 ms → **step 8 cancelled** (< 1.0 ms)|
+|`max_shadow_k 8`|−0.3 ms → **step 6 B1 rejected** (< 0.5 ms), K stays 16|
+|`gi_bilat 0`, `gi_strength 0`|+1.8, +1.6 ms (noise)|
+|GI forced rebuild, feedback 0 → 0.3 (G_REBUILD)|81.0 → 116.4 ms = **+35.4 ms** → step 9 go|
+|forced rebuild without GI → with GI (1 iteration)|75.2 → 81.0 ms (+5.8 ms)|
+
+The per-pixel top-K emitter shadow trace is the dominant frame cost; any future "light cache" proposal must be judged against that 25 ms.
+
+### Tier A (steps 2–4) — accepted
+
+Pre-plan (step-0 + knob) vs steps 2–4 (+ knob), alternating launches (A×3, B×2; B3 lost to a harness bug):
+- base (GI off): A median-of-medians 64.51 ms, B 64.24 ms (Δ −0.27, noise 3.6 ms) — non-regressing, no measurable gain at this scene.
+- pixels: A/B 0.0019–0.0203 % vs null 0.0037–0.0211 %; with GI populated A/B 0.0010–0.0352 % vs null 0.0025–0.0357 %. Within `null + 0.10 pp`. Resolve reflection `ro_sb=2 rw_sb=1`, no pipeline/binding errors.
+- Unit test: `[lighting]` emitter cull cases, 8 assertions in 3 test cases pass.
+
+### Tier B (user decision mid-run: implement directly, verify once at the end)
+
+|Step|Commit|Evidence (macOS)|Status|
+|---|---|---|---|
+|5 cascades 5→4|`3e6e63fed0`|cross-launch gate stopped after 1 of 6 launches; final-session GI dump within tier-B pixel limits (below)|accepted, **timing unverified**|
+|7 nearest SDF far steps|`e4a69755e9`|in-session ABAB via temporary switch (removed before commit): 4/4 pairs faster, median **−1.2 ms**; pixels 0.85 % changed / luma 0.08 vs null 0.023 % / 0.012 → within +2.0 pp / +1.0|accepted|
+|8 cached LOS field|—|G_LOS −0.9 ms at ±5 ms bracket noise|cancelled (unresolved, not proven < 1 ms)|
+|9 GI iterations over frames|`6f20a94632`|G_REBUILD +35.4 ms justified it; rebuild-spike A/B not run (user deferred testing)|accepted, **spike reduction unverified**|
+|6 B1 K 16→8|—|k8 −0.3 ms, noise|rejected|
+
+Measurement knobs added: `force_world_redraw`, `force_rc_rebuild 2` (one-shot rebuild, `a5ea9c4b2a`).
+
+### Final verification (HEAD `6f20a94632`)
+
+- `[lighting]` 13/14, `[.gpu]` 2/3: the one failure, `gpu_device lifecycle` SIGABRT after `lighting_gpu_test.cpp:54`, **is pre-existing**; the pre-plan binary (Sep 29) aborts at the same line.
+- debug.log: no `pipeline create failed`, no `binding layout mismatch`; `rc_resolve … ro_sb=2 rw_sb=1`.
+- Pixels vs the steps 2–4 dump: GI off 0.875 % / luma 0.093; GI on 0.984 % / 0.162 (null 0.003 %). Tier-B limit +2.0 pp / +1.0: pass. Almost all of this is step 7.
+- Frame times in the final session (88 ms idle-redraw base) are not comparable with earlier sessions (different session, same-binary spread 3.6 ms plus drift); no headline speed-up is claimed.
+
+### Step 9b — per-turn lightmap (measurement only, probe reverted)
+
+`[lm-prof]` around `begin_gpu_lighting`/`finish_gpu_lighting` (`map_cache.cpp`), 29 "wait" turns plus idle: median begin 3.6 ms + finish 62.0 ms = **65.7 ms per lightmap build** (n=2927 builds, far more than the 29 turns, so builds also run outside turns). ≥ 5 ms, so per the decision rule **open a separate dispatch-scoping plan**. `finish` includes the synchronous GPU wait/download; that plan's first step is splitting GPU time from sync.
+
+Follow-ups outside this plan: the HUD/viewport stays at 73 columns until the first input event after load; the per-turn lightmap plan; `emitter_glow.*.hlsl` untracked.
+
+## Deferred Windows verification
+
+Nothing below has run on Windows. Every accepted step is Windows-unverified.
+
+|Step|Commit|Change|macOS result|
+|---|---|---|---|
+|2|`f718ccb91e`|cull off-view emitters from sprite shading|pixels = null; time non-regressing|
+|3|`2a3c72dd16` (+`7393b36658` tracks RC shaders)|tile-centre SDF in GiBuf.a|same gate|
+|4|`0c7344988e`|honest top-K, arrays 64→16, slider cap|same gate|
+|5|`3e6e63fed0`|RC cascades 5→4|pixels within tier B; timing unverified|
+|7|`e4a69755e9`|nearest SDF on far march steps|−1.2 ms, 0.85 % pixels|
+|9|`6f20a94632`|GI feedback iterations spread over 3 frames|unverified|
+
+Procedure:
+1. Configure/build per the platform matrix (`windows-tiles-sounds-x64-msvc`; needs vcpkg at `C:/vcpkg`). Run `cata_test-tiles "[lighting]" --rng-seed 1` first. The known pre-existing `gpu_device lifecycle` abort may reproduce; confirm it against the parent of `9c1d006d6d`.
+2. Check the D3D12 root signature: debug.log must show no `frag binding layout mismatch` and `rc_resolve.comp reflection: ro_sb=2 rw_sb=1`.
+3. Null pair: two harness launches (`win-base1`/`win-base2`), phase `base`, `force_world_redraw 1`, at branch tip. Debug log is `$SCRATCH\userdir\config\debug.log`. Record `win_null_pct`/`win_null_luma`/`win_noise_ms`.
+4. Steps 5/7/9 have no runtime switch: A/B the step's parent commit against the step commit, alternating launches (A,B,A,B…, ≥3 each), comparing median-of-medians and base dumps (GI populated via `gi_enable 1` + `force_rc_rebuild 2`). Steps 2–4: same parent-vs-step design.
+5. Demote rule: gain sign flips, magnitude < half the macOS gain, or pixel diff > `win_null + 2.0 pp / +1.0` → `git revert <sha>` on the shared branch, and mark the row `rejected-on-Windows`.
