@@ -1,4 +1,5 @@
 #include "avatar.h"
+#include "avatar_action.h"
 #include "calendar.h"
 #include "cata_utility.h"
 #include "catch/catch_amalgamated.hpp"
@@ -1274,4 +1275,66 @@ TEST_CASE("rolling_steering_turns_vehicle", "[vehicle][steering]") {
     get_map().vehmove();
 
     CHECK(deg_of(veh.face.dir()) == 15);
+}
+
+namespace {
+
+/// A car_test on pavement with the avatar boarded on a BOARDABLE seat that has a
+/// BOARDABLE neighbour in the same vehicle; returns the step from seat to neighbour.
+struct seat_lock_fixture {
+    vehicle* veh = nullptr;
+    tripoint_bub_ms seat;
+    tripoint_rel_ms step;
+};
+
+auto make_seat_lock_fixture() -> seat_lock_fixture {
+    clear_all_state();
+    build_test_map(ter_id("t_pavement"));
+    map& here = get_map();
+    // (65,65): every car_test tile stays in the avatar's centre submap, so boarding's
+    // update_map() does not shift the bubble.
+    vehicle* veh =
+        here.add_vehicle(vproto_id("car_test"), tripoint_bub_ms(65, 65, 0), 0_degrees, 100, 0);
+    REQUIRE(veh != nullptr);
+    const auto seat = veh->bub_part_location(
+        veh->get_avail_parts("BOARDABLE").begin()->part_index());
+    const auto is_boardable_here = [&](const tripoint_bub_ms& t) {
+        const auto vp = here.veh_at(t);
+        return vp && &vp->vehicle() == veh && vp.part_with_feature("BOARDABLE", true);
+    };
+    std::optional<tripoint_rel_ms> step;
+    for (const auto& n : here.points_in_radius(seat, 1)) {
+        if (n != seat && is_boardable_here(n)) {
+            step = n - seat;
+            break;
+        }
+    }
+    REQUIRE(step);
+    avatar& you = get_avatar();
+    you.setpos(seat);
+    here.board_vehicle(seat, &you);
+    REQUIRE(you.in_vehicle);
+    return {.veh = veh, .seat = you.bub_pos(), .step = *step};
+}
+
+} // namespace
+
+TEST_CASE("avatar_cannot_walk_inside_rolling_vehicle", "[vehicle][seat_lock]") {
+    const auto fx = make_seat_lock_fixture();
+    avatar& you = get_avatar();
+    // Below the old 100 cm/s "moving" threshold: any rolling vehicle locks the seat.
+    fx.veh->velocity = 50;
+
+    CHECK_FALSE(avatar_action::move(you, get_map(), fx.step));
+    CHECK(you.bub_pos() == fx.seat);
+    CHECK(you.in_vehicle);
+}
+
+TEST_CASE("avatar_can_walk_inside_stopped_vehicle", "[vehicle][seat_lock]") {
+    const auto fx = make_seat_lock_fixture();
+    avatar& you = get_avatar();
+    fx.veh->velocity = 0;
+
+    CHECK(avatar_action::move(you, get_map(), fx.step));
+    CHECK(you.bub_pos() == fx.seat + fx.step);
 }

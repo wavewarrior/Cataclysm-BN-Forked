@@ -615,7 +615,7 @@ if( m.has_flag( TFLAG_RAMP_UP, dest_loc ) ) {
         veh_closed_door = door_part >= 0 && !dst_veh->part( door_part ).open;
     }
 
-    if( src_veh != nullptr && std::abs( src_veh->velocity ) > 100 ) {
+    if( src_veh != nullptr && src_veh->is_moving() ) {
         if( dst_veh == nullptr ) {
             if( query_yn( _( "Dive from moving vehicle?" ) ) ) {
                 g->moving_vehicle_dismount( dest_loc );
@@ -624,8 +624,11 @@ if( m.has_flag( TFLAG_RAMP_UP, dest_loc ) ) {
         } else if( dst_veh != src_veh ) {
             add_msg( m_info, _( "There is another vehicle in the way." ) );
             return false;
-        } else if( !vp_dst.part_with_feature( "BOARDABLE", true ) ) {
-            add_msg( m_info, _( "That part of the vehicle is currently unsafe." ) );
+        } else {
+            add_msg( m_info, _( "You can't move around inside a moving vehicle." ) );
+            if( you.is_auto_moving() ) {
+                you.clear_destination();
+            }
             return false;
         }
     }
