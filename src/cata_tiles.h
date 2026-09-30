@@ -20,14 +20,18 @@
 #include "sdl_wrappers.h"
 #include "tile_light_mode.h"
 #include "type_id.h"
+#include "vehicle_handle.h"
+#include "vehicle_render_geometry.h"
 #include "weather.h"
 #include "weighted_list.h"
 #include "zone_draw_options.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <unordered_map>
@@ -45,6 +49,8 @@ class JsonObject;
 class dynamic_atlas;
 class field;
 class item;
+class vehicle;
+class vpart_position;
 class optional_vpart_position;
 class effect;
 struct bionic;
@@ -1218,6 +1224,17 @@ class cata_tiles
         bool draw_vpart(
             const tripoint_bub_ms& p, lit_level ll, int &height_3d, const bool ( &invisible )[5],
             int z_drop );
+        /// True when `v` is one of this frame's composite vehicles (drawn as one
+        /// rotated sprite instead of per-tile parts).
+        auto is_composite_vehicle( const vehicle &v ) const -> bool;
+        /// Bake slot `slot`'s parts into its composite texture and queue the single
+        /// world quad that carries it.
+        auto draw_vehicle_composite( std::size_t slot ) -> void;
+        /// Rider screen-pixel offset for a character riding `vp` standing on tile `p`:
+        /// the composite's continuous seat offset, else the vehicle's sub-tile render
+        /// offset (today's behaviour).
+        auto vehicle_ride_offset( const vpart_position &vp, const tripoint_bub_ms &p ) const
+        -> SDL_FPoint;
         bool draw_critter_at(
             const tripoint_bub_ms& p, lit_level ll, int &height_3d, const bool ( &invisible )[5],
             int z_drop );
@@ -1528,6 +1545,10 @@ class cata_tiles
             subtile_off_x_ = x;
             subtile_off_y_ = y;
         }
+        /// Select and advance this frame's composite vehicles (slot 0 own, slot 1 co-op
+        /// partner). Call once per frame before draw(). Returns the avatar's seat lag
+        /// (rendered − committed, tiles) when the avatar rides slot 0, for the camera.
+        auto prepare_vehicle_composites() -> std::optional<SDL_FPoint>;
         // Hover-outline: map tile currently under the mouse (nullopt = none).
         // Set by game::handle_mouseview; read in draw_critter_at to outline the
         // creature there. See HOVER_OUTLINE_PLAN.md.
@@ -1662,6 +1683,22 @@ class cata_tiles
         const Creature *prefetch_critter_ = nullptr;
         sprite_xform prefetch_xform_;
         bool prefetch_valid_ = false;
+
+        // ── Composite vehicles (plans/vehicle-drive-composite-path.md Step 8) ──
+        // Up to two vehicles are baked into one rotated composite each: slot 0 is the
+        // driven vehicle (or the rolling one the avatar is aboard), slot 1 the co-op
+        // partner's. Motion is render-only: the pose eases toward the committed Box2D
+        // pose, so the drawn vehicle is continuous while vision/lighting stay on tiles.
+        struct composite_slot {
+            const vehicle *veh =
+                nullptr;  ///< drawn this frame; nullptr = unused. Valid only until draw() ends.
+            vehicle_render_frame frame;    ///< eased frame this frame
+            vehicle_handle tracked;        ///< vehicle `motion` belongs to
+            tripoint_abs_ms ref;           ///< committed anchor at the last advance
+            vehicle_motion_state motion;
+            bool settled = true;
+        };
+        std::array<composite_slot, lighting::render_state::vehicle_composite_slots> composite_slots_;
 
         // Refresh anim_wall_now_/anim_enabled_ and the file-scope tuning from options.
         void refresh_anim_frame();

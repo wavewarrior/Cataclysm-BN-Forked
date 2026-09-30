@@ -597,9 +597,19 @@ void game::draw_ter( const tripoint_bub_ms &center, const bool looking,
     main_camera_.set_follow_speed( camera_dbg::smooth_speed );
     main_camera_.set_look_ahead( camera_dbg::look_ahead );
     main_camera_.set_dead_zone( camera_dbg::dead_zone );
-    main_camera_.update( center.xy().raw(), looking );
-    if( tilecontext ) {
-        tilecontext->set_subtile_offset( main_camera_.sub_x(), main_camera_.sub_y() );
+    const auto seat_lag = tilecontext ? tilecontext->prepare_vehicle_composites() : std::nullopt;
+    if( seat_lag && !looking ) {
+        // Riding a composite vehicle: the vehicle's own motion model drives the view.
+        // The camera only eases the view offset (driving look-ahead) in the seat's
+        // frame, so the seat stays put on screen while the terrain scrolls.
+        main_camera_.update( ( center.xy() - u.bub_pos().xy() ).raw(), false );
+        tilecontext->set_subtile_offset( main_camera_.sub_x() + seat_lag->x,
+                                         main_camera_.sub_y() + seat_lag->y );
+    } else {
+        main_camera_.update( center.xy().raw(), looking );
+        if( tilecontext ) {
+            tilecontext->set_subtile_offset( main_camera_.sub_x(), main_camera_.sub_y() );
+        }
     }
 
     // Place the cursor over the player as is expected by screen readers.

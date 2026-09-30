@@ -26,9 +26,11 @@
 #include "type_id.h"
 #include "vehicle.h"
 #include "vehicle_part.h"
+#include "units_utility.h"
 #include "vpart_position.h"
 
 #include <algorithm>
+#include <cmath>
 #include <map>
 #include <optional>
 #include <string>
@@ -669,6 +671,10 @@ bool cata_tiles::draw_vpart(
         } else {
             you.memorize_tile( bub_to_abs( p ), vpname, subtile, rotation );
         }
+        // A composite vehicle is drawn as one rotated sprite by
+        // draw_vehicle_composite; its parts must not also land in the tile queue.
+        // Memorizing above still happened, so memory stays correct.
+        if( !overridden && is_composite_vehicle( veh ) ) { return true; }
         if( !overridden ) {
             // Vehicle smooth render offset (Box2D sub-tile residual).
             if( !tile_iso ) {
@@ -733,6 +739,7 @@ bool cata_tiles::draw_vpart(
             if( !veh.forward_velocity() ) {
                 get_avatar().memorize_tile( bub_to_abs( p ), vpname, subtile, rotation );
             }
+            if( is_composite_vehicle( veh ) ) { return true; }
             const tile_search_params tile{vpname, C_VEHICLE_PART, empty_string, subtile, rotation};
             if( !tile_iso ) {
                 active_anim_xform_ = sprite_xform{
@@ -794,6 +801,106 @@ bool cata_tiles::draw_vpart(
         return ret;
     }
     return false;
+}
+
+auto cata_tiles::vehicle_ride_offset( const vpart_position &vp,
+                                      const tripoint_bub_ms &p ) const -> SDL_FPoint
+{
+    const vehicle &veh = vp.vehicle();
+    for( const composite_slot &slot : composite_slots_ ) {
+        if( slot.veh != &veh ) { continue; }
+        // The composite puts mount `m`'s tile centre at bubble point `c`; the rider
+        // sprite is drawn at tile `p`, so the slide it needs is (c - p) in tiles.
+        const tripoint_mnt_veh m = vp.mount();
+        const vehicle_render_point c = vehicle_mount_to_bubble(
+                                           slot.frame, static_cast<float>( m.x() ), static_cast<float>( m.y() ) );
+        return SDL_FPoint {
+            ( c.x - static_cast<float>( p.x() ) ) * static_cast<float>( tile_width ),
+            ( c.y - static_cast<float>( p.y() ) ) * static_cast<float>( tile_height ) };
+    }
+    return SDL_FPoint {
+        veh.render_offset_x *static_cast<float>( tile_width ),
+        veh.render_offset_y *static_cast<float>( tile_height ) };
+}
+
+/// Bake one composite vehicle: every standalone part into the slot's own texture,
+/// then ONE world quad carrying the result.
+///
+/// The parts are drawn into a target laid out in the vehicle's LOCAL frame (mount
+/// +x = east, i.e. heading 0), so each part sprite's rotation is its display
+/// direction RELATIVE to the vehicle's heading; the quad then rotates the whole
+/// bake by the eased frame angle. Positions mirror `vehicle_preview_window::display`,
+/// which faces the vehicle north and therefore adds 270 degrees — we do not.
+auto cata_tiles::draw_vehicle_composite( std::size_t slot ) -> void
+{
+    lighting::render_state &rs = lighting::get_render_state();
+    lighting::ui_composite_target *vt = rs.current_vehicle_target( slot );
+    if( !vt || !vt->texture() ) { return; }
+    const vehicle &veh = *composite_slots_[ slot ].veh;
+
+    active_anim_xform_ = {};
+    rs.set_vehicle_route( static_cast<int>( slot ) );
+
+    const vehicle_render_frame &f = composite_slots_[ slot ].frame;
+    map &here = get_map();
+    for( const int part_idx : veh.all_standalone_parts() ) {
+        const vehicle_part &part = veh.cpart( part_idx );
+        if( part.removed ) { continue; }
+        char part_mod = 0;
+        const vpart_id &vp_id = veh.part_id_string( part_idx, false, part_mod );
+        const int subtile = part_mod == 1 ? open_ : part_mod == 2 ? broken : 0;
+        const int rotation = static_cast<int>( std::lround( to_degrees( normalize(
+                veh.part_display_direction( part_idx ) - veh.face.dir() ) ) ) );
+        const tripoint_bub_ms part_pos = veh.bub_part_location( part_idx );
+        const auto [bgCol, fgCol] = get_vpart_color( here.veh_at( part_pos ), here, part_pos );
+        const tripoint_bub_ms px(
+            ( part.mount.x() - f.mount_min_x + 1 ) * tile_width,
+            ( part.mount.y() - f.mount_min_y + 1 ) * tile_height, 0 );
+        // `tile_search_params::id` is a reference: the name must outlive the decl.
+        const std::string vpname = "vp_" + vp_id.str();
+        const tile_search_params tile{
+            vpname, C_VEHICLE_PART, empty_string, subtile, rotation };
+        int height_3d = 0;
+        const bool drawn = draw_from_id_string(
+                               tile, px, bgCol, fgCol, lit_level::BRIGHT, false, 0, true, height_3d );
+        if( drawn && veh.part_with_feature( part_idx, "CARGO", true ) >= 0
+            && !veh.get_items( part_idx ).empty() ) {
+            const tile_search_params hl{ ITEM_HIGHLIGHT, C_NONE, empty_string, 0, 0 };
+            draw_from_id_string( hl, px, std::nullopt, std::nullopt, lit_level::LIT, false, 0,
+                                 true, height_3d );
+        }
+    }
+
+    rs.set_vehicle_route( -1 );
+
+    // The target's centre pixel is the mount-centre tile's centre, so the quad rides
+    // that tile centre at the target's own 1:1 size.
+    const vehicle_render_point c = vehicle_mount_to_bubble(
+                                       f, 0.5f * static_cast<float>( f.mount_min_x + f.mount_max_x ),
+                                       0.5f * static_cast<float>( f.mount_min_y + f.mount_max_y ) );
+    const point_bub_ms anchor = veh.bub_ms_location().xy();
+    const point base = player_to_screen( anchor );
+    const float cx = static_cast<float>( base.x )
+                     + ( c.x - static_cast<float>( anchor.x() ) + 0.5f ) * static_cast<float>( tile_width );
+    const float cy = static_cast<float>( base.y )
+                     + ( c.y - static_cast<float>( anchor.y() ) + 0.5f ) * static_cast<float>( tile_height );
+    const float w = static_cast<float>( vt->width() );
+    const float h = static_cast<float>( vt->height() );
+    lighting::sprite_instance si {};
+    si.dst_x = cx - w * 0.5f;
+    si.dst_y = cy - h * 0.5f;
+    si.dst_w = w;
+    si.dst_h = h;
+    si.src_u = 0.0f;
+    si.src_v = 0.0f;
+    si.src_uw = 1.0f;
+    si.src_vh = 1.0f;
+    si.tint_r = si.tint_g = si.tint_b = si.tint_a = 1.0f;
+    si.rotation = f.angle;
+    si.light_mode = static_cast<float>( sprite_light_mode::gpu_lit );
+    // Ground-plane art: no tall-sprite base-tile lighting, no silhouette shadow.
+    si.cutout_pad2 = 1.0f;
+    rs.queue_tile_sprite( vt->texture(), si );
 }
 
 bool cata_tiles::draw_critter_at(
@@ -903,12 +1010,14 @@ bool cata_tiles::draw_critter_at(
                 // When deferred y-sort prefetched the xform, use that instead.
                 active_anim_xform_ =
                     prefetch_valid_ ? prefetch_xform_ : compute_anim_xform( critter );
-                // Propagate vehicle sub-tile offset so passengers slide with the vehicle.
+                // Propagate the vehicle's render offset so passengers slide with it:
+                // the composite's continuous seat offset when the vehicle is drawn as
+                // one sprite, else the Box2D sub-tile residual.
                 if( !tile_iso && m->has_effect( effect_ridden ) ) {
                     if( const auto vp_ride = get_map().veh_at( p ) ) {
-                        const auto &veh = vp_ride->vehicle();
-                        active_anim_xform_.off_x += veh.render_offset_x * static_cast<float>( tile_width );
-                        active_anim_xform_.off_y += veh.render_offset_y * static_cast<float>( tile_height );
+                        const SDL_FPoint ro = vehicle_ride_offset( *vp_ride, p );
+                        active_anim_xform_.off_x += ro.x;
+                        active_anim_xform_.off_y += ro.y;
                     }
                 }
                 if( do_outline ) {
@@ -1251,12 +1360,14 @@ void cata_tiles::draw_entity_with_overlays(
     // Sprite-animation transform for this character + all its overlays (rigid body).
     // When deferred y-sort prefetched the xform, use that instead.
     active_anim_xform_ = prefetch_valid_ ? prefetch_xform_ : compute_anim_xform( ch );
-    // Propagate vehicle sub-tile offset so passengers slide with the vehicle.
+    // Propagate the vehicle's render offset so passengers slide with it: the
+    // composite's continuous seat offset when the vehicle is drawn as one sprite,
+    // else the Box2D sub-tile residual.
     if( !tile_iso && ch.in_vehicle ) {
         if( const auto vp_ride = get_map().veh_at( p ) ) {
-            const auto &veh = vp_ride->vehicle();
-            active_anim_xform_.off_x += veh.render_offset_x * static_cast<float>( tile_width );
-            active_anim_xform_.off_y += veh.render_offset_y * static_cast<float>( tile_height );
+            const SDL_FPoint ro = vehicle_ride_offset( *vp_ride, p );
+            active_anim_xform_.off_x += ro.x;
+            active_anim_xform_.off_y += ro.y;
         }
     }
 

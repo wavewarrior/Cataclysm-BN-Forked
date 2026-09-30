@@ -75,6 +75,9 @@
 #include "vehicle.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
+#include "camera_debug.h"
+#include "coop_session.h"
+#include "coop_vehicle_sync.h"
 #include "weather.h"
 #include "weighted_list.h"
 
@@ -560,6 +563,118 @@ float g_depth_lean_str = 1.0f;
 /// Global multiplier on per-tile depth_extrude_dark (0 = darkening off, 1 = full).
 float g_depth_dark_str = 1.0f;
 
+namespace
+{
+
+/// The vehicle whose controls the local avatar operates, in person or by remote.
+/// Mirrors the `controlled_vehicle` computation in handle_action.cpp.
+auto driven_vehicle_for_render() -> const vehicle * // *NOPAD*
+{
+    if( !g ) { return nullptr; }
+    if( vehicle *remote = g->remoteveh() ) { return remote; }
+    if( !g->u.controlling_vehicle ) { return nullptr; }
+    const optional_vpart_position vp = g->m.veh_at( g->u.bub_pos() );
+    if( !vp || !vp->vehicle().player_in_control( g->u ) ) { return nullptr; }
+    return &vp->vehicle();
+}
+
+/// Slot 0 candidate: the driven vehicle, else the rolling vehicle the avatar rides.
+auto own_composite_vehicle() -> const vehicle * // *NOPAD*
+{
+    if( const vehicle *driven = driven_vehicle_for_render() ) { return driven; }
+    if( !g || !g->u.in_vehicle ) { return nullptr; }
+    const optional_vpart_position vp = g->m.veh_at( g->u.bub_pos() );
+    if( !vp || !vp->vehicle().is_moving() ) { return nullptr; }
+    return &vp->vehicle();
+}
+
+} // namespace
+
+auto cata_tiles::prepare_vehicle_composites() -> std::optional<SDL_FPoint>
+{
+    const double now = static_cast<double>( SDL_GetTicks() ) / 1000.0;
+    const vehicle_motion_mode mode = coop_session::get().is_coop()
+                                     ? vehicle_motion_mode::tick_paced : vehicle_motion_mode::ease;
+    lighting::render_state &rs = lighting::get_render_state();
+
+    // Isometric drawing has no linear screen mapping for a rotated composite, and a
+    // vpart_override draw (vehicle preview) owns the tile queue.
+    const bool eligible = !tile_iso && vpart_override.empty() && rs.ready();
+    const std::array<const vehicle *, lighting::render_state::vehicle_composite_slots> candidates = {
+        eligible ? own_composite_vehicle() : nullptr,
+        eligible ? coop_partner_driven_vehicle() : nullptr
+    };
+
+    for( std::size_t i = 0; i < composite_slots_.size(); ++i ) {
+        composite_slot &slot = composite_slots_[ i ];
+        const vehicle *v = candidates[ i ];
+        if( v != nullptr && i == 1 && v == candidates[ 0 ] ) { v = nullptr; }
+        if( v == nullptr ) {
+            slot.veh = nullptr;
+            slot.tracked = {};
+            continue;
+        }
+
+        const vehicle_render_frame f = make_vehicle_render_frame( *v );
+        const point_bub_ms anchor = v->bub_ms_location().xy();
+        const vehicle_render_pose target {
+            f.origin_x - static_cast<float>( anchor.x() ),
+            f.origin_y - static_cast<float>( anchor.y() ),
+            f.angle
+        };
+
+        if( !( slot.tracked == v->handle() )
+            || slot.ref.z() != v->abs_ms_location().z() ) {
+            reset_vehicle_motion( slot.motion, target, now );
+        } else {
+            // The committed anchor moved: shift every stored pose the other way so the
+            // shown pose keeps its world position.
+            const tripoint_rel_ms d = slot.ref - v->abs_ms_location();
+            rebase_vehicle_motion( slot.motion, static_cast<float>( d.x() ),
+                                   static_cast<float>( d.y() ) );
+        }
+
+        const vehicle_render_pose pose = advance_vehicle_motion( slot.motion, {
+            .target = target, .now = now, .mode = mode,
+            .rate = camera_dbg::smooth_speed, .snap_tiles = 64.0f
+        } );
+        slot.tracked = v->handle();
+        slot.ref = v->abs_ms_location();
+        slot.settled = pose == target;
+
+        slot.frame = f;
+        slot.frame.origin_x = static_cast<float>( anchor.x() ) + pose.x;
+        slot.frame.origin_y = static_cast<float>( anchor.y() ) + pose.y;
+        slot.frame.angle = pose.angle;
+
+        // One tile of margin on every side plus one for the half-tile the part sprites
+        // themselves may spill over their mounts by.
+        const int w = ( f.mount_max_x - f.mount_min_x + 3 ) * tile_width;
+        const int h = ( f.mount_max_y - f.mount_min_y + 3 ) * tile_height;
+        slot.veh = rs.vehicle_target( i, w, h ) != nullptr ? v : nullptr;
+    }
+
+    if( composite_slots_[ 0 ].veh == nullptr || !g->u.in_vehicle ) {
+        return std::nullopt;
+    }
+    const optional_vpart_position vp = g->m.veh_at( g->u.bub_pos() );
+    if( !vp || &vp->vehicle() != composite_slots_[ 0 ].veh ) {
+        return std::nullopt;
+    }
+    const tripoint_mnt_veh mount = vp->mount();
+    const vehicle_render_point seat = vehicle_mount_to_bubble(
+                                          composite_slots_[ 0 ].frame, static_cast<float>( mount.x() ),
+                                          static_cast<float>( mount.y() ) );
+    return SDL_FPoint {
+        seat.x - static_cast<float>( g->u.bub_pos().x() ),
+        seat.y - static_cast<float>( g->u.bub_pos().y() ) };
+}
+
+auto cata_tiles::is_composite_vehicle( const vehicle &v ) const -> bool
+{
+    return std::ranges::any_of( composite_slots_,
+    [&v]( const composite_slot & s ) { return s.veh == &v; } );
+}
 
 void cata_tiles::draw(
     point dest, const tripoint_bub_ms& center, int width, int height,
@@ -569,6 +684,14 @@ void cata_tiles::draw(
     if( !g ) { return; }
     // Refresh the sprite-animation frame context (wall-clock + option tuning) once.
     refresh_anim_frame();
+
+    // An in-flight vehicle composite moves every frame, so it must keep the redraw
+    // pump alive the same way a creature animation does.
+    if( std::ranges::any_of( composite_slots_, []( const composite_slot & s ) {
+    return s.veh != nullptr && !s.settled;
+} ) ) {
+        creatures_anim_active_ = true;
+    }
 
     // Hover-outline: holding Alt outlines ALL visible creatures (not just the one
     // under the cursor). Polled here since a bare modifier press may not trigger a
@@ -1430,6 +1553,15 @@ void cata_tiles::draw(
                 }
                 gr_begin = gr_end;
             }
+            // ---- Composite vehicles (slot 0 own, slot 1 co-op partner) ----
+            // Baked and queued as ONE quad each, after the ground entities of this z so
+            // the y-sorted creatures of Pass 3 still sort against it by tile.
+            for( std::size_t i = 0; i < composite_slots_.size(); ++i ) {
+                const composite_slot &slot = composite_slots_[ i ];
+                if( slot.veh != nullptr && z == slot.veh->bub_ms_location().z() ) {
+                    draw_vehicle_composite( i );
+                }
+            }
             // ---- Pass 3: y-sort and draw creatures AND deferred canopies ----
             // The canopies (deferred wide terrain foregrounds) join the creature
             // y-sort: both keys are the BOTTOM EDGE of the sprite in screen pixels —
@@ -1887,6 +2019,12 @@ void cata_tiles::draw(
                               1.0f, 0.95f, 0.2f, 1.0f );
             }
         }
+    }
+    // The slot pointers reference live vehicles only for the duration of this draw;
+    // a draw() that did not go through prepare_vehicle_composites() must therefore
+    // fall back to per-tile drawing. Motion state survives so the pose stays put.
+    for( composite_slot &slot : composite_slots_ ) {
+        slot.veh = nullptr;
     }
     lighting::get_render_state().clear_tile_scissor();
 }
