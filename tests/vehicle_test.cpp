@@ -20,6 +20,7 @@
 #include "overmapbuffer.h"
 #include "state_helpers.h"
 #include "type_id.h"
+#include "units_utility.h"
 #include "veh_type.h"
 #include "vehicle.h"
 #include "vehicle_part.h"
@@ -28,6 +29,7 @@
 #include "vpart_range.h"
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <optional>
 #include <ranges>
@@ -1163,4 +1165,113 @@ TEST_CASE("vehicle_move_notifications_per_turn", "[vehicle][perf]") {
     veh.velocity = 0;
     here.vehmove();
     CHECK(here.take_vehicle_move_notifications() == 0);
+}
+
+namespace {
+
+/// Whole degrees of `a` normalized into [0, 360). Angle quantities are radians in
+/// double, so comparisons go through this to avoid float-equality surprises.
+auto deg_of(units::angle a) -> int {
+    return static_cast<int>(std::lround(units::to_degrees(normalize(a))));
+}
+
+/// Pavement + a car_test at (60,60,0) pointing east, under Box2D authority.
+auto make_presteer_fixture() -> vehicle* {
+    clear_all_state();
+    build_test_map(ter_id("t_pavement"));
+    map& here = get_map();
+    vehicle* veh_ptr =
+        here.add_vehicle(vproto_id("car_test"), tripoint_bub_ms(60, 60, 0), 0_degrees, 100, 0);
+    REQUIRE(veh_ptr != nullptr);
+    REQUIRE(veh_ptr->box2d_position_authority);
+    veh_ptr->engine_on = true;
+    return veh_ptr;
+}
+
+} // namespace
+
+TEST_CASE("stationary_steering_queues_heading_without_rotating", "[vehicle][steering]") {
+    const auto reverse_steering = override_option("REVERSE_STEERING", "false");
+    vehicle* veh_ptr = make_presteer_fixture();
+    vehicle& veh = *veh_ptr;
+    avatar& you = get_avatar();
+    you.set_skill_level(skill_id("driving"), 10);
+
+    you.set_moves(100);
+    veh.pldrive(you, tripoint_rel_veh{1, 0, 0});
+
+    CHECK(deg_of(veh.face.dir()) == 0);
+    CHECK(deg_of(veh.turn_dir) == 15);
+
+    // A stopped vehicle must never rotate, however many turns go by.
+    for (int turn = 0; turn < 3; ++turn) { get_map().vehmove(); }
+    CHECK(deg_of(veh.face.dir()) == 0);
+    CHECK(deg_of(veh.turn_dir) == 15);
+}
+
+TEST_CASE("stationary_presteer_stops_at_three_steps", "[vehicle][steering]") {
+    const auto reverse_steering = override_option("REVERSE_STEERING", "false");
+    vehicle* veh_ptr = make_presteer_fixture();
+    vehicle& veh = *veh_ptr;
+    avatar& you = get_avatar();
+    you.set_skill_level(skill_id("driving"), 10);
+
+    for (int press = 0; press < 5; ++press) {
+        you.set_moves(100);
+        veh.pldrive(you, tripoint_rel_veh{1, 0, 0});
+    }
+
+    CHECK(deg_of(veh.face.dir()) == 0);
+    CHECK(deg_of(veh.turn_dir) == 45);
+}
+
+TEST_CASE("pulling_away_forward_keeps_presteer", "[vehicle][steering]") {
+    const auto reverse_steering = override_option("REVERSE_STEERING", "false");
+    vehicle* veh_ptr = make_presteer_fixture();
+    vehicle& veh = *veh_ptr;
+    avatar& you = get_avatar();
+    you.set_skill_level(skill_id("driving"), 10);
+    veh.cruise_on = false;
+
+    you.set_moves(100);
+    veh.pldrive(you, tripoint_rel_veh{1, 0, 0});
+    you.set_moves(100);
+    veh.pldrive(you, tripoint_rel_veh{0, -1, 0});
+
+    CHECK(veh.velocity > 0);
+    CHECK(deg_of(veh.turn_dir) == 15);
+}
+
+TEST_CASE("pulling_away_in_reverse_mirrors_presteer", "[vehicle][steering]") {
+    const auto reverse_steering = override_option("REVERSE_STEERING", "false");
+    vehicle* veh_ptr = make_presteer_fixture();
+    vehicle& veh = *veh_ptr;
+    avatar& you = get_avatar();
+    you.set_skill_level(skill_id("driving"), 10);
+    veh.cruise_on = false;
+
+    you.set_moves(100);
+    veh.pldrive(you, tripoint_rel_veh{1, 0, 0});
+    you.set_moves(100);
+    veh.pldrive(you, tripoint_rel_veh{0, 1, 0});
+
+    CHECK(veh.velocity < 0);
+    CHECK(deg_of(veh.turn_dir) == 345);
+}
+
+TEST_CASE("rolling_steering_turns_vehicle", "[vehicle][steering]") {
+    const auto reverse_steering = override_option("REVERSE_STEERING", "false");
+    vehicle* veh_ptr = make_presteer_fixture();
+    vehicle& veh = *veh_ptr;
+    avatar& you = get_avatar();
+    you.set_skill_level(skill_id("driving"), 10);
+    veh.tags.insert("IN_CONTROL_OVERRIDE");
+    veh.velocity = 1000;
+    veh.cruise_velocity = 1000;
+
+    you.set_moves(100);
+    veh.pldrive(you, tripoint_rel_veh{1, 0, 0});
+    get_map().vehmove();
+
+    CHECK(deg_of(veh.face.dir()) == 15);
 }

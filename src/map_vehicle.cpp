@@ -937,8 +937,12 @@ void map::vehmove() {
             // (refresh=false), which refresh_precalc(physics_angle) already
             // keeps correct from the continuous physics angle.  Without this,
             // coord_translate(pivot_point()) desyncs from bub_ms_location() —
-            // see vehicle_rails_test.cpp.
-            veh.set_facing_and_pivot(veh.turn_dir, veh.pivot_point(), false);
+            // see vehicle_rails_test.cpp.  A stopped vehicle keeps its heading and only
+            // holds its steer target.
+            const auto steer_target = veh.turn_dir;
+            veh.set_facing_and_pivot( veh.is_moving() ? steer_target : veh.face.dir(), veh.pivot_point(),
+                                      false );
+            veh.turn_dir = steer_target; // set_facing() overwrites turn_dir; keep the pre-steer
             veh.render_offset_x = static_cast<float>(
                 veh.physics_pos.x - std::lround(veh.physics_pos.x));
             veh.render_offset_y = static_cast<float>(

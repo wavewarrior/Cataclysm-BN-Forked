@@ -73,6 +73,24 @@ static const float imp_conv_const = 0.1;
 // Inverse conversion constant for impulse to damage
 static const float imp_conv_const_inv = 1 / imp_conv_const;
 
+namespace
+{
+
+/// Most 15° steering steps a stopped vehicle can queue: the same 3 steps a moving
+/// driver gets per turn ("At most 3 turns per turn" in pldrive).
+constexpr auto max_presteer_steps = 3;
+/// Heading change from `from` to `to` in whole 15° steps, signed, in (-12, 12].
+auto presteer_steps( units::angle from, units::angle to ) -> int
+{
+    auto d = normalize( to - from );
+    if( d > 180_degrees ) {
+        d -= 360_degrees;
+    }
+    return static_cast<int>( std::lround( d / 15_degrees ) );
+}
+
+} // namespace
+
 auto mps_to_cmps( double mps ) -> int
 {
     return std::lround( mps * 100.0 );
@@ -138,10 +156,11 @@ int vehicle::slowdown( int at_velocity ) const
 
 void vehicle::thrust( int thd, int z )
 {
-    //if vehicle is stopped, set target direction to forward.
-    //ensure it is not skidding. Set turns used to 0.
+    const bool started_stopped = !is_moving();
+    //if vehicle is stopped, ensure it is not skidding. Set turns used to 0.
     if( !is_moving() && z == 0 ) {
-        turn_dir = face.dir();
+        // Stopped: clear skid state, but keep any pre-steer (turn_dir) so it applies
+        // on the first move.
         stop();
     }
     bool pl_ctrl = player_in_control( get_player_character() );
@@ -301,6 +320,11 @@ void vehicle::thrust( int thd, int z )
         } else {
             velocity = std::min( velocity, std::max( velocity + vel_inc, min_vel ) );
         }
+    }
+    // Pre-steer is a wheel position: pulling away in reverse turns the other way, exactly
+    // as vehicle::turn() mirrors a press made while already reversing.
+    if( started_stopped && velocity < 0 && !::get_option<bool>( "REVERSE_STEERING" ) ) {
+        turn_dir = normalize( face.dir() - ( turn_dir - face.dir() ) );
     }
     // If you are going faster than the animal can handle, harness is damaged
     // Animal may come free ( and possibly hit by vehicle )
@@ -1367,6 +1391,10 @@ void vehicle::pldrive( Character &driver, tripoint_rel_veh p )
         thrust( 0, p.z() );
     }
     units::angle turn_delta = 15_degrees * p.x();
+    if( turn_delta != 0_degrees && !is_moving()
+        && std::abs( presteer_steps( face.dir(), turn_dir + turn_delta ) ) > max_presteer_steps ) {
+        turn_delta = 0_degrees; // wheel at lock: no steering, no move cost; throttle (p.y) still handled
+    }
     const float handling_diff = handling_difficulty();
     if( turn_delta != 0_degrees ) {
         float eff = steering_effectiveness();
@@ -1424,6 +1452,13 @@ void vehicle::pldrive( Character &driver, tripoint_rel_veh p )
         }
 
         turn( turn_delta );
+        if( !is_moving() ) {
+            // A stopped vehicle only queues a steer target; snap it to the wheel lock so
+            // a fumbled multi-step turn cannot exceed what a moving driver could queue.
+            const auto steps = std::clamp( presteer_steps( face.dir(), turn_dir ),
+                                           -max_presteer_steps, max_presteer_steps );
+            turn_dir = normalize( face.dir() + steps * 15_degrees );
+        }
 
         // At most 3 turns per turn, because otherwise it looks really weird and jumpy
         driver.moves -= action_time_scale::vehicle_control_cost( driver,
