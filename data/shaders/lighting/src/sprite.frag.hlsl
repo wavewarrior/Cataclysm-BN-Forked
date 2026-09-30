@@ -275,17 +275,18 @@ float sdf_bilinear(float2 p) {
 // Stage 2b: the wall-only sun SDF + its bilinear sampler are GONE. The sun (and
 // moon) shadow is now the unified coverage occluder marched in 3D by
 // sky_sun.comp → SkyBuf.a; the fragment no longer reads SunSdfBuf.
-// Per-tile 1-bounce indirect light (RGB). Read from GiBuf, the GPU compute GI
-// pass's output: tile-res, 4 floats/tile (rgb + pad), x-major
-// gi[(x*sdf_map_h+y)*4 + c] — the same x-major layout as SdfBuf/SkyVisBuf, no
-// transpose (the compute shader writes the CPU-style index directly, unlike the
-// old IndirectTex storage texture which needed a row/col swap). Bilinear with the
-// same p-0.5 centre convention as sdf_bilinear.
-float3 indirect_texel(int x, int y) {
+// Per-tile 1-bounce indirect light. Read from GiBuf, the GPU compute GI pass's
+// output: tile-res, 4 floats/tile x-major gi[(x*sdf_map_h+y)*4 + c] — the same
+// x-major layout as SdfBuf/SkyVisBuf, no transpose (the compute shader writes the
+// CPU-style index directly, unlike the old IndirectTex storage texture which
+// needed a row/col swap). .rgb = irradiance, .a = SDF at the tile centre
+// (rc_resolve.comp), the bilateral weight key below. Bilinear with the same p-0.5
+// centre convention as sdf_bilinear.
+float4 indirect_texel(int x, int y) {
     x = clamp(x, 0, (int)sdf_map_w - 1);
     y = clamp(y, 0, (int)sdf_map_h - 1);
     const int o = (x * (int)sdf_map_h + y) * 4;
-    return float3(GiBuf[o + 0], GiBuf[o + 1], GiBuf[o + 2]);
+    return float4(GiBuf[o + 0], GiBuf[o + 1], GiBuf[o + 2], GiBuf[o + 3]);
 }
 // Bilateral GI upsample: reject taps whose SDF differs sharply from the sample
 // point's, so bounce light does not cross a wall. GI is one probe per TILE, so a
@@ -304,30 +305,31 @@ float3 indirect_bilinear(float2 p) {
     const int x0 = (int)fp.x;
     const int y0 = (int)fp.y;
     const float2 w = sp - fp;
-    const float3 a = indirect_texel(x0, y0);
-    const float3 b = indirect_texel(x0 + 1, y0);
-    const float3 c = indirect_texel(x0, y0 + 1);
-    const float3 d = indirect_texel(x0 + 1, y0 + 1);
-    const float3 plain = lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
+    const float4 a = indirect_texel(x0, y0);
+    const float4 b = indirect_texel(x0 + 1, y0);
+    const float4 c = indirect_texel(x0, y0 + 1);
+    const float4 d = indirect_texel(x0 + 1, y0 + 1);
+    const float3 plain = lerp(lerp(a.rgb, b.rgb, w.x), lerp(c.rgb, d.rgb, w.x), w.y);
 
-    // Bilinear weights, then an SDF-similarity factor per tap. Tap centres are the
-    // probe tile centres (integer tile + 0.5), which is what sdf_bilinear expects.
+    // Bilinear weights, then an SDF-similarity factor per tap. Tap SDFs are the
+    // probe tile-centre values rc_resolve stored in .a (clamped at the bubble edge).
     const float sd_c = sdf_bilinear(p);
     const float wa = (1.0 - w.x) * (1.0 - w.y);
     const float wb = w.x * (1.0 - w.y);
     const float wc = (1.0 - w.x) * w.y;
     const float wd = w.x * w.y;
     const float inv_sigma = 1.0 / GI_BILAT_SIGMA;
-    const float ba = wa * exp(-abs(sdf_bilinear(float2(x0, y0) + 0.5) - sd_c) * inv_sigma);
-    const float bb = wb * exp(-abs(sdf_bilinear(float2(x0 + 1, y0) + 0.5) - sd_c) * inv_sigma);
-    const float bc = wc * exp(-abs(sdf_bilinear(float2(x0, y0 + 1) + 0.5) - sd_c) * inv_sigma);
-    const float bd = wd * exp(-abs(sdf_bilinear(float2(x0 + 1, y0 + 1) + 0.5) - sd_c) * inv_sigma);
+    const float ba = wa * exp(-abs(a.w - sd_c) * inv_sigma);
+    const float bb = wb * exp(-abs(b.w - sd_c) * inv_sigma);
+    const float bc = wc * exp(-abs(c.w - sd_c) * inv_sigma);
+    const float bd = wd * exp(-abs(d.w - sd_c) * inv_sigma);
     const float wsum = ba + bb + bc + bd;
     // A fully-rejected neighbourhood must not produce black — fall back to the
     // unweighted result rather than dividing by ~0. gi_bilat lerps the whole term
     // back to plain bilinear so the upsample is A/B-able at runtime like every
     // other step in this plan.
-    const float3 bilat = (wsum < 1e-4) ? plain : ((a * ba + b * bb + c * bc + d * bd) / wsum);
+    const float3 bilat =
+        (wsum < 1e-4) ? plain : ((a.rgb * ba + b.rgb * bb + c.rgb * bc + d.rgb * bd) / wsum);
     return lerp(plain, bilat, saturate(gi_bilat));
 }
 // Stage 2a directional skylight reader (SkyBuf). Same tile-res x-major layout +

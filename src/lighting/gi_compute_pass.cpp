@@ -73,7 +73,7 @@ bool gi_compute_pass::init(gpu_device& dev, std::uint32_t max_w, std::uint32_t m
     // storage buffers (emitters, sdf, sky, albedo, prev-gi feedback) + 1
     // readwrite (field). RC build: 2 readonly (field, sdf) + 1 readwrite
     // (atlas). RC merge: 0 readonly + 1 readwrite (atlas, read AND written
-    // through the same UAV). RC resolve: 1 readonly (atlas) + 1 readwrite
+    // through the same UAV). RC resolve: 2 readonly (atlas, sdf) + 1 readwrite
     // (gi out). No samplers (compute dodges the fragment sampler-order
     // root-sig that killed rc.frag on D3D12). A mismatch here means a
     // buffer was stripped or mis-declared — fail loudly at startup rather
@@ -101,7 +101,7 @@ bool gi_compute_pass::init(gpu_device& dev, std::uint32_t max_w, std::uint32_t m
         << " rw_sb=" << rp.resources.num_readwrite_storage_buffers
         << " uniforms=" << rp.resources.num_uniform_buffers << " threads=("
         << rp.resources.threadcount_x << "," << rp.resources.threadcount_y << ","
-        << rp.resources.threadcount_z << ") (expects ro_sb=1 rw_sb=1)";
+        << rp.resources.threadcount_z << ") (expects ro_sb=2 rw_sb=1)";
 
     // Allocate the buffers FIRST, before checking the pipelines. The sprite's
     // GiBuf bind reads gi_buffer() unconditionally (all-or-none storage-buffer
@@ -389,8 +389,8 @@ void gi_compute_pass::record(
             return;
         }
         SDL_BindGPUComputePipeline( p, rc_resolve_pipeline_ );
-        SDL_GPUBuffer* ro[1] = { rc_atlas_ }; // t0
-        SDL_BindGPUComputeStorageBuffers( p, /*first_slot=*/0, ro, 1 );
+        SDL_GPUBuffer* ro[2] = { rc_atlas_, sdf_buf }; // t0 atlas, t1 sdf (tile-centre SDF → GiBuf.a)
+        SDL_BindGPUComputeStorageBuffers( p, /*first_slot=*/0, ro, 2 );
         SDL_DispatchGPUCompute( p, gx, gy, 1 );
         SDL_EndGPUComputePass( p );
     }

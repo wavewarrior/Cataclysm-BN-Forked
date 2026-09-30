@@ -6,11 +6,14 @@
 //
 //   t0 space0  RcAtlas — StructuredBuffer<float>, the flat multi-cascade
 //              atlas (readonly here — MERGE already finished writing it).
+//   t1 space0  SdfBuf  — StructuredBuffer<float>, SS-finer JFA SDF (rc_shared.hlsl).
 //   u0 space1  GiOut   — RWStructuredBuffer<float>, 4 floats/tile, x-major
-//              gi[(x*map_h+y)*4 + c] (sprite.frag GI input, unchanged layout).
+//              gi[(x*map_h+y)*4 + c] (sprite.frag GI input). .rgb = irradiance,
+//              .a = SDF at the tile centre (sprite.frag bilateral GI weight).
 //   b0 space2  RcParams (shared push; see rc_params.h for the C++ mirror).
 
 StructuredBuffer<float>   RcAtlas : register(t0, space0);
+StructuredBuffer<float>   SdfBuf  : register(t1, space0);
 RWStructuredBuffer<float> GiOut   : register(u0, space1);
 
 static const uint RC_CASCADES = 5u;
@@ -26,6 +29,8 @@ cbuffer RcParams : register(b0, space2) {
     float rc_pad0;
     uint4 geom[RC_CASCADES];
 };
+
+#include "rc_shared.hlsl"
 
 [numthreads(8, 8, 1)]
 void main( uint3 tid : SV_DispatchThreadID )
@@ -51,5 +56,7 @@ void main( uint3 tid : SV_DispatchThreadID )
     GiOut[go + 0u] = irradiance.x;
     GiOut[go + 1u] = irradiance.y;
     GiOut[go + 2u] = irradiance.z;
-    GiOut[go + 3u] = 0.0;
+    // Tile-centre SDF, so sprite.frag's bilateral GI upsample reads its four tap
+    // weights from here instead of four sdf_bilinear calls (16 loads) per pixel.
+    GiOut[go + 3u] = sdf_bilinear( float2( tid.xy ) + 0.5 );
 }
