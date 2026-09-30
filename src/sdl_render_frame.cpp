@@ -168,6 +168,9 @@ if( !rs.ready() ) {
     return ctx;
 }
 
+// Structure rebuilds since the last [render][perf] window (reported as rebuilds=k/n).
+namespace { int s_rebuild_in_window = 0; } // namespace
+
 auto build_lighting( lighting::render_state &rs ) -> bool
 {
     ZoneScopedN( "render_build_lighting" );
@@ -236,7 +239,7 @@ if( g && world_generator && world_generator->active_world ) {
             last_struct_px == INT_MIN
             || std::abs( px - last_struct_px ) >= SDF_CAM_DRIFT_TILES
             || std::abs( py - last_struct_py ) >= SDF_CAM_DRIFT_TILES;
-        rebuild.structure = sdl_lighting_devui::devui_visible()
+        rebuild.structure = sdl_lighting_devui::devui_visible() || g_force_rc_rebuild
                             || gen != last_gen || z != last_z
                             || origin != last_origin || cam_drifted;
 
@@ -249,6 +252,7 @@ if( g && world_generator && world_generator->active_world ) {
                       || z != last_z;
 
         if( rebuild.structure ) {
+            ++s_rebuild_in_window;
             last_gen = gen;
             last_z = z;
             last_origin = origin;
@@ -1923,7 +1927,8 @@ void refresh_display()
                 DebugLogFL( DL::Info, DC::Main )
                         << "[render][perf] " << n << " frames: render_body avg=" << ( sum_body / n )
                         << "ms max=" << max_body << "ms | frame_period avg=" << ap << "ms (~"
-                        << ( ap > 0.0 ? 1000.0 / ap : 0.0 ) << " fps) max=" << max_period << "ms";
+                        << ( ap > 0.0 ? 1000.0 / ap : 0.0 ) << " fps) max=" << max_period << "ms"
+                        << " rebuilds=" << s_rebuild_in_window << "/" << n;
                 // Per-phase breakdown (avg/max ms) — which stage owns the spike.
                 std::string ph;
                 for( int i = 0; i < 10; ++i ) {
@@ -1935,6 +1940,7 @@ void refresh_display()
                 DebugLogFL( DL::Info, DC::Main ) << "[render][perf][phase avg/max ms]" << ph;
                 sum_body = max_body = sum_period = max_period = 0.0;
                 n = 0;
+                s_rebuild_in_window = 0;
             }
         }
     } _fp;

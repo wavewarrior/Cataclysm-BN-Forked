@@ -88,6 +88,7 @@ bool g_bloom_enable = false;
 // daylight scan (Step 3) and window light shafts (Step 6) it feeds both
 // ship enabled by default.
 bool g_sky_sun_enable = true;
+bool g_force_rc_rebuild = false;
 float g_bloom_threshold = 1.0f;
 float g_bloom_intensity = 0.5f;
 float g_grade_cdl_slope_r = 1.0f;

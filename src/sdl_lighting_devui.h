@@ -59,6 +59,8 @@ extern bool g_bloom_enable;
 // Phase 1 (coop-priority-gk-lighting): SDF sun-march compute dispatch gate.
 // Disabled by default; keep code, allow runtime A/B via F4 without rebuilding.
 extern bool g_sky_sun_enable;
+// Measurement knob (file channel only): forces a structure rebuild every frame.
+extern bool g_force_rc_rebuild;
 extern float g_bloom_threshold;
 extern float g_bloom_intensity;
 // ASC-CDL colour grade + post-processing controls (F4 sliders).

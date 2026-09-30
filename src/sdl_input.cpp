@@ -515,7 +515,8 @@ void CheckMessages( display_context &d )
     // gi_feedback, rc_readback, sun_arrow, guard_amount, portal_dirs,
     // portal_reach, sky_sun_enable, flicker_gain, shaft_enable,
     // shaft_intensity, shaft_length_scale, shaft_width, dust_enable,
-    // dust_density, dust_size, dust_drift, crt_world.
+    // dust_density, dust_size, dust_drift, crt_world, shadow_steps,
+    // max_shadow_k, gi_bilat, light_eps, force_rc_rebuild, gi_enable.
     {
         std::error_code ec;
         if( std::filesystem::exists( "/tmp/cata_knob", ec ) ) {
@@ -557,6 +558,12 @@ void CheckMessages( display_context &d )
                 else if( kn == "glow_radius" ) g_glow_radius = kv;
                 else if( kn == "glow_saturation" ) g_glow_saturation = kv;
                 else if( kn == "crt_world" ) rmlui_layer::crt().crt_world = kv > 0.5f;
+                else if( kn == "shadow_steps" ) dp.shadow_steps = static_cast<std::uint32_t>( std::max( 1.0f, kv ) );
+                else if( kn == "max_shadow_k" ) dp.max_shadow_k = kv;
+                else if( kn == "gi_bilat" ) dp.gi_bilat = kv;
+                else if( kn == "light_eps" ) dp.light_eps = kv;
+                else if( kn == "force_rc_rebuild" ) g_force_rc_rebuild = kv > 0.5f;
+                else if( kn == "gi_enable" ) g_gi_enable = kv > 0.5f;
                 else ok = false;
                 std::filesystem::remove( "/tmp/cata_knob", ec );
                 dbg( DL::Info ) << "knob " << kn << " = " << kv << ( ok ? "" : " (unknown)" );

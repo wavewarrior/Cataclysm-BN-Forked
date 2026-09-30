@@ -67,17 +67,35 @@ void gpu_device::init(SDL_Window* window, bool debug, bool vsync) {
 
     swap_format = SDL_GetGPUSwapchainTextureFormat(device.get(), window);
     vsync_enabled = vsync;
-    const SDL_GPUPresentMode present_mode =
+    SDL_GPUPresentMode present_mode =
         vsync ? SDL_GPU_PRESENTMODE_VSYNC : SDL_GPU_PRESENTMODE_MAILBOX;
     // Compositions: SDR is the only universally supported one. HDR support
     // negotiated later in the bloom/tonemap phase.
-    SDL_SetGPUSwapchainParameters(
+    bool present_ok = SDL_SetGPUSwapchainParameters(
         device.get(), window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, present_mode);
+    // Measurement-only: benchmark harnesses set CATA_MEASURE_IMMEDIATE=1 so an
+    // unsupported MAILBOX (Metal) does not leave frame_period vsync-quantized.
+    // Production never takes this branch.
+    const char* measure_env = std::getenv("CATA_MEASURE_IMMEDIATE");
+    if (!present_ok && !vsync && measure_env != nullptr && std::strcmp(measure_env, "1") == 0) {
+        DebugLogFL( DL::Info, DC::Main ) << "present mode mailbox rejected (" << SDL_GetError()
+                      << "); CATA_MEASURE_IMMEDIATE retrying immediate";
+        present_mode = SDL_GPU_PRESENTMODE_IMMEDIATE;
+        present_ok = SDL_SetGPUSwapchainParameters(
+            device.get(), window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, present_mode);
+    }
+    // present= is the mode the last request selected; on ret=0 the swapchain
+    // keeps SDL_ClaimWindowForGPUDevice's default (VSYNC).
+    const char* present_name = !present_ok ? "vsync"
+                               : present_mode == SDL_GPU_PRESENTMODE_MAILBOX ? "mailbox"
+                               : present_mode == SDL_GPU_PRESENTMODE_IMMEDIATE ? "immediate"
+                               : "vsync";
 
     const char* driver = SDL_GetGPUDeviceDriver(device.get());
-    dbg(DL::Info) << "SDL_GPU device created. driver=" << (driver ? driver : "?")
+    DebugLogFL( DL::Info, DC::Main ) << "SDL_GPU device created. driver=" << (driver ? driver : "?")
                   << " swapchain_format=" << static_cast<int>(swap_format)
-                  << " vsync=" << (vsync ? "on" : "off");
+                  << " vsync=" << (vsync ? "on" : "off")
+                  << " present=" << present_name << " ret=" << (present_ok ? 1 : 0);
 }
 
 void gpu_device::shutdown() noexcept {
