@@ -690,15 +690,25 @@ auto flush_and_gather_rc( lighting::render_state &rs,
         // Radiance Cascades: field gather → cascade build → cascade merge →
         // cascade-0 resolve, on the render CB. SDL_GPU inserts the compute→
         // graphics barrier so the sprite pass reads the finished gi_out_buffer().
-        rs.gi().record( ctx.cmd_buffer,
-                        rs.collector()->emitter_buffer(), rs.sdf().sdf_buffer(),
-                        rs.sky().sky_buffer(), rs.sdf().albedo_buffer(),
-                        map_w, map_h, rp );
+        rs.gi().record( { .cmd = ctx.cmd_buffer,
+                          .bufs = { .emitter = rs.collector()->emitter_buffer(),
+                                    .sdf = rs.sdf().sdf_buffer(), .sky = rs.sky().sky_buffer(),
+                                    .albedo = rs.sdf().albedo_buffer() },
+                          .w = map_w, .h = map_h, .params = rp } );
         gi_ran = true;
     } else if( !g_gi_enable ) {
     gi_reason = "disabled";
 } else if( sdf_populated ) {
     gi_reason = !rs.gi().ready() ? "gi_ready" : "collector";
+    }
+    // Feedback iterations the last structure rebuild queued (gi_compute_pass::
+    // record) run one per frame on the frames that follow it.
+    if( !gi_ran && g_gi_enable && rs.collector() && rs.sdf().populated() ) {
+        rs.gi().record_pending( ctx.cmd_buffer,
+                                { .emitter = rs.collector()->emitter_buffer(),
+                                  .sdf = rs.sdf().sdf_buffer(), .sky = rs.sky().sky_buffer(),
+                                  .albedo = rs.sdf().albedo_buffer() },
+                                static_cast<std::uint32_t>( std::max( 0, rs.collector()->last_count() ) ) );
     }
 
     if( rc_rebuild ) {

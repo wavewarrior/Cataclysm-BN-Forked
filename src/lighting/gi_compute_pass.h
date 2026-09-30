@@ -70,6 +70,23 @@ struct gi_params {
     float gi_albedo; // albedo-bleed mix (0=off): field *= lerp(1, albedo, k)
 };
 
+/// Input buffers of one GI gather; all need SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ.
+struct gi_buffers {
+    SDL_GPUBuffer* emitter = nullptr; // t0, emitter_collector::emitter_buffer()
+    SDL_GPUBuffer* sdf = nullptr;     // t1, 8x JFA SDF
+    SDL_GPUBuffer* sky = nullptr;     // t2, sky_sun_pass output (recorded before GI)
+    SDL_GPUBuffer* albedo = nullptr;  // t3, per-tile albedo
+};
+
+/// One field → RC build → RC merge → RC resolve iteration.
+struct gi_iteration {
+    SDL_GPUCommandBuffer* cmd = nullptr;
+    gi_buffers bufs;
+    std::uint32_t w = 0; // runtime tile dims
+    std::uint32_t h = 0;
+    gi_params params{};
+};
+
 class gi_compute_pass {
 public:
     gi_compute_pass() = default;
@@ -104,21 +121,23 @@ public:
     // always has a valid handle.
     SDL_GPUBuffer* gi_buffer() const noexcept { return gi_out_buf_; }
 
-    // Run the four compute passes on `cb`: field (writes field_buf_) →
-    // RC build ×RC_CASCADES (writes rc_atlas_) → RC merge ×(RC_CASCADES-1)
-    // descending (merges rc_atlas_ in place) → RC resolve (writes
-    // gi_out_buf_). SDL_GPU inserts the compute→compute barriers between them
+    // Structure-rebuild gather: runs ONE full iteration on `it.cmd` — field
+    // (writes field_buf_) → RC build ×RC_CASCADES (writes rc_atlas_) → RC merge
+    // ×(RC_CASCADES-1) descending (merges rc_atlas_ in place) → RC resolve
+    // (writes gi_out_buf_). With gi_feedback > 0 it also queues 2 more
+    // iterations for record_pending() on the following frames, so the
+    // multi-bounce series converges over 3 consecutive frames instead of
+    // tripling this frame's cost. SDL_GPU inserts the compute→compute barriers
     // and the compute-write→graphics-read barrier on gi_out_buf_ before the
-    // sprite pass. No-op if not ready or any arg invalid. The field pass
-    // binds emitter_buf (t0) + sdf_buf (t1) + sky_buf (t2) + albedo_buf (t3)
-    // as readonly compute storage buffers; all must carry
-    // SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ. sky_buf (sky_sun_pass output)
-    // feeds the P2 daylight-bounce injection — it must be recorded BEFORE
-    // this call so SDL_GPU inserts the write→read barrier.
-    void record(
-        SDL_GPUCommandBuffer* cb, SDL_GPUBuffer* emitter_buf, SDL_GPUBuffer* sdf_buf,
-        SDL_GPUBuffer* sky_buf, SDL_GPUBuffer* albedo_buf, std::uint32_t runtime_w,
-        std::uint32_t runtime_h, const gi_params& params);
+    // sprite pass. No-op if not ready or any input invalid. `it.bufs.sky` must
+    // be recorded BEFORE this call so SDL_GPU inserts the write→read barrier.
+    auto record( const gi_iteration& it ) -> void;
+
+    // Runs one queued feedback iteration (if any) on `cb` with the geometry and
+    // params of the last record(), except `emitter_count`, which tracks the
+    // current emitter buffer. Call on frames where record() did not run.
+    auto record_pending( SDL_GPUCommandBuffer* cb, const gi_buffers& bufs,
+                         std::uint32_t emitter_count ) -> void;
 
     // Dev oracle: synchronous GPU→CPU readback of gi_out_buf_ over the runtime
     // tile region; logs sum/max/nonzero/centroid to DC::Main. Stalls the GPU
@@ -128,6 +147,8 @@ public:
 private:
     SDL_GPUBuffer* create_buffer( std::uint32_t floats, SDL_GPUBufferUsageFlags usage );
     void zero_buffer( SDL_GPUBuffer* buf, std::uint32_t floats );
+    /// One field→build→merge→resolve iteration; false where a pass failed to begin.
+    auto record_iteration( const gi_iteration& it ) -> bool;
 
     gpu_device* dev_ = nullptr;
     SDL_GPUComputePipeline* field_pipeline_ = nullptr;
@@ -140,6 +161,11 @@ private:
     std::uint32_t max_w_ = 0;
     std::uint32_t max_h_ = 0;
     std::uint32_t rc_atlas_floats_ = 0; // allocated size, for the zero-fill and bounds
+    // Feedback iterations still owed to the last record() (0..2), and its geometry.
+    std::uint32_t pending_iters_ = 0;
+    std::uint32_t pending_w_ = 0;
+    std::uint32_t pending_h_ = 0;
+    gi_params pending_params_{};
 };
 
 } // namespace lighting

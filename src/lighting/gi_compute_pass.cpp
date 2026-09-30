@@ -221,6 +221,7 @@ bool gi_compute_pass::resize( std::uint32_t max_w, std::uint32_t max_h ) {
         return true;
     }
     if( !dev_ || !dev_->ready() ) { return false; }
+    pending_iters_ = 0; // the queued series targets buffers being reallocated
     if( field_buf_ ) { SDL_ReleaseGPUBuffer( dev_->raw(), field_buf_ ); field_buf_ = nullptr; }
     if( rc_atlas_ ) { SDL_ReleaseGPUBuffer( dev_->raw(), rc_atlas_ ); rc_atlas_ = nullptr; }
     if( gi_out_buf_ ) { SDL_ReleaseGPUBuffer( dev_->raw(), gi_out_buf_ ); gi_out_buf_ = nullptr; }
@@ -259,31 +260,59 @@ void gi_compute_pass::shutdown() noexcept {
     field_pipeline_ = rc_build_pipeline_ = rc_merge_pipeline_ = rc_resolve_pipeline_ = nullptr;
     field_buf_ = rc_atlas_ = gi_out_buf_ = nullptr;
     max_w_ = max_h_ = rc_atlas_floats_ = 0;
+    pending_iters_ = 0;
 }
 
-void gi_compute_pass::record(
-    SDL_GPUCommandBuffer* cb, SDL_GPUBuffer* emitter_buf, SDL_GPUBuffer* sdf_buf,
-    SDL_GPUBuffer* sky_buf, SDL_GPUBuffer* albedo_buf, std::uint32_t runtime_w,
-    std::uint32_t runtime_h, const gi_params& params ) {
-    if( !ready() || !cb || !emitter_buf || !sdf_buf || !sky_buf || !albedo_buf
-        || runtime_w == 0 || runtime_h == 0 ) {
-        return;
-    }
-    const std::uint32_t gx = ( runtime_w + 7u ) / 8u; // ceil(W/8) — numthreads(8,8,1)
-    const std::uint32_t gy = ( runtime_h + 7u ) / 8u;
-
+auto gi_compute_pass::record( const gi_iteration& it ) -> void {
     // Multi-bounce convergence: GI only re-records on a structure rebuild
     // (terrain change / z / origin / >=4-tile camera drift), which for a
     // stationary player can be ONE event, ever. A single field->RC pass only
     // gives gi_feedback one iteration of the 1/(1-k) series - indistinguishable
-    // from "no effect". Looping the whole pipeline a few times within this
-    // ONE rebuild lets each iteration's FIELD read the previous iteration's
-    // freshly-resolved gi_out_buf_ (same trick as the cross-rebuild feedback,
-    // just repeated immediately), so multi-bounce light actually shows up the
-    // moment the knob is raised. Off (gi_feedback<=0): exactly 1 pass, byte-
-    // identical to pre-feedback behaviour.
-    const std::uint32_t iterations = ( params.gi_feedback > 0.001f ) ? 3u : 1u;
-    for( std::uint32_t iter = 0; iter < iterations; ++iter ) {
+    // from "no effect". Each iteration's FIELD reads the previous iteration's
+    // resolved gi_out_buf_, so running 3 iterations makes multi-bounce light
+    // show up the moment the knob is raised. They used to run back-to-back
+    // inside this ONE rebuild (3x its cost, the single largest GI frame spike);
+    // now the rebuild frame runs the first and the next two frames run one each
+    // via record_pending(), converging over 3 consecutive frames. Off
+    // (gi_feedback<=0): exactly 1 pass, byte-identical to pre-feedback behaviour.
+    pending_iters_ = 0;
+    if( !record_iteration( it ) ) {
+        return;
+    }
+    if( it.params.gi_feedback > 0.001f ) {
+        pending_iters_ = 2u;
+        pending_w_ = it.w;
+        pending_h_ = it.h;
+        pending_params_ = it.params;
+    }
+}
+
+auto gi_compute_pass::record_pending( SDL_GPUCommandBuffer* cb, const gi_buffers& bufs,
+                                      std::uint32_t emitter_count ) -> void {
+    if( pending_iters_ == 0 ) {
+        return;
+    }
+    --pending_iters_;
+    pending_params_.emitter_count = emitter_count;
+    if( !record_iteration( { .cmd = cb, .bufs = bufs, .w = pending_w_, .h = pending_h_,
+                             .params = pending_params_ } ) ) {
+        pending_iters_ = 0;
+    }
+}
+
+auto gi_compute_pass::record_iteration( const gi_iteration& it ) -> bool {
+    SDL_GPUCommandBuffer* const cb = it.cmd;
+    const auto& b = it.bufs;
+    const std::uint32_t runtime_w = it.w;
+    const std::uint32_t runtime_h = it.h;
+    const gi_params& params = it.params;
+    if( !ready() || !cb || !b.emitter || !b.sdf || !b.sky || !b.albedo
+        || runtime_w == 0 || runtime_h == 0 ) {
+        return false;
+    }
+    const std::uint32_t gx = ( runtime_w + 7u ) / 8u; // ceil(W/8) — numthreads(8,8,1)
+    const std::uint32_t gy = ( runtime_h + 7u ) / 8u;
+    SDL_GPUBuffer* const sdf_buf = b.sdf;
 
     // ---- Pass 1: FIELD — per-tile direct radiance gather. Unchanged by
     // Stage 7; Radiance Cascades reads this exactly like the old bounce did.
@@ -295,10 +324,10 @@ void gi_compute_pass::record(
         SDL_GPUComputePass* p = SDL_BeginGPUComputePass( cb, nullptr, 0, &rw, 1 );
         if( !p ) {
             dbg( DL::Error ) << "gi field pass: BeginGPUComputePass failed: " << SDL_GetError();
-            return;
+            return false;
         }
         SDL_BindGPUComputePipeline( p, field_pipeline_ );
-        SDL_GPUBuffer* ro[5] = { emitter_buf, sdf_buf, sky_buf, albedo_buf, gi_out_buf_ }; // t0..t4
+        SDL_GPUBuffer* ro[5] = { b.emitter, sdf_buf, b.sky, b.albedo, gi_out_buf_ }; // t0..t4
         SDL_BindGPUComputeStorageBuffers( p, /*first_slot=*/0, ro, 5 );
         SDL_DispatchGPUCompute( p, gx, gy, 1 );
         SDL_EndGPUComputePass( p );
@@ -312,7 +341,7 @@ void gi_compute_pass::record(
         DebugLogFL( DL::Error, DC::Main )
                 << "gi_compute_pass: rc atlas too small for runtime size (" << needed << " > "
                 << rc_atlas_floats_ << ") — skipping RC this frame";
-        return;
+        return false;
     }
 
     rc_params_gpu rp{};
@@ -337,7 +366,7 @@ void gi_compute_pass::record(
         SDL_GPUComputePass* p = SDL_BeginGPUComputePass( cb, nullptr, 0, &rw, 1 );
         if( !p ) {
             dbg( DL::Error ) << "rc build pass: BeginGPUComputePass failed: " << SDL_GetError();
-            return;
+            return false;
         }
         SDL_BindGPUComputePipeline( p, rc_build_pipeline_ );
         SDL_GPUBuffer* ro[2] = { field_buf_, sdf_buf }; // t0 (field), t1 (sdf)
@@ -364,7 +393,7 @@ void gi_compute_pass::record(
         SDL_GPUComputePass* p = SDL_BeginGPUComputePass( cb, nullptr, 0, &rw, 1 );
         if( !p ) {
             dbg( DL::Error ) << "rc merge pass: BeginGPUComputePass failed: " << SDL_GetError();
-            return;
+            return false;
         }
         SDL_BindGPUComputePipeline( p, rc_merge_pipeline_ );
         // No readonly storage buffers: rc_merge.comp reads AND writes rc_atlas_
@@ -386,7 +415,7 @@ void gi_compute_pass::record(
         SDL_GPUComputePass* p = SDL_BeginGPUComputePass( cb, nullptr, 0, &rw, 1 );
         if( !p ) {
             dbg( DL::Error ) << "rc resolve pass: BeginGPUComputePass failed: " << SDL_GetError();
-            return;
+            return false;
         }
         SDL_BindGPUComputePipeline( p, rc_resolve_pipeline_ );
         SDL_GPUBuffer* ro[2] = { rc_atlas_, sdf_buf }; // t0 atlas, t1 sdf (tile-centre SDF → GiBuf.a)
@@ -394,7 +423,7 @@ void gi_compute_pass::record(
         SDL_DispatchGPUCompute( p, gx, gy, 1 );
         SDL_EndGPUComputePass( p );
     }
-    } // for iter
+    return true;
 }
 
 void gi_compute_pass::debug_log_stats( std::uint32_t runtime_w, std::uint32_t runtime_h ) {
