@@ -239,9 +239,12 @@ if( g && world_generator && world_generator->active_world ) {
             last_struct_px == INT_MIN
             || std::abs( px - last_struct_px ) >= SDF_CAM_DRIFT_TILES
             || std::abs( py - last_struct_py ) >= SDF_CAM_DRIFT_TILES;
+        // g_rebuild_once: file knob `force_rc_rebuild 2` → exactly one structure rebuild.
         rebuild.structure = sdl_lighting_devui::devui_visible() || g_force_rc_rebuild
+                            || g_rebuild_once
                             || gen != last_gen || z != last_z
                             || origin != last_origin || cam_drifted;
+        g_rebuild_once = false;
 
         // vis depends on player position — the seen_cache shadowcast origin.
         // When the player moves, FOV changes even if terrain hasn't.

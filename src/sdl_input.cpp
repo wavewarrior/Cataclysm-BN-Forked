@@ -563,7 +563,11 @@ void CheckMessages( display_context &d )
                 else if( kn == "max_shadow_k" ) dp.max_shadow_k = kv;
                 else if( kn == "gi_bilat" ) dp.gi_bilat = kv;
                 else if( kn == "light_eps" ) dp.light_eps = kv;
-                else if( kn == "force_rc_rebuild" ) g_force_rc_rebuild = kv > 0.5f;
+                else if( kn == "force_rc_rebuild" ) {
+                    // 2 = one rebuild on the next frame (leaves continuous forcing off).
+                    g_rebuild_once = kv > 1.5f;
+                    g_force_rc_rebuild = kv > 0.5f && kv <= 1.5f;
+                }
                 else if( kn == "gi_enable" ) g_gi_enable = kv > 0.5f;
                 else if( kn == "force_world_redraw" ) g_force_world_redraw = kv > 0.5f;
                 else ok = false;

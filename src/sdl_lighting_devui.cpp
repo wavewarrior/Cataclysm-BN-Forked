@@ -89,6 +89,7 @@ bool g_bloom_enable = false;
 // ship enabled by default.
 bool g_sky_sun_enable = true;
 bool g_force_rc_rebuild = false;
+bool g_rebuild_once = false;
 bool g_force_world_redraw = false;
 float g_bloom_threshold = 1.0f;
 float g_bloom_intensity = 0.5f;
