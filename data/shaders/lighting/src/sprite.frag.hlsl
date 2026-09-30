@@ -744,11 +744,15 @@ float4 main(VS_OUT i): SV_Target0 {
     // P1: use runtime light_eps from cbuffer (falls back to default when 0).
     const float eps = max(light_eps, LIGHT_EPS_DEFAULT);
     // P2: K-max shadow budget — track strongest emitters for full shadow trace.
-    const int k_max = (int)max(max_shadow_k, MAX_SHADOW_K_DEFAULT);
-    // Tracking arrays for K-strongest by atten*lambert. 64 covers extreme horde density.
-    uint top_idx[64];
-    float top_val[64];
+    // The knob can LOWER K (0 = default); it can never exceed the array size.
+    const int k_max = (max_shadow_k > 0.5) ? min((int)max_shadow_k, MAX_SHADOW_K_DEFAULT)
+                                           : MAX_SHADOW_K_DEFAULT;
+    // Tracking arrays for the K strongest by atten*lambert, sized to the cap so no
+    // dynamically-indexed local array outgrows it.
+    uint top_idx[MAX_SHADOW_K_DEFAULT];
+    float top_val[MAX_SHADOW_K_DEFAULT];
     int top_n = 0;
+    int weakest = 0; // index of the smallest top_val once top_n > 0
 
     // --- PASS 1: accumulate unshadowed light + track K-max candidates ---
     for (uint ei = 0u; ei < me; ++ei) {
@@ -778,18 +782,21 @@ float4 main(VS_OUT i): SV_Target0 {
         emitter_light += rgb * atten * lambert;
 
         // P2: track K-strongest for full shadow trace (inline selection, no sort).
+        const float v = atten * lambert;
         if (top_n < k_max) {
             top_idx[top_n] = ei;
-            top_val[top_n] = atten * lambert;
+            top_val[top_n] = v;
+            weakest = (top_n == 0 || v < top_val[weakest]) ? top_n : weakest;
             ++top_n;
-        } else if (atten * lambert > top_val[0]) {
-            // Replace weakest tracked entry.
+        } else if (v > top_val[weakest]) {
+            // Replace the weakest tracked entry, then find the new weakest.
+            top_idx[weakest] = ei;
+            top_val[weakest] = v;
             int min_i = 0;
             for (int mi = 1; mi < top_n; ++mi) {
                 if (top_val[mi] < top_val[min_i]) { min_i = mi; }
             }
-            top_idx[min_i] = ei;
-            top_val[min_i] = atten * lambert;
+            weakest = min_i;
         }
     }
 
