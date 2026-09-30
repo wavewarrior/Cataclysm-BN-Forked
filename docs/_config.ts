@@ -15,7 +15,7 @@ import { languages } from "./plugins/languages.ts"
 const site = lume()
 
 site
-    .ignore("README.md")
+    .ignore("README.md", "agents", "adr")
     .use(relativeUrls())
     .use(autoId({ languages }))
     .use(wiki({ languages }))
