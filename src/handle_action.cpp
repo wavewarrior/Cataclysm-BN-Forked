@@ -270,6 +270,8 @@ input_context game::get_player_input( std::string& action )
         constexpr int ANIM_FRAME_MS = 33;
         constexpr int SPRITE_ANIM_FRAME_MS = 25; // ~40fps while sprite animations are live
         const auto anim_timeout = []( bool weather, bool sct ) {
+            // Measurement knob: redraw the world as fast as frames present.
+            if( g_force_world_redraw ) { return 1; }
             // Weather/SCT frame-stepping is tuned to 125ms ticks; keep that while active
             // (sprite anims degrade to 8fps during rain rather than speeding the rain 5x).
             if( weather || sct ) { return 125; }
@@ -331,7 +333,7 @@ input_context game::get_player_input( std::string& action )
                 ZoneScopedN( "get_player_input_map_anim_check" );
                 needs_map_animation = minimap_requires_animation() || terrain_requires_animation()
                                       || sidebar_requires_animation() || creatures_require_animation()
-                                      || sfx::sound_pulses_active();
+                                      || sfx::sound_pulses_active() || g_force_world_redraw;
             }
             if( needs_map_animation ) {
                 // TODO: we redraw *everything* just to animate a couple blinking dots

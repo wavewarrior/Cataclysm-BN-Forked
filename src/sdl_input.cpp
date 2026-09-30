@@ -516,7 +516,8 @@ void CheckMessages( display_context &d )
     // portal_reach, sky_sun_enable, flicker_gain, shaft_enable,
     // shaft_intensity, shaft_length_scale, shaft_width, dust_enable,
     // dust_density, dust_size, dust_drift, crt_world, shadow_steps,
-    // max_shadow_k, gi_bilat, light_eps, force_rc_rebuild, gi_enable.
+    // max_shadow_k, gi_bilat, light_eps, force_rc_rebuild, gi_enable,
+    // force_world_redraw.
     {
         std::error_code ec;
         if( std::filesystem::exists( "/tmp/cata_knob", ec ) ) {
@@ -564,6 +565,7 @@ void CheckMessages( display_context &d )
                 else if( kn == "light_eps" ) dp.light_eps = kv;
                 else if( kn == "force_rc_rebuild" ) g_force_rc_rebuild = kv > 0.5f;
                 else if( kn == "gi_enable" ) g_gi_enable = kv > 0.5f;
+                else if( kn == "force_world_redraw" ) g_force_world_redraw = kv > 0.5f;
                 else ok = false;
                 std::filesystem::remove( "/tmp/cata_knob", ec );
                 dbg( DL::Info ) << "knob " << kn << " = " << kv << ( ok ? "" : " (unknown)" );
@@ -1018,6 +1020,12 @@ void CheckMessages( display_context &d )
     }
     if( d.needupdate ) {
         try_sdl_update( d );
+    }
+    // force_world_redraw: an idle input wait with no timeout only re-enters the
+    // redraw loop on an event. Report a timeout instead so the knob takes effect
+    // without user input (get_player_input treats TIMEOUT as keep-waiting).
+    if( g_force_world_redraw && d.last_input.type == input_event_t::error ) {
+        d.last_input.type = input_event_t::timeout;
     }
     if( quit ) {
         exit_handler( 0 );

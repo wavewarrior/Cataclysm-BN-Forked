@@ -61,6 +61,9 @@ extern bool g_bloom_enable;
 extern bool g_sky_sun_enable;
 // Measurement knob (file channel only): forces a structure rebuild every frame.
 extern bool g_force_rc_rebuild;
+// Measurement knob (file channel only): the idle input loop re-invalidates and
+// redraws the main UI every iteration, so sprite shading runs every frame.
+extern bool g_force_world_redraw;
 extern float g_bloom_threshold;
 extern float g_bloom_intensity;
 // ASC-CDL colour grade + post-processing controls (F4 sliders).
