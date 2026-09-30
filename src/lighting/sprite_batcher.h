@@ -126,9 +126,13 @@ struct sprite_instance {
     // texture::enqueue_tile_sprite from tile_sprite_options::caster (populated
     // in cata_tiles::draw_critter_at). 0 for every non-creature sprite.
     float cutout_pad0;
-    // Reserved pads: keep the struct a multiple of 16 bytes (112 B = 28 floats)
-    // for the GPU StructuredBuffer stride. Never written; must stay in lockstep
-    // with the HLSL SpriteInstance declarations.
+    // Pads keep the struct a multiple of 16 bytes (112 B = 28 floats) for the GPU
+    // StructuredBuffer stride; they must stay in lockstep with the HLSL SpriteInstance
+    // declarations. cutout_pad0 is the shadow-caster flag above, cutout_pad1 the raw CPU
+    // lightmap scalar (sprite.vert `raw_light`).
+    // Ground-plane multi-tile flag: 1 = a flat composite (vehicle) larger than 1.5 tiles
+    // that must NOT take the tall-sprite base-tile lighting or cast a silhouette shadow.
+    // 0 for every other sprite.
     float cutout_pad1;
     float cutout_pad2;
 };

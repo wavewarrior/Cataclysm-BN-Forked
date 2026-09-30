@@ -300,6 +300,7 @@ void render_state::shutdown() noexcept {
     // Release the compositor textures + tonemap pass while the device is live.
     ui_target_.reset();
     avatar_target_.reset();
+    for (std::unique_ptr<ui_composite_target>& t : vehicle_targets_) { t.reset(); }
     world_target_.reset();
     shadow_mask_.reset();
     world_ldr_target_.reset();
@@ -520,6 +521,9 @@ void render_state::clear_ui_queues() noexcept {
 
 void render_state::clear_tile_queue() noexcept {
     tile_sprite_queue_.clear();
+    // Composite vehicle slots re-record every frame the vehicle is on screen, so a frame
+    // that does not re-record them must not keep the last frame's parts. See set_vehicle_route.
+    for (std::vector<tile_sprite_draw>& q : vehicle_sprite_queues_) { q.clear(); }
     // The cut index and quad list index into the queue we just dropped, so they
     // must go with it: a frame where cata_tiles::draw() does not re-record them
     // falls back to the single-pass Pass W.
@@ -846,6 +850,27 @@ void render_state::append_slice(
 
 void render_state::queue_tile_sprite(SDL_GPUTexture* atlas_tex, const sprite_instance& inst) {
     if (!device_.ready() || !atlas_tex) { return; }
+    if (vehicle_route_ >= 0 && vehicle_route_ < static_cast<int>(vehicle_composite_slots)) {
+        // Driven / partner-driven vehicle composite: flatten to plain unlit albedo so the
+        // parts bake into the slot's texture without double lighting; the ONE world quad
+        // carrying that texture is lit normally. Lighting-ish channels zeroed, tint, flash,
+        // rotation and the outline flag survive. Checked BEFORE the avatar/unlit routes —
+        // the three are never enabled together.
+        sprite_instance flat = inst;
+        flat.light_mode = 0.0f;
+        flat.light_mul = 0.0f;
+        flat.pad1 = 0.0f;
+        flat.extrude_px = 0.0f;
+        flat.extrude_dark = 0.0f;
+        flat.extrude_lean = 0.0f;
+        flat.face_amt = 0.0f;
+        flat.cutout = 0.0f;
+        flat.cutout_pad0 = 0.0f;
+        flat.cutout_pad1 = 0.0f;
+        vehicle_sprite_queues_[static_cast<std::size_t>(vehicle_route_)].push_back(
+            {atlas_tex, flat});
+        return;
+    }
     if (avatar_route_) {
         // Character-creator portrait: its own queue, flushed into avatar_target_ by
         // composite_avatar_pass. Checked BEFORE unlit_overlay_route_ so the portrait
@@ -956,6 +981,40 @@ void render_state::flush_avatar_sprites(sprite_batcher& dst, SDL_GPUSampler* sam
     avatar_sprite_queue_.clear();
 }
 
+void render_state::flush_vehicle_sprites(
+    std::size_t slot, sprite_batcher& dst, SDL_GPUSampler* sampler) {
+    if (slot >= vehicle_sprite_queues_.size() || vehicle_sprite_queues_[slot].empty()) { return; }
+    // Drains WITHOUT clearing: the composite is re-queued every frame the vehicle is on
+    // screen, and clear_tile_queue() (called by clear_frame_queues at the top of each
+    // redraw cycle) owns the reset — the same contract as flush_tile_sprites.
+    if (!sampler) { return; }
+    SDL_GPUTexture* bound = nullptr;
+    for (const tile_sprite_draw& s : vehicle_sprite_queues_[slot]) {
+        if (s.texture != bound) {
+            dst.set_texture(s.texture, sampler);
+            bound = s.texture;
+        }
+        dst.draw(s.inst);
+    }
+}
+
+ui_composite_target* render_state::vehicle_target(std::size_t slot, int w, int h) {
+    if (slot >= vehicle_targets_.size() || w <= 0 || h <= 0 || !device_.ready()) { return nullptr; }
+    // Unlike the portrait target, these track the vehicle's footprint, so they are grown on
+    // demand rather than at init. A failed alloc leaves a target with a null texture(), which
+    // callers must (and do) guard on.
+    if (!vehicle_targets_[slot]) {
+        vehicle_targets_[slot] = std::make_unique<ui_composite_target>();
+        if (!vehicle_targets_[slot]->init(device_, w, h)) {
+            vehicle_targets_[slot].reset();
+            return nullptr;
+        }
+    } else {
+        vehicle_targets_[slot]->resize(w, h);
+    }
+    return vehicle_targets_[slot]->texture() ? vehicle_targets_[slot].get() : nullptr;
+}
+
 void render_state::set_splat_frame(
     std::size_t cut, std::vector<splat_quad> quads, const SDL_Rect& map_viewport) {
     splat_cut_ = cut;
@@ -1008,6 +1067,8 @@ void render_state::flush_shadow_casters(
         // Hover-outline silhouette copies (pad2 > 0.5) must NOT cast shadows —
         // 8 offset casters would draw a black halo around the creature.
         if (s.inst.pad2 > 0.5f) { continue; }
+        // Ground-plane composites (vehicles) are floor-level art, never casters.
+        if (s.inst.cutout_pad2 > 0.5f) { continue; }
         if (s.texture != bound) {
             shadow_batcher_.set_texture(s.texture, gpu_sampler_);
             bound = s.texture;

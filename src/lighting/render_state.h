@@ -41,6 +41,8 @@
 #include "ui_adaptor_draw_slices.h"
 #include "ui_composite_target.h"
 
+#include <array>
+#include <cstddef>
 #include <memory>
 #include <vector>
 
@@ -208,6 +210,25 @@ public:
     // source string, so the decorator source carries this counter — otherwise a
     // window resize would leave the document sampling a destroyed texture.
     unsigned avatar_texture_generation() const noexcept { return avatar_generation_; }
+
+    // ── Vehicle composite route (slot 0 = own vehicle, slot 1 = co-op partner's) ──
+    // While a slot is routed, queue_tile_sprite redirects into that slot's queue, flattened
+    // to plain unlit albedo; the composite quad is lit once in the world pass. Checked FIRST
+    // in queue_tile_sprite (never enabled together with the other routes).
+    static constexpr std::size_t vehicle_composite_slots = 2;
+    void set_vehicle_route(int slot) noexcept { vehicle_route_ = slot; } // -1 = off
+    bool vehicle_sprites_empty(std::size_t slot) const noexcept {
+        return vehicle_sprite_queues_[slot].empty();
+    }
+    // Drains WITHOUT clearing (same contract as flush_tile_sprites); clear_tile_queue() resets.
+    void flush_vehicle_sprites(std::size_t slot, sprite_batcher& dst, SDL_GPUSampler* sampler);
+    // Lazily allocates (first call) or resizes the slot's target to w×h LOGICAL px.
+    // nullptr when w/h <= 0, the device is not ready, or allocation failed.
+    ui_composite_target* vehicle_target(std::size_t slot, int w, int h);
+    ui_composite_target* current_vehicle_target(std::size_t slot) noexcept {
+        return vehicle_targets_[slot].get();
+    }
+
     // Ranged drain of [begin, end) — used to split Pass W at the
     // terrain/entity boundary so the splatmap composite can land between the
     // halves. Same "drain WITHOUT clearing" contract and set_texture dedupe as
@@ -521,6 +542,10 @@ private:
     std::vector<tile_sprite_draw> avatar_sprite_queue_;
     unsigned avatar_generation_ = 0;
 
+    // Vehicle composite route. See set_vehicle_route.
+    int vehicle_route_ = -1;
+    std::array<std::vector<tile_sprite_draw>, vehicle_composite_slots> vehicle_sprite_queues_;
+
     // When true, queue_tile_sprite redirects sprites into the unlit
     // UI/font-glyph path (GPU minimap overlay). See set_unlit_overlay_route.
     bool unlit_overlay_route_ = false;
@@ -545,6 +570,10 @@ private:
     // Character-creator portrait target. Its own texture rather than a region of
     // ui_target_, so RmlUi can sample it as a decorator. See set_avatar_route.
     std::unique_ptr<ui_composite_target> avatar_target_;
+    // Per-slot composite textures for the driven / partner-driven vehicles. One texture
+    // per slot so the whole vehicle reaches the world pass as ONE quad.
+    // See set_vehicle_route.
+    std::array<std::unique_ptr<ui_composite_target>, vehicle_composite_slots> vehicle_targets_;
 
     // World accumulation target (persistent lit-world layer, HDR once
     // step 1b lands).

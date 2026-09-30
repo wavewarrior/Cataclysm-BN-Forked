@@ -125,6 +125,8 @@ static auto composite_ui_pass_a( lighting::render_state &rs, lighting::frame_con
                                  int proj_w, int proj_h ) -> void;
 static auto composite_avatar_pass( lighting::render_state &rs,
                                    lighting::frame_context &ctx ) -> void;
+static auto composite_vehicle_pass( lighting::render_state &rs,
+                                    lighting::frame_context &ctx ) -> void;
 static auto render_world_pass_w( lighting::render_state &rs, lighting::frame_context &ctx,
                                  int proj_w, int proj_h ) -> void;
 static auto tonemap_pass_t( lighting::render_state &rs, lighting::frame_context &ctx ) -> void;
@@ -1075,6 +1077,32 @@ auto composite_avatar_pass( lighting::render_state &rs, lighting::frame_context 
     rs.tile_batcher().end_pass();
 }
 
+// Bakes each vehicle composite slot's parts into its own texture (see
+// render_state::set_vehicle_route). The parts were flattened to unlit albedo on the way in,
+// so this pass is a plain albedo bake; the ONE quad carrying the result is lit in Pass W.
+//
+// Like the avatar pass, the projection is the target's own extent, NOT the screen's: parts
+// are drawn at target-local pixel coordinates and the world quad decides the on-screen size.
+auto composite_vehicle_pass( lighting::render_state &rs, lighting::frame_context &ctx ) -> void
+{
+    constexpr float clear_transparent[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    for( std::size_t slot = 0; slot < lighting::render_state::vehicle_composite_slots; ++slot ) {
+        lighting::ui_composite_target *vt = rs.current_vehicle_target( slot );
+        if( !vt || !vt->texture() || rs.vehicle_sprites_empty( slot ) || !rs.gpu_sampler() ) {
+            continue;
+        }
+        rs.tile_batcher().begin_pass( ctx.cmd_buffer, vt->texture(),
+                                      vt->width(), vt->height(),
+                                      clear_transparent,
+                                      vt->width(), vt->height() );
+        // The tile batcher keeps whatever scissor the last world frame left on it; the
+        // composite covers its whole target.
+        rs.tile_batcher().set_scissor( nullptr );
+        rs.flush_vehicle_sprites( slot, rs.tile_batcher(), rs.gpu_sampler() );
+        rs.tile_batcher().end_pass();
+    }
+}
+
 auto render_world_pass_w( lighting::render_state &rs,
                           lighting::frame_context &ctx, int proj_w, int proj_h ) -> void
 {
@@ -2011,6 +2039,8 @@ void refresh_display()
     composite_ui_pass_a( rs, *ctx, proj_w, proj_h );
     dbg( DL::Debug ) << "[render] composite_avatar_pass";
     composite_avatar_pass( rs, *ctx );
+    dbg( DL::Debug ) << "[render] composite_vehicle_pass";
+    composite_vehicle_pass( rs, *ctx );
     lap( 6 );
     dbg( DL::Debug ) << "[render] render_world_pass_w";
     render_world_pass_w( rs, *ctx, proj_w, proj_h );

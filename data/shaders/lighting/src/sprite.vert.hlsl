@@ -16,9 +16,14 @@ struct SpriteInstance {
     // shader punches a soft hole around the player in flagged sprites so the
     // character stays visible through the leaves. Unread by the vertex stage.
     float cutout;
-    // Reserved pads: keep the struct a multiple of 16 bytes (112 B = 28 floats)
+    // Pads keep the struct a multiple of 16 bytes (112 B = 28 floats)
     // for the GPU StructuredBuffer stride. cutout_pad0 doubles as the
-    // shadow-caster flag (see `caster` below); cutout_pad1/2 remain unread.
+    // shadow-caster flag (see `caster` below); cutout_pad1 is the raw CPU
+    // lightmap scalar (see `raw_light` below); cutout_pad2 is the
+    // ground-plane multi-tile flag — 1 marks a flat composite (a driven
+    // vehicle) bigger than 1.5 tiles that must NOT be treated as a TALL
+    // sprite, i.e. no base-tile lighting here and no silhouette shadow in
+    // render_state::flush_shadow_casters.
     float cutout_pad0;
     float cutout_pad1;
     float cutout_pad2;
@@ -224,10 +229,12 @@ VS_OUT main(uint vid : SV_VertexID, uint iid : SV_InstanceID) {
     // bottom edge minus half a tile; for a 1-tile sprite that is just the sprite
     // centre, so light_pos == map_pos and small sprites keep per-pixel ground
     // lighting (preserving the 4x-SDF shadow smoothness). Threshold at 1.5 tiles.
+    // A ground-plane composite (cutout_pad2, a driven vehicle) is exempt: it stands flat on
+    // many tiles at once, so painting its whole hull with one base tile's radiance is wrong.
     const float2 base_px = float2(centre.x, s.dst_y + s.dst_h - 0.5 * tile_pixel_size);
     const float2 base_tile =
         base_px / max(tile_pixel_size, 1.0) - float2(camera_off_x, camera_off_y);
-    const bool is_tall = s.dst_h > tile_pixel_size * 1.5;
+    const bool is_tall = s.dst_h > tile_pixel_size * 1.5 && s.cutout_pad2 < 0.5;
 
     // ---- Foliage sway (cosmetic breeze: UV offset) ----
     // Offsets UVs horizontally instead of displacing vertices, so the quad
