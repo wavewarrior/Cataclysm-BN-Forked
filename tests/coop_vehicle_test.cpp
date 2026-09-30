@@ -19,6 +19,7 @@
 #include "coop_sim_transport.h"
 #include "coop_vehicle_sync.h"
 #include "game.h"
+#include "game_constants.h"
 #include "json.h"
 #include "map.h"
 #include "map_helpers.h"
@@ -100,6 +101,21 @@ struct inproc_harness {
             coop_mode_guard mcli(coop_mode::client);
             cli.coop_world_tick();
         }
+        // Pin the host avatar to the reality-bubble centre before recording u_start.
+        //
+        // The join handshake and the client's sync reconciliation move g->u around, and a
+        // bare setpos(abs) does not shift the loaded grid.  Anything that turns an absolute
+        // position into a bubble position (vehicle::bub_ms_location, vpart_reference::pos,
+        // Character::bub_pos) derives its origin from the AVATAR's tile, while add_vehicle,
+        // board_vehicle and the vehicle cache use map::get_abs_sub().  When the avatar's
+        // submap no longer quantizes to the loaded anchor the two frames disagree by whole
+        // submaps, so a car that was just added is invisible to veh_at() and board_vehicle
+        // refuses it - order-dependent, because it depends on where earlier tests left the
+        // avatar.  The centre tile of the map's own frame quantizes back to get_abs_sub()
+        // exactly, so placing the avatar there restores the invariant the engine asserts
+        // (game.cpp debug_assert_player_map_origin).
+        g->u.setpos(tripoint_bub_ms(g_half_mapsize_x, g_half_mapsize_y, g->u.abs_pos().z()));
+        REQUIRE(g->m.get_abs_sub() == player_reality_bubble_origin().xy());
         u_start = g->u.abs_pos();
     }
 
