@@ -115,6 +115,13 @@ bool g_dust_enable = true;
 float g_dust_density = 0.5f;
 float g_dust_size = 0.5f;
 float g_dust_drift = 0.1f;
+// Decorative emitter glow overlay. intensity=1.0 + radius=1.0 + saturation=1.0
+// reproduce the pre-knob frame exactly; the shipped defaults tone the core down
+// and push the tint back (users saw a blown-out white ball losing its warmth).
+bool g_glow_enable = true;
+float g_glow_intensity = 0.6f;
+float g_glow_radius = 1.0f;
+float g_glow_saturation = 1.3f;
 bool g_rain_enable = true;
 float g_rain_intensity = 0.5f;
 float g_spec_strength = 0.0f; // wet specular glint (0=off); × rain intensity per-frame
@@ -607,6 +614,10 @@ void devui_rml_open()
     c.Bind( "dust_density", &g_dust_density );
     c.Bind( "dust_size", &g_dust_size );
     c.Bind( "dust_drift", &g_dust_drift );
+    c.Bind( "glow_enable", &g_glow_enable );
+    c.Bind( "glow_intensity", &g_glow_intensity );
+    c.Bind( "glow_radius", &g_glow_radius );
+    c.Bind( "glow_saturation", &g_glow_saturation );
     c.Bind( "rain_enable", &g_rain_enable );
     c.Bind( "rain_intensity", &g_rain_intensity );
     c.Bind( "spec_strength", &g_spec_strength );

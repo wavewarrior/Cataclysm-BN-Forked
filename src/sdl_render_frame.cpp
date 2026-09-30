@@ -1229,7 +1229,7 @@ auto render_world_pass_w( lighting::render_state &rs,
     // daylight even after excluding it from the ambient ceiling clamp, but a
     // fire/torch should still visually read as a light source. See
     // emitter_glow_pass.h.
-    if( !s_emo.snap.empty() ) {
+    if( g_glow_enable && !s_emo.snap.empty() ) {
         const float tp = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
         // Cull to the player's z-level and a generous on-screen radius so the
         // instance list stays small regardless of how many emitters exist in
@@ -1269,20 +1269,34 @@ auto render_world_pass_w( lighting::render_state &rs,
             const float sx = ( e.pos_x + s_emo.cam_off_x ) * tp;
             const float sy = ( e.pos_y + s_emo.cam_off_y ) * tp;
             // 0,0,0 encodes "uncolored white" (gpu_emitter.h convention).
-            const float cr = e.r > 0.01f ? e.r : 1.0f;
-            const float cg = e.g > 0.01f ? e.g : 1.0f;
-            const float cb = e.b > 0.01f ? e.b : 1.0f;
-            // Cosmetic scale only — NOT physically derived. Small, tile-ish
-            // radius (the core, not the felt light reach) — bloom supplies
-            // the extended soft tail, this quad must not do that itself.
-            const float radius_tiles = std::clamp( e.radius, 1.0f, 10.0f );
-            const float core_tiles = std::clamp( radius_tiles / 4.0f, 0.6f, 2.0f );
-            // HDR overdrive: well above bloom's threshold (1.0 default) so
-            // the extract pass actually has bright material to bloom, scaled
-            // modestly by how big/strong the real light is.
-            const float peak = std::clamp( radius_tiles / 3.0f, 1.5f, 6.0f );
+            float cr = e.r > 0.01f ? e.r : 1.0f;
+            float cg = e.g > 0.01f ? e.g : 1.0f;
+            float cb = e.b > 0.01f ? e.b : 1.0f;
+            // Additive stacking whitens the core (every channel clips toward
+            // 1 together), which is what makes a warm torch read as a white
+            // ball. glow_saturation pushes the tint away from its own luma
+            // before the additive multiply so the warmth survives the blow-up.
+            if( g_glow_saturation != 1.0f ) {
+                const float lum = 0.2126f * cr + 0.7152f * cg + 0.0722f * cb;
+                cr = std::clamp( lum + ( cr - lum ) * g_glow_saturation, 0.f, 1.f );
+                cg = std::clamp( lum + ( cg - lum ) * g_glow_saturation, 0.f, 1.f );
+                cb = std::clamp( lum + ( cb - lum ) * g_glow_saturation, 0.f, 1.f );
+            }
+            // The gradient spans the emitter's OWN light radius, so the glow
+            // reads as that light's footprint, not an unrelated fixed-size
+            // blob (earlier versions drew a 0.6-2 tile core decoupled from
+            // `e.radius`, which looked detached from the light it marked).
+            // glow_radius scales that footprint for taste (1.0 = physical).
+            const float radius_tiles = std::clamp( e.radius, 1.0f, 10.0f ) * g_glow_radius;
+            // Held just above bloom's 1.0 extract threshold so bloom still
+            // catches a hint of it, but far below the old 1.5-6.0 overdrive
+            // that blew out every tile near a lamp/fire. Larger lights get a
+            // slightly stronger core; small ones stay a gentle mark.
+            // glow_intensity scales the whole core (0 = invisible overlay).
+            const float peak = std::clamp( 0.9f + radius_tiles * 0.05f, 0.9f, 1.4f )
+                               * g_glow_intensity;
             glow_instances.push_back( { .x = sx, .y = sy,
-                                        .radius_px = core_tiles * tp,
+                                        .radius_px = radius_tiles * tp,
                                         .r = cr, .g = cg, .b = cb,
                                         .strength = peak, .pad0 = 0.f } );
         }

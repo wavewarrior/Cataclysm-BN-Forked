@@ -552,6 +552,10 @@ void CheckMessages( display_context &d )
                 else if( kn == "dust_density" ) g_dust_density = kv;
                 else if( kn == "dust_size" ) g_dust_size = kv;
                 else if( kn == "dust_drift" ) g_dust_drift = kv;
+                else if( kn == "glow_enable" ) g_glow_enable = kv > 0.5f;
+                else if( kn == "glow_intensity" ) g_glow_intensity = kv;
+                else if( kn == "glow_radius" ) g_glow_radius = kv;
+                else if( kn == "glow_saturation" ) g_glow_saturation = kv;
                 else if( kn == "crt_world" ) rmlui_layer::crt().crt_world = kv > 0.5f;
                 else ok = false;
                 std::filesystem::remove( "/tmp/cata_knob", ec );

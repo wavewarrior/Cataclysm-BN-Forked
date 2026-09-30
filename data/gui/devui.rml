@@ -151,6 +151,13 @@
                 <div class="devui-row">normal elev <input type="range" min="0.05" max="1.5" step="0.01" data-value="nrm_elev"/> <span class="devui-val">{{nrm_elev}}</span></div>
                 <div class="devui-row">entity relief <input type="range" min="0" max="1" step="0.01" data-value="nrm_entity_amount"/> <span class="devui-val">{{nrm_entity_amount}}</span></div>
 
+                <div class="devui-section">Emitter glow overlay</div>
+                <label class="devui-row"><input type="checkbox" value="1" data-checked="glow_enable"/> emitter glow</label>
+                <div class="devui-row">glow intensity <input type="range" min="0" max="2" step="0.02" data-value="glow_intensity"/> <span class="devui-val">{{glow_intensity}}</span></div>
+                <div class="devui-row">glow radius <input type="range" min="0.1" max="3" step="0.05" data-value="glow_radius"/> <span class="devui-val">{{glow_radius}}</span></div>
+                <div class="devui-row">glow saturation <input type="range" min="0" max="3" step="0.05" data-value="glow_saturation"/> <span class="devui-val">{{glow_saturation}}</span></div>
+                <div class="devui-note">(warm halo sprite on each visible fire/torch; intensity scales brightness, radius scales the halo vs the light's own radius, saturation fights the additive white-out of the tint)</div>
+
                 <div class="devui-section">Window light shafts</div>
                 <label class="devui-row"><input type="checkbox" value="1" data-checked="shaft_enable"/> light shafts</label>
                 <div class="devui-row">shaft intensity <input type="range" min="0" max="2" step="0.02" data-value="shaft_intensity"/> <span class="devui-val">{{shaft_intensity}}</span></div>

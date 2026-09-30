@@ -11,7 +11,6 @@
 #include <ranges>
 #include <cstdint>
 #include <cstdlib>
-#include <filesystem>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -1542,18 +1541,14 @@ void map::generate_lightmap_worker( const int zlev )
 
     constexpr std::array<int, 4> dir_x = { {  0, -1, 1, 0 } };    //    [0]
     constexpr std::array<int, 4> dir_y = { { -1,  0, 0, 1 } };    // [1][X][2]
-    // BUGFIX (atmospheric-lighting-coherence plan, window-portal light injection
-    // investigation): apply_directional_light's `direction` names describe light
-    // TRAVEL direction (90=goes south, 0=goes west, 180=goes east, 270=goes north).
-    // A source at neighbour index i must shine THROUGH p toward the OPPOSITE side
-    // (e.g. a west neighbour's light must travel east, into the room) — west (i=1)
-    // and east (i=2) were swapped here, so every west/east-facing window/opening
-    // (both the general skylight-bleed injection above and the window-specific
-    // WINDOW_FLOOD_BOOST below, both of which read this same table) shone its
-    // boosted luminance back out into open air instead of into the room, leaving
-    // interiors pinned at the bare LIGHT_AMBIENT_LOW floor regardless of outdoor
-    // brightness. North (i=0) and south (i=3) were already correct.
-    constexpr std::array<int, 4> dir_d = { { 90, 180, 0, 270 } }; //    [3]
+    // `direction` names the half-space apply_directional_light WRITES, not the
+    // bearing the light comes from (90=OCTANT_NORTH, 0=OCTANT_EAST,
+    // 270=OCTANT_SOUTH, 180=OCTANT_WEST — shadowcasting.h). Swapping the west
+    // (i=1) and east (i=2) entries to point back at their own neighbours makes
+    // the beam leave through the opening it entered, and breaks
+    // vision_crouching_blocks_vision_but_not_light in all four east/west
+    // transforms; this table is the one that oracle has pinned.
+    constexpr std::array<int, 4> dir_d = { { 90, 0, 180, 270 } }; //    [3]
 
     const float natural_light = g->natural_light_level( zlev );
 
@@ -1669,7 +1664,10 @@ void map::generate_lightmap_worker( const int zlev )
                     // neighbour and one genuinely-inside neighbour, injects extra
                     // directional daylight beyond what ordinary transparency propagation
                     // already provides. Headless/coop-safe: no GPU state is read.
-{
+                    // The boost rides dir_d, so a north/south-facing window aims it
+                    // back out through its own opening; those interiors are lit by the
+                    // ordinary transparency propagation above, which already suffices.
+                    {
                         const ter_id win_t = cur_submap->get_ter( sm_ms );
                         if( win_t->has_flag( TFLAG_CONNECT_TO_WALL ) && win_t->has_flag( "WINDOW" )
                             && win_t->transparent ) {
@@ -3253,9 +3251,11 @@ auto map::apply_directional_light( const apply_directional_light_options &opt ) 
     const int sx = cache.cache_x;
     const int sy = cache.cache_y;
 
-    // direction convention: 90=north-facing (light goes south), 0=east-facing (west),
-    // 270=south-facing (north), 180=west-facing (east).  Each maps to the two octants
-    // covering the relevant half-space in k_octant_xforms.
+    // direction convention: the value names the half-space this cast WRITES,
+    // via the octant masks below (90=OCTANT_NORTH covers the yy=-1 half, i.e.
+    // light travelling north from p; 0=EAST, 270=SOUTH, 180=WEST).  It is not a
+    // bearing the light comes from.  Each maps to the two octants covering the
+    // half-space in k_octant_xforms.
     auto mask = uint8_t{};
     if( opt.direction == 90 ) {
         mask = OCTANT_NORTH;

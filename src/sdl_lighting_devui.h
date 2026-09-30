@@ -90,6 +90,11 @@ extern bool g_dust_enable;
 extern float g_dust_density;
 extern float g_dust_size;
 extern float g_dust_drift;
+// Decorative emitter glow overlay (emitter_glow_pass): per-fire/torch glow sprite.
+extern bool g_glow_enable;
+extern float g_glow_intensity;   // × core peak brightness
+extern float g_glow_radius;      // × emitter-radius fraction the gradient spans
+extern float g_glow_saturation;  // >1 pushes the tint back after additive whitening
 // High-fidelity rain effect controls.
 extern bool g_rain_enable;
 extern float g_rain_intensity;
