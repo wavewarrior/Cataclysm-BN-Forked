@@ -272,6 +272,11 @@ float sdf_bilinear(float2 p) {
     const float bil = lerp(lerp(a, b, w.x), lerp(c, d, w.x), w.y);
     return bil;
 }
+// Nearest sub-cell SDF sample: one load. shadow_trace.hlsl uses it on far-field
+// sphere-trace steps where the field is flat (see SDF_NEAREST_SLACK there).
+float sdf_nearest(float2 p) {
+    return sdf_texel((int)floor(p.x * (float)SDF_SS), (int)floor(p.y * (float)SDF_SS));
+}
 // Stage 2b: the wall-only sun SDF + its bilinear sampler are GONE. The sun (and
 // moon) shadow is now the unified coverage occluder marched in 3D by
 // sky_sun.comp → SkyBuf.a; the fragment no longer reads SunSdfBuf.

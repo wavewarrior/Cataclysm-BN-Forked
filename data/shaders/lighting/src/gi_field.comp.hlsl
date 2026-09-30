@@ -96,6 +96,10 @@ float sdf_bilinear( float2 p )
     const float d = sdf_texel( x0 + 1, y0 + 1 );
     return lerp( lerp( a, b, w.x ), lerp( c, d, w.x ), w.y );
 }
+float sdf_nearest( float2 p )
+{
+    return sdf_texel( (int)floor( p.x * (float)SDF_SS ), (int)floor( p.y * (float)SDF_SS ) );
+}
 // Soft-shadow sphere trace, shared with sprite.frag and vol.frag. Included here
 // (not at the top) because it calls sdf_bilinear, defined above. GI probes pass
 // self_eps = 0: a probe sits in open space, not on the occluder it is lit by.

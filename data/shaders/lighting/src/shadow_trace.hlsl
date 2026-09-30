@@ -9,6 +9,7 @@
 //
 // The including file MUST already define
 //     float sdf_bilinear(float2 p);   // signed distance in TILE units
+//     float sdf_nearest(float2 p);    // same field, nearest sub-cell (one load)
 // and declare `sdf_map_w`, so this include belongs AFTER those, not at the top.
 //
 // Technique: Inigo Quilez's cone-ratio soft shadow
@@ -65,6 +66,16 @@
 //
 // `self_eps` > 0 enables the self-shadow escape. Pass 0 to disable it; that is
 // an exact no-op, because the guard cannot fire when self_eps is 0.
+// Far-field steps read the nearest sub-cell instead of the bilinear blend. The
+// JFA SDF is capped (cells no seed reaches read SDF_FLOOD/SDF_SS = 2 tiles), so
+// a step that starts more than SDF_FAR_TILES from any occluder crosses a smooth,
+// mostly flat field where the bilinear blend's four loads buy little that one
+// nearest load does not carry.
+static const float SDF_FAR_TILES = 1.0;
+// sqrt(2)/(2*8): the farthest a point sits from its nearest sub-cell centre.
+// The SDF is 1-Lipschitz, so subtracting this keeps the far-step advance
+// conservative (never past an occluder the bilinear march would have hit).
+static const float SDF_NEAREST_SLACK = 0.0884;
 float soft_shadow_march(float2 origin, float2 dir, float dist_to_light,
                         float k, int steps, float self_eps, bool ref_receiver) {
     if(sdf_map_w == 0u || steps <= 0) {
@@ -93,7 +104,9 @@ float soft_shadow_march(float2 origin, float2 dir, float dist_to_light,
     float prev_step = 1e10;
     [loop] for(int ss = 0; ss < steps; ++ss) {
         if(t >= dist_to_light - 0.4) { break; }
-        const float sd = sdf_bilinear(origin + dir * t);
+        const bool far_step = prev_sd > SDF_FAR_TILES && prev_sd < 1e9;
+        const float2 q = origin + dir * t;
+        const float sd = far_step ? sdf_nearest(q) : sdf_bilinear(q);
         if(sd < 0.05) { shadow = 0.0; break; }
         // How far BACK from the current sample the closest approach sits.
         // General form, because the 0.15 floor below means the march does NOT
@@ -122,7 +135,7 @@ float soft_shadow_march(float2 origin, float2 dir, float dist_to_light,
                                          : max(dist_to_light - t_hit, 0.01);
         shadow = min(shadow, k * d / denom);
         prev_sd   = sd;
-        prev_step = max(sd, 0.15);
+        prev_step = max(far_step ? sd - SDF_NEAREST_SLACK : sd, 0.15);
         t += prev_step;
     }
     return saturate(shadow);

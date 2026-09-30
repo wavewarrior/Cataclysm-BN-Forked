@@ -44,3 +44,9 @@ float sdf_bilinear( float2 p )
     const float d = sdf_texel( x0 + 1, y0 + 1 );
     return lerp( lerp( a, b, w.x ), lerp( c, d, w.x ), w.y );
 }
+
+// Nearest sub-cell sample (one load) — shadow_trace.hlsl's far-field step.
+float sdf_nearest( float2 p )
+{
+    return sdf_texel( (int)floor( p.x * (float)sdf_ss ), (int)floor( p.y * (float)sdf_ss ) );
+}
