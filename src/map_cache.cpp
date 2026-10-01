@@ -923,9 +923,9 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
             })) {
             force_seen_rebuild_for_gpu_residency = true;
             // `light_changed` with the default scope is this sequence: every level's
-            // lightmap plus every level's visibility bit and the aggregate.  The
-            // separate visibility mark for `zlev` was already implied by that, since
-            // the lightmap invalidate raises visibility for every loaded level.
+            // lightmap plus every level's visibility bit, which is what makes the
+            // view-stale condition force the rebuild.  The separate visibility mark
+            // for `zlev` is already implied by that.
             level_cache_freshness::report( *this, level_cache_freshness::light_changed {} );
         }
     }

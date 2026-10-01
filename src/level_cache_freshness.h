@@ -323,8 +323,9 @@ class level_cache_freshness
             tripoint_bub_ms at;
             /// Extent over which the lightmap goes stale.
             lightmap_scope scope = lightmap_scope::all_levels;
-            /// Also raise the map-wide visibility aggregate, as the activity-cadence
-            /// boundary does alongside the lightmap invalidate.
+            /// Also mark every loaded level's visibility stale, so the view-stale
+            /// condition forces a rebuild: the activity-cadence boundary does this
+            /// alongside the lightmap invalidate because the light level may have moved.
             bool visibility = false;
             /// Also unconditionally dirty the seen cache of `at`'s level, as a vehicle
             /// camera-system toggle does alongside the visibility invalidate.
