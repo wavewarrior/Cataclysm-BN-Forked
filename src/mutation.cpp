@@ -9,6 +9,7 @@
 #include <numeric>
 #include <unordered_set>
 
+#include "level_cache_freshness.h"
 #include "avatar_action.h"
 #include "activity_actor_definitions.h"
 #include "bionics.h"
@@ -562,7 +563,7 @@ void Character::activate_mutation( const trait_id &mut )
     if( !mut->enchantments.empty() ) {
         recalculate_enchantment_cache();
     }
-    get_map().invalidate_lightmap_caches();
+    level_cache_freshness::report( get_map(), level_cache_freshness::light_changed {} );
 
     if( mdata.transform ) {
         const cata::value_ptr<mut_transform> trans = mdata.transform;
@@ -682,7 +683,7 @@ void Character::deactivate_mutation( const trait_id &mut )
     // Handle stat changes from deactivation
     apply_mods( mut, false );
     recalc_sight_limits();
-    get_map().invalidate_lightmap_caches();
+    level_cache_freshness::report( get_map(), level_cache_freshness::light_changed {} );
     const mutation_branch &mdata = mut.obj();
     if( mdata.transform ) {
         const cata::value_ptr<mut_transform> trans = mdata.transform;

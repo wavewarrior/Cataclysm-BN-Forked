@@ -48,6 +48,7 @@
 #include "item_reload_option.h"
 #include "itype.h"
 #include "json.h"
+#include "level_cache_freshness.h"
 #include "line.h"
 #include "locations.h"
 #include "magic/magic.h"
@@ -391,7 +392,7 @@ if( p.is_worn( it ) ) { p.on_item_takeoff( it ); }
     // Check for gaining or losing night vision, eye encumbrance effects, clairvoyance from
     // transforming relics, etc.
     p.recalc_sight_limits();
-    get_map().invalidate_lightmap_caches();
+    level_cache_freshness::report( get_map(), level_cache_freshness::light_changed {} );
 
     return 0;
 }

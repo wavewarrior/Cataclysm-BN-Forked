@@ -53,6 +53,7 @@
 #include "item_functions.h"
 #include "itype.h"
 #include "json.h"
+#include "level_cache_freshness.h"
 #include "line.h"
 #include "magic/magic.h"
 #include "make_static.h"
@@ -1223,7 +1224,7 @@ bool Character::activate_bionic( bionic &bio, bool eff_only, bool *close_bionics
     // Recalculate stats (strength, mods from pain etc.) that could have been affected
     reset_encumbrance();
     reset();
-    here.invalidate_lightmap_caches();
+    level_cache_freshness::report( here, level_cache_freshness::light_changed {} );
 
     // Also reset crafting inventory cache if this bionic spawned a fake item
     if( !bio.info().fake_item.is_empty() ) {
@@ -1309,7 +1310,7 @@ bool Character::deactivate_bionic( bionic &bio, bool eff_only )
     // Recalculate stats (strength, mods from pain etc.) that could have been affected
     reset_encumbrance();
     reset();
-    get_map().invalidate_lightmap_caches();
+    level_cache_freshness::report( get_map(), level_cache_freshness::light_changed {} );
     if( !bio.id->enchantments.empty() ) {
         recalculate_enchantment_cache();
     }
