@@ -21,8 +21,9 @@ class RemovePartHandler
         virtual void unboard( const tripoint_bub_ms &loc ) = 0;
         virtual detached_ptr<item> add_item_or_charges( const tripoint_bub_ms &loc, detached_ptr<item> &&it,
                 bool permit_oob ) = 0;
-        virtual void set_transparency_cache_dirty( int z ) = 0;
-        virtual void set_floor_cache_dirty( int z ) = 0;
+        /** The part edit changed opacity/floor coverage; implementations report a change kind. */
+        virtual void report_part_opacity_change( int z ) = 0;
+        virtual void report_part_floor_change( int z ) = 0;
         virtual void removed( vehicle &veh, int part ) = 0;
         virtual void spawn_animal_from_part( item &base, const tripoint_bub_ms &loc ) = 0;
         virtual auto part_location( const vehicle &veh, const int part ) const -> tripoint_bub_ms = 0;
@@ -40,7 +41,7 @@ class DefaultRemovePartHandler : public RemovePartHandler
                                                 bool /*permit_oob*/ ) override {
             return g->m.add_item_or_charges( loc, std::move( it ) );
         }
-        void set_transparency_cache_dirty( const int z ) override {
+        void report_part_opacity_change( const int z ) override {
             level_cache_freshness::report( get_map(), level_cache_freshness::terrain_changed {
                 .at = tripoint_bub_ms( 0, 0, z ),
                 .transparency = true,
@@ -52,7 +53,7 @@ class DefaultRemovePartHandler : public RemovePartHandler
                 .memory_seen = false,
             } );
         }
-        void set_floor_cache_dirty( const int z ) override {
+        void report_part_floor_change( const int z ) override {
             map &here = get_map();
             level_cache_freshness::report( here, level_cache_freshness::terrain_changed {
                 .at = tripoint_bub_ms( 0, 0, z ),
@@ -123,8 +124,8 @@ class MapgenRemovePartHandler : public RemovePartHandler
             }
             return m.add_item_or_charges( loc, std::move( it ) );
         }
-        void set_transparency_cache_dirty( const int /*z*/ ) override {}
-        void set_floor_cache_dirty( const int /*z*/ ) override {}
+        void report_part_opacity_change( const int /*z*/ ) override {}
+        void report_part_floor_change( const int /*z*/ ) override {}
         void removed( vehicle &veh, const int /*part*/ ) override {
             m.dirty_vehicle_list.insert( veh.handle() );
         }

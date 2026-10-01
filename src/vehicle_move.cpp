@@ -50,6 +50,7 @@
 #include "veh_type.h"
 #include "vpart_position.h"
 #include "vpart_range.h"
+#include "level_cache_freshness.h"
 static const itype_id fuel_type_muscle( "muscle" );
 static const itype_id fuel_type_animal( "animal" );
 static const itype_id fuel_type_battery( "battery" );
@@ -408,7 +409,12 @@ void vehicle::stop( bool update_cache )
     }
     map &here = get_map();
     for( const auto &p : get_points() ) {
-        here.set_memory_seen_cache_dirty( abs_to_bub( p ) );
+        // Nothing about the terrain changed; the vehicle stopped here, so what the
+        // player remembers of these tiles must be re-checked.
+        level_cache_freshness::report( here, level_cache_freshness::terrain_changed {
+            .at = abs_to_bub( p ),
+            .support_above = false,
+        } );
     }
 }
 

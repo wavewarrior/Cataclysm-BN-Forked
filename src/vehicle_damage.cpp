@@ -49,6 +49,7 @@
 #include "item_group.h"
 #include "itype.h"
 #include "json.h"
+#include "level_cache_freshness.h"
 #include "make_static.h"
 #include "map.h"
 #include "map_iterator.h"
@@ -615,7 +616,11 @@ int vehicle::damage_direct( int p, int dmg, damage_type type )
     if( is_autodriving ) {
         stop_autodriving();
     }
-    here.set_memory_seen_cache_dirty( bub_part_location( p ) );
+    // The part took damage; only the memory of these tiles must be re-checked.
+    level_cache_freshness::report( here, level_cache_freshness::terrain_changed {
+        .at = bub_part_location( p ),
+        .support_above = false,
+    } );
     if( parts[p].is_broken() ) {
         return break_off( p, dmg );
     }

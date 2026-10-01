@@ -266,9 +266,9 @@ class MapgenConstructorRemovePartHandler : public RemovePartHandler
             }
             return m.add_item_or_charges( omt_loc->xy(), std::move( it ) );
         }
-        auto set_transparency_cache_dirty( const int /*z*/ ) -> void override {
+        auto report_part_opacity_change( const int /*z*/ ) -> void override {
         }
-        auto set_floor_cache_dirty( const int /*z*/ ) -> void override {
+        auto report_part_floor_change( const int /*z*/ ) -> void override {
         }
         auto removed( vehicle &/*veh*/, const int /*part*/ ) -> void override {
         }

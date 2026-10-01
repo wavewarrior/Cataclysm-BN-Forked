@@ -828,11 +828,11 @@ bool vehicle::remove_part( const int p, RemovePartHandler &handler )
     // if a windshield is removed (usually destroyed) also remove curtains
     // attached to it.
     if( remove_dependent_part( "WINDOW", "CURTAIN" ) || part_flag( p, VPFLAG_OPAQUE ) ) {
-        handler.set_transparency_cache_dirty( abs_sm_pos.z() );
+        handler.report_part_opacity_change( abs_sm_pos.z() );
     }
 
     if( part_flag( p, VPFLAG_ROOF ) || part_flag( p, VPFLAG_OPAQUE ) ) {
-        handler.set_floor_cache_dirty( abs_sm_pos.z() + 1 );
+        handler.report_part_floor_change( abs_sm_pos.z() + 1 );
     }
 
     remove_dependent_part( "SEAT", "SEATBELT" );
