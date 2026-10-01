@@ -743,27 +743,42 @@ void level_cache_freshness::report( map &who, const world_replaced &change ) {
             }
         }
     };
+    enum_bitset<level_cache_part> area_parts;
+    area_parts.set( level_cache_part::transparency );
+    area_parts.set( level_cache_part::outside );
+    if( change.absorption ) {
+        area_parts.set( level_cache_part::absorption );
+    }
+    if( change.floor ) {
+        area_parts.set( level_cache_part::floor );
+    }
+    if( change.lightmap ) {
+        area_parts.set( level_cache_part::lightmap );
+    }
     for( int z = zmin; z <= zmax; ++z ) {
         if( !who.inbounds_z( z ) ) {
             continue;
         }
-        mark_area( z, freshness_parts( {
-            level_cache_part::transparency,
-            level_cache_part::absorption,
-            level_cache_part::floor,
-            level_cache_part::outside,
-            level_cache_part::lightmap,
-        } ), 0 );
+        mark_area( z, area_parts, 0 );
         advance_transparency_generation( who.get_cache( z ) );
-        who.set_seen_cache_dirty( z );
-        who.set_suspension_cache_dirty( z );
-        who.set_vehicle_cache_dirty( z );
+        if( change.seen ) {
+            who.set_seen_cache_dirty( z );
+        }
+        if( change.suspension ) {
+            who.set_suspension_cache_dirty( z );
+        }
+        if( change.vehicle ) {
+            who.set_vehicle_cache_dirty( z );
+        }
         // Outside and absorption one level down: `loadn`'s floor raise cascades there
-        // because outside at z-1 reads floor at z.
-        mark_area( z - 1, freshness_parts( {
-            level_cache_part::outside,
-            level_cache_part::absorption,
-        } ), 1 );
+        // because outside at z-1 reads floor at z. A caller that leaves the floor cache
+        // alone has no such dependency.
+        if( change.floor ) {
+            mark_area( z - 1, freshness_parts( {
+                level_cache_part::outside,
+                level_cache_part::absorption,
+            } ), 1 );
+        }
     }
 }
 

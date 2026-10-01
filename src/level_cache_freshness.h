@@ -311,10 +311,27 @@ class level_cache_freshness
          * the caches (bulk load, co-op tile sync): every Level cache bitset of the
          * area AND the submap dirty flags must rise, or the builders early-return on
          * their clean bitsets and never see the new terrain.
+         *
+         * The defaults describe a full replacement (what a non-incremental `loadn`
+         * does). Callers that replace less than everything — a paint that touches only
+         * sight-related caches, a regeneration that leaves the lightmap alone — turn
+         * the corresponding part off rather than reaching for a bit setter.
          */
         struct world_replaced {
             tripoint_bub_sm first = tripoint_bub_sm::zero();
             tripoint_bub_sm last = tripoint_bub_sm::zero();
+            /// Dirt the seen cache of each covered level.
+            bool seen = true;
+            /// Dirt the lightmap of each covered level.
+            bool lightmap = true;
+            /// Dirt the floor cache, and with it the outside/absorption cascade below.
+            bool floor = true;
+            /// Dirt the sound absorption cache of each covered level.
+            bool absorption = true;
+            /// Dirt the suspension cache of each covered level.
+            bool suspension = true;
+            /// Dirt the vehicle caches of each covered level (and the vehicle floor above).
+            bool vehicle = true;
         };
 
         static void report( map &who, const terrain_changed &change );
