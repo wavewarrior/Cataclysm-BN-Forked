@@ -15,6 +15,7 @@
 
 struct level_cache;
 class map;
+class submap;
 
 /**
  * One piece of a Level cache whose freshness this module tracks.
@@ -187,6 +188,55 @@ class level_cache_freshness
         /** Mark every per-submap cache of a freshly constructed Level cache stale. */
         static void initialise( level_cache &cache );
 
+        // ---- Per-cache staleness verbs ----------------------------------
+        //
+        // Successors of the `map::set_*_cache_dirty` helpers. Each carries the
+        // couplings of the helper it replaces, so a caller states which cache went
+        // stale and never assembles a subset of bits.
+
+        /** Transparency cache of a whole level, plus the absorption cache derived from it. */
+        static void mark_transparency( map &who, int zlev );
+        /** Transparency cache of the submap containing `p`. */
+        static void mark_transparency( map &who, const tripoint_bub_ms &p );
+        /** Outside cache of a whole level. */
+        static void mark_outside( map &who, int zlev );
+        /** Outside cache of the tile's submap and its boundary neighbours. */
+        static void mark_outside( map &who, const tripoint_bub_ms &p );
+        /** Floor cache of a whole level, cascading outside and absorption one level down. */
+        static void mark_floor( map &who, int zlev );
+        /** Floor cache of the tile's submap, cascading outside and absorption below. */
+        static void mark_floor( map &who, const tripoint_bub_ms &p );
+        /** Sound absorption cache of a whole level. */
+        static void mark_absorption( map &who, int zlev );
+        /** Sound absorption cache of the tile's submap and its boundary neighbours. */
+        static void mark_absorption( map &who, const tripoint_bub_ms &p );
+        /** Suspension cache of a whole level. */
+        static void mark_suspension( map &who, int zlev );
+        /** Seen cache of a whole level, unconditionally. */
+        static void mark_seen( map &who, int zlev );
+        /** Seen cache of `p`'s level, only where `p` was actually remembered. */
+        static void mark_seen( map &who, const tripoint_bub_ms &p );
+        /** Lightmap of the single submap containing `p`. */
+        static void mark_lightmap( map &who, const tripoint_bub_ms &p );
+        /** Lightmap of every loaded level, with the CPU lightmap memo and visibility. */
+        static void invalidate_lightmap( map &who );
+        /** Visibility cache of every loaded level, plus the map-wide aggregate. */
+        static void invalidate_visibility( map &who );
+        /** Forget one remembered tile and queue it for re-memorising. */
+        static void mark_memory_seen( map &who, const tripoint_bub_ms &p );
+        /** Forget everything remembered on a level and queue a full re-memorise. */
+        static void mark_memory_seen( map &who, int zlev );
+        /**
+         * Escape hatch, coarse by design: every Level cache of one z-level is stale.
+         *
+         * This is the literal content of the old `map::invalidate_map_cache`, kept for
+         * the sites that genuinely mean "rebuild this whole level" — a viewer re-centre,
+         * a save/load restore, a teleport, a z jump in the map editor. No change kind
+         * covers it and the ticket forbids inventing one. Callers that know what
+         * changed use a kind or one of the verbs above instead.
+         */
+        static void invalidate_level( map &who, int zlev );
+
         // ---- Change kinds -------------------------------------------------
 
         // Report a change to the world or the viewer. Each kind raises exactly the
@@ -356,6 +406,22 @@ class level_cache_freshness
         static std::uint64_t cpu_lightmap_generation( const level_cache &cache );
         /** The map-wide aggregate: does a gameplay consumer need a full refresh? */
         static bool visibility_stale( const map &who );
+
+    private:
+        /**
+         * Mark one submap grid cell of `part` stale in the level bitset and, when the
+         * submap is resident and `flag` names one, in its own dirty flag. Member
+         * because the submap lookup is private to `map`.
+         */
+        static void mark_submap_flag( map &who, level_cache &ch, level_cache_part part,
+                                      const tripoint_bub_sm &smp, bool submap::*flag );
+        /**
+         * The 3x3-tile-neighbourhood shape shared by the outside, absorption and floor
+         * point raises: the tile's own submap, the edge neighbours when the tile sits on
+         * a submap boundary, and the corners when it sits on two.
+         */
+        static void mark_boundary_neighbours( map &who, level_cache &ch, level_cache_part part,
+                const tripoint_bub_ms &p, bool submap::*flag );
 };
 
 #endif // CATA_SRC_LEVEL_CACHE_FRESHNESS_H

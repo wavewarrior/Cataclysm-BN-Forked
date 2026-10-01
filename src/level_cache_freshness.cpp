@@ -403,6 +403,243 @@ void level_cache_freshness::initialise( level_cache &cache ) {
     }
 }
 
+void level_cache_freshness::mark_submap_flag( map &who, level_cache &ch,
+        const level_cache_part part, const tripoint_bub_sm &smp,
+        bool submap::*const flag ) {
+    mark( ch, freshness_parts( { part } ), static_cast<size_t>( ch.bidx( smp.x(), smp.y() ) ) );
+    submap *const sm = who.get_submap_at_grid( smp );
+    if( ( flag != nullptr ) && sm != nullptr ) {
+        sm->*flag = true;
+    }
+}
+
+void level_cache_freshness::mark_boundary_neighbours( map &who, level_cache &ch,
+        const level_cache_part part, const tripoint_bub_ms &p, bool submap::*const flag ) {
+    const auto proj = project_remain<coords::sm>( p );
+    const tripoint_bub_sm smp = proj.quotient_tripoint;
+    const auto l = proj.remainder;
+    const auto mark_cell = [&]( const point_rel_sm & d ) {
+        const tripoint_bub_sm n( smp.xy() + d, smp.z() );
+        if( n.x() < 0 || n.y() < 0 || n.x() >= who.my_MAPSIZE || n.y() >= who.my_MAPSIZE ) {
+            return;
+        }
+        mark_submap_flag( who, ch, part, n, flag );
+    };
+    mark_cell( point_rel_sm::zero() );
+    const bool on_left = l.x() == 0;
+    const bool on_right = l.x() == SEEX - 1;
+    const bool on_top = l.y() == 0;
+    const bool on_bottom = l.y() == SEEY - 1;
+    if( on_left ) { mark_cell( point_rel_sm::west() ); }
+    if( on_right ) { mark_cell( point_rel_sm::east() ); }
+    if( on_top ) { mark_cell( point_rel_sm::north() ); }
+    if( on_bottom ) { mark_cell( point_rel_sm::south() ); }
+    if( on_left && on_top ) { mark_cell( point_rel_sm::north_west() ); }
+    if( on_right && on_top ) { mark_cell( point_rel_sm::north_east() ); }
+    if( on_left && on_bottom ) { mark_cell( point_rel_sm::south_west() ); }
+    if( on_right && on_bottom ) { mark_cell( point_rel_sm::south_east() ); }
+}
+
+void level_cache_freshness::mark_transparency( map &who, const int zlev ) {
+    assert_main_thread();
+    if( !who.inbounds_z( zlev ) ) {
+        return;
+    }
+    level_cache &ch = who.get_cache( zlev );
+    // Coupling carried from the old helper: wiping the whole transparency cache also
+    // wipes the sound absorption cache derived from it.
+    mark( ch, freshness_parts( { level_cache_part::transparency, level_cache_part::absorption } ) );
+    advance_transparency_generation( ch );
+    for( const point_bub_sm p : who.flat_bubble_submaps() ) {
+        if( submap * const sm = who.get_submap_at_grid( tripoint_bub_sm( p, zlev ) ) ) {
+            sm->transparency_dirty = true;
+        }
+    }
+}
+
+void level_cache_freshness::mark_transparency( map &who, const tripoint_bub_ms &p ) {
+    assert_main_thread();
+    if( !who.inbounds( p ) ) {
+        return;
+    }
+    const tripoint_bub_sm smp = project_to<coords::sm>( p );
+    level_cache &ch = who.get_cache( smp.z() );
+    mark_submap_flag( who, ch, level_cache_part::transparency, smp,
+                      &submap::transparency_dirty );
+    advance_transparency_generation( ch );
+}
+
+void level_cache_freshness::mark_outside( map &who, const int zlev ) {
+    assert_main_thread();
+    if( !who.inbounds_z( zlev ) ) {
+        return;
+    }
+    mark( who.get_cache( zlev ), freshness_parts( { level_cache_part::outside } ) );
+    for( const point_bub_sm p : who.flat_bubble_submaps() ) {
+        if( submap * const sm = who.get_submap_at_grid( tripoint_bub_sm( p, zlev ) ) ) {
+            sm->outside_dirty = true;
+        }
+    }
+}
+
+void level_cache_freshness::mark_outside( map &who, const tripoint_bub_ms &p ) {
+    assert_main_thread();
+    if( !who.inbounds( p ) ) {
+        return;
+    }
+    mark_boundary_neighbours( who, who.get_cache( p.z() ), level_cache_part::outside, p,
+                              &submap::outside_dirty );
+}
+
+void level_cache_freshness::mark_absorption( map &who, const int zlev ) {
+    assert_main_thread();
+    if( who.inbounds_z( zlev ) ) {
+        mark( who.get_cache( zlev ), freshness_parts( { level_cache_part::absorption } ) );
+    }
+}
+
+void level_cache_freshness::mark_absorption( map &who, const tripoint_bub_ms &p ) {
+    assert_main_thread();
+    if( !who.inbounds( p ) ) {
+        return;
+    }
+    // The absorption builder reads a 3x3 tile neighbourhood like the outside builder, so
+    // the raise has the same boundary shape; unlike outside and transparency it has no
+    // submap dirty flag.
+    mark_boundary_neighbours( who, who.get_cache( p.z() ), level_cache_part::absorption, p,
+                              nullptr );
+}
+
+void level_cache_freshness::mark_floor( map &who, const int zlev ) {
+    assert_main_thread();
+    if( who.inbounds_z( zlev ) ) {
+        mark( who.get_cache( zlev ), freshness_parts( { level_cache_part::floor } ) );
+        for( const point_bub_sm p : who.flat_bubble_submaps() ) {
+            if( submap * const sm = who.get_submap_at_grid( tripoint_bub_sm( p, zlev ) ) ) {
+                sm->floor_dirty = true;
+            }
+        }
+    }
+    // outside_cache and sheltered_cache at z-1 depend on floor_cache at z, and with them
+    // the absorption and sound wall caches.
+    mark_outside( who, zlev - 1 );
+    mark_absorption( who, zlev - 1 );
+}
+
+void level_cache_freshness::mark_floor( map &who, const tripoint_bub_ms &p ) {
+    assert_main_thread();
+    if( !who.inbounds( p ) ) {
+        return;
+    }
+    mark_submap_flag( who, who.get_cache( p.z() ), level_cache_part::floor,
+                      project_to<coords::sm>( p ), &submap::floor_dirty );
+    // The 3x3 tile neighbourhood means adjacent submaps one level down may be affected
+    // too, and the absorption cache follows the outside cache there.
+    mark_outside( who, p + tripoint_rel_ms::below() );
+    mark_absorption( who, p + tripoint_rel_ms::below() );
+}
+
+void level_cache_freshness::mark_suspension( map &who, const int zlev ) {
+    assert_main_thread();
+    if( who.inbounds_z( zlev ) ) {
+        mark( who.get_cache( zlev ), freshness_parts( { level_cache_part::suspension_dirty } ) );
+    }
+}
+
+void level_cache_freshness::mark_seen( map &who, const int zlev ) {
+    assert_main_thread();
+    if( who.inbounds_z( zlev ) ) {
+        mark( who.get_cache( zlev ), freshness_parts( { level_cache_part::seen } ) );
+    }
+}
+
+void level_cache_freshness::mark_seen( map &who, const tripoint_bub_ms &p ) {
+    assert_main_thread();
+    if( !who.inbounds( p ) ) {
+        return;
+    }
+    level_cache &ch = who.get_cache( p.z() );
+    if( ch.seen_cache_dirty ) {
+        return;
+    }
+    const int ci = ch.idx( p.x(), p.y() );
+    if( ch.seen_cache[ci] != 0.0 || ch.camera_cache[ci] != 0.0 ) {
+        mark( ch, freshness_parts( { level_cache_part::seen } ) );
+    }
+}
+
+void level_cache_freshness::mark_lightmap( map &who, const tripoint_bub_ms &p ) {
+    assert_main_thread();
+    if( !who.inbounds_z( p.z() ) ) {
+        return;
+    }
+    level_cache &ch = who.get_cache( p.z() );
+    const size_t bidx = static_cast<size_t>( ch.bidx( p.x() / SEEX, p.y() / SEEY ) );
+    mark( ch, freshness_parts( { level_cache_part::lightmap } ), bidx );
+}
+
+void level_cache_freshness::invalidate_lightmap( map &who ) {
+    assert_main_thread();
+    const auto parts = freshness_parts( { level_cache_part::lightmap } );
+    for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z ) {
+        level_cache &ch = who.get_cache( z );
+        mark( ch, parts );
+        invalidate_cpu_lightmap( ch );
+        mark_visibility( who, z );
+    }
+}
+
+void level_cache_freshness::invalidate_visibility( map &who ) {
+    assert_main_thread();
+    for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z ) {
+        mark_visibility( who, z );
+    }
+}
+
+void level_cache_freshness::mark_memory_seen( map &who, const tripoint_bub_ms &p ) {
+    assert_main_thread();
+    level_cache &ch = who.get_cache( p.z() );
+    const int offset = p.x() + p.y() * ch.cache_x;
+    if( offset < 0 || offset >= ch.cache_x * ch.cache_y ) {
+        return;
+    }
+    const auto bit = static_cast<size_t>( offset );
+    if( ch.map_memory_seen_cache[bit] ) {
+        ch.map_memory_seen_cache.reset( bit );
+        queue_memory_seen( ch, p );
+    }
+}
+
+void level_cache_freshness::mark_memory_seen( map &who, const int zlev ) {
+    assert_main_thread();
+    level_cache &ch = who.get_cache( zlev );
+    ch.map_memory_seen_cache.reset();
+    queue_memory_seen_all( ch );
+}
+
+void level_cache_freshness::invalidate_level( map &who, const int zlev ) {
+    assert_main_thread();
+    if( !who.inbounds_z( zlev ) ) {
+        return;
+    }
+    level_cache &ch = who.get_cache( zlev );
+    mark( ch, freshness_parts( {
+        level_cache_part::floor,
+        level_cache_part::transparency,
+        level_cache_part::absorption,
+        level_cache_part::sound_wall,
+        level_cache_part::seen,
+        level_cache_part::lightmap,
+        level_cache_part::outside,
+        level_cache_part::suspension_dirty,
+    } ) );
+    invalidate_cpu_lightmap( ch );
+    mark_vehicle_caches( who, zlev );
+    mark_visibility( who, zlev );
+    forget_seen_origin( who );
+    forget_solar_stamps( who );
+}
+
 namespace {
 
 /// Walk the `band_count` bands of submaps the shift scrolls in from, in the
@@ -446,35 +683,35 @@ void level_cache_freshness::report( map &who, const terrain_changed &change ) {
     const tripoint_bub_ms &p = change.at;
     const tripoint_bub_ms above( p.xy(), p.z() + 1 );
     // One raise per property diff, mirroring the branches of ter_set/furn_set
-    // (map_access.cpp). `set_*` helpers keep their own couplings (floor dirties the
+    // (map_access.cpp). The verbs keep their own couplings (floor dirties the
     // level below, transparency bumps the Structure-rebuild generation).
     if( change.transparency ) {
         switch( change.scope ) {
             case terrain_changed::transparency_scope::tile:
-                who.set_transparency_cache_dirty( p );
+                mark_transparency( who, p );
                 break;
             case terrain_changed::transparency_scope::level:
-                who.set_transparency_cache_dirty( p.z() );
+                mark_transparency( who, p.z() );
                 break;
             case terrain_changed::transparency_scope::all_levels:
                 for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z ) {
-                    who.set_transparency_cache_dirty( z );
+                    mark_transparency( who, z );
                 }
                 break;
         }
-        who.set_seen_cache_dirty( change.seen_probe.value_or( p ) );
+        mark_seen( who, change.seen_probe.value_or( p ) );
     }
     if( change.no_floor || change.z_transparent ) {
-        who.set_floor_cache_dirty( p );
+        mark_floor( who, p );
         // Floor/z-transparency changes reveal or hide tiles one level down.
-        who.set_seen_cache_dirty( p.z() );
-        who.set_seen_cache_dirty( p.z() - 1 );
+        mark_seen( who, p.z() );
+        mark_seen( who, p.z() - 1 );
     }
     if( change.sun_roof_above ) {
-        who.set_floor_cache_dirty( above );
+        mark_floor( who, above );
     }
     if( change.suspended ) {
-        who.set_suspension_cache_dirty( p.z() );
+        mark_suspension( who, p.z() );
     }
     if( change.support_here || change.no_floor ) {
         support_lost( who, p );
@@ -484,15 +721,15 @@ void level_cache_freshness::report( map &who, const terrain_changed &change ) {
         support_lost( who, above );
     }
     if( change.memory_seen ) {
-        who.set_memory_seen_cache_dirty( p );
+        mark_memory_seen( who, p );
     }
     if( change.lightmap ) {
-        who.invalidate_lightmap_caches();
+        invalidate_lightmap( who );
     }
     if( change.floor_level ) {
-        // Whole-level floor shape, with the helper's own cascade to the outside and
+        // Whole-level floor shape, with the verb's own cascade to the outside and
         // absorption caches one level down.
-        who.set_floor_cache_dirty( p.z() );
+        mark_floor( who, p.z() );
     }
 }
 
@@ -502,12 +739,12 @@ void level_cache_freshness::report( map &who, const light_changed &change ) {
     // changes) all funnel through this one instrument: every level's lightmap is stale.
     switch( change.scope ) {
         case light_changed::lightmap_scope::all_levels:
-            who.invalidate_lightmap_caches();
+            invalidate_lightmap( who );
             break;
         case light_changed::lightmap_scope::tile:
             // A viewer move inside the bubble moves only the entity lights of the
             // submap it landed in, which is what the player-move site raises today.
-            who.mark_lightmap_dirty( change.at );
+            mark_lightmap( who, change.at );
             break;
         case light_changed::lightmap_scope::none:
             // Nothing about the light sources changed; the caller reports a viewer-side
@@ -515,12 +752,12 @@ void level_cache_freshness::report( map &who, const light_changed &change ) {
             break;
     }
     if( change.seen ) {
-        who.set_seen_cache_dirty( change.at.z() );
+        mark_seen( who, change.at.z() );
     }
     if( change.visibility ) {
         // The activity-cadence boundary pairs the lightmap invalidate with the
         // map-wide visibility aggregate, because the light level may have moved.
-        who.invalidate_visibility_caches();
+        invalidate_visibility( who );
     }
 }
 
@@ -535,12 +772,12 @@ void level_cache_freshness::report( map &who, const vehicle_moved &change ) {
     // (an observation, not freshness) and minus the GPU residency push, which stays at
     // the call site until the GPU seam turns to generation polling.
     mark( ch, freshness_parts( { level_cache_part::veh_in_active_range } ) );
-    who.set_vehicle_cache_dirty( smz );
-    who.invalidate_lightmap_caches();
+    mark_vehicle_caches( who, smz );
+    invalidate_lightmap( who );
     // Hour-only: the vehicle path must not reset the light-level gate, or every move
     // would force a full sunlight cascade.
     forget_solar_hour( who );
-    who.set_seen_cache_dirty( smz );
+    mark_seen( who, smz );
     mark( ch, freshness_parts( { level_cache_part::visibility } ) );
 
     const auto bubble = who.reality_bubble_2D_bounds();
@@ -602,7 +839,7 @@ void level_cache_freshness::report( map &who, const vehicle_moved &change ) {
     // Vehicles can extend through the floor; mark the level above as well.
     const int above_z = smz + 1;
     if( who.inbounds_z( above_z ) ) {
-        who.set_seen_cache_dirty( above_z );
+        mark_seen( who, above_z );
         mark( who.get_cache( above_z ), freshness_parts( { level_cache_part::visibility } ) );
         mark_occupancy( who.get_cache( above_z ), above_z,
                         freshness_parts( { level_cache_part::floor } ) );
@@ -678,10 +915,10 @@ void level_cache_freshness::report( map &who, const map_shifted &change ) {
         // Seen work stays limited to the levels the player can glance at; deeper levels
         // ride along on the translate above (see the comment in `map::shift`).
         if( std::abs( gridz - change.player_z ) <= 1 ) {
-            who.set_seen_cache_dirty( gridz );
+            mark_seen( who, gridz );
         }
         mark_visibility( who, gridz );
-        who.set_suspension_cache_dirty( gridz );
+        mark_suspension( who, gridz );
     }
     // Pending collapse checks are bubble-relative, so they travel with the bubble —
     // the last freshness write of `map::shift` (map.cpp).
@@ -762,13 +999,13 @@ void level_cache_freshness::report( map &who, const world_replaced &change ) {
         mark_area( z, area_parts, 0 );
         advance_transparency_generation( who.get_cache( z ) );
         if( change.seen ) {
-            who.set_seen_cache_dirty( z );
+            mark_seen( who, z );
         }
         if( change.suspension ) {
-            who.set_suspension_cache_dirty( z );
+            mark_suspension( who, z );
         }
         if( change.vehicle ) {
-            who.set_vehicle_cache_dirty( z );
+            mark_vehicle_caches( who, z );
         }
         // Outside and absorption one level down: `loadn`'s floor raise cascades there
         // because outside at z-1 reads floor at z. A caller that leaves the floor cache
