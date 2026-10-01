@@ -327,8 +327,13 @@ void vehicle::set_electronics_menu_options(
             {
                 add_msg( _( "Camera system won't turn on" ) );
             }
-            get_map().set_seen_cache_dirty( bub_ms_location().z() );
-            get_map().invalidate_visibility_caches();
+            level_cache_freshness::report( get_map(), level_cache_freshness::light_changed {
+                .at = bub_ms_location(),
+                // No light source changed: the camera feed did. Seen and visibility.
+                .scope = level_cache_freshness::light_changed::lightmap_scope::none,
+                .visibility = true,
+                .seen = true,
+            } );
             refresh();
         } );
     }

@@ -8,6 +8,7 @@
 #include "game.h"
 #include "item.h"
 #include "map.h"
+#include "level_cache_freshness.h"
 #include "player_activity.h"
 #include "translations.h"
 #include "vehicle.h"
@@ -40,13 +41,27 @@ class DefaultRemovePartHandler : public RemovePartHandler
             return g->m.add_item_or_charges( loc, std::move( it ) );
         }
         void set_transparency_cache_dirty( const int z ) override {
-            map &here = get_map();
-            here.set_transparency_cache_dirty( z );
-            here.set_seen_cache_dirty( tripoint_bub_ms::zero() );
+            level_cache_freshness::report( get_map(), level_cache_freshness::terrain_changed {
+                .at = tripoint_bub_ms( 0, 0, z ),
+                .transparency = true,
+                // A part edit repaints the whole level's transparency cache.
+                .scope = level_cache_freshness::terrain_changed::transparency_scope::level,
+                // The old pair probed the bubble origin, not the part's tile.
+                .seen_probe = tripoint_bub_ms::zero(),
+                .support_above = false,
+                .memory_seen = false,
+            } );
         }
         void set_floor_cache_dirty( const int z ) override {
-            get_map().set_floor_cache_dirty( z );
-            get_map().set_vehicle_cache_dirty( z - 1 );
+            map &here = get_map();
+            level_cache_freshness::report( here, level_cache_freshness::terrain_changed {
+                .at = tripoint_bub_ms( 0, 0, z ),
+                .floor_level = true,
+                .support_above = false,
+                .memory_seen = false,
+            } );
+            // Membership bookkeeping, not freshness of the part edit itself.
+            level_cache_freshness::mark_vehicle_caches( here, z - 1 );
         }
         void removed( vehicle &veh, const int part ) override {
             avatar &player_character = get_avatar();
