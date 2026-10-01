@@ -45,46 +45,41 @@ auto make_vehicle_render_frame( const vehicle &veh ) -> vehicle_render_frame
 
     const point_bub_ms anchor = veh.bub_ms_location().xy();
 
-    // Branch A: Box2D owns the pose, so precalc[0] was last written by
-    // refresh_precalc(physics_angle): rotation about mount (0,0), rounded to tiles.
-    const float pa = veh.physics_angle;
-    const float c = std::cos( pa );
-    const float s = std::sin( pa );
-    bool continuous_layout = veh.box2d_position_authority;
-    if( continuous_layout ) {
-        for( const int p : standalone ) {
-            const vehicle_part &vp = veh.cpart( p );
-            const float mx = static_cast<float>( vp.mount.x() );
-            const float my = static_cast<float>( vp.mount.y() );
-            const point_rel_ms expected{
-                static_cast<int>( std::round( mx * c - my * s ) ),
-                static_cast<int>( std::round( mx * s + my * c ) )
-            };
-            if( vp.precalc[0] != expected ) {
-                continuous_layout = false;
-                break;
-            }
-        }
+    // The committed part tiles are always `anchor + precalc[0]`, whichever code wrote
+    // that layout: `refresh_precalc( physics_angle )` after a physics step (rotation
+    // about mount (0,0)), or `rotate_to_world( pivot_rotation[0], pivot_anchor[0] )`
+    // after `displace_vehicle` swapped precalc[1] into precalc[0] during a tile
+    // crossing. Those two layouts differ by the rotated pivot offset, so deriving the
+    // continuous origin one way while the tiles sit the other way teleports the
+    // composite by that integer offset the moment the layout is rewritten - a 2-tile
+    // lurch on a car whose pivot is 2 tiles off its mount origin.
+    //
+    // Correct therefore by the difference between the committed layout and the
+    // continuous rotation, per part: `precalc[0] - round( R(a) * mount )`. It is an
+    // integer vector, so it is exact and jitter-free in both writers: zero for the
+    // `refresh_precalc` layout, which rounds the very same rotation, and the rotated
+    // pivot offset for the pivot layout at 0/90/180/270 degrees. Anything finer (say
+    // the unrounded residual) would make the composite step every time a part's tile
+    // rounding flipped, and would drag the drawn vehicle off its own committed tiles.
+    const bool physics_pose = veh.box2d_position_authority;
+    const float a = physics_pose ? veh.physics_angle : units::to_radians( veh.pivot_rotation[0] );
+    const float c = std::cos( a );
+    const float s = std::sin( a );
+    const float roff_x = physics_pose ? veh.render_offset_x : 0.0f;
+    const float roff_y = physics_pose ? veh.render_offset_y : 0.0f;
+    int sum_x = 0;
+    int sum_y = 0;
+    for( const int p : standalone ) {
+        const vehicle_part &vp = veh.cpart( p );
+        const float mx = static_cast<float>( vp.mount.x() );
+        const float my = static_cast<float>( vp.mount.y() );
+        sum_x += vp.precalc[0].x() - static_cast<int>( std::lround( c * mx - s * my ) );
+        sum_y += vp.precalc[0].y() - static_cast<int>( std::lround( s * mx + c * my ) );
     }
-
-    if( continuous_layout ) {
-        f.angle = pa;
-        f.origin_x = static_cast<float>( anchor.x() ) + veh.render_offset_x;
-        f.origin_y = static_cast<float>( anchor.y() ) + veh.render_offset_y;
-        return f;
-    }
-
-    // Branch B: the discrete layout of rotate_to_world( pivot_rotation[0], pivot_anchor[0] ),
-    // reproduced as the exact rotation it performs at 0/90/180/270 degrees.
-    const float a = units::to_radians( veh.pivot_rotation[0] );
-    const float ca = std::cos( a );
-    const float sa = std::sin( a );
-    const tripoint_mnt_veh &pivot = veh.pivot_anchor[0];
-    const float px = -static_cast<float>( pivot.x() );
-    const float py = -static_cast<float>( pivot.y() );
+    const float inv_n = 1.0f / static_cast<float>( standalone.size() );
     f.angle = a;
-    f.origin_x = static_cast<float>( anchor.x() ) + ( ca * px - sa * py );
-    f.origin_y = static_cast<float>( anchor.y() ) + ( sa * px + ca * py );
+    f.origin_x = static_cast<float>( anchor.x() ) + roff_x + static_cast<float>( sum_x ) * inv_n;
+    f.origin_y = static_cast<float>( anchor.y() ) + roff_y + static_cast<float>( sum_y ) * inv_n;
     return f;
 }
 

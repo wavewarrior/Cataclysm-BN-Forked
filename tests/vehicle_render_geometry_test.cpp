@@ -204,3 +204,56 @@ TEST_CASE("vehicle_path_band_geometry", "[vehicle][render]") {
         CHECK(band.centre.back().x == Catch::Approx(32.5f).margin(0.05f));
     }
 }
+
+// The composite must sit on the vehicle's own committed tiles at every heading, and the
+// frame origin must not creep as the heading sweeps: the only correction applied to
+// `anchor + render_offset` is the integer difference between the committed layout and
+// the continuous rotation, which is identically zero for the layout a physics step
+// writes. Averaging anything finer (the unrounded residual) reintroduces a sub-tile
+// creep that steps every time one part's tile rounding flips mid-turn.
+TEST_CASE("vehicle_render_frame_origin_tracks_anchor_while_turning", "[vehicle][render]") {
+    for (const units::angle dir :
+         {0_degrees, 15_degrees, 30_degrees, 45_degrees, 90_degrees, 135_degrees, 180_degrees,
+          270_degrees, 345_degrees}) {
+        SECTION(string_format("heading %d", units::to_degrees(dir))) {
+            vehicle* veh = spawn_car(dir);
+            REQUIRE(veh->box2d_position_authority);
+            get_map().vehmove();
+            REQUIRE(layout_is_continuous(*veh));
+
+            const point_bub_ms anchor = veh->bub_ms_location().xy();
+            const vehicle_render_frame frame = make_vehicle_render_frame(*veh);
+            // Zero correction: the origin is the anchor plus the sub-tile physics offset.
+            CHECK(frame.origin_x == static_cast<float>(anchor.x()) + veh->render_offset_x);
+            CHECK(frame.origin_y == static_cast<float>(anchor.y()) + veh->render_offset_y);
+            check_parts_match_frame(*veh, frame);
+        }
+    }
+}
+
+// Crossing a tile rewrites the committed layout: `move_vehicle` builds the pivot-rotated
+// layout in precalc[1] and `displace_vehicle` swaps it into precalc[0]. At a cardinal
+// heading that layout is the continuous rotation shifted by the vehicle's own pivot offset,
+// so a frame derived as a plain rotation of the mounts is left off its own tiles by that
+// offset - two tiles for a car - on every crossing.
+TEST_CASE("vehicle_render_frame_follows_its_tiles_across_a_tile_crossing", "[vehicle][render]") {
+    vehicle* veh = spawn_car(90_degrees);
+    REQUIRE(veh->box2d_position_authority);
+    get_map().vehmove();
+    veh->render_offset_x = 0.0f;
+    veh->render_offset_y = 0.0f;
+    REQUIRE(layout_is_continuous(*veh));
+
+    // What move_vehicle() does on the step that crosses the tile.
+    veh->precalc_mounts(1, veh->face.dir(), veh->pivot_point());
+    const tripoint_abs_ms anchor_before = veh->abs_ms_location();
+    REQUIRE(get_map().displace_vehicle(*veh, tripoint_rel_ms(0, -1, 0)));
+    const tripoint_rel_ms step = veh->abs_ms_location() - anchor_before;
+    CHECK(step == tripoint_rel_ms(0, -1, 0));
+    // Premise: the crossing really did swap in the pivot layout.
+    REQUIRE_FALSE(layout_is_continuous(*veh));
+
+    veh->render_offset_x = 0.0f;
+    veh->render_offset_y = 0.0f;
+    check_parts_match_frame(*veh, make_vehicle_render_frame(*veh));
+}

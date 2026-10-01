@@ -587,7 +587,6 @@ auto own_composite_vehicle() -> const vehicle * // *NOPAD*
     if( !vp || !vp->vehicle().is_moving() ) { return nullptr; }
     return &vp->vehicle();
 }
-
 } // namespace
 
 auto cata_tiles::prepare_vehicle_composites() -> std::optional<SDL_FPoint>
@@ -609,6 +608,19 @@ auto cata_tiles::prepare_vehicle_composites() -> std::optional<SDL_FPoint>
         composite_slot &slot = composite_slots_[ i ];
         const vehicle *v = candidates[ i ];
         if( v != nullptr && i == 1 && v == candidates[ 0 ] ) { v = nullptr; }
+        if( v == nullptr && eligible && i == 0 && g->u.in_vehicle ) {
+            // A turn's readback walk steps the vehicle anchor one tile per redraw while
+            // the avatar's committed tile only updates at commit_occupants(), so for a few
+            // frames `veh_at( u.pos() )` finds nothing and the position-based lookup
+            // reports no candidate. The seat is recorded on the avatar independently of
+            // position, so it still names the vehicle being ridden; holding on to it
+            // avoids dropping the composite for those frames, the camera branch flipping,
+            // and the >8-tile snap that follows when it flips back.
+            if( vehicle *ridden = resolve_vehicle( g->u.boarded_vehicle );
+                ridden != nullptr && ridden->is_moving() ) {
+                v = ridden;
+            }
+        }
         if( v == nullptr ) {
             slot.veh = nullptr;
             slot.tracked = {};
@@ -623,8 +635,9 @@ auto cata_tiles::prepare_vehicle_composites() -> std::optional<SDL_FPoint>
             f.angle
         };
 
-        if( !( slot.tracked == v->handle() )
-            || slot.ref.z() != v->abs_ms_location().z() ) {
+        const bool new_track = !( slot.tracked == v->handle() )
+                               || slot.ref.z() != v->abs_ms_location().z();
+        if( new_track ) {
             reset_vehicle_motion( slot.motion, target, now );
         } else {
             // The committed anchor moved: shift every stored pose the other way so the
@@ -654,20 +667,30 @@ auto cata_tiles::prepare_vehicle_composites() -> std::optional<SDL_FPoint>
         slot.veh = rs.vehicle_target( i, w, h ) != nullptr ? v : nullptr;
     }
 
-    if( composite_slots_[ 0 ].veh == nullptr || !g->u.in_vehicle ) {
+    composite_slot &s0 = composite_slots_[ 0 ];
+    if( s0.veh == nullptr || !g->u.in_vehicle || g->u.boarded_part < 0 ) {
         return std::nullopt;
     }
-    const optional_vpart_position vp = g->m.veh_at( g->u.bub_pos() );
-    if( !vp || &vp->vehicle() != composite_slots_[ 0 ].veh ) {
+    // The seat recorded on the avatar is authoritative and position-independent: it
+    // survives the frames of a turn's readback walk when the avatar's committed tile is
+    // still the pre-move one and `veh_at( u.pos() )` cannot see the vehicle.
+    if( resolve_vehicle( g->u.boarded_vehicle ) != s0.veh
+        || g->u.boarded_part >= s0.veh->part_count() ) {
         return std::nullopt;
     }
-    const tripoint_mnt_veh mount = vp->mount();
+    const tripoint_mnt_veh mount = s0.veh->cpart( g->u.boarded_part ).mount;
+    // Denominator is the tile the frame is drawn around, i.e. the avatar's committed
+    // tile, which `draw_ter` passes as `center`: the offset then carries that tile to
+    // the rendered seat. Once commit_occupants() has run this equals the seat's own
+    // committed tile; mid-turn it is the pre-move tile, which is exactly what the view
+    // is centred on, so the walk distance travels with the offset itself.
     const vehicle_render_point seat = vehicle_mount_to_bubble(
-                                          composite_slots_[ 0 ].frame, static_cast<float>( mount.x() ),
+                                          s0.frame, static_cast<float>( mount.x() ),
                                           static_cast<float>( mount.y() ) );
     return SDL_FPoint {
         seat.x - static_cast<float>( g->u.bub_pos().x() ),
-        seat.y - static_cast<float>( g->u.bub_pos().y() ) };
+        seat.y - static_cast<float>( g->u.bub_pos().y() )
+    };
 }
 
 auto cata_tiles::is_composite_vehicle( const vehicle &v ) const -> bool
