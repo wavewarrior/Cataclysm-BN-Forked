@@ -38,6 +38,15 @@ void refresh_level_cache(
     std::initializer_list<int> invalidate_zlevels = {}, bool skip_lightmap = false);
 
 /**
+ * Non-invalidating counterpart of refresh_level_cache: run the standard refresh
+ * through `game::refresh_player_visibility_cache_if_needed` WITHOUT invalidating
+ * any Level cache first. Use this after a mutation under test: it proves the
+ * mutator raised the freshness state it needs to raise, which
+ * `refresh_level_cache` cannot prove because its leading invalidate masks it.
+ */
+void refresh_view(bool skip_lightmap = false);
+
+/**
  * Structure-only variant of refresh_level_cache: invalidate then rebuild the
  * Level cache of one z-level without running the visibility refresh. Matches
  * the hand-rolled invalidate/build pairs it replaces.

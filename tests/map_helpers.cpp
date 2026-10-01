@@ -227,6 +227,12 @@ void refresh_level_cache(std::initializer_list<int> invalidate_zlevels, bool ski
     g->refresh_player_visibility_cache_if_needed(/*player_map_cache_current=*/false, skip_lightmap);
 }
 
+void refresh_view(const bool skip_lightmap) {
+    // No invalidate: whatever freshness state the mutation under test raised is what
+    // the refresh gets to work with.
+    g->refresh_player_visibility_cache_if_needed(/*player_map_cache_current=*/false, skip_lightmap);
+}
+
 void rebuild_level_cache(int zlev, bool skip_lightmap) {
     g->m.invalidate_map_cache(zlev);
     g->m.build_map_cache(zlev, skip_lightmap);

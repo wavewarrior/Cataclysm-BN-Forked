@@ -14,12 +14,16 @@
 #include "vehicle.h"
 #include "weather.h"
 
-// Stage-0 pinning tests for the Level cache freshness effort (spec #8, ticket #9).
+// Stage-0 pinning tests for the Level cache freshness effort (spec #8, tickets #9/#10).
 //
 // Assert externally visible behaviour only: after a change to the world or the viewer,
-// and the standard refresh (`refresh_level_cache`, which goes through
-// `game::refresh_player_visibility_cache_if_needed`, the same public entry point
-// production calls), what do line-of-sight and lightmap queries answer?
+// and the standard refresh, what do line-of-sight and lightmap queries answer?
+//
+// After a mutation under test the refresh is `refresh_view()`, which runs the production
+// entry point `game::refresh_player_visibility_cache_if_needed` WITHOUT a leading
+// invalidate, so a pin fails if the mutator stops raising the freshness state it relies
+// on. `refresh_level_cache()` (invalidate first) is kept only for fixture setup and for
+// the "full rebuild does reflect the edit" control, where masking is intended.
 //
 // These tests never assert which internal dirty bit was raised, nor the order of
 // internal calls. Vocabulary: GLOSSARY.md; plan: plans/level-cache-freshness.md.
@@ -64,16 +68,16 @@ TEST_CASE("player move plus standard refresh updates line of sight", "[level_cac
 
     SECTION("walking around the block reveals the target") {
         g->place_player(tripoint_bub_ms(60, 66, 0));
-        refresh_level_cache();
+        refresh_view();
         CHECK(you.sees(z));
     }
 
     SECTION("walking back behind the block hides it again") {
         g->place_player(tripoint_bub_ms(60, 66, 0));
-        refresh_level_cache();
+        refresh_view();
         REQUIRE(you.sees(z));
         g->place_player(player_home);
-        refresh_level_cache();
+        refresh_view();
         CHECK_FALSE(you.sees(z));
     }
 }
@@ -104,7 +108,7 @@ TEST_CASE(
 
     SECTION("changing z-level and refreshing reveals it") {
         g->place_player(player_below);
-        refresh_level_cache({0, 1});
+        refresh_view();
         CHECK(here.pl_sees(sample, /*max_range=*/100));
     }
 }
@@ -120,19 +124,19 @@ TEST_CASE("terrain edit plus standard refresh updates line of sight", "[level_ca
 
     SECTION("raising a wall block cuts the line") {
         build_wall_block(tripoint_bub_ms(62, 60, 0));
-        refresh_level_cache();
+        refresh_view();
         CHECK_FALSE(you.sees(z));
     }
 
     SECTION("an open door keeps the line") {
         here.ter_set(tripoint_bub_ms(62, 60, 0), ter_id("t_door_o"));
-        refresh_level_cache();
+        refresh_view();
         CHECK(you.sees(z));
     }
 
     SECTION("a closed door cuts the line") {
         here.ter_set(tripoint_bub_ms(62, 60, 0), ter_id("t_door_c"));
-        refresh_level_cache();
+        refresh_view();
         CHECK_FALSE(you.sees(z));
     }
 }
@@ -159,7 +163,7 @@ TEST_CASE("light change plus standard refresh updates the lightmap", "[level_cac
 
     SECTION("an emissive tile lights the room after the refresh") {
         here.ter_set(player_home + tripoint_east, ter_id("t_utility_light"));
-        refresh_level_cache();
+        refresh_view();
         CHECK(cache.lm[sample_idx] > LIGHT_AMBIENT_DIM);
     }
 }
@@ -190,7 +194,7 @@ TEST_CASE(
     // cache notification a committed tile crossing produces.
     veh->box2d_position_authority = false;
     REQUIRE(here.displace_vehicle(*veh, tripoint_rel_ms(0, 1, 0)));
-    refresh_level_cache();
+    refresh_view();
     const tripoint_bub_ms board_start = veh->bub_part_location(board_index);
     REQUIRE_FALSE(here.is_transparent(board_start));
     const tripoint drive_into_line = blocked_tile.raw() - board_start.raw();
@@ -208,7 +212,7 @@ TEST_CASE(
             CHECK(here.take_vehicle_move_notifications() > 0);
         }
         THEN("the standard refresh reports the blocked line") {
-            refresh_level_cache();
+            refresh_view();
             CHECK_FALSE(you.sees(z));
         }
     }
