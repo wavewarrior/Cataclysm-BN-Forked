@@ -909,6 +909,11 @@ class map : public submap_load_listener
         auto visibility_caches_dirty() const -> bool;
         /// Mark visibility_cache_dirty for every loaded z-level.
         void invalidate_visibility_caches();
+        /// Counts map::update_visibility_cache() invocations (the expensive
+        /// all-z visibility recompute). Returns the count since the last call
+        /// and resets it to zero; shaped after take_vehicle_move_notifications.
+        /// Read by the level-cache-freshness per-turn measurement test.
+        auto take_visibility_cache_updates() -> unsigned;
 
         bool check_seen_cache( const tripoint_bub_ms &p ) const;
         bool check_and_set_seen_cache( const tripoint_bub_ms &p ) const;
@@ -2472,6 +2477,8 @@ class map : public submap_load_listener
         std::map<tripoint_bub_ms, std::pair<vehicle_handle, int> > cached_veh_rope;
         /// Diagnostic for the per-turn cache-churn gate (stage C).
         unsigned vehicle_move_notifications_ = 0;
+        /// Backing counter for take_visibility_cache_updates().
+        unsigned visibility_cache_updates_ = 0;
         /// Stage C2: while true, on_vehicle_moved() only unions bounds into
         /// pending_vehicle_move_bounds_ instead of touching caches; the batch
         /// owner (map::vehmove()) replays one real call per z on flush.

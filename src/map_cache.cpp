@@ -362,6 +362,7 @@ void map::set_absorption_cache_dirty(const int zlev) {
 
 void map::update_visibility_cache(const int zlev) {
     ZoneScopedN("update_visibility_cache");
+    ++visibility_cache_updates_;
     static const bool s_diag_seen_vars = std::getenv("CBN_DIAG_SEEN_CACHE") != nullptr;
     const auto player_pos = g->u.bub_pos();
     visibility_variables_cache.variables_set = true; // Not used yet
@@ -523,6 +524,13 @@ void map::update_visibility_cache(const int zlev) {
     std::ranges::for_each(std::views::iota(min_z, max_z + 1), [this](int z) {
         get_cache(z).visibility_cache_dirty = false;
     });
+}
+
+auto map::take_visibility_cache_updates() -> unsigned
+{
+    const unsigned count = visibility_cache_updates_;
+    visibility_cache_updates_ = 0;
+    return count;
 }
 
 
