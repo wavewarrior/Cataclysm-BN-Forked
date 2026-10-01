@@ -25,6 +25,7 @@
 #include "game_constants.h"
 #include "item.h"
 #include "item_contents.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "mapbuffer.h"
 #include "lighting/render_state.h"
@@ -1177,10 +1178,15 @@ void weather_manager::update_weather()
 
     if( weather_id->sight_penalty !=
         old_weather->sight_penalty ) {
-        for( int i = -OVERMAP_DEPTH; i <= OVERMAP_HEIGHT; i++ ) {
-            get_map().set_transparency_cache_dirty( i );
-        }
-        get_map().set_seen_cache_dirty( tripoint_bub_ms::zero() );
+        // The sight penalty is folded into the transparency cache, so every loaded
+        // level went stale; the seen cache is invalidated at the bubble centre.
+        level_cache_freshness::report( get_map(), level_cache_freshness::terrain_changed {
+            .at = tripoint_bub_ms::zero(),
+            .transparency = true,
+            .scope = level_cache_freshness::terrain_changed::transparency_scope::all_levels,
+            .support_above = false,
+            .memory_seen = false,
+        } );
     }
 
     water_temperature = weather_gen.get_water_temperature(
