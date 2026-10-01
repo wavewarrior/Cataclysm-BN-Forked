@@ -847,6 +847,72 @@ TEST_CASE( "world-replaced matches the non-incremental loadn setter sequence",
     CHECK( via_kind == via_loadn );
 }
 
+TEST_CASE( "restricted world-replaced matches the partial bulk sequences",
+           "[level_cache_freshness]" ) {
+    // Two callers replace less than everything: an OMT regeneration leaves the seen
+    // cache, the lightmap and the vehicles alone; a background repaint additionally
+    // leaves the floor family alone.  The part options must reproduce the old setter
+    // sequences exactly, couplings included.
+    const int mapsize = get_map().getmapsize();
+    const auto whole_bubble = [&]( const int z ) {
+        return level_cache_freshness::world_replaced {
+            .first = tripoint_bub_sm( 0, 0, z ),
+            .last = tripoint_bub_sm( mapsize - 1, mapsize - 1, z ),
+        };
+    };
+
+    // The regeneration shape: transparency (with its absorption coupling), outside,
+    // floor with the z-1 cascade, absorption, suspension.
+    set_up_open_daylight_map();
+    map &here = get_map();
+    generation_baseline base = capture_generations( here );
+    here.set_transparency_cache_dirty( 0 );
+    here.set_outside_cache_dirty( 0 );
+    here.set_floor_cache_dirty( 0 );
+    here.set_absorption_cache_dirty( 0 );
+    here.set_suspension_cache_dirty( 0 );
+    const std::vector<std::string> via_setters = capture( here, base );
+
+    set_up_open_daylight_map();
+    base = capture_generations( here );
+    level_cache_freshness::report( here, [&] {
+        auto change = whole_bubble( 0 );
+        change.seen = false;
+        change.lightmap = false;
+        change.vehicle = false;
+        return change;
+    }() );
+    const std::vector<std::string> via_kind = capture( here, base );
+
+    INFO( "setters only:\n" << only_in( via_setters, via_kind )
+          << "kind only:\n" << only_in( via_kind, via_setters ) );
+    CHECK( via_kind == via_setters );
+
+    // The repaint shape: transparency (absorption coupling again), seen, outside.
+    set_up_open_daylight_map();
+    base = capture_generations( here );
+    here.set_transparency_cache_dirty( 0 );
+    here.set_seen_cache_dirty( 0 );
+    here.set_outside_cache_dirty( 0 );
+    const std::vector<std::string> via_paint = capture( here, base );
+
+    set_up_open_daylight_map();
+    base = capture_generations( here );
+    level_cache_freshness::report( here, [&] {
+        auto change = whole_bubble( 0 );
+        change.lightmap = false;
+        change.floor = false;
+        change.suspension = false;
+        change.vehicle = false;
+        return change;
+    }() );
+    const std::vector<std::string> via_kind_paint = capture( here, base );
+
+    INFO( "paint setters only:\n" << only_in( via_paint, via_kind_paint )
+          << "paint kind only:\n" << only_in( via_kind_paint, via_paint ) );
+    CHECK( via_kind_paint == via_paint );
+}
+
 TEST_CASE( "world-replaced makes the caches see terrain swapped underneath them",
            "[level_cache_freshness]" ) {
     // Issue #7's mechanism, documented and pinned: terrain replaced under a resident
