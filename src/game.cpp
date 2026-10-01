@@ -129,6 +129,7 @@
 #include "json.h"
 #include "kill_tracker.h"
 #include "lighting/rmlui_layer.h"
+#include "level_cache_freshness.h"
 #include "lightmap.h"
 #include "line.h"
 #include "live_view.h"
@@ -907,7 +908,10 @@ bool game::do_turn()
     // the incremental rebuild; only submaps with actual changes are rebuilt.
     {
         ZoneScopedN( "do_turn_invalidate_visibility" );
-        m.invalidate_visibility_caches();
+        level_cache_freshness::report( m, level_cache_freshness::light_changed {
+            .scope = level_cache_freshness::light_changed::lightmap_scope::none,
+            .visibility = true,
+        } );
         mon_info_cache_dirty = true;
     }
 

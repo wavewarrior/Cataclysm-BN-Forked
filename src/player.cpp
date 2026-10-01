@@ -7,6 +7,7 @@
 #include "enums.h"
 #include "flag.h"
 #include "game.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "messages.h"
 #include "output.h"
@@ -33,6 +34,17 @@ static auto update_map_after_player_setpos( player &who,
     }
     if( old_pos.z() != new_pos.z() ) {
         g->vertical_shift_notify( old_pos.z(), new_pos.z() );
+        // The viewer left its level.  Nothing raises a dirty bit on a z change today:
+        // the seen-cache origin no longer matches the viewer, so the next build of the
+        // level rebuilds what is seen.  The kind records that mechanism.
+        level_cache_freshness::report( g->m, level_cache_freshness::z_level_changed {} );
+    } else {
+        // The viewer moved inside the bubble or across a submap boundary (a bubble shift
+        // reports `map_shifted` from inside `update_map` above; the viewer move rides on
+        // top of it).  Nothing raises a dirty bit for a move today: the seen-cache origin
+        // no longer matches the viewer, so the next build of the level rebuilds what is
+        // seen.  The kind records that mechanism.
+        level_cache_freshness::report( g->m, level_cache_freshness::player_moved {} );
     }
 }
 

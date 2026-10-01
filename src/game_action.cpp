@@ -56,6 +56,7 @@
 #include "init.h"
 #include "item_functions.h"
 #include "itype.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "harvest.h"
 #include "iuse_actor.h"
@@ -1883,7 +1884,10 @@ const auto npcperf = asleep && get_option<bool>( "SLEEP_SKIP_NPC" );
     // update_visibility_cache; subsequent redraws within the same turn skip it.
     // Lightmap is NOT blanket-invalidated here — per-submap dirty tracking handles
     // the incremental rebuild; only submaps with actual changes are rebuilt.
-    m.invalidate_visibility_caches();
+    level_cache_freshness::report( m, level_cache_freshness::light_changed {
+        .scope = level_cache_freshness::light_changed::lightmap_scope::none,
+        .visibility = true,
+    } );
 
     // starting a new turn, clear out temperature cache
     weather_manager &weather = get_weather();
@@ -2239,7 +2243,10 @@ auto game::coop_client_frame_step() -> void
     ZoneScopedN( "game::coop_client_frame_step" );
     // Mark all visibility caches dirty for this frame.  The first redraw will run
     // update_visibility_cache; subsequent redraws within the same frame skip it.
-    m.invalidate_visibility_caches();
+    level_cache_freshness::report( m, level_cache_freshness::light_changed {
+        .scope = level_cache_freshness::light_changed::lightmap_scope::none,
+        .visibility = true,
+    } );
 
     update_performance_bubble();
 

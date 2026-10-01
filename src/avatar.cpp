@@ -45,6 +45,7 @@
 #include "item.h"
 #include "item_contents.h"
 #include "item_factory.h"
+#include "level_cache_freshness.h"
 #include "locations.h"
 #include "itype.h"
 #include "iuse.h"
@@ -1420,7 +1421,11 @@ void avatar::set_movement_mode( character_movemode new_mode )
     if( is_crouch_like_movemode( move_mode ) || is_crouch_like_movemode( new_mode ) ||
         move_mode == CMM_PRONE || new_mode == CMM_PRONE ) {
         // crouching and prone affect visibility
-        get_map().set_seen_cache_dirty( bub_pos().z() );
+        level_cache_freshness::report( get_map(), level_cache_freshness::light_changed {
+            .at = bub_pos(),
+            .scope = level_cache_freshness::light_changed::lightmap_scope::none,
+            .seen = true,
+        } );
     }
     move_mode = new_mode;
 }
