@@ -596,11 +596,17 @@ TEST_CASE( "vehicle-moved matches the pre-migration on_vehicle_moved sequence",
 
     set_up_open_daylight_map();
     map &here = get_map();
+    // Both arms call `invalidate_lightmap_caches()`, which marks visibility on every
+    // level, so the direct visibility marks of the vehicle path are structurally
+    // redundant and no capture can see them dropped. Clearing first only keeps the
+    // starting state honest (the bit otherwise arrives pre-dirtied).
+    level_cache_freshness::clear_visibility( here );
     generation_baseline base = capture_generations( here );
     reference_vehicle_move_sequence( here, sm_min, sm_max, 0 );
     const std::vector<std::string> via_setters = capture( here, base );
 
     set_up_open_daylight_map();
+    level_cache_freshness::clear_visibility( here );
     base = capture_generations( here );
     // The real entry point, which now reports the kind; the notification counter it
     // raises is an observation for the GPU consumer, not freshness.
