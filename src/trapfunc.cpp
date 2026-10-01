@@ -20,6 +20,7 @@
 #include "game_constants.h"
 #include "int_id.h"
 #include "item.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "map_iterator.h"
 #include "mapdata.h"
@@ -1451,8 +1452,16 @@ bool trapfunc::map_regen( const tripoint_bub_ms &p, Creature *c, item * )
                 popup( _( "Failed to generate the new map" ) );
                 return false;
             }
-            here.set_seen_cache_dirty( p );
-            here.set_transparency_cache_dirty( p.z() );
+            // The regenerated surroundings changed opacity across the whole level of
+            // the trap; the trap itself moved no support and the terrain is re-memorised
+            // by the mapgen update above.
+            level_cache_freshness::report( here, level_cache_freshness::terrain_changed {
+                .at = p,
+                .transparency = true,
+                .scope = level_cache_freshness::terrain_changed::transparency_scope::level,
+                .support_above = false,
+                .memory_seen = false,
+            } );
             return true;
         }
     }
