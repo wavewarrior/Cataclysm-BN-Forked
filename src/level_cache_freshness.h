@@ -179,6 +179,110 @@ class level_cache_freshness
 
         /** Mark every per-submap cache of a freshly constructed Level cache stale. */
         static void initialise( level_cache &cache );
+
+        // ---- Change kinds -------------------------------------------------
+
+        // Report a change to the world or the viewer. Each kind raises exactly the
+        // dependents the bit-setter sequence it replaces raised; the equivalence is
+        // pinned per kind in the tests. Like the verbs above, `report` is main-thread
+        // only: it asserts via the existing `is_pool_worker_thread()` pattern, and the
+        // assertion is compiled out of the shipped build (`-DNDEBUG`).
+        // Kinds carry location/level/diff information only.
+        //
+        // Deliberately left at the call sites, because they are not Level cache
+        // freshness: the pathfinding-cache dirt (`map::set_pathfinding_cache_dirty`),
+        // the `suspension_cache` emplace accompanying a suspension flag change,
+        // `invalidate_max_populated_zlev`, the vehicle zone-dirty walk, and the GPU
+        // residency pushes (those move to generation polling in a later stage).
+
+        /**
+         * Terrain or furniture changed at one tile. The flags carry the property diff
+         * the old `ter_set`/`furn_set` inspected, so the dependents raised match the
+         * branch that actually ran rather than a blanket union.
+         */
+        struct terrain_changed {
+            tripoint_bub_ms at;
+            /// Opacity flipped: transparency cache and the tile's seen entry.
+            bool transparency = false;
+            /// TFLAG_NO_FLOOR differs: floor cache plus seen here and one level down.
+            bool no_floor = false;
+            /// TFLAG_Z_TRANSPARENT differs: same dependents as `no_floor`.
+            bool z_transparent = false;
+            /// TFLAG_SUN_ROOF_ABOVE differs: floor cache one level up.
+            bool sun_roof_above = false;
+            /// TFLAG_SUSPENDED differs: suspension cache of this level.
+            bool suspended = false;
+            /// Invalidate the lightmap of every level. `ter_set` passes true
+            /// unconditionally; `furn_set` only when emitted light differs.
+            bool lightmap = false;
+            /// Queue the support-loss check at `at` itself, as `furn_set` always does;
+            /// `ter_set` only does it when `no_floor` is set.
+            bool support_here = false;
+        };
+        /** A light source appeared, disappeared or changed intensity somewhere. */
+        struct light_changed {
+        };
+        /**
+         * A vehicle committed a move covering submap grid cells `sm_min..sm_max` on
+         * level `z` — the notification `map::on_vehicle_moved` receives.
+         */
+        struct vehicle_moved {
+            tripoint_bub_sm sm_min;
+            tripoint_bub_sm sm_max;
+            int z = 0;
+        };
+        /**
+         * The viewer moved within the current bubble. Forces the seen rebuild the
+         * origin check triggers today; raises no dirty bit directly.
+         */
+        struct player_moved {
+        };
+        /** The viewer changed z-level. Same origin-forcing mechanism as `player_moved`. */
+        struct z_level_changed {
+        };
+        /**
+         * The reality bubble shifted by `shift` submaps. Reproduces the shift's
+         * per-submap translate plus dirty-edge sequence over every level — NOT a
+         * blanket invalidate. `player_z` selects the levels whose seen cache is
+         * force-dirtied.
+         */
+        struct map_shifted {
+            point_rel_sm shift;
+            int player_z = 0;
+        };
+        /**
+         * The terrain of a whole rectangular area of submaps was replaced underneath
+         * the caches (bulk load, co-op tile sync): every Level cache bitset of the
+         * area AND the submap dirty flags must rise, or the builders early-return on
+         * their clean bitsets and never see the new terrain.
+         */
+        struct world_replaced {
+            tripoint_bub_sm first = tripoint_bub_sm::zero();
+            tripoint_bub_sm last = tripoint_bub_sm::zero();
+        };
+
+        static void report( map &who, const terrain_changed &change );
+        static void report( map &who, const light_changed &change );
+        static void report( map &who, const vehicle_moved &change );
+        static void report( map &who, const player_moved &change );
+        static void report( map &who, const z_level_changed &change );
+        static void report( map &who, const map_shifted &change );
+        static void report( map &who, const world_replaced &change );
+
+        // ---- Freshness reads (queries) ------------------------------------
+
+        /** True when the named part of a level is not fresh. */
+        static bool stale( const level_cache &cache, level_cache_part part );
+        /** True when one submap bit of a per-submap part is not fresh. */
+        static bool stale( const level_cache &cache, level_cache_part part, size_t bit );
+        /** The Structure-rebuild generation the renderer polls for transparency. */
+        static std::uint64_t transparency_generation( const level_cache &cache );
+        /** The Structure-rebuild generation tied to outside-cache content. */
+        static std::uint64_t outside_generation( const level_cache &cache );
+        /** The generation the CPU lightmap memo is keyed by. */
+        static std::uint64_t cpu_lightmap_generation( const level_cache &cache );
+        /** The map-wide aggregate: does a gameplay consumer need a full refresh? */
+        static bool visibility_stale( const map &who );
 };
 
 #endif // CATA_SRC_LEVEL_CACHE_FRESHNESS_H
