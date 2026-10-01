@@ -1679,7 +1679,6 @@ void map::shift( const point_rel_sm& sp )
 
     const int zmin = -OVERMAP_DEPTH;
     const int zmax = OVERMAP_HEIGHT;
-    level_cache_freshness::forget_seen_origin( *this );
 #if defined( CATA_SDL )
     if( cata_compute::uses_sdl_gpu_compute() ) {
         auto *const gpu_device = cata_gpu::get_device();
@@ -1716,8 +1715,6 @@ void map::shift( const point_rel_sm& sp )
         }
     }
 
-    const half_open_rectangle<point_bub_ms>
-    boundaries_2d( point_bub_ms::zero(), point_bub_ms( g_mapsize_x, g_mapsize_y ) );
     const point_rel_ms shift_offset_pt( -sp.x() * SEEX, -sp.y() * SEEY );
 
     auto const shift_flat_cache = [&]( auto & cache, auto & scratch, level_cache & gc,
@@ -1767,91 +1764,6 @@ void map::shift( const point_rel_sm& sp )
     auto short_shift_scratch = std::vector<short> {};
     auto bool_shift_scratch = std::vector<bool> {};
 
-    auto const mark_shifted_submap_bands = [&]( const int gridz, const int band_count, auto mark ) {
-        auto const mark_column = [&]( const int smx ) {
-            if( smx < 0 || smx >= my_MAPSIZE ) {
-                return;
-            }
-            for( const auto smy : std::views::iota( 0, my_MAPSIZE ) ) {
-                mark( tripoint_bub_sm( smx, smy, gridz ) );
-            }
-        };
-        auto const mark_row = [&]( const int smy ) {
-            if( smy < 0 || smy >= my_MAPSIZE ) {
-                return;
-            }
-            for( const auto smx : std::views::iota( 0, my_MAPSIZE ) ) {
-                mark( tripoint_bub_sm( smx, smy, gridz ) );
-            }
-        };
-
-        for( const auto band : std::views::iota( 0, band_count ) ) {
-            if( sp.x() > 0 ) {
-                mark_column( my_MAPSIZE - 1 - band );
-            } else if( sp.x() < 0 ) {
-                mark_column( band );
-            }
-            if( sp.y() > 0 ) {
-                mark_row( my_MAPSIZE - 1 - band );
-            } else if( sp.y() < 0 ) {
-                mark_row( band );
-            }
-        }
-    };
-    auto const mark_shifted_map_caches_dirty = [&]( auto const gridz ) {
-        ZoneScopedN( "shift_mark_map_caches_dirty" );
-        auto &gc = get_cache( gridz );
-        auto const mark_submap_dirty = [&]( const tripoint_bub_sm & smp,
-        const mapbuffer_mark_submap_caches_dirty_options & dirty_options ) {
-            const auto abs_sm = map_local_to_abs( *this, smp );
-            auto options = dirty_options;
-            options.begin = abs_sm.xy();
-            options.end = abs_sm.xy() + point_rel_sm( 1, 1 );
-            options.zlev = abs_sm.z();
-            get_mapbuffer().mark_submap_caches_dirty( options );
-        };
-
-        auto const mark_floor = [&]( const tripoint_bub_sm & smp ) {
-            level_cache_freshness::mark( gc,
-                freshness_parts( { level_cache_part::floor } ),
-                static_cast<size_t>( gc.bidx( smp.x(), smp.y() ) ) );
-            mark_submap_dirty( smp, { .floor = true } );
-        };
-        auto const mark_outside = [&]( const tripoint_bub_sm & smp ) {
-            level_cache_freshness::mark( gc,
-                freshness_parts( { level_cache_part::outside } ),
-                static_cast<size_t>( gc.bidx( smp.x(), smp.y() ) ) );
-            mark_submap_dirty( smp, { .outside = true } );
-        };
-        auto const mark_transparency = [&]( const tripoint_bub_sm & smp ) {
-            level_cache_freshness::mark( gc,
-                freshness_parts( { level_cache_part::transparency } ),
-                static_cast<size_t>( gc.bidx( smp.x(), smp.y() ) ) );
-            mark_submap_dirty( smp, { .transparency = true } );
-        };
-
-        mark_shifted_submap_bands( gridz, 1, mark_floor );
-        mark_shifted_submap_bands( gridz, 3, mark_outside );
-        mark_shifted_submap_bands( gridz, 3, mark_transparency );
-    };
-    auto const mark_shifted_absorption_cache_dirty = [&]( level_cache & gc, const int gridz ) {
-        auto const mark = [&]( const tripoint_bub_sm & smp ) {
-            if( smp.x() < 0 || smp.x() >= my_MAPSIZE || smp.y() < 0 || smp.y() >= my_MAPSIZE ) {
-                return;
-            }
-            level_cache_freshness::mark( gc,
-                freshness_parts( { level_cache_part::absorption } ),
-                static_cast<size_t>( gc.bidx( smp.x(), smp.y() ) ) );
-            const auto abs_sm = map_local_to_abs( *this, smp );
-            get_mapbuffer().mark_submap_caches_dirty( {
-                .begin = abs_sm.xy(),
-                .end = abs_sm.xy() + point_rel_sm( 1, 1 ),
-                .zlev = abs_sm.z(),
-                .absorption = true,
-            } );
-        };
-        mark_shifted_submap_bands( gridz, 2, mark );
-    };
 
     // Run any Lua on_mapgen_postprocess hooks that were deferred from worker
     // threads (Lua is not thread-safe).  The submaps are already in the
@@ -1871,6 +1783,18 @@ void map::shift( const point_rel_sm& sp )
     // Shift the map sx submaps to the right and sy submaps down.
     // sx and sy should never be bigger than +/-1.
     // absx and absy are our position in the world, for saving/loading purposes.
+    //
+    // The bubble moved: translate the carried caches, dirty the shifted-in edges, and
+    // raise the seen, visibility and suspension caches of the affected levels.  The
+    // content translates happen per level in the loop below; the freshness they imply
+    // is reported here once, because the bits and the mapbuffer flags are a monotone
+    // union and the translate is independent of what `loadn` brings in.  Pathfinding
+    // dirt is not Level cache freshness and stays per level in the loop.
+    level_cache_freshness::report( *this, level_cache_freshness::map_shifted {
+        .shift = sp,
+        .player_z = g->u.bub_pos().z(),
+    } );
+
     {
         ZoneScopedN( "shift_grid_copy_load" );
         for( const auto gridz : std::views::iota( -OVERMAP_DEPTH, OVERMAP_HEIGHT + 1 ) ) {
@@ -1879,7 +1803,6 @@ void map::shift( const point_rel_sm& sp )
                 ZoneScopedN( "shift_memory_seen_cache" );
                 auto &gc = get_cache( gridz );
                 shift_bitset_cache( gc.map_memory_seen_cache, gc.cache_x, SEEX, sp );
-                level_cache_freshness::queue_memory_seen_all( gc );
             }
             {
                 ZoneScopedN( "shift_prerequisite_caches" );
@@ -1889,38 +1812,16 @@ void map::shift( const point_rel_sm& sp )
                 shift_flat_cache( gc.floor_cache, char_shift_scratch, gc, '\x01' );
                 shift_flat_cache( gc.outside_cache, char_shift_scratch, gc, '\0' );
                 shift_flat_cache( gc.sheltered_cache, char_shift_scratch, gc, '\x01' );
-                const auto prerequisite_parts = freshness_parts( {
-                    level_cache_part::transparency,
-                    level_cache_part::floor,
-                    level_cache_part::outside,
-                } );
-                level_cache_freshness::translate( gc, prerequisite_parts, sp, my_MAPSIZE );
             }
             {
                 // Translate the lightmap so a non-player z that is rendered
                 // (visible lower z through open air / holes / ledges, or the whole
-                // stack) stays at the correct world position.  Non-player-z
-                // lightmaps are not regenerated on a pure horizontal shift (see the
-                // set_seen_cache_dirty gate below), so the translate is what keeps
-                // them visually correct; the player z is rebuilt fresh anyway.
-                // Light does not propagate lm->lm across z (cross-z coupling is
-                // structural, via floor/outside, which is rebuilt above), so a
-                // translated stale lm cannot corrupt player z.
+                // stack) stays at the correct world position.  The seen, visibility and
+                // dirty-edge freshness for the shift is reported once, above the loop.
                 ZoneScopedN( "shift_lightmap" );
                 auto &gc = get_cache( gridz );
                 shift_flat_cache( gc.lm, float_shift_scratch, gc, 0.0f );
                 shift_flat_cache( gc.sm, float_shift_scratch, gc, 0.0f );
-                // Shift the per-submap dirty bitset so retained submaps stay clean, then
-                // force-dirty the newly-shifted-in edge submaps so generate_lightmap
-                // recomputes them instead of displaying stale translated data (prevents
-                // the 1-frame flash).
-                level_cache_freshness::translate( gc,
-                    freshness_parts( { level_cache_part::lightmap } ), sp, my_MAPSIZE );
-                mark_shifted_submap_bands( gridz, 1, [&gc]( const tripoint_bub_sm & smp ) {
-                    level_cache_freshness::mark( gc,
-                        freshness_parts( { level_cache_part::lightmap } ),
-                        static_cast<size_t>( gc.bidx( smp.x(), smp.y() ) ) );
-                } );
             }
             {
                 ZoneScopedN( "shift_absorption_cache" );
@@ -1928,8 +1829,6 @@ void map::shift( const point_rel_sm& sp )
                 shift_flat_cache( gc.absorption_cache, short_shift_scratch, gc,
                                   static_cast<short>( SOUND_ABSORPTION_OPEN_FIELD ) );
                 shift_flat_cache( gc.sound_wall_cache, bool_shift_scratch, gc, false );
-                level_cache_freshness::translate( gc,
-                    freshness_parts( { level_cache_part::absorption } ), sp, my_MAPSIZE );
             }
             // Iterate in shift-direction order so copy_grid never reads an
             // already-overwritten source slot.  sp >= 0 → forward; sp < 0 → reverse.
@@ -1969,25 +1868,7 @@ void map::shift( const point_rel_sm& sp )
                     } );
                 } );
             }
-            mark_shifted_map_caches_dirty( gridz );
-            // seen_cache/lightmap: dirtying a z here drives a full generate_lightmap
-            // for that level (the costly all-z work, ~7-10ms).  A pure horizontal
-            // shift does not change a level's lighting relative to its own world
-            // tiles, and lm/sm were translated above to stay visually correct where
-            // a non-player z is rendered.  Light does not propagate lm->lm across z
-            // (coupling is structural, via floor/outside, rebuilt above), so a
-            // translated stale lm cannot corrupt another level.  So regenerate only
-            // the player's z plus the immediately-adjacent z (the levels most likely
-            // glimpsed through a hole/ledge while crossing).  Deeper visible levels
-            // rely on the translate; they are rarely viewed and mostly static.
-            const int player_z = g->u.bub_pos().z();
-            if( std::abs( gridz - player_z ) <= 1 ) {
-                set_seen_cache_dirty( gridz );
-            }
-            mark_visibility_cache_dirty( gridz );
             set_pathfinding_cache_dirty( gridz );
-            set_suspension_cache_dirty( gridz );
-            mark_shifted_absorption_cache_dirty( get_cache( gridz ), gridz );
         }
     } // shift_grid_copy_load
 
@@ -2017,7 +1898,6 @@ void map::shift( const point_rel_sm& sp )
 
     g->setremoteveh( remoteveh );
 
-    level_cache_freshness::translate_support_losses( *this, shift_offset_pt, boundaries_2d );
     sounds::shift_sound_positions( shift_offset_pt );
 
     // Lightmap was translated via shift_flat_cache above, and the per-submap
@@ -2149,16 +2029,15 @@ void map::loadn( const tripoint_bub_sm& grid, const bool update_vehicles, const 
             tmpsub->absorption_dirty = true;
             tmpsub->pf_dirty = true;
         } else {
-            set_transparency_cache_dirty( grid.z() );
-            set_floor_cache_dirty( grid.z() );
-            set_outside_cache_dirty( grid.z() );
-            set_absorption_cache_dirty( grid.z() );
-            set_seen_cache_dirty( grid.z() );
+            // A whole-level replacement: the level's caches are stale everywhere, with
+            // the floor raise cascading outside/absorption one level down and the
+            // vehicle raise touching the level above.  Pathfinding dirt is not Level
+            // cache freshness and stays here.
+            level_cache_freshness::report( *this, level_cache_freshness::world_replaced {
+                .first = tripoint_bub_sm( 0, 0, grid.z() ),
+                .last = tripoint_bub_sm( my_MAPSIZE - 1, my_MAPSIZE - 1, grid.z() ),
+            } );
             set_pathfinding_cache_dirty( grid.z() );
-            set_suspension_cache_dirty( grid.z() );
-            level_cache_freshness::mark( get_cache( grid.z() ),
-                                         freshness_parts( { level_cache_part::lightmap } ) );
-            set_vehicle_cache_dirty( grid.z() );
         }
     }
     // Overlay boundary terrain on the edge tiles of this submap if it sits at the
@@ -2910,11 +2789,19 @@ void map::draw_line_furn( const furn_id &type, const tripoint_bub_ms &p1,
 
 void map::draw_fill_background( const ter_id& type )
 {
-    // Need to explicitly set caches dirty - set_ter would do it before
+    // Need to explicitly set caches dirty - set_ter would do it before.  A background
+    // repaint replaces the terrain of every loaded submap of the avatar's level under
+    // the sight caches; the floor, lightmap, suspension and vehicle families are not
+    // derived from what the background was painted.
     const auto z = get_avatar().abs_pos().z();
-    set_transparency_cache_dirty( z );
-    set_seen_cache_dirty( z );
-    set_outside_cache_dirty( z );
+    level_cache_freshness::report( *this, level_cache_freshness::world_replaced {
+        .first = tripoint_bub_sm( 0, 0, z ),
+        .last = tripoint_bub_sm( my_MAPSIZE - 1, my_MAPSIZE - 1, z ),
+        .lightmap = false,
+        .floor = false,
+        .suspension = false,
+        .vehicle = false,
+    } );
     set_pathfinding_cache_dirty( z );
 
     get_mapbuffer().fill_terrain( {
