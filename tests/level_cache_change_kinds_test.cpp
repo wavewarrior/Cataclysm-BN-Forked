@@ -205,8 +205,9 @@ std::vector<std::string> capture( map &here, const generation_baseline &base ) {
             static_cast<unsigned long long>(
                 level_cache_freshness::cpu_lightmap_generation( ch ) - base.cpu_lm[zi] ) ) );
     }
-    lines.push_back( string_format( "visibility-aggregate %d",
-                                    level_cache_freshness::visibility_stale( here ) ? 1 : 0 ) );
+    lines.push_back( string_format( "view-stale %d",
+                                    level_cache_freshness::visibility_stale( here,
+                                            get_avatar().bub_pos() ) ? 1 : 0 ) );
     record_queues( here, lines );
     std::sort( lines.begin(), lines.end() );
     return lines;
@@ -221,6 +222,26 @@ std::string only_in( const std::vector<std::string> &a, const std::vector<std::s
         }
     }
     return out;
+}
+
+// The view-stale line is the one capture() line whose correct value after a viewer-side
+// kind is "1": forgetting the origin IS the mechanism (issue #5), and issue #17 made the
+// view-stale condition read that origin. Tests that pin "raised no dirty bit" therefore
+// compare the bit/generation fingerprint with that line stripped and assert the
+// view-stale value separately.
+std::vector<std::string> without_view_stale( const std::vector<std::string> &lines ) {
+    std::vector<std::string> out;
+    for( const std::string &line : lines ) {
+        if( line.rfind( "view-stale ", 0 ) != 0 ) {
+            out.push_back( line );
+        }
+    }
+    return out;
+}
+
+bool captured_view_stale( const std::vector<std::string> &lines ) {
+    return std::find( lines.begin(), lines.end(), std::string( "view-stale 1" ) )
+           != lines.end();
 }
 
 void drain_work_lists( map &here ) {
@@ -634,14 +655,20 @@ TEST_CASE(
 
     // Issue #5: a player move inside the bubble raises no dirty bit at all; what forces
     // the seen rebuild is the stored origin no longer matching the viewer. The kind is
-    // the faithful translation of that fact, so it raises nothing either.
-    INFO( "kind only:\n" << only_in( via_kind, untouched ) );
-    CHECK( via_kind == untouched );
+    // the faithful translation of that fact, so it raises nothing either — but from
+    // issue #17 the view-stale condition reads that origin, so the one line that may
+    // differ is the view-stale line, and it must read stale.
+    INFO( "kind only:\n" << only_in( without_view_stale( via_kind ),
+                                     without_view_stale( untouched ) ) );
+    CHECK( without_view_stale( via_kind ) == without_view_stale( untouched ) );
+    CHECK( captured_view_stale( via_kind ) );
 
     set_up_open_daylight_map();
     base = capture_generations( here );
     level_cache_freshness::report( here, level_cache_freshness::z_level_changed {} );
-    CHECK( capture( here, base ) == untouched );
+    const std::vector<std::string> via_z = capture( here, base );
+    CHECK( without_view_stale( via_z ) == without_view_stale( untouched ) );
+    CHECK( captured_view_stale( via_z ) );
 }
 
 TEST_CASE(

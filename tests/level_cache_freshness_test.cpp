@@ -3,6 +3,7 @@
 #include "catch/catch_amalgamated.hpp"
 #include "coordinates.h"
 #include "game.h"
+#include "level_cache_freshness.h"
 #include "lightmap.h"
 #include "map.h"
 #include "map_helpers.h"
@@ -270,4 +271,83 @@ TEST_CASE(
     // Pinned value: measured on current behaviour (seed 1, tiles build). Stage 3
     // (view stale replacing the aggregate) is expected to lower this.
     CHECK(updates == 1);
+}
+
+// Issue #17: the view-stale condition replaces the never-cleared aggregate. It is
+// false right after the standard refresh, true again on a move or a z-level change,
+// and a refresh that finds it false costs no recomputation at all.
+TEST_CASE(
+    "view stale is false after a refresh and true again when the viewer moves",
+    "[level_cache_freshness]") {
+    set_up_open_daylight_map();
+    map& here = get_map();
+    auto& you = get_avatar();
+
+    refresh_view();
+    CHECK_FALSE(level_cache_freshness::visibility_stale(here, you.bub_pos()));
+
+    SECTION("a move inside the bubble makes the view stale") {
+        g->place_player(tripoint_bub_ms(61, 60, 0));
+        CHECK(level_cache_freshness::visibility_stale(here, you.bub_pos()));
+        refresh_view();
+        CHECK_FALSE(level_cache_freshness::visibility_stale(here, you.bub_pos()));
+    }
+
+    SECTION("a z-level change makes the view stale") {
+        g->place_player(tripoint_bub_ms(60, 60, 1));
+        CHECK(level_cache_freshness::visibility_stale(here, you.bub_pos()));
+        refresh_view();
+        CHECK_FALSE(level_cache_freshness::visibility_stale(here, you.bub_pos()));
+    }
+
+    SECTION("a light-level report makes the view stale") {
+        level_cache_freshness::invalidate_visibility(here);
+        CHECK(level_cache_freshness::visibility_stale(here, you.bub_pos()));
+    }
+}
+
+// The within-turn saving: the refresh patterns that repeat within one turn (spell
+// targeting, projectile animation, creature-hit messages, autodrive) each call the
+// same entry point. With the aggregate they all rebuilt; with view stale only the
+// first pays.
+TEST_CASE(
+    "repeated within-turn refreshes cost no extra recomputation",
+    "[level_cache_freshness][perf]") {
+    set_up_open_daylight_map();
+    map& here = get_map();
+
+    refresh_view();
+    here.take_visibility_cache_updates();
+    for (int i = 0; i < 4; i++) {
+        refresh_view();
+    }
+    CHECK(here.take_visibility_cache_updates() == 0);
+
+    SECTION("but a viewer move pays again") {
+        g->place_player(tripoint_bub_ms(61, 60, 0));
+        refresh_view();
+        CHECK(here.take_visibility_cache_updates() == 1);
+    }
+}
+
+// Geometry-only visibility is the documented answer while the view is stale.
+TEST_CASE(
+    "a stale view answers visibility from geometry alone",
+    "[level_cache_freshness]") {
+    set_up_open_daylight_map();
+    map& here = get_map();
+    auto& you = get_avatar();
+
+    monster& z = spawn_test_monster("debug_mon", tripoint_bub_ms(65, 60, 0));
+    refresh_view();
+    REQUIRE(you.sees(z));
+
+    // Stale the view without rebuilding, then drop a wall in the corridor. The
+    // cached answer is unchanged: readers that need exactness refresh first.
+    level_cache_freshness::invalidate_visibility(here);
+    build_wall_block(tripoint_bub_ms(62, 60, 0));
+    CHECK(you.sees(z));
+
+    refresh_view();
+    CHECK_FALSE(you.sees(z));
 }

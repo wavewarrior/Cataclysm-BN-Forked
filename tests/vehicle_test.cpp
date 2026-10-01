@@ -498,7 +498,7 @@ TEST_CASE("can autodrive", "[vehicle][autodrive]") {
     veh_ptr->is_autodriving = true;
 
     level_cache_freshness::invalidate_visibility( here );
-    REQUIRE(here.visibility_caches_dirty());
+    REQUIRE( level_cache_freshness::visibility_stale( here, you.bub_pos() ) );
 
     CHECK(veh_ptr->do_autodrive(you) == autodrive_result::ok);
 }

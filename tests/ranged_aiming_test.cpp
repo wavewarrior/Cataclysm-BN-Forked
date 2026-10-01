@@ -121,7 +121,7 @@ TEST_CASE("Projectile damage message visibility survives dirty target-ui cache",
     REQUIRE( shooter.sees( z ) );
 
     level_cache_freshness::invalidate_level( here, shooter_pos.z() );
-    REQUIRE( here.visibility_caches_dirty() );
+    REQUIRE( level_cache_freshness::visibility_stale( here, shooter_pos ) );
 
     auto test_proj = projectile {};
     auto &gun = shooter.primary_weapon();

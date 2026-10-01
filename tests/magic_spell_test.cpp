@@ -113,7 +113,7 @@ TEST_CASE("avatar sees own tile even with dirty visibility cache",
     avatar& you = get_avatar();
     map& here = get_map();
     level_cache_freshness::invalidate_level( here, you.bub_pos().z() );
-    REQUIRE(here.visibility_caches_dirty());
+    REQUIRE( level_cache_freshness::visibility_stale( here, you.bub_pos() ) );
 
     CHECK(you.sees(you.bub_pos()));
 }
