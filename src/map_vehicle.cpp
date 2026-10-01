@@ -237,7 +237,7 @@ void map::add_vehicle_to_cache(vehicle* veh) {
         level_cache& ch = get_cache(p.z());
         level_cache_freshness::mark(ch,
             freshness_parts( { level_cache_part::veh_in_active_range } ));
-        set_vehicle_cache_dirty(p.z());
+        level_cache_freshness::mark_vehicle_caches( *this, p.z() );
 
         if (!ch.veh_cached_parts.contains(p)
             || !veh->part_info(vpr.part_index()).has_flag(VPFLAG_NOCOLLIDE)
@@ -259,7 +259,7 @@ void map::clear_vehicle_point_from_cache(vehicle* veh, const tripoint_bub_ms& pt
     const vehicle_handle handle = veh->handle();
     level_cache& ch = get_cache(pt.z());
     auto it = ch.veh_cached_parts.find(pt);
-    set_vehicle_cache_dirty(pt.z());
+    level_cache_freshness::mark_vehicle_caches( *this, pt.z() );
     if (it != ch.veh_cached_parts.end() && it->second.first == handle) {
         if (inbounds(pt)) { ch.veh_exists_at[ch.idx(pt.x(), pt.y())] = false; }
         ch.veh_cached_parts.erase(it);
@@ -295,7 +295,7 @@ void map::clear_vehicle_cache() {
         }
         level_cache_freshness::assign(ch,
             freshness_parts( { level_cache_part::veh_in_active_range } ), false);
-        set_vehicle_cache_dirty(zlev);
+        level_cache_freshness::mark_vehicle_caches( *this, zlev );
     }
     cached_veh_rope.clear();
 }
@@ -312,7 +312,7 @@ void map::clear_vehicle_list(const int zlev) {
     level_cache_freshness::assign(ch,
         freshness_parts( { level_cache_part::veh_in_active_range } ), false);
     std::erase_if( cached_veh_rope, [zlev]( const auto &kv ) { return kv.first.z() == zlev; } );
-    set_vehicle_cache_dirty(zlev);
+    level_cache_freshness::mark_vehicle_caches( *this, zlev );
 
     last_full_vehicle_list_dirty = true;
 }
@@ -323,7 +323,7 @@ void map::update_vehicle_list(const submap* const to, const int zlev) {
     level_cache& ch = get_cache(zlev);
     for (const auto& elem : to->vehicles) {
         ch.vehicle_list.insert(elem->handle());
-        set_vehicle_cache_dirty(zlev);
+        level_cache_freshness::mark_vehicle_caches( *this, zlev );
         if (!elem->loot_zones.empty()) { ch.zone_vehicles.insert(elem->handle()); }
     }
 
@@ -336,7 +336,7 @@ void map::register_vehicle( vehicle &veh )
     if( z >= -OVERMAP_DEPTH && z <= OVERMAP_HEIGHT ) {
         level_cache &ch = get_cache( z );
         ch.vehicle_list.insert( veh.handle() );
-        set_vehicle_cache_dirty( z );
+        level_cache_freshness::mark_vehicle_caches( *this, z );
         if( !veh.loot_zones.empty() ) {
             ch.zone_vehicles.insert( veh.handle() );
         }
@@ -1599,7 +1599,7 @@ const vehicle* map::veh_at_internal(const tripoint_bub_ms& p, int& part_num) con
         level_cache& mutable_ch = const_cast<level_cache&>(ch);
         mutable_ch.veh_exists_at[mutable_ch.idx(p.x(), p.y())] = false;
         mutable_ch.veh_cached_parts.erase(p);
-        const_cast<map*>(this)->set_vehicle_cache_dirty(p.z());
+        level_cache_freshness::mark_vehicle_caches( *const_cast<map *>( this ), p.z() );
         part_num = -1;
         return nullptr;
     }

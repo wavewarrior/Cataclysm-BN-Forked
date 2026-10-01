@@ -1608,7 +1608,9 @@ void map::shift_vehicle_z( vehicle& veh, int z_shift )
 {
     auto src = veh.abs_sm_pos;
     auto dst = src + tripoint_rel_sm( 0, 0, z_shift );
-    invalidate_lightmap_caches();
+    // A vehicle crossing floors changes what is lit where, exactly as any other light
+    // mutator: every loaded level's lightmap is stale.
+    level_cache_freshness::report( *this, level_cache_freshness::light_changed {} );
     auto dirty_vertical_vehicle_caches = [this]( const int zlev ) {
         if( !inbounds_z( zlev ) ) { return; }
         invalidate_map_cache( zlev );
