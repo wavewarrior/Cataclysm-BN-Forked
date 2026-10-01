@@ -3612,31 +3612,24 @@ auto mapbuffer::invalidate_active_terrain_set_caches( const tripoint_abs_ms &p,
     const auto &old_terrain = old_id.obj();
     const auto &new_terrain = new_id.obj();
 
-    if( old_terrain.transparent != new_terrain.transparent ) {
-        here.set_transparency_cache_dirty( *local );
-        here.set_seen_cache_dirty( *local );
-    }
+    const bool no_floor_changed = new_terrain.has_flag( TFLAG_NO_FLOOR ) !=
+                                  old_terrain.has_flag( TFLAG_NO_FLOOR );
+    const bool suspended_changed = new_terrain.has_flag( TFLAG_SUSPENDED ) !=
+                                   old_terrain.has_flag( TFLAG_SUSPENDED );
+    level_cache_freshness::report( here, level_cache_freshness::terrain_changed {
+        .at = *local,
+        .transparency = old_terrain.transparent != new_terrain.transparent,
+        .no_floor = no_floor_changed,
+        .z_transparent = new_terrain.has_flag( TFLAG_Z_TRANSPARENT ) !=
+                         old_terrain.has_flag( TFLAG_Z_TRANSPARENT ),
+        .suspended = suspended_changed,
+        .lightmap = true,
+    } );
 
-    if( new_terrain.has_flag( TFLAG_NO_FLOOR ) != old_terrain.has_flag( TFLAG_NO_FLOOR ) ) {
-        here.set_floor_cache_dirty( *local );
-        level_cache_freshness::support_lost( here, *local );
-        here.set_seen_cache_dirty( local->z() );
-        here.set_seen_cache_dirty( local->z() - 1 );
+    if( no_floor_changed ) {
+        // Sound absorption reads the floor here and one level down.
         here.set_absorption_cache_dirty( *local );
         here.set_absorption_cache_dirty( local->z() - 1 );
-    }
-
-    if( new_terrain.has_flag( TFLAG_Z_TRANSPARENT ) != old_terrain.has_flag( TFLAG_Z_TRANSPARENT ) ) {
-        here.set_floor_cache_dirty( *local );
-        here.set_seen_cache_dirty( local->z() );
-        here.set_seen_cache_dirty( local->z() - 1 );
-    }
-
-    if( new_terrain.has_flag( TFLAG_SUSPENDED ) != old_terrain.has_flag( TFLAG_SUSPENDED ) ) {
-        here.set_suspension_cache_dirty( local->z() );
-        if( new_terrain.has_flag( TFLAG_SUSPENDED ) ) {
-            here.get_cache( local->z() ).suspension_cache.emplace_back( p.xy() );
-        }
     }
 
     if( new_terrain.has_flag( TFLAG_BLOCK_WIND ) != old_terrain.has_flag( TFLAG_BLOCK_WIND ) ) {
@@ -3644,15 +3637,16 @@ auto mapbuffer::invalidate_active_terrain_set_caches( const tripoint_abs_ms &p,
     }
 
     if( new_terrain.has_flag( TFLAG_CONNECT_TO_WALL ) != old_terrain.has_flag(
-            TFLAG_CONNECT_TO_WALL ) ) {
+                TFLAG_CONNECT_TO_WALL ) ) {
         here.set_absorption_cache_dirty( *local );
     }
 
+    if( suspended_changed && new_terrain.has_flag( TFLAG_SUSPENDED ) ) {
+        here.get_cache( local->z() ).suspension_cache.emplace_back( p.xy() );
+    }
+
     here.invalidate_max_populated_zlev( local->z() );
-    here.set_memory_seen_cache_dirty( *local );
     here.set_pathfinding_cache_dirty( *local );
-    here.support_dirty( tripoint_bub_ms( local->xy(), local->z() + 1 ) );
-    here.invalidate_lightmap_caches();
 }
 
 auto mapbuffer::sync_furniture_change_side_tables( const tripoint_abs_ms &p, submap &sm,
@@ -3702,26 +3696,19 @@ auto mapbuffer::invalidate_active_furniture_set_caches( const tripoint_abs_ms &p
     const auto &old_furniture = old_id.obj();
     const auto &new_furniture = new_id.obj();
 
-    if( old_furniture.transparent != new_furniture.transparent ) {
-        here.set_transparency_cache_dirty( *local );
-        here.set_seen_cache_dirty( *local );
-    }
-
-    if( old_furniture.light_emitted != new_furniture.light_emitted ) {
-        here.invalidate_lightmap_caches();
-    }
-
-    if( old_furniture.has_flag( TFLAG_NO_FLOOR ) != new_furniture.has_flag( TFLAG_NO_FLOOR ) ||
-        old_furniture.has_flag( TFLAG_Z_TRANSPARENT ) != new_furniture.has_flag( TFLAG_Z_TRANSPARENT ) ) {
-        here.set_floor_cache_dirty( *local );
-        here.set_seen_cache_dirty( local->z() );
-        here.set_seen_cache_dirty( local->z() - 1 );
-    }
-
-    if( old_furniture.has_flag( TFLAG_SUN_ROOF_ABOVE ) !=
-        new_furniture.has_flag( TFLAG_SUN_ROOF_ABOVE ) ) {
-        here.set_floor_cache_dirty( tripoint_bub_ms( local->xy(), local->z() + 1 ) );
-    }
+    level_cache_freshness::report( here, level_cache_freshness::terrain_changed {
+        .at = *local,
+        .transparency = old_furniture.transparent != new_furniture.transparent,
+        .no_floor = old_furniture.has_flag( TFLAG_NO_FLOOR ) !=
+                    new_furniture.has_flag( TFLAG_NO_FLOOR ),
+        .z_transparent = old_furniture.has_flag( TFLAG_Z_TRANSPARENT ) !=
+                         new_furniture.has_flag( TFLAG_Z_TRANSPARENT ),
+        .sun_roof_above = old_furniture.has_flag( TFLAG_SUN_ROOF_ABOVE ) !=
+                          new_furniture.has_flag( TFLAG_SUN_ROOF_ABOVE ),
+        .suspended = false,
+        .lightmap = old_furniture.light_emitted != new_furniture.light_emitted,
+        .support_here = true,
+    } );
 
     if( old_furniture.has_flag( TFLAG_BLOCK_WIND ) != new_furniture.has_flag( TFLAG_BLOCK_WIND ) ||
         old_furniture.has_flag( TFLAG_CONNECT_TO_WALL ) !=
@@ -3730,10 +3717,7 @@ auto mapbuffer::invalidate_active_furniture_set_caches( const tripoint_abs_ms &p
     }
 
     here.invalidate_max_populated_zlev( local->z() );
-    here.set_memory_seen_cache_dirty( *local );
     here.set_pathfinding_cache_dirty( *local );
-    here.support_dirty( *local );
-    here.support_dirty( tripoint_bub_ms( local->xy(), local->z() + 1 ) );
 }
 
 auto mapbuffer::sync_active_trap_change_side_tables( const tripoint_abs_ms &p,

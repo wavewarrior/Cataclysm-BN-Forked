@@ -258,40 +258,24 @@ void map::furn_set(
         Creature* c = g->critter_at( p );
         if( c ) { c->remove_effect( effect_crushed ); }
     }
-    if( old_t.transparent != new_t.transparent ) {
-        set_transparency_cache_dirty( p );
-        set_seen_cache_dirty( p );
-    }
-    if( old_t.light_emitted != new_t.light_emitted ) {
-        invalidate_lightmap_caches();
-    }
-
-    if( ( old_t.has_flag( TFLAG_NO_FLOOR ) != new_t.has_flag( TFLAG_NO_FLOOR ) )
-        || ( old_t.has_flag( TFLAG_Z_TRANSPARENT ) != new_t.has_flag( TFLAG_Z_TRANSPARENT ) ) ) {
-        set_floor_cache_dirty( p );
-        // Changes to floor / z-transparency can reveal (or hide) tiles on the z-level below.
-        // Invalidate seen caches unconditionally for both affected levels so tiles drawing
-        // does not render stale BLANK visibility after events like explosions.
-        set_seen_cache_dirty( p.z() );
-        set_seen_cache_dirty( p.z() - 1 );
-    }
-
-    if( old_t.has_flag( TFLAG_SUN_ROOF_ABOVE ) != new_t.has_flag( TFLAG_SUN_ROOF_ABOVE ) ) {
-        set_floor_cache_dirty( tripoint_bub_ms( p.xy(), p.z() + 1 ) );
-    }
+    level_cache_freshness::report( *this, level_cache_freshness::terrain_changed {
+        .at = p,
+        .transparency = old_t.transparent != new_t.transparent,
+        .no_floor = old_t.has_flag( TFLAG_NO_FLOOR ) != new_t.has_flag( TFLAG_NO_FLOOR ),
+        .z_transparent = old_t.has_flag( TFLAG_Z_TRANSPARENT ) !=
+                         new_t.has_flag( TFLAG_Z_TRANSPARENT ),
+        .sun_roof_above = old_t.has_flag( TFLAG_SUN_ROOF_ABOVE ) !=
+                          new_t.has_flag( TFLAG_SUN_ROOF_ABOVE ),
+        .suspended = false,
+        .lightmap = old_t.light_emitted != new_t.light_emitted,
+        // Furniture always checks for a loss of support at the tile itself.
+        .support_here = true,
+    } );
 
     invalidate_max_populated_zlev( p.z() );
 
-    set_memory_seen_cache_dirty( p );
-
     // TODO: Limit to changes that affect move cost, traps and stairs
     set_pathfinding_cache_dirty( p );
-
-    // Make sure the furniture falls if it needs to
-    support_dirty( p );
-    tripoint_bub_ms above( p.xy(), p.z() + 1 );
-    // Make sure that if we supported something and no longer do so, it falls down
-    support_dirty( above );
 
     if( old_t.active ) {
         current_submap->active_furniture.erase( point_sm_ms( l ) );
@@ -495,46 +479,28 @@ bool map::ter_set( const tripoint_bub_ms& p, const ter_id& new_terrain )
     const ter_t& old_t = old_id.obj();
     const ter_t& new_t = new_terrain.obj();
 
-    if( old_t.transparent != new_t.transparent ) {
-        set_transparency_cache_dirty( p );
-        set_seen_cache_dirty( p );
-    }
+    const bool suspended_changed = new_t.has_flag( TFLAG_SUSPENDED ) !=
+                                   old_t.has_flag( TFLAG_SUSPENDED );
+    level_cache_freshness::report( *this, level_cache_freshness::terrain_changed {
+        .at = p,
+        .transparency = old_t.transparent != new_t.transparent,
+        .no_floor = new_t.has_flag( TFLAG_NO_FLOOR ) != old_t.has_flag( TFLAG_NO_FLOOR ),
+        .z_transparent = new_t.has_flag( TFLAG_Z_TRANSPARENT ) !=
+                         old_t.has_flag( TFLAG_Z_TRANSPARENT ),
+        .suspended = suspended_changed,
+        // Terrain changes always force a lightmap rebuild.
+        .lightmap = true,
+    } );
 
-    if( new_t.has_flag( TFLAG_NO_FLOOR ) != old_t.has_flag( TFLAG_NO_FLOOR ) ) {
-        set_floor_cache_dirty( p );
-        // It's a set, not a flag
-        level_cache_freshness::support_lost( *this, p );
-        // Opening/closing a floor affects visibility on this and the level below.
-        set_seen_cache_dirty( p.z() );
-        set_seen_cache_dirty( p.z() - 1 );
-    }
-
-    if( new_t.has_flag( TFLAG_Z_TRANSPARENT ) != old_t.has_flag( TFLAG_Z_TRANSPARENT ) ) {
-        set_floor_cache_dirty( p );
-        // Changing z-transparency affects visibility between this z-level and the one below.
-        set_seen_cache_dirty( p.z() );
-        set_seen_cache_dirty( p.z() - 1 );
-    }
-
-    if( new_t.has_flag( TFLAG_SUSPENDED ) != old_t.has_flag( TFLAG_SUSPENDED ) ) {
-        set_suspension_cache_dirty( p.z() );
-        if( new_t.has_flag( TFLAG_SUSPENDED ) ) {
-            level_cache& ch = get_cache( p.z() );
-            ch.suspension_cache.emplace_back( map_local_to_abs( *this, p ).xy() );
-        }
+    if( suspended_changed && new_t.has_flag( TFLAG_SUSPENDED ) ) {
+        level_cache& ch = get_cache( p.z() );
+        ch.suspension_cache.emplace_back( map_local_to_abs( *this, p ).xy() );
     }
 
     invalidate_max_populated_zlev( p.z() );
-    set_memory_seen_cache_dirty( p );
 
     // TODO: Limit to changes that affect move cost, traps and stairs
     set_pathfinding_cache_dirty( p );
-
-    tripoint_bub_ms above( p.xy(), p.z() + 1 );
-    // Make sure that if we supported something and no longer do so, it falls down
-    support_dirty( above );
-
-    invalidate_lightmap_caches();
 
     return true;
 }
