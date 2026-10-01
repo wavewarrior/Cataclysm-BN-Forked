@@ -2671,7 +2671,7 @@ auto mapbuffer::set_lum( const tripoint_abs_ms &p, const std::uint8_t luminance,
         .mode = mapbuffer_lookup_mode::resident_only,
     } );
     if( active_reality_bubble_local( p ) ) {
-        g->m.invalidate_lightmap_caches();
+        level_cache_freshness::report( g->m, level_cache_freshness::light_changed {} );
     }
     return true;
 }
@@ -3813,7 +3813,7 @@ void mapbuffer::sync_active_item_submap_index( const tripoint_abs_ms &p,
 void mapbuffer::invalidate_active_item_luminance_cache( const tripoint_abs_ms &p ) const
 {
     if( active_reality_bubble_local( p ) ) {
-        g->m.invalidate_lightmap_caches();
+        level_cache_freshness::report( g->m, level_cache_freshness::light_changed {} );
     }
 }
 

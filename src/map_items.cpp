@@ -1,3 +1,4 @@
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "coop_mutation_log.h"
 
@@ -238,7 +239,7 @@ map_stack::iterator map::i_rem(
     const auto removed_emissive = ( *it )->is_emissive();
     current_submap->update_lum_rem( l, **it );
     if( removed_emissive ) {
-        invalidate_lightmap_caches();
+        level_cache_freshness::report( *this, level_cache_freshness::light_changed {} );
     }
 
     return current_submap->get_items( l ).erase( std::move( it ), out );
@@ -272,7 +273,7 @@ detached_ptr<item> map::i_rem( const tripoint_bub_ms& p, item* it )
     const auto removed_emissive = it->is_emissive();
     current_submap->update_lum_rem( l, *it );
     if( removed_emissive ) {
-        invalidate_lightmap_caches();
+        level_cache_freshness::report( *this, level_cache_freshness::light_changed {} );
     }
 
     return items.remove( it );
@@ -297,7 +298,7 @@ std::vector<detached_ptr<item>> map::i_clear( const tripoint_bub_ms& p )
     const auto had_luminance = current_submap->get_lum( l ) != 0;
     current_submap->set_lum( l, 0 );
     if( had_luminance ) {
-        invalidate_lightmap_caches();
+        level_cache_freshness::report( *this, level_cache_freshness::light_changed {} );
     }
     return current_submap->get_items( l ).clear();
 }
@@ -519,7 +520,7 @@ void map::add_item( const tripoint_bub_ms& p, detached_ptr<item>&& new_item )
     const auto adds_luminance = new_item->is_emissive();
     current_submap->update_lum_add( l, *new_item );
     if( adds_luminance ) {
-        invalidate_lightmap_caches();
+        level_cache_freshness::report( *this, level_cache_freshness::light_changed {} );
     }
     if( new_item->needs_processing() ) {
         current_submap->active_items.add( *new_item );
@@ -628,7 +629,7 @@ void map::update_lum( item& loc, bool add )
     } else {
         current_submap->update_lum_rem( l, *target );
     }
-    invalidate_lightmap_caches();
+    level_cache_freshness::report( *this, level_cache_freshness::light_changed {} );
 }
 
 static bool process_map_items(
