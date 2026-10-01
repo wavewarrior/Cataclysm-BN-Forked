@@ -201,9 +201,21 @@ class level_cache_freshness
          * branch that actually ran rather than a blanket union.
          */
         struct terrain_changed {
+            /// How widely the opacity change dirties the transparency cache. Field,
+            /// trap and weather opacity changes are not tile-sized: a field that goes
+            /// opaque anywhere on a level invalidates the whole level's transparency
+            /// cache (and with it the derived absorption cache), and a weather change
+            /// to the sight penalty invalidates every loaded level.
+            enum class transparency_scope {
+                tile,       ///< one submap, as `ter_set`/`furn_set` do
+                level,      ///< the whole level of `at`
+                all_levels, ///< every loaded level
+            };
             tripoint_bub_ms at;
             /// Opacity flipped: transparency cache and the tile's seen entry.
             bool transparency = false;
+            /// Extent over which `transparency` dirties the cache.
+            transparency_scope scope = transparency_scope::tile;
             /// TFLAG_NO_FLOOR differs: floor cache plus seen here and one level down.
             bool no_floor = false;
             /// TFLAG_Z_TRANSPARENT differs: same dependents as `no_floor`.
@@ -218,6 +230,13 @@ class level_cache_freshness
             /// Queue the support-loss check at `at` itself, as `furn_set` always does;
             /// `ter_set` only does it when `no_floor` is set.
             bool support_here = false;
+            /// Queue the support-loss check one level above `at`, as both terrain
+            /// mutators do. An opacity-only change (field, trap, weather) moves no
+            /// support and passes false.
+            bool support_above = true;
+            /// Queue `at` for re-memorising, as both terrain mutators do. A change that
+            /// leaves the terrain itself alone passes false.
+            bool memory_seen = true;
         };
         /** A light source appeared, disappeared or changed intensity somewhere. */
         struct light_changed {

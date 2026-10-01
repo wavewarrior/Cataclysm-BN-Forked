@@ -372,6 +372,84 @@ TEST_CASE( "terrain-changed matches the ter_set and furn_set setter sequences",
     }
 }
 
+TEST_CASE( "terrain-changed reproduces the field, trap and weather opacity sequences",
+           "[level_cache_freshness]" ) {
+    // The field/trap/weather sites raise a transparency+seen pair without touching
+    // support or memory. The kind reproduces them with the tile/level/all-levels
+    // transparency scope and the two extras switched off; the reference arm still
+    // spells the old setters, which survive until issue #16 removes them.
+    const tripoint_bub_ms at( 61, 60, 0 );
+
+    struct shape {
+        const char *name;
+        level_cache_freshness::terrain_changed::transparency_scope scope;
+        tripoint_bub_ms seen_at;
+        void ( *reference )( map &, const tripoint_bub_ms & );
+    };
+    const auto field_pair = []( map &here, const tripoint_bub_ms & p ) {
+        here.set_transparency_cache_dirty( p );
+        here.set_seen_cache_dirty( p );
+    };
+    const auto trap_pair = []( map &here, const tripoint_bub_ms & p ) {
+        here.set_seen_cache_dirty( p );
+        here.set_transparency_cache_dirty( p.z() );
+    };
+    const auto weather_pair = []( map &here, const tripoint_bub_ms & ) {
+        for( int i = -OVERMAP_DEPTH; i <= OVERMAP_HEIGHT; i++ ) {
+            here.set_transparency_cache_dirty( i );
+        }
+        here.set_seen_cache_dirty( tripoint_bub_ms::zero() );
+    };
+    using scope = level_cache_freshness::terrain_changed::transparency_scope;
+    const std::vector<shape> shapes = { {
+        // map_field / map_terrain / mapbuffer field sync: one tile's opacity.
+        { "field pair", scope::tile, at, field_pair },
+        // trapfunc map_regen: whole level of the trap, seen at the trap tile.
+        { "trap pair", scope::level, at, trap_pair },
+        // weather sight-penalty change: every level, seen at the bubble centre.
+        { "weather pair", scope::all_levels, tripoint_bub_ms::zero(), weather_pair },
+    } };
+
+    for( const shape &s : shapes ) {
+        CAPTURE( s.name );
+        const auto fixture = [&]( map &here ) {
+            set_up_open_daylight_map();
+            refresh_level_cache();
+            drain_work_lists( here );
+        };
+
+        map &here = get_map();
+        fixture( here );
+        generation_baseline base = capture_generations( here );
+        s.reference( here, at );
+        const std::vector<std::string> via_setters = capture( here, base );
+
+        fixture( here );
+        base = capture_generations( here );
+        level_cache_freshness::report( here, level_cache_freshness::terrain_changed {
+            .at = s.seen_at,
+            .transparency = true,
+            .scope = s.scope,
+            .support_above = false,
+            .memory_seen = false,
+        } );
+        const std::vector<std::string> via_kind = capture( here, base );
+
+        INFO( "raised by the setters but not by the kind:\n"
+              << only_in( via_setters, via_kind ) );
+        INFO( "raised by the kind but not by the setters:\n"
+              << only_in( via_kind, via_setters ) );
+        CHECK( via_kind == via_setters );
+        // The seen raise must actually fire for the tile-shaped shapes; the weather
+        // seen point sits on an unseen tile in this fixture, where the old setter is
+        // itself a no-op, so only the first two shapes assert it.
+        if( s.scope != scope::all_levels ) {
+            CHECK( level_cache_freshness::stale( here.access_cache( 0 ),
+                                                 level_cache_part::seen ) );
+        }
+    }
+}
+
 TEST_CASE( "light-changed matches invalidate_lightmap_caches", "[level_cache_freshness]" ) {
     set_up_open_daylight_map();
     map &here = get_map();

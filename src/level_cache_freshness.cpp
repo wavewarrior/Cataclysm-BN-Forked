@@ -437,7 +437,19 @@ void level_cache_freshness::report( map &who, const terrain_changed &change ) {
     // (map_access.cpp). `set_*` helpers keep their own couplings (floor dirties the
     // level below, transparency bumps the Structure-rebuild generation).
     if( change.transparency ) {
-        who.set_transparency_cache_dirty( p );
+        switch( change.scope ) {
+            case terrain_changed::transparency_scope::tile:
+                who.set_transparency_cache_dirty( p );
+                break;
+            case terrain_changed::transparency_scope::level:
+                who.set_transparency_cache_dirty( p.z() );
+                break;
+            case terrain_changed::transparency_scope::all_levels:
+                for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z ) {
+                    who.set_transparency_cache_dirty( z );
+                }
+                break;
+        }
         who.set_seen_cache_dirty( p );
     }
     if( change.no_floor || change.z_transparent ) {
@@ -455,9 +467,13 @@ void level_cache_freshness::report( map &who, const terrain_changed &change ) {
     if( change.support_here || change.no_floor ) {
         support_lost( who, p );
     }
-    // Both mutators always check whether something above lost its support.
-    support_lost( who, above );
-    who.set_memory_seen_cache_dirty( p );
+    if( change.support_above ) {
+        // Both terrain mutators always check whether something above lost its support.
+        support_lost( who, above );
+    }
+    if( change.memory_seen ) {
+        who.set_memory_seen_cache_dirty( p );
+    }
     if( change.lightmap ) {
         who.invalidate_lightmap_caches();
     }
