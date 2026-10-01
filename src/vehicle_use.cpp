@@ -1755,9 +1755,17 @@ void vehicle::open_or_close( const int part_index, const bool opening )
     parts[part_index].open = opening;
     insides_dirty = true;
     map& here = get_map();
-    here.set_transparency_cache_dirty( abs_sm_pos.z() );
     const auto part_location = bub_part_location( part_index );
-    here.set_seen_cache_dirty( part_location );
+    level_cache_freshness::report( here, level_cache_freshness::terrain_changed {
+        .at = part_location,
+        .transparency = true,
+        // Opening or closing a part repaints the whole level's transparency cache.
+        .scope = level_cache_freshness::terrain_changed::transparency_scope::level,
+        // The old pair dirtied the seen cache at the part's own tile.
+        .seen_probe = part_location,
+        .support_above = false,
+        .memory_seen = false,
+    } );
     const int dist = rl_dist( get_player_character().bub_pos(), part_location );
     if( dist < 20 ) {
         sfx::play_variant_sound(

@@ -290,6 +290,18 @@ void level_cache_freshness::stamp_seen_origin( map &who, const tripoint_bub_ms &
     who.m_last_seen_cache_origin = origin;
 }
 
+void level_cache_freshness::mark_vehicle_caches( map &who, const int zlev ) {
+    assert_main_thread();
+    // The coupling `map::set_vehicle_cache_dirty` carries: a vehicle on this level
+    // dirties the vehicle-floor cache of the level above it.
+    if( who.inbounds_z( zlev ) ) {
+        mark( who.get_cache( zlev ), freshness_parts( { level_cache_part::vehicle_caches } ) );
+    }
+    if( who.inbounds_z( zlev + 1 ) ) {
+        mark( who.get_cache( zlev + 1 ), freshness_parts( { level_cache_part::vehicle_floor } ) );
+    }
+}
+
 void level_cache_freshness::forget_solar_stamps( map &who ) {
     assert_main_thread();
     who.m_solar.last_built_hour = -1;
@@ -450,7 +462,7 @@ void level_cache_freshness::report( map &who, const terrain_changed &change ) {
                 }
                 break;
         }
-        who.set_seen_cache_dirty( p );
+        who.set_seen_cache_dirty( change.seen_probe.value_or( p ) );
     }
     if( change.no_floor || change.z_transparent ) {
         who.set_floor_cache_dirty( p );

@@ -490,78 +490,19 @@ void map::on_vehicle_moved(
 
     ++vehicle_move_notifications_;
 
+    // Out-of-range levels raise nothing, and the GPU residency push below must stay
+    // gated the same way the kind's own bounds check gates its marks.
     if (!inbounds_z(smz)) { return; }
-
-    auto& ch = get_cache(smz);
-    // Vehicle-only caches are cleared by build_map_cache() when a z-level has vehicle
-    // cache effects.  Keep that cleanup path active even if this movement is a
-    // removal of the last vehicle on the level.
-    level_cache_freshness::mark(ch, freshness_parts( { level_cache_part::veh_in_active_range } ));
-
-    // Vehicle
-    set_vehicle_cache_dirty(smz);
-    invalidate_lightmap_caches();
-    level_cache_freshness::forget_solar_hour(*this);
-    set_seen_cache_dirty(smz);
-    level_cache_freshness::mark( ch, freshness_parts( { level_cache_part::visibility } ) );
+    level_cache_freshness::report( *this, level_cache_freshness::vehicle_moved {
+        .sm_min = sm_min,
+        .sm_max = sm_max,
+        .z = smz,
+    } );
 #if defined(CATA_SDL)
-    cata_gpu::invalidate_lighting_transparency_levels(std::vector<int>{smz});
+    // Kept at the site: the GPU residency push is not Level cache freshness and moves
+    // to generation polling in a later stage.
+    cata_gpu::invalidate_lighting_transparency_levels( std::vector<int> { smz } );
 #endif
-
-    const auto for_clamped_submaps =
-        [&](const point_bub_sm& range_min, const point_bub_sm& range_max, const auto& callback) {
-            const auto bubble_bounds = reality_bubble_2D_bounds();
-            const auto requested = inclusive_rectangle<point_bub_sm>(range_min, range_max);
-            if (!bubble_bounds.overlaps(requested)) { return; }
-            for (const auto p : point_range<point_bub_sm>(
-                     clamp(range_min, bubble_bounds), clamp(range_max, bubble_bounds))) {
-                callback(p);
-            }
-        };
-
-    // Mark dirty only the submaps the vehicle actually occupies (union of old
-    // and new footprint), rather than the entire z-level.
-    for_clamped_submaps(sm_min.xy(), sm_max.xy(), [&](const point_bub_sm& p) {
-        const auto idx = static_cast<size_t>(ch.bidx(p.x(), p.y()));
-        level_cache_freshness::mark(ch, freshness_parts( {
-            level_cache_part::transparency,
-            level_cache_part::floor,
-        } ), idx);
-        auto* sm = get_submap_at_grid(tripoint_bub_sm(p, smz));
-        if (sm) {
-            sm->transparency_dirty = true;
-            sm->floor_dirty = true;
-            sm->pf_dirty = true;
-        }
-    });
-
-    // outside_cache has a 3x3 tile neighbourhood dependency, so expand the
-    // dirty region by one submap in each direction.
-    const auto outside_min = point_bub_sm(sm_min.x() - 1, sm_min.y() - 1);
-    const auto outside_max = point_bub_sm(sm_max.x() + 1, sm_max.y() + 1);
-    for_clamped_submaps(outside_min, outside_max, [&](const point_bub_sm& p) {
-        level_cache_freshness::mark(ch,
-            freshness_parts( { level_cache_part::outside } ),
-            static_cast<size_t>(ch.bidx(p.x(), p.y())));
-        auto* sm = get_submap_at_grid(tripoint_bub_sm(p, smz));
-        if (sm) { sm->outside_dirty = true; }
-    });
-
-    // Vehicles can extend through the floor; mark the level above as well.
-    const auto above_z = smz + 1;
-    if (inbounds_z(above_z)) {
-        auto& ch_above = get_cache(above_z);
-        set_seen_cache_dirty(above_z);
-        level_cache_freshness::mark( ch_above,
-            freshness_parts( { level_cache_part::visibility } ) );
-        for_clamped_submaps(sm_min.xy(), sm_max.xy(), [&](const point_bub_sm& p) {
-            level_cache_freshness::mark(ch_above,
-                freshness_parts( { level_cache_part::floor } ),
-                static_cast<size_t>(ch_above.bidx(p.x(), p.y())));
-            auto* sm = get_submap_at_grid(tripoint_bub_sm(p, above_z));
-            if (sm) { sm->floor_dirty = true; }
-        });
-    }
 }
 
 auto map::take_vehicle_move_notifications() -> unsigned

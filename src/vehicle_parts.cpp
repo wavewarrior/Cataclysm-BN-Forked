@@ -761,8 +761,15 @@ bool vehicle::merge_rackable_vehicle( vehicle *carry_veh, const std::vector<int>
         map &here = get_map();
         carry_veh->part_removal_cleanup();
         here.dirty_vehicle_list.insert( handle() );
-        here.set_transparency_cache_dirty( abs_sm_pos.z() );
-        here.set_seen_cache_dirty( tripoint_bub_ms::zero() );
+        level_cache_freshness::report( here, level_cache_freshness::terrain_changed {
+            .at = tripoint_bub_ms( 0, 0, abs_sm_pos.z() ),
+            .transparency = true,
+            .scope = level_cache_freshness::terrain_changed::transparency_scope::level,
+            // The old pair probed the bubble origin, not the vehicle tile.
+            .seen_probe = tripoint_bub_ms::zero(),
+            .support_above = false,
+            .memory_seen = false,
+        } );
         refresh();
     } else {
         //~ %1$s is the vehicle being loaded onto the bicycle rack
@@ -1316,8 +1323,15 @@ bool vehicle::split_vehicles( const std::vector<std::vector <int>> &new_vehs,
 
         map &here = get_map();
         here.dirty_vehicle_list.insert( new_vehicle->handle() );
-        here.set_transparency_cache_dirty( abs_sm_pos.z() );
-        here.set_seen_cache_dirty( tripoint_bub_ms::zero() );
+        level_cache_freshness::report( here, level_cache_freshness::terrain_changed {
+            .at = tripoint_bub_ms( 0, 0, abs_sm_pos.z() ),
+            .transparency = true,
+            .scope = level_cache_freshness::terrain_changed::transparency_scope::level,
+            // The old pair probed the bubble origin, not the vehicle tile.
+            .seen_probe = tripoint_bub_ms::zero(),
+            .support_above = false,
+            .memory_seen = false,
+        } );
         if( !new_labels.empty() ) {
             new_vehicle->labels = new_labels;
         }

@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
-#include <set>
+#include <optional>
 #include <vector>
 
 #include "coordinates.h"
@@ -144,6 +144,13 @@ class level_cache_freshness
         /** Record the viewer position the seen cache was just built for. */
         static void stamp_seen_origin( map &who, const tripoint_bub_ms &origin );
         /**
+         * Bookkeeping pair for a vehicle entering or leaving a level's caches: the
+         * vehicle-only caches of `zlev` and the vehicle-floor cache one level above it.
+         * Both parts are write-only today (issue #2) and disappear with #22; the verb
+         * exists so vehicle code never raises a freshness bit directly.
+         */
+        static void mark_vehicle_caches( map &who, int zlev );
+        /**
          * Forget both solar stamps so the sunlight cascade recomputes. Only
          * `invalidate_map_cache` needs the pair; the other two writers below each touch
          * one field, and resetting the wrong one forces a full sunlight rebuild.
@@ -236,6 +243,12 @@ class level_cache_freshness
             /// Queue `at` for re-memorising, as both terrain mutators do. A change that
             /// leaves the terrain itself alone passes false.
             bool memory_seen = true;
+            /// Tile whose seen-cache content gates the seen dirtying that accompanies
+            /// `transparency`. The terrain mutators probe the tile that changed; a
+            /// vehicle part edit that repaints a whole level probes the bubble origin
+            /// instead, and a part edit that knows the part's tile probes that tile.
+            /// Defaults to `at`, which is what the terrain mutators do.
+            std::optional<tripoint_bub_ms> seen_probe;
         };
         /**
          * A light source appeared, disappeared or changed intensity somewhere.
