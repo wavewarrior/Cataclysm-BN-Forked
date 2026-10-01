@@ -25,6 +25,7 @@
 #include "input.h"
 #include "json.h"
 #include "language.h"
+#include "level_cache_freshness.h"
 #include "line.h"
 #include "mapsharing.h"
 #include "output.h"
@@ -1884,7 +1885,7 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
                 world_generator->active_world->info->save();
             }
             if( ingame && colored_lighting_changed ) {
-                g->m.invalidate_lightmap_caches();
+                level_cache_freshness::report( g->m, level_cache_freshness::light_changed {} );
             }
             g->on_options_changed();
         } else {

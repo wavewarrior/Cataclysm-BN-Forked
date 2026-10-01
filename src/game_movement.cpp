@@ -37,6 +37,7 @@
 #include "item.h"
 #include "iexamine.h"
 #include "input.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "mapdata.h"
 #include "messages.h"
@@ -782,7 +783,10 @@ auto game::place_player( const tripoint_bub_ms &dest_loc, const bool keep_grab )
     // picks up the character light and any static sources at the new position.
     // For shifts, update_map+loadn already marks the 14 new-edge submaps —
     // this handles within-submap moves that don't trigger a shift.
-    m.mark_lightmap_dirty( u.bub_pos() );
+    level_cache_freshness::report( m, level_cache_freshness::light_changed {
+        .at = u.bub_pos(),
+        .scope = level_cache_freshness::light_changed::lightmap_scope::tile,
+    } );
     // Important: don't use dest_loc after this line. `update_map` may have shifted the map
     // and dest_loc was not adjusted and therefore is still in the un-shifted system and probably wrong.
     // If you must use it you can calculate the position in the new, shifted system with
@@ -1044,7 +1048,7 @@ bool game::phasing_move( const tripoint_bub_ms &dest_loc, const bool via_ramp )
         //tunneling costs 100 moves baseline, 50 per extra tile up to a cap of 500 moves
         u.moves -= ( 50 + ( tunneldist * 50 ) );
         u.setpos( dest );
-        m.invalidate_lightmap_caches();
+        level_cache_freshness::report( m, level_cache_freshness::light_changed {} );
 
         if( m.veh_at( u.bub_pos() ).part_with_feature( "BOARDABLE", true ) ) {
             m.board_vehicle( u.bub_pos(), &u );

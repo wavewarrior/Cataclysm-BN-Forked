@@ -29,6 +29,7 @@
 #include "explosion_queue.h"
 #include "fluid_grid.h"
 #include "game_constants.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "init.h"
 #include "gamemode.h"
@@ -572,8 +573,9 @@ auto game::run_activity_cadence_boundary() -> void
     weather.clear_temp_cache();
     weather.update_weather();
     reset_light_level();
-    m.invalidate_lightmap_caches();
-    m.invalidate_visibility_caches();
+    level_cache_freshness::report( m, level_cache_freshness::light_changed {
+        .visibility = true,
+    } );
     if( action_time_scale::once_every_this_tick( activity_time_cadence::fixed_window() ) ) {
         overmap_npc_move();
     }
