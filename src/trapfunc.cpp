@@ -1453,8 +1453,8 @@ bool trapfunc::map_regen( const tripoint_bub_ms &p, Creature *c, item * )
                 return false;
             }
             // The regenerated surroundings changed opacity across the whole level of
-            // the trap; the trap itself moved no support and the terrain is re-memorised
-            // by the mapgen update above.
+            // the trap. The old sequence raised no support-loss check and no memory
+            // mark, so both extras stay switched off.
             level_cache_freshness::report( here, level_cache_freshness::terrain_changed {
                 .at = p,
                 .transparency = true,

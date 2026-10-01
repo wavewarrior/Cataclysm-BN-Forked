@@ -201,15 +201,14 @@ class level_cache_freshness
          * branch that actually ran rather than a blanket union.
          */
         struct terrain_changed {
-            /// How widely the opacity change dirties the transparency cache. Field,
-            /// trap and weather opacity changes are not tile-sized: a field that goes
-            /// opaque anywhere on a level invalidates the whole level's transparency
-            /// cache (and with it the derived absorption cache), and a weather change
-            /// to the sight penalty invalidates every loaded level.
+            /// How widely the opacity change dirties the transparency cache. Not every
+            /// opacity change is tile-sized: a trap-triggered map regen repaints the
+            /// whole level of the trap, and a weather change to the sight penalty
+            /// invalidates every loaded level.
             enum class transparency_scope {
-                tile,       ///< one submap, as `ter_set`/`furn_set` do
-                level,      ///< the whole level of `at`
-                all_levels, ///< every loaded level
+                tile,       ///< one submap: `ter_set`/`furn_set`, field add/remove
+                level,      ///< the whole level of `at`: a trap-triggered map regen
+                all_levels, ///< every loaded level: a weather sight-penalty change
             };
             tripoint_bub_ms at;
             /// Opacity flipped: transparency cache and the tile's seen entry.

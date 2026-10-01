@@ -406,7 +406,7 @@ TEST_CASE( "terrain-changed reproduces the field, trap and weather opacity seque
         { "field pair", scope::tile, at, field_pair },
         // trapfunc map_regen: whole level of the trap, seen at the trap tile.
         { "trap pair", scope::level, at, trap_pair },
-        // weather sight-penalty change: every level, seen at the bubble centre.
+        // weather sight-penalty change: every level, seen at the bubble origin (0,0,0).
         { "weather pair", scope::all_levels, tripoint_bub_ms::zero(), weather_pair },
     } };
 

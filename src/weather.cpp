@@ -1179,7 +1179,7 @@ void weather_manager::update_weather()
     if( weather_id->sight_penalty !=
         old_weather->sight_penalty ) {
         // The sight penalty is folded into the transparency cache, so every loaded
-        // level went stale; the seen cache is invalidated at the bubble centre.
+        // level went stale; the seen cache is invalidated at the bubble origin (0,0,0).
         level_cache_freshness::report( get_map(), level_cache_freshness::terrain_changed {
             .at = tripoint_bub_ms::zero(),
             .transparency = true,
