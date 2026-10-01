@@ -47,6 +47,7 @@
 #include "item.h"
 #include "itype.h"
 #include "live_view.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "mapdata.h"
 #include "map_item_stack.h"
@@ -1374,7 +1375,7 @@ look_around_result game::look_around( bool show_window, tripoint_bub_ms &center,
 
             add_msg( m_debug, "levx: %d, levy: %d, levz: %d", get_levx(), get_levy(), center.z() );
             u.view_offset.z() = center.z() - u.bub_pos().z();
-            m.invalidate_map_cache( center.z() );
+            level_cache_freshness::invalidate_level( m, center.z() );
         } else if( action == "TRAVEL_TO" ) {
             if( !avatar_knows_travel_destination( u, lp ) ) {
                 add_msg( _( "You don't know that destination." ) );
@@ -1480,7 +1481,7 @@ look_around_result game::look_around( bool show_window, tripoint_bub_ms &center,
              action != "throw_blind" );
 
     if( center.z() != old_levz ) {
-        m.invalidate_map_cache( old_levz );
+        level_cache_freshness::invalidate_level( m, old_levz );
         m.build_map_cache( old_levz );
         u.view_offset.z() = 0;
     }

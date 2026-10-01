@@ -39,6 +39,7 @@
 #include "line.h"
 #include "magic/magic.h"
 #include "enchantments/enchantment.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "material.h"
 #include "math_defines.h"
@@ -220,8 +221,7 @@ target_handler::trajectory target_ui::run()
 
     avatar& player_character = *you;
     on_out_of_scope cleanup( [&here, &player_character]() {
-        here.invalidate_map_cache(
-            player_character.bub_pos().z() + player_character.view_offset.z() );
+        level_cache_freshness::invalidate_level( here, player_character.bub_pos().z() + player_character.view_offset.z() );
     } );
 
     shared_ptr_fast<game::draw_callback_t> target_ui_cb = make_shared_fast<game::draw_callback_t>(
@@ -1144,7 +1144,7 @@ void target_ui::set_view_offset( const tripoint_rel_ms& new_offset )
     if( changed_z ) {
         // We need to do a bunch of cache updates since we're
         // looking at a different z-level.
-        get_map().invalidate_map_cache( new_.z() );
+        level_cache_freshness::invalidate_level( get_map(), new_.z() );
     }
 }
 

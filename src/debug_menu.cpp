@@ -60,6 +60,7 @@
 #include "json_export.h"
 #include "language.h"
 #include "magic/magic.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "mapbuffer_registry.h"
 #include "map_extras.h"
@@ -546,7 +547,7 @@ void spawn_nested_mapgen()
         const auto nested_offset = point_rel_ms( local_ms.x(), local_ms.y() );
         ( *ptr )->nest( md, nested_offset );
         g->load_npcs();
-        get_map().invalidate_map_cache( g->get_levz() );
+        level_cache_freshness::invalidate_level( get_map(), g->get_levz() );
     }
 }
 
@@ -2162,7 +2163,7 @@ void debug()
                     mx_map.load( where_omt );
                     MapExtras::apply_function( mx_str[mx_choice], mx_map, where_omt );
                     g->load_npcs();
-                    m.invalidate_map_cache( g->get_levz() );
+                    level_cache_freshness::invalidate_level( m, g->get_levz() );
                 }
             }
             break;

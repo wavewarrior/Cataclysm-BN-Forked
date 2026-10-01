@@ -133,6 +133,7 @@
 #include "locations.h"
 #include "npc.h"
 #include "magic/magic.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "physics/physics_world.h"
 #include "map/utils/map_functions.h"
@@ -670,10 +671,10 @@ bool game::load( const save_t &name )
 
     // Build caches once so any immediate post-load draws don't use uninitialized lighting/visibility,
     // then re-invalidate so the first real in-game draw rebuilds everything again.
-    m.invalidate_map_cache( get_levz() );
+    level_cache_freshness::invalidate_level( m, get_levz() );
     m.build_map_cache( get_levz() );
     m.update_visibility_cache( get_levz() );
-    m.invalidate_map_cache( get_levz() );
+    level_cache_freshness::invalidate_level( m, get_levz() );
 
     saving_blocked_by_failed_load = false;
     return true;

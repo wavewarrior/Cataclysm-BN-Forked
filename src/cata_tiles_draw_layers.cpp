@@ -15,6 +15,7 @@
 #include "flag.h"
 #include "item.h"
 #include "item_factory.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "mtype.h"
 #include "monster.h"
@@ -194,7 +195,7 @@ bool cata_tiles::draw_terrain(
         if( t.obj().connects( connect_group ) ) {
             get_connect_values( p, subtile, rotation, connect_group, {} );
             // re-memorize previously seen terrain in case new connections have been seen
-            here.set_memory_seen_cache_dirty( p );
+            level_cache_freshness::mark_memory_seen( here, p );
         } else {
             get_terrain_orientation( p, rotation, subtile, {}, invisible );
             // do something to get other terrain orientation values

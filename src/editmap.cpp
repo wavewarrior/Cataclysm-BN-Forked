@@ -18,6 +18,7 @@
 #include "item.h"
 #include "lighting/rmlui_layer.h"
 #include "line.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "mapbuffer.h"
 #include "map_iterator.h"
@@ -1516,12 +1517,12 @@ void editmap::mapgen_preview( const point_abs_ms& tc, uilist& gmenu )
         }
     };
     const auto invalidate_cache = [&]() {
-        here.set_transparency_cache_dirty( target.z() );
-        here.set_outside_cache_dirty( target.z() );
-        here.set_floor_cache_dirty( target.z() );
+        level_cache_freshness::mark_transparency( here, target.z() );
+        level_cache_freshness::mark_outside( here, target.z() );
+        level_cache_freshness::mark_floor( here, target.z() );
         here.set_pathfinding_cache_dirty( target.z() );
-        here.set_suspension_cache_dirty( target.z() );
-        here.set_absorption_cache_dirty( target.z() );
+        level_cache_freshness::mark_suspension( here, target.z() );
+        level_cache_freshness::mark_absorption( here, target.z() );
 
         here.clear_vehicle_cache();
         here.clear_vehicle_list( target.z() );

@@ -3628,17 +3628,17 @@ auto mapbuffer::invalidate_active_terrain_set_caches( const tripoint_abs_ms &p,
 
     if( no_floor_changed ) {
         // Sound absorption reads the floor here and one level down.
-        here.set_absorption_cache_dirty( *local );
-        here.set_absorption_cache_dirty( local->z() - 1 );
+        level_cache_freshness::mark_absorption( here, *local );
+        level_cache_freshness::mark_absorption( here, local->z() - 1 );
     }
 
     if( new_terrain.has_flag( TFLAG_BLOCK_WIND ) != old_terrain.has_flag( TFLAG_BLOCK_WIND ) ) {
-        here.set_absorption_cache_dirty( *local );
+        level_cache_freshness::mark_absorption( here, *local );
     }
 
     if( new_terrain.has_flag( TFLAG_CONNECT_TO_WALL ) != old_terrain.has_flag(
                 TFLAG_CONNECT_TO_WALL ) ) {
-        here.set_absorption_cache_dirty( *local );
+        level_cache_freshness::mark_absorption( here, *local );
     }
 
     if( suspended_changed && new_terrain.has_flag( TFLAG_SUSPENDED ) ) {

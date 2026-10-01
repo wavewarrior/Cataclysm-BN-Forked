@@ -1613,7 +1613,7 @@ void map::shift_vehicle_z( vehicle& veh, int z_shift )
     level_cache_freshness::report( *this, level_cache_freshness::light_changed {} );
     auto dirty_vertical_vehicle_caches = [this]( const int zlev ) {
         if( !inbounds_z( zlev ) ) { return; }
-        invalidate_map_cache( zlev );
+        level_cache_freshness::invalidate_level( *this, zlev );
     };
     dirty_vertical_vehicle_caches( src.z() );
     dirty_vertical_vehicle_caches( src.z() + 1 );

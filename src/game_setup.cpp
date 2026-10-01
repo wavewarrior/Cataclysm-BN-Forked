@@ -132,6 +132,7 @@
 #include "locations.h"
 #include "npc.h"
 #include "magic/magic.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "physics/physics_world.h"
 #include "map/utils/map_functions.h"
@@ -741,13 +742,13 @@ bool game::start_game()
     u.setpos( project_to<coords::ms>( lev + tripoint_rel_sm( g_half_mapsize, g_half_mapsize, 0 ) ) );
     load_map( lev, /*pump_events=*/true );
 
-    m.invalidate_map_cache( get_levz() );
+    level_cache_freshness::invalidate_level( m, get_levz() );
     m.build_map_cache( get_levz() );
     // Do this after the map cache has been built!
     start_loc.place_player( u, lev.z() );
     update_map( u );
     // ...but then rebuild it, because we want visibility cache to avoid spawning monsters in sight
-    m.invalidate_map_cache( get_levz() );
+    level_cache_freshness::invalidate_level( m, get_levz() );
     m.build_map_cache( get_levz() );
     // Start the overmap with out immediate neighborhood visible, this needs to be after place_player
     get_overmapbuffer( current_dimension_id_ ).reveal( u.abs_omt_pos().xy(),
@@ -1795,8 +1796,8 @@ bool game::travel_to_dimension( const dimension_id &dim_id,
             auto const zmin = -OVERMAP_DEPTH;
             auto const zmax = OVERMAP_HEIGHT;
             for( auto z = zmin; z <= zmax; z++ ) {
-                here.set_memory_seen_cache_dirty( z );
-                here.invalidate_map_cache( z );
+                level_cache_freshness::mark_memory_seen( here, z );
+                level_cache_freshness::invalidate_level( here, z );
             }
         }
         here.build_map_cache( target_load_origin.z() );

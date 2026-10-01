@@ -45,6 +45,7 @@
 #include "line.h"
 #include "locations.h"
 #include "magic/magic.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "map_iterator.h"
 #include "map_selector.h"
@@ -412,7 +413,7 @@ void aim_activity_actor::restore_view()
     bool changed_z = player_character.view_offset.z() != initial_view_offset.z();
     player_character.view_offset = initial_view_offset;
     if( changed_z ) {
-        get_map().invalidate_map_cache( player_character.view_offset.z() );
+        level_cache_freshness::invalidate_level( get_map(), player_character.view_offset.z() );
         g->invalidate_main_ui_adaptor();
     }
 }

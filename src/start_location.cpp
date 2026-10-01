@@ -16,6 +16,7 @@
 #include "generic_factory.h"
 #include "int_id.h"
 #include "json.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "mapbuffer_registry.h"
 #include "map_extras.h"
@@ -334,7 +335,7 @@ void start_location::place_player( player &u, const int &z ) const
     map &m = g->m;
     // Start us off somewhere in the center of the map
     u.setpos( tripoint_bub_ms( g_half_mapsize_x, g_half_mapsize_y, z ) );
-    m.invalidate_map_cache( z );
+    level_cache_freshness::invalidate_level( m, z );
     m.build_map_cache( z );
     const bool must_be_inside = !flags().contains( "ALLOW_OUTSIDE" );
     ///\EFFECT_STR allows player to start behind less-bashable furniture and terrain

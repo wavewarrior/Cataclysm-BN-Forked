@@ -2140,7 +2140,7 @@ void game::vertical_move( int movez, bool force, bool peeking )
         u.remove_effect( effect_bouldering );
     }
 
-    m.invalidate_map_cache( g->get_levz() );
+    level_cache_freshness::invalidate_level( m, g->get_levz() );
     // Upon force movement, traps can not be avoided.
     m.creature_on_trap( u, !force );
 

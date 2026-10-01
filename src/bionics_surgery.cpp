@@ -51,6 +51,7 @@
 #include "line.h"
 #include "magic/magic.h"
 #include "make_static.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "map_iterator.h"
 #include "mapdata.h"
@@ -542,7 +543,7 @@ void Character::perform_uninstall( bionic_id bid, int difficulty, int success,
         bionics_uninstall_failure( difficulty, success, adjusted_skill );
 
     }
-    here.invalidate_map_cache( g->get_levz() );
+    level_cache_freshness::invalidate_level( here, g->get_levz() );
 }
 
 bool Character::uninstall_bionic( const bionic &target_cbm, monster &installer, Character &patient,
@@ -825,7 +826,7 @@ void Character::perform_install( bionic_id bid, bionic_id upbid, int difficulty,
                                ( 10.0 ) );
         bionics_install_failure( installer_name, difficulty, success, adjusted_skill );
     }
-    get_map().invalidate_map_cache( g->get_levz() );
+    level_cache_freshness::invalidate_level( get_map(), g->get_levz() );
 }
 
 void Character::do_damage_for_bionic_failure( int min_damage, int max_damage )

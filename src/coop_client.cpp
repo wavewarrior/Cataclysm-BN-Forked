@@ -21,6 +21,7 @@
 #include "game_constants.h"
 #include "get_version.h"
 #include "json.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "mapbuffer.h"
 #include "mapdata.h"
@@ -242,14 +243,14 @@ auto coop_client::apply_world_seed_to_avatar() -> void
                 << "[coop] load_map: abs_sub_after=(" << abs_sub_after.x() << ","
                 << abs_sub_after.y() << ") spawn=(" << world_seed_spawn_.x() << ","
                 << world_seed_spawn_.y() << ")";
-        g->m.invalidate_map_cache( levz );
+        level_cache_freshness::invalidate_level( g->m, levz );
         g->m.build_map_cache( levz );
         const tripoint_bub_ms bpos = abs_to_map_local( g->m, world_seed_spawn_ );
         g->u.setpos( bpos );
         DebugLog( DL::Info, DC::Main )
                 << "[coop] setpos: bpos=(" << bpos.x() << "," << bpos.y() << ")"
                 << " abs_pos_after=(" << g->u.abs_pos().x() << "," << g->u.abs_pos().y() << ")";
-        g->m.invalidate_map_cache( levz );
+        level_cache_freshness::invalidate_level( g->m, levz );
         g->m.build_map_cache( levz );
     }
     g->u.process_turn(); // initialise avatar stats at spawn
@@ -807,7 +808,7 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
                 }
             }
             // Invalidate the map's high-level visibility caches after bulk update.
-            g->m.invalidate_visibility_caches();
+            level_cache_freshness::invalidate_visibility( g->m );
 
         } else if( key == "monsters" ) {
             // H5: delta-update by host-assigned stable ID.

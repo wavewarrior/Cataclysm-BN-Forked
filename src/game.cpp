@@ -2848,7 +2848,7 @@ void game::place_player_overmap( const tripoint_abs_omt &om_dest )
     for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; z++ ) {
         m.clear_vehicle_list( z );
     }
-    m.set_memory_seen_cache_dirty( get_levz() );
+    level_cache_freshness::mark_memory_seen( m, get_levz() );
     // offset because load_map expects the coordinates of the top left corner, but the
     // player will be centered in the middle of the map.
     // TODO: fix point types
@@ -2982,7 +2982,7 @@ void game::resize_reality_bubble_to( int new_size )
     load_npcs();
 
     u.recalc_sight_limits();
-    m.invalidate_map_cache( get_levz() );
+    level_cache_freshness::invalidate_level( m, get_levz() );
     m.build_map_cache( get_levz() );
 
     // Discard pathfinding objects sized for the old bubble.
