@@ -479,11 +479,25 @@ void level_cache_freshness::report( map &who, const terrain_changed &change ) {
     }
 }
 
-void level_cache_freshness::report( map &who, const light_changed & ) {
+void level_cache_freshness::report( map &who, const light_changed &change ) {
     assert_main_thread();
     // Today's light mutators (emissive item add/remove, vehicle light toggles, field
     // changes) all funnel through this one instrument: every level's lightmap is stale.
-    who.invalidate_lightmap_caches();
+    switch( change.scope ) {
+        case light_changed::lightmap_scope::all_levels:
+            who.invalidate_lightmap_caches();
+            break;
+        case light_changed::lightmap_scope::tile:
+            // A viewer move inside the bubble moves only the entity lights of the
+            // submap it landed in, which is what the player-move site raises today.
+            who.mark_lightmap_dirty( change.at );
+            break;
+    }
+    if( change.visibility ) {
+        // The activity-cadence boundary pairs the lightmap invalidate with the
+        // map-wide visibility aggregate, because the light level may have moved.
+        who.invalidate_visibility_caches();
+    }
 }
 
 void level_cache_freshness::report( map &who, const vehicle_moved &change ) {

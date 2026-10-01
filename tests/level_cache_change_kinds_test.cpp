@@ -467,6 +467,69 @@ TEST_CASE( "light-changed matches invalidate_lightmap_caches", "[level_cache_fre
     CHECK( via_kind == via_setter );
 }
 
+TEST_CASE( "tile-scoped light-changed matches mark_lightmap_dirty", "[level_cache_freshness]" ) {
+    // `at` sits in submap (6,5); the fixture player sits in (5,5), so the pin can see
+    // the tile scope spare the player's own submap and every other bit.
+    const tripoint_bub_ms at( 72, 60, 0 );
+
+    set_up_open_daylight_map();
+    map &here = get_map();
+    level_cache &ch = here.access_cache( 0 );
+    const size_t bit_at = static_cast<size_t>( ch.bidx( at.x() / SEEX, at.y() / SEEY ) );
+    const size_t bit_player = static_cast<size_t>(
+        ch.bidx( player_home.x() / SEEX, player_home.y() / SEEY ) );
+    generation_baseline base = capture_generations( here );
+    const std::vector<std::string> plain = capture( here, base );
+    here.mark_lightmap_dirty( at );
+    const std::vector<std::string> via_setter = capture( here, base );
+    CHECK( via_setter != plain );
+    CHECK( level_cache_freshness::stale( ch, level_cache_part::lightmap, bit_at ) );
+    CHECK_FALSE( level_cache_freshness::stale( ch, level_cache_part::lightmap, bit_player ) );
+
+    set_up_open_daylight_map();
+    base = capture_generations( here );
+    const std::vector<std::string> plain_again = capture( here, base );
+    level_cache_freshness::report( here, level_cache_freshness::light_changed {
+        .at = at,
+        .scope = level_cache_freshness::light_changed::lightmap_scope::tile,
+    } );
+    const std::vector<std::string> via_kind = capture( here, base );
+    CHECK( via_kind != plain_again );
+    CHECK( level_cache_freshness::stale( here.access_cache( 0 ), level_cache_part::lightmap,
+                                          bit_at ) );
+    CHECK_FALSE( level_cache_freshness::stale( here.access_cache( 0 ),
+                                               level_cache_part::lightmap, bit_player ) );
+
+    INFO( "setter only:\n" << only_in( via_setter, via_kind )
+          << "kind only:\n" << only_in( via_kind, via_setter ) );
+    CHECK( via_kind == via_setter );
+}
+
+TEST_CASE( "light-changed with the visibility option matches the paired invalidates",
+           "[level_cache_freshness]" ) {
+    set_up_open_daylight_map();
+    map &here = get_map();
+    generation_baseline base = capture_generations( here );
+    const std::vector<std::string> plain = capture( here, base );
+    here.invalidate_lightmap_caches();
+    here.invalidate_visibility_caches();
+    const std::vector<std::string> via_setters = capture( here, base );
+    CHECK( via_setters != plain );
+
+    set_up_open_daylight_map();
+    base = capture_generations( here );
+    const std::vector<std::string> plain_again = capture( here, base );
+    level_cache_freshness::report( here, level_cache_freshness::light_changed {
+        .visibility = true,
+    } );
+    const std::vector<std::string> via_kind = capture( here, base );
+    CHECK( via_kind != plain_again );
+
+    INFO( "setters only:\n" << only_in( via_setters, via_kind )
+          << "kind only:\n" << only_in( via_kind, via_setters ) );
+    CHECK( via_kind == via_setters );
+}
+
 TEST_CASE( "vehicle-moved matches on_vehicle_moved", "[level_cache_freshness][vehicle]" ) {
     const tripoint_bub_sm sm_min( 3, 4, 0 );
     const tripoint_bub_sm sm_max( 4, 5, 0 );

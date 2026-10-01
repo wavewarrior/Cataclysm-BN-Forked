@@ -237,8 +237,25 @@ class level_cache_freshness
             /// leaves the terrain itself alone passes false.
             bool memory_seen = true;
         };
-        /** A light source appeared, disappeared or changed intensity somewhere. */
+        /**
+         * A light source appeared, disappeared or changed intensity somewhere.
+         * Default: every loaded level's lightmap is stale, which is what every light
+         * mutator raises today.
+         */
         struct light_changed {
+            /// How widely the light change dirties the lightmap. A viewer move inside
+            /// the bubble changes only the entity lights of the submap it landed in;
+            /// mutators that cannot localise the change take the default.
+            enum class lightmap_scope {
+                all_levels, ///< every loaded level, as `invalidate_lightmap_caches` does
+                tile,       ///< only the submap containing `at`
+            };
+            tripoint_bub_ms at;
+            /// Extent over which the lightmap goes stale.
+            lightmap_scope scope = lightmap_scope::all_levels;
+            /// Also raise the map-wide visibility aggregate, as the activity-cadence
+            /// boundary does alongside the lightmap invalidate.
+            bool visibility = false;
         };
         /**
          * A vehicle committed a move covering submap grid cells `sm_min..sm_max` on
