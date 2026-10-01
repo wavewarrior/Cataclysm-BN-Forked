@@ -530,29 +530,87 @@ TEST_CASE( "light-changed with the visibility option matches the paired invalida
     CHECK( via_kind == via_setters );
 }
 
-TEST_CASE( "vehicle-moved matches on_vehicle_moved", "[level_cache_freshness][vehicle]" ) {
+// The freshness writes `map::on_vehicle_moved` performed before ticket #14 routed it
+// through the `vehicle_moved` kind, spelled out from the pre-migration source. The
+// notification counter and the GPU residency push stay at the call site and are not
+// freshness, so they are absent here; so is `pf_dirty`, which the capture excludes.
+void reference_vehicle_move_sequence( map &here, const tripoint_bub_sm &sm_min,
+                                      const tripoint_bub_sm &sm_max, const int smz ) {
+    level_cache &ch = here.access_cache( smz );
+    level_cache_freshness::mark( ch,
+        freshness_parts( { level_cache_part::veh_in_active_range } ) );
+    here.set_vehicle_cache_dirty( smz );
+    here.invalidate_lightmap_caches();
+    level_cache_freshness::forget_solar_hour( here );
+    here.set_seen_cache_dirty( smz );
+    level_cache_freshness::mark( ch, freshness_parts( { level_cache_part::visibility } ) );
+
+    const auto mark_rect = [&]( const int x0, const int y0, const int x1, const int y1,
+    const level_cache_part part ) {
+        level_cache &level = here.access_cache( smz );
+        for( int x = x0; x <= x1; ++x ) {
+            for( int y = y0; y <= y1; ++y ) {
+                level_cache_freshness::mark( level, freshness_parts( { part } ),
+                                             static_cast<size_t>( level.bidx( x, y ) ) );
+                if( submap * const sm = here.get_submap_at_grid(
+                        tripoint_bub_sm( point_bub_sm( x, y ), smz ) ) ) {
+                    if( part == level_cache_part::transparency ) {
+                        sm->transparency_dirty = true;
+                    } else if( part == level_cache_part::outside ) {
+                        sm->outside_dirty = true;
+                    } else {
+                        sm->floor_dirty = true;
+                    }
+                }
+            }
+        }
+    };
+    mark_rect( sm_min.x(), sm_min.y(), sm_max.x(), sm_max.y(), level_cache_part::transparency );
+    mark_rect( sm_min.x(), sm_min.y(), sm_max.x(), sm_max.y(), level_cache_part::floor );
+    mark_rect( sm_min.x() - 1, sm_min.y() - 1, sm_max.x() + 1, sm_max.y() + 1,
+               level_cache_part::outside );
+
+    // Vehicles can extend through the floor: the level above gets seen, visibility and
+    // floor over the occupancy rectangle only.
+    const int above_z = smz + 1;
+    here.set_seen_cache_dirty( above_z );
+    level_cache_freshness::mark( here.access_cache( above_z ),
+                                 freshness_parts( { level_cache_part::visibility } ) );
+    level_cache &ch_above = here.access_cache( above_z );
+    for( int x = sm_min.x(); x <= sm_max.x(); ++x ) {
+        for( int y = sm_min.y(); y <= sm_max.y(); ++y ) {
+            level_cache_freshness::mark( ch_above, freshness_parts( { level_cache_part::floor } ),
+                                         static_cast<size_t>( ch_above.bidx( x, y ) ) );
+            if( submap * const sm = here.get_submap_at_grid(
+                    tripoint_bub_sm( point_bub_sm( x, y ), above_z ) ) ) {
+                sm->floor_dirty = true;
+            }
+        }
+    }
+}
+
+TEST_CASE( "vehicle-moved matches the pre-migration on_vehicle_moved sequence",
+           "[level_cache_freshness][vehicle]" ) {
     const tripoint_bub_sm sm_min( 3, 4, 0 );
     const tripoint_bub_sm sm_max( 4, 5, 0 );
 
     set_up_open_daylight_map();
     map &here = get_map();
     generation_baseline base = capture_generations( here );
-    here.on_vehicle_moved( sm_min, sm_max, 0 );
-    // The notification counter is an observation of the real path, not freshness; the
-    // kind deliberately does not carry it (the GPU consumer drains it).
-    here.take_vehicle_move_notifications();
-    const std::vector<std::string> via_real = capture( here, base );
+    reference_vehicle_move_sequence( here, sm_min, sm_max, 0 );
+    const std::vector<std::string> via_setters = capture( here, base );
 
     set_up_open_daylight_map();
     base = capture_generations( here );
-    level_cache_freshness::report( here, level_cache_freshness::vehicle_moved {
-        .sm_min = sm_min, .sm_max = sm_max, .z = 0
-    } );
+    // The real entry point, which now reports the kind; the notification counter it
+    // raises is an observation for the GPU consumer, not freshness.
+    here.on_vehicle_moved( sm_min, sm_max, 0 );
+    here.take_vehicle_move_notifications();
     const std::vector<std::string> via_kind = capture( here, base );
 
-    INFO( "real path only:\n" << only_in( via_real, via_kind )
-          << "kind only:\n" << only_in( via_kind, via_real ) );
-    CHECK( via_kind == via_real );
+    INFO( "setters only:\n" << only_in( via_setters, via_kind )
+          << "kind only:\n" << only_in( via_kind, via_setters ) );
+    CHECK( via_kind == via_setters );
 }
 
 TEST_CASE(
@@ -865,4 +923,116 @@ TEST_CASE( "world-replaced makes the caches see terrain swapped underneath them"
         CHECK( after.floor_here == 0 );
         CHECK( after.outside_below != 0 );
     }
+}
+
+TEST_CASE(
+    "terrain-changed with a seen probe matches the vehicle part-edit opacity pair",
+    "[level_cache_freshness][vehicle]" ) {
+    // `vehicle::open_or_close`, the bicycle-rack merge, the split and the part-removal
+    // handler all dirty the whole level's transparency cache and then probe the seen
+    // cache at a tile that is NOT the vehicle (the bubble origin, or the part's own
+    // tile). That probe is conditional inside `set_seen_cache_dirty`, so which tile it
+    // lands on is observable and the kind must carry it.
+    const tripoint_bub_ms vehicle_tile( 61, 60, 0 );
+
+    set_up_open_daylight_map();
+    map &here = get_map();
+    generation_baseline base = capture_generations( here );
+    here.set_transparency_cache_dirty( 0 );
+    here.set_seen_cache_dirty( tripoint_bub_ms::zero() );
+    const std::vector<std::string> via_setters = capture( here, base );
+
+    set_up_open_daylight_map();
+    base = capture_generations( here );
+    level_cache_freshness::report( here, level_cache_freshness::terrain_changed {
+        .at = vehicle_tile,
+        .transparency = true,
+        .scope = level_cache_freshness::terrain_changed::transparency_scope::level,
+        .seen_probe = tripoint_bub_ms::zero(),
+        .support_above = false,
+        .memory_seen = false,
+    } );
+    const std::vector<std::string> via_kind = capture( here, base );
+
+    INFO( "setters only:\n" << only_in( via_setters, via_kind )
+          << "kind only:\n" << only_in( via_kind, via_setters ) );
+    CHECK( via_kind == via_setters );
+
+    // Discriminating: the seen dirtying is conditional on the content of the PROBE tile,
+    // so the probe point is observable. Poisoning the probe tile's seen entry makes the
+    // conditional decline; a probe elsewhere still sees lit content and dirties seen.
+    const auto seen_rises = [&]( const tripoint_bub_ms &probe,
+    const tripoint_bub_ms &poison ) {
+        set_up_open_daylight_map();
+        map &m = get_map();
+        level_cache &ch = m.access_cache( 0 );
+        REQUIRE( !level_cache_freshness::stale( ch, level_cache_part::seen ) );
+        ch.seen_cache[static_cast<size_t>( ch.idx( poison.x(), poison.y() ) )] = 0.0f;
+        ch.camera_cache[static_cast<size_t>( ch.idx( poison.x(), poison.y() ) )] = 0.0f;
+        level_cache_freshness::report( m, level_cache_freshness::terrain_changed {
+            .at = vehicle_tile,
+            .transparency = true,
+            .scope = level_cache_freshness::terrain_changed::transparency_scope::level,
+            .seen_probe = probe,
+            .support_above = false,
+            .memory_seen = false,
+        } );
+        return level_cache_freshness::stale( m.access_cache( 0 ), level_cache_part::seen );
+    };
+    CHECK_FALSE( seen_rises( tripoint_bub_ms::zero(), tripoint_bub_ms::zero() ) );
+    CHECK( seen_rises( player_home, tripoint_bub_ms::zero() ) );
+    CHECK_FALSE( seen_rises( player_home, player_home ) );
+}
+
+TEST_CASE(
+    "whole-level floor plus vehicle-caches bookkeeping match the part-removal handler",
+    "[level_cache_freshness][vehicle]" ) {
+    const int z = 0;
+
+    set_up_open_daylight_map();
+    map &here = get_map();
+    generation_baseline base = capture_generations( here );
+    here.set_floor_cache_dirty( z + 1 );
+    here.set_vehicle_cache_dirty( z );
+    const std::vector<std::string> via_setters = capture( here, base );
+
+    set_up_open_daylight_map();
+    base = capture_generations( here );
+    level_cache_freshness::report( here, level_cache_freshness::terrain_changed {
+        .at = tripoint_bub_ms( 0, 0, z + 1 ),
+        .floor_level = true,
+        .support_above = false,
+        .memory_seen = false,
+    } );
+    level_cache_freshness::mark_vehicle_caches( here, z );
+    const std::vector<std::string> via_kind = capture( here, base );
+
+    INFO( "setters only:\n" << only_in( via_setters, via_kind )
+          << "kind only:\n" << only_in( via_kind, via_setters ) );
+    CHECK( via_kind == via_setters );
+}
+
+TEST_CASE(
+    "light-changed with no lightmap change matches the camera-toggle pair",
+    "[level_cache_freshness][vehicle]" ) {
+    set_up_open_daylight_map();
+    map &here = get_map();
+    generation_baseline base = capture_generations( here );
+    here.set_seen_cache_dirty( 0 );
+    here.invalidate_visibility_caches();
+    const std::vector<std::string> via_setters = capture( here, base );
+
+    set_up_open_daylight_map();
+    base = capture_generations( here );
+    level_cache_freshness::report( here, level_cache_freshness::light_changed {
+        .at = player_home,
+        .scope = level_cache_freshness::light_changed::lightmap_scope::none,
+        .visibility = true,
+        .seen = true,
+    } );
+    const std::vector<std::string> via_kind = capture( here, base );
+
+    INFO( "setters only:\n" << only_in( via_setters, via_kind )
+          << "kind only:\n" << only_in( via_kind, via_setters ) );
+    CHECK( via_kind == via_setters );
 }

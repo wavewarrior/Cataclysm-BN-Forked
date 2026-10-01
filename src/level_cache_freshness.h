@@ -249,6 +249,10 @@ class level_cache_freshness
             /// instead, and a part edit that knows the part's tile probes that tile.
             /// Defaults to `at`, which is what the terrain mutators do.
             std::optional<tripoint_bub_ms> seen_probe;
+            /// A roof or opaque part came off: the whole floor cache of `at`'s level, as
+            /// `set_floor_cache_dirty( zlev )` does, instead of the one-tile shape of
+            /// `no_floor`/`sun_roof_above`. A vehicle part edit repaints the level.
+            bool floor_level = false;
         };
         /**
          * A light source appeared, disappeared or changed intensity somewhere.
@@ -262,6 +266,7 @@ class level_cache_freshness
             enum class lightmap_scope {
                 all_levels, ///< every loaded level, as `invalidate_lightmap_caches` does
                 tile,       ///< only the submap containing `at`
+                none,       ///< lighting untouched; only the `seen`/`visibility` flags below
             };
             tripoint_bub_ms at;
             /// Extent over which the lightmap goes stale.
@@ -269,6 +274,9 @@ class level_cache_freshness
             /// Also raise the map-wide visibility aggregate, as the activity-cadence
             /// boundary does alongside the lightmap invalidate.
             bool visibility = false;
+            /// Also unconditionally dirty the seen cache of `at`'s level, as a vehicle
+            /// camera-system toggle does alongside the visibility invalidate.
+            bool seen = false;
         };
         /**
          * A vehicle committed a move covering submap grid cells `sm_min..sm_max` on

@@ -489,6 +489,11 @@ void level_cache_freshness::report( map &who, const terrain_changed &change ) {
     if( change.lightmap ) {
         who.invalidate_lightmap_caches();
     }
+    if( change.floor_level ) {
+        // Whole-level floor shape, with the helper's own cascade to the outside and
+        // absorption caches one level down.
+        who.set_floor_cache_dirty( p.z() );
+    }
 }
 
 void level_cache_freshness::report( map &who, const light_changed &change ) {
@@ -504,6 +509,13 @@ void level_cache_freshness::report( map &who, const light_changed &change ) {
             // submap it landed in, which is what the player-move site raises today.
             who.mark_lightmap_dirty( change.at );
             break;
+        case light_changed::lightmap_scope::none:
+            // Nothing about the light sources changed; the caller reports a viewer-side
+            // fact (a camera feed switched) that dirties what is seen, not what lights.
+            break;
+    }
+    if( change.seen ) {
+        who.set_seen_cache_dirty( change.at.z() );
     }
     if( change.visibility ) {
         // The activity-cadence boundary pairs the lightmap invalidate with the
