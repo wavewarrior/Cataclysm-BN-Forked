@@ -54,6 +54,7 @@
 #include "lightmap.h"
 #include "line.h"
 #include "map.h"
+#include "level_cache_freshness.h"
 #include "map_feature_descriptions.h"
 #include "map/utils/map_functions.h"
 #include "map_iterator.h"
@@ -234,7 +235,8 @@ void map::add_vehicle_to_cache(vehicle* veh) {
             }
         }
         level_cache& ch = get_cache(p.z());
-        ch.veh_in_active_range = true;
+        level_cache_freshness::mark(ch,
+            freshness_parts( { level_cache_part::veh_in_active_range } ));
         set_vehicle_cache_dirty(p.z());
 
         if (!ch.veh_cached_parts.contains(p)
@@ -291,7 +293,8 @@ void map::clear_vehicle_cache() {
             if (inbounds(p)) { ch.veh_exists_at[ch.idx(p.x(), p.y())] = false; }
             ch.veh_cached_parts.erase(part);
         }
-        ch.veh_in_active_range = false;
+        level_cache_freshness::assign(ch,
+            freshness_parts( { level_cache_part::veh_in_active_range } ), false);
         set_vehicle_cache_dirty(zlev);
     }
     cached_veh_rope.clear();
@@ -306,7 +309,8 @@ void map::clear_vehicle_list(const int zlev) {
     // disagree about which vehicles are still resident at this z-level.
     ch.veh_cached_parts.clear();
     std::ranges::fill( ch.veh_exists_at, false );
-    ch.veh_in_active_range = false;
+    level_cache_freshness::assign(ch,
+        freshness_parts( { level_cache_part::veh_in_active_range } ), false);
     std::erase_if( cached_veh_rope, [zlev]( const auto &kv ) { return kv.first.z() == zlev; } );
     set_vehicle_cache_dirty(zlev);
 
@@ -492,14 +496,14 @@ void map::on_vehicle_moved(
     // Vehicle-only caches are cleared by build_map_cache() when a z-level has vehicle
     // cache effects.  Keep that cleanup path active even if this movement is a
     // removal of the last vehicle on the level.
-    ch.veh_in_active_range = true;
+    level_cache_freshness::mark(ch, freshness_parts( { level_cache_part::veh_in_active_range } ));
 
     // Vehicle
     set_vehicle_cache_dirty(smz);
     invalidate_lightmap_caches();
-    m_solar.last_built_hour = -1;
+    level_cache_freshness::forget_solar_hour(*this);
     set_seen_cache_dirty(smz);
-    ch.visibility_cache_dirty = true;
+    level_cache_freshness::mark( ch, freshness_parts( { level_cache_part::visibility } ) );
 #if defined(CATA_SDL)
     cata_gpu::invalidate_lighting_transparency_levels(std::vector<int>{smz});
 #endif
@@ -519,8 +523,10 @@ void map::on_vehicle_moved(
     // and new footprint), rather than the entire z-level.
     for_clamped_submaps(sm_min.xy(), sm_max.xy(), [&](const point_bub_sm& p) {
         const auto idx = static_cast<size_t>(ch.bidx(p.x(), p.y()));
-        ch.transparency_cache_dirty.set(idx);
-        ch.floor_cache_dirty.set(idx);
+        level_cache_freshness::mark(ch, freshness_parts( {
+            level_cache_part::transparency,
+            level_cache_part::floor,
+        } ), idx);
         auto* sm = get_submap_at_grid(tripoint_bub_sm(p, smz));
         if (sm) {
             sm->transparency_dirty = true;
@@ -534,8 +540,9 @@ void map::on_vehicle_moved(
     const auto outside_min = point_bub_sm(sm_min.x() - 1, sm_min.y() - 1);
     const auto outside_max = point_bub_sm(sm_max.x() + 1, sm_max.y() + 1);
     for_clamped_submaps(outside_min, outside_max, [&](const point_bub_sm& p) {
-        const auto idx = static_cast<size_t>(ch.bidx(p.x(), p.y()));
-        ch.outside_cache_dirty.set(idx);
+        level_cache_freshness::mark(ch,
+            freshness_parts( { level_cache_part::outside } ),
+            static_cast<size_t>(ch.bidx(p.x(), p.y())));
         auto* sm = get_submap_at_grid(tripoint_bub_sm(p, smz));
         if (sm) { sm->outside_dirty = true; }
     });
@@ -545,9 +552,12 @@ void map::on_vehicle_moved(
     if (inbounds_z(above_z)) {
         auto& ch_above = get_cache(above_z);
         set_seen_cache_dirty(above_z);
-        ch_above.visibility_cache_dirty = true;
+        level_cache_freshness::mark( ch_above,
+            freshness_parts( { level_cache_part::visibility } ) );
         for_clamped_submaps(sm_min.xy(), sm_max.xy(), [&](const point_bub_sm& p) {
-            ch_above.floor_cache_dirty.set(static_cast<size_t>(ch_above.bidx(p.x(), p.y())));
+            level_cache_freshness::mark(ch_above,
+                freshness_parts( { level_cache_part::floor } ),
+                static_cast<size_t>(ch_above.bidx(p.x(), p.y())));
             auto* sm = get_submap_at_grid(tripoint_bub_sm(p, above_z));
             if (sm) { sm->floor_dirty = true; }
         });

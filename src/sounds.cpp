@@ -36,6 +36,7 @@
 #include "itype.h"
 #include "line.h"
 #include "map.h"
+#include "level_cache_freshness.h"
 #include "mapbuffer.h"
 #include "map_iterator.h"
 #include "mapdata.h"
@@ -1782,7 +1783,8 @@ bool map::build_absorption_cache( const int zlev )
             }
         }
     }
-    map_cache.absorption_cache_dirty.reset();
+    level_cache_freshness::clear( map_cache,
+                                  freshness_parts( { level_cache_part::absorption } ) );
     return true;
 }
 

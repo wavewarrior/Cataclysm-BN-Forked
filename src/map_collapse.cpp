@@ -1,4 +1,5 @@
 #include "map.h"
+#include "level_cache_freshness.h"
 #include "coop_mutation_log.h"
 
 #include "physics/physics_world.h"
@@ -381,7 +382,7 @@ void map::drop_fields( const tripoint_bub_ms& p )
 
 void map::support_dirty( const tripoint_bub_ms& p )
 {
-    support_cache_dirty.insert( p );
+    level_cache_freshness::support_lost( *this, p );
 }
 
 void map::process_falling()
@@ -392,8 +393,7 @@ void map::process_falling()
     if( !support_cache_dirty.empty() ) {
         add_msg( m_debug, "Checking %d tiles for falling objects", support_cache_dirty.size() );
         // We want the cache to stay constant, but falling can change it
-        std::set<tripoint_bub_ms> last_cache = std::move( support_cache_dirty );
-        support_cache_dirty.clear();
+        std::set<tripoint_bub_ms> last_cache = level_cache_freshness::take_support_losses( *this );
         for( const tripoint_bub_ms& p : last_cache ) { drop_everything( p ); }
     }
 }

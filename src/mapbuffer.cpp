@@ -39,6 +39,7 @@
 #include "itype.h"
 #include "json.h"
 #include "map.h"
+#include "level_cache_freshness.h"
 #include "mapdata.h"
 #include "mapgen_constructor.h"
 #include "map_iterator.h"
@@ -3618,7 +3619,7 @@ auto mapbuffer::invalidate_active_terrain_set_caches( const tripoint_abs_ms &p,
 
     if( new_terrain.has_flag( TFLAG_NO_FLOOR ) != old_terrain.has_flag( TFLAG_NO_FLOOR ) ) {
         here.set_floor_cache_dirty( *local );
-        here.support_cache_dirty.insert( *local );
+        level_cache_freshness::support_lost( here, *local );
         here.set_seen_cache_dirty( local->z() );
         here.set_seen_cache_dirty( local->z() - 1 );
         here.set_absorption_cache_dirty( *local );

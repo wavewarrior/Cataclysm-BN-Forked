@@ -1,5 +1,6 @@
 #include "coop_mutation_log.h"
 #include "map.h"
+#include "level_cache_freshness.h"
 // S2: the GPU lightmap dispatch and the readiness latch both live in build_map_cache below.
 #include "lightmap_ready.h"
 #if defined(CATA_SDL)
@@ -191,11 +192,11 @@ auto horde_should_avoid_vehicle_tile(
 void map::set_transparency_cache_dirty(const int zlev) {
     if (inbounds_z(zlev)) {
         auto& cache = get_cache(zlev);
-        cache.transparency_cache_dirty.set();
-        // If we are invalidating the entire transparency cache for this zlevel, the sound
-        // absorption cache will also be invalidated.
-        cache.absorption_cache_dirty.set();
-        ++cache.transparency_generation;
+        // Coupling kept here, not in the module: wiping the whole transparency cache
+        // also wipes the sound absorption cache derived from it.
+        level_cache_freshness::mark(cache, freshness_parts(
+        { level_cache_part::transparency, level_cache_part::absorption } ) );
+        level_cache_freshness::advance_transparency_generation(cache);
         for (const auto p : flat_bubble_submaps()) {
             auto* sm = get_submap_at_grid(tripoint_bub_sm(p, zlev));
             if (sm) { sm->transparency_dirty = true; }
@@ -209,15 +210,16 @@ void map::set_seen_cache_dirty(const tripoint_bub_ms& change_location) {
         if (cache.seen_cache_dirty) { return; }
         const int ci = cache.idx(change_location.x(), change_location.y());
         if (cache.seen_cache[ci] != 0.0 || cache.camera_cache[ci] != 0.0) {
-            cache.seen_cache_dirty = true;
+            level_cache_freshness::mark(cache,
+                freshness_parts( { level_cache_part::seen } ));
         }
     }
 }
 
 void map::set_outside_cache_dirty(const int zlev) {
     if (inbounds_z(zlev)) {
-        level_cache& ch = get_cache(zlev);
-        ch.outside_cache_dirty.set();
+        level_cache_freshness::mark(get_cache(zlev),
+            freshness_parts( { level_cache_part::outside } ));
         for (const auto p : flat_bubble_submaps()) {
             auto* sm = get_submap_at_grid(tripoint_bub_sm(p, zlev));
             if (sm) { sm->outside_dirty = true; }
@@ -235,7 +237,8 @@ void map::set_outside_cache_dirty(const tripoint_bub_ms& p) {
     // Helper: mark one submap grid cell dirty in both the bitset and the submap flag.
     auto mark = [&](const tripoint_bub_sm& p) {
         if (p.x() < 0 || p.y() < 0 || p.x() >= my_MAPSIZE || p.y() >= my_MAPSIZE) { return; }
-        ch.outside_cache_dirty.set(static_cast<size_t>(ch.bidx(p.x(), p.y())));
+        level_cache_freshness::mark(ch, freshness_parts( { level_cache_part::outside } ),
+                                    static_cast<size_t>(ch.bidx(p.x(), p.y())));
         auto* sm = get_submap_at_grid(tripoint_bub_sm{p.x(), p.y(), p.z()});
         if (sm) { sm->outside_dirty = true; }
     };
@@ -263,12 +266,16 @@ void map::set_outside_cache_dirty(const tripoint_bub_ms& p) {
 }
 
 void map::set_suspension_cache_dirty(const int zlev) {
-    if (inbounds_z(zlev)) { get_cache(zlev).suspension_cache_dirty = true; }
+    if (inbounds_z(zlev)) {
+        level_cache_freshness::mark(get_cache(zlev),
+            freshness_parts( { level_cache_part::suspension_dirty } ));
+    }
 }
 
 void map::set_floor_cache_dirty(const int zlev) {
     if (inbounds_z(zlev)) {
-        get_cache(zlev).floor_cache_dirty.set();
+        level_cache_freshness::mark(get_cache(zlev),
+            freshness_parts( { level_cache_part::floor } ));
         for (const auto p : flat_bubble_submaps()) {
             auto* sm = get_submap_at_grid(tripoint_bub_sm(p, zlev));
             if (sm) { sm->floor_dirty = true; }
@@ -281,15 +288,23 @@ void map::set_floor_cache_dirty(const int zlev) {
 }
 
 void map::set_vehicle_cache_dirty(const int zlev) {
-    if (inbounds_z(zlev)) { get_cache(zlev).vehicle_caches_dirty = true; }
-    if (inbounds_z(zlev + 1)) { get_cache(zlev + 1).vehicle_floor_cache_dirty = true; }
+    // Coupling kept here: a vehicle on this level dirties the floor cache of the level above.
+    if (inbounds_z(zlev)) {
+        level_cache_freshness::mark(get_cache(zlev),
+            freshness_parts( { level_cache_part::vehicle_caches } ));
+    }
+    if (inbounds_z(zlev + 1)) {
+        level_cache_freshness::mark(get_cache(zlev + 1),
+            freshness_parts( { level_cache_part::vehicle_floor } ));
+    }
 }
 
 void map::set_floor_cache_dirty(const tripoint_bub_ms& p) {
     if (!inbounds(p)) { return; }
     level_cache& ch = get_cache(p.z());
     const auto smp = project_to<coords::sm>(p);
-    ch.floor_cache_dirty.set(static_cast<size_t>(ch.bidx(smp.x(), smp.y())));
+    level_cache_freshness::mark(ch, freshness_parts( { level_cache_part::floor } ),
+                                static_cast<size_t>(ch.bidx(smp.x(), smp.y())));
     auto* sm = get_submap_at_grid(tripoint_bub_sm{smp.x(), smp.y(), p.z()});
     if (sm) { sm->floor_dirty = true; }
     // outside_cache and sheltered_cache at z-1 depend on floor_cache at z.
@@ -303,7 +318,7 @@ void map::set_floor_cache_dirty(const tripoint_bub_ms& p) {
 void map::set_seen_cache_dirty(const int& zlevel) {
     if (inbounds_z(zlevel)) {
         level_cache& cache = get_cache(zlevel);
-        cache.seen_cache_dirty = true;
+        level_cache_freshness::mark(cache, freshness_parts( { level_cache_part::seen } ));
     }
 }
 
@@ -311,8 +326,9 @@ void map::set_transparency_cache_dirty(const tripoint_bub_ms& p) {
     if (inbounds(p)) {
         const auto smp = project_to<coords::sm>(p);
         level_cache& ch = get_cache(smp.z());
-        ch.transparency_cache_dirty.set(static_cast<size_t>(ch.bidx(smp.x(), smp.y())));
-        ++ch.transparency_generation;
+        level_cache_freshness::mark(ch, freshness_parts( { level_cache_part::transparency } ),
+                                    static_cast<size_t>(ch.bidx(smp.x(), smp.y())));
+        level_cache_freshness::advance_transparency_generation(ch);
         auto* sm = get_submap_at_grid(smp);
         if (sm) { sm->transparency_dirty = true; }
     }
@@ -329,7 +345,8 @@ void map::set_absorption_cache_dirty(const tripoint_bub_ms& p) {
     // Helper: mark one submap grid cell dirty in both the bitset and the submap flag.
     auto mark = [&](const tripoint_bub_sm& p) {
         if (p.x() < 0 || p.y() < 0 || p.x() >= my_MAPSIZE || p.y() >= my_MAPSIZE) { return; }
-        ch.absorption_cache_dirty.set(static_cast<size_t>(ch.bidx(p.x(), p.y())));
+        level_cache_freshness::mark(ch, freshness_parts( { level_cache_part::absorption } ),
+                                    static_cast<size_t>(ch.bidx(p.x(), p.y())));
         auto* sm = get_submap_at_grid(tripoint_bub_sm{p.x(), p.y(), p.z()});
         if (sm) { sm->absorption_dirty = true; }
     };
@@ -357,7 +374,10 @@ void map::set_absorption_cache_dirty(const tripoint_bub_ms& p) {
 }
 
 void map::set_absorption_cache_dirty(const int zlev) {
-    if (inbounds_z(zlev)) { get_cache(zlev).absorption_cache_dirty.set(); }
+    if (inbounds_z(zlev)) {
+        level_cache_freshness::mark(get_cache(zlev),
+            freshness_parts( { level_cache_part::absorption } ));
+    }
 }
 
 void map::update_visibility_cache(const int zlev) {
@@ -521,9 +541,7 @@ void map::update_visibility_cache(const int zlev) {
 
     // Mark all z-levels touched by this run as clean so subsequent draws within
     // the same turn can skip the rebuild entirely.
-    std::ranges::for_each(std::views::iota(min_z, max_z + 1), [this](int z) {
-        get_cache(z).visibility_cache_dirty = false;
-    });
+    level_cache_freshness::clear_visibility(*this, min_z, max_z);
 }
 
 auto map::take_visibility_cache_updates() -> unsigned
@@ -553,11 +571,8 @@ void map::build_outside_cache(const int zlev) {
         }
         // All-open is one fixed state; bump only if we were not already there.
         const std::uint64_t h_open = ~0ull;
-        if (ch.outside_checksum != h_open) {
-            ch.outside_checksum = h_open;
-            ++ch.outside_generation;
-        }
-        ch.outside_cache_dirty.reset();
+        level_cache_freshness::record_outside_content(ch, h_open);
+        level_cache_freshness::clear(ch, freshness_parts( { level_cache_part::outside } ));
         return;
     }
 
@@ -624,12 +639,9 @@ void map::build_outside_cache(const int zlev) {
         for (size_t i = 0; i < ch.outside_cache.size(); ++i) {
             h = (h ^ static_cast<std::uint64_t>(ch.outside_cache[i] ? 1u : 0u)) * 1099511628211ull;
         }
-        if (h != ch.outside_checksum) {
-            ch.outside_checksum = h;
-            ++ch.outside_generation;
-        }
+        level_cache_freshness::record_outside_content(ch, h);
     }
-    ch.outside_cache_dirty.reset();
+    level_cache_freshness::clear(ch, freshness_parts( { level_cache_part::outside } ));
 }
 
 bool map::build_floor_cache(const int zlev) {
@@ -677,8 +689,9 @@ bool map::build_floor_cache(const int zlev) {
         }
     }
 
-    ch.floor_cache_dirty.reset();
-    ch.has_any_floor = std::ranges::any_of(floor_cache, [](char c) { return c != 0; });
+    level_cache_freshness::clear(ch, freshness_parts( { level_cache_part::floor } ));
+    level_cache_freshness::assign(ch, freshness_parts( { level_cache_part::has_any_floor } ),
+                                  std::ranges::any_of(floor_cache, [](char c) { return c != 0; }));
     return true;
 }
 
@@ -703,7 +716,8 @@ void map::update_suspension_cache(const int& z) {
                 }
             }
         }
-        ch.suspension_cache_initialized = true;
+        level_cache_freshness::assign(ch,
+            freshness_parts( { level_cache_part::suspension_init } ), true);
     }
 
     for (auto iter = suspension_cache.begin(); iter != suspension_cache.end();) {
@@ -732,7 +746,7 @@ void map::update_suspension_cache(const int& z) {
             iter = suspension_cache.erase(iter);
         }
     }
-    ch.suspension_cache_dirty = false;
+    level_cache_freshness::clear(ch, freshness_parts( { level_cache_part::suspension_dirty } ));
 }
 
 static void vehicle_caching_internal(level_cache& zch, const vpart_reference& vp, vehicle* v) {
@@ -810,7 +824,8 @@ static void vehicle_caching_internal_above(
         const tripoint_bub_ms& part_pos = v->bub_part_location(vp.part());
         const int tile_idx = zch_above.idx(part_pos.x(), part_pos.y());
         zch_above.vehicle_floor_cache[tile_idx] = true;
-        zch_above.has_any_vehicle_floor = true;
+        level_cache_freshness::assign(zch_above,
+            freshness_parts( { level_cache_part::has_any_vehicle_floor } ), true);
     }
 }
 
@@ -945,7 +960,8 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
                 // All three must be cleared unconditionally — not gated on veh_in_active_range —
                 // to prevent stale entries from surviving after the vehicle is gone.
                 std::fill(ch.vehicle_floor_cache.begin(), ch.vehicle_floor_cache.end(), '\0');
-                ch.has_any_vehicle_floor = false;
+                level_cache_freshness::assign(ch,
+                    freshness_parts( { level_cache_part::has_any_vehicle_floor } ), false);
                 const diagonal_blocks fill = {false, false};
                 std::fill(ch.vehicle_obscured_cache.begin(), ch.vehicle_obscured_cache.end(), fill);
                 std::fill(ch.vehicle_obstructed_cache.begin(), ch.vehicle_obstructed_cache.end(),
@@ -982,7 +998,8 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
                 // All three must be cleared unconditionally — not gated on veh_in_active_range —
                 // to prevent stale entries from surviving after the vehicle is gone.
                 std::fill(ch.vehicle_floor_cache.begin(), ch.vehicle_floor_cache.end(), '\0');
-                ch.has_any_vehicle_floor = false;
+                level_cache_freshness::assign(ch,
+                    freshness_parts( { level_cache_part::has_any_vehicle_floor } ), false);
                 const diagonal_blocks fill = {false, false};
                 std::fill(ch.vehicle_obscured_cache.begin(), ch.vehicle_obscured_cache.end(), fill);
                 std::fill(ch.vehicle_obstructed_cache.begin(), ch.vehicle_obstructed_cache.end(),
@@ -1094,7 +1111,8 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
             })) {
             force_seen_rebuild_for_gpu_residency = true;
             invalidate_lightmap_caches();
-            get_cache(zlev).visibility_cache_dirty = true;
+            level_cache_freshness::mark( get_cache( zlev ),
+                freshness_parts( { level_cache_part::visibility } ) );
         }
     }
 #endif
@@ -1146,8 +1164,7 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
             // work, not part of this merge.
             std::ranges::fill(c.light_color_cache, light_color_rgb{});
             c.has_colored_lights = false;
-            c.lm_cpu_cache_valid = false;
-            ++c.lm_cpu_cache_generation;
+            level_cache_freshness::invalidate_cpu_lightmap(c);
         }
         pending_gpu_lighting = cata_gpu::begin_gpu_lighting(
             gpu_device,
@@ -1247,9 +1264,10 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
         // skipped.
         build_seen_cache(p, zlev);
         log_seen_field("after_cpu_build_seen_cache");
-        m_last_seen_cache_origin = p;
+        level_cache_freshness::stamp_seen_origin(*this, p);
         // seen_cache changed; mark visibility stale.
-        get_cache(zlev).visibility_cache_dirty = true;
+        level_cache_freshness::mark( get_cache( zlev ),
+            freshness_parts( { level_cache_part::visibility } ) );
     }
     _lap(_ph_seen);
 
@@ -1272,8 +1290,10 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
                 mark_lightmap_generated();
 
                 std::ranges::for_each(dirty_lightmap_levels, [this](int z) {
-                    get_cache(z).lightmap_dirty.reset();
-                    get_cache(z).visibility_cache_dirty = true;
+                    level_cache_freshness::clear(get_cache(z),
+                        freshness_parts( { level_cache_part::lightmap } ));
+                    level_cache_freshness::mark( get_cache( z ),
+                        freshness_parts( { level_cache_part::visibility } ) );
                 });
             }
 #endif
@@ -1334,9 +1354,11 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
                 // cache computed before this rebuild (e.g. from handle_action's unconditional
                 // update_visibility_cache call) is now stale and must be rebuilt in game::draw.
                 std::ranges::for_each(dirty_lightmap_levels, [this](int z) {
-                    get_cache(z).lightmap_dirty.reset();
-                    get_cache(z).lm_cpu_cache_valid = true;
-                    get_cache(z).visibility_cache_dirty = true;
+                    level_cache_freshness::clear(get_cache(z),
+                        freshness_parts( { level_cache_part::lightmap } ));
+                    level_cache_freshness::validate_cpu_lightmap(get_cache(z));
+                    level_cache_freshness::mark( get_cache( z ),
+                        freshness_parts( { level_cache_part::visibility } ) );
                 });
 
             } // end if( !dirty_lightmap_levels.empty() )

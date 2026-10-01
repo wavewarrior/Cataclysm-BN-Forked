@@ -1,4 +1,5 @@
 #include "map.h"
+#include "level_cache_freshness.h"
 #include "coop_mutation_log.h"
 
 #include "physics/physics_world.h"
@@ -502,7 +503,7 @@ bool map::ter_set( const tripoint_bub_ms& p, const ter_id& new_terrain )
     if( new_t.has_flag( TFLAG_NO_FLOOR ) != old_t.has_flag( TFLAG_NO_FLOOR ) ) {
         set_floor_cache_dirty( p );
         // It's a set, not a flag
-        support_cache_dirty.insert( p );
+        level_cache_freshness::support_lost( *this, p );
         // Opening/closing a floor affects visibility on this and the level below.
         set_seen_cache_dirty( p.z() );
         set_seen_cache_dirty( p.z() - 1 );

@@ -41,6 +41,7 @@
 #include "lightmap_ready.h"
 #include "line.h"
 #include "map.h"
+#include "level_cache_freshness.h"
 #include "mapbuffer.h"
 #include "map_iterator.h"
 #include "mapdata.h"
@@ -685,7 +686,8 @@ bool map::build_transparency_cache( const int zlev )
         }
 
         if( refs.empty() ) {
-            map_cache.transparency_cache_dirty.reset();
+            level_cache_freshness::clear( map_cache,
+                                          freshness_parts( { level_cache_part::transparency } ) );
             return true;
         }
 
@@ -773,7 +775,8 @@ bool map::build_transparency_cache( const int zlev )
             ++ref_index;
         }
 
-        map_cache.transparency_cache_dirty.reset();
+        level_cache_freshness::clear( map_cache,
+                                      freshness_parts( { level_cache_part::transparency } ) );
         return true;
     }
 #endif
@@ -846,7 +849,8 @@ bool map::build_transparency_cache( const int zlev )
         }
     }
 
-    map_cache.transparency_cache_dirty.reset();
+    level_cache_freshness::clear( map_cache,
+                                  freshness_parts( { level_cache_part::transparency } ) );
 
 #if defined( CATA_SDL ) && defined( CATA_GPU_VERIFY )
     cata_gpu::verify_transparency_against_cpu( *this, zlev,
@@ -973,7 +977,8 @@ auto map::build_transparency_caches( const int minz, const int maxz ) -> std::ve
         }
         if( refs.empty() ) {
             for( const auto &state : level_states ) {
-                get_cache( state.zlev ).transparency_cache_dirty.reset();
+                level_cache_freshness::clear( get_cache( state.zlev ),
+                                             freshness_parts( { level_cache_part::transparency } ) );
             }
             return dirty_levels;
         }
@@ -1048,7 +1053,8 @@ auto map::build_transparency_caches( const int minz, const int maxz ) -> std::ve
         }
 
         for( const auto &state : level_states ) {
-            get_cache( state.zlev ).transparency_cache_dirty.reset();
+            level_cache_freshness::clear( get_cache( state.zlev ),
+                                          freshness_parts( { level_cache_part::transparency } ) );
             if( state.rebuild_all ? state.resident_output_complete : state.resident_level_was_valid ) {
                 cata_gpu::mark_lighting_transparency_level_updated( state.zlev );
             }
@@ -1481,7 +1487,7 @@ void map::generate_lightmap( const int zlev )
     } else {
         std::ranges::fill( lm, 0.0f );
         build_sunlight_cache( zlev );
-        m_solar.last_built_light_level_int = current_light_int;
+        level_cache_freshness::stamp_solar_light_level( *this, current_light_int );
     }
 
     // Dawn/dusk tint: color sunlit tiles during twilight.
@@ -2549,7 +2555,8 @@ void map::build_seen_cache( const tripoint_bub_ms &origin, const int target_z )
             blocked_caches[idx] = { cur_cache.vehicle_obscured_cache.data(), cur_cache.cache_x, cur_cache.cache_y };
             std::fill( cur_cache.seen_cache.begin(), cur_cache.seen_cache.end(),
                        light_transparency_solid );
-            cur_cache.seen_cache_dirty = false;
+            level_cache_freshness::clear( cur_cache,
+                                          freshness_parts( { level_cache_part::seen } ) );
         }
 
         auto &origin_cache = get_cache( origin.z() );
