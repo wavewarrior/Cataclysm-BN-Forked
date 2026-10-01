@@ -162,12 +162,8 @@ static void full_map_test(
     // player's vision_threshold is based on the previous lighting level (so
     // they might, for example, have poor nightvision due to having just been
     // in daylight)
-    here.invalidate_map_cache(origin.z());
-    here.build_map_cache(origin.z());
-    here.update_visibility_cache(origin.z());
-    here.invalidate_map_cache(origin.z());
-    here.build_map_cache(origin.z());
-    here.update_visibility_cache(origin.z());
+    refresh_level_cache({origin.z()});
+    refresh_level_cache({origin.z()});
 
     const level_cache& cache = here.access_cache(origin.z());
     const level_cache& above_cache = here.access_cache(origin.z() + 1);

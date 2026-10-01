@@ -106,8 +106,7 @@ auto make_horde_vehicle_spawn_fixture(const horde_vehicle_spawn_options& options
                 here.ter_set(p, horde_spawn_blocking_terrain);
             }
         });
-    here.invalidate_map_cache(target_submap.z());
-    here.build_map_cache(target_submap.z(), true);
+    rebuild_level_cache(target_submap.z());
 
     return horde_vehicle_spawn_fixture{.vehicle_points = vehicle_points, .horde = horde};
 }
@@ -1020,10 +1019,7 @@ TEST_CASE("box2d_authority_vehicle_climbs_ramp", "[vehicle][box2d][ramp]") {
             here.ter_set(tripoint_bub_ms(x, y, -1), ter_id("t_rock"));
         }
     }
-    for (const auto z : std::array{-1, 0, 1}) {
-        here.invalidate_map_cache(z);
-        here.build_map_cache(z, true);
-    }
+    for (const auto z : std::array{-1, 0, 1}) { rebuild_level_cache(z); }
 
     // Heading west: 0 degrees is +x (east) and rotation is clockwise, so 180 is -x.
     auto* veh_ptr =

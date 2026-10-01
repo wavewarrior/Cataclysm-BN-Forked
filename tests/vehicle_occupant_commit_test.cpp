@@ -194,10 +194,7 @@ void set_ramp_up( const int transit_x )
             here.ter_set( tripoint_bub_ms( x, y, -1 ), ter_id( "t_rock" ) );
         }
     }
-    for( const auto z : std::array<int, 3> { -1, 0, 1 } ) {
-        here.invalidate_map_cache( z );
-        here.build_map_cache( z, true );
-    }
+    for (const auto z : std::array<int, 3>{-1, 0, 1}) { rebuild_level_cache(z); }
 }
 
 } // namespace

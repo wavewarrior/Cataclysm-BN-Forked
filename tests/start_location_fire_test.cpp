@@ -43,8 +43,7 @@ TEST_CASE(
             }
         }
     }
-    here.invalidate_map_cache(0);
-    here.build_map_cache(0, true);
+    rebuild_level_cache(0);
 
     // Place the avatar inside the building.
     const tripoint_bub_ms center(60, 60, 0);

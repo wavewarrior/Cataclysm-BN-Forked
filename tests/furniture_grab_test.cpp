@@ -76,10 +76,7 @@ static auto set_ramp_for_furniture(const int transit_x, const bool use_ramp, con
         }
     }
 
-    for (const auto z : std::array{-1, 0, 1}) {
-        here.invalidate_map_cache(z);
-        here.build_map_cache(z, true);
-    }
+    for (const auto z : std::array{-1, 0, 1}) { rebuild_level_cache(z); }
 }
 
 static auto setup_grabbed_furniture(

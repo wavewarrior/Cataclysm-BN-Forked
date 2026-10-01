@@ -5,6 +5,7 @@
 #include "lighting/gpu_emitter.h"
 #include "lighting/snapshot.h"
 #include "map.h"
+#include "map_helpers.h"
 #include "state_helpers.h"
 #include "type_id.h"
 
@@ -47,8 +48,7 @@ auto build_house() -> void {
 auto rebuild_caches() -> void {
     auto& here = get_map();
     here.invalidate_map_cache(1);
-    here.invalidate_map_cache(0);
-    here.build_map_cache(0, true);
+    rebuild_level_cache(0);
 }
 
 auto sun_travelling(float dir_x, float dir_y) -> lighting::sun_params {

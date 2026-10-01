@@ -31,11 +31,7 @@
 
 static constexpr tripoint_bub_ms shooter_pos(60, 60, 0);
 
-static auto update_player_visibility_cache() -> void {
-    g->m.invalidate_map_cache(shooter_pos.z());
-    g->m.build_map_cache(shooter_pos.z());
-    g->m.update_visibility_cache(shooter_pos.z());
-}
+static auto update_player_visibility_cache() -> void { refresh_level_cache({shooter_pos.z()}); }
 
 static void set_up_player_vision() {
     g->place_player(shooter_pos);

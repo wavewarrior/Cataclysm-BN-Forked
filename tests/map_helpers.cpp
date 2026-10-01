@@ -48,8 +48,7 @@ void wipe_map_terrain() {
         }
     }
     clear_vehicles();
-    g->m.invalidate_map_cache(0);
-    g->m.build_map_cache(0, true);
+    rebuild_level_cache(0);
 }
 
 void clear_creatures() {
@@ -189,9 +188,7 @@ void build_test_map(const ter_id& terrain) {
         g->m.trap_set(p, trap_id("tr_null"));
         g->m.i_clear(p);
     }
-
-    g->m.invalidate_map_cache(0);
-    g->m.build_map_cache(0, true);
+    rebuild_level_cache(0);
 }
 
 void build_water_test_map(const ter_id& surface, const ter_id& mid, const ter_id& bottom) {
@@ -211,17 +208,26 @@ void build_water_test_map(const ter_id& surface, const ter_id& mid, const ter_id
         }
     }
 
-    for (const int z : {z_bottom, -1, z_surface}) {
-        here.invalidate_map_cache(z);
-        here.build_map_cache(z, true);
-    }
+    for (const int z : {z_bottom, -1, z_surface}) { rebuild_level_cache(z); }
 }
 
 void set_time(const time_point& time) {
     calendar::turn = time;
     g->reset_light_level();
-    const auto z = g->u.bub_pos().z();
-    g->m.invalidate_map_cache(z);
-    g->m.build_map_cache(z);
-    g->m.update_visibility_cache(z);
+    refresh_level_cache();
+}
+
+void refresh_level_cache(std::initializer_list<int> invalidate_zlevels, bool skip_lightmap) {
+    if (invalidate_zlevels.size() == 0) {
+        g->m.invalidate_map_cache(g->u.bub_pos().z());
+    } else {
+        for (const int z : invalidate_zlevels) { g->m.invalidate_map_cache(z); }
+    }
+    // The same public entry point game::do_turn and the targeting loops call.
+    g->refresh_player_visibility_cache_if_needed(/*player_map_cache_current=*/false, skip_lightmap);
+}
+
+void rebuild_level_cache(int zlev, bool skip_lightmap) {
+    g->m.invalidate_map_cache(zlev);
+    g->m.build_map_cache(zlev, skip_lightmap);
 }

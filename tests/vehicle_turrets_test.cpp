@@ -54,11 +54,9 @@ static auto biggest_tank(const itype_id& ammo) -> const vpart_info* {
     return *std::ranges::max_element(res, {}, &vpart_info::size);
 }
 
-static auto update_player_visibility_cache(map& here, const tripoint_bub_ms& player_pos)
+static auto update_player_visibility_cache(map& /*here*/, const tripoint_bub_ms& player_pos)
     -> void {
-    here.invalidate_map_cache(player_pos.z());
-    here.build_map_cache(player_pos.z());
-    here.update_visibility_cache(player_pos.z());
+    refresh_level_cache({player_pos.z()});
 }
 
 TEST_CASE("vehicle_turret", "[vehicle][gun][magazine][.]") {

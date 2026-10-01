@@ -41,8 +41,7 @@ static auto prepare_fixed_window_wait(const time_duration& duration) -> void {
     weather.clear_temp_cache();
 
     g->reset_light_level();
-    g->m.invalidate_map_cache(g->get_levz());
-    g->m.build_map_cache(g->get_levz(), true);
+    rebuild_level_cache(g->get_levz());
 
     g->u.assign_activity(std::make_unique<player_activity>(
         std::make_unique<wait_activity_actor>(wait_type::WAIT, "", duration)));

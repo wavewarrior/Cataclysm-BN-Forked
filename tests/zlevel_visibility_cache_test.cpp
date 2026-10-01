@@ -99,10 +99,7 @@ TEST_CASE("solid_floor_blocks_directly_below_visibility", "[vision][zlevel]") {
     here.ter_set(player_pos, t_floor);
     here.ter_set(below_pos, t_floor);
 
-    here.invalidate_map_cache(player_pos.z());
-    here.invalidate_map_cache(below_pos.z());
-    here.build_map_cache(player_pos.z());
-    here.update_visibility_cache(player_pos.z());
+    refresh_level_cache({player_pos.z(), below_pos.z()});
 
     const level_cache& below_cache = here.access_cache(below_pos.z());
     CHECK(below_cache.seen_cache[below_cache.idx(below_pos.x(), below_pos.y())] == 0.0f);
@@ -128,10 +125,7 @@ TEST_CASE("opening_floor_rebuilds_below_visibility", "[vision][zlevel]") {
     here.ter_set(hole_pos, t_open_air);
     here.ter_set(hole_pos + tripoint_below, t_floor);
 
-    here.invalidate_map_cache(hole_pos.z());
-    here.invalidate_map_cache(hole_pos.z() - 1);
-    here.build_map_cache(g->u.bub_pos().z());
-    here.update_visibility_cache(g->u.bub_pos().z());
+    refresh_level_cache({hole_pos.z(), hole_pos.z() - 1});
 
     const level_cache& below_cache = here.access_cache(hole_pos.z() - 1);
 

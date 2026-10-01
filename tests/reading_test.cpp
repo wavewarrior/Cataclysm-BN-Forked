@@ -451,9 +451,7 @@ TEST_CASE("active night vision tiers allow fine detail vision in darkness", "[re
     here.ter_set(pos, ter_id("t_floor"));
     here.furn_set(pos, furn_id("f_null"));
     here.ter_set(pos + tripoint_above, ter_id("t_flat_roof"));
-    here.invalidate_map_cache(pos.z());
-    here.build_map_cache(pos.z());
-    here.update_visibility_cache(pos.z());
+    refresh_level_cache({pos.z()});
 
     REQUIRE_FALSE(character_funcs::can_see_fine_details(dummy));
 
