@@ -49,6 +49,7 @@
 #include "item_group.h"
 #include "itype.h"
 #include "json.h"
+#include "level_cache_freshness.h"
 #include "make_static.h"
 #include "map.h"
 #include "map_iterator.h"
@@ -557,7 +558,7 @@ int vehicle::install_part( const tripoint_mnt_veh &dp, vehicle_part &&new_part )
 
     refresh();
     map &here = get_map();
-    here.invalidate_lightmap_caches();
+    level_cache_freshness::report( here, level_cache_freshness::light_changed {} );
     // Keep the Box2D collider, per-tile cache and mapbuffer footprint index in
     // step with the footprint once this vehicle is actually registered
     // (map::add_vehicle()/register_vehicle() has run). Gate on has_loaded_vehicle,
@@ -892,7 +893,7 @@ bool vehicle::remove_part( const int p, RemovePartHandler &handler )
         }
     }
     refresh();
-    get_map().invalidate_lightmap_caches();
+    level_cache_freshness::report( get_map(), level_cache_freshness::light_changed {} );
     coeff_air_changed = true;
     return shift_if_needed();
 }
@@ -919,7 +920,7 @@ void vehicle::part_removal_cleanup()
     removed_part_count = 0;
     if( changed || parts.empty() ) {
         refresh();
-        here.invalidate_lightmap_caches();
+        level_cache_freshness::report( here, level_cache_freshness::light_changed {} );
         if( parts.empty() ) {
             here.destroy_vehicle( this );
             return;

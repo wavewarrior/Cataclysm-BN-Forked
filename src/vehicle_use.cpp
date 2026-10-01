@@ -22,6 +22,7 @@
 #include "itype.h"
 #include "iuse.h"
 #include "json.h"
+#include "level_cache_freshness.h"
 #include "make_static.h"
 #include "map.h"
 #include "map_iterator.h"
@@ -146,7 +147,7 @@ for( const auto p : found )
             }
         }
         refresh();
-        get_map().invalidate_lightmap_caches();
+        level_cache_freshness::report( get_map(), level_cache_freshness::light_changed {} );
     } );
 }
 
