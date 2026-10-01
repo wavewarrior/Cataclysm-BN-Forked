@@ -773,6 +773,7 @@ struct veh_veh_coll_opts {
 
 class map : public submap_load_listener
 {
+        friend class level_cache_freshness;
         friend class editmap;
         friend class mapbuffer;
         friend class visitable<map_cursor>;

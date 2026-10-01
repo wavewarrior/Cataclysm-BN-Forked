@@ -1,4 +1,5 @@
 #include "map.h"
+#include "level_cache_freshness.h"
 #include "coop_mutation_log.h"
 
 #include "physics/physics_world.h"
@@ -1590,18 +1591,6 @@ void shift_bitset_cache( cata_dynamic_bitset &cache, int size, int multiplier,
     }
 }
 
-static inline void shift_tripoint_set(
-    std::set<tripoint_bub_ms> &set, const point_rel_ms& offset,
-    const half_open_rectangle<point_bub_ms> &boundaries )
-{
-    std::set<tripoint_bub_ms> old_set = std::move( set );
-    set.clear();
-    for( const tripoint_bub_ms& pt : old_set ) {
-        tripoint_bub_ms new_pt = pt + offset;
-        if( boundaries.contains( new_pt.xy() ) ) { set.insert( new_pt ); }
-    }
-}
-
 template <typename T>
 static inline void shift_tripoint_map(
     std::map<tripoint_bub_ms, T> &map, const point_rel_ms& offset,
@@ -1688,7 +1677,7 @@ void map::shift( const point_rel_sm& sp )
 
     const int zmin = -OVERMAP_DEPTH;
     const int zmax = OVERMAP_HEIGHT;
-    m_last_seen_cache_origin = tripoint_bub_ms( tripoint_min );
+    level_cache_freshness::forget_seen_origin( *this );
 #if defined( CATA_SDL )
     if( cata_compute::uses_sdl_gpu_compute() ) {
         auto *const gpu_device = cata_gpu::get_device();
@@ -1776,21 +1765,6 @@ void map::shift( const point_rel_sm& sp )
     auto short_shift_scratch = std::vector<short> {};
     auto bool_shift_scratch = std::vector<bool> {};
 
-    auto const shift_submap_dirty_bits = [&]( cata_dynamic_bitset & dirty_bits, level_cache & gc ) {
-        const auto old_dirty = dirty_bits;
-        dirty_bits.reset();
-        for( const auto smx : std::views::iota( 0, my_MAPSIZE ) ) {
-            const auto source_smx = smx + sp.x();
-            for( const auto smy : std::views::iota( 0, my_MAPSIZE ) ) {
-                const auto source_smy = smy + sp.y();
-                if( source_smx >= 0 && source_smx < my_MAPSIZE && source_smy >= 0 &&
-                    source_smy < my_MAPSIZE &&
-                    old_dirty.test( static_cast<size_t>( gc.bidx( source_smx, source_smy ) ) ) ) {
-                    dirty_bits.set( static_cast<size_t>( gc.bidx( smx, smy ) ) );
-                }
-            }
-        }
-    };
     auto const mark_shifted_submap_bands = [&]( const int gridz, const int band_count, auto mark ) {
         auto const mark_column = [&]( const int smx ) {
             if( smx < 0 || smx >= my_MAPSIZE ) {
@@ -1836,15 +1810,21 @@ void map::shift( const point_rel_sm& sp )
         };
 
         auto const mark_floor = [&]( const tripoint_bub_sm & smp ) {
-            gc.floor_cache_dirty.set( static_cast<size_t>( gc.bidx( smp.x(), smp.y() ) ) );
+            level_cache_freshness::mark( gc,
+                freshness_parts( { level_cache_part::floor } ),
+                static_cast<size_t>( gc.bidx( smp.x(), smp.y() ) ) );
             mark_submap_dirty( smp, { .floor = true } );
         };
         auto const mark_outside = [&]( const tripoint_bub_sm & smp ) {
-            gc.outside_cache_dirty.set( static_cast<size_t>( gc.bidx( smp.x(), smp.y() ) ) );
+            level_cache_freshness::mark( gc,
+                freshness_parts( { level_cache_part::outside } ),
+                static_cast<size_t>( gc.bidx( smp.x(), smp.y() ) ) );
             mark_submap_dirty( smp, { .outside = true } );
         };
         auto const mark_transparency = [&]( const tripoint_bub_sm & smp ) {
-            gc.transparency_cache_dirty.set( static_cast<size_t>( gc.bidx( smp.x(), smp.y() ) ) );
+            level_cache_freshness::mark( gc,
+                freshness_parts( { level_cache_part::transparency } ),
+                static_cast<size_t>( gc.bidx( smp.x(), smp.y() ) ) );
             mark_submap_dirty( smp, { .transparency = true } );
         };
 
@@ -1857,7 +1837,9 @@ void map::shift( const point_rel_sm& sp )
             if( smp.x() < 0 || smp.x() >= my_MAPSIZE || smp.y() < 0 || smp.y() >= my_MAPSIZE ) {
                 return;
             }
-            gc.absorption_cache_dirty.set( static_cast<size_t>( gc.bidx( smp.x(), smp.y() ) ) );
+            level_cache_freshness::mark( gc,
+                freshness_parts( { level_cache_part::absorption } ),
+                static_cast<size_t>( gc.bidx( smp.x(), smp.y() ) ) );
             const auto abs_sm = map_local_to_abs( *this, smp );
             get_mapbuffer().mark_submap_caches_dirty( {
                 .begin = abs_sm.xy(),
@@ -1895,8 +1877,7 @@ void map::shift( const point_rel_sm& sp )
                 ZoneScopedN( "shift_memory_seen_cache" );
                 auto &gc = get_cache( gridz );
                 shift_bitset_cache( gc.map_memory_seen_cache, gc.cache_x, SEEX, sp );
-                gc.map_memory_seen_cache_dirty_points.clear();
-                gc.map_memory_seen_cache_dirty_all = true;
+                level_cache_freshness::queue_memory_seen_all( gc );
             }
             {
                 ZoneScopedN( "shift_prerequisite_caches" );
@@ -1906,9 +1887,12 @@ void map::shift( const point_rel_sm& sp )
                 shift_flat_cache( gc.floor_cache, char_shift_scratch, gc, '\x01' );
                 shift_flat_cache( gc.outside_cache, char_shift_scratch, gc, '\0' );
                 shift_flat_cache( gc.sheltered_cache, char_shift_scratch, gc, '\x01' );
-                shift_submap_dirty_bits( gc.transparency_cache_dirty, gc );
-                shift_submap_dirty_bits( gc.floor_cache_dirty, gc );
-                shift_submap_dirty_bits( gc.outside_cache_dirty, gc );
+                const auto prerequisite_parts = freshness_parts( {
+                    level_cache_part::transparency,
+                    level_cache_part::floor,
+                    level_cache_part::outside,
+                } );
+                level_cache_freshness::translate( gc, prerequisite_parts, sp, my_MAPSIZE );
             }
             {
                 // Translate the lightmap so a non-player z that is rendered
@@ -1928,9 +1912,12 @@ void map::shift( const point_rel_sm& sp )
                 // force-dirty the newly-shifted-in edge submaps so generate_lightmap
                 // recomputes them instead of displaying stale translated data (prevents
                 // the 1-frame flash).
-                shift_submap_dirty_bits( gc.lightmap_dirty, gc );
+                level_cache_freshness::translate( gc,
+                    freshness_parts( { level_cache_part::lightmap } ), sp, my_MAPSIZE );
                 mark_shifted_submap_bands( gridz, 1, [&gc]( const tripoint_bub_sm & smp ) {
-                    gc.lightmap_dirty.set( static_cast<size_t>( gc.bidx( smp.x(), smp.y() ) ) );
+                    level_cache_freshness::mark( gc,
+                        freshness_parts( { level_cache_part::lightmap } ),
+                        static_cast<size_t>( gc.bidx( smp.x(), smp.y() ) ) );
                 } );
             }
             {
@@ -1939,7 +1926,8 @@ void map::shift( const point_rel_sm& sp )
                 shift_flat_cache( gc.absorption_cache, short_shift_scratch, gc,
                                   static_cast<short>( SOUND_ABSORPTION_OPEN_FIELD ) );
                 shift_flat_cache( gc.sound_wall_cache, bool_shift_scratch, gc, false );
-                shift_submap_dirty_bits( gc.absorption_cache_dirty, gc );
+                level_cache_freshness::translate( gc,
+                    freshness_parts( { level_cache_part::absorption } ), sp, my_MAPSIZE );
             }
             // Iterate in shift-direction order so copy_grid never reads an
             // already-overwritten source slot.  sp >= 0 → forward; sp < 0 → reverse.
@@ -2027,9 +2015,7 @@ void map::shift( const point_rel_sm& sp )
 
     g->setremoteveh( remoteveh );
 
-    if( !support_cache_dirty.empty() ) {
-        shift_tripoint_set( support_cache_dirty, shift_offset_pt, boundaries_2d );
-    }
+    level_cache_freshness::translate_support_losses( *this, shift_offset_pt, boundaries_2d );
     sounds::shift_sound_positions( shift_offset_pt );
 
     // Lightmap was translated via shift_flat_cache above, and the per-submap
@@ -2149,10 +2135,12 @@ void map::loadn( const tripoint_bub_sm& grid, const bool update_vehicles, const 
         if( incremental ) {
             level_cache& ch = get_cache( grid.z() );
             const size_t bidx = static_cast<size_t>( ch.bidx( grid.x(), grid.y() ) );
-            ch.transparency_cache_dirty.set( bidx );
-            ch.floor_cache_dirty.set( bidx );
-            ch.outside_cache_dirty.set( bidx );
-            ch.lightmap_dirty.set( bidx );
+            level_cache_freshness::mark( ch, freshness_parts( {
+                level_cache_part::transparency,
+                level_cache_part::floor,
+                level_cache_part::outside,
+                level_cache_part::lightmap,
+            } ), bidx );
             tmpsub->transparency_dirty = true;
             tmpsub->floor_dirty = true;
             tmpsub->outside_dirty = true;
@@ -2166,7 +2154,8 @@ void map::loadn( const tripoint_bub_sm& grid, const bool update_vehicles, const 
             set_seen_cache_dirty( grid.z() );
             set_pathfinding_cache_dirty( grid.z() );
             set_suspension_cache_dirty( grid.z() );
-            get_cache( grid.z() ).lightmap_dirty.set();
+            level_cache_freshness::mark( get_cache( grid.z() ),
+                                         freshness_parts( { level_cache_part::lightmap } ) );
             set_vehicle_cache_dirty( grid.z() );
         }
     }
@@ -2753,7 +2742,8 @@ static void vehicle_caching_internal_above(
         const tripoint_bub_ms& part_pos = v->bub_part_location( vp.part() );
         const int tile_idx = zch_above.idx( part_pos.x(), part_pos.y() );
         zch_above.vehicle_floor_cache[tile_idx] = true;
-        zch_above.has_any_vehicle_floor = true;
+        level_cache_freshness::assign( zch_above,
+            freshness_parts( { level_cache_part::has_any_vehicle_floor } ), true );
     }
 }
 
@@ -2761,7 +2751,8 @@ void map::do_vehicle_caching( int z )
 {
     level_cache& ch = get_cache( z );
     if( ch.vehicle_list.empty() && inbounds_z( z + 1 ) ) {
-        get_cache( z + 1 ).vehicle_floor_cache_dirty = false;
+        level_cache_freshness::clear( get_cache( z + 1 ),
+            freshness_parts( { level_cache_part::vehicle_floor } ) );
     }
     for( const vehicle_handle handle : ch.vehicle_list ) {
         vehicle *const v = resolve_vehicle( handle );
@@ -2773,11 +2764,12 @@ void map::do_vehicle_caching( int z )
             if( part_pos.z() < OVERMAP_HEIGHT ) {
                 level_cache &ch_above = get_cache( part_pos.z() + 1 );
                 vehicle_caching_internal_above( ch_above, vp, v );
-                ch_above.vehicle_floor_cache_dirty = false;
+                level_cache_freshness::clear( ch_above,
+                    freshness_parts( { level_cache_part::vehicle_floor } ) );
             }
         }
     }
-    ch.vehicle_caches_dirty = false;
+    level_cache_freshness::clear( ch, freshness_parts( { level_cache_part::vehicle_caches } ) );
 }
 
 
@@ -3368,12 +3360,7 @@ level_cache::level_cache( int mx, int my )
       sound_wall_cache( static_cast<size_t>( mx * my ), false )
 
 {
-    transparency_cache_dirty.set();
-    absorption_cache_dirty.set();
-    sound_wall_cache_dirty.set();
-    outside_cache_dirty.set();
-    floor_cache_dirty.set();
-    lightmap_dirty.set();
+    level_cache_freshness::initialise( *this );
 }
 
 // Default constructor: zero-sized null sentinel — not for normal use.
@@ -3486,51 +3473,43 @@ void map::invalidate_map_cache( const int zlev )
 #endif
     if( inbounds_z( zlev ) ) {
         level_cache& ch = get_cache( zlev );
-        ch.floor_cache_dirty.set();
-        ch.transparency_cache_dirty.set();
-        ch.absorption_cache_dirty.set();
-        ch.sound_wall_cache_dirty.set();
-        ch.seen_cache_dirty = true;
-        ch.lightmap_dirty.set();
-        ch.lm_cpu_cache_valid = false;
+        level_cache_freshness::mark( ch, freshness_parts( {
+            level_cache_part::floor,
+            level_cache_part::transparency,
+            level_cache_part::absorption,
+            level_cache_part::sound_wall,
+            level_cache_part::seen,
+            level_cache_part::lightmap,
+            level_cache_part::outside,
+            level_cache_part::suspension_dirty,
+        } ) );
+        level_cache_freshness::invalidate_cpu_lightmap( ch );
         set_vehicle_cache_dirty( zlev );
-        ++ch.lm_cpu_cache_generation;
-        mark_visibility_cache_dirty( zlev );
-        ch.outside_cache_dirty.set();
-        ch.suspension_cache_dirty = true;
-        m_last_seen_cache_origin = tripoint_bub_ms( tripoint_min );
-        m_solar.last_built_hour = -1;
-        m_solar.last_built_light_level_int = -1;
+        level_cache_freshness::mark_visibility( *this, zlev );
+        level_cache_freshness::forget_seen_origin( *this );
+        level_cache_freshness::forget_solar_stamps( *this );
     }
 }
 
 void map::invalidate_lightmap_caches()
 {
-    std::ranges::for_each( std::views::iota( -OVERMAP_DEPTH, OVERMAP_HEIGHT + 1 ), [this]( int z ) {
+    const auto parts = freshness_parts( { level_cache_part::lightmap } );
+    std::ranges::for_each( std::views::iota( -OVERMAP_DEPTH, OVERMAP_HEIGHT + 1 ), [&]( int z ) {
         auto &cache = get_cache( z );
-        cache.lightmap_dirty.set();
-        cache.lm_cpu_cache_valid = false;
-        ++cache.lm_cpu_cache_generation;
-        mark_visibility_cache_dirty( z );
+        level_cache_freshness::mark( cache, parts );
+        level_cache_freshness::invalidate_cpu_lightmap( cache );
+        level_cache_freshness::mark_visibility( *this, z );
     } );
 }
 
 auto map::mark_visibility_cache_dirty( const int zlev ) -> void
 {
-    if( !inbounds_z( zlev ) ) {
-        return;
-    }
-    get_cache( zlev ).visibility_cache_dirty = true;
-    visibility_caches_dirty_ = true;
+    level_cache_freshness::mark_visibility( *this, zlev );
 }
 
 auto map::mark_visibility_caches_clean() -> void
 {
-    std::ranges::for_each( std::views::iota( -OVERMAP_DEPTH,
-    OVERMAP_HEIGHT + 1 ), [this]( const int z ) {
-        get_cache( z ).visibility_cache_dirty = false;
-    } );
-    visibility_caches_dirty_ = false;
+    level_cache_freshness::clear_visibility( *this );
 }
 
 auto map::visibility_caches_dirty() const -> bool
@@ -3708,14 +3687,11 @@ auto map::current_lightmap_source_signature() -> std::size_t
 void map::invalidate_lightmap_caches_if_light_state_changed()
 {
     const auto signature = current_lightmap_source_signature();
-    if( m_last_lightmap_source_signature_valid &&
-        signature == m_last_lightmap_source_signature ) {
-        TracyPlot( "Light Source Signature Changed", int64_t{ 0 } );
+    const bool changed = level_cache_freshness::note_lightmap_source_signature( *this, signature );
+    TracyPlot( "Light Source Signature Changed", int64_t{ changed ? 1 : 0 } );
+    if( !changed ) {
         return;
     }
-    TracyPlot( "Light Source Signature Changed", int64_t{ 1 } );
-    m_last_lightmap_source_signature = signature;
-    m_last_lightmap_source_signature_valid = true;
     invalidate_lightmap_caches();
 }
 
@@ -3723,7 +3699,7 @@ void map::invalidate_visibility_caches()
 {
     std::ranges::for_each( std::views::iota( -OVERMAP_DEPTH,
     OVERMAP_HEIGHT + 1 ), [this]( const int z ) {
-        mark_visibility_cache_dirty( z );
+        level_cache_freshness::mark_visibility( *this, z );
     } );
 }
 
@@ -3735,9 +3711,7 @@ void map::set_memory_seen_cache_dirty( const tripoint_bub_ms& p )
         const auto bit = static_cast<size_t>( offset );
         if( ch.map_memory_seen_cache[bit] ) {
             ch.map_memory_seen_cache.reset( bit );
-            if( !ch.map_memory_seen_cache_dirty_all ) {
-                ch.map_memory_seen_cache_dirty_points.push_back( p );
-            }
+            level_cache_freshness::queue_memory_seen( ch, p );
         }
     }
 }
@@ -3749,15 +3723,14 @@ void map::mark_lightmap_dirty( const tripoint_bub_ms& p )
     const int smx = p.x() / SEEX;
     const int smy = p.y() / SEEY;
     const size_t bidx = static_cast<size_t>( ch.bidx( smx, smy ) );
-    ch.lightmap_dirty.set( bidx );
+    level_cache_freshness::mark( ch, freshness_parts( { level_cache_part::lightmap } ), bidx );
 }
 
 auto map::set_memory_seen_cache_dirty( const int zlev ) -> void
 {
     level_cache &ch = get_cache( zlev );
     ch.map_memory_seen_cache.reset();
-    ch.map_memory_seen_cache_dirty_points.clear();
-    ch.map_memory_seen_cache_dirty_all = true;
+    level_cache_freshness::queue_memory_seen_all( ch );
 }
 
 auto map::is_memory_seen_cache_dirty_all( const int zlev ) const -> bool
@@ -3767,17 +3740,12 @@ auto map::is_memory_seen_cache_dirty_all( const int zlev ) const -> bool
 
 auto map::take_memory_seen_cache_dirty_points( const int zlev ) -> std::vector<tripoint_bub_ms>
 {
-    level_cache &ch = get_cache( zlev );
-    auto dirty_points = std::move( ch.map_memory_seen_cache_dirty_points );
-    ch.map_memory_seen_cache_dirty_points.clear();
-    return dirty_points;
+    return level_cache_freshness::take_memory_seen_points( get_cache( zlev ) );
 }
 
 auto map::mark_memory_seen_cache_dirty_all_clean( const int zlev ) -> void
 {
-    level_cache &ch = get_cache( zlev );
-    ch.map_memory_seen_cache_dirty_all = false;
-    ch.map_memory_seen_cache_dirty_points.clear();
+    level_cache_freshness::acknowledge_memory_seen( get_cache( zlev ) );
 }
 
 void map::clip_to_bounds( point_bub_ms &p ) const
