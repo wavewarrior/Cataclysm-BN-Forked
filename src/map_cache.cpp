@@ -1110,9 +1110,11 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
                 .z_count = OVERMAP_LAYERS,
             })) {
             force_seen_rebuild_for_gpu_residency = true;
-            invalidate_lightmap_caches();
-            level_cache_freshness::mark( get_cache( zlev ),
-                freshness_parts( { level_cache_part::visibility } ) );
+            // `light_changed` with the default scope is this sequence: every level's
+            // lightmap plus every level's visibility bit and the aggregate.  The
+            // separate visibility mark for `zlev` was already implied by that, since
+            // the lightmap invalidate raises visibility for every loaded level.
+            level_cache_freshness::report( *this, level_cache_freshness::light_changed {} );
         }
     }
 #endif

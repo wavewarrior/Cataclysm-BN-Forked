@@ -41,6 +41,7 @@
 #include "game.h"
 #include "generic_factory.h"
 #include "json.h"
+#include "level_cache_freshness.h"
 #include "line.h"
 #include "map.h"
 #include "map_iterator.h"
@@ -6363,12 +6364,17 @@ void overmap::spawn_ores( const tripoint_abs_omt &p )
         mapgen_constructor generated_map( generated_buffer );
         generated_map.generate( p, calendar::turn );
 
-        here.set_transparency_cache_dirty( p.z() );
-        here.set_outside_cache_dirty( p.z() );
-        here.set_floor_cache_dirty( p.z() );
-        here.set_absorption_cache_dirty( p.z() );
+        // The tile's terrain was replaced underneath the caches.  Sight caches and the
+        // floor/absorption family go stale; the lightmap, seen cache and vehicle caches
+        // are untouched by a regeneration that swaps in the same kind of ground.
+        level_cache_freshness::report( here, level_cache_freshness::world_replaced {
+            .first = tripoint_bub_sm( 0, 0, p.z() ),
+            .last = tripoint_bub_sm( here.getmapsize() - 1, here.getmapsize() - 1, p.z() ),
+            .seen = false,
+            .lightmap = false,
+            .vehicle = false,
+        } );
         here.set_pathfinding_cache_dirty( p.z() );
-        here.set_suspension_cache_dirty( p.z() );
 
         here.clear_vehicle_cache();
         here.clear_vehicle_list( p.z() );
