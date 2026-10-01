@@ -22,6 +22,7 @@
 #include "itype.h"
 #include "line.h"
 #include "make_static.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "map_iterator.h"
 #include "mapbuffer.h"
@@ -977,8 +978,12 @@ auto mark_field_cache_dirty( field_cache_dirty_context const &ctx,
         return;
     }
     const auto bub_pos = abs_to_bub( project_to<coords::ms>( abs_sm ) );
-    ctx.here.set_transparency_cache_dirty( bub_pos );
-    ctx.here.set_seen_cache_dirty( bub_pos );
+    level_cache_freshness::report( ctx.here, level_cache_freshness::terrain_changed {
+        .at = bub_pos,
+        .transparency = true,
+        .support_above = false,
+        .memory_seen = false,
+    } );
 }
 
 // Resolve `local + delta` crossing submap boundaries via mapbuffer.
@@ -1138,8 +1143,13 @@ std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
                 }
                 curfield.remove_field( it++ );
                 if( in_bubble && dirty_transparency_cache ) {
-                    map.set_transparency_cache_dirty( abs_to_bub( project_to<coords::ms>( pos ) ) );
-                    map.set_seen_cache_dirty( abs_to_bub( project_to<coords::ms>( pos ) ) );
+                    const auto bub_pos = abs_to_bub( project_to<coords::ms>( pos ) );
+                    level_cache_freshness::report( map, level_cache_freshness::terrain_changed {
+                        .at = bub_pos,
+                        .transparency = true,
+                        .support_above = false,
+                        .memory_seen = false,
+                    } );
                 }
                 continue;
             }
@@ -1740,8 +1750,13 @@ std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
             }
 
             if( in_bubble && dirty_transparency_cache ) {
-                map.set_transparency_cache_dirty( abs_to_bub( project_to<coords::ms>( pos ) ) );
-                map.set_seen_cache_dirty( abs_to_bub( project_to<coords::ms>( pos ) ) );
+                const auto bub_pos = abs_to_bub( project_to<coords::ms>( pos ) );
+                level_cache_freshness::report( map, level_cache_freshness::terrain_changed {
+                    .at = bub_pos,
+                    .transparency = true,
+                    .support_above = false,
+                    .memory_seen = false,
+                } );
             }
 
         } // end field-entry loop

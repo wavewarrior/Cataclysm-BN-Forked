@@ -3758,8 +3758,12 @@ auto mapbuffer::invalidate_active_field_add_caches( const tripoint_abs_ms &p,
     here.invalidate_max_populated_zlev( local->z() );
 
     if( field_type.dirty_transparency_cache || !field_type.is_transparent() ) {
-        here.set_transparency_cache_dirty( *local );
-        here.set_seen_cache_dirty( *local );
+        level_cache_freshness::report( here, level_cache_freshness::terrain_changed {
+            .at = *local,
+            .transparency = true,
+            .support_above = false,
+            .memory_seen = false,
+        } );
     }
 
     if( field_type.is_dangerous() ) {
@@ -3782,8 +3786,12 @@ auto mapbuffer::invalidate_active_field_remove_caches( const tripoint_abs_ms &p,
     auto &here = g->m;
     const auto &field_type = type.obj();
     if( field_type.dirty_transparency_cache || !field_type.is_transparent() ) {
-        here.set_transparency_cache_dirty( *local );
-        here.set_seen_cache_dirty( *local );
+        level_cache_freshness::report( here, level_cache_freshness::terrain_changed {
+            .at = *local,
+            .transparency = true,
+            .support_above = false,
+            .memory_seen = false,
+        } );
     }
 
     if( field_type.is_dangerous() ) {

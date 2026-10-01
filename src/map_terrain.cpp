@@ -1,3 +1,4 @@
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "coop_mutation_log.h"
 
@@ -952,8 +953,12 @@ bool map::add_field(
 
     // Dirty the transparency cache now that field processing doesn't always do it
     if( fd_type.dirty_transparency_cache || !fd_type.is_transparent() ) {
-        set_transparency_cache_dirty( p );
-        set_seen_cache_dirty( p );
+        level_cache_freshness::report( *this, level_cache_freshness::terrain_changed {
+            .at = p,
+            .transparency = true,
+            .support_above = false,
+            .memory_seen = false,
+        } );
     }
 
     if( fd_type.is_dangerous() ) { set_pathfinding_cache_dirty( p ); }
@@ -975,8 +980,12 @@ void map::remove_field( const tripoint_bub_ms& p, const field_type_id& field_to_
         --current_submap->field_count;
         const auto& fdata = field_to_remove.obj();
         if( fdata.dirty_transparency_cache || !fdata.is_transparent() ) {
-            set_transparency_cache_dirty( p );
-            set_seen_cache_dirty( p );
+            level_cache_freshness::report( *this, level_cache_freshness::terrain_changed {
+                .at = p,
+                .transparency = true,
+                .support_above = false,
+                .memory_seen = false,
+            } );
         }
         if( fdata.is_dangerous() ) { set_pathfinding_cache_dirty( p ); }
     }
