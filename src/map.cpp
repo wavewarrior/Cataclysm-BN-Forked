@@ -3342,15 +3342,6 @@ bool map::is_map_cache_valid( const int zlev )
 }
 
 
-auto map::mark_visibility_caches_clean() -> void
-{
-    level_cache_freshness::clear_visibility( *this );
-}
-
-auto map::visibility_caches_dirty() const -> bool
-{
-    return visibility_caches_dirty_;
-}
 
 auto map::current_lightmap_source_signature() -> std::size_t
 {

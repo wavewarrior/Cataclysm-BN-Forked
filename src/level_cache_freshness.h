@@ -87,15 +87,15 @@ inline enum_bitset<level_cache_part> freshness_parts(
  * - `mark`/`clear`/`assign`/`translate` take the `level_cache` rather than a
  *   z-level for the same reason: the caller has already resolved which level it
  *   owns, and the module never guesses.
- * - Reads are not part of this interface. Readers keep using the `level_cache`
- *   fields and `map::visibility_caches_dirty()`, so their freshness assumptions
- *   are unchanged.
- * - Nothing here decides whether a rebuild runs. In particular the map-wide
- *   visibility aggregate is only ever set true by `mark_visibility`. The clearing verbs
- *   exist for completeness, but the only caller that reaches them is
- *   `map::mark_visibility_caches_clean`, which nothing calls, so in practice the
- *   aggregate stays true once raised. That asymmetry is load-bearing today and is
- *   replaced by "view stale" in a later ticket.
+ * - Reads go through the freshness queries at the bottom of this interface and the
+ *   `level_cache` fields; nothing else reads freshness state.
+ * - Whether a rebuild runs is decided by the view-stale condition, spelled by
+ *   `visibility_stale`: the visibility cache is stale when the viewer is not the
+ *   one the seen cache was built for (origin or z-level moved) or when any loaded
+ *   level's visibility bit is dirty. There is no map-wide sticky aggregate.
+ * - Geometry-only visibility is the read contract: while a level is stale,
+ *   visibility queries answer from line of sight only. A reader that needs exact
+ *   visibility refreshes first (`game::refresh_player_visibility_cache_if_needed`).
  */
 class level_cache_freshness
 {
@@ -132,18 +132,20 @@ class level_cache_freshness
         static void record_outside_content( level_cache &cache, std::uint64_t checksum );
 
         /**
-         * A level's visibility is stale: the per-level bit plus the map-wide aggregate.
-         * Out-of-range `zlev` is ignored, matching the helper this replaces.
+         * A level's visibility is stale: its per-level bit, which is what the
+         * view-stale condition reads. Out-of-range `zlev` is ignored.
          */
         static void mark_visibility( map &who, int zlev );
-        /** Clear the visibility bit of a z-range only; the map-wide aggregate is untouched. */
-        static void clear_visibility( map &who, int min_z, int max_z );
-        /** Clear every level's visibility bit and the map-wide aggregate. */
+        /** Clear the visibility bit of a z-range: a builder reporting what it rebuilt. */
+        static void clear_visibility( map &who, int min_z, const int max_z );
+        /** Clear every level's visibility bit. */
         static void clear_visibility( map &who );
         /** Forget which viewer the seen cache was built for, forcing the next rebuild. */
         static void forget_seen_origin( map &who );
         /** Record the viewer position the seen cache was just built for. */
         static void stamp_seen_origin( map &who, const tripoint_bub_ms &origin );
+        /** Record the viewer the visibility cache was just rebuilt for. */
+        static void stamp_visibility_origin( map &who, const tripoint_bub_ms &origin );
         /**
          * Bookkeeping pair for a vehicle entering or leaving a level's caches: the
          * vehicle-only caches of `zlev` and the vehicle-floor cache one level above it.
@@ -404,8 +406,14 @@ class level_cache_freshness
         static std::uint64_t outside_generation( const level_cache &cache );
         /** The generation the CPU lightmap memo is keyed by. */
         static std::uint64_t cpu_lightmap_generation( const level_cache &cache );
-        /** The map-wide aggregate: does a gameplay consumer need a full refresh? */
-        static bool visibility_stale( const map &who );
+        /**
+         * View stale: does the visibility cache need rebuilding before exact
+         * visibility may be read? True when `viewer` is not the origin the caches
+         * were last built for (so a move or a z-level change always answers true)
+         * or when any loaded level's visibility bit is dirty. Until that rebuild
+         * runs, visibility queries answer with geometry-only visibility.
+         */
+        static bool visibility_stale( const map &who, const tripoint_bub_ms &viewer );
 
     private:
         /**

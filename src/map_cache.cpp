@@ -350,8 +350,10 @@ void map::update_visibility_cache(const int zlev) {
     }
 
     // Mark all z-levels touched by this run as clean so subsequent draws within
-    // the same turn can skip the rebuild entirely.
+    // the same turn can skip the rebuild entirely, and record the viewer this sweep
+    // answered for so the view-stale condition recognises a later move.
     level_cache_freshness::clear_visibility(*this, min_z, max_z);
+    level_cache_freshness::stamp_visibility_origin(*this, player_pos);
 }
 
 auto map::take_visibility_cache_updates() -> unsigned

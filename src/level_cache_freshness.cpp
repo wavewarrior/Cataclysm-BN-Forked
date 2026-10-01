@@ -259,16 +259,11 @@ void level_cache_freshness::mark_visibility( map &who, const int zlev ) {
         return;
     }
     who.get_cache( zlev ).visibility_cache_dirty = true;
-    // The aggregate is the source of truth for gameplay consumers. It is only ever set
-    // true here and cleared wholesale by `clear_visibility`; that asymmetry is
-    // load-bearing today and is replaced by "view stale" in a later ticket.
-    who.visibility_caches_dirty_ = true;
 }
 
 void level_cache_freshness::clear_visibility( map &who, const int min_z, const int max_z ) {
     assert_main_thread();
-    // Per-level bits only: a range clear is a builder reporting what it just rebuilt and
-    // deliberately leaves the map-wide aggregate alone.
+    // Per-level bits only: a range clear is a builder reporting what it just rebuilt.
     for( int z = min_z; z <= max_z; ++z ) {
         who.get_cache( z ).visibility_cache_dirty = false;
     }
@@ -277,7 +272,11 @@ void level_cache_freshness::clear_visibility( map &who, const int min_z, const i
 void level_cache_freshness::clear_visibility( map &who ) {
     assert_main_thread();
     clear_visibility( who, -OVERMAP_DEPTH, OVERMAP_HEIGHT );
-    who.visibility_caches_dirty_ = false;
+}
+
+void level_cache_freshness::stamp_visibility_origin( map &who, const tripoint_bub_ms &origin ) {
+    assert_main_thread();
+    who.m_last_visibility_origin = origin;
 }
 
 void level_cache_freshness::forget_seen_origin( map &who ) {
@@ -755,8 +754,9 @@ void level_cache_freshness::report( map &who, const light_changed &change ) {
         mark_seen( who, change.at.z() );
     }
     if( change.visibility ) {
-        // The activity-cadence boundary pairs the lightmap invalidate with the
-        // map-wide visibility aggregate, because the light level may have moved.
+        // The activity-cadence boundary pairs the lightmap invalidate with a forced
+        // visibility rebuild, because the ambient light level may have moved. Marking
+        // every loaded level is what makes the view-stale condition answer true.
         invalidate_visibility( who );
     }
 }
@@ -1050,6 +1050,27 @@ std::uint64_t level_cache_freshness::cpu_lightmap_generation( const level_cache 
     return cache.lm_cpu_cache_generation;
 }
 
-bool level_cache_freshness::visibility_stale( const map &who ) {
-    return who.visibility_caches_dirty_;
+bool level_cache_freshness::visibility_stale( const map &who, const tripoint_bub_ms &viewer ) {
+    // View stale, derived from cheap state rather than a sticky flag. The view is out
+    // of date when the caches were last built for a DIFFERENT viewer (so a move or a
+    // z-level change answers true, including the moves that only forget an origin),
+    // when a level has reported its visibility dirty, or when an input visibility is
+    // computed from has gone stale since. Absorption and sound walls are excluded:
+    // they feed hearing, not sight. While this answers true, visibility queries give
+    // geometry-only answers; readers needing exactness refresh first.
+    if( ( who.m_last_visibility_origin != viewer ) ||
+        ( who.m_last_seen_cache_origin != viewer ) ) {
+        return true;
+    }
+    for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z ) {
+        const level_cache &ch = who.get_cache_ref( z );
+        if( ch.visibility_cache_dirty || ch.seen_cache_dirty
+            || stale( ch, level_cache_part::transparency )
+            || stale( ch, level_cache_part::outside )
+            || stale( ch, level_cache_part::floor )
+            || stale( ch, level_cache_part::lightmap ) ) {
+            return true;
+        }
+    }
+    return false;
 }

@@ -52,6 +52,7 @@
 #include "json.h"
 #include "line.h"
 #include "locations.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "map_iterator.h"
 #include "map_selector.h"
@@ -791,7 +792,8 @@ int iuse::note_bionics( player* p, item* it, bool t, const tripoint_bub_ms& pos 
             continue;
         }
         const auto pt = corpse->bub_pos();
-        if( !visibility_cache_updated && here.visibility_caches_dirty() ) {
+        if( !visibility_cache_updated &&
+            level_cache_freshness::visibility_stale( here, p->bub_pos() ) ) {
             here.update_visibility_cache( p->bub_pos().z() );
             visibility_cache_updated = true;
         }

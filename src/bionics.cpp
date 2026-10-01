@@ -2000,7 +2000,8 @@ void Character::process_bionic( bionic &bio )
                 continue;
             }
             const auto pt = corpse->bub_pos();
-            if( !visibility_cache_updated && here.visibility_caches_dirty() ) {
+            if( !visibility_cache_updated &&
+                level_cache_freshness::visibility_stale( here, bub_pos() ) ) {
                 here.update_visibility_cache( bub_pos().z() );
                 visibility_cache_updated = true;
             }

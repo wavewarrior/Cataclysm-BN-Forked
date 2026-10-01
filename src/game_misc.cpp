@@ -125,6 +125,7 @@
 #include "iuse_actor.h"
 #include "json.h"
 #include "kill_tracker.h"
+#include "level_cache_freshness.h"
 #include "lightmap.h"
 #include "line.h"
 #include "live_view.h"
@@ -560,11 +561,16 @@ auto game::refresh_player_visibility_cache_if_needed( const bool player_map_cach
     ZoneScopedN( "refresh_player_visibility_cache_if_needed" );
 
     const auto zlev = u.bub_pos().z();
-    const auto needs_visibility_refresh = [&]() {
+    // View stale (issue #17): the cache is current only when it was last rebuilt for
+    // this very viewer and no level has reported its visibility dirty since. The old
+    // map-wide aggregate was never cleared, so this predicate was true on every call
+    // and every caller paid for a rebuild; now a caller that repeats the query without
+    // anything moving skips it.
+    const auto needs_visibility_refresh = [ & ]() {
         if( !m.get_visibility_variables_cache().variables_set ) {
             return true;
         }
-        return m.visibility_caches_dirty();
+        return level_cache_freshness::visibility_stale( m, u.bub_pos() );
     };
 
     if( !needs_visibility_refresh() ) {

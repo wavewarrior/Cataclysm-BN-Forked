@@ -857,8 +857,6 @@ class map : public submap_load_listener
 
         auto is_map_cache_valid( const int zlev ) -> bool;
 
-        auto mark_visibility_caches_clean() -> void;
-        auto visibility_caches_dirty() const -> bool;
         /// Counts map::update_visibility_cache() invocations (the expensive
         /// all-z visibility recompute). Returns the count since the last call
         /// and resets it to zero; shaped after take_vehicle_move_notifications.
@@ -2197,7 +2195,9 @@ class map : public submap_load_listener
         // full-cache invalidation forces a seen_cache rebuild regardless of whether
         // the player moved.
         tripoint_bub_ms m_last_seen_cache_origin = tripoint_bub_ms( tripoint_min );
-        bool visibility_caches_dirty_ = true;
+        // Last viewer position for which the visibility cache was rebuilt. The view-stale
+        // condition compares against this; see `level_cache_freshness::visibility_stale`.
+        tripoint_bub_ms m_last_visibility_origin = tripoint_bub_ms( tripoint_min );
         std::size_t m_last_lightmap_source_signature = 0;
         bool m_last_lightmap_source_signature_valid = false;
 
