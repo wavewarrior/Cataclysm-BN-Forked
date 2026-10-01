@@ -6,6 +6,7 @@
 #include "fstream_utils.h"
 #include "game.h"
 #include "magic/magic.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "ranged.h"
 #include "magic/spell_targeting.h"
@@ -111,7 +112,7 @@ TEST_CASE("avatar sees own tile even with dirty visibility cache",
 
     avatar& you = get_avatar();
     map& here = get_map();
-    here.invalidate_map_cache(you.bub_pos().z());
+    level_cache_freshness::invalidate_level( here, you.bub_pos().z() );
     REQUIRE(here.visibility_caches_dirty());
 
     CHECK(you.sees(you.bub_pos()));
@@ -139,7 +140,7 @@ TEST_CASE( "hostile targeted spells accept targets selected by spell targeting",
 
     monster &target = spawn_test_monster( "mon_zombie", target_pos );
     map &here = get_map();
-    here.invalidate_map_cache( you.bub_pos().z() );
+    level_cache_freshness::invalidate_level( here, you.bub_pos().z() );
     g->refresh_player_visibility_cache_if_needed();
 
     spell hostile_spell( spell_id( "test_spell_pew" ) );

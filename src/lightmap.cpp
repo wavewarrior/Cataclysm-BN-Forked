@@ -1472,7 +1472,7 @@ void map::generate_lightmap( const int zlev )
 
     // B3: skip the lm full-zero and sunlight cascade when the outdoor light level
     // hasn't changed since the last build.  lm retains its previous values; the
-    // worker below adds artificial lights on top.  invalidate_map_cache sets the
+    // worker below adds artificial lights on top.  `invalidate_level` sets the
     // tracking field to -1, forcing a rebuild on the next frame — this covers
     // structural changes (new walls, destroyed roofs) that the cascade depends on.
     // The int truncation means frames where only entity lights moved skip the

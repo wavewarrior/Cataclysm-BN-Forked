@@ -12,6 +12,7 @@
 #include "game_constants.h"
 #include "item.h"
 #include "json.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "map_helpers.h"
 #include "mapbuffer.h"
@@ -496,7 +497,7 @@ TEST_CASE("can autodrive", "[vehicle][autodrive]") {
     you.omt_path = {current_omt + tripoint_rel_omt(1, 0, 0)};
     veh_ptr->is_autodriving = true;
 
-    here.invalidate_visibility_caches();
+    level_cache_freshness::invalidate_visibility( here );
     REQUIRE(here.visibility_caches_dirty());
 
     CHECK(veh_ptr->do_autodrive(you) == autodrive_result::ok);

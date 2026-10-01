@@ -7,6 +7,7 @@
 #include "dispersion.h"
 #include "game.h"
 #include "item.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "map_helpers.h"
 #include "monster.h"
@@ -119,7 +120,7 @@ TEST_CASE("Projectile damage message visibility survives dirty target-ui cache",
     const auto starting_hp = z.get_hp();
     REQUIRE( shooter.sees( z ) );
 
-    here.invalidate_map_cache( shooter_pos.z() );
+    level_cache_freshness::invalidate_level( here, shooter_pos.z() );
     REQUIRE( here.visibility_caches_dirty() );
 
     auto test_proj = projectile {};
@@ -188,7 +189,7 @@ TEST_CASE("Aiming at a target behind wall", "[ranged][aiming]") {
     // is_transparent()/sees() below see the new wall instead of stale,
     // pre-wall data left over from set_up_player_vision()'s cache build.
     g->m.update_visibility_cache(shooter_bpos.z());
-    g->m.invalidate_map_cache(shooter_bpos.z());
+    level_cache_freshness::invalidate_level( g->m, shooter_bpos.z() );
     g->m.build_map_cache(shooter_bpos.z());
     monster& z = spawn_test_monster("debug_mon", shooter_bpos + point(2, 0));
     WHEN("There is no direct, passable line to target") {
@@ -237,7 +238,7 @@ TEST_CASE("Aiming at a target behind bars", "[ranged][aiming]") {
     // is_transparent()/sees() below see the new bars instead of stale,
     // pre-bars data left over from set_up_player_vision()'s cache build.
     g->m.update_visibility_cache(shooter_bpos.z());
-    g->m.invalidate_map_cache(shooter_bpos.z());
+    level_cache_freshness::invalidate_level( g->m, shooter_bpos.z() );
     g->m.build_map_cache(shooter_bpos.z());
     monster& z = spawn_test_monster("debug_mon", shooter_bpos + point(2, 0));
     WHEN("There is no direct, passable line to target") {

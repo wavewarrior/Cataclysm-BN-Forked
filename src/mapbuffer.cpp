@@ -3713,7 +3713,7 @@ auto mapbuffer::invalidate_active_furniture_set_caches( const tripoint_abs_ms &p
     if( old_furniture.has_flag( TFLAG_BLOCK_WIND ) != new_furniture.has_flag( TFLAG_BLOCK_WIND ) ||
         old_furniture.has_flag( TFLAG_CONNECT_TO_WALL ) !=
         new_furniture.has_flag( TFLAG_CONNECT_TO_WALL ) ) {
-        here.set_absorption_cache_dirty( *local );
+        level_cache_freshness::mark_absorption( here, *local );
     }
 
     here.invalidate_max_populated_zlev( local->z() );

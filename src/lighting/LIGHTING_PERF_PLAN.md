@@ -30,11 +30,11 @@ Split `rebuild_pertile` into two independent gates so each buffer only rebuilds 
 
 ### Step 1: Verify vehicle movement invalidates correctly
 
-Before changing anything, confirm that vehicles call `set_transparency_cache_dirty()` when they move. Search for vehicle movement code paths and trace whether the generation counter increments. If not, the gate is wrong for driving scenes and needs fixing first.
+Before changing anything, confirm that vehicles raise transparency dirt (the `vehicle_moved` change kind) when they move. Search for vehicle movement code paths and trace whether the generation counter increments. If not, the gate is wrong for driving scenes and needs fixing first.
 
 **Search targets:**
 - Vehicle movement/update functions in `src/vehicle.cpp` or similar
-- Any path that changes vehicle position without calling `set_transparency_cache_dirty`
+- Any path that changes vehicle position without raising transparency dirt
 
 ### Step 2: Split the gate in sdl_render_frame.cpp
 

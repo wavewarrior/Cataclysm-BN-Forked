@@ -4,6 +4,7 @@
 #include "lighting/event_queue.h"
 #include "lighting/gpu_emitter.h"
 #include "lighting/snapshot.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "map_helpers.h"
 #include "state_helpers.h"
@@ -47,7 +48,7 @@ auto build_house() -> void {
 
 auto rebuild_caches() -> void {
     auto& here = get_map();
-    here.invalidate_map_cache(1);
+    level_cache_freshness::invalidate_level( here, 1 );
     rebuild_level_cache(0);
 }
 

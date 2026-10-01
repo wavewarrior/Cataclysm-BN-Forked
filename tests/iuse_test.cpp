@@ -9,6 +9,7 @@
 #include "game.h"
 #include "item.h"
 #include "itype.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "map_helpers.h"
 #include "morale_types.h"
@@ -308,7 +309,7 @@ TEST_CASE("bionic_scanner_marks_new_corpse_after_activation", "[iuse][bionic_sca
     corpse->add_component(item::spawn("bio_electrosense", calendar::turn));
     auto* const corpse_ptr = corpse.get();
     REQUIRE_FALSE(here.add_item_or_charges(corpse_pos, std::move(corpse), false));
-    here.invalidate_visibility_caches();
+    level_cache_freshness::invalidate_visibility( here );
 
     you.process_items();
 

@@ -6,6 +6,7 @@
 #include "coordinates.h"
 #include "game.h"
 #include "lightmap.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "map_helpers.h"
 #include "options_helpers.h"
@@ -33,7 +34,7 @@ TEST_CASE("solar_cache_uses_date_sensitive_hour", "[vision][zlevel][sun]") {
 
     calendar::turn = summer_after_sunrise;
     g->reset_light_level();
-    here.invalidate_map_cache(sample.z());
+    level_cache_freshness::invalidate_level( here, sample.z() );
     here.build_map_cache(sample.z());
 
     const auto& summer_cache = here.access_cache(sample.z());

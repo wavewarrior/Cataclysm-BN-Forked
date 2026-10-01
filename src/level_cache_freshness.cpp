@@ -292,7 +292,7 @@ void level_cache_freshness::stamp_seen_origin( map &who, const tripoint_bub_ms &
 
 void level_cache_freshness::mark_vehicle_caches( map &who, const int zlev ) {
     assert_main_thread();
-    // The coupling `map::set_vehicle_cache_dirty` carries: a vehicle on this level
+    // The coupling this verb carries: a vehicle on this level
     // dirties the vehicle-floor cache of the level above it.
     if( who.inbounds_z( zlev ) ) {
         mark( who.get_cache( zlev ), freshness_parts( { level_cache_part::vehicle_caches } ) );

@@ -8,6 +8,7 @@
 #include "field.h"
 #include "game.h"
 #include "game_constants.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "map_iterator.h"
 #include "mapbuffer.h"
@@ -219,9 +220,9 @@ void set_time(const time_point& time) {
 
 void refresh_level_cache(std::initializer_list<int> invalidate_zlevels, bool skip_lightmap) {
     if (invalidate_zlevels.size() == 0) {
-        g->m.invalidate_map_cache(g->u.bub_pos().z());
+        level_cache_freshness::invalidate_level( g->m, g->u.bub_pos().z() );
     } else {
-        for (const int z : invalidate_zlevels) { g->m.invalidate_map_cache(z); }
+        for (const int z : invalidate_zlevels) { level_cache_freshness::invalidate_level( g->m, z ); }
     }
     // The same public entry point game::do_turn and the targeting loops call.
     g->refresh_player_visibility_cache_if_needed(/*player_map_cache_current=*/false, skip_lightmap);
@@ -234,6 +235,6 @@ void refresh_view(const bool skip_lightmap) {
 }
 
 void rebuild_level_cache(int zlev, bool skip_lightmap) {
-    g->m.invalidate_map_cache(zlev);
+    level_cache_freshness::invalidate_level( g->m, zlev );
     g->m.build_map_cache(zlev, skip_lightmap);
 }

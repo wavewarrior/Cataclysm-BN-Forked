@@ -2341,7 +2341,7 @@ void debug()
         }
 
     }
-    m.invalidate_map_cache( g->get_levz() );
+    level_cache_freshness::invalidate_level( m, g->get_levz() );
 }
 
 } // namespace debug_menu

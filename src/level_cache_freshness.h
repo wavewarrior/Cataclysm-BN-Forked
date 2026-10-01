@@ -68,13 +68,13 @@ inline enum_bitset<level_cache_part> freshness_parts(
  *
  * Interface — everything a caller must know:
  *
- * - Verbs record a fact about freshness. They deliberately do NOT couple
- *   families: marking transparency stale does not mark absorption stale. The
- *   coupling rules (transparency implies absorption, floor implies the level
- *   below, a vehicle move implies the level above) live in the `map::set_*`,
- *   `map::mark_*` and `map::invalidate_*` helpers, which compose these verbs.
- *   Those helpers are the transitional per-family surface that change kinds
- *   will replace.
+ * - Verbs record a fact about freshness. The low-level `mark`/`clear` verbs
+ *   deliberately do NOT couple families: marking transparency stale does not
+ *   mark absorption stale. The coupling rules (transparency implies absorption,
+ *   floor implies the level below, a vehicle move implies the level above) live
+ *   in the per-cache `mark_*` and `invalidate_*` verbs below, which compose the
+ *   low-level ones. Those verbs are the successors of the deleted
+ *   `map::set_*_cache_dirty` helpers; the change kinds compose them further.
  * - Mutating verbs are main-thread only and assert it, following the existing
  *   `is_pool_worker_thread()` pattern. Exception: the per-level `clear` and
  *   `assign`, which the parallel region of `map::build_map_cache` needs. Those
@@ -153,7 +153,7 @@ class level_cache_freshness
         static void mark_vehicle_caches( map &who, int zlev );
         /**
          * Forget both solar stamps so the sunlight cascade recomputes. Only
-         * `invalidate_map_cache` needs the pair; the other two writers below each touch
+         * `invalidate_level` needs the pair; the other two writers below each touch
          * one field, and resetting the wrong one forces a full sunlight rebuild.
          */
         static void forget_solar_stamps( map &who );
@@ -300,7 +300,7 @@ class level_cache_freshness
             /// Defaults to `at`, which is what the terrain mutators do.
             std::optional<tripoint_bub_ms> seen_probe;
             /// A roof or opaque part came off: the whole floor cache of `at`'s level, as
-            /// `set_floor_cache_dirty( zlev )` does, instead of the one-tile shape of
+            /// `mark_floor( who, zlev )` does, instead of the one-tile shape of
             /// `no_floor`/`sun_roof_above`. A vehicle part edit repaints the level.
             bool floor_level = false;
         };
@@ -314,7 +314,7 @@ class level_cache_freshness
             /// the bubble changes only the entity lights of the submap it landed in;
             /// mutators that cannot localise the change take the default.
             enum class lightmap_scope {
-                all_levels, ///< every loaded level, as `invalidate_lightmap_caches` does
+                all_levels, ///< every loaded level, as `invalidate_lightmap` does
                 tile,       ///< only the submap containing `at`
                 none,       ///< lighting untouched; only the `seen`/`visibility` flags below
             };

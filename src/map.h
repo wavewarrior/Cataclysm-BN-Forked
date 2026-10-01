@@ -364,7 +364,7 @@ struct level_cache {
     // ---- per-submap dirty bitsets (size: cache_mapsize²) ----
     cata_dynamic_bitset transparency_cache_dirty;
     // P3: monotonically-increasing generation counter, bumped whenever
-    // set_transparency_cache_dirty is called. Render code compares against
+    // `level_cache_freshness::mark_transparency` is called. Render code compares against
     // its last-seen value to decide whether the SDF needs rebuilding — avoids
     // rebuilding on every combat turn when terrain hasn't actually changed.
     std::uint64_t transparency_generation = 0;
@@ -381,7 +381,7 @@ struct level_cache {
     std::uint64_t outside_generation = 0;
     // Content hash of outside_cache at the last bump. outside_cache_dirty is set far
     // more often than the CONTENT changes -- every moving vehicle part dirties it, and
-    // set_floor_cache_dirty() always dirties the level below -- so bumping the
+    // mark_floor() always dirties the level below -- so bumping the
     // generation on every rebuild would force a full lighting re-snapshot on each
     // vehicle move and door open, which is exactly the cost the generation counters
     // exist to avoid. Bump only when this hash actually changes.
@@ -840,76 +840,25 @@ class map : public submap_load_listener
                                  const dimension_id &dim_id ) override;
 
         /**
-         * Sets a dirty flag on the a given cache.
-         *
-         * If this isn't set, it's just assumed that
-         * the cache hasn't changed and
-         * doesn't need to be updated.
+         * Level cache freshness lives in `level_cache_freshness`: report a change kind
+         * or one of its per-cache verbs, never a dirty bit. The only freshness writer
+         * left here is the pathfinding cache, which is mapbuffer plumbing rather than a
+         * Level cache (see the module header).
          */
-        /*@{*/
-
-        // This will also set the z_levels sound absorption cache to dirty as is almost certainly invalidated as well.
-        void set_transparency_cache_dirty( const int zlev );
-
-        // more granular version of the transparency cache invalidation
-        // preferred over map::set_transparency_cache_dirty( const int zlev )
-        // p is in local coords ("ms")
-        void set_transparency_cache_dirty( const tripoint_bub_ms &p );
-
-        // Invalidates a specific location's (p, in local cords "ms") absorption_cache and marks it for recalculation.
-        // Should be called whenever a tile's (or its contents) ability to absorb sound significantly changes.
-        // For example if wind blocking furniture is added or removed, the tile is set to a tile type with wind blocking, if a tile is set to a type with very high absorption, etc.
-        void set_absorption_cache_dirty( const tripoint_bub_ms &p );
-        // Set an entire zlevel's sound absorption cache to dirty.
-        void set_absorption_cache_dirty( const int zlev );
-
-        // invalidates seen cache for the whole zlevel unconditionally
-
-        void set_seen_cache_dirty( const tripoint_bub_ms &change_location );
-
-        void set_seen_cache_dirty( const int &zlevel );
-
-        void set_outside_cache_dirty( const int zlev );
-        // Point-level: marks only the tile's submap + boundary neighbours (max 4).
-        void set_outside_cache_dirty( const tripoint_bub_ms &p );
-
-        void set_floor_cache_dirty( const int zlev );
-        void set_vehicle_cache_dirty( const int zlev );
-        // Point-level: marks only the tile's own submap (no horizontal neighbour dependency).
-        void set_floor_cache_dirty( const tripoint_bub_ms &p );
-
-        void set_suspension_cache_dirty( const int zlev );
-
         /// Mark the per-submap pf_cache dirty for all submaps on zlev.
         /// Use the tripoint overload for single-tile changes.
         void set_pathfinding_cache_dirty( int zlev );
         /// Mark the per-submap pf_cache dirty for the single submap containing p.
         void set_pathfinding_cache_dirty( const tripoint_bub_ms &p );
-        /*@}*/
 
-        void set_memory_seen_cache_dirty( const tripoint_bub_ms &p );
-        auto set_memory_seen_cache_dirty( int zlev ) -> void;
         auto is_memory_seen_cache_dirty_all( int zlev ) const -> bool;
         auto take_memory_seen_cache_dirty_points( int zlev ) -> std::vector<tripoint_bub_ms>;
         auto mark_memory_seen_cache_dirty_all_clean( int zlev ) -> void;
 
         auto is_map_cache_valid( const int zlev ) -> bool;
-        void invalidate_map_cache( const int zlev );
 
-        /// Mark a single submap's lightmap_dirty bit.  Used by game::place_player
-        /// so that within-submap moves trigger a lightmap rebuild for changed
-        /// entity lights and static sources, without a blanket all-z invalidate.
-        void mark_lightmap_dirty( const tripoint_bub_ms &p );
-
-        /// Mark lightmap_dirty for every loaded z-level.  Call once per game turn
-        /// so that only the first redraw of each turn runs generate_lightmap.
-        void invalidate_lightmap_caches();
-
-        auto mark_visibility_cache_dirty( int zlev ) -> void;
         auto mark_visibility_caches_clean() -> void;
         auto visibility_caches_dirty() const -> bool;
-        /// Mark visibility_cache_dirty for every loaded z-level.
-        void invalidate_visibility_caches();
         /// Counts map::update_visibility_cache() invocations (the expensive
         /// all-z visibility recompute). Returns the count since the last call
         /// and resets it to zero; shaped after take_vehicle_move_notifications.
@@ -2159,7 +2108,7 @@ class map : public submap_load_listener
         auto direct_sunlight_state_at( point_bub_ms p, int zlev ) const -> direct_sunlight_state;
         auto has_direct_sunlight_at( point_bub_ms p, int zlev ) const -> bool;
         auto current_lightmap_source_signature() -> std::size_t;
-        void invalidate_lightmap_caches_if_light_state_changed();
+        void invalidate_lightmap_if_light_state_changed();
     public:
         // Rebuilds outside_caches for zlev top-down:
         // A tile is outside if any neighbour in the 3×3 at z+1
@@ -2244,8 +2193,9 @@ class map : public submap_load_listener
 
         // Last player position for which build_seen_cache was run.
         // Initialized to tripoint_min so the first build_map_cache call always rebuilds.
-        // Reset to tripoint_min by invalidate_map_cache so any full-cache invalidation
-        // forces a seen_cache rebuild regardless of whether the player moved.
+        // Reset to tripoint_min by `level_cache_freshness::invalidate_level` so any
+        // full-cache invalidation forces a seen_cache rebuild regardless of whether
+        // the player moved.
         tripoint_bub_ms m_last_seen_cache_origin = tripoint_bub_ms( tripoint_min );
         bool visibility_caches_dirty_ = true;
         std::size_t m_last_lightmap_source_signature = 0;
@@ -2265,7 +2215,7 @@ class map : public submap_load_listener
             // Absolute game-hour when the cache was last rebuilt; -1 forces a rebuild on first use.
             int   last_built_hour = -1;
             // Truncated natural_light_level(0) from the last build_sunlight_cache cascade.
-            // -1 forces a rebuild on first use; set to -1 by invalidate_map_cache to
+            // -1 forces a rebuild on first use; set to -1 by `invalidate_level` to
             // force a rebuild after structural changes.
             int   last_built_light_level_int = -1;
         };
