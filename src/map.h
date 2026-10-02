@@ -405,6 +405,14 @@ struct level_cache {
     bool lm_cpu_cache_valid = false;
     // Incremented whenever CPU lm contents are invalidated before a rebuild.
     uint64_t lm_cpu_cache_generation = 0;
+    // Issue #20: event-based per-level residency generation, polled by the GPU
+    // residency layer (spec #8, user stories 18/19). Advances on EVERY change kind
+    // the freshness module reports, for every level the kind affects, EVEN WHEN the
+    // resulting content is identical — residency work that depends on the event
+    // rather than the content must not be skipped. Distinct from the two
+    // Structure-rebuild generations above, which stay content/event gated exactly
+    // as before.
+    std::uint64_t residency_generation = 0;
     // Per-level visibility dirtiness. The map-level aggregate flag is the source
     // of truth for gameplay consumers that need completed player visibility.
     bool visibility_cache_dirty = true;

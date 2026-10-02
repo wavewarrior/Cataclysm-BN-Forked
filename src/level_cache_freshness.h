@@ -120,6 +120,14 @@ class level_cache_freshness
 
         /** Advance the transparency generation the renderer polls for a structure rebuild. */
         static void advance_transparency_generation( level_cache &cache );
+        /**
+         * Advance the per-level residency generation. Unlike the two Structure-rebuild
+         * generations, this one is event-based: it advances on every reported change
+         * kind affecting the level, even when the resulting content is identical, so a
+         * residency consumer that polls it never misses an event (issue #20). The
+         * change-kind verbs call it; direct callers should report a kind instead.
+         */
+        static void advance_residency_generation( level_cache &cache );
         /** Declare the CPU lightmap unusable and advance the generation it is memoed by. */
         static void invalidate_cpu_lightmap( level_cache &cache );
         /** Declare the CPU lightmap current for the whole level. */
@@ -408,6 +416,12 @@ class level_cache_freshness
         /** The generation the CPU lightmap memo is keyed by. */
         static std::uint64_t cpu_lightmap_generation( const level_cache &cache );
         /**
+         * The event-based residency generation the GPU residency layer polls (issue
+         * #20). Advances on every change kind affecting this level, even when the
+         * content ends up identical; see `advance_residency_generation`.
+         */
+        static std::uint64_t residency_generation( const level_cache &cache );
+        /**
          * View stale: does the visibility cache need rebuilding before exact
          * visibility may be read? True when `viewer` is not the origin the caches
          * were last built for (so a move or a z-level change always answers true)
@@ -448,6 +462,14 @@ class level_cache_freshness
 
 
     private:
+        /**
+         * Advance the residency generation of one in-bounds level. The change kinds
+         * call this at their top for every level they can affect, so a residency
+         * consumer polling the generation never misses an event (issue #20).
+         */
+        static void advance_residency( map &who, int zlev );
+        /** Advance the residency generation of every loaded level. */
+        static void advance_residency_all( map &who );
         /**
          * Mark one submap grid cell of `part` stale in the level bitset and, when the
          * submap is resident and `flag` names one, in its own dirty flag. Member

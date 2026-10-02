@@ -231,6 +231,24 @@ void level_cache_freshness::advance_transparency_generation( level_cache &cache 
     ++cache.transparency_generation;
 }
 
+void level_cache_freshness::advance_residency_generation( level_cache &cache ) {
+    assert_main_thread();
+    ++cache.residency_generation;
+}
+
+void level_cache_freshness::advance_residency( map &who, const int zlev ) {
+    if( !who.inbounds_z( zlev ) ) {
+        return;
+    }
+    advance_residency_generation( who.get_cache( zlev ) );
+}
+
+void level_cache_freshness::advance_residency_all( map &who ) {
+    for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z ) {
+        advance_residency_generation( who.get_cache( z ) );
+    }
+}
+
 void level_cache_freshness::invalidate_cpu_lightmap( level_cache &cache ) {
     assert_main_thread();
     cache.lm_cpu_cache_valid = false;
@@ -681,6 +699,18 @@ void level_cache_freshness::report( map &who, const terrain_changed &change ) {
     assert_main_thread();
     const tripoint_bub_ms &p = change.at;
     const tripoint_bub_ms above( p.xy(), p.z() + 1 );
+    // Issue #20: a terrain event dirties the tile's level and, through the floor
+    // cascade and the support/sun-roof couplings, the levels one above and below;
+    // a weather-scope repaint reaches every loaded level. Residency advances over
+    // that whole footprint, event-based, even when the rebuilt caches are identical.
+    if( change.transparency
+        && change.scope == terrain_changed::transparency_scope::all_levels ) {
+        advance_residency_all( who );
+    } else {
+        advance_residency( who, p.z() - 1 );
+        advance_residency( who, p.z() );
+        advance_residency( who, p.z() + 1 );
+    }
     // One raise per property diff, mirroring the branches of ter_set/furn_set
     // (map_access.cpp). The verbs keep their own couplings (floor dirties the
     // level below, transparency bumps the Structure-rebuild generation).
@@ -754,6 +784,10 @@ void level_cache_freshness::report( map &who, const terrain_changed &change ) {
 
 void level_cache_freshness::report( map &who, const light_changed &change ) {
     assert_main_thread();
+    // Issue #20: a light event can move the lit appearance of any level (the
+    // default scope is every loaded level), so residency advances everywhere
+    // regardless of the scope the lightmap dirt takes.
+    advance_residency_all( who );
     // Today's light mutators (emissive item add/remove, vehicle light toggles, field
     // changes) all funnel through this one instrument: every level's lightmap is stale.
     switch( change.scope ) {
@@ -783,6 +817,11 @@ void level_cache_freshness::report( map &who, const light_changed &change ) {
 
 void level_cache_freshness::report( map &who, const vehicle_moved &change ) {
     assert_main_thread();
+    // Issue #20: a committed move repaints the vehicle's level and the level its
+    // roof shadows, so both levels' residency advances even when the rebuilt
+    // caches come out identical (out-of-range z is guarded inside).
+    advance_residency( who, change.z );
+    advance_residency( who, change.z + 1 );
     const int smz = change.z;
     if( !who.inbounds_z( smz ) ) {
         return;
@@ -868,6 +907,10 @@ void level_cache_freshness::report( map &who, const vehicle_moved &change ) {
 
 void level_cache_freshness::report( map &who, const player_moved & ) {
     assert_main_thread();
+    // Issue #20: the kind carries no position, and a move can change what is
+    // resident near the old and the new spot alike, so every loaded level's
+    // residency advances.
+    advance_residency_all( who );
     // Today a player move raises no dirty bit at all: what makes the next build rebuild
     // the seen cache (and thereby raise the visibility bit) is the stored origin no
     // longer matching the viewer. Forgetting it is the faithful translation.
@@ -876,12 +919,18 @@ void level_cache_freshness::report( map &who, const player_moved & ) {
 
 void level_cache_freshness::report( map &who, const z_level_changed & ) {
     assert_main_thread();
+    // Issue #20: a z jump relocates the viewer's whole vantage; every loaded
+    // level's residency advances, since the kind carries no level to narrow to.
+    advance_residency_all( who );
     // Same route as a same-bubble move: `vertical_shift_notify` raises no bit either.
     forget_seen_origin( who );
 }
 
 void level_cache_freshness::report( map &who, const map_shifted &change ) {
     assert_main_thread();
+    // Issue #20: the shift moves every level's caches wholesale, so every loaded
+    // level's residency advances with it.
+    advance_residency_all( who );
     // `map::shift` forgets which viewer the seen cache was built for before anything
     // else, so the next build re-derives it for the new bubble position.
     forget_seen_origin( who );
@@ -950,6 +999,9 @@ void level_cache_freshness::report( map &who, const map_shifted &change ) {
 
 void level_cache_freshness::report( map &who, const world_replaced &change ) {
     assert_main_thread();
+    // Issue #20: a bulk replacement is a load-shaped event; every loaded level's
+    // residency must be refreshed even if the swapped terrain ends up identical.
+    advance_residency_all( who );
     const int mapsize = who.getmapsize();
     const int xmin = std::min( change.first.x(), change.last.x() );
     const int xmax = std::max( change.first.x(), change.last.x() );
@@ -1068,6 +1120,10 @@ std::uint64_t level_cache_freshness::outside_generation( const level_cache &cach
 
 std::uint64_t level_cache_freshness::cpu_lightmap_generation( const level_cache &cache ) {
     return cache.lm_cpu_cache_generation;
+}
+
+std::uint64_t level_cache_freshness::residency_generation( const level_cache &cache ) {
+    return cache.residency_generation;
 }
 
 bool level_cache_freshness::visibility_inputs_stale( const map &who ) {
