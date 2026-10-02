@@ -399,6 +399,11 @@ TEST_CASE( "terrain-changed reproduces the field, trap and weather opacity seque
     // support or memory. The kind reproduces them with the tile/level/all-levels
     // transparency scope and the two extras switched off; the reference arm still
     // spells the per-cache verbs that succeeded the old setters.
+    //
+    // Issue #18 extended the mapping: transparency and seen are inputs the visibility
+    // cache is computed from, so an opacity change now also reports the visibility
+    // dependent, at the scope of the repaint. The reference arms gained the matching
+    // raise, which is the behaviour this ticket fixes.
     const tripoint_bub_ms at( 61, 60, 0 );
 
     struct shape {
@@ -410,16 +415,21 @@ TEST_CASE( "terrain-changed reproduces the field, trap and weather opacity seque
     const auto field_pair = []( map &here, const tripoint_bub_ms & p ) {
         level_cache_freshness::mark_transparency( here, p );
         level_cache_freshness::mark_seen( here, p );
+        level_cache_freshness::mark_visibility( here, p.z() );
     };
     const auto trap_pair = []( map &here, const tripoint_bub_ms & p ) {
         level_cache_freshness::mark_seen( here, p );
         level_cache_freshness::mark_transparency( here, p.z() );
+        level_cache_freshness::mark_visibility( here, p.z() );
     };
     const auto weather_pair = []( map &here, const tripoint_bub_ms & ) {
         for( int i = -OVERMAP_DEPTH; i <= OVERMAP_HEIGHT; i++ ) {
             level_cache_freshness::mark_transparency( here, i );
         }
         level_cache_freshness::mark_seen( here, tripoint_bub_ms::zero() );
+        for( int i = -OVERMAP_DEPTH; i <= OVERMAP_HEIGHT; i++ ) {
+            level_cache_freshness::mark_visibility( here, i );
+        }
     };
     using scope = level_cache_freshness::terrain_changed::transparency_scope;
     const std::vector<shape> shapes = { {
@@ -1039,6 +1049,8 @@ TEST_CASE(
     generation_baseline base = capture_generations( here );
     level_cache_freshness::mark_transparency( here, 0 );
     level_cache_freshness::mark_seen( here, tripoint_bub_ms::zero() );
+    // Issue #18: an opacity repaint also reports the visibility dependent it stales.
+    level_cache_freshness::mark_visibility( here, 0 );
     const std::vector<std::string> via_setters = capture( here, base );
 
     set_up_open_daylight_map();
@@ -1092,6 +1104,9 @@ TEST_CASE(
     map &here = get_map();
     generation_baseline base = capture_generations( here );
     level_cache_freshness::mark_floor( here, z + 1 );
+    // Issue #18: a whole-level floor repaint stales the visibility of the level it
+    // repainted, so the kind reports that dependent too.
+    level_cache_freshness::mark_visibility( here, z + 1 );
     level_cache_freshness::mark_vehicle_caches( here, z );
     const std::vector<std::string> via_setters = capture( here, base );
 

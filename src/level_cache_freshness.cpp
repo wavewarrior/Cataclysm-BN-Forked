@@ -699,12 +699,31 @@ void level_cache_freshness::report( map &who, const terrain_changed &change ) {
                 break;
         }
         mark_seen( who, change.seen_probe.value_or( p ) );
+        // Issue #18: the transparency cache and the seen cache are inputs the
+        // visibility cache is computed from, so an opacity change makes the cached
+        // visibility answer wrong even though the old bit-setter sequence raised no
+        // visibility bit. Reporting the dependent — at the scope of the repaint — is
+        // what makes a refresh that skips the rebuild notice the edit at all. Only the
+        // visibility bit rises, unlike `invalidate_visibility`: an opacity edit says
+        // nothing about the viewer or the ambient light, so the seen origin and the
+        // solar stamps stay where they are.
+        if( change.scope == terrain_changed::transparency_scope::all_levels ) {
+            for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z ) {
+                mark_visibility( who, z );
+            }
+        } else {
+            mark_visibility( who, p.z() );
+        }
     }
     if( change.no_floor || change.z_transparent ) {
         mark_floor( who, p );
         // Floor/z-transparency changes reveal or hide tiles one level down.
         mark_seen( who, p.z() );
         mark_seen( who, p.z() - 1 );
+        // Same reasoning: the floor cache gates the seen rebuild, so both levels'
+        // cached visibility is now suspect.
+        mark_visibility( who, p.z() );
+        mark_visibility( who, p.z() - 1 );
     }
     if( change.sun_roof_above ) {
         mark_floor( who, above );
@@ -729,6 +748,7 @@ void level_cache_freshness::report( map &who, const terrain_changed &change ) {
         // Whole-level floor shape, with the verb's own cascade to the outside and
         // absorption caches one level down.
         mark_floor( who, p.z() );
+        mark_visibility( who, p.z() );
     }
 }
 
@@ -1050,13 +1070,35 @@ std::uint64_t level_cache_freshness::cpu_lightmap_generation( const level_cache 
     return cache.lm_cpu_cache_generation;
 }
 
+bool level_cache_freshness::visibility_inputs_stale( const map &who ) {
+    // The geometry inputs `apparent_light_helper` reads: the transparency cache, the
+    // seen/camera visibility, and the outside and floor caches that gate them. The
+    // lightmap is deliberately NOT part of this set: it is the subject of issue #19,
+    // and including it here would make every within-turn refresh that passes
+    // `skip_lightmap` rebuild forever, since that build leaves the bit raised.
+    // Absorption and sound walls are excluded too: they feed hearing, not sight.
+    for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z ) {
+        const level_cache &ch = who.get_cache_ref( z );
+        if( ch.seen_cache_dirty
+            || stale( ch, level_cache_part::transparency )
+            || stale( ch, level_cache_part::outside )
+            || stale( ch, level_cache_part::floor ) ) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool level_cache_freshness::visibility_stale( const map &who, const tripoint_bub_ms &viewer ) {
     // View stale, derived from cheap state rather than a sticky flag. The view is out
     // of date when the caches were last built for a DIFFERENT viewer (so a move or a
     // z-level change answers true, including the moves that only forget an origin),
     // when a level has reported its visibility dirty, or when an input visibility is
-    // computed from has gone stale since. Absorption and sound walls are excluded:
-    // they feed hearing, not sight. While this answers true, visibility queries give
+    // computed from has gone stale since. Unlike `visibility_inputs_stale` this DOES
+    // read the lightmap: a recompute can still answer correctly from a stale lightmap
+    // once the geometry inputs are current, whereas a light-only change must not force
+    // a whole Level-cache rebuild. Absorption and sound walls are excluded: they feed
+    // hearing, not sight. While this answers true, visibility queries give
     // geometry-only answers; readers needing exactness refresh first.
     if( ( who.m_last_visibility_origin != viewer ) ||
         ( who.m_last_seen_cache_origin != viewer ) ) {

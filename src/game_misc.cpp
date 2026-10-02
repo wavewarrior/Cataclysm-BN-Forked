@@ -577,7 +577,11 @@ auto game::refresh_player_visibility_cache_if_needed( const bool player_map_cach
         return;
     }
 
-    if( !player_map_cache_current ) {
+    if( !player_map_cache_current || level_cache_freshness::visibility_inputs_stale( m ) ) {
+        // Issue #18: a caller claiming the map cache is current is only believed while
+        // the module agrees. A terrain edit that dirties visibility inputs but raises
+        // no visibility bit used to be repaired by nothing on this path: the recompute
+        // below would read the stale inputs and reproduce the stale answer. Rebuild.
         m.build_map_cache( zlev, skip_lightmap );
     }
     if( needs_visibility_refresh() ) {

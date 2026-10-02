@@ -415,6 +415,16 @@ class level_cache_freshness
          * runs, visibility queries answer with geometry-only visibility.
          */
         static bool visibility_stale( const map &who, const tripoint_bub_ms &viewer );
+        /**
+         * Are the GEOMETRY inputs visibility is computed from (transparency, seen,
+         * outside, floor) stale on any loaded level? True means the Level cache itself
+         * must be rebuilt before an exact visibility answer is readable: recomputing
+         * the visibility cache from stale geometry reproduces the stale answer, so a
+         * caller told "the map cache is current" should verify with this rather than
+         * trust the claim (issue #18). The lightmap is excluded: a recompute can still
+         * answer correctly from a stale lightmap, and light freshness is issue #19.
+         */
+        static bool visibility_inputs_stale( const map &who );
 
     private:
         /**

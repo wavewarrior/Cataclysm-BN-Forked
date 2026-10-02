@@ -219,13 +219,14 @@ TEST_CASE(
     }
 }
 
-// Pins the stale-answer case the characterisation (issue #5) found: the per-turn
-// production refresh runs with `player_map_cache_current = true`, so it never rebuilds
-// the Level cache, and a terrain edit that changes visibility inputs is therefore not
-// reflected. Tickets #17-#19 fix this; when they land, this case is the one to flip
-// (it expects the stale answer today, and the fresh answer after the fix).
+// Issue #18 fixed this: the per-turn production refresh runs with
+// `player_map_cache_current = true`, and a terrain edit that changes visibility INPUTS
+// (transparency, seen) raises no visibility bit. The refresh entry point used to believe
+// the caller's claim, skip the rebuild, and recompute the visibility cache from stale
+// inputs, which reproduces the stale answer. It now verifies the claim against the
+// module's own view of the inputs, so the edit is reflected.
 TEST_CASE(
-    "refresh without the full rebuild leaves terrain edits stale",
+    "refresh reflects terrain edits that raise no visibility bit",
     "[level_cache_freshness][level_cache_stale_bug]") {
     set_up_open_daylight_map();
     auto& you = get_avatar();
@@ -236,14 +237,14 @@ TEST_CASE(
 
     build_wall_block(tripoint_bub_ms(62, 60, 0));
 
-    // game.cpp's per-turn call: same public entry point, but told the map cache is
-    // already current, so no rebuild happens.
+    // game.cpp's per-turn call: same public entry point, told the map cache is
+    // already current.
     g->refresh_player_visibility_cache_if_needed(
         /*player_map_cache_current=*/true,
         /*skip_lightmap=*/true);
-    CHECK(you.sees(z)); // pinned: still the stale, pre-edit answer
+    CHECK_FALSE(you.sees(z)); // issue #18: the edit is reflected, not stale
 
-    SECTION("the full rebuild does reflect the edit") {
+    SECTION("the full rebuild agrees") {
         refresh_level_cache();
         CHECK_FALSE(you.sees(z));
     }
