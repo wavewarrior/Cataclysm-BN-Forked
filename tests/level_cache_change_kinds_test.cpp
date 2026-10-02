@@ -1083,6 +1083,25 @@ TEST_CASE( "world-replaced makes the caches see terrain swapped underneath them"
         CHECK( after.floor_here == 0 );
         CHECK( after.outside_below != 0 );
     }
+
+    SECTION( "world-replaced widens to the sound-absorption bitset (issue #7 fix)" ) {
+        // The old co-op tile sync raised the submap flags only, so the absorption
+        // bitset stayed clean and `build_absorption_cache` early-returned over the
+        // swapped terrain. The kind's defaults raise it, which is the one deliberate
+        // widening of the new call site.
+        silent_swap( here );
+        const tripoint_bub_sm sm0 = project_to<coords::sm>( opaque_at );
+        level_cache &ch0 = here.access_cache( 0 );
+        const size_t bit = static_cast< size_t >( ch0.bidx( sm0.x(), sm0.y() ) );
+        REQUIRE_FALSE( level_cache_freshness::stale( ch0, level_cache_part::absorption, bit ) );
+        // z=0 only: the only route to the bit is the kind's own absorption part, not
+        // the z=1 floor cascade (which lands one level below the level it repaints).
+        level_cache_freshness::report( here, level_cache_freshness::world_replaced {
+            .first = sm0, .last = sm0
+        } );
+        CHECK( level_cache_freshness::stale( here.access_cache( 0 ),
+                   level_cache_part::absorption, bit ) );
+    }
 }
 
 TEST_CASE(
@@ -1198,4 +1217,96 @@ TEST_CASE(
     INFO( "setters only:\n" << only_in( via_setters, via_kind )
           << "kind only:\n" << only_in( via_kind, via_setters ) );
     CHECK( via_kind == via_setters );
+}
+
+TEST_CASE( "the raise doors leave the bitsets and the submap flags agreeing",
+           "[level_cache_freshness]" ) {
+    // The postcondition of `raise_submap_flags`, pinned: after a public raise door, a
+    // part that has a submap flag agrees between the Level cache bitset and the flag.
+    // Lightmap has no flag and absorption is bitset-only for `world_replaced`, so both
+    // are outside the checked set.
+    const point_bub_sm mid = project_to<coords::sm>( player_home ).xy();
+    const tripoint_bub_sm first( mid.x() - 1, mid.y() - 1, 0 );
+    const tripoint_bub_sm last( mid.x(), mid.y(), 0 );
+
+    set_up_open_daylight_map();
+    map &here = get_map();
+    level_cache_freshness::report( here, level_cache_freshness::world_replaced {
+        .first = first, .last = last
+    } );
+    for( int sx = first.x(); sx <= last.x(); ++sx ) {
+        for( int sy = first.y(); sy <= last.y(); ++sy ) {
+            CAPTURE( sx, sy );
+            submap *const sm = here.get_submap_at_grid( tripoint_bub_sm( sx, sy, 0 ) );
+            REQUIRE( sm != nullptr );
+            const level_cache &ch = here.access_cache( 0 );
+            const size_t bit = static_cast< size_t >( ch.bidx( sx, sy ) );
+            for( const level_cache_part part : { level_cache_part::transparency,
+                  level_cache_part::floor, level_cache_part::outside } ) {
+                CHECK( level_cache_freshness::stale( ch, part, bit ) ==
+                       ( part == level_cache_part::transparency ? sm->transparency_dirty
+                         : part == level_cache_part::floor ? sm->floor_dirty
+                           : sm->outside_dirty ) );
+            }
+        }
+    }
+
+    // The single-slot door obeys the same postcondition, and keeps the one documented
+    // asymmetry: the absorption flag rises without the bitset.
+    set_up_open_daylight_map();
+    level_cache_freshness::report( here, level_cache_freshness::submap_replaced {
+        .at = first
+    } );
+    submap *const sm = here.get_submap_at_grid( first );
+    REQUIRE( sm != nullptr );
+    const level_cache &ch = here.access_cache( 0 );
+    const size_t bit = static_cast< size_t >( ch.bidx( first.x(), first.y() ) );
+    CHECK( level_cache_freshness::stale( ch, level_cache_part::transparency, bit ) ==
+           sm->transparency_dirty );
+    CHECK( level_cache_freshness::stale( ch, level_cache_part::floor, bit ) == sm->floor_dirty );
+    CHECK( level_cache_freshness::stale( ch, level_cache_part::outside, bit ) ==
+           sm->outside_dirty );
+    CHECK( sm->absorption_dirty );
+    CHECK_FALSE( level_cache_freshness::stale( ch, level_cache_part::absorption, bit ) );
+}
+
+TEST_CASE( "submap-replaced matches the incremental loadn primitive sequence",
+           "[level_cache_freshness]" ) {
+    // The arm `map::loadn` used to run inline: four cache parts marked at the slot's
+    // bit, then the submap's own flags raised by hand — absorption flag included, and
+    // with no absorption bitset behind it. The kind must reproduce that byte for byte.
+    const tripoint_bub_sm slot = project_to<coords::sm>( player_home );
+    const auto reference_sequence = [&]( map &here ) {
+        level_cache &ch = here.access_cache( slot.z() );
+        const size_t bit = static_cast< size_t >( ch.bidx( slot.x(), slot.y() ) );
+        level_cache_freshness::mark( ch, freshness_parts( {
+            level_cache_part::transparency,
+            level_cache_part::floor,
+            level_cache_part::outside,
+            level_cache_part::lightmap,
+        } ), bit );
+        submap *const sm = here.get_submap_at_grid( slot );
+        REQUIRE( sm != nullptr );
+        sm->transparency_dirty = true;
+        sm->floor_dirty = true;
+        sm->outside_dirty = true;
+        sm->absorption_dirty = true;
+    };
+
+    set_up_open_daylight_map();
+    map &here = get_map();
+    generation_baseline base = capture_generations( here );
+    reference_sequence( here );
+    const std::vector<std::string> via_loadn = capture( here, base );
+
+    set_up_open_daylight_map();
+    base = capture_generations( here );
+    level_cache_freshness::report( here, level_cache_freshness::submap_replaced {
+        .at = slot
+    } );
+    const std::vector<std::string> via_kind = capture( here, base );
+
+    INFO( "loadn primitives only:\n" << only_in( via_loadn, via_kind )
+          << "kind only:\n" << only_in( via_kind, via_loadn ) );
+    CHECK( via_kind == via_loadn );
 }

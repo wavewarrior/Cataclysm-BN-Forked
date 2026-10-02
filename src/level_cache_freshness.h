@@ -416,10 +416,21 @@ class level_cache_freshness
             bool suspension = true;
         };
 
+        /**
+         * One submap slot was freshly populated (the incremental arm of `loadn`):
+         * reproduces the old raw sequence exactly — the four cache parts marked at
+         * the slot, the submap's transparency/floor/outside flags raised, and the
+         * absorption flag raised without the bitset (the asymmetry the old arm had).
+         */
+        struct submap_replaced {
+            tripoint_bub_sm at;
+        };
+
         static void report( map &who, const terrain_changed &change );
         static void report( map &who, const terrain_replaced &change );
         static void report( map &who, const furniture_replaced &change );
         static void report( map &who, const light_changed &change );
+        static void report( map &who, const submap_replaced &change );
         static void report( map &who, const vehicle_moved &change );
         static void report( map &who, const player_moved &change );
         static void report( map &who, const z_level_changed &change );

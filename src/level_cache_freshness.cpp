@@ -101,6 +101,27 @@ bool const *flag_of( level_cache const &cache, const level_cache_part part ) {
     return flag_of( const_cast<level_cache &>( cache ), part );
 }
 
+/**
+ * Mirror a part bitset onto the submap's own dirty flags.
+ *
+ * Postcondition: for every part that has a submap flag, the bitset bit and the
+ * submap bool agree after any public raise door. Lightmap has no submap flag;
+ * the absorption flag is deliberately NOT mirrored here — the bitset-only
+ * precedent is `loadn` (see the `world_replaced` comment below), and
+ * `build_absorption_cache` re-raises the flag itself (sounds.cpp).
+ */
+void raise_submap_flags( submap &sm, const enum_bitset<level_cache_part> &parts ) {
+    if( parts[level_cache_part::transparency] ) {
+        sm.transparency_dirty = true;
+    }
+    if( parts[level_cache_part::floor] ) {
+        sm.floor_dirty = true;
+    }
+    if( parts[level_cache_part::outside] ) {
+        sm.outside_dirty = true;
+    }
+}
+
 } // namespace
 
 enum_bitset<level_cache_part> level_cache_bitset_parts() {
@@ -1108,17 +1129,8 @@ void level_cache_freshness::report( map &who, const world_replaced &change ) {
                 if( sm == nullptr ) {
                     continue;
                 }
-                // Submap flags mirror the helpers `loadn` calls: transparency, floor and
-                // outside have one; the absorption raise is bitset-only there.
-                if( parts[level_cache_part::transparency] ) {
-                    sm->transparency_dirty = true;
-                }
-                if( parts[level_cache_part::floor] ) {
-                    sm->floor_dirty = true;
-                }
-                if( parts[level_cache_part::outside] ) {
-                    sm->outside_dirty = true;
-                }
+                // Submap flags mirror the helpers `loadn` calls.
+                raise_submap_flags( *sm, parts );
             }
         }
     };
@@ -1155,6 +1167,30 @@ void level_cache_freshness::report( map &who, const world_replaced &change ) {
                 level_cache_part::absorption,
             } ), 1 );
         }
+    }
+}
+
+void level_cache_freshness::report( map &who, const submap_replaced &change ) {
+    assert_main_thread();
+    const tripoint_bub_sm &at = change.at;
+    if( !who.inbounds( at ) ) {
+        return;
+    }
+    level_cache &ch = who.get_cache( at.z() );
+    const enum_bitset<level_cache_part> parts = freshness_parts( {
+        level_cache_part::transparency,
+        level_cache_part::floor,
+        level_cache_part::outside,
+        level_cache_part::lightmap,
+    } );
+    mark( ch, parts, static_cast<size_t>( ch.bidx( at.x(), at.y() ) ) );
+    submap *const sm = who.get_submap_at_grid( at );
+    if( sm != nullptr ) {
+        raise_submap_flags( *sm, parts );
+        // Documented asymmetry of the old raw arm: it raised the absorption submap
+        // flag without the bitset. Reproduced verbatim; `raise_submap_flags` does not
+        // mirror absorption. Pathfinding dirt stays at the call site, like every kind.
+        sm->absorption_dirty = true;
     }
 }
 

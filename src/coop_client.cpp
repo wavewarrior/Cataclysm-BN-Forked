@@ -763,6 +763,13 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
         } else if( key == "tiles" ) {
             // Each entry is: { "version": N, "coordinates": [x,y,z], <submap members> }
             // This is the standard mapbuffer format — see mapbuffer::deserialize_into_vec.
+            // Bounding box of the submaps actually swapped in, kept twice: in
+            // bubble-relative submap coords (for the Level cache bitsets, which only
+            // exist for resident levels) and in absolute submap coords (for the
+            // mapbuffer pass that reaches the buffered, non-resident slots).
+            bool any_swapped = false;
+            int bx0 = 0, bx1 = 0, by0 = 0, by1 = 0, bz0 = 0, bz1 = 0;
+            int ax0 = 0, ax1 = 0, ay0 = 0, ay1 = 0;
             jin.start_array();
             while( !jin.end_array() ) {
                 got_tiles                    = true;
@@ -795,16 +802,57 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
                 if( new_sm ) {
                     submap* existing = MAPBUFFER.lookup_submap_in_memory( sm_pos );
                     if( existing ) {
-                        // Atomically swap host-authoritative data into the live submap,
-                        // then mark all caches dirty so the renderer sees updated tiles.
+                        // Atomically swap host-authoritative data into the live submap.
+                        // Cache freshness goes through `world_replaced` after the loop;
+                        // pathfinding dirt is not Level cache freshness and stays here.
                         submap::swap( *existing, *new_sm );
-                        existing->transparency_dirty = true;
-                        existing->outside_dirty = true;
-                        existing->floor_dirty = true;
                         existing->pf_dirty = true;
+                        const tripoint_bub_sm bub = abs_to_map_local( g->m, sm_pos );
+                        if( !any_swapped ) {
+                            any_swapped = true;
+                            bx0 = bx1 = bub.x();
+                            by0 = by1 = bub.y();
+                            bz0 = bz1 = bub.z();
+                            ax0 = ax1 = sm_pos.x();
+                            ay0 = ay1 = sm_pos.y();
+                        } else {
+                            bx0 = std::min( bx0, bub.x() );
+                            bx1 = std::max( bx1, bub.x() );
+                            by0 = std::min( by0, bub.y() );
+                            by1 = std::max( by1, bub.y() );
+                            bz0 = std::min( bz0, bub.z() );
+                            bz1 = std::max( bz1, bub.z() );
+                            ax0 = std::min( ax0, sm_pos.x() );
+                            ax1 = std::max( ax1, sm_pos.x() );
+                            ay0 = std::min( ay0, sm_pos.y() );
+                            ay1 = std::max( ay1, sm_pos.y() );
+                        }
                     } else {
                         MAPBUFFER.add_submap( sm_pos, new_sm );
                     }
+                }
+            }
+            if( any_swapped ) {
+                // Issue #7: the swapped terrain must raise the Level cache bitsets too,
+                // or the builders early-return on their clean bitsets. Deliberately
+                // wider than the old raw writes: the kind's defaults also raise the
+                // sound-absorption bitset, so the flags and the bitsets now agree.
+                level_cache_freshness::report( g->m, level_cache_freshness::world_replaced {
+                    .first = tripoint_bub_sm( bx0, by0, bz0 ),
+                    .last = tripoint_bub_sm( bx1, by1, bz1 ),
+                } );
+                // The bitsets only exist for resident levels; the mapbuffer pass is what
+                // reaches the swapped submaps that are loaded but outside the bubble.
+                for( int z = bz0; z <= bz1; ++z ) {
+                    MAPBUFFER.mark_submap_caches_dirty( {
+                        .begin = point_abs_sm( ax0, ay0 ),
+                        .end = point_abs_sm( ax1 + 1, ay1 + 1 ),
+                        .zlev = z,
+                        .transparency = true,
+                        .floor = true,
+                        .outside = true,
+                        .absorption = true,
+                    } );
                 }
             }
             // Invalidate the map's high-level visibility caches after bulk update.

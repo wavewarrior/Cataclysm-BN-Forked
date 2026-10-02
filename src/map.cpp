@@ -1979,18 +1979,9 @@ void map::loadn( const tripoint_bub_sm& grid, const bool update_vehicles, const 
     {
         ZoneScopedN( "loadn_dirty" );
         if( incremental ) {
-            level_cache& ch = get_cache( grid.z() );
-            const size_t bidx = static_cast<size_t>( ch.bidx( grid.x(), grid.y() ) );
-            level_cache_freshness::mark( ch, freshness_parts( {
-                level_cache_part::transparency,
-                level_cache_part::floor,
-                level_cache_part::outside,
-                level_cache_part::lightmap,
-            } ), bidx );
-            tmpsub->transparency_dirty = true;
-            tmpsub->floor_dirty = true;
-            tmpsub->outside_dirty = true;
-            tmpsub->absorption_dirty = true;
+            level_cache_freshness::report( *this, level_cache_freshness::submap_replaced {
+                .at = grid,
+            } );
             tmpsub->pf_dirty = true;
         } else {
             // A whole-level replacement: the level's caches are stale everywhere, with
