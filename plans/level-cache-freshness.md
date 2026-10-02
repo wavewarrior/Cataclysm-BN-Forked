@@ -17,7 +17,7 @@ The upkeep of the per-z-level **Level cache** has no owner. Roughly two dozen di
 
 - Whether visibility is recomputed depends on a map-wide flag that is never cleared. It starts true and stays true, so it works only because it accidentally forces the full map cache rebuild on every refresh. Nobody can safely change it, because that accidental trigger is what keeps visibility correct after the player moves or changes z-level.
 - Different mutators raise different subsets of bits. Some terrain edits and some entity-light updates change visibility inputs but raise no visibility bit, so visibility can be read stale on paths that skip the full rebuild.
-- Several bits are write-only and two functions are dead, which hides the real contract.
+- Several bits were write-only and two functions dead, which hid the real contract. Deleted in the final stage (#22): `sound_wall_cache_dirty`, `has_any_floor`, `vehicle_caches_dirty`, `vehicle_floor_cache_dirty`, `map::is_map_cache_valid`. The never-called clean-aggregate function had already gone with the view-stale swap (#17). `has_any_vehicle_floor` was kept: the lightmap builder reads it.
 - The GPU lighting layer learns about CPU changes through several unrelated paths (direct invalidate calls from three places, plus internal staleness writers, plus two generation counters polled by the renderer). The vehicle-move path changes transparency without bumping the generation the renderer polls.
 - Tests re-implement the invalidate, build, update sequence by hand in many places, so a change in the contract breaks tests unpredictably and no test states the contract.
 
@@ -56,8 +56,8 @@ Introduce one module, **Level cache freshness**, that owns whether each Level ca
 27. As a test author, I want a test that counts expensive visibility recomputations per turn, so that the claimed saving from removing redundant refreshes is measured, not assumed.
 28. As a reviewer, I want each migration stage to be independently buildable and testable, so that I can review and revert one stage at a time.
 29. As a reviewer, I want the behaviour change confined to a single named stage plus the stale-bug fixes, so that behaviour-preserving stages can be reviewed as pure refactors.
-30. As a maintainer, I want write-only bits deleted (the four identified) so that no one infers meaning from state nothing reads.
-31. As a maintainer, I want the dead clean-aggregate function and the dead cache-validity predicate deleted, so that dead code stops suggesting a contract that does not exist.
+30. As a maintainer, I want write-only bits deleted (the four identified) so that no one infers meaning from state nothing reads. **[DONE #22]**
+31. As a maintainer, I want the dead clean-aggregate function and the dead cache-validity predicate deleted, so that dead code stops suggesting a contract that does not exist. **[DONE: predicate #22; clean-aggregate #17]**
 32. As a developer reading visibility code, I want the documentation of the dirty-read behaviour to state plainly that a stale level yields line-of-sight-only answers, so that I know when to refresh first.
 33. As a developer of AI or stealth features, I want to know that exact visibility requires a refresh first, so that I choose the right call.
 34. As a developer, I want the module's vocabulary to match the repo glossary ("structure rebuild", "view stale", "change kind"), so that code, plans and tests speak the same language.
@@ -142,5 +142,9 @@ Frontier order: #9 -> #10 -> #11; then #12-#15 in parallel; #16 after all four; 
 Landed: #18 (e77ab629f8), #19 (98f124b097 + 282bfd2988, sabotage-proven; `[vision]` gate
 unchanged vs baseline), #20 (0dba51deec + 35d24efa68, sabotage-proven; suite 179/30),
 #21 (b2716f7a45, sabotage-proven; poll_lighting_residency in gpu_lm, three map-side
-invalidate sites deleted, suite 182/31).
-Remaining frontier: #22.
+invalidate sites deleted, suite 182/31), #22 (write-only bits `sound_wall_cache_dirty`,
+`has_any_floor`, `vehicle_caches_dirty`, `vehicle_floor_cache_dirty` and the dead
+predicate `map::is_map_cache_valid` deleted together with the `mark_vehicle_caches` verb
+and the `world_replaced::vehicle` option they served; `has_any_vehicle_floor` kept — the
+lightmap builder reads it; the dead clean-aggregate function had already gone with #17).
+Frontier complete.
