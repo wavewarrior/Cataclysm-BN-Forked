@@ -46,11 +46,10 @@
 namespace {
 
 constexpr tripoint_bub_ms player_home( 60, 60, 0 );
-// Per-bit comparisons run in this z-window; "any bit is set" is still checked for every
-// level. The window keeps the capture small without losing coverage of the interesting
-// levels (player level, one above, one below).
-constexpr int z_lo = -1;
-constexpr int z_hi = 1;
+// The capture covers the FULL z-stack (-OVERMAP_DEPTH..OVERMAP_HEIGHT): a kind that
+// dirties the wrong level anywhere must fail the pin, not just outside the player's
+// window. Levels beyond the loaded bubble contribute aggregate staleness, generation
+// deltas and queue contents, which is exactly what a wrong-level bug raises.
 
 const char *part_name( const level_cache_part part ) {
     switch( part ) {
@@ -104,16 +103,16 @@ constexpr std::array<level_cache_part, 10> observed_parts = { {
 } };
 
 struct generation_baseline {
-    std::uint64_t transparency[3];
-    std::uint64_t outside[3];
-    std::uint64_t cpu_lm[3];
+    std::uint64_t transparency[OVERMAP_LAYERS];
+    std::uint64_t outside[OVERMAP_LAYERS];
+    std::uint64_t cpu_lm[OVERMAP_LAYERS];
 };
 
 generation_baseline capture_generations( map &here ) {
     generation_baseline base;
-    for( int z = z_lo; z <= z_hi; ++z ) {
+    for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z ) {
         const level_cache &ch = here.access_cache( z );
-        const int zi = z - z_lo;
+        const int zi = z + OVERMAP_DEPTH;
         base.transparency[zi] = level_cache_freshness::transparency_generation( ch );
         base.outside[zi] = level_cache_freshness::outside_generation( ch );
         base.cpu_lm[zi] = level_cache_freshness::cpu_lightmap_generation( ch );
@@ -129,7 +128,7 @@ void record_queues( map &here, std::vector<std::string> &lines ) {
     for( const tripoint_bub_ms &p : losses ) {
         lines.push_back( string_format( "support-lost %d %d %d", p.x(), p.y(), p.z() ) );
     }
-    for( int z = z_lo; z <= z_hi; ++z ) {
+    for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z ) {
         level_cache &ch = here.access_cache( z );
         std::vector<tripoint_bub_ms> pts = level_cache_freshness::take_memory_seen_points( ch );
         std::sort( pts.begin(), pts.end() );
@@ -141,15 +140,16 @@ void record_queues( map &here, std::vector<std::string> &lines ) {
     }
 }
 
-// Full freshness state of the z-window, plus generation deltas since `base`, plus the
-// submap dirty flags of the window (the co-op defect of issue #7 lives in those flags).
+// Full freshness state of the whole z-stack, plus generation deltas since `base`, plus
+// the submap dirty flags of every loaded level (the co-op defect of issue #7 lives in
+// those flags).
 std::vector<std::string> capture( map &here, const generation_baseline &base ) {
     std::vector<std::string> lines;
     const int mapsize = here.getmapsize();
     const enum_bitset<level_cache_part> bitset_parts = level_cache_bitset_parts();
-    for( int z = z_lo; z <= z_hi; ++z ) {
+    for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z ) {
         level_cache &ch = here.access_cache( z );
-        const int zi = z - z_lo;
+        const int zi = z + OVERMAP_DEPTH;
         for( const level_cache_part part : observed_parts ) {
             if( level_cache_freshness::stale( ch, part ) ) {
                 lines.push_back( string_format( "stale z%d %s", z, part_name( part ) ) );
@@ -184,15 +184,21 @@ std::vector<std::string> capture( map &here, const generation_baseline &base ) {
                 }
             }
         }
-        lines.push_back( string_format( "gen-transparency z%d +%llu", z,
-            static_cast<unsigned long long>(
-                level_cache_freshness::transparency_generation( ch ) - base.transparency[zi] ) ) );
-        lines.push_back( string_format( "gen-outside z%d +%llu", z,
-            static_cast<unsigned long long>(
-                level_cache_freshness::outside_generation( ch ) - base.outside[zi] ) ) );
-        lines.push_back( string_format( "gen-cpu-lm z%d +%llu", z,
-            static_cast<unsigned long long>(
-                level_cache_freshness::cpu_lightmap_generation( ch ) - base.cpu_lm[zi] ) ) );
+        // Sparse emission: a missing gen line means delta +0. All levels are always
+        // visited, so nothing is conflated, and a clean capture stays small at 41 levels.
+        const auto emit_gen = [&]( const char *name, const std::uint64_t now,
+                                   const std::uint64_t was ) {
+            if( const std::uint64_t delta = now - was; delta != 0 ) {
+                lines.push_back( string_format( "gen-%s z%d +%llu", name, z,
+                                                static_cast<unsigned long long>( delta ) ) );
+            }
+        };
+        emit_gen( "transparency", level_cache_freshness::transparency_generation( ch ),
+                  base.transparency[zi] );
+        emit_gen( "outside", level_cache_freshness::outside_generation( ch ),
+                  base.outside[zi] );
+        emit_gen( "cpu-lm", level_cache_freshness::cpu_lightmap_generation( ch ),
+                  base.cpu_lm[zi] );
     }
     lines.push_back( string_format( "view-stale %d",
                                     level_cache_freshness::visibility_stale( here,
