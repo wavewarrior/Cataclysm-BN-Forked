@@ -1,8 +1,12 @@
+#include <array>
+#include <cstdint>
+
 #include "avatar.h"
 #include "calendar.h"
 #include "catch/catch_amalgamated.hpp"
 #include "coordinates.h"
 #include "game.h"
+#include "game_constants.h"
 #include "level_cache_freshness.h"
 #include "lightmap.h"
 #include "map.h"
@@ -404,4 +408,138 @@ TEST_CASE(
 
     refresh_view();
     CHECK_FALSE(you.sees(z));
+}
+
+// Issue #20: the event-based per-level residency generation. Every change kind the
+// module exposes advances it for every level the kind affects, even when the content
+// ends up identical — that is the difference from the content-gated outside generation
+// and the point of the residency seam (spec #8, user stories 18/19). The transparency
+// generation keeps its own meaning; the outside generation keeps its content gate.
+namespace {
+
+// Residency generations of the z-window the pins examine.
+std::array<std::uint64_t, 3> residency_base(map& here) {
+    return { here.access_cache(-1).residency_generation,
+             here.access_cache(0).residency_generation,
+             here.access_cache(1).residency_generation };
+}
+
+} // namespace
+
+TEST_CASE(
+    "every change kind advances the residency generation of the affected level",
+    "[level_cache_freshness]") {
+    set_up_open_daylight_map();
+    map& here = get_map();
+
+    using K = level_cache_freshness;
+
+    SECTION("terrain changed advances the tile's level") {
+        const auto base = residency_base(here);
+        K::report(here, K::terrain_changed{ .at = player_home });
+        CHECK(here.access_cache(0).residency_generation > base[1]);
+    }
+
+    SECTION("terrain changed with the weather scope advances every loaded level") {
+        const auto base = residency_base(here);
+        K::report(here, K::terrain_changed{
+            .at = player_home,
+            .transparency = true,
+            .scope = K::terrain_changed::transparency_scope::all_levels });
+        CHECK(here.access_cache(-1).residency_generation > base[0]);
+        CHECK(here.access_cache(0).residency_generation > base[1]);
+        CHECK(here.access_cache(1).residency_generation > base[2]);
+    }
+
+    SECTION("light changed advances the affected levels") {
+        const auto base = residency_base(here);
+        K::report(here, K::light_changed{});
+        CHECK(here.access_cache(0).residency_generation > base[1]);
+    }
+
+    SECTION("vehicle moved advances its level and the level above") {
+        const auto base = residency_base(here);
+        K::report(here, K::vehicle_moved{
+            .sm_min = tripoint_bub_sm(2, 2, 0),
+            .sm_max = tripoint_bub_sm(3, 3, 0),
+            .z = 0 });
+        CHECK(here.access_cache(0).residency_generation > base[1]);
+        CHECK(here.access_cache(1).residency_generation > base[2]);
+    }
+
+    SECTION("player moved advances the levels") {
+        const auto base = residency_base(here);
+        K::report(here, K::player_moved{});
+        CHECK(here.access_cache(0).residency_generation > base[1]);
+    }
+
+    SECTION("z-level changed advances the levels") {
+        const auto base = residency_base(here);
+        K::report(here, K::z_level_changed{});
+        CHECK(here.access_cache(0).residency_generation > base[1]);
+    }
+
+    SECTION("map shifted advances every loaded level") {
+        const auto base = residency_base(here);
+        K::report(here, K::map_shifted{ .shift = point_rel_sm(1, 0), .player_z = 0 });
+        CHECK(here.access_cache(-1).residency_generation > base[0]);
+        CHECK(here.access_cache(0).residency_generation > base[1]);
+        CHECK(here.access_cache(1).residency_generation > base[2]);
+    }
+
+    SECTION("world replaced advances every loaded level") {
+        const auto base = residency_base(here);
+        const int ms = here.getmapsize();
+        K::report(here, K::world_replaced{
+            .first = tripoint_bub_sm(0, 0, 0),
+            .last = tripoint_bub_sm(ms - 1, ms - 1, 0) });
+        CHECK(here.access_cache(-1).residency_generation > base[0]);
+        CHECK(here.access_cache(0).residency_generation > base[1]);
+        CHECK(here.access_cache(1).residency_generation > base[2]);
+    }
+
+    SECTION("a production terrain edit advances the residency generation") {
+        // The kind is what the mutators report, so a real edit must move the
+        // generation the residency layer polls.
+        const auto base = residency_base(here);
+        here.ter_set(player_home, ter_id("t_grass"));
+        CHECK(here.access_cache(0).residency_generation > base[1]);
+    }
+}
+
+TEST_CASE(
+    "the residency generation advances even when the content is unchanged",
+    "[level_cache_freshness]") {
+    set_up_open_daylight_map();
+    map& here = get_map();
+
+    // A reported event whose property diff is empty — the shape of a paint that
+    // repaints identical terrain — raises no dirty bit, yet the event-based
+    // residency generation must still advance (user story 19). This is exactly
+    // what separates it from the content-gated outside generation below.
+    const std::uint64_t before = here.access_cache(0).residency_generation;
+    level_cache_freshness::report(here, level_cache_freshness::terrain_changed{
+        .at = player_home,
+        .support_above = false,
+        .memory_seen = false });
+    CHECK(here.access_cache(0).residency_generation > before);
+}
+
+TEST_CASE(
+    "the outside generation still does not advance when content is unchanged",
+    "[level_cache_freshness]") {
+    set_up_open_daylight_map();
+    map& here = get_map();
+    level_cache& ch = here.access_cache(0);
+
+    // The content gate is the outside generation's meaning and issue #20 keeps it:
+    // recording the same checksum twice advances nothing, while a new one does.
+    const std::uint64_t before = level_cache_freshness::outside_generation(ch);
+    level_cache_freshness::record_outside_content(ch, 0xC0FFEE);
+    const std::uint64_t after_first = level_cache_freshness::outside_generation(ch);
+    CHECK(after_first > before);
+    level_cache_freshness::record_outside_content(ch, 0xC0FFEE);
+    CHECK(level_cache_freshness::outside_generation(ch) == after_first);
+    level_cache_freshness::record_outside_content(ch, 0xBEEF);
+    CHECK(level_cache_freshness::outside_generation(ch) > after_first);
 }
