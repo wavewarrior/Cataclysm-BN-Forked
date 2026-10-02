@@ -1,6 +1,9 @@
 #include <array>
 #include <cstdint>
 
+#if defined(CATA_SDL)
+#include "compute/gpu_lm.h"
+#endif
 #include "avatar.h"
 #include "calendar.h"
 #include "catch/catch_amalgamated.hpp"
@@ -542,4 +545,49 @@ TEST_CASE(
     CHECK(level_cache_freshness::outside_generation(ch) == after_first);
     level_cache_freshness::record_outside_content(ch, 0xBEEF);
     CHECK(level_cache_freshness::outside_generation(ch) > after_first);
+}
+// Issue #21: the GPU residency layer learns about CPU changes by polling the
+// per-level residency generations, not by being called. The jump counter is the
+// headless window into what the poll observed: a change kind that advances a
+// generation must eventually advance the counter, and a quiet poll must not.
+TEST_CASE(
+    "the residency poll notices generation jumps headlessly",
+    "[level_cache_freshness]") {
+#if defined(CATA_SDL)
+    set_up_open_daylight_map();
+    map& here = get_map();
+    const auto poll = [&here]() {
+        cata_gpu::poll_lighting_residency( {
+            .device = nullptr,
+            .m = &here,
+            .cache_x = here.access_cache( 0 ).cache_x,
+            .cache_y = here.access_cache( 0 ).cache_y,
+            .z_count = OVERMAP_LAYERS,
+        } );
+    };
+    using K = level_cache_freshness;
+
+    // Adopt the current stamps, then a single terrain edit advances the counter
+    // (the kind touches its level and neighbours); a second poll with no new
+    // change observes nothing.
+    poll();
+    const std::uint64_t before = cata_gpu::lighting_residency_jump_count();
+    K::report( here, K::terrain_changed { .at = player_home } );
+    poll();
+    const std::uint64_t after_edit = cata_gpu::lighting_residency_jump_count();
+    CHECK( after_edit > before );
+    poll();
+    CHECK( cata_gpu::lighting_residency_jump_count() == after_edit );
+
+    // A committed vehicle move advances its level and the level above; the
+    // poll notices the jumps.
+    poll();
+    const std::uint64_t veh_before = cata_gpu::lighting_residency_jump_count();
+    K::report( here, K::vehicle_moved {
+        .sm_min = tripoint_bub_sm( 1, 1, 0 ),
+        .sm_max = tripoint_bub_sm( 2, 2, 0 ),
+        .z = 0 } );
+    poll();
+    CHECK( cata_gpu::lighting_residency_jump_count() > veh_before );
+#endif // CATA_SDL
 }

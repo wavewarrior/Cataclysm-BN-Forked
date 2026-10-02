@@ -124,10 +124,6 @@
 #include <variant>
 #include <vector>
 
-#if defined(CATA_SDL)
-#    include "compute/gpu_lm.h"
-#endif
-
 using ammo_effect_str_id = string_id<ammo_effect>;
 
 static const ammo_effect_str_id ammo_effect_INCENDIARY("INCENDIARY");
@@ -487,22 +483,16 @@ void map::on_vehicle_moved(
         }
         return;
     }
-
     ++vehicle_move_notifications_;
 
-    // Out-of-range levels raise nothing, and the GPU residency push below must stay
-    // gated the same way the kind's own bounds check gates its marks.
+    // Out-of-range levels raise nothing: the kind's own bounds check gates its
+    // marks, and the GPU residency layer picks the change up by polling (#21).
     if (!inbounds_z(smz)) { return; }
     level_cache_freshness::report( *this, level_cache_freshness::vehicle_moved {
         .sm_min = sm_min,
         .sm_max = sm_max,
         .z = smz,
     } );
-#if defined(CATA_SDL)
-    // Kept at the site: the GPU residency push is not Level cache freshness and moves
-    // to generation polling in a later stage.
-    cata_gpu::invalidate_lighting_transparency_levels( std::vector<int> { smz } );
-#endif
 }
 
 auto map::take_vehicle_move_notifications() -> unsigned

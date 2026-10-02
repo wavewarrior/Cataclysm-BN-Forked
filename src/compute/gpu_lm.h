@@ -236,6 +236,28 @@ struct shift_lighting_residency_params {
 // transparency dispatches can patch only the newly loaded edge bands.
 auto shift_lighting_resident_inputs(shift_lighting_residency_params const& p) -> bool;
 
+// Issue #21: the residency layer POLLS the per-level residency generations of
+// Level cache freshness instead of being called by map code. Compare each
+// level's generation against the last-seen stamp this module owns; a jumped
+// stamp invalidates that level's resident transparency, exactly as the deleted
+// direct invalidate calls did. A moved bubble origin replays the in-place
+// translate when shift_lighting_resident_inputs already applied it, and falls
+// back to invalidating every level otherwise (same contract as the old
+// map::shift fallback). Render-only bookkeeping: safe with a null device.
+struct poll_lighting_residency_params {
+    SDL_GPUDevice* device = nullptr;
+    map* m = nullptr;
+    int cache_x = 0;
+    int cache_y = 0;
+    int z_count = 0;
+};
+auto poll_lighting_residency(poll_lighting_residency_params const& p) -> void;
+
+// Cumulative count of residency-generation jumps the poll has observed across
+// all levels since startup/reset. Observation-only; lets tests pin that the
+// poll notices a change kind without a graphics device.
+auto lighting_residency_jump_count() -> std::uint64_t;
+
 // Begin the full GPU lighting pass for the dirty z-levels.
 //   1. Pack inputs from CPU level caches.
 //   2. Collect typed GPU light sources.

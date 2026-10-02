@@ -158,12 +158,6 @@
 #include <variant>
 #include <vector>
 
-#if defined( CATA_SDL )
-#include "compute/compute_backend.h"
-#include "compute/gpu_lm.h"
-#include "compute/gpu_platform.h"
-#endif
-
 struct ammo_effect;
 using ammo_effect_str_id = string_id<ammo_effect>;
 
@@ -1679,36 +1673,6 @@ void map::shift( const point_rel_sm& sp )
 
     const int zmin = -OVERMAP_DEPTH;
     const int zmax = OVERMAP_HEIGHT;
-#if defined( CATA_SDL )
-    if( cata_compute::uses_sdl_gpu_compute() ) {
-        auto *const gpu_device = cata_gpu::get_device();
-        const auto &shift_cache = get_cache_ref( zmin );
-        const auto gpu_residency_shifted = cata_gpu::shift_lighting_resident_inputs( {
-            .device = gpu_device,
-            .cache_x = shift_cache.cache_x,
-            .cache_y = shift_cache.cache_y,
-            .z_count = OVERMAP_LAYERS,
-            .shift_x_submaps = sp.x(),
-            .shift_y_submaps = sp.y(),
-        } );
-        if( !gpu_residency_shifted ) {
-            // D2: cata_gpu::get_device() is nullptr BY DESIGN whenever the fork renderer has no
-            // SDL_GPU device — the windowless test binary, or a machine where device creation
-            // fails. gpu_lm's shift returns false for that case as well as for a real failure, and
-            // upstream cannot tell them apart because upstream's CI always provisions Lavapipe.
-            // With no device there is no resident lighting input to shift, so this is a no-op, not
-            // an error; only a live device that failed to shift deserves a debugmsg.
-            if( gpu_device != nullptr ) {
-                debugmsg( "SDL_GPU resident lighting input shift failed; see debug.log for details" );
-            }
-            auto shifted_levels = std::vector<int> {};
-            for( const auto gridz : std::views::iota( zmin, zmax + 1 ) ) {
-                shifted_levels.push_back( gridz );
-            }
-            cata_gpu::invalidate_lighting_transparency_levels( shifted_levels );
-        }
-    }
-#endif
     for( const auto gridz : std::views::iota( zmin, zmax + 1 ) ) {
         for( const vehicle_handle handle : get_cache( gridz ).vehicle_list ) {
             if( vehicle *const veh = resolve_vehicle( handle ); veh != nullptr ) { veh->zones_dirty = true; }

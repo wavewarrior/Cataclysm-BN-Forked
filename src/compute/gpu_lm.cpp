@@ -2785,6 +2785,112 @@ auto shift_lighting_resident_inputs(shift_lighting_residency_params const& p) ->
     return true;
 }
 
+// Issue #21: per-level last-seen residency generations and last-seen bubble
+// origin owned by the residency layer. The poll compares against these stamps
+// instead of map code pushing invalidations.
+namespace {
+
+struct residency_poll_state {
+    std::vector<std::uint64_t> last_seen_generations;
+    point_abs_sm last_seen_origin {};
+    bool have_origin = false;
+    bool primed = false;
+    std::uint64_t jump_count = 0;
+};
+
+residency_poll_state s_residency_poll;
+
+} // namespace
+
+auto lighting_residency_jump_count() -> std::uint64_t {
+    return s_residency_poll.jump_count;
+}
+
+auto poll_lighting_residency(poll_lighting_residency_params const& p) -> void {
+    if (p.m == nullptr || p.z_count <= 0) { return; }
+    map& m = *p.m;
+    auto& st = s_residency_poll;
+    const int zmin = -OVERMAP_DEPTH;
+    if (st.last_seen_generations.size() != static_cast<std::size_t>( p.z_count ) ) {
+        st.last_seen_generations.assign( static_cast<std::size_t>( p.z_count ), 0 );
+        st.have_origin = false;
+        st.primed = false;
+    }
+    // First sight of a map adopts the current stamps silently: adopting an
+    // already-advanced generation is not a jump the poll observed.
+    if( !st.primed ) {
+        for( int z = zmin; z <= zmin + p.z_count - 1; ++z ) {
+            st.last_seen_generations[static_cast<std::size_t>( z_to_resident_index( z ) )] =
+                level_cache_freshness::residency_generation( m.get_cache_ref( z ) );
+        }
+        st.primed = true;
+        st.last_seen_origin = m.get_abs_sub();
+        st.have_origin = true;
+        return;
+    }
+    const point_abs_sm origin = m.get_abs_sub();
+    const bool origin_moved = st.have_origin &&
+        ( origin.x() != st.last_seen_origin.x() || origin.y() != st.last_seen_origin.y() );
+    // Observe every generation jump for the counter, whatever caused it.
+    bool any_jump = false;
+    for( int z = zmin; z <= zmin + p.z_count - 1; ++z ) {
+        const std::size_t idx = static_cast<std::size_t>( z_to_resident_index( z ) );
+        const std::uint64_t gen = level_cache_freshness::residency_generation( m.get_cache_ref( z ) );
+        if( gen != st.last_seen_generations[idx] ) {
+            st.jump_count++;
+            any_jump = true;
+        }
+    }
+    if( origin_moved ) {
+        // The bubble moved: replay the in-place translate so the next lighting
+        // build only uploads the newly loaded edge bands. A shift advances every
+        // generation (#20), so the jump is expected and needs no per-level
+        // invalidate beyond what the translate performs.
+        const int delta_x = static_cast<int>( origin.x() )
+                            - static_cast<int>( st.last_seen_origin.x() );
+        const int delta_y = static_cast<int>( origin.y() )
+                            - static_cast<int>( st.last_seen_origin.y() );
+        const bool shifted = shift_lighting_resident_inputs( {
+            .device = p.device,
+            .cache_x = p.cache_x,
+            .cache_y = p.cache_y,
+            .z_count = p.z_count,
+            .shift_x_submaps = delta_x,
+            .shift_y_submaps = delta_y,
+        } );
+        if( !shifted ) {
+            // D2: a null device means there is no resident input to shift, so the
+            // invalidate-all fallback below is a no-op-shaped bookkeeping reset, not
+            // an error; only a live device that failed to shift deserves a debugmsg.
+            if( p.device != nullptr ) {
+                debugmsg( "SDL_GPU resident lighting input shift failed; see debug.log for details" );
+            }
+            auto all_levels = std::vector<int> {};
+            for( const auto gridz : std::views::iota( zmin, zmin + p.z_count ) ) {
+                all_levels.push_back( gridz );
+            }
+            invalidate_lighting_transparency_levels( all_levels );
+        }
+    } else if( any_jump ) {
+        // No move: invalidate exactly the levels whose generation jumped, the
+        // same effect the deleted direct invalidate calls had.
+        auto jumped = std::vector<int> {};
+        for( int z = zmin; z <= zmin + p.z_count - 1; ++z ) {
+            const std::size_t idx = static_cast<std::size_t>( z_to_resident_index( z ) );
+            const std::uint64_t gen = level_cache_freshness::residency_generation( m.get_cache_ref( z ) );
+            if( gen != st.last_seen_generations[idx] ) { jumped.push_back( z ); }
+        }
+        invalidate_lighting_transparency_levels( jumped );
+    }
+    // Adopt the current stamps last so the next poll only sees new changes.
+    for( int z = zmin; z <= zmin + p.z_count - 1; ++z ) {
+        st.last_seen_generations[static_cast<std::size_t>( z_to_resident_index( z ) )] =
+            level_cache_freshness::residency_generation( m.get_cache_ref( z ) );
+    }
+    st.last_seen_origin = origin;
+    st.have_origin = true;
+}
+
 auto compute_light_radius(float const luminance) -> float {
     if (luminance <= LIGHT_AMBIENT_LOW) { return 0.0f; }
 

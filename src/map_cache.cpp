@@ -677,7 +677,6 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
     bool gpu_vehicle_obscured_dirty = false;
     std::vector<int> dirty_seen_cache_levels;
     std::vector<int> gpu_transparency_dirty_levels;
-    std::vector<int> gpu_transparency_residency_invalid_levels;
     std::vector<int> gpu_floor_dirty_levels;
     std::vector<int> gpu_vehicle_floor_dirty_levels;
     std::vector<int> gpu_vehicle_obscured_dirty_levels;
@@ -853,7 +852,6 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
                 const auto& part_pos = veh->bub_part_location(vp.part());
                 if (!inbounds(part_pos) || vp.part().removed) { continue; }
                 add_gpu_dirty_level(gpu_transparency_dirty_levels, part_pos.z());
-                add_gpu_dirty_level(gpu_transparency_residency_invalid_levels, part_pos.z());
                 add_gpu_dirty_level(gpu_floor_dirty_levels, part_pos.z());
                 add_gpu_dirty_level(gpu_vehicle_obscured_dirty_levels, part_pos.z());
             }
@@ -877,7 +875,6 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
     _lap(_ph_veh);
 
     normalize_gpu_dirty_levels(gpu_transparency_dirty_levels);
-    normalize_gpu_dirty_levels(gpu_transparency_residency_invalid_levels);
     normalize_gpu_dirty_levels(gpu_floor_dirty_levels);
     normalize_gpu_dirty_levels(gpu_vehicle_floor_dirty_levels);
     normalize_gpu_dirty_levels(gpu_vehicle_obscured_dirty_levels);
@@ -885,12 +882,6 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
     gpu_floor_dirty = !gpu_floor_dirty_levels.empty();
     gpu_vehicle_floor_dirty = !gpu_vehicle_floor_dirty_levels.empty();
     gpu_vehicle_obscured_dirty = !gpu_vehicle_obscured_dirty_levels.empty();
-#if defined(CATA_SDL)
-    if (!gpu_transparency_residency_invalid_levels.empty()) {
-        cata_gpu::invalidate_lighting_transparency_levels(
-            gpu_transparency_residency_invalid_levels);
-    }
-#endif
     TracyPlot("Map GPU Transparency Dirty Levels",
               static_cast<int64_t>(gpu_transparency_dirty_levels.size()));
     TracyPlot("Map GPU Floor Dirty Levels", static_cast<int64_t>(gpu_floor_dirty_levels.size()));
@@ -898,8 +889,6 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
               static_cast<int64_t>(gpu_vehicle_floor_dirty_levels.size()));
     TracyPlot("Map GPU Vehicle Obscured Dirty Levels",
               static_cast<int64_t>(gpu_vehicle_obscured_dirty_levels.size()));
-    TracyPlot("Map GPU Transparency Invalidated Levels",
-              static_cast<int64_t>(gpu_transparency_residency_invalid_levels.size()));
 
     const tripoint_bub_ms& p = g->u.bub_pos();
     auto force_seen_rebuild_for_gpu_residency = false;
@@ -911,6 +900,19 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
     SDL_GPUDevice* const gpu_device = cata_gpu::get_device();
 #else
     constexpr std::nullptr_t gpu_device = nullptr;
+#endif
+#if defined(CATA_SDL)
+    // Issue #21: the GPU residency layer polls the per-level residency generations
+    // of Level cache freshness instead of map code pushing invalidations. Runs
+    // before any consumer of resident lighting below; safe with a null device
+    // (records staleness bookkeeping only).
+    cata_gpu::poll_lighting_residency( {
+        .device = gpu_device,
+        .m = this,
+        .cache_x = get_cache_ref(minz).cache_x,
+        .cache_y = get_cache_ref(minz).cache_y,
+        .z_count = OVERMAP_LAYERS,
+    } );
 #endif
 #if defined(CATA_SDL)
     if (!skip_lightmap && gpu_device != nullptr) {
