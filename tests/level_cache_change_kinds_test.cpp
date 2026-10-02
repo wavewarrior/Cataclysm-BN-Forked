@@ -62,8 +62,6 @@ const char *part_name( const level_cache_part part ) {
             return "floor";
         case level_cache_part::absorption:
             return "absorption";
-        case level_cache_part::sound_wall:
-            return "sound_wall";
         case level_cache_part::lightmap:
             return "lightmap";
         case level_cache_part::seen:
@@ -76,12 +74,6 @@ const char *part_name( const level_cache_part part ) {
             return "suspension_dirty";
         case level_cache_part::suspension_init:
             return "suspension_init";
-        case level_cache_part::vehicle_caches:
-            return "vehicle_caches";
-        case level_cache_part::vehicle_floor:
-            return "vehicle_floor";
-        case level_cache_part::has_any_floor:
-            return "has_any_floor";
         case level_cache_part::has_any_vehicle_floor:
             return "has_any_vehicle_floor";
         case level_cache_part::colored_light_active:
@@ -97,20 +89,17 @@ const char *part_name( const level_cache_part part ) {
 }
 
 // The parts a change kind can raise. The rest are builder-owned stamps
-// (`has_any_floor`, `colored_light_active`, `suspension_init`, ...) that no kind touches.
-constexpr std::array<level_cache_part, 13> observed_parts = { {
+// (`colored_light_active`, `suspension_init`, ...) that no kind touches.
+constexpr std::array<level_cache_part, 10> observed_parts = { {
     level_cache_part::transparency,
     level_cache_part::outside,
     level_cache_part::floor,
     level_cache_part::absorption,
-    level_cache_part::sound_wall,
     level_cache_part::lightmap,
     level_cache_part::seen,
     level_cache_part::visibility,
     level_cache_part::lm_valid,
     level_cache_part::suspension_dirty,
-    level_cache_part::vehicle_caches,
-    level_cache_part::vehicle_floor,
     level_cache_part::memory_seen_all,
 } };
 
@@ -565,12 +554,12 @@ TEST_CASE( "light-changed with the visibility option matches the paired invalida
 // through the `vehicle_moved` kind, spelled out from the pre-migration source. The
 // notification counter and the GPU residency push stay at the call site and are not
 // freshness, so they are absent here; so is `pf_dirty`, which the capture excludes.
+// The write-only vehicle-cache bits deleted in #22 are gone from both sides.
 void reference_vehicle_move_sequence( map &here, const tripoint_bub_sm &sm_min,
                                       const tripoint_bub_sm &sm_max, const int smz ) {
     level_cache &ch = here.access_cache( smz );
     level_cache_freshness::mark( ch,
         freshness_parts( { level_cache_part::veh_in_active_range } ) );
-    level_cache_freshness::mark_vehicle_caches( here, smz );
     level_cache_freshness::invalidate_lightmap( here );
     level_cache_freshness::forget_solar_hour( here );
     level_cache_freshness::mark_seen( here, smz );
@@ -862,7 +851,6 @@ TEST_CASE( "world-replaced matches the non-incremental loadn setter sequence",
             level_cache_freshness::mark_suspension( here, z );
             level_cache_freshness::mark( here.access_cache( z ),
                                          freshness_parts( { level_cache_part::lightmap } ) );
-            level_cache_freshness::mark_vehicle_caches( here, z );
         }
     };
 
@@ -887,7 +875,7 @@ TEST_CASE( "world-replaced matches the non-incremental loadn setter sequence",
 TEST_CASE( "restricted world-replaced matches the partial bulk sequences",
            "[level_cache_freshness]" ) {
     // Two callers replace less than everything: an OMT regeneration leaves the seen
-    // cache, the lightmap and the vehicles alone; a background repaint additionally
+    // cache and the lightmap alone; a background repaint additionally
     // leaves the floor family alone.  The part options must reproduce the old setter
     // sequences exactly, couplings included.
     const int mapsize = get_map().getmapsize();
@@ -916,7 +904,6 @@ TEST_CASE( "restricted world-replaced matches the partial bulk sequences",
         auto change = whole_bubble( 0 );
         change.seen = false;
         change.lightmap = false;
-        change.vehicle = false;
         return change;
     }() );
     const std::vector<std::string> via_kind = capture( here, base );
@@ -940,7 +927,6 @@ TEST_CASE( "restricted world-replaced matches the partial bulk sequences",
         change.lightmap = false;
         change.floor = false;
         change.suspension = false;
-        change.vehicle = false;
         return change;
     }() );
     const std::vector<std::string> via_kind_paint = capture( here, base );
@@ -1096,7 +1082,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "whole-level floor plus vehicle-caches bookkeeping match the part-removal handler",
+    "whole-level floor change matches the part-removal handler",
     "[level_cache_freshness][vehicle]" ) {
     const int z = 0;
 
@@ -1107,7 +1093,6 @@ TEST_CASE(
     // Issue #18: a whole-level floor repaint stales the visibility of the level it
     // repainted, so the kind reports that dependent too.
     level_cache_freshness::mark_visibility( here, z + 1 );
-    level_cache_freshness::mark_vehicle_caches( here, z );
     const std::vector<std::string> via_setters = capture( here, base );
 
     set_up_open_daylight_map();
@@ -1118,7 +1103,6 @@ TEST_CASE(
         .support_above = false,
         .memory_seen = false,
     } );
-    level_cache_freshness::mark_vehicle_caches( here, z );
     const std::vector<std::string> via_kind = capture( here, base );
 
     INFO( "setters only:\n" << only_in( via_setters, via_kind )

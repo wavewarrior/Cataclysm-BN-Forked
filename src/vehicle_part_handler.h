@@ -61,8 +61,6 @@ class DefaultRemovePartHandler : public RemovePartHandler
                 .support_above = false,
                 .memory_seen = false,
             } );
-            // Membership bookkeeping, not freshness of the part edit itself.
-            level_cache_freshness::mark_vehicle_caches( here, z - 1 );
         }
         void removed( vehicle &veh, const int part ) override {
             avatar &player_character = get_avatar();

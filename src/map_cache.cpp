@@ -502,8 +502,6 @@ bool map::build_floor_cache(const int zlev) {
     }
 
     level_cache_freshness::clear(ch, freshness_parts( { level_cache_part::floor } ));
-    level_cache_freshness::assign(ch, freshness_parts( { level_cache_part::has_any_floor } ),
-                                  std::ranges::any_of(floor_cache, [](char c) { return c != 0; }));
     return true;
 }
 

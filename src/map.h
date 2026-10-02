@@ -388,11 +388,9 @@ struct level_cache {
     std::uint64_t outside_checksum = 0;
     cata_dynamic_bitset outside_cache_dirty;
     cata_dynamic_bitset floor_cache_dirty;
-    // FIX ABSORPTION AND WALL CACHE CALLS
     // absorption_cache_dirty is for tile sound absorption checking/rebuild purposes.
     // Should be set for a tile position if the tile in question changes significantly, or if a tile feature that affects sound propagation is added/removed.
     cata_dynamic_bitset absorption_cache_dirty;
-    cata_dynamic_bitset sound_wall_cache_dirty;
 
     bool seen_cache_dirty = false;
     // Per-submap dirty bitset for lightmap, parallel to transparency_cache_dirty
@@ -416,15 +414,9 @@ struct level_cache {
     // Per-level visibility dirtiness. The map-level aggregate flag is the source
     // of truth for gameplay consumers that need completed player visibility.
     bool visibility_cache_dirty = true;
-    // Set by build_floor_cache; true when at least one tile has a floor.
-    bool has_any_floor = true;
     bool has_any_vehicle_floor = false;
     bool suspension_cache_initialized = false;
     bool suspension_cache_dirty = false;
-    // Vehicle floor cache dirty: set when vehicle below moves
-    bool vehicle_floor_cache_dirty = false;
-    // Vehicle cache dirty: set when vehicle here moves
-    bool vehicle_caches_dirty = false;
     std::list<point_abs_ms> suspension_cache;
 
     // ---- 12 tile-coordinate arrays (size: cache_x * cache_y) ----
@@ -862,8 +854,6 @@ class map : public submap_load_listener
         auto is_memory_seen_cache_dirty_all( int zlev ) const -> bool;
         auto take_memory_seen_cache_dirty_points( int zlev ) -> std::vector<tripoint_bub_ms>;
         auto mark_memory_seen_cache_dirty_all_clean( int zlev ) -> void;
-
-        auto is_map_cache_valid( const int zlev ) -> bool;
 
         /// Counts map::update_visibility_cache() invocations (the expensive
         /// all-z visibility recompute). Returns the count since the last call

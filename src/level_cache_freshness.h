@@ -29,16 +29,12 @@ enum class level_cache_part : int {
     outside,               ///< per-submap outside_cache_dirty
     floor,                 ///< per-submap floor_cache_dirty
     absorption,            ///< per-submap absorption_cache_dirty
-    sound_wall,            ///< per-submap sound_wall_cache_dirty
     lightmap,              ///< per-submap lightmap_dirty
     seen,                  ///< per-level seen_cache_dirty
     visibility,            ///< per-level visibility_cache_dirty
     lm_valid,              ///< per-level lm_cpu_cache_valid (inverted freshness)
     suspension_dirty,      ///< per-level suspension_cache_dirty
     suspension_init,       ///< per-level suspension_cache_initialized
-    vehicle_caches,        ///< per-level vehicle_caches_dirty
-    vehicle_floor,         ///< per-level vehicle_floor_cache_dirty
-    has_any_floor,         ///< per-level has_any_floor, stamped by the floor builder
     has_any_vehicle_floor, ///< per-level has_any_vehicle_floor
     colored_light_active,  ///< per-level colored_light_cache_active
     veh_in_active_range,   ///< per-level veh_in_active_range
@@ -155,13 +151,6 @@ class level_cache_freshness
         /** Record the viewer the visibility cache was just rebuilt for. */
         static void stamp_visibility_origin( map &who, const tripoint_bub_ms &origin );
         /**
-         * Bookkeeping pair for a vehicle entering or leaving a level's caches: the
-         * vehicle-only caches of `zlev` and the vehicle-floor cache one level above it.
-         * Both parts are write-only today (issue #2) and disappear with #22; the verb
-         * exists so vehicle code never raises a freshness bit directly.
-         */
-        static void mark_vehicle_caches( map &who, int zlev );
-        /**
          * Forget both solar stamps so the sunlight cascade recomputes. Only
          * `invalidate_level` needs the pair; the other two writers below each touch
          * one field, and resetting the wrong one forces a full sunlight rebuild.
@@ -259,8 +248,8 @@ class level_cache_freshness
         // Deliberately left at the call sites, because they are not Level cache
         // freshness: the pathfinding-cache dirt (`map::set_pathfinding_cache_dirty`),
         // the `suspension_cache` emplace accompanying a suspension flag change,
-        // `invalidate_max_populated_zlev`, the vehicle zone-dirty walk, and the GPU
-        // residency pushes (those move to generation polling in a later stage).
+        // `invalidate_max_populated_zlev`, and the vehicle zone-dirty walk. The GPU
+        // residency pushes became generation polling in ticket #21.
 
         /**
          * Terrain or furniture changed at one tile. The flags carry the property diff
@@ -391,8 +380,6 @@ class level_cache_freshness
             bool absorption = true;
             /// Dirt the suspension cache of each covered level.
             bool suspension = true;
-            /// Dirt the vehicle caches of each covered level (and the vehicle floor above).
-            bool vehicle = true;
         };
 
         static void report( map &who, const terrain_changed &change );

@@ -23,16 +23,12 @@ constexpr level_cache_part all_parts[] = {
     level_cache_part::outside,
     level_cache_part::floor,
     level_cache_part::absorption,
-    level_cache_part::sound_wall,
     level_cache_part::lightmap,
     level_cache_part::seen,
     level_cache_part::visibility,
     level_cache_part::lm_valid,
     level_cache_part::suspension_dirty,
     level_cache_part::suspension_init,
-    level_cache_part::vehicle_caches,
-    level_cache_part::vehicle_floor,
-    level_cache_part::has_any_floor,
     level_cache_part::has_any_vehicle_floor,
     level_cache_part::colored_light_active,
     level_cache_part::veh_in_active_range,
@@ -63,8 +59,6 @@ cata_dynamic_bitset *bitset_of( level_cache &cache, const level_cache_part part 
             return &cache.floor_cache_dirty;
         case level_cache_part::absorption:
             return &cache.absorption_cache_dirty;
-        case level_cache_part::sound_wall:
-            return &cache.sound_wall_cache_dirty;
         case level_cache_part::lightmap:
             return &cache.lightmap_dirty;
         default:
@@ -84,12 +78,6 @@ bool *flag_of( level_cache &cache, const level_cache_part part ) {
             return &cache.suspension_cache_dirty;
         case level_cache_part::suspension_init:
             return &cache.suspension_cache_initialized;
-        case level_cache_part::vehicle_caches:
-            return &cache.vehicle_caches_dirty;
-        case level_cache_part::vehicle_floor:
-            return &cache.vehicle_floor_cache_dirty;
-        case level_cache_part::has_any_floor:
-            return &cache.has_any_floor;
         case level_cache_part::has_any_vehicle_floor:
             return &cache.has_any_vehicle_floor;
         case level_cache_part::colored_light_active:
@@ -122,7 +110,6 @@ enum_bitset<level_cache_part> level_cache_bitset_parts() {
         result.set( level_cache_part::outside );
         result.set( level_cache_part::floor );
         result.set( level_cache_part::absorption );
-        result.set( level_cache_part::sound_wall );
         result.set( level_cache_part::lightmap );
         return result;
     }();
@@ -305,18 +292,6 @@ void level_cache_freshness::forget_seen_origin( map &who ) {
 void level_cache_freshness::stamp_seen_origin( map &who, const tripoint_bub_ms &origin ) {
     assert_main_thread();
     who.m_last_seen_cache_origin = origin;
-}
-
-void level_cache_freshness::mark_vehicle_caches( map &who, const int zlev ) {
-    assert_main_thread();
-    // The coupling this verb carries: a vehicle on this level
-    // dirties the vehicle-floor cache of the level above it.
-    if( who.inbounds_z( zlev ) ) {
-        mark( who.get_cache( zlev ), freshness_parts( { level_cache_part::vehicle_caches } ) );
-    }
-    if( who.inbounds_z( zlev + 1 ) ) {
-        mark( who.get_cache( zlev + 1 ), freshness_parts( { level_cache_part::vehicle_floor } ) );
-    }
 }
 
 void level_cache_freshness::forget_solar_stamps( map &who ) {
@@ -644,14 +619,12 @@ void level_cache_freshness::invalidate_level( map &who, const int zlev ) {
         level_cache_part::floor,
         level_cache_part::transparency,
         level_cache_part::absorption,
-        level_cache_part::sound_wall,
         level_cache_part::seen,
         level_cache_part::lightmap,
         level_cache_part::outside,
         level_cache_part::suspension_dirty,
     } ) );
     invalidate_cpu_lightmap( ch );
-    mark_vehicle_caches( who, zlev );
     mark_visibility( who, zlev );
     forget_seen_origin( who );
     forget_solar_stamps( who );
@@ -828,10 +801,9 @@ void level_cache_freshness::report( map &who, const vehicle_moved &change ) {
     }
     level_cache &ch = who.get_cache( smz );
     // Mirrors map::on_vehicle_moved's non-batched body, minus the notification counter
-    // (an observation, not freshness) and minus the GPU residency push, which stays at
-    // the call site until the GPU seam turns to generation polling.
+    // (an observation, not freshness); the GPU residency push became generation polling
+    // in ticket #21, and the write-only vehicle-cache bits were deleted in #22.
     mark( ch, freshness_parts( { level_cache_part::veh_in_active_range } ) );
-    mark_vehicle_caches( who, smz );
     invalidate_lightmap( who );
     // Hour-only: the vehicle path must not reset the light-level gate, or every move
     // would force a full sunlight cascade.
@@ -1017,11 +989,11 @@ void level_cache_freshness::report( map &who, const world_replaced &change ) {
     //
     // Per covered level this is the non-incremental `loadn` sequence (map.cpp) at area
     // granularity, including its couplings: the transparency raise bumps the
-    // Structure-rebuild generation, the floor raise cascades outside and absorption one
-    // level down (with one submap of slack, the 3x3-tile neighbourhood of a submap), and
-    // the vehicle raise touches the level above. Pathfinding dirt stays at the call site
-    // like every other kind, and the visibility bit is not raised here: the seen rebuild
-    // the dirty seen cache provokes raises it, exactly as it does for `loadn`.
+    // Structure-rebuild generation, and the floor raise cascades outside and absorption
+    // one level down (with one submap of slack, the 3x3-tile neighbourhood of a
+    // submap). Pathfinding dirt stays at the call site like every other kind, and the
+    // visibility bit is not raised here: the seen rebuild the dirty seen cache provokes
+    // raises it, exactly as it does for `loadn`.
     const auto mark_area = [&]( const int z, const enum_bitset<level_cache_part> &parts,
     const int slack ) {
         if( !who.inbounds_z( z ) ) {
@@ -1075,9 +1047,6 @@ void level_cache_freshness::report( map &who, const world_replaced &change ) {
         }
         if( change.suspension ) {
             mark_suspension( who, z );
-        }
-        if( change.vehicle ) {
-            mark_vehicle_caches( who, z );
         }
         // Outside and absorption one level down: `loadn`'s floor raise cascades there
         // because outside at z-1 reads floor at z. A caller that leaves the floor cache

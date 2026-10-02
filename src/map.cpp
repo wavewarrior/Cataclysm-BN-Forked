@@ -2591,14 +2591,9 @@ static void vehicle_caching_internal_above(
             freshness_parts( { level_cache_part::has_any_vehicle_floor } ), true );
     }
 }
-
 void map::do_vehicle_caching( int z )
 {
     level_cache& ch = get_cache( z );
-    if( ch.vehicle_list.empty() && inbounds_z( z + 1 ) ) {
-        level_cache_freshness::clear( get_cache( z + 1 ),
-            freshness_parts( { level_cache_part::vehicle_floor } ) );
-    }
     for( const vehicle_handle handle : ch.vehicle_list ) {
         vehicle *const v = resolve_vehicle( handle );
         if( v == nullptr ) { continue; }
@@ -2607,14 +2602,10 @@ void map::do_vehicle_caching( int z )
             if( !inbounds( part_pos ) || vp.part().removed ) { continue; }
             vehicle_caching_internal( get_cache( part_pos.z() ), vp, v );
             if( part_pos.z() < OVERMAP_HEIGHT ) {
-                level_cache &ch_above = get_cache( part_pos.z() + 1 );
-                vehicle_caching_internal_above( ch_above, vp, v );
-                level_cache_freshness::clear( ch_above,
-                    freshness_parts( { level_cache_part::vehicle_floor } ) );
+                vehicle_caching_internal_above( get_cache( part_pos.z() + 1 ), vp, v );
             }
         }
     }
-    level_cache_freshness::clear( ch, freshness_parts( { level_cache_part::vehicle_caches } ) );
 }
 
 
@@ -2764,7 +2755,6 @@ void map::draw_fill_background( const ter_id& type )
         .lightmap = false,
         .floor = false,
         .suspension = false,
-        .vehicle = false,
     } );
     set_pathfinding_cache_dirty( z );
 
@@ -3188,7 +3178,6 @@ level_cache::level_cache( int mx, int my )
       outside_cache_dirty( static_cast<size_t>( mx / SEEX ) * ( my / SEEY ) ),
       floor_cache_dirty( static_cast<size_t>( mx / SEEX ) * ( my / SEEY ) ),
       absorption_cache_dirty( static_cast<size_t>( mx / SEEX ) * ( my / SEEY ) ),
-      sound_wall_cache_dirty( static_cast<size_t>( mx / SEEX ) * ( my / SEEY ) ),
       lightmap_dirty( static_cast<size_t>( mx / SEEX ) * ( my / SEEY ) ),
       lm( static_cast<size_t>( mx * my ), 0.0f ),
       sm( static_cast<size_t>( mx * my ), 0.0f ),
@@ -3292,18 +3281,6 @@ bool map::check_and_set_seen_cache( const tripoint_bub_ms& p ) const
     return false;
 }
 
-bool map::is_map_cache_valid( const int zlev )
-{
-    if( inbounds_z( zlev ) ) {
-        level_cache &ch = get_cache( zlev );
-        // NOTE: Purposely excludes visibility cache, that is handled seperately in the game loop
-        return ch.floor_cache_dirty.any() || ch.transparency_cache_dirty.any() ||
-               ch.absorption_cache_dirty.any() || ch.sound_wall_cache_dirty.any() ||
-               ch.seen_cache_dirty || ch.lightmap_dirty.any() || ch.outside_cache_dirty.any() ||
-               ch.suspension_cache_dirty;
-    }
-    return false;
-}
 
 
 
