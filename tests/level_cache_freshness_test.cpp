@@ -1,5 +1,6 @@
 #include "avatar.h"
 #include "calendar.h"
+#include "efftype.h"
 #include "catch/catch_amalgamated.hpp"
 #include "coordinates.h"
 #include "game.h"
@@ -250,6 +251,59 @@ TEST_CASE(
     }
 }
 
+// Issue #19: entity lights (a burning monster walking into view, a friend
+// switching on a lamp) change the lightmap without raising any freshness bit,
+// because the light-source signature was only sampled inside a build. A caller
+// claiming the map cache is current got visibility from the stale lightmap.
+// The refresh entry point now samples the signature itself whenever it is able
+// to process the lightmap, so a light-only change forces the rebuilding repair.
+TEST_CASE(
+    "entity light plus standard refresh updates the lightmap",
+    "[level_cache_freshness][level_cache_stale_bug]") {
+    clear_all_state();
+    build_test_map(ter_id("t_dirt"));
+    map& here = get_map();
+    // Roofed room at midnight: the sampled tile starts in the dark.
+    for (int x = 56; x <= 64; x++) {
+        for (int y = 56; y <= 64; y++) {
+            here.ter_set(tripoint_bub_ms(x, y, 1), ter_id("t_flat_roof"));
+        }
+    }
+    g->place_player(player_home);
+    set_time(calendar::turn_zero);
+    get_avatar().recalc_sight_limits();
+    refresh_level_cache();
+
+    const level_cache& cache = here.access_cache(player_home.z());
+    const auto sample_idx = static_cast<size_t>(cache.idx(player_home.x() + 2, player_home.y()));
+    CHECK(cache.lm[sample_idx] < LIGHT_AMBIENT_LIT);
+
+    // A burning monster appears one tile beyond the sample point. Movement and
+    // effects raise no freshness bit; only the light-source signature notices.
+    // Fire light is intensity 8, which clears LIGHT_AMBIENT_DIM one tile away.
+    monster& z = spawn_test_monster("mon_zombie", tripoint_bub_ms(62, 60, 0));
+    z.add_effect(efftype_id("onfire"), 100_turns);
+
+    SECTION("the caller-claims-current refresh propagates the light") {
+        // The per-turn production shape: the caller asserts the map cache is
+        // current. Nothing but the signature knows the monster brought light.
+        g->refresh_player_visibility_cache_if_needed(
+            /*player_map_cache_current=*/true,
+            /*skip_lightmap=*/false);
+        CHECK(cache.lm[sample_idx] > LIGHT_AMBIENT_DIM); // issue #19: not stale
+    }
+
+    SECTION("a repeat refresh with nothing changed costs no recomputation") {
+        g->refresh_player_visibility_cache_if_needed(
+            /*player_map_cache_current=*/true,
+            /*skip_lightmap=*/false);
+        here.take_visibility_cache_updates();
+        g->refresh_player_visibility_cache_if_needed(
+            /*player_map_cache_current=*/true,
+            /*skip_lightmap=*/false);
+        CHECK(here.take_visibility_cache_updates() == 0);
+    }
+}
 // Measurement for user story 27: how many expensive visibility recomputations does one
 // turn cost on current behaviour? `map::take_visibility_cache_updates()` counts
 // `map::update_visibility_cache()` calls, each of which sweeps every loaded z-level.
