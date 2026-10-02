@@ -140,4 +140,5 @@ Frontier order: #9 -> #10 -> #11; then #12-#15 in parallel; #16 after all four; 
 | #22 | Delete write-only bits and dead functions | #17, #21 |
 
 Landed: #18 (e77ab629f8), #19 (98f124b097 + 282bfd2988, sabotage-proven; `[vision]` gate
-unchanged vs baseline). Remaining frontier: #20 -> #21, then #22.
+unchanged vs baseline), #20 (0dba51deec + 35d24efa68, sabotage-proven; suite 179/30).
+Remaining frontier: #21, then #22.
