@@ -1,6 +1,5 @@
 #include "avatar.h"
 #include "calendar.h"
-#include "efftype.h"
 #include "catch/catch_amalgamated.hpp"
 #include "coordinates.h"
 #include "game.h"
