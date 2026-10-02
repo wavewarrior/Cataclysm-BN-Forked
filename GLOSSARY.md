@@ -13,7 +13,7 @@ Whether a Level cache reflects the current world and the current viewer, and whi
 _Avoid_: cache invalidation, dirty tracking
 
 **Change kind**:
-One of a small closed set of facts about the world or viewer that affects Level cache freshness, such as terrain changed, light changed, vehicle moved, player moved, z-level changed, or map shifted.
+One of a small closed set of facts about the world or viewer that affects Level cache freshness, such as terrain changed, light changed, vehicle moved, player moved, z-level changed, or map shifted. A kind carries the fact, not its consequences; deriving consequences is the module's job.
 _Avoid_: dirty flag, invalidate call
 
 **Structure rebuild**:
@@ -21,8 +21,24 @@ The recomputation of a lighting field because world structure changed, as oppose
 _Avoid_: dirty/invalidate (as nouns)
 
 **View stale**:
-The condition that the viewer's position, z-level or inputs have changed since the Level cache was last built for them, so a rebuild must run before visibility is read exactly.
-_Avoid_: visibility dirty aggregate
+The condition that the viewer's position, z-level or inputs have changed since the Level cache was last built for them.
+_Avoid_: visibility dirty aggregate, needs-rebuild
+
+**Property diff**:
+The set of freshness-relevant terrain and furniture property changes that the module computes internally from an old/new state pair.
+_Avoid_: change flags, diff fields
+
+**Stamp door**:
+A named entry point through which a completed builder reports the freshness state it established for its own cache content.
+_Avoid_: raw bit write, builder stamp (as a verb)
+
+**Rebuild plan**:
+The immutable value the freshness module derives once per consumption point, saying which parts of which levels to rebuild and how the lightmap participates in this refresh.
+_Avoid_: refresh decision, dirty list
+
+**The single door**:
+The invariant that every influence on Level cache freshness enters the module through a public door: a change kind, a stamp door, or the declared escape hatch.
+_Avoid_: closed surface, invalidation discipline
 
 **Geometry-only visibility**:
 The optimistic answer visibility queries give while a level's visibility is stale: line of sight is checked, light level is not.
