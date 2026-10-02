@@ -1783,8 +1783,8 @@ bool map::build_absorption_cache( const int zlev )
             }
         }
     }
-    level_cache_freshness::clear( map_cache,
-                                  freshness_parts( { level_cache_part::absorption } ) );
+    level_cache_freshness::stamp_built( map_cache,
+                                        { level_cache_part::absorption } );
     return true;
 }
 

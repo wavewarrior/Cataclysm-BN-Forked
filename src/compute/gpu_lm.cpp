@@ -1921,8 +1921,8 @@ auto clear_colored_light_caches(map const& m, std::vector<int> const& levels) ->
         auto& lc = const_cast<level_cache&>(m.get_cache_ref(z));
         if (!lc.colored_light_cache_active) { continue; }
         std::ranges::fill(lc.colored_light_cache, 0u);
-        level_cache_freshness::assign(lc,
-            freshness_parts({level_cache_part::colored_light_active}), false);
+        level_cache_freshness::stamp_gpu_download( lc,
+            { level_cache_part::colored_light_active } );
     }
 }
 
@@ -3915,7 +3915,7 @@ auto finish_gpu_lighting(SDL_GPUDevice* const device, gpu_lighting_work const& w
                 auto const sz = static_cast<std::size_t>(pending.cache_xy);
                 auto const* seen_src = seen_mapped + seen_level_index * pending.cache_xy;
                 std::ranges::copy(std::span{seen_src, sz}, lc.seen_cache.begin());
-                level_cache_freshness::clear(lc, freshness_parts({level_cache_part::seen}));
+                level_cache_freshness::stamp_gpu_download( lc, { level_cache_part::seen } );
                 ++seen_level_index;
             }
         }
@@ -3928,9 +3928,8 @@ auto finish_gpu_lighting(SDL_GPUDevice* const device, gpu_lighting_work const& w
                     colored_light_mapped + colored_level_index * pending.cache_xy;
                 auto const color_span = std::span{color_src, sz};
                 std::ranges::copy(color_span, lc.colored_light_cache.begin());
-                level_cache_freshness::assign(lc,
-                    freshness_parts({level_cache_part::colored_light_active}),
-                    std::ranges::any_of(color_span, [](uint32_t const value) { return value != 0u; }));
+                level_cache_freshness::stamp_gpu_download( lc,
+                    { level_cache_part::colored_light_active }, color_span );
                 ++colored_level_index;
             }
         }
@@ -4387,7 +4386,7 @@ auto finish_gpu_visibility(SDL_GPUDevice* const device, gpu_visibility_work cons
             std::ranges::transform(
                 std::span{src, sz}, lc.visibility_cache.begin(),
                 [](uint32_t const value) { return static_cast<lit_level>(value); });
-            level_cache_freshness::clear(lc, freshness_parts({level_cache_part::visibility}));
+            level_cache_freshness::stamp_gpu_download( lc, { level_cache_part::visibility } );
             ++visibility_level_index;
         }
 

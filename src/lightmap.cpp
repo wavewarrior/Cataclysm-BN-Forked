@@ -686,8 +686,8 @@ bool map::build_transparency_cache( const int zlev )
         }
 
         if( refs.empty() ) {
-            level_cache_freshness::clear( map_cache,
-                                          freshness_parts( { level_cache_part::transparency } ) );
+            level_cache_freshness::stamp_built( map_cache,
+                                                { level_cache_part::transparency } );
             return true;
         }
 
@@ -775,8 +775,8 @@ bool map::build_transparency_cache( const int zlev )
             ++ref_index;
         }
 
-        level_cache_freshness::clear( map_cache,
-                                      freshness_parts( { level_cache_part::transparency } ) );
+        level_cache_freshness::stamp_built( map_cache,
+                                           { level_cache_part::transparency } );
         return true;
     }
 #endif
@@ -849,8 +849,8 @@ bool map::build_transparency_cache( const int zlev )
         }
     }
 
-    level_cache_freshness::clear( map_cache,
-                                  freshness_parts( { level_cache_part::transparency } ) );
+    level_cache_freshness::stamp_built( map_cache,
+                                        { level_cache_part::transparency } );
 
 #if defined( CATA_SDL ) && defined( CATA_GPU_VERIFY )
     cata_gpu::verify_transparency_against_cpu( *this, zlev,
@@ -977,8 +977,8 @@ auto map::build_transparency_caches( const int minz, const int maxz ) -> std::ve
         }
         if( refs.empty() ) {
             for( const auto &state : level_states ) {
-                level_cache_freshness::clear( get_cache( state.zlev ),
-                                             freshness_parts( { level_cache_part::transparency } ) );
+                level_cache_freshness::stamp_built( get_cache( state.zlev ),
+                                                    { level_cache_part::transparency } );
             }
             return dirty_levels;
         }
@@ -1053,8 +1053,8 @@ auto map::build_transparency_caches( const int minz, const int maxz ) -> std::ve
         }
 
         for( const auto &state : level_states ) {
-            level_cache_freshness::clear( get_cache( state.zlev ),
-                                          freshness_parts( { level_cache_part::transparency } ) );
+            level_cache_freshness::stamp_built( get_cache( state.zlev ),
+                                                { level_cache_part::transparency } );
             if( state.rebuild_all ? state.resident_output_complete : state.resident_level_was_valid ) {
                 cata_gpu::mark_lighting_transparency_level_updated( state.zlev );
             }
@@ -2555,8 +2555,8 @@ void map::build_seen_cache( const tripoint_bub_ms &origin, const int target_z )
             blocked_caches[idx] = { cur_cache.vehicle_obscured_cache.data(), cur_cache.cache_x, cur_cache.cache_y };
             std::fill( cur_cache.seen_cache.begin(), cur_cache.seen_cache.end(),
                        light_transparency_solid );
-            level_cache_freshness::clear( cur_cache,
-                                          freshness_parts( { level_cache_part::seen } ) );
+            level_cache_freshness::stamp_built( cur_cache,
+                                                { level_cache_part::seen } );
         }
 
         auto &origin_cache = get_cache( origin.z() );

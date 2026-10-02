@@ -2,6 +2,7 @@
 #include <cmath>
 #include <array>
 #include <cstdint>
+#include <span>
 #include <set>
 #include <string>
 #include <vector>
@@ -21,6 +22,32 @@
 #include "string_formatter.h"
 #include "submap.h"
 #include "type_id.h"
+
+// The equivalence pins replay the raw bit-setter sequences the named stamp doors
+// replace; those primitives are private to the module, which therefore befriends this
+// hook struct. Everything the pins *assert* still goes through the public queries.
+struct level_cache_freshness_test_hooks {
+        static void mark( level_cache &ch, const enum_bitset<level_cache_part> &parts ) {
+            level_cache_freshness::mark( ch, parts );
+        }
+        static void mark( level_cache &ch, const enum_bitset<level_cache_part> &parts,
+                          size_t bit ) {
+            level_cache_freshness::mark( ch, parts, bit );
+        }
+        static void clear( level_cache &ch, const enum_bitset<level_cache_part> &parts ) {
+            level_cache_freshness::clear( ch, parts );
+        }
+        static void assign( level_cache &ch, const enum_bitset<level_cache_part> &parts,
+                            bool value ) {
+            level_cache_freshness::assign( ch, parts, value );
+        }
+        static enum_bitset<level_cache_part> parts_of(
+            std::initializer_list<level_cache_part> list ) {
+            return level_cache_freshness::parts_of( list );
+        }
+};
+
+using hooks = level_cache_freshness_test_hooks;
 
 // Equivalence pins for the change kinds of the Level cache freshness module (spec #8,
 // ticket #11).
@@ -204,6 +231,29 @@ std::vector<std::string> capture( map &here, const generation_baseline &base ) {
                                     level_cache_freshness::visibility_stale( here,
                                             get_avatar().bub_pos() ) ? 1 : 0 ) );
     record_queues( here, lines );
+    std::sort( lines.begin(), lines.end() );
+    return lines;
+}
+
+// capture() observes the ten parts a change kind can raise. The stamp doors act on the
+// builder-owned flags outside that set (`visibility` is already in `observed_parts`),
+// so the door pins extend the capture with these.
+std::vector<std::string> capture_builder_flags( map &here ) {
+    std::vector<std::string> lines;
+    constexpr std::array<level_cache_part, 4> builder_parts = { {
+        level_cache_part::suspension_init,
+        level_cache_part::has_any_vehicle_floor,
+        level_cache_part::veh_in_active_range,
+        level_cache_part::colored_light_active,
+    } };
+    for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z ) {
+        const level_cache &ch = here.access_cache( z );
+        for( const level_cache_part part : builder_parts ) {
+            if( level_cache_freshness::stale( ch, part ) ) {
+                lines.push_back( string_format( "stale z%d %s", z, part_name( part ) ) );
+            }
+        }
+    }
     std::sort( lines.begin(), lines.end() );
     return lines;
 }
@@ -623,19 +673,19 @@ TEST_CASE( "light-changed with the visibility option matches the paired invalida
 void reference_vehicle_move_sequence( map &here, const tripoint_bub_sm &sm_min,
                                       const tripoint_bub_sm &sm_max, const int smz ) {
     level_cache &ch = here.access_cache( smz );
-    level_cache_freshness::mark( ch,
-        freshness_parts( { level_cache_part::veh_in_active_range } ) );
+    hooks::mark( ch,
+        hooks::parts_of( { level_cache_part::veh_in_active_range } ) );
     level_cache_freshness::invalidate_lightmap( here );
     level_cache_freshness::forget_solar_hour( here );
     level_cache_freshness::mark_seen( here, smz );
-    level_cache_freshness::mark( ch, freshness_parts( { level_cache_part::visibility } ) );
+    hooks::mark( ch, hooks::parts_of( { level_cache_part::visibility } ) );
 
     const auto mark_rect = [&]( const int x0, const int y0, const int x1, const int y1,
     const level_cache_part part ) {
         level_cache &level = here.access_cache( smz );
         for( int x = x0; x <= x1; ++x ) {
             for( int y = y0; y <= y1; ++y ) {
-                level_cache_freshness::mark( level, freshness_parts( { part } ),
+                hooks::mark( level, hooks::parts_of( { part } ),
                                              static_cast<size_t>( level.bidx( x, y ) ) );
                 if( submap * const sm = here.get_submap_at_grid(
                         tripoint_bub_sm( point_bub_sm( x, y ), smz ) ) ) {
@@ -659,12 +709,12 @@ void reference_vehicle_move_sequence( map &here, const tripoint_bub_sm &sm_min,
     // floor over the occupancy rectangle only.
     const int above_z = smz + 1;
     level_cache_freshness::mark_seen( here, above_z );
-    level_cache_freshness::mark( here.access_cache( above_z ),
-                                 freshness_parts( { level_cache_part::visibility } ) );
+    hooks::mark( here.access_cache( above_z ),
+                                 hooks::parts_of( { level_cache_part::visibility } ) );
     level_cache &ch_above = here.access_cache( above_z );
     for( int x = sm_min.x(); x <= sm_max.x(); ++x ) {
         for( int y = sm_min.y(); y <= sm_max.y(); ++y ) {
-            level_cache_freshness::mark( ch_above, freshness_parts( { level_cache_part::floor } ),
+            hooks::mark( ch_above, hooks::parts_of( { level_cache_part::floor } ),
                                          static_cast<size_t>( ch_above.bidx( x, y ) ) );
             if( submap * const sm = here.get_submap_at_grid(
                     tripoint_bub_sm( point_bub_sm( x, y ), above_z ) ) ) {
@@ -792,17 +842,17 @@ void reference_shift_sequence( map &here, const point_rel_sm &sp, const int play
     for( int gridz = -OVERMAP_DEPTH; gridz <= OVERMAP_HEIGHT; ++gridz ) {
         level_cache &gc = here.access_cache( gridz );
         level_cache_freshness::queue_memory_seen_all( gc );
-        level_cache_freshness::translate( gc, freshness_parts( {
+        level_cache_freshness::translate( gc, hooks::parts_of( {
             level_cache_part::transparency, level_cache_part::floor,
             level_cache_part::outside } ), sp, mapsize );
         level_cache_freshness::translate( gc,
-            freshness_parts( { level_cache_part::lightmap } ), sp, mapsize );
+            hooks::parts_of( { level_cache_part::lightmap } ), sp, mapsize );
         level_cache_freshness::translate( gc,
-            freshness_parts( { level_cache_part::absorption } ), sp, mapsize );
+            hooks::parts_of( { level_cache_part::absorption } ), sp, mapsize );
         const auto mark_edge = [&]( const level_cache_part part, const int count,
         const bool buffer_flag ) {
             bands( gridz, count, [&]( const tripoint_bub_sm & smp ) {
-                level_cache_freshness::mark( gc, freshness_parts( { part } ),
+                hooks::mark( gc, hooks::parts_of( { part } ),
                                             static_cast<size_t>( gc.bidx( smp.x(), smp.y() ) ) );
                 if( buffer_flag ) {
                     const tripoint_abs_sm abs_sm = map_local_to_abs( here, smp );
@@ -868,7 +918,7 @@ TEST_CASE( "map-shifted translates carried dirt and never blankets",
     // every edge band.
     const int dirty_sx = mapsize / 2;
     const int clean_sx = mapsize / 2 + 2;
-    level_cache_freshness::mark( ch, freshness_parts( { level_cache_part::floor } ),
+    hooks::mark( ch, hooks::parts_of( { level_cache_part::floor } ),
                                  static_cast<size_t>( ch.bidx( dirty_sx, 5 ) ) );
     level_cache_freshness::report( here, level_cache_freshness::map_shifted {
         .shift = point_rel_sm( 1, 0 ), .player_z = 0
@@ -914,8 +964,8 @@ TEST_CASE( "world-replaced matches the non-incremental loadn setter sequence",
             level_cache_freshness::mark_absorption( here, z );
             level_cache_freshness::mark_seen( here, z );
             level_cache_freshness::mark_suspension( here, z );
-            level_cache_freshness::mark( here.access_cache( z ),
-                                         freshness_parts( { level_cache_part::lightmap } ) );
+            hooks::mark( here.access_cache( z ),
+                                         hooks::parts_of( { level_cache_part::lightmap } ) );
         }
     };
 
@@ -1279,7 +1329,7 @@ TEST_CASE( "submap-replaced matches the incremental loadn primitive sequence",
     const auto reference_sequence = [&]( map &here ) {
         level_cache &ch = here.access_cache( slot.z() );
         const size_t bit = static_cast< size_t >( ch.bidx( slot.x(), slot.y() ) );
-        level_cache_freshness::mark( ch, freshness_parts( {
+        hooks::mark( ch, hooks::parts_of( {
             level_cache_part::transparency,
             level_cache_part::floor,
             level_cache_part::outside,
@@ -1309,4 +1359,166 @@ TEST_CASE( "submap-replaced matches the incremental loadn primitive sequence",
     INFO( "loadn primitives only:\n" << only_in( via_loadn, via_kind )
           << "kind only:\n" << only_in( via_kind, via_loadn ) );
     CHECK( via_kind == via_loadn );
+}
+
+TEST_CASE( "Named stamp doors match the raw primitive sequences they replace",
+           "[level_cache_freshness]" ) {
+    // Ticket #35: the per-level builders and the GPU download paths now go through
+    // named doors instead of writing `mark`/`clear`/`assign` by hand. Each arm below
+    // replays the exact primitive sequence the converted site used to run inline and
+    // compares the observable freshness outcome with the door's.
+    const auto fresh_arm = []( map *&here, level_cache *&ch ) {
+        set_up_open_daylight_map();
+        here = &get_map();
+        ch = &here->access_cache( 0 );
+    };
+    map *here = nullptr;
+    level_cache *ch = nullptr;
+
+    SECTION( "stamp_suspension_initialised" ) {
+        fresh_arm( here, ch );
+        hooks::assign( *ch, hooks::parts_of( { level_cache_part::suspension_init } ), false );
+        level_cache_freshness::stamp_suspension_initialised( *ch );
+        const std::vector<std::string> via_door = capture_builder_flags( *here );
+        fresh_arm( here, ch );
+        hooks::assign( *ch, hooks::parts_of( { level_cache_part::suspension_init } ), false );
+        hooks::assign( *ch, hooks::parts_of( { level_cache_part::suspension_init } ), true );
+        CHECK( capture_builder_flags( *here ) == via_door );
+        CHECK( level_cache_freshness::stale( *ch, level_cache_part::suspension_init ) );
+    }
+
+    SECTION( "stamp_vehicle_floor" ) {
+        for( const bool value : { true, false } ) {
+            CAPTURE( value );
+            fresh_arm( here, ch );
+            hooks::assign( *ch, hooks::parts_of( { level_cache_part::has_any_vehicle_floor } ),
+                           !value );
+            level_cache_freshness::stamp_vehicle_floor( *ch, value );
+            const std::vector<std::string> via_door = capture_builder_flags( *here );
+            fresh_arm( here, ch );
+            hooks::assign( *ch, hooks::parts_of( { level_cache_part::has_any_vehicle_floor } ),
+                           !value );
+            hooks::assign( *ch, hooks::parts_of( { level_cache_part::has_any_vehicle_floor } ),
+                           value );
+            CHECK( capture_builder_flags( *here ) == via_door );
+            CHECK( level_cache_freshness::stale( *ch,
+                   level_cache_part::has_any_vehicle_floor ) == value );
+        }
+    }
+
+    SECTION( "stamp_veh_range keeps the mark/assign split" ) {
+        // The raise site used `mark` (a dirty-bit write), the two clearing sites used
+        // `assign( ..., false )`; the door keeps both spellings.
+        fresh_arm( here, ch );
+        hooks::assign( *ch, hooks::parts_of( { level_cache_part::veh_in_active_range } ), false );
+        level_cache_freshness::stamp_veh_range( *ch, true );
+        const std::vector<std::string> raised_by_door = capture_builder_flags( *here );
+        fresh_arm( here, ch );
+        hooks::mark( *ch, hooks::parts_of( { level_cache_part::veh_in_active_range } ) );
+        CHECK( capture_builder_flags( *here ) == raised_by_door );
+
+        fresh_arm( here, ch );
+        hooks::mark( *ch, hooks::parts_of( { level_cache_part::veh_in_active_range } ) );
+        level_cache_freshness::stamp_veh_range( *ch, false );
+        const std::vector<std::string> cleared_by_door = capture_builder_flags( *here );
+        fresh_arm( here, ch );
+        hooks::mark( *ch, hooks::parts_of( { level_cache_part::veh_in_active_range } ) );
+        hooks::assign( *ch, hooks::parts_of( { level_cache_part::veh_in_active_range } ), false );
+        CHECK( capture_builder_flags( *here ) == cleared_by_door );
+        CHECK_FALSE( level_cache_freshness::stale( *ch,
+                     level_cache_part::veh_in_active_range ) );
+    }
+
+    SECTION( "stamp_gpu_download computes the colored-light value itself" ) {
+        // Positive: the download wrote a nonzero color somewhere.
+        const std::vector<uint32_t> colors = { 0u, 0u, 0x00FF0000u, 0u };
+        fresh_arm( here, ch );
+        hooks::assign( *ch, hooks::parts_of( { level_cache_part::colored_light_active } ), false );
+        level_cache_freshness::stamp_gpu_download( *ch,
+            { level_cache_part::colored_light_active }, std::span<const uint32_t>{ colors } );
+        const std::vector<std::string> active_by_door = capture_builder_flags( *here );
+        fresh_arm( here, ch );
+        hooks::assign( *ch, hooks::parts_of( { level_cache_part::colored_light_active } ), false );
+        hooks::assign( *ch, hooks::parts_of( { level_cache_part::colored_light_active } ),
+                       std::ranges::any_of( colors,
+                           []( const uint32_t value ) { return value != 0u; } ) );
+        CHECK( capture_builder_flags( *here ) == active_by_door );
+        CHECK( level_cache_freshness::stale( *ch, level_cache_part::colored_light_active ) );
+
+        // Negative: the wipe site passes the empty span, which must read as inactive.
+        fresh_arm( here, ch );
+        hooks::assign( *ch, hooks::parts_of( { level_cache_part::colored_light_active } ), true );
+        level_cache_freshness::stamp_gpu_download( *ch,
+            { level_cache_part::colored_light_active } );
+        const std::vector<std::string> wiped_by_door = capture_builder_flags( *here );
+        fresh_arm( here, ch );
+        hooks::assign( *ch, hooks::parts_of( { level_cache_part::colored_light_active } ), true );
+        hooks::assign( *ch, hooks::parts_of( { level_cache_part::colored_light_active } ), false );
+        CHECK( capture_builder_flags( *here ) == wiped_by_door );
+        CHECK_FALSE( level_cache_freshness::stale( *ch,
+                     level_cache_part::colored_light_active ) );
+    }
+
+    SECTION( "stamp_gpu_download clears the seen and visibility bits" ) {
+        for( const level_cache_part part : { level_cache_part::seen,
+              level_cache_part::visibility } ) {
+            CAPTURE( part_name( part ) );
+            set_up_open_daylight_map();
+            const generation_baseline door_base = capture_generations( get_map() );
+            level_cache &door_ch = get_map().access_cache( 0 );
+            hooks::mark( door_ch, hooks::parts_of( { part } ) );
+            level_cache_freshness::stamp_gpu_download( door_ch, { part } );
+            const std::vector<std::string> via_door = capture( get_map(), door_base );
+            set_up_open_daylight_map();
+            const generation_baseline ref_base = capture_generations( get_map() );
+            level_cache &ref_ch = get_map().access_cache( 0 );
+            hooks::mark( ref_ch, hooks::parts_of( { part } ) );
+            hooks::clear( ref_ch, hooks::parts_of( { part } ) );
+            CHECK( capture( get_map(), ref_base ) == via_door );
+            CHECK_FALSE( level_cache_freshness::stale( ref_ch, part ) );
+        }
+    }
+
+    SECTION( "stamp_visibility_stale raises exactly the per-level bit" ) {
+        set_up_open_daylight_map();
+        const generation_baseline door_base = capture_generations( get_map() );
+        level_cache_freshness::stamp_visibility_stale( get_map().access_cache( 0 ) );
+        const std::vector<std::string> via_door = capture( get_map(), door_base );
+        set_up_open_daylight_map();
+        const generation_baseline ref_base = capture_generations( get_map() );
+        hooks::mark( get_map().access_cache( 0 ),
+                     hooks::parts_of( { level_cache_part::visibility } ) );
+        CHECK( capture( get_map(), ref_base ) == via_door );
+        CHECK( captured_view_stale( via_door ) );
+    }
+}
+
+TEST_CASE( "stamp_built matches the per-level builder clear sequence",
+           "[level_cache_freshness]" ) {
+    // The builders finished rebuilding a cache and report it; the door is the only
+    // remaining spelling of "these parts of MY level are fresh again".
+    for( const level_cache_part part : { level_cache_part::transparency,
+          level_cache_part::outside, level_cache_part::floor,
+          level_cache_part::suspension_dirty, level_cache_part::lightmap,
+          level_cache_part::absorption, level_cache_part::seen } ) {
+        CAPTURE( part_name( part ) );
+        set_up_open_daylight_map();
+        const generation_baseline door_base = capture_generations( get_map() );
+        level_cache &door_ch = get_map().access_cache( 0 );
+        hooks::mark( door_ch, hooks::parts_of( { part } ) );
+        REQUIRE( level_cache_freshness::stale( door_ch, part ) );
+        level_cache_freshness::stamp_built( door_ch, { part } );
+        const std::vector<std::string> via_door = capture( get_map(), door_base );
+
+        set_up_open_daylight_map();
+        const generation_baseline ref_base = capture_generations( get_map() );
+        level_cache &ref_ch = get_map().access_cache( 0 );
+        hooks::mark( ref_ch, hooks::parts_of( { part } ) );
+        hooks::clear( ref_ch, hooks::parts_of( { part } ) );
+        const std::vector<std::string> via_primitives = capture( get_map(), ref_base );
+        INFO( "door only:\n" << only_in( via_door, via_primitives )
+              << "primitives only:\n" << only_in( via_primitives, via_door ) );
+        CHECK( via_primitives == via_door );
+        CHECK_FALSE( level_cache_freshness::stale( ref_ch, part ) );
+    }
 }

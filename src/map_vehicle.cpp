@@ -231,8 +231,7 @@ void map::add_vehicle_to_cache(vehicle* veh) {
             }
         }
         level_cache& ch = get_cache(p.z());
-        level_cache_freshness::mark(ch,
-            freshness_parts( { level_cache_part::veh_in_active_range } ));
+        level_cache_freshness::stamp_veh_range( ch, true );
 
         if (!ch.veh_cached_parts.contains(p)
             || !veh->part_info(vpr.part_index()).has_flag(VPFLAG_NOCOLLIDE)
@@ -287,8 +286,7 @@ void map::clear_vehicle_cache() {
             if (inbounds(p)) { ch.veh_exists_at[ch.idx(p.x(), p.y())] = false; }
             ch.veh_cached_parts.erase(part);
         }
-        level_cache_freshness::assign(ch,
-            freshness_parts( { level_cache_part::veh_in_active_range } ), false);
+        level_cache_freshness::stamp_veh_range( ch, false );
     }
     cached_veh_rope.clear();
 }
@@ -302,8 +300,7 @@ void map::clear_vehicle_list(const int zlev) {
     // disagree about which vehicles are still resident at this z-level.
     ch.veh_cached_parts.clear();
     std::ranges::fill( ch.veh_exists_at, false );
-    level_cache_freshness::assign(ch,
-        freshness_parts( { level_cache_part::veh_in_active_range } ), false);
+    level_cache_freshness::stamp_veh_range( ch, false );
     std::erase_if( cached_veh_rope, [zlev]( const auto &kv ) { return kv.first.z() == zlev; } );
 
     last_full_vehicle_list_dirty = true;

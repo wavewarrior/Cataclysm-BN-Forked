@@ -2578,8 +2578,7 @@ static void vehicle_caching_internal_above(
         const tripoint_bub_ms& part_pos = v->bub_part_location( vp.part() );
         const int tile_idx = zch_above.idx( part_pos.x(), part_pos.y() );
         zch_above.vehicle_floor_cache[tile_idx] = true;
-        level_cache_freshness::assign( zch_above,
-            freshness_parts( { level_cache_part::has_any_vehicle_floor } ), true );
+        level_cache_freshness::stamp_vehicle_floor( zch_above, true );
     }
 }
 void map::do_vehicle_caching( int z )

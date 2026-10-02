@@ -6,8 +6,8 @@
 #include <cstdint>
 #include <initializer_list>
 #include <optional>
+#include <span>
 #include <vector>
-
 #include "coordinates.h"
 #include "cuboid_rectangle.h"
 #include "enum_bitset.h"
@@ -51,15 +51,6 @@ struct enum_traits<level_cache_part> {
 /** The parts that are per-submap bitsets rather than per-level flags. */
 enum_bitset<level_cache_part> level_cache_bitset_parts();
 
-/** Assemble a part set; the spelling callers use for coupled families. */
-inline enum_bitset<level_cache_part> freshness_parts(
-    std::initializer_list<level_cache_part> list ) {
-    enum_bitset<level_cache_part> parts;
-    for( const level_cache_part part : list ) {
-        parts.set( part );
-    }
-    return parts;
-}
 /**
  * Level cache freshness: the single owner of Level cache freshness state.
  *
@@ -73,17 +64,20 @@ inline enum_bitset<level_cache_part> freshness_parts(
  *   low-level ones. Those verbs are the successors of the deleted
  *   `map::set_*_cache_dirty` helpers; the change kinds compose them further.
  * - Mutating verbs are main-thread only and assert it, following the existing
- *   `is_pool_worker_thread()` pattern. Exception: the per-level `clear` and
- *   `assign`, which the parallel region of `map::build_map_cache` needs. Those
- *   may only ever be called for the caller's own level — a worker that cleared
- *   another level's state would race with that level's builder.
+ *   `is_pool_worker_thread()` pattern. Exception: the per-level builder stamps —
+ *   `stamp_built`, `stamp_suspension_initialised`, `stamp_vehicle_floor`,
+ *   `stamp_veh_range`, `stamp_gpu_download` — which the parallel region of
+ *   `map::build_map_cache` and the GPU download paths need. Those may only ever be
+ *   called for the caller's own level — a worker that stamped another level's state
+ *   would race with that level's builder.
  *   The assertion is an `assert`, so it is compiled out of the shipped
  *   `RelWithDebInfo` build (`-DNDEBUG`): it cannot fail a test run, which is what lets
  *   this refactor claim "no behaviour change". It is a development aid, not enforcement;
  *   every asserted verb was checked to have only main-thread callers.
- * - `mark`/`clear`/`assign`/`translate` take the `level_cache` rather than a
- *   z-level for the same reason: the caller has already resolved which level it
- *   owns, and the module never guesses.
+ * - The raw `mark`/`clear`/`assign` bit writers are private: outside the module a
+ *   writer either reports a change kind or calls a named stamp door, and both take
+ *   the `level_cache` (doors) or a z-level (verbs) rather than guessing which level
+ *   the caller owns.
  * - Reads go through the freshness queries at the bottom of this interface and the
  *   `level_cache` fields; nothing else reads freshness state.
  * - Whether a rebuild runs is decided by the view-stale condition, spelled by
@@ -97,16 +91,6 @@ inline enum_bitset<level_cache_part> freshness_parts(
 class level_cache_freshness
 {
     public:
-        /** Mark a whole level stale: every bit of each named bitset, or the flag. */
-        static void mark( level_cache &cache, const enum_bitset<level_cache_part> &parts );
-        /** Mark one submap of a level stale; `bit` indexes that level's bitsets. */
-        static void mark( level_cache &cache, const enum_bitset<level_cache_part> &parts,
-                          size_t bit );
-        /** Mark a whole level fresh. Per-level-builder side: workers allowed. */
-        static void clear( level_cache &cache, const enum_bitset<level_cache_part> &parts );
-        /** Set named per-level flags to an explicit value. Workers allowed, own level only. */
-        static void assign( level_cache &cache, const enum_bitset<level_cache_part> &parts,
-                            bool value );
         /**
          * Move the dirty bits of a level along with the caches they describe when the
          * reality bubble shifts, so retained submaps stay fresh and only the shifted-in
@@ -437,6 +421,43 @@ class level_cache_freshness
         static void report( map &who, const map_shifted &change );
         static void report( map &who, const world_replaced &change );
 
+        // ---- Named stamp doors ------------------------------------------
+        //
+        // The per-level builders and the GPU download paths stamp the facts they
+        // just computed for their own level. Like `clear`/`assign`, these are
+        // worker-allowed and may only ever be called for the caller's own level.
+
+        /** Record that a level's suspension cache has been initialised. */
+        static void stamp_suspension_initialised( level_cache &cache );
+        /** Stamp the level's "some submap holds a vehicle floor" fact. */
+        static void stamp_vehicle_floor( level_cache &cache, bool value );
+        /** Stamp the level's "a vehicle is in active range" fact. */
+        static void stamp_veh_range( level_cache &cache, bool value );
+        /**
+         * Stamp what a GPU download just made current for this level: `parts` names
+         * the caches now resident on the GPU (`seen`, `visibility`,
+         * `colored_light_active`). The colored-light value is computed here from
+         * `colored_span` — the span the download wrote, empty when the cache was
+         * wiped — so a caller never spells the boolean itself.
+         */
+        static void stamp_gpu_download( level_cache &cache,
+                                        const enum_bitset<level_cache_part> &parts,
+                                        const std::span<const uint32_t> &colored_span = {} );
+        /** Record that a builder rebuilt the named caches of its own level. */
+        static void stamp_built( level_cache &cache, const enum_bitset<level_cache_part> &parts );
+        /** Raise a level's visibility bit: its geometry inputs are no longer fresh. */
+        static void stamp_visibility_stale( level_cache &cache );
+        /** Convenience spellings of the part-set-taking doors. */
+        static void stamp_gpu_download( level_cache &cache,
+                                        std::initializer_list<level_cache_part> parts,
+                                        const std::span<const uint32_t> &colored_span = {} ) {
+            stamp_gpu_download( cache, parts_of( parts ), colored_span );
+        }
+        static void stamp_built( level_cache &cache,
+                                 std::initializer_list<level_cache_part> parts ) {
+            stamp_built( cache, parts_of( parts ) );
+        }
+
         // ---- Freshness reads (queries) ------------------------------------
 
         /** True when the named part of a level is not fresh. */
@@ -496,6 +517,31 @@ class level_cache_freshness
 
 
     private:
+        /** Mark a whole level stale: every bit of each named bitset, or the flag. */
+        static void mark( level_cache &cache, const enum_bitset<level_cache_part> &parts );
+        /** Mark one submap of a level stale; `bit` indexes that level's bitsets. */
+        static void mark( level_cache &cache, const enum_bitset<level_cache_part> &parts,
+                          size_t bit );
+        /** Mark a whole level fresh. Per-level-builder side: workers allowed. */
+        static void clear( level_cache &cache, const enum_bitset<level_cache_part> &parts );
+        /** Set named per-level flags to an explicit value. Workers allowed, own level only. */
+        static void assign( level_cache &cache, const enum_bitset<level_cache_part> &parts,
+                           bool value );
+        /** Assemble a part set; the spelling the doors use for coupled families. */
+        static enum_bitset<level_cache_part> parts_of(
+            std::initializer_list<level_cache_part> list ) {
+            enum_bitset<level_cache_part> parts;
+            for( const level_cache_part part : list ) {
+                parts.set( part );
+            }
+            return parts;
+        }
+        /**
+         * Test seam: the equivalence pins replay the raw bit-setter sequences the
+         * doors replace, which needs the primitives. Production code has no reason
+         * to name this type.
+         */
+        friend struct level_cache_freshness_test_hooks;
         /**
          * Advance the residency generation of one in-bounds level. The change kinds
          * call this at their top for every level they can affect, so a residency
