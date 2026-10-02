@@ -45,6 +45,47 @@ struct level_cache_freshness_test_hooks {
             std::initializer_list<level_cache_part> list ) {
             return level_cache_freshness::parts_of( list );
         }
+        // The staleness verbs are private since ticket #36: the equivalence pins still
+        // replay the raw sequences the kinds replace, so the seam forwards them.
+        static void mark_transparency( map &who, int zlev ) {
+            level_cache_freshness::mark_transparency( who, zlev );
+        }
+        static void mark_transparency( map &who, const tripoint_bub_ms &p ) {
+            level_cache_freshness::mark_transparency( who, p );
+        }
+        static void mark_outside( map &who, int zlev ) {
+            level_cache_freshness::mark_outside( who, zlev );
+        }
+        static void mark_floor( map &who, int zlev ) {
+            level_cache_freshness::mark_floor( who, zlev );
+        }
+        static void mark_absorption( map &who, int zlev ) {
+            level_cache_freshness::mark_absorption( who, zlev );
+        }
+        static void mark_suspension( map &who, int zlev ) {
+            level_cache_freshness::mark_suspension( who, zlev );
+        }
+        static void mark_seen( map &who, int zlev ) {
+            level_cache_freshness::mark_seen( who, zlev );
+        }
+        static void mark_seen( map &who, const tripoint_bub_ms &p ) {
+            level_cache_freshness::mark_seen( who, p );
+        }
+        static void mark_lightmap( map &who, const tripoint_bub_ms &p ) {
+            level_cache_freshness::mark_lightmap( who, p );
+        }
+        static void invalidate_lightmap( map &who ) {
+            level_cache_freshness::invalidate_lightmap( who );
+        }
+        static void invalidate_visibility( map &who ) {
+            level_cache_freshness::invalidate_visibility( who );
+        }
+        static void mark_memory_seen( map &who, const tripoint_bub_ms &p ) {
+            level_cache_freshness::mark_memory_seen( who, p );
+        }
+        static void mark_memory_seen( map &who, int zlev ) {
+            level_cache_freshness::mark_memory_seen( who, zlev );
+        }
 };
 
 using hooks = level_cache_freshness_test_hooks;
@@ -67,6 +108,12 @@ using hooks = level_cache_freshness_test_hooks;
 // Generations are compared as DELTAS from their value right after fixture setup: the
 // counters are per-level members that survive `clear_all_state()`, so absolute values
 // would differ between two runs of the same fixture for reasons unrelated to the change.
+//
+// Single door (ticket #36): the ten staleness verbs are private to the module, so no
+// production translation unit outside it can name one — a build that compiles is the
+// compiler test of that claim, and there is deliberately no whitelist file. The one
+// exception is the `level_cache_freshness_test_hooks` friendship above, the adjudicated
+// test seam: the pins replay the private verbs to prove the kinds reproduce them.
 //
 // Vocabulary: GLOSSARY.md; plan: plans/level-cache-freshness.md.
 
@@ -517,20 +564,20 @@ TEST_CASE( "terrain-changed reproduces the field, trap and weather opacity seque
         void ( *reference )( map &, const tripoint_bub_ms & );
     };
     const auto field_pair = []( map &here, const tripoint_bub_ms & p ) {
-        level_cache_freshness::mark_transparency( here, p );
-        level_cache_freshness::mark_seen( here, p );
+        hooks::mark_transparency( here, p );
+        hooks::mark_seen( here, p );
         level_cache_freshness::mark_visibility( here, p.z() );
     };
     const auto trap_pair = []( map &here, const tripoint_bub_ms & p ) {
-        level_cache_freshness::mark_seen( here, p );
-        level_cache_freshness::mark_transparency( here, p.z() );
+        hooks::mark_seen( here, p );
+        hooks::mark_transparency( here, p.z() );
         level_cache_freshness::mark_visibility( here, p.z() );
     };
     const auto weather_pair = []( map &here, const tripoint_bub_ms & ) {
         for( int i = -OVERMAP_DEPTH; i <= OVERMAP_HEIGHT; i++ ) {
-            level_cache_freshness::mark_transparency( here, i );
+            hooks::mark_transparency( here, i );
         }
-        level_cache_freshness::mark_seen( here, tripoint_bub_ms::zero() );
+        hooks::mark_seen( here, tripoint_bub_ms::zero() );
         for( int i = -OVERMAP_DEPTH; i <= OVERMAP_HEIGHT; i++ ) {
             level_cache_freshness::mark_visibility( here, i );
         }
@@ -589,7 +636,7 @@ TEST_CASE( "light-changed matches invalidate_lightmap", "[level_cache_freshness]
     set_up_open_daylight_map();
     map &here = get_map();
     generation_baseline base = capture_generations( here );
-    level_cache_freshness::invalidate_lightmap( here );
+    hooks::invalidate_lightmap( here );
     const std::vector<std::string> via_setter = capture( here, base );
 
     set_up_open_daylight_map();
@@ -615,7 +662,7 @@ TEST_CASE( "tile-scoped light-changed matches mark_lightmap", "[level_cache_fres
         ch.bidx( player_home.x() / SEEX, player_home.y() / SEEY ) );
     generation_baseline base = capture_generations( here );
     const std::vector<std::string> plain = capture( here, base );
-    level_cache_freshness::mark_lightmap( here, at );
+    hooks::mark_lightmap( here, at );
     const std::vector<std::string> via_setter = capture( here, base );
     CHECK( via_setter != plain );
     CHECK( level_cache_freshness::stale( ch, level_cache_part::lightmap, bit_at ) );
@@ -646,8 +693,8 @@ TEST_CASE( "light-changed with the visibility option matches the paired invalida
     map &here = get_map();
     generation_baseline base = capture_generations( here );
     const std::vector<std::string> plain = capture( here, base );
-    level_cache_freshness::invalidate_lightmap( here );
-    level_cache_freshness::invalidate_visibility( here );
+    hooks::invalidate_lightmap( here );
+    hooks::invalidate_visibility( here );
     const std::vector<std::string> via_setters = capture( here, base );
     CHECK( via_setters != plain );
 
@@ -675,9 +722,9 @@ void reference_vehicle_move_sequence( map &here, const tripoint_bub_sm &sm_min,
     level_cache &ch = here.access_cache( smz );
     hooks::mark( ch,
         hooks::parts_of( { level_cache_part::veh_in_active_range } ) );
-    level_cache_freshness::invalidate_lightmap( here );
+    hooks::invalidate_lightmap( here );
     level_cache_freshness::forget_solar_hour( here );
-    level_cache_freshness::mark_seen( here, smz );
+    hooks::mark_seen( here, smz );
     hooks::mark( ch, hooks::parts_of( { level_cache_part::visibility } ) );
 
     const auto mark_rect = [&]( const int x0, const int y0, const int x1, const int y1,
@@ -708,7 +755,7 @@ void reference_vehicle_move_sequence( map &here, const tripoint_bub_sm &sm_min,
     // Vehicles can extend through the floor: the level above gets seen, visibility and
     // floor over the occupancy rectangle only.
     const int above_z = smz + 1;
-    level_cache_freshness::mark_seen( here, above_z );
+    hooks::mark_seen( here, above_z );
     hooks::mark( here.access_cache( above_z ),
                                  hooks::parts_of( { level_cache_part::visibility } ) );
     level_cache &ch_above = here.access_cache( above_z );
@@ -874,10 +921,10 @@ void reference_shift_sequence( map &here, const point_rel_sm &sp, const int play
         mark_edge( level_cache_part::lightmap, 1, false );
         mark_edge( level_cache_part::absorption, 2, true );
         if( std::abs( gridz - player_z ) <= 1 ) {
-            level_cache_freshness::mark_seen( here, gridz );
+            hooks::mark_seen( here, gridz );
         }
         level_cache_freshness::mark_visibility( here, gridz );
-        level_cache_freshness::mark_suspension( here, gridz );
+        hooks::mark_suspension( here, gridz );
     }
     const half_open_rectangle<point_bub_ms> boundaries_2d( point_bub_ms::zero(),
         point_bub_ms( g_mapsize_x, g_mapsize_y ) );
@@ -958,12 +1005,12 @@ TEST_CASE( "world-replaced matches the non-incremental loadn setter sequence",
     // whole bubble: the sequence a bulk world load runs.
     const auto reference_sequence = [&]( map &here ) {
         for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z ) {
-            level_cache_freshness::mark_transparency( here, z );
-            level_cache_freshness::mark_floor( here, z );
-            level_cache_freshness::mark_outside( here, z );
-            level_cache_freshness::mark_absorption( here, z );
-            level_cache_freshness::mark_seen( here, z );
-            level_cache_freshness::mark_suspension( here, z );
+            hooks::mark_transparency( here, z );
+            hooks::mark_floor( here, z );
+            hooks::mark_outside( here, z );
+            hooks::mark_absorption( here, z );
+            hooks::mark_seen( here, z );
+            hooks::mark_suspension( here, z );
             hooks::mark( here.access_cache( z ),
                                          hooks::parts_of( { level_cache_part::lightmap } ) );
         }
@@ -1006,11 +1053,11 @@ TEST_CASE( "restricted world-replaced matches the partial bulk sequences",
     set_up_open_daylight_map();
     map &here = get_map();
     generation_baseline base = capture_generations( here );
-    level_cache_freshness::mark_transparency( here, 0 );
-    level_cache_freshness::mark_outside( here, 0 );
-    level_cache_freshness::mark_floor( here, 0 );
-    level_cache_freshness::mark_absorption( here, 0 );
-    level_cache_freshness::mark_suspension( here, 0 );
+    hooks::mark_transparency( here, 0 );
+    hooks::mark_outside( here, 0 );
+    hooks::mark_floor( here, 0 );
+    hooks::mark_absorption( here, 0 );
+    hooks::mark_suspension( here, 0 );
     const std::vector<std::string> via_setters = capture( here, base );
 
     set_up_open_daylight_map();
@@ -1030,9 +1077,9 @@ TEST_CASE( "restricted world-replaced matches the partial bulk sequences",
     // The repaint shape: transparency (absorption coupling again), seen, outside.
     set_up_open_daylight_map();
     base = capture_generations( here );
-    level_cache_freshness::mark_transparency( here, 0 );
-    level_cache_freshness::mark_seen( here, 0 );
-    level_cache_freshness::mark_outside( here, 0 );
+    hooks::mark_transparency( here, 0 );
+    hooks::mark_seen( here, 0 );
+    hooks::mark_outside( here, 0 );
     const std::vector<std::string> via_paint = capture( here, base );
 
     set_up_open_daylight_map();
@@ -1167,8 +1214,8 @@ TEST_CASE(
     set_up_open_daylight_map();
     map &here = get_map();
     generation_baseline base = capture_generations( here );
-    level_cache_freshness::mark_transparency( here, 0 );
-    level_cache_freshness::mark_seen( here, tripoint_bub_ms::zero() );
+    hooks::mark_transparency( here, 0 );
+    hooks::mark_seen( here, tripoint_bub_ms::zero() );
     // Issue #18: an opacity repaint also reports the visibility dependent it stales.
     level_cache_freshness::mark_visibility( here, 0 );
     const std::vector<std::string> via_setters = capture( here, base );
@@ -1223,7 +1270,7 @@ TEST_CASE(
     set_up_open_daylight_map();
     map &here = get_map();
     generation_baseline base = capture_generations( here );
-    level_cache_freshness::mark_floor( here, z + 1 );
+    hooks::mark_floor( here, z + 1 );
     // Issue #18: a whole-level floor repaint stales the visibility of the level it
     // repainted, so the kind reports that dependent too.
     level_cache_freshness::mark_visibility( here, z + 1 );
@@ -1250,8 +1297,8 @@ TEST_CASE(
     set_up_open_daylight_map();
     map &here = get_map();
     generation_baseline base = capture_generations( here );
-    level_cache_freshness::mark_seen( here, 0 );
-    level_cache_freshness::invalidate_visibility( here );
+    hooks::mark_seen( here, 0 );
+    hooks::invalidate_visibility( here );
     const std::vector<std::string> via_setters = capture( here, base );
 
     set_up_open_daylight_map();
@@ -1521,4 +1568,141 @@ TEST_CASE( "stamp_built matches the per-level builder clear sequence",
         CHECK( via_primitives == via_door );
         CHECK_FALSE( level_cache_freshness::stale( ref_ch, part ) );
     }
+}
+
+TEST_CASE( "regenerated-level matches the map-editor five-verb sequence",
+           "[level_cache_freshness]" ) {
+    // Ticket #36: the editor's regen lambda is now one `report`. The kind must raise
+    // exactly what the five verbs raised, in the same couplings.
+    set_up_open_daylight_map();
+    map &here = get_map();
+    generation_baseline base = capture_generations( here );
+    hooks::mark_transparency( here, 0 );
+    hooks::mark_outside( here, 0 );
+    hooks::mark_floor( here, 0 );
+    hooks::mark_suspension( here, 0 );
+    hooks::mark_absorption( here, 0 );
+    const std::vector<std::string> via_verbs = capture( here, base );
+
+    set_up_open_daylight_map();
+    base = capture_generations( here );
+    level_cache_freshness::report( here,
+        level_cache_freshness::regenerated_level { .at = player_home } );
+    const std::vector<std::string> via_kind = capture( here, base );
+
+    INFO( "verbs only:\n" << only_in( via_verbs, via_kind )
+          << "kind only:\n" << only_in( via_kind, via_verbs ) );
+    CHECK( via_kind == via_verbs );
+}
+
+TEST_CASE( "memory-forgotten matches both mark_memory_seen overloads",
+           "[level_cache_freshness]" ) {
+    // Ticket #36: the tile shape (the tile-draw connect path) and the whole-level shape
+    // (dimension switch, teleport) each have their own reference arm.
+    const tripoint_bub_ms remembered( 60, 60, 0 );
+    set_up_open_daylight_map();
+    map &here = get_map();
+    generation_baseline base = capture_generations( here );
+    hooks::mark_memory_seen( here, remembered );
+    const std::vector<std::string> tile_via_verb = capture( here, base );
+
+    set_up_open_daylight_map();
+    base = capture_generations( here );
+    level_cache_freshness::report( here,
+        level_cache_freshness::memory_forgotten { .at = remembered } );
+    const std::vector<std::string> tile_via_kind = capture( here, base );
+    INFO( "tile verb only:\n" << only_in( tile_via_verb, tile_via_kind )
+          << "tile kind only:\n" << only_in( tile_via_kind, tile_via_verb ) );
+    CHECK( tile_via_kind == tile_via_verb );
+
+    // The level shape must ignore xy() and reset the whole level: a different xy()
+    // with the same z gives the same capture, and the capture differs from the tile one.
+    set_up_open_daylight_map();
+    // The fixture's refresh leaves every level flagged as fully re-memorisable, which
+    // would hide the raise under test; acknowledge first so the flag starts false.
+    for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z ) {
+        level_cache_freshness::acknowledge_memory_seen( here.access_cache( z ) );
+    }
+    base = capture_generations( here );
+    hooks::mark_memory_seen( here, 0 );
+    const std::vector<std::string> level_via_verb = capture( here, base );
+
+    set_up_open_daylight_map();
+    for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z ) {
+        level_cache_freshness::acknowledge_memory_seen( here.access_cache( z ) );
+    }
+    base = capture_generations( here );
+    level_cache_freshness::report( here, level_cache_freshness::memory_forgotten {
+        .at = tripoint_bub_ms( 0, 0, 0 ), .whole_level = true } );
+    const std::vector<std::string> level_via_kind = capture( here, base );
+    INFO( "level verb only:\n" << only_in( level_via_verb, level_via_kind )
+          << "level kind only:\n" << only_in( level_via_kind, level_via_verb ) );
+    CHECK( level_via_kind == level_via_verb );
+
+    set_up_open_daylight_map();
+    for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z ) {
+        level_cache_freshness::acknowledge_memory_seen( here.access_cache( z ) );
+    }
+    base = capture_generations( here );
+    level_cache_freshness::report( here, level_cache_freshness::memory_forgotten {
+        .at = tripoint_bub_ms( 37, 41, 0 ), .whole_level = true } );
+    CHECK( capture( here, base ) == level_via_kind );
+}
+
+TEST_CASE( "world-replaced is a strict superset of the invalidate_level escape hatch",
+           "[level_cache_freshness]" ) {
+    // Ticket #36 C4: the co-op rejoin moved from the escape hatch to the bulk kind.
+    // The widening is adjudicated: the kind raises residency plus seen/suspension,
+    // which the hatch never touched. Pin the superset, not equality.
+    // Hatch-only observations are excluded from the superset, by adjudication: the CPU
+    // lightmap memo (bit and generation — the bulk kind leaves the memo to the signature
+    // detector, like `loadn` does) and the visibility bit with the view-stale flag it
+    // feeds (the kind relies on the seen rebuild to provoke the visibility rebuild).
+    const auto comparable = []( const std::vector<std::string> &lines ) {
+        std::vector<std::string> out;
+        for( const std::string &line : lines ) {
+            if( line.find( "lm_valid" ) != std::string::npos ||
+                line.find( "visibility" ) != std::string::npos ||
+                line.rfind( "view-stale ", 0 ) == 0 ||
+                line.rfind( "gen-cpu-lm ", 0 ) == 0 ) {
+                continue;
+            }
+            out.push_back( line );
+        }
+        return out;
+    };
+    const int mapsize = get_map().getmapsize();
+    const auto whole_bubble = [&]( const int z ) {
+        return level_cache_freshness::world_replaced {
+            .first = tripoint_bub_sm( 0, 0, z ),
+            .last = tripoint_bub_sm( mapsize - 1, mapsize - 1, z ),
+        };
+    };
+    set_up_open_daylight_map();
+    map &here = get_map();
+    generation_baseline base = capture_generations( here );
+    const std::uint64_t resid_before =
+        level_cache_freshness::residency_generation( here.access_cache( 0 ) );
+    level_cache_freshness::invalidate_level( here, 0 );
+    const std::vector<std::string> via_hatch = capture( here, base );
+    const std::uint64_t hatch_resid =
+        level_cache_freshness::residency_generation( here.access_cache( 0 ) );
+    CHECK( hatch_resid == resid_before );
+
+    set_up_open_daylight_map();
+    base = capture_generations( here );
+    level_cache_freshness::report( here, whole_bubble( 0 ) );
+    const std::vector<std::string> via_kind = capture( here, base );
+    const std::uint64_t kind_resid =
+        level_cache_freshness::residency_generation( here.access_cache( 0 ) );
+    CHECK( kind_resid > resid_before );
+
+    // Strictly more: every raise the hatch made is present, and the kind adds more.
+    const std::vector<std::string> hatch_cmp = comparable( via_hatch );
+    const std::vector<std::string> kind_cmp = comparable( via_kind );
+    for( const std::string &line : hatch_cmp ) {
+        INFO( "missing from the kind: " << line );
+        CHECK( std::find( kind_cmp.begin(), kind_cmp.end(), line ) != kind_cmp.end() );
+    }
+    CHECK( kind_cmp.size() > hatch_cmp.size() );
 }

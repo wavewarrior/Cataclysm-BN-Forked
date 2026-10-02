@@ -1796,7 +1796,8 @@ bool game::travel_to_dimension( const dimension_id &dim_id,
             auto const zmin = -OVERMAP_DEPTH;
             auto const zmax = OVERMAP_HEIGHT;
             for( auto z = zmin; z <= zmax; z++ ) {
-                level_cache_freshness::mark_memory_seen( here, z );
+                level_cache_freshness::report( here, level_cache_freshness::memory_forgotten {
+                    .at = tripoint_bub_ms( 0, 0, z ), .whole_level = true } );
                 level_cache_freshness::invalidate_level( here, z );
             }
         }

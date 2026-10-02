@@ -243,14 +243,26 @@ auto coop_client::apply_world_seed_to_avatar() -> void
                 << "[coop] load_map: abs_sub_after=(" << abs_sub_after.x() << ","
                 << abs_sub_after.y() << ") spawn=(" << world_seed_spawn_.x() << ","
                 << world_seed_spawn_.y() << ")";
-        level_cache_freshness::invalidate_level( g->m, levz );
+        // The rejoin repositioned the whole bubble: that is a bulk world replacement,
+        // so the kind is the door. Wider than the old escape hatch by design — the
+        // kind also advances residency and raises seen/suspension.
+        level_cache_freshness::report( g->m, level_cache_freshness::world_replaced {
+            .first = tripoint_bub_sm( 0, 0, levz ),
+            .last = tripoint_bub_sm( g->m.getmapsize() - 1, g->m.getmapsize() - 1, levz ),
+        } );
         g->m.build_map_cache( levz );
         const tripoint_bub_ms bpos = abs_to_map_local( g->m, world_seed_spawn_ );
         g->u.setpos( bpos );
         DebugLog( DL::Info, DC::Main )
                 << "[coop] setpos: bpos=(" << bpos.x() << "," << bpos.y() << ")"
                 << " abs_pos_after=(" << g->u.abs_pos().x() << "," << g->u.abs_pos().y() << ")";
-        level_cache_freshness::invalidate_level( g->m, levz );
+        // Same bulk-replacement shape as the load above; the avatar reposition that
+        // just happened is covered by the level-wide raise (issue #36 C4 widens this
+        // deliberately beyond the old escape hatch).
+        level_cache_freshness::report( g->m, level_cache_freshness::world_replaced {
+            .first = tripoint_bub_sm( 0, 0, levz ),
+            .last = tripoint_bub_sm( g->m.getmapsize() - 1, g->m.getmapsize() - 1, levz ),
+        } );
         g->m.build_map_cache( levz );
     }
     g->u.process_turn(); // initialise avatar stats at spawn
@@ -855,8 +867,12 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
                     } );
                 }
             }
-            // Invalidate the map's high-level visibility caches after bulk update.
-            level_cache_freshness::invalidate_visibility( g->m );
+            // No explicit visibility invalidate: the world_replaced above raises the
+            // seen cache of every covered level, and the seen rebuild it provokes
+            // raises the visibility bit — the same argument as `loadn` (see the
+            // world_replaced handler comment in level_cache_freshness.cpp). Pinned by
+            // the "world-replaced makes the caches see terrain swapped underneath
+            // them" test case, which observes the swap through refresh_view().
 
         } else if( key == "monsters" ) {
             // H5: delta-update by host-assigned stable ID.

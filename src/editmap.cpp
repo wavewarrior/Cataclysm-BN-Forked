@@ -1517,12 +1517,10 @@ void editmap::mapgen_preview( const point_abs_ms& tc, uilist& gmenu )
         }
     };
     const auto invalidate_cache = [&]() {
-        level_cache_freshness::mark_transparency( here, target.z() );
-        level_cache_freshness::mark_outside( here, target.z() );
-        level_cache_freshness::mark_floor( here, target.z() );
+        // The regen repaints the level's sight/structure caches wholesale; the kind
+        // mirrors the five-verb sequence the lambda used to spell out.
+        level_cache_freshness::report( here, level_cache_freshness::regenerated_level { .at = target } );
         here.set_pathfinding_cache_dirty( target.z() );
-        level_cache_freshness::mark_suspension( here, target.z() );
-        level_cache_freshness::mark_absorption( here, target.z() );
 
         here.clear_vehicle_cache();
         here.clear_vehicle_list( target.z() );

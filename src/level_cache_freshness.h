@@ -56,13 +56,13 @@ enum_bitset<level_cache_part> level_cache_bitset_parts();
  *
  * Interface — everything a caller must know:
  *
- * - Verbs record a fact about freshness. The low-level `mark`/`clear` verbs
- *   deliberately do NOT couple families: marking transparency stale does not
- *   mark absorption stale. The coupling rules (transparency implies absorption,
- *   floor implies the level below, a vehicle move implies the level above) live
- *   in the per-cache `mark_*` and `invalidate_*` verbs below, which compose the
- *   low-level ones. Those verbs are the successors of the deleted
- *   `map::set_*_cache_dirty` helpers; the change kinds compose them further.
+ * - The staleness verbs record a fact about freshness and are the module's private
+ *   vocabulary: they are the successors of the deleted `map::set_*_cache_dirty` helpers,
+ *   and the change kinds compose them. The low-level `mark`/`clear` verbs deliberately do
+ *   NOT couple families (marking transparency stale does not mark absorption stale); the
+ *   coupling rules (transparency implies absorption, floor implies the level below, a
+ *   vehicle move implies the level above) live in the verbs, which compose the low-level
+ *   ones.
  * - Mutating verbs are main-thread only and assert it, following the existing
  *   `is_pool_worker_thread()` pattern. Exception: the per-level builder stamps —
  *   `stamp_built`, `stamp_suspension_initialised`, `stamp_vehicle_floor`,
@@ -74,10 +74,13 @@ enum_bitset<level_cache_part> level_cache_bitset_parts();
  *   `RelWithDebInfo` build (`-DNDEBUG`): it cannot fail a test run, which is what lets
  *   this refactor claim "no behaviour change". It is a development aid, not enforcement;
  *   every asserted verb was checked to have only main-thread callers.
- * - The raw `mark`/`clear`/`assign` bit writers are private: outside the module a
- *   writer either reports a change kind or calls a named stamp door, and both take
- *   the `level_cache` (doors) or a z-level (verbs) rather than guessing which level
- *   the caller owns.
+ * - The single door: outside this module raise freshness only through `report( kind )`,
+ *   `invalidate_level`, a named stamp door, or `translate`. The raw `mark`/`clear`/`assign`
+ *   bit writers and the staleness verbs are private, so a caller cannot assemble a subset
+ *   of bits or name a verb; doors and verbs take the `level_cache` or a z-level rather
+ *   than letting the caller guess which level it owns. Need a raise shape no kind offers?
+ *   Add a change kind; if none fits, write an ADR before reaching for a verb. The only
+ *   exception is the test friendship in the private section.
  * - Reads go through the freshness queries at the bottom of this interface and the
  *   `level_cache` fields; nothing else reads freshness state.
  * - Whether a rebuild runs is decided by the view-stale condition, spelled by
@@ -172,44 +175,15 @@ class level_cache_freshness
         /** Mark every per-submap cache of a freshly constructed Level cache stale. */
         static void initialise( level_cache &cache );
 
-        // ---- Per-cache staleness verbs ----------------------------------
+        // ---- The single door ---------------------------------------------
         //
-        // Successors of the `map::set_*_cache_dirty` helpers. Each carries the
-        // couplings of the helper it replaces, so a caller states which cache went
-        // stale and never assembles a subset of bits.
+        // Raise freshness only through `report( kind )`, `invalidate_level`, a stamp
+        // door, or `translate`. Need a new raise shape? Add a change kind. Cannot?
+        // Write an ADR before reaching for a verb.
+        //
+        // The one exception is the test friendship below: the equivalence pins replay
+        // the private verbs to prove the kinds match the sequences they replace.
 
-        /** Transparency cache of a whole level, plus the absorption cache derived from it. */
-        static void mark_transparency( map &who, int zlev );
-        /** Transparency cache of the submap containing `p`. */
-        static void mark_transparency( map &who, const tripoint_bub_ms &p );
-        /** Outside cache of a whole level. */
-        static void mark_outside( map &who, int zlev );
-        /** Outside cache of the tile's submap and its boundary neighbours. */
-        static void mark_outside( map &who, const tripoint_bub_ms &p );
-        /** Floor cache of a whole level, cascading outside and absorption one level down. */
-        static void mark_floor( map &who, int zlev );
-        /** Floor cache of the tile's submap, cascading outside and absorption below. */
-        static void mark_floor( map &who, const tripoint_bub_ms &p );
-        /** Sound absorption cache of a whole level. */
-        static void mark_absorption( map &who, int zlev );
-        /** Sound absorption cache of the tile's submap and its boundary neighbours. */
-        static void mark_absorption( map &who, const tripoint_bub_ms &p );
-        /** Suspension cache of a whole level. */
-        static void mark_suspension( map &who, int zlev );
-        /** Seen cache of a whole level, unconditionally. */
-        static void mark_seen( map &who, int zlev );
-        /** Seen cache of `p`'s level, only where `p` was actually remembered. */
-        static void mark_seen( map &who, const tripoint_bub_ms &p );
-        /** Lightmap of the single submap containing `p`. */
-        static void mark_lightmap( map &who, const tripoint_bub_ms &p );
-        /** Lightmap of every loaded level, with the CPU lightmap memo and visibility. */
-        static void invalidate_lightmap( map &who );
-        /** Visibility cache of every loaded level, plus the map-wide aggregate. */
-        static void invalidate_visibility( map &who );
-        /** Forget one remembered tile and queue it for re-memorising. */
-        static void mark_memory_seen( map &who, const tripoint_bub_ms &p );
-        /** Forget everything remembered on a level and queue a full re-memorise. */
-        static void mark_memory_seen( map &who, int zlev );
         /**
          * Escape hatch, coarse by design: every Level cache of one z-level is stale.
          *
@@ -217,7 +191,7 @@ class level_cache_freshness
          * the sites that genuinely mean "rebuild this whole level" — a viewer re-centre,
          * a save/load restore, a teleport, a z jump in the map editor. No change kind
          * covers it and the ticket forbids inventing one. Callers that know what
-         * changed use a kind or one of the verbs above instead.
+         * changed use a kind; the private verbs below are the module's own vocabulary.
          */
         static void invalidate_level( map &who, int zlev );
 
@@ -225,7 +199,7 @@ class level_cache_freshness
 
         // Report a change to the world or the viewer. Each kind raises exactly the
         // dependents the bit-setter sequence it replaces raised; the equivalence is
-        // pinned per kind in the tests. Like the verbs above, `report` is main-thread
+        // pinned per kind in the tests. Like the private verbs, `report` is main-thread
         // only: it asserts via the existing `is_pool_worker_thread()` pattern, and the
         // assertion is compiled out of the shipped build (`-DNDEBUG`).
         // Kinds carry location/level/diff information only.
@@ -399,6 +373,27 @@ class level_cache_freshness
             /// Dirt the suspension cache of each covered level.
             bool suspension = true;
         };
+        /**
+         * A level was regenerated underneath the caches (the map editor's regen): the
+         * five sight/structure caches of `at`'s level all go stale at once, with the
+         * couplings each verb carries — transparency drags absorption, floor drags
+         * outside and absorption one level down. Mirrors the five-verb sequence the
+         * editor lambda spelled out, in that order.
+         */
+        struct regenerated_level {
+            tripoint_bub_ms at;
+        };
+        /**
+         * Memorised terrain was forgotten: `whole_level` forgets everything a level
+         * remembers and queues a full re-memorise, otherwise one tile. In
+         * `whole_level` mode only `at.z()` is meaningful — the level shape of the verb
+         * it replaces ignores x/y entirely, so `at.xy()` is decoration here.
+         */
+        struct memory_forgotten {
+            tripoint_bub_ms at;
+            bool whole_level = false;
+        };
+
 
         /**
          * One submap slot was freshly populated (the incremental arm of `loadn`):
@@ -420,6 +415,8 @@ class level_cache_freshness
         static void report( map &who, const z_level_changed &change );
         static void report( map &who, const map_shifted &change );
         static void report( map &who, const world_replaced &change );
+        static void report( map &who, const regenerated_level &change );
+        static void report( map &who, const memory_forgotten &change );
 
         // ---- Named stamp doors ------------------------------------------
         //
@@ -527,6 +524,44 @@ class level_cache_freshness
         /** Set named per-level flags to an explicit value. Workers allowed, own level only. */
         static void assign( level_cache &cache, const enum_bitset<level_cache_part> &parts,
                            bool value );
+        // ---- Per-cache staleness verbs ----------------------------------
+        //
+        // Successors of the `map::set_*_cache_dirty` helpers. Each carries the
+        // couplings of the helper it replaces, so a caller states which cache went
+        // stale and never assembles a subset of bits.
+
+        /** Transparency cache of a whole level, plus the absorption cache derived from it. */
+        static void mark_transparency( map &who, int zlev );
+        /** Transparency cache of the submap containing `p`. */
+        static void mark_transparency( map &who, const tripoint_bub_ms &p );
+        /** Outside cache of a whole level. */
+        static void mark_outside( map &who, int zlev );
+        /** Outside cache of the tile's submap and its boundary neighbours. */
+        static void mark_outside( map &who, const tripoint_bub_ms &p );
+        /** Floor cache of a whole level, cascading outside and absorption one level down. */
+        static void mark_floor( map &who, int zlev );
+        /** Floor cache of the tile's submap, cascading outside and absorption below. */
+        static void mark_floor( map &who, const tripoint_bub_ms &p );
+        /** Sound absorption cache of a whole level. */
+        static void mark_absorption( map &who, int zlev );
+        /** Sound absorption cache of the tile's submap and its boundary neighbours. */
+        static void mark_absorption( map &who, const tripoint_bub_ms &p );
+        /** Suspension cache of a whole level. */
+        static void mark_suspension( map &who, int zlev );
+        /** Seen cache of a whole level, unconditionally. */
+        static void mark_seen( map &who, int zlev );
+        /** Seen cache of `p`'s level, only where `p` was actually remembered. */
+        static void mark_seen( map &who, const tripoint_bub_ms &p );
+        /** Lightmap of the single submap containing `p`. */
+        static void mark_lightmap( map &who, const tripoint_bub_ms &p );
+        /** Lightmap of every loaded level, with the CPU lightmap memo and visibility. */
+        static void invalidate_lightmap( map &who );
+        /** Visibility cache of every loaded level, plus the map-wide aggregate. */
+        static void invalidate_visibility( map &who );
+        /** Forget one remembered tile and queue it for re-memorising. */
+        static void mark_memory_seen( map &who, const tripoint_bub_ms &p );
+        /** Forget everything remembered on a level and queue a full re-memorise. */
+        static void mark_memory_seen( map &who, int zlev );
         /** Assemble a part set; the spelling the doors use for coupled families. */
         static enum_bitset<level_cache_part> parts_of(
             std::initializer_list<level_cache_part> list ) {

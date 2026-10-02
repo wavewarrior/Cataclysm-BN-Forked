@@ -195,7 +195,7 @@ bool cata_tiles::draw_terrain(
         if( t.obj().connects( connect_group ) ) {
             get_connect_values( p, subtile, rotation, connect_group, {} );
             // re-memorize previously seen terrain in case new connections have been seen
-            level_cache_freshness::mark_memory_seen( here, p );
+            level_cache_freshness::report( here, level_cache_freshness::memory_forgotten { .at = p } );
         } else {
             get_terrain_orientation( p, rotation, subtile, {}, invisible );
             // do something to get other terrain orientation values

@@ -2848,7 +2848,8 @@ void game::place_player_overmap( const tripoint_abs_omt &om_dest )
     for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; z++ ) {
         m.clear_vehicle_list( z );
     }
-    level_cache_freshness::mark_memory_seen( m, get_levz() );
+    level_cache_freshness::report( m, level_cache_freshness::memory_forgotten {
+        .at = tripoint_bub_ms( 0, 0, get_levz() ), .whole_level = true } );
     // offset because load_map expects the coordinates of the top left corner, but the
     // player will be centered in the middle of the map.
     // TODO: fix point types

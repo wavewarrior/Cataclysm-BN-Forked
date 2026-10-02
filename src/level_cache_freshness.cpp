@@ -1239,6 +1239,36 @@ void level_cache_freshness::report( map &who, const submap_replaced &change ) {
     }
 }
 
+void level_cache_freshness::report( map &who, const regenerated_level &change ) {
+    assert_main_thread();
+    const int zlev = change.at.z();
+    // Issue #20: a regeneration is a load-shaped event on the level it repaints and on
+    // the level the floor cascade reaches, so residency advances on both.
+    advance_residency( who, zlev );
+    advance_residency( who, zlev - 1 );
+    // The map-editor regen sequence, verb for verb in the order the lambda spelled it:
+    // transparency (with its absorption coupling), outside, floor (with the z-1
+    // outside/absorption cascade), suspension, absorption. Pathfinding dirt and the
+    // vehicle-cache resets stay at the call site, like every other kind.
+    mark_transparency( who, zlev );
+    mark_outside( who, zlev );
+    mark_floor( who, zlev );
+    mark_suspension( who, zlev );
+    mark_absorption( who, zlev );
+}
+
+void level_cache_freshness::report( map &who, const memory_forgotten &change ) {
+    assert_main_thread();
+    advance_residency( who, change.at.z() );
+    if( change.whole_level ) {
+        // The level shape resets the whole seen-memory bitmap and queues a full
+        // re-memorise; `at.xy()` plays no part in it.
+        mark_memory_seen( who, change.at.z() );
+    } else {
+        mark_memory_seen( who, change.at );
+    }
+}
+
 bool level_cache_freshness::stale( const level_cache &cache, const level_cache_part part ) {
     if( const cata_dynamic_bitset * const bits = bitset_of( cache, part ) ) {
         return bits->any();

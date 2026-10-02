@@ -497,7 +497,9 @@ TEST_CASE("can autodrive", "[vehicle][autodrive]") {
     you.omt_path = {current_omt + tripoint_rel_omt(1, 0, 0)};
     veh_ptr->is_autodriving = true;
 
-    level_cache_freshness::invalidate_visibility( here );
+    level_cache_freshness::report( here, level_cache_freshness::light_changed {
+        .scope = level_cache_freshness::light_changed::lightmap_scope::none,
+        .visibility = true } );
     REQUIRE( level_cache_freshness::visibility_stale( here, you.bub_pos() ) );
 
     CHECK(veh_ptr->do_autodrive(you) == autodrive_result::ok);

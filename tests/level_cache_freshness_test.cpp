@@ -362,7 +362,9 @@ TEST_CASE(
     }
 
     SECTION("a light-level report makes the view stale") {
-        level_cache_freshness::invalidate_visibility(here);
+        level_cache_freshness::report( here, level_cache_freshness::light_changed {
+            .scope = level_cache_freshness::light_changed::lightmap_scope::none,
+            .visibility = true } );
         CHECK(level_cache_freshness::visibility_stale(here, you.bub_pos()));
     }
 }
@@ -405,7 +407,9 @@ TEST_CASE(
 
     // Stale the view without rebuilding, then drop a wall in the corridor. The
     // cached answer is unchanged: readers that need exactness refresh first.
-    level_cache_freshness::invalidate_visibility(here);
+    level_cache_freshness::report( here, level_cache_freshness::light_changed {
+        .scope = level_cache_freshness::light_changed::lightmap_scope::none,
+        .visibility = true } );
     build_wall_block(tripoint_bub_ms(62, 60, 0));
     CHECK(you.sees(z));
 

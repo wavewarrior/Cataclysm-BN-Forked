@@ -3449,7 +3449,9 @@ void map::invalidate_lightmap_if_light_state_changed()
     if( !changed ) {
         return;
     }
-    level_cache_freshness::invalidate_lightmap( *this );
+    // The default scope is every loaded level, which is what the verb did. The #28
+    // plan dissolves this detector recursion; until then the kind is the door.
+    level_cache_freshness::report( *this, level_cache_freshness::light_changed{} );
 }
 
 
