@@ -271,43 +271,24 @@ void swap_terrain_silently( map &here, const tripoint_bub_ms &p, const ter_id &w
 }
 
 
-// Flags of the terrain change described by an old/new pair, computed with the same
-// predicates `map::ter_set` inspects (map_access.cpp), so the kind raises exactly the
-// branch that would have run.
-level_cache_freshness::terrain_changed ter_change_flags( const tripoint_bub_ms &at,
+// The reference arms state the FACT of a replacement and let the module compute the
+// Property diff. There is deliberately no hand-written TFLAG comparison left here: a
+// fifth copy of the diff would pin the copy rather than the behaviour (#24).
+level_cache_freshness::terrain_replaced ter_change_flags( const tripoint_bub_ms &at,
         const ter_id &old_id, const ter_id &new_id ) {
-    const ter_t &old_t = old_id.obj();
-    const ter_t &new_t = new_id.obj();
-    return level_cache_freshness::terrain_changed {
+    return level_cache_freshness::terrain_replaced {
         .at = at,
-        .transparency = old_t.transparent != new_t.transparent,
-        .no_floor = old_t.has_flag( TFLAG_NO_FLOOR ) != new_t.has_flag( TFLAG_NO_FLOOR ),
-        .z_transparent = old_t.has_flag( TFLAG_Z_TRANSPARENT )
-                         != new_t.has_flag( TFLAG_Z_TRANSPARENT ),
-        .sun_roof_above = old_t.has_flag( TFLAG_SUN_ROOF_ABOVE )
-                          != new_t.has_flag( TFLAG_SUN_ROOF_ABOVE ),
-        .suspended = old_t.has_flag( TFLAG_SUSPENDED ) != new_t.has_flag( TFLAG_SUSPENDED ),
-        // `ter_set` invalidates the lightmap unconditionally.
-        .lightmap = true,
+        .old_id = old_id,
+        .new_id = new_id,
     };
 }
 
-level_cache_freshness::terrain_changed furn_change_flags( const tripoint_bub_ms &at,
+level_cache_freshness::furniture_replaced furn_change_flags( const tripoint_bub_ms &at,
         const furn_id &old_id, const furn_id &new_id ) {
-    const furn_t &old_t = old_id.obj();
-    const furn_t &new_t = new_id.obj();
-    return level_cache_freshness::terrain_changed {
+    return level_cache_freshness::furniture_replaced {
         .at = at,
-        .transparency = old_t.transparent != new_t.transparent,
-        .no_floor = old_t.has_flag( TFLAG_NO_FLOOR ) != new_t.has_flag( TFLAG_NO_FLOOR ),
-        .z_transparent = old_t.has_flag( TFLAG_Z_TRANSPARENT )
-                         != new_t.has_flag( TFLAG_Z_TRANSPARENT ),
-        .sun_roof_above = old_t.has_flag( TFLAG_SUN_ROOF_ABOVE )
-                          != new_t.has_flag( TFLAG_SUN_ROOF_ABOVE ),
-        .suspended = old_t.has_flag( TFLAG_SUSPENDED ) != new_t.has_flag( TFLAG_SUSPENDED ),
-        .lightmap = old_t.light_emitted != new_t.light_emitted,
-        // `furn_set` always queues a support check at the edited tile.
-        .support_here = true,
+        .old_id = old_id,
+        .new_id = new_id,
     };
 }
 } // namespace
@@ -333,11 +314,22 @@ TEST_CASE( "terrain-changed matches the ter_set and furn_set setter sequences",
         { "t_floor to t_open_air", "t_floor", "t_open_air", "f_null", "f_null" },
         // Furniture starts emitting light: lightmap only, plus the support checks.
         { "f_null to f_floor_lamp_on", "t_dirt", "t_dirt", "f_null", "f_floor_lamp_on" },
+        // Support check without a floor opening: the old `ter_set` queued no support
+        // probe here, the kind always does (deliberate correction #24). Neither id
+        // carries TFLAG_NO_FLOOR, so the support queue is the only difference.
+        { "t_floor to t_grate", "t_floor", "t_grate", "f_null", "f_null" },
+        // Opaque furniture removed: the old `furn_set` raised no lightmap (emitted
+        // light unchanged), the kind raises it on the opacity flip (correction #24).
+        { "f_server to f_null", "t_dirt", "t_dirt", "f_server", "f_null" },
+        // Suspension inverts: the suspension-cache raise and the post-report enqueue
+        // both moved into the kind; the pair pins them travelling together.
+        { "t_dirt to t_web_bridge", "t_dirt", "t_web_bridge", "f_null", "f_null" },
     } };
 
     for( const scenario &s : scenarios ) {
         CAPTURE( s.name );
-        const bool via_furniture = std::string( s.new_furn ) != "f_null";
+        const bool via_furniture = std::string( s.new_furn ) != "f_null"
+                                   || std::string( s.old_furn ) != "f_null";
 
         // Plant the "old" state silently, then bring the caches up to date, so both arms
         // start from the same world and the same freshness state.
@@ -385,6 +377,73 @@ TEST_CASE( "terrain-changed matches the ter_set and furn_set setter sequences",
         INFO( "raised by the kind but not by the mutator:\n"
               << only_in( via_kind, via_mutator ) );
         CHECK( via_kind == via_mutator );
+    }
+}
+
+TEST_CASE( "id-pair replacement kinds apply the adjudicated corrections",
+           "[level_cache_freshness]" ) {
+    // The matrix above compares kind against mutator, and the mutators now RUN the
+    // kinds, so the four adjudicated divergences (#24) need direct pins against the
+    // OLD expected behaviour.
+    const tripoint_bub_ms at( 61, 60, 0 );
+    map &here = get_map();
+
+    SECTION( "terrain replacement always queues the support check at the tile" ) {
+        // t_floor -> t_grate: neither id carries TFLAG_NO_FLOOR, so the old
+        // `ter_set` queued no support probe at the tile; the kind always does.
+        set_up_open_daylight_map();
+        REQUIRE( here.ter_set( at, ter_id( "t_grate" ) ) );
+        const std::set<tripoint_bub_ms> losses
+            = level_cache_freshness::take_support_losses( here );
+        CHECK( losses.count( at ) == 1 );
+    }
+
+    SECTION( "furniture opacity flip raises the lightmap" ) {
+        // f_server is opaque and emits no light: removing it changes no
+        // light_emitted, and the old `furn_set` raised no lightmap.
+        set_up_open_daylight_map();
+        point_sm_ms loc;
+        submap *const sm = here.get_submap_at( at, loc );
+        REQUIRE( sm != nullptr );
+        sm->set_furn( loc, furn_id( "f_server" ) );
+        refresh_level_cache();
+        drain_work_lists( here );
+        REQUIRE_FALSE( level_cache_freshness::stale( here.access_cache( 0 ),
+                       level_cache_part::lightmap ) );
+        here.furn_set( at, furn_id( "f_null" ) );
+        CHECK( level_cache_freshness::stale( here.access_cache( 0 ),
+               level_cache_part::lightmap ) );
+    }
+
+    SECTION( "suspension enqueue travels with the suspension raise" ) {
+        // The post-report enqueue the old `ter_set` carried moved into the module:
+        // a replacement INTO a SUSPENDED carrier queues the tile absolutely.
+        set_up_open_daylight_map();
+        REQUIRE( here.ter_set( at, ter_id( "t_web_bridge" ) ) );
+        level_cache &ch = here.access_cache( 0 );
+        CHECK( level_cache_freshness::stale( ch, level_cache_part::suspension_dirty ) );
+        const point_abs_ms want = map_local_to_abs( here, at ).xy();
+        CHECK( std::find( ch.suspension_cache.begin(), ch.suspension_cache.end(),
+                          want ) != ch.suspension_cache.end() );
+    }
+
+    SECTION( "remote-apply absorption marks the tile, not the whole level below" ) {
+        // The old mapbuffer terrain arm added a WHOLE-LEVEL absorption mark at z-1
+        // alongside the tile mark. That z-1 raise is deliberately gone: the floor
+        // cascade inside the diff's `no_floor` handling already covers the tile one
+        // level down, and the blanket mark rebuilt every submap's absorption for
+        // nothing. Pinned: the tile's own bit rises, the level below is NOT blanketed.
+        set_up_open_daylight_map();
+        level_cache_freshness::report( here, level_cache_freshness::terrain_replaced {
+            .at = at,
+            .old_id = ter_id( "t_floor" ),
+            .new_id = ter_id( "t_open_air" ),
+            .raise_absorption = true,
+        } );
+        level_cache &ch0 = here.access_cache( 0 );
+        const size_t bit = static_cast<size_t>( ch0.bidx( at.x() / SEEX, at.y() / SEEY ) );
+        CHECK( level_cache_freshness::stale( ch0, level_cache_part::absorption, bit ) );
+        CHECK( !here.access_cache( -1 ).absorption_cache_dirty.all() );
     }
 }
 

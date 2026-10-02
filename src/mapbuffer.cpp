@@ -3609,41 +3609,14 @@ auto mapbuffer::invalidate_active_terrain_set_caches( const tripoint_abs_ms &p,
     }
 
     auto &here = g->m;
-    const auto &old_terrain = old_id.obj();
-    const auto &new_terrain = new_id.obj();
-
-    const bool no_floor_changed = new_terrain.has_flag( TFLAG_NO_FLOOR ) !=
-                                  old_terrain.has_flag( TFLAG_NO_FLOOR );
-    const bool suspended_changed = new_terrain.has_flag( TFLAG_SUSPENDED ) !=
-                                   old_terrain.has_flag( TFLAG_SUSPENDED );
-    level_cache_freshness::report( here, level_cache_freshness::terrain_changed {
+    level_cache_freshness::report( here, level_cache_freshness::terrain_replaced {
         .at = *local,
-        .transparency = old_terrain.transparent != new_terrain.transparent,
-        .no_floor = no_floor_changed,
-        .z_transparent = new_terrain.has_flag( TFLAG_Z_TRANSPARENT ) !=
-                         old_terrain.has_flag( TFLAG_Z_TRANSPARENT ),
-        .suspended = suspended_changed,
-        .lightmap = true,
+        .old_id = old_id,
+        .new_id = new_id,
+        // Remote apply: the change happened on another machine, so nothing raised
+        // the sound absorption cache here yet.
+        .raise_absorption = true,
     } );
-
-    if( no_floor_changed ) {
-        // Sound absorption reads the floor here and one level down.
-        level_cache_freshness::mark_absorption( here, *local );
-        level_cache_freshness::mark_absorption( here, local->z() - 1 );
-    }
-
-    if( new_terrain.has_flag( TFLAG_BLOCK_WIND ) != old_terrain.has_flag( TFLAG_BLOCK_WIND ) ) {
-        level_cache_freshness::mark_absorption( here, *local );
-    }
-
-    if( new_terrain.has_flag( TFLAG_CONNECT_TO_WALL ) != old_terrain.has_flag(
-                TFLAG_CONNECT_TO_WALL ) ) {
-        level_cache_freshness::mark_absorption( here, *local );
-    }
-
-    if( suspended_changed && new_terrain.has_flag( TFLAG_SUSPENDED ) ) {
-        here.get_cache( local->z() ).suspension_cache.emplace_back( p.xy() );
-    }
 
     here.invalidate_max_populated_zlev( local->z() );
     here.set_pathfinding_cache_dirty( *local );
@@ -3693,29 +3666,14 @@ auto mapbuffer::invalidate_active_furniture_set_caches( const tripoint_abs_ms &p
     }
 
     auto &here = g->m;
-    const auto &old_furniture = old_id.obj();
-    const auto &new_furniture = new_id.obj();
-
-    level_cache_freshness::report( here, level_cache_freshness::terrain_changed {
+    level_cache_freshness::report( here, level_cache_freshness::furniture_replaced {
         .at = *local,
-        .transparency = old_furniture.transparent != new_furniture.transparent,
-        .no_floor = old_furniture.has_flag( TFLAG_NO_FLOOR ) !=
-                    new_furniture.has_flag( TFLAG_NO_FLOOR ),
-        .z_transparent = old_furniture.has_flag( TFLAG_Z_TRANSPARENT ) !=
-                         new_furniture.has_flag( TFLAG_Z_TRANSPARENT ),
-        .sun_roof_above = old_furniture.has_flag( TFLAG_SUN_ROOF_ABOVE ) !=
-                          new_furniture.has_flag( TFLAG_SUN_ROOF_ABOVE ),
-        .suspended = false,
-        .lightmap = old_furniture.light_emitted != new_furniture.light_emitted,
-        .support_here = true,
+        .old_id = old_id,
+        .new_id = new_id,
+        // Remote apply: the change happened on another machine, so nothing raised
+        // the sound absorption cache here yet.
+        .raise_absorption = true,
     } );
-
-    if( old_furniture.has_flag( TFLAG_BLOCK_WIND ) != new_furniture.has_flag( TFLAG_BLOCK_WIND ) ||
-        old_furniture.has_flag( TFLAG_CONNECT_TO_WALL ) !=
-        new_furniture.has_flag( TFLAG_CONNECT_TO_WALL ) ) {
-        level_cache_freshness::mark_absorption( here, *local );
-    }
-
     here.invalidate_max_populated_zlev( local->z() );
     here.set_pathfinding_cache_dirty( *local );
 }

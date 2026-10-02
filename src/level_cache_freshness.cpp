@@ -666,6 +666,69 @@ void for_shifted_bands( const point_rel_sm &shift, int mapsize, int band_count,
     }
 }
 
+/**
+ * The Property diff of an id-pair replacement, plus the absorption predicate.
+ *
+ * The successor of the hand-written diff copies the terrain mutators and the
+ * co-op remote-apply arms each carried (ticket #24): the caller states the fact
+ * of a replacement, this computes which properties moved. `absorption` folds the
+ * three sound-absorption predicates (NO_FLOOR, BLOCK_WIND, CONNECT_TO_WALL) into
+ * one verdict; whether it RAISES anything is per-call policy, applied by the
+ * `report` overload, not by the diff.
+ */
+struct replacement_diff {
+    level_cache_freshness::terrain_changed change;
+    bool absorption = false;
+};
+
+replacement_diff terrain_diff_of( const tripoint_bub_ms &at, const ter_t &old_t,
+                                  const ter_t &new_t ) {
+    replacement_diff diff;
+    diff.change.at = at;
+    diff.change.transparency = old_t.transparent != new_t.transparent;
+    diff.change.no_floor = old_t.has_flag( TFLAG_NO_FLOOR ) != new_t.has_flag( TFLAG_NO_FLOOR );
+    diff.change.z_transparent = old_t.has_flag( TFLAG_Z_TRANSPARENT ) !=
+                                new_t.has_flag( TFLAG_Z_TRANSPARENT );
+    // Always computed, unlike the old `ter_set` copy which never looked at it:
+    // provably dead on terrain data (zero carriers in data/json), and the unified
+    // rule is what the furniture arms already did.
+    diff.change.sun_roof_above = old_t.has_flag( TFLAG_SUN_ROOF_ABOVE ) !=
+                                 new_t.has_flag( TFLAG_SUN_ROOF_ABOVE );
+    diff.change.suspended = old_t.has_flag( TFLAG_SUSPENDED ) != new_t.has_flag( TFLAG_SUSPENDED );
+    // Terrain changes always force a lightmap rebuild.
+    diff.change.lightmap = true;
+    diff.absorption = diff.change.no_floor
+                      || old_t.has_flag( TFLAG_BLOCK_WIND ) != new_t.has_flag( TFLAG_BLOCK_WIND )
+                      || old_t.has_flag( TFLAG_CONNECT_TO_WALL ) !=
+                      new_t.has_flag( TFLAG_CONNECT_TO_WALL );
+    return diff;
+}
+
+replacement_diff furniture_diff_of( const tripoint_bub_ms &at, const furn_t &old_t,
+                                    const furn_t &new_t ) {
+    replacement_diff diff;
+    diff.change.at = at;
+    diff.change.transparency = old_t.transparent != new_t.transparent;
+    diff.change.no_floor = old_t.has_flag( TFLAG_NO_FLOOR ) != new_t.has_flag( TFLAG_NO_FLOOR );
+    diff.change.z_transparent = old_t.has_flag( TFLAG_Z_TRANSPARENT ) !=
+                                new_t.has_flag( TFLAG_Z_TRANSPARENT );
+    diff.change.sun_roof_above = old_t.has_flag( TFLAG_SUN_ROOF_ABOVE ) !=
+                                 new_t.has_flag( TFLAG_SUN_ROOF_ABOVE );
+    // Furniture replacements never move the suspension cache.
+    diff.change.suspended = false;
+    // Deliberate correction (#24): an opacity flip changes what the lightmap sees
+    // through the tile, so the lightmap goes stale on a transparency change too,
+    // not only on an emitted-light change.
+    diff.change.lightmap = old_t.light_emitted != new_t.light_emitted
+                           || diff.change.transparency;
+    diff.change.support_here = true;
+    diff.absorption = diff.change.no_floor
+                      || old_t.has_flag( TFLAG_BLOCK_WIND ) != new_t.has_flag( TFLAG_BLOCK_WIND )
+                      || old_t.has_flag( TFLAG_CONNECT_TO_WALL ) !=
+                      new_t.has_flag( TFLAG_CONNECT_TO_WALL );
+    return diff;
+}
+
 } // namespace
 
 void level_cache_freshness::report( map &who, const terrain_changed &change ) {
@@ -752,6 +815,41 @@ void level_cache_freshness::report( map &who, const terrain_changed &change ) {
         // absorption caches one level down.
         mark_floor( who, p.z() );
         mark_visibility( who, p.z() );
+    }
+}
+void level_cache_freshness::report( map &who, const terrain_replaced &change ) {
+    assert_main_thread();
+    const ter_t &old_t = change.old_id.obj();
+    const ter_t &new_t = change.new_id.obj();
+    replacement_diff diff = terrain_diff_of( change.at, old_t, new_t );
+    // Deliberate correction (#24): a terrain replacement ALWAYS queues the support
+    // check at the tile itself. The old `ter_set` queued it only when NO_FLOOR
+    // inverted, so replacing, say, a floor with rubble left a stale support entry
+    // for whatever stood on the tile until some other change probed it.
+    diff.change.support_here = true;
+    // Ordering preserved from the sites this absorbs: the property raises first,
+    // then the absorption mark, then the suspension enqueue.
+    report( who, diff.change );
+    if( change.raise_absorption && diff.absorption ) {
+        // Sound absorption reads the floor here, and the floor cascade inside
+        // `report` already covered one level down: one mark at the tile, the old
+        // whole-level z-1 mark is deliberately gone (pinned in the tests).
+        mark_absorption( who, change.at );
+    }
+    if( diff.change.suspended && new_t.has_flag( TFLAG_SUSPENDED ) ) {
+        who.get_cache( change.at.z() ).suspension_cache.emplace_back(
+            map_local_to_abs( who, change.at ).xy() );
+    }
+}
+
+void level_cache_freshness::report( map &who, const furniture_replaced &change ) {
+    assert_main_thread();
+    const furn_t &old_t = change.old_id.obj();
+    const furn_t &new_t = change.new_id.obj();
+    replacement_diff diff = furniture_diff_of( change.at, old_t, new_t );
+    report( who, diff.change );
+    if( change.raise_absorption && diff.absorption ) {
+        mark_absorption( who, change.at );
     }
 }
 

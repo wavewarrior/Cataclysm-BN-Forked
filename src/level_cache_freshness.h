@@ -12,6 +12,7 @@
 #include "cuboid_rectangle.h"
 #include "enum_bitset.h"
 #include "enum_traits.h"
+#include "type_id.h"
 
 struct level_cache;
 class map;
@@ -304,6 +305,39 @@ class level_cache_freshness
             bool floor_level = false;
         };
         /**
+         * The terrain at one tile was replaced: the caller states the FACT of a
+         * replacement (which id was there, which id is there now) and the module
+         * computes the Property diff. Use this wherever the old/new ids are known —
+         * the terrain mutators and the co-op remote-apply arms. Sites that know only
+         * an effect (a field's opacity, a trap's regen, a weather sight penalty) keep
+         * constructing `terrain_changed` directly.
+         *
+         * `raise_absorption` is the per-kind policy field: the diff evaluates the
+         * three absorption predicates (NO_FLOOR, BLOCK_WIND, CONNECT_TO_WALL)
+         * uniformly, but only a caller that knows the local setters did NOT already
+         * raise the sound-absorption cache — a remote-apply arm replaying a change
+         * that happened on another machine — turns this on. Off for the local setters.
+         */
+        struct terrain_replaced {
+            tripoint_bub_ms at;
+            ter_id old_id;
+            ter_id new_id;
+            bool raise_absorption = false;
+        };
+        /**
+         * The furniture at one tile was replaced. Same contract as `terrain_replaced`,
+         * with the furniture diff: the suspension predicate never fires (furniture
+         * carries no SUSPENDED semantics here), and the lightmap raises on an emitted
+         * light OR opacity flip.
+         */
+        struct furniture_replaced {
+            tripoint_bub_ms at;
+            furn_id old_id;
+            furn_id new_id;
+            bool raise_absorption = false;
+        };
+
+        /**
          * A light source appeared, disappeared or changed intensity somewhere.
          * Default: every loaded level's lightmap is stale, which is what every light
          * mutator raises today.
@@ -383,6 +417,8 @@ class level_cache_freshness
         };
 
         static void report( map &who, const terrain_changed &change );
+        static void report( map &who, const terrain_replaced &change );
+        static void report( map &who, const furniture_replaced &change );
         static void report( map &who, const light_changed &change );
         static void report( map &who, const vehicle_moved &change );
         static void report( map &who, const player_moved &change );

@@ -258,18 +258,10 @@ void map::furn_set(
         Creature* c = g->critter_at( p );
         if( c ) { c->remove_effect( effect_crushed ); }
     }
-    level_cache_freshness::report( *this, level_cache_freshness::terrain_changed {
+    level_cache_freshness::report( *this, level_cache_freshness::furniture_replaced {
         .at = p,
-        .transparency = old_t.transparent != new_t.transparent,
-        .no_floor = old_t.has_flag( TFLAG_NO_FLOOR ) != new_t.has_flag( TFLAG_NO_FLOOR ),
-        .z_transparent = old_t.has_flag( TFLAG_Z_TRANSPARENT ) !=
-                         new_t.has_flag( TFLAG_Z_TRANSPARENT ),
-        .sun_roof_above = old_t.has_flag( TFLAG_SUN_ROOF_ABOVE ) !=
-                          new_t.has_flag( TFLAG_SUN_ROOF_ABOVE ),
-        .suspended = false,
-        .lightmap = old_t.light_emitted != new_t.light_emitted,
-        // Furniture always checks for a loss of support at the tile itself.
-        .support_here = true,
+        .old_id = old_id,
+        .new_id = new_furniture,
     } );
 
     invalidate_max_populated_zlev( p.z() );
@@ -475,27 +467,11 @@ bool map::ter_set( const tripoint_bub_ms& p, const ter_id& new_terrain )
 
     current_submap->set_ter( l, new_terrain );
 
-    // Set the dirty flags
-    const ter_t& old_t = old_id.obj();
-    const ter_t& new_t = new_terrain.obj();
-
-    const bool suspended_changed = new_t.has_flag( TFLAG_SUSPENDED ) !=
-                                   old_t.has_flag( TFLAG_SUSPENDED );
-    level_cache_freshness::report( *this, level_cache_freshness::terrain_changed {
+    level_cache_freshness::report( *this, level_cache_freshness::terrain_replaced {
         .at = p,
-        .transparency = old_t.transparent != new_t.transparent,
-        .no_floor = new_t.has_flag( TFLAG_NO_FLOOR ) != old_t.has_flag( TFLAG_NO_FLOOR ),
-        .z_transparent = new_t.has_flag( TFLAG_Z_TRANSPARENT ) !=
-                         old_t.has_flag( TFLAG_Z_TRANSPARENT ),
-        .suspended = suspended_changed,
-        // Terrain changes always force a lightmap rebuild.
-        .lightmap = true,
+        .old_id = old_id,
+        .new_id = new_terrain,
     } );
-
-    if( suspended_changed && new_t.has_flag( TFLAG_SUSPENDED ) ) {
-        level_cache& ch = get_cache( p.z() );
-        ch.suspension_cache.emplace_back( map_local_to_abs( *this, p ).xy() );
-    }
 
     invalidate_max_populated_zlev( p.z() );
 
