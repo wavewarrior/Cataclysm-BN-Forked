@@ -574,14 +574,29 @@ auto game::refresh_player_visibility_cache_if_needed( const bool player_map_cach
     };
 
     if( !needs_visibility_refresh() ) {
-        return;
+        // Issue #19: entity lights (a burning monster walking into view, a friend
+        // switching on a lamp, the player's own held torch) change the lightmap whose
+        // brightness `sees()` reads, and they raise no freshness bit of their own: the
+        // light-source signature that detects them is otherwise sampled only inside a
+        // build's lightmap phase, so a refresh that finds everything current never
+        // notices them and keeps answering from the stale lightmap. Sample the
+        // signature on this would-skip path (when a rebuild is happening anyway, the
+        // build samples it) and fall through when it says the lightmap went stale.
+        // Only a build that processes the lightmap can clear the bit, so a `skip_lightmap`
+        // refresh must not escalate on it: doing that would rebuild forever.
+        if( skip_lightmap || !level_cache_freshness::lightmap_needs_rebuild( m ) ) {
+            return;
+        }
     }
 
-    if( !player_map_cache_current || level_cache_freshness::visibility_inputs_stale( m ) ) {
+    if( !player_map_cache_current || level_cache_freshness::visibility_inputs_stale( m ) ||
+        ( !skip_lightmap && level_cache_freshness::lightmap_stale( m ) ) ) {
         // Issue #18: a caller claiming the map cache is current is only believed while
         // the module agrees. A terrain edit that dirties visibility inputs but raises
         // no visibility bit used to be repaired by nothing on this path: the recompute
         // below would read the stale inputs and reproduce the stale answer. Rebuild.
+        // Issue #19: a stale lightmap joins that set, but only for builds that will
+        // actually process it; a skip_lightmap build cannot clear the bit.
         m.build_map_cache( zlev, skip_lightmap );
     }
     if( needs_visibility_refresh() ) {

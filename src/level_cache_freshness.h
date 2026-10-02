@@ -425,6 +425,27 @@ class level_cache_freshness
          * answer correctly from a stale lightmap, and light freshness is issue #19.
          */
         static bool visibility_inputs_stale( const map &who );
+        /**
+         * Is any loaded level's lightmap stale? The lightmap is the OTHER input an
+         * exact visibility answer is read from, and it is deliberately NOT folded into
+         * `visibility_inputs_stale`: only a build that processes the lightmap can clear
+         * the bit, so a caller must ask this separately and act on it only when it is
+         * about to rebuild the lightmap (issue #19).
+         */
+        static bool lightmap_stale( const map &who );
+        /**
+         * Reconcile the light-source signature and report whether the lightmap is now
+         * stale. Entity lights (a burning monster walking into view, a friend switching
+         * on a lamp, the player's own held light) change `lm` and raise no freshness bit
+         * of their own; the signature that detects them is otherwise sampled only inside
+         * a build's lightmap phase, so a refresh that believes everything is current
+         * never notices them (issue #19). Sampling here raises the lightmap bit when the
+         * sources moved or changed. Only a caller that is about to process the lightmap
+         * may call this: a `skip_lightmap` refresh cannot clear the bit it raises, and
+         * escalating on it would rebuild forever.
+         */
+        static bool lightmap_needs_rebuild( map &who );
+
 
     private:
         /**

@@ -1089,6 +1089,31 @@ bool level_cache_freshness::visibility_inputs_stale( const map &who ) {
     return false;
 }
 
+bool level_cache_freshness::lightmap_stale( const map &who ) {
+    // Issue #19: entity lights (a burning monster, a lit NPC, the player's own lamp)
+    // are applied to `lm` inside the lightmap phase of the build, so a lightmap that
+    // is stale makes the cached visibility answer wrong even when every geometry
+    // input is current. Kept out of `visibility_inputs_stale` on purpose: a refresh
+    // that passes `skip_lightmap` cannot repair this bit, so folding it in there
+    // would make such a refresh rebuild forever.
+    for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z ) {
+        if( stale( who.get_cache_ref( z ), level_cache_part::lightmap ) ) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool level_cache_freshness::lightmap_needs_rebuild( map &who ) {
+    // One verb for the refresh's light question: reconcile the signature (this is the
+    // only signal for an entity-light move, which raises no bit of its own) and then
+    // answer the ordinary staleness query, which now includes whatever the signature
+    // just raised. A build that processes the lightmap clears the bit; the caller has
+    // to be such a build (see the header).
+    who.invalidate_lightmap_if_light_state_changed();
+    return lightmap_stale( who );
+}
+
 bool level_cache_freshness::visibility_stale( const map &who, const tripoint_bub_ms &viewer ) {
     // View stale, derived from cheap state rather than a sticky flag. The view is out
     // of date when the caches were last built for a DIFFERENT viewer (so a move or a
