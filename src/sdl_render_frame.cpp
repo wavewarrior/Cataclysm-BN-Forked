@@ -15,6 +15,7 @@
 #include "cata_tiles.h"
 #include "dynamic_atlas.h"
 #include "game_constants.h"
+#include "level_cache_freshness.h"
 #include "map.h"
 #include "debug.h"
 #include "panels.h"
@@ -200,11 +201,13 @@ auto build_lighting( lighting::render_state &rs ) -> bool
 //   rebuild_vis       — FOV visibility mask (player position change)
 // When a door opens (structure++), vis does NOT need to rebuild. When the player
 // walks in static terrain, only vis rebuilds — SDF/sun_sdf/sky_vis are skipped.
-static std::uint64_t last_gen = 0;
-static int           last_z = INT_MIN;
-static point         last_origin{ INT_MIN, INT_MIN };
-static int           last_player_x = INT_MIN;
-static int           last_player_y = INT_MIN;
+// T8/ADR-0002: the freshness stamps themselves live in the rebuild plan, derived
+// here at the consumption point; what stays file-local is only what is genuinely
+// frame-local: the pose tuple each buffer was last rebuilt FOR, the occluder stamp
+// the SDF was last baked against, and the camera-drift anchor.
+static std::optional<level_cache_freshness::pose_stamps> last_struct_pose;
+static std::optional<level_cache_freshness::pose_stamps> last_vis_pose;
+static std::uint64_t last_occluder = 0;
 // Step 2/3: the JFA seed is now rasterised from the sprite footprints captured by
 // cata_tiles, so it depends on WHICH TILES WERE DRAWN, not only on the transparency
 // cache. A tile that was off-camera at the last rebuild falls back to its TransBuf
@@ -220,56 +223,59 @@ lighting::lighting_rebuild_flags rebuild{};
 int px = 0, py = 0;
 std::uint64_t gen = 0;
 if( g && world_generator && world_generator->active_world ) {
+    // ADR-0002: derive the plan at the consumption point. The skip policy is the
+    // gate's honest demand: it needs pose and occluder stamps only, and must not
+    // escalate a lightmap bit a frame rebuild cannot clear.
     const int z = g->u.bub_pos().z();
-        const point origin = g->m.get_abs_sub().raw();
-        // Read generation from the current level's cache.
-        const auto &cache = g->m.get_cache_ref( z );
-        // Fold in outside_generation: sky_vis comes from outside_cache, which is
-        // built on a DIFFERENT schedule to transparency. Without this term a
-        // structure snapshot taken before the map populated outside_cache stayed
-        // zero forever, killing the sun term (see level_cache::outside_generation).
-        gen = cache.transparency_generation ^ ( cache.outside_generation * 1099511628211ull );
-        px = g->u.bub_pos().x();
-        py = g->u.bub_pos().y();
+    const auto plan = level_cache_freshness::plan_for( g->m,
+        level_cache_freshness::pose_of_viewer( g->u, z ),
+        level_cache_freshness::lightmap_policy::skip );
+    // Occluder-set stamp for the viewed level: the module folds transparency and
+    // outside advances (sky_vis is built on a different schedule; without that term
+    // a snapshot taken before the map populated outside_cache stayed zero forever,
+    // killing the sun term). Compared opaquely, never interpreted.
+    gen = plan.occluder[static_cast<size_t>( z + OVERMAP_DEPTH )];
+    px = plan.pose.viewer.x();
+    py = plan.pose.viewer.y();
 
-        // Rebuild the SDF on transparency change (gen), z change, map shift (origin:
-        // a shift moves the bubble's contents, so the map-local SDF must realign
-        // immediately or shadows drift behind the camera for a frame), or once the
-        // camera has drifted far enough that newly-scrolled-in occluders would still
-        // be carrying their coarse tile-square fallback seed.
-        const bool cam_drifted =
-            last_struct_px == INT_MIN
-            || std::abs( px - last_struct_px ) >= SDF_CAM_DRIFT_TILES
-            || std::abs( py - last_struct_py ) >= SDF_CAM_DRIFT_TILES;
-        // g_rebuild_once: file knob `force_rc_rebuild 2` → exactly one structure rebuild.
-        rebuild.structure = sdl_lighting_devui::devui_visible() || g_force_rc_rebuild
-                            || g_rebuild_once
-                            || gen != last_gen || z != last_z
-                            || origin != last_origin || cam_drifted;
-        g_rebuild_once = false;
+    // Rebuild the SDF on an occluder-set change (gen), z change, map shift (a shift
+    // moves the bubble's contents, so the map-local SDF must realign immediately or
+    // shadows drift behind the camera for a frame), or once the camera has drifted
+    // far enough that newly-scrolled-in occluders would still be carrying their
+    // coarse tile-square fallback seed. Camera pan itself does not force it: the
+    // SDF is bubble-indexed, panning one tile per step does not change its content.
+    const bool cam_drifted =
+        last_struct_px == INT_MIN
+        || std::abs( px - last_struct_px ) >= SDF_CAM_DRIFT_TILES
+        || std::abs( py - last_struct_py ) >= SDF_CAM_DRIFT_TILES;
+    const bool pose_shifted = !last_struct_pose
+        || last_struct_pose->bubble_origin != plan.pose.bubble_origin
+        || last_struct_pose->viewer.z() != plan.pose.viewer.z();
+    // g_rebuild_once: file knob `force_rc_rebuild 2` -> exactly one structure rebuild.
+    rebuild.structure = sdl_lighting_devui::devui_visible() || g_force_rc_rebuild
+                        || g_rebuild_once
+                        || gen != last_occluder || pose_shifted || cam_drifted;
+    g_rebuild_once = false;
 
-        // vis depends on player position — the seen_cache shadowcast origin.
-        // When the player moves, FOV changes even if terrain hasn't.
-        // When terrain changes (structure rebuild), vis is already covered by
-        // rebuild.structure because seen_cache is rebuilt alongside transparency_cache.
-        rebuild.vis = sdl_lighting_devui::devui_visible()
-                      || px != last_player_x || py != last_player_y
-                      || z != last_z;
+    // vis depends on player position - the seen_cache shadowcast origin.
+    // When the player moves, FOV changes even if terrain hasn't.
+    // When terrain changes (structure rebuild), vis is already covered by
+    // rebuild.structure because seen_cache is rebuilt alongside transparency_cache.
+    rebuild.vis = sdl_lighting_devui::devui_visible()
+                  || !last_vis_pose
+                  || last_vis_pose->viewer != plan.pose.viewer;
 
-        if( rebuild.structure ) {
-            ++s_rebuild_in_window;
-            last_gen = gen;
-            last_z = z;
-            last_origin = origin;
-            last_struct_px = px;
-            last_struct_py = py;
-        }
-        if( rebuild.vis ) {
-            last_player_x = px;
-            last_player_y = py;
-            last_z = z;
-        }
+    if( rebuild.structure ) {
+        ++s_rebuild_in_window;
+        last_occluder = gen;
+        last_struct_pose = plan.pose;
+        last_struct_px = px;
+        last_struct_py = py;
     }
+    if( rebuild.vis ) {
+        last_vis_pose = plan.pose;
+    }
+}
 
     if( cursor_light_emitter::enabled && g && tilecontext
         && world_generator && world_generator->active_world ) {

@@ -1366,8 +1366,12 @@ auto level_cache_freshness::plan_for( map &who, const viewer_pose &pose,
         if( obscured || ch.veh_in_active_range ) {
             add_level( plan.vehicle_obscured_levels, z );
         }
-        plan.residency.generation[static_cast<size_t>( z + OVERMAP_DEPTH )] =
-            residency_generation( ch );
+        const size_t slot = static_cast<size_t>( z + OVERMAP_DEPTH );
+        plan.residency.generation[slot] = residency_generation( ch );
+        // The frame gate's occluder fold: transparency and outside advances both
+        // repaint the SDF/sky-vis snapshot, so the gate compares this one stamp.
+        plan.occluder[slot] = transparency_generation( ch )
+                              ^ ( outside_generation( ch ) * 1099511628211ull );
         if( ch.seen_cache_dirty ) {
             plan.visibility = true;
         }

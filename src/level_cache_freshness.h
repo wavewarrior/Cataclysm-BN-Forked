@@ -140,6 +140,13 @@ struct rebuild_plan {
     lightmap_disposition lightmap;
     bool visibility;
     residency_snapshot residency;
+    /**
+     * Per-level occluder-set stamp for the render-frame gate: the fold of the
+     * transparency and outside-cache generations the SDF/sky-vis snapshot is keyed
+     * by. An absolute stamp like the residency ones: compared opaquely, never
+     * interpreted by the gate.
+     */
+    std::array<std::uint64_t, OVERMAP_LAYERS> occluder;
     pose_stamps pose;
 };
         /**
