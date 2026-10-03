@@ -100,7 +100,7 @@ Filed as ordinary issues on this repo, children of map #23. Frontier order: #32 
 | [#38](https://github.com/wavewarrior/Cataclysm-BN-Forked/issues/38) | T7: Push residency events; retire the GPU poll | #37 |
 | [#39](https://github.com/wavewarrior/Cataclysm-BN-Forked/issues/39) | T8: Frame gate consumes the plan | #37 |
 
-**Status (2026-10-03):** T1–T6 landed. T6 shipped `plan_for`/`rebuild_plan` (nested types),
+**Status (2026-10-03):** T1–T8 landed; the facade is complete. T6 shipped `plan_for`/`rebuild_plan` (nested types),
 the `build_map_cache( const rebuild_plan& )` signature, the full caller sweep (production
 sites derive the plan at their consumption point; tests go through
 `build_map_cache_from_plan`), and `docs/adr/0002-retire-gpu-pull-seam.md`. The GPU dirty
@@ -110,5 +110,11 @@ the normal policy (was: inside the build and the refresh entry point), so a skip
 no longer escalate — the escalation law now lives in the disposition type; the CPU-path
 `apply_character_light` tail runs only when the disposition is `process` (was: every
 non-skip build, which re-applied unchanged entity lights onto an unchanged lightmap).
-T7 replaces the residency poll inside `build_map_cache` (the `poll_lighting_residency`
-call at its head) with `apply_residency_events( plan.residency )`.
+T7 (`b7a9cf4bab`) replaced the residency poll inside `build_map_cache` with
+`cata_gpu::apply_residency_events( plan.residency, plan.pose.bubble_origin )`; the poll and
+its params struct are deleted and the jump-count pins ride the plan events unweakened.
+T8 (`f650fdbf4e`) dissolved the render-frame gate's file-static stamps: `build_lighting`
+derives a skip-policy plan at the gate, reads `plan.occluder` (the former XOR-fold, now a
+module-filled per-level stamp) and `plan.pose`, and keeps only the SDF camera-drift anchor
+as frame-local state; equivalence with the retired fold is pinned in
+`tests/sdl_render_frame_gate_test.cpp` `[render_frame_gate]`.

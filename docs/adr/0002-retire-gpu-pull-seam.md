@@ -1,6 +1,6 @@
 # ADR-0002: Retire the GPU pull-on-generations seam in favour of the pushed rebuild plan
 
-**Status:** Accepted 2026-10-02. Supersedes the pull seam of plans/level-cache-freshness.md ticket #21; preserves the residency event guarantee of #20. Execution: #37 landed (plan derivation + `build_map_cache` consumption + caller sweep); #38 (`apply_residency_events`) and #39 (frame gate consumes the plan) pending.
+**Status:** Accepted 2026-10-02. Supersedes the pull seam of plans/level-cache-freshness.md ticket #21; preserves the residency event guarantee of #20. Fully executed: #37 (plan derivation + `build_map_cache` consumption + caller sweep, `cbe5ffd9fe`), #38 (`apply_residency_events`, `b7a9cf4bab`), #39 (frame gate consumes the plan, `f650fdbf4e`).
 
 **Decision:** Staleness is derived once per consumption point by `level_cache_freshness::plan_for` and pushed to the CPU builder, the GPU residency layer, and the render-frame gate. Generation counters remain as the module's internal diff substrate and as the residency event carrier inside the plan; no consumer polls them directly anymore.
 
