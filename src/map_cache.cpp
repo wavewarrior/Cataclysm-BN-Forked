@@ -903,16 +903,17 @@ void map::build_map_cache( const level_cache_freshness::rebuild_plan &plan ) {
     constexpr std::nullptr_t gpu_device = nullptr;
 #endif
 #if defined(CATA_SDL)
-    // Issue #21: the GPU residency layer polls the per-level residency generations
-    // of Level cache freshness instead of map code pushing invalidations. Runs
-    // before any consumer of resident lighting below; safe with a null device
-    // (records staleness bookkeeping only).
-    cata_gpu::poll_lighting_residency( {
+    // Issue #21 guarantee in T7 push form (ADR-0002): the GPU residency layer
+    // receives the plan's residency snapshot instead of polling the generations.
+    // Runs before any consumer of resident lighting below; safe with a null
+    // device (records staleness bookkeeping only).
+    cata_gpu::apply_residency_events( {
         .device = gpu_device,
-        .m = this,
         .cache_x = get_cache_ref(minz).cache_x,
         .cache_y = get_cache_ref(minz).cache_y,
         .z_count = OVERMAP_LAYERS,
+        .residency = plan.residency,
+        .bubble_origin = plan.pose.bubble_origin,
     } );
 #endif
 #if defined(CATA_SDL)

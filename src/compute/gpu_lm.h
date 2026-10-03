@@ -3,6 +3,7 @@
 
 #    include "coordinates.h"
 #    include "game_constants.h"
+#    include "level_cache_freshness.h"
 #    include "map.h"
 
 #    include <SDL3/SDL_gpu.h>
@@ -236,26 +237,28 @@ struct shift_lighting_residency_params {
 // transparency dispatches can patch only the newly loaded edge bands.
 auto shift_lighting_resident_inputs(shift_lighting_residency_params const& p) -> bool;
 
-// Issue #21: the residency layer POLLS the per-level residency generations of
-// Level cache freshness instead of being called by map code. Compare each
-// level's generation against the last-seen stamp this module owns; a jumped
-// stamp invalidates that level's resident transparency, exactly as the deleted
-// direct invalidate calls did. A moved bubble origin replays the in-place
-// translate when shift_lighting_resident_inputs already applied it, and falls
-// back to invalidating every level otherwise (same contract as the old
-// map::shift fallback). Render-only bookkeeping: safe with a null device.
-struct poll_lighting_residency_params {
+// Issue #21 guarantee, T7 push form (ADR-0002): the residency layer receives the
+// plan's residency snapshot instead of polling the generations. Diff the snapshot
+// against this module's last-applied state: a jumped level loses its resident
+// transparency, exactly as the deleted direct invalidate calls did. A changed
+// shift stamp replays the in-place translate when shift_lighting_resident_inputs
+// already applied it, and falls back to invalidating every level otherwise (same
+// contract as the old map::shift fallback). GPU residency validity stays private
+// here; render-only bookkeeping: safe with a null device.
+struct apply_residency_events_params {
     SDL_GPUDevice* device = nullptr;
-    map* m = nullptr;
     int cache_x = 0;
     int cache_y = 0;
     int z_count = 0;
+    level_cache_freshness::residency_snapshot residency;
+    point_abs_sm bubble_origin;
 };
-auto poll_lighting_residency(poll_lighting_residency_params const& p) -> void;
+auto apply_residency_events(apply_residency_events_params const& p) -> void;
 
-// Cumulative count of residency-generation jumps the poll has observed across
-// all levels since startup/reset. Observation-only; lets tests pin that the
-// poll notices a change kind without a graphics device.
+// Cumulative count of residency events (per-level generation deltas) the pushed
+// plans have carried across all levels since startup/reset. Observation-only;
+// lets tests pin that a change kind reaches the lighting layer exactly once
+// without a graphics device.
 auto lighting_residency_jump_count() -> std::uint64_t;
 
 // Begin the full GPU lighting pass for the dirty z-levels.

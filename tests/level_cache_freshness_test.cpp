@@ -552,48 +552,53 @@ TEST_CASE(
     level_cache_freshness::record_outside_content(ch, 0xBEEF);
     CHECK(level_cache_freshness::outside_generation(ch) > after_first);
 }
-// Issue #21: the GPU residency layer learns about CPU changes by polling the
-// per-level residency generations, not by being called. The jump counter is the
-// headless window into what the poll observed: a change kind that advances a
-// generation must eventually advance the counter, and a quiet poll must not.
+// T7 (ADR-0002): the GPU residency layer receives pushed plan events instead of
+// polling the generations. The jump counter is the headless window into what the
+// layer applied: a change kind that advances a generation must eventually advance
+// the counter through a plan, and applying a quiet plan must not.
 TEST_CASE(
-    "the residency poll notices generation jumps headlessly",
+    "pushed residency events reach the lighting layer exactly once",
     "[level_cache_freshness]") {
 #if defined(CATA_SDL)
     set_up_open_daylight_map();
     map& here = get_map();
-    const auto poll = [&here]() {
-        cata_gpu::poll_lighting_residency( {
+    // The consumer door as map_cache.cpp calls it: derive the plan, push it.
+    const auto push = [&here]() {
+        const auto plan = level_cache_freshness::plan_for(
+            here, level_cache_freshness::pose_of_viewer( get_avatar(), 0 ),
+            level_cache_freshness::lightmap_policy::skip );
+        cata_gpu::apply_residency_events( {
             .device = nullptr,
-            .m = &here,
             .cache_x = here.access_cache( 0 ).cache_x,
             .cache_y = here.access_cache( 0 ).cache_y,
             .z_count = OVERMAP_LAYERS,
+            .residency = plan.residency,
+            .bubble_origin = plan.pose.bubble_origin,
         } );
     };
     using K = level_cache_freshness;
 
     // Adopt the current stamps, then a single terrain edit advances the counter
-    // (the kind touches its level and neighbours); a second poll with no new
-    // change observes nothing.
-    poll();
+    // (the kind touches its level and neighbours); a second push with no new
+    // change observes nothing — the event reached the layer exactly once.
+    push();
     const std::uint64_t before = cata_gpu::lighting_residency_jump_count();
     K::report( here, K::terrain_changed { .at = player_home } );
-    poll();
+    push();
     const std::uint64_t after_edit = cata_gpu::lighting_residency_jump_count();
     CHECK( after_edit > before );
-    poll();
+    push();
     CHECK( cata_gpu::lighting_residency_jump_count() == after_edit );
 
     // A committed vehicle move advances its level and the level above; the
-    // poll notices the jumps.
-    poll();
+    // pushed plan carries the jumps.
+    push();
     const std::uint64_t veh_before = cata_gpu::lighting_residency_jump_count();
     K::report( here, K::vehicle_moved {
         .sm_min = tripoint_bub_sm( 1, 1, 0 ),
         .sm_max = tripoint_bub_sm( 2, 2, 0 ),
         .z = 0 } );
-    poll();
+    push();
     CHECK( cata_gpu::lighting_residency_jump_count() > veh_before );
 #endif // CATA_SDL
 }

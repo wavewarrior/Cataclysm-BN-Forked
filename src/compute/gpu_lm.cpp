@@ -2785,71 +2785,62 @@ auto shift_lighting_resident_inputs(shift_lighting_residency_params const& p) ->
     return true;
 }
 
-// Issue #21: per-level last-seen residency generations and last-seen bubble
-// origin owned by the residency layer. The poll compares against these stamps
-// instead of map code pushing invalidations.
+// T7 (ADR-0002): the last-applied residency state this layer owns. Plans push
+// absolute snapshots; we diff against these stamps, so a plan stays meaningful
+// even when several are derived before one applies. GPU residency *validity*
+// never leaves this module.
 namespace {
 
-struct residency_poll_state {
-    std::vector<std::uint64_t> last_seen_generations;
-    point_abs_sm last_seen_origin {};
-    bool have_origin = false;
+struct residency_apply_state {
+    std::array<std::uint64_t, OVERMAP_LAYERS> last_applied_generations {};
+    std::uint64_t last_applied_shift = 0;
+    point_abs_sm last_applied_origin {};
     bool primed = false;
     std::uint64_t jump_count = 0;
 };
 
-residency_poll_state s_residency_poll;
+residency_apply_state s_residency_applied;
 
 } // namespace
 
 auto lighting_residency_jump_count() -> std::uint64_t {
-    return s_residency_poll.jump_count;
+    return s_residency_applied.jump_count;
 }
 
-auto poll_lighting_residency(poll_lighting_residency_params const& p) -> void {
-    if (p.m == nullptr || p.z_count <= 0) { return; }
-    map& m = *p.m;
-    auto& st = s_residency_poll;
-    const int zmin = -OVERMAP_DEPTH;
-    if (st.last_seen_generations.size() != static_cast<std::size_t>( p.z_count ) ) {
-        st.last_seen_generations.assign( static_cast<std::size_t>( p.z_count ), 0 );
-        st.have_origin = false;
-        st.primed = false;
-    }
-    // First sight of a map adopts the current stamps silently: adopting an
-    // already-advanced generation is not a jump the poll observed.
-    if( !st.primed ) {
-        for( int z = zmin; z <= zmin + p.z_count - 1; ++z ) {
-            st.last_seen_generations[static_cast<std::size_t>( z_to_resident_index( z ) )] =
-                level_cache_freshness::residency_generation( m.get_cache_ref( z ) );
-        }
-        st.primed = true;
-        st.last_seen_origin = m.get_abs_sub();
-        st.have_origin = true;
+auto apply_residency_events( apply_residency_events_params const &p ) -> void {
+    if( p.z_count <= 0 ) {
         return;
     }
-    const point_abs_sm origin = m.get_abs_sub();
-    const bool origin_moved = st.have_origin &&
-        ( origin.x() != st.last_seen_origin.x() || origin.y() != st.last_seen_origin.y() );
-    // Observe every generation jump for the counter, whatever caused it.
+    auto &st = s_residency_applied;
+    const int zmin = -OVERMAP_DEPTH;
+    // First sight of a plan adopts the pushed stamps silently: adopting an
+    // already-advanced generation is not an event this layer received.
+    if( !st.primed ) {
+        st.last_applied_generations = p.residency.generation;
+        st.last_applied_shift = p.residency.shift;
+        st.last_applied_origin = p.bubble_origin;
+        st.primed = true;
+        return;
+    }
+    // Count every generation delta the plan carries, whatever caused it: this is
+    // the #20 guarantee expressed on the pushed carrier.
     bool any_jump = false;
     for( int z = zmin; z <= zmin + p.z_count - 1; ++z ) {
         const std::size_t idx = static_cast<std::size_t>( z_to_resident_index( z ) );
-        const std::uint64_t gen = level_cache_freshness::residency_generation( m.get_cache_ref( z ) );
-        if( gen != st.last_seen_generations[idx] ) {
+        if( p.residency.generation[idx] != st.last_applied_generations[idx] ) {
             st.jump_count++;
             any_jump = true;
         }
     }
-    if( origin_moved ) {
+    if( p.residency.shift != st.last_applied_shift ) {
         // The bubble moved: replay the in-place translate so the next lighting
         // build only uploads the newly loaded edge bands. A shift advances every
         // generation (#20), so the jump is expected and needs no per-level
         // invalidate beyond what the translate performs.
-        const int delta_x = static_cast<int>( origin.x() )
-                            - static_cast<int>( st.last_seen_origin.x() );
-        const int delta_y = static_cast<int>( origin.y() )
-                            - static_cast<int>( st.last_seen_origin.y() );
+        const int delta_x = static_cast<int>( p.bubble_origin.x() )
+                            - static_cast<int>( st.last_applied_origin.x() );
+        const int delta_y = static_cast<int>( p.bubble_origin.y() )
+                            - static_cast<int>( st.last_applied_origin.y() );
         const bool shifted = shift_lighting_resident_inputs( {
             .device = p.device,
             .cache_x = p.cache_x,
@@ -2877,18 +2868,16 @@ auto poll_lighting_residency(poll_lighting_residency_params const& p) -> void {
         auto jumped = std::vector<int> {};
         for( int z = zmin; z <= zmin + p.z_count - 1; ++z ) {
             const std::size_t idx = static_cast<std::size_t>( z_to_resident_index( z ) );
-            const std::uint64_t gen = level_cache_freshness::residency_generation( m.get_cache_ref( z ) );
-            if( gen != st.last_seen_generations[idx] ) { jumped.push_back( z ); }
+            if( p.residency.generation[idx] != st.last_applied_generations[idx] ) {
+                jumped.push_back( z );
+            }
         }
         invalidate_lighting_transparency_levels( jumped );
     }
-    // Adopt the current stamps last so the next poll only sees new changes.
-    for( int z = zmin; z <= zmin + p.z_count - 1; ++z ) {
-        st.last_seen_generations[static_cast<std::size_t>( z_to_resident_index( z ) )] =
-            level_cache_freshness::residency_generation( m.get_cache_ref( z ) );
-    }
-    st.last_seen_origin = origin;
-    st.have_origin = true;
+    // Adopt the pushed stamps last so the next plan only carries new events.
+    st.last_applied_generations = p.residency.generation;
+    st.last_applied_shift = p.residency.shift;
+    st.last_applied_origin = p.bubble_origin;
 }
 
 auto compute_light_radius(float const luminance) -> float {
