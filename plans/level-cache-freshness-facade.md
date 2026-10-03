@@ -99,3 +99,16 @@ Filed as ordinary issues on this repo, children of map #23. Frontier order: #32 
 | [#37](https://github.com/wavewarrior/Cataclysm-BN-Forked/issues/37) | T6: One rebuild_plan; build_map_cache consumes it | #36 |
 | [#38](https://github.com/wavewarrior/Cataclysm-BN-Forked/issues/38) | T7: Push residency events; retire the GPU poll | #37 |
 | [#39](https://github.com/wavewarrior/Cataclysm-BN-Forked/issues/39) | T8: Frame gate consumes the plan | #37 |
+
+**Status (2026-10-03):** T1–T6 landed. T6 shipped `plan_for`/`rebuild_plan` (nested types),
+the `build_map_cache( const rebuild_plan& )` signature, the full caller sweep (production
+sites derive the plan at their consumption point; tests go through
+`build_map_cache_from_plan`), and `docs/adr/0002-retire-gpu-pull-seam.md`. The GPU dirty
+lists are seeded from the plan; the build still appends its own Phase3 discoveries.
+Behaviour deltas, adjudicated: the light-source signature is sampled by `plan_for` under
+the normal policy (was: inside the build and the refresh entry point), so a skip build can
+no longer escalate — the escalation law now lives in the disposition type; the CPU-path
+`apply_character_light` tail runs only when the disposition is `process` (was: every
+non-skip build, which re-applied unchanged entity lights onto an unchanged lightmap).
+T7 replaces the residency poll inside `build_map_cache` (the `poll_lighting_residency`
+call at its head) with `apply_residency_events( plan.residency )`.

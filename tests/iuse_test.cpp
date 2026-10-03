@@ -103,7 +103,7 @@ auto make_active_bionic_scanner_benchmark_fixture(
     REQUIRE(scanner_ptr->is_active());
     REQUIRE(scanner_ptr->needs_processing());
 
-    here.build_map_cache(you.bub_pos().z());
+    build_map_cache_from_plan(here, you.bub_pos().z());
     here.update_visibility_cache(you.bub_pos().z());
 
     return active_bionic_scanner_benchmark_fixture{
@@ -615,7 +615,7 @@ TEST_CASE("bionic_scanner_inside_worn_container_marks_corpse_stack", "[iuse][bio
     REQUIRE(scanner_ptr->is_active());
     REQUIRE(scanner_ptr->needs_processing());
     REQUIRE(backpack_ptr->needs_processing());
-    here.build_map_cache(you.bub_pos().z());
+    build_map_cache_from_plan(here, you.bub_pos().z());
     here.update_visibility_cache(you.bub_pos().z());
     REQUIRE(you.sees(corpse_pos));
 

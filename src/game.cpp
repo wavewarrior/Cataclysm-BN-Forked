@@ -1153,7 +1153,9 @@ bool game::do_turn()
     {
         ZoneScopedN( "do_turn_monster_visibility_cache" );
         const auto _t0 = _perf_clk::now();
-        m.build_map_cache( get_levz(), true );
+        m.build_map_cache( level_cache_freshness::plan_for( m,
+            level_cache_freshness::pose_of_viewer( u, get_levz() ),
+            level_cache_freshness::lightmap_policy::skip ) );
         _perf_cache += std::chrono::duration<double, std::milli>( _perf_clk::now() - _t0 ).count();
     }
     // This has to be done after updating our map caches, as sound propagation relies on terrain.
@@ -2984,7 +2986,9 @@ void game::resize_reality_bubble_to( int new_size )
 
     u.recalc_sight_limits();
     level_cache_freshness::invalidate_level( m, get_levz() );
-    m.build_map_cache( get_levz() );
+    m.build_map_cache( level_cache_freshness::plan_for( m,
+        level_cache_freshness::pose_of_viewer( u, get_levz() ),
+        level_cache_freshness::lightmap_policy::normal ) );
 
     // Discard pathfinding objects sized for the old bubble.
     Pathfinding::clear_pool();

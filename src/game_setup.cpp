@@ -743,13 +743,17 @@ bool game::start_game()
     load_map( lev, /*pump_events=*/true );
 
     level_cache_freshness::invalidate_level( m, get_levz() );
-    m.build_map_cache( get_levz() );
+    m.build_map_cache( level_cache_freshness::plan_for( m,
+        level_cache_freshness::pose_of_viewer( u, get_levz() ),
+        level_cache_freshness::lightmap_policy::normal ) );
     // Do this after the map cache has been built!
     start_loc.place_player( u, lev.z() );
     update_map( u );
     // ...but then rebuild it, because we want visibility cache to avoid spawning monsters in sight
     level_cache_freshness::invalidate_level( m, get_levz() );
-    m.build_map_cache( get_levz() );
+    m.build_map_cache( level_cache_freshness::plan_for( m,
+        level_cache_freshness::pose_of_viewer( u, get_levz() ),
+        level_cache_freshness::lightmap_policy::normal ) );
     // Start the overmap with out immediate neighborhood visible, this needs to be after place_player
     get_overmapbuffer( current_dimension_id_ ).reveal( u.abs_omt_pos().xy(),
             get_option<int>( "DISTANCE_INITIAL_VISIBILITY" ), 0 );
@@ -1801,7 +1805,9 @@ bool game::travel_to_dimension( const dimension_id &dim_id,
                 level_cache_freshness::invalidate_level( here, z );
             }
         }
-        here.build_map_cache( target_load_origin.z() );
+        here.build_map_cache( level_cache_freshness::plan_for( here,
+            level_cache_freshness::pose_of_viewer( u, target_load_origin.z() ),
+            level_cache_freshness::lightmap_policy::normal ) );
 
         load_npcs();
         here.spawn_monsters( true );

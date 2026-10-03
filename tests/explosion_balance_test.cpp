@@ -246,7 +246,7 @@ TEST_CASE("rotated_vehicle_walls_block_explosions") {
 
     here.add_vehicle(vproto_id("test_explosion_wall_vehicle"), origin, -45_degrees, 0, 0);
 
-    here.build_map_cache(0);
+    build_map_cache_from_plan(here, 0);
 
     const auto mon_origin = origin + tripoint_rel_ms(-2, 1, 0);
 

@@ -1482,7 +1482,9 @@ look_around_result game::look_around( bool show_window, tripoint_bub_ms &center,
 
     if( center.z() != old_levz ) {
         level_cache_freshness::invalidate_level( m, old_levz );
-        m.build_map_cache( old_levz );
+        m.build_map_cache( level_cache_freshness::plan_for( m,
+            level_cache_freshness::pose_of_viewer( u, old_levz ),
+            level_cache_freshness::lightmap_policy::normal ) );
         u.view_offset.z() = 0;
     }
 

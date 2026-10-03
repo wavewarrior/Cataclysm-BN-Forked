@@ -2,6 +2,7 @@
 #ifndef CATA_SRC_LEVEL_CACHE_FRESHNESS_H
 #define CATA_SRC_LEVEL_CACHE_FRESHNESS_H
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
@@ -9,12 +10,14 @@
 #include <span>
 #include <vector>
 #include "coordinates.h"
+#include "game_constants.h"
 #include "cuboid_rectangle.h"
 #include "enum_bitset.h"
 #include "enum_traits.h"
 #include "type_id.h"
 
 struct level_cache;
+class avatar;
 class map;
 class submap;
 
@@ -50,6 +53,9 @@ struct enum_traits<level_cache_part> {
 
 /** The parts that are per-submap bitsets rather than per-level flags. */
 enum_bitset<level_cache_part> level_cache_bitset_parts();
+
+
+
 
 /**
  * Level cache freshness: the single owner of Level cache freshness state.
@@ -94,6 +100,48 @@ enum_bitset<level_cache_part> level_cache_bitset_parts();
 class level_cache_freshness
 {
     public:
+/** What a caller wants the lightmap phase of a rebuild to do. */
+enum class lightmap_policy { normal, skip };
+/** What the derived plan decided about the lightmap phase. */
+enum class lightmap_disposition { process, defer_without_escalation };
+/** Where the rebuild is looked at from: the viewer tile and the camera offset. */
+struct viewer_pose {
+    tripoint_bub_ms viewer;
+    point_rel_ms camera;
+};
+/**
+ * The per-level residency generations as observed when the plan was derived, plus
+ * the bubble origin then. These are ABSOLUTE stamps, not deltas: the consumer
+ * (T7's pushed residency events) diffs them against what it last applied, so a
+ * plan stays meaningful even when two plans are derived before one applies.
+ */
+struct residency_snapshot {
+    std::array<std::uint64_t, OVERMAP_LAYERS> generation;
+    std::uint64_t shift;
+};
+/** The pose a build was derived for; compared opaquely, never interpreted. */
+struct pose_stamps {
+    point_abs_sm bubble_origin;
+    tripoint_bub_ms viewer;
+    point_rel_ms camera;
+    auto operator==( const pose_stamps & ) const -> bool = default;
+};
+/**
+ * One rebuild plan: everything a Level-cache rebuild needs to know, derived once
+ * per consumption point by `plan_for` so that no consumer re-reads freshness state
+ * to answer the same question twice. See ADR-0002 (retire the GPU pull seam): the
+ * plan is the single carrier of both the dirty-level sets and the residency stamps.
+ */
+struct rebuild_plan {
+    bool structure;
+    std::vector<int> structure_levels;
+    std::vector<int> transparency_levels, floor_levels, vehicle_floor_levels,
+                     vehicle_obscured_levels;
+    lightmap_disposition lightmap;
+    bool visibility;
+    residency_snapshot residency;
+    pose_stamps pose;
+};
         /**
          * Move the dirty bits of a level along with the caches they describe when the
          * reality bubble shifts, so retained submaps stay fresh and only the shifted-in
@@ -500,17 +548,27 @@ class level_cache_freshness
          */
         static bool lightmap_stale( const map &who );
         /**
-         * Reconcile the light-source signature and report whether the lightmap is now
-         * stale. Entity lights (a burning monster walking into view, a friend switching
-         * on a lamp, the player's own held light) change `lm` and raise no freshness bit
-         * of their own; the signature that detects them is otherwise sampled only inside
-         * a build's lightmap phase, so a refresh that believes everything is current
-         * never notices them (issue #19). Sampling here raises the lightmap bit when the
-         * sources moved or changed. Only a caller that is about to process the lightmap
-         * may call this: a `skip_lightmap` refresh cannot clear the bit it raises, and
-         * escalating on it would rebuild forever.
+         * Derive the one rebuild plan for one consumption point: the dirty-level sets,
+         * the lightmap disposition, the residency stamps, and the pose, from the state
+         * the module owns. Cheap by contract (counter reads + bitset scans), so callers
+         * may derive a plan per frame. The plan is the only sanctioned way into
+         * `map::build_map_cache` (ADR-0002): consumers match the enum, none re-reads
+         * freshness state.
+         *
+         * Escalation law, enforced by the type: `policy::skip` derives
+         * `defer_without_escalation` without sampling the light-source signature, so a
+         * refresh that cannot clear the lightmap bit can never escalate on it.
+         * `policy::normal` samples the signature (raising the bit through the
+         * `light_changed` kind when entity lights moved, issue #19) and derives
+         * `process` when the lightmap is stale.
          */
-        static bool lightmap_needs_rebuild( map &who );
+        static auto plan_for( map &who, const viewer_pose &pose, lightmap_policy policy )
+        -> rebuild_plan;
+
+        /** The viewer pose a build for `zlev` is derived for: the player's bubble
+         * position with z overridden to the build level, viewer offset as camera
+         * drift. */
+        static auto pose_of_viewer( const avatar &who, int zlev ) -> viewer_pose;
 
 
     private:

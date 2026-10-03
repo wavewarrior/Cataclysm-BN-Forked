@@ -236,5 +236,13 @@ void refresh_view(const bool skip_lightmap) {
 
 void rebuild_level_cache(int zlev, bool skip_lightmap) {
     level_cache_freshness::invalidate_level( g->m, zlev );
-    g->m.build_map_cache(zlev, skip_lightmap);
+    build_map_cache_from_plan( get_map(), zlev, skip_lightmap );
+}
+
+void build_map_cache_from_plan(map &here, const int zlev, const bool skip_lightmap) {
+    // The plan is the only way in (ADR-0002); tests take the same door as the game.
+    here.build_map_cache( level_cache_freshness::plan_for( here,
+        level_cache_freshness::pose_of_viewer( get_avatar(), zlev ),
+        skip_lightmap ? level_cache_freshness::lightmap_policy::skip
+                      : level_cache_freshness::lightmap_policy::normal ) );
 }

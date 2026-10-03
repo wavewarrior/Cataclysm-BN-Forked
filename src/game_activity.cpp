@@ -445,7 +445,9 @@ for( const auto turn_index : std::views::iota( 0, dur_turns ) ) {
         } );
         if( critter_tracker->size() > 0 || has_active_npcs ) {
             sounds::process_sounds();
-            m.build_map_cache( get_levz(), true );
+            m.build_map_cache( level_cache_freshness::plan_for( m,
+                level_cache_freshness::pose_of_viewer( u, get_levz() ),
+                level_cache_freshness::lightmap_policy::skip ) );
             if( critter_tracker->size() > 0 ) {
                 monmove( monster_activity_ai_mode::activity_skip, &activity_monsters );
                 if( critter_tracker->size() != monster_count ) {

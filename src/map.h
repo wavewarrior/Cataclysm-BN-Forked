@@ -40,6 +40,7 @@
 #include "mapbuffer.h"
 #include "mapdata.h"
 #include "mapgen_functions.h"
+#include "level_cache_freshness.h"
 #include "memory_fast.h"
 #include "shadowcasting.h"
 #include "submap_load_manager.h"
@@ -1920,8 +1921,11 @@ class map : public submap_load_listener
                         spawn_disposition disposition, int faction_id = -1, int mission_id = -1,
                         const std::string &name = "NONE" ) const;
         void do_vehicle_caching( int z );
-        // Note: in 3D mode, will actually build caches on ALL z-levels
-        void build_map_cache( int zlev, bool skip_lightmap = false );
+        // Consumes a plan derived by level_cache_freshness::plan_for (ADR-0002): the
+        // plan carries the dirty-level sets, the lightmap disposition, and the pose
+        // whose z is the level to build. In 3D mode, builds caches on ALL z-levels.
+        void build_map_cache( const level_cache_freshness::rebuild_plan &plan );
+
         // Unlike the other caches, this populates a supplied cache instead of an internal cache.
         void build_obstacle_cache( const tripoint_bub_ms &start, const tripoint_bub_ms &end,
                                    float *obstacle_cache, int cache_sy );
@@ -2104,7 +2108,6 @@ class map : public submap_load_listener
         auto direct_sunlight_state_at( point_bub_ms p, int zlev ) const -> direct_sunlight_state;
         auto has_direct_sunlight_at( point_bub_ms p, int zlev ) const -> bool;
         auto current_lightmap_source_signature() -> std::size_t;
-        void invalidate_lightmap_if_light_state_changed();
     public:
         // Rebuilds outside_caches for zlev top-down:
         // A tile is outside if any neighbour in the 3×3 at z+1

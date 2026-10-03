@@ -35,7 +35,7 @@ TEST_CASE("solar_cache_uses_date_sensitive_hour", "[vision][zlevel][sun]") {
     calendar::turn = summer_after_sunrise;
     g->reset_light_level();
     level_cache_freshness::invalidate_level( here, sample.z() );
-    here.build_map_cache(sample.z());
+    build_map_cache_from_plan(here, sample.z());
 
     const auto& summer_cache = here.access_cache(sample.z());
     const auto sample_idx = static_cast<size_t>(summer_cache.idx(sample.x(), sample.y()));
@@ -44,7 +44,7 @@ TEST_CASE("solar_cache_uses_date_sensitive_hour", "[vision][zlevel][sun]") {
 
     calendar::turn = winter_before_sunrise;
     g->reset_light_level();
-    here.build_map_cache(sample.z());
+    build_map_cache_from_plan(here, sample.z());
 
     const auto& winter_cache = here.access_cache(sample.z());
     CHECK(winter_cache.lm[sample_idx] < summer_light);

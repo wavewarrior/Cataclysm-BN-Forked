@@ -76,7 +76,7 @@ TEST_CASE("monsters_dont_see_through_vehicle_holes", "[vision]") {
     tripoint_bub_ms origin(60, 60, 0);
 
     get_map().add_vehicle(vproto_id("apc"), origin, -45_degrees, 0, 0);
-    get_map().build_map_cache(0);
+    build_map_cache_from_plan(get_map(), 0);
 
     tripoint_bub_ms mon_origin = origin + tripoint_rel_ms(-2, 1, 0);
 

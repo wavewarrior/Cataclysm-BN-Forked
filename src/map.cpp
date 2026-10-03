@@ -3441,18 +3441,6 @@ auto map::current_lightmap_source_signature() -> std::size_t
     return seed;
 }
 
-void map::invalidate_lightmap_if_light_state_changed()
-{
-    const auto signature = current_lightmap_source_signature();
-    const bool changed = level_cache_freshness::note_lightmap_source_signature( *this, signature );
-    TracyPlot( "Light Source Signature Changed", int64_t{ changed ? 1 : 0 } );
-    if( !changed ) {
-        return;
-    }
-    // The default scope is every loaded level, which is what the verb did. The #28
-    // plan dissolves this detector recursion; until then the kind is the door.
-    level_cache_freshness::report( *this, level_cache_freshness::light_changed{} );
-}
 
 
 auto map::is_memory_seen_cache_dirty_all( const int zlev ) const -> bool

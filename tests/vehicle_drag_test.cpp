@@ -42,7 +42,7 @@ static void clear_game_drag(const ter_id& terrain) {
     build_test_map(terrain);
 
     map& here = get_map();
-    here.build_map_cache(0, true);
+    build_map_cache_from_plan(here, 0, /*skip_lightmap=*/true);
 }
 
 static vehicle* setup_drag_test(const vproto_id& veh_id) {

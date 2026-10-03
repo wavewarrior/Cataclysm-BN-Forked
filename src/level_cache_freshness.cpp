@@ -5,6 +5,7 @@
 #include <cmath>
 #include <span>
 #include <utility>
+#include "avatar.h"
 
 #include "cata_dynamic_bitset.h"
 #include "coordinates.h"
@@ -1338,14 +1339,91 @@ bool level_cache_freshness::lightmap_stale( const map &who ) {
     return false;
 }
 
-bool level_cache_freshness::lightmap_needs_rebuild( map &who ) {
-    // One verb for the refresh's light question: reconcile the signature (this is the
-    // only signal for an entity-light move, which raises no bit of its own) and then
-    // answer the ordinary staleness query, which now includes whatever the signature
-    // just raised. A build that processes the lightmap clears the bit; the caller has
-    // to be such a build (see the header).
-    who.invalidate_lightmap_if_light_state_changed();
-    return lightmap_stale( who );
+auto level_cache_freshness::plan_for( map &who, const viewer_pose &pose,
+                                      const lightmap_policy policy ) -> rebuild_plan {
+    assert_main_thread();
+    rebuild_plan plan;
+    auto add_level = []( std::vector<int> &levels, const int z ) {
+        levels.push_back( z );
+    };
+    for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z ) {
+        const level_cache &ch = who.get_cache_ref( z );
+        if( !ch.floor_cache_dirty.none() ) {
+            add_level( plan.floor_levels, z );
+        }
+        if( !ch.transparency_cache_dirty.none() ) {
+            // Mirrors the skip predicate of map::build_transparency_caches: a level
+            // with no dirty submap contributes nothing to the batch it returns.
+            add_level( plan.transparency_levels, z );
+        }
+        if( ch.has_any_vehicle_floor ) {
+            add_level( plan.vehicle_floor_levels, z );
+        }
+        const bool obscured = std::ranges::any_of( ch.vehicle_obscured_cache,
+        []( const diagonal_blocks & b ) {
+            return b.nw || b.ne;
+        } );
+        if( obscured || ch.veh_in_active_range ) {
+            add_level( plan.vehicle_obscured_levels, z );
+        }
+        plan.residency.generation[static_cast<size_t>( z + OVERMAP_DEPTH )] =
+            residency_generation( ch );
+        if( ch.seen_cache_dirty ) {
+            plan.visibility = true;
+        }
+    }
+    auto normalize = []( std::vector<int> &levels ) {
+        std::ranges::sort( levels );
+        levels.erase( std::ranges::unique( levels ).begin(), levels.end() );
+    };
+    normalize( plan.floor_levels );
+    normalize( plan.transparency_levels );
+    normalize( plan.vehicle_floor_levels );
+    normalize( plan.vehicle_obscured_levels );
+    plan.structure_levels = plan.floor_levels;
+    for( const auto *levels : { &plan.transparency_levels, &plan.vehicle_floor_levels,
+                                &plan.vehicle_obscured_levels } ) {
+        plan.structure_levels.insert( plan.structure_levels.end(), levels->begin(),
+                                      levels->end() );
+    }
+    normalize( plan.structure_levels );
+    plan.structure = !plan.structure_levels.empty();
+    plan.visibility = plan.visibility || who.m_last_seen_cache_origin != pose.viewer;
+    const point_abs_sm origin = who.get_abs_sub();
+    // An opaque shift stamp: any bubble move changes it, nothing interprets it.
+    // The bubble origin is a 2D submap point; z travels in the pose.
+    plan.residency.shift = static_cast<std::uint64_t>( origin.x() ) << 32 ^
+                           static_cast<std::uint64_t>( origin.y() );
+    // The escalation law, enforced here: a skip build may not even sample the
+    // signature, because it cannot clear the bit a changed signature raises.
+    if( policy == lightmap_policy::skip ) {
+        plan.lightmap = lightmap_disposition::defer_without_escalation;
+    } else {
+        // The only signal for an entity-light move, which raises no bit of its own
+        // (issue #19): reconcile the signature, raising the lightmap bit through the
+        // `light_changed` kind when the sources moved.
+        if( note_lightmap_source_signature( who, who.current_lightmap_source_signature() ) ) {
+            report( who, light_changed {} );
+        }
+        plan.lightmap = lightmap_stale( who ) ? lightmap_disposition::process
+                             : lightmap_disposition::defer_without_escalation;
+    }
+    plan.pose = pose_stamps {
+        .bubble_origin = origin,
+        .viewer = pose.viewer,
+        .camera = pose.camera,
+    };
+    return plan;
+}
+
+auto level_cache_freshness::pose_of_viewer( const avatar &who, const int zlev )
+-> viewer_pose {
+    tripoint_bub_ms viewer = who.bub_pos();
+    viewer.z() = zlev;
+    return viewer_pose {
+        .viewer = viewer,
+        .camera = who.view_offset.xy(),
+    };
 }
 
 bool level_cache_freshness::visibility_stale( const map &who, const tripoint_bub_ms &viewer ) {

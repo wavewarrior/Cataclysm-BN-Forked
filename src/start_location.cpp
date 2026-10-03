@@ -336,7 +336,9 @@ void start_location::place_player( player &u, const int &z ) const
     // Start us off somewhere in the center of the map
     u.setpos( tripoint_bub_ms( g_half_mapsize_x, g_half_mapsize_y, z ) );
     level_cache_freshness::invalidate_level( m, z );
-    m.build_map_cache( z );
+    m.build_map_cache( level_cache_freshness::plan_for( m,
+        level_cache_freshness::pose_of_viewer( get_avatar(), z ),
+        level_cache_freshness::lightmap_policy::normal ) );
     const bool must_be_inside = !flags().contains( "ALLOW_OUTSIDE" );
     ///\EFFECT_STR allows player to start behind less-bashable furniture and terrain
     // TODO: Allow using items here

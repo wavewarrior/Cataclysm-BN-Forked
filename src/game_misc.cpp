@@ -476,10 +476,14 @@ void game::draw( ui_adaptor &ui )
         ZoneScopedN( "game_draw_cache" );
         if( is_looking && ter_view_p.z() != u.bub_pos().z() ) {
             // Keep visibility calculations based on the player position while still building the viewed z-level cache.
-            m.build_map_cache( ter_view_p.z() );
+            m.build_map_cache( level_cache_freshness::plan_for( m,
+                level_cache_freshness::pose_of_viewer( u, ter_view_p.z() ),
+                level_cache_freshness::lightmap_policy::normal ) );
         }
         const auto cache_z = is_looking ? u.bub_pos().z() : ter_view_p.z();
-        m.build_map_cache( cache_z );
+        m.build_map_cache( level_cache_freshness::plan_for( m,
+            level_cache_freshness::pose_of_viewer( u, cache_z ),
+            level_cache_freshness::lightmap_policy::normal ) );
         if( m.get_cache_ref( cache_z ).visibility_cache_dirty ) {
             m.update_visibility_cache( cache_z );
         }
@@ -573,31 +577,29 @@ auto game::refresh_player_visibility_cache_if_needed( const bool player_map_cach
         return level_cache_freshness::visibility_stale( m, u.bub_pos() );
     };
 
-    if( !needs_visibility_refresh() ) {
-        // Issue #19: entity lights (a burning monster walking into view, a friend
-        // switching on a lamp, the player's own held torch) change the lightmap whose
-        // brightness `sees()` reads, and they raise no freshness bit of their own: the
-        // light-source signature that detects them is otherwise sampled only inside a
-        // build's lightmap phase, so a refresh that finds everything current never
-        // notices them and keeps answering from the stale lightmap. Sample the
-        // signature on this would-skip path (when a rebuild is happening anyway, the
-        // build samples it) and fall through when it says the lightmap went stale.
-        // Only a build that processes the lightmap can clear the bit, so a `skip_lightmap`
-        // refresh must not escalate on it: doing that would rebuild forever.
-        if( skip_lightmap || !level_cache_freshness::lightmap_needs_rebuild( m ) ) {
-            return;
-        }
+    // The plan is the door (ADR-0002): deriving it with the policy this refresh
+    // demands is also what answers the light question. Under `normal` the derivation
+    // reconciles the entity-light signature (issue #19: a burning monster walking
+    // into view raises no bit of its own) and says `process` when the lightmap went
+    // stale; under `skip` the law forbids even sampling it, so the disposition can
+    // never license a rebuild this refresh could not clear.
+    const auto plan = level_cache_freshness::plan_for( m,
+        level_cache_freshness::pose_of_viewer( u, zlev ),
+        skip_lightmap ? level_cache_freshness::lightmap_policy::skip
+                      : level_cache_freshness::lightmap_policy::normal );
+
+    if( !needs_visibility_refresh() &&
+        plan.lightmap != level_cache_freshness::lightmap_disposition::process ) {
+        return;
     }
 
     if( !player_map_cache_current || level_cache_freshness::visibility_inputs_stale( m ) ||
-        ( !skip_lightmap && level_cache_freshness::lightmap_stale( m ) ) ) {
+        plan.lightmap == level_cache_freshness::lightmap_disposition::process ) {
         // Issue #18: a caller claiming the map cache is current is only believed while
         // the module agrees. A terrain edit that dirties visibility inputs but raises
         // no visibility bit used to be repaired by nothing on this path: the recompute
         // below would read the stale inputs and reproduce the stale answer. Rebuild.
-        // Issue #19: a stale lightmap joins that set, but only for builds that will
-        // actually process it; a skip_lightmap build cannot clear the bit.
-        m.build_map_cache( zlev, skip_lightmap );
+        m.build_map_cache( plan );
     }
     if( needs_visibility_refresh() ) {
         m.update_visibility_cache( zlev );
@@ -1740,7 +1742,9 @@ point_rel_sm game::update_map( int &x, int &y )
     load_npcs();
     _sh_lap( _sh_npc );
 
-    m.build_map_cache( get_levz() );
+    m.build_map_cache( level_cache_freshness::plan_for( m,
+        level_cache_freshness::pose_of_viewer( u, get_levz() ),
+        level_cache_freshness::lightmap_policy::normal ) );
     _sh_lap( _sh_cache );
 
     // Spawn monsters only in the strip of submaps that just entered the bubble

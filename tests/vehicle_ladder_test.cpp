@@ -33,7 +33,7 @@ TEST_CASE("rope_ladder_spans_full_column_in_rope_cache", "[vehicle][ladder][zlev
     const auto ladder = veh->install_part(tripoint_mnt_veh::zero(), vpart_id("ladder_3"), true);
     REQUIRE(ladder >= 0);
 
-    here.build_map_cache(vpos.z(), true);
+    build_map_cache_from_plan(here, vpos.z(), /*skip_lightmap=*/true);
 
     const auto top = veh->bub_part_location(ladder);
     const auto len = veh->part(ladder).info().ladder_length();

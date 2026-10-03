@@ -1537,7 +1537,9 @@ void editmap::mapgen_preview( const point_abs_ms& tc, uilist& gmenu )
 
         here.reset_vehicle_cache();
 
-        here.build_map_cache( target.z(), false );
+        here.build_map_cache( level_cache_freshness::plan_for( here,
+            level_cache_freshness::pose_of_viewer( g->u, target.z() ),
+            level_cache_freshness::lightmap_policy::normal ) );
     };
     regenerate_tmpmap( preview_buffer );
     swap_buffers();

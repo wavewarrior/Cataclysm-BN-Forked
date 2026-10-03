@@ -637,7 +637,10 @@ static void vehicle_caching_internal_above(
     }
 }
 
-void map::build_map_cache(const int zlev, bool skip_lightmap) {
+void map::build_map_cache( const level_cache_freshness::rebuild_plan &plan ) {
+    const int zlev = plan.pose.viewer.z();
+    const bool process_lightmap =
+        plan.lightmap == level_cache_freshness::lightmap_disposition::process;
     ZoneScoped;
     // Submap-shift stall attribution (diagnostic, logged only when total >2ms):
     // per-phase split + player-z vs other-z for the unconditional all-z Phase1
@@ -667,15 +670,19 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
     TracyPlot("Map CPU LM Valid Levels", static_cast<int64_t>(valid_lm_levels));
     TracyPlot("Map CPU LM Stale Levels", static_cast<int64_t>(maxz - minz + 1 - valid_lm_levels));
     bool seen_cache_dirty = false;
+    // The four GPU dirty-level sets arrive pre-derived in the plan (ADR-0002); the
+    // build only appends what its own vehicle pass discovers (Phase3 part levels).
+    std::vector<int> dirty_seen_cache_levels;
+    std::vector<int> gpu_transparency_dirty_levels = plan.transparency_levels;
+    std::vector<int> gpu_floor_dirty_levels = plan.floor_levels;
+    std::vector<int> gpu_vehicle_floor_dirty_levels = plan.vehicle_floor_levels;
+    std::vector<int> gpu_vehicle_obscured_dirty_levels = plan.vehicle_obscured_levels;
+    // The dirty FLAGS the GPU params carry are derived from the lists below once
+    // the build's own appends are in; the plan seeds the lists (ADR-0002).
     bool gpu_transparency_dirty = false;
     bool gpu_floor_dirty = false;
     bool gpu_vehicle_floor_dirty = false;
     bool gpu_vehicle_obscured_dirty = false;
-    std::vector<int> dirty_seen_cache_levels;
-    std::vector<int> gpu_transparency_dirty_levels;
-    std::vector<int> gpu_floor_dirty_levels;
-    std::vector<int> gpu_vehicle_floor_dirty_levels;
-    std::vector<int> gpu_vehicle_obscured_dirty_levels;
 
     auto add_gpu_dirty_level = [](auto& levels, const int z) {
         if (z >= -OVERMAP_DEPTH && z <= OVERMAP_HEIGHT) { levels.push_back(z); }
@@ -909,7 +916,7 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
     } );
 #endif
 #if defined(CATA_SDL)
-    if (!skip_lightmap && gpu_device != nullptr) {
+    if (process_lightmap && gpu_device != nullptr) {
         const auto& visibility_cache = get_cache_ref(zlev);
         if (!cata_gpu::resident_lighting_ready_for_visibility({
                 .device = gpu_device,
@@ -928,9 +935,10 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
 #endif
 
     auto dirty_lightmap_levels = std::vector<int>{};
-    if (!skip_lightmap) {
+    if (process_lightmap) {
         ZoneScopedN("Phase4_lightmap_prepare");
-        invalidate_lightmap_if_light_state_changed();
+        // The light-source signature was already reconciled by plan_for (ADR-0002):
+        // the escalation law lives in the plan's disposition, not in a build-time call.
         // Only include levels whose lightmap is actually stale this redraw.
         // lightmap_dirty is marked per-submap by map::shift (loadn), player
         // movement, terrain changes, and explicit invalidate calls (vehicle
@@ -954,7 +962,7 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
 
 #if defined(CATA_SDL)
     auto pending_gpu_lighting = cata_gpu::gpu_lighting_work{};
-    if (!skip_lightmap && gpu_device != nullptr && !dirty_lightmap_levels.empty()) {
+    if (process_lightmap && gpu_device != nullptr && !dirty_lightmap_levels.empty()) {
         ZoneScopedN("Phase4_lightmap_begin");
         update_solar_params();
         // GPU path: lightmap rebuilds only run for lightmap-dirty levels.
@@ -1080,7 +1088,7 @@ void map::build_map_cache(const int zlev, bool skip_lightmap) {
     }
     _lap(_ph_seen);
 
-    if (!skip_lightmap) {
+    if (process_lightmap) {
         if (gpu_device != nullptr) {
 #if defined(CATA_SDL)
             if (!dirty_lightmap_levels.empty()) {

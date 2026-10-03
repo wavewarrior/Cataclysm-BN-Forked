@@ -190,7 +190,7 @@ TEST_CASE("Aiming at a target behind wall", "[ranged][aiming]") {
     // pre-wall data left over from set_up_player_vision()'s cache build.
     g->m.update_visibility_cache(shooter_bpos.z());
     level_cache_freshness::invalidate_level( g->m, shooter_bpos.z() );
-    g->m.build_map_cache(shooter_bpos.z());
+    build_map_cache_from_plan(g->m, shooter_bpos.z());
     monster& z = spawn_test_monster("debug_mon", shooter_bpos + point(2, 0));
     WHEN("There is no direct, passable line to target") {
         const auto path = g->m.find_clear_path(shooter.bub_pos(), z.bub_pos());
@@ -239,7 +239,7 @@ TEST_CASE("Aiming at a target behind bars", "[ranged][aiming]") {
     // pre-bars data left over from set_up_player_vision()'s cache build.
     g->m.update_visibility_cache(shooter_bpos.z());
     level_cache_freshness::invalidate_level( g->m, shooter_bpos.z() );
-    g->m.build_map_cache(shooter_bpos.z());
+    build_map_cache_from_plan(g->m, shooter_bpos.z());
     monster& z = spawn_test_monster("debug_mon", shooter_bpos + point(2, 0));
     WHEN("There is no direct, passable line to target") {
         const auto path = g->m.find_clear_path(shooter.bub_pos(), z.bub_pos());

@@ -56,7 +56,7 @@ static auto make_storage(const vpart_id& storage_part, const bool enabled)
     const auto part_index = veh->install_part(tripoint_mnt_veh::zero(), storage_part, true);
     REQUIRE(part_index >= 0);
     veh->part(part_index).enabled = enabled;
-    here.build_map_cache(vehicle_pos.z(), true);
+    build_map_cache_from_plan(here, vehicle_pos.z(), /*skip_lightmap=*/true);
 
     return {.veh = veh, .part_index = part_index, .pos = vehicle_pos};
 }

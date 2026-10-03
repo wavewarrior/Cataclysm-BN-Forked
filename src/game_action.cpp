@@ -2033,7 +2033,9 @@ const auto npcperf = asleep && get_option<bool>( "SLEEP_SKIP_NPC" );
     // consider a stripped down cache just for monsters.
     {
         const auto _t0 = _perf_clk::now();
-        m.build_map_cache( get_levz(), true );
+        m.build_map_cache( level_cache_freshness::plan_for( m,
+            level_cache_freshness::pose_of_viewer( u, get_levz() ),
+            level_cache_freshness::lightmap_policy::skip ) );
         _perf_cache += std::chrono::duration<double, std::milli>( _perf_clk::now() - _t0 ).count();
     }
     if( !monperf ) {
@@ -2256,7 +2258,9 @@ auto game::coop_client_frame_step() -> void
     }
 
     m.build_floor_caches();
-    m.build_map_cache( get_levz(), true );
+    m.build_map_cache( level_cache_freshness::plan_for( m,
+        level_cache_freshness::pose_of_viewer( u, get_levz() ),
+        level_cache_freshness::lightmap_policy::skip ) );
 
     mon_info_update();
     handle_wait_activity_redraw();

@@ -1105,7 +1105,7 @@ auto make_vehicle_craft_fixture(const vehicle_craft_fixture_options& opts)
         veh->part(freezer_part).enabled = true;
     }
 
-    here.build_map_cache(vehicle_pos.z(), true);
+    build_map_cache_from_plan(here, vehicle_pos.z(), /*skip_lightmap=*/true);
     REQUIRE(here.veh_at(vehicle_pos));
 
     const auto stand_pos = vehicle_pos + tripoint(0, 1, 0);

@@ -290,11 +290,11 @@ TEST_CASE("detaching_opaque_vehicle_invalidates_transparency_cache", "[vehicle][
     REQUIRE(board >= 0);
 
     const auto board_pos = veh_ptr->bub_part_location(board);
-    here.build_map_cache(board_pos.z(), true);
+    build_map_cache_from_plan(here, board_pos.z(), /*skip_lightmap=*/true);
     REQUIRE_FALSE(here.is_transparent(board_pos));
 
     here.destroy_vehicle(veh_ptr);
-    here.build_map_cache(board_pos.z(), true);
+    build_map_cache_from_plan(here, board_pos.z(), /*skip_lightmap=*/true);
 
     CHECK(here.is_transparent(board_pos));
 }
@@ -795,7 +795,7 @@ TEST_CASE("box2d_authority_vehicle_bashes_terrain", "[vehicle][box2d]") {
         start.x() + static_cast<int>(std::lround(fv.x * 6)),
         start.y() + static_cast<int>(std::lround(fv.y * 6)), 0);
     here.ter_set(obstacle, ter_id("t_wall_wood"));
-    here.build_map_cache(0, true);
+    build_map_cache_from_plan(here, 0, /*skip_lightmap=*/true);
     REQUIRE(here.is_bashable_ter_furn(obstacle, false));
     const auto before = here.ter(obstacle);
 
@@ -857,7 +857,7 @@ TEST_CASE("bash_vehicle_tile_gates_on_momentum", "[vehicle][box2d]") {
 
     const auto obstacle = tripoint_bub_ms(61, 60, 0);
     here.ter_set(obstacle, ter_id("t_wall_wood"));
-    here.build_map_cache(0, true);
+    build_map_cache_from_plan(here, 0, /*skip_lightmap=*/true);
     REQUIRE(here.is_bashable_ter_furn(obstacle, false));
     // Pin the assumption the low-velocity case below depends on: if t_wall_wood's
     // JSON ever changes, this fails loudly here instead of the CHECK_FALSE silently

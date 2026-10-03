@@ -1,5 +1,7 @@
+#include <algorithm>
 #include <array>
 #include <cstdint>
+#include <vector>
 
 #if defined(CATA_SDL)
 #include "compute/gpu_lm.h"
@@ -594,4 +596,124 @@ TEST_CASE(
     poll();
     CHECK( cata_gpu::lighting_residency_jump_count() > veh_before );
 #endif // CATA_SDL
+}
+
+// ADR-0002: the rebuild plan is the single carrier of the refresh decision. These
+// pins hold the plan's contract: the escalation law (a skip policy may neither
+// escalate nor consume the light-source signature), the level lists the build is
+// licensed to rebuild, the view-stale answer, and the residency stamps the GPU
+// consumer will diff once T7 replaces the poll.
+TEST_CASE(
+    "the rebuild plan defers the lightmap under the skip policy without escalating",
+    "[level_cache_freshness]") {
+    clear_all_state();
+    build_test_map( ter_id( "t_dirt" ) );
+    map &here = get_map();
+    g->place_player( player_home );
+    set_time( calendar::turn_zero );
+    get_avatar().recalc_sight_limits();
+    refresh_level_cache();
+
+    using K = level_cache_freshness;
+    const auto pose = K::pose_of_viewer( get_avatar(), 0 );
+
+    SECTION( "a clean lightmap defers under both policies" ) {
+        CHECK( K::plan_for( here, pose, K::lightmap_policy::normal ).lightmap ==
+               K::lightmap_disposition::defer_without_escalation );
+        CHECK( K::plan_for( here, pose, K::lightmap_policy::skip ).lightmap ==
+               K::lightmap_disposition::defer_without_escalation );
+    }
+
+    SECTION( "a raised lightmap bit processes under normal and defers under skip" ) {
+        K::report( here, K::light_changed {} );
+        CHECK( K::plan_for( here, pose, K::lightmap_policy::normal ).lightmap ==
+               K::lightmap_disposition::process );
+        CHECK( K::plan_for( here, pose, K::lightmap_policy::skip ).lightmap ==
+               K::lightmap_disposition::defer_without_escalation );
+    }
+
+    SECTION( "skip may not consume the signature an entity light changed" ) {
+        // A burning monster changes the light-source signature and raises no bit
+        // of its own (issue #19 shape). A skip plan must not sample the signature:
+        // it cannot clear the bit a changed signature raises, so it must not raise
+        // one either.
+        monster &z = spawn_test_monster( "mon_zombie", tripoint_bub_ms( 62, 60, 0 ) );
+        z.add_effect( efftype_id( "onfire" ), 100_turns );
+        const auto skipped = K::plan_for( here, pose, K::lightmap_policy::skip );
+        CHECK( skipped.lightmap == K::lightmap_disposition::defer_without_escalation );
+        CHECK_FALSE( K::stale( here.access_cache( 0 ), level_cache_part::lightmap ) );
+        // The signature stayed unconsumed: the next normal plan escalates.
+        CHECK( K::plan_for( here, pose, K::lightmap_policy::normal ).lightmap ==
+               K::lightmap_disposition::process );
+        CHECK( K::stale( here.access_cache( 0 ), level_cache_part::lightmap ) );
+    }
+}
+
+TEST_CASE(
+    "the rebuild plan lists the levels the dirty state licenses for rebuild",
+    "[level_cache_freshness]") {
+    set_up_open_daylight_map();
+    map &here = get_map();
+    using K = level_cache_freshness;
+    const auto pose = K::pose_of_viewer( get_avatar(), 0 );
+        // Builder-owned vehicle flags survive `clear_all_state` and can carry over
+        // from a passing vehicle test; silence them so the plan measures the fixture.
+        for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z ) {
+            level_cache &ch = here.access_cache( z );
+            K::stamp_veh_range( ch, false );
+            K::stamp_vehicle_floor( ch, false );
+        }
+
+    SECTION( "a fresh world yields an empty plan" ) {
+        const auto plan = K::plan_for( here, pose, K::lightmap_policy::normal );
+        CHECK_FALSE( plan.structure );
+        CHECK( plan.structure_levels.empty() );
+        CHECK( plan.floor_levels.empty() );
+        CHECK( plan.transparency_levels.empty() );
+        CHECK_FALSE( plan.visibility );
+    }
+
+    SECTION( "a terrain edit lists its level for every affected part" ) {
+        // An opaque wall: the property diff raises transparency and seen; the
+        // floor cache does not distinguish dirt from wall, so no floor raise.
+        here.ter_set( player_home, ter_id( "t_wall" ) );
+        const auto plan = K::plan_for( here, pose, K::lightmap_policy::normal );
+        CHECK( plan.structure );
+        CHECK( std::ranges::find( plan.transparency_levels, 0 ) !=
+               plan.transparency_levels.end() );
+        // The structure set is the union: every listed level appears in it.
+        for( const auto *levels : { &plan.transparency_levels } ) {
+            for( const int z : *levels ) {
+                CHECK( std::ranges::find( plan.structure_levels, z ) !=
+                       plan.structure_levels.end() );
+            }
+        }
+        // Seen dirt from the edit rides through as the visibility decision.
+        CHECK( plan.visibility );
+    }
+
+    SECTION( "a viewer move sets visibility without licensing any rebuild" ) {
+        g->place_player( tripoint_bub_ms( 61, 60, 0 ) );
+        const auto moved = K::pose_of_viewer( get_avatar(), 0 );
+        const auto plan = K::plan_for( here, moved, K::lightmap_policy::normal );
+        CHECK( plan.visibility );
+        CHECK_FALSE( plan.structure );
+        CHECK( plan.structure_levels.empty() );
+    }
+
+    SECTION( "the plan carries the current residency stamps and pose" ) {
+        const auto plan = K::plan_for( here, pose, K::lightmap_policy::normal );
+        for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z ) {
+            CHECK( plan.residency.generation[static_cast<size_t>( z + OVERMAP_DEPTH )] ==
+                   K::residency_generation( here.access_cache( z ) ) );
+        }
+        CHECK( plan.pose.viewer == pose.viewer );
+        CHECK( plan.pose.camera == pose.camera );
+        CHECK( plan.pose.bubble_origin == here.get_abs_sub() );
+        // Two plans for the same pose compare equal; a camera drift does not.
+        CHECK( K::plan_for( here, pose, K::lightmap_policy::normal ).pose == plan.pose );
+        auto drifted = pose;
+        drifted.camera = point_rel_ms( 1, 0 );
+        CHECK( K::plan_for( here, drifted, K::lightmap_policy::normal ).pose != plan.pose );
+    }
 }

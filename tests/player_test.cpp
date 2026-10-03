@@ -540,7 +540,7 @@ TEST_CASE("player_move_through_vehicle_holes") {
     const auto pos = dummy.bub_pos();
 
     get_map().add_vehicle(vproto_id("apc"), pos + tripoint_rel_ms(2, -1, 0), -45_degrees, 0, 0);
-    get_map().build_map_cache(pos.z());
+    build_map_cache_from_plan(get_map(), pos.z());
 
     REQUIRE(get_avatar().bub_pos() == pos);
 

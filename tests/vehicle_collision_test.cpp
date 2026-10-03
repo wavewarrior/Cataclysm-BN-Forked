@@ -42,7 +42,7 @@ TEST_CASE("vehicle_collision_with_wall_terminates", "[vehicle]") {
     REQUIRE(veh_ptr != nullptr);
 
     REQUIRE(here.ter_set(wall_pos, ter_id("t_concrete_wall")));
-    here.build_map_cache(0, true);
+    build_map_cache_from_plan(here, 0, /*skip_lightmap=*/true);
 
     CAPTURE(here.ter(wall_pos).id().str());
     CAPTURE(here.move_cost_ter_furn(wall_pos));

@@ -250,7 +250,9 @@ auto coop_client::apply_world_seed_to_avatar() -> void
             .first = tripoint_bub_sm( 0, 0, levz ),
             .last = tripoint_bub_sm( g->m.getmapsize() - 1, g->m.getmapsize() - 1, levz ),
         } );
-        g->m.build_map_cache( levz );
+        g->m.build_map_cache( level_cache_freshness::plan_for( g->m,
+            level_cache_freshness::pose_of_viewer( g->u, levz ),
+            level_cache_freshness::lightmap_policy::normal ) );
         const tripoint_bub_ms bpos = abs_to_map_local( g->m, world_seed_spawn_ );
         g->u.setpos( bpos );
         DebugLog( DL::Info, DC::Main )
@@ -263,7 +265,9 @@ auto coop_client::apply_world_seed_to_avatar() -> void
             .first = tripoint_bub_sm( 0, 0, levz ),
             .last = tripoint_bub_sm( g->m.getmapsize() - 1, g->m.getmapsize() - 1, levz ),
         } );
-        g->m.build_map_cache( levz );
+        g->m.build_map_cache( level_cache_freshness::plan_for( g->m,
+            level_cache_freshness::pose_of_viewer( g->u, levz ),
+            level_cache_freshness::lightmap_policy::normal ) );
     }
     g->u.process_turn(); // initialise avatar stats at spawn
     DebugLog( DL::Info, DC::Main )

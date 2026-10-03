@@ -672,7 +672,9 @@ bool game::load( const save_t &name )
     // Build caches once so any immediate post-load draws don't use uninitialized lighting/visibility,
     // then re-invalidate so the first real in-game draw rebuilds everything again.
     level_cache_freshness::invalidate_level( m, get_levz() );
-    m.build_map_cache( get_levz() );
+    m.build_map_cache( level_cache_freshness::plan_for( m,
+        level_cache_freshness::pose_of_viewer( u, get_levz() ),
+        level_cache_freshness::lightmap_policy::normal ) );
     m.update_visibility_cache( get_levz() );
     level_cache_freshness::invalidate_level( m, get_levz() );
 
