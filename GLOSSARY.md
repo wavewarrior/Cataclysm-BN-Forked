@@ -97,3 +97,17 @@ _Avoid_: moving (ambiguous with grab/drag), in motion
 **Coasting**:
 A rolling vehicle that no one is driving.
 _Avoid_: freewheeling, drifting
+
+## Co-op
+
+**World event**:
+A replicated edit to the shared world in co-op: a terrain or furniture replacement, or a field appearing, changing intensity, or expiring.
+_Avoid_: delta, mutation, sync entry
+
+**World event interpreter**:
+The single owner of what each world event means: how it is applied to a map, how it is undone, and how it is written to and read from the wire.
+_Avoid_: event handler, delta codec
+
+**Rollback**:
+Undoing recent world events in reverse order to return a map to an earlier tick after the two players' worlds disagree.
+_Avoid_: rewind, revert
