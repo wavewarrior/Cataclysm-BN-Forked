@@ -28,11 +28,15 @@
 #include "coop_sim_transport.h"
 #include "field.h"
 #include "game.h"
+#include "item.h"
+#include "json.h"
 #include "map.h"
 #include "map_helpers.h"
 #include "npc.h"
 #include "state_helpers.h"
 #include "type_id.h"
+
+#include <sstream>
 
 namespace {
 
@@ -507,4 +511,67 @@ TEST_CASE("inproc: all five replicated world events survive the wire", "[coop][i
     // did not end up armed for a forced full sync.
     h.srv.process_incoming_for_test();
     CHECK_FALSE(h.srv.force_resync_pending_for_test());
+}
+
+namespace {
+
+/// A serialised knife, built as handle_action.cpp builds the trade_offer item_json.
+auto knife_offer_json() -> std::string {
+    const itype_id knife_id("knife_combat");
+    REQUIRE(knife_id.is_valid());
+    auto knife = item::spawn(knife_id, calendar::turn, item::solitary_tag{});
+    REQUIRE(knife);
+    std::ostringstream oss;
+    JsonOut jout(oss);
+    knife->serialize(jout);
+    return oss.str();
+}
+
+/// Deliver one host sync to the client through the real wire and apply_sync.
+auto sync_host_to_client(inproc_harness& h) -> void {
+    {
+        coop_tick_log_guard guard;
+        h.srv.build_and_send_sync();
+    }
+    h.srv.flush_send_queue_for_test();
+    coop_mode_guard mcli(coop_mode::client);
+    h.cli.coop_world_tick();
+}
+
+} // namespace
+
+// F2: the giver removes the item when offering, so a declined offer must come back.
+// Host and client share one g->u in-process, so the knife count is the observable.
+TEST_CASE("inproc: a declined trade offer returns the item exactly once",
+          "[coop][inproc][trade]") {
+    const itype_id knife_id("knife_combat");
+    inproc_harness h;
+    h.setup();
+    const std::string offer = knife_offer_json();
+    const int before = g->u.amount_of(knife_id);
+
+    h.srv.resolve_trade_offer(offer, false);
+    CHECK(g->u.amount_of(knife_id) == before);
+
+    sync_host_to_client(h);
+    CHECK(g->u.amount_of(knife_id) == before + 1);
+
+    // One-shot: the next sync must not hand it back again.
+    sync_host_to_client(h);
+    CHECK(g->u.amount_of(knife_id) == before + 1);
+}
+
+TEST_CASE("inproc: an accepted trade offer is kept and never echoed back",
+          "[coop][inproc][trade]") {
+    const itype_id knife_id("knife_combat");
+    inproc_harness h;
+    h.setup();
+    const std::string offer = knife_offer_json();
+    const int before = g->u.amount_of(knife_id);
+
+    h.srv.resolve_trade_offer(offer, true);
+    CHECK(g->u.amount_of(knife_id) == before + 1);
+
+    sync_host_to_client(h);
+    CHECK(g->u.amount_of(knife_id) == before + 1);
 }

@@ -72,6 +72,10 @@ struct coop_server {
         auto coop_world_tick() -> void;
         auto update_proxy_position( npc* proxy ) -> void;
         auto build_and_send_sync( bool force_full = false ) -> void;
+        /// F2: resolve a client's trade offer.  Acks the client, then either adds the item to
+        /// the host (accepted) or queues it to return to the client in the next sync as
+        /// "pending_gift" (declined).  Main-thread only; the popup lives in the caller.
+        auto resolve_trade_offer( const std::string& offer_json, bool accepted ) -> void;
         auto shutdown() -> void;
         auto send_chat( const std::string& text ) -> void;
         /// F4: send a raw JSON packet directly onto the send queue (overmap mark, emotes, etc.)
@@ -274,6 +278,8 @@ struct coop_server {
         // F3: tap shoulder
         std::atomic<bool> pending_tap_{false};
         bool pending_tap_sent_to_client_ = false; ///< main-thread only
+        /// F2: declined offer awaiting return to the client; emitted once by the next sync.
+        std::optional<std::string> pending_gift_json_;
         // G1: worn JSON from join_info — main-thread only (pre-receiver window)
         std::string client_worn_json_;
         // G2: downed state

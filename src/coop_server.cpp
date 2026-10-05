@@ -686,13 +686,7 @@ if( phase == client_join_phase::listening ||
                     const std::string msg = string_format(
                                                 _( "%s wants to give you: %s. Accept?" ),
                                                 coop_session::get().partner_name, offered->tname() );
-                    const bool accepted = show_coop_popup( msg );
-                    const std::string ack = accepted ? R"({"t":44})" : R"({"t":45})";
-                    {
-                        std::scoped_lock lk{ send_mtx_ };
-                        send_q_.push_back( ack );
-                    }
-                    if( accepted ) { g->u.i_add( std::move( offered ) ); }
+                    resolve_trade_offer( *trade_offer, show_coop_popup( msg ) );
                 }
             } catch( const JsonError& e ) {
                 DebugLog( DL::Error, DC::Main ) << "[coop] F2 trade JSON: " << e.what();
@@ -1656,6 +1650,11 @@ auto coop_server::build_and_send_sync( bool force_full ) -> void
     jout.member( "ping_ts", static_cast<int64_t>( SDL_GetTicks() ) );
     // Input window sizing: tell the client how long our own world tick takes.
     jout.member( "tick_ms", static_cast<int>( coop_session::get().local_tick_cost.value() ) );
+    // F2: a declined trade offer goes back to its owner, once, as pending_gift.
+    if( pending_gift_json_.has_value() ) {
+        jout.member( "pending_gift", *pending_gift_json_ );
+        pending_gift_json_.reset();
+    }
 
     // F3: one-shot tap notification to client (set by send_tap_shoulder() caller)
     if( pending_tap_sent_to_client_ ) {
@@ -1883,6 +1882,7 @@ auto coop_server::reset_client_state() -> void
     // Main-thread-only fields.
     client_death_announced_ = false;
     pending_tap_sent_to_client_ = false;
+    pending_gift_json_.reset();
     client_down_turns_remaining_ = 0;
     sync_tick_counter_ = 0;
     last_sync_origin_ = tripoint_abs_sm{
@@ -1990,6 +1990,28 @@ jout.member( "t", static_cast<int>( coop_pkt::chat ) );
     std::scoped_lock lk{send_mtx_};
     if( send_q_.size() >= 64 ) { send_q_.pop_front(); }
     send_q_.push_back( oss.str() );
+}
+
+auto coop_server::resolve_trade_offer( const std::string& offer_json, bool accepted ) -> void
+{
+    const std::string ack = accepted ? R"({"t":44})" : R"({"t":45})";
+    {
+        std::scoped_lock lk{ send_mtx_ };
+        send_q_.push_back( ack );
+    }
+    if( !accepted ) {
+        // The giver already removed the item when offering; hand it back in the next sync.
+        pending_gift_json_ = offer_json;
+        return;
+    }
+    try {
+        std::istringstream iss( offer_json );
+        JsonIn jin( iss );
+        detached_ptr<item> offered = item::spawn( jin );
+        if( offered ) { g->u.i_add( std::move( offered ) ); }
+    } catch( const JsonError& e ) {
+        DebugLog( DL::Error, DC::Main ) << "[coop] F2 trade JSON: " << e.what();
+    }
 }
 
 auto coop_server::send_raw( const std::string& json ) -> void
