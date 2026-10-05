@@ -16,16 +16,23 @@ Verified live defect: `reverse_delta` already flips `field_created` <-> `field_e
 - Boundary: the interpreter owns applying and (de)serialising the delta event array only. The other `apply_sync` keys are untouched.
 - `coop_rollback_engine` keeps its ring buffer; `rollback_to` delegates invert+apply to the interpreter. `reverse_type` is removed if nothing reads it.
 - `coop_hash_event`, `coop_hash_event_extended`, `coop_collect_streamable` stay free functions with their existing tests. The interpreter exposes the streamable predicate so the 5-type set lives once.
-- Wire byte-identical, no protocol bump. The `creature_id`-as-intensity overload becomes a named accessor inside the interpreter.
-- Known limit, pinned and documented: rolling back `field_expired` restores intensity 1 (the expiry event, `map_field.cpp:1136`, carries no intensity).
+- Wire byte-identical in the interpreter commit, no protocol bump. The field-intensity carrier (actually `old_value`, see D3) is a named accessor inside the interpreter. Commit 3 is the one deliberate wire change.
+- Rolling back `field_expired` restores intensity 1 until commit 3 carries intensity on expiry events; commit 3 removes that limit.
 - `pending_gift`: implement server emission as the declined-item restore path (host declines a client `trade_offer`; server echoes the item JSON in the next sync; client re-adds). Lands last, as its own commit.
 
 ## Commit order
 
-1. Characterisation tests against current behaviour: apply-then-invert round-trip table over the 5 types, and wire round-trip for the event array. The field-rollback case is tagged `[.]` as known-fail.
-2. Interpreter conversion (server, client `apply_sync` event array, rollback delegate). The field case turns green and loses `[.]`.
-3. `feat`: `pending_gift` declined-item restore.
+1. DONE (`2e3e692736`): characterisation tests. Terrain/furniture round-trips and a wire test through the real `build_and_send_sync` -> `apply_sync` pass. Field created/expired and field_changed rollback cases are known-fail, tagged `[.][coop_known_fail][rollback]` (not `[coop]`, because Catch2 runs hidden cases named by a filter tag).
+2. Interpreter conversion (server, client `apply_sync` event array, rollback delegate). Wire bytes stay identical: the interpreter encodes the carrier quirk (field intensity travels in `old_value`) behind named accessors. Fixes D1 and D2; the three field cases turn green and regain `[coop]`.
+3. `fix`: field-intensity carrier. Move intensity to `creature_id` on field_created/field_changed and also carry it on field_expired, so rollback restores exactly. The single deliberate wire and hash change; accept mixed-version skew. Update the wire test that pins today's behaviour.
+4. `feat`: `pending_gift` declined-item restore.
+
+## Defects found by commit 1
+
+- D1 double inversion: `reverse_delta` flips field_created/field_expired, then `rollback_to` inverts again.
+- D2 value/old_value swap: `reverse_delta` swaps them, `rollback_to` reads the field type out of `value`; for field_changed it looks up the old intensity as a field type.
+- D3 producer carrier misalignment: `map_field.cpp:1020` and `:1737` brace-initialise positionally, so intensity lands in `old_value`, not `creature_id`. Fields replicate at intensity 1 and field_changed is a client no-op.
 
 ## Out of scope
 
-Whole-sync-packet codec; the turn-plan candidate (`do_turn` / `coop_client_turn_step`); carrying intensity on expiry events.
+Whole-sync-packet codec; the turn-plan candidate (`do_turn` / `coop_client_turn_step`).
