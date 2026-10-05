@@ -23,7 +23,7 @@ Verified live defect: `reverse_delta` already flips `field_created` <-> `field_e
 ## Commit order
 
 1. DONE (`2e3e692736`): characterisation tests. Terrain/furniture round-trips and a wire test through the real `build_and_send_sync` -> `apply_sync` pass. Field created/expired and field_changed rollback cases are known-fail, tagged `[.][coop_known_fail][rollback]` (not `[coop]`, because Catch2 runs hidden cases named by a filter tag).
-2. Interpreter conversion (server, client `apply_sync` event array, rollback delegate). Wire bytes stay identical: the interpreter encodes the carrier quirk (field intensity travels in `old_value`) behind named accessors. Fixes D1 and D2; the three field cases turn green and regain `[coop]`.
+2. DONE: Interpreter conversion (`src/coop_world_event_interpreter.{h,cpp}`). Server, client `apply_sync` event array and `coop_rollback_engine::rollback_to` delegate to it; `reverse_delta`/`reverse_type` deleted. Wire bytes stayed identical: the interpreter encodes the carrier quirk (field intensity travels in `old_value`, read through `field_intensity_carrier`) behind named accessors. D1 and D2 are gone by construction; the three field cases turned green and regained `[coop]`.
 3. `fix`: field-intensity carrier. Move intensity to `creature_id` on field_created/field_changed and also carry it on field_expired, so rollback restores exactly. The single deliberate wire and hash change; accept mixed-version skew. Update the wire test that pins today's behaviour.
 4. `feat`: `pending_gift` declined-item restore.
 

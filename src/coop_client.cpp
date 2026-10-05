@@ -10,6 +10,7 @@
 #include "coop_packets.h"
 #include "coop_proto.h"
 #include "coop_reconcile.h"
+#include "coop_world_event_interpreter.h"
 #include "coop_menu.h"
 #include "coop_session.h"
 #include "coordinates.h"
@@ -664,114 +665,28 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
             server_hash = static_cast<uint64_t>( jin.get_int64() );
 
         } else if( key == "events" ) {
-            // A4 delta stream: apply terrain/furniture events in-place.
+            // A4 delta stream: the World event interpreter applies each event and
+            // hands back the record needed to undo it.
             // Avoids the 5×5 submap blast on every tick.
             jin.start_array();
             while( !jin.end_array() ) {
-                jin.start_object();
-                int ev_type = 0, ex = 0, ey = 0, ez = 0, ev_val = 0, ev_cid = 0;
-                while( !jin.end_object() ) {
-                    const auto mk = jin.get_member_name();
-                    if( mk == "ev" ) {
-                        ev_type = jin.get_int();
-                    } else if( mk == "x" ) {
-                        ex = jin.get_int();
-                    } else if( mk == "y" ) {
-                        ey = jin.get_int();
-                    } else if( mk == "z" ) {
-                        ez = jin.get_int();
-                    } else if( mk == "v" ) {
-                        ev_val = jin.get_int();
-                    } else if( mk == "cid" ) {
-                        ev_cid = jin.get_int();
-                    } else {
-                        jin.skip_value();
-                    }
-                }
+                const coop_world_event ev = coop_world_event_interpreter::read_event( jin );
                 // A4b: mix event into local hash — same 6-field order as server.
-                // ev_cid is always mixed (including when 0 / "cid" absent from JSON).
+                // cid is always mixed (including when 0 / "cid" absent from JSON).
                 // Test seam: skip_one_hash_event_for_test_ causes the FIRST event's hash
                 // to be omitted, inducing local_hash ≠ server_hash so the detection path
                 // at line 543 fires naturally without a direct resync_request injection.
                 if( skip_one_hash_event_for_test_ ) {
                     skip_one_hash_event_for_test_ = false; // consume — only skip once
                 } else {
-                    local_hash =
-                        coop_hash_event_fields( local_hash, ev_type, ex, ey, ez, ev_val, ev_cid );
+                    local_hash = coop_hash_event_fields( local_hash,
+                                    static_cast<int>( ev.type ), ev.pos.x(), ev.pos.y(), ev.pos.z(),
+                                    ev.value, ev.creature_id );
                 }
                 ++ev_count;
-                const tripoint_abs_ms abs_pos{ex, ey, ez};
-                const tripoint_bub_ms bpos = abs_to_map_local( g->m, abs_pos );
-                using evt = coop_event_type;
-                if( ev_type == static_cast<int>( evt::terrain_changed ) ) {
-                    const ter_id ter{ ev_val };
-                    const int old_ter = g->m.ter( bpos ).to_i();
-                    if( ter ) { g->m.ter_set( bpos, ter ); }
-                    {
-                        coop_world_event recorded_ev;
-                        recorded_ev.type = static_cast<coop_event_type>( ev_type );
-                        recorded_ev.pos = abs_pos;
-                        recorded_ev.value = ev_val;
-                        recorded_ev.old_value = old_ter;
-                        recorded_ev.creature_id = ev_cid;
-                        rollback_engine_.push( turn_val, recorded_ev );
-                    }
-                } else if( ev_type == static_cast<int>( evt::furniture_changed ) ) {
-                    const int old_furn = g->m.furn( bpos ).to_i();
-                    g->m.furn_set( bpos, furn_id{ ev_val } );
-                    {
-                        coop_world_event recorded_ev;
-                        recorded_ev.type = static_cast<coop_event_type>( ev_type );
-                        recorded_ev.pos = abs_pos;
-                        recorded_ev.value = ev_val;
-                        recorded_ev.old_value = old_furn;
-                        recorded_ev.creature_id = ev_cid;
-                        rollback_engine_.push( turn_val, recorded_ev );
-                    }
-                } else if( ev_type == static_cast<int>( evt::field_created ) ) {
-                    const field_type_id ftype{ ev_val };
-                    const int intensity = ev_cid > 0 ? ev_cid : 1;
-                    if( ftype ) { g->m.add_field( bpos, ftype, intensity, 0_turns ); }
-                    {
-                        coop_world_event recorded_ev;
-                        recorded_ev.type = static_cast<coop_event_type>( ev_type );
-                        recorded_ev.pos = abs_pos;
-                        recorded_ev.value = ev_val;
-                        recorded_ev.old_value = 0; // no field existed before
-                        recorded_ev.creature_id = ev_cid;
-                        rollback_engine_.push( turn_val, recorded_ev );
-                    }
-                } else if( ev_type == static_cast<int>( evt::field_changed ) ) {
-                    const field_type_id ftype{ ev_val };
-                    const int new_int = ev_cid;
-                    int old_int = 0;
-                    if( ftype && new_int > 0 ) {
-                        auto* fe = g->m.get_field( bpos ).find_field( ftype );
-                        if( fe ) {
-                            old_int = fe->get_field_intensity();
-                            fe->set_field_intensity( new_int );
-                        }
-                    }
-                    {
-                        coop_world_event recorded_ev;
-                        recorded_ev.type = static_cast<coop_event_type>( ev_type );
-                        recorded_ev.pos = abs_pos;
-                        recorded_ev.value = ev_val;
-                        recorded_ev.old_value = old_int;
-                        recorded_ev.creature_id = ev_cid;
-                        rollback_engine_.push( turn_val, recorded_ev );
-                    }
-                } else if( ev_type == static_cast<int>( evt::field_expired ) ) {
-                    g->m.remove_field( bpos, field_type_id{ ev_val } );
-                    {
-                        coop_world_event recorded_ev;
-                        recorded_ev.type = static_cast<coop_event_type>( ev_type );
-                        recorded_ev.pos = abs_pos;
-                        recorded_ev.value = ev_val;
-                        recorded_ev.old_value = 0; // field existed before expiration
-                        recorded_ev.creature_id = ev_cid;
-                        rollback_engine_.push( turn_val, recorded_ev );
-                    }
+                if( coop_world_event_interpreter::is_replicated( ev.type ) ) {
+                    rollback_engine_.push( turn_val,
+                                           coop_world_event_interpreter::apply( g->m, ev ) );
                 }
                 // creature_moved/died: not streamed in A4b (monsters ride monster section).
                 // item_spawned: deferred (no item payload; 30s full sync covers drift).
@@ -1037,7 +952,7 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
                 << local_hash << " server=0x" << server_hash << std::dec << " — requesting resync";
         // Attempt to roll back locally-applied deltas before requesting a full resync.
         // This undoes events from the current turn so the incoming full sync applies cleanly.
-        rollback_engine_.rollback_to( turn_val - 1 );
+        rollback_engine_.rollback_to( g->m, turn_val - 1 );
         std::ostringstream rss;
         JsonOut rsj( rss );
         rsj.start_object();

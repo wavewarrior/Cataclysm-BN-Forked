@@ -4,6 +4,7 @@
 #include "avatar.h"
 #include "calendar.h"
 #include "coop_mutation_log.h"
+#include "coop_world_event_interpreter.h"
 #include "coop_net.h"
 #include "coop_packets.h"
 #include "coop_session.h"
@@ -1515,19 +1516,7 @@ auto coop_server::build_and_send_sync( bool force_full ) -> void
     const auto& sent_events = sr.sent;
     const auto events_hash = sr.hash;
     jout.member( "hash", static_cast<int64_t>( events_hash ) );
-    jout.member( "events" );
-    jout.start_array();
-    for( const auto& ev : sent_events ) {
-        jout.start_object();
-        jout.member( "ev", static_cast<int>( ev.type ) );
-        jout.member( "x", ev.pos.x() );
-        jout.member( "y", ev.pos.y() );
-        jout.member( "z", ev.pos.z() );
-        jout.member( "v", ev.value );
-        if( ev.creature_id != 0 ) { jout.member( "cid", ev.creature_id ); }
-        jout.end_object();
-    }
-    jout.end_array();
+    coop_world_event_interpreter::write_events( jout, sent_events );
 
     // --- tiles (full sync path) ---
     jout.member( "tiles" );
