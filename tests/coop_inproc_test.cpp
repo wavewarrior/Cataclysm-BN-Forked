@@ -26,6 +26,7 @@
 #include "coop_server.h"
 #include "coop_session.h"
 #include "coop_sim_transport.h"
+#include "field.h"
 #include "game.h"
 #include "map.h"
 #include "map_helpers.h"
@@ -408,4 +409,103 @@ TEST_CASE("inproc: turn advances across a long synced run", "[coop][inproc][pari
     for (int i = 0; i < 60; ++i) { h.tick(); }
     CHECK(to_turn<int>(calendar::turn) > turn_before);
     CHECK(h.proxy != nullptr);
+}
+
+// ---------------------------------------------------------------------------
+// A4 event-array wire round-trip (commit 1 of plans/coop-world-event-interpreter.md)
+// ---------------------------------------------------------------------------
+//
+// Real serialiser, real wire, real parser: the events go into a
+// coop_tick_log_guard the same way map_field.cpp / submap.cpp push them, are
+// serialised by the production coop_server::build_and_send_sync (public,
+// force_full=false so the DELTA path is taken), cross a coop_sim_transport, and
+// are parsed and applied by the production coop_client::apply_sync.
+//
+// build_and_send_sync is called directly rather than through coop_world_tick()
+// because coop_world_tick installs its OWN coop_tick_log_guard
+// (coop_server.cpp:520), which would replace a log installed by the test.
+//
+// Server and client share one g->m in-process, so a map change observed after
+// the client tick is the client's own apply of the wire event (pushing into the
+// log does not touch the map).  Hash agreement is asserted indirectly: the
+// client sends resync_request ONLY on a hash mismatch, and the server answers it
+// by raising force_resync_.
+//
+// Events are built with map_field.cpp's POSITIONAL brace-init
+// ({type, pos, value, intensity}), not with .creature_id set by hand.  That
+// pins defect D3: coop_world_event declares value then old_value then
+// creature_id, so the producer's 4th brace element lands in old_value, the
+// server omits "cid" (creature_id == 0), and the client sees intensity 0.
+TEST_CASE("inproc: all five replicated world events survive the wire", "[coop][inproc][wire]") {
+    constexpr tripoint_bub_ms TER_TILE{10, 10, 0};
+    constexpr tripoint_bub_ms FURN_TILE{12, 10, 0};
+    constexpr tripoint_bub_ms FIELD_TILE{14, 10, 0};
+    constexpr tripoint_bub_ms EXPIRE_TILE{16, 10, 0};
+
+    inproc_harness h;
+    h.setup();
+    clear_fields(0);
+
+    REQUIRE(get_map().ter(TER_TILE) == ter_str_id("t_grass"));
+    REQUIRE(get_map().furn(FURN_TILE) == furn_str_id("f_null"));
+    REQUIRE(get_map().get_field(FIELD_TILE).find_field(field_type_id("fd_fire")) == nullptr);
+    get_map().add_field(EXPIRE_TILE, field_type_id("fd_fire"), 1, 0_turns);
+    REQUIRE(get_map().get_field(EXPIRE_TILE).find_field(field_type_id("fd_fire")) != nullptr);
+
+    const auto abs_of = [](const tripoint_bub_ms& p) { return map_local_to_abs(get_map(), p); };
+
+    {
+        coop_tick_log_guard guard;
+        // terrain / furniture: submap.cpp:610 / :623 push {type, abs, id}.
+        guard.log().push(
+            {coop_event_type::terrain_changed, abs_of(TER_TILE), ter_id("t_floor").to_i()});
+        guard.log().push(
+            {coop_event_type::furniture_changed, abs_of(FURN_TILE), furn_id("f_locker").to_i()});
+        // Fields: map_field.cpp:1019-1021 and :1736-1738 positional init.
+        guard.log().push(
+            {coop_event_type::field_created, abs_of(FIELD_TILE), field_type_id("fd_fire").to_i(),
+             3});
+        guard.log().push(
+            {coop_event_type::field_changed, abs_of(FIELD_TILE), field_type_id("fd_fire").to_i(),
+             4});
+        // map_field.cpp:1136: the expiry event carries no intensity.
+        guard.log().push(
+            {coop_event_type::field_expired, abs_of(EXPIRE_TILE), field_type_id("fd_fire").to_i()});
+
+        // Delta path: force_full=false, origin unchanged since the initial sync,
+        // and the 30-tick periodic resync cannot fire this early.
+        h.srv.build_and_send_sync();
+    }
+    h.srv.flush_send_queue_for_test();
+
+    {
+        coop_mode_guard mcli(coop_mode::client);
+        h.cli.coop_world_tick();
+    }
+
+    // The client applied the terrain and furniture deltas.
+    CHECK(get_map().ter(TER_TILE) == ter_str_id("t_floor"));
+    CHECK(get_map().furn(FURN_TILE) == furn_str_id("f_locker"));
+    // D3: "cid" was omitted (producer put intensity in old_value), so apply_sync
+    // falls back to intensity 1 rather than the producer's 3.
+    field_entry* created = get_map().get_field(FIELD_TILE).find_field(field_type_id("fd_fire"));
+    REQUIRE(created != nullptr);
+    CHECK(created->get_field_intensity() == 1);
+    // D3 again: field_changed arrived with cid absent → new_int == 0 → no-op.
+    // The expiry did land: the field on EXPIRE_TILE is gone.
+    CHECK(get_map().get_field(EXPIRE_TILE).find_field(field_type_id("fd_fire")) == nullptr);
+
+    // Hash parity, checked on the wire: the client sends resync_request ({"t":25})
+    // ONLY when its replica of the 6-field FNV chain disagrees with the server's,
+    // so scanning the host inbox for that packet proves the event array hashed
+    // identically on both ends.  client_status ({"t":13}) is expected traffic.
+    bool resync_requested_on_wire = false;
+    for (std::string frame; h.srv_tx->recv(frame, 0);) {
+        if (frame.find(R"("t":25)") != std::string::npos) { resync_requested_on_wire = true; }
+    }
+    CHECK_FALSE(resync_requested_on_wire);
+    // Belt and braces: dispatch whatever the client sent and confirm the server
+    // did not end up armed for a forced full sync.
+    h.srv.process_incoming_for_test();
+    CHECK_FALSE(h.srv.force_resync_pending_for_test());
 }
