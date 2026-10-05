@@ -828,7 +828,12 @@ if (NOT TARGET SDL3_shadercross::SDL3_shadercross)
         # radiance-cascade lighting shaders — see src/lighting/CLAUDE.md. Paired
         # with SDL release-3.4.12 (this shadercross was developed against it).
         set(SDLSHADERCROSS_DXC          ON  CACHE BOOL "" FORCE)
-        set(SDLSHADERCROSS_VENDORED     ON  CACHE BOOL "" FORCE)
+        if (APPLE)
+            set(SDLSHADERCROSS_VENDORED          OFF CACHE BOOL "" FORCE)
+            set(SDLSHADERCROSS_SPIRVCROSS_SHARED ON  CACHE BOOL "" FORCE)
+        else ()
+            set(SDLSHADERCROSS_VENDORED          ON  CACHE BOOL "" FORCE)
+        endif ()
         set(SDLSHADERCROSS_SHARED       ${_CATA_SHADERCROSS_SHARED} CACHE BOOL "" FORCE)
         set(SDLSHADERCROSS_STATIC       ${_CATA_SHADERCROSS_STATIC} CACHE BOOL "" FORCE)
         set(SDLSHADERCROSS_CLI          OFF CACHE BOOL "" FORCE)
@@ -860,13 +865,69 @@ if (NOT TARGET SDL3_shadercross::SDL3_shadercross)
         # spirv-cross calls project() which resets CMAKE_MSVC_RUNTIME_LIBRARY;
         # use CMAKE_PROJECT_<NAME>_INCLUDE to re-set after the project() call.
         set(CMAKE_PROJECT_SPIRV-CROSS_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/CMakeModules/FixSpirvCrossRuntime.cmake")
-        FetchContent_Declare(
-            SDL3_SHADERCROSS
-            GIT_REPOSITORY https://github.com/libsdl-org/SDL_shadercross.git
-            GIT_TAG        9a461644308366b50f0c364069d762be8e3b3443
-            EXCLUDE_FROM_ALL
-        )
-        FetchContent_MakeAvailable(SDL3_SHADERCROSS)
+        if (APPLE)
+            # macOS: skip the vendored LLVM/DXC/SPIRV-Tools build (~1650 of ~2210
+            # cold steps, ~23% of cold CPU). Take only the SPIRV-Cross submodule
+            # from the pinned shadercross checkout and link a pinned prebuilt DXC.
+            # Both downloads are SHA-pinned; INCLUDE_PATH only has to exist for
+            # the finder (shadercross links DxcCreateInstance, never includes it).
+            FetchContent_Declare(
+                SDL3_SHADERCROSS
+                GIT_REPOSITORY https://github.com/libsdl-org/SDL_shadercross.git
+                GIT_TAG        9a461644308366b50f0c364069d762be8e3b3443
+                GIT_SUBMODULES external/SPIRV-Cross
+                EXCLUDE_FROM_ALL
+            )
+            FetchContent_GetProperties(SDL3_SHADERCROSS)
+            if (NOT sdl3_shadercross_POPULATED)
+                cmake_policy(PUSH)
+                if (POLICY CMP0169)
+                    cmake_policy(SET CMP0169 OLD)
+                endif ()
+                FetchContent_Populate(SDL3_SHADERCROSS)
+                cmake_policy(POP)
+            endif ()
+            set(SPIRV_CROSS_SHARED       ON  CACHE BOOL "" FORCE)
+            set(SPIRV_CROSS_STATIC       OFF CACHE BOOL "" FORCE)
+            set(SPIRV_CROSS_CLI          OFF CACHE BOOL "" FORCE)
+            set(SPIRV_CROSS_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
+            add_subdirectory("${sdl3_shadercross_SOURCE_DIR}/external/SPIRV-Cross"
+                             "${CMAKE_BINARY_DIR}/_deps/spirv_cross-build" EXCLUDE_FROM_ALL)
+            if (NOT TARGET spirv_cross_c_shared)
+                add_library(spirv_cross_c_shared ALIAS spirv-cross-c-shared)
+            endif ()
+            set(_CATA_DXC_PIN "31d48398e0e76c0f18cdcedfe2d5c850d0e08419")
+            FetchContent_Declare(
+                CATA_DXC_PREBUILT
+                URL      https://github.com/MethanePowered/DirectXShaderCompilerBinary/raw/${_CATA_DXC_PIN}/binaries/MacOS.zip
+                URL_HASH SHA256=8f07135f0858cd7c5b2e346ee64b6e7a72128fbf38b06685ec9ac1b465d24399
+            )
+            FetchContent_MakeAvailable(CATA_DXC_PREBUILT)
+            set(_CATA_DXC_ROOT "${cata_dxc_prebuilt_SOURCE_DIR}")
+            if (EXISTS "${_CATA_DXC_ROOT}/MacOS/lib")
+                set(_CATA_DXC_ROOT "${_CATA_DXC_ROOT}/MacOS")
+            endif ()
+            file(DOWNLOAD
+                https://raw.githubusercontent.com/MethanePowered/DirectXShaderCompilerBinary/${_CATA_DXC_PIN}/include/dxc/dxcapi.h
+                "${CMAKE_BINARY_DIR}/_deps/dxc-headers/dxc/dxcapi.h"
+                EXPECTED_HASH SHA256=1855295d3e9ed604a8f2b9dbd415a9d8f39f9e78b386f2f46fd00615da2cdfee)
+            set(DirectXShaderCompiler_INCLUDE_PATH        "${CMAKE_BINARY_DIR}/_deps/dxc-headers/dxc"   CACHE PATH     "" FORCE)
+            set(DirectXShaderCompiler_dxcompiler_LIBRARY  "${_CATA_DXC_ROOT}/lib/libdxcompiler.dylib"   CACHE FILEPATH "" FORCE)
+            set(DirectXShaderCompiler_dxil_LIBRARY        "${_CATA_DXC_ROOT}/lib/libdxil.dylib"         CACHE FILEPATH "" FORCE)
+            # The shadercross dylib records @rpath/libdxcompiler.dylib; its build
+            # dir is already on the game's rpath, so drop the prebuilt dylibs there.
+            file(COPY "${_CATA_DXC_ROOT}/lib/libdxcompiler.dylib" "${_CATA_DXC_ROOT}/lib/libdxil.dylib"
+                 DESTINATION "${sdl3_shadercross_BINARY_DIR}")
+            add_subdirectory("${sdl3_shadercross_SOURCE_DIR}" "${sdl3_shadercross_BINARY_DIR}" EXCLUDE_FROM_ALL)
+        else ()
+            FetchContent_Declare(
+                SDL3_SHADERCROSS
+                GIT_REPOSITORY https://github.com/libsdl-org/SDL_shadercross.git
+                GIT_TAG        9a461644308366b50f0c364069d762be8e3b3443
+                EXCLUDE_FROM_ALL
+            )
+            FetchContent_MakeAvailable(SDL3_SHADERCROSS)
+        endif ()
         set(CMAKE_CXX_FLAGS "${_CATA_SAVED_CXX_FLAGS}")
         set(CMAKE_C_FLAGS   "${_CATA_SAVED_C_FLAGS}")
         # Recursively strip `/WX` (and `-Werror`) from every target the
