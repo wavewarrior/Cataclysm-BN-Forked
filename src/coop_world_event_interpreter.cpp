@@ -27,11 +27,9 @@ auto coop_world_event_interpreter::is_replicated( coop_event_type type ) -> bool
 
 auto coop_world_event_interpreter::field_intensity_carrier( const coop_world_event& ev ) -> int
 {
-    // The wire carries intensity in `creature_id`, but the producers
-    // (map_field.cpp:1020, :1737) brace-initialise positionally and put it in
-    // `old_value`, so this reads 0 and fields replicate at the lowest intensity
-    // (defect D3).  Reading through this one accessor keeps that in a single
-    // place; ticket #42 fixes the producers and the carrier.
+    // Field events carry their intensity in `creature_id`: the new intensity for
+    // created/changed, the pre-expiry intensity for expired.  Reading it through
+    // this one accessor keeps the carrier in a single place.
     return ev.creature_id;
 }
 
@@ -63,8 +61,8 @@ auto coop_world_event_interpreter::apply( map& target, const coop_world_event& e
             // A creation implies no field of this type was present beforehand.
             recorded.field = ev.value;
             recorded.old_intensity = 0;
-            // A carrier of 0 means the producer sent no intensity (defect D3), so
-            // the field is created at the lowest intensity, as apply_sync did.
+            // A carrier of 0 means the sender gave no intensity (an older build),
+            // so the field is created at the lowest intensity.
             recorded.new_intensity = std::max( field_intensity_carrier( ev ), 1 );
             if( ftype ) {
                 target.add_field( bpos, ftype, recorded.new_intensity, 0_turns );
@@ -86,10 +84,10 @@ auto coop_world_event_interpreter::apply( map& target, const coop_world_event& e
             break;
         }
         case coop_event_type::field_expired: {
-            // The expiry event carries no intensity (map_field.cpp:1136), so the
-            // pre-expiry strength is unknowable here; see defect D3.
+            // The pre-expiry intensity travels in the carrier, so a rollback
+            // restores the field exactly.  0 (older sender) falls back to 1 in invert.
             recorded.field = ev.value;
-            recorded.old_intensity = 0;
+            recorded.old_intensity = field_intensity_carrier( ev );
             target.remove_field( bpos, field_type_id{ ev.value } );
             break;
         }
@@ -123,8 +121,8 @@ auto coop_world_event_interpreter::invert( const coop_recorded_event& recorded )
             inv.field = recorded.field;
             break;
         case coop_event_type::field_expired:
-            // Known limit until commit 3 carries intensity on expiry events: a
-            // restored field comes back at intensity 1.
+            // Restores the carried pre-expiry intensity; a sender that carried
+            // none (older build) leaves 0, which restores at the lowest intensity.
             inv.op = coop_inverse_op::add_field;
             inv.field = recorded.field;
             inv.intensity = recorded.old_intensity > 0 ? recorded.old_intensity : 1;

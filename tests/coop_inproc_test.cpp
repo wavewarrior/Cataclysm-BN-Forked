@@ -431,11 +431,10 @@ TEST_CASE("inproc: turn advances across a long synced run", "[coop][inproc][pari
 // client sends resync_request ONLY on a hash mismatch, and the server answers it
 // by raising force_resync_.
 //
-// Events are built with map_field.cpp's POSITIONAL brace-init
-// ({type, pos, value, intensity}), not with .creature_id set by hand.  That
-// pins defect D3: coop_world_event declares value then old_value then
-// creature_id, so the producer's 4th brace element lands in old_value, the
-// server omits "cid" (creature_id == 0), and the client sees intensity 0.
+// Field events are built the way map_field.cpp builds them: designated
+// initialisers with the intensity in `.creature_id` (new intensity for
+// created/changed, pre-expiry intensity for expired), which the wire carries as
+// "cid" and the client reads back.
 TEST_CASE("inproc: all five replicated world events survive the wire", "[coop][inproc][wire]") {
     constexpr tripoint_bub_ms TER_TILE{10, 10, 0};
     constexpr tripoint_bub_ms FURN_TILE{12, 10, 0};
@@ -461,16 +460,17 @@ TEST_CASE("inproc: all five replicated world events survive the wire", "[coop][i
             {coop_event_type::terrain_changed, abs_of(TER_TILE), ter_id("t_floor").to_i()});
         guard.log().push(
             {coop_event_type::furniture_changed, abs_of(FURN_TILE), furn_id("f_locker").to_i()});
-        // Fields: map_field.cpp:1019-1021 and :1736-1738 positional init.
+        // Fields: map_field.cpp pushes intensity in `.creature_id`.
         guard.log().push(
-            {coop_event_type::field_created, abs_of(FIELD_TILE), field_type_id("fd_fire").to_i(),
-             3});
+            {.type = coop_event_type::field_created, .pos = abs_of(FIELD_TILE),
+             .value = field_type_id("fd_fire").to_i(), .creature_id = 2});
         guard.log().push(
-            {coop_event_type::field_changed, abs_of(FIELD_TILE), field_type_id("fd_fire").to_i(),
-             4});
-        // map_field.cpp:1136: the expiry event carries no intensity.
+            {.type = coop_event_type::field_changed, .pos = abs_of(FIELD_TILE),
+             .value = field_type_id("fd_fire").to_i(), .creature_id = 3});
+        // The expiry carries the pre-expiry intensity.
         guard.log().push(
-            {coop_event_type::field_expired, abs_of(EXPIRE_TILE), field_type_id("fd_fire").to_i()});
+            {.type = coop_event_type::field_expired, .pos = abs_of(EXPIRE_TILE),
+             .value = field_type_id("fd_fire").to_i(), .creature_id = 1});
 
         // Delta path: force_full=false, origin unchanged since the initial sync,
         // and the 30-tick periodic resync cannot fire this early.
@@ -486,13 +486,12 @@ TEST_CASE("inproc: all five replicated world events survive the wire", "[coop][i
     // The client applied the terrain and furniture deltas.
     CHECK(get_map().ter(TER_TILE) == ter_str_id("t_floor"));
     CHECK(get_map().furn(FURN_TILE) == furn_str_id("f_locker"));
-    // D3: "cid" was omitted (producer put intensity in old_value), so apply_sync
-    // falls back to intensity 1 rather than the producer's 3.
+    // The field arrives at the host's intensity: created at 2, then changed to 3
+    // (fd_fire tops out at 3, so 3 is also not the old lowest-intensity default).
     field_entry* created = get_map().get_field(FIELD_TILE).find_field(field_type_id("fd_fire"));
     REQUIRE(created != nullptr);
-    CHECK(created->get_field_intensity() == 1);
-    // D3 again: field_changed arrived with cid absent → new_int == 0 → no-op.
-    // The expiry did land: the field on EXPIRE_TILE is gone.
+    CHECK(created->get_field_intensity() == 3);
+    // The expiry landed: the field on EXPIRE_TILE is gone.
     CHECK(get_map().get_field(EXPIRE_TILE).find_field(field_type_id("fd_fire")) == nullptr);
 
     // Hash parity, checked on the wire: the client sends resync_request ({"t":25})

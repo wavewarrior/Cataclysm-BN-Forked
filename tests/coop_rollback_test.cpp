@@ -14,9 +14,7 @@
  * value <-> old_value swap (D2) — so the helper now drives production `apply`
  * instead of a transcription, and all four cases run under [coop].
  *
- * Remaining known limit, asserted below: rolling back `field_expired` restores
- * intensity 1, because the expiry event carries no intensity
- * (map_field.cpp:1136).  Commit 3 removes that limit.
+ * Rolling back `field_expired` restores the carried pre-expiry intensity exactly.
  */
 
 #include "calendar.h"
@@ -135,24 +133,23 @@ TEST_CASE(
     SECTION("field_expired: rollback must restore the expired field") {
         setup_world();
         coop_rollback_engine engine;
-        g->m.add_field(TILE, field_type_id("fd_fire"), 1, 0_turns);
+        g->m.add_field(TILE, field_type_id("fd_fire"), 3, 0_turns);
         REQUIRE(field_at_tile(field_type_str_id("fd_fire")) != nullptr);
 
         const coop_recorded_event rec = apply_sync_event(
-            engine, coop_event_type::field_expired, field_type_id("fd_fire").to_i(), 0);
+            engine, coop_event_type::field_expired, field_type_id("fd_fire").to_i(), 3);
         REQUIRE(field_at_tile(field_type_str_id("fd_fire")) == nullptr);
         // The record keeps the field type under its own name, so the inverse finds
         // fd_fire rather than whatever type index old_value happened to hold
         // (defect D2).
         CHECK(rec.field == field_type_id("fd_fire").to_i());
 
-        // Pinned limit: the expiry event carries no intensity
-        // (map_field.cpp:1136), so a correct rollback restores intensity 1.
-        // Commit 3 removes this limit.
+        // The expiry event carries the pre-expiry intensity, so the rollback
+        // restores intensity 3 exactly.
         CHECK(engine.rollback_to(g->m, SYNC_TURN - 1) == 1);
         field_entry* restored = field_at_tile(field_type_str_id("fd_fire"));
         REQUIRE(restored != nullptr);
-        CHECK(restored->get_field_intensity() == 1);
+        CHECK(restored->get_field_intensity() == 3);
     }
 }
 

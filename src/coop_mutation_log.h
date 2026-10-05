@@ -15,7 +15,7 @@ struct coop_world_event {
     tripoint_abs_ms pos;
     int value = 0;       ///< ter_id, furn_id, field intensity, hp, …
     int old_value = 0;   ///< previous value before mutation (for reversible deltas)
-    int creature_id = 0; ///< stable host-assigned monster/npc id
+    int creature_id = 0; ///< monster/npc id; for field events, the field intensity (see interpreter)
     std::string str;     ///< mtype_id for creature_spawned; empty otherwise
 };
 

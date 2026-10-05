@@ -22,7 +22,7 @@ struct coop_recorded_event {
     int old_terrain_or_furniture = 0;
     /// Field events: the field type involved, plus the intensities either side
     /// of the mutation.  `old_intensity` is 0 when no field was present before
-    /// (creation) or when the wire carried none (expiry — see the plan's D3).
+    /// (creation) or when an older sender carried no intensity (expiry).
     int field = 0;
     int old_intensity = 0;
     int new_intensity = 0;
@@ -61,9 +61,8 @@ struct coop_world_event_interpreter {
         /// filters through this.
         static auto is_replicated( coop_event_type type ) -> bool;
 
-        /// Reads the field intensity off a wire event.  The wire carries it in
-        /// `creature_id`, but today's producers (map_field.cpp) brace-initialise
-        /// positionally and put it in `old_value`, so it is lost (defect D3).
+        /// Reads the field intensity off a wire event: it travels in `creature_id`
+        /// (new intensity for created/changed, pre-expiry intensity for expired).
         /// Readers go through here instead of touching `creature_id` directly.
         static auto field_intensity_carrier( const coop_world_event& ev ) -> int;
 

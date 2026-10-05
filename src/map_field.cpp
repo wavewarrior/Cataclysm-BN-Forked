@@ -1017,8 +1017,8 @@ auto sub_add_field( SubTile& dst, field_type_id type, int intensity, time_durati
             const tripoint_abs_ms abs_pos{
                 sm_pos.x() * SEEX + dst.local.x(), sm_pos.y() * SEEY + dst.local.y(), sm_pos.z()};
             _log->push( {
-                coop_event_type::field_created, abs_pos, type.to_i(),
-                intensity} ); // value=type, creature_id=intensity
+                .type = coop_event_type::field_created, .pos = abs_pos, .value = type.to_i(),
+                .creature_id = intensity} ); // value=type, creature_id=intensity
         }
     }
     return dst.get_field().find_field( type );
@@ -1133,7 +1133,9 @@ std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
                 if( auto * _log = coop_mutation_log::current() ) {
                     const tripoint_abs_ms
                     _abs{pos.x() * SEEX + local.x(), pos.y() * SEEY + local.y(), pos.z()};
-                    _log->push( {coop_event_type::field_expired, _abs, _fd_type_before.to_i()} );
+                    _log->push( {
+                        .type = coop_event_type::field_expired, .pos = _abs,
+                        .value = _fd_type_before.to_i(), .creature_id = _intensity_before} );
                 }
                 --sm.field_count;
                 const auto &cur_fd_type = cur_fd_type_id.obj();
@@ -1728,14 +1730,17 @@ std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
                 _abs{pos.x() * SEEX + local.x(), pos.y() * SEEY + local.y(), pos.z()};
                 if( !cur.is_field_alive() ) {
                     // Field died during processing.
-                    _log->push( {coop_event_type::field_expired, _abs, _fd_type_before.to_i()} );
+                    _log->push( {
+                        .type = coop_event_type::field_expired, .pos = _abs,
+                        .value = _fd_type_before.to_i(), .creature_id = _intensity_before} );
                 } else if( cur.get_field_intensity() != _intensity_before ) {
                     // Intensity changed (upgrade, burn, decay).
                     // value=type, creature_id=new_intensity — both needed to identify field at
                     // multi-field tiles.
                     _log->push( {
-                        coop_event_type::field_changed, _abs, cur.get_field_type().to_i(),
-                        cur.get_field_intensity()} );
+                        .type = coop_event_type::field_changed, .pos = _abs,
+                        .value = cur.get_field_type().to_i(),
+                        .creature_id = cur.get_field_intensity()} );
                 }
             }
             if( !cur.is_field_alive() ) {
