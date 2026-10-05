@@ -74,6 +74,10 @@ option(BUILD_SDL3 "Force builds SDL3 and its modules from source, instead of usi
 option(BUILD_SHADERCROSS "Build SDL_shadercross from source when shadercross is not on PATH" "ON")
 if(WIN32)
     set(SHADER_TARGETS "dxil;spirv;msl" CACHE STRING "Shaders to build (dxil/spirv/msl)")
+elseif(APPLE)
+    # Metal only: a fresh build dir otherwise demands data/shaders/*.spv, which
+    # are not checked in, and fails configure.
+    set(SHADER_TARGETS "msl" CACHE STRING "Shaders to build (dxil/spirv/msl)")
 else()
     set(SHADER_TARGETS "spirv;msl" CACHE STRING "Shaders to build (dxil/spirv/msl)")
 endif()
