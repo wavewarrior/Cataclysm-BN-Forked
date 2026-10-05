@@ -402,7 +402,7 @@ Installation prefix for binaries, resources, and documentation files.
 | `CATA_CCACHE`         | `ON`                                    | Try to find and build with ccache.                                                |
 | `BUILD_SDL3`          | `OFF`                                   | Force Build SDL3 instead of using system libraries.                               |
 | `BUILD_SHADERCROSS`   | `ON`                                    | Build SDL_shadercross from source when shadercross is not on PATH.                |
-| `SHADER_TARGETS`      | `spirv;msl` (`dxil;spirv;msl` on WIN32) | Shaders to build.                                                                 |
+| `SHADER_TARGETS`      | `spirv;msl` (`dxil;spirv;msl` on WIN32, `msl` on macOS) | Shaders to build. On macOS the DXC used by SDL_shadercross is a SHA-pinned prebuilt, not built from source. |
 | `DYNAMIC_LINKING`     | `ON`                                    | Use dynamic linking. Or use static to remove MinGW dependency instead.            |
 | `LINKER`              | `" "`                                   | Custom Linker to use                                                              |
 | `BACKTRACE`           | `ON`                                    | Support for printing stack backtraces on crash.                                   |
