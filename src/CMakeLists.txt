@@ -147,6 +147,12 @@ function(setup_common_target_properties target_name)
         target_compile_definitions(${target_name} PUBLIC USE_TRACY)
     endif ()
 
+    # Absolute path here is deliberate: clang records it in the .pch AST and
+    # reopens it when loading the PCH, so a PCH restored from another worktree's
+    # cache entry would hard-error once that worktree is gone. Keeping the path
+    # absolute makes the PCH producer miss across roots (each root builds its own
+    # PCH, a few seconds) while ccache still serves every dependent TU within a
+    # root thanks to pch_defines,time_macros sloppiness.
     target_precompile_headers(${target_name} PRIVATE
         ${CMAKE_SOURCE_DIR}/pch/main-pch.hpp)
 endfunction()

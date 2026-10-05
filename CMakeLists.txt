@@ -340,6 +340,14 @@ if (NOT MSVC)
         set(CATA_WARNINGS "${CATA_WARNINGS} -Wredundant-decls")
     endif ()
     set(CATA_OTHER_FLAGS "${CATA_OTHER_FLAGS} -fsigned-char -fno-builtin-std-forward_like")
+    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        # Deterministic PCH bytes: clang embeds a timestamp in .pch files by default,
+        # which defeats ccache hits for every dependent TU when the PCH is rebuilt in
+        # another worktree/build dir. Required by ccache's PCH support. SHELL: keeps
+        # the pair together and off link lines. GCC CI must not see -Xclang.
+        # see https://ccache.dev/manual/latest.html#_precompiled_headers
+        add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:SHELL:-Xclang -fno-pch-timestamp>")
+    endif ()
     add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-finite-math-only>)
     # Add debug symbols for non-release builds or when backtrace is enabled
     if (BACKTRACE OR NOT RELEASE)
@@ -377,6 +385,29 @@ endif ()
 #set(THREADS_USE_PTHREADS_WIN32 True)
 set(CMAKE_THREAD_PREFER_PTHREAD True)
 find_package(Threads REQUIRED)
+
+# ccache must be wired before any FetchContent/add_subdirectory so vendored
+# deps (SDL3, shadercross/DXC/LLVM, ...) also get a worktree-independent cache key;
+# the launcher is captured per target at creation time.
+find_program(CCACHE_FOUND ccache)
+if (CCACHE_FOUND AND CATA_CCACHE)
+    # base_dir/nohashdir make paths relative, enabling cache sharing across worktrees
+    # see https://ccache.dev/manual/latest.html#_configuration_options
+    # pch_defines,time_macros: without them ccache refuses every translation unit that
+    # uses a precompiled header ("Could not use precompiled header"), i.e. all of src/ and tests/.
+    # see https://ccache.dev/manual/latest.html#_precompiled_headers
+    set(CATA_CCACHE_CMD
+        "${CMAKE_COMMAND}" -E env
+        "CCACHE_BASEDIR=${CMAKE_SOURCE_DIR}"
+        "CCACHE_NOHASHDIR=true"
+        "CCACHE_SLOPPINESS=pch_defines,time_macros"
+        "${CCACHE_FOUND}"
+    )
+
+    # Compiler launchers only: ccache cannot cache link steps.
+    set(CMAKE_C_COMPILER_LAUNCHER   ${CATA_CCACHE_CMD})
+    set(CMAKE_CXX_COMPILER_LAUNCHER ${CATA_CCACHE_CMD})
+endif ()
 
 if (USE_TRACY)
 
@@ -986,24 +1017,6 @@ endif ()
 
 if (USE_XDG_DIR)
     add_definitions(-DUSE_XDG_DIR)
-endif ()
-
-find_program(CCACHE_FOUND ccache)
-if (CCACHE_FOUND AND CATA_CCACHE)
-    # Configure ccache for git worktrees
-    # Set base_dir to make paths relative, enabling cache sharing across worktrees
-    # see https://ccache.dev/manual/latest.html#_configuration_options
-    set(CATA_CCACHE_CMD
-        "${CMAKE_COMMAND}" -E env
-        "CCACHE_BASEDIR=${CMAKE_SOURCE_DIR}"
-        "CCACHE_NOHASHDIR=true"
-        "${CCACHE_FOUND}"
-    )
-
-    set(CMAKE_C_COMPILER_LAUNCHER   ${CATA_CCACHE_CMD})
-    set(CMAKE_CXX_COMPILER_LAUNCHER ${CATA_CCACHE_CMD})
-    set(CMAKE_C_LINKER_LAUNCHER     ${CATA_CCACHE_CMD})
-    set(CMAKE_CXX_LINKER_LAUNCHER   ${CATA_CCACHE_CMD})
 endif ()
 
 # --- RmlUi (player-facing menu UI layer — spike) ---
