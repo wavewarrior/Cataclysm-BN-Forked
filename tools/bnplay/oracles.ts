@@ -75,6 +75,22 @@ function describe(value: unknown): string {
   return text.length > 60 ? text.slice(0, 57) + "..." : text
 }
 
+/**
+ * The value a Trial oracle's `field` names in a response: a top-level key, or a path into an
+ * object member with dots (`scene.status`). `found` is false when the response has no such field.
+ */
+function lookup(response: DriverResponse, field: string): { found: boolean; value?: unknown } {
+  if (field in response) return { found: true, value: response[field] }
+  let value: unknown = response
+  for (const part of field.split(".")) {
+    if (typeof value !== "object" || value === null || Array.isArray(value) || !(part in value)) {
+      return { found: false }
+    }
+    value = (value as Record<string, unknown>)[part]
+  }
+  return { found: true, value }
+}
+
 type Tracked = { spec: OracleSpec; failed?: FirstFail; satisfied: boolean }
 
 export class OracleRun {
@@ -159,8 +175,9 @@ export class OracleRun {
 
   #checkOracle(tracked: Tracked, at: Omit<FirstFail, "why">, response: DriverResponse): void {
     const { spec } = tracked
-    if (tracked.failed || tracked.satisfied || !(spec.field in response)) return
-    const actual = response[spec.field]
+    if (tracked.failed || tracked.satisfied) return
+    const { found, value: actual } = lookup(response, spec.field)
+    if (!found) return
     const holding = holds(spec.operator, actual, spec.value)
     const expectation = `${spec.field} ${spec.operator} ${describe(spec.value)}`
     if (spec.mode === "always") {

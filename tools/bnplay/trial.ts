@@ -32,6 +32,12 @@ export type Trial = {
    */
   attachView?: number
   /**
+   * Name of a Scene (a Lua script that builds a situation in the world) to run once the Episode
+   * has booted and been seeded, before its first state. The response to `run_scene` is in the
+   * transcript and in every oracle's reach as the `scene` field. Absent: none runs.
+   */
+  scene?: string
+  /**
    * Commands the Trial expects to work: a response to one of them with outcome `unsupported` or
    * `no_effect` fails the Episode. An entry is a command (`move`) or an `action` by name
    * (`action:pause`).
@@ -76,6 +82,7 @@ const FIELDS = [
   "wall_clock_limit_s",
   "turn_limit",
   "attach_view",
+  "scene",
   "expected_commands",
   "oracle",
 ]
@@ -84,6 +91,9 @@ const ORACLE_FIELDS = ["name", "field", "operator", "value", "mode", "severity"]
 
 /** What a fixture name may look like: it names a directory in the fixture library. */
 export const FIXTURE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
+
+/** What a Scene name may look like: it names a file in the Scenes directory. */
+export const SCENE_NAME = /^[A-Za-z0-9_-]+$/
 
 function fail(field: string, expectation: string): never {
   throw new TrialError(`Trial field \`${field}\` ${expectation}`)
@@ -225,6 +235,12 @@ export function parseTrial(source: string): Trial {
     wallClockLimitS: (wallClock as number | undefined) ?? DEFAULT_WALL_CLOCK_LIMIT_S,
     turnLimit: integer(table, "turn_limit", 1),
     attachView: integer(table, "attach_view", 1),
+    scene: text(
+      table,
+      "scene",
+      SCENE_NAME,
+      "must be a plain Scene name (letters, digits, `_` and `-`)",
+    ),
     expectedCommands: (expected as string[] | undefined) ?? [],
     oracles: oracleSpecs(table.oracle),
   }

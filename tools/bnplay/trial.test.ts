@@ -8,6 +8,7 @@ Deno.test("a Trial naming only a fixture parses with the default wall-clock limi
   assertEquals(trial.seed, undefined)
   assertEquals(trial.turnLimit, undefined)
   assertEquals(trial.attachView, undefined)
+  assertEquals(trial.scene, undefined)
 })
 
 Deno.test("a full Trial parses every field", () => {
@@ -19,6 +20,7 @@ Deno.test("a full Trial parses every field", () => {
     wall_clock_limit_s = 90
     turn_limit = 200
     attach_view = 3
+    scene = "lightone"
   `)
   assertEquals(trial, {
     fixture: "bairdford",
@@ -28,6 +30,7 @@ Deno.test("a full Trial parses every field", () => {
     wallClockLimitS: 90,
     turnLimit: 200,
     attachView: 3,
+    scene: "lightone",
     expectedCommands: [],
     oracles: [],
   })
@@ -40,6 +43,16 @@ Deno.test("attach_view names the radius of the view attached to every response",
     const toml = `fixture = "a"\nattach_view = ${text}`
     const err = assertThrows(() => parseTrial(toml), TrialError, undefined, toml)
     assertEquals(err.message.includes("attach_view"), true, `${toml} -> ${err.message}`)
+  }
+})
+
+Deno.test("scene names the Scene run when the Episode starts", () => {
+  assertEquals(parseTrial(`fixture = "a"\nscene = "lightone"`).scene, "lightone")
+  assertEquals(parseTrial(`fixture = "a"\nscene = "shadow-test_2"`).scene, "shadow-test_2")
+  for (const text of ['""', '"../x"', '"a/b"', '"x.lua"', "3", "true"]) {
+    const toml = `fixture = "a"\nscene = ${text}`
+    const err = assertThrows(() => parseTrial(toml), TrialError, undefined, toml)
+    assertEquals(err.message.includes("scene"), true, `${toml} -> ${err.message}`)
   }
 })
 

@@ -139,6 +139,7 @@ export class Episode {
       userdir: this.#userdir,
       world: this.world,
       basepath: this.#config.basepath,
+      scenesDir: this.#config.scenesDir,
       firstTimeoutMs: this.#config.bootTimeoutMs,
       requestTimeoutMs: this.#config.stepTimeoutMs,
       trace: (entry) => {
@@ -171,6 +172,14 @@ export class Episode {
         })
         if (attached.status !== "ok") {
           throw new Error(`the game refused the Trial's attach_view: ${JSON.stringify(attached)}`)
+        }
+      }
+      // A Scene that fails is the Trial's result to judge (an oracle can read `scene.status`); only
+      // a game that cannot run the request at all, such as an unknown Scene, ends the boot.
+      if (this.#trial.scene !== undefined) {
+        const ran = await this.#driver!.send({ cmd: "run_scene", name: this.#trial.scene })
+        if (ran.status !== "ok") {
+          throw new Error(`the game refused the Trial's scene: ${JSON.stringify(ran)}`)
         }
       }
       const state = await this.#driver!.send({ cmd: "state" })

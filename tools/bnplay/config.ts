@@ -7,6 +7,8 @@
  *                           (default tools/bnplay/fixtures, gitignored)
  *   BNPLAY_BINARY           game binary (default out/build/osx-arm-slim/src/cataclysm-bn-tiles)
  *   BNPLAY_BASEPATH         `--basepath` for the game (default the repo root)
+ *   BNPLAY_SCENES           directory of the Lua Scenes `run_scene` and a Trial's `scene` run
+ *                           (default tools/visual_verify/scenes)
  *   BNPLAY_BOOT_TIMEOUT_MS  how long a game may take to answer its first ping (default 60000)
  *   BNPLAY_STEP_TIMEOUT_MS  how long one request may take before the game counts as hung
  *                           (default 30000)
@@ -33,6 +35,7 @@ export type Config = {
   fixtures: string
   binary: string
   basepath: string
+  scenesDir: string
   bootTimeoutMs: number
   stepTimeoutMs: number
   maxSessions: number
@@ -66,6 +69,7 @@ export function loadConfig(): Config {
     binary: Deno.env.get("BNPLAY_BINARY") ??
       join(REPO_ROOT, "out", "build", "osx-arm-slim", "src", "cataclysm-bn-tiles"),
     basepath: Deno.env.get("BNPLAY_BASEPATH") ?? REPO_ROOT,
+    scenesDir: Deno.env.get("BNPLAY_SCENES") ?? join(REPO_ROOT, "tools", "visual_verify", "scenes"),
     bootTimeoutMs: positiveInteger("BNPLAY_BOOT_TIMEOUT_MS", 60_000),
     stepTimeoutMs: positiveInteger("BNPLAY_STEP_TIMEOUT_MS", 30_000),
     maxSessions: positiveInteger("BNPLAY_MAX_SESSIONS", 2),
