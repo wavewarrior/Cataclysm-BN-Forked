@@ -3,6 +3,7 @@
 #define MINICORO_IMPL
 #define MCO_NO_DEBUG
 #include "coop_fiber.h"
+#include "driver_loop.h"
 
 #include "minicoro.h"
 
@@ -19,8 +20,9 @@ thread_local input_event coop_fiber::pending_event_;
 
 namespace
 {
-// An exception that escaped a fiber function, parked until resume() rethrows it on the
-// caller's stack: it must not unwind past the coroutine's own stack.
+// An exception that escaped a fiber function while the agent driver serves, parked until
+// resume() rethrows it on the caller's stack: it must not unwind past the coroutine's own stack.
+// Outside the driver nothing is caught here, so co-op fibers behave as they always did.
 thread_local std::exception_ptr fiber_error;
 } // namespace
 
@@ -31,6 +33,10 @@ thread_local std::exception_ptr fiber_error;
 auto coop_fiber::entry_( mco_coro* co ) -> void
 {
     auto* self = static_cast<coop_fiber *>( mco_get_user_data( co ) );
+    if( !driver_mode_active() ) {
+        self->fn_();
+        return;
+    }
     try {
         self->fn_();
     } catch( ... ) {
