@@ -165,7 +165,9 @@ TEST_CASE("driver_items_commands_map_game_results_to_outcomes", "[driver]") {
         CAPTURE(swapped.result.outcome, swapped.result.detail, u.primary_weapon().typeId().str());
         CHECK(swapped.result.outcome == "completed");
         CHECK(swapped.spent > 0);
-        CHECK(u.primary_weapon().typeId() == itype_id("rock"));
+        const driver_items::found_item wielded = driver_items::find_item(rock_id);
+        REQUIRE(wielded.error.empty());
+        CHECK(u.is_wielding(*wielded.ref.get()));
         CHECK(u.has_item_with([](const item& it) { return it.typeId() == itype_id("jeans"); }));
     }
 
