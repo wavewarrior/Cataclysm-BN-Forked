@@ -3,11 +3,13 @@
 
 The contract suites run against this and against the real binary, so the supervisor can be tested
 end to end without a 7 to 10 second, 1 GB boot. It is started exactly like the game (the fd shim
-execs it with `--driver-fd N` appended) and accepts the game's other flags.
+execs it with `--driver-fd N` appended) and accepts the game's other flags, including
+`--driver-deny-list <file>`.
 
-Protocol commands (same as the real driver): `ping`, `state`, `wait`, `move`, `seed`, `quit`.
-The mock world is the contract's fixture: the avatar is walled in on every compass side and cannot
-go up, so a move is blocked or refused and costs no time; only `wait` spends turns.
+Protocol commands (same as the real driver): `ping`, `state`, `wait`, `move`, `seed`, `action`,
+`key`, `quit`. The mock world is the contract's fixture: the avatar is walled in on every compass
+side and cannot go up, so a move is blocked or refused and costs no time; `wait` and a raw `pause`
+spend turns; `inventory`, `look` and `map` open menus that a `key` answers.
 
 Test hooks (mock only, never part of the protocol): `info` reports the user directory and world the
 mock was started with, `dirty` writes a file into that world, `spawn_child` starts a grandchild in
@@ -26,11 +28,21 @@ TURN_CAP = 1000
 SEED_LIMIT = 2**32
 COMPASS = ("n", "ne", "e", "se", "s", "sw", "w", "nw")
 VITALS = {"hp": 100, "pain": 0, "stamina": 100, "hunger": 0, "thirst": 0}
+MENUS = ("inventory", "look", "map")
+# Actions that read input with no modal to answer it: the real game hangs on them, the mock's
+# guard reports them as `unsupported` instead, as the real driver's no-fiber guard does.
+BLOCKING_READS = ("craft", "drop", "eat", "apply", "wear", "read")
+FREE_ACTIONS = ("pause",)
+# The deny list a driver started without `--driver-deny-list` uses.
+DEFAULT_DENY = BLOCKING_READS
+NAMED_KEYS = ("ESC", "ENTER", "SPACE", "TAB", "UP", "DOWN", "LEFT", "RIGHT")
 
 
 class Game:
-    def __init__(self) -> None:
+    def __init__(self, deny: dict[str, str]) -> None:
         self.turn = START_TURN
+        self.deny = deny
+        self.menu: str | None = None
         # The message log; an identical message in a row merges into one entry with a count.
         self.log: list[list] = []
 
@@ -52,8 +64,15 @@ def is_int(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+def load_deny_list(path: str | None) -> dict[str, str]:
+    if path is None:
+        return {action: "reads input with no modal fiber" for action in DEFAULT_DENY}
+    with open(path) as f:
+        return {entry["action"]: entry.get("why", "") for entry in json.load(f)["deny"]}
+
+
 def observation(rid: int, game: Game, **fields) -> dict:
-    return {
+    obs = {
         "id": rid,
         "status": "ok",
         "outcome": "completed",
@@ -64,26 +83,36 @@ def observation(rid: int, game: Game, **fields) -> dict:
         "new_messages": [],
         "prompt": None,
         **VITALS,
-        **fields,
     }
+    if game.menu:
+        obs.update(outcome="awaiting_input", boundary="needs_input", prompt=game.menu)
+    obs.update(fields)
+    return obs
 
 
 def error(rid: int | None, message: str) -> dict:
     return {"id": rid, "status": "error", "error": message}
 
 
+def menu_open(rid: int, game: Game) -> dict:
+    return error(rid, f"the {game.menu} menu is open: answer it with `key` first")
+
+
 def wait(rid: int, game: Game, req: dict) -> dict:
+    if game.menu:
+        return menu_open(rid, game)
     turns = req.get("turns")
     if not is_int(turns) or turns < 1:
         return error(rid, "`turns` must be a positive integer")
-    spent = min(turns, TURN_CAP)
-    game.turn += spent
+    game.turn += min(turns, TURN_CAP)
     if turns > TURN_CAP:
         return observation(rid, game, outcome="interrupted", reason="turn_cap", time_passed=True)
     return observation(rid, game, time_passed=True)
 
 
 def move(rid: int, game: Game, req: dict) -> dict:
+    if game.menu:
+        return menu_open(rid, game)
     direction = req.get("dir")
     if direction in COMPASS:
         message = game.say("There is a wall in the way.")
@@ -101,6 +130,36 @@ def seed(rid: int, req: dict) -> dict:
     return {"id": rid, "status": "ok", "seed": value}
 
 
+def action(rid: int, game: Game, req: dict) -> dict:
+    if game.menu:
+        return menu_open(rid, game)
+    name = req.get("name")
+    if name in game.deny:
+        return observation(
+            rid, game, outcome="unsupported", reason="deny_list", detail=game.deny[name]
+        )
+    if name in BLOCKING_READS:
+        return observation(rid, game, outcome="unsupported", reason="blocking_read")
+    if name in MENUS:
+        game.menu = name
+        return observation(rid, game)
+    if name in FREE_ACTIONS:
+        game.turn += 1
+        return observation(rid, game, time_passed=True)
+    return error(rid, f"unknown action {name!r}")
+
+
+def key(rid: int, game: Game, req: dict) -> dict:
+    name = req.get("key")
+    if not isinstance(name, str) or not (name in NAMED_KEYS or len(name) == 1):
+        return error(rid, "`key` must be a key name such as ESC, ENTER or a single character")
+    if not game.menu:
+        return error(rid, "no menu is open to answer")
+    if name == "ESC":
+        game.menu = None
+    return observation(rid, game)
+
+
 def main() -> int:
     argv = sys.argv[1:]
     fd = option(argv, "--driver-fd")
@@ -109,10 +168,15 @@ def main() -> int:
         return 2
     userdir = option(argv, "--userdir") or ""
     world = option(argv, "--world") or ""
+    try:
+        deny = load_deny_list(option(argv, "--driver-deny-list"))
+    except (OSError, ValueError, KeyError) as e:
+        print(f"mock_driver: cannot load the deny list: {e}", file=sys.stderr)
+        return 2
     # Output on the game's own stdout must never reach the protocol channel.
     print("MOCK STDOUT NOISE (must never reach the client)", flush=True)
     chan = os.fdopen(int(fd), "r+b", buffering=0)
-    game = Game()
+    game = Game(deny)
 
     def reply(resp: dict) -> None:
         chan.write((json.dumps(resp) + "\n").encode())
@@ -141,6 +205,10 @@ def main() -> int:
             reply(move(rid, game, req))
         elif cmd == "seed":
             reply(seed(rid, req))
+        elif cmd == "action":
+            reply(action(rid, game, req))
+        elif cmd == "key":
+            reply(key(rid, game, req))
         elif cmd == "quit":
             reply({"id": rid, "status": "ok"})
             return 0
