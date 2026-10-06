@@ -298,7 +298,7 @@ Deno.test("fixture list flags a baseline stale once the fixture or its mod set c
     assert(modded.stale![0].includes("mod set"), modded.stale![0])
     assert(modded.stale![0].includes("dda"), modded.stale![0])
 
-    // Both at once name both; reformatting the same mods is not a change.
+    // Both at once name both; an empty mod list is the same as having no mods.json.
     await Deno.writeTextFile(player, original + "again\n")
     assertEquals((await only()).stale?.length, 2)
     await Deno.writeTextFile(player, original)
@@ -312,6 +312,17 @@ Deno.test("fixture list flags a baseline stale once the fixture or its mod set c
     assertEquals((await only()).baseline, "stale")
     assertEquals((await baseline(sandbox, "aging")).code, 0)
     assertEquals((await only()).baseline, "fresh")
+  })
+})
+
+Deno.test("Finder's .DS_Store in a fixture does not make its baseline stale", async () => {
+  await withLoggedSave(NOISY, async (sandbox, save) => {
+    await addFixtureNamed(sandbox, save, "browsed")
+    assertEquals((await baseline(sandbox, "browsed")).code, 0)
+    const world = join(sandbox.fixtures, "browsed")
+    await Deno.writeTextFile(join(world, ".DS_Store"), "viewed in Finder\n")
+    await Deno.writeTextFile(join(world, "maps", ".DS_Store"), "viewed in Finder\n")
+    assertEquals((await list(sandbox))[0].baseline, "fresh")
   })
 })
 

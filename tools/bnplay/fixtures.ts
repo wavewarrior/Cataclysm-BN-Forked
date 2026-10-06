@@ -76,7 +76,10 @@ export async function addFixture(
 
 /** What a baseline is a baseline OF: the fixture's files and the mods its world loads. */
 export type FixtureIdentity = {
-  /** Hash over every file of the world except `mods.json`, by path, size and content. */
+  /**
+   * Hash over every file of the world by path, size and content, apart from `mods.json` (see
+   * `mods`) and the `.DS_Store` files Finder drops into any folder it shows.
+   */
   digest: string
   /** The world's mod list in a canonical form: `[]` when `mods.json` is absent or empty. */
   mods: string
@@ -101,7 +104,9 @@ async function fileDigest(path: string): Promise<string> {
 
 async function describeTree(root: string, relative = ""): Promise<string[]> {
   const entries: Deno.DirEntry[] = []
-  for await (const entry of Deno.readDir(join(root, relative))) entries.push(entry)
+  for await (const entry of Deno.readDir(join(root, relative))) {
+    if (entry.name !== ".DS_Store") entries.push(entry)
+  }
   entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
   const described: string[] = []
   for (const entry of entries) {
