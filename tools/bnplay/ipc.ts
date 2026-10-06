@@ -8,6 +8,7 @@ import type { DriverRequest } from "./client.ts"
 import { REPO_ROOT, socketPath } from "./config.ts"
 
 export type DaemonRequest =
+  | { op: "ping" }
   | { op: "start"; trial: string }
   | { op: "step"; session: string; request: DriverRequest }
   | { op: "stop"; session: string }
@@ -44,11 +45,10 @@ export async function call(home: string, request: DaemonRequest): Promise<Daemon
   }
 }
 
+/** True when a daemon owns this home and answers a ping. */
 export async function daemonRunning(home: string): Promise<boolean> {
   try {
-    const conn = await Deno.connect({ transport: "unix", path: socketPath(home) })
-    conn.close()
-    return true
+    return (await call(home, { op: "ping" })).ok
   } catch {
     return false
   }

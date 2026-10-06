@@ -29,7 +29,7 @@
     },
     "test:bnplay": {
       "description": "bnplay tests: the driver contract against the mock and the real game binary, the Trial parser and the CLI end to end (the real binary needs a built cataclysm-bn-tiles and a Bairdford save)",
-      "command": "deno test --allow-run --allow-env --allow-read --allow-write tools/bnplay/",
+      "command": "deno test --allow-run --allow-env --allow-read --allow-write --allow-net tools/bnplay/",
     },
     "bnplay": {
       "description": "agent playtest supervisor: start, step and stop Episodes (see tools/bnplay/main.ts)",

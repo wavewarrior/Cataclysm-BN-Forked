@@ -49,7 +49,19 @@ class Daemon {
       Deno.addSignalListener(signal, () => void shutdown())
     }
 
-    for await (const conn of listener) void this.#serveConnection(conn, shutdown)
+    for (;;) {
+      let conn: Deno.Conn
+      try {
+        conn = await listener.accept()
+      } catch (e) {
+        if (e instanceof Deno.errors.BadResource) return // the listener was closed
+        // macOS fails accept() with EINVAL when a peer (a liveness probe) hung up before it was
+        // accepted; that must not take the daemon, and the games it holds, down.
+        this.#log(`accept failed: ${(e as Error).message}`)
+        continue
+      }
+      void this.#serveConnection(conn, shutdown)
+    }
   }
 
   async #serveConnection(conn: Deno.Conn, shutdown: () => Promise<void>): Promise<void> {
@@ -90,6 +102,8 @@ class Daemon {
           return { ok: true, result: await this.#session(request.session).step(request.request) }
         case "stop":
           return { ok: true, result: await this.#session(request.session).stop() }
+        case "ping":
+          return { ok: true, result: {} }
         case "shutdown":
           await this.#endAll()
           return { ok: true, result: {} }

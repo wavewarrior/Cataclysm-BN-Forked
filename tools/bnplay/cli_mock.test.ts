@@ -176,6 +176,21 @@ Deno.test("a bad Trial is refused with a clear error and no game is started", as
   })
 })
 
+Deno.test("clients that hang up before they are served do not take the daemon down", async () => {
+  await withSandbox(async (sandbox) => {
+    const { session } = await start(sandbox)
+    const socket = join(sandbox.home, "daemon.sock")
+    await Promise.all(
+      Array.from(
+        { length: 100 },
+        () => Deno.connect({ transport: "unix", path: socket }).then((conn) => conn.close()),
+      ),
+    )
+    // The Episode, and the daemon holding it, are still there.
+    assertEquals((await step(sandbox, session, "state")).json?.status, "ok")
+  })
+})
+
 Deno.test("step and stop on an unknown session are refused", async () => {
   await withSandbox(async (sandbox) => {
     for (const args of [["step", "nosuch", '{"cmd":"ping"}'], ["stop", "nosuch"]]) {
