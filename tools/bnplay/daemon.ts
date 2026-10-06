@@ -18,6 +18,8 @@ class Daemon {
   readonly #sessions = new Map<string, Episode>()
   /** Starts that passed the cap check and have not yet become sessions. */
   #starting = 0
+  /** Of those, the starts of a windowed Trial: only one window may be open at a time. */
+  #startingWindowed = 0
   readonly #log: (message: string) => void
 
   constructor(config: Config) {
@@ -196,17 +198,42 @@ class Daemon {
       throw new HarnessError(`cannot read the Trial file ${trialPath}`)
     }
     const trial = parseTrial(text)
-    const fixture = join(this.#config.fixtures, trial.fixture)
-    if (!(await Deno.stat(fixture).then((s) => s.isDirectory, () => false))) {
-      throw new HarnessError(`fixture ${trial.fixture} not found in ${this.#config.fixtures}`)
+    // Checked and taken before the next await, as the cap is: concurrent starts cannot both pass.
+    if (trial.window) this.#refuseSecondWindow()
+    if (trial.window) this.#startingWindowed++
+    try {
+      const fixture = join(this.#config.fixtures, trial.fixture)
+      if (!(await Deno.stat(fixture).then((s) => s.isDirectory, () => false))) {
+        throw new HarnessError(`fixture ${trial.fixture} not found in ${this.#config.fixtures}`)
+      }
+      if (!(await Deno.stat(this.#config.binary).then((s) => s.isFile, () => false))) {
+        throw new HarnessError(`game binary not found: ${this.#config.binary}`)
+      }
+      const id = crypto.randomUUID().slice(0, 8)
+      const episode = await Episode.start(this.#config, trial, id)
+      this.#sessions.set(id, episode)
+      return { session: id, transcript: episode.transcriptPath, boot_ms: episode.bootMs }
+    } finally {
+      if (trial.window) this.#startingWindowed--
     }
-    if (!(await Deno.stat(this.#config.binary).then((s) => s.isFile, () => false))) {
-      throw new HarnessError(`game binary not found: ${this.#config.binary}`)
-    }
-    const id = crypto.randomUUID().slice(0, 8)
-    const episode = await Episode.start(this.#config, trial, id)
-    this.#sessions.set(id, episode)
-    return { session: id, transcript: episode.transcriptPath, boot_ms: episode.bootMs }
+  }
+
+  /**
+   * Two game windows at once would occlude each other and silently break the captures, so a
+   * windowed Trial starts only while no other windowed session is live or booting. Windowless
+   * sessions are not counted.
+   */
+  #refuseSecondWindow(): void {
+    const live = [...this.#sessions.values()].find((e) => e.windowed && !e.ended)
+    if (!live && this.#startingWindowed === 0) return
+    const which = live ? `session ${live.id} is` : "another windowed session is still booting and"
+    throw new HarnessError(
+      `a windowed session is already running: ${which} using the one game window ` +
+        `(only one windowed session runs at a time); stop it (bnplay stop ${
+          live?.id ?? "<session>"
+        }) ` +
+        `or start a windowless Trial, which is not limited this way`,
+    )
   }
 
   /**

@@ -291,6 +291,11 @@ export class Episode {
     return this.#finishing ?? Promise.resolve()
   }
 
+  /** True for an Episode with a real game window (a renderer Trial). */
+  get windowed(): boolean {
+    return this.#trial.window !== undefined
+  }
+
   /** Kills the Episode now, whatever it is doing. */
   kill(reason: EndReason): Promise<void> {
     return this.#finish(reason)
