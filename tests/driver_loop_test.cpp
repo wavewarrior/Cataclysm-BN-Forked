@@ -432,3 +432,123 @@ TEST_CASE("driver_loop_the_avatar_dying_ends_the_response_with_died", "[driver]"
         CHECK(each->text("outcome") == "died");
     }
 }
+
+/// Rows of the grid a response carries: in its `view` member when `nested`, else at top level.
+/// -1 when there is none.
+auto grid_rows(const reply& r, bool nested) -> int {
+    std::istringstream in(r.line);
+    JsonIn jsin(in);
+    JsonObject jo = jsin.get_object();
+    jo.allow_omitted_members();
+    if (!nested) { return jo.has_array("grid") ? static_cast<int>(jo.get_array("grid").size()) : -1; }
+    if (!jo.has_object("view")) { return -1; }
+    JsonObject view = jo.get_object("view");
+    view.allow_omitted_members();
+    return view.has_array("grid") ? static_cast<int>(view.get_array("grid").size()) : -1;
+}
+
+TEST_CASE("driver_loop_view_answers_in_no_time_and_rejects_a_bad_radius", "[driver]") {
+    avatar& u = setup();
+    const int turn_before = to_turn<int>(calendar::turn);
+    const int moves_before = u.moves;
+
+    const std::vector<reply> out = converse({
+        R"({"id":1,"cmd":"view"})",
+        R"({"id":2,"cmd":"view","radius":2})",
+        R"({"id":3,"cmd":"view","radius":0})",
+        R"({"id":4,"cmd":"view","radius":11})",
+        R"({"id":5,"cmd":"view","radius":2.5})",
+        R"({"id":6,"cmd":"view","radius":"3"})",
+        R"({"id":7,"cmd":"state"})",
+    });
+    CHECK(out[0].text("status") == "ok");
+    CHECK(out[0].text("outcome") == "completed");
+    CHECK_FALSE(out[0].flag("time_passed"));
+    CHECK(out[0].number("turn") == turn_before);
+    CHECK(out[0].number("radius") == 5);
+    CHECK(grid_rows(out[0], false) == 11);
+    CHECK_FALSE(out[0].object_has("view"));
+    CHECK(grid_rows(out[1], false) == 5);
+    for (const size_t i : {2, 3, 4, 5}) {
+        CAPTURE(i, out[i].line);
+        CHECK(out[i].text("status") == "error");
+        CHECK_FALSE(out[i].text("error").empty());
+    }
+    CHECK(out[6].number("turn") == turn_before);
+    CHECK(u.moves == moves_before);
+}
+
+TEST_CASE("driver_loop_attach_view_adds_the_view_to_every_observation", "[driver]") {
+    setup();
+    const std::vector<reply> out = converse({
+        R"({"id":1,"cmd":"state"})",
+        R"({"id":2,"cmd":"attach_view","radius":-1})",
+        R"({"id":3,"cmd":"attach_view","radius":11})",
+        R"({"id":4,"cmd":"attach_view"})",
+        R"({"id":5,"cmd":"state"})",
+        R"({"id":6,"cmd":"attach_view","radius":2})",
+        R"({"id":7,"cmd":"state"})",
+        R"({"id":8,"cmd":"wait","turns":2})",
+        R"({"id":9,"cmd":"query","topic":"inventory"})",
+        R"({"id":10,"cmd":"view","radius":3})",
+        R"({"id":11,"cmd":"attach_view","radius":0})",
+        R"({"id":12,"cmd":"state"})",
+    });
+    CHECK(grid_rows(out[0], true) == -1);
+    for (const size_t i : {1, 2, 3}) {
+        CAPTURE(i, out[i].line);
+        CHECK(out[i].text("status") == "error");
+    }
+    CHECK(grid_rows(out[4], true) == -1);
+    CHECK(out[5].text("status") == "ok");
+    CHECK(grid_rows(out[6], true) == 5);
+    CHECK(grid_rows(out[6], false) == -1);
+    CHECK(grid_rows(out[7], true) == 5);
+    // A query's answer carries the view too, within what its own list leaves of the ceiling.
+    CHECK(out[8].text("status") == "ok");
+    CHECK(grid_rows(out[8], true) == 5);
+    // A view asked for is the asked-for window, not the attached one nested in itself.
+    CHECK(grid_rows(out[9], false) == 7);
+    CHECK_FALSE(out[9].object_has("view"));
+    CHECK(out[10].text("status") == "ok");
+    CHECK(grid_rows(out[11], true) == -1);
+}
+
+TEST_CASE("driver_loop_attached_view_does_not_outlive_the_session", "[driver]") {
+    setup();
+    converse({R"({"id":1,"cmd":"attach_view","radius":3})", R"({"id":2,"cmd":"state"})"});
+    const std::vector<reply> out = converse({R"({"id":1,"cmd":"state"})"});
+    CHECK(grid_rows(out[0], true) == -1);
+}
+
+TEST_CASE("driver_loop_attached_view_keeps_the_response_within_the_ceiling_and_says_when_it_cut", "[driver]") {
+    avatar& u = setup();
+    for (int i = 0; i < 30; ++i) { get_map().add_item_or_charges(centre + tripoint_rel_ms(1 + i % 6, i / 6 - 2, 0), item::spawn("tank_gun_auto")); }
+    for (int i = 0; i < 14; ++i) { spawn_test_monster("mon_zombie", centre + tripoint_rel_ms(-1 - i % 7, -3 + i / 7 * 3 + i % 2, 0)); }
+    // A full inventory query is the longest answer the lean part of a response can carry.
+    for (int i = 0; i < 30; ++i) { u.i_add(item::spawn("tank_gun_auto")); }
+    for (int i = 0; i < 12; ++i) { get_map().add_item_or_charges(centre, item::spawn("tank_gun_auto")); }
+    u.recalc_sight_limits();
+    build_map_cache_from_plan(get_map(), centre.z());
+
+    const std::vector<reply> out = converse({
+        R"({"id":1,"cmd":"attach_view","radius":10})",
+        R"({"id":2,"cmd":"state"})",
+        R"({"id":3,"cmd":"query","topic":"inventory"})",
+        R"({"id":4,"cmd":"wait","turns":3})",
+    });
+    for (const size_t i : {1, 2, 3}) {
+        CAPTURE(i, out[i].line);
+        CHECK(out[i].flag("truncated"));
+        CHECK(out[i].line.size() <= 6000);
+        std::istringstream in(out[i].line);
+        JsonIn jsin(in);
+        JsonObject jo = jsin.get_object();
+        jo.allow_omitted_members();
+        REQUIRE(jo.has_object("view"));
+        JsonObject view = jo.get_object("view");
+        view.allow_omitted_members();
+        CHECK(view.get_bool("truncated", false));
+        CHECK(view.get_array("grid").size() >= 3);
+    }
+}

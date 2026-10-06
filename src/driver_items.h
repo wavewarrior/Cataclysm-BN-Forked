@@ -2,7 +2,9 @@
 
 #include <string>
 #include <string_view>
+#include <vector>
 
+#include "coordinates.h"
 #include "safe_reference.h"
 
 class JsonOut;
@@ -58,6 +60,14 @@ auto is_query_topic( const std::string &topic ) -> bool;
 /// Writes the members of the `topic` query into the response object `jo` is inside. Assigns ids
 /// to every item it lists. Returns true when it cut a list to stay within the size ceiling.
 auto write_query( JsonOut &jo, const std::string &topic ) -> bool;
+
+/// Items on `pos` that the avatar could pick up from there: those lying on the tile (none when it
+/// is sealed) and in the cargo of a vehicle part on it. For the avatar's own tile these are the
+/// items `query inventory` reports as `here`.
+auto items_at( const tripoint_bub_ms &pos ) -> std::vector<item *>;
+
+/// `text` cut to the longest name any list entry carries.
+auto short_name( std::string text ) -> std::string;
 
 /// The id the driver reports for `it`, assigning one the first time. Decimal digits, as a
 /// string: the ids carry a 32-bit save prefix, which a JSON number would not hold exactly.

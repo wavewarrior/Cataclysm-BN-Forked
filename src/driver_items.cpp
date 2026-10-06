@@ -97,22 +97,7 @@ auto is_carried( const avatar &u, const item &it ) -> bool
 /// Items the avatar can reach without moving: those on its tile, and in a vehicle's cargo there.
 auto items_here() -> std::vector<item *>
 {
-    std::vector<item *> found;
-    const tripoint_bub_ms pos = get_avatar().bub_pos();
-    map &here = get_map();
-    if( !here.has_flag( "SEALED", pos ) ) {
-        for( item *it : here.i_at( pos ) ) {
-            found.push_back( it );
-        }
-    }
-    if( const optional_vpart_position vp = here.veh_at( pos ) ) {
-        if( const std::optional<vpart_reference> cargo = vp.part_with_feature( "CARGO", false ) ) {
-            for( item *it : cargo->vehicle().get_items( cargo->part_index() ) ) {
-                found.push_back( it );
-            }
-        }
-    }
-    return found;
+    return items_at( get_avatar().bub_pos() );
 }
 
 auto is_here( const item &it ) -> bool
@@ -552,6 +537,30 @@ auto craft_allowed( const avatar &u, const recipe &rec ) -> command_result
     return {};
 }
 } // namespace
+
+auto items_at( const tripoint_bub_ms &pos ) -> std::vector<item *>
+{
+    std::vector<item *> found;
+    map &here = get_map();
+    if( !here.has_flag( "SEALED", pos ) ) {
+        for( item *it : here.i_at( pos ) ) {
+            found.push_back( it );
+        }
+    }
+    if( const optional_vpart_position vp = here.veh_at( pos ) ) {
+        if( const std::optional<vpart_reference> cargo = vp.part_with_feature( "CARGO", false ) ) {
+            for( item *it : cargo->vehicle().get_items( cargo->part_index() ) ) {
+                found.push_back( it );
+            }
+        }
+    }
+    return found;
+}
+
+auto short_name( std::string text ) -> std::string
+{
+    return shortened( std::move( text ) );
+}
 
 auto is_query_topic( const std::string &topic ) -> bool
 {

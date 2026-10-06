@@ -25,6 +25,7 @@
 #include "driver_combat.h"
 #include "driver_items.h"
 #include "driver_message_delta.h"
+#include "driver_view.h"
 #include "fstream_utils.h"
 #include "game.h"
 #include "input.h"
@@ -130,6 +131,14 @@ constexpr size_t max_new_messages = 10;
 constexpr size_t max_message_bytes = 240;
 /// Hard cap on the turns one request may run. A request that reaches it is interrupted.
 constexpr int max_turns_per_request = 1000;
+/// What one response may take (about 1.5K tokens at four bytes a token), and what the members
+/// written after the attached view (outcome, reason, detail, turns, progress, truncated) may.
+constexpr size_t max_response_bytes = 6000;
+constexpr size_t reserved_tail_bytes = 700;
+
+/// Radius of the view attached to every observation; 0 attaches none. Set by `attach_view`, and
+/// cleared whenever the driver starts serving.
+int attached_view_radius = 0;
 
 /// What the world looked like before a request began, for the fields that are deltas.
 struct snapshot {
@@ -197,11 +206,16 @@ auto take_snapshot() -> snapshot
     return { .pos = get_avatar().abs_pos(), .turn = calendar::turn, .messages = log_window() };
 }
 
+/// Whether an observation carries the attached view. The response to `view` itself does not: it
+/// is the view the agent asked for.
+enum class view_mode { attach, none };
+
 /// Observation response: the contract's common payload. Reads the world, never advances it.
 /// `payload` adds members of its own to the response (a query's answer) and says whether it had
 /// to cut something to stay within the size ceiling.
 auto observation_line( int id, const snapshot &before, const action_result &result,
-                       const std::function<bool( JsonOut & )> &payload = nullptr ) -> std::string
+                       const std::function<bool( JsonOut & )> &payload = nullptr,
+                       view_mode views = view_mode::attach ) -> std::string
 {
     const avatar &u = get_avatar();
     message_delta delta = compute_message_delta( before.messages, log_window() );
@@ -238,6 +252,21 @@ auto observation_line( int id, const snapshot &before, const action_result &resu
     if( payload ) {
         truncated |= payload( jo );
     }
+    if( attached_view_radius > 0 && views == view_mode::attach ) {
+        // The view takes what the rest of the response leaves of the ceiling: it shrinks, and
+        // says so, before the response outgrows it.
+        const size_t used = static_cast<size_t>( os.tellp() );
+        const size_t left = max_response_bytes > used + reserved_tail_bytes ?
+                            max_response_bytes - used - reserved_tail_bytes : 0;
+        jo.member( "view" );
+        jo.start_object();
+        const bool cut = driver_view::write_view( jo, attached_view_radius, left );
+        if( cut ) {
+            jo.member( "truncated", true );
+        }
+        jo.end_object();
+        truncated |= cut;
+    }
     jo.member( "outcome", std::string( dead ? "died" : result.outcome ) );
     if( !dead && ( result.outcome == "interrupted" || result.outcome == "unsupported" ) ) {
         jo.member( "reason", std::string( result.reason ) );
@@ -270,6 +299,16 @@ auto seed_line( int id, unsigned int seed ) -> std::string
     JsonOut jo( os, false );
     begin_response( jo, id, "ok" );
     jo.member( "seed", seed );
+    jo.end_object();
+    return os.str() + "\n";
+}
+
+auto attach_view_line( int id, int radius ) -> std::string
+{
+    std::ostringstream os;
+    JsonOut jo( os, false );
+    begin_response( jo, id, "ok" );
+    jo.member( "attach_view", radius );
     jo.end_object();
     return os.str() + "\n";
 }
@@ -671,6 +710,7 @@ auto run_driver_loop( int fd, const std::string &deny_list_path ) -> bool
         return false;
     }
     driver_serving = true;
+    attached_view_radius = 0;
     line_reader in( fd );
     std::string line;
     while( in.read_line( line ) ) {
@@ -825,6 +865,30 @@ auto run_driver_loop( int fd, const std::string &deny_list_path ) -> bool
                         return driver_items::run_sleep();
                     }, .max_turns = *max_turns }, before );
                 } ) ) );
+            } else if( cmd == "view" ) {
+                // Read-only, so it answers while a screen waits for a key as well as when none does.
+                const std::optional<int64_t> radius = jo.has_member( "radius" ) ?
+                                                      whole_number( jo, "radius", 1, driver_view::max_radius ) :
+                                                      std::optional<int64_t>( driver_view::default_radius );
+                if( !radius ) {
+                    write_all( fd, error_line( id, "radius must be a whole number from 1 to " +
+                                               std::to_string( driver_view::max_radius ) ) );
+                    continue;
+                }
+                write_all( fd, observation_line( *id, take_snapshot(), modal_result(),
+                [&]( JsonOut & out ) {
+                    return driver_view::write_view( out, static_cast<int>( *radius ) );
+                }, view_mode::none ) );
+            } else if( cmd == "attach_view" ) {
+                const std::optional<int64_t> radius = whole_number( jo, "radius", 0, driver_view::max_radius );
+                if( !radius ) {
+                    write_all( fd, error_line( id, "radius must be a whole number from 0 to " +
+                                               std::to_string( driver_view::max_radius ) +
+                                               "; 0 attaches no view" ) );
+                    continue;
+                }
+                attached_view_radius = static_cast<int>( *radius );
+                write_all( fd, attach_view_line( *id, attached_view_radius ) );
             } else if( cmd == "seed" ) {
                 const std::optional<int64_t> seed = whole_number( jo, "seed", 0,
                                                     std::numeric_limits<unsigned int>::max() );
