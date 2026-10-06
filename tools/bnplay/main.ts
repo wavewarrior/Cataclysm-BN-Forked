@@ -8,6 +8,11 @@
  *   bnplay fixture add <save> [name]     clone a world save into the fixture library
  *   bnplay fixture baseline <name>       boot the fixture and record its post-readiness game log
  *   bnplay fixture list                  show each fixture and whether its baseline is fresh
+ *   bnplay doctor [--fixture <name>] [--self-check]
+ *                                        preflight: driver flag, binary freshness, fixture and
+ *                                        baseline, stray driver processes, memory and swap;
+ *                                        starts no game unless --self-check asks for the A/A
+ *                                        determinism pair. Exit 0 healthy, 1 a check failed
  *   bnplay shutdown                      end every Episode and stop the resident daemon
  *
  * A resident daemon keeps the games running between calls and is started on first use (see
@@ -31,6 +36,7 @@ const USAGE = `usage:
   bnplay fixture add <save-dir> [name]
   bnplay fixture baseline <name>
   bnplay fixture list
+  bnplay doctor [--fixture <name>] [--self-check]
   bnplay shutdown`
 
 class UsageError extends Error {}
@@ -90,6 +96,20 @@ function parseArgs(args: string[]): DaemonRequest {
           throw new UsageError(USAGE)
       }
     }
+    case "doctor": {
+      let fixture: string | undefined
+      let selfCheck = false
+      for (let i = 0; i < rest.length; i++) {
+        if (rest[i] === "--self-check") {
+          selfCheck = true
+        } else if (rest[i] === "--fixture" && i + 1 < rest.length) {
+          fixture = rest[++i]
+        } else {
+          throw new UsageError(`bnplay doctor: unexpected argument ${rest[i]}\n${USAGE}`)
+        }
+      }
+      return { op: "doctor", fixture, self_check: selfCheck }
+    }
     case "shutdown":
       expect(0)
       return { op: "shutdown" }
@@ -123,7 +143,8 @@ async function main(args: string[]): Promise<number> {
   ) {
     return result.exit_code
   }
-  return 0
+  // A failed preflight check is a finding, printed whole, not a failure of the command itself.
+  return request.op === "doctor" && "healthy" in result && result.healthy === false ? 1 : 0
 }
 
 try {
