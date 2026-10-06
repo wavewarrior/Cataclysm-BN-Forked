@@ -27,6 +27,7 @@
 #include "driver_items.h"
 #include "driver_message_delta.h"
 #include "driver_scene.h"
+#include "driver_time.h"
 #include "driver_view.h"
 #include "fstream_utils.h"
 #include "game.h"
@@ -304,6 +305,18 @@ auto seed_line( int id, unsigned int seed ) -> std::string
     JsonOut jo( os, false );
     begin_response( jo, id, "ok" );
     jo.member( "seed", seed );
+    jo.end_object();
+    return os.str() + "\n";
+}
+
+auto set_time_line( int id, const driver_time::pinned &clock ) -> std::string
+{
+    std::ostringstream os;
+    JsonOut jo( os, false );
+    begin_response( jo, id, "ok" );
+    jo.member( "turn", clock.turn );
+    jo.member( "date", clock.date );
+    jo.member( "time", clock.time );
     jo.end_object();
     return os.str() + "\n";
 }
@@ -990,6 +1003,24 @@ auto run_driver_loop( int fd, const driver_options &options ) -> bool
                     continue;
                 }
                 write_all( fd, seed_line( *id, static_cast<unsigned int>( *seed ) ) );
+            } else if( cmd == "set_time" ) {
+                auto asked = driver_time::request{};
+                if( jo.has_member( "date" ) ) {
+                    if( !jo.has_string( "date" ) ) {
+                        write_all( fd, error_line( id, "date must be a YYYY-SS-DD string" ) );
+                        continue;
+                    }
+                    asked.date = jo.get_string( "date" );
+                }
+                if( jo.has_member( "time" ) ) {
+                    if( !jo.has_string( "time" ) ) {
+                        write_all( fd, error_line( id, "time must be an HH:MM string" ) );
+                        continue;
+                    }
+                    asked.time = jo.get_string( "time" );
+                }
+                const auto clock = driver_time::pin( asked );
+                write_all( fd, clock ? set_time_line( *id, *clock ) : error_line( id, clock.error() ) );
             } else if( cmd == "quit" ) {
                 write_all( fd, quit_line( *id ) );
                 break;

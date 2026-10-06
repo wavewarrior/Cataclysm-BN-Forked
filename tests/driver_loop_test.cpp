@@ -822,3 +822,71 @@ TEST_CASE("driver_loop_capture_with_no_drawable_is_refused_and_never_returns_an_
     CHECK(content == "an old frame");
     std::filesystem::remove_all(dir);
 }
+
+// `set_time` pins the world clock the way the Trial's `start_date` and `time_of_day` ask: the date
+// is "YYYY-SS-DD" (the game has no months: year from 1, season 01 spring to 04 winter, day of the
+// season from 01), the time is "HH:MM".
+
+TEST_CASE("driver_loop_set_time_pins_the_date_and_the_time_of_day", "[driver]") {
+    setup();
+    const auto season = to_turns<int>(calendar::season_length());
+    const auto year = to_turns<int>(calendar::year_length());
+    const auto expected = 2 * year + season + 9 * 86400 + 8 * 3600 + 30 * 60;
+
+    const auto out = converse({
+        R"({"id":1,"cmd":"set_time","date":"0003-02-10","time":"08:30"})",
+        R"({"id":2,"cmd":"state"})",
+    });
+
+    CHECK(out[0].text("status") == "ok");
+    CHECK(out[0].number("turn") == expected);
+    CHECK(out[0].text("date") == "0003-02-10");
+    CHECK(out[0].text("time") == "08:30");
+    CHECK(out[1].number("turn") == expected);
+    CHECK(to_turn<int>(calendar::turn) == expected);
+}
+
+TEST_CASE("driver_loop_set_time_with_one_field_keeps_the_other", "[driver]") {
+    setup();
+    // setup() puts the clock at noon on the first day.
+    const auto out = converse({
+        R"({"id":1,"cmd":"set_time","time":"06:15"})",
+        R"({"id":2,"cmd":"set_time","date":"0001-01-03"})",
+    });
+
+    CHECK(out[0].text("status") == "ok");
+    CHECK(out[0].number("turn") == 6 * 3600 + 15 * 60);
+    CHECK(out[0].text("date") == "0001-01-01");
+    CHECK(out[1].text("status") == "ok");
+    CHECK(out[1].number("turn") == 2 * 86400 + 6 * 3600 + 15 * 60);
+    CHECK(out[1].text("time") == "06:15");
+}
+
+TEST_CASE("driver_loop_set_time_refuses_impossible_values_and_leaves_the_clock_alone", "[driver]") {
+    setup();
+    const auto before = to_turn<int>(calendar::turn);
+    const auto days = std::to_string(to_days<int>(calendar::season_length()) + 1);
+    const auto bad = std::vector<std::string>{
+        R"({"id":1,"cmd":"set_time"})",
+        R"({"id":2,"cmd":"set_time","date":"0001-05-01"})",
+        R"({"id":3,"cmd":"set_time","date":"0001-00-01"})",
+        R"({"id":4,"cmd":"set_time","date":"0000-01-01"})",
+        R"({"id":5,"cmd":"set_time","date":"0001-01-00"})",
+        "{\"id\":6,\"cmd\":\"set_time\",\"date\":\"0001-01-" + days + "\"}",
+        R"({"id":7,"cmd":"set_time","date":"yesterday"})",
+        R"({"id":8,"cmd":"set_time","time":"24:00"})",
+        R"({"id":9,"cmd":"set_time","time":"12:60"})",
+        R"({"id":10,"cmd":"set_time","time":"noon"})",
+        R"({"id":11,"cmd":"set_time","time":1200})",
+        R"({"id":12,"cmd":"set_time","date":"9999-04-91"})",
+    };
+
+    const auto out = converse(bad);
+
+    for (auto i = size_t{0}; i < out.size(); ++i) {
+        CAPTURE(bad[i], out[i].line);
+        CHECK(out[i].text("status") == "error");
+        CHECK_FALSE(out[i].text("error").empty());
+    }
+    CHECK(to_turn<int>(calendar::turn) == before);
+}
