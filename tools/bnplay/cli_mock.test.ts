@@ -66,22 +66,33 @@ Deno.test("each Episode runs on its own clone and the source fixture is never to
     const infoA = (await step<Info>(sandbox, a.session, "info")).json!
     const infoB = (await step<Info>(sandbox, b.session, "info")).json!
     assertNotEquals(infoA.userdir, infoB.userdir)
-    for (const info of [infoA, infoB]) {
+    for (const [info, episode] of [[infoA, a], [infoB, b]] as const) {
       assert(!String(info.userdir).startsWith(sandbox.fixtures))
-      assertEquals(info.world, "bairdford")
+      assertEquals(info.world, `bairdford-${episode.session}`)
     }
+    assertNotEquals(infoA.world, infoB.world)
 
     // The game scribbles into its own clone of the world.
     assertEquals((await step(sandbox, a.session, "dirty")).json?.status, "ok")
     assertEquals(await treeSnapshot(join(sandbox.fixtures, "bairdford")), fixtureBefore)
-    const cloneA = await treeSnapshot(join(String(infoA.userdir), "save", "bairdford"))
-    const cloneB = await treeSnapshot(join(String(infoB.userdir), "save", "bairdford"))
+    const cloneA = await treeSnapshot(join(infoA.userdir, "save", infoA.world))
+    const cloneB = await treeSnapshot(join(infoB.userdir, "save", infoB.world))
     assertEquals(cloneA["/scribble"], "written by the mock\n")
     assertEquals(cloneB["/scribble"], undefined)
     assertEquals(cloneB["/player.sav"], fixtureBefore["/player.sav"])
 
     await sandbox.cli(["stop", a.session])
     await sandbox.cli(["stop", b.session])
+  })
+})
+
+Deno.test("a caller-supplied request id cannot derail the Episode", async () => {
+  await withSandbox(async (sandbox) => {
+    const { session } = await start(sandbox)
+    const res = await sandbox.cli(["step", session, '{"cmd":"ping","id":7}'])
+    assertEquals(res.code, 0, res.stderr)
+    assertEquals(jsonOut(res).status, "ok")
+    await sandbox.cli(["stop", session])
   })
 })
 
@@ -119,7 +130,7 @@ Deno.test("a hung game is killed by process group when the wall-clock limit expi
 
 Deno.test("a request that gets no answer in time kills the game and ends the Episode", async () => {
   await withSandbox(async (sandbox) => {
-    const { session } = await start(sandbox)
+    const { session, transcript } = await start(sandbox)
     const child = (await step<{ child_pid: number }>(sandbox, session, "spawn_child")).json!
       .child_pid
 
@@ -129,6 +140,12 @@ Deno.test("a request that gets no answer in time kills the game and ends the Epi
     assert(await eventually(() => !pidAlive(child)), "grandchild survived the kill")
     assertEquals(await pidsMatching(join(sandbox.home, "episodes", session)), [])
     assertEquals(jsonOut(await sandbox.cli(["stop", session])).ended, "hang")
+    // The unanswered request is paired with the failure that ended it, not left dangling.
+    const records = await readTranscript(transcript)
+    const hang = records.find((r) => r.request?.cmd === "hang")!
+    const failure = records.find((r) => r.failure?.id === hang.request!.id)
+    assert(failure, "the hung request has no failure record")
+    assert(failure.failure!.message.includes("timeout"), failure.failure!.message)
   }, { BNPLAY_STEP_TIMEOUT_MS: "700" })
 })
 

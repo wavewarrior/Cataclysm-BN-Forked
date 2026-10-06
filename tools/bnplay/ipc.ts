@@ -31,24 +31,36 @@ export async function* readLines(stream: ReadableStream<Uint8Array>): AsyncGener
   }
 }
 
-/** Sends one request to the daemon and returns its reply. Rejects when no daemon answers. */
-export async function call(home: string, request: DaemonRequest): Promise<DaemonReply> {
+/**
+ * Sends one request to the daemon and returns its reply. Rejects when no daemon answers; with
+ * `timeoutMs` it also rejects when the daemon does not reply in time.
+ */
+export async function call(
+  home: string,
+  request: DaemonRequest,
+  timeoutMs?: number,
+): Promise<DaemonReply> {
   const conn = await Deno.connect({ transport: "unix", path: socketPath(home) })
+  const timer = timeoutMs === undefined ? undefined : setTimeout(() => conn.close(), timeoutMs)
   try {
     await conn.write(new TextEncoder().encode(JSON.stringify(request) + "\n"))
     for await (const line of readLines(conn.readable)) return JSON.parse(line)
     throw new Error("the daemon closed the connection without answering")
   } finally {
+    clearTimeout(timer)
     try {
       conn.close()
-    } catch { /* already closed by the readable's end */ }
+    } catch { /* already closed by the readable's end or the timer */ }
   }
 }
+
+/** A daemon that does not answer a ping within this long counts as not running. */
+const PING_TIMEOUT_MS = 2_000
 
 /** True when a daemon owns this home and answers a ping. */
 export async function daemonRunning(home: string): Promise<boolean> {
   try {
-    return (await call(home, { op: "ping" })).ok
+    return (await call(home, { op: "ping" }, PING_TIMEOUT_MS)).ok
   } catch {
     return false
   }

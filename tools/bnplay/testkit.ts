@@ -100,7 +100,13 @@ export async function makeSandbox(opts: SandboxOptions = {}): Promise<Sandbox> {
     },
     async cleanup() {
       await sandbox.cli(["shutdown"]).catch(() => undefined)
+      // A daemon that logged an unexpected failure is a failing test, not a swallowed error.
+      const log = await Deno.readTextFile(join(home, "daemon.log")).catch(() => "")
       await Deno.remove(dir, { recursive: true })
+      const bad = log.split("\n").filter((l) =>
+        /unhandled rejection|uncaught error|connection failed|internal error/.test(l)
+      )
+      if (bad.length > 0) throw new Error(`the daemon logged failures:\n${bad.join("\n")}`)
     },
   }
   return sandbox

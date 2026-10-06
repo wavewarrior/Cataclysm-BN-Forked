@@ -38,9 +38,15 @@ export type SpawnOptions = {
   requestTimeoutMs?: number
   /** Where the game's own log output goes; "inherit" shows it. */
   stderr?: "null" | "inherit"
-  /** Called with every request sent through `send` and every response it received. */
+  /**
+   * Called with every request sent through `send`, and then either the response or the failure
+   * (timeout, kill, dead game) that ended it, so every request is paired.
+   */
   trace?: (
-    entry: { request: DriverRequest & { id: number } } | { response: DriverResponse },
+    entry:
+      | { request: DriverRequest & { id: number } }
+      | { response: DriverResponse }
+      | { failure: { id: number; message: string } },
   ) => void
   /** Deny-list data file for the driver (`--driver-deny-list`); default is the repo's file. */
   denyList?: string
@@ -178,16 +184,21 @@ export function spawnDriver(opts: SpawnOptions): Driver {
   return {
     async send(req, timeoutMs) {
       const id = nextId++
-      const request = { id, ...req }
+      const request = { ...req, id }
       opts.trace?.({ request })
-      const response = await transmit(
-        id,
-        JSON.stringify(request),
-        timeoutMs,
-        `cmd=${req.cmd} id=${id}`,
-      )
-      opts.trace?.({ response })
-      return response
+      try {
+        const response = await transmit(
+          id,
+          JSON.stringify(request),
+          timeoutMs,
+          `cmd=${req.cmd} id=${id}`,
+        )
+        opts.trace?.({ response })
+        return response
+      } catch (e) {
+        opts.trace?.({ failure: { id, message: (e as Error).message } })
+        throw e
+      }
     },
     sendRaw(line, expectedId, timeoutMs) {
       return transmit(expectedId, line, timeoutMs, `raw line ${JSON.stringify(line)}`)
