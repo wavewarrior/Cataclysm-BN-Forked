@@ -130,7 +130,7 @@ if( here.veh_at( pos ) ) {
 
 /// A creature or item in view, where it is from the avatar and what the driver calls it. An
 /// item carries only the item itself: its id is issued, and its name read, when it is written.
-struct located {
+struct visible_entity {
     int dx = 0;
     int dy = 0;
     item *source = nullptr;
@@ -140,31 +140,46 @@ struct located {
 };
 
 /// Nearest first, as the game measures distance, then north to south, west to east.
-auto nearer( const located &a, const located &b ) -> bool
+auto nearer( const visible_entity &a, const visible_entity &b ) -> bool
 {
-    const auto key = []( const located & at ) {
+    const auto key = []( const visible_entity & at ) {
         return std::tuple( std::max( std::abs( at.dx ), std::abs( at.dy ) ), at.dy, at.dx );
     };
     return key( a ) < key( b );
 }
 
-/// How a creature on a tile is drawn and listed, if the avatar sees one there.
-auto creature_entry( const avatar &u, const tripoint_bub_ms &pos, int dx, int dy ) ->
-std::optional<std::pair<glyph, located>>
+/// What to look for on one tile: who is looking, the tile, and its offset from the avatar.
+struct creature_probe {
+    const avatar &u;
+    const tripoint_bub_ms &pos;
+    int dx = 0;
+    int dy = 0;
+};
+
+/// How a creature on a tile is drawn, and how it is listed.
+struct creature_seen {
+    glyph shown;
+    visible_entity entry;
+};
+
+/// How a creature on a tile looks to the avatar, if it sees one there.
+auto creature_entry( const creature_probe &asked ) -> std::optional<creature_seen>
 {
-    Creature *const critter = g->critter_at( pos, true );
-    if( critter == nullptr || !u.sees( *critter ) ) {
+    Creature *const critter = g->critter_at( asked.pos, true );
+    if( critter == nullptr || !asked.u.sees( *critter ) ) {
         return std::nullopt;
     }
     if( const monster *const mon = dynamic_cast<const monster *>( critter ) ) {
-        return std::pair( monster_glyph, located{ .dx = dx, .dy = dy, .id = mon->type->id.str(),
-                          .name = driver_items::short_name( mon->name() ),
-                          .hostile = mon->attitude( &u ) == MATT_ATTACK } );
+        return creature_seen{ .shown = monster_glyph, .entry = visible_entity{
+                .dx = asked.dx, .dy = asked.dy, .id = mon->type->id.str(),
+                .name = driver_items::truncate_name( mon->name() ),
+                .hostile = mon->attitude( &asked.u ) == MATT_ATTACK } };
     }
     if( const npc *const person = dynamic_cast<const npc *>( critter ) ) {
-        return std::pair( person_glyph, located{ .dx = dx, .dy = dy, .id = "npc",
-                          .name = driver_items::short_name( person->name ),
-                          .hostile = person->is_enemy() } );
+        return creature_seen{ .shown = person_glyph, .entry = visible_entity{
+                .dx = asked.dx, .dy = asked.dy, .id = "npc",
+                .name = driver_items::truncate_name( person->name ),
+                .hostile = person->is_enemy() } };
     }
     return std::nullopt;
 }
@@ -174,8 +189,8 @@ struct window {
     int radius = 0;
     std::vector<std::string> grid;
     std::map<char, std::string_view> legend;
-    std::vector<located> creatures;
-    std::vector<located> items;
+    std::vector<visible_entity> creatures;
+    std::vector<visible_entity> items;
 
     /// What `radius`, the grid and the legend take as text, at most.
     auto fixed_bytes() const -> size_t {
@@ -192,27 +207,27 @@ struct window {
 
 auto look_around( int radius ) -> window
 {
-    avatar &u = get_avatar();
-    map &here = get_map();
-    const tripoint_bub_ms centre = u.bub_pos();
+    auto &u = get_avatar();
+    auto &here = get_map();
+    const auto centre = u.bub_pos();
 
     window seen{ .radius = radius };
     for( int dy = -radius; dy <= radius; ++dy ) {
         std::string row;
         for( int dx = -radius; dx <= radius; ++dx ) {
-            const tripoint_bub_ms pos = centre + tripoint_rel_ms( dx, dy, 0 );
-            const bool own_tile = dx == 0 && dy == 0;
+            const auto pos = centre + tripoint_rel_ms( dx, dy, 0 );
+            const auto own_tile = dx == 0 && dy == 0;
             glyph shown = unseen;
             if( own_tile || ( here.inbounds( pos ) && u.sees( pos ) ) ) {
-                const std::vector<item *> lying = driver_items::items_at( pos );
+                const auto lying = driver_items::items_at( pos );
                 for( item *it : lying ) {
                     seen.items.push_back( { .dx = dx, .dy = dy, .source = it } );
                 }
                 if( own_tile ) {
                     shown = you;
-                } else if( auto creature = creature_entry( u, pos, dx, dy ) ) {
-                    shown = creature->first;
-                    seen.creatures.push_back( std::move( creature->second ) );
+                } else if( auto creature = creature_entry( { .u = u, .pos = pos, .dx = dx, .dy = dy } ) ) {
+                    shown = creature->shown;
+                    seen.creatures.push_back( std::move( creature->entry ) );
                 } else {
                     shown = tile_glyph( here, pos, !lying.empty() );
                 }
@@ -240,24 +255,24 @@ struct list_writer {
 
     /// Writes the nearest of `entries` that fit the spec's limit and what is left of the
     /// budget. Returns true when some were left out.
-    auto write( const list_spec &spec, std::vector<located> entries ) -> bool;
+    auto write( const list_spec &spec, std::vector<visible_entity> entries ) -> bool;
 };
 
 /// What an entry is called: an item's name is read from the item now.
-auto name_of( const located &entry ) -> std::string
+auto name_of( const visible_entity &entry ) -> std::string
 {
-    return entry.source != nullptr ? driver_items::short_name( entry.source->display_name() ) :
+    return entry.source != nullptr ? driver_items::truncate_name( entry.source->display_name() ) :
            entry.name;
 }
 
 // *INDENT-OFF*
-auto list_writer::write( const list_spec &spec, std::vector<located> entries ) -> bool
+auto list_writer::write( const list_spec &spec, std::vector<visible_entity> entries ) -> bool
 {
     std::ranges::sort( entries, nearer );
     jo.member( spec.name );
     jo.start_array();
     size_t written = 0;
-    for( const located &entry : entries ) {
+    for( const visible_entity &entry : entries ) {
         const std::string name = name_of( entry );
         const size_t id_bytes = entry.source != nullptr ? max_item_id_bytes : entry.id.size();
         const size_t cost = entry_bytes + id_bytes + name.size() +

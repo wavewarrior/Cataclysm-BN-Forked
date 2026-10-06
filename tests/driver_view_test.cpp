@@ -240,7 +240,7 @@ TEST_CASE("driver_view_lists_items_with_the_ids_query_inventory_reports", "[driv
     std::ostringstream os;
     JsonOut jo(os, false);
     jo.start_object();
-    driver_items::write_query(jo, "inventory");
+    driver_items::write_query(jo, driver_items::query_topic::inventory);
     jo.end_object();
     std::istringstream in(os.str());
     JsonIn jsin(in);
@@ -260,7 +260,7 @@ TEST_CASE("driver_view_lists_items_with_the_ids_query_inventory_reports", "[driv
     const listed* const far_rock = view.item_at(2, 2);
     REQUIRE(far_rock != nullptr);
     CHECK(far_rock->id == driver_items::issue_id(rock));
-    CHECK(far_rock->name == driver_items::short_name(rock.display_name()));
+    CHECK(far_rock->name == driver_items::truncate_name(rock.display_name()));
     CHECK(view.at(2, 2) == '*');
     CHECK(view.legend.at("*") == "items");
     // The rock behind the wall is out of sight.

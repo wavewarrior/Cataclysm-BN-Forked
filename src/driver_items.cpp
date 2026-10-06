@@ -102,24 +102,31 @@ auto items_here() -> std::vector<item *>
 
 auto is_here( const item &it ) -> bool
 {
-    const std::vector<item *> here = items_here();
+    const auto here = items_here();
     return std::ranges::find( here, &it ) != here.end();
 }
 
-/// Writes up to `limit` of `items` as `{id, name}` entries; true when some were left out.
-auto write_entries( JsonOut &jo, const std::string &name, const std::vector<item *> &items,
-                    size_t limit ) -> bool
+/// What one list of the inventory takes: the member it is written under, the items in it, and
+/// how many of them a response may carry.
+struct entry_list {
+    std::string name;
+    std::span<item *const> items;
+    size_t limit = 0;
+};
+
+/// Writes up to the list's limit of its items as `{id, name}` entries; true when some were left out.
+auto write_entries( JsonOut &jo, const entry_list &list ) -> bool
 {
-    jo.member( name );
+    jo.member( list.name );
     jo.start_array();
-for( item *it : std::span( items ).first( std::min( limit, items.size() ) ) ) {
+for( item *it : list.items.first( std::min( list.limit, list.items.size() ) ) ) {
     jo.start_object();
         jo.member( "id", issue_id( *it ) );
         jo.member( "name", shortened( it->display_name() ) );
         jo.end_object();
     }
     jo.end_array();
-    return items.size() > limit;
+    return list.items.size() > list.limit;
 }
 
 auto write_inventory( JsonOut &jo ) -> bool
@@ -142,15 +149,15 @@ auto write_inventory( JsonOut &jo ) -> bool
     for( item *it : u.worn ) {
         worn.push_back( it );
     }
-    truncated |= write_entries( jo, "worn", worn, max_worn );
+    truncated |= write_entries( jo, { .name = "worn", .items = worn, .limit = max_worn } );
 
     std::vector<item *> carried;
     for( const std::vector<item *> *stack : u.inv_const_slice() ) {
         carried.insert( carried.end(), stack->begin(), stack->end() );
     }
-    truncated |= write_entries( jo, "items", carried, max_carried );
+    truncated |= write_entries( jo, { .name = "items", .items = carried, .limit = max_carried } );
 
-    truncated |= write_entries( jo, "here", items_here(), max_here );
+    truncated |= write_entries( jo, { .name = "here", .items = items_here(), .limit = max_here } );
     return truncated;
 }
 
@@ -199,7 +206,7 @@ auto write_effects( JsonOut &jo ) -> bool
 /// A refusal the driver itself explains: the reason is in `detail` only.
 auto refused( std::string detail ) -> command_result
 {
-    return { .outcome = "refused", .detail = std::move( detail ) };
+    return { .outcome = outcome::refused, .detail = std::move( detail ) };
 }
 
 /// A refusal the game's rules gave, in the game's own words. The game says such things through
@@ -214,7 +221,7 @@ auto refused_by_game( const std::string &message ) -> command_result
 /// A command the game declined with a message of its own: the driver reads the log for it.
 auto refused_silently() -> command_result
 {
-    return { .outcome = "refused" };
+    return { .outcome = outcome::refused };
 }
 
 auto not_carried() -> command_result
@@ -253,7 +260,7 @@ auto run_take_off( avatar &u, item &it ) -> command_result
 auto run_wield( avatar &u, item &it ) -> command_result
 {
     if( u.is_wielding( it ) ) {
-        return { .outcome = "no_effect", .detail = "You are already wielding that." };
+        return { .outcome = outcome::no_effect, .detail = "You are already wielding that." };
     }
     if( !is_carried( u, it ) ) {
         return not_carried();
@@ -280,7 +287,7 @@ auto run_wield( avatar &u, item &it ) -> command_result
     // The game asks whether to draw from a holster: a question nothing here can answer, and it
     // comes only after the old weapon is already put away.
     if( it.get_use( "holster" ) && !it.contents.empty() ) {
-        return { .outcome = "unsupported", .reason = "blocking_read",
+        return { .outcome = outcome::unsupported, .reason = "blocking_read",
                  .detail = "wielding a loaded holster asks a question the driver cannot answer" };
     }
     if( u.is_armed() ) {
@@ -492,7 +499,7 @@ auto run_reload( avatar &u, item &it ) -> command_result
         return refused_by_game( string_format( _( "You can't reload a %s!" ), it.tname() ) );
     }
     if( target->is_holster() || target->is_bandolier() ) {
-        return { .outcome = "unsupported", .reason = "blocking_read",
+        return { .outcome = outcome::unsupported, .reason = "blocking_read",
                  .detail = "reloading a holster or bandolier asks what to put in it" };
     }
 
@@ -557,20 +564,52 @@ auto items_at( const tripoint_bub_ms &pos ) -> std::vector<item *>
     return found;
 }
 
-auto short_name( std::string text ) -> std::string
+auto truncate_name( std::string text ) -> std::string
 {
     return shortened( std::move( text ) );
 }
 
-auto is_query_topic( const std::string &topic ) -> bool
+auto outcome_name( const outcome o ) -> std::string_view
 {
-    return topic == "inventory" || topic == "effects";
+    switch( o ) {
+    case outcome::completed:
+        return "completed";
+    case outcome::refused:
+        return "refused";
+    case outcome::no_effect:
+        return "no_effect";
+    case outcome::unsupported:
+        return "unsupported";
+    case outcome::blocked:
+        return "blocked";
+    case outcome::interrupted:
+        return "interrupted";
+    case outcome::awaiting_input:
+        return "awaiting_input";
+}
+return "completed";
 }
 
-auto write_query( JsonOut &jo, const std::string &topic ) -> bool
+auto query_topic_name( const query_topic topic ) -> std::string_view
 {
-    jo.member( "topic", topic );
-    return topic == "inventory" ? write_inventory( jo ) : write_effects( jo );
+    return topic == query_topic::inventory ? "inventory" : "effects";
+}
+
+auto topic_named( const std::string &name ) -> std::optional<query_topic>
+{
+    if( name == "inventory" ) {
+        return query_topic::inventory;
+    }
+    if( name == "effects" ) {
+        return query_topic::effects;
+    }
+    return std::nullopt;
+}
+
+auto write_query( JsonOut &jo, const query_topic topic ) -> bool
+{
+    jo.member( "topic", std::string( query_topic_name( topic ) ) );
+    return topic == query_topic::inventory ? write_inventory( jo ) : write_effects( jo );
 }
 
 auto issue_id( item &it ) -> std::string
@@ -582,23 +621,23 @@ auto issue_id( item &it ) -> std::string
     return std::to_string( id );
 }
 
-auto find_item( const std::string &id_text ) -> found_item
+auto find_item( const std::string &id_text ) -> std::expected<safe_reference<item>, std::string>
 {
     item_ref::id_type id = 0;
     const char *const end = id_text.data() + id_text.size();
     const auto [stop, error] = std::from_chars( id_text.data(), end, id );
     if( id_text.empty() || error != std::errc() || stop != end ) {
-        return { .error = "item must be an item id as reported by query inventory" };
+        return std::unexpected( "item must be an item id as reported by query inventory" );
     }
     const auto known = issued.find( id );
     if( known == issued.end() ) {
-        return { .error = "unknown item id " + id_text +
-                          ": ids come from query inventory and last for one Episode" };
+        return std::unexpected( "unknown item id " + id_text +
+                                ": ids come from query inventory and last for one Episode" );
     }
     if( !known->second ) {
-        return { .error = "stale item id " + id_text + ": that item no longer exists" };
+        return std::unexpected( "stale item id " + id_text + ": that item no longer exists" );
     }
-    return { .ref = known->second };
+    return known->second;
 }
 
 // *INDENT-OFF*
@@ -633,13 +672,13 @@ auto run_command( command kind, const safe_reference<item> &target,
     return refused( "Unknown item command." );
 }
 
-auto recipe_error( const std::string &recipe_text ) -> std::string
+auto recipe_error( const std::string &recipe_text ) -> std::expected<void, std::string>
 {
     if( recipe_text.empty() ) {
-        return "recipe must be a recipe id";
+        return std::unexpected( "recipe must be a recipe id" );
     }
     if( !recipe_id( recipe_text ).is_valid() ) {
-        return "unknown recipe id " + recipe_text;
+        return std::unexpected( "unknown recipe id " + recipe_text );
     }
     return {};
 }
@@ -651,7 +690,7 @@ auto run_craft( const std::string &recipe_text ) -> command_result
     if( is_busy( u ) ) {
         return busy();
     }
-    if( const command_result allowed = craft_allowed( u, rec ); allowed.outcome != "completed" ) {
+    if( const command_result allowed = craft_allowed( u, rec ); allowed.outcome != outcome::completed ) {
         return allowed;
     }
     if( u.has_recipe( &rec, u.crafting_inventory(), character_funcs::get_crafting_helpers( u ) ) < 0 ) {
@@ -676,7 +715,7 @@ auto run_sleep() -> command_result
         return refused_by_game( _( "You cannot sleep while mounted." ) );
     }
     if( u.in_sleep_state() ) {
-        return { .outcome = "no_effect", .detail = "You are already asleep or trying to sleep." };
+        return { .outcome = outcome::no_effect, .detail = "You are already asleep or trying to sleep." };
     }
     if( is_busy( u ) ) {
         return busy();

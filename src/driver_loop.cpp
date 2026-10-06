@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <expected>
 #include <functional>
 #include <iostream>
 #include <limits>
@@ -43,6 +44,7 @@
 namespace
 {
 
+using driver_items::outcome;
 /// Buffered line reader over a raw descriptor. `read_line` is false at EOF or on a read error.
 class line_reader
 {
@@ -73,10 +75,10 @@ class line_reader
         std::string buf_;
 };
 
-void write_all( int fd, const std::string &s )
+auto write_all( int fd, const std::string &s ) -> void
 {
     const char *ptr = s.data();
-    size_t left = s.size();
+    auto left = s.size();
     while( left > 0 ) {
         const ssize_t w = ::write( fd, ptr, left );
         if( w <= 0 ) {
@@ -88,12 +90,13 @@ void write_all( int fd, const std::string &s )
 }
 
 /// `id` is empty when the request carried none that could be read.
-void begin_response( JsonOut &jo, const std::optional<int> &id, std::string_view status )
+auto begin_response( JsonOut &jo, const std::optional<int> &id,
+                     std::string_view status ) -> void
 {
     jo.start_object();
     jo.member( "id" );
     if( id ) {
-        jo.write( *id );
+    jo.write( *id );
     } else {
         jo.write_null();
     }
@@ -171,7 +174,7 @@ std::optional<std::string_view> interruption;
 /// What a request did, as far as the driver can tell without looking at the world again.
 struct action_result {
     bool time_passed = false;
-    std::string_view outcome = "completed";
+    driver_items::outcome outcome = driver_items::outcome::completed;
     /// Only meaningful for outcomes `interrupted` (why) and `unsupported` (which guard).
     std::string_view reason;
     /// Free text that explains `reason`, such as the deny-list entry's own note.
@@ -189,7 +192,7 @@ auto modal_result( bool time_passed = false ) -> action_result
 {
     action_result result = { .time_passed = time_passed };
     if( modal ) {
-        result.outcome = "awaiting_input";
+        result.outcome = driver_items::outcome::awaiting_input;
         result.prompt = modal->prompt;
     }
     return result;
@@ -215,13 +218,26 @@ auto take_snapshot() -> snapshot
 /// is the view the agent asked for.
 enum class view_mode { attach, none };
 
+/// What an observation response is built from: the request it answers, the world as it looked
+/// when that request began, what the request did, and what else the response carries.
+struct observation {
+    int id = 0;
+    const snapshot &before;
+    const action_result &result;
+    /// Adds members of its own to the response (a query's answer) and says whether it had to
+    /// cut something to stay within the size ceiling.
+    std::function<bool( JsonOut & )> payload = nullptr;
+    view_mode views = view_mode::attach;
+};
+
 /// Observation response: the contract's common payload. Reads the world, never advances it.
-/// `payload` adds members of its own to the response (a query's answer) and says whether it had
-/// to cut something to stay within the size ceiling.
-auto observation_line( int id, const snapshot &before, const action_result &result,
-                       const std::function<bool( JsonOut & )> &payload = nullptr,
-                       view_mode views = view_mode::attach ) -> std::string
+auto observation_line( const observation &asked ) -> std::string
 {
+    const auto id = asked.id;
+    const snapshot &before = asked.before;
+    const action_result &result = asked.result;
+    const std::function<bool( JsonOut & )> &payload = asked.payload;
+    const auto views = asked.views;
     const avatar &u = get_avatar();
     message_delta delta = compute_message_delta( before.messages, log_window() );
     const bool capped = cap_messages( delta.fresh, max_new_messages, max_message_bytes );
@@ -232,8 +248,9 @@ auto observation_line( int id, const snapshot &before, const action_result &resu
     std::ostringstream os;
     JsonOut jo( os, false );
     begin_response( jo, id, "ok" );
-    jo.member( "boundary", std::string( !dead && result.outcome == "awaiting_input" ? "needs_input" :
-                                        "turn_complete" ) );
+    jo.member( "boundary", std::string( !dead &&
+                                        result.outcome == driver_items::outcome::awaiting_input ?
+                                        "needs_input" : "turn_complete" ) );
     jo.member( "turn", to_turn<int>( calendar::turn ) );
     jo.member( "time_passed", result.time_passed );
     jo.member( "moved", u.abs_pos() != before.pos );
@@ -272,9 +289,12 @@ auto observation_line( int id, const snapshot &before, const action_result &resu
         jo.end_object();
         truncated |= cut;
     }
-    jo.member( "outcome", std::string( dead ? "died" : result.outcome ) );
-    if( !dead && ( result.outcome == "interrupted" || result.outcome == "unsupported" ||
-                   ( result.outcome == "refused" && !result.reason.empty() ) ) ) {
+    const std::string_view outcome_text = dead ? std::string_view( "died" ) :
+                                          driver_items::outcome_name( result.outcome );
+    jo.member( "outcome", std::string( outcome_text ) );
+    if( !dead && ( result.outcome == driver_items::outcome::interrupted ||
+                   result.outcome == driver_items::outcome::unsupported ||
+                   ( result.outcome == driver_items::outcome::refused && !result.reason.empty() ) ) ) {
         jo.member( "reason", std::string( result.reason ) );
     }
     if( !dead && !result.detail.empty() ) {
@@ -295,7 +315,7 @@ auto observation_line( int id, const snapshot &before, const action_result &resu
 
 auto state_line( int id ) -> std::string
 {
-    return observation_line( id, take_snapshot(), modal_result() );
+    return observation_line( { .id = id, .before = take_snapshot(), .result = modal_result() } );
 }
 
 auto seed_line( int id, unsigned int seed ) -> std::string
@@ -334,9 +354,9 @@ auto attach_view_line( int id, int radius ) -> std::string
 /// Runs world steps until the avatar has moves again, at most `turn_budget` of them.
 /// Whatever is left of the avatar's turn is forfeited first, as the co-op host does for a
 /// client that queued no further action.
-void advance_to_turn_boundary( int &turn_budget )
+auto advance_to_turn_boundary( int &turn_budget ) -> void
 {
-    avatar &u = get_avatar();
+    auto &u = get_avatar();
     u.moves = std::min( u.moves, 0 );
     while( u.moves <= 0 && turn_budget > 0 && !u.is_dead_state() ) {
         g->post_action_world_step();
@@ -482,10 +502,10 @@ auto run_activity( int max_turns, action_result result ) -> action_result
         if( u.in_sleep_state() ) {
             u.wake_up();
         }
-        result.outcome = "interrupted";
+        result.outcome = outcome::interrupted;
         result.reason = "turn_cap";
     } else if( interruption ) {
-        result.outcome = "interrupted";
+        result.outcome = outcome::interrupted;
         result.reason = *interruption;
     }
     interruption.reset();
@@ -500,14 +520,14 @@ auto run_typed( const typed_request &request, const snapshot &before ) -> action
     avatar &u = get_avatar();
     int budget = max_turns_per_request;
     complete_partial_turn( budget );
-    driver_items::command_result done = { .outcome = "refused", .detail = "the avatar cannot act" };
+    driver_items::command_result done = { .outcome = outcome::refused, .detail = "the avatar cannot act" };
     const bool was_busy = activity_running();
     const int moves_before = u.moves;
     if( u.moves > 0 && !u.is_dead_state() ) {
         done = request.run();
     }
     const bool spent = u.moves < moves_before;
-    const bool started = done.outcome == "completed" && !was_busy && activity_running();
+    const bool started = done.outcome == outcome::completed && !was_busy && activity_running();
     if( spent && !started ) {
         advance_to_turn_boundary( budget );
     }
@@ -515,7 +535,7 @@ auto run_typed( const typed_request &request, const snapshot &before ) -> action
                              .outcome = done.outcome, .reason = done.reason,
                              .detail = std::move( done.detail )
                            };
-    if( result.outcome == "refused" && result.detail.empty() ) {
+    if( result.outcome == outcome::refused && result.detail.empty() ) {
         // The game rejected it with a message of its own: report that one.
         const std::vector<std::string> said = compute_message_delta( before.messages, log_window() ).fresh;
         result.detail = said.empty() ? "the game would not do that" : said.back();
@@ -555,7 +575,7 @@ auto run_move( const std::string &action, const snapshot &before ) -> action_res
     }
     if( !step.spent && get_avatar().abs_pos() == before.pos ) {
         // Nothing was spent and nothing moved: the game said no, or the world did.
-        result.outcome = step.safe_mode_stopped ? "refused" : "blocked";
+        result.outcome = step.safe_mode_stopped ? outcome::refused : outcome::blocked;
     }
     return result;
 }
@@ -566,7 +586,7 @@ auto run_wait( int turns ) -> action_result
     action_result result;
     for( int done = 0; done < turns; ++done ) {
         if( budget <= 0 ) {
-            result.outcome = "interrupted";
+            result.outcome = outcome::interrupted;
             result.reason = "turn_cap";
             break;
         }
@@ -580,9 +600,9 @@ auto run_wait( int turns ) -> action_result
         }
         if( !step.spent ) {
             if( done == 0 ) {
-                result.outcome = step.safe_mode_stopped ? "refused" : "no_effect";
+                result.outcome = step.safe_mode_stopped ? outcome::refused : outcome::no_effect;
             } else {
-                result.outcome = "interrupted";
+                result.outcome = outcome::interrupted;
                 result.reason = step.safe_mode_stopped ? "monster_in_view" : "other";
             }
             break;
@@ -591,15 +611,22 @@ auto run_wait( int turns ) -> action_result
     return result;
 }
 
-/// A whole-number member of `jo` within [`min`, `max`]; empty when it is fractional or out of
+/// The bounds a request's whole-number member must lie in.
+struct integer_bounds {
+    const JsonObject &jo;
+    const std::string &name;
+    int64_t min = 0;
+    int64_t max = std::numeric_limits<int64_t>::max();
+};
+
+/// A whole-number member of `jo` within the bounds; empty when it is fractional or out of
 /// range. Throws, like any bad request, when the member is missing or not a number.
-auto whole_number( const JsonObject &jo, const std::string &name, int64_t min,
-                   int64_t max ) -> std::optional<int64_t>
+auto bounded_integer( const integer_bounds &asked ) -> std::optional<int64_t>
 {
     // get_int would silently truncate 1.5, so read the number as a float and check it.
-    const double value = jo.get_float( name );
-    if( value != std::floor( value ) || value < static_cast<double>( min ) ||
-        value > static_cast<double>( max ) ) {
+    const double value = asked.jo.get_float( asked.name );
+    if( value != std::floor( value ) || value < static_cast<double>( asked.min ) ||
+        value > static_cast<double>( asked.max ) ) {
         return std::nullopt;
     }
     return static_cast<int64_t>( value );
@@ -607,15 +634,17 @@ auto whole_number( const JsonObject &jo, const std::string &name, int64_t min,
 
 /// The `max_turns` a request names: 0 when it names none, empty when it is not a whole number
 /// of at least 1.
+// *INDENT-OFF*
 auto requested_turns( const JsonObject &jo ) -> std::optional<int>
 {
     if( !jo.has_member( "max_turns" ) ) {
-    return 0;
+        return 0;
+    }
+    const std::optional<int64_t> turns = bounded_integer( { .jo = jo, .name = "max_turns", .min = 1,
+                                       .max = std::numeric_limits<int>::max() } );
+    return turns ? std::optional<int>( static_cast<int>( *turns ) ) : std::nullopt;
 }
-const std::optional<int64_t> turns = whole_number( jo, "max_turns", 1,
-                                     std::numeric_limits<int>::max() );
-return turns ? std::optional<int>( static_cast<int>( *turns ) ) : std::nullopt;
-}
+// *INDENT-ON*
 
 /// Actions the driver refuses, each with the note that says why. Loaded once at start.
 std::map<std::string, std::string> deny_list;
@@ -629,23 +658,31 @@ bool driver_serving = false;
 /// Where `run_scene` looks for Scenes; empty means the driver's default. Set when the loop starts.
 std::string scenes_directory;
 
-void parse_deny_list( JsonIn &jsin )
+auto parse_deny_list( JsonIn &jsin ) -> std::map<std::string, std::string>
 {
-    JsonObject jo = jsin.get_object();
+    auto denied = std::map<std::string, std::string>();
+    auto jo = jsin.get_object();
     jo.allow_omitted_members();
-    JsonArray entries = jo.get_array( "deny" );
+    auto entries = jo.get_array( "deny" );
     for( size_t i = 0; i < entries.size(); ++i ) {
-        JsonObject entry = entries.get_object( i );
-        deny_list[entry.get_string( "action" )] = entry.get_string( "why", "" );
+        auto entry = entries.get_object( i );
+        denied[entry.get_string( "action" )] = entry.get_string( "why", "" );
     }
+    return denied;
 }
 
-/// Fills `deny_list` from the data file; false when it cannot be read. A driver that does not
-/// know what hangs it must not start.
-auto load_deny_list( const std::string &path ) -> bool
+/// Fills `deny_list` from the data file; the error says which file could not be read. A driver
+/// that does not know what hangs it must not start.
+auto load_deny_list( const std::string &path ) -> std::expected<void, std::string>
 {
     deny_list.clear();
-    return read_from_file_json( path, parse_deny_list );
+    const auto read = read_from_file_json( path, []( JsonIn & jsin ) {
+        deny_list = parse_deny_list( jsin );
+    } );
+    if( !read ) {
+    return std::unexpected( "cannot load the deny list " + path );
+    }
+    return {};
 }
 
 /// Runs `run`, and turns a read that would have blocked the game into outcome `unsupported`
@@ -660,7 +697,7 @@ auto guarded( const snapshot &before, const std::function<action_result()> &run 
         inp_mngr.set_timeout( timeout );
         g->modal_fiber_.reset();
         modal.reset();
-        return { .time_passed = calendar::turn != before.turn, .outcome = "unsupported",
+        return { .time_passed = calendar::turn != before.turn, .outcome = outcome::unsupported,
                  .reason = "blocking_read", .detail = err.what() };
     }
 }
@@ -670,7 +707,7 @@ auto guarded( const snapshot &before, const std::function<action_result()> &run 
 auto run_action( const std::string &action, const snapshot &before ) -> action_result
 {
     if( const auto denied = deny_list.find( action ); denied != deny_list.end() ) {
-        return { .outcome = "unsupported", .reason = "deny_list", .detail = denied->second };
+        return { .outcome = outcome::unsupported, .reason = "deny_list", .detail = denied->second };
     }
     int budget = max_turns_per_request;
     const step_report step = perform_action( action, budget );
@@ -681,7 +718,8 @@ auto run_action( const std::string &action, const snapshot &before ) -> action_r
     // Anything the player could see change counts; only a silent nothing is `no_effect`.
     const bool changed = time_passed || get_avatar().abs_pos() != before.pos ||
                          !compute_message_delta( before.messages, log_window() ).fresh.empty();
-    return { .time_passed = time_passed, .outcome = changed ? "completed" : "no_effect" };
+    return { .time_passed = time_passed,
+             .outcome = changed ? outcome::completed : outcome::no_effect };
 }
 
 /// The key a request names: one printable character, or a key name such as `ESC` or `RETURN`.
@@ -761,12 +799,12 @@ auto capture_line( int id, const JsonObject &jo, bool windowed ) -> std::string
     if( !taken.error.empty() ) {
         return error_line( id, taken.error );
     }
-    action_result outcome = modal_result();
+    action_result observed = modal_result();
     if( taken.no_drawable ) {
-        outcome.outcome = "refused";
-        outcome.reason = "no_drawable";
-        outcome.detail = "the window is hidden or minimised, or the screen is locked: there is no "
-                         "frame to capture. Nothing was written.";
+        observed.outcome = outcome::refused;
+        observed.reason = "no_drawable";
+        observed.detail = "the window is hidden or minimised, or the screen is locked: there is no "
+                          "frame to capture. Nothing was written.";
     }
     const auto payload = [&taken]( JsonOut & out ) -> bool {
         if( taken.written ) {
@@ -774,7 +812,7 @@ auto capture_line( int id, const JsonObject &jo, bool windowed ) -> std::string
         }
         return false;
     };
-    return observation_line( id, before, outcome, payload );
+    return observation_line( { .id = id, .before = before, .result = observed, .payload = payload } );
 }
 // *INDENT-ON*
 
@@ -784,9 +822,8 @@ auto run_driver_loop( int fd, const driver_options &options ) -> bool
 {
     const std::string path = options.deny_list_path.empty() ?
                              PATH_INFO::datadir() + default_deny_list_name : options.deny_list_path;
-    const bool loaded = load_deny_list( path );
-    if( !loaded ) {
-        std::cerr << "driver: cannot load the deny list " << path << "\n";
+    if( const auto loaded = load_deny_list( path ); !loaded ) {
+        std::cerr << "driver: " << loaded.error() << "\n";
         return false;
     }
     scenes_directory = options.scenes_dir;
@@ -831,20 +868,24 @@ auto run_driver_loop( int fd, const driver_options &options ) -> bool
                     continue;
                 }
                 const snapshot before = take_snapshot();
-                write_all( fd, observation_line( *id, before, guarded( before, [&]() {
+                write_all( fd, observation_line( { .id = *id, .before = before,
+                                                   .result = guarded( before, [&]()
+                {
                     return run_move( action, before );
-                } ) ) );
+                } ) } ) );
             } else if( cmd == "wait" ) {
-                const std::optional<int64_t> turns = whole_number( jo, "turns", 1,
-                                                     std::numeric_limits<int>::max() );
+                const std::optional<int64_t> turns = bounded_integer( { .jo = jo, .name = "turns",
+                                                     .min = 1, .max = std::numeric_limits<int>::max() } );
                 if( !turns ) {
                     write_all( fd, error_line( id, "turns must be a whole number, at least 1" ) );
                     continue;
                 }
                 const snapshot before = take_snapshot();
-                write_all( fd, observation_line( *id, before, guarded( before, [&]() {
+                write_all( fd, observation_line( { .id = *id, .before = before,
+                                                   .result = guarded( before, [&]()
+                {
                     return run_wait( static_cast<int>( *turns ) );
-                } ) ) );
+                } ) } ) );
             } else if( cmd == "action" ) {
                 const std::string name = jo.get_string( "name" );
                 if( look_up_action( name ) == ACTION_NULL ) {
@@ -852,9 +893,11 @@ auto run_driver_loop( int fd, const driver_options &options ) -> bool
                     continue;
                 }
                 const snapshot before = take_snapshot();
-                write_all( fd, observation_line( *id, before, guarded( before, [&]() {
+                write_all( fd, observation_line( { .id = *id, .before = before,
+                                                   .result = guarded( before, [&]()
+                {
                     return run_action( name, before );
-                } ) ) );
+                } ) } ) );
             } else if( cmd == "key" ) {
                 const std::string key = jo.get_string( "key" );
                 if( !modal ) {
@@ -867,20 +910,24 @@ auto run_driver_loop( int fd, const driver_options &options ) -> bool
                     continue;
                 }
                 const snapshot before = take_snapshot();
-                write_all( fd, observation_line( *id, before, guarded( before, [&]() {
+                write_all( fd, observation_line( { .id = *id, .before = before,
+                                                   .result = guarded( before, [&]()
+                {
                     return run_key( *evt, before );
-                } ) ) );
+                } ) } ) );
             } else if( cmd == "query" ) {
                 const std::string topic = jo.get_string( "topic" );
-                if( !driver_items::is_query_topic( topic ) ) {
+                const auto asked = driver_items::topic_named( topic );
+                if( !asked ) {
                     write_all( fd, error_line( id, "unknown topic '" + topic +
                                                "': query takes inventory or effects" ) );
                     continue;
                 }
-                write_all( fd, observation_line( *id, take_snapshot(), modal_result(),
-                [&]( JsonOut & out ) {
-                    return driver_items::write_query( out, topic );
-                } ) );
+                write_all( fd, observation_line( { .id = *id, .before = take_snapshot(),
+                                                   .result = modal_result(), .payload = [&]( JsonOut & out )
+                {
+                    return driver_items::write_query( out, *asked );
+                } } ) );
             } else if( combat_kind ) {
                 const driver_combat::parsed_target target = driver_combat::parse_target( jo, *combat_kind );
                 if( !target.error.empty() ) {
@@ -893,16 +940,18 @@ auto run_driver_loop( int fd, const driver_options &options ) -> bool
                     continue;
                 }
                 const snapshot before = take_snapshot();
-                write_all( fd, observation_line( *id, before, guarded( before, [&]() {
+                write_all( fd, observation_line( { .id = *id, .before = before,
+                                                   .result = guarded( before, [&]()
+                {
                     return run_typed( { .run = [&]()
                     {
                         return driver_combat::run_command( *combat_kind, target );
                     }, .max_turns = *max_turns }, before );
-                } ) ) );
+                } ) } ) );
             } else if( item_kind ) {
-                const driver_items::found_item found = driver_items::find_item( jo.get_string( "item" ) );
-                if( !found.error.empty() ) {
-                    write_all( fd, error_line( id, found.error ) );
+                const auto found = driver_items::find_item( jo.get_string( "item" ) );
+                if( !found ) {
+                    write_all( fd, error_line( id, found.error() ) );
                     continue;
                 }
                 const std::optional<int> max_turns = requested_turns( jo );
@@ -915,16 +964,18 @@ auto run_driver_loop( int fd, const driver_options &options ) -> bool
                     .method = jo.get_string( "method", "" ),
                 };
                 const snapshot before = take_snapshot();
-                write_all( fd, observation_line( *id, before, guarded( before, [&]() {
+                write_all( fd, observation_line( { .id = *id, .before = before,
+                                                   .result = guarded( before, [&]()
+                {
                     return run_typed( { .run = [&]()
                     {
-                        return driver_items::run_command( *item_kind, found.ref, options );
+                        return driver_items::run_command( *item_kind, *found, options );
                     }, .max_turns = *max_turns }, before );
-                } ) ) );
+                } ) } ) );
             } else if( cmd == "craft" ) {
                 const std::string recipe = jo.get_string( "recipe" );
-                if( const std::string why = driver_items::recipe_error( recipe ); !why.empty() ) {
-                    write_all( fd, error_line( id, why ) );
+                if( const auto known = driver_items::recipe_error( recipe ); !known ) {
+                    write_all( fd, error_line( id, known.error() ) );
                     continue;
                 }
                 const std::optional<int> max_turns = requested_turns( jo );
@@ -933,12 +984,14 @@ auto run_driver_loop( int fd, const driver_options &options ) -> bool
                     continue;
                 }
                 const snapshot before = take_snapshot();
-                write_all( fd, observation_line( *id, before, guarded( before, [&]() {
+                write_all( fd, observation_line( { .id = *id, .before = before,
+                                                   .result = guarded( before, [&]()
+                {
                     return run_typed( { .run = [&]()
                     {
                         return driver_items::run_craft( recipe );
                     }, .max_turns = *max_turns }, before );
-                } ) ) );
+                } ) } ) );
             } else if( cmd == "sleep" ) {
                 const std::optional<int> max_turns = requested_turns( jo );
                 if( !max_turns ) {
@@ -946,26 +999,30 @@ auto run_driver_loop( int fd, const driver_options &options ) -> bool
                     continue;
                 }
                 const snapshot before = take_snapshot();
-                write_all( fd, observation_line( *id, before, guarded( before, [&]() {
+                write_all( fd, observation_line( { .id = *id, .before = before,
+                                                   .result = guarded( before, [&]()
+                {
                     return run_typed( { .run = []()
                     {
                         return driver_items::run_sleep();
                     }, .max_turns = *max_turns }, before );
-                } ) ) );
+                } ) } ) );
             } else if( cmd == "view" ) {
                 // Read-only, so it answers while a screen waits for a key as well as when none does.
                 const std::optional<int64_t> radius = jo.has_member( "radius" ) ?
-                                                      whole_number( jo, "radius", 1, driver_view::max_radius ) :
+                                                      bounded_integer( { .jo = jo, .name = "radius", .min = 1,
+                                                          .max = driver_view::max_radius } ) :
                                                       std::optional<int64_t>( driver_view::default_radius );
                 if( !radius ) {
                     write_all( fd, error_line( id, "radius must be a whole number from 1 to " +
                                                std::to_string( driver_view::max_radius ) ) );
                     continue;
                 }
-                write_all( fd, observation_line( *id, take_snapshot(), modal_result(),
-                [&]( JsonOut & out ) {
+                write_all( fd, observation_line( { .id = *id, .before = take_snapshot(),
+                                                   .result = modal_result(), .payload = [&]( JsonOut & out )
+                {
                     return driver_view::write_view( out, static_cast<int>( *radius ) );
-                }, view_mode::none ) );
+                }, .views = view_mode::none } ) );
             } else if( cmd == "run_scene" ) {
                 const std::string name = jo.has_string( "name" ) ? jo.get_string( "name" ) : std::string();
                 if( !driver_scene::valid_name( name ) ) {
@@ -980,13 +1037,15 @@ auto run_driver_loop( int fd, const driver_options &options ) -> bool
                 }
                 const snapshot before = take_snapshot();
                 driver_scene::result scene = driver_scene::run( file );
-                write_all( fd, observation_line( *id, before, modal_result(), [&]( JsonOut & out ) -> bool {
+                write_all( fd, observation_line( { .id = *id, .before = before,
+                .result = modal_result(), .payload = [&]( JsonOut & out ) -> bool {
                     return driver_scene::write( out, std::move( scene ) );
-                } ) );
+                } } ) );
             } else if( cmd == "capture" ) {
                 write_all( fd, capture_line( *id, jo, options.windowed ) );
             } else if( cmd == "attach_view" ) {
-                const std::optional<int64_t> radius = whole_number( jo, "radius", 0, driver_view::max_radius );
+                const std::optional<int64_t> radius = bounded_integer( { .jo = jo, .name = "radius",
+                                                      .max = driver_view::max_radius } );
                 if( !radius ) {
                     write_all( fd, error_line( id, "radius must be a whole number from 0 to " +
                                                std::to_string( driver_view::max_radius ) +
@@ -996,8 +1055,8 @@ auto run_driver_loop( int fd, const driver_options &options ) -> bool
                 attached_view_radius = static_cast<int>( *radius );
                 write_all( fd, attach_view_line( *id, attached_view_radius ) );
             } else if( cmd == "seed" ) {
-                const std::optional<int64_t> seed = whole_number( jo, "seed", 0,
-                                                    std::numeric_limits<unsigned int>::max() );
+                const std::optional<int64_t> seed = bounded_integer( { .jo = jo, .name = "seed",
+                                                    .max = std::numeric_limits<unsigned int>::max() } );
                 if( !seed ) {
                     write_all( fd, error_line( id, "seed must be a whole number from 0 to 4294967295" ) );
                     continue;

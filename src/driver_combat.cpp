@@ -35,6 +35,7 @@ namespace
 {
 
 using driver_items::command_result;
+using driver_items::outcome;
 
 /// How far a shot may be aimed, in tiles: further than the loaded map reaches in any direction.
 constexpr int max_fire_offset = 132;
@@ -44,13 +45,13 @@ const efftype_id effect_pet( "pet" );
 /// A refusal the driver itself explains: the reason is in `detail` only.
 auto refused( std::string detail ) -> command_result
 {
-    return { .outcome = "refused", .detail = std::move( detail ) };
+    return { .outcome = outcome::refused, .detail = std::move( detail ) };
 }
 
 /// A command the game declined with a message of its own: the driver reads the log for it.
 auto refused_silently() -> command_result
 {
-    return { .outcome = "refused" };
+    return { .outcome = outcome::refused };
 }
 
 /// Whether the avatar has an activity under way or is asleep, so that a new one would replace it.

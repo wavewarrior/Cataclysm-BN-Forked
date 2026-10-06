@@ -46,7 +46,7 @@ int captures_written = 0;
 /// asleep) has no drawable to dump from. A state view is drawn offscreen and does not.
 auto window_has_drawable( SDL_Window *window, mode kind ) -> bool
 {
-    const auto unusable = SDL_WindowFlags( SDL_WINDOW_HIDDEN | SDL_WINDOW_MINIMIZED );
+    auto unusable = SDL_WindowFlags( SDL_WINDOW_HIDDEN | SDL_WINDOW_MINIMIZED );
     if( kind == mode::composite ) {
         unusable |= SDL_WINDOW_OCCLUDED;
     }
@@ -89,7 +89,7 @@ auto capture( const request &req, const std::function<void()> &draw ) -> result
 
     const auto composite = req.kind == mode::composite;
     const auto stem = req.dir + "/turn-" + std::to_string( req.turn ) + "-" +
-                             std::to_string( captures_written + 1 ) + "-";
+                      std::to_string( captures_written + 1 ) + "-";
     const auto frame_path = stem + ( composite ? "final.bmp" : "state.png" );
     const auto map_path = stem + "map.json";
 
