@@ -21,6 +21,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -72,8 +73,9 @@ struct reply {
     }
 };
 
-/// Serves `requests`, one line each, and returns the response to each in turn.
-auto converse(const std::vector<std::string>& requests) -> std::vector<reply> {
+/// Serves `requests`, one line each, and returns the response to each in turn. `scenes_dir` is
+/// where `run_scene` looks for Scenes; empty selects the driver's default.
+auto converse(const std::vector<std::string>& requests, const std::string& scenes_dir = "") -> std::vector<reply> {
     int fds[2];
     REQUIRE(socketpair(AF_UNIX, SOCK_STREAM, 0, fds) == 0);
 
@@ -99,7 +101,7 @@ auto converse(const std::vector<std::string>& requests) -> std::vector<reply> {
         // Hanging up ends the loop.
         close(fds[1]);
     });
-    const bool served = run_driver_loop(fds[0], deny.string());
+    const bool served = run_driver_loop(fds[0], deny.string(), scenes_dir);
     agent.join();
     close(fds[0]);
     std::filesystem::remove(deny);
@@ -551,4 +553,181 @@ TEST_CASE("driver_loop_attached_view_keeps_the_response_within_the_ceiling_and_s
         CHECK(view.get_bool("truncated", false));
         CHECK(view.get_array("grid").size() >= 3);
     }
+}
+
+namespace {
+
+/// Scenes on disk for one test, removed with the object: `name` -> Lua source.
+struct scene_dir {
+    std::filesystem::path path = std::filesystem::temp_directory_path() / "bnplay_scene_test";
+
+    explicit scene_dir(const std::map<std::string, std::string>& scenes) {
+        std::filesystem::remove_all(path);
+        std::filesystem::create_directories(path);
+        for (const auto& [name, source] : scenes) { std::ofstream(path / (name + ".lua")) << source; }
+    }
+    ~scene_dir() { std::filesystem::remove_all(path); }
+    scene_dir(const scene_dir&) = delete;
+    auto operator=(const scene_dir&) -> scene_dir& = delete;
+};
+
+/// The `scene` member of a response.
+struct scene_report {
+    bool present = false;
+    std::string status;
+    std::vector<std::string> lines;
+    bool truncated = false;
+};
+
+auto scene_of(const reply& r) -> scene_report {
+    std::istringstream in(r.line);
+    JsonIn jsin(in);
+    JsonObject jo = jsin.get_object();
+    jo.allow_omitted_members();
+    scene_report out;
+    if (!jo.has_object("scene")) { return out; }
+    JsonObject scene = jo.get_object("scene");
+    scene.allow_omitted_members();
+    out.present = true;
+    out.status = scene.get_string("status", "");
+    out.truncated = jo.get_bool("truncated", false);
+    for (JsonValue line : scene.get_array("lines")) { out.lines.push_back(line.get_string()); }
+    return out;
+}
+
+auto has_line_with(const scene_report& scene, const std::string& text) -> bool {
+    return std::ranges::any_of(scene.lines, [&](const std::string& line) { return line.find(text) != std::string::npos; });
+}
+
+} // namespace
+
+TEST_CASE("driver_loop_run_scene_reports_what_the_scene_logged_in_no_time", "[driver]") {
+    setup();
+    const scene_dir scenes({{"logs", "gdebug.log_info(\"LOGS_RESULT first\")\nprint(\"LOGS_RESULT second\")\nreturn true"},
+        {"quiet", "return true"}});
+    const int turn_before = to_turn<int>(calendar::turn);
+
+    const std::vector<reply> out = converse({
+        R"({"id":1,"cmd":"run_scene","name":"logs"})",
+        R"({"id":2,"cmd":"run_scene","name":"logs"})",
+        R"({"id":3,"cmd":"run_scene","name":"quiet"})",
+    }, scenes.path.string());
+
+    for (const reply& each : out) {
+        CAPTURE(each.line);
+        CHECK(each.text("status") == "ok");
+        CHECK(each.text("outcome") == "completed");
+        CHECK_FALSE(each.flag("time_passed"));
+        CHECK(each.number("turn") == turn_before);
+    }
+    // What a Scene logs belongs to that run alone: the second run does not carry the first's lines.
+    for (const size_t i : {0, 1}) {
+        const scene_report scene = scene_of(out[i]);
+        CHECK(scene.status == "passed");
+        CHECK(scene.lines == std::vector<std::string>{"LOGS_RESULT first", "LOGS_RESULT second"});
+        CHECK_FALSE(scene.truncated);
+    }
+    const scene_report quiet = scene_of(out[2]);
+    CHECK(quiet.status == "passed");
+    CHECK(quiet.lines.empty());
+    // The result is its own member, not folded into the messages.
+    CHECK_FALSE(out[0].line.find("LOGS_RESULT") == std::string::npos);
+    CHECK(out[0].line.find("\"new_messages\":[]") != std::string::npos);
+}
+
+TEST_CASE("driver_loop_a_failing_scene_reports_failed_with_its_lines_and_the_driver_carries_on", "[driver]") {
+    setup();
+    const scene_dir scenes({
+        {"raises", "gdebug.log_info(\"RAISES_RESULT before\")\nerror(\"scene exploded\")"},
+        {"says_no", "gdebug.log_info(\"SAYS_NO_RESULT checked\")\nreturn false"},
+        {"no_syntax", "this is not lua"},
+    });
+
+    const std::vector<reply> out = converse({
+        R"({"id":1,"cmd":"run_scene","name":"raises"})",
+        R"({"id":2,"cmd":"run_scene","name":"says_no"})",
+        R"({"id":3,"cmd":"run_scene","name":"no_syntax"})",
+        R"({"id":4,"cmd":"state"})",
+    }, scenes.path.string());
+
+    for (const size_t i : {0, 1, 2}) {
+        CAPTURE(i, out[i].line);
+        // The request itself succeeded: the failure is the Scene's result, not a protocol error.
+        CHECK(out[i].text("status") == "ok");
+        CHECK(scene_of(out[i]).status == "failed");
+    }
+    const scene_report raises = scene_of(out[0]);
+    CHECK(raises.lines.front() == "RAISES_RESULT before");
+    CHECK(has_line_with(raises, "scene exploded"));
+    CHECK(scene_of(out[1]).lines.front() == "SAYS_NO_RESULT checked");
+    CHECK_FALSE(scene_of(out[2]).lines.empty());
+    // The driver still answers, and a passing Scene afterwards is unaffected by the failures.
+    CHECK(out[3].text("status") == "ok");
+    CHECK_FALSE(out[3].object_has("scene"));
+}
+
+TEST_CASE("driver_loop_run_scene_rejects_a_bad_or_unknown_name_as_a_protocol_error", "[driver]") {
+    setup();
+    const scene_dir scenes({{"real", "return true"}});
+    const int turn_before = to_turn<int>(calendar::turn);
+
+    const std::vector<reply> out = converse({
+        R"({"id":1,"cmd":"run_scene"})",
+        R"({"id":2,"cmd":"run_scene","name":3})",
+        R"({"id":3,"cmd":"run_scene","name":""})",
+        R"({"id":4,"cmd":"run_scene","name":"no_such_scene"})",
+        R"({"id":5,"cmd":"run_scene","name":"../real"})",
+        R"({"id":6,"cmd":"run_scene","name":"real.lua"})",
+        R"({"id":7,"cmd":"run_scene","name":"a/b"})",
+        R"({"id":8,"cmd":"state"})",
+    }, scenes.path.string());
+
+    for (const size_t i : {0, 1, 2, 3, 4, 5, 6}) {
+        CAPTURE(i, out[i].line);
+        CHECK(out[i].text("status") == "error");
+        CHECK_FALSE(out[i].text("error").empty());
+        CHECK_FALSE(out[i].object_has("scene"));
+    }
+    CHECK(out[7].number("turn") == turn_before);
+}
+
+TEST_CASE("driver_loop_run_scene_cuts_a_long_result_and_says_so", "[driver]") {
+    setup();
+    const scene_dir scenes({{"chatty",
+        "for i = 1, 200 do gdebug.log_info(\"CHATTY_RESULT line \" .. i .. string.rep(\"x\", 400)) end\nreturn true"}});
+
+    const std::vector<reply> out = converse({
+        R"({"id":1,"cmd":"run_scene","name":"chatty"})",
+    }, scenes.path.string());
+
+    const scene_report scene = scene_of(out[0]);
+    CHECK(scene.status == "passed");
+    CHECK(scene.truncated);
+    CHECK(!scene.lines.empty());
+    CHECK(out[0].line.size() <= 6000);
+    // The newest lines are the ones kept: a Scene reports its summary last.
+    CHECK(has_line_with(scene, "line 200"));
+}
+
+TEST_CASE("driver_loop_the_lighting_scenes_run_unchanged_through_run_scene", "[driver]") {
+    setup();
+    const tripoint_bub_ms light = centre + tripoint_rel_ms(12, 0, 0);
+
+    const std::vector<reply> out = converse({
+        R"({"id":1,"cmd":"run_scene","name":"lightone"})",
+        R"({"id":2,"cmd":"run_scene","name":"lightmobs"})",
+        R"({"id":3,"cmd":"run_scene","name":"lightscene"})",
+        R"({"id":4,"cmd":"run_scene","name":"shadowtest"})",
+    }, "tools/visual_verify/scenes");
+
+    const std::vector<std::string> tags{"LIGHTONE_RESULT", "LIGHTMOBS_RESULT", "LIGHTSCENE_RESULT", "SHADOWTEST_RESULT"};
+    for (size_t i = 0; i < out.size(); ++i) {
+        CAPTURE(i, out[i].line);
+        CHECK(out[i].text("status") == "ok");
+        const scene_report scene = scene_of(out[i]);
+        CHECK(scene.status == "passed");
+        CHECK(has_line_with(scene, tags[i]));
+    }
+    // The Scenes did their work in the world, not just in the log.
+    CHECK(!get_map().i_at(light).empty());
 }

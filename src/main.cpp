@@ -165,6 +165,7 @@ int main( int argc, char* argv[] )
     std::string world; /** if set try to load first save in this world on startup */
     int driver_fd = -1; /** if >= 0 serve the line-JSON agent driver on this inherited fd */
     std::string driver_deny_list; /** the driver's deny-list file; empty selects the default */
+    std::string driver_scenes; /** the driver's Scenes directory; empty selects the default */
 
     // Set default file paths
 #if defined(PREFIX)
@@ -185,7 +186,7 @@ int main( int argc, char* argv[] )
         const char *section_default = nullptr;
         const char *section_map_sharing = "Map sharing";
         const char *section_user_directory = "User directories";
-        const std::array<arg_handler, 19> first_pass_arguments = {{
+        const std::array<arg_handler, 20> first_pass_arguments = {{
                 {
                     "--seed", "<string of letters and or numbers>",
                     "Sets the random number generator's seed value",
@@ -444,6 +445,18 @@ int main( int argc, char* argv[] )
                         return -1;
                     }
                     driver_deny_list = params[0];
+                    return 1;
+                }
+            },
+            {
+                "--driver-scenes", "<dir>",
+                "Look for the driver's run_scene Scenes in this directory instead of tools/visual_verify/scenes.",
+                section_default,
+                [&driver_scenes]( int num_args, const char **params ) -> int {
+                    if( num_args < 1 ) {
+                        return -1;
+                    }
+                    driver_scenes = params[0];
                     return 1;
                 }
             }
@@ -833,7 +846,7 @@ int main( int argc, char* argv[] )
                 break;
             }
             if( driver_fd >= 0 ) {
-                if( !run_driver_loop( driver_fd, driver_deny_list ) ) {
+                if( !run_driver_loop( driver_fd, driver_deny_list, driver_scenes ) ) {
                     return 1;
                 }
                 exit_handler( 0 );

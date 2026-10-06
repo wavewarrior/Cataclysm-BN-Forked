@@ -10,8 +10,10 @@
 /// Call after the world is loaded. Returns on `quit` or when the peer closes the descriptor.
 /// `deny_list_path` names the data file listing actions the driver refuses; empty selects the
 /// default file under the data directory. Returns false, having served nothing, when that file
-/// cannot be loaded.
-auto run_driver_loop( int fd, const std::string &deny_list_path ) -> bool;
+/// cannot be loaded. `scenes_dir` is where `run_scene` finds Scenes; empty selects the Scene
+/// library of the checkout the game runs from (`tools/visual_verify/scenes` under `--basepath`).
+auto run_driver_loop( int fd, const std::string &deny_list_path,
+                      const std::string &scenes_dir = "" ) -> bool;
 
 /// True while the driver serves requests. The input layer must not wait for a key then: nobody
 /// is typing, so a read with no modal fiber to answer it would hang the process.

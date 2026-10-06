@@ -25,6 +25,7 @@
 #include "driver_combat.h"
 #include "driver_items.h"
 #include "driver_message_delta.h"
+#include "driver_scene.h"
 #include "driver_view.h"
 #include "fstream_utils.h"
 #include "game.h"
@@ -608,6 +609,9 @@ const std::string default_deny_list_name = "driver_deny_list.json";
 /// True once the driver serves requests: the input layer's guard keys off it.
 bool driver_serving = false;
 
+/// Where `run_scene` looks for Scenes; empty means the driver's default. Set when the loop starts.
+std::string scenes_directory;
+
 void parse_deny_list( JsonIn &jsin )
 {
     JsonObject jo = jsin.get_object();
@@ -700,7 +704,8 @@ auto run_key( const input_event &evt, const snapshot &before ) -> action_result
 
 } // namespace
 
-auto run_driver_loop( int fd, const std::string &deny_list_path ) -> bool
+auto run_driver_loop( int fd, const std::string &deny_list_path,
+                      const std::string &scenes_dir ) -> bool
 {
     const std::string path = deny_list_path.empty() ? PATH_INFO::datadir() + default_deny_list_name :
                              deny_list_path;
@@ -709,6 +714,7 @@ auto run_driver_loop( int fd, const std::string &deny_list_path ) -> bool
         std::cerr << "driver: cannot load the deny list " << path << "\n";
         return false;
     }
+    scenes_directory = scenes_dir;
     driver_serving = true;
     attached_view_radius = 0;
     line_reader in( fd );
@@ -728,7 +734,7 @@ auto run_driver_loop( int fd, const std::string &deny_list_path ) -> bool
             const std::optional<driver_items::command> item_kind = item_command_named( cmd );
             const std::optional<driver_combat::command> combat_kind = driver_combat::command_named( cmd );
             if( modal && ( cmd == "move" || cmd == "wait" || cmd == "action" || cmd == "craft" ||
-                           cmd == "sleep" || item_kind || combat_kind ) ) {
+                           cmd == "sleep" || cmd == "run_scene" || item_kind || combat_kind ) ) {
                 write_all( fd, error_line( id, "a menu is open (prompt '" + modal->prompt +
                                            "'): answer it with key" ) );
                 continue;
@@ -879,6 +885,23 @@ auto run_driver_loop( int fd, const std::string &deny_list_path ) -> bool
                 [&]( JsonOut & out ) {
                     return driver_view::write_view( out, static_cast<int>( *radius ) );
                 }, view_mode::none ) );
+            } else if( cmd == "run_scene" ) {
+                const std::string name = jo.has_string( "name" ) ? jo.get_string( "name" ) : std::string();
+                if( !driver_scene::valid_name( name ) ) {
+                    write_all( fd, error_line( id, "name must be the name of a Scene: letters, digits, _ and -" ) );
+                    continue;
+                }
+                const std::string dir = scenes_directory.empty() ? driver_scene::default_dir() : scenes_directory;
+                const std::string file = driver_scene::find( dir, name );
+                if( file.empty() ) {
+                    write_all( fd, error_line( id, "unknown scene '" + name + "': no " + name + ".lua in " + dir ) );
+                    continue;
+                }
+                const snapshot before = take_snapshot();
+                driver_scene::result scene = driver_scene::run( file );
+                write_all( fd, observation_line( *id, before, modal_result(), [&]( JsonOut & out ) -> bool {
+                    return driver_scene::write( out, std::move( scene ) );
+                } ) );
             } else if( cmd == "attach_view" ) {
                 const std::optional<int64_t> radius = whole_number( jo, "radius", 0, driver_view::max_radius );
                 if( !radius ) {
