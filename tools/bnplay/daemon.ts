@@ -1,11 +1,12 @@
 /**
  * The resident supervisor daemon. It keeps games running between shell calls (a boot takes 7 to 10
  * seconds) and serves the operations the CLI and MCP front ends share: start, step, stop, the
- * fixture library operations and shutdown.
+ * fixture library operations, the doctor preflight and shutdown.
  */
 import { join } from "@std/path"
 import { captureBaseline } from "./baseline.ts"
 import { type Config, loadConfig, socketPath } from "./config.ts"
+import { runDoctor } from "./doctor.ts"
 import { Episode, HarnessError } from "./episode.ts"
 import { addFixture, fixtureStatus, listFixtures } from "./fixtures.ts"
 import { type DaemonReply, type DaemonRequest, daemonState, readLines } from "./ipc.ts"
@@ -125,6 +126,8 @@ class Daemon {
           }
         case "fixture_baseline":
           return { ok: true, result: await this.#baseline(request.name) }
+        case "doctor":
+          return { ok: true, result: await this.#doctor(request.fixture, request.self_check) }
         case "ping":
           return { ok: true, result: {} }
         case "shutdown":
@@ -211,6 +214,42 @@ class Daemon {
     } finally {
       // The capture ended its Episode; nobody can step it, so it is not kept as a session.
       if (episode) this.#sessions.delete(episode.id)
+    }
+  }
+
+  /**
+   * The doctor preflight. The Episodes of the optional self-check are booted one at a time, count
+   * against the session cap like any other, and are ended before this returns.
+   */
+  async #doctor(fixture: string | undefined, selfCheck: boolean): Promise<object> {
+    const booted: Episode[] = []
+    try {
+      return await runDoctor(this.#config, {
+        fixture,
+        selfCheck,
+        liveUserdirs: [...this.#sessions.values()]
+          .filter((e) => !e.ended)
+          .map((e) => join(this.#config.home, "episodes", e.id, "userdir")),
+        boot: async (trial) => {
+          this.#refuseBeyondCap()
+          this.#starting++ // taken before the first await, as in #start
+          try {
+            const episode = await Episode.start(
+              this.#config,
+              trial,
+              crypto.randomUUID().slice(0, 8),
+            )
+            booted.push(episode)
+            this.#sessions.set(episode.id, episode)
+            return episode
+          } finally {
+            this.#starting--
+          }
+        },
+      })
+    } finally {
+      // The self-check ended its Episodes; nobody can step them, so they are not kept as sessions.
+      for (const episode of booted) this.#sessions.delete(episode.id)
     }
   }
 

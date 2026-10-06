@@ -16,6 +16,12 @@
  *                           and ends as a harness error (default 600000, ten minutes)
  *   BNPLAY_BASELINE_IDLE_MS how long `fixture baseline` lets the game idle after it reports ready,
  *                           logging whatever it logs at idle (default 3000)
+ *   BNPLAY_MIN_FREE_MEMORY_MB  `doctor` fails below this much available memory (free, inactive
+ *                           and speculative pages; default 1024, a game holds about 1 GB)
+ *   BNPLAY_MIN_FREE_SWAP_MB `doctor` fails below this much free swap (default 1024; swap has been
+ *                           exhausted on this machine before)
+ *   BNPLAY_SELFCHECK_IDLE_MS how long each Episode of `doctor --self-check` idles after it is
+ *                           seeded, before its first world step (default 3000)
  */
 import { dirname, fromFileUrl, join } from "@std/path"
 
@@ -32,6 +38,9 @@ export type Config = {
   maxSessions: number
   idleTimeoutMs: number
   baselineIdleMs: number
+  minFreeMemoryMb: number
+  minFreeSwapMb: number
+  selfCheckIdleMs: number
 }
 
 function positiveInteger(name: string, fallback: number): number {
@@ -39,6 +48,14 @@ function positiveInteger(name: string, fallback: number): number {
   if (raw === undefined) return fallback
   const n = Number(raw)
   if (!Number.isInteger(n) || n <= 0) throw new Error(`${name} must be a positive integer`)
+  return n
+}
+
+function nonNegativeInteger(name: string, fallback: number): number {
+  const raw = Deno.env.get(name)
+  if (raw === undefined) return fallback
+  const n = Number(raw)
+  if (!Number.isInteger(n) || n < 0) throw new Error(`${name} must be a non-negative integer`)
   return n
 }
 
@@ -54,6 +71,9 @@ export function loadConfig(): Config {
     maxSessions: positiveInteger("BNPLAY_MAX_SESSIONS", 2),
     idleTimeoutMs: positiveInteger("BNPLAY_IDLE_TIMEOUT_MS", 600_000),
     baselineIdleMs: positiveInteger("BNPLAY_BASELINE_IDLE_MS", 3_000),
+    minFreeMemoryMb: nonNegativeInteger("BNPLAY_MIN_FREE_MEMORY_MB", 1_024),
+    minFreeSwapMb: nonNegativeInteger("BNPLAY_MIN_FREE_SWAP_MB", 1_024),
+    selfCheckIdleMs: nonNegativeInteger("BNPLAY_SELFCHECK_IDLE_MS", 3_000),
   }
 }
 

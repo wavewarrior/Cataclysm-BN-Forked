@@ -22,12 +22,16 @@ process exits. Each line starts with the game's `HH:MM:SS.mmm` wall-clock stamp.
 its own noise: `mock_log_boot.txt` is logged during boot, before the first ping is answered;
 `mock_log_idle.txt` shortly after it is answered; `mock_log_quit.txt` while shutting down after
 `quit`. A world with `mock_log_none` writes no debug.log at all.
+
+A world with `mock_diverge` makes the first `wait` report a random `pain`, so two same-seed Episodes
+of it disagree there, as the real game's same-seed Episodes sometimes do.
 """
 from __future__ import annotations
 
 import atexit
 import json
 import os
+import random
 import subprocess
 import sys
 import threading
@@ -56,6 +60,8 @@ class Game:
         self.menu: str | None = None
         # The message log; an identical message in a row merges into one entry with a count.
         self.log: list[list] = []
+        # Set from the world: the first world step is nondeterministic (see `mock_diverge`).
+        self.diverge = False
 
     def say(self, text: str) -> str:
         """Logs a message and returns the log entry as the player sees it."""
@@ -169,6 +175,9 @@ def wait(rid: int, game: Game, req: dict) -> dict:
     game.turn += min(turns, TURN_CAP)
     if turns > TURN_CAP:
         return observation(rid, game, outcome="interrupted", reason="turn_cap", time_passed=True)
+    if game.diverge:
+        game.diverge = False
+        return observation(rid, game, time_passed=True, pain=random.randrange(1 << 30))
     return observation(rid, game, time_passed=True)
 
 
@@ -244,6 +253,7 @@ def main() -> int:
     debug_log.log_script("mock_log_boot.txt")
     chan = os.fdopen(int(fd), "r+b", buffering=0)
     game = Game(deny)
+    game.diverge = os.path.exists(os.path.join(userdir, "save", world, "mock_diverge"))
     ready = False
 
     def reply(resp: dict) -> None:
