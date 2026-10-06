@@ -2,6 +2,7 @@
 
 #include <deque>
 #include <string>
+#include <vector>
 
 namespace cata
 {
@@ -37,9 +38,29 @@ class lua_log_handler
             return entries;
         }
 
+        /// Everything added while the object lives, in order, whatever the capacity of the log.
+        /// Does not touch the entries the log keeps. At most one is active at a time.
+        class capture
+        {
+            public:
+                explicit capture( lua_log_handler &handler );
+                ~capture();
+                capture( const capture & ) = delete;
+                capture &operator=( const capture & ) = delete;
+
+                const std::vector<lua_log_msg> &messages() const {
+                    return collected;
+                }
+
+            private:
+                lua_log_handler &owner;
+                std::vector<lua_log_msg> collected;
+        };
+
     private:
         std::deque<lua_log_msg> entries;
         size_t capacity = 0;
+        std::vector<lua_log_msg> *capturing = nullptr;
 };
 
 lua_log_handler &get_lua_log_instance();

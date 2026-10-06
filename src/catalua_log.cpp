@@ -22,7 +22,21 @@ void lua_log_handler::add( LuaLogLevel level, std::string &&text )
     while( entries.size() >= capacity ) {
         entries.pop_back();
     }
+    if( capturing ) {
+        capturing->push_back( lua_log_msg{ level, text } );
+    }
     entries.push_front( lua_log_msg{ level, text } );
+}
+
+lua_log_handler::capture::capture( lua_log_handler &handler )
+    : owner( handler )
+{
+    owner.capturing = &collected;
+}
+
+lua_log_handler::capture::~capture()
+{
+    owner.capturing = nullptr;
 }
 
 void lua_log_handler::clear()
