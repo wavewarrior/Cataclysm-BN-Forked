@@ -63,6 +63,7 @@
     "@std/front-matter": "jsr:@std/front-matter@^1.0.9",
     "@std/fs": "jsr:@std/fs@^1.0.19",
     "@std/path": "jsr:@std/path@^1.1.2",
+    "@std/toml": "jsr:@std/toml@^1.0.11",
     "@std/yaml": "jsr:@std/yaml@^1.0.10",
     "@valibot/valibot": "jsr:@valibot/valibot@^1.1.0",
     "@zip-js/zip-js": "jsr:@zip-js/zip-js@^2.8.26",
