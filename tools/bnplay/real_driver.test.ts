@@ -14,6 +14,7 @@ import { runCliLifecycle } from "./cli_lifecycle.ts"
 import { type ContractTarget, runContract } from "./contract.ts"
 import { runItemContract } from "./item_contract.ts"
 import { runMenuContract } from "./menu_contract.ts"
+import { runSceneContract } from "./scene_contract.ts"
 import { runTimeContract } from "./time_contract.ts"
 import { runViewContract } from "./view_contract.ts"
 
@@ -42,6 +43,7 @@ const target: ContractTarget = {
       basepath,
       firstTimeoutMs: 30_000,
       denyList: opts?.denyList,
+      scenesDir: opts?.scenesDir,
       stderr: Deno.env.get("BNPLAY_VERBOSE") ? "inherit" : "null",
     })
     const close = driver.close.bind(driver)
@@ -60,6 +62,7 @@ runActivityContract("real binary", target)
 runCombatContract("real binary", target)
 runMenuContract("real binary", target)
 runViewContract("real binary", target, { inventoryIds: true })
+runSceneContract("real binary", target, { scenesLibrary: join(repo, "tools/visual_verify/scenes") })
 
 // The same Episode lifecycle through the CLI and the resident daemon, on a clone of the fixture.
 runCliLifecycle("real binary", {

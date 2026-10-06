@@ -50,6 +50,8 @@ export type SpawnOptions = {
   ) => void
   /** Deny-list data file for the driver (`--driver-deny-list`); default is the repo's file. */
   denyList?: string
+  /** Directory `run_scene` finds Scenes in (`--driver-scenes`); default is the repo's own. */
+  scenesDir?: string
 }
 
 export type Driver = {
@@ -90,6 +92,7 @@ export function spawnDriver(opts: SpawnOptions): Driver {
       "--basepath",
       opts.basepath,
       ...(opts.denyList ? ["--driver-deny-list", opts.denyList] : []),
+      ...(opts.scenesDir ? ["--driver-scenes", opts.scenesDir] : []),
     ],
     stdin: "piped",
     stdout: "piped",

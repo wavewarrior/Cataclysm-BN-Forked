@@ -3,6 +3,7 @@ import { spawnDriver } from "./client.ts"
 import { type ContractTarget, runContract } from "./contract.ts"
 import { runCombatContract } from "./combat_contract.ts"
 import { runMenuContract } from "./menu_contract.ts"
+import { runSceneContract } from "./scene_contract.ts"
 import { MOCK_DRIVER } from "./testkit.ts"
 import { runViewContract } from "./view_contract.ts"
 import { runTimeContract } from "./time_contract.ts"
@@ -17,6 +18,7 @@ const target: ContractTarget = {
       world: "mock",
       basepath: userdir,
       denyList: opts?.denyList,
+      scenesDir: opts?.scenesDir,
       firstTimeoutMs: 10_000,
     })
     const close = driver.close.bind(driver)
@@ -33,3 +35,4 @@ runTimeContract("mock driver", target)
 runMenuContract("mock driver", target)
 runCombatContract("mock driver", target)
 runViewContract("mock driver", target)
+runSceneContract("mock driver", target)

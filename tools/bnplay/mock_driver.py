@@ -12,6 +12,10 @@ side and cannot go up, so a move is blocked or refused and costs no time; `wait`
 spend turns; `inventory`, `look` and `map` open menus that a `key` answers.
 `view` answers for the same walled-in fixture (the avatar's neighbours are walls, the rest is out
 of sight, and a rock lies underfoot), and `attach_view` adds that view to every observation.
+`run_scene <name>` reads `<name>.lua` from the `--driver-scenes` directory and runs it the only way a
+mock can: it understands `gdebug.log_info("...")`, `print("...")` (a logged line), `error("...")`
+(the Scene fails, its error last in the lines) and `return false`, one statement per line, and
+nothing else. It answers like the real driver, whose Lua runs everything.
 
 Test hooks (mock only, never part of the protocol): `info` reports the user directory and world the
 mock was started with, `dirty` writes a file into that world, `spawn_child` starts a grandchild in
@@ -41,6 +45,7 @@ import atexit
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 import threading
@@ -68,6 +73,11 @@ COMBAT_REACH = {"melee": 1, "fire": 132, "smash": 1}
 # The view command: its default radius and the widest it answers.
 VIEW_DEFAULT_RADIUS = 5
 VIEW_MAX_RADIUS = 10
+
+# The Scenes `run_scene` finds: a name is letters, digits, `_` and `-`, and a Scene is one file.
+SCENE_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
+SCENE_LOGGED = re.compile(r'^\s*(?:gdebug\.log_(?:info|warn|error)|print)\("(.*)"\)\s*$')
+SCENE_RAISES = re.compile(r'^\s*error\("(.*)"\)\s*$')
 
 
 class Game:
@@ -216,6 +226,31 @@ def view(rid: int, game: Game, req: dict) -> dict:
     return observation(rid, game, **view_members(radius))
 
 
+def run_scene(rid: int, game: Game, req: dict, scenes_dir: str) -> dict:
+    if game.menu:
+        return menu_open(rid, game)
+    name = req.get("name")
+    if not isinstance(name, str) or not SCENE_NAME.fullmatch(name):
+        return error(rid, "`name` must be the name of a Scene: letters, digits, _ and -")
+    path = os.path.join(scenes_dir, name + ".lua")
+    if not os.path.isfile(path):
+        return error(rid, f"unknown scene {name!r}: no {name}.lua in {scenes_dir}")
+    lines: list[str] = []
+    passed = True
+    with open(path) as f:
+        for statement in f.read().splitlines():
+            if logged := SCENE_LOGGED.match(statement):
+                lines.append(logged[1])
+            elif raised := SCENE_RAISES.match(statement):
+                lines.append(f"error: {path}:1: {raised[1]}")
+                passed = False
+                break
+            elif statement.strip() == "return false":
+                passed = False
+                break
+    return observation(rid, game, scene={"status": "passed" if passed else "failed", "lines": lines})
+
+
 def attach_view(rid: int, game: Game, req: dict) -> dict:
     radius = req.get("radius")
     if not is_int(radius) or not 0 <= radius <= VIEW_MAX_RADIUS:
@@ -334,6 +369,9 @@ def main() -> int:
         return 2
     userdir = option(argv, "--userdir") or ""
     world = option(argv, "--world") or ""
+    scenes_dir = option(argv, "--driver-scenes") or os.path.join(
+        option(argv, "--basepath") or "", "tools", "visual_verify", "scenes"
+    )
     try:
         deny = load_deny_list(option(argv, "--driver-deny-list"))
     except (OSError, ValueError, KeyError) as e:
@@ -383,6 +421,8 @@ def main() -> int:
             reply(seed(rid, req))
         elif cmd == "view":
             reply(view(rid, game, req))
+        elif cmd == "run_scene":
+            reply(run_scene(rid, game, req, scenes_dir))
         elif cmd == "attach_view":
             reply(attach_view(rid, game, req))
         elif cmd == "action":
