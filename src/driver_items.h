@@ -20,6 +20,18 @@ enum class command {
     wield,
     wear,
     take_off,
+    eat,
+    use,
+    read,
+    reload,
+};
+
+/// What the typed commands take beyond the item they act on.
+struct command_options {
+    /// `eat`: the answer to the game's "eat it anyway?" question.
+    bool anyway = false;
+    /// `use`: which of the item's uses to run; empty when the item has just one.
+    std::string method;
 };
 
 /// What an item command did, as far as the executor can tell. The driver adds the time it spent.
@@ -55,7 +67,22 @@ auto issue_id( item &it ) -> std::string;
 auto find_item( const std::string &id_text ) -> found_item;
 
 /// Runs `kind` on the item. Spends the avatar's moves as the game does; the caller lets the
-/// world catch up. The item may have gone since `find_item`: that is a refusal.
-auto run_command( command kind, const safe_reference<item> &target ) -> command_result;
+/// world catch up. The item may have gone since `find_item`: that is a refusal. A command that
+/// starts an activity (`read`, `reload`, `use` for some items) leaves it running for the caller.
+auto run_command( command kind, const safe_reference<item> &target,
+const command_options &options = {} ) -> command_result;
+
+/// Empty when `recipe` names a recipe the game knows; otherwise why not. An unknown recipe id
+/// is a protocol error, since an invented id is an agent bug.
+auto recipe_error( const std::string &recipe ) -> std::string;
+
+/// Starts crafting `recipe` once, from what the avatar has and what is near: the crafting
+/// activity is left running for the caller. The game's own checks apply, and so does its pick
+/// of components; a craft that would need a choice between components is `unsupported`.
+auto run_craft( const std::string &recipe ) -> command_result;
+
+/// Starts trying to fall asleep, as the sleep action does once its menu is answered "yes".
+/// The sleep itself is left running for the caller.
+auto run_sleep() -> command_result;
 
 } // namespace driver_items

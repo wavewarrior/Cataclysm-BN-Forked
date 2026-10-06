@@ -30,6 +30,7 @@
 #include "json.h"
 #include "messages.h"
 #include "path_info.h"
+#include "player_activity.h"
 #include "rng.h"
 
 namespace
@@ -148,6 +149,10 @@ struct open_modal {
 /// single modal fiber.
 std::optional<open_modal> modal;
 
+/// Why the game last stopped the avatar's activity, if it did since the driver began running
+/// one. The first reason stands. See `driver_note_interruption`.
+std::optional<std::string_view> interruption;
+
 /// What a request did, as far as the driver can tell without looking at the world again.
 struct action_result {
     bool time_passed = false;
@@ -158,6 +163,10 @@ struct action_result {
     std::string detail;
     /// Name of the screen waiting for a key; empty when none is.
     std::string_view prompt;
+    /// Turns an activity ran during the request; empty when the request ran none.
+    std::optional<int> turns;
+    /// How far an activity that was stopped had got, in the game's words; empty when unknown.
+    std::string progress;
 };
 
 /// How a request reads while a screen waits for a key.
@@ -234,6 +243,12 @@ auto observation_line( int id, const snapshot &before, const action_result &resu
     }
     if( !dead && !result.detail.empty() ) {
         jo.member( "detail", result.detail );
+    }
+    if( !dead && result.turns ) {
+        jo.member( "turns", *result.turns );
+    }
+    if( !dead && !result.progress.empty() ) {
+        jo.member( "progress", result.progress );
     }
     if( truncated ) {
         jo.member( "truncated", true );
@@ -333,22 +348,109 @@ auto perform_action( const std::string &action, int &turn_budget ) -> step_repor
     return report;
 }
 
-/// An item command, run on the avatar directly: the game's own checks and costs, no menu. What
-/// it spent in moves lets the world advance, as after any other action. A rejection costs
+/// What a typed command asks of the driver.
+struct typed_request {
+    /// Runs the command on the avatar: the game's own checks and costs, no menu.
+    std::function<driver_items::command_result()> run;
+    /// Turns an activity the command starts may run; 0 means until it ends or is interrupted.
+    int max_turns = 0;
+};
+
+/// True while the avatar has an activity under way or is asleep.
+auto activity_running() -> bool
+{
+    const avatar &u = get_avatar();
+    return ( u.activity && *u.activity ) || u.in_sleep_state();
+}
+
+/// While alive, the game cannot batch an activity's turns into one world step (it skips ahead
+/// in five-minute windows otherwise, which would make a turn limit approximate). A queued
+/// screenshot is what turns that batching off, and nothing in the driver takes one.
+class single_turn_steps
+{
+    public:
+        single_turn_steps() : was_queued( g->queue_screenshot ) {
+            g->queue_screenshot = true;
+        }
+        single_turn_steps( const single_turn_steps & ) = delete;
+        single_turn_steps &operator=( const single_turn_steps & ) = delete;
+        ~single_turn_steps() {
+            g->queue_screenshot = was_queued;
+        }
+    private:
+        bool was_queued;
+};
+
+/// Runs the avatar's activity, a turn at a time, until it ends, the game interrupts it, or
+/// `max_turns` turns have passed (never more than the per-request cap). An activity still
+/// running at the limit is stopped, so a request never leaves one behind.
+auto run_activity( int max_turns, action_result result ) -> action_result
+{
+    avatar &u = get_avatar();
+    if( !activity_running() ) {
+        return result;
+    }
+    const int limit = max_turns > 0 ? std::min( max_turns, max_turns_per_request ) :
+                      max_turns_per_request;
+    int budget = limit;
+    interruption.reset();
+    {
+        const single_turn_steps one_turn_at_a_time;
+        while( budget > 0 && !u.is_dead_state() && activity_running() ) {
+            // The moves the last world step handed out go to the activity, as the main loop does.
+            while( u.moves > 0 && u.activity && *u.activity ) {
+                u.activity->do_turn( u );
+            }
+            if( !activity_running() || u.is_dead_state() ) {
+                break;
+            }
+            advance_to_turn_boundary( budget );
+        }
+    }
+    result.time_passed = result.time_passed || budget < limit;
+    result.turns = limit - budget;
+    if( u.is_dead_state() ) {
+        return result;
+    }
+    if( activity_running() ) {
+        if( u.activity && *u.activity ) {
+            if( const std::optional<std::string> progress = u.activity->get_progress_message( u ) ) {
+                std::vector<std::string> one{ *progress };
+                cap_messages( one, 1, max_message_bytes );
+                result.progress = one.front();
+            }
+            u.cancel_activity();
+        }
+        if( u.in_sleep_state() ) {
+            u.wake_up();
+        }
+        result.outcome = "interrupted";
+        result.reason = "turn_cap";
+    } else if( interruption ) {
+        result.outcome = "interrupted";
+        result.reason = *interruption;
+    }
+    interruption.reset();
+    return result;
+}
+
+/// A typed command, run on the avatar directly. What it spent in moves lets the world advance,
+/// as after any other action, and an activity it started runs to its end. A rejection costs
 /// nothing and carries the game's message.
-auto run_item( driver_items::command kind, const safe_reference<item> &target,
-               const snapshot &before ) -> action_result
+auto run_typed( const typed_request &request, const snapshot &before ) -> action_result
 {
     avatar &u = get_avatar();
     int budget = max_turns_per_request;
     complete_partial_turn( budget );
     driver_items::command_result done = { .outcome = "refused", .detail = "the avatar cannot act" };
+    const bool was_busy = activity_running();
     const int moves_before = u.moves;
     if( u.moves > 0 && !u.is_dead_state() ) {
-        done = driver_items::run_command( kind, target );
+        done = request.run();
     }
     const bool spent = u.moves < moves_before;
-    if( spent ) {
+    const bool started = done.outcome == "completed" && !was_busy && activity_running();
+    if( spent && !started ) {
         advance_to_turn_boundary( budget );
     }
     action_result result = { .time_passed = spent || budget < max_turns_per_request,
@@ -360,7 +462,12 @@ auto run_item( driver_items::command kind, const safe_reference<item> &target,
         const std::vector<std::string> said = compute_message_delta( before.messages, log_window() ).fresh;
         result.detail = said.empty() ? "the game would not do that" : said.back();
     }
-    return result;
+    if( result.outcome == "no_effect" && result.detail.empty() &&
+        !compute_message_delta( before.messages, log_window() ).fresh.empty() ) {
+        // The game said something, as it does for a use that costs nothing: that is an effect.
+        result.outcome = "completed";
+    }
+    return started ? run_activity( request.max_turns, std::move( result ) ) : result;
 }
 
 /// `dir` is a compass point or `up`/`down`; empty when it is none of them.
@@ -376,7 +483,9 @@ auto item_command_named( const std::string &name ) -> std::optional<driver_items
     using driver_items::command;
     static const std::map<std::string, command> known = {
         { "pickup", command::pickup }, { "drop", command::drop }, { "wield", command::wield },
-        { "wear", command::wear }, { "take_off", command::take_off },
+        { "wear", command::wear }, { "take_off", command::take_off }, { "eat", command::eat },
+        { "drink", command::eat }, { "use", command::use }, { "read", command::read },
+        { "reload", command::reload },
     };
     const auto found = known.find( name );
     return found == known.end() ? std::nullopt : std::make_optional( found->second );
@@ -441,6 +550,18 @@ auto whole_number( const JsonObject &jo, const std::string &name, int64_t min,
         return std::nullopt;
     }
     return static_cast<int64_t>( value );
+}
+
+/// The `max_turns` a request names: 0 when it names none, empty when it is not a whole number
+/// of at least 1.
+auto requested_turns( const JsonObject &jo ) -> std::optional<int>
+{
+    if( !jo.has_member( "max_turns" ) ) {
+    return 0;
+}
+const std::optional<int64_t> turns = whole_number( jo, "max_turns", 1,
+                                     std::numeric_limits<int>::max() );
+return turns ? std::optional<int>( static_cast<int>( *turns ) ) : std::nullopt;
 }
 
 /// Actions the driver refuses, each with the note that says why. Loaded once at start.
@@ -569,7 +690,8 @@ auto run_driver_loop( int fd, const std::string &deny_list_path ) -> bool
             id = jo.get_int( "id" );
             const std::string cmd = jo.get_string( "cmd" );
             const std::optional<driver_items::command> item_kind = item_command_named( cmd );
-            if( modal && ( cmd == "move" || cmd == "wait" || cmd == "action" || item_kind ) ) {
+            if( modal && ( cmd == "move" || cmd == "wait" || cmd == "action" || cmd == "craft" ||
+                           cmd == "sleep" || item_kind ) ) {
                 write_all( fd, error_line( id, "a menu is open (prompt '" + modal->prompt +
                                            "'): answer it with key" ) );
                 continue;
@@ -641,9 +763,52 @@ auto run_driver_loop( int fd, const std::string &deny_list_path ) -> bool
                     write_all( fd, error_line( id, found.error ) );
                     continue;
                 }
+                const std::optional<int> max_turns = requested_turns( jo );
+                if( !max_turns ) {
+                    write_all( fd, error_line( id, "max_turns must be a whole number, at least 1" ) );
+                    continue;
+                }
+                const driver_items::command_options options = {
+                    .anyway = jo.get_bool( "anyway", false ),
+                    .method = jo.get_string( "method", "" ),
+                };
                 const snapshot before = take_snapshot();
                 write_all( fd, observation_line( *id, before, guarded( before, [&]() {
-                    return run_item( *item_kind, found.ref, before );
+                    return run_typed( { .run = [&]()
+                    {
+                        return driver_items::run_command( *item_kind, found.ref, options );
+                    }, .max_turns = *max_turns }, before );
+                } ) ) );
+            } else if( cmd == "craft" ) {
+                const std::string recipe = jo.get_string( "recipe" );
+                if( const std::string why = driver_items::recipe_error( recipe ); !why.empty() ) {
+                    write_all( fd, error_line( id, why ) );
+                    continue;
+                }
+                const std::optional<int> max_turns = requested_turns( jo );
+                if( !max_turns ) {
+                    write_all( fd, error_line( id, "max_turns must be a whole number, at least 1" ) );
+                    continue;
+                }
+                const snapshot before = take_snapshot();
+                write_all( fd, observation_line( *id, before, guarded( before, [&]() {
+                    return run_typed( { .run = [&]()
+                    {
+                        return driver_items::run_craft( recipe );
+                    }, .max_turns = *max_turns }, before );
+                } ) ) );
+            } else if( cmd == "sleep" ) {
+                const std::optional<int> max_turns = requested_turns( jo );
+                if( !max_turns ) {
+                    write_all( fd, error_line( id, "max_turns must be a whole number, at least 1" ) );
+                    continue;
+                }
+                const snapshot before = take_snapshot();
+                write_all( fd, observation_line( *id, before, guarded( before, [&]() {
+                    return run_typed( { .run = []()
+                    {
+                        return driver_items::run_sleep();
+                    }, .max_turns = *max_turns }, before );
                 } ) ) );
             } else if( cmd == "seed" ) {
                 const std::optional<int64_t> seed = whole_number( jo, "seed", 0,
@@ -670,6 +835,13 @@ auto run_driver_loop( int fd, const std::string &deny_list_path ) -> bool
 auto driver_mode_active() -> bool
 {
     return driver_serving;
+}
+
+auto driver_note_interruption( std::string_view reason ) -> void
+{
+    if( driver_serving && !interruption ) {
+    interruption = reason;
+}
 }
 
 driver_blocking_read::driver_blocking_read()

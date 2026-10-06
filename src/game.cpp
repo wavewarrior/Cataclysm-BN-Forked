@@ -91,6 +91,7 @@
 #include "distraction_manager.h"
 #include "active_tile_data_def.h"
 #include "distribution_grid.h"
+#include "driver_loop.h"
 #include "drop_token.h"
 #include "fluid_grid.h"
 #include "editmap.h"
@@ -1380,12 +1381,44 @@ static bool cancel_auto_move( Character &who, const std::string &text )
     return false;
 }
 
+/// What the agent driver calls a distraction that stopped an activity.
+static auto driver_interruption_reason( const distraction_type type ) -> std::string_view
+{
+    switch( type ) {
+        case distraction_type::hostile_spotted_far:
+        case distraction_type::hostile_spotted_near:
+            return "monster_in_view";
+        case distraction_type::pain:
+            return "pain";
+        case distraction_type::noise:
+            return "noise";
+        case distraction_type::alert:
+        case distraction_type::attacked:
+        case distraction_type::talked_to:
+        case distraction_type::asthma:
+        case distraction_type::weather_change:
+        case distraction_type::num_distraction_type:
+            break;
+    }
+    return "other";
+}
+
 bool game::cancel_activity_or_ignore_query( const distraction_type type, const std::string &text )
 {
     invalidate_main_ui_adaptor();
     if( ( !u.activity && !u.has_distant_destination() ) ||
         u.activity->is_distraction_ignored( type ) ) {
         return false;
+    }
+    if( driver_mode_active() ) {
+        // Nobody can answer the question: the game stops what it was doing, and the driver
+        // reports why.
+        driver_note_interruption( driver_interruption_reason( type ) );
+        if( u.activity ) {
+            u.cancel_activity();
+        }
+        u.clear_destination();
+        return true;
     }
     if( u.has_distant_destination() ) {
         if( cancel_auto_move( u, text ) ) {

@@ -1,4 +1,5 @@
 #include "catch/catch_amalgamated.hpp"
+#include "activity_type.h"
 #include "avatar.h"
 #include "calendar.h"
 #include "driver_items.h"
@@ -6,6 +7,9 @@
 #include "item.h"
 #include "json.h"
 #include "map.h"
+#include "map_helpers.h"
+#include "player_activity.h"
+#include "recipe.h"
 #include "state_helpers.h"
 #include "type_id.h"
 
@@ -250,4 +254,228 @@ TEST_CASE("driver_items_effects_query_lists_active_effects", "[driver]") {
         }
     }
     CHECK(found);
+}
+
+namespace {
+
+using driver_items::command_options;
+
+/// Like `run`, with the options some commands take.
+auto run_with(driver_items::command kind, const std::string& id, const command_options& options)
+    -> ran {
+    const driver_items::found_item found = driver_items::find_item(id);
+    REQUIRE(found.error.empty());
+    get_avatar().moves = 100;
+    ran out;
+    out.result = driver_items::run_command(kind, found.ref, options);
+    out.spent = 100 - get_avatar().moves;
+    return out;
+}
+
+/// An item of `type` in the avatar's inventory; says its id.
+auto carry(const char* type) -> std::string {
+    item& placed = put_on_ground(type);
+    const std::string id = driver_items::issue_id(placed);
+    REQUIRE(run(command::pickup, id).result.outcome == "completed");
+    return id;
+}
+
+/// Lets the avatar's activity run, a turn at a time, until it ends; the turns it took.
+auto finish_activity(avatar& u) -> int {
+    int turns = 0;
+    while (u.activity && *u.activity && turns < 100000) {
+        u.moves = 100;
+        u.activity->do_turn(u);
+        ++turns;
+    }
+    REQUIRE(turns < 100000);
+    return turns;
+}
+
+auto midday_light() -> void {
+    set_time(calendar::turn_zero + 12_hours);
+    get_avatar().recalc_sight_limits();
+}
+
+} // namespace
+
+TEST_CASE("driver_items_eat_consumes_food_and_refuses_what_the_game_would_ask_about", "[driver]") {
+    avatar& u = setup();
+    const std::string apple = carry("apple");
+
+    SECTION("a hungry avatar eats it, which costs moves") {
+        u.set_stored_kcal(u.max_stored_kcal() / 2);
+        u.set_thirst(300);
+        const ran ate = run(command::eat, apple);
+        CAPTURE(ate.result.detail);
+        CHECK(ate.result.outcome == "completed");
+        CHECK(ate.spent > 0);
+        CHECK_FALSE(u.has_item_with([](const item& it) { return it.typeId() == itype_id("apple"); }));
+    }
+
+    SECTION("a full avatar is refused with the game's words, and the food is kept") {
+        u.set_stored_kcal(u.max_stored_kcal());
+        const ran refused = run(command::eat, apple);
+        CHECK(refused.result.outcome == "refused");
+        CHECK_FALSE(refused.result.detail.empty());
+        CHECK(refused.spent == 0);
+        CHECK(u.has_item_with([](const item& it) { return it.typeId() == itype_id("apple"); }));
+
+        // The game's "eat it anyway?" answered yes.
+        const ran anyway = run_with(command::eat, apple, {.anyway = true});
+        CHECK(anyway.result.outcome == "completed");
+        CHECK(anyway.spent > 0);
+        CHECK_FALSE(u.has_item_with([](const item& it) { return it.typeId() == itype_id("apple"); }));
+    }
+
+    SECTION("something that is not food is refused") {
+        const std::string rock = carry("rock");
+        const ran refused = run(command::eat, rock);
+        CHECK(refused.result.outcome == "refused");
+        CHECK_FALSE(refused.result.detail.empty());
+        CHECK(refused.spent == 0);
+    }
+
+    SECTION("what is not carried cannot be eaten") {
+        const std::string ground = driver_items::issue_id(put_on_ground("apple"));
+        const ran refused = run(command::eat, ground);
+        CHECK(refused.result.outcome == "refused");
+        CHECK(refused.spent == 0);
+    }
+}
+
+TEST_CASE("driver_items_use_runs_the_item_s_use_and_says_when_it_has_none", "[driver]") {
+    avatar& u = setup();
+
+    SECTION("an item with one use runs it") {
+        const std::string stick = carry("glowstick");
+        const ran used = run(command::use, stick);
+        CAPTURE(used.result.detail);
+        // The driver reads the game's log to tell a use that said something from one that did not.
+        CHECK(used.result.outcome != "refused");
+        CHECK(u.has_item_with([](const item& it) { return it.typeId() == itype_id("glowstick_lit"); }));
+    }
+
+    SECTION("a use the item does not have is refused and the ones it has are named") {
+        const std::string stick = carry("glowstick");
+        const ran refused = run_with(command::use, stick, {.method = "no_such_use"});
+        CHECK(refused.result.outcome == "refused");
+        CHECK(refused.result.detail.find("transform") != std::string::npos);
+        CHECK(refused.spent == 0);
+    }
+
+    SECTION("an item with no use is refused") {
+        const std::string rock = carry("rock");
+        const ran refused = run(command::use, rock);
+        CHECK(refused.result.outcome == "refused");
+        CHECK_FALSE(refused.result.detail.empty());
+    }
+}
+
+TEST_CASE("driver_items_read_starts_the_reading_activity", "[driver]") {
+    avatar& u = setup();
+    midday_light();
+
+    SECTION("a book is read, once, as an activity") {
+        const std::string book = carry("mag_cooking");
+        const ran started = run(command::read, book);
+        CHECK(started.result.outcome == "completed");
+        REQUIRE(u.activity);
+        CHECK(u.activity->id() == activity_id("ACT_READ"));
+        // Nothing else may be started over it.
+        CHECK(run(command::read, book).result.outcome == "refused");
+        u.cancel_activity();
+    }
+
+    SECTION("something that is not a book is refused with the game's words") {
+        const std::string rock = carry("rock");
+        const ran refused = run(command::read, rock);
+        CHECK(refused.result.outcome == "refused");
+        CHECK_FALSE(u.activity);
+    }
+}
+
+TEST_CASE("driver_items_reload_starts_the_reload_and_it_fills_the_magazine", "[driver]") {
+    avatar& u = setup();
+
+    SECTION("a magazine is loaded from the ammo the avatar carries") {
+        const std::string mag = carry("glockmag");
+        carry("9mm");
+        const ran started = run(command::reload, mag);
+        CHECK(started.result.outcome == "completed");
+        REQUIRE(u.activity);
+        CHECK(u.activity->id() == activity_id("ACT_RELOAD"));
+        finish_activity(u);
+        const driver_items::found_item found = driver_items::find_item(mag);
+        REQUIRE(found.error.empty());
+        CHECK(found.ref.get()->ammo_remaining() > 0);
+    }
+
+    SECTION("with no ammo it is refused with the game's words") {
+        const std::string mag = carry("glockmag");
+        const ran refused = run(command::reload, mag);
+        CHECK(refused.result.outcome == "refused");
+        CHECK_FALSE(u.activity);
+    }
+
+    SECTION("what cannot be reloaded is refused") {
+        const std::string rock = carry("rock");
+        const ran refused = run(command::reload, rock);
+        CHECK(refused.result.outcome == "refused");
+        CHECK_FALSE(refused.result.detail.empty());
+    }
+}
+
+TEST_CASE("driver_items_craft_by_recipe_id_makes_the_item", "[driver]") {
+    avatar& u = setup();
+    midday_light();
+    const recipe& rec = recipe_id("pointy_stick").obj();
+
+    SECTION("an unknown recipe id is an error the driver reports before acting") {
+        CHECK_FALSE(driver_items::recipe_error("no_such_recipe").empty());
+        CHECK_FALSE(driver_items::recipe_error("").empty());
+        CHECK(driver_items::recipe_error("pointy_stick").empty());
+    }
+
+    SECTION("a recipe the avatar does not know is refused") {
+        REQUIRE_FALSE(u.knows_recipe(&recipe_id("carver_off").obj()));
+        const driver_items::command_result res = driver_items::run_craft("carver_off");
+        CHECK(res.outcome == "refused");
+        CHECK_FALSE(res.detail.empty());
+        CHECK_FALSE(u.activity);
+    }
+
+    SECTION("a recipe without the components is refused and names what is missing") {
+        u.learn_recipe(&rec);
+        u.invalidate_crafting_inventory();
+        const driver_items::command_result res = driver_items::run_craft("pointy_stick");
+        CHECK(res.outcome == "refused");
+        CHECK_FALSE(res.detail.empty());
+        CHECK_FALSE(u.activity);
+    }
+
+    SECTION("with what it needs the craft runs and the result is carried") {
+        u.learn_recipe(&rec);
+        u.set_skill_level(rec.skill_used, std::max(rec.difficulty, 1));
+        u.i_add(item::spawn("knife_combat"));
+        u.i_add(item::spawn("stick"));
+        u.invalidate_crafting_inventory();
+        const driver_items::command_result res = driver_items::run_craft("pointy_stick");
+        REQUIRE(res.outcome == "completed");
+        REQUIRE(u.activity);
+        CHECK(u.activity->id() == activity_id("ACT_CRAFT"));
+        finish_activity(u);
+        CHECK(u.has_item_with([](const item& it) { return it.typeId() == itype_id("pointy_stick"); }));
+        CHECK_FALSE(u.has_item_with([](const item& it) { return it.typeId() == itype_id("stick"); }));
+    }
+}
+
+TEST_CASE("driver_items_sleep_starts_trying_to_sleep_once", "[driver]") {
+    avatar& u = setup();
+    const driver_items::command_result started = driver_items::run_sleep();
+    CHECK(started.outcome == "completed");
+    REQUIRE(u.activity);
+    CHECK(u.activity->id() == activity_id("ACT_TRY_SLEEP"));
+    CHECK(driver_items::run_sleep().outcome == "no_effect");
+    u.cancel_activity();
 }
