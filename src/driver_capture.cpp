@@ -46,7 +46,7 @@ int captures_written = 0;
 /// asleep) has no drawable to dump from. A state view is drawn offscreen and does not.
 auto window_has_drawable( SDL_Window *window, mode kind ) -> bool
 {
-    SDL_WindowFlags unusable = SDL_WINDOW_HIDDEN | SDL_WINDOW_MINIMIZED;
+    const auto unusable = SDL_WindowFlags( SDL_WINDOW_HIDDEN | SDL_WINDOW_MINIMIZED );
     if( kind == mode::composite ) {
         unusable |= SDL_WINDOW_OCCLUDED;
     }
@@ -63,7 +63,7 @@ auto parse_request( std::string_view dir, std::optional<std::string_view> mode_t
     if( dir.empty() || !where.is_absolute() ) {
         return { .error = "dir must be an absolute directory path" };
     }
-    mode kind = mode::composite;
+    auto kind = mode::composite;
     if( mode_text && *mode_text == "state" ) {
         kind = mode::state;
     } else if( mode_text && *mode_text != "final" ) {
@@ -76,7 +76,7 @@ auto parse_request( std::string_view dir, std::optional<std::string_view> mode_t
 auto capture( const request &req, const std::function<void()> &draw ) -> result
 {
     auto &rs = lighting::get_render_state();
-    SDL_Window *window = rs.ready() ? rs.device().window_ptr() : nullptr;
+    auto *window = rs.ready() ? rs.device().window_ptr() : nullptr;
     if( !window_has_drawable( window, req.kind ) ) {
         return { .no_drawable = true };
     }
@@ -87,11 +87,11 @@ auto capture( const request &req, const std::function<void()> &draw ) -> result
         return { .error = "cannot create " + req.dir + ": " + ec.message() };
     }
 
-    const bool composite = req.kind == mode::composite;
-    const std::string stem = req.dir + "/turn-" + std::to_string( req.turn ) + "-" +
+    const auto composite = req.kind == mode::composite;
+    const auto stem = req.dir + "/turn-" + std::to_string( req.turn ) + "-" +
                              std::to_string( captures_written + 1 ) + "-";
-    const std::string frame_path = stem + ( composite ? "final.bmp" : "state.png" );
-    const std::string map_path = stem + "map.json";
+    const auto frame_path = stem + ( composite ? "final.bmp" : "state.png" );
+    const auto map_path = stem + "map.json";
 
     int width = 0;
     int height = 0;
@@ -101,7 +101,7 @@ auto capture( const request &req, const std::function<void()> &draw ) -> result
         // and the request is disarmed so that no later frame can be taken for this one.
         lighting::arm_frame_capture( frame_path );
         draw();
-        const std::optional<lighting::frame_capture_report> dumped = lighting::take_frame_capture();
+        const auto dumped = lighting::take_frame_capture();
         if( dumped && dumped->written && !window_has_drawable( window, req.kind ) ) {
             // `draw` pumps the window's events: a window that went away since the request
             // arrived shows itself only now, and what it dumped is not to be trusted.
@@ -124,8 +124,8 @@ auto capture( const request &req, const std::function<void()> &draw ) -> result
         if( !window_has_drawable( window, req.kind ) ) {
             return { .no_drawable = true };
         }
-        const std::string part = frame_path + ".part";
-        const std::optional<state_view_size> saved = save_state_view( part );
+        const auto part = frame_path + ".part";
+        const auto saved = save_state_view( part );
         if( !saved ) {
             std::filesystem::remove( part, ec );
             return { .error = "the state view could not be rendered or saved" };
@@ -139,7 +139,7 @@ auto capture( const request &req, const std::function<void()> &draw ) -> result
     }
 
     // The snapshot is of the same turn: the game has not moved since `draw`.
-    const std::string map_part = map_path + ".part";
+    const auto map_part = map_path + ".part";
     if( !sdl_lighting_devui::dump_map_to( frame, map_part ) || !publish( map_part, map_path ) ) {
         // A frame without its map is half a capture: take it back.
         std::filesystem::remove( frame_path, ec );

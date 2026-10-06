@@ -71,7 +71,7 @@ auto valid_name( const std::string &name ) -> bool
 
 auto find( const std::string &dir, const std::string &name ) -> std::string
 {
-    const std::filesystem::path file = std::filesystem::path( dir ) / ( name + ".lua" );
+    const auto file = std::filesystem::path( dir ) / ( name + ".lua" );
     std::error_code ec;
     return std::filesystem::is_regular_file( file, ec ) ? file.string() : std::string();
 }
@@ -79,14 +79,14 @@ auto find( const std::string &dir, const std::string &name ) -> std::string
 auto run( const std::string &path ) -> result
 {
     result out;
-    cata::lua_state *state = DynamicDataLoader::get_instance().lua.get();
+    auto *state = DynamicDataLoader::get_instance().lua.get();
     if( !state ) {
         out.lines.emplace_back( "error: the game has no Lua state to run a Scene in" );
         return out;
     }
 
     // A read that unwinds out of a Scene leaves the input timeout it had set.
-    const int timeout = inp_mngr.get_timeout();
+    const auto timeout = inp_mngr.get_timeout();
     std::string error;
     {
         const cata::lua_log_handler::capture log( cata::get_lua_log_instance() );
@@ -110,13 +110,13 @@ auto run( const std::string &path ) -> result
 
 auto write( JsonOut &jo, result scene ) -> bool
 {
-    bool cut = cap_messages( scene.lines, max_lines, max_line_bytes );
-    size_t total = 0;
+    auto cut = cap_messages( scene.lines, max_lines, max_line_bytes );
+    auto total = size_t{ 0 };
     for( const std::string &line : scene.lines ) {
         total += line.size();
     }
     // Drop the oldest lines until the rest fits: the summary a Scene ends with is the one kept.
-    size_t dropped = 0;
+    auto dropped = size_t{ 0 };
     while( total > max_total_bytes && dropped + 1 < scene.lines.size() ) {
         total -= scene.lines[dropped++].size();
         cut = true;

@@ -14,7 +14,7 @@ auto requested_window = std::optional<driver_window_size>();
 auto read_dimension( std::string_view digits ) -> std::optional<int>
 {
     int value = 0;
-    const char *const end = digits.data() + digits.size();
+    const auto *const end = digits.data() + digits.size();
     const auto [stop, error] = std::from_chars( digits.data(), end, value );
     if( digits.empty() || error != std::errc() || stop != end || value <= 0 ) {
         return std::nullopt;
@@ -26,12 +26,12 @@ auto read_dimension( std::string_view digits ) -> std::optional<int>
 
 auto parse_driver_window_size( std::string_view text ) -> std::optional<driver_window_size>
 {
-    const size_t x = text.find( 'x' );
+    const auto x = text.find( 'x' );
     if( x == std::string_view::npos ) {
         return std::nullopt;
     }
-    const std::optional<int> width = read_dimension( text.substr( 0, x ) );
-    const std::optional<int> height = read_dimension( text.substr( x + 1 ) );
+    const auto width = read_dimension( text.substr( 0, x ) );
+    const auto height = read_dimension( text.substr( x + 1 ) );
     if( !width || !height ) {
         return std::nullopt;
     }

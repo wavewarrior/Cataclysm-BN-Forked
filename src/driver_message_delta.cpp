@@ -13,15 +13,15 @@ auto compute_message_delta( const std::vector<log_entry> &before,
     // Nothing was logged before, or the log was cleared or reloaded (its sequence restarted):
     // everything in view is new.
     if( before.empty() || after.back().seq < before.back().seq ) {
-        for( const log_entry &entry : after ) {
+        for( const auto &entry : after ) {
             delta.fresh.push_back( entry.text );
         }
         return delta;
     }
-    const log_entry &anchor = before.back();
-    for( const log_entry &entry : after ) {
+    const auto &anchor = before.back();
+    for( const auto &entry : after ) {
         // The anchor changed text only when a repeat merged into it.
-        const bool repeated = entry.seq == anchor.seq && entry.text != anchor.text;
+        const auto repeated = entry.seq == anchor.seq && entry.text != anchor.text;
         if( entry.seq > anchor.seq || repeated ) {
             delta.fresh.push_back( entry.text );
         }
@@ -34,17 +34,17 @@ auto compute_message_delta( const std::vector<log_entry> &before,
 auto cap_messages( std::vector<std::string> &messages, size_t max_count,
                    size_t max_bytes ) -> bool
 {
-    bool cut = false;
+    auto cut = false;
     if( messages.size() > max_count ) {
         messages.erase( messages.begin(),
                         messages.end() - static_cast<std::ptrdiff_t>( max_count ) );
         cut = true;
     }
-    for( std::string &message : messages ) {
+    for( auto &message : messages ) {
         if( message.size() <= max_bytes ) {
             continue;
         }
-        size_t end = max_bytes;
+        auto end = max_bytes;
         // Do not split a multi-byte character: back up to the byte that starts one.
         while( end > 0 && ( static_cast<uint8_t>( message[end] ) & 0xC0 ) == 0x80 ) {
             --end;

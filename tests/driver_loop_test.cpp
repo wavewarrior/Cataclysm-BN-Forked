@@ -36,38 +36,43 @@ namespace {
 
 constexpr tripoint_bub_ms centre{60, 60, 0};
 
+/// Where these tests keep scratch files: one prefix, so a leftover is easy to spot.
+auto bnplay_temp(const std::string& name) -> std::filesystem::path {
+    return std::filesystem::temp_directory_path() / ("bnplay_" + name);
+}
+
 /// One response line, read by field.
 struct reply {
     std::string line;
 
     auto object_has(const char* name) const -> bool {
         std::istringstream in(line);
-        JsonIn jsin(in);
-        JsonObject jo = jsin.get_object();
+        auto jsin = JsonIn(in);
+        auto jo = jsin.get_object();
         jo.allow_omitted_members();
         return jo.has_member(name);
     }
 
     auto text(const char* name) const -> std::string {
         std::istringstream in(line);
-        JsonIn jsin(in);
-        JsonObject jo = jsin.get_object();
+        auto jsin = JsonIn(in);
+        auto jo = jsin.get_object();
         jo.allow_omitted_members();
         return jo.has_string(name) ? jo.get_string(name) : std::string();
     }
 
     auto number(const char* name) const -> int {
         std::istringstream in(line);
-        JsonIn jsin(in);
-        JsonObject jo = jsin.get_object();
+        auto jsin = JsonIn(in);
+        auto jo = jsin.get_object();
         jo.allow_omitted_members();
         return jo.has_int(name) ? jo.get_int(name) : -1;
     }
 
     auto flag(const char* name) const -> bool {
         std::istringstream in(line);
-        JsonIn jsin(in);
-        JsonObject jo = jsin.get_object();
+        auto jsin = JsonIn(in);
+        auto jo = jsin.get_object();
         jo.allow_omitted_members();
         return jo.has_bool(name) && jo.get_bool(name);
     }
@@ -81,7 +86,7 @@ auto converse(const std::vector<std::string>& requests, const std::string& scene
     int fds[2];
     REQUIRE(socketpair(AF_UNIX, SOCK_STREAM, 0, fds) == 0);
 
-    const std::filesystem::path deny = std::filesystem::temp_directory_path() / "bnplay_loop_test_deny.json";
+    const auto deny = bnplay_temp("loop_test_deny.json");
     std::ofstream(deny) << R"({"deny": []})";
 
     std::vector<reply> replies;
@@ -96,14 +101,14 @@ auto converse(const std::vector<std::string>& requests, const std::string& scene
                 if (got <= 0) { break; }
                 pending.append(chunk, static_cast<size_t>(got));
             }
-            const size_t end = pending.find('\n');
+            const auto end = pending.find('\n');
             replies.push_back({pending.substr(0, end)});
             pending.erase(0, end + 1);
         }
         // Hanging up ends the loop.
         close(fds[1]);
     });
-    const bool served = run_driver_loop(fds[0], {.deny_list_path = deny.string(), .scenes_dir = scenes_dir, .windowed = windowed});
+    const auto served = run_driver_loop(fds[0], {.deny_list_path = deny.string(), .scenes_dir = scenes_dir, .windowed = windowed});
     agent.join();
     close(fds[0]);
     std::filesystem::remove(deny);
@@ -114,10 +119,10 @@ auto converse(const std::vector<std::string>& requests, const std::string& scene
 
 auto setup() -> avatar& {
     clear_all_state();
-    map& here = get_map();
+    auto& here = get_map();
     g->place_player(centre);
     for (const tripoint_bub_ms& pos : here.points_in_radius(centre, 3)) { here.i_clear(pos); }
-    avatar& u = get_avatar();
+    auto& u = get_avatar();
     u.moves = 100;
     set_time(calendar::turn_zero + 12_hours);
     u.recalc_sight_limits();
@@ -162,10 +167,10 @@ auto arm_with_shotgun(avatar& u, bool loaded) -> void {
 } // namespace
 
 TEST_CASE("driver_loop_craft_runs_to_its_end_and_the_result_is_carried", "[driver]") {
-    avatar& u = setup();
+    auto& u = setup();
     equip_for(u, "pointy_stick", {"knife_combat", "stick"});
 
-    const std::vector<reply> out = converse({R"({"id":1,"cmd":"craft","recipe":"pointy_stick"})"});
+    const auto out = converse({R"({"id":1,"cmd":"craft","recipe":"pointy_stick"})"});
     CAPTURE(out[0].line);
     CHECK(out[0].text("status") == "ok");
     CHECK(out[0].text("outcome") == "completed");
@@ -176,10 +181,10 @@ TEST_CASE("driver_loop_craft_runs_to_its_end_and_the_result_is_carried", "[drive
 }
 
 TEST_CASE("driver_loop_max_turns_stops_an_activity_early_and_leaves_none_behind", "[driver]") {
-    avatar& u = setup();
+    auto& u = setup();
     equip_for(u, "pointy_stick", {"knife_combat", "stick"});
 
-    const std::vector<reply> out = converse({
+    const auto out = converse({
         R"({"id":1,"cmd":"craft","recipe":"pointy_stick","max_turns":3})",
         R"({"id":2,"cmd":"wait","turns":1})",
     });
@@ -194,10 +199,10 @@ TEST_CASE("driver_loop_max_turns_stops_an_activity_early_and_leaves_none_behind"
 }
 
 TEST_CASE("driver_loop_an_activity_with_no_limit_is_cut_at_the_turn_cap", "[driver]") {
-    avatar& u = setup();
+    auto& u = setup();
     u.set_fatigue(0);
 
-    const std::vector<reply> out = converse({R"({"id":1,"cmd":"sleep"})"});
+    const auto out = converse({R"({"id":1,"cmd":"sleep"})"});
     CAPTURE(out[0].line);
     CHECK(out[0].text("outcome") == "interrupted");
     CHECK(out[0].text("reason") == "turn_cap");
@@ -206,11 +211,11 @@ TEST_CASE("driver_loop_an_activity_with_no_limit_is_cut_at_the_turn_cap", "[driv
 }
 
 TEST_CASE("driver_loop_a_monster_coming_close_interrupts_with_its_reason", "[driver]") {
-    avatar& u = setup();
+    auto& u = setup();
     equip_for(u, "pointy_stick", {"knife_combat", "stick"});
     spawn_test_monster("mon_zombie", centre + point_east * 2);
 
-    const std::vector<reply> out = converse({R"({"id":1,"cmd":"craft","recipe":"pointy_stick"})"});
+    const auto out = converse({R"({"id":1,"cmd":"craft","recipe":"pointy_stick"})"});
     CAPTURE(out[0].line);
     CHECK(out[0].text("outcome") == "interrupted");
     CHECK(out[0].text("reason") == "monster_in_view");
@@ -219,10 +224,10 @@ TEST_CASE("driver_loop_a_monster_coming_close_interrupts_with_its_reason", "[dri
 }
 
 TEST_CASE("driver_loop_a_sleep_ends_at_its_limit_with_the_avatar_awake", "[driver]") {
-    avatar& u = setup();
+    auto& u = setup();
     u.set_fatigue(1000);
 
-    const std::vector<reply> out = converse({R"({"id":1,"cmd":"sleep","max_turns":30})"});
+    const auto out = converse({R"({"id":1,"cmd":"sleep","max_turns":30})"});
     CAPTURE(out[0].line);
     CHECK(out[0].text("outcome") == "interrupted");
     CHECK(out[0].text("reason") == "turn_cap");
@@ -232,8 +237,8 @@ TEST_CASE("driver_loop_a_sleep_ends_at_its_limit_with_the_avatar_awake", "[drive
 }
 
 TEST_CASE("driver_loop_refuses_a_craft_it_cannot_start_and_an_unknown_recipe", "[driver]") {
-    avatar& u = setup();
-    const std::vector<reply> out = converse({
+    auto& u = setup();
+    const auto out = converse({
         R"({"id":1,"cmd":"craft","recipe":"pointy_stick"})",
         R"({"id":2,"cmd":"craft","recipe":"no_such_recipe"})",
         R"({"id":3,"cmd":"craft","recipe":"pointy_stick","max_turns":0})",
@@ -250,14 +255,14 @@ TEST_CASE("driver_loop_refuses_a_craft_it_cannot_start_and_an_unknown_recipe", "
 // real binary; these cover the rest in-process.
 
 TEST_CASE("driver_loop_melee_hits_an_adjacent_monster_by_direction_or_position", "[driver]") {
-    avatar& u = setup();
+    auto& u = setup();
     rng_set_engine_seed(1);
     u.wield(item::spawn(itype_id("knife_combat")));
     u.moves = 100;
-    monster& zed = spawn_test_monster("mon_zombie", centre + point_east);
-    const int hp_before = zed.get_hp();
+    auto& zed = spawn_test_monster("mon_zombie", centre + point_east);
+    const auto hp_before = zed.get_hp();
 
-    const std::vector<reply> out = converse({
+    const auto out = converse({
         R"({"id":1,"cmd":"melee","dir":"e"})",
         R"({"id":2,"cmd":"melee","pos":[1,0]})",
         R"({"id":3,"cmd":"melee","dir":"e"})",
@@ -272,7 +277,7 @@ TEST_CASE("driver_loop_melee_hits_an_adjacent_monster_by_direction_or_position",
 }
 
 TEST_CASE("driver_loop_melee_kills_and_the_next_swing_finds_nothing", "[driver]") {
-    avatar& u = setup();
+    auto& u = setup();
     rng_set_engine_seed(1);
     u.wield(item::spawn(itype_id("knife_combat")));
     u.moves = 100;
@@ -280,7 +285,7 @@ TEST_CASE("driver_loop_melee_kills_and_the_next_swing_finds_nothing", "[driver]"
 
     std::vector<std::string> swings;
     for (int i = 0; i < 12; ++i) { swings.push_back(R"({"id":1,"cmd":"melee","dir":"e"})"); }
-    const std::vector<reply> out = converse(swings);
+    const auto out = converse(swings);
 
     CHECK_FALSE(alive_at(centre + point_east));
     CHECK(out.front().text("outcome") == "completed");
@@ -291,12 +296,12 @@ TEST_CASE("driver_loop_melee_kills_and_the_next_swing_finds_nothing", "[driver]"
 }
 
 TEST_CASE("driver_loop_melee_at_an_empty_tile_or_an_ally_is_refused_and_costs_nothing", "[driver]") {
-    avatar& u = setup();
-    monster& pet = spawn_test_monster("mon_zombie", centre + point_west);
+    auto& u = setup();
+    auto& pet = spawn_test_monster("mon_zombie", centre + point_west);
     pet.friendly = -1;
-    const int turn_before = to_turn<int>(calendar::turn);
+    const auto turn_before = to_turn<int>(calendar::turn);
 
-    const std::vector<reply> out = converse({
+    const auto out = converse({
         R"({"id":1,"cmd":"melee","dir":"e"})",
         R"({"id":2,"cmd":"melee","dir":"w"})",
         R"({"id":3,"cmd":"state"})",
@@ -316,14 +321,14 @@ TEST_CASE("driver_loop_melee_at_an_empty_tile_or_an_ally_is_refused_and_costs_no
 }
 
 TEST_CASE("driver_loop_fire_shoots_along_a_direction_or_at_a_position", "[driver]") {
-    avatar& u = setup();
+    auto& u = setup();
     rng_set_engine_seed(1);
     arm_with_shotgun(u, true);
     spawn_test_monster("mon_zombie", centre + point_east * 4);
-    const int hp_before = hp_of(centre + point_east * 4);
-    const int ammo_before = u.primary_weapon().ammo_remaining();
+    const auto hp_before = hp_of(centre + point_east * 4);
+    const auto ammo_before = u.primary_weapon().ammo_remaining();
 
-    const std::vector<reply> out = converse({
+    const auto out = converse({
         R"({"id":1,"cmd":"fire","dir":"e"})",
         R"({"id":2,"cmd":"fire","pos":[4,0]})",
     });
@@ -338,8 +343,8 @@ TEST_CASE("driver_loop_fire_shoots_along_a_direction_or_at_a_position", "[driver
 }
 
 TEST_CASE("driver_loop_fire_refuses_what_cannot_be_fired_and_spends_nothing", "[driver]") {
-    avatar& u = setup();
-    const int turn_before = to_turn<int>(calendar::turn);
+    auto& u = setup();
+    const auto turn_before = to_turn<int>(calendar::turn);
 
     std::string request = R"({"id":1,"cmd":"fire","dir":"e"})";
     SECTION("empty hands") {}
@@ -351,7 +356,7 @@ TEST_CASE("driver_loop_fire_refuses_what_cannot_be_fired_and_spends_nothing", "[
         arm_with_shotgun(u, false);
         request = R"({"id":1,"cmd":"fire","pos":[3,0]})";
     }
-    const std::vector<reply> out = converse({request});
+    const auto out = converse({request});
     CAPTURE(out[0].line);
     CHECK(out[0].text("status") == "ok");
     CHECK(out[0].text("outcome") == "refused");
@@ -361,14 +366,14 @@ TEST_CASE("driver_loop_fire_refuses_what_cannot_be_fired_and_spends_nothing", "[
 }
 
 TEST_CASE("driver_loop_smash_breaks_furniture_and_open_air_has_nothing_to_smash", "[driver]") {
-    avatar& u = setup();
+    auto& u = setup();
     rng_set_engine_seed(1);
     u.set_str_bonus(20);
     const tripoint_bub_ms chair = centre + point_east;
     get_map().furn_set(chair, furn_id("f_chair"));
     get_map().ter_set(centre + point_west, ter_id("t_open_air"));
 
-    const std::vector<reply> out = converse({
+    const auto out = converse({
         R"({"id":1,"cmd":"smash","pos":[1,0]})",
         R"({"id":2,"cmd":"smash","pos":[1,0]})",
         R"({"id":3,"cmd":"smash","dir":"e"})",
@@ -387,7 +392,7 @@ TEST_CASE("driver_loop_smash_breaks_furniture_and_open_air_has_nothing_to_smash"
 
 TEST_CASE("driver_loop_combat_commands_reject_a_bad_target_as_a_protocol_error", "[driver]") {
     setup();
-    const int turn_before = to_turn<int>(calendar::turn);
+    const auto turn_before = to_turn<int>(calendar::turn);
     std::vector<std::string> requests;
     for (const char* cmd : {"melee", "fire", "smash"}) {
         for (const char* target : {R"()", R"(,"dir":"sideways")", R"(,"dir":3)", R"(,"dir":"up")",
@@ -404,7 +409,7 @@ TEST_CASE("driver_loop_combat_commands_reject_a_bad_target_as_a_protocol_error",
     requests.push_back(R"({"id":1,"cmd":"melee","dir":"e","max_turns":0})");
     requests.push_back(R"({"id":1,"cmd":"state"})");
 
-    const std::vector<reply> out = converse(requests);
+    const auto out = converse(requests);
     for (size_t i = 0; i + 1 < out.size(); ++i) {
         CAPTURE(requests[i], out[i].line);
         CHECK(out[i].text("status") == "error");
@@ -414,7 +419,7 @@ TEST_CASE("driver_loop_combat_commands_reject_a_bad_target_as_a_protocol_error",
 }
 
 TEST_CASE("driver_loop_the_avatar_dying_ends_the_response_with_died", "[driver]") {
-    avatar& u = setup();
+    auto& u = setup();
     rng_set_engine_seed(1);
     u.set_all_parts_hp_cur(1);
     for (const tripoint_rel_ms& around : {tripoint_rel_ms(1, 0, 0), tripoint_rel_ms(-1, 0, 0),
@@ -426,7 +431,7 @@ TEST_CASE("driver_loop_the_avatar_dying_ends_the_response_with_died", "[driver]"
     for (int i = 0; i < 20; ++i) { swings.push_back(R"({"id":1,"cmd":"melee","dir":"e"})"); }
     swings.push_back(R"({"id":1,"cmd":"state"})");
     swings.push_back(R"({"id":1,"cmd":"wait","turns":5})");
-    const std::vector<reply> out = converse(swings);
+    const auto out = converse(swings);
 
     CHECK(u.is_dead_state());
     const auto first = std::ranges::find_if(out, [](const reply& r) { return r.text("outcome") == "died"; });
@@ -443,22 +448,22 @@ TEST_CASE("driver_loop_the_avatar_dying_ends_the_response_with_died", "[driver]"
 /// -1 when there is none.
 auto grid_rows(const reply& r, bool nested) -> int {
     std::istringstream in(r.line);
-    JsonIn jsin(in);
-    JsonObject jo = jsin.get_object();
+    auto jsin = JsonIn(in);
+    auto jo = jsin.get_object();
     jo.allow_omitted_members();
     if (!nested) { return jo.has_array("grid") ? static_cast<int>(jo.get_array("grid").size()) : -1; }
     if (!jo.has_object("view")) { return -1; }
-    JsonObject view = jo.get_object("view");
+    auto view = jo.get_object("view");
     view.allow_omitted_members();
     return view.has_array("grid") ? static_cast<int>(view.get_array("grid").size()) : -1;
 }
 
 TEST_CASE("driver_loop_view_answers_in_no_time_and_rejects_a_bad_radius", "[driver]") {
-    avatar& u = setup();
-    const int turn_before = to_turn<int>(calendar::turn);
-    const int moves_before = u.moves;
+    auto& u = setup();
+    const auto turn_before = to_turn<int>(calendar::turn);
+    const auto moves_before = u.moves;
 
-    const std::vector<reply> out = converse({
+    const auto out = converse({
         R"({"id":1,"cmd":"view"})",
         R"({"id":2,"cmd":"view","radius":2})",
         R"({"id":3,"cmd":"view","radius":0})",
@@ -486,7 +491,7 @@ TEST_CASE("driver_loop_view_answers_in_no_time_and_rejects_a_bad_radius", "[driv
 
 TEST_CASE("driver_loop_attach_view_adds_the_view_to_every_observation", "[driver]") {
     setup();
-    const std::vector<reply> out = converse({
+    const auto out = converse({
         R"({"id":1,"cmd":"state"})",
         R"({"id":2,"cmd":"attach_view","radius":-1})",
         R"({"id":3,"cmd":"attach_view","radius":11})",
@@ -523,12 +528,12 @@ TEST_CASE("driver_loop_attach_view_adds_the_view_to_every_observation", "[driver
 TEST_CASE("driver_loop_attached_view_does_not_outlive_the_session", "[driver]") {
     setup();
     converse({R"({"id":1,"cmd":"attach_view","radius":3})", R"({"id":2,"cmd":"state"})"});
-    const std::vector<reply> out = converse({R"({"id":1,"cmd":"state"})"});
+    const auto out = converse({R"({"id":1,"cmd":"state"})"});
     CHECK(grid_rows(out[0], true) == -1);
 }
 
 TEST_CASE("driver_loop_attached_view_keeps_the_response_within_the_ceiling_and_says_when_it_cut", "[driver]") {
-    avatar& u = setup();
+    auto& u = setup();
     for (int i = 0; i < 30; ++i) { get_map().add_item_or_charges(centre + tripoint_rel_ms(1 + i % 6, i / 6 - 2, 0), item::spawn("tank_gun_auto")); }
     for (int i = 0; i < 14; ++i) { spawn_test_monster("mon_zombie", centre + tripoint_rel_ms(-1 - i % 7, -3 + i / 7 * 3 + i % 2, 0)); }
     // A full inventory query is the longest answer the lean part of a response can carry.
@@ -537,7 +542,7 @@ TEST_CASE("driver_loop_attached_view_keeps_the_response_within_the_ceiling_and_s
     u.recalc_sight_limits();
     build_map_cache_from_plan(get_map(), centre.z());
 
-    const std::vector<reply> out = converse({
+    const auto out = converse({
         R"({"id":1,"cmd":"attach_view","radius":10})",
         R"({"id":2,"cmd":"state"})",
         R"({"id":3,"cmd":"query","topic":"inventory"})",
@@ -548,11 +553,11 @@ TEST_CASE("driver_loop_attached_view_keeps_the_response_within_the_ceiling_and_s
         CHECK(out[i].flag("truncated"));
         CHECK(out[i].line.size() <= 6000);
         std::istringstream in(out[i].line);
-        JsonIn jsin(in);
-        JsonObject jo = jsin.get_object();
+        auto jsin = JsonIn(in);
+        auto jo = jsin.get_object();
         jo.allow_omitted_members();
         REQUIRE(jo.has_object("view"));
-        JsonObject view = jo.get_object("view");
+        auto view = jo.get_object("view");
         view.allow_omitted_members();
         CHECK(view.get_bool("truncated", false));
         CHECK(view.get_array("grid").size() >= 3);
@@ -563,7 +568,7 @@ namespace {
 
 /// Scenes on disk for one test, removed with the object: `name` -> Lua source.
 struct scene_dir {
-    std::filesystem::path path = std::filesystem::temp_directory_path() / "bnplay_scene_test";
+    std::filesystem::path path = bnplay_temp("scene_test");
 
     explicit scene_dir(const std::map<std::string, std::string>& scenes) {
         std::filesystem::remove_all(path);
@@ -585,12 +590,12 @@ struct scene_report {
 
 auto scene_of(const reply& r) -> scene_report {
     std::istringstream in(r.line);
-    JsonIn jsin(in);
-    JsonObject jo = jsin.get_object();
+    auto jsin = JsonIn(in);
+    auto jo = jsin.get_object();
     jo.allow_omitted_members();
     scene_report out;
     if (!jo.has_object("scene")) { return out; }
-    JsonObject scene = jo.get_object("scene");
+    auto scene = jo.get_object("scene");
     scene.allow_omitted_members();
     out.present = true;
     out.status = scene.get_string("status", "");
@@ -609,9 +614,9 @@ TEST_CASE("driver_loop_run_scene_reports_what_the_scene_logged_in_no_time", "[dr
     setup();
     const scene_dir scenes({{"logs", "gdebug.log_info(\"LOGS_RESULT first\")\nprint(\"LOGS_RESULT second\")\nreturn true"},
         {"quiet", "return true"}});
-    const int turn_before = to_turn<int>(calendar::turn);
+    const auto turn_before = to_turn<int>(calendar::turn);
 
-    const std::vector<reply> out = converse({
+    const auto out = converse({
         R"({"id":1,"cmd":"run_scene","name":"logs"})",
         R"({"id":2,"cmd":"run_scene","name":"logs"})",
         R"({"id":3,"cmd":"run_scene","name":"quiet"})",
@@ -647,7 +652,7 @@ TEST_CASE("driver_loop_a_failing_scene_reports_failed_with_its_lines_and_the_dri
         {"no_syntax", "this is not lua"},
     });
 
-    const std::vector<reply> out = converse({
+    const auto out = converse({
         R"({"id":1,"cmd":"run_scene","name":"raises"})",
         R"({"id":2,"cmd":"run_scene","name":"says_no"})",
         R"({"id":3,"cmd":"run_scene","name":"no_syntax"})",
@@ -673,9 +678,9 @@ TEST_CASE("driver_loop_a_failing_scene_reports_failed_with_its_lines_and_the_dri
 TEST_CASE("driver_loop_run_scene_rejects_a_bad_or_unknown_name_as_a_protocol_error", "[driver]") {
     setup();
     const scene_dir scenes({{"real", "return true"}});
-    const int turn_before = to_turn<int>(calendar::turn);
+    const auto turn_before = to_turn<int>(calendar::turn);
 
-    const std::vector<reply> out = converse({
+    const auto out = converse({
         R"({"id":1,"cmd":"run_scene"})",
         R"({"id":2,"cmd":"run_scene","name":3})",
         R"({"id":3,"cmd":"run_scene","name":""})",
@@ -700,7 +705,7 @@ TEST_CASE("driver_loop_run_scene_cuts_a_long_result_and_says_so", "[driver]") {
     const scene_dir scenes({{"chatty",
         "for i = 1, 200 do gdebug.log_info(\"CHATTY_RESULT line \" .. i .. string.rep(\"x\", 400)) end\nreturn true"}});
 
-    const std::vector<reply> out = converse({
+    const auto out = converse({
         R"({"id":1,"cmd":"run_scene","name":"chatty"})",
     }, scenes.path.string());
 
@@ -717,7 +722,7 @@ TEST_CASE("driver_loop_the_lighting_scenes_run_unchanged_through_run_scene", "[d
     setup();
     const tripoint_bub_ms light = centre + tripoint_rel_ms(12, 0, 0);
 
-    const std::vector<reply> out = converse({
+    const auto out = converse({
         R"({"id":1,"cmd":"run_scene","name":"lightone"})",
         R"({"id":2,"cmd":"run_scene","name":"lightmobs"})",
         R"({"id":3,"cmd":"run_scene","name":"lightscene"})",
@@ -742,11 +747,11 @@ TEST_CASE("driver_loop_the_lighting_scenes_run_unchanged_through_run_scene", "[d
 
 TEST_CASE("driver_loop_capture_without_a_window_is_a_protocol_error_that_names_the_windowed_mode", "[driver]") {
     setup();
-    const int turn_before = to_turn<int>(calendar::turn);
-    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "bnplay_capture_test_windowless";
+    const auto turn_before = to_turn<int>(calendar::turn);
+    const auto dir = bnplay_temp("capture_test_windowless");
     std::filesystem::remove_all(dir);
 
-    const std::vector<reply> out = converse({
+    const auto out = converse({
         "{\"id\":1,\"cmd\":\"capture\",\"dir\":\"" + dir.string() + "\"}",
         "{\"id\":2,\"cmd\":\"capture\",\"dir\":\"" + dir.string() + "\",\"mode\":\"state\"}",
         R"({"id":3,"cmd":"state"})",
@@ -764,9 +769,9 @@ TEST_CASE("driver_loop_capture_without_a_window_is_a_protocol_error_that_names_t
 
 TEST_CASE("driver_loop_capture_rejects_a_bad_dir_or_mode_as_a_protocol_error", "[driver]") {
     setup();
-    const int turn_before = to_turn<int>(calendar::turn);
+    const auto turn_before = to_turn<int>(calendar::turn);
 
-    const std::vector<reply> out = converse({
+    const auto out = converse({
         R"({"id":1,"cmd":"capture"})",
         R"({"id":2,"cmd":"capture","dir":""})",
         R"({"id":3,"cmd":"capture","dir":7})",
@@ -787,17 +792,17 @@ TEST_CASE("driver_loop_capture_rejects_a_bad_dir_or_mode_as_a_protocol_error", "
 }
 
 TEST_CASE("driver_loop_capture_with_no_drawable_is_refused_and_never_returns_an_old_frame", "[driver]") {
-    avatar& u = setup();
-    const int turn_before = to_turn<int>(calendar::turn);
-    const int moves_before = u.moves;
-    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "bnplay_capture_test_refused";
+    auto& u = setup();
+    const auto turn_before = to_turn<int>(calendar::turn);
+    const auto moves_before = u.moves;
+    const auto dir = bnplay_temp("capture_test_refused");
     std::filesystem::remove_all(dir);
     std::filesystem::create_directories(dir);
     // A frame left from an earlier capture, under the name the first capture of this turn would take.
-    const std::filesystem::path old_frame = dir / ("turn-" + std::to_string(turn_before) + "-1-final.bmp");
+    const auto old_frame = dir / ("turn-" + std::to_string(turn_before) + "-1-final.bmp");
     std::ofstream(old_frame) << "an old frame";
 
-    const std::vector<reply> out = converse({
+    const auto out = converse({
         "{\"id\":1,\"cmd\":\"capture\",\"dir\":\"" + dir.string() + "\"}",
         "{\"id\":2,\"cmd\":\"capture\",\"dir\":\"" + dir.string() + "\",\"mode\":\"state\"}",
     }, "", true);
