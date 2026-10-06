@@ -34,6 +34,11 @@ twice the window's size for `final`, as on a HiDPI display, a PNG of the window'
 `turn-<turn>-<n>-state.png` and `turn-<turn>-<n>-map.json` (`n` counts the captures so far), and
 refuses with `no_drawable` while the window is `minimise`d (a mock
 hook, undone by `restore`). A windowless mock answers `capture` with a protocol error.
+The frames are real images of synthetic content: the left half is as blue as the render state
+says and `render` (mock only) sets it: `state` (a whole number; each step is 100 of blue), `noise`
+(how many pixels flip per capture), `stuck` (later `state`s are ignored), `message` (a game
+message, answered in `new_messages`), `report_window` (`WxH`, what captures claim the window is) and
+`scale` (the final composite is the window times this; 2 by default, as on a Retina display).
 
 Like the game it writes `<userdir>/config/debug.log`, buffered: nothing reaches the file until the
 process exits. Each line starts with the game's `HH:MM:SS.mmm` wall-clock stamp. The world save
@@ -104,6 +109,13 @@ class Game:
         self.minimised = False
         # Captures written so far: each is named by its turn and its number.
         self.captures = 0
+        # Mock hook (`render`): what the captured frames show.
+        self.render_state = 1
+        self.render_noise = 0
+        self.render_stuck = False
+        self.reported_window: tuple[int, int] | None = None
+        # The composite is the window times this, as on a HiDPI display (2 on a Retina one).
+        self.render_scale = 2
 
     def say(self, text: str) -> str:
         """Logs a message and returns the log entry as the player sees it."""
@@ -224,44 +236,111 @@ def capture(rid: int, game: Game, req: dict, window: str | None) -> dict:
     os.makedirs(directory, exist_ok=True)
     stem = os.path.join(directory, f"turn-{game.turn}-{game.captures + 1}-")
     if mode == "final":
-        frame, size, label = stem + "final.bmp", (width * 2, height * 2), "final composite"
+        scaled = (int(width * game.render_scale), int(height * game.render_scale))
+        frame, size, label = stem + "final.bmp", scaled, "final composite"
         with open(frame, "wb") as f:
-            f.write(bmp_header(*size))
-            f.truncate(54 + size[0] * size[1] * 3)
+            f.write(bmp_bytes(*size, frame_rows(*size, game)))
     else:
         frame, size, label = stem + "state.png", (width, height), "state view"
         with open(frame, "wb") as f:
-            f.write(png_header(*size))
+            f.write(png_bytes(*size, frame_rows(*size, game)))
     map_path = stem + "map.json"
     with open(map_path, "w") as f:
         json.dump({"frame": game.turn, "turn": game.turn, "z": 0, "player": [60, 60, 0]}, f)
     game.captures += 1
+    # Mock hook: the window the game claims to be in, to test a Trial's size against it.
+    reported = game.reported_window or (width, height)
     return observation(
         rid, game,
         capture={
             "mode": mode, "label": label, "frame": frame, "map": map_path,
-            "width": size[0], "height": size[1], "window_width": width, "window_height": height,
+            "width": size[0], "height": size[1],
+            "window_width": reported[0], "window_height": reported[1],
         },
     )
 
 
-def bmp_header(width: int, height: int) -> bytes:
-    """The 54 bytes that make a 24-bit BMP of this size."""
-    size = ((width * 3 + 3) & ~3) * height
+def render(rid: int, game: Game, req: dict) -> dict:
+    """Mock hook: what the frames show. `state` sets the render state (ignored once the render is
+    `stuck`, a toggle that cannot be undone), `noise` how many pixels differ per capture, `message`
+    logs a game message (the readiness a Trial waits for), `report_window` is the `WxH` the
+    captures claim as the window and `scale` what the final composite is multiplied by."""
+    fields = {}
+    if "state" in req and not game.render_stuck:
+        game.render_state = req["state"]
+    if "noise" in req:
+        game.render_noise = req["noise"]
+    if req.get("stuck"):
+        game.render_stuck = True
+    if "report_window" in req:
+        w, h = (int(n) for n in req["report_window"].split("x"))
+        game.reported_window = (w, h)
+    if "scale" in req:
+        game.render_scale = req["scale"]
+    if "message" in req:
+        fields["new_messages"] = [game.say(str(req["message"]))]
+    return observation(rid, game, **fields)
+
+
+def frame_rows(width: int, height: int, game: Game) -> list[bytearray]:
+    """The synthetic frame of the game's render state, top row first, as rows of R, G, B bytes.
+
+    Red runs left to right and green top to bottom; the left half is as blue as the render state
+    says (100 per step), so changing the state changes half the frame by a known amount. Noise
+    flips the colour of that many pixels, picked by the number of the capture: two captures of one
+    state differ by about twice the noise's pixels, and the same capture number differs the same
+    way on every run.
+    """
+    red = bytes(x * 255 // max(width - 1, 1) for x in range(width))
+    shade = min(255, game.render_state * 100)
+    blue = bytes(shade if x < width // 2 else 0 for x in range(width))
+    rows = []
+    for y in range(height):
+        row = bytearray(3 * width)
+        row[0::3] = red
+        row[1::3] = bytes([y * 255 // max(height - 1, 1)]) * width
+        row[2::3] = blue
+        rows.append(row)
+    rng = random.Random(game.captures + 1)
+    for _ in range(game.render_noise):
+        at = 3 * rng.randrange(width)
+        row = rows[rng.randrange(height)]
+        for channel in range(3):
+            row[at + channel] = (row[at + channel] + 128) % 256
+    return rows
+
+
+def bmp_bytes(width: int, height: int, rows: list[bytearray]) -> bytes:
+    """A 24-bit bottom-up BMP, as the game's swapchain dump writes it."""
+    stride = (width * 3 + 3) & ~3
+    pixels = b"".join(_bgr(row) + b"\0" * (stride - width * 3) for row in reversed(rows))
     return (
-        b"BM" + struct.pack("<IHHI", 54 + size, 0, 0, 54)
-        + struct.pack("<IiiHHIIiiII", 40, width, height, 1, 24, 0, size, 0, 0, 0, 0)
+        b"BM" + struct.pack("<IHHI", 54 + len(pixels), 0, 0, 54)
+        + struct.pack("<IiiHHIIiiII", 40, width, height, 1, 24, 0, len(pixels), 0, 0, 0, 0)
+        + pixels
     )
 
 
-def png_header(width: int, height: int) -> bytes:
-    """A PNG signature, its IHDR chunk and an IEND: enough for a reader of the size."""
+def _bgr(row: bytearray) -> bytes:
+    out = bytearray(len(row))
+    out[0::3] = row[2::3]
+    out[1::3] = row[1::3]
+    out[2::3] = row[0::3]
+    return bytes(out)
+
+
+def png_bytes(width: int, height: int, rows: list[bytearray]) -> bytes:
+    """An 8-bit RGB PNG with the filter of every row set to none."""
 
     def chunk(kind: bytes, data: bytes) -> bytes:
         return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
 
     ihdr = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
-    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IEND", b"")
+    scanlines = b"".join(b"\0" + bytes(row) for row in rows)
+    return (
+        b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr)
+        + chunk(b"IDAT", zlib.compress(scanlines, 1)) + chunk(b"IEND", b"")
+    )
 
 
 def error(rid: int | None, message: str) -> dict:
@@ -507,6 +586,8 @@ def main() -> int:
             reply(key(rid, game, req))
         elif cmd == "capture":
             reply(capture(rid, game, req, windowed))
+        elif cmd == "render":
+            reply(render(rid, game, req))
         elif cmd == "minimise":
             game.minimised = True
             reply({"id": rid, "status": "ok"})
