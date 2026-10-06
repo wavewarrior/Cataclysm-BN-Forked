@@ -8,6 +8,7 @@
 import { fromFileUrl, join } from "@std/path"
 import { spawnDriver } from "./client.ts"
 import { type ContractTarget, runContract } from "./contract.ts"
+import { runItemContract } from "./item_contract.ts"
 import { runMenuContract } from "./menu_contract.ts"
 import { runTimeContract } from "./time_contract.ts"
 
@@ -48,4 +49,5 @@ const target: ContractTarget = {
 
 runContract("real binary", target)
 runTimeContract("real binary", target)
+runItemContract("real binary", target)
 runMenuContract("real binary", target)
