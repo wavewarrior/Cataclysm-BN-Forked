@@ -1,5 +1,5 @@
 import { assertEquals, assertThrows } from "@std/assert"
-import { parseTrial, TrialError } from "./trial.ts"
+import { DEFAULT_WINDOW_SIZE, parseTrial, TrialError } from "./trial.ts"
 
 Deno.test("a Trial naming only a fixture parses with the default wall-clock limit", () => {
   const trial = parseTrial(`fixture = "bairdford"`)
@@ -53,6 +53,42 @@ Deno.test("scene names the Scene run when the Episode starts", () => {
     const toml = `fixture = "a"\nscene = ${text}`
     const err = assertThrows(() => parseTrial(toml), TrialError, undefined, toml)
     assertEquals(err.message.includes("scene"), true, `${toml} -> ${err.message}`)
+  }
+})
+
+Deno.test("a Trial is windowless unless it selects the windowed mode", () => {
+  assertEquals(parseTrial(`fixture = "a"`).window, undefined)
+  assertEquals(parseTrial(`fixture = "a"\nmode = "windowless"`).window, undefined)
+})
+
+Deno.test("mode windowed selects a window of the stated default size", () => {
+  assertEquals(parseTrial(`fixture = "a"\nmode = "windowed"`).window, DEFAULT_WINDOW_SIZE)
+  assertEquals(DEFAULT_WINDOW_SIZE, { width: 1280, height: 720 })
+})
+
+Deno.test("window_size fixes the size of the window of a windowed Trial", () => {
+  const trial = parseTrial(`fixture = "a"\nmode = "windowed"\nwindow_size = [1024, 768]`)
+  assertEquals(trial.window, { width: 1024, height: 768 })
+})
+
+Deno.test("a bad mode or window size is rejected with the field name", () => {
+  for (
+    const [field, text] of [
+      ["mode", `fixture = "a"\nmode = "headless"`],
+      ["mode", `fixture = "a"\nmode = 1`],
+      ["window_size", `fixture = "a"\nmode = "windowed"\nwindow_size = [800]`],
+      ["window_size", `fixture = "a"\nmode = "windowed"\nwindow_size = [800, 600, 3]`],
+      ["window_size", `fixture = "a"\nmode = "windowed"\nwindow_size = [800.5, 600]`],
+      ["window_size", `fixture = "a"\nmode = "windowed"\nwindow_size = ["800", "600"]`],
+      ["window_size", `fixture = "a"\nmode = "windowed"\nwindow_size = "800x600"`],
+      // Below the game's 80x24 cell minimum the game would resize the window itself.
+      ["window_size", `fixture = "a"\nmode = "windowed"\nwindow_size = [320, 200]`],
+      // A size means nothing without a window.
+      ["window_size", `fixture = "a"\nwindow_size = [1024, 768]`],
+    ] as const
+  ) {
+    const err = assertThrows(() => parseTrial(text), TrialError, undefined, text)
+    assertEquals(err.message.includes(field), true, `${text} -> ${err.message}`)
   }
 })
 

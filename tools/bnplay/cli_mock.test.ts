@@ -193,6 +193,37 @@ Deno.test("a bad Trial is refused with a clear error and no game is started", as
   })
 })
 
+Deno.test("a windowed Trial runs an Episode that answers like a windowless one", async () => {
+  await withSandbox(async (sandbox) => {
+    const windowed = await start(
+      sandbox,
+      `fixture = "bairdford"\nmode = "windowed"\nwindow_size = [1024, 768]\n`,
+    )
+    const windowless = await start(sandbox)
+    const a = await step(sandbox, windowed.session, "state")
+    const b = await step(sandbox, windowless.session, "state")
+    assertEquals(a.code, 0, a.stderr)
+    assertEquals(b.code, 0, b.stderr)
+    assertEquals(a.json?.outcome, b.json?.outcome)
+    assertEquals(a.json?.turn, b.json?.turn)
+    for (const session of [windowed.session, windowless.session]) {
+      assertEquals((await sandbox.cli(["stop", session])).code, 0)
+    }
+  })
+})
+
+Deno.test("a windowed Trial with a bad window size is a usage error before any game starts", async () => {
+  await withSandbox(async (sandbox) => {
+    const res = await sandbox.cli([
+      "start",
+      await sandbox.trial(`fixture = "bairdford"\nmode = "windowed"\nwindow_size = [10, 10]\n`),
+    ])
+    assertEquals(res.code, 2)
+    assert(res.stderr.includes("window_size"), res.stderr)
+    assertEquals(await pidsMatching(sandbox.home), [])
+  })
+})
+
 Deno.test("clients that hang up before they are served do not take the daemon down", async () => {
   await withSandbox(async (sandbox) => {
     const { session } = await start(sandbox)

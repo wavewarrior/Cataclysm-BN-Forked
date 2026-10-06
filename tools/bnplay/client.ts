@@ -5,6 +5,7 @@
  * failure, and a timed-out driver is killed by process group so no game process lingers.
  */
 import { dirname, fromFileUrl, join } from "@std/path"
+import type { WindowSize } from "./trial.ts"
 
 export type DriverRequest = { cmd: string; [key: string]: unknown }
 
@@ -52,6 +53,12 @@ export type SpawnOptions = {
   denyList?: string
   /** Directory `run_scene` finds Scenes in (`--driver-scenes`); default is the repo's own. */
   scenesDir?: string
+  /**
+   * Boots the game windowed (`--driver-windowed WxH`): a real, visible window of this size in
+   * logical pixels, placed in a corner, opened without taking focus. Absent: windowless, with no
+   * display session needed.
+   */
+  window?: WindowSize
 }
 
 export type Driver = {
@@ -93,11 +100,17 @@ export function spawnDriver(opts: SpawnOptions): Driver {
       opts.basepath,
       ...(opts.denyList ? ["--driver-deny-list", opts.denyList] : []),
       ...(opts.scenesDir ? ["--driver-scenes", opts.scenesDir] : []),
+      ...(opts.window ? ["--driver-windowed", `${opts.window.width}x${opts.window.height}`] : []),
     ],
     stdin: "piped",
     stdout: "piped",
     stderr: opts.stderr ?? "null",
-    env: { SDL_VIDEODRIVER: "dummy", SDL_AUDIODRIVER: "dummy" },
+    // Windowless needs no display session, and the dummy video driver keeps it that way. A
+    // windowed game must reach the real one, so it blanks a driver inherited from the caller's
+    // environment (SDL ignores an empty name); audio stays off either way.
+    env: opts.window
+      ? { SDL_VIDEODRIVER: "", SDL_AUDIODRIVER: "dummy" }
+      : { SDL_VIDEODRIVER: "dummy", SDL_AUDIODRIVER: "dummy" },
   }).spawn()
   const pgid = child.pid
 

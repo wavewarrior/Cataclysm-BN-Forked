@@ -140,6 +140,7 @@ export class Episode {
       world: this.world,
       basepath: this.#config.basepath,
       scenesDir: this.#config.scenesDir,
+      window: this.#trial.window,
       firstTimeoutMs: this.#config.bootTimeoutMs,
       requestTimeoutMs: this.#config.stepTimeoutMs,
       trace: (entry) => {

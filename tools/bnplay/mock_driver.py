@@ -367,6 +367,11 @@ def main() -> int:
     if fd is None:
         print("mock_driver: --driver-fd required", file=sys.stderr)
         return 2
+    windowed = option(argv, "--driver-windowed")
+    if windowed is not None and not re.fullmatch(r"[1-9][0-9]*x[1-9][0-9]*", windowed):
+        # The real game refuses the same: the size is `<width>x<height>` in pixels.
+        print(f"mock_driver: --driver-windowed takes WxH, got {windowed!r}", file=sys.stderr)
+        return 2
     userdir = option(argv, "--userdir") or ""
     world = option(argv, "--world") or ""
     scenes_dir = option(argv, "--driver-scenes") or os.path.join(

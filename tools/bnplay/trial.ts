@@ -13,6 +13,15 @@ export class TrialError extends Error {
   }
 }
 
+/** Size of a game window in logical pixels (the swapchain is larger on a HiDPI display). */
+export type WindowSize = { width: number; height: number }
+
+/** The window size of a windowed Trial that does not set `window_size`. */
+export const DEFAULT_WINDOW_SIZE: WindowSize = { width: 1280, height: 720 }
+
+/** The game keeps a window at least 80x24 cells of its default 8x16 font; a smaller size is refused. */
+const MIN_WINDOW_SIZE: WindowSize = { width: 640, height: 384 }
+
 export type Trial = {
   /** Name of a fixture in the fixture library. */
   fixture: string
@@ -37,6 +46,12 @@ export type Trial = {
    * transcript and in every oracle's reach as the `scene` field. Absent: none runs.
    */
   scene?: string
+  /**
+   * The window of a renderer Trial (`mode = "windowed"`): a real game window, visible, at this
+   * fixed size in logical pixels, in a corner of the screen. Absent: the Episode is windowless
+   * (no window, no display session needed), the default.
+   */
+  window?: WindowSize
   /**
    * Commands the Trial expects to work: a response to one of them with outcome `unsupported` or
    * `no_effect` fails the Episode. An entry is a command (`move`) or an `action` by name
@@ -83,6 +98,8 @@ const FIELDS = [
   "turn_limit",
   "attach_view",
   "scene",
+  "mode",
+  "window_size",
   "expected_commands",
   "oracle",
 ]
@@ -120,6 +137,33 @@ function text(
   if (value === undefined) return undefined
   if (typeof value !== "string" || !shape.test(value)) fail(field, expectation)
   return value
+}
+
+/** The window a Trial asks for: none when windowless, else its `window_size` or the default. */
+function windowOf(table: Record<string, unknown>): WindowSize | undefined {
+  const mode = table.mode
+  if (mode !== undefined && mode !== "windowless" && mode !== "windowed") {
+    fail("mode", 'must be "windowless" (the default) or "windowed"')
+  }
+  const size = table.window_size
+  if (mode !== "windowed") {
+    if (size !== undefined) fail("window_size", 'is only meaningful with mode = "windowed"')
+    return undefined
+  }
+  if (size === undefined) return DEFAULT_WINDOW_SIZE
+  const expectation =
+    `must be [width, height], whole numbers of at least ${MIN_WINDOW_SIZE.width} by ${MIN_WINDOW_SIZE.height}`
+  if (!Array.isArray(size) || size.length !== 2) fail("window_size", expectation)
+  const [width, height] = size.map((n) =>
+    (typeof n === "number" || typeof n === "bigint") ? Number(n) : NaN
+  )
+  if (
+    !Number.isInteger(width) || !Number.isInteger(height) ||
+    width < MIN_WINDOW_SIZE.width || height < MIN_WINDOW_SIZE.height
+  ) {
+    fail("window_size", expectation)
+  }
+  return { width, height }
 }
 
 function oracleSpecs(raw: unknown): OracleSpec[] {
@@ -217,6 +261,8 @@ export function parseTrial(source: string): Trial {
     fail("expected_commands", 'must be a list of command names such as ["move", "action:pause"]')
   }
 
+  const window = windowOf(table)
+
   return {
     fixture,
     seed: integer(table, "seed", 0),
@@ -241,6 +287,7 @@ export function parseTrial(source: string): Trial {
       SCENE_NAME,
       "must be a plain Scene name (letters, digits, `_` and `-`)",
     ),
+    ...(window ? { window } : {}),
     expectedCommands: (expected as string[] | undefined) ?? [],
     oracles: oracleSpecs(table.oracle),
   }
