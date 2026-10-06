@@ -6,6 +6,7 @@
 import { assert, assertEquals, assertNotEquals } from "@std/assert"
 import { join } from "@std/path"
 import {
+  eventually,
   jsonOut,
   makeFakeWorld,
   makeSandbox,
@@ -152,4 +153,245 @@ Deno.test("fixture list reports a fixture without a baseline as missing, not as 
     }
     assertEquals(await pidsMatching(sandbox.home), [])
   })
+})
+
+/** What the mock game logs (see mock_driver.py): while booting, once idle, while shutting down. */
+type LogScript = { boot?: string[]; idle?: string[]; quit?: string[]; noLog?: boolean }
+
+async function makeLoggedWorld(script: LogScript): Promise<string> {
+  const dir = await makeFakeWorld()
+  const scripted: [string, string[] | undefined][] = [
+    ["mock_log_boot.txt", script.boot],
+    ["mock_log_idle.txt", script.idle],
+    ["mock_log_quit.txt", script.quit],
+  ]
+  for (const [file, lines] of scripted) {
+    if (lines) await Deno.writeTextFile(join(dir, file), lines.join("\n") + "\n")
+  }
+  if (script.noLog) await Deno.writeTextFile(join(dir, "mock_log_none"), "")
+  return dir
+}
+
+const NOISY: LogScript = {
+  boot: ["ERROR : boot.cpp:1 [load] logged while booting"],
+  idle: [
+    "ERROR DEBUGMSG : tick.cpp:2 [tick] first idle noise",
+    "WARNING : tick.cpp:3 [tick] second idle noise",
+  ],
+  quit: ["ERROR : exit.cpp:4 [bye] logged while shutting down"],
+}
+
+/** A sandbox whose games idle briefly for a baseline, beside a world save that logs `script`. */
+async function withLoggedSave(
+  script: LogScript,
+  body: (sandbox: Sandbox, save: string) => Promise<void>,
+  env: Record<string, string> = {},
+): Promise<void> {
+  const save = await makeLoggedWorld(script)
+  const sandbox = await makeSandbox({ env: { BNPLAY_BASELINE_IDLE_MS: "700", ...env } })
+  try {
+    await body(sandbox, save)
+  } finally {
+    await sandbox.cleanup()
+    await Deno.remove(save, { recursive: true })
+  }
+}
+
+type Baselined = {
+  fixture: string
+  baseline: string
+  lines: number
+  sample: string[]
+  path: string
+  log: string
+  idle_ms: number
+}
+
+async function baseline(sandbox: Sandbox, fixture: string, env?: Record<string, string>) {
+  const res = await sandbox.cli(["fixture", "baseline", fixture], env)
+  return { ...res, json: res.code === 0 ? jsonOut<Baselined>(res) : undefined }
+}
+
+async function addFixtureNamed(sandbox: Sandbox, save: string, name: string): Promise<void> {
+  const res = await sandbox.cli(["fixture", "add", save, name])
+  assertEquals(res.code, 0, res.stderr)
+}
+
+/** The line without the game's `HH:MM:SS.mmm` stamp, which differs on every run. */
+function unstamped(line: string): string {
+  return line.replace(/^\d\d:\d\d:\d\d\.\d{3} /, "")
+}
+
+Deno.test("fixture baseline records only the game-log lines logged after readiness", async () => {
+  await withLoggedSave(NOISY, async (sandbox, save) => {
+    await addFixtureNamed(sandbox, save, "noisy")
+    const fixtureBefore = await treeSnapshot(join(sandbox.fixtures, "noisy"))
+
+    const res = await baseline(sandbox, "noisy")
+    assertEquals(res.code, 0, res.stderr)
+    const recorded = res.json!
+    assertEquals(recorded.fixture, "noisy")
+    assertEquals(recorded.baseline, "fresh")
+    assertEquals(recorded.lines, 2)
+    assertEquals(recorded.sample.map(unstamped), NOISY.idle)
+
+    // The game really did log all three kinds of line; only the idle ones were recorded.
+    const gameLog = await Deno.readTextFile(recorded.log)
+    for (const line of [...NOISY.boot!, ...NOISY.idle!, ...NOISY.quit!]) {
+      assert(gameLog.includes(line), `the game log lacks ${line}`)
+    }
+    const record = JSON.parse(await Deno.readTextFile(recorded.path))
+    assertEquals(record.lines.map(unstamped), NOISY.idle)
+
+    // Capturing a baseline plays on a clone: the fixture itself is untouched, and no game is left.
+    assertEquals(await treeSnapshot(join(sandbox.fixtures, "noisy")), fixtureBefore)
+    assertEquals(await pidsMatching(sandbox.home), [])
+    const [entry] = await list(sandbox)
+    assertEquals(entry.baseline, "fresh")
+    assertEquals(entry.lines, 2)
+  })
+})
+
+Deno.test("a clean boot that logs nothing after readiness is an empty baseline, not a missing one", async () => {
+  await withLoggedSave({ boot: NOISY.boot }, async (sandbox, save) => {
+    await addFixtureNamed(sandbox, save, "quiet")
+    assertEquals((await list(sandbox))[0].baseline, "missing")
+
+    const res = await baseline(sandbox, "quiet")
+    assertEquals(res.code, 0, res.stderr)
+    assertEquals(res.json!.lines, 0)
+    assertEquals(res.json!.baseline, "fresh")
+    const [entry] = await list(sandbox)
+    assertEquals(entry.baseline, "fresh")
+    assertEquals(entry.lines, 0)
+    assertEquals(entry.message, undefined)
+  })
+})
+
+Deno.test("fixture list flags a baseline stale once the fixture or its mod set changes", async () => {
+  await withLoggedSave(NOISY, async (sandbox, save) => {
+    await addFixtureNamed(sandbox, save, "aging")
+    assertEquals((await baseline(sandbox, "aging")).code, 0)
+    const only = async () => (await list(sandbox))[0]
+    assertEquals((await only()).baseline, "fresh")
+
+    // The fixture changes: the baseline no longer describes it.
+    const player = join(sandbox.fixtures, "aging", "player.sav")
+    const original = await Deno.readTextFile(player)
+    await Deno.writeTextFile(player, original + "a later save\n")
+    const changed = await only()
+    assertEquals(changed.baseline, "stale")
+    assertEquals(changed.stale?.length, 1)
+    assert(changed.stale![0].includes("fixture"), changed.stale![0])
+    assert(changed.message?.includes("fixture baseline aging"), changed.message)
+
+    // Put the bytes back and the baseline describes the fixture again.
+    await Deno.writeTextFile(player, original)
+    assertEquals((await only()).baseline, "fresh")
+
+    // The mod set changes: stale, and the reason names the mod set.
+    const mods = join(sandbox.fixtures, "aging", "mods.json")
+    await Deno.writeTextFile(mods, '["dda"]\n')
+    const modded = await only()
+    assertEquals(modded.baseline, "stale")
+    assertEquals(modded.stale?.length, 1)
+    assert(modded.stale![0].includes("mod set"), modded.stale![0])
+    assert(modded.stale![0].includes("dda"), modded.stale![0])
+
+    // Both at once name both; reformatting the same mods is not a change.
+    await Deno.writeTextFile(player, original + "again\n")
+    assertEquals((await only()).stale?.length, 2)
+    await Deno.writeTextFile(player, original)
+    await Deno.remove(mods)
+    assertEquals((await only()).baseline, "fresh")
+    await Deno.writeTextFile(mods, "[ ]\n")
+    assertEquals((await only()).baseline, "fresh", "an empty mod list is the same as no mods.json")
+
+    // Refreshing records a new baseline against the changed fixture.
+    await Deno.writeTextFile(player, original + "kept\n")
+    assertEquals((await only()).baseline, "stale")
+    assertEquals((await baseline(sandbox, "aging")).code, 0)
+    assertEquals((await only()).baseline, "fresh")
+  })
+})
+
+Deno.test("fixture baseline fails clearly and records nothing when it cannot get one", async () => {
+  await withLoggedSave(NOISY, async (sandbox, save) => {
+    const unknown = await baseline(sandbox, "nothing-here")
+    assertEquals(unknown.code, 2)
+    assert(unknown.stderr.includes("nothing-here"), unknown.stderr)
+
+    // The game wrote no debug.log, so there is nothing to base a baseline on.
+    const silent = await makeLoggedWorld({ noLog: true })
+    try {
+      await addFixtureNamed(sandbox, silent, "silent")
+      const res = await baseline(sandbox, "silent")
+      assertEquals(res.code, 2)
+      assert(res.stderr.includes("debug.log"), res.stderr)
+      assertEquals((await list(sandbox))[0].baseline, "missing")
+    } finally {
+      await Deno.remove(silent, { recursive: true })
+    }
+    assertEquals(await pidsMatching(sandbox.home), [])
+  })
+})
+
+Deno.test("a game that dies at boot leaves the previous baseline in place", async () => {
+  await withLoggedSave(NOISY, async (sandbox, save) => {
+    await addFixtureNamed(sandbox, save, "kept")
+    assertEquals((await baseline(sandbox, "kept")).code, 0)
+
+    // A daemon whose game binary dies at boot.
+    await sandbox.cli(["shutdown"])
+    const res = await baseline(sandbox, "kept", { BNPLAY_BINARY: "/usr/bin/false" })
+    assertEquals(res.code, 2)
+    assert(res.stderr.includes("boot"), res.stderr)
+    const [entry] = await list(sandbox)
+    assertEquals(entry.baseline, "fresh")
+    assertEquals(entry.lines, 2)
+    assertEquals(await pidsMatching(sandbox.home), [])
+  })
+})
+
+Deno.test("a fixture that changes while its baseline is captured gets no baseline", async () => {
+  await withLoggedSave(NOISY, async (sandbox, save) => {
+    await addFixtureNamed(sandbox, save, "moving")
+    const capturing = baseline(sandbox, "moving")
+    // Wait until the game runs on its clone, then edit the fixture under it.
+    const episodes = join(sandbox.home, "episodes")
+    const cloned = async () => {
+      try {
+        for await (const e of Deno.readDir(episodes)) {
+          const clone = join(episodes, e.name, "userdir", "save", "moving")
+          if (await Deno.stat(clone).then(() => true, () => false)) return true
+        }
+      } catch { /* no Episode directory yet */ }
+      return false
+    }
+    assert(await eventually(cloned, 20_000), "the baseline never started a game")
+    await Deno.writeTextFile(join(sandbox.fixtures, "moving", "player.sav"), "edited meanwhile\n")
+
+    const res = await capturing
+    assertEquals(res.code, 2)
+    assert(res.stderr.includes("changed"), res.stderr)
+    assertEquals((await list(sandbox))[0].baseline, "missing")
+  }, { MOCK_BOOT_DELAY_S: "2" })
+})
+
+Deno.test("a baseline run counts against the session cap and is refused beyond it", async () => {
+  await withLoggedSave(NOISY, async (sandbox, save) => {
+    await addFixtureNamed(sandbox, save, "capped")
+    const trial = await sandbox.trial(`fixture = "capped"\n`)
+    const started = await sandbox.cli(["start", trial])
+    assertEquals(started.code, 0, started.stderr)
+
+    const res = await baseline(sandbox, "capped")
+    assertEquals(res.code, 2)
+    assert(res.stderr.includes("session limit"), res.stderr)
+    assertEquals((await list(sandbox))[0].baseline, "missing")
+
+    assertEquals((await sandbox.cli(["stop", jsonOut(started).session as string])).code, 0)
+    assertEquals((await baseline(sandbox, "capped")).code, 0)
+    assertEquals(await pidsMatching(sandbox.home), [])
+  }, { BNPLAY_MAX_SESSIONS: "1" })
 })

@@ -6,6 +6,7 @@
 import { join } from "@std/path"
 import { type Config, loadConfig, socketPath } from "./config.ts"
 import { Episode, HarnessError } from "./episode.ts"
+import { captureBaseline } from "./baseline.ts"
 import { addFixture, fixtureStatus, listFixtures } from "./fixtures.ts"
 import { type DaemonReply, type DaemonRequest, daemonRunning, readLines } from "./ipc.ts"
 import { parseTrial, TrialError } from "./trial.ts"
@@ -121,6 +122,8 @@ class Daemon {
               fixtures: await listFixtures(this.#config.fixtures),
             },
           }
+        case "fixture_baseline":
+          return { ok: true, result: await this.#baseline(request.name) }
         case "ping":
           return { ok: true, result: {} }
         case "shutdown":
@@ -184,6 +187,30 @@ class Daemon {
     const episode = await Episode.start(this.#config, trial, id)
     this.#sessions.set(id, episode)
     return { session: id, transcript: episode.transcriptPath, boot_ms: episode.bootMs }
+  }
+
+  /**
+   * Captures a fixture's baseline on an Episode of its own. The game it boots counts against the
+   * session cap like any other, and a daemon shutdown ends it with the rest.
+   */
+  async #baseline(fixture: string): Promise<object> {
+    let episode = undefined as Episode | undefined
+    try {
+      return await captureBaseline(this.#config, fixture, async (trial) => {
+        this.#refuseBeyondCap()
+        this.#starting++ // taken before the first await, as in #start
+        try {
+          episode = await Episode.start(this.#config, trial, crypto.randomUUID().slice(0, 8))
+          this.#sessions.set(episode.id, episode)
+          return episode
+        } finally {
+          this.#starting--
+        }
+      })
+    } finally {
+      // The capture ended its Episode; nobody can step it, so it is not kept as a session.
+      if (episode) this.#sessions.delete(episode.id)
+    }
   }
 
   async #endAll(): Promise<void> {

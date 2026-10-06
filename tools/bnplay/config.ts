@@ -14,6 +14,8 @@
  *                           (default 2)
  *   BNPLAY_IDLE_TIMEOUT_MS  an Episode that gets no request for this long is killed by process group
  *                           and ends as a harness error (default 600000, ten minutes)
+ *   BNPLAY_BASELINE_IDLE_MS how long `fixture baseline` lets the game idle after it reports ready,
+ *                           logging whatever it logs at idle (default 3000)
  */
 import { dirname, fromFileUrl, join } from "@std/path"
 
@@ -29,6 +31,7 @@ export type Config = {
   stepTimeoutMs: number
   maxSessions: number
   idleTimeoutMs: number
+  baselineIdleMs: number
 }
 
 function positiveInteger(name: string, fallback: number): number {
@@ -50,6 +53,7 @@ export function loadConfig(): Config {
     stepTimeoutMs: positiveInteger("BNPLAY_STEP_TIMEOUT_MS", 30_000),
     maxSessions: positiveInteger("BNPLAY_MAX_SESSIONS", 2),
     idleTimeoutMs: positiveInteger("BNPLAY_IDLE_TIMEOUT_MS", 600_000),
+    baselineIdleMs: positiveInteger("BNPLAY_BASELINE_IDLE_MS", 3_000),
   }
 }
 

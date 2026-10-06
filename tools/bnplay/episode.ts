@@ -61,6 +61,10 @@ export class Episode {
   /** Set once, synchronously, when the Episode ends; also the signal that it must not be used. */
   ended?: EndReason
   bootMs = 0
+  /** Wall-clock time, in ms since the epoch, at which the game answered its first ping ready. */
+  readyAt = 0
+  /** The game's debug.log; the game flushes it as it exits, so read it after the Episode ends. */
+  readonly debugLogPath: string
 
   readonly #config: Config
   readonly #trial: Trial
@@ -84,6 +88,7 @@ export class Episode {
     this.#dir = join(config.home, "episodes", id)
     this.#userdir = join(this.#dir, "userdir")
     this.transcriptPath = join(this.#dir, "transcript.jsonl")
+    this.debugLogPath = join(this.#userdir, "config", "debug.log")
     this.#transcript = new Transcript(this.transcriptPath)
   }
 
@@ -129,6 +134,7 @@ export class Episode {
     )
     try {
       const res = await this.#driver!.send({ cmd: "ping" })
+      this.readyAt = Date.now()
       if (res.status !== "ok" || res.ready !== true) {
         throw new Error(`the first ping was not answered ready: ${JSON.stringify(res)}`)
       }
