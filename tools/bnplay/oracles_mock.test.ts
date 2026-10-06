@@ -340,7 +340,7 @@ Deno.test("a game that dies is a harness error too", async () => {
   })
 })
 
-Deno.test("hitting the wall-clock limit with no decisive oracle is inconclusive (3)", async () => {
+Deno.test("hitting the wall-clock limit with no failed oracle is inconclusive (3), never a pass", async () => {
   await withSandbox(async (sandbox) => {
     const session = await start(
       sandbox,
@@ -370,7 +370,7 @@ Deno.test("hitting the wall-clock limit with no decisive oracle is inconclusive 
   })
 })
 
-Deno.test("a wall-clock ending after a decisive oracle takes that verdict", async () => {
+Deno.test("a wall-clock ending fails (1) when an oracle failed and is inconclusive (3) otherwise", async () => {
   await withSandbox(async (sandbox) => {
     const failing = await start(
       sandbox,
@@ -397,7 +397,8 @@ Deno.test("a wall-clock ending after a decisive oracle takes that verdict", asyn
     await step(sandbox, passing, { cmd: "wait", turns: 2 })
     await delay(2_500)
     const passed = await finish(sandbox, passing)
-    assertEquals([passed.report.ended, passed.code], ["wall_clock", 0])
+    assertEquals([passed.report.ended, passed.code], ["wall_clock", 3])
+    assertEquals(passed.report.verdict, "inconclusive")
   })
 })
 

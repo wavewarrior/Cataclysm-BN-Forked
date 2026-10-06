@@ -4,8 +4,10 @@
  * under about 500 tokens for a typical run; the transcript is the repro.
  *
  * Exit codes: 0 pass, 1 an oracle failed, 2 harness error (the game failed to boot, hung or died,
- * or the supervisor ended the Episode), 3 inconclusive (the wall-clock limit ended the Episode
- * before any oracle reached a verdict that decides it).
+ * or the supervisor ended the Episode), 3 inconclusive. An Episode that ends on its wall-clock
+ * limit never passes: it is 1 when any oracle failed, else 3, however many oracles were already
+ * satisfied, because the Trial did not run to its own end. While an Episode is still running, a
+ * report with no decisive oracle yet is 3 too.
  */
 import type { Config } from "./config.ts"
 import type { EndReason } from "./episode.ts"
@@ -185,6 +187,7 @@ export async function buildReport(config: Config, input: ReportInput): Promise<R
   if (stoppedAnswering(input) || (input.ended && HARNESS_ENDINGS.includes(input.ended))) {
     verdict = "harness_error"
   } else if (results.some((r) => r.result === "fail")) verdict = "fail"
+  else if (input.ended === "wall_clock") verdict = "inconclusive"
   else if (progress !== "complete" && !results.some((r) => r.decisive)) verdict = "inconclusive"
   else verdict = "pass"
   const exit_code = ({ pass: 0, fail: 1, harness_error: 2, inconclusive: 3 } as const)[verdict]
