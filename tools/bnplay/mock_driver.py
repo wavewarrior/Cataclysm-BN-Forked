@@ -15,14 +15,24 @@ Test hooks (mock only, never part of the protocol): `info` reports the user dire
 mock was started with, `dirty` writes a file into that world, `spawn_child` starts a grandchild in
 the process group and reports its pid, `hang` never answers, `sleep` answers after `seconds`.
 Env `MOCK_BOOT_DELAY_S` delays the first answer, like a slow boot.
+
+Like the game it writes `<userdir>/config/debug.log`, buffered: nothing reaches the file until the
+process exits. Each line starts with the game's `HH:MM:SS.mmm` wall-clock stamp. The world save
+(the fixture) scripts what is logged, one `LEVEL : text` line per file line, so a fixture decides
+its own noise: `mock_log_boot.txt` is logged during boot, before the first ping is answered;
+`mock_log_idle.txt` shortly after it is answered; `mock_log_quit.txt` while shutting down after
+`quit`. A world with `mock_log_none` writes no debug.log at all.
 """
 from __future__ import annotations
 
+import atexit
 import json
 import os
 import subprocess
 import sys
+import threading
 import time
+from datetime import datetime
 
 START_TURN = 1000
 TURN_CAP = 1000
@@ -55,6 +65,57 @@ class Game:
             self.log.append([text, 1])
         text, count = self.log[-1]
         return text if count == 1 else f"{text} x {count}"
+
+
+def stamp() -> str:
+    """The game's debug.log time prefix: local wall clock, to the millisecond."""
+    now = datetime.now()
+    return f"{now:%H:%M:%S}.{now.microsecond // 1000:03d}"
+
+
+class DebugLog:
+    """The game's debug.log: buffered, so only a process that exits writes it out."""
+
+    IDLE_DELAY_S = 0.15
+    QUIT_DELAY_S = 0.03
+
+    def __init__(self, userdir: str, world: str) -> None:
+        self.world_dir = os.path.join(userdir, "save", world)
+        self.path = os.path.join(userdir, "config", "debug.log")
+        self.enabled = bool(userdir) and not os.path.exists(
+            os.path.join(self.world_dir, "mock_log_none")
+        )
+        self.lines: list[str] = []
+        self.lock = threading.Lock()
+        self.write(": Starting log.")
+
+    def write(self, text: str) -> None:
+        with self.lock:
+            self.lines.append(f"{stamp()} {text}\n")
+
+    def scripted(self, name: str) -> list[str]:
+        try:
+            with open(os.path.join(self.world_dir, name)) as f:
+                return [line.strip() for line in f if line.strip()]
+        except OSError:
+            return []
+
+    def log_script(self, name: str) -> None:
+        for text in self.scripted(name):
+            self.write(text)
+
+    def log_script_later(self, name: str) -> None:
+        threading.Timer(self.IDLE_DELAY_S, self.log_script, args=(name,)).start()
+
+    def close(self) -> None:
+        self.write(": Log shutdown.")
+        if not self.enabled:
+            return
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        with open(self.path, "a") as f:
+            f.write("\n\n-----------------------------------------\n")
+            f.writelines(self.lines)
+            f.write("-----------------------------------------\n\n")
 
 
 def option(argv: list[str], name: str) -> str | None:
@@ -174,12 +235,16 @@ def main() -> int:
     except (OSError, ValueError, KeyError) as e:
         print(f"mock_driver: cannot load the deny list: {e}", file=sys.stderr)
         return 2
+    debug_log = DebugLog(userdir, world)
+    atexit.register(debug_log.close)
     # Output on the game's own stdout must never reach the protocol channel.
     print("MOCK STDOUT NOISE (must never reach the client)", flush=True)
     # A real game takes seconds to boot; MOCK_BOOT_DELAY_S makes starts overlap in tests.
     time.sleep(float(os.environ.get("MOCK_BOOT_DELAY_S", "0")))
+    debug_log.log_script("mock_log_boot.txt")
     chan = os.fdopen(int(fd), "r+b", buffering=0)
     game = Game(deny)
+    ready = False
 
     def reply(resp: dict) -> None:
         chan.write((json.dumps(resp) + "\n").encode())
@@ -200,6 +265,9 @@ def main() -> int:
         cmd = req["cmd"]
         if cmd == "ping":
             reply({"id": rid, "status": "ok", "ready": True})
+            if not ready:
+                ready = True
+                debug_log.log_script_later("mock_log_idle.txt")
         elif cmd == "state":
             reply(observation(rid, game))
         elif cmd == "wait":
@@ -214,6 +282,8 @@ def main() -> int:
             reply(key(rid, game, req))
         elif cmd == "quit":
             reply({"id": rid, "status": "ok"})
+            time.sleep(DebugLog.QUIT_DELAY_S)
+            debug_log.log_script("mock_log_quit.txt")
             return 0
         elif cmd == "info":
             reply({"id": rid, "status": "ok", "userdir": userdir, "world": world, "pid": os.getpid()})
