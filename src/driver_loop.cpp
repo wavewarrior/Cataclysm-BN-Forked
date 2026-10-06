@@ -301,7 +301,7 @@ auto prime_modal( const std::string &action ) -> bool
 
 /// A world saved mid-turn leaves the avatar without moves: the first action completes
 /// that partial turn before it can act.
-void complete_partial_turn( int &turn_budget )
+auto complete_partial_turn( int &turn_budget ) -> void
 {
     avatar &u = get_avatar();
     while( u.moves <= 0 && turn_budget > 0 && !u.is_dead_state() ) {

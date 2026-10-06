@@ -228,20 +228,20 @@ auto not_carried() -> command_result
     return refused( "You are not carrying that item." );
 }
 
+// *INDENT-OFF*
 auto run_wear( avatar &u, item &it ) -> command_result
 {
     if( u.is_worn( it ) ) {
-    return refused_by_game( _( "You are already wearing that." ) );
+        return refused_by_game( _( "You are already wearing that." ) );
     }
     if( !u.is_wielding( it ) && !carried_in_inventory( u, it ) ) {
-    return not_carried();
+        return not_carried();
     }
     // The game's own rules and message; wearing logs it too, but that path is skipped on refusal.
     if( const ret_val<bool> can = u.can_wear( it ); !can.success() ) {
-    return refused_by_game( can.str() );
+        return refused_by_game( can.str() );
     }
-    return u.wear_possessed( it, true ) ? command_result{} :
-           refused_silently();
+    return u.wear_possessed( it, true ) ? command_result{} : refused_silently();
 }
 
 auto run_take_off( avatar &u, item &it ) -> command_result
@@ -253,25 +253,24 @@ auto run_take_off( avatar &u, item &it ) -> command_result
     if( u.volume_carried() + it.volume() > u.volume_capacity_reduced_by( it.get_storage() ) ) {
         return refused( "No room in inventory for your " + it.tname() + "." );
     }
-    return u.takeoff( it ) ? command_result{} :
-           refused_silently();
+    return u.takeoff( it ) ? command_result{} : refused_silently();
 }
 
 auto run_wield( avatar &u, item &it ) -> command_result
 {
     if( u.is_wielding( it ) ) {
-    return { .outcome = "no_effect", .detail = "You are already wielding that." };
-}
-if( !is_carried( u, it ) ) {
-    return not_carried();
+        return { .outcome = "no_effect", .detail = "You are already wielding that." };
+    }
+    if( !is_carried( u, it ) ) {
+        return not_carried();
     }
     if( const ret_val<bool> can = u.can_wield( it ); !can.success() ) {
-    return refused_by_game( can.str() );
+        return refused_by_game( can.str() );
     }
     // The game's own unwield asks, in a menu, where to put the old weapon. The driver takes that
     // menu's first option: into the inventory, if it fits.
     if( u.is_armed() ) {
-    item &old = u.primary_weapon();
+        item &old = u.primary_weapon();
         if( const ret_val<bool> can = u.can_unwield( old ); !can.success() ) {
             return refused_by_game( can.str() );
         }
@@ -287,36 +286,35 @@ if( !is_carried( u, it ) ) {
     // The game asks whether to draw from a holster: a question nothing here can answer, and it
     // comes only after the old weapon is already put away.
     if( it.get_use( "holster" ) && !it.contents.empty() ) {
-    return { .outcome = "unsupported", .reason = "blocking_read",
-             .detail = "wielding a loaded holster asks a question the driver cannot answer" };
-}
-if( u.is_armed() ) {
-    item &old = u.primary_weapon();
+        return { .outcome = "unsupported", .reason = "blocking_read",
+                 .detail = "wielding a loaded holster asks a question the driver cannot answer" };
+    }
+    if( u.is_armed() ) {
+        item &old = u.primary_weapon();
         old.on_unwield( u );
         u.moves -= u.item_handling_cost( old );
         u.i_add( u.remove_primary_weapon() );
     }
-    return u.wield( it ) ? command_result{} :
-           refused_silently();
+    return u.wield( it ) ? command_result{} : refused_silently();
 }
 
 auto run_drop( avatar &u, item &it, const item_ref &ref ) -> command_result
 {
     if( !is_carried( u, it ) ) {
-    return not_carried();
+        return not_carried();
     }
     if( u.is_wielding( it ) ) {
-    if( const ret_val<bool> can = u.can_unwield( it ); !can.success() ) {
+        if( const ret_val<bool> can = u.can_unwield( it ); !can.success() ) {
             return refused_by_game( can.str() );
         }
     } else if( u.is_worn( it ) ) {
-    if( const ret_val<bool> can = u.can_takeoff( it ); !can.success() ) {
+        if( const ret_val<bool> can = u.can_takeoff( it ); !can.success() ) {
             return refused_by_game( can.str() );
         }
     }
     const tripoint_bub_ms pos = u.bub_pos();
     if( !get_map().can_put_items( pos ) ) {
-    return refused_by_game( _( "You can't place items here!" ) );
+        return refused_by_game( _( "You can't place items here!" ) );
     }
 
     // What the game's drop activity does, run now instead of over turns.
@@ -327,29 +325,28 @@ auto run_drop( avatar &u, item &it, const item_ref &ref ) -> command_result
     get_map().process_falling();
 
     // A merged or destroyed item is gone from the avatar; otherwise it must have left.
-    return !ref || !is_carried( u, *ref.get() ) ? command_result{} :
-           refused_silently();
+    return !ref || !is_carried( u, *ref.get() ) ? command_result{} : refused_silently();
 }
 
 auto run_pickup( avatar &u, item &it, const item_ref &ref ) -> command_result
 {
     if( is_carried( u, it ) ) {
-    return refused( "You are already carrying that." );
+        return refused( "You are already carrying that." );
     }
     if( !is_here( it ) ) {
-    return refused( "That item is not on your tile." );
+        return refused( "That item is not on your tile." );
     }
     // The checks the game's pickup makes before it takes an item, with its messages. Its quiet
     // pickup, which the driver uses because no prompt can be answered, would just skip these.
     if( it.made_of( LIQUID ) ) {
-    return refused_by_game( _( "You can't pick up a liquid!" ) );
+        return refused_by_game( _( "You can't pick up a liquid!" ) );
     }
     if( !u.can_pick_weight( it.weight(), false ) ) {
         return refused_by_game( string_format( _( "The %s is too heavy!" ), it.display_name() ) );
     }
     if( it.is_bucket() && !it.is_container_empty() ) {
-    return refused_by_game( string_format( _( "Can't stash %s while it's not empty" ),
-                                           it.display_name() ) );
+        return refused_by_game( string_format( _( "Can't stash %s while it's not empty" ),
+                                               it.display_name() ) );
     }
     if( !u.can_pick_volume( it.volume() ) ) {
         return refused_by_game( string_format( _( "Not enough capacity to stash %s" ),
@@ -361,9 +358,9 @@ auto run_pickup( avatar &u, item &it, const item_ref &ref ) -> command_result
     pickup::do_pickup( targets, true );
 
     // Picked up, or merged into a stack the avatar already carries (the original is then gone).
-    return !ref || is_carried( u, *ref.get() ) ? command_result{} :
-           refused_silently();
+    return !ref || is_carried( u, *ref.get() ) ? command_result{} : refused_silently();
 }
+// *INDENT-ON*
 
 } // namespace
 
@@ -406,16 +403,17 @@ auto find_item( const std::string &id_text ) -> found_item
     return { .ref = known->second };
 }
 
+// *INDENT-OFF*
 auto run_command( command kind, const safe_reference<item> &target ) -> command_result
 {
     if( !target ) {
-    return refused( "That item no longer exists." );
+        return refused( "That item no longer exists." );
     }
     avatar &u = get_avatar();
     item &it = *target.get();
     switch( kind ) {
-    case command::pickup:
-        return run_pickup( u, it, target );
+        case command::pickup:
+            return run_pickup( u, it, target );
         case command::drop:
             return run_drop( u, it, target );
         case command::wield:
@@ -427,5 +425,6 @@ auto run_command( command kind, const safe_reference<item> &target ) -> command_
     }
     return refused( "Unknown item command." );
 }
+// *INDENT-ON*
 
 } // namespace driver_items
