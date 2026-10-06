@@ -1,9 +1,10 @@
-/** Runs the driver contract suite against the mock driver (no game, no display, no memory cost). */
+/** Runs the driver contract suites against the mock driver (no game, no display, no memory cost). */
 import { spawnDriver } from "./client.ts"
-import { runContract } from "./contract.ts"
+import { type ContractTarget, runContract } from "./contract.ts"
 import { MOCK_DRIVER } from "./testkit.ts"
+import { runTimeContract } from "./time_contract.ts"
 
-runContract("mock driver", {
+const target: ContractTarget = {
   bootTimeoutMs: 10_000,
   async spawn() {
     const userdir = await Deno.makeTempDir({ prefix: "bnplay-mock-" })
@@ -21,4 +22,7 @@ runContract("mock driver", {
     }
     return driver
   },
-})
+}
+
+runContract("mock driver", target)
+runTimeContract("mock driver", target)
