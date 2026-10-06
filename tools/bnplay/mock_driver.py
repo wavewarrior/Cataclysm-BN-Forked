@@ -18,6 +18,9 @@ writes `text` (a `LEVEL : text` line) to the debug log, `hurt` takes `amount` of
 moves the turn counter back `turns` turns and `glitch` moves it on by one without saying time
 passed (both deliberately wrong, for the oracle that watches the counter), and the raw action
 `fidget` is accepted and does nothing (`no_effect`).
+`melee`, `fire` and `smash` take a `dir` or a `pos` target and answer as the real driver does in
+the walled-in fixture (melee and fire are refused, smash bashes a wall); `hurt` taking `hp` to 0 or
+below makes every response carry `outcome: died`.
 Env `MOCK_BOOT_DELAY_S` delays the first answer, like a slow boot.
 
 Like the game it writes `<userdir>/config/debug.log`, buffered: nothing reaches the file until the
@@ -56,6 +59,9 @@ NO_EFFECT_ACTIONS = ("fidget",)
 # The deny list a driver started without `--driver-deny-list` uses.
 DEFAULT_DENY = BLOCKING_READS
 NAMED_KEYS = ("ESC", "ENTER", "SPACE", "TAB", "UP", "DOWN", "LEFT", "RIGHT")
+
+# How far each combat command reaches, in tiles: melee and smash one, fire as far as the map goes.
+COMBAT_REACH = {"melee": 1, "fire": 132, "smash": 1}
 
 
 class Game:
@@ -162,6 +168,8 @@ def observation(rid: int, game: Game, **fields) -> dict:
     if game.menu:
         obs.update(outcome="awaiting_input", boundary="needs_input", prompt=game.menu)
     obs.update(fields)
+    if game.hp <= 0:
+        obs.update(outcome="died", boundary="turn_complete", prompt=None)
     return obs
 
 
@@ -227,6 +235,41 @@ def action(rid: int, game: Game, req: dict) -> dict:
     if name in NO_EFFECT_ACTIONS:
         return observation(rid, game, outcome="no_effect")
     return error(rid, f"unknown action {name!r}")
+
+
+def target_problem(req: dict, kind: str) -> str | None:
+    """Why `req` names no usable target, or None when it names one."""
+    has_dir, has_pos = "dir" in req, "pos" in req
+    if has_dir == has_pos:
+        return "name the target with `dir` or `pos`, exactly one of them"
+    if has_dir:
+        return None if req["dir"] in COMPASS else "`dir` must be a compass direction"
+    pos = req["pos"]
+    if not isinstance(pos, list) or len(pos) != 2 or not all(is_int(p) for p in pos):
+        return "`pos` must be [dx, dy], two whole numbers"
+    if pos == [0, 0]:
+        return "`pos` is the avatar's own tile: name another tile"
+    if max(abs(p) for p in pos) > COMBAT_REACH[kind]:
+        return "`pos` is out of reach"
+    return None
+
+
+def combat(rid: int, game: Game, req: dict, kind: str) -> dict:
+    """melee, fire and smash: the avatar wields a pocket knife and no creature is adjacent."""
+    if game.menu:
+        return menu_open(rid, game)
+    problem = target_problem(req, kind)
+    if problem:
+        return error(rid, problem)
+    turns = req.get("max_turns")
+    if "max_turns" in req and (not is_int(turns) or turns < 1):
+        return error(rid, "`max_turns` must be a whole number, at least 1")
+    if kind == "melee":
+        return observation(rid, game, outcome="refused", detail="There is nothing there to attack.")
+    if kind == "fire":
+        return observation(rid, game, outcome="refused", detail="Your pocket knife is not a gun.")
+    game.turn += 1
+    return observation(rid, game, time_passed=True)
 
 
 def key(rid: int, game: Game, req: dict) -> dict:
@@ -325,6 +368,8 @@ def main() -> int:
         elif cmd == "spawn_child":
             child = subprocess.Popen(["/bin/sleep", "311"])
             reply({"id": rid, "status": "ok", "child_pid": child.pid})
+        elif cmd in COMBAT_REACH:
+            reply(combat(rid, game, req, cmd))
         elif cmd == "sleep":
             time.sleep(float(req.get("seconds", 1)))
             reply({"id": rid, "status": "ok"})

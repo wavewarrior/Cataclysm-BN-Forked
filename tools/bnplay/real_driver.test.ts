@@ -9,6 +9,7 @@
 import { fromFileUrl, join } from "@std/path"
 import { spawnDriver } from "./client.ts"
 import { runActivityContract } from "./activity_contract.ts"
+import { runCombatContract } from "./combat_contract.ts"
 import { runCliLifecycle } from "./cli_lifecycle.ts"
 import { type ContractTarget, runContract } from "./contract.ts"
 import { runItemContract } from "./item_contract.ts"
@@ -55,6 +56,7 @@ runContract("real binary", target)
 runTimeContract("real binary", target)
 runItemContract("real binary", target)
 runActivityContract("real binary", target)
+runCombatContract("real binary", target)
 runMenuContract("real binary", target)
 
 // The same Episode lifecycle through the CLI and the resident daemon, on a clone of the fixture.
