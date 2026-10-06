@@ -1,6 +1,6 @@
 /**
  * Front end to daemon transport: one JSON object per line over a unix socket in the daemon's home.
- * The CLI and (later) the MCP server are thin clients of the same operations.
+ * The CLI and the MCP server are thin clients of the same operations (operations.ts).
  */
 import { delay } from "@std/async"
 import { dirname, fromFileUrl, join } from "@std/path"

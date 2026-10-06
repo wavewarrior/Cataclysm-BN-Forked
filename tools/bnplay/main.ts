@@ -21,122 +21,32 @@
  * failed to boot, hung or died, or was reaped), 3 inconclusive (the wall-clock limit ended the
  * Episode before any oracle reached a verdict that decides it).
  * `bnplay daemon` runs the daemon in the foreground.
+ *
+ * MCP: `bnplay mcp` serves the same operations as typed tools (start, step, stop, report,
+ * fixture_add, fixture_baseline, fixture_list, doctor, shutdown) over stdio, as a thin client of
+ * the same daemon. Arguments are named like the CLI's (`step` takes `session` and `command`, an
+ * object; `doctor` takes `fixture` and `self_check`). A result is the JSON the CLI prints, as
+ * structured content; a refusal (what the CLI prints on stderr with exit 2) is a tool error. A
+ * verdict (`exit_code` in the report) and `healthy: false` are results, not errors. Mount it from
+ * an MCP host with the command
+ *   deno run --allow-run --allow-env --allow-read --allow-write --allow-net \
+ *     --config deno.jsonc tools/bnplay/main.ts mcp
+ * or `deno task bnplay mcp`. Both front ends are generated from operations.ts.
  */
-import { resolve } from "@std/path"
-import type { DriverRequest } from "./client.ts"
-import { loadConfig } from "./config.ts"
+import { parseArgs, USAGE } from "./cli.ts"
 import { runDaemon } from "./daemon.ts"
-import { call, type DaemonRequest, daemonState, ensureDaemon } from "./ipc.ts"
-
-const USAGE = `usage:
-  bnplay start <trial.toml>
-  bnplay step <session> '<command json>'
-  bnplay stop <session>
-  bnplay report <session>
-  bnplay fixture add <save-dir> [name]
-  bnplay fixture baseline <name>
-  bnplay fixture list
-  bnplay doctor [--fixture <name>] [--self-check]
-  bnplay shutdown`
-
-class UsageError extends Error {}
-
-/** Turns the command line into the daemon operation it asks for. */
-function parseArgs(args: string[]): DaemonRequest {
-  const [command, ...rest] = args
-  const expect = (count: number) => {
-    if (rest.length !== count) {
-      throw new UsageError(`bnplay ${command} takes ${count} argument(s)\n${USAGE}`)
-    }
-  }
-  switch (command) {
-    case "start":
-      expect(1)
-      return { op: "start", trial: resolve(rest[0]) }
-    case "step": {
-      expect(2)
-      let request: unknown
-      try {
-        request = JSON.parse(rest[1])
-      } catch {
-        throw new UsageError(`the step command is not valid JSON: ${rest[1]}`)
-      }
-      if (typeof request !== "object" || request === null || Array.isArray(request)) {
-        throw new UsageError('the step command must be a JSON object, e.g. \'{"cmd":"state"}\'')
-      }
-      return { op: "step", session: rest[0], request: request as DriverRequest }
-    }
-    case "stop":
-      expect(1)
-      return { op: "stop", session: rest[0] }
-    case "report":
-      expect(1)
-      return { op: "report", session: rest[0] }
-    case "fixture": {
-      const [sub, ...args] = rest
-      switch (sub) {
-        case "add":
-          if (args.length < 1 || args.length > 2) {
-            throw new UsageError(
-              `bnplay fixture add takes a save directory and an optional name\n${USAGE}`,
-            )
-          }
-          return { op: "fixture_add", source: resolve(args[0]), name: args[1] }
-        case "baseline":
-          if (args.length !== 1) {
-            throw new UsageError(`bnplay fixture baseline takes a fixture name\n${USAGE}`)
-          }
-          return { op: "fixture_baseline", name: args[0] }
-        case "list":
-          if (args.length !== 0) {
-            throw new UsageError(`bnplay fixture list takes no argument\n${USAGE}`)
-          }
-          return { op: "fixture_list" }
-        default:
-          throw new UsageError(USAGE)
-      }
-    }
-    case "doctor": {
-      let fixture: string | undefined
-      let selfCheck = false
-      for (let i = 0; i < rest.length; i++) {
-        if (rest[i] === "--self-check") {
-          selfCheck = true
-        } else if (rest[i] === "--fixture" && i + 1 < rest.length) {
-          fixture = rest[++i]
-        } else {
-          throw new UsageError(`bnplay doctor: unexpected argument ${rest[i]}\n${USAGE}`)
-        }
-      }
-      return { op: "doctor", fixture, self_check: selfCheck }
-    }
-    case "shutdown":
-      expect(0)
-      return { op: "shutdown" }
-    default:
-      throw new UsageError(USAGE)
-  }
-}
+import { runMcp } from "./mcp.ts"
+import { runRequest, UsageError } from "./operations.ts"
 
 async function main(args: string[]): Promise<number> {
-  if (args[0] === "daemon") {
-    await runDaemon()
+  if (args[0] === "daemon" || args[0] === "mcp") {
+    if (args.length !== 1) throw new UsageError(USAGE)
+    await (args[0] === "daemon" ? runDaemon() : runMcp())
     return 0
   }
-  const request = parseArgs(args)
-  const { home } = loadConfig()
-  if (request.op === "shutdown") {
-    if ((await daemonState(home)) === "absent") {
-      console.log(JSON.stringify({ daemon: "not running" }))
-      return 0
-    }
-  } else {
-    await ensureDaemon(home)
-  }
-  const reply = await call(home, request)
-  if (!reply.ok) throw new Error(reply.error)
-  console.log(JSON.stringify(reply.result))
-  const { result } = reply
+  const { request } = parseArgs(args)
+  const result = await runRequest(request)
+  console.log(JSON.stringify(result))
   if (
     (request.op === "stop" || request.op === "report") && "exit_code" in result &&
     typeof result.exit_code === "number"
