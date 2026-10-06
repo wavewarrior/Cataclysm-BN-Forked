@@ -202,15 +202,22 @@ auto write_effects( JsonOut &jo ) -> bool
     return rows.size() > max_effects;
 }
 
+/// A refusal the driver itself explains: the reason is in `detail` only.
 auto refused( std::string detail ) -> command_result
 {
-    // The game says why through its message log: a refusal that bypassed it still reaches
-    // `new_messages`.
-    add_msg( m_info, "%s", detail );
     return { .outcome = "refused", .detail = std::move( detail ) };
 }
 
-/// A command that gave no explanation of its own: the driver reads the log for one.
+/// A refusal the game's rules gave, in the game's own words. The game says such things through
+/// its message log, so this does too, and the message reaches `new_messages` as it would for
+/// the player.
+auto refused_by_game( const std::string &message ) -> command_result
+{
+    add_msg( m_info, "%s", message );
+    return refused( message );
+}
+
+/// A command the game declined with a message of its own: the driver reads the log for it.
 auto refused_silently() -> command_result
 {
     return { .outcome = "refused" };
@@ -224,13 +231,14 @@ auto not_carried() -> command_result
 auto run_wear( avatar &u, item &it ) -> command_result
 {
     if( u.is_worn( it ) ) {
-    return refused( "You are already wearing that." );
+    return refused_by_game( _( "You are already wearing that." ) );
     }
     if( !u.is_wielding( it ) && !carried_in_inventory( u, it ) ) {
     return not_carried();
     }
+    // The game's own rules and message; wearing logs it too, but that path is skipped on refusal.
     if( const ret_val<bool> can = u.can_wear( it ); !can.success() ) {
-    return refused( can.str() );
+    return refused_by_game( can.str() );
     }
     return u.wear_possessed( it, true ) ? command_result{} :
            refused_silently();
@@ -239,7 +247,7 @@ auto run_wear( avatar &u, item &it ) -> command_result
 auto run_take_off( avatar &u, item &it ) -> command_result
 {
     if( const ret_val<bool> can = u.can_takeoff( it ); !can.success() ) {
-        return refused( can.str() );
+        return refused_by_game( can.str() );
     }
     // The game would ask whether to drop it instead: an agent drops explicitly.
     if( u.volume_carried() + it.volume() > u.volume_capacity_reduced_by( it.get_storage() ) ) {
@@ -258,14 +266,14 @@ if( !is_carried( u, it ) ) {
     return not_carried();
     }
     if( const ret_val<bool> can = u.can_wield( it ); !can.success() ) {
-    return refused( can.str() );
+    return refused_by_game( can.str() );
     }
     // The game's own unwield asks, in a menu, where to put the old weapon. The driver takes that
     // menu's first option: into the inventory, if it fits.
     if( u.is_armed() ) {
     item &old = u.primary_weapon();
         if( const ret_val<bool> can = u.can_unwield( old ); !can.success() ) {
-            return refused( can.str() );
+            return refused_by_game( can.str() );
         }
         if( u.volume_carried() + old.volume() > u.volume_capacity() ) {
             return refused( "No room in inventory for your " + old.tname() + "." );
@@ -299,16 +307,16 @@ auto run_drop( avatar &u, item &it, const item_ref &ref ) -> command_result
     }
     if( u.is_wielding( it ) ) {
     if( const ret_val<bool> can = u.can_unwield( it ); !can.success() ) {
-            return refused( can.str() );
+            return refused_by_game( can.str() );
         }
     } else if( u.is_worn( it ) ) {
     if( const ret_val<bool> can = u.can_takeoff( it ); !can.success() ) {
-            return refused( can.str() );
+            return refused_by_game( can.str() );
         }
     }
     const tripoint_bub_ms pos = u.bub_pos();
     if( !get_map().can_put_items( pos ) ) {
-    return refused( "You can't place items here!" );
+    return refused_by_game( _( "You can't place items here!" ) );
     }
 
     // What the game's drop activity does, run now instead of over turns.
@@ -334,17 +342,18 @@ auto run_pickup( avatar &u, item &it, const item_ref &ref ) -> command_result
     // The checks the game's pickup makes before it takes an item, with its messages. Its quiet
     // pickup, which the driver uses because no prompt can be answered, would just skip these.
     if( it.made_of( LIQUID ) ) {
-    return refused( "You can't pick up a liquid!" );
+    return refused_by_game( _( "You can't pick up a liquid!" ) );
     }
     if( !u.can_pick_weight( it.weight(), false ) ) {
-        return refused( string_format( _( "The %s is too heavy!" ), it.display_name() ) );
+        return refused_by_game( string_format( _( "The %s is too heavy!" ), it.display_name() ) );
     }
     if( it.is_bucket() && !it.is_container_empty() ) {
-    return refused( string_format( _( "Can't stash %s while it's not empty" ),
-                                   it.display_name() ) );
+    return refused_by_game( string_format( _( "Can't stash %s while it's not empty" ),
+                                           it.display_name() ) );
     }
     if( !u.can_pick_volume( it.volume() ) ) {
-        return refused( string_format( _( "Not enough capacity to stash %s" ), it.display_name() ) );
+        return refused_by_game( string_format( _( "Not enough capacity to stash %s" ),
+                                               it.display_name() ) );
     }
 
     std::vector<pickup::pick_drop_selection> targets;
@@ -389,7 +398,7 @@ auto find_item( const std::string &id_text ) -> found_item
     const auto known = issued.find( id );
     if( known == issued.end() ) {
         return { .error = "unknown item id " + id_text +
-                          ": ids come from query inventory and last one Episode" };
+                          ": ids come from query inventory and last for one Episode" };
     }
     if( !known->second ) {
         return { .error = "stale item id " + id_text + ": that item no longer exists" };
