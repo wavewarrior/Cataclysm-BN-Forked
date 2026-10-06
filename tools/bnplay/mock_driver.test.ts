@@ -4,6 +4,7 @@ import { type ContractTarget, runContract } from "./contract.ts"
 import { runCombatContract } from "./combat_contract.ts"
 import { runMenuContract } from "./menu_contract.ts"
 import { MOCK_DRIVER } from "./testkit.ts"
+import { runViewContract } from "./view_contract.ts"
 import { runTimeContract } from "./time_contract.ts"
 
 const target: ContractTarget = {
@@ -31,3 +32,4 @@ runContract("mock driver", target)
 runTimeContract("mock driver", target)
 runMenuContract("mock driver", target)
 runCombatContract("mock driver", target)
+runViewContract("mock driver", target)

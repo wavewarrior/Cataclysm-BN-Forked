@@ -15,6 +15,7 @@ import { type ContractTarget, runContract } from "./contract.ts"
 import { runItemContract } from "./item_contract.ts"
 import { runMenuContract } from "./menu_contract.ts"
 import { runTimeContract } from "./time_contract.ts"
+import { runViewContract } from "./view_contract.ts"
 
 const repo = fromFileUrl(new URL("../../", import.meta.url)).replace(/\/$/, "")
 const binary = Deno.env.get("BNPLAY_BINARY") ??
@@ -58,6 +59,7 @@ runItemContract("real binary", target)
 runActivityContract("real binary", target)
 runCombatContract("real binary", target)
 runMenuContract("real binary", target)
+runViewContract("real binary", target, { inventoryIds: true })
 
 // The same Episode lifecycle through the CLI and the resident daemon, on a clone of the fixture.
 runCliLifecycle("real binary", {

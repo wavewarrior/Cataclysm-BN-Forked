@@ -10,6 +10,8 @@ Protocol commands (same as the real driver): `ping`, `state`, `wait`, `move`, `s
 `key`, `quit`. The mock world is the contract's fixture: the avatar is walled in on every compass
 side and cannot go up, so a move is blocked or refused and costs no time; `wait` and a raw `pause`
 spend turns; `inventory`, `look` and `map` open menus that a `key` answers.
+`view` answers for the same walled-in fixture (the avatar's neighbours are walls, the rest is out
+of sight, and a rock lies underfoot), and `attach_view` adds that view to every observation.
 
 Test hooks (mock only, never part of the protocol): `info` reports the user directory and world the
 mock was started with, `dirty` writes a file into that world, `spawn_child` starts a grandchild in
@@ -63,6 +65,10 @@ NAMED_KEYS = ("ESC", "ENTER", "SPACE", "TAB", "UP", "DOWN", "LEFT", "RIGHT")
 # How far each combat command reaches, in tiles: melee and smash one, fire as far as the map goes.
 COMBAT_REACH = {"melee": 1, "fire": 132, "smash": 1}
 
+# The view command: its default radius and the widest it answers.
+VIEW_DEFAULT_RADIUS = 5
+VIEW_MAX_RADIUS = 10
+
 
 class Game:
     def __init__(self, deny: dict[str, str]) -> None:
@@ -74,6 +80,8 @@ class Game:
         self.log: list[list] = []
         # Set from the world: the first world step is nondeterministic (see `mock_diverge`).
         self.diverge = False
+        # Radius of the view attached to every observation; 0 attaches none.
+        self.attach_radius = 0
 
     def say(self, text: str) -> str:
         """Logs a message and returns the log entry as the player sees it."""
@@ -168,6 +176,8 @@ def observation(rid: int, game: Game, **fields) -> dict:
     if game.menu:
         obs.update(outcome="awaiting_input", boundary="needs_input", prompt=game.menu)
     obs.update(fields)
+    if game.attach_radius and "grid" not in obs:
+        obs["view"] = view_members(game.attach_radius)
     if game.hp <= 0:
         obs.update(outcome="died", boundary="turn_complete", prompt=None)
     return obs
@@ -179,6 +189,39 @@ def error(rid: int | None, message: str) -> dict:
 
 def menu_open(rid: int, game: Game) -> dict:
     return error(rid, f"the {game.menu} menu is open: answer it with `key` first")
+
+
+def view_members(radius: int) -> dict:
+    """What the walled-in avatar sees: its neighbours are walls, the rest is out of sight."""
+    span = range(-radius, radius + 1)
+    grid = [
+        "".join("@" if dx == dy == 0 else "#" if abs(dx) <= 1 and abs(dy) <= 1 else "?" for dx in span)
+        for dy in span
+    ]
+    meanings = {"@": "you", "#": "wall", "?": "not in view"}
+    used = {symbol for row in grid for symbol in row}
+    return {
+        "radius": radius,
+        "grid": grid,
+        "legend": {symbol: meaning for symbol, meaning in meanings.items() if symbol in used},
+        "creatures": [],
+        "items": [{"id": "4242", "name": "rock", "dx": 0, "dy": 0}],
+    }
+
+
+def view(rid: int, game: Game, req: dict) -> dict:
+    radius = req.get("radius", VIEW_DEFAULT_RADIUS)
+    if not is_int(radius) or not 1 <= radius <= VIEW_MAX_RADIUS:
+        return error(rid, f"`radius` must be a whole number from 1 to {VIEW_MAX_RADIUS}")
+    return observation(rid, game, **view_members(radius))
+
+
+def attach_view(rid: int, game: Game, req: dict) -> dict:
+    radius = req.get("radius")
+    if not is_int(radius) or not 0 <= radius <= VIEW_MAX_RADIUS:
+        return error(rid, f"`radius` must be a whole number from 0 to {VIEW_MAX_RADIUS}")
+    game.attach_radius = radius
+    return {"id": rid, "status": "ok", "attach_view": radius}
 
 
 def wait(rid: int, game: Game, req: dict) -> dict:
@@ -338,6 +381,10 @@ def main() -> int:
             reply(move(rid, game, req))
         elif cmd == "seed":
             reply(seed(rid, req))
+        elif cmd == "view":
+            reply(view(rid, game, req))
+        elif cmd == "attach_view":
+            reply(attach_view(rid, game, req))
         elif cmd == "action":
             reply(action(rid, game, req))
         elif cmd == "key":
