@@ -269,19 +269,23 @@ Use installed token reduction tools to compress tool outputs before they enter c
 
 See `token-optimization` skill for details. Track savings with `rtk gain`.
 
-### Visual verification
+### Playtesting and visual verification
 
-**Never verify a UI/render change by taking screenshots and looking at them.** Use the
-harness: `python tools/visual_verify/vv.py` drives the installed Windows build and reports
-diffs as numbers plus an ASCII delta grid, so frames stay on disk. Measured: a 6-state,
-8-frame, 4-assertion run costs 932 tokens of report versus ~14,700 to read those frames.
+**Verify gameplay and render changes with `bnplay`, not by taking screenshots and looking at
+them.** Read the `bnplay` skill (`.agents/skills/bnplay/SKILL.md`) first: it runs an Episode end
+to end and lists the traps (one game per user directory, binary freshness, the watchdog).
 
-- `vv.py selftest` proves the harness still reaches the game before you trust a result.
-- Reach for the `computer` tool only to *discover* a control's coordinates once; it returns
-  one PNG per call (~1,230 tokens) and cannot measure anything.
-- Escalate numbers → higher `thresh` → `vv crop` (~80 tokens) → full frame, in that order.
-- See `tools/visual_verify/README.md`; it supersedes the PowerShell/`CopyFromScreen` flow
-  described in the `cbn-drive-installed-game` and `cbn-input-harness-pixel-proof` skills.
+- `deno task bnplay doctor` before trusting any run: it fails on a stale binary, a missing
+  driver flag, a missing fixture baseline, stray games, and low memory or swap.
+- An Episode is `fixture add` (once), `start <trial.toml>`, `step <session> '<json>'`, `stop`.
+  `stop` prints a report of under ~500 tokens; its exit code is the verdict (0 pass, 1 oracle
+  failed, 2 harness error, 3 inconclusive) and the transcript is the repro.
+- Escalate cheapest first: the lean `step` response, then `view`/`query`, then the transcript and
+  debug log, then `capture` (windowed Trials only, for renderer work; judge frames with the
+  `paired_null`/`diff_vs_null`/`triplet` oracles, never by eye).
+- The `computer` tool cannot measure anything and costs ~1,230 tokens per PNG; use it only to
+  discover something once.
+- Windows contributors: see `tools/visual_verify/README.md` for the `vv.py` harness.
 
 ## References
 
