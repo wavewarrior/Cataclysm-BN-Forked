@@ -6,13 +6,16 @@
 #include "game.h"
 #include "item.h"
 #include "json.h"
+#include "monster.h"
 #include "map.h"
 #include "map_helpers.h"
 #include "player_activity.h"
 #include "recipe.h"
+#include "rng.h"
 #include "state_helpers.h"
 #include "type_id.h"
 
+#include <algorithm>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -58,6 +61,14 @@ struct reply {
         JsonObject jo = jsin.get_object();
         jo.allow_omitted_members();
         return jo.has_int(name) ? jo.get_int(name) : -1;
+    }
+
+    auto flag(const char* name) const -> bool {
+        std::istringstream in(line);
+        JsonIn jsin(in);
+        JsonObject jo = jsin.get_object();
+        jo.allow_omitted_members();
+        return jo.has_bool(name) && jo.get_bool(name);
     }
 };
 
@@ -120,6 +131,28 @@ auto equip_for(avatar& u, const char* recipe_name, std::vector<const char*> thin
 
 auto has(avatar& u, const char* type) -> bool {
     return u.has_item_with([type](const item& it) { return it.typeId() == itype_id(type); });
+}
+
+/// The monster on `at`, if one is alive there.
+auto monster_at(const tripoint_bub_ms& at) -> monster* {
+    monster* mon = g->critter_at<monster>(at);
+    return mon && !mon->is_dead() ? mon : nullptr;
+}
+
+auto alive_at(const tripoint_bub_ms& at) -> bool { return monster_at(at) != nullptr; }
+
+/// Its hit points; 0 once it is gone.
+auto hp_of(const tripoint_bub_ms& at) -> int {
+    const monster* mon = monster_at(at);
+    return mon ? mon->get_hp() : 0;
+}
+
+/// Wields a shotgun, loaded or not.
+auto arm_with_shotgun(avatar& u, bool loaded) -> void {
+    auto gun = item::spawn(itype_id("m1014"));
+    if (loaded) { gun->ammo_set(itype_id("shot_bird")); }
+    u.wield(std::move(gun));
+    u.moves = 100;
 }
 
 } // namespace
@@ -206,4 +239,196 @@ TEST_CASE("driver_loop_refuses_a_craft_it_cannot_start_and_an_unknown_recipe", "
     CHECK(out[1].text("status") == "error");
     CHECK(out[2].text("status") == "error");
     CHECK_FALSE(u.activity);
+}
+
+// Combat: what the Bairdford fixture cannot reach (an adjacent monster, a kill, a shot that
+// lands, the avatar's death). The fixture covers the refusals and protocol errors over the
+// real binary; these cover the rest in-process.
+
+TEST_CASE("driver_loop_melee_hits_an_adjacent_monster_by_direction_or_position", "[driver]") {
+    avatar& u = setup();
+    rng_set_engine_seed(1);
+    u.wield(item::spawn(itype_id("knife_combat")));
+    u.moves = 100;
+    monster& zed = spawn_test_monster("mon_zombie", centre + point_east);
+    const int hp_before = zed.get_hp();
+
+    const std::vector<reply> out = converse({
+        R"({"id":1,"cmd":"melee","dir":"e"})",
+        R"({"id":2,"cmd":"melee","pos":[1,0]})",
+        R"({"id":3,"cmd":"melee","dir":"e"})",
+    });
+    CAPTURE(out[0].line);
+    for (const reply& each : out) {
+        CHECK(each.text("status") == "ok");
+        CHECK(each.text("outcome") == "completed");
+        CHECK(each.flag("time_passed"));
+    }
+    CHECK(hp_of(centre + point_east) < hp_before);
+}
+
+TEST_CASE("driver_loop_melee_kills_and_the_next_swing_finds_nothing", "[driver]") {
+    avatar& u = setup();
+    rng_set_engine_seed(1);
+    u.wield(item::spawn(itype_id("knife_combat")));
+    u.moves = 100;
+    spawn_test_monster("mon_zombie", centre + point_east).set_hp(1);
+
+    std::vector<std::string> swings;
+    for (int i = 0; i < 12; ++i) { swings.push_back(R"({"id":1,"cmd":"melee","dir":"e"})"); }
+    const std::vector<reply> out = converse(swings);
+
+    CHECK_FALSE(alive_at(centre + point_east));
+    CHECK(out.front().text("outcome") == "completed");
+    CAPTURE(out.back().line);
+    CHECK(out.back().text("outcome") == "refused");
+    CHECK_FALSE(out.back().text("detail").empty());
+    CHECK_FALSE(out.back().flag("time_passed"));
+}
+
+TEST_CASE("driver_loop_melee_at_an_empty_tile_or_an_ally_is_refused_and_costs_nothing", "[driver]") {
+    avatar& u = setup();
+    monster& pet = spawn_test_monster("mon_zombie", centre + point_west);
+    pet.friendly = -1;
+    const int turn_before = to_turn<int>(calendar::turn);
+
+    const std::vector<reply> out = converse({
+        R"({"id":1,"cmd":"melee","dir":"e"})",
+        R"({"id":2,"cmd":"melee","dir":"w"})",
+        R"({"id":3,"cmd":"state"})",
+    });
+    for (int i : {0, 1}) {
+        CAPTURE(out[i].line);
+        CHECK(out[i].text("status") == "ok");
+        CHECK(out[i].text("outcome") == "refused");
+        CHECK_FALSE(out[i].text("detail").empty());
+        CHECK_FALSE(out[i].flag("time_passed"));
+    }
+    CHECK(out[2].number("turn") == turn_before);
+    CHECK(hp_of(centre + point_west) == pet.get_hp_max());
+    CHECK(u.moves > 0);
+}
+
+TEST_CASE("driver_loop_fire_shoots_along_a_direction_or_at_a_position", "[driver]") {
+    avatar& u = setup();
+    rng_set_engine_seed(1);
+    arm_with_shotgun(u, true);
+    spawn_test_monster("mon_zombie", centre + point_east * 4);
+    const int hp_before = hp_of(centre + point_east * 4);
+    const int ammo_before = u.primary_weapon().ammo_remaining();
+
+    const std::vector<reply> out = converse({
+        R"({"id":1,"cmd":"fire","dir":"e"})",
+        R"({"id":2,"cmd":"fire","pos":[4,0]})",
+    });
+    for (const reply& each : out) {
+        CAPTURE(each.line);
+        CHECK(each.text("status") == "ok");
+        CHECK(each.text("outcome") == "completed");
+        CHECK(each.flag("time_passed"));
+    }
+    CHECK(u.primary_weapon().ammo_remaining() == ammo_before - 2);
+    CHECK(hp_of(centre + point_east * 4) < hp_before);
+}
+
+TEST_CASE("driver_loop_fire_refuses_what_cannot_be_fired_and_spends_nothing", "[driver]") {
+    avatar& u = setup();
+    const int turn_before = to_turn<int>(calendar::turn);
+
+    std::string request = R"({"id":1,"cmd":"fire","dir":"e"})";
+    SECTION("empty hands") {}
+    SECTION("a knife") {
+        u.wield(item::spawn(itype_id("knife_combat")));
+        u.moves = 100;
+    }
+    SECTION("an unloaded gun") {
+        arm_with_shotgun(u, false);
+        request = R"({"id":1,"cmd":"fire","pos":[3,0]})";
+    }
+    const std::vector<reply> out = converse({request});
+    CAPTURE(out[0].line);
+    CHECK(out[0].text("status") == "ok");
+    CHECK(out[0].text("outcome") == "refused");
+    CHECK_FALSE(out[0].text("detail").empty());
+    CHECK_FALSE(out[0].flag("time_passed"));
+    CHECK(to_turn<int>(calendar::turn) == turn_before);
+}
+
+TEST_CASE("driver_loop_smash_breaks_furniture_and_open_air_has_nothing_to_smash", "[driver]") {
+    avatar& u = setup();
+    rng_set_engine_seed(1);
+    u.set_str_bonus(20);
+    const tripoint_bub_ms chair = centre + point_east;
+    get_map().furn_set(chair, furn_id("f_chair"));
+    get_map().ter_set(centre + point_west, ter_id("t_open_air"));
+
+    const std::vector<reply> out = converse({
+        R"({"id":1,"cmd":"smash","pos":[1,0]})",
+        R"({"id":2,"cmd":"smash","pos":[1,0]})",
+        R"({"id":3,"cmd":"smash","dir":"e"})",
+        R"({"id":4,"cmd":"smash","dir":"w"})",
+    });
+
+    CAPTURE(out[0].line);
+    CHECK(out[0].text("outcome") == "completed");
+    CHECK(out[0].flag("time_passed"));
+    CHECK_FALSE(get_map().has_furn(chair));
+    CAPTURE(out[3].line);
+    CHECK(out[3].text("outcome") == "refused");
+    CHECK_FALSE(out[3].text("detail").empty());
+    CHECK_FALSE(out[3].flag("time_passed"));
+}
+
+TEST_CASE("driver_loop_combat_commands_reject_a_bad_target_as_a_protocol_error", "[driver]") {
+    setup();
+    const int turn_before = to_turn<int>(calendar::turn);
+    std::vector<std::string> requests;
+    for (const char* cmd : {"melee", "fire", "smash"}) {
+        for (const char* target : {R"()", R"(,"dir":"sideways")", R"(,"dir":3)", R"(,"dir":"up")",
+                                   R"(,"dir":"e","pos":[1,0])", R"(,"pos":[])", R"(,"pos":[1])",
+                                   R"(,"pos":[1,2,3])", R"(,"pos":[1.5,0])", R"(,"pos":"e")",
+                                   R"(,"pos":[0,0])", R"(,"pos":[0,"x"])"}) {
+            requests.push_back(std::string(R"({"id":1,"cmd":")") + cmd + "\"" + target + "}");
+        }
+    }
+    // Out of reach: past the adjacent tile for melee and smash, past the loaded map for fire.
+    requests.push_back(R"({"id":1,"cmd":"melee","pos":[2,0]})");
+    requests.push_back(R"({"id":1,"cmd":"smash","pos":[0,-2]})");
+    requests.push_back(R"({"id":1,"cmd":"fire","pos":[5000,0]})");
+    requests.push_back(R"({"id":1,"cmd":"melee","dir":"e","max_turns":0})");
+    requests.push_back(R"({"id":1,"cmd":"state"})");
+
+    const std::vector<reply> out = converse(requests);
+    for (size_t i = 0; i + 1 < out.size(); ++i) {
+        CAPTURE(requests[i], out[i].line);
+        CHECK(out[i].text("status") == "error");
+        CHECK_FALSE(out[i].text("error").empty());
+    }
+    CHECK(out.back().number("turn") == turn_before);
+}
+
+TEST_CASE("driver_loop_the_avatar_dying_ends_the_response_with_died", "[driver]") {
+    avatar& u = setup();
+    rng_set_engine_seed(1);
+    u.set_all_parts_hp_cur(1);
+    for (const tripoint_rel_ms& around : {tripoint_rel_ms(1, 0, 0), tripoint_rel_ms(-1, 0, 0),
+                                           tripoint_rel_ms(0, -1, 0)}) {
+        spawn_test_monster("mon_zombie", centre + around);
+    }
+
+    std::vector<std::string> swings;
+    for (int i = 0; i < 20; ++i) { swings.push_back(R"({"id":1,"cmd":"melee","dir":"e"})"); }
+    swings.push_back(R"({"id":1,"cmd":"state"})");
+    swings.push_back(R"({"id":1,"cmd":"wait","turns":5})");
+    const std::vector<reply> out = converse(swings);
+
+    CHECK(u.is_dead_state());
+    const auto first = std::ranges::find_if(out, [](const reply& r) { return r.text("outcome") == "died"; });
+    REQUIRE(first != out.end());
+    // Death is terminal: nothing the agent asks afterwards changes the answer, and nothing hangs.
+    for (auto each = first; each != out.end(); ++each) {
+        CAPTURE(each->line);
+        CHECK(each->text("status") == "ok");
+        CHECK(each->text("outcome") == "died");
+    }
 }

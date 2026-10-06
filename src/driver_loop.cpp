@@ -22,6 +22,7 @@
 #include "avatar.h"
 #include "calendar.h"
 #include "coop_fiber.h"
+#include "driver_combat.h"
 #include "driver_items.h"
 #include "driver_message_delta.h"
 #include "fstream_utils.h"
@@ -685,8 +686,9 @@ auto run_driver_loop( int fd, const std::string &deny_list_path ) -> bool
             id = jo.get_int( "id" );
             const std::string cmd = jo.get_string( "cmd" );
             const std::optional<driver_items::command> item_kind = item_command_named( cmd );
+            const std::optional<driver_combat::command> combat_kind = driver_combat::command_named( cmd );
             if( modal && ( cmd == "move" || cmd == "wait" || cmd == "action" || cmd == "craft" ||
-                           cmd == "sleep" || item_kind ) ) {
+                           cmd == "sleep" || item_kind || combat_kind ) ) {
                 write_all( fd, error_line( id, "a menu is open (prompt '" + modal->prompt +
                                            "'): answer it with key" ) );
                 continue;
@@ -752,6 +754,24 @@ auto run_driver_loop( int fd, const std::string &deny_list_path ) -> bool
                 [&]( JsonOut & out ) {
                     return driver_items::write_query( out, topic );
                 } ) );
+            } else if( combat_kind ) {
+                const driver_combat::parsed_target target = driver_combat::parse_target( jo, *combat_kind );
+                if( !target.error.empty() ) {
+                    write_all( fd, error_line( id, target.error ) );
+                    continue;
+                }
+                const std::optional<int> max_turns = requested_turns( jo );
+                if( !max_turns ) {
+                    write_all( fd, error_line( id, "max_turns must be a whole number, at least 1" ) );
+                    continue;
+                }
+                const snapshot before = take_snapshot();
+                write_all( fd, observation_line( *id, before, guarded( before, [&]() {
+                    return run_typed( { .run = [&]()
+                    {
+                        return driver_combat::run_command( *combat_kind, target );
+                    }, .max_turns = *max_turns }, before );
+                } ) ) );
             } else if( item_kind ) {
                 const driver_items::found_item found = driver_items::find_item( jo.get_string( "item" ) );
                 if( !found.error.empty() ) {
