@@ -373,8 +373,9 @@ Deno.test("a fixture that changes while its baseline is captured gets no baselin
     const cloned = async () => {
       try {
         for await (const e of Deno.readDir(episodes)) {
-          const clone = join(episodes, e.name, "userdir", "save", "moving")
-          if (await Deno.stat(clone).then(() => true, () => false)) return true
+          // Each Episode plays on a world of its own in its user directory.
+          const saves = join(episodes, e.name, "userdir", "save")
+          for await (const _world of Deno.readDir(saves)) return true
         }
       } catch { /* no Episode directory yet */ }
       return false
