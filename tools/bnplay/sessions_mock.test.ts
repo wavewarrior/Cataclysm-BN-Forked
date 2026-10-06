@@ -164,3 +164,29 @@ Deno.test("a long request is not idle time", async () => {
     assertEquals(jsonOut(await sandbox.cli(["stop", session])).ended, "stop")
   }, { BNPLAY_IDLE_TIMEOUT_MS: "1500" })
 })
+
+Deno.test("the daemon remembers only the last few ended sessions, and their transcripts stay on disk", async () => {
+  await withSandbox(async (sandbox) => {
+    const ended: { session: string; transcript: string }[] = []
+    for (let i = 0; i < 4; i++) {
+      const episode = await start(sandbox)
+      assertEquals((await sandbox.cli(["stop", episode.session])).code, 0)
+      ended.push(episode)
+    }
+    // The next start forgets the oldest ended sessions beyond the two kept.
+    const live = await start(sandbox)
+
+    for (const forgotten of ended.slice(0, 2)) {
+      const report = await sandbox.cli(["report", forgotten.session])
+      assertEquals(report.code, 2)
+      assert(report.stderr.includes("no session"), report.stderr)
+      assert(await Deno.stat(forgotten.transcript).then(() => true, () => false), "transcript lost")
+    }
+    for (const kept of ended.slice(2)) {
+      const report = await sandbox.cli(["report", kept.session])
+      assertEquals(report.code, 0, report.stderr)
+      assertEquals(jsonOut(report).ended, "stop")
+    }
+    assertEquals((await sandbox.cli(["stop", live.session])).code, 0)
+  }, { BNPLAY_ENDED_SESSIONS_KEPT: "2" })
+})

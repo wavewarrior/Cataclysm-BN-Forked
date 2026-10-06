@@ -193,6 +193,18 @@ class Daemon {
     }
   }
 
+  /**
+   * Ended sessions stay in the table so `report` still works, but only the last
+   * `endedSessionsKept` of them (by start order): a daemon that runs for days must not grow with
+   * every Episode. A forgotten session's transcript and report inputs stay on disk.
+   */
+  #forgetOldEnded(): void {
+    const ended = [...this.#sessions.values()].filter((e) => e.ended)
+    for (const old of ended.slice(0, Math.max(0, ended.length - this.#config.endedSessionsKept))) {
+      this.#sessions.delete(old.id)
+    }
+  }
+
   async #startEpisode(trialPath: string): Promise<object> {
     let text: string
     try {
@@ -215,6 +227,7 @@ class Daemon {
       const id = crypto.randomUUID().slice(0, 8)
       const episode = await Episode.start(this.#config, trial, id)
       this.#sessions.set(id, episode)
+      this.#forgetOldEnded()
       return { session: id, transcript: episode.transcriptPath, boot_ms: episode.bootMs }
     } finally {
       if (trial.window) this.#startingWindowed--

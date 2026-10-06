@@ -19,6 +19,9 @@
  *                           whole cap when it names no limit), see step_timeout.ts
  *   BNPLAY_MAX_SESSIONS     how many Episodes may run at once; a `start` beyond it is refused
  *                           (default 2)
+ *   BNPLAY_ENDED_SESSIONS_KEPT  how many ended sessions the daemon remembers, so `report` still
+ *                           works on them; older ones are forgotten when a new session starts, and
+ *                           their transcripts stay on disk (default 20)
  *   BNPLAY_IDLE_TIMEOUT_MS  an Episode that gets no request for this long is killed by process group
  *                           and ends as a harness error (default 600000, ten minutes)
  *   BNPLAY_BASELINE_IDLE_MS how long `fixture baseline` lets the game idle after it reports ready,
@@ -47,6 +50,7 @@ export type Config = {
   stepTimeoutMs: number
   turnTimeoutMs: number
   maxSessions: number
+  endedSessionsKept: number
   idleTimeoutMs: number
   baselineIdleMs: number
   minFreeMemoryMb: number
@@ -83,6 +87,7 @@ export function loadConfig(): Config {
     stepTimeoutMs: positiveInteger("BNPLAY_STEP_TIMEOUT_MS", 30_000),
     turnTimeoutMs: nonNegativeInteger("BNPLAY_TURN_TIMEOUT_MS", 100),
     maxSessions: positiveInteger("BNPLAY_MAX_SESSIONS", 2),
+    endedSessionsKept: nonNegativeInteger("BNPLAY_ENDED_SESSIONS_KEPT", 20),
     idleTimeoutMs: positiveInteger("BNPLAY_IDLE_TIMEOUT_MS", 600_000),
     baselineIdleMs: positiveInteger("BNPLAY_BASELINE_IDLE_MS", 3_000),
     minFreeMemoryMb: nonNegativeInteger("BNPLAY_MIN_FREE_MEMORY_MB", 1_024),
