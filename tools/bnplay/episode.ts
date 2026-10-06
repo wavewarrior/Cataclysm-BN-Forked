@@ -58,6 +58,8 @@ export async function run(cmd: string, args: string[]): Promise<void> {
 export class Episode {
   readonly id: string
   readonly transcriptPath: string
+  /** World name in the Episode's own user directory: unique, so no two Episodes share a world. */
+  readonly world: string
   /** Set once, synchronously, when the Episode ends; also the signal that it must not be used. */
   ended?: EndReason
   bootMs = 0
@@ -85,6 +87,7 @@ export class Episode {
     this.#config = config
     this.#trial = trial
     this.id = id
+    this.world = `${trial.fixture}-${id}`
     this.#dir = join(config.home, "episodes", id)
     this.#userdir = join(this.#dir, "userdir")
     this.transcriptPath = join(this.#dir, "transcript.jsonl")
@@ -101,13 +104,13 @@ export class Episode {
     const episode = new Episode(config, trial, id)
     episode.#transcript.add({
       event: "start",
-      detail: { session: id, trial, userdir: episode.#userdir },
+      detail: { session: id, world: episode.world, trial, userdir: episode.#userdir },
     })
     try {
       await run("cp", [
         "-cR",
         join(config.fixtures, trial.fixture),
-        join(episode.#userdir, "save", trial.fixture),
+        join(episode.#userdir, "save", episode.world),
       ])
     } catch (e) {
       await episode.#finish("boot_failure")
@@ -122,7 +125,7 @@ export class Episode {
     this.#driver = spawnDriver({
       binary: this.#config.binary,
       userdir: this.#userdir,
-      world: this.#trial.fixture,
+      world: this.world,
       basepath: this.#config.basepath,
       firstTimeoutMs: this.#config.bootTimeoutMs,
       requestTimeoutMs: this.#config.stepTimeoutMs,

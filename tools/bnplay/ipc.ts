@@ -34,26 +34,48 @@ export async function* readLines(stream: ReadableStream<Uint8Array>): AsyncGener
   }
 }
 
-/** Sends one request to the daemon and returns its reply. Rejects when no daemon answers. */
-export async function call(home: string, request: DaemonRequest): Promise<DaemonReply> {
+/**
+ * Sends one request to the daemon and returns its reply. Rejects when no daemon answers; with
+ * `timeoutMs` it also rejects when the daemon does not reply in time.
+ */
+export async function call(
+  home: string,
+  request: DaemonRequest,
+  timeoutMs?: number,
+): Promise<DaemonReply> {
   const conn = await Deno.connect({ transport: "unix", path: socketPath(home) })
+  const timer = timeoutMs === undefined ? undefined : setTimeout(() => conn.close(), timeoutMs)
   try {
     await conn.write(new TextEncoder().encode(JSON.stringify(request) + "\n"))
     for await (const line of readLines(conn.readable)) return JSON.parse(line)
     throw new Error("the daemon closed the connection without answering")
   } finally {
+    clearTimeout(timer)
     try {
       conn.close()
-    } catch { /* already closed by the readable's end */ }
+    } catch { /* already closed by the readable's end or the timer */ }
   }
 }
 
-/** True when a daemon owns this home and answers a ping. */
-export async function daemonRunning(home: string): Promise<boolean> {
+/** A daemon that does not answer a ping within this long is "unresponsive", not gone. */
+const PING_TIMEOUT_MS = 2_000
+
+/**
+ * `absent`: no daemon listens on this home (nothing there, or a stale socket nobody serves).
+ * `running`: a daemon answers a ping. `unresponsive`: something accepts the connection but does
+ * not answer in time. That is alive-but-slow and must never be treated as absent: replacing its
+ * socket would orphan every game it holds.
+ */
+export type DaemonState = "absent" | "running" | "unresponsive"
+
+export async function daemonState(home: string): Promise<DaemonState> {
   try {
-    return (await call(home, { op: "ping" })).ok
-  } catch {
-    return false
+    return (await call(home, { op: "ping" }, PING_TIMEOUT_MS)).ok ? "running" : "unresponsive"
+  } catch (e) {
+    if (e instanceof Deno.errors.NotFound || e instanceof Deno.errors.ConnectionRefused) {
+      return "absent"
+    }
+    return "unresponsive"
   }
 }
 
@@ -62,7 +84,15 @@ const DAEMON_START_TIMEOUT_MS = 20_000
 
 /** Starts the resident daemon in its own session when none is listening, and waits for it. */
 export async function ensureDaemon(home: string): Promise<void> {
-  if (await daemonRunning(home)) return
+  const logPath = join(home, "daemon.log")
+  const existing = await daemonState(home)
+  if (existing === "running") return
+  if (existing === "unresponsive") {
+    // Alive but slow: starting a second daemon would steal its socket and orphan its games.
+    throw new Error(
+      `the bnplay daemon is not answering (is the machine overloaded?); see ${logPath}`,
+    )
+  }
   await Deno.mkdir(home, { recursive: true })
   // Own session, so closing the shell that started it does not take the games down with it; its
   // stdout and stderr go to the daemon log so a crash leaves a trace.
@@ -96,7 +126,7 @@ export async function ensureDaemon(home: string): Promise<void> {
   daemon.unref()
   const deadline = Date.now() + DAEMON_START_TIMEOUT_MS
   while (Date.now() < deadline) {
-    if (await daemonRunning(home)) return
+    if ((await daemonState(home)) === "running") return
     await delay(100)
   }
   throw new Error(`the bnplay daemon did not start; see ${join(home, "daemon.log")}`)

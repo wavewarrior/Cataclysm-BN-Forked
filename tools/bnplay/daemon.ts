@@ -8,7 +8,7 @@ import { captureBaseline } from "./baseline.ts"
 import { type Config, loadConfig, socketPath } from "./config.ts"
 import { Episode, HarnessError } from "./episode.ts"
 import { addFixture, fixtureStatus, listFixtures } from "./fixtures.ts"
-import { type DaemonReply, type DaemonRequest, daemonRunning, readLines } from "./ipc.ts"
+import { type DaemonReply, type DaemonRequest, daemonState, readLines } from "./ipc.ts"
 import { parseTrial, TrialError } from "./trial.ts"
 
 class Daemon {
@@ -29,10 +29,11 @@ class Daemon {
   async serve(): Promise<void> {
     const path = socketPath(this.#config.home)
     await Deno.mkdir(this.#config.home, { recursive: true })
-    if (await daemonRunning(this.#config.home)) return // another daemon already owns this home
+    // Another daemon already owns this home, even a slow one: never remove a live socket.
+    if ((await daemonState(this.#config.home)) !== "absent") return
     await Deno.remove(path).catch(() => undefined) // a stale socket from a dead daemon
     const listener = Deno.listen({ transport: "unix", path })
-    this.#log(`listening on ${path}`)
+    this.#log(`listening on ${path} pid ${Deno.pid}`)
     // A resident daemon holds games for other sessions; a stray error is logged, not fatal.
     globalThis.addEventListener("unhandledrejection", (event) => {
       event.preventDefault()

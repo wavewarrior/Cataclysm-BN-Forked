@@ -17,7 +17,7 @@ import { resolve } from "@std/path"
 import type { DriverRequest } from "./client.ts"
 import { loadConfig } from "./config.ts"
 import { runDaemon } from "./daemon.ts"
-import { call, type DaemonRequest, daemonRunning, ensureDaemon } from "./ipc.ts"
+import { call, type DaemonRequest, daemonState, ensureDaemon } from "./ipc.ts"
 
 const USAGE = `usage:
   bnplay start <trial.toml>
@@ -98,7 +98,7 @@ async function main(args: string[]): Promise<number> {
   const request = parseArgs(args)
   const { home } = loadConfig()
   if (request.op === "shutdown") {
-    if (!(await daemonRunning(home))) {
+    if ((await daemonState(home)) === "absent") {
       console.log(JSON.stringify({ daemon: "not running" }))
       return 0
     }
