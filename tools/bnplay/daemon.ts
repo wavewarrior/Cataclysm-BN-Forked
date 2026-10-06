@@ -1,10 +1,12 @@
 /**
  * The resident supervisor daemon. It keeps games running between shell calls (a boot takes 7 to 10
- * seconds) and serves the operations the CLI and MCP front ends share: start, step, stop, shutdown.
+ * seconds) and serves the operations the CLI and MCP front ends share: start, step, stop, the
+ * fixture library operations and shutdown.
  */
 import { join } from "@std/path"
 import { type Config, loadConfig, socketPath } from "./config.ts"
 import { Episode, HarnessError } from "./episode.ts"
+import { addFixture, fixtureStatus } from "./fixtures.ts"
 import { type DaemonReply, type DaemonRequest, daemonRunning, readLines } from "./ipc.ts"
 import { parseTrial, TrialError } from "./trial.ts"
 
@@ -104,6 +106,13 @@ class Daemon {
           return { ok: true, result: await this.#session(request.session).step(request.request) }
         case "stop":
           return { ok: true, result: await this.#session(request.session).stop() }
+        case "fixture_add": {
+          const added = await addFixture(this.#config.fixtures, request.source, request.name)
+          return {
+            ok: true,
+            result: { ...added, ...(await fixtureStatus(this.#config.fixtures, added.fixture)) },
+          }
+        }
         case "ping":
           return { ok: true, result: {} }
         case "shutdown":

@@ -4,6 +4,9 @@
  *   bnplay start <trial.toml>            boot an Episode from a Trial; prints the session id
  *   bnplay step <session> '<json>'       send one command; prints the lean response
  *   bnplay stop <session>                end the Episode; prints where its transcript is
+ *   bnplay fixture add <save> [name]     clone a world save into the fixture library
+ *   bnplay fixture baseline <name>       boot the fixture and record its post-readiness game log
+ *   bnplay fixture list                  show each fixture and whether its baseline is fresh
  *   bnplay shutdown                      end every Episode and stop the resident daemon
  *
  * A resident daemon keeps the games running between calls and is started on first use (see
@@ -20,6 +23,9 @@ const USAGE = `usage:
   bnplay start <trial.toml>
   bnplay step <session> '<command json>'
   bnplay stop <session>
+  bnplay fixture add <save-dir> [name]
+  bnplay fixture baseline <name>
+  bnplay fixture list
   bnplay shutdown`
 
 class UsageError extends Error {}
@@ -52,6 +58,30 @@ function parseArgs(args: string[]): DaemonRequest {
     case "stop":
       expect(1)
       return { op: "stop", session: rest[0] }
+    case "fixture": {
+      const [sub, ...args] = rest
+      switch (sub) {
+        case "add":
+          if (args.length < 1 || args.length > 2) {
+            throw new UsageError(
+              `bnplay fixture add takes a save directory and an optional name\n${USAGE}`,
+            )
+          }
+          return { op: "fixture_add", source: resolve(args[0]), name: args[1] }
+        case "baseline":
+          if (args.length !== 1) {
+            throw new UsageError(`bnplay fixture baseline takes a fixture name\n${USAGE}`)
+          }
+          return { op: "fixture_baseline", name: args[0] }
+        case "list":
+          if (args.length !== 0) {
+            throw new UsageError(`bnplay fixture list takes no argument\n${USAGE}`)
+          }
+          return { op: "fixture_list" }
+        default:
+          throw new UsageError(USAGE)
+      }
+    }
     case "shutdown":
       expect(0)
       return { op: "shutdown" }

@@ -48,7 +48,7 @@ const HARNESS_ERROR_EXIT_CODE = 2
 /** Time a graceful `quit` gets before the Episode is killed instead. */
 const QUIT_TIMEOUT_MS = 10_000
 
-async function run(cmd: string, args: string[]): Promise<void> {
+export async function run(cmd: string, args: string[]): Promise<void> {
   const out = await new Deno.Command(cmd, { args, stdout: "null", stderr: "piped" }).output()
   if (!out.success) {
     throw new Error(`${cmd} failed: ${new TextDecoder().decode(out.stderr).trim()}`)
