@@ -14,7 +14,7 @@ export type ContractTarget = {
 }
 
 /** Returns true when any process is still alive in the process group. */
-async function groupAlive(pgid: number): Promise<boolean> {
+export async function groupAlive(pgid: number): Promise<boolean> {
   const { code } = await new Deno.Command("pgrep", {
     args: ["-g", String(pgid)],
     stdout: "null",

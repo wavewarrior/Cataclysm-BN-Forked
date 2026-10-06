@@ -8,7 +8,8 @@
 import { fromFileUrl, join } from "@std/path"
 import { spawnDriver } from "./client.ts"
 import { runCliLifecycle } from "./cli_lifecycle.ts"
-import { runContract } from "./contract.ts"
+import { type ContractTarget, runContract } from "./contract.ts"
+import { runTimeContract } from "./time_contract.ts"
 
 const repo = fromFileUrl(new URL("../../", import.meta.url)).replace(/\/$/, "")
 const binary = Deno.env.get("BNPLAY_BINARY") ??
@@ -17,7 +18,7 @@ const sourceSave = Deno.env.get("BNPLAY_SAVE") ??
   join(Deno.env.get("HOME") ?? "", "Library/Application Support/Cataclysm-BN/save/Bairdford")
 const world = "Bairdford"
 
-runContract("real binary", {
+const target: ContractTarget = {
   bootTimeoutMs: 30_000,
   async spawn() {
     const userdir = await Deno.makeTempDir({ prefix: "bnplay-" })
@@ -42,7 +43,10 @@ runContract("real binary", {
     }
     return driver
   },
-})
+}
+
+runContract("real binary", target)
+runTimeContract("real binary", target)
 
 // The same Episode lifecycle through the CLI and the resident daemon, on a clone of the fixture.
 runCliLifecycle("real binary", {
