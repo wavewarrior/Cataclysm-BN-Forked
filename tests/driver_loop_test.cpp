@@ -101,7 +101,7 @@ auto converse(const std::vector<std::string>& requests, const std::string& scene
         // Hanging up ends the loop.
         close(fds[1]);
     });
-    const bool served = run_driver_loop(fds[0], deny.string(), scenes_dir);
+    const bool served = run_driver_loop(fds[0], {.deny_list_path = deny.string(), .scenes_dir = scenes_dir});
     agent.join();
     close(fds[0]);
     std::filesystem::remove(deny);

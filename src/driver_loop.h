@@ -6,14 +6,24 @@
 
 /// Line-JSON agent driver: one request line in, one response line out, strictly in order.
 
+/// What the driver loop is told besides the descriptor it serves.
+struct driver_options {
+    /// The data file listing actions the driver refuses; empty selects the default file under
+    /// the data directory.
+    std::string deny_list_path;
+    /// Where `run_scene` finds Scenes; empty selects the Scene library of the checkout the game
+    /// runs from (`tools/visual_verify/scenes` under `--basepath`).
+    std::string scenes_dir;
+    /// The game has a real window: the loop draws the game and refreshes the display before it
+    /// waits for each request, so a fresh frame exists whenever the driver is idle. The command
+    /// surface, the deny list and the no-fiber guard are the same as without a window.
+    bool windowed = false;
+};
+
 /// Serves the driver protocol on an inherited, bidirectional file descriptor.
 /// Call after the world is loaded. Returns on `quit` or when the peer closes the descriptor.
-/// `deny_list_path` names the data file listing actions the driver refuses; empty selects the
-/// default file under the data directory. Returns false, having served nothing, when that file
-/// cannot be loaded. `scenes_dir` is where `run_scene` finds Scenes; empty selects the Scene
-/// library of the checkout the game runs from (`tools/visual_verify/scenes` under `--basepath`).
-auto run_driver_loop( int fd, const std::string &deny_list_path,
-                      const std::string &scenes_dir = "" ) -> bool;
+/// Returns false, having served nothing, when the deny list cannot be loaded.
+auto run_driver_loop( int fd, const driver_options &options ) -> bool;
 
 /// True while the driver serves requests. The input layer must not wait for a key then: nobody
 /// is typing, so a read with no modal fiber to answer it would hang the process.

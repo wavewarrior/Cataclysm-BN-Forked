@@ -32,6 +32,7 @@
 #include "debug.h"
 #include "filesystem.h"
 #include "driver_loop.h"
+#include "driver_window.h"
 #include "game.h"
 #include "avatar.h"      // game::u.moves access in the accumulator tick loop
 #include "calendar.h"    // to_turn<int>(calendar::turn) for tick logging
@@ -164,6 +165,7 @@ int main( int argc, char* argv[] )
     std::vector<std::string> opts;
     std::string world; /** if set try to load first save in this world on startup */
     int driver_fd = -1; /** if >= 0 serve the line-JSON agent driver on this inherited fd */
+    bool driver_windowed = false; /** the driver boots with a real window instead of test_mode */
     std::string driver_deny_list; /** the driver's deny-list file; empty selects the default */
     std::string driver_scenes; /** the driver's Scenes directory; empty selects the default */
 
@@ -186,7 +188,7 @@ int main( int argc, char* argv[] )
         const char *section_default = nullptr;
         const char *section_map_sharing = "Map sharing";
         const char *section_user_directory = "User directories";
-        const std::array<arg_handler, 20> first_pass_arguments = {{
+        const std::array<arg_handler, 21> first_pass_arguments = {{
                 {
                     "--seed", "<string of letters and or numbers>",
                     "Sets the random number generator's seed value",
@@ -421,7 +423,7 @@ int main( int argc, char* argv[] )
             },
             {
                 "--driver-fd", "<N>",
-                "Serve the line-JSON agent driver protocol on inherited file descriptor N, without a window.",
+                "Serve the line-JSON agent driver protocol on inherited file descriptor N. Without a window unless --driver-windowed is also given.",
                 section_default,
                 [&driver_fd]( int num_args, const char **params ) -> int {
                     if( num_args < 1 ) {
@@ -431,8 +433,23 @@ int main( int argc, char* argv[] )
                     // Stray stdout writes (cata_printf, SDL, RmlUi, Lua print) must never
                     // reach the protocol channel: move stdout onto stderr.
                     dup2( STDERR_FILENO, STDOUT_FILENO );
-                    // Windowless: the test_mode path skips init_interface.
-                    test_mode = true;
+                    return 1;
+                }
+            },
+            {
+                "--driver-windowed", "<WxH>",
+                "With --driver-fd, open a real, visible game window of this size in pixels, in a corner of the screen and without taking focus, instead of running windowless.",
+                section_default,
+                [&driver_windowed]( int num_args, const char **params ) -> int {
+                    if( num_args < 1 ) {
+                        return -1;
+                    }
+                    const std::optional<driver_window_size> size = parse_driver_window_size( params[0] );
+                    if( !size ) {
+                        return -1;
+                    }
+                    request_driver_window( *size );
+                    driver_windowed = true;
                     return 1;
                 }
             },
@@ -645,6 +662,17 @@ int main( int argc, char* argv[] )
         }
     }
 
+    if( driver_windowed && driver_fd < 0 ) {
+        std::cerr << "driver: --driver-windowed requires --driver-fd\n";
+        return 1;
+    }
+    // The windowless driver takes the test_mode path, which skips the interface init. The
+    // windowed one must not: test_mode also makes frame production return early, so no frame
+    // would ever exist, and it skips the window the whole mode is for.
+    if( driver_fd >= 0 && !driver_windowed ) {
+        test_mode = true;
+    }
+
     preload_config::load();
 
     std::string current_path = std::filesystem::current_path().string();
@@ -805,7 +833,7 @@ int main( int argc, char* argv[] )
 
     // Now we do the actual game.
 
-    if( driver_fd >= 0 ) {
+    if( driver_fd >= 0 && !driver_windowed ) {
         // test_mode skipped init_interface: its display metrics are zero, so give the UI a
         // fixed terminal size or game_ui::init_ui would write zeros into the options file.
         FULL_SCREEN_WIDTH = TERMX = 80;
@@ -846,7 +874,17 @@ int main( int argc, char* argv[] )
                 break;
             }
             if( driver_fd >= 0 ) {
-                if( !run_driver_loop( driver_fd, driver_deny_list, driver_scenes ) ) {
+                // The windowed driver draws the game itself, so the main UI must outlive it.
+                shared_ptr_fast<ui_adaptor> driver_ui;
+                if( driver_windowed ) {
+                    driver_ui = g->create_or_get_main_ui_adaptor();
+                }
+                const driver_options options = {
+                    .deny_list_path = driver_deny_list,
+                    .scenes_dir = driver_scenes,
+                    .windowed = driver_windowed,
+                };
+                if( !run_driver_loop( driver_fd, options ) ) {
                     return 1;
                 }
                 exit_handler( 0 );

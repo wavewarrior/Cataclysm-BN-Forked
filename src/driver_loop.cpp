@@ -32,9 +32,11 @@
 #include "input.h"
 #include "json.h"
 #include "messages.h"
+#include "output.h"
 #include "path_info.h"
 #include "player_activity.h"
 #include "rng.h"
+#include "ui_manager.h"
 
 namespace
 {
@@ -702,24 +704,46 @@ auto run_key( const input_event &evt, const snapshot &before ) -> action_result
     return { .time_passed = spent || budget < max_turns_per_request };
 }
 
+/// Draws the game into the window and presents it, so a fresh frame exists while the driver
+/// waits for its next request. The window is only ever redrawn here: nobody is typing, so no
+/// input loop does it. Events are pumped first (a keypress is dropped) to keep the window
+/// responsive and to apply a resize before the draw. A failed draw leaves the window as it was
+/// and never fails the request that follows.
+auto present_frame() -> void
+{
+    try {
+        inp_mngr.pump_events();
+        g->invalidate_main_ui_adaptor();
+        ui_manager::redraw_invalidated();
+        refresh_display();
+    } catch( const std::exception &err ) {
+        std::cerr << "driver: the frame could not be drawn: " << err.what() << "\n";
+    }
+}
+
 } // namespace
 
-auto run_driver_loop( int fd, const std::string &deny_list_path,
-                      const std::string &scenes_dir ) -> bool
+auto run_driver_loop( int fd, const driver_options &options ) -> bool
 {
-    const std::string path = deny_list_path.empty() ? PATH_INFO::datadir() + default_deny_list_name :
-                             deny_list_path;
+    const std::string path = options.deny_list_path.empty() ?
+                             PATH_INFO::datadir() + default_deny_list_name : options.deny_list_path;
     const bool loaded = load_deny_list( path );
     if( !loaded ) {
         std::cerr << "driver: cannot load the deny list " << path << "\n";
         return false;
     }
-    scenes_directory = scenes_dir;
+    scenes_directory = options.scenes_dir;
     driver_serving = true;
     attached_view_radius = 0;
     line_reader in( fd );
     std::string line;
-    while( in.read_line( line ) ) {
+    while( true ) {
+        if( options.windowed ) {
+            present_frame();
+        }
+        if( !in.read_line( line ) ) {
+            break;
+        }
         if( line.empty() ) {
             continue;
         }
