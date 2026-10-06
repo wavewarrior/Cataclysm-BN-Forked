@@ -17,6 +17,7 @@ import type { Config } from "./config.ts"
 import { OracleRun } from "./oracles.ts"
 import { RendererRun } from "./renderer.ts"
 import type { ReportInput, RequestTiming } from "./report.ts"
+import { stepTimeout } from "./step_timeout.ts"
 import { Transcript } from "./transcript.ts"
 import { CAPTURE_TAG, type Trial } from "./trial.ts"
 
@@ -229,9 +230,8 @@ export class Episode {
       let response: DriverResponse
       try {
         // A `capture` always writes into the Episode's own directory, never where the agent points.
-        response = await this.#driver!.send(
-          request.cmd === "capture" ? { ...sent, dir: this.capturesPath } : request,
-        )
+        const sending = request.cmd === "capture" ? { ...sent, dir: this.capturesPath } : request
+        response = await this.#driver!.send(sending, stepTimeout(this.#config, sending))
       } catch (e) {
         if (this.ended) this.#assertLive()
         if (e instanceof DriverTimeout) {

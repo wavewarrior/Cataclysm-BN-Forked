@@ -10,8 +10,13 @@
  *   BNPLAY_SCENES           directory of the Lua Scenes `run_scene` and a Trial's `scene` run
  *                           (default tools/visual_verify/scenes)
  *   BNPLAY_BOOT_TIMEOUT_MS  how long a game may take to answer its first ping (default 60000)
- *   BNPLAY_STEP_TIMEOUT_MS  how long one request may take before the game counts as hung
- *                           (default 30000)
+ *   BNPLAY_STEP_TIMEOUT_MS  how long a request that spends no game time may take before the game
+ *                           counts as hung (default 30000)
+ *   BNPLAY_TURN_TIMEOUT_MS  extra time a request gets for each game turn it may spend, up to the
+ *                           driver's cap of 1000 turns a request (default 100; an empty world runs
+ *                           a turn in about 2 ms). A request has BNPLAY_STEP_TIMEOUT_MS plus this
+ *                           times its turns (a `wait`'s `turns`, an activity's `max_turns`, or the
+ *                           whole cap when it names no limit), see step_timeout.ts
  *   BNPLAY_MAX_SESSIONS     how many Episodes may run at once; a `start` beyond it is refused
  *                           (default 2)
  *   BNPLAY_IDLE_TIMEOUT_MS  an Episode that gets no request for this long is killed by process group
@@ -40,6 +45,7 @@ export type Config = {
   scenesDir: string
   bootTimeoutMs: number
   stepTimeoutMs: number
+  turnTimeoutMs: number
   maxSessions: number
   idleTimeoutMs: number
   baselineIdleMs: number
@@ -75,6 +81,7 @@ export function loadConfig(): Config {
     scenesDir: Deno.env.get("BNPLAY_SCENES") ?? join(REPO_ROOT, "tools", "visual_verify", "scenes"),
     bootTimeoutMs: positiveInteger("BNPLAY_BOOT_TIMEOUT_MS", 60_000),
     stepTimeoutMs: positiveInteger("BNPLAY_STEP_TIMEOUT_MS", 30_000),
+    turnTimeoutMs: nonNegativeInteger("BNPLAY_TURN_TIMEOUT_MS", 100),
     maxSessions: positiveInteger("BNPLAY_MAX_SESSIONS", 2),
     idleTimeoutMs: positiveInteger("BNPLAY_IDLE_TIMEOUT_MS", 600_000),
     baselineIdleMs: positiveInteger("BNPLAY_BASELINE_IDLE_MS", 3_000),

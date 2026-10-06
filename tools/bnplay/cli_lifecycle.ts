@@ -84,6 +84,18 @@ export function runCliLifecycle(name: string, target: LifecycleTarget): void {
           assertEquals(jsonOut(res).status, "error")
         })
 
+        await t.step(
+          "a wait past the per-request cap is interrupted at the cap, not killed as a hang",
+          async () => {
+            const res = await sandbox.cli(["step", session, '{"cmd":"wait","turns":1001}'])
+            assertEquals(res.code, 0, res.stderr)
+            const out = jsonOut(res)
+            assertEquals(out.outcome, "interrupted")
+            assertEquals(out.reason, "turn_cap")
+            assertEquals(out.episode_ended, undefined)
+          },
+        )
+
         await t.step("stop ends the Episode and leaves no game process", async () => {
           const res = await sandbox.cli(["stop", session])
           assertEquals(res.code, 0, res.stderr)
@@ -111,7 +123,17 @@ export function runCliLifecycle(name: string, target: LifecycleTarget): void {
           assertEquals(
             requests.map((r) => r.cmd),
             // Boot: ping, the Trial's seed, the first state; then what the agent sent, then quit.
-            ["ping", "seed", "state", "ping", "state", "state", "no_such_command", "quit"],
+            [
+              "ping",
+              "seed",
+              "state",
+              "ping",
+              "state",
+              "state",
+              "no_such_command",
+              "wait",
+              "quit",
+            ],
           )
           for (const [i, req] of requests.entries()) assertEquals(responses[i].id, req.id)
         })

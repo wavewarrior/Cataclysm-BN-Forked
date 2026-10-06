@@ -27,7 +27,8 @@ passed (both deliberately wrong, for the oracle that watches the counter), and t
 `melee`, `fire` and `smash` take a `dir` or a `pos` target and answer as the real driver does in
 the walled-in fixture (melee and fire are refused, smash bashes a wall); `hurt` taking `hp` to 0 or
 below makes every response carry `outcome: died`.
-Env `MOCK_BOOT_DELAY_S` delays the first answer, like a slow boot.
+Env `MOCK_BOOT_DELAY_S` delays the first answer, like a slow boot; `MOCK_TURN_DELAY_MS` makes
+every turn a `wait` spends take that long, like a slow world step.
 `capture <dir> [mode]` is the windowed mode's command: the mock writes a stand-in frame (a BMP of
 twice the window's size for `final`, as on a HiDPI display, a PNG of the window's size for
 `state`) and the map snapshot of the turn, named `turn-<turn>-<n>-final.bmp`,
@@ -415,6 +416,7 @@ def wait(rid: int, game: Game, req: dict) -> dict:
     turns = req.get("turns")
     if not is_int(turns) or turns < 1:
         return error(rid, "`turns` must be a positive integer")
+    time.sleep(min(turns, TURN_CAP) * float(os.environ.get("MOCK_TURN_DELAY_MS", "0")) / 1000)
     game.turn += min(turns, TURN_CAP)
     if turns > TURN_CAP:
         return observation(rid, game, outcome="interrupted", reason="turn_cap", time_passed=True)

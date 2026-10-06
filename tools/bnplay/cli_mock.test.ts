@@ -20,6 +20,13 @@ runCliLifecycle("mock driver", {
   fixture: "bairdford",
   fixtureSource: makeFakeWorld,
   disposeFixtureSource: (dir) => Deno.remove(dir, { recursive: true }),
+  // A wait of a thousand turns takes the mock two seconds: far past the plain step timeout, well
+  // inside the time a thousand turns are given.
+  env: {
+    MOCK_TURN_DELAY_MS: "2",
+    BNPLAY_STEP_TIMEOUT_MS: "700",
+    BNPLAY_TURN_TIMEOUT_MS: "20",
+  },
 })
 
 type Info = { userdir: string; world: string }

@@ -105,5 +105,12 @@ runCliLifecycle("real binary", {
   binary,
   fixture: world,
   fixtureSource: () => Promise.resolve(sourceSave),
-  env: { BNPLAY_BOOT_TIMEOUT_MS: "60000", BNPLAY_BASEPATH: basepath },
+  // A thousand turns take the real game about two seconds in the fixture's quiet world: past a
+  // plain step timeout of 1.2 s, inside the time the turns are given.
+  env: {
+    BNPLAY_BOOT_TIMEOUT_MS: "60000",
+    BNPLAY_BASEPATH: basepath,
+    BNPLAY_STEP_TIMEOUT_MS: "1200",
+    BNPLAY_TURN_TIMEOUT_MS: "20",
+  },
 })
