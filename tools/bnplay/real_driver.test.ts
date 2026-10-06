@@ -1,0 +1,44 @@
+/**
+ * Runs the driver contract suite against the real game binary on a clone of a fixture save.
+ *
+ * Environment (all optional):
+ *   BNPLAY_BINARY   tiles binary (default out/build/osx-arm-slim/src/cataclysm-bn-tiles)
+ *   BNPLAY_SAVE     source save directory to clone (default the local Bairdford save)
+ */
+import { fromFileUrl, join } from "@std/path"
+import { spawnDriver } from "./client.ts"
+import { runContract } from "./contract.ts"
+
+const repo = fromFileUrl(new URL("../../", import.meta.url)).replace(/\/$/, "")
+const binary = Deno.env.get("BNPLAY_BINARY") ??
+  join(repo, "out/build/osx-arm-slim/src/cataclysm-bn-tiles")
+const sourceSave = Deno.env.get("BNPLAY_SAVE") ??
+  join(Deno.env.get("HOME") ?? "", "Library/Application Support/Cataclysm-BN/save/Bairdford")
+const world = "Bairdford"
+
+runContract("real binary", {
+  bootTimeoutMs: 30_000,
+  async spawn() {
+    const userdir = await Deno.makeTempDir({ prefix: "bnplay-" })
+    await Deno.mkdir(join(userdir, "save"))
+    // Copy-on-write clone: the source save is never modified.
+    const cp = await new Deno.Command("cp", {
+      args: ["-cR", sourceSave, join(userdir, "save", world)],
+    }).output()
+    if (!cp.success) throw new Error("cloning the fixture save failed")
+    const driver = spawnDriver({
+      binary,
+      userdir,
+      world,
+      basepath: repo,
+      firstTimeoutMs: 30_000,
+      stderr: Deno.env.get("BNPLAY_VERBOSE") ? "inherit" : "null",
+    })
+    const close = driver.close.bind(driver)
+    driver.close = async () => {
+      await close()
+      await Deno.remove(userdir, { recursive: true })
+    }
+    return driver
+  },
+})
