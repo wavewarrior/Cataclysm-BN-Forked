@@ -15,6 +15,9 @@ import { fixtureStatus, listFixtures } from "./fixtures.ts"
 import { type MachineSample, sampleMachine } from "./machine.ts"
 import { FIXTURE_NAME, type Trial } from "./trial.ts"
 
+/** The flag that makes the game open a real window (its value is `WxH`). */
+const WINDOWED_FLAG = "--driver-windowed"
+
 export type CheckStatus = "ok" | "warn" | "fail" | "skipped"
 
 export type Check = {
@@ -208,25 +211,29 @@ type DriverProcess = { pid: number; elapsed: string; command: string }
 
 const PS_LINE = /^\s*(\d+)\s+(\S+)\s+(.*)$/
 
-/** Game processes serving the driver protocol that are not one of this daemon's Episodes. */
-async function strayDrivers(config: Config, liveUserdirs: string[]): Promise<DriverProcess[]> {
+/** Every process running the game binary, from `ps`. */
+async function gameProcesses(config: Config): Promise<DriverProcess[]> {
   const out = await new Deno.Command("ps", {
     args: ["-axo", "pid=,etime=,command="],
     stdout: "piped",
   }).output()
   const executable = basename(config.binary).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-  const named = new RegExp(`(^|[\\s/])${executable}\\s`)
-  const strays: DriverProcess[] = []
+  const named = new RegExp(`(^|[\\s/])${executable}(\\s|$)`)
+  const found: DriverProcess[] = []
   for (const line of new TextDecoder().decode(out.stdout).split("\n")) {
     const m = PS_LINE.exec(line)
-    if (!m) continue
-    const command = m[3]
-    if (!command.includes(DRIVER_FLAG) || !named.test(command)) continue
-    // A live Episode runs on a user directory of its own under this daemon's home.
-    if (liveUserdirs.some((dir) => command.includes(dir))) continue
-    strays.push({ pid: Number(m[1]), elapsed: m[2], command })
+    if (m && named.test(m[3])) found.push({ pid: Number(m[1]), elapsed: m[2], command: m[3] })
   }
-  return strays
+  return found
+}
+
+/** Game processes serving the driver protocol that are not one of this daemon's Episodes. */
+async function strayDrivers(config: Config, liveUserdirs: string[]): Promise<DriverProcess[]> {
+  return (await gameProcesses(config)).filter((p) =>
+    p.command.includes(DRIVER_FLAG) &&
+    // A live Episode runs on a user directory of its own under this daemon's home.
+    !liveUserdirs.some((dir) => p.command.includes(dir))
+  )
 }
 
 async function strayCheck(config: Config, liveUserdirs: string[]): Promise<Check> {
@@ -244,6 +251,133 @@ async function strayCheck(config: Config, liveUserdirs: string[]): Promise<Check
       `using them, end them: kill -KILL ${strays.map((s) => s.pid).join(" ")}`,
     details: strays,
   }
+}
+
+/** The session type `launchctl managername` names for a graphical login. */
+const GRAPHICAL_SESSION = "Aqua"
+
+/**
+ * A windowed game needs the window server of a logged-in desktop: over ssh or from a background
+ * service the process has no display and the game cannot open its window.
+ */
+async function displaySessionCheck(config: Config): Promise<Check> {
+  const name = "display_session"
+  let session: string
+  try {
+    const out = await new Deno.Command(config.launchctl, {
+      args: ["managername"],
+      stdout: "piped",
+      stderr: "null",
+    }).output()
+    session = new TextDecoder().decode(out.stdout).trim()
+  } catch (e) {
+    return {
+      name,
+      status: "fail",
+      summary: `the session type could not be read (${config.launchctl} managername): ${
+        (e as Error).message
+      }`,
+      message: "A windowed Trial needs a graphical login session; point BNPLAY_LAUNCHCTL at " +
+        "launchctl, or run bnplay from a terminal on the logged-in desktop.",
+    }
+  }
+  if (session === GRAPHICAL_SESSION) {
+    return { name, status: "ok", summary: `a graphical login session (${session})` }
+  }
+  return {
+    name,
+    status: "fail",
+    summary: `no display session: launchctl reports \`${
+      session || "nothing"
+    }\`, not ${GRAPHICAL_SESSION}`,
+    message: "A windowed game opens a real window, which needs a graphical login session. Run " +
+      "bnplay from a terminal on the logged-in desktop, not over ssh or from a background service; " +
+      "a windowless Trial needs no display.",
+  }
+}
+
+/**
+ * A game window nobody here owns: an interactive game, or a windowed driver that is not one of
+ * this daemon's Episodes. A second window can occlude the Trial's, and a wrong frame silently
+ * corrupts a paired-null comparison.
+ */
+async function strayWindowCheck(config: Config, liveUserdirs: string[]): Promise<Check> {
+  const name = "stray_windows"
+  const strays = (await gameProcesses(config)).filter((p) =>
+    (!p.command.includes(DRIVER_FLAG) || p.command.includes(WINDOWED_FLAG)) &&
+    !liveUserdirs.some((dir) => p.command.includes(dir))
+  )
+  if (strays.length === 0) return { name, status: "ok", summary: "no stray game windows" }
+  return {
+    name,
+    status: "fail",
+    summary: `${strays.length} game process(es) with a window, not owned by this daemon: ` +
+      strays.map((s) => `pid ${s.pid} (running ${s.elapsed})`).join(", "),
+    message: "A game window other than the Trial's can occlude it, and a capture of an occluded " +
+      `window is refused. Close the game, or if nobody is using it: kill -KILL ${
+        strays.map((s) => s.pid).join(" ")
+      }`,
+    details: strays,
+  }
+}
+
+/** The two lighting shader sources the windowed game cannot start without. */
+const SHADER_SOURCES = ["emitter_glow.vert.hlsl", "emitter_glow.frag.hlsl"]
+const SHADER_DIR = join("data", "shaders", "lighting", "src")
+
+/** The checkout `basepath` is a worktree of, when it is one: where the shaders actually live. */
+async function mainCheckout(basepath: string): Promise<string | undefined> {
+  try {
+    const out = await new Deno.Command("git", {
+      args: ["-C", basepath, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+      stdout: "piped",
+      stderr: "null",
+    }).output()
+    const common = new TextDecoder().decode(out.stdout).trim()
+    return out.success && basename(common) === ".git" ? dirname(common) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * `emitter_glow.vert.hlsl` and `emitter_glow.frag.hlsl` are gitignored (`/data/shaders/`), were
+ * never committed, and no build step generates them: they are hand-written sources that exist in
+ * the original checkout only, so a fresh clone or worktree fails windowed init without them.
+ */
+async function shaderSourceCheck(config: Config): Promise<Check> {
+  const name = "shader_sources"
+  const dir = join(config.basepath, SHADER_DIR)
+  const missing: string[] = []
+  for (const file of SHADER_SOURCES) {
+    if (!(await isFile(join(dir, file)))) missing.push(file)
+  }
+  if (missing.length === 0) {
+    return { name, status: "ok", summary: `${SHADER_SOURCES.join(" and ")} exist under ${dir}` }
+  }
+  const main = await mainCheckout(config.basepath)
+  const from = main && join(main, SHADER_DIR) !== dir
+    ? `the main checkout at ${join(main, SHADER_DIR)}/`
+    : "the main checkout (the original working tree of this repo, under data/shaders/lighting/src/)"
+  return {
+    name,
+    status: "fail",
+    summary: `missing under ${dir}: ${missing.join(", ")}`,
+    message:
+      `Windowed init fails without them. They are untracked: /data/shaders/ is gitignored and ` +
+      "these two files were never committed, and no build step generates them, so a fresh clone or " +
+      `worktree does not have them. Copy them from ${from} or have them tracked by a separate ` +
+      "repo fix.",
+  }
+}
+
+/** The checks only a windowed Trial needs; a windowless Trial never sees them. */
+async function windowedChecks(config: Config, liveUserdirs: string[]): Promise<Check[]> {
+  return [
+    await displaySessionCheck(config),
+    await strayWindowCheck(config, liveUserdirs),
+    await shaderSourceCheck(config),
+  ]
 }
 
 const mb = (n: number) => `${Math.round(n)} MB`
@@ -435,6 +569,8 @@ async function selfCheck(
 export type DoctorOptions = {
   /** Check only this fixture; the self-check plays it. */
   fixture?: string
+  /** The Trial the run is for: a windowed one adds the checks a game window needs. */
+  trial?: Trial
   selfCheck: boolean
   /** User directories of the Episodes the daemon holds, which are not strays. */
   liveUserdirs: string[]
@@ -470,6 +606,7 @@ export async function runDoctor(config: Config, options: DoctorOptions): Promise
     await binaryFreshnessCheck(config),
     ...await fixtureChecks(config, options.fixture),
     await strayCheck(config, options.liveUserdirs),
+    ...(options.trial?.window ? await windowedChecks(config, options.liveUserdirs) : []),
     ...machineChecks(config, machine),
   ]
   const report: DoctorReport = {

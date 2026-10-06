@@ -8,9 +8,11 @@
  *   bnplay fixture add <save> [name]     clone a world save into the fixture library
  *   bnplay fixture baseline <name>       boot the fixture and record its post-readiness game log
  *   bnplay fixture list                  show each fixture and whether its baseline is fresh
- *   bnplay doctor [--fixture <name>] [--self-check]
+ *   bnplay doctor [--fixture <name>] [--trial <trial.toml>] [--self-check]
  *                                        preflight: driver flag, binary freshness, fixture and
- *                                        baseline, stray driver processes, memory and swap;
+ *                                        baseline, stray driver processes, memory and swap (a
+ *                                        windowed --trial adds a display session, no stray game
+ *                                        windows and the lighting shader sources);
  *                                        starts no game unless --self-check asks for the A/A
  *                                        determinism pair. Exit 0 healthy, 1 a check failed
  *   bnplay shutdown                      end every Episode and stop the resident daemon

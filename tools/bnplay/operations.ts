@@ -168,8 +168,10 @@ export const OPERATIONS: { [K in OperationName]: Operation<K> } = {
     cli: ["doctor"],
     description:
       "Preflight: driver flag in the binary, binary freshness, fixture and baseline, stray driver " +
-      "processes, memory and swap. Starts no game unless self_check asks for the A/A determinism " +
-      "pair. A failed check is reported in the result (healthy: false), not as an error.",
+      "processes, memory and swap. Given a windowed Trial it also checks a display session, no " +
+      "stray game windows and the lighting shader sources a window needs. Starts no game unless " +
+      "self_check asks for the A/A determinism pair. A failed check is reported in the result " +
+      "(healthy: false), not as an error.",
     params: [
       {
         name: "fixture",
@@ -186,11 +188,20 @@ export const OPERATIONS: { [K in OperationName]: Operation<K> } = {
         required: false,
         cli: "flag",
       },
+      {
+        name: "trial",
+        kind: "path",
+        description: "Trial whose prerequisites to check; a windowed Trial adds the window checks",
+        required: false,
+        cli: "flag",
+        placeholder: "<trial.toml>",
+      },
     ],
     request: (a) => ({
       op: "doctor",
       fixture: a.fixture as string | undefined,
       self_check: a.self_check === true,
+      trial: a.trial as string | undefined,
     }),
   },
   shutdown: {

@@ -11,7 +11,7 @@ import { Episode, HarnessError } from "./episode.ts"
 import { addFixture, fixtureStatus, listFixtures } from "./fixtures.ts"
 import { type DaemonReply, type DaemonRequest, daemonState, readLines } from "./ipc.ts"
 import { buildReport } from "./report.ts"
-import { parseTrial, TrialError } from "./trial.ts"
+import { parseTrial, type Trial, TrialError } from "./trial.ts"
 
 class Daemon {
   readonly #config: Config
@@ -145,7 +145,10 @@ class Daemon {
         case "fixture_baseline":
           return { ok: true, result: await this.#baseline(request.name) }
         case "doctor":
-          return { ok: true, result: await this.#doctor(request.fixture, request.self_check) }
+          return {
+            ok: true,
+            result: await this.#doctor(request.fixture, request.self_check, request.trial),
+          }
         case "ping":
           return { ok: true, result: {} }
         case "shutdown":
@@ -264,22 +267,36 @@ class Daemon {
    * The doctor preflight. The Episodes of the optional self-check are booted one at a time, count
    * against the session cap like any other, and are ended before this returns.
    */
-  async #doctor(fixture: string | undefined, selfCheck: boolean): Promise<object> {
+  async #doctor(
+    fixture: string | undefined,
+    selfCheck: boolean,
+    trialPath: string | undefined,
+  ): Promise<object> {
+    let trial: Trial | undefined
+    if (trialPath !== undefined) {
+      try {
+        trial = parseTrial(await Deno.readTextFile(trialPath))
+      } catch (e) {
+        if (e instanceof TrialError) throw e
+        throw new HarnessError(`cannot read the Trial file ${trialPath}`)
+      }
+    }
     const booted: Episode[] = []
     try {
       return await runDoctor(this.#config, {
         fixture,
+        trial,
         selfCheck,
         liveUserdirs: [...this.#sessions.values()]
           .filter((e) => !e.ended)
           .map((e) => join(this.#config.home, "episodes", e.id, "userdir")),
-        boot: async (trial) => {
+        boot: async (selfCheckTrial) => {
           this.#refuseBeyondCap()
           this.#starting++ // taken before the first await, as in #start
           try {
             const episode = await Episode.start(
               this.#config,
-              trial,
+              selfCheckTrial,
               crypto.randomUUID().slice(0, 8),
             )
             booted.push(episode)

@@ -71,6 +71,10 @@ type RigOptions = {
   noFixture?: boolean
   /** Text of the binary; the mock by default. */
   binaryText?: string
+  /** Leave out the lighting shader sources a windowed game cannot start without. */
+  noShaders?: boolean
+  /** What `launchctl managername` says: `Aqua` is a graphical login session. */
+  session?: string
   env?: Record<string, string>
 }
 
@@ -87,6 +91,16 @@ async function withRig(opts: RigOptions, body: (rig: Rig) => Promise<void>): Pro
   await Deno.mkdir(join(source, "src", "lighting"), { recursive: true })
   await Deno.writeTextFile(join(source, "src", "main.cpp"), "int main() {}\n")
   await Deno.writeTextFile(join(source, "src", "lighting", "gpu.cpp"), "void gpu() {}\n")
+  if (!opts.noShaders) {
+    const shaders = join(source, "data", "shaders", "lighting", "src")
+    await Deno.mkdir(shaders, { recursive: true })
+    for (const name of ["emitter_glow.vert.hlsl", "emitter_glow.frag.hlsl"]) {
+      await Deno.writeTextFile(join(shaders, name), "// shader\n")
+    }
+  }
+  const launchctl = join(dir, "launchctl")
+  await Deno.writeTextFile(launchctl, `#!/bin/sh\necho ${opts.session ?? "Aqua"}\n`)
+  await Deno.chmod(launchctl, 0o755)
   // The binary was built after every source was last touched.
   const now = Date.now() / 1000
   await Deno.utime(join(source, "src", "main.cpp"), now - 120, now - 120)
@@ -95,7 +109,7 @@ async function withRig(opts: RigOptions, body: (rig: Rig) => Promise<void>): Pro
 
   const sandbox = await makeSandbox({
     binary,
-    env: { ...ROOMY, BNPLAY_BASEPATH: source, ...opts.env },
+    env: { ...ROOMY, BNPLAY_BASEPATH: source, BNPLAY_LAUNCHCTL: launchctl, ...opts.env },
   })
   const world = await makeFakeWorld()
   try {
@@ -470,5 +484,143 @@ Deno.test("doctor refuses arguments it does not know", async () => {
     assert(res.stderr.includes("--selfcheck"), res.stderr)
     const bare = await rig.sandbox.cli(["doctor", "--fixture"])
     assertEquals(bare.code, 2)
+  })
+})
+
+const WINDOWED_CHECKS = ["display_session", "stray_windows", "shader_sources"]
+
+async function windowedTrial(rig: Rig): Promise<string> {
+  return await rig.sandbox.trial(`fixture = "${rig.fixture}"\nmode = "windowed"\n`)
+}
+
+async function windowlessTrial(rig: Rig): Promise<string> {
+  return await rig.sandbox.trial(`fixture = "${rig.fixture}"\n`)
+}
+
+Deno.test("doctor passes a windowed Trial on a graphical session with no stray windows and the shader sources", async () => {
+  await withRig({}, async (rig) => {
+    const { code, report } = await rig.doctor(["--trial", await windowedTrial(rig)])
+    assertEquals(code, 0, JSON.stringify(report.checks))
+    for (const name of WINDOWED_CHECKS) assertEquals(check(report, name).status, "ok", name)
+  })
+})
+
+Deno.test("doctor makes the windowed checks for windowed Trials only", async () => {
+  // Everything a windowed game needs is missing, and a windowless Trial does not care.
+  await withRig({ noShaders: true, session: "Background" }, async (rig) => {
+    const stray = new Deno.Command("/bin/sh", {
+      args: ["-c", "read line", "sh", rig.binary, "--userdir", "/tmp/nobody/"],
+      stdin: "piped",
+      stdout: "null",
+      stderr: "null",
+    }).spawn()
+    try {
+      for (const args of [[], ["--trial", await windowlessTrial(rig)]]) {
+        const { code, report } = await rig.doctor(args)
+        assertEquals(code, 0, JSON.stringify(report.checks))
+        for (const name of WINDOWED_CHECKS) {
+          assertEquals(report.checks.some((c) => c.name === name), false, `${name} ${args}`)
+        }
+      }
+      const windowed = await rig.doctor(["--trial", await windowedTrial(rig)])
+      assertEquals(windowed.code, 1)
+      for (const name of WINDOWED_CHECKS) assertEquals(check(windowed.report, name).status, "fail")
+    } finally {
+      stray.kill("SIGKILL")
+      await stray.status
+    }
+  })
+})
+
+Deno.test("doctor reports a missing display session and what it means", async () => {
+  await withRig({ session: "Background" }, async (rig) => {
+    const { code, report } = await rig.doctor(["--trial", await windowedTrial(rig)])
+    assertEquals(code, 1)
+    const found = check(report, "display_session")
+    assertEquals(found.status, "fail")
+    assert(found.summary.includes("Background"), found.summary)
+    assert(found.message?.includes("login session"), found.message)
+    assertEquals(check(report, "stray_windows").status, "ok")
+  })
+})
+
+Deno.test("doctor reports a stray game window, an interactive game or a windowed driver nobody owns", async () => {
+  await withRig({}, async (rig) => {
+    const spawn = (...flags: string[]) =>
+      new Deno.Command("/bin/sh", {
+        args: ["-c", "read line", "sh", rig.binary, "--userdir", "/tmp/nobody/", ...flags],
+        stdin: "piped",
+        stdout: "null",
+        stderr: "null",
+      }).spawn()
+    const trial = await windowedTrial(rig)
+    const interactive = spawn()
+    try {
+      const { code, report } = await rig.doctor(["--trial", trial])
+      assertEquals(code, 1)
+      const found = check(report, "stray_windows")
+      assertEquals(found.status, "fail")
+      assert(found.summary.includes(`pid ${interactive.pid}`), found.summary)
+      assert(found.message?.includes("kill -KILL"), found.message)
+      // The checks that are not about windows are not touched.
+      assertEquals(check(report, "stray_processes").status, "ok")
+    } finally {
+      interactive.kill("SIGKILL")
+      await interactive.status
+    }
+    const windowedDriver = spawn("--driver-fd", "3", "--driver-windowed", "640x384")
+    try {
+      const { report } = await rig.doctor(["--trial", trial])
+      assertEquals(check(report, "stray_windows").status, "fail")
+    } finally {
+      windowedDriver.kill("SIGKILL")
+      await windowedDriver.status
+    }
+    assertEquals(check((await rig.doctor(["--trial", trial])).report, "stray_windows").status, "ok")
+  })
+})
+
+Deno.test("a windowed Episode of this daemon is not a stray window", async () => {
+  await withRig({}, async (rig) => {
+    const trial = await windowedTrial(rig)
+    const started = await rig.sandbox.cli(["start", trial])
+    assertEquals(started.code, 0, started.stderr)
+    try {
+      const { report } = await rig.doctor(["--trial", trial])
+      assertEquals(check(report, "stray_windows").status, "ok")
+    } finally {
+      await rig.sandbox.cli(["stop", JSON.parse(started.stdout).session])
+    }
+  })
+})
+
+Deno.test("doctor says the lighting shader sources are untracked and where to copy them from", async () => {
+  await withRig({ noShaders: true }, async (rig) => {
+    const { code, report } = await rig.doctor(["--trial", await windowedTrial(rig)])
+    assertEquals(code, 1)
+    const found = check(report, "shader_sources")
+    assertEquals(found.status, "fail")
+    for (const name of ["emitter_glow.vert.hlsl", "emitter_glow.frag.hlsl"]) {
+      assert(found.summary.includes(name), found.summary)
+    }
+    const message = found.message ?? ""
+    // What is true: gitignored, never committed, no build step makes them; copy or track them.
+    assert(message.includes("untracked"), message)
+    assert(message.includes("no build step"), message)
+    assert(message.includes("main checkout"), message)
+    assert(message.includes("data/shaders/lighting/src"), message)
+    assert(message.includes("tracked by a separate repo fix"), message)
+  })
+})
+
+Deno.test("doctor names only the shader source that is missing", async () => {
+  await withRig({}, async (rig) => {
+    const frag = join(rig.source, "data", "shaders", "lighting", "src", "emitter_glow.frag.hlsl")
+    await Deno.remove(frag)
+    const { report } = await rig.doctor(["--trial", await windowedTrial(rig)])
+    const found = check(report, "shader_sources")
+    assertEquals(found.status, "fail")
+    assert(found.summary.includes("emitter_glow.frag.hlsl"), found.summary)
+    assertEquals(found.summary.includes("emitter_glow.vert.hlsl"), false, found.summary)
   })
 })

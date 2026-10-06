@@ -24,6 +24,8 @@
  *                           exhausted on this machine before)
  *   BNPLAY_SELFCHECK_IDLE_MS how long each Episode of `doctor --self-check` idles after it is
  *                           seeded, before its first world step (default 3000)
+ *   BNPLAY_LAUNCHCTL        the `launchctl` that `doctor` asks for the session type a windowed
+ *                           Trial needs (default `launchctl`; `Aqua` is a graphical login)
  */
 import { dirname, fromFileUrl, join } from "@std/path"
 
@@ -44,6 +46,7 @@ export type Config = {
   minFreeMemoryMb: number
   minFreeSwapMb: number
   selfCheckIdleMs: number
+  launchctl: string
 }
 
 function positiveInteger(name: string, fallback: number): number {
@@ -78,6 +81,7 @@ export function loadConfig(): Config {
     minFreeMemoryMb: nonNegativeInteger("BNPLAY_MIN_FREE_MEMORY_MB", 1_024),
     minFreeSwapMb: nonNegativeInteger("BNPLAY_MIN_FREE_SWAP_MB", 1_024),
     selfCheckIdleMs: nonNegativeInteger("BNPLAY_SELFCHECK_IDLE_MS", 3_000),
+    launchctl: Deno.env.get("BNPLAY_LAUNCHCTL") ?? "launchctl",
   }
 }
 
