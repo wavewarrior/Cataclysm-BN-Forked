@@ -23,7 +23,7 @@ export type AddedFixture = {
 
 /**
  * Clones `source` (a world save directory) into the library as `name` (default: the save's own
- * directory name, which is also the game's world name). The source is only ever read.
+ * directory name). The source is only ever read.
  */
 export async function addFixture(
   fixtures: string,

@@ -40,7 +40,7 @@ const FIELDS = [
   "turn_limit",
 ]
 
-/** What a fixture name may look like: it is also a directory name and the game's world name. */
+/** What a fixture name may look like: it names a directory in the fixture library. */
 export const FIXTURE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 
 function fail(field: string, expectation: string): never {

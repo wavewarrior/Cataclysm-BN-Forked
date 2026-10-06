@@ -10,6 +10,7 @@
  */
 import { assert, assertEquals } from "@std/assert"
 import { fromFileUrl, join } from "@std/path"
+import { linesInWindow } from "./gamelog.ts"
 import { jsonOut, makeSandbox, pidsMatching, treeSnapshot } from "./testkit.ts"
 
 const repo = fromFileUrl(new URL("../../", import.meta.url)).replace(/\/$/, "")
@@ -53,6 +54,15 @@ Deno.test({
       const gameLog = await Deno.readTextFile(recorded.log)
       for (const boot of ["SDL version used during compile", "LAPI version"]) {
         assert(gameLog.includes(boot), `the game log has no boot line ${boot}`)
+      }
+      // An empty baseline proves nothing unless the window can read this log at all: a window
+      // wide enough to cover the whole run must return the boot lines the baseline left out.
+      const everything = linesInWindow(gameLog, {
+        fromMs: Date.now() - 3_600_000,
+        toMs: Date.now() + 60_000,
+      })
+      for (const boot of ["SDL version used during compile", "LAPI version"]) {
+        assert(everything.some((line) => line.includes(boot)), `the window lost ${boot}`)
       }
       const record = JSON.parse(await Deno.readTextFile(recorded.path))
       assertEquals(record.lines.length, recorded.lines)
