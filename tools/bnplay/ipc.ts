@@ -54,15 +54,25 @@ export async function call(
   }
 }
 
-/** A daemon that does not answer a ping within this long counts as not running. */
+/** A daemon that does not answer a ping within this long is "unresponsive", not gone. */
 const PING_TIMEOUT_MS = 2_000
 
-/** True when a daemon owns this home and answers a ping. */
-export async function daemonRunning(home: string): Promise<boolean> {
+/**
+ * `absent`: no daemon listens on this home (nothing there, or a stale socket nobody serves).
+ * `running`: a daemon answers a ping. `unresponsive`: something accepts the connection but does
+ * not answer in time. That is alive-but-slow and must never be treated as absent: replacing its
+ * socket would orphan every game it holds.
+ */
+export type DaemonState = "absent" | "running" | "unresponsive"
+
+export async function daemonState(home: string): Promise<DaemonState> {
   try {
-    return (await call(home, { op: "ping" }, PING_TIMEOUT_MS)).ok
-  } catch {
-    return false
+    return (await call(home, { op: "ping" }, PING_TIMEOUT_MS)).ok ? "running" : "unresponsive"
+  } catch (e) {
+    if (e instanceof Deno.errors.NotFound || e instanceof Deno.errors.ConnectionRefused) {
+      return "absent"
+    }
+    return "unresponsive"
   }
 }
 
@@ -71,7 +81,15 @@ const DAEMON_START_TIMEOUT_MS = 20_000
 
 /** Starts the resident daemon in its own session when none is listening, and waits for it. */
 export async function ensureDaemon(home: string): Promise<void> {
-  if (await daemonRunning(home)) return
+  const logPath = join(home, "daemon.log")
+  const existing = await daemonState(home)
+  if (existing === "running") return
+  if (existing === "unresponsive") {
+    // Alive but slow: starting a second daemon would steal its socket and orphan its games.
+    throw new Error(
+      `the bnplay daemon is not answering (is the machine overloaded?); see ${logPath}`,
+    )
+  }
   await Deno.mkdir(home, { recursive: true })
   // Own session, so closing the shell that started it does not take the games down with it; its
   // stdout and stderr go to the daemon log so a crash leaves a trace.
@@ -105,7 +123,7 @@ export async function ensureDaemon(home: string): Promise<void> {
   daemon.unref()
   const deadline = Date.now() + DAEMON_START_TIMEOUT_MS
   while (Date.now() < deadline) {
-    if (await daemonRunning(home)) return
+    if ((await daemonState(home)) === "running") return
     await delay(100)
   }
   throw new Error(`the bnplay daemon did not start; see ${join(home, "daemon.log")}`)

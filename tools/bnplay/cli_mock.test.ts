@@ -208,6 +208,29 @@ Deno.test("clients that hang up before they are served do not take the daemon do
   })
 })
 
+Deno.test("a slow daemon is never replaced and keeps its sessions", async () => {
+  await withSandbox(async (sandbox) => {
+    const { session } = await start(sandbox)
+    const log = await Deno.readTextFile(join(sandbox.home, "daemon.log"))
+    const pid = Number(/pid (\d+)/.exec(log)?.[1])
+    assert(pid > 0, log)
+    Deno.kill(pid, "SIGSTOP") // accepts connections at the kernel level, answers nothing
+    try {
+      const res = await step(sandbox, session, "state")
+      assertEquals(res.code, 2)
+      assert(res.stderr.includes("not answering"), res.stderr)
+    } finally {
+      Deno.kill(pid, "SIGCONT")
+    }
+    // The same daemon, with the same Episode, answers again; no second daemon took its socket.
+    assertEquals((await step(sandbox, session, "state")).json?.status, "ok")
+    assertEquals(
+      (await Deno.readTextFile(join(sandbox.home, "daemon.log"))).match(/listening on/g)?.length,
+      1,
+    )
+  })
+})
+
 Deno.test("step and stop on an unknown session are refused", async () => {
   await withSandbox(async (sandbox) => {
     for (const args of [["step", "nosuch", '{"cmd":"ping"}'], ["stop", "nosuch"]]) {

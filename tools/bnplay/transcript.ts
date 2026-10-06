@@ -22,17 +22,22 @@ export type TranscriptRecord = {
 export class Transcript {
   readonly #file: Deno.FsFile
   readonly #started = performance.now()
+  #closed = false
 
   constructor(readonly path: string) {
     this.#file = Deno.openSync(path, { create: true, append: true })
   }
 
+  /** Appends a record; after `close` it does nothing, so a late trace cannot throw. */
   add(record: Omit<TranscriptRecord, "ms">): void {
+    if (this.#closed) return
     const line = JSON.stringify({ ms: Math.round(performance.now() - this.#started), ...record })
     this.#file.writeSync(new TextEncoder().encode(line + "\n"))
   }
 
   close(): void {
+    if (this.#closed) return
+    this.#closed = true
     this.#file.close()
   }
 }
