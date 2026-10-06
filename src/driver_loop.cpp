@@ -1,18 +1,27 @@
 #include "driver_loop.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
+#include <limits>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include <unistd.h>
 
 #include "avatar.h"
 #include "calendar.h"
+#include "driver_message_delta.h"
 #include "game.h"
 #include "json.h"
+#include "messages.h"
+#include "rng.h"
 
 namespace
 {
@@ -103,18 +112,66 @@ auto quit_line( int id ) -> std::string
     return os.str() + "\n";
 }
 
-/// Minimal lean observation: reads the world, never advances it.
-auto state_line( int id ) -> std::string
+/// Newest messages compared before and after a request, and the caps on what one response
+/// carries (a response must stay within about 1.5K tokens).
+constexpr size_t message_window = 64;
+constexpr size_t max_new_messages = 10;
+constexpr size_t max_message_bytes = 240;
+/// Hard cap on the turns one request may run. A request that reaches it is interrupted.
+constexpr int max_turns_per_request = 1000;
+
+/// What the world looked like before a request began, for the fields that are deltas.
+struct snapshot {
+    tripoint_abs_ms pos;
+    std::vector<log_entry> messages;
+};
+
+/// What a request did, as far as the driver can tell without looking at the world again.
+struct action_result {
+    bool time_passed = false;
+    std::string_view outcome = "completed";
+    /// Only meaningful for outcome `interrupted`.
+    std::string_view reason;
+};
+
+auto log_window() -> std::vector<log_entry>
+{
+    const auto recent = Messages::recent_messages_rich( message_window );
+    std::vector<log_entry> entries;
+    entries.reserve( recent.size() );
+    for( const Messages::rich_message &message : recent ) {
+        entries.push_back( { .seq = message.seq, .text = message.text } );
+    }
+    return entries;
+}
+
+auto take_snapshot() -> snapshot
+{
+    return { .pos = get_avatar().abs_pos(), .messages = log_window() };
+}
+
+/// Observation response: the contract's common payload. Reads the world, never advances it.
+auto observation_line( int id, const snapshot &before, const action_result &result ) -> std::string
 {
     const avatar &u = get_avatar();
+    message_delta delta = compute_message_delta( before.messages, log_window() );
+    const bool capped = cap_messages( delta.fresh, max_new_messages, max_message_bytes );
+    const bool truncated = delta.lost || capped;
+    // Death ends the Episode, so it outranks whatever the action itself reported.
+    const bool dead = u.is_dead_state();
+
     std::ostringstream os;
     JsonOut jo( os, false );
     begin_response( jo, id, "ok" );
     jo.member( "boundary", std::string( "turn_complete" ) );
     jo.member( "turn", to_turn<int>( calendar::turn ) );
-    jo.member( "time_passed", false );
+    jo.member( "time_passed", result.time_passed );
+    jo.member( "moved", u.abs_pos() != before.pos );
     jo.member( "new_messages" );
     jo.start_array();
+    for( const std::string &message : delta.fresh ) {
+        jo.write( message );
+    }
     jo.end_array();
     jo.member( "prompt" );
     jo.write_null();
@@ -123,9 +180,142 @@ auto state_line( int id ) -> std::string
     jo.member( "stamina", u.get_stamina() );
     jo.member( "hunger", u.get_stored_kcal() );
     jo.member( "thirst", u.get_thirst() );
-    jo.member( "outcome", std::string( "completed" ) );
+    jo.member( "outcome", std::string( dead ? "died" : result.outcome ) );
+    if( !dead && result.outcome == "interrupted" ) {
+        jo.member( "reason", std::string( result.reason ) );
+    }
+    if( truncated ) {
+        jo.member( "truncated", true );
+    }
     jo.end_object();
     return os.str() + "\n";
+}
+
+auto state_line( int id ) -> std::string
+{
+    return observation_line( id, take_snapshot(), {} );
+}
+
+auto seed_line( int id, unsigned int seed ) -> std::string
+{
+    rng_set_engine_seed( seed );
+    std::ostringstream os;
+    JsonOut jo( os, false );
+    begin_response( jo, id, "ok" );
+    jo.member( "seed", seed );
+    jo.end_object();
+    return os.str() + "\n";
+}
+
+/// Runs world steps until the avatar has moves again, at most `turn_budget` of them.
+/// Whatever is left of the avatar's turn is forfeited first, as the co-op host does for a
+/// client that queued no further action.
+void advance_to_turn_boundary( int &turn_budget )
+{
+    avatar &u = get_avatar();
+    u.moves = std::min( u.moves, 0 );
+    while( u.moves <= 0 && turn_budget > 0 && !u.is_dead_state() ) {
+        g->post_action_world_step();
+        --turn_budget;
+    }
+}
+
+/// How one action went.
+struct step_report {
+    /// The action spent moves; only then does the world advance.
+    bool spent = false;
+    /// World steps run, including one that finished a turn that was already under way.
+    int turns = 0;
+    /// The game's safe mode was stopping movement, so a rejection is the game's, not a wall's.
+    bool safe_mode_stopped = false;
+};
+
+/// Hands one action to the game as if its key was pressed, then lets the world respond.
+/// An action that spends no moves (a blocked move, a cancelled menu) does not advance the world.
+auto perform_action( const std::string &action, int &turn_budget ) -> step_report
+{
+    avatar &u = get_avatar();
+    const int budget_before = turn_budget;
+    // A world saved mid-turn leaves the avatar without moves: the first action completes
+    // that partial turn before it can act.
+    while( u.moves <= 0 && turn_budget > 0 && !u.is_dead_state() ) {
+        g->post_action_world_step();
+        --turn_budget;
+    }
+    step_report report;
+    report.safe_mode_stopped = g->safe_mode == SAFE_MODE_STOP;
+    if( u.moves > 0 && !u.is_dead_state() ) {
+        const int moves_before = u.moves;
+        g->handle_action_from( action );
+        report.spent = u.moves < moves_before;
+        if( report.spent ) {
+            advance_to_turn_boundary( turn_budget );
+        }
+    }
+    report.turns = budget_before - turn_budget;
+    return report;
+}
+
+/// `dir` is a compass point or `up`/`down`; empty when it is none of them.
+auto move_action_name( const std::string &dir ) -> std::string
+{
+    static const std::vector<std::string> known = { "n", "ne", "e", "se", "s", "sw", "w", "nw", "up", "down" };
+    return std::ranges::find( known, dir ) == known.end() ? std::string() : "move_" + dir;
+}
+
+auto run_move( const std::string &action, const snapshot &before ) -> action_result
+{
+    int budget = max_turns_per_request;
+    const step_report step = perform_action( action, budget );
+    action_result result;
+    result.time_passed = step.spent || step.turns > 0;
+    if( !step.spent && get_avatar().abs_pos() == before.pos ) {
+        // Nothing was spent and nothing moved: the game said no, or the world did.
+        result.outcome = step.safe_mode_stopped ? "refused" : "blocked";
+    }
+    return result;
+}
+
+auto run_wait( int turns ) -> action_result
+{
+    int budget = max_turns_per_request;
+    action_result result;
+    for( int done = 0; done < turns; ++done ) {
+        if( budget <= 0 ) {
+            result.outcome = "interrupted";
+            result.reason = "turn_cap";
+            break;
+        }
+        const step_report step = perform_action( "pause", budget );
+        result.time_passed = result.time_passed || step.spent || step.turns > 0;
+        if( get_avatar().is_dead_state() ) {
+            break;
+        }
+        if( !step.spent ) {
+            if( done == 0 ) {
+                result.outcome = step.safe_mode_stopped ? "refused" : "no_effect";
+            } else {
+                result.outcome = "interrupted";
+                result.reason = step.safe_mode_stopped ? "monster_in_view" : "other";
+            }
+            break;
+        }
+    }
+    return result;
+}
+
+/// A whole-number member of `jo` within [`min`, `max`]; empty when it is fractional or out of
+/// range. Throws, like any bad request, when the member is missing or not a number.
+auto whole_number( const JsonObject &jo, const std::string &name, int64_t min,
+                   int64_t max ) -> std::optional<int64_t>
+{
+    // get_int would silently truncate 1.5, so read the number as a float and check it.
+    const double value = jo.get_float( name );
+    if( value != std::floor( value ) || value < static_cast<double>( min ) ||
+        value > static_cast<double>( max ) ) {
+        return std::nullopt;
+    }
+    return static_cast<int64_t>( value );
 }
 
 } // namespace
@@ -150,6 +340,31 @@ void run_driver_loop( int fd )
                 write_all( fd, ping_line( *id ) );
             } else if( cmd == "state" ) {
                 write_all( fd, state_line( *id ) );
+            } else if( cmd == "move" ) {
+                const std::string action = move_action_name( jo.get_string( "dir" ) );
+                if( action.empty() ) {
+                    write_all( fd, error_line( id, "unknown direction" ) );
+                    continue;
+                }
+                const snapshot before = take_snapshot();
+                write_all( fd, observation_line( *id, before, run_move( action, before ) ) );
+            } else if( cmd == "wait" ) {
+                const std::optional<int64_t> turns = whole_number( jo, "turns", 1,
+                                                     std::numeric_limits<int>::max() );
+                if( !turns ) {
+                    write_all( fd, error_line( id, "turns must be a whole number, at least 1" ) );
+                    continue;
+                }
+                const snapshot before = take_snapshot();
+                write_all( fd, observation_line( *id, before, run_wait( static_cast<int>( *turns ) ) ) );
+            } else if( cmd == "seed" ) {
+                const std::optional<int64_t> seed = whole_number( jo, "seed", 0,
+                                                    std::numeric_limits<unsigned int>::max() );
+                if( !seed ) {
+                    write_all( fd, error_line( id, "seed must be a whole number from 0 to 4294967295" ) );
+                    continue;
+                }
+                write_all( fd, seed_line( *id, static_cast<unsigned int>( *seed ) ) );
             } else if( cmd == "quit" ) {
                 write_all( fd, quit_line( *id ) );
                 return;
