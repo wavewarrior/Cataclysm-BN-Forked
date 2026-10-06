@@ -18,11 +18,11 @@
  * interface init, the GPU device and its lighting buffers come on top. Hence one windowed Episode
  * at a time.
  *
- * The capture contract's no_drawable refusal runs against the mock only. A script cannot minimise
- * the game's window (System Events does not list the background app; only a desktop automation
- * client with the accessibility permission can press its minimise button), so the real refusal is
- * covered in process (tests/driver_loop_test.cpp) and was driven once by hand: with the window
- * minimised, both capture modes answered `outcome: refused`, reason `no_drawable`.
+ * The capture contract's no_drawable refusal runs against the mock only. An osascript (System
+ * Events) attempt to minimise the game's window failed and was not pursued, so the real refusal is
+ * covered in process (tests/driver_loop_test.cpp) and was driven once by hand, pressing the
+ * window's minimise button through a desktop automation client: both capture modes answered
+ * `outcome: refused`, reason `no_drawable`.
  */
 import { fromFileUrl, join } from "@std/path"
 import { spawnDriver } from "./client.ts"

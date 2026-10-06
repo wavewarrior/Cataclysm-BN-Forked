@@ -211,7 +211,10 @@ export class Episode {
       this.#assertLive()
       let response: DriverResponse
       try {
-        response = await this.#driver!.send(this.#withCapturesDir(request))
+        // A `capture` always writes into the Episode's own directory, never where the agent points.
+        response = await this.#driver!.send(
+          request.cmd === "capture" ? { ...request, dir: this.capturesPath } : request,
+        )
       } catch (e) {
         if (this.ended) this.#assertLive()
         if (e instanceof DriverTimeout) {
@@ -236,11 +239,6 @@ export class Episode {
       }
       return response
     })
-  }
-
-  /** A `capture` always writes into the Episode's own directory, never where the agent points. */
-  #withCapturesDir(request: DriverRequest): DriverRequest {
-    return request.cmd === "capture" ? { ...request, dir: this.capturesPath } : request
   }
 
   /** True once the game turn counter has moved as far as the Trial's turn limit allows. */
