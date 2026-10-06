@@ -13,7 +13,8 @@ spend turns; `inventory`, `look` and `map` open menus that a `key` answers.
 
 Test hooks (mock only, never part of the protocol): `info` reports the user directory and world the
 mock was started with, `dirty` writes a file into that world, `spawn_child` starts a grandchild in
-the process group and reports its pid, `hang` never answers.
+the process group and reports its pid, `hang` never answers, `sleep` answers after `seconds`.
+Env `MOCK_BOOT_DELAY_S` delays the first answer, like a slow boot.
 """
 from __future__ import annotations
 
@@ -175,6 +176,8 @@ def main() -> int:
         return 2
     # Output on the game's own stdout must never reach the protocol channel.
     print("MOCK STDOUT NOISE (must never reach the client)", flush=True)
+    # A real game takes seconds to boot; MOCK_BOOT_DELAY_S makes starts overlap in tests.
+    time.sleep(float(os.environ.get("MOCK_BOOT_DELAY_S", "0")))
     chan = os.fdopen(int(fd), "r+b", buffering=0)
     game = Game(deny)
 
@@ -221,6 +224,9 @@ def main() -> int:
         elif cmd == "spawn_child":
             child = subprocess.Popen(["/bin/sleep", "311"])
             reply({"id": rid, "status": "ok", "child_pid": child.pid})
+        elif cmd == "sleep":
+            time.sleep(float(req.get("seconds", 1)))
+            reply({"id": rid, "status": "ok"})
         elif cmd == "hang":
             while True:
                 time.sleep(3600)

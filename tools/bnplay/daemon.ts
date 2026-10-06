@@ -11,6 +11,8 @@ import { parseTrial, TrialError } from "./trial.ts"
 class Daemon {
   readonly #config: Config
   readonly #sessions = new Map<string, Episode>()
+  /** Starts that passed the cap check and have not yet become sessions. */
+  #starting = 0
   readonly #log: (message: string) => void
 
   constructor(config: Config) {
@@ -126,6 +128,27 @@ class Daemon {
   }
 
   async #start(trialPath: string): Promise<object> {
+    this.#refuseBeyondCap()
+    // The slot is taken before the first await: concurrent starts must not all see a free slot.
+    this.#starting++
+    try {
+      return await this.#startEpisode(trialPath)
+    } finally {
+      this.#starting--
+    }
+  }
+
+  #refuseBeyondCap(): void {
+    const live = [...this.#sessions.values()].filter((e) => !e.ended).length + this.#starting
+    if (live >= this.#config.maxSessions) {
+      throw new HarnessError(
+        `session limit reached: ${live} of ${this.#config.maxSessions} sessions are running; ` +
+          `stop one (bnplay stop <session>) or raise BNPLAY_MAX_SESSIONS before starting another`,
+      )
+    }
+  }
+
+  async #startEpisode(trialPath: string): Promise<object> {
     let text: string
     try {
       text = await Deno.readTextFile(trialPath)

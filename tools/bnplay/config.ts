@@ -10,6 +10,10 @@
  *   BNPLAY_BOOT_TIMEOUT_MS  how long a game may take to answer its first ping (default 60000)
  *   BNPLAY_STEP_TIMEOUT_MS  how long one request may take before the game counts as hung
  *                           (default 30000)
+ *   BNPLAY_MAX_SESSIONS     how many Episodes may run at once; a `start` beyond it is refused
+ *                           (default 2)
+ *   BNPLAY_IDLE_TIMEOUT_MS  an Episode that gets no request for this long is killed by process group
+ *                           and ends as a harness error (default 600000, ten minutes)
  */
 import { dirname, fromFileUrl, join } from "@std/path"
 
@@ -23,9 +27,11 @@ export type Config = {
   basepath: string
   bootTimeoutMs: number
   stepTimeoutMs: number
+  maxSessions: number
+  idleTimeoutMs: number
 }
 
-function milliseconds(name: string, fallback: number): number {
+function positiveInteger(name: string, fallback: number): number {
   const raw = Deno.env.get(name)
   if (raw === undefined) return fallback
   const n = Number(raw)
@@ -40,8 +46,10 @@ export function loadConfig(): Config {
     binary: Deno.env.get("BNPLAY_BINARY") ??
       join(REPO_ROOT, "out", "build", "osx-arm-slim", "src", "cataclysm-bn-tiles"),
     basepath: Deno.env.get("BNPLAY_BASEPATH") ?? REPO_ROOT,
-    bootTimeoutMs: milliseconds("BNPLAY_BOOT_TIMEOUT_MS", 60_000),
-    stepTimeoutMs: milliseconds("BNPLAY_STEP_TIMEOUT_MS", 30_000),
+    bootTimeoutMs: positiveInteger("BNPLAY_BOOT_TIMEOUT_MS", 60_000),
+    stepTimeoutMs: positiveInteger("BNPLAY_STEP_TIMEOUT_MS", 30_000),
+    maxSessions: positiveInteger("BNPLAY_MAX_SESSIONS", 2),
+    idleTimeoutMs: positiveInteger("BNPLAY_IDLE_TIMEOUT_MS", 600_000),
   }
 }
 

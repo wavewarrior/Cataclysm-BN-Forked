@@ -25,6 +25,7 @@ export type EndReason =
   | "driver_exit"
   | "boot_failure"
   | "daemon_shutdown"
+  | "idle_timeout"
 
 /** A failure the agent should read, not a bug in the supervisor. */
 export class HarnessError extends Error {
@@ -40,6 +41,9 @@ export type EpisodeSummary = {
   exit_code: number
   transcript: string
 }
+
+/** The exit code of an Episode that ended any way but `stop`: a harness error, not a game result. */
+const HARNESS_ERROR_EXIT_CODE = 2
 
 /** Time a graceful `quit` gets before the Episode is killed instead. */
 const QUIT_TIMEOUT_MS = 10_000
@@ -66,6 +70,9 @@ export class Episode {
   /** Undefined only while the fixture is still being cloned. */
   #driver?: Driver
   #watchdog?: Parameters<typeof clearTimeout>[0]
+  #idleTimer?: Parameters<typeof clearTimeout>[0]
+  /** Requests accepted and not yet answered; an Episode is only idle while this is zero. */
+  #inFlight = 0
   #finishing?: Promise<void>
   #exitCode = 0
   #queue: Promise<unknown> = Promise.resolve()
@@ -135,12 +142,13 @@ export class Episode {
       )
     }
     this.bootMs = Math.round(performance.now() - began)
+    this.#armIdleTimer()
     this.#transcript.add({ event: "ready", detail: { boot_ms: this.bootMs } })
   }
 
   /** Sends one command and returns the driver's response, serialised with other requests. */
   step(request: DriverRequest): Promise<DriverResponse> {
-    return this.#serialised(async () => {
+    return this.#request(async () => {
       this.#assertLive()
       let response: DriverResponse
       try {
@@ -165,7 +173,7 @@ export class Episode {
 
   /** Asks the game to quit, then reaps the process group. Idempotent. */
   stop(): Promise<EpisodeSummary> {
-    return this.#serialised(async () => {
+    return this.#request(async () => {
       if (!this.ended) {
         try {
           await this.#driver!.send({ cmd: "quit" }, QUIT_TIMEOUT_MS)
@@ -194,15 +202,37 @@ export class Episode {
   }
 
   #assertLive(): void {
+    if (this.ended === "idle_timeout") {
+      throw new HarnessError(
+        `session ${this.id} was killed after ${this.#config.idleTimeoutMs / 1000}s without a ` +
+          `request (ended: idle_timeout); its transcript is kept at ${this.transcriptPath}`,
+      )
+    }
     if (this.ended) {
       throw new HarnessError(`session ${this.id} ended: ${this.ended}`)
     }
   }
 
-  #serialised<T>(body: () => Promise<T>): Promise<T> {
+  /** Runs one client request in order with the others; the Episode is never idle while it runs. */
+  #request<T>(body: () => Promise<T>): Promise<T> {
+    this.#inFlight++
+    clearTimeout(this.#idleTimer)
     const next = this.#queue.then(body, body)
     this.#queue = next.catch(() => undefined)
-    return next
+    return next.finally(() => {
+      this.#inFlight--
+      this.#armIdleTimer()
+    })
+  }
+
+  /** The reaper: the game dies by process group if no request arrives within the idle timeout. */
+  #armIdleTimer(): void {
+    clearTimeout(this.#idleTimer)
+    if (this.ended || this.#inFlight > 0) return
+    this.#idleTimer = setTimeout(
+      () => void this.#finish("idle_timeout"),
+      this.#config.idleTimeoutMs,
+    )
   }
 
   /**
@@ -213,17 +243,20 @@ export class Episode {
     if (!this.#finishing) {
       this.ended = reason
       clearTimeout(this.#watchdog)
+      clearTimeout(this.#idleTimer)
       this.#finishing = this.#reap(reason, graceful)
     }
     return this.#finishing
   }
 
   async #reap(reason: EndReason, graceful: boolean): Promise<void> {
+    let driverExit = 0
     if (this.#driver) {
       if (!graceful) this.#driver.kill()
       await this.#driver.close()
-      this.#exitCode = await this.#driver.exited
+      driverExit = await this.#driver.exited
     }
+    this.#exitCode = reason === "stop" ? driverExit : HARNESS_ERROR_EXIT_CODE
     this.#transcript.add({ event: "end", detail: { reason, exit_code: this.#exitCode } })
     this.#transcript.close()
     // The clone is the heavy part; the transcript and logs stay.
