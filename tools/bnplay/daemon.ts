@@ -6,7 +6,7 @@
 import { join } from "@std/path"
 import { type Config, loadConfig, socketPath } from "./config.ts"
 import { Episode, HarnessError } from "./episode.ts"
-import { addFixture, fixtureStatus } from "./fixtures.ts"
+import { addFixture, fixtureStatus, listFixtures } from "./fixtures.ts"
 import { type DaemonReply, type DaemonRequest, daemonRunning, readLines } from "./ipc.ts"
 import { parseTrial, TrialError } from "./trial.ts"
 
@@ -113,6 +113,14 @@ class Daemon {
             result: { ...added, ...(await fixtureStatus(this.#config.fixtures, added.fixture)) },
           }
         }
+        case "fixture_list":
+          return {
+            ok: true,
+            result: {
+              dir: this.#config.fixtures,
+              fixtures: await listFixtures(this.#config.fixtures),
+            },
+          }
         case "ping":
           return { ok: true, result: {} }
         case "shutdown":

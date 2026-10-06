@@ -98,3 +98,18 @@ export async function fixtureStatus(fixtures: string, fixture: string): Promise<
   }
   return { fixture, baseline: "fresh" }
 }
+
+/** Every fixture in the library with its baseline status, by name. */
+export async function listFixtures(fixtures: string): Promise<FixtureStatus[]> {
+  const names: string[] = []
+  try {
+    for await (const entry of Deno.readDir(fixtures)) {
+      // Hidden entries are the library's own bookkeeping (baselines, a clone in progress).
+      if (entry.isDirectory && FIXTURE_NAME.test(entry.name)) names.push(entry.name)
+    }
+  } catch (e) {
+    if (!(e instanceof Deno.errors.NotFound)) throw e
+  }
+  names.sort()
+  return await Promise.all(names.map((name) => fixtureStatus(fixtures, name)))
+}

@@ -112,9 +112,44 @@ Deno.test("fixture add refuses what is not a world save, and adds nothing", asyn
     }
   })
 })
-Deno.test("fixture add starts no game process", async () => {
+
+type Entry = {
+  fixture: string
+  baseline: "missing" | "fresh" | "stale"
+  message?: string
+  stale?: string[]
+  lines?: number
+}
+
+async function list(sandbox: Sandbox): Promise<Entry[]> {
+  const res = await sandbox.cli(["fixture", "list"])
+  assertEquals(res.code, 0, res.stderr)
+  return jsonOut<{ fixtures: Entry[] }>(res).fixtures
+}
+
+Deno.test("fixture list shows nothing for an empty library", async () => {
+  await withSave(async (sandbox) => {
+    assertEquals(await list(sandbox), [])
+  })
+})
+
+Deno.test("fixture list reports a fixture without a baseline as missing, not as empty", async () => {
   await withSave(async (sandbox, save) => {
-    assertEquals((await sandbox.cli(["fixture", "add", save, "quiet"])).code, 0)
+    assertEquals((await sandbox.cli(["fixture", "add", save, "second"])).code, 0)
+    assertEquals((await sandbox.cli(["fixture", "add", save, "first"])).code, 0)
+    // Files and hidden directories in the library are not fixtures.
+    await Deno.writeTextFile(join(sandbox.fixtures, "notes.txt"), "not a fixture\n")
+
+    const entries = await list(sandbox)
+    assertEquals(entries.map((e) => e.fixture), ["first", "second"])
+    for (const entry of entries) {
+      assertEquals(entry.baseline, "missing")
+      assertEquals(entry.lines, undefined)
+      assert(
+        entry.message?.includes(`fixture baseline ${entry.fixture}`),
+        `the message must say how to capture one: ${entry.message}`,
+      )
+    }
     assertEquals(await pidsMatching(sandbox.home), [])
   })
 })
