@@ -1,5 +1,6 @@
 #include "cursesdef.h" // IWYU pragma: associated
 #include "sdltiles.h" // IWYU pragma: associated
+#include "driver_capture.h"
 #include "sdl_input.h"
 #include "sdl_fonts.h"
 #include "sdl_framebuffer.h"
@@ -198,16 +199,27 @@ bool is_draw_tiles_mode()
  */
 bool save_screenshot( const std::string &file_path )
 {
+    return save_state_view( file_path ).has_value();
+}
+
+/** Re-renders the drawn state offscreen, without the swapchain, the lighting tonemap or the
+ * interface passes, and saves it as a PNG: the agent driver's state view (see driver_capture.h).
+ * @param file_path: Full path where the PNG file should be saved.
+ * @returns the size of the image written, or nothing on failure.
+ */
+auto save_state_view( const std::string &file_path ) ->
+std::optional<driver_capture::state_view_size>
+{
     auto &rs = lighting::get_render_state();
     if( !rs.ready() ) {
         dbg( DL::Error ) << "save_screenshot: render state not ready";
-        return false;
+        return std::nullopt;
     }
 
     const int w = WindowWidth;
     const int h = WindowHeight;
     if( w <= 0 || h <= 0 ) {
-        return false;
+        return std::nullopt;
     }
 
     // Use the same format as the swapchain so the existing pipeline matches.
@@ -222,13 +234,13 @@ bool save_screenshot( const std::string &file_path )
     tci.sample_count         = SDL_GPU_SAMPLECOUNT_1;
     SDL_GPUTexture *offscreen = SDL_CreateGPUTexture( rs.device().raw(), &tci );
     if( printErrorIf( !offscreen, "save_screenshot: SDL_CreateGPUTexture failed" ) ) {
-        return false;
+        return std::nullopt;
     }
 
     SDL_GPUCommandBuffer *cb = SDL_AcquireGPUCommandBuffer( rs.device().raw() );
     if( !cb ) {
         SDL_ReleaseGPUTexture( rs.device().raw(), offscreen );
-        return false;
+        return std::nullopt;
     }
 
     // Re-render current queue state into the offscreen texture.
@@ -268,7 +280,10 @@ bool save_screenshot( const std::string &file_path )
     }
 
     SDL_ReleaseGPUTexture( rs.device().raw(), offscreen );
-    return ok;
+    if( !ok ) {
+        return std::nullopt;
+    }
+    return driver_capture::state_view_size{ .width = w, .height = h };
 }
 
 void rescale_tileset( float size )

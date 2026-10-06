@@ -74,8 +74,10 @@ struct reply {
 };
 
 /// Serves `requests`, one line each, and returns the response to each in turn. `scenes_dir` is
-/// where `run_scene` looks for Scenes; empty selects the driver's default.
-auto converse(const std::vector<std::string>& requests, const std::string& scenes_dir = "") -> std::vector<reply> {
+/// where `run_scene` looks for Scenes; empty selects the driver's default. `windowed` serves as
+/// the windowed driver does, which in this process has no window.
+auto converse(const std::vector<std::string>& requests, const std::string& scenes_dir = "",
+              bool windowed = false) -> std::vector<reply> {
     int fds[2];
     REQUIRE(socketpair(AF_UNIX, SOCK_STREAM, 0, fds) == 0);
 
@@ -101,7 +103,7 @@ auto converse(const std::vector<std::string>& requests, const std::string& scene
         // Hanging up ends the loop.
         close(fds[1]);
     });
-    const bool served = run_driver_loop(fds[0], {.deny_list_path = deny.string(), .scenes_dir = scenes_dir});
+    const bool served = run_driver_loop(fds[0], {.deny_list_path = deny.string(), .scenes_dir = scenes_dir, .windowed = windowed});
     agent.join();
     close(fds[0]);
     std::filesystem::remove(deny);
@@ -304,6 +306,8 @@ TEST_CASE("driver_loop_melee_at_an_empty_tile_or_an_ally_is_refused_and_costs_no
         CHECK(out[i].text("status") == "ok");
         CHECK(out[i].text("outcome") == "refused");
         CHECK_FALSE(out[i].text("detail").empty());
+        // Only a refusal that has a reason (a capture with no drawable) carries one.
+        CHECK_FALSE(out[i].object_has("reason"));
         CHECK_FALSE(out[i].flag("time_passed"));
     }
     CHECK(out[2].number("turn") == turn_before);
@@ -730,4 +734,91 @@ TEST_CASE("driver_loop_the_lighting_scenes_run_unchanged_through_run_scene", "[d
     }
     // The Scenes did their work in the world, not just in the log.
     CHECK(!get_map().i_at(light).empty());
+}
+
+// `capture` needs a window and the display session it opens in, neither of which a test process
+// has: what is checked here is what an agent sees when the window gives no frame. The frames
+// themselves are checked against the real windowed binary by tools/bnplay/capture_contract.ts.
+
+TEST_CASE("driver_loop_capture_without_a_window_is_a_protocol_error_that_names_the_windowed_mode", "[driver]") {
+    setup();
+    const int turn_before = to_turn<int>(calendar::turn);
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "bnplay_capture_test_windowless";
+    std::filesystem::remove_all(dir);
+
+    const std::vector<reply> out = converse({
+        "{\"id\":1,\"cmd\":\"capture\",\"dir\":\"" + dir.string() + "\"}",
+        "{\"id\":2,\"cmd\":\"capture\",\"dir\":\"" + dir.string() + "\",\"mode\":\"state\"}",
+        R"({"id":3,"cmd":"state"})",
+    });
+
+    for (const size_t i : {0, 1}) {
+        CAPTURE(i, out[i].line);
+        CHECK(out[i].text("status") == "error");
+        CHECK(out[i].text("error").find("windowed") != std::string::npos);
+        CHECK_FALSE(out[i].object_has("capture"));
+    }
+    CHECK(out[2].number("turn") == turn_before);
+    CHECK_FALSE(std::filesystem::exists(dir));
+}
+
+TEST_CASE("driver_loop_capture_rejects_a_bad_dir_or_mode_as_a_protocol_error", "[driver]") {
+    setup();
+    const int turn_before = to_turn<int>(calendar::turn);
+
+    const std::vector<reply> out = converse({
+        R"({"id":1,"cmd":"capture"})",
+        R"({"id":2,"cmd":"capture","dir":""})",
+        R"({"id":3,"cmd":"capture","dir":7})",
+        R"({"id":4,"cmd":"capture","dir":"relative/dir"})",
+        R"({"id":5,"cmd":"capture","dir":"/tmp/bnplay_capture_test_bad","mode":"lighting"})",
+        R"({"id":6,"cmd":"capture","dir":"/tmp/bnplay_capture_test_bad","mode":3})",
+        R"({"id":7,"cmd":"state"})",
+    }, "", true);
+
+    for (size_t i = 0; i < 6; ++i) {
+        CAPTURE(i, out[i].line);
+        CHECK(out[i].text("status") == "error");
+        CHECK_FALSE(out[i].text("error").empty());
+        CHECK_FALSE(out[i].object_has("capture"));
+    }
+    CHECK(out[6].number("turn") == turn_before);
+    CHECK_FALSE(std::filesystem::exists("/tmp/bnplay_capture_test_bad"));
+}
+
+TEST_CASE("driver_loop_capture_with_no_drawable_is_refused_and_never_returns_an_old_frame", "[driver]") {
+    avatar& u = setup();
+    const int turn_before = to_turn<int>(calendar::turn);
+    const int moves_before = u.moves;
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "bnplay_capture_test_refused";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    // A frame left from an earlier capture, under the name the first capture of this turn would take.
+    const std::filesystem::path old_frame = dir / ("turn-" + std::to_string(turn_before) + "-1-final.bmp");
+    std::ofstream(old_frame) << "an old frame";
+
+    const std::vector<reply> out = converse({
+        "{\"id\":1,\"cmd\":\"capture\",\"dir\":\"" + dir.string() + "\"}",
+        "{\"id\":2,\"cmd\":\"capture\",\"dir\":\"" + dir.string() + "\",\"mode\":\"state\"}",
+    }, "", true);
+
+    for (const reply& each : out) {
+        CAPTURE(each.line);
+        CHECK(each.text("status") == "ok");
+        CHECK(each.text("outcome") == "refused");
+        CHECK(each.text("reason") == "no_drawable");
+        CHECK_FALSE(each.flag("time_passed"));
+        CHECK(each.number("turn") == turn_before);
+        CHECK_FALSE(each.object_has("capture"));
+    }
+    CHECK(u.moves == moves_before);
+    // Nothing was written, and the old frame is neither reported nor touched.
+    std::vector<std::string> names;
+    for (const auto& entry : std::filesystem::directory_iterator(dir)) { names.push_back(entry.path().filename().string()); }
+    CHECK(names == std::vector<std::string>{old_frame.filename().string()});
+    std::ifstream in(old_frame);
+    std::string content;
+    std::getline(in, content);
+    CHECK(content == "an old frame");
+    std::filesystem::remove_all(dir);
 }

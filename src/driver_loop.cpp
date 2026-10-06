@@ -22,6 +22,7 @@
 #include "avatar.h"
 #include "calendar.h"
 #include "coop_fiber.h"
+#include "driver_capture.h"
 #include "driver_combat.h"
 #include "driver_items.h"
 #include "driver_message_delta.h"
@@ -271,7 +272,8 @@ auto observation_line( int id, const snapshot &before, const action_result &resu
         truncated |= cut;
     }
     jo.member( "outcome", std::string( dead ? "died" : result.outcome ) );
-    if( !dead && ( result.outcome == "interrupted" || result.outcome == "unsupported" ) ) {
+    if( !dead && ( result.outcome == "interrupted" || result.outcome == "unsupported" ||
+                   ( result.outcome == "refused" && !result.reason.empty() ) ) ) {
         jo.member( "reason", std::string( result.reason ) );
     }
     if( !dead && !result.detail.empty() ) {
@@ -721,6 +723,48 @@ auto present_frame() -> void
     }
 }
 
+// *INDENT-OFF*
+/// The response to `capture`: the frame and map of this turn, a refusal when the window gives no
+/// frame, or the protocol error that says why the request cannot be served. Takes no game time.
+auto capture_line( int id, const JsonObject &jo, bool windowed ) -> std::string
+{
+    if( !windowed ) {
+        return error_line( id, "capture needs the windowed mode: start the game with "
+                           "--driver-windowed (a Trial with mode = \"windowed\")" );
+    }
+    const std::string dir = jo.has_string( "dir" ) ? jo.get_string( "dir" ) : std::string();
+    // A `mode` that is not text reads as an empty one, which names no mode.
+    std::optional<std::string> mode_text;
+    if( jo.has_member( "mode" ) ) {
+        mode_text = jo.has_string( "mode" ) ? jo.get_string( "mode" ) : std::string();
+    }
+    const driver_capture::parsed_request parsed = driver_capture::parse_request( dir, mode_text,
+            to_turn<int>( calendar::turn ) );
+    if( !parsed.value ) {
+        return error_line( id, parsed.error );
+    }
+    const snapshot before = take_snapshot();
+    const driver_capture::result taken = driver_capture::capture( *parsed.value, present_frame );
+    if( !taken.error.empty() ) {
+        return error_line( id, taken.error );
+    }
+    action_result outcome = modal_result();
+    if( taken.no_drawable ) {
+        outcome.outcome = "refused";
+        outcome.reason = "no_drawable";
+        outcome.detail = "the window is hidden or minimised, or the screen is locked: there is no "
+                         "frame to capture. Nothing was written.";
+    }
+    const auto payload = [&taken]( JsonOut & out ) -> bool {
+        if( taken.written ) {
+            driver_capture::write( out, *taken.written );
+        }
+        return false;
+    };
+    return observation_line( id, before, outcome, payload );
+}
+// *INDENT-ON*
+
 } // namespace
 
 auto run_driver_loop( int fd, const driver_options &options ) -> bool
@@ -926,6 +970,8 @@ auto run_driver_loop( int fd, const driver_options &options ) -> bool
                 write_all( fd, observation_line( *id, before, modal_result(), [&]( JsonOut & out ) -> bool {
                     return driver_scene::write( out, std::move( scene ) );
                 } ) );
+            } else if( cmd == "capture" ) {
+                write_all( fd, capture_line( *id, jo, options.windowed ) );
             } else if( cmd == "attach_view" ) {
                 const std::optional<int64_t> radius = whole_number( jo, "radius", 0, driver_view::max_radius );
                 if( !radius ) {
