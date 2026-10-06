@@ -12,6 +12,7 @@ import type { EndReason } from "./episode.ts"
 import { fixtureStatus, readBaseline } from "./fixtures.ts"
 import { linesInWindow, stampTime, withoutStamp } from "./gamelog.ts"
 import type { FirstFail, OracleResult, OracleRun, Progress } from "./oracles.ts"
+import type { RendererRun } from "./renderer.ts"
 import type { Trial } from "./trial.ts"
 
 /**
@@ -33,6 +34,7 @@ export type ReportInput = {
   transcript: string
   log: string
   oracles: OracleRun
+  renderer: RendererRun
   requests: RequestTiming[]
   /** The request that got no answer, when the game hung or died. */
   failure?: FirstFail
@@ -176,6 +178,7 @@ export async function buildReport(config: Config, input: ReportInput): Promise<R
     aliveCheck(input),
     await logCheck(config, input),
     ...input.oracles.results(progress),
+    ...await input.renderer.results(progress),
   ]
 
   let verdict: Report["verdict"]

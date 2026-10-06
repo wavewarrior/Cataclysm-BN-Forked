@@ -15,9 +15,10 @@ import {
 } from "./client.ts"
 import type { Config } from "./config.ts"
 import { OracleRun } from "./oracles.ts"
+import { RendererRun } from "./renderer.ts"
 import type { ReportInput, RequestTiming } from "./report.ts"
 import { Transcript } from "./transcript.ts"
-import type { Trial } from "./trial.ts"
+import { CAPTURE_TAG, type Trial } from "./trial.ts"
 
 /** Why an Episode ended. Everything except `stop`, `turn_limit` and `died` is a harness failure. */
 export type EndReason =
@@ -89,9 +90,12 @@ export class Episode {
   #exitCode = 0
   #queue: Promise<unknown> = Promise.resolve()
   readonly #oracles: OracleRun
+  readonly #renderer: RendererRun
   readonly #requests: RequestTiming[] = []
   /** The request being answered: requests of one Episode never overlap. */
-  #current?: { request: DriverRequest; began: number }
+  #current?: { request: DriverRequest; began: number; tag?: string }
+  /** The tag of the capture being sent: the supervisor's, never the game's. */
+  #nextTag?: string
   #failure?: ReportInput["failure"]
   /** True once a capture wrote a frame, so the report names the directory. */
   #captured = false
@@ -103,6 +107,7 @@ export class Episode {
     this.#trial = trial
     this.id = id
     this.#oracles = new OracleRun(trial)
+    this.#renderer = new RendererRun(trial)
     this.world = `${trial.fixture}-${id}`
     this.#dir = join(config.home, "episodes", id)
     this.#userdir = join(this.#dir, "userdir")
@@ -209,11 +214,23 @@ export class Episode {
   step(request: DriverRequest): Promise<DriverResponse & { episode_ended?: EndReason }> {
     return this.#request(async () => {
       this.#assertLive()
+      // A capture's `tag` names its state for the renderer oracles; the game never sees it.
+      const { tag, ...sent } = request
+      if (request.cmd === "capture" && tag !== undefined) {
+        if (typeof tag !== "string" || !CAPTURE_TAG.test(tag)) {
+          return {
+            id: null,
+            status: "error",
+            error: "`tag` must be a capture tag: letters, digits, `_` and `-`",
+          }
+        }
+        this.#nextTag = tag
+      }
       let response: DriverResponse
       try {
         // A `capture` always writes into the Episode's own directory, never where the agent points.
         response = await this.#driver!.send(
-          request.cmd === "capture" ? { ...request, dir: this.capturesPath } : request,
+          request.cmd === "capture" ? { ...sent, dir: this.capturesPath } : request,
         )
       } catch (e) {
         if (this.ended) this.#assertLive()
@@ -300,6 +317,7 @@ export class Episode {
       transcript: this.transcriptPath,
       log: this.debugLogPath,
       oracles: this.#oracles,
+      renderer: this.#renderer,
       requests: this.#requests,
       failure: this.#failure,
       captures: this.#captured ? this.capturesPath : undefined,
@@ -315,10 +333,11 @@ export class Episode {
   ): void {
     if ("request" in entry) {
       this.#requests.push({ index: entry.request.id, sentAt: Date.now() })
-      this.#current = { request: entry.request, began: performance.now() }
+      this.#current = { request: entry.request, began: performance.now(), tag: this.#nextTag }
+      this.#nextTag = undefined
       if (entry.request.cmd === "quit") this.#endedAt = Date.now()
     } else if ("response" in entry) {
-      const { request, began } = this.#current!
+      const { request, began, tag } = this.#current!
       const timing = this.#requests.at(-1)!
       timing.ms = performance.now() - began
       timing.answeredAt = Date.now()
@@ -327,6 +346,7 @@ export class Episode {
         this.#captured = true
       }
       this.#oracles.observe({ index, request, response: entry.response })
+      this.#renderer.observe({ index, tag, response: entry.response })
     } else {
       this.#failure = { index: entry.failure.id, why: entry.failure.message }
     }

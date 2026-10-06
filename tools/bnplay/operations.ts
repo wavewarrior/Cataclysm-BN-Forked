@@ -59,7 +59,9 @@ export const OPERATIONS: { [K in OperationName]: Operation<K> } = {
   step: {
     cli: ["step"],
     description: "Send one driver command to a running Episode and return the lean response. " +
-      'Example command: {"cmd":"state"}. A driver error comes back as the response.',
+      'Example command: {"cmd":"state"}. A driver error comes back as the response. A windowed ' +
+      'Episode\'s capture takes an optional "tag" (letters, digits, _ and -) that names its ' +
+      "state to the Trial's capture oracles; the game never sees it.",
     params: [
       {
         name: "session",
