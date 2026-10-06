@@ -3,7 +3,8 @@
  *
  *   bnplay start <trial.toml>            boot an Episode from a Trial; prints the session id
  *   bnplay step <session> '<json>'       send one command; prints the lean response
- *   bnplay stop <session>                end the Episode; prints where its transcript is
+ *   bnplay stop <session>                end the Episode; prints its report and exits with its verdict
+ *   bnplay report <session>              print the report of an Episode (running or ended)
  *   bnplay fixture add <save> [name]     clone a world save into the fixture library
  *   bnplay fixture baseline <name>       boot the fixture and record its post-readiness game log
  *   bnplay fixture list                  show each fixture and whether its baseline is fresh
@@ -11,6 +12,9 @@
  *
  * A resident daemon keeps the games running between calls and is started on first use (see
  * config.ts for the environment that configures it). Failures print one line on stderr and exit 2.
+ * `stop` and `report` exit with the verdict: 0 pass, 1 an oracle failed, 2 harness error (the game
+ * failed to boot, hung or died, or was reaped), 3 inconclusive (the wall-clock limit ended the
+ * Episode before any oracle reached a verdict that decides it).
  * `bnplay daemon` runs the daemon in the foreground.
  */
 import { resolve } from "@std/path"
@@ -23,6 +27,7 @@ const USAGE = `usage:
   bnplay start <trial.toml>
   bnplay step <session> '<command json>'
   bnplay stop <session>
+  bnplay report <session>
   bnplay fixture add <save-dir> [name]
   bnplay fixture baseline <name>
   bnplay fixture list
@@ -58,6 +63,9 @@ function parseArgs(args: string[]): DaemonRequest {
     case "stop":
       expect(1)
       return { op: "stop", session: rest[0] }
+    case "report":
+      expect(1)
+      return { op: "report", session: rest[0] }
     case "fixture": {
       const [sub, ...args] = rest
       switch (sub) {
@@ -108,6 +116,13 @@ async function main(args: string[]): Promise<number> {
   const reply = await call(home, request)
   if (!reply.ok) throw new Error(reply.error)
   console.log(JSON.stringify(reply.result))
+  const { result } = reply
+  if (
+    (request.op === "stop" || request.op === "report") && "exit_code" in result &&
+    typeof result.exit_code === "number"
+  ) {
+    return result.exit_code
+  }
   return 0
 }
 

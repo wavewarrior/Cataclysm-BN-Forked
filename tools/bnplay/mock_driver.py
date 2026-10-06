@@ -13,7 +13,11 @@ spend turns; `inventory`, `look` and `map` open menus that a `key` answers.
 
 Test hooks (mock only, never part of the protocol): `info` reports the user directory and world the
 mock was started with, `dirty` writes a file into that world, `spawn_child` starts a grandchild in
-the process group and reports its pid, `hang` never answers, `sleep` answers after `seconds`.
+the process group and reports its pid, `hang` never answers, `sleep` answers after `seconds`, `log`
+writes `text` (a `LEVEL : text` line) to the debug log, `hurt` takes `amount` off `hp`, `rewind`
+moves the turn counter back `turns` turns and `glitch` moves it on by one without saying time
+passed (both deliberately wrong, for the oracle that watches the counter), and the raw action
+`fidget` is accepted and does nothing (`no_effect`).
 Env `MOCK_BOOT_DELAY_S` delays the first answer, like a slow boot.
 
 Like the game it writes `<userdir>/config/debug.log`, buffered: nothing reaches the file until the
@@ -44,6 +48,7 @@ MENUS = ("inventory", "look", "map")
 # guard reports them as `unsupported` instead, as the real driver's no-fiber guard does.
 BLOCKING_READS = ("craft", "drop", "eat", "apply", "wear", "read")
 FREE_ACTIONS = ("pause",)
+NO_EFFECT_ACTIONS = ("fidget",)
 # The deny list a driver started without `--driver-deny-list` uses.
 DEFAULT_DENY = BLOCKING_READS
 NAMED_KEYS = ("ESC", "ENTER", "SPACE", "TAB", "UP", "DOWN", "LEFT", "RIGHT")
@@ -52,6 +57,7 @@ NAMED_KEYS = ("ESC", "ENTER", "SPACE", "TAB", "UP", "DOWN", "LEFT", "RIGHT")
 class Game:
     def __init__(self, deny: dict[str, str]) -> None:
         self.turn = START_TURN
+        self.hp = VITALS["hp"]
         self.deny = deny
         self.menu: str | None = None
         # The message log; an identical message in a row merges into one entry with a count.
@@ -145,6 +151,7 @@ def observation(rid: int, game: Game, **fields) -> dict:
         "new_messages": [],
         "prompt": None,
         **VITALS,
+        "hp": game.hp,
     }
     if game.menu:
         obs.update(outcome="awaiting_input", boundary="needs_input", prompt=game.menu)
@@ -208,6 +215,8 @@ def action(rid: int, game: Game, req: dict) -> dict:
     if name in FREE_ACTIONS:
         game.turn += 1
         return observation(rid, game, time_passed=True)
+    if name in NO_EFFECT_ACTIONS:
+        return observation(rid, game, outcome="no_effect")
     return error(rid, f"unknown action {name!r}")
 
 
@@ -291,6 +300,18 @@ def main() -> int:
             with open(os.path.join(userdir, "save", world, "scribble"), "w") as f:
                 f.write("written by the mock\n")
             reply({"id": rid, "status": "ok"})
+        elif cmd == "log":
+            debug_log.write(str(req.get("text", "")))
+            reply({"id": rid, "status": "ok"})
+        elif cmd == "hurt":
+            game.hp -= int(req.get("amount", 1))
+            reply(observation(rid, game))
+        elif cmd == "rewind":
+            game.turn -= int(req.get("turns", 1))
+            reply(observation(rid, game, time_passed=True))
+        elif cmd == "glitch":
+            game.turn += 1
+            reply(observation(rid, game))
         elif cmd == "spawn_child":
             child = subprocess.Popen(["/bin/sleep", "311"])
             reply({"id": rid, "status": "ok", "child_pid": child.pid})

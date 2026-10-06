@@ -126,7 +126,7 @@ Deno.test("an idle session is reaped by process group, keeps its transcript and 
     assert(/idle/i.test(later.stderr), later.stderr)
 
     const stop = await sandbox.cli(["stop", session])
-    assertEquals(stop.code, 0, stop.stderr)
+    assertEquals(stop.code, 2, stop.stderr) // a reaped session is a harness error
     const summary = jsonOut(stop)
     assertEquals(summary.ended, "idle_timeout")
     assertEquals(summary.exit_code, 2)

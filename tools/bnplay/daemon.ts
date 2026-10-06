@@ -9,6 +9,7 @@ import { type Config, loadConfig, socketPath } from "./config.ts"
 import { Episode, HarnessError } from "./episode.ts"
 import { addFixture, fixtureStatus, listFixtures } from "./fixtures.ts"
 import { type DaemonReply, type DaemonRequest, daemonState, readLines } from "./ipc.ts"
+import { buildReport } from "./report.ts"
 import { parseTrial, TrialError } from "./trial.ts"
 
 class Daemon {
@@ -106,8 +107,16 @@ class Daemon {
           return { ok: true, result: await this.#start(request.trial) }
         case "step":
           return { ok: true, result: await this.#session(request.session).step(request.request) }
-        case "stop":
-          return { ok: true, result: await this.#session(request.session).stop() }
+        case "stop": {
+          const episode = this.#session(request.session)
+          await episode.stop()
+          return { ok: true, result: await buildReport(this.#config, episode.reportInput()) }
+        }
+        case "report": {
+          const episode = this.#session(request.session)
+          await episode.closed() // an Episode the watchdog killed may still be reaping its game
+          return { ok: true, result: await buildReport(this.#config, episode.reportInput()) }
+        }
         case "fixture_add": {
           const added = await addFixture(this.#config.fixtures, request.source, request.name)
           return {

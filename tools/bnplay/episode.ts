@@ -14,12 +14,15 @@ import {
   spawnDriver,
 } from "./client.ts"
 import type { Config } from "./config.ts"
+import { OracleRun } from "./oracles.ts"
+import type { ReportInput, RequestTiming } from "./report.ts"
 import { Transcript } from "./transcript.ts"
 import type { Trial } from "./trial.ts"
 
-/** Why an Episode ended. Everything except `stop` is a harness failure. */
+/** Why an Episode ended. Everything except `stop` and `turn_limit` is a harness failure. */
 export type EndReason =
   | "stop"
+  | "turn_limit"
   | "wall_clock"
   | "hang"
   | "driver_exit"
@@ -42,7 +45,7 @@ export type EpisodeSummary = {
   transcript: string
 }
 
-/** The exit code of an Episode that ended any way but `stop`: a harness error, not a game result. */
+/** The game-side exit code of an Episode that ended any way but `stop` or `turn_limit`. */
 const HARNESS_ERROR_EXIT_CODE = 2
 
 /** Time a graceful `quit` gets before the Episode is killed instead. */
@@ -82,11 +85,19 @@ export class Episode {
   #finishing?: Promise<void>
   #exitCode = 0
   #queue: Promise<unknown> = Promise.resolve()
+  readonly #oracles: OracleRun
+  readonly #requests: RequestTiming[] = []
+  /** The request being answered: requests of one Episode never overlap. */
+  #current?: { request: DriverRequest; began: number }
+  #failure?: ReportInput["failure"]
+  /** When the quit request was sent, or the Episode was killed: the end of the log window. */
+  #endedAt?: number
 
   private constructor(config: Config, trial: Trial, id: string) {
     this.#config = config
     this.#trial = trial
     this.id = id
+    this.#oracles = new OracleRun(trial)
     this.world = `${trial.fixture}-${id}`
     this.#dir = join(config.home, "episodes", id)
     this.#userdir = join(this.#dir, "userdir")
@@ -129,7 +140,10 @@ export class Episode {
       basepath: this.#config.basepath,
       firstTimeoutMs: this.#config.bootTimeoutMs,
       requestTimeoutMs: this.#config.stepTimeoutMs,
-      trace: (entry) => this.#transcript.add(entry),
+      trace: (entry) => {
+        this.#transcript.add(entry)
+        this.#observe(entry)
+      },
     })
     this.#watchdog = setTimeout(
       () => void this.#finish("wall_clock"),
@@ -141,6 +155,18 @@ export class Episode {
       if (res.status !== "ok" || res.ready !== true) {
         throw new Error(`the first ping was not answered ready: ${JSON.stringify(res)}`)
       }
+      this.bootMs = Math.round(performance.now() - began)
+      // The Trial's seed applies before turn 0, and the first state is the turn the Episode counts from.
+      if (this.#trial.seed !== undefined) {
+        const seeded = await this.#driver!.send({ cmd: "seed", seed: this.#trial.seed })
+        if (seeded.status !== "ok") {
+          throw new Error(`the game refused the Trial's seed: ${JSON.stringify(seeded)}`)
+        }
+      }
+      const state = await this.#driver!.send({ cmd: "state" })
+      if (state.status !== "ok") {
+        throw new Error(`the game refused the first state request: ${JSON.stringify(state)}`)
+      }
     } catch (e) {
       const expired = this.ended === "wall_clock"
       await this.#finish("boot_failure")
@@ -150,13 +176,12 @@ export class Episode {
           : `boot failed: ${(e as Error).message}`,
       )
     }
-    this.bootMs = Math.round(performance.now() - began)
     this.#armIdleTimer()
     this.#transcript.add({ event: "ready", detail: { boot_ms: this.bootMs } })
   }
 
   /** Sends one command and returns the driver's response, serialised with other requests. */
-  step(request: DriverRequest): Promise<DriverResponse> {
+  step(request: DriverRequest): Promise<DriverResponse & { episode_ended?: EndReason }> {
     return this.#request(async () => {
       this.#assertLive()
       let response: DriverResponse
@@ -176,24 +201,45 @@ export class Episode {
         )
       }
       if (request.cmd === "quit" && response.status === "ok") await this.#finish("stop", true)
+      else if (this.#turnLimitReached()) {
+        await this.#quit("turn_limit")
+        return { ...response, episode_ended: "turn_limit" }
+      }
       return response
     })
+  }
+
+  /** True once the game turn counter has moved as far as the Trial's turn limit allows. */
+  #turnLimitReached(): boolean {
+    const { turnLimit } = this.#trial
+    const first = this.#oracles.firstTurn
+    const last = this.#oracles.lastTurn
+    return turnLimit !== undefined && first !== undefined && last !== undefined &&
+      last - first >= turnLimit
+  }
+
+  /** Asks the game to quit and reaps it; a game that will not quit is ended as a hang or a death. */
+  async #quit(reason: "stop" | "turn_limit"): Promise<void> {
+    try {
+      await this.#driver!.send({ cmd: "quit" }, QUIT_TIMEOUT_MS)
+      await this.#finish(reason, true)
+    } catch (e) {
+      await this.#finish(e instanceof DriverTimeout ? "hang" : "driver_exit")
+    }
   }
 
   /** Asks the game to quit, then reaps the process group. Idempotent. */
   stop(): Promise<EpisodeSummary> {
     return this.#request(async () => {
-      if (!this.ended) {
-        try {
-          await this.#driver!.send({ cmd: "quit" }, QUIT_TIMEOUT_MS)
-          await this.#finish("stop", true)
-        } catch (e) {
-          await this.#finish(e instanceof DriverTimeout ? "hang" : "driver_exit")
-        }
-      }
+      if (!this.ended) await this.#quit("stop")
       await this.#finishing
       return this.summary()
     })
+  }
+
+  /** Resolves once the Episode has ended and its game is reaped; at once if it is still running. */
+  closed(): Promise<void> {
+    return this.#finishing ?? Promise.resolve()
   }
 
   /** Kills the Episode now, whatever it is doing. */
@@ -207,6 +253,46 @@ export class Episode {
       ended: this.ended ?? "stop",
       exit_code: this.#exitCode,
       transcript: this.transcriptPath,
+    }
+  }
+
+  /** Everything the report is made from. */
+  reportInput(): ReportInput {
+    return {
+      session: this.id,
+      trial: this.#trial,
+      ended: this.ended,
+      bootMs: this.bootMs,
+      readyAt: this.readyAt,
+      endedAt: this.#endedAt,
+      transcript: this.transcriptPath,
+      log: this.debugLogPath,
+      oracles: this.#oracles,
+      requests: this.#requests,
+      failure: this.#failure,
+    }
+  }
+
+  /** Records every request and answer: when it was sent, how long it took, what the oracles see. */
+  #observe(
+    entry:
+      | { request: DriverRequest & { id: number } }
+      | { response: DriverResponse }
+      | { failure: { id: number; message: string } },
+  ): void {
+    if ("request" in entry) {
+      this.#requests.push({ index: entry.request.id, sentAt: Date.now() })
+      this.#current = { request: entry.request, began: performance.now() }
+      if (entry.request.cmd === "quit") this.#endedAt = Date.now()
+    } else if ("response" in entry) {
+      const { request, began } = this.#current!
+      const timing = this.#requests.at(-1)!
+      timing.ms = performance.now() - began
+      timing.answeredAt = Date.now()
+      const index = timing.index
+      this.#oracles.observe({ index, request, response: entry.response })
+    } else {
+      this.#failure = { index: entry.failure.id, why: entry.failure.message }
     }
   }
 
@@ -251,6 +337,7 @@ export class Episode {
   #finish(reason: EndReason, graceful = false): Promise<void> {
     if (!this.#finishing) {
       this.ended = reason
+      this.#endedAt ??= Date.now()
       clearTimeout(this.#watchdog)
       clearTimeout(this.#idleTimer)
       this.#finishing = this.#reap(reason, graceful)
@@ -265,7 +352,8 @@ export class Episode {
       await this.#driver.close()
       driverExit = await this.#driver.exited
     }
-    this.#exitCode = reason === "stop" ? driverExit : HARNESS_ERROR_EXIT_CODE
+    const normal = reason === "stop" || reason === "turn_limit"
+    this.#exitCode = normal ? driverExit : HARNESS_ERROR_EXIT_CODE
     this.#transcript.add({ event: "end", detail: { reason, exit_code: this.#exitCode } })
     this.#transcript.close()
     // The clone is the heavy part; the transcript and logs stay.

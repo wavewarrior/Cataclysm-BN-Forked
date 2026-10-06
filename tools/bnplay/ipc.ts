@@ -12,6 +12,7 @@ export type DaemonRequest =
   | { op: "start"; trial: string }
   | { op: "step"; session: string; request: DriverRequest }
   | { op: "stop"; session: string }
+  | { op: "report"; session: string }
   | { op: "fixture_add"; source: string; name?: string }
   | { op: "fixture_baseline"; name: string }
   | { op: "fixture_list" }

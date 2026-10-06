@@ -52,3 +52,21 @@ export function linesInWindow(log: string, window: LogWindow): string[] {
   }
   return picked
 }
+
+/**
+ * The wall-clock time, in ms since the epoch, a stamped `line` was logged at: the first moment at
+ * or after `notBefore` with that time of day (the stamp carries no date). Undefined for a line
+ * without a stamp.
+ */
+export function stampTime(line: string, notBefore: number): number | undefined {
+  const stamp = STAMP.exec(line)
+  if (!stamp) return undefined
+  const t = ((Number(stamp[1]) * 60 + Number(stamp[2])) * 60 + Number(stamp[3])) * 1000 +
+    Number(stamp[4])
+  return notBefore + (t - msOfDay(notBefore) + DAY_MS) % DAY_MS
+}
+
+/** A line without its stamp, so the same message logged at another time compares equal. */
+export function withoutStamp(line: string): string {
+  return line.replace(STAMP, "").trimEnd()
+}
