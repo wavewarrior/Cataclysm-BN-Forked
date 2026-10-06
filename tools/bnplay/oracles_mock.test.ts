@@ -440,6 +440,49 @@ Deno.test("the Trial's seed is sent before the first state and a refused seed fa
   })
 })
 
+Deno.test("the Trial's start date and time of day are pinned after the seed and before the first state", async () => {
+  await withSandbox(async (sandbox) => {
+    const session = await start(
+      sandbox,
+      'seed = 4242\nstart_date = "0002-03-10"\ntime_of_day = "08:30"\nturn_limit = 5\n',
+    )
+    const { report } = await finish(sandbox, session)
+    const records = await readTranscript(report.transcript)
+    const requests = records.flatMap((r) => r.request ? [r.request] : [])
+    assertEquals(requests.map((r) => r.cmd).slice(0, 4), ["ping", "seed", "set_time", "state"])
+    assertEquals(requests[2].date, "0002-03-10")
+    assertEquals(requests[2].time, "08:30")
+
+    // The mock's season is 91 days: year 2, season 3, day 10, 08:30.
+    const pinned = (4 * 91 * 86_400) + 2 * 91 * 86_400 + 9 * 86_400 + 8 * 3_600 + 30 * 60
+    const state = records.flatMap((r) => r.response ? [r.response] : [])[3]
+    assertEquals(state.turn, pinned, "the first state is the pinned turn")
+    assertEquals(report.turns?.first, pinned, "the Episode counts its turns from the pin")
+  })
+})
+
+Deno.test("a time-of-day pin alone keeps the day, and a refused pin fails the boot", async () => {
+  await withSandbox(async (sandbox) => {
+    const session = await start(sandbox, 'time_of_day = "06:00"\n')
+    const { report } = await finish(sandbox, session)
+    const requests = (await readTranscript(report.transcript)).flatMap((r) =>
+      r.request ? [r.request] : []
+    )
+    assertEquals(requests.map((r) => r.cmd).slice(0, 3), ["ping", "set_time", "state"])
+    assertEquals(requests[1].date, undefined)
+    assertEquals(report.turns?.first, 6 * 3_600)
+
+    // Day 92 passes the Trial parser (the game owns the season length) but not the game.
+    const refused = await sandbox.cli([
+      "start",
+      await sandbox.trial(`fixture = "bairdford"\nstart_date = "0001-01-92"\n`),
+    ])
+    assertEquals(refused.code, 2)
+    assert(refused.stderr.includes("start_date"), refused.stderr)
+    assertEquals(await pidsMatching(join(sandbox.home, "episodes")), [])
+  })
+})
+
 Deno.test("the Trial's turn limit ends the Episode after that many turns", async () => {
   await withSandbox(async (sandbox) => {
     const session = await start(sandbox, "turn_limit = 10\n")

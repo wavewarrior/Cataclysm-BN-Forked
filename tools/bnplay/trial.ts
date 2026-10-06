@@ -28,9 +28,13 @@ export type Trial = {
   fixture: string
   /** RNG seed pinned for the Episode. */
   seed?: number
-  /** In-game start date, `YYYY-MM-DD`. */
+  /**
+   * In-game date the clock is pinned to, `YYYY-SS-DD`: year from 0001, season 01 (spring) to 04
+   * (winter), day of the season from 01. The game has no months. The day must also fit the world's
+   * season length (91 by default), which only the game knows; it refuses a later day.
+   */
   startDate?: string
-  /** In-game time of day, `HH:MM`. */
+  /** In-game time of day the clock is pinned to, `HH:MM`. */
   timeOfDay?: string
   /** Wall-clock limit, enforced outside the game; the Episode is killed when it expires. */
   wallClockLimitS: number
@@ -197,6 +201,20 @@ function text(
   const value = table[field]
   if (value === undefined) return undefined
   if (typeof value !== "string" || !shape.test(value)) fail(field, expectation)
+  return value
+}
+
+/**
+ * `start_date`: `YYYY-SS-DD` with a year from 1, a season 01 to 04 and a day 01 to 99. Whether
+ * the day fits the world's season length is the game's to say.
+ */
+function startDate(table: Record<string, unknown>): string | undefined {
+  const expectation =
+    'must be a quoted "YYYY-SS-DD" string: year from 0001, season 01 to 04 (spring to winter; the game has no months), day of the season from 01'
+  const value = text(table, "start_date", /^\d{4}-\d{2}-\d{2}$/, expectation)
+  if (value === undefined) return undefined
+  const [year, season, day] = value.split("-").map(Number)
+  if (year < 1 || season < 1 || season > 4 || day < 1) fail("start_date", expectation)
   return value
 }
 
@@ -426,12 +444,7 @@ export function parseTrial(source: string): Trial {
   return {
     fixture,
     seed: integer(table, "seed", 0),
-    startDate: text(
-      table,
-      "start_date",
-      /^\d{4}-\d{2}-\d{2}$/,
-      'must be a quoted "YYYY-MM-DD" string',
-    ),
+    startDate: startDate(table),
     timeOfDay: text(
       table,
       "time_of_day",

@@ -170,11 +170,24 @@ export class Episode {
         throw new Error(`the first ping was not answered ready: ${JSON.stringify(res)}`)
       }
       this.bootMs = Math.round(performance.now() - began)
-      // The Trial's seed applies before turn 0, and the first state is the turn the Episode counts from.
+      // The Trial's seed and clock pin apply before turn 0, and the first state is the turn the
+      // Episode counts from.
       if (this.#trial.seed !== undefined) {
         const seeded = await this.#driver!.send({ cmd: "seed", seed: this.#trial.seed })
         if (seeded.status !== "ok") {
           throw new Error(`the game refused the Trial's seed: ${JSON.stringify(seeded)}`)
+        }
+      }
+      if (this.#trial.startDate !== undefined || this.#trial.timeOfDay !== undefined) {
+        const pinned = await this.#driver!.send({
+          cmd: "set_time",
+          ...(this.#trial.startDate === undefined ? {} : { date: this.#trial.startDate }),
+          ...(this.#trial.timeOfDay === undefined ? {} : { time: this.#trial.timeOfDay }),
+        })
+        if (pinned.status !== "ok") {
+          throw new Error(
+            `the game refused the Trial's start_date or time_of_day: ${JSON.stringify(pinned)}`,
+          )
         }
       }
       if (this.#trial.attachView !== undefined) {

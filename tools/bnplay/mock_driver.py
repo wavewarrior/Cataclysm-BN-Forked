@@ -6,7 +6,8 @@ end to end without a 7 to 10 second, 1 GB boot. It is started exactly like the g
 execs it with `--driver-fd N` appended) and accepts the game's other flags, including
 `--driver-deny-list <file>`.
 
-Protocol commands (same as the real driver): `ping`, `state`, `wait`, `move`, `seed`, `action`,
+Protocol commands (same as the real driver): `ping`, `state`, `wait`, `move`, `seed`, `set_time`,
+`action`,
 `key`, `quit`. The mock world is the contract's fixture: the avatar is walled in on every compass
 side and cannot go up, so a move is blocked or refused and costs no time; `wait` and a raw `pause`
 spend turns; `inventory`, `look` and `map` open menus that a `key` answers.
@@ -446,6 +447,47 @@ def seed(rid: int, req: dict) -> dict:
     return {"id": rid, "status": "ok", "seed": value}
 
 
+DAY = 86400
+SEASON_DAYS = 91
+YEAR = 4 * SEASON_DAYS * DAY
+LATEST_TURN = 2**31 // 2 - 1
+
+
+def set_time(rid: int, game: Game, req: dict) -> dict:
+    """Pins the clock like the real driver: `date` is `YYYY-SS-DD` (year from 1, season 01 to 04,
+    day of the season from 01 to 91; the game has no months) and `time` is `HH:MM`."""
+    date, clock = req.get("date"), req.get("time")
+    if date is None and clock is None:
+        return error(rid, "set_time needs a date, a time, or both")
+    day_start = game.turn - game.turn % DAY
+    if date is not None:
+        found = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", date) if isinstance(date, str) else None
+        if not found:
+            return error(rid, f"date must be YYYY-SS-DD; got {date!r}")
+        year, season, day = (int(part) for part in found.groups())
+        if year < 1 or not 1 <= season <= 4 or not 1 <= day <= SEASON_DAYS:
+            return error(rid, f"date must be YYYY-SS-DD; got {date!r}")
+        day_start = (year - 1) * YEAR + (season - 1) * SEASON_DAYS * DAY + (day - 1) * DAY
+    into_day = game.turn % DAY
+    if clock is not None:
+        found = re.fullmatch(r"(\d{2}):(\d{2})", clock) if isinstance(clock, str) else None
+        if not found or int(found.group(1)) > 23 or int(found.group(2)) > 59:
+            return error(rid, f"time must be HH:MM; got {clock!r}")
+        into_day = int(found.group(1)) * 3600 + int(found.group(2)) * 60
+    target = day_start + into_day
+    if target > LATEST_TURN:
+        return error(rid, "that date is too far ahead")
+    game.turn = target
+    return {
+        "id": rid,
+        "status": "ok",
+        "turn": target,
+        "date": f"{target // YEAR + 1:04}-{target % YEAR // (SEASON_DAYS * DAY) + 1:02}-"
+        f"{target % (SEASON_DAYS * DAY) // DAY + 1:02}",
+        "time": f"{target % DAY // 3600:02}:{target % 3600 // 60:02}",
+    }
+
+
 def action(rid: int, game: Game, req: dict) -> dict:
     if game.menu:
         return menu_open(rid, game)
@@ -576,6 +618,8 @@ def main() -> int:
             reply(move(rid, game, req))
         elif cmd == "seed":
             reply(seed(rid, req))
+        elif cmd == "set_time":
+            reply(set_time(rid, game, req))
         elif cmd == "view":
             reply(view(rid, game, req))
         elif cmd == "run_scene":

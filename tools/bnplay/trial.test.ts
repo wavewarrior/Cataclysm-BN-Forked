@@ -15,7 +15,7 @@ Deno.test("a full Trial parses every field", () => {
   const trial = parseTrial(`
     fixture = "bairdford"
     seed = 12345
-    start_date = "2026-10-06"
+    start_date = "0002-03-10"
     time_of_day = "08:30"
     wall_clock_limit_s = 90
     turn_limit = 200
@@ -25,7 +25,7 @@ Deno.test("a full Trial parses every field", () => {
   assertEquals(trial, {
     fixture: "bairdford",
     seed: 12345,
-    startDate: "2026-10-06",
+    startDate: "0002-03-10",
     timeOfDay: "08:30",
     wallClockLimitS: 90,
     turnLimit: 200,
@@ -196,6 +196,14 @@ Deno.test("fields of the wrong type or range are rejected with the field name", 
       ["wall_clock_limit_s", `fixture = "a"\nwall_clock_limit_s = 0`],
       ["turn_limit", `fixture = "a"\nturn_limit = 1.5`],
       ["start_date", `fixture = "a"\nstart_date = "yesterday"`],
+      ["start_date", `fixture = "a"\nstart_date = "2026-10-06"`],
+      ["start_date", `fixture = "a"\nstart_date = "0000-01-01"`],
+      ["start_date", `fixture = "a"\nstart_date = "0001-00-01"`],
+      ["start_date", `fixture = "a"\nstart_date = "0001-05-01"`],
+      ["start_date", `fixture = "a"\nstart_date = "0001-01-00"`],
+      ["time_of_day", `fixture = "a"\ntime_of_day = "24:00"`],
+      ["time_of_day", `fixture = "a"\ntime_of_day = "12:60"`],
+      ["time_of_day", `fixture = "a"\ntime_of_day = 1200`],
       ["time_of_day", `fixture = "a"\ntime_of_day = "25:00"`],
       ["fixture", `fixture = 7`],
     ] as const

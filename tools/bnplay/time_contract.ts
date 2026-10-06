@@ -197,6 +197,55 @@ export function runTimeContract(name: string, target: ContractTarget): void {
           },
         )
 
+        await t.step(
+          "set_time pins the date and the time of day, and bad values are refused",
+          async () => {
+            await sync()
+            // Year 1, season 01, day 03, 08:30: two days and 8.5 hours after the calendar's start,
+            // whatever the world's season length.
+            const pinned = 2 * 86_400 + 8 * 3_600 + 30 * 60
+            const res = await driver.send({ cmd: "set_time", date: "0001-01-03", time: "08:30" })
+            assertEquals(res.status, "ok", JSON.stringify(res))
+            assertEquals(res.turn, pinned)
+            assertEquals(res.date, "0001-01-03")
+            assertEquals(res.time, "08:30")
+            assertEquals((await driver.send({ cmd: "state" })).turn, pinned)
+            // Time runs on from the pin.
+            assertEquals((await driver.send({ cmd: "wait", turns: 2 })).turn, pinned + 2)
+
+            // One field alone keeps the other: the time of day, then the day.
+            const dateOnly = await driver.send({ cmd: "set_time", date: "0001-01-05" })
+            assertEquals(dateOnly.turn, 4 * 86_400 + 8 * 3_600 + 30 * 60 + 2)
+            const timeOnly = await driver.send({ cmd: "set_time", time: "23:59" })
+            assertEquals(timeOnly.turn, 4 * 86_400 + 23 * 3_600 + 59 * 60)
+
+            await sync()
+            const bad = [
+              {},
+              { date: "yesterday" },
+              { date: "0001-05-01" },
+              { date: "0001-00-01" },
+              { date: "0000-01-01" },
+              { date: "0001-01-00" },
+              { date: "0001-01-99" },
+              { date: 20260101 },
+              { time: "24:00" },
+              { time: "12:60" },
+              { time: "noon" },
+              { time: 1200 },
+            ]
+            for (const request of bad) {
+              const err = await driver.send({ cmd: "set_time", ...request })
+              assertEquals(err.status, "error", JSON.stringify(request))
+            }
+            assertEquals(
+              (await driver.send({ cmd: "state" })).turn,
+              now,
+              "a refusal moves the clock",
+            )
+          },
+        )
+
         await t.step("the protocol channel carries only protocol lines", () => {
           assertEquals(driver.noise, [])
         })
