@@ -10,6 +10,7 @@ import { fromFileUrl, join } from "@std/path"
 import { spawnDriver } from "./client.ts"
 import { runCliLifecycle } from "./cli_lifecycle.ts"
 import { type ContractTarget, runContract } from "./contract.ts"
+import { runMenuContract } from "./menu_contract.ts"
 import { runTimeContract } from "./time_contract.ts"
 
 const repo = fromFileUrl(new URL("../../", import.meta.url)).replace(/\/$/, "")
@@ -22,7 +23,7 @@ const world = "Bairdford"
 
 const target: ContractTarget = {
   bootTimeoutMs: 30_000,
-  async spawn() {
+  async spawn(opts) {
     const userdir = await Deno.makeTempDir({ prefix: "bnplay-" })
     await Deno.mkdir(join(userdir, "save"))
     // Copy-on-write clone: the source save is never modified.
@@ -36,6 +37,7 @@ const target: ContractTarget = {
       world,
       basepath,
       firstTimeoutMs: 30_000,
+      denyList: opts?.denyList,
       stderr: Deno.env.get("BNPLAY_VERBOSE") ? "inherit" : "null",
     })
     const close = driver.close.bind(driver)
@@ -49,6 +51,7 @@ const target: ContractTarget = {
 
 runContract("real binary", target)
 runTimeContract("real binary", target)
+runMenuContract("real binary", target)
 
 // The same Episode lifecycle through the CLI and the resident daemon, on a clone of the fixture.
 runCliLifecycle("real binary", {

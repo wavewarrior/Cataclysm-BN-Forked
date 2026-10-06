@@ -7,8 +7,8 @@ import { assert, assertEquals, assertExists } from "@std/assert"
 import type { Driver } from "./client.ts"
 
 export type ContractTarget = {
-  /** Starts a fresh driver session. */
-  spawn: () => Promise<Driver>
+  /** Starts a fresh driver session; `denyList` names a deny-list data file to load instead. */
+  spawn: (opts?: { denyList?: string }) => Promise<Driver>
   /** Boot-window ceiling for the first answer, in milliseconds. */
   bootTimeoutMs: number
 }

@@ -164,6 +164,7 @@ int main( int argc, char* argv[] )
     std::vector<std::string> opts;
     std::string world; /** if set try to load first save in this world on startup */
     int driver_fd = -1; /** if >= 0 serve the line-JSON agent driver on this inherited fd */
+    std::string driver_deny_list; /** the driver's deny-list file; empty selects the default */
 
     // Set default file paths
 #if defined(PREFIX)
@@ -184,7 +185,7 @@ int main( int argc, char* argv[] )
         const char *section_default = nullptr;
         const char *section_map_sharing = "Map sharing";
         const char *section_user_directory = "User directories";
-        const std::array<arg_handler, 18> first_pass_arguments = {{
+        const std::array<arg_handler, 19> first_pass_arguments = {{
                 {
                     "--seed", "<string of letters and or numbers>",
                     "Sets the random number generator's seed value",
@@ -431,6 +432,18 @@ int main( int argc, char* argv[] )
                     dup2( STDERR_FILENO, STDOUT_FILENO );
                     // Windowless: the test_mode path skips init_interface.
                     test_mode = true;
+                    return 1;
+                }
+            },
+            {
+                "--driver-deny-list", "<path>",
+                "Load the driver's deny list from this file instead of data/driver_deny_list.json.",
+                section_default,
+                [&driver_deny_list]( int num_args, const char **params ) -> int {
+                    if( num_args < 1 ) {
+                        return -1;
+                    }
+                    driver_deny_list = params[0];
                     return 1;
                 }
             }
@@ -820,7 +833,9 @@ int main( int argc, char* argv[] )
                 break;
             }
             if( driver_fd >= 0 ) {
-                run_driver_loop( driver_fd );
+                if( !run_driver_loop( driver_fd, driver_deny_list ) ) {
+                    return 1;
+                }
                 exit_handler( 0 );
             }
             world.clear(); // ensure quit returns to opening screen

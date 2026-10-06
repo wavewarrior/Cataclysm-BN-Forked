@@ -37,6 +37,7 @@
 #include "mapdata.h"
 #include "coordinates.h"
 #include "debug.h"
+#include "driver_loop.h"
 
 #define dbg(x) DebugLogFL((x),DC::Main)
 
@@ -1071,6 +1072,18 @@ void input_manager::pump_events()
 
 input_event input_manager::get_input_event()
 {
+    if( driver_mode_active() ) {
+        // Nobody types in driver mode, and a modal fiber (which never gets here) is the only
+        // thing that can wait for a key. A poll with no wait finds nothing; any other read has
+        // no one to answer it, so it must fail instead of hanging the process.
+        if( g_display.inputdelay != 0 ) {
+            throw driver_blocking_read();
+        }
+        input_event nothing;
+        nothing.type = input_event_t::timeout;
+        return nothing;
+    }
+
     // Unlike pump_events(), this one cannot degrade to a no-op off the main
     // thread: the inputdelay < 0 branch below spins until a real event arrives,
     // so a silent guard would hang instead of crash.  Blocking on user input

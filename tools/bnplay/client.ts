@@ -42,6 +42,8 @@ export type SpawnOptions = {
   trace?: (
     entry: { request: DriverRequest & { id: number } } | { response: DriverResponse },
   ) => void
+  /** Deny-list data file for the driver (`--driver-deny-list`); default is the repo's file. */
+  denyList?: string
 }
 
 export type Driver = {
@@ -81,6 +83,7 @@ export function spawnDriver(opts: SpawnOptions): Driver {
       "--dont-debugmsg",
       "--basepath",
       opts.basepath,
+      ...(opts.denyList ? ["--driver-deny-list", opts.denyList] : []),
     ],
     stdin: "piped",
     stdout: "piped",

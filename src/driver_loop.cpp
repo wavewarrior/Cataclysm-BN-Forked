@@ -5,7 +5,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <functional>
+#include <iostream>
 #include <limits>
+#include <map>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -15,12 +18,17 @@
 
 #include <unistd.h>
 
+#include "action.h"
 #include "avatar.h"
 #include "calendar.h"
+#include "coop_fiber.h"
 #include "driver_message_delta.h"
+#include "fstream_utils.h"
 #include "game.h"
+#include "input.h"
 #include "json.h"
 #include "messages.h"
+#include "path_info.h"
 #include "rng.h"
 
 namespace
@@ -123,16 +131,44 @@ constexpr int max_turns_per_request = 1000;
 /// What the world looked like before a request began, for the fields that are deltas.
 struct snapshot {
     tripoint_abs_ms pos;
+    time_point turn;
     std::vector<log_entry> messages;
 };
+
+/// A screen the avatar opened that now holds the game's input until the agent answers it.
+struct open_modal {
+    /// The raw action that opened it, which is what the response calls the prompt.
+    std::string prompt;
+    /// The avatar's moves when it opened, to tell whether answering it spent any.
+    int moves_before = 0;
+};
+
+/// The screen currently waiting for a key, if any. Only one can be open: the game runs a
+/// single modal fiber.
+std::optional<open_modal> modal;
 
 /// What a request did, as far as the driver can tell without looking at the world again.
 struct action_result {
     bool time_passed = false;
     std::string_view outcome = "completed";
-    /// Only meaningful for outcome `interrupted`.
+    /// Only meaningful for outcomes `interrupted` (why) and `unsupported` (which guard).
     std::string_view reason;
+    /// Free text that explains `reason`, such as the deny-list entry's own note.
+    std::string detail;
+    /// Name of the screen waiting for a key; empty when none is.
+    std::string_view prompt;
 };
+
+/// How a request reads while a screen waits for a key.
+auto modal_result( bool time_passed = false ) -> action_result
+{
+    action_result result = { .time_passed = time_passed };
+    if( modal ) {
+        result.outcome = "awaiting_input";
+        result.prompt = modal->prompt;
+    }
+    return result;
+}
 
 auto log_window() -> std::vector<log_entry>
 {
@@ -147,7 +183,7 @@ auto log_window() -> std::vector<log_entry>
 
 auto take_snapshot() -> snapshot
 {
-    return { .pos = get_avatar().abs_pos(), .messages = log_window() };
+    return { .pos = get_avatar().abs_pos(), .turn = calendar::turn, .messages = log_window() };
 }
 
 /// Observation response: the contract's common payload. Reads the world, never advances it.
@@ -163,7 +199,8 @@ auto observation_line( int id, const snapshot &before, const action_result &resu
     std::ostringstream os;
     JsonOut jo( os, false );
     begin_response( jo, id, "ok" );
-    jo.member( "boundary", std::string( "turn_complete" ) );
+    jo.member( "boundary", std::string( !dead && result.outcome == "awaiting_input" ? "needs_input" :
+                                        "turn_complete" ) );
     jo.member( "turn", to_turn<int>( calendar::turn ) );
     jo.member( "time_passed", result.time_passed );
     jo.member( "moved", u.abs_pos() != before.pos );
@@ -174,15 +211,22 @@ auto observation_line( int id, const snapshot &before, const action_result &resu
     }
     jo.end_array();
     jo.member( "prompt" );
-    jo.write_null();
+    if( result.prompt.empty() ) {
+        jo.write_null();
+    } else {
+        jo.write( std::string( result.prompt ) );
+    }
     jo.member( "hp", u.hp_percentage() );
     jo.member( "pain", u.get_pain() );
     jo.member( "stamina", u.get_stamina() );
     jo.member( "hunger", u.get_stored_kcal() );
     jo.member( "thirst", u.get_thirst() );
     jo.member( "outcome", std::string( dead ? "died" : result.outcome ) );
-    if( !dead && result.outcome == "interrupted" ) {
+    if( !dead && ( result.outcome == "interrupted" || result.outcome == "unsupported" ) ) {
         jo.member( "reason", std::string( result.reason ) );
+    }
+    if( !dead && !result.detail.empty() ) {
+        jo.member( "detail", result.detail );
     }
     if( truncated ) {
         jo.member( "truncated", true );
@@ -193,7 +237,7 @@ auto observation_line( int id, const snapshot &before, const action_result &resu
 
 auto state_line( int id ) -> std::string
 {
-    return observation_line( id, take_snapshot(), {} );
+    return observation_line( id, take_snapshot(), modal_result() );
 }
 
 auto seed_line( int id, unsigned int seed ) -> std::string
@@ -230,8 +274,27 @@ struct step_report {
     bool safe_mode_stopped = false;
 };
 
+/// Starts the modal fiber the action queued, if any, and runs it to its first wait for a key.
+/// The first resume only starts the fiber, so it carries no key. Returns true, and records the
+/// screen, while it waits; a screen that finished without asking is simply gone.
+auto prime_modal( const std::string &action ) -> bool
+{
+    const bool queued = g->modal_fiber_.has_value();
+    if( !queued ) {
+        return false;
+    }
+    g->modal_fiber_->resume( input_event() );
+    if( g->modal_fiber_->done() ) {
+        g->modal_fiber_.reset();
+        return false;
+    }
+    modal = open_modal{ .prompt = action, .moves_before = get_avatar().moves };
+    return true;
+}
+
 /// Hands one action to the game as if its key was pressed, then lets the world respond.
-/// An action that spends no moves (a blocked move, a cancelled menu) does not advance the world.
+/// An action that spends no moves (a blocked move, a cancelled menu) does not advance the world,
+/// and one that opens a screen waits for its answer first: see `modal`.
 auto perform_action( const std::string &action, int &turn_budget ) -> step_report
 {
     avatar &u = get_avatar();
@@ -248,7 +311,8 @@ auto perform_action( const std::string &action, int &turn_budget ) -> step_repor
         const int moves_before = u.moves;
         g->handle_action_from( action );
         report.spent = u.moves < moves_before;
-        if( report.spent ) {
+        // A screen that waits for its answer holds the world still; its answer decides the rest.
+        if( !prime_modal( action ) && report.spent ) {
             advance_to_turn_boundary( turn_budget );
         }
     }
@@ -269,6 +333,9 @@ auto run_move( const std::string &action, const snapshot &before ) -> action_res
     const step_report step = perform_action( action, budget );
     action_result result;
     result.time_passed = step.spent || step.turns > 0;
+    if( modal ) {
+        return modal_result( result.time_passed );
+    }
     if( !step.spent && get_avatar().abs_pos() == before.pos ) {
         // Nothing was spent and nothing moved: the game said no, or the world did.
         result.outcome = step.safe_mode_stopped ? "refused" : "blocked";
@@ -288,6 +355,9 @@ auto run_wait( int turns ) -> action_result
         }
         const step_report step = perform_action( "pause", budget );
         result.time_passed = result.time_passed || step.spent || step.turns > 0;
+        if( modal ) {
+            return modal_result( result.time_passed );
+        }
         if( get_avatar().is_dead_state() ) {
             break;
         }
@@ -318,10 +388,117 @@ auto whole_number( const JsonObject &jo, const std::string &name, int64_t min,
     return static_cast<int64_t>( value );
 }
 
+/// Actions the driver refuses, each with the note that says why. Loaded once at start.
+std::map<std::string, std::string> deny_list;
+
+/// Where the deny list lives under the data directory when no other file is named.
+const std::string default_deny_list_name = "driver_deny_list.json";
+
+/// True once the driver serves requests: the input layer's guard keys off it.
+bool driver_serving = false;
+
+void parse_deny_list( JsonIn &jsin )
+{
+    JsonObject jo = jsin.get_object();
+    jo.allow_omitted_members();
+    JsonArray entries = jo.get_array( "deny" );
+    for( size_t i = 0; i < entries.size(); ++i ) {
+        JsonObject entry = entries.get_object( i );
+        deny_list[entry.get_string( "action" )] = entry.get_string( "why", "" );
+    }
+}
+
+/// Fills `deny_list` from the data file; false when it cannot be read. A driver that does not
+/// know what hangs it must not start.
+auto load_deny_list( const std::string &path ) -> bool
+{
+    deny_list.clear();
+    return read_from_file_json( path, parse_deny_list );
+}
+
+/// Runs `run`, and turns a read that would have blocked the game into outcome `unsupported`
+/// instead of a hang. Whatever the aborted action left half-open is dropped.
+auto guarded( const snapshot &before, const std::function<action_result()> &run ) -> action_result
+{
+    const int timeout = inp_mngr.get_timeout();
+    try {
+        return run();
+    } catch( const driver_blocking_read &err ) {
+        // handle_input restores the read timeout only when it returns, not when it unwinds.
+        inp_mngr.set_timeout( timeout );
+        g->modal_fiber_.reset();
+        modal.reset();
+        return { .time_passed = calendar::turn != before.turn, .outcome = "unsupported",
+                 .reason = "blocking_read", .detail = err.what() };
+    }
+}
+
+/// A raw action, as if its key had been pressed: refused if listed, otherwise handed to the
+/// game, which may open a screen that waits for `key`.
+auto run_action( const std::string &action, const snapshot &before ) -> action_result
+{
+    if( const auto denied = deny_list.find( action ); denied != deny_list.end() ) {
+        return { .outcome = "unsupported", .reason = "deny_list", .detail = denied->second };
+    }
+    int budget = max_turns_per_request;
+    const step_report step = perform_action( action, budget );
+    const bool time_passed = step.spent || step.turns > 0;
+    if( modal ) {
+        return modal_result( time_passed );
+    }
+    // Anything the player could see change counts; only a silent nothing is `no_effect`.
+    const bool changed = time_passed || get_avatar().abs_pos() != before.pos ||
+                         !compute_message_delta( before.messages, log_window() ).fresh.empty();
+    return { .time_passed = time_passed, .outcome = changed ? "completed" : "no_effect" };
+}
+
+/// The key a request names: one printable character, or a key name such as `ESC` or `RETURN`.
+/// Empty when it names no key.
+auto key_event( const std::string &key ) -> std::optional<input_event>
+{
+    const bool printable = key.size() == 1 && key[0] >= ' ' && key[0] <= '~';
+    const int code = printable ? key[0] : key.empty() ? 0 : inp_mngr.get_keycode( key );
+    if( code <= 0 ) {
+        return std::nullopt;
+    }
+    input_event evt( code, input_event_t::keyboard );
+    if( printable ) {
+        evt.text = key;
+    }
+    return evt;
+}
+
+/// Answers the open screen with one key. When the screen closes, whatever it spent in moves
+/// lets the world advance, as it would after any other action.
+auto run_key( const input_event &evt, const snapshot &before ) -> action_result
+{
+    const int moves_before = modal->moves_before;
+    g->modal_fiber_->resume( evt );
+    if( !g->modal_fiber_->done() ) {
+        return modal_result( calendar::turn != before.turn );
+    }
+    g->modal_fiber_.reset();
+    modal.reset();
+    int budget = max_turns_per_request;
+    const bool spent = get_avatar().moves < moves_before;
+    if( spent ) {
+        advance_to_turn_boundary( budget );
+    }
+    return { .time_passed = spent || budget < max_turns_per_request };
+}
+
 } // namespace
 
-void run_driver_loop( int fd )
+auto run_driver_loop( int fd, const std::string &deny_list_path ) -> bool
 {
+    const std::string path = deny_list_path.empty() ? PATH_INFO::datadir() + default_deny_list_name :
+                             deny_list_path;
+    const bool loaded = load_deny_list( path );
+    if( !loaded ) {
+        std::cerr << "driver: cannot load the deny list " << path << "\n";
+        return false;
+    }
+    driver_serving = true;
     line_reader in( fd );
     std::string line;
     while( in.read_line( line ) ) {
@@ -336,6 +513,11 @@ void run_driver_loop( int fd )
             jo.allow_omitted_members();
             id = jo.get_int( "id" );
             const std::string cmd = jo.get_string( "cmd" );
+            if( modal && ( cmd == "move" || cmd == "wait" || cmd == "action" ) ) {
+                write_all( fd, error_line( id, "a menu is open (prompt '" + modal->prompt +
+                                           "'): answer it with key" ) );
+                continue;
+            }
             if( cmd == "ping" ) {
                 write_all( fd, ping_line( *id ) );
             } else if( cmd == "state" ) {
@@ -347,7 +529,9 @@ void run_driver_loop( int fd )
                     continue;
                 }
                 const snapshot before = take_snapshot();
-                write_all( fd, observation_line( *id, before, run_move( action, before ) ) );
+                write_all( fd, observation_line( *id, before, guarded( before, [&]() {
+                    return run_move( action, before );
+                } ) ) );
             } else if( cmd == "wait" ) {
                 const std::optional<int64_t> turns = whole_number( jo, "turns", 1,
                                                      std::numeric_limits<int>::max() );
@@ -356,7 +540,34 @@ void run_driver_loop( int fd )
                     continue;
                 }
                 const snapshot before = take_snapshot();
-                write_all( fd, observation_line( *id, before, run_wait( static_cast<int>( *turns ) ) ) );
+                write_all( fd, observation_line( *id, before, guarded( before, [&]() {
+                    return run_wait( static_cast<int>( *turns ) );
+                } ) ) );
+            } else if( cmd == "action" ) {
+                const std::string name = jo.get_string( "name" );
+                if( look_up_action( name ) == ACTION_NULL ) {
+                    write_all( fd, error_line( id, "unknown action '" + name + "'" ) );
+                    continue;
+                }
+                const snapshot before = take_snapshot();
+                write_all( fd, observation_line( *id, before, guarded( before, [&]() {
+                    return run_action( name, before );
+                } ) ) );
+            } else if( cmd == "key" ) {
+                const std::string key = jo.get_string( "key" );
+                if( !modal ) {
+                    write_all( fd, error_line( id, "no menu is open: key answers an open menu" ) );
+                    continue;
+                }
+                const std::optional<input_event> evt = key_event( key );
+                if( !evt ) {
+                    write_all( fd, error_line( id, "unknown key '" + key + "'" ) );
+                    continue;
+                }
+                const snapshot before = take_snapshot();
+                write_all( fd, observation_line( *id, before, guarded( before, [&]() {
+                    return run_key( *evt, before );
+                } ) ) );
             } else if( cmd == "seed" ) {
                 const std::optional<int64_t> seed = whole_number( jo, "seed", 0,
                                                     std::numeric_limits<unsigned int>::max() );
@@ -367,7 +578,7 @@ void run_driver_loop( int fd )
                 write_all( fd, seed_line( *id, static_cast<unsigned int>( *seed ) ) );
             } else if( cmd == "quit" ) {
                 write_all( fd, quit_line( *id ) );
-                return;
+                break;
             } else {
                 write_all( fd, error_line( id, "unknown cmd '" + cmd + "'" ) );
             }
@@ -375,4 +586,16 @@ void run_driver_loop( int fd )
             write_all( fd, error_line( id, std::string( "bad request: " ) + err.what() ) );
         }
     }
+    driver_serving = false;
+    return true;
+}
+
+auto driver_mode_active() -> bool
+{
+    return driver_serving;
+}
+
+driver_blocking_read::driver_blocking_read()
+    : std::runtime_error( "the game waited for a key with no menu to answer it" )
+{
 }
