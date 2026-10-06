@@ -7,6 +7,7 @@
  */
 import { fromFileUrl, join } from "@std/path"
 import { spawnDriver } from "./client.ts"
+import { runCliLifecycle } from "./cli_lifecycle.ts"
 import { runContract } from "./contract.ts"
 
 const repo = fromFileUrl(new URL("../../", import.meta.url)).replace(/\/$/, "")
@@ -41,4 +42,12 @@ runContract("real binary", {
     }
     return driver
   },
+})
+
+// The same Episode lifecycle through the CLI and the resident daemon, on a clone of the fixture.
+runCliLifecycle("real binary", {
+  binary,
+  fixture: world,
+  fixtureSource: () => Promise.resolve(sourceSave),
+  env: { BNPLAY_BOOT_TIMEOUT_MS: "60000" },
 })

@@ -38,6 +38,10 @@ export type SpawnOptions = {
   requestTimeoutMs?: number
   /** Where the game's own log output goes; "inherit" shows it. */
   stderr?: "null" | "inherit"
+  /** Called with every request sent through `send` and every response it received. */
+  trace?: (
+    entry: { request: DriverRequest & { id: number } } | { response: DriverResponse },
+  ) => void
 }
 
 export type Driver = {
@@ -169,9 +173,18 @@ export function spawnDriver(opts: SpawnOptions): Driver {
   const exited = child.status.then((s) => s.code)
 
   return {
-    send(req, timeoutMs) {
+    async send(req, timeoutMs) {
       const id = nextId++
-      return transmit(id, JSON.stringify({ id, ...req }), timeoutMs, `cmd=${req.cmd} id=${id}`)
+      const request = { id, ...req }
+      opts.trace?.({ request })
+      const response = await transmit(
+        id,
+        JSON.stringify(request),
+        timeoutMs,
+        `cmd=${req.cmd} id=${id}`,
+      )
+      opts.trace?.({ response })
+      return response
     },
     sendRaw(line, expectedId, timeoutMs) {
       return transmit(expectedId, line, timeoutMs, `raw line ${JSON.stringify(line)}`)
