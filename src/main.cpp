@@ -22,6 +22,7 @@
 #include "platform_win.h"
 #else
 #include <csignal>
+#include <unistd.h>
 #endif
 #include "action.h"
 #include "catalua.h"
@@ -30,6 +31,7 @@
 #include "cursesdef.h"
 #include "debug.h"
 #include "filesystem.h"
+#include "driver_loop.h"
 #include "game.h"
 #include "avatar.h"      // game::u.moves access in the accumulator tick loop
 #include "calendar.h"    // to_turn<int>(calendar::turn) for tick logging
@@ -161,6 +163,7 @@ int main( int argc, char* argv[] )
     dump_mode dmode = dump_mode::TSV;
     std::vector<std::string> opts;
     std::string world; /** if set try to load first save in this world on startup */
+    int driver_fd = -1; /** if >= 0 serve the line-JSON agent driver on this inherited fd */
 
     // Set default file paths
 #if defined(PREFIX)
@@ -181,7 +184,7 @@ int main( int argc, char* argv[] )
         const char *section_default = nullptr;
         const char *section_map_sharing = "Map sharing";
         const char *section_user_directory = "User directories";
-        const std::array<arg_handler, 17> first_pass_arguments = {{
+        const std::array<arg_handler, 18> first_pass_arguments = {{
                 {
                     "--seed", "<string of letters and or numbers>",
                     "Sets the random number generator's seed value",
@@ -411,6 +414,23 @@ int main( int argc, char* argv[] )
 #if defined(CATA_SDL)
                     preload_config::set_gpu_backend_override( params[0] );
 #endif
+                    return 1;
+                }
+            },
+            {
+                "--driver-fd", "<N>",
+                "Serve the line-JSON agent driver protocol on inherited file descriptor N, without a window.",
+                section_default,
+                [&driver_fd]( int num_args, const char **params ) -> int {
+                    if( num_args < 1 ) {
+                        return -1;
+                    }
+                    driver_fd = atoi( params[0] );
+                    // Stray stdout writes (cata_printf, SDL, RmlUi, Lua print) must never
+                    // reach the protocol channel: move stdout onto stderr.
+                    dup2( STDERR_FILENO, STDOUT_FILENO );
+                    // Windowless: the test_mode path skips init_interface.
+                    test_mode = true;
                     return 1;
                 }
             }
@@ -752,11 +772,24 @@ int main( int argc, char* argv[] )
     // Must be after startup_lua_test() to avoid racing sol/luna global state.
     // Placed after lua-doc block to avoid spawning a thread that would
     // terminate the process on early exit (deno task docs:gen).
-    init::start_prewarm();
+    if( driver_fd < 0 ) {
+        // The driver never shows a menu; prewarm would only contend for CPU.
+        init::start_prewarm();
+    }
 
     // Now we do the actual game.
 
-    game_ui::init_ui();
+    if( driver_fd >= 0 ) {
+        // test_mode skipped init_interface: its display metrics are zero, so give the UI a
+        // fixed terminal size or game_ui::init_ui would write zeros into the options file.
+        FULL_SCREEN_WIDTH = TERMX = 80;
+        FULL_SCREEN_HEIGHT = TERMY = 24;
+        // init_colors normally runs inside init_interface; without it JSON colour names
+        // fail to parse and the world cannot load.
+        init_colors();
+    } else {
+        game_ui::init_ui();
+    }
 
     catacurses::curs_set( 0 ); // Invisible cursor here, because MAPBUFFER.load() is crash-prone
 
@@ -768,12 +801,28 @@ int main( int argc, char* argv[] )
     sigaction( SIGINT, &sigIntHandler, nullptr );
 #endif
 
-    prompt_select_lang_on_startup();
+    if( driver_fd < 0 ) {
+        prompt_select_lang_on_startup();
+    }
     replay_buffered_debugmsg_prompts();
+    if( driver_fd >= 0 && world.empty() ) {
+        std::cerr << "driver: --driver-fd requires --world\n";
+        return 1;
+    }
 
     while( true ) {
         if( !world.empty() ) {
-            if( !g->load( world ) ) { break; }
+            if( !g->load( world ) ) {
+                if( driver_fd >= 0 ) {
+                    std::cerr << "driver: world '" << world << "' failed to load\n";
+                    return 1;
+                }
+                break;
+            }
+            if( driver_fd >= 0 ) {
+                run_driver_loop( driver_fd );
+                exit_handler( 0 );
+            }
             world.clear(); // ensure quit returns to opening screen
 
         } else {
