@@ -1,0 +1,11 @@
+{
+  "//": "Actions the agent driver refuses with outcome 'unsupported'. Loaded when the driver starts: edit and restart, no rebuild. An action leaves this list once a typed command or a safe path covers it; the raw form of a typed command stays listed. The driver's no-fiber guard catches blocking reads that are not listed here.",
+  "deny": [
+    { "action": "craft", "why": "reads input directly with no modal fiber; hangs the driver" },
+    { "action": "drop", "why": "reads input directly with no modal fiber; hangs the driver" },
+    { "action": "eat", "why": "reads input directly with no modal fiber; hangs the driver" },
+    { "action": "apply", "why": "reads input directly with no modal fiber; hangs the driver" },
+    { "action": "wear", "why": "silently does nothing in the driver" },
+    { "action": "read", "why": "silently does nothing in the driver" }
+  ]
+}
