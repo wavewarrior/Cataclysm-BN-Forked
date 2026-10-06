@@ -19,10 +19,11 @@ import type { ReportInput, RequestTiming } from "./report.ts"
 import { Transcript } from "./transcript.ts"
 import type { Trial } from "./trial.ts"
 
-/** Why an Episode ended. Everything except `stop` and `turn_limit` is a harness failure. */
+/** Why an Episode ended. Everything except `stop`, `turn_limit` and `died` is a harness failure. */
 export type EndReason =
   | "stop"
   | "turn_limit"
+  | "died"
   | "wall_clock"
   | "hang"
   | "driver_exit"
@@ -45,7 +46,7 @@ export type EpisodeSummary = {
   transcript: string
 }
 
-/** The game-side exit code of an Episode that ended any way but `stop` or `turn_limit`. */
+/** The game-side exit code of an Episode that ended any way but `stop`, `turn_limit` or `died`. */
 const HARNESS_ERROR_EXIT_CODE = 2
 
 /** Time a graceful `quit` gets before the Episode is killed instead. */
@@ -201,7 +202,11 @@ export class Episode {
         )
       }
       if (request.cmd === "quit" && response.status === "ok") await this.#finish("stop", true)
-      else if (this.#turnLimitReached()) {
+      else if (response.outcome === "died") {
+        // The avatar is dead: nothing more can happen in this world, so the Episode ends here.
+        await this.#quit("died")
+        return { ...response, episode_ended: "died" }
+      } else if (this.#turnLimitReached()) {
         await this.#quit("turn_limit")
         return { ...response, episode_ended: "turn_limit" }
       }
@@ -219,7 +224,7 @@ export class Episode {
   }
 
   /** Asks the game to quit and reaps it; a game that will not quit is ended as a hang or a death. */
-  async #quit(reason: "stop" | "turn_limit"): Promise<void> {
+  async #quit(reason: "stop" | "turn_limit" | "died"): Promise<void> {
     try {
       await this.#driver!.send({ cmd: "quit" }, QUIT_TIMEOUT_MS)
       await this.#finish(reason, true)
@@ -352,7 +357,7 @@ export class Episode {
       await this.#driver.close()
       driverExit = await this.#driver.exited
     }
-    const normal = reason === "stop" || reason === "turn_limit"
+    const normal = reason === "stop" || reason === "turn_limit" || reason === "died"
     this.#exitCode = normal ? driverExit : HARNESS_ERROR_EXIT_CODE
     this.#transcript.add({ event: "end", detail: { reason, exit_code: this.#exitCode } })
     this.#transcript.close()

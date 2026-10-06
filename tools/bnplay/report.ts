@@ -73,7 +73,7 @@ const ERROR_LINE = /^\d{2}:\d{2}:\d{2}\.\d+ ERROR\b/
 
 function progressOf(ended: EndReason | undefined): Progress {
   if (ended === undefined) return "running"
-  return ended === "stop" || ended === "turn_limit" ? "complete" : "wall_clock"
+  return ended === "stop" || ended === "turn_limit" || ended === "died" ? "complete" : "wall_clock"
 }
 
 function trimmed(result: ReportOracle): ReportOracle {
