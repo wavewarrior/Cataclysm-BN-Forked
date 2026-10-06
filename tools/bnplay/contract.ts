@@ -5,6 +5,7 @@
  */
 import { assert, assertEquals, assertExists } from "@std/assert"
 import type { Driver } from "./client.ts"
+import type { WindowSize } from "./trial.ts"
 
 export type ContractTarget = {
   /**
@@ -14,6 +15,13 @@ export type ContractTarget = {
   spawn: (opts?: { denyList?: string; scenesDir?: string }) => Promise<Driver>
   /** Boot-window ceiling for the first answer, in milliseconds. */
   bootTimeoutMs: number
+  /** The window the drivers `spawn` starts are launched with; absent when they are windowless. */
+  window?: WindowSize
+  /**
+   * Takes the game's window away (minimises it) so that it has no drawable, and returns what
+   * puts it back. Absent when the target has no safe way to do that.
+   */
+  hideWindow?: (driver: Driver) => Promise<() => Promise<void>>
 }
 
 /** Returns true when any process is still alive in the process group. */

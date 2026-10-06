@@ -17,9 +17,16 @@
  * So a windowed Episode takes about 2.5 times as long to boot and about 3.4 times the memory: the
  * interface init, the GPU device and its lighting buffers come on top. Hence one windowed Episode
  * at a time.
+ *
+ * The capture contract's no_drawable refusal runs against the mock only. A script cannot minimise
+ * the game's window (System Events does not list the background app; only a desktop automation
+ * client with the accessibility permission can press its minimise button), so the real refusal is
+ * covered in process (tests/driver_loop_test.cpp) and was driven once by hand: with the window
+ * minimised, both capture modes answered `outcome: refused`, reason `no_drawable`.
  */
 import { fromFileUrl, join } from "@std/path"
 import { spawnDriver } from "./client.ts"
+import { runCaptureContract } from "./capture_contract.ts"
 import { runActivityContract } from "./activity_contract.ts"
 import { runCombatContract } from "./combat_contract.ts"
 import { runCliLifecycle } from "./cli_lifecycle.ts"
@@ -46,6 +53,7 @@ const world = "Bairdford"
 function makeTarget(window?: WindowSize): ContractTarget {
   return {
     bootTimeoutMs: 30_000,
+    window,
     async spawn(opts) {
       const userdir = await Deno.makeTempDir({ prefix: "bnplay-" })
       await Deno.mkdir(join(userdir, "save"))
@@ -84,6 +92,7 @@ function runSuites(name: string, target: ContractTarget): void {
   runMenuContract(name, target)
   runViewContract(name, target, { inventoryIds: true })
   runSceneContract(name, target, { scenesLibrary: join(repo, "tools/visual_verify/scenes") })
+  runCaptureContract(name, target)
 }
 
 const windowedRun = Deno.env.get("BNPLAY_WINDOWED")

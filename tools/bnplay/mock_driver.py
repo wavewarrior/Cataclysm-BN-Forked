@@ -28,6 +28,12 @@ passed (both deliberately wrong, for the oracle that watches the counter), and t
 the walled-in fixture (melee and fire are refused, smash bashes a wall); `hurt` taking `hp` to 0 or
 below makes every response carry `outcome: died`.
 Env `MOCK_BOOT_DELAY_S` delays the first answer, like a slow boot.
+`capture <dir> [mode]` is the windowed mode's command: the mock writes a stand-in frame (a BMP of
+twice the window's size for `final`, as on a HiDPI display, a PNG of the window's size for
+`state`) and the map snapshot of the turn, named `turn-<turn>-<n>-final.bmp`,
+`turn-<turn>-<n>-state.png` and `turn-<turn>-<n>-map.json` (`n` counts the captures so far), and
+refuses with `no_drawable` while the window is `minimise`d (a mock
+hook, undone by `restore`). A windowless mock answers `capture` with a protocol error.
 
 Like the game it writes `<userdir>/config/debug.log`, buffered: nothing reaches the file until the
 process exits. Each line starts with the game's `HH:MM:SS.mmm` wall-clock stamp. The world save
@@ -46,10 +52,12 @@ import json
 import os
 import random
 import re
+import struct
 import subprocess
 import sys
 import threading
 import time
+import zlib
 from datetime import datetime
 
 START_TURN = 1000
@@ -92,6 +100,10 @@ class Game:
         self.diverge = False
         # Radius of the view attached to every observation; 0 attaches none.
         self.attach_radius = 0
+        # Mock hook: a minimised window has no drawable.
+        self.minimised = False
+        # Captures written so far: each is named by its turn and its number.
+        self.captures = 0
 
     def say(self, text: str) -> str:
         """Logs a message and returns the log entry as the player sees it."""
@@ -191,6 +203,65 @@ def observation(rid: int, game: Game, **fields) -> dict:
     if game.hp <= 0:
         obs.update(outcome="died", boundary="turn_complete", prompt=None)
     return obs
+
+
+def capture(rid: int, game: Game, req: dict, window: str | None) -> dict:
+    """The windowed mode's `capture`: a stand-in frame and the map snapshot of the turn."""
+    if window is None:
+        return error(rid, "capture needs the windowed mode (start the game with --driver-windowed)")
+    directory = req.get("dir")
+    if not isinstance(directory, str) or not os.path.isabs(directory):
+        return error(rid, "`dir` must be an absolute directory path")
+    mode = req.get("mode", "final")
+    if mode not in ("final", "state"):
+        return error(rid, "`mode` must be `final` or `state`")
+    if game.minimised:
+        return observation(
+            rid, game, outcome="refused", reason="no_drawable",
+            detail="the window is hidden or minimised: there is no drawable to capture",
+        )
+    width, height = (int(n) for n in window.split("x"))
+    os.makedirs(directory, exist_ok=True)
+    stem = os.path.join(directory, f"turn-{game.turn}-{game.captures + 1}-")
+    if mode == "final":
+        frame, size, label = stem + "final.bmp", (width * 2, height * 2), "final composite"
+        with open(frame, "wb") as f:
+            f.write(bmp_header(*size))
+            f.truncate(54 + size[0] * size[1] * 3)
+    else:
+        frame, size, label = stem + "state.png", (width, height), "state view"
+        with open(frame, "wb") as f:
+            f.write(png_header(*size))
+    map_path = stem + "map.json"
+    with open(map_path, "w") as f:
+        json.dump({"frame": game.turn, "turn": game.turn, "z": 0, "player": [60, 60, 0]}, f)
+    game.captures += 1
+    return observation(
+        rid, game,
+        capture={
+            "mode": mode, "label": label, "frame": frame, "map": map_path,
+            "width": size[0], "height": size[1], "window_width": width, "window_height": height,
+        },
+    )
+
+
+def bmp_header(width: int, height: int) -> bytes:
+    """The 54 bytes that make a 24-bit BMP of this size."""
+    size = ((width * 3 + 3) & ~3) * height
+    return (
+        b"BM" + struct.pack("<IHHI", 54 + size, 0, 0, 54)
+        + struct.pack("<IiiHHIIiiII", 40, width, height, 1, 24, 0, size, 0, 0, 0, 0)
+    )
+
+
+def png_header(width: int, height: int) -> bytes:
+    """A PNG signature, its IHDR chunk and an IEND: enough for a reader of the size."""
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IEND", b"")
 
 
 def error(rid: int | None, message: str) -> dict:
@@ -434,6 +505,14 @@ def main() -> int:
             reply(action(rid, game, req))
         elif cmd == "key":
             reply(key(rid, game, req))
+        elif cmd == "capture":
+            reply(capture(rid, game, req, windowed))
+        elif cmd == "minimise":
+            game.minimised = True
+            reply({"id": rid, "status": "ok"})
+        elif cmd == "restore":
+            game.minimised = False
+            reply({"id": rid, "status": "ok"})
         elif cmd == "quit":
             reply({"id": rid, "status": "ok"})
             time.sleep(DebugLog.QUIT_DELAY_S)
