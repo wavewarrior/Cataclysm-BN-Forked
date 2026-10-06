@@ -462,11 +462,6 @@ auto run_typed( const typed_request &request, const snapshot &before ) -> action
         const std::vector<std::string> said = compute_message_delta( before.messages, log_window() ).fresh;
         result.detail = said.empty() ? "the game would not do that" : said.back();
     }
-    if( result.outcome == "no_effect" && result.detail.empty() &&
-        !compute_message_delta( before.messages, log_window() ).fresh.empty() ) {
-        // The game said something, as it does for a use that costs nothing: that is an effect.
-        result.outcome = "completed";
-    }
     return started ? run_activity( request.max_turns, std::move( result ) ) : result;
 }
 

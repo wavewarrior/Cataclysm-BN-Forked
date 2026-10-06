@@ -444,12 +444,19 @@ auto run_use( avatar &u, item &it, const std::string &method ) -> command_result
         return refused( "Your " + it.tname() + " has no use called " + chosen + "; it has: " + uses );
     }
 
+    const item_ref ref( it );
+    const itype_id type_before = it.typeId();
+    const bool active_before = it.is_active();
+    const auto charges_before = it.charges;
     const int moves_before = u.moves;
     const bool used = u.invoke_item( &it, chosen );
-    // A use that costs nothing and starts nothing may still have done something the game says
-    // in its log; the driver reads that.
-    return used || u.moves < moves_before || is_busy( u ) ? command_result{} :
-           command_result{ .outcome = "no_effect" };
+    // The game reports a use that cost no charge by returning false, so the answer is what the
+    // use did: time, an activity, or a change to the item. A use that did none of those was
+    // turned down, and the game's message says why.
+    const bool changed = !ref || ref.get()->typeId() != type_before ||
+                         ref.get()->is_active() != active_before || ref.get()->charges != charges_before;
+    return used || changed || u.moves < moves_before || is_busy( u ) ? command_result{} :
+           refused_silently();
 }
 
 auto run_read( avatar &u, item &it ) -> command_result

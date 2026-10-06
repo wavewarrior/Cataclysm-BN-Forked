@@ -1107,8 +1107,8 @@ bool avatar::has_identified( const itype_id &item_id ) const
 void avatar::wake_up()
 {
     if( has_effect( effect_sleep ) ) {
-        // Anything but the sleep running out is the game waking the avatar early.
-        if( get_effect( effect_sleep ).get_duration() != 1_turns ) {
+        // Anything but the sleep running out (or the rested wake, which zeroes it) is early.
+        if( get_effect( effect_sleep ).get_duration() > 1_turns ) {
             driver_note_interruption( "other" );
         }
         if( calendar::turn - get_effect( effect_sleep ).get_start_time() > 2_hours ) {

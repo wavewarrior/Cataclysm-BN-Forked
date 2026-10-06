@@ -351,8 +351,8 @@ TEST_CASE("driver_items_use_runs_the_item_s_use_and_says_when_it_has_none", "[dr
         const std::string stick = carry("glowstick");
         const ran used = run(command::use, stick);
         CAPTURE(used.result.detail);
-        // The driver reads the game's log to tell a use that said something from one that did not.
-        CHECK(used.result.outcome != "refused");
+        // The use costs no charge, so the game returns false; the item changing is the proof.
+        CHECK(used.result.outcome == "completed");
         CHECK(u.has_item_with([](const item& it) { return it.typeId() == itype_id("glowstick_lit"); }));
     }
 
