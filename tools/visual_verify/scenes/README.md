@@ -41,6 +41,17 @@ Each script writes a `*_RESULT` line via `gdebug.log_info`. Those only reach
 to `true` in `config/options.json`, otherwise the lines are filtered out and a
 successful run looks like a silent failure.
 
+## Running one without the console
+
+The agent driver (`--driver-fd`, see `tools/bnplay/`) runs these scripts as they are, with no
+console and no debug-log option: `{"cmd": "run_scene", "name": "lightone"}` loads
+`<scenes dir>/lightone.lua` (the directory is `tools/visual_verify/scenes` under `--basepath`
+unless `--driver-scenes <dir>` names another) and answers with
+`"scene": {"status": "passed" | "failed", "lines": [...]}`. `lines` is what the script logged
+(`gdebug.log_info`, `print`), so the `*_RESULT` lines arrive in the response. A script fails by
+raising an error or returning `false`; a failed run reports its lines and the error and never
+stops the driver. A Trial names a Scene to run at the start with `scene = "lightone"`.
+
 ## Scripts
 
 | Script | Purpose |

@@ -111,3 +111,45 @@ _Avoid_: event handler, delta codec
 **Rollback**:
 Undoing recent world events in reverse order to return a map to an earlier tick after the two players' worlds disagree.
 _Avoid_: rewind, revert
+
+## Agent playtesting
+
+**Trial**:
+The declarative definition of a playtest: the save fixture to load, the pinned seed, start date and time-of-day, mod set, an optional scene, an optional scripted action prefix, and the end conditions.
+_Avoid_: scenario (collides with the game's start scenario, `class scenario`), test case, script (ambiguous with `.vv` files and Lua)
+
+**Episode**:
+One execution of a Trial, with its own private user directory and its own report.
+_Avoid_: run, session
+
+**Scene**:
+A Lua setup fixture that a Trial may reference, used to place terrain, monsters and items before or during an Episode.
+_Avoid_: map setup, fixture (a fixture here means a save)
+
+**Driver**:
+The mode of the game binary (`--driver-fd`) that serves one JSON request line in, one observation line out, over an inherited file descriptor, so a supervisor can drive an Episode without a window or a keyboard.
+_Avoid_: server, harness (the Windows `vv.py` tool is the harness)
+
+**Supervisor**:
+`bnplay`, the external Deno tool that boots an Episode's driver in a private clone, watches it from outside the game, evaluates oracles and writes the report. Isolation between Episodes is enforced here, not by the game. Its handle for a running Episode is a session id.
+_Avoid_: runner, daemon (the daemon is only the supervisor's resident process)
+
+**Fixture**:
+A world save kept in the fixture library (a gitignored directory) that a Trial names and every Episode clones into its own user directory.
+_Avoid_: save (the user's own saves are never touched), scene (a Scene is Lua)
+
+**Fixture baseline**:
+The game-log lines a fixture produces on a clean boot-and-idle after the driver reports ready, recorded once so an Episode fails only on error lines that are new. Refreshed whenever the fixture or its mod set changes.
+_Avoid_: golden log, snapshot
+
+**Observation**:
+The compact JSON a driver answers each request with: turn, whether time passed, new messages, vitals and an `outcome`.
+_Avoid_: state (that is one command), response (it may be a protocol error)
+
+**Oracle**:
+A check the supervisor evaluates over an Episode's observations or captured frames and reports as pass, fail or warn: the built-in checks, a declared predicate, or a capture oracle (`paired_null`, `diff_vs_null`, `triplet`).
+_Avoid_: assertion, test
+
+**Transcript**:
+The JSONL record of every request and response of an Episode; the report points at a failing request in it, and it is the repro because same-seed Episodes are not guaranteed to replay.
+_Avoid_: log (that is the game's `debug.log`)

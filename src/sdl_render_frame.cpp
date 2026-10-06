@@ -1283,7 +1283,7 @@ auto render_world_pass_w( lighting::render_state &rs,
     // daylight even after excluding it from the ambient ceiling clamp, but a
     // fire/torch should still visually read as a light source. See
     // emitter_glow_pass.h.
-    if( g_glow_enable && !s_emo.snap.empty() && !lighting::overmap_view_open ) {
+    if( g && g_glow_enable && !s_emo.snap.empty() && !lighting::overmap_view_open ) {
         const float tp = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
         // Cull to the player's z-level and a generous on-screen radius so the
         // instance list stays small regardless of how many emitters exist in
@@ -1374,8 +1374,8 @@ auto render_world_pass_w( lighting::render_state &rs,
     // make_cone calls) — no new detection pass. Same VIS_CLEAR visibility gate
     // as the emitter-glow builder above, so a shaft/mote can only appear where
     // the player already sees the window (the emitter-glow-pass FoW lesson).
-    if( ( g_shaft_enable || g_dust_enable ) && !s_emo.snap.empty() && !diagnostic_view_active()
-        && !lighting::overmap_view_open ) {
+    if( g && ( g_shaft_enable || g_dust_enable ) && !s_emo.snap.empty() &&
+        !diagnostic_view_active() && !lighting::overmap_view_open ) {
         const float tp = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
         constexpr float CULL_RADIUS_TILES = 48.f;
         // Minimum direct-sun term (snapshot.cpp: 225 * cos(facing) * sun_intensity)

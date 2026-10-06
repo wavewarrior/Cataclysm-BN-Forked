@@ -22,6 +22,7 @@
 #endif
 
 #include "debug.h"
+#include "driver_window.h"
 #include "get_version.h"
 #include "path_info.h"
 
@@ -86,7 +87,11 @@ extern "C" {
                  << "\nVERSION: " << getVersionString()
                  << "\nTYPE: " << type
                  << "\nMESSAGE: " << msg;
-        if( SDL_ShowSimpleMessageBox( SDL_MESSAGEBOX_ERROR, "Error",
+        // A driver window has nobody at the keyboard: a modal box would hold the crashed game
+        // (and a dialog on the user's desktop) until the supervisor's watchdog kills it. The
+        // report below goes to stderr and the crash file as usual.
+        if( !requested_driver_window() &&
+            SDL_ShowSimpleMessageBox( SDL_MESSAGEBOX_ERROR, "Error",
                                       log_text.str().c_str(), nullptr ) != 0 ) {
             log_text << "Error creating SDL message box: " << SDL_GetError() << '\n';
         }

@@ -620,7 +620,7 @@ void haul()
     }
 }
 
-void smash()
+void smash( const std::optional<tripoint_bub_ms>& target )
 {
     player& u = g->u;
     map& here = get_map();
@@ -654,8 +654,9 @@ void smash()
         smashskill = u.str_cur + weapon.damage_melee( DT_BASH );
     }
 
-    const std::optional<tripoint_bub_ms> smashp_ =
-        choose_adjacent( _( "Smash where?" ), true );
+    // The agent driver names the tile itself; the player is asked where otherwise.
+    const std::optional<tripoint_bub_ms> smashp_ = target ? target
+            : choose_adjacent( _( "Smash where?" ), true );
     if( !smashp_ ) { return; }
     auto smashp = *smashp_;
 

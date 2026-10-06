@@ -28,6 +28,7 @@
 #include "coordinates.h"
 #include "creature.h"
 #include "debug.h"
+#include "driver_loop.h"
 #include "enums.h"
 #include "faction.h"
 #include "game.h"
@@ -2918,6 +2919,9 @@ void sounds::process_sound_markers( Character *who )
                 wake_up_vol += who->bonus_from_enchantments( wake_up_vol, ench_val_SLEEP_DB_RESIST );
 
                 if( rng( wake_up_vol / 2, wake_up_vol ) <= db_vol && !who->has_effect( effect_narcosis ) ) {
+                    if( who->is_avatar() ) {
+                        driver_note_interruption( "noise" );
+                    }
                     who->wake_up();
                     who->add_msg_if_player( m_warning, _( "Something is making noise." ) );
                 } else {

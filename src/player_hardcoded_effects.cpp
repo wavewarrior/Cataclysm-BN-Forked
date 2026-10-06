@@ -11,6 +11,7 @@
 #include "character_effects.h"
 #include "character_functions.h"
 #include "damage.h"
+#include "driver_loop.h"
 #include "effect.h"
 #include "enums.h"
 #include "event.h"
@@ -1268,6 +1269,10 @@ void Character::hardcoded_effects( effect &it )
 
         // A bit of a hack: check if we are about to wake up for any reason, including regular
         // timing out of sleep
+        if( woke_up && is_avatar() ) {
+            // Too bright, too cold, too hot or a vision: the game ends the sleep early.
+            driver_note_interruption( "other" );
+        }
         if( dur == 1_turns || woke_up ) {
             wake_up();
         }

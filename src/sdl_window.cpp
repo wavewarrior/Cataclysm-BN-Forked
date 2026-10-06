@@ -1,6 +1,7 @@
 #include "sdl_window.h"
 #include <atomic>
 #include <algorithm>
+#include <optional>
 
 #include "cached_options.h"
 #include "cata_tiles.h"
@@ -10,6 +11,7 @@
 #include "cursesdef.h"
 #include "cursesport.h"
 #include "debug.h"
+#include "driver_window.h"
 #include "font_loader.h"
 #include "game_constants.h"
 #include "game_ui.h"
@@ -43,6 +45,14 @@ static void InitSDL()
 {
     SDL_InitFlags init_flags = SDL_INIT_VIDEO | SDL_INIT_AUDIO;
 
+    if( requested_driver_window() ) {
+        // The driver's window opens in the background: the app must not make itself the
+        // foreground process, and showing or raising a window must not activate it. The first
+        // hint is only read by SDL_Init, so these are set before it.
+        SDL_SetHint( SDL_HINT_MAC_BACKGROUND_APP, "1" );
+        SDL_SetHint( SDL_HINT_WINDOW_ACTIVATE_WHEN_SHOWN, "0" );
+        SDL_SetHint( SDL_HINT_WINDOW_ACTIVATE_WHEN_RAISED, "0" );
+    }
     throwErrorIf( !SDL_Init( init_flags ), "SDL_Init failed" );
     throwErrorIf( !TTF_Init(), "TTF_Init failed" );
     printErrorIf( !SDL_InitSubSystem( SDL_INIT_JOYSTICK ), "Initializing joystick subsystem failed" );
@@ -93,15 +103,44 @@ auto sync_update_interval_to_display( SDL_Window *window ) -> void
 } // namespace
 
 
+/// Puts the driver's window in the bottom right corner of the usable area of `display` and shows
+/// it, without making it the key window: whatever the user is doing keeps the keyboard.
+static void place_driver_window( SDL_Window *window, int display, const driver_window_size &size )
+{
+    int display_count = 0;
+    SDL_DisplayID *displays = SDL_GetDisplays( &display_count );
+    SDL_Rect usable{ 0, 0, 0, 0 };
+    const bool known = displays && display >= 0 && display < display_count &&
+                       SDL_GetDisplayUsableBounds( displays[display], &usable );
+    SDL_free( displays );
+    if( known ) {
+        const screen_position at = driver_window_corner( { usable.x, usable.y, usable.w, usable.h },
+                                   size );
+        SDL_SetWindowPosition( window, at.x, at.y );
+    } else {
+        dbg( DL::Warn ) << "driver window: usable bounds unknown (" << SDL_GetError()
+                        << "); leaving the window where the system put it";
+    }
+    SDL_ShowWindow( window );
+}
+
 //Registers, creates, and shows the Window!!
 static void WinCreate()
 {
     std::string version = string_format( "Cataclysm: Bright Nights - %s", getVersionString() );
+    // The windowed driver boot fixes the window's size; it is never fullscreen or maximised.
+    const std::optional<driver_window_size> driver_window = requested_driver_window();
 
     // Common flags used for fulscreen and for windowed
     int window_flags = 0;
     g_display.WindowWidth = g_display.TERMINAL_WIDTH * fontwidth * g_display.scaling_factor;
     g_display.WindowHeight = g_display.TERMINAL_HEIGHT * fontheight * g_display.scaling_factor;
+    if( driver_window ) {
+        g_display.WindowWidth = driver_window->width;
+        g_display.WindowHeight = driver_window->height;
+        // Created hidden so it is placed before it appears, never flashing at the centre.
+        window_flags |= SDL_WINDOW_HIDDEN;
+    }
     // HIGH_PIXEL_DENSITY: SDL3 industry-standard HiDPI path. Window opens
     // at full physical resolution (e.g. 3680×2196 on a 4K Win11 monitor at
     // 200% scaling), GPU swapchain matches. UI continues to lay out in
@@ -110,8 +149,11 @@ static void WinCreate()
     // stretch across the full physical framebuffer. See SDL3 HiDPI README.
     window_flags |= SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
 
-    const auto screen_mode = get_option<std::string>( "FULLSCREEN" );
-    const auto minimize = get_option<bool>( "MINIMIZE_ON_FOCUS_LOSS" );
+    const auto screen_mode = driver_window ? std::string( "no" ) :
+                             get_option<std::string>( "FULLSCREEN" );
+    // A window that never had focus must not be minimised for losing it: a minimised window
+    // has no drawable, and so no frame.
+    const auto minimize = !driver_window && get_option<bool>( "MINIMIZE_ON_FOCUS_LOSS" );
 
     SDL_SetHint( SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, minimize ? "1" : "0" );
 
@@ -138,8 +180,12 @@ static void WinCreate()
     g_display.window.reset( SDL_CreateWindow( version.c_str(), g_display.WindowWidth,
                             g_display.WindowHeight, window_flags ) );
     throwErrorIf( !g_display.window, "SDL_CreateWindow failed" );
-    SDL_SetWindowPosition( g_display.window.get(), SDL_WINDOWPOS_CENTERED_DISPLAY( display ),
-                           SDL_WINDOWPOS_CENTERED_DISPLAY( display ) );
+    if( driver_window ) {
+        place_driver_window( g_display.window.get(), display, *driver_window );
+    } else {
+        SDL_SetWindowPosition( g_display.window.get(), SDL_WINDOWPOS_CENTERED_DISPLAY( display ),
+                               SDL_WINDOWPOS_CENTERED_DISPLAY( display ) );
+    }
     // Redraw throttle follows the panel, not a hardcoded 40 fps (see above).
     sync_update_interval_to_display( g_display.window.get() );
     SDL_StartTextInput( g_display.window.get() );

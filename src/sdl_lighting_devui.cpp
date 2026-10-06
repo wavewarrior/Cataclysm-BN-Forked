@@ -1,5 +1,6 @@
 #include "sdl_lighting_devui.h"
 
+#include "driver_capture.h"
 #include "avatar.h"
 #include "camera_debug.h"
 #include "cata_tiles.h"
@@ -1247,21 +1248,9 @@ void rml_tick()
 // correlation of the F7 debug fields against what is physically on the map.
 // Paired with CATA_FRAME_DUMP so both fire on the same frame count.
 // ---------------------------------------------------------------------------
-void maybe_dump_map( std::uint64_t frame, std::uint64_t last_dump_frame )
+auto dump_map_to( std::uint64_t frame, const std::string &path ) -> bool
 {
-    std::string path;
-    if( frame == last_dump_frame ) {
-        // F13 / file-trigger on-demand dump: pair with the BMP written this frame.
-        path = "/tmp/cata_map_" + std::to_string( frame ) + ".json";
-    } else {
-        static const char *spec = std::getenv( "CATA_MAP_DUMP" );
-        if( spec == nullptr ) { return; }
-        const char *colon = std::strchr( spec, ':' );
-        if( colon == nullptr ) { return; }
-        if( std::strtoull( spec, nullptr, 10 ) != frame ) { return; }
-        path.assign( colon + 1 );
-    }
-    if( g == nullptr ) { return; }
+    if( g == nullptr ) { return false; }
 
     map& mm = get_map();
     const int z = g->u.bub_pos().z();
@@ -1272,11 +1261,12 @@ void maybe_dump_map( std::uint64_t frame, std::uint64_t last_dump_frame )
     std::ofstream f( path, std::ios::binary );
     if( !f ) {
         DebugLogFL( DL::Warn, DC::Main ) << "map dump: cannot open " << path;
-        return;
+        return false;
     }
     JsonOut j( f );
     j.start_object();
     j.member( "frame", static_cast<long long>( frame ) );
+    j.member( "turn", to_turn<int>( calendar::turn ) );
     j.member( "z", z );
     j.member( "width", W );
     j.member( "height", H );
@@ -1384,8 +1374,31 @@ void maybe_dump_map( std::uint64_t frame, std::uint64_t last_dump_frame )
     j.end_array();
 
     j.end_object();
+    f.flush();
+    if( !f ) {
+        DebugLogFL( DL::Warn, DC::Main ) << "map dump: cannot write " << path;
+        return false;
+    }
     DebugLogFL( DL::Info, DC::Main ) << "map dump: wrote " << path
                                      << " (" << W << "x" << H << ", z=" << z << ")";
+    return true;
+}
+
+void maybe_dump_map( std::uint64_t frame, std::uint64_t last_dump_frame )
+{
+    std::string path;
+    if( frame == last_dump_frame ) {
+        // F13 / file-trigger on-demand dump: pair with the BMP written this frame.
+        path = "/tmp/cata_map_" + std::to_string( frame ) + ".json";
+    } else {
+        static const char *spec = std::getenv( "CATA_MAP_DUMP" );
+        if( spec == nullptr ) { return; }
+        const char *colon = std::strchr( spec, ':' );
+        if( colon == nullptr ) { return; }
+        if( std::strtoull( spec, nullptr, 10 ) != frame ) { return; }
+        path.assign( colon + 1 );
+    }
+    dump_map_to( frame, path );
 }
 
 } // namespace sdl_lighting_devui

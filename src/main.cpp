@@ -22,6 +22,7 @@
 #include "platform_win.h"
 #else
 #include <csignal>
+#include <unistd.h>
 #endif
 #include "action.h"
 #include "catalua.h"
@@ -30,6 +31,8 @@
 #include "cursesdef.h"
 #include "debug.h"
 #include "filesystem.h"
+#include "driver_loop.h"
+#include "driver_window.h"
 #include "game.h"
 #include "avatar.h"      // game::u.moves access in the accumulator tick loop
 #include "calendar.h"    // to_turn<int>(calendar::turn) for tick logging
@@ -161,6 +164,10 @@ int main( int argc, char* argv[] )
     dump_mode dmode = dump_mode::TSV;
     std::vector<std::string> opts;
     std::string world; /** if set try to load first save in this world on startup */
+    int driver_fd = -1; /** if >= 0 serve the line-JSON agent driver on this inherited fd */
+    bool driver_windowed = false; /** the driver boots with a real window instead of test_mode */
+    std::string driver_deny_list; /** the driver's deny-list file; empty selects the default */
+    std::string driver_scenes; /** the driver's Scenes directory; empty selects the default */
 
     // Set default file paths
 #if defined(PREFIX)
@@ -181,7 +188,7 @@ int main( int argc, char* argv[] )
         const char *section_default = nullptr;
         const char *section_map_sharing = "Map sharing";
         const char *section_user_directory = "User directories";
-        const std::array<arg_handler, 17> first_pass_arguments = {{
+        const std::array<arg_handler, 21> first_pass_arguments = {{
                 {
                     "--seed", "<string of letters and or numbers>",
                     "Sets the random number generator's seed value",
@@ -413,6 +420,62 @@ int main( int argc, char* argv[] )
 #endif
                     return 1;
                 }
+            },
+            {
+                "--driver-fd", "<N>",
+                "Serve the line-JSON agent driver protocol on inherited file descriptor N. Without a window unless --driver-windowed is also given.",
+                section_default,
+                [&driver_fd]( int num_args, const char **params ) -> int {
+                    if( num_args < 1 ) {
+                        return -1;
+                    }
+                    driver_fd = atoi( params[0] );
+                    // Stray stdout writes (cata_printf, SDL, RmlUi, Lua print) must never
+                    // reach the protocol channel: move stdout onto stderr.
+                    dup2( STDERR_FILENO, STDOUT_FILENO );
+                    return 1;
+                }
+            },
+            {
+                "--driver-windowed", "<WxH>",
+                "With --driver-fd, open a real, visible game window of this size in pixels, in a corner of the screen and without taking focus, instead of running windowless.",
+                section_default,
+                [&driver_windowed]( int num_args, const char **params ) -> int {
+                    if( num_args < 1 ) {
+                        return -1;
+                    }
+                    const std::optional<driver_window_size> size = parse_driver_window_size( params[0] );
+                    if( !size ) {
+                        return -1;
+                    }
+                    request_driver_window( *size );
+                    driver_windowed = true;
+                    return 1;
+                }
+            },
+            {
+                "--driver-deny-list", "<path>",
+                "Load the driver's deny list from this file instead of data/driver_deny_list.json.",
+                section_default,
+                [&driver_deny_list]( int num_args, const char **params ) -> int {
+                    if( num_args < 1 ) {
+                        return -1;
+                    }
+                    driver_deny_list = params[0];
+                    return 1;
+                }
+            },
+            {
+                "--driver-scenes", "<dir>",
+                "Look for the driver's run_scene Scenes in this directory instead of tools/visual_verify/scenes.",
+                section_default,
+                [&driver_scenes]( int num_args, const char **params ) -> int {
+                    if( num_args < 1 ) {
+                        return -1;
+                    }
+                    driver_scenes = params[0];
+                    return 1;
+                }
             }
         }
     };
@@ -599,6 +662,17 @@ int main( int argc, char* argv[] )
         }
     }
 
+    if( driver_windowed && driver_fd < 0 ) {
+        std::cerr << "driver: --driver-windowed requires --driver-fd\n";
+        return 1;
+    }
+    // The windowless driver takes the test_mode path, which skips the interface init. The
+    // windowed one must not: test_mode also makes frame production return early, so no frame
+    // would ever exist, and it skips the window the whole mode is for.
+    if( driver_fd >= 0 && !driver_windowed ) {
+        test_mode = true;
+    }
+
     preload_config::load();
 
     std::string current_path = std::filesystem::current_path().string();
@@ -752,11 +826,24 @@ int main( int argc, char* argv[] )
     // Must be after startup_lua_test() to avoid racing sol/luna global state.
     // Placed after lua-doc block to avoid spawning a thread that would
     // terminate the process on early exit (deno task docs:gen).
-    init::start_prewarm();
+    if( driver_fd < 0 ) {
+        // The driver never shows a menu; prewarm would only contend for CPU.
+        init::start_prewarm();
+    }
 
     // Now we do the actual game.
 
-    game_ui::init_ui();
+    if( driver_fd >= 0 && !driver_windowed ) {
+        // test_mode skipped init_interface: its display metrics are zero, so give the UI a
+        // fixed terminal size or game_ui::init_ui would write zeros into the options file.
+        FULL_SCREEN_WIDTH = TERMX = 80;
+        FULL_SCREEN_HEIGHT = TERMY = 24;
+        // init_colors normally runs inside init_interface; without it JSON colour names
+        // fail to parse and the world cannot load.
+        init_colors();
+    } else {
+        game_ui::init_ui();
+    }
 
     catacurses::curs_set( 0 ); // Invisible cursor here, because MAPBUFFER.load() is crash-prone
 
@@ -768,12 +855,40 @@ int main( int argc, char* argv[] )
     sigaction( SIGINT, &sigIntHandler, nullptr );
 #endif
 
-    prompt_select_lang_on_startup();
+    if( driver_fd < 0 ) {
+        prompt_select_lang_on_startup();
+    }
     replay_buffered_debugmsg_prompts();
+    if( driver_fd >= 0 && world.empty() ) {
+        std::cerr << "driver: --driver-fd requires --world\n";
+        return 1;
+    }
 
     while( true ) {
         if( !world.empty() ) {
-            if( !g->load( world ) ) { break; }
+            if( !g->load( world ) ) {
+                if( driver_fd >= 0 ) {
+                    std::cerr << "driver: world '" << world << "' failed to load\n";
+                    return 1;
+                }
+                break;
+            }
+            if( driver_fd >= 0 ) {
+                // The windowed driver draws the game itself, so the main UI must outlive it.
+                shared_ptr_fast<ui_adaptor> driver_ui;
+                if( driver_windowed ) {
+                    driver_ui = g->create_or_get_main_ui_adaptor();
+                }
+                const driver_options options = {
+                    .deny_list_path = driver_deny_list,
+                    .scenes_dir = driver_scenes,
+                    .windowed = driver_windowed,
+                };
+                if( !run_driver_loop( driver_fd, options ) ) {
+                    return 1;
+                }
+                exit_handler( 0 );
+            }
             world.clear(); // ensure quit returns to opening screen
 
         } else {

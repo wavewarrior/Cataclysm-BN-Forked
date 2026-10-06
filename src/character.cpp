@@ -32,6 +32,7 @@
 #include "debug.h"
 #include "detached_ptr.h"
 #include "disease.h"
+#include "driver_loop.h"
 #include "effect.h"
 #include "enchantments/enchantment.h"
 #include "event.h"
@@ -882,7 +883,12 @@ void Character::react_to_felt_pain( int intensity )
 
         pain_thresh = std::max( 1, pain_thresh );
 
-        if( intensity >= pain_thresh ) { wake_up(); }
+        if( intensity >= pain_thresh ) {
+            if( is_avatar() ) {
+                driver_note_interruption( "pain" );
+            }
+            wake_up();
+        }
     }
 }
 
