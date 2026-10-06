@@ -5,9 +5,16 @@ description: Use when asked to playtest, verify gameplay, drive or run the game,
 
 # bnplay: observe, act, verify
 
-`bnplay` (`tools/bnplay/`, Deno) boots the game windowless from a save fixture, serves it over a one-line-in, one-line-out JSON driver, and judges the run with oracles. The game stays resident between your calls; you pay the 7 to 10 s boot once per Episode. A **Trial** (TOML) defines the test, an **Episode** is one run of it, a **Scene** is a Lua setup script (see GLOSSARY.md).
+`bnplay` (`tools/bnplay/`, Deno) boots the game windowless from a save fixture, serves it over a one-line-in, one-line-out JSON driver, and judges the run with oracles.
 
-Same operations as a CLI and as MCP tools. Below, `bnplay <op>` means `deno task bnplay <op>` from the repo root: JSON result on stdout, failures as one `bnplay: <reason>` line on stderr with exit 2 (deno adds its own banner on stderr). MCP: `deno task bnplay mcp`; tools `start`, `step`, `stop`, `report`, `fixture_add`, `fixture_baseline`, `fixture_list`, `doctor`, `shutdown`; arguments named as below, `step` takes `session` and `command` (an object); a result is the same JSON, a refusal is a tool error, a verdict or `healthy:false` is a result.
+- The game stays resident between your calls; you pay the 7 to 10 s boot once per Episode.
+- **Trial** (TOML): defines the test. **Episode**: one run of it. **Scene**: a Lua setup script (see GLOSSARY.md).
+
+The same operations exist as a CLI and as MCP tools:
+
+- **CLI**: below, `bnplay <op>` means `deno task bnplay <op>` from the repo root. The result is JSON on stdout; a failure is one `bnplay: <reason>` line on stderr with exit 2 (deno adds its own banner on stderr).
+- **MCP**: `deno task bnplay mcp`. Tools: `start`, `step`, `stop`, `report`, `fixture_add`, `fixture_baseline`, `fixture_list`, `doctor`, `shutdown`. Arguments are named as below; `step` takes `session` and `command` (an object).
+- **MCP results**: the same JSON; a refusal is a tool error; a verdict or `healthy:false` is a result.
 
 ## Run an Episode
 
@@ -19,12 +26,13 @@ Each step is done when its stated output appears.
    ```toml
    fixture = "Bairdford"      # required
    seed = 7                   # reseeds the engine just before turn 0
-   turn_limit = 20            # Episode ends after this many game turns
+   start_date = "0001-03-10"  # optional: pins the game date, YYYY-SS-DD (see below)
+   time_of_day = "08:30"      # optional: pins the game time of day, HH:MM
+   turn_limit = 20            # Episode ends after this many game turns; checked after each request completes
    wall_clock_limit_s = 300   # hard cap enforced outside the game; default 300 counts from boot
    expected_commands = ["wait", "action:pause"]   # commands that must not be unsupported/no_effect
    attach_view = 3            # optional: a radius-3 view on every response
    scene = "lightone"         # optional: Lua Scene run before the first state
-   # start_date and time_of_day parse but the supervisor does not apply them yet: do not rely on them
 
    [[oracle]]                 # predicate over every observation; flat observation keys
    name = "stays alive"
@@ -34,17 +42,25 @@ Each step is done when its stated output appears.
    mode = "always"            # always (default) | never | by-turn-N (N game turns after the first state)
    severity = "fail"          # fail (default) | warn: warn never changes the exit code
    ```
-   Unknown fields are errors. Choose `wall_clock_limit_s` for the whole session including your thinking time.
+   - Unknown fields are errors. Choose `wall_clock_limit_s` for the whole session including your thinking time.
+   - `start_date` is `YYYY-SS-DD`: year from 0001, season 01 (spring) to 04 (winter), day of the season from 01 to the world's season length (91 by default). The game has no months.
+   - `start_date` and `time_of_day` set the game clock after the seed and before the first state (the driver's `set_time`). The turn counter jumps; nothing is simulated across the gap. One alone keeps the other (the day, or the time of day). A day past the season length fails the boot.
+   - `turn_limit` counts from the first state and is checked only after a request completes: a Trial that sends no request never reaches it (the wall clock still ends it). The request that crosses it is answered in full with `episode_ended: turn_limit`.
 4. **Start.** `bnplay start trial.toml` prints `{"session":"814f5a63","transcript":"...","boot_ms":7110}`. The session id is the handle for every later call. A start beyond the cap (2 sessions, `BNPLAY_MAX_SESSIONS`) is refused.
 5. **Step** until your question is answered: `bnplay step 814f5a63 '{"cmd":"wait","turns":3}'` prints one lean observation. Observe, act, check the `outcome`, repeat. Never send the next command before reading the previous outcome.
-6. **Stop.** `bnplay stop 814f5a63` ends the Episode (also reaps the game) and prints the report; its exit code is the verdict. `bnplay report <session>` re-reads it (also while running). The Episode may have ended on its own (`"episode_ended":"turn_limit"` or `"died"` in a response); `stop` still returns the report.
+6. **Stop.** `bnplay stop 814f5a63` ends the Episode (also reaps the game) and prints the report; its exit code is the verdict. `bnplay report <session>` re-reads it (also while running). The Episode may have ended on its own (`"episode_ended":"turn_limit"` or `"died"` in a response); `stop` still returns the report. The daemon remembers the last 20 ended sessions (`BNPLAY_ENDED_SESSIONS_KEPT`), so `report` fails with `no session` on an older one; its transcript stays on disk.
 7. **Clean up.** `bnplay shutdown` ends every Episode and the daemon when you are finished.
 
 Passing run (real output, trimmed): `{"session":"814f5a63","verdict":"pass","exit_code":0,"ended":"turn_limit","oracles":[{"name":"alive","result":"pass"},{"name":"game_log","result":"pass"},{"name":"turn_counter","result":"pass"},{"name":"commands","result":"pass"},{"name":"stays alive","result":"pass"}],"boot_ms":7110,"requests":20,"latency_ms":{"median":0.4,"max":98.6},"turns":{"first":1344365,"last":1344393},"transcript":"<dir>/transcript.jsonl","log":"<dir>/userdir/config/debug.log"}`
 
 ## Read the report
 
-- **Exit code** (of `stop` and `report`): `0` pass; `1` an oracle failed; `2` harness error (boot failure, game hung or died, idle reaper, daemon shutdown; also any bnplay refusal prints `bnplay: <reason>` and exits 2); `3` inconclusive (wall clock ended it before any decisive oracle).
+- **Exit code** (of `stop` and `report`):
+  - `0` pass.
+  - `1` an oracle failed.
+  - `2` harness error: boot failure, game hung or died, idle reaper, daemon shutdown. Any bnplay refusal prints `bnplay: <reason>` and exits 2.
+  - `3` inconclusive: no oracle has decided yet, or the wall clock ended the Episode with no oracle failed.
+  - A wall-clock ending is never `0`: `1` if any oracle failed, else `3`, however many oracles were already satisfied.
 - `oracles[]`: built-ins `alive` (answers in time), `game_log` (no new ERROR lines after ready versus the fixture baseline), `turn_counter` (never backwards, agrees with `time_passed`), `commands` (no `unsupported`/`no_effect` on `expected_commands`), plus yours. `result` is `pass`, `fail`, `warn`, `inconclusive` or `skipped`.
 - A failure carries `first_fail`: `{"index":3,"turn":1344365,"elapsed":0,"why":"stamina=10000, not stamina ge 10001"}`. `index` is the `id` of the request in the transcript: open `transcript` (JSONL, one `request` or `response` per line) and search `"id":3`. The transcript is the repro. The debug log at `log` holds the game's own errors.
 - Seed determinism is not guaranteed: same-seed Episodes sometimes diverge at the first world step. Assert invariants (outcome, `time_passed`, monotonic turn), never exact world state or RNG values. `bnplay doctor --self-check` runs an A/A pair and reports divergence next to load and swap.
@@ -69,6 +85,7 @@ Every request is `{"cmd":"<name>", ...}`; a malformed or unknown one answers `{"
 | `run_scene` | `name` (a `.lua` in `tools/visual_verify/scenes`, or `BNPLAY_SCENES`) | response has `scene: {status, lines}` |
 | `attach_view` | `radius` 0 to 10 (0 detaches) | |
 | `seed` | `seed` | |
+| `set_time` | `date` `YYYY-SS-DD` and/or `time` `HH:MM` | pins the game clock (a Trial's `start_date`, `time_of_day`); answers `turn`, `date`, `time`; refuses an impossible value |
 | `capture` | `tag`, `mode` `final` or `state` | windowed Episodes only |
 | `quit` | | prefer `bnplay stop` |
 
@@ -83,7 +100,7 @@ Every response: `id`, `status` (`ok` or `error`), `boundary` (`turn_complete` or
 | `outcome` | Meaning |
 |---|---|
 | `completed` | it happened (check `time_passed`) |
-| `blocked` | the world stopped it (a wall); no game time |
+| `blocked` | the move spent no time and did not change position: a wall, or a game message refusal such as "You can't walk through that" (`detail` or `new_messages` holds it) |
 | `refused` | the game rejected it; `detail` holds the game's message |
 | `no_effect` | accepted, nothing observable changed |
 | `awaiting_input` | a menu is open; see `prompt` |
@@ -100,7 +117,12 @@ Spend tokens only when the cheaper rung cannot answer: the lean `step` response;
 ## Traps
 
 - **The game has no instance lock.** Exit code 25 is the ordinary quit path, not a conflict signal, and two instances sharing a save corrupt it silently. Isolation is enforced by the **supervisor**, never by the game: every Episode gets its own `--userdir`, a copy-on-write clone of the fixture and a unique world name. Never launch the game by hand against a user directory or world that an Episode or an interactive game uses, and never point two sessions at the same userdir or world.
-- **External watchdog.** A request unanswered for 30 s (`BNPLAY_STEP_TIMEOUT_MS`) means a hung game: the supervisor kills it by process group and ends the Episode as a harness error (exit 2). The Trial's `wall_clock_limit_s` ends the Episode the same way from outside the game: exit 3 (inconclusive) unless an oracle had already decided. A session with no request for 10 minutes (`BNPLAY_IDLE_TIMEOUT_MS`) is reaped by process group; its transcript is kept, later `step` calls fail with `ended: idle_timeout`, `stop` still prints the report (exit 2). Always `stop` when done: a game holds about 1 GB and swap has run out on this machine before.
+- **External watchdog.**
+  - A request unanswered in time means a hung game: the supervisor kills it by process group and ends the Episode as a harness error (exit 2).
+  - The time allowed is `BNPLAY_STEP_TIMEOUT_MS` (30 s) plus `BNPLAY_TURN_TIMEOUT_MS` (100 ms) for every turn the request may spend, at most the 1000-turn cap: `state`, `seed`, `view`, `move` get 30 s; `wait` with `turns: 1000` gets 130 s. The turns it may spend are its `turns` or `max_turns`, else the whole cap for a command that can run the world (`action`, `sleep`, `craft`, `key`, item and combat commands). A `wait` of 1001 turns therefore returns `interrupted`, `turn_cap`; it is not a hang.
+  - The Trial's `wall_clock_limit_s` ends the Episode the same way from outside the game: exit 1 if an oracle had failed, else 3 (inconclusive), never 0.
+  - A session with no request for 10 minutes (`BNPLAY_IDLE_TIMEOUT_MS`) is reaped by process group. Its transcript is kept, later `step` calls fail with `ended: idle_timeout`, and `stop` still prints the report (exit 2).
+  - Always `stop` when done: a game holds about 1 GB and swap has run out on this machine before.
 - **Modal debug prompts block forever.** A mod-heavy world raises thousands of JSON debug prompts; the driver is always started with `--dont-debugmsg`. Never start the game any other way unattended.
 - **ESC on the main menu quits.** In an interactive launch, `ESC` opens "Really quit?" and a later Enter accepts: the game exits cleanly and looks exactly like a crash. The driver has no main menu (`--world` loads straight in; `key` with no menu open is an error), so this bites only the fallback workflows below.
 - **A stale binary produces phantom diagnoses.** Run `doctor` before trusting any Episode; rebuild when it says the binary predates `src/`. A copied binary gets a new mtime and passes the check: copy only fresh builds.
@@ -131,4 +153,20 @@ factor = 2             # effect must exceed factor x the null's noise
 
 ## Configuration
 
-Environment of the process that starts the daemon (set before the first `bnplay` call; `bnplay shutdown` first to change it): `BNPLAY_BINARY`, `BNPLAY_BASEPATH`, `BNPLAY_HOME`, `BNPLAY_FIXTURES`, `BNPLAY_SCENES`, `BNPLAY_BOOT_TIMEOUT_MS` (60000), `BNPLAY_STEP_TIMEOUT_MS` (30000), `BNPLAY_MAX_SESSIONS` (2), `BNPLAY_IDLE_TIMEOUT_MS` (600000), `BNPLAY_MIN_FREE_MEMORY_MB`, `BNPLAY_MIN_FREE_SWAP_MB`. Full list: header of `tools/bnplay/config.ts`. Tests: `deno task test:bnplay`.
+Environment of the process that starts the daemon. Set it before the first `bnplay` call; run `bnplay shutdown` first to change it. Full list: header of `tools/bnplay/config.ts`. Tests: `deno task test:bnplay`.
+
+| Variable | Default | Sets |
+|---|---|---|
+| `BNPLAY_BINARY` | `out/build/osx-arm-slim/src/cataclysm-bn-tiles` | game binary |
+| `BNPLAY_BASEPATH` | this repo | checkout whose `data/` and `src/` the binary was built from |
+| `BNPLAY_HOME` | `out/bnplay` | daemon state: socket, one directory per Episode |
+| `BNPLAY_FIXTURES` | `tools/bnplay/fixtures` | fixture library |
+| `BNPLAY_SCENES` | `tools/visual_verify/scenes` | where `run_scene` and a Trial's `scene` find Scenes |
+| `BNPLAY_BOOT_TIMEOUT_MS` | 60000 | first ping |
+| `BNPLAY_STEP_TIMEOUT_MS` | 30000 | a request that spends no game time |
+| `BNPLAY_TURN_TIMEOUT_MS` | 100 | extra time per turn a request may spend |
+| `BNPLAY_MAX_SESSIONS` | 2 | concurrent Episodes |
+| `BNPLAY_ENDED_SESSIONS_KEPT` | 20 | ended sessions `report` still knows |
+| `BNPLAY_IDLE_TIMEOUT_MS` | 600000 | idle reaper |
+| `BNPLAY_MIN_FREE_MEMORY_MB` | 1024 | `doctor` memory floor |
+| `BNPLAY_MIN_FREE_SWAP_MB` | 1024 | `doctor` swap floor |

@@ -317,7 +317,7 @@ to end and lists the traps (one game per user directory, binary freshness, the w
   (excluded by default; a bare `"[json]"` filter opts them IN) and expect a debugmsg they never get,
   because `text_style_check()` is only wired into `tools/clang-tidy-plugin/TextStyleCheck.cpp`, never
   into the runtime JSON reader. Do not attribute these to your change.
-- **Domain tags**: Tests are tagged by domain — `[item]`, `[melee]`, `[json]`, `[coop]`, `[calendar]`, `[map]`, `[vehicle]`, etc. Filter with `"[tag]"` to run only relevant tests.
+- **Domain tags**: Tests are tagged by domain — `[item]`, `[melee]`, `[json]`, `[coop]`, `[driver]` (the agent driver, `src/driver_*.cpp`), `[calendar]`, `[map]`, `[vehicle]`, etc. Filter with `"[tag]"` to run only relevant tests.
 - **Slow tests**: Tagged `[.]` and excluded by default. Include them with `"~[.]"` or explicitly.
 - **Helper modules**:
   - `tests/map_helpers.h` — `build_test_map`, `spawn_test_monster`, and map manipulation utilities.
