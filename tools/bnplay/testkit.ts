@@ -8,6 +8,22 @@ export const REPO = dirname(dirname(here))
 export const MOCK_DRIVER = join(here, "mock_driver.py")
 const MAIN = join(here, "main.ts")
 
+/** Arguments of the `deno` process that runs `bnplay <args>`. */
+export function bnplayDenoArgs(args: string[]): string[] {
+  return [
+    "run",
+    "--allow-run",
+    "--allow-read",
+    "--allow-net",
+    "--allow-write",
+    "--allow-env",
+    "--config",
+    join(REPO, "deno.jsonc"),
+    MAIN,
+    ...args,
+  ]
+}
+
 export type CliResult = { code: number; stdout: string; stderr: string }
 
 export type Sandbox = {
@@ -69,18 +85,7 @@ export async function makeSandbox(opts: SandboxOptions = {}): Promise<Sandbox> {
     env,
     async cli(args, extra) {
       const out = await new Deno.Command(Deno.execPath(), {
-        args: [
-          "run",
-          "--allow-run",
-          "--allow-read",
-          "--allow-net",
-          "--allow-write",
-          "--allow-env",
-          "--config",
-          join(REPO, "deno.jsonc"),
-          MAIN,
-          ...args,
-        ],
+        args: bnplayDenoArgs(args),
         cwd: dir,
         env: { ...env, ...extra },
         clearEnv: false,
