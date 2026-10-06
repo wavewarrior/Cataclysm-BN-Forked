@@ -347,6 +347,7 @@ async function selfCheckEpisode(
     wallClockLimitS: Math.ceil((config.bootTimeoutMs + config.selfCheckIdleMs) / 1000) + 60,
     expectedCommands: [],
     oracles: [],
+    rendererOracles: [],
   })
   const observations: Observation[] = []
   try {

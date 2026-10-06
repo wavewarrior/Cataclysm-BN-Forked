@@ -5,6 +5,7 @@
  * never silently becomes a default.
  */
 import { parse } from "@std/toml"
+import type { Region } from "./frames.ts"
 
 export class TrialError extends Error {
   constructor(message: string) {
@@ -60,6 +61,11 @@ export type Trial = {
   expectedCommands: string[]
   /** Predicates evaluated over the observation stream, besides the built-in checks. */
   oracles: OracleSpec[]
+  /**
+   * Oracles over the captured frames of a windowed Trial: a toggled state judged against a paired
+   * same-state null.
+   */
+  rendererOracles: RendererOracleSpec[]
 }
 
 export const ORACLE_OPERATORS = ["eq", "ne", "lt", "le", "gt", "ge", "contains"] as const
@@ -83,8 +89,43 @@ export type OracleSpec = {
   severity: "fail" | "warn"
 }
 
+/**
+ * `paired_null`: two captures of the same state, which must differ by no more than `max_noise`.
+ * `diff_vs_null`: a toggled state must differ from the original by more than `factor` times that
+ * noise. `triplet`: as `diff_vs_null`, and the restored state must match the original again
+ * (1 -> 0 -> 1).
+ */
+export const RENDERER_KINDS = ["paired_null", "diff_vs_null", "triplet"] as const
+export type RendererKind = typeof RENDERER_KINDS[number]
+
+/**
+ * A capture oracle. Frames are picked by the `tag` the agent gives each `capture`: the first two
+ * captures tagged `original` are the reference and its paired null, the first tagged `toggled` and
+ * the first tagged `restored` are the other states. Every number is a frame delta (see
+ * frames.ts): the mean absolute colour difference, 0 identical to 1 black against white.
+ */
+export type RendererOracleSpec = {
+  name: string
+  kind: RendererKind
+  original: string
+  toggled?: string
+  restored?: string
+  /** An effect must exceed this many times the paired null's noise. */
+  factor: number
+  /** A `paired_null` oracle fails when its two captures differ by more than this. */
+  maxNoise: number
+  /** Compare only this part of the frame, as fractions of its size. */
+  region?: Region
+  /**
+   * A game message that must be logged before a capture of a state other than the previous
+   * capture's: the game says it has settled, so readiness never rests on the pixels.
+   */
+  ready?: string
+  severity: "fail" | "warn"
+}
+
 /** Names the built-in checks report under; a Trial oracle may not reuse them. */
-export const BUILT_IN_ORACLES = ["alive", "game_log", "turn_counter", "commands"]
+export const BUILT_IN_ORACLES = ["alive", "game_log", "turn_counter", "commands", "window_size"]
 
 /** Wall-clock limit applied when a Trial does not set one: an Episode never runs unbounded. */
 export const DEFAULT_WALL_CLOCK_LIMIT_S = 300
@@ -105,6 +146,26 @@ const FIELDS = [
 ]
 
 const ORACLE_FIELDS = ["name", "field", "operator", "value", "mode", "severity"]
+
+const RENDERER_FIELDS = [
+  "name",
+  "kind",
+  "original",
+  "toggled",
+  "restored",
+  "factor",
+  "max_noise",
+  "region",
+  "ready",
+  "severity",
+]
+
+/** What a capture tag may look like: the agent writes it in `capture` requests. */
+export const CAPTURE_TAG = /^[A-Za-z0-9_-]+$/
+
+/** Defaults of a capture oracle: twice the noise, and a null no noisier than this. */
+const DEFAULT_FACTOR = 2
+const DEFAULT_MAX_NOISE = 0.02
 
 /** What a fixture name may look like: it names a directory in the fixture library. */
 export const FIXTURE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
@@ -166,16 +227,116 @@ function windowOf(table: Record<string, unknown>): WindowSize | undefined {
   return { width, height }
 }
 
-function oracleSpecs(raw: unknown): OracleSpec[] {
-  if (raw === undefined) return []
+function rendererSpec(table: Record<string, unknown>, where: string): RendererOracleSpec {
+  for (const key of Object.keys(table)) {
+    if (!RENDERER_FIELDS.includes(key)) {
+      fail(`${where} field \`${key}\``, `is unknown (known: ${RENDERER_FIELDS.join(", ")})`)
+    }
+  }
+  const kind = table.kind as RendererKind
+  if (!RENDERER_KINDS.includes(kind)) {
+    fail(`${where} kind`, `must be one of ${RENDERER_KINDS.join(", ")}`)
+  }
+  const tag = (key: string): string | undefined => {
+    const value = table[key]
+    if (value === undefined) return undefined
+    if (typeof value !== "string" || !CAPTURE_TAG.test(value)) {
+      fail(`${where} ${key}`, "must be a capture tag (letters, digits, `_` and `-`)")
+    }
+    return value
+  }
+  const original = tag("original")
+  if (original === undefined) {
+    fail(`${where} original`, "is required: the tag of the original state")
+  }
+  const toggled = tag("toggled")
+  const restored = tag("restored")
+  if (kind === "paired_null") {
+    if (toggled !== undefined) fail(`${where} toggled`, "means nothing to a paired_null oracle")
+  } else if (toggled === undefined) {
+    fail(`${where} toggled`, `is required by a ${kind} oracle: the tag of the toggled state`)
+  }
+  if (kind === "triplet") {
+    if (restored === undefined) {
+      fail(`${where} restored`, "is required by a triplet oracle: the tag of the restored state")
+    }
+  } else if (restored !== undefined) {
+    fail(`${where} restored`, `means nothing to a ${kind} oracle`)
+  }
+
+  const factor = table.factor ?? DEFAULT_FACTOR
+  if (typeof factor !== "number" || !Number.isFinite(factor) || factor < 1) {
+    fail(`${where} factor`, "must be a number of at least 1")
+  }
+  const maxNoise = table.max_noise ?? DEFAULT_MAX_NOISE
+  if (typeof maxNoise !== "number" || !(maxNoise >= 0 && maxNoise <= 1)) {
+    fail(`${where} max_noise`, "must be a number from 0 to 1 (a share of the colour range)")
+  }
+
+  let region: Region | undefined
+  if (table.region !== undefined) {
+    const r = table.region
+    const ok = Array.isArray(r) && r.length === 4 && r.every((n) => typeof n === "number") &&
+      r[0] >= 0 && r[1] >= 0 && r[2] > 0 && r[3] > 0 && r[0] + r[2] <= 1 && r[1] + r[3] <= 1
+    if (!ok) {
+      fail(`${where} region`, "must be [x, y, width, height], fractions of the frame inside 0..1")
+    }
+    region = r as Region
+  }
+  if (table.ready !== undefined && (typeof table.ready !== "string" || table.ready === "")) {
+    fail(`${where} ready`, "must be a non-empty message text")
+  }
+  if (table.severity !== undefined && table.severity !== "fail" && table.severity !== "warn") {
+    fail(`${where} severity`, 'must be "fail" or "warn"')
+  }
+  const name = table.name ?? `${kind}: ${original}`
+  if (typeof name !== "string" || name === "") fail(`${where} name`, "must be a non-empty string")
+  return {
+    name,
+    kind,
+    original,
+    ...(toggled === undefined ? {} : { toggled }),
+    ...(restored === undefined ? {} : { restored }),
+    factor,
+    maxNoise,
+    ...(region === undefined ? {} : { region }),
+    ...(table.ready === undefined ? {} : { ready: table.ready as string }),
+    severity: table.severity === "warn" ? "warn" : "fail",
+  }
+}
+
+/** The two kinds of `[[oracle]]` table: predicates over the stream, and capture oracles. */
+function oracleSpecs(
+  raw: unknown,
+  windowed: boolean,
+): { oracles: OracleSpec[]; rendererOracles: RendererOracleSpec[] } {
+  if (raw === undefined) return { oracles: [], rendererOracles: [] }
   if (!Array.isArray(raw)) fail("oracle", "must be a list of `[[oracle]]` tables")
   const specs: OracleSpec[] = []
+  const renderer: RendererOracleSpec[] = []
+  const taken = (name: string) =>
+    BUILT_IN_ORACLES.includes(name) || specs.some((s) => s.name === name) ||
+    renderer.some((s) => s.name === name)
   for (const [i, entry] of raw.entries()) {
     const where = `oracle ${i + 1}`
     if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
       fail("oracle", "must be a list of `[[oracle]]` tables")
     }
     const table = entry as Record<string, unknown>
+    if ("kind" in table) {
+      if (!windowed) {
+        fail(
+          `${where} kind`,
+          'is a capture oracle, which needs a windowed Trial (mode = "windowed")',
+        )
+      }
+      const spec = rendererSpec(table, where)
+      if (taken(spec.name)) {
+        fail(`${where} name`, `\`${spec.name}\` is already taken by another oracle`)
+      }
+      renderer.push(spec)
+      continue
+    }
     for (const key of Object.keys(table)) {
       if (!ORACLE_FIELDS.includes(key)) {
         fail(`${where} field \`${key}\``, `is unknown (known: ${ORACLE_FIELDS.join(", ")})`)
@@ -210,9 +371,7 @@ function oracleSpecs(raw: unknown): OracleSpec[] {
       ? `${modeText}: ${table.field} ${operator} ${value}`
       : table.name
     if (typeof name !== "string" || name === "") fail(`${where} name`, "must be a non-empty string")
-    if (BUILT_IN_ORACLES.includes(name) || specs.some((s) => s.name === name)) {
-      fail(`${where} name`, `\`${name}\` is already taken by another oracle`)
-    }
+    if (taken(name)) fail(`${where} name`, `\`${name}\` is already taken by another oracle`)
     specs.push({
       name,
       field: table.field,
@@ -222,7 +381,7 @@ function oracleSpecs(raw: unknown): OracleSpec[] {
       severity: table.severity === "warn" ? "warn" : "fail",
     })
   }
-  return specs
+  return { oracles: specs, rendererOracles: renderer }
 }
 
 export function parseTrial(source: string): Trial {
@@ -262,6 +421,7 @@ export function parseTrial(source: string): Trial {
   }
 
   const window = windowOf(table)
+  const { oracles, rendererOracles } = oracleSpecs(table.oracle, window !== undefined)
 
   return {
     fixture,
@@ -289,6 +449,7 @@ export function parseTrial(source: string): Trial {
     ),
     ...(window ? { window } : {}),
     expectedCommands: (expected as string[] | undefined) ?? [],
-    oracles: oracleSpecs(table.oracle),
+    oracles,
+    rendererOracles,
   }
 }

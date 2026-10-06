@@ -33,6 +33,7 @@ Deno.test("a full Trial parses every field", () => {
     scene: "lightone",
     expectedCommands: [],
     oracles: [],
+    rendererOracles: [],
   })
 })
 
@@ -212,4 +213,109 @@ Deno.test("a fixture name cannot escape the fixture library", () => {
 
 Deno.test("text that is not TOML is rejected with a Trial error", () => {
   assertThrows(() => parseTrial(`fixture = = oops`), TrialError)
+})
+
+const WINDOWED = `fixture = "a"\nmode = "windowed"\n`
+
+Deno.test("capture oracles parse with the defaults a renderer Trial wants", () => {
+  const trial = parseTrial(
+    `${WINDOWED}
+     [[oracle]]
+     kind = "triplet"
+     original = "on"
+     toggled = "off"
+     restored = "on-again"
+     [[oracle]]
+     kind = "diff_vs_null"
+     name = "glow"
+     original = "on"
+     toggled = "off"
+     factor = 3
+     region = [0, 0.5, 0.5, 0.25]
+     ready = "lighting settled"
+     severity = "warn"
+     [[oracle]]
+     kind = "paired_null"
+     original = "on"
+     max_noise = 0.01
+     [[oracle]]
+     field = "hp"
+     operator = "gt"
+     value = 0`,
+  )
+  assertEquals(trial.oracles.length, 1)
+  assertEquals(trial.rendererOracles, [
+    {
+      name: "triplet: on",
+      kind: "triplet",
+      original: "on",
+      toggled: "off",
+      restored: "on-again",
+      factor: 2,
+      maxNoise: 0.02,
+      severity: "fail",
+    },
+    {
+      name: "glow",
+      kind: "diff_vs_null",
+      original: "on",
+      toggled: "off",
+      factor: 3,
+      maxNoise: 0.02,
+      region: [0, 0.5, 0.5, 0.25],
+      ready: "lighting settled",
+      severity: "warn",
+    },
+    {
+      name: "paired_null: on",
+      kind: "paired_null",
+      original: "on",
+      factor: 2,
+      maxNoise: 0.01,
+      severity: "fail",
+    },
+  ])
+})
+
+Deno.test("a capture oracle needs a windowed Trial", () => {
+  const err = assertThrows(
+    () => parseTrial(`fixture = "a"\n[[oracle]]\nkind = "paired_null"\noriginal = "on"`),
+    TrialError,
+  )
+  assertEquals(err.message.includes("windowed"), true, err.message)
+})
+
+Deno.test("malformed capture oracles are rejected and the error says which part is wrong", () => {
+  const base = `${WINDOWED}[[oracle]]\n`
+  for (
+    const [expected, body] of [
+      ["kind", `kind = "sparkle"\noriginal = "on"`],
+      ["original", `kind = "paired_null"`],
+      ["original", `kind = "paired_null"\noriginal = "has space"`],
+      ["toggled", `kind = "diff_vs_null"\noriginal = "on"`],
+      ["toggled", `kind = "triplet"\noriginal = "on"\nrestored = "on2"`],
+      ["restored", `kind = "triplet"\noriginal = "on"\ntoggled = "off"`],
+      ["toggled", `kind = "paired_null"\noriginal = "on"\ntoggled = "off"`],
+      ["restored", `kind = "diff_vs_null"\noriginal = "on"\ntoggled = "off"\nrestored = "on"`],
+      ["factor", `kind = "paired_null"\noriginal = "on"\nfactor = 0.5`],
+      ["max_noise", `kind = "paired_null"\noriginal = "on"\nmax_noise = 2`],
+      ["region", `kind = "paired_null"\noriginal = "on"\nregion = [0, 0, 1]`],
+      ["region", `kind = "paired_null"\noriginal = "on"\nregion = [0.5, 0, 0.75, 1]`],
+      ["region", `kind = "paired_null"\noriginal = "on"\nregion = [0, 0, 0, 1]`],
+      ["ready", `kind = "paired_null"\noriginal = "on"\nready = ""`],
+      ["field", `kind = "paired_null"\noriginal = "on"\nfield = "hp"`],
+      ["severity", `kind = "paired_null"\noriginal = "on"\nseverity = "error"`],
+      ["name", `kind = "paired_null"\noriginal = "on"\nname = "window_size"`],
+    ] as const
+  ) {
+    const err = assertThrows(() => parseTrial(base + body), TrialError, undefined, body)
+    assertEquals(err.message.includes(expected), true, `${body} -> ${err.message}`)
+  }
+  const same = `${base}kind = "paired_null"\noriginal = "on"\nname = "x"\n` +
+    `[[oracle]]\nkind = "paired_null"\noriginal = "off"\nname = "x"`
+  assertThrows(() => parseTrial(same), TrialError, "already taken")
+  // A predicate and a capture oracle share one namespace of report names.
+  const mixed = `${base}kind = "paired_null"\noriginal = "on"\nname = "x"\n` +
+    `[[oracle]]\nfield = "hp"\noperator = "eq"\nvalue = 1\nname = "x"`
+  assertThrows(() => parseTrial(mixed), TrialError, "already taken")
 })

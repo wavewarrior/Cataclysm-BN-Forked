@@ -64,6 +64,7 @@ export async function captureBaseline(
       SHUTDOWN_ALLOWANCE_S,
     expectedCommands: [],
     oracles: [],
+    rendererOracles: [],
   })
   let quitAt = Date.now()
   try {
