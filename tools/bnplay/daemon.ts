@@ -81,7 +81,14 @@ class Daemon {
         if (request.op === "shutdown") await shutdown()
       }
     } catch (e) {
-      this.#log(`connection failed: ${(e as Error).message}`)
+      if (
+        e instanceof Deno.errors.BrokenPipe || e instanceof Deno.errors.ConnectionReset ||
+        e instanceof Deno.errors.NotConnected
+      ) {
+        this.#log(`client hung up: ${e.message}`) // a CLI that timed out and left; expected
+      } else {
+        this.#log(`connection failed: ${(e as Error).message}`)
+      }
     } finally {
       try {
         writer.releaseLock()
