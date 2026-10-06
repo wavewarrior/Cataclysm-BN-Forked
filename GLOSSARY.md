@@ -111,3 +111,17 @@ _Avoid_: event handler, delta codec
 **Rollback**:
 Undoing recent world events in reverse order to return a map to an earlier tick after the two players' worlds disagree.
 _Avoid_: rewind, revert
+
+## Agent playtesting
+
+**Trial**:
+The declarative definition of a playtest: the save fixture to load, the pinned seed, start date and time-of-day, mod set, an optional scene, an optional scripted action prefix, and the end conditions.
+_Avoid_: scenario (collides with the game's start scenario, `class scenario`), test case, script (ambiguous with `.vv` files and Lua)
+
+**Episode**:
+One execution of a Trial, with its own private user directory and its own report.
+_Avoid_: run, session
+
+**Scene**:
+A Lua setup fixture that a Trial may reference, used to place terrain, monsters and items before or during an Episode.
+_Avoid_: map setup, fixture (a fixture here means a save)
