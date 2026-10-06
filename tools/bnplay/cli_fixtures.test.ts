@@ -316,7 +316,7 @@ Deno.test("fixture list flags a baseline stale once the fixture or its mod set c
 })
 
 Deno.test("fixture baseline fails clearly and records nothing when it cannot get one", async () => {
-  await withLoggedSave(NOISY, async (sandbox, save) => {
+  await withLoggedSave(NOISY, async (sandbox) => {
     const unknown = await baseline(sandbox, "nothing-here")
     assertEquals(unknown.code, 2)
     assert(unknown.stderr.includes("nothing-here"), unknown.stderr)

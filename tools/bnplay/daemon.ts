@@ -4,9 +4,9 @@
  * fixture library operations and shutdown.
  */
 import { join } from "@std/path"
+import { captureBaseline } from "./baseline.ts"
 import { type Config, loadConfig, socketPath } from "./config.ts"
 import { Episode, HarnessError } from "./episode.ts"
-import { captureBaseline } from "./baseline.ts"
 import { addFixture, fixtureStatus, listFixtures } from "./fixtures.ts"
 import { type DaemonReply, type DaemonRequest, daemonRunning, readLines } from "./ipc.ts"
 import { parseTrial, TrialError } from "./trial.ts"

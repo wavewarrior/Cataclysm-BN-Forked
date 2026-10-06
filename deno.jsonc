@@ -32,7 +32,7 @@
       "command": "deno test --allow-run --allow-env --allow-read --allow-write --allow-net tools/bnplay/",
     },
     "bnplay": {
-      "description": "agent playtest supervisor: start, step and stop Episodes (see tools/bnplay/main.ts)",
+      "description": "agent playtest supervisor: start, step and stop Episodes, manage the fixture library (see tools/bnplay/main.ts)",
       "command": "deno run --allow-run --allow-env --allow-read --allow-write --allow-net tools/bnplay/main.ts",
     },
   },
