@@ -22,6 +22,7 @@
 #include "avatar.h"
 #include "calendar.h"
 #include "coop_fiber.h"
+#include "driver_items.h"
 #include "driver_message_delta.h"
 #include "fstream_utils.h"
 #include "game.h"
@@ -187,12 +188,15 @@ auto take_snapshot() -> snapshot
 }
 
 /// Observation response: the contract's common payload. Reads the world, never advances it.
-auto observation_line( int id, const snapshot &before, const action_result &result ) -> std::string
+/// `payload` adds members of its own to the response (a query's answer) and says whether it had
+/// to cut something to stay within the size ceiling.
+auto observation_line( int id, const snapshot &before, const action_result &result,
+                       const std::function<bool( JsonOut & )> &payload = nullptr ) -> std::string
 {
     const avatar &u = get_avatar();
     message_delta delta = compute_message_delta( before.messages, log_window() );
     const bool capped = cap_messages( delta.fresh, max_new_messages, max_message_bytes );
-    const bool truncated = delta.lost || capped;
+    bool truncated = delta.lost || capped;
     // Death ends the Episode, so it outranks whatever the action itself reported.
     const bool dead = u.is_dead_state();
 
@@ -221,6 +225,9 @@ auto observation_line( int id, const snapshot &before, const action_result &resu
     jo.member( "stamina", u.get_stamina() );
     jo.member( "hunger", u.get_stored_kcal() );
     jo.member( "thirst", u.get_thirst() );
+    if( payload ) {
+        truncated |= payload( jo );
+    }
     jo.member( "outcome", std::string( dead ? "died" : result.outcome ) );
     if( !dead && ( result.outcome == "interrupted" || result.outcome == "unsupported" ) ) {
         jo.member( "reason", std::string( result.reason ) );
@@ -292,6 +299,17 @@ auto prime_modal( const std::string &action ) -> bool
     return true;
 }
 
+/// A world saved mid-turn leaves the avatar without moves: the first action completes
+/// that partial turn before it can act.
+void complete_partial_turn( int &turn_budget )
+{
+    avatar &u = get_avatar();
+    while( u.moves <= 0 && turn_budget > 0 && !u.is_dead_state() ) {
+        g->post_action_world_step();
+        --turn_budget;
+    }
+}
+
 /// Hands one action to the game as if its key was pressed, then lets the world respond.
 /// An action that spends no moves (a blocked move, a cancelled menu) does not advance the world,
 /// and one that opens a screen waits for its answer first: see `modal`.
@@ -299,12 +317,7 @@ auto perform_action( const std::string &action, int &turn_budget ) -> step_repor
 {
     avatar &u = get_avatar();
     const int budget_before = turn_budget;
-    // A world saved mid-turn leaves the avatar without moves: the first action completes
-    // that partial turn before it can act.
-    while( u.moves <= 0 && turn_budget > 0 && !u.is_dead_state() ) {
-        g->post_action_world_step();
-        --turn_budget;
-    }
+    complete_partial_turn( turn_budget );
     step_report report;
     report.safe_mode_stopped = g->safe_mode == SAFE_MODE_STOP;
     if( u.moves > 0 && !u.is_dead_state() ) {
@@ -320,11 +333,53 @@ auto perform_action( const std::string &action, int &turn_budget ) -> step_repor
     return report;
 }
 
+/// An item command, run on the avatar directly: the game's own checks and costs, no menu. What
+/// it spent in moves lets the world advance, as after any other action. A rejection costs
+/// nothing and carries the game's message.
+auto run_item( driver_items::command kind, const safe_reference<item> &target,
+               const snapshot &before ) -> action_result
+{
+    avatar &u = get_avatar();
+    int budget = max_turns_per_request;
+    complete_partial_turn( budget );
+    driver_items::command_result done = { .outcome = "refused", .detail = "the avatar cannot act" };
+    const int moves_before = u.moves;
+    if( u.moves > 0 && !u.is_dead_state() ) {
+        done = driver_items::run_command( kind, target );
+    }
+    const bool spent = u.moves < moves_before;
+    if( spent ) {
+        advance_to_turn_boundary( budget );
+    }
+    action_result result = { .time_passed = spent || budget < max_turns_per_request,
+                             .outcome = done.outcome, .reason = done.reason,
+                             .detail = std::move( done.detail )
+                           };
+    if( result.outcome == "refused" && result.detail.empty() ) {
+        // The game rejected it with a message of its own: report that one.
+        const std::vector<std::string> said = compute_message_delta( before.messages, log_window() ).fresh;
+        result.detail = said.empty() ? "the game would not do that" : said.back();
+    }
+    return result;
+}
+
 /// `dir` is a compass point or `up`/`down`; empty when it is none of them.
 auto move_action_name( const std::string &dir ) -> std::string
 {
     static const std::vector<std::string> known = { "n", "ne", "e", "se", "s", "sw", "w", "nw", "up", "down" };
     return std::ranges::find( known, dir ) == known.end() ? std::string() : "move_" + dir;
+}
+
+/// The item command a request names, if it names one.
+auto item_command_named( const std::string &name ) -> std::optional<driver_items::command>
+{
+    using driver_items::command;
+    static const std::map<std::string, command> known = {
+        { "pickup", command::pickup }, { "drop", command::drop }, { "wield", command::wield },
+        { "wear", command::wear }, { "take_off", command::take_off },
+    };
+    const auto found = known.find( name );
+    return found == known.end() ? std::nullopt : std::make_optional( found->second );
 }
 
 auto run_move( const std::string &action, const snapshot &before ) -> action_result
@@ -513,7 +568,8 @@ auto run_driver_loop( int fd, const std::string &deny_list_path ) -> bool
             jo.allow_omitted_members();
             id = jo.get_int( "id" );
             const std::string cmd = jo.get_string( "cmd" );
-            if( modal && ( cmd == "move" || cmd == "wait" || cmd == "action" ) ) {
+            const std::optional<driver_items::command> item_kind = item_command_named( cmd );
+            if( modal && ( cmd == "move" || cmd == "wait" || cmd == "action" || item_kind ) ) {
                 write_all( fd, error_line( id, "a menu is open (prompt '" + modal->prompt +
                                            "'): answer it with key" ) );
                 continue;
@@ -567,6 +623,27 @@ auto run_driver_loop( int fd, const std::string &deny_list_path ) -> bool
                 const snapshot before = take_snapshot();
                 write_all( fd, observation_line( *id, before, guarded( before, [&]() {
                     return run_key( *evt, before );
+                } ) ) );
+            } else if( cmd == "query" ) {
+                const std::string topic = jo.get_string( "topic" );
+                if( !driver_items::is_query_topic( topic ) ) {
+                    write_all( fd, error_line( id, "unknown topic '" + topic +
+                                               "': query takes inventory or effects" ) );
+                    continue;
+                }
+                write_all( fd, observation_line( *id, take_snapshot(), modal_result(),
+                [&]( JsonOut & out ) {
+                    return driver_items::write_query( out, topic );
+                } ) );
+            } else if( item_kind ) {
+                const driver_items::found_item found = driver_items::find_item( jo.get_string( "item" ) );
+                if( !found.error.empty() ) {
+                    write_all( fd, error_line( id, found.error ) );
+                    continue;
+                }
+                const snapshot before = take_snapshot();
+                write_all( fd, observation_line( *id, before, guarded( before, [&]() {
+                    return run_item( *item_kind, found.ref, before );
                 } ) ) );
             } else if( cmd == "seed" ) {
                 const std::optional<int64_t> seed = whole_number( jo, "seed", 0,
