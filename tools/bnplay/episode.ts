@@ -71,6 +71,8 @@ export class Episode {
   readyAt = 0
   /** The game's debug.log; the game flushes it as it exits, so read it after the Episode ends. */
   readonly debugLogPath: string
+  /** Where this Episode's captures go: `capture` writes under it, whatever the agent asked for. */
+  readonly capturesPath: string
 
   readonly #config: Config
   readonly #trial: Trial
@@ -91,6 +93,8 @@ export class Episode {
   /** The request being answered: requests of one Episode never overlap. */
   #current?: { request: DriverRequest; began: number }
   #failure?: ReportInput["failure"]
+  /** True once a capture wrote a frame, so the report names the directory. */
+  #captured = false
   /** When the quit request was sent, or the Episode was killed: the end of the log window. */
   #endedAt?: number
 
@@ -104,6 +108,7 @@ export class Episode {
     this.#userdir = join(this.#dir, "userdir")
     this.transcriptPath = join(this.#dir, "transcript.jsonl")
     this.debugLogPath = join(this.#userdir, "config", "debug.log")
+    this.capturesPath = join(this.#dir, "captures")
     this.#transcript = new Transcript(this.transcriptPath)
   }
 
@@ -206,7 +211,7 @@ export class Episode {
       this.#assertLive()
       let response: DriverResponse
       try {
-        response = await this.#driver!.send(request)
+        response = await this.#driver!.send(this.#withCapturesDir(request))
       } catch (e) {
         if (this.ended) this.#assertLive()
         if (e instanceof DriverTimeout) {
@@ -231,6 +236,11 @@ export class Episode {
       }
       return response
     })
+  }
+
+  /** A `capture` always writes into the Episode's own directory, never where the agent points. */
+  #withCapturesDir(request: DriverRequest): DriverRequest {
+    return request.cmd === "capture" ? { ...request, dir: this.capturesPath } : request
   }
 
   /** True once the game turn counter has moved as far as the Trial's turn limit allows. */
@@ -294,6 +304,7 @@ export class Episode {
       oracles: this.#oracles,
       requests: this.#requests,
       failure: this.#failure,
+      captures: this.#captured ? this.capturesPath : undefined,
     }
   }
 
@@ -314,6 +325,9 @@ export class Episode {
       timing.ms = performance.now() - began
       timing.answeredAt = Date.now()
       const index = timing.index
+      if (typeof entry.response.capture === "object" && entry.response.capture !== null) {
+        this.#captured = true
+      }
       this.#oracles.observe({ index, request, response: entry.response })
     } else {
       this.#failure = { index: entry.failure.id, why: entry.failure.message }

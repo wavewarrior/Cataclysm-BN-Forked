@@ -36,6 +36,8 @@ export type ReportInput = {
   requests: RequestTiming[]
   /** The request that got no answer, when the game hung or died. */
   failure?: FirstFail
+  /** The directory the Episode's captures were written to; absent when it captured nothing. */
+  captures?: string
 }
 
 export type ReportOracle = Omit<OracleResult, "decisive">
@@ -54,6 +56,8 @@ export type Report = {
   turns?: { first: number; last: number }
   transcript: string
   log: string
+  /** Where the Episode's captures are; absent when it captured nothing. */
+  captures?: string
   notes?: string[]
 }
 
@@ -200,6 +204,7 @@ export async function buildReport(config: Config, input: ReportInput): Promise<R
     ...(first === undefined || last === undefined ? {} : { turns: { first, last } }),
     transcript: input.transcript,
     log: input.log,
+    ...(input.captures === undefined ? {} : { captures: input.captures }),
     ...(notes.length > 0 ? { notes } : {}),
   }
 }
