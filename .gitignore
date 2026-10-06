@@ -90,6 +90,9 @@ CMakeUserPresets.json
 out/
 RelWithDebInfo*/
 
+# bnplay fixture library (world saves cloned by `bnplay fixture add`)
+/tools/bnplay/fixtures/
+
 # Visual Studio 2015
 /msvc-full-features/*db
 /msvc-full-features/ipch
