@@ -164,6 +164,15 @@ export class Episode {
           throw new Error(`the game refused the Trial's seed: ${JSON.stringify(seeded)}`)
         }
       }
+      if (this.#trial.attachView !== undefined) {
+        const attached = await this.#driver!.send({
+          cmd: "attach_view",
+          radius: this.#trial.attachView,
+        })
+        if (attached.status !== "ok") {
+          throw new Error(`the game refused the Trial's attach_view: ${JSON.stringify(attached)}`)
+        }
+      }
       const state = await this.#driver!.send({ cmd: "state" })
       if (state.status !== "ok") {
         throw new Error(`the game refused the first state request: ${JSON.stringify(state)}`)

@@ -7,6 +7,7 @@ Deno.test("a Trial naming only a fixture parses with the default wall-clock limi
   assertEquals(trial.wallClockLimitS, 300)
   assertEquals(trial.seed, undefined)
   assertEquals(trial.turnLimit, undefined)
+  assertEquals(trial.attachView, undefined)
 })
 
 Deno.test("a full Trial parses every field", () => {
@@ -17,6 +18,7 @@ Deno.test("a full Trial parses every field", () => {
     time_of_day = "08:30"
     wall_clock_limit_s = 90
     turn_limit = 200
+    attach_view = 3
   `)
   assertEquals(trial, {
     fixture: "bairdford",
@@ -25,9 +27,20 @@ Deno.test("a full Trial parses every field", () => {
     timeOfDay: "08:30",
     wallClockLimitS: 90,
     turnLimit: 200,
+    attachView: 3,
     expectedCommands: [],
     oracles: [],
   })
+})
+
+Deno.test("attach_view names the radius of the view attached to every response", () => {
+  assertEquals(parseTrial(`fixture = "a"\nattach_view = 1`).attachView, 1)
+  assertEquals(parseTrial(`fixture = "a"\nattach_view = 10`).attachView, 10)
+  for (const text of ["0", "-2", "1.5", '"3"', "true"]) {
+    const toml = `fixture = "a"\nattach_view = ${text}`
+    const err = assertThrows(() => parseTrial(toml), TrialError, undefined, toml)
+    assertEquals(err.message.includes("attach_view"), true, `${toml} -> ${err.message}`)
+  }
 })
 
 Deno.test("oracles and expected commands parse with their defaults", () => {

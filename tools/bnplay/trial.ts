@@ -27,6 +27,11 @@ export type Trial = {
   /** End the Episode after this many game turns. */
   turnLimit?: number
   /**
+   * Attach a view of this radius (in tiles) to every response, so a dense Trial needs no extra
+   * round trip a turn. Absent: no view. The game refuses a radius above its own limit, 10.
+   */
+  attachView?: number
+  /**
    * Commands the Trial expects to work: a response to one of them with outcome `unsupported` or
    * `no_effect` fails the Episode. An entry is a command (`move`) or an `action` by name
    * (`action:pause`).
@@ -70,6 +75,7 @@ const FIELDS = [
   "time_of_day",
   "wall_clock_limit_s",
   "turn_limit",
+  "attach_view",
   "expected_commands",
   "oracle",
 ]
@@ -218,6 +224,7 @@ export function parseTrial(source: string): Trial {
     ),
     wallClockLimitS: (wallClock as number | undefined) ?? DEFAULT_WALL_CLOCK_LIMIT_S,
     turnLimit: integer(table, "turn_limit", 1),
+    attachView: integer(table, "attach_view", 1),
     expectedCommands: (expected as string[] | undefined) ?? [],
     oracles: oracleSpecs(table.oracle),
   }
