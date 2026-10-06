@@ -24,6 +24,9 @@ export type ContractTarget = {
   hideWindow?: (driver: Driver) => Promise<() => Promise<void>>
 }
 
+/** Response ceiling: about 1.5K tokens of compact JSON, taken at 4 bytes a token. */
+export const RESPONSE_CEILING_BYTES = 6000
+
 /** Returns true when any process is still alive in the process group. */
 export async function groupAlive(pgid: number): Promise<boolean> {
   const { code } = await new Deno.Command("pgrep", {

@@ -8,10 +8,7 @@
  */
 import { assert, assertEquals, assertExists } from "@std/assert"
 import type { DriverResponse } from "./client.ts"
-import { type ContractTarget, groupAlive } from "./contract.ts"
-
-/** Response ceiling: about 1.5K tokens of compact JSON, taken at 4 bytes a token. */
-const RESPONSE_CEILING_BYTES = 6000
+import { type ContractTarget, groupAlive, RESPONSE_CEILING_BYTES } from "./contract.ts"
 
 const DIRECTIONS = ["n", "ne", "e", "se", "s", "sw", "w", "nw", "up"] as const
 const OPPOSITE: Record<string, string> = {
