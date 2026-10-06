@@ -345,6 +345,8 @@ async function selfCheckEpisode(
     fixture,
     seed: SELF_CHECK_SEED,
     wallClockLimitS: Math.ceil((config.bootTimeoutMs + config.selfCheckIdleMs) / 1000) + 60,
+    expectedCommands: [],
+    oracles: [],
   })
   const observations: Observation[] = []
   try {

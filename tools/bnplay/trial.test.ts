@@ -25,7 +25,91 @@ Deno.test("a full Trial parses every field", () => {
     timeOfDay: "08:30",
     wallClockLimitS: 90,
     turnLimit: 200,
+    expectedCommands: [],
+    oracles: [],
   })
+})
+
+Deno.test("oracles and expected commands parse with their defaults", () => {
+  const trial = parseTrial(`
+    fixture = "bairdford"
+    expected_commands = ["wait", "action:pause"]
+
+    [[oracle]]
+    field = "hp"
+    operator = "gt"
+    value = 0
+
+    [[oracle]]
+    name = "found the exit"
+    field = "prompt"
+    operator = "eq"
+    value = "map"
+    mode = "by-turn-20"
+    severity = "warn"
+
+    [[oracle]]
+    field = "new_messages"
+    operator = "contains"
+    value = "You die"
+    mode = "never"
+  `)
+  assertEquals(trial.expectedCommands, ["wait", "action:pause"])
+  assertEquals(trial.oracles, [
+    {
+      name: "always: hp gt 0",
+      field: "hp",
+      operator: "gt",
+      value: 0,
+      mode: "always",
+      severity: "fail",
+    },
+    {
+      name: "found the exit",
+      field: "prompt",
+      operator: "eq",
+      value: "map",
+      mode: { byTurn: 20 },
+      severity: "warn",
+    },
+    {
+      name: "never: new_messages contains You die",
+      field: "new_messages",
+      operator: "contains",
+      value: "You die",
+      mode: "never",
+      severity: "fail",
+    },
+  ])
+})
+
+Deno.test("malformed oracles are rejected and the error says which part is wrong", () => {
+  const base = `fixture = "a"\n[[oracle]]\n`
+  for (
+    const [expected, body] of [
+      ["operator", `field = "hp"\nvalue = 1`],
+      ["operator", `field = "hp"\noperator = "approx"\nvalue = 1`],
+      ["field", `operator = "eq"\nvalue = 1`],
+      ["value", `field = "hp"\noperator = "eq"`],
+      ["value", `field = "hp"\noperator = "gt"\nvalue = "high"`],
+      ["mode", `field = "hp"\noperator = "eq"\nvalue = 1\nmode = "sometimes"`],
+      ["mode", `field = "hp"\noperator = "eq"\nvalue = 1\nmode = "by-turn-0"`],
+      ["severity", `field = "hp"\noperator = "eq"\nvalue = 1\nseverity = "error"`],
+      ["colour", `field = "hp"\noperator = "eq"\nvalue = 1\ncolour = "red"`],
+      ["name", `field = "hp"\noperator = "eq"\nvalue = 1\nname = "alive"`],
+    ] as const
+  ) {
+    const err = assertThrows(() => parseTrial(base + body), TrialError, undefined, body)
+    assertEquals(err.message.includes(expected), true, `${body} -> ${err.message}`)
+  }
+  const twice = `${base}field = "hp"\noperator = "eq"\nvalue = 1\nname = "x"\n` +
+    `[[oracle]]\nfield = "hp"\noperator = "eq"\nvalue = 2\nname = "x"`
+  assertThrows(() => parseTrial(twice), TrialError, "already taken")
+  assertThrows(
+    () => parseTrial(`fixture = "a"\nexpected_commands = "wait"`),
+    TrialError,
+    "expected_commands",
+  )
 })
 
 Deno.test("a Trial without a fixture is rejected and the error names the field", () => {

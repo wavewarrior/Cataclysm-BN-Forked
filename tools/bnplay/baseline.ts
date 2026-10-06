@@ -62,6 +62,8 @@ export async function captureBaseline(
     fixture,
     wallClockLimitS: Math.ceil((config.bootTimeoutMs + config.baselineIdleMs) / 1000) +
       SHUTDOWN_ALLOWANCE_S,
+    expectedCommands: [],
+    oracles: [],
   })
   let quitAt = Date.now()
   try {

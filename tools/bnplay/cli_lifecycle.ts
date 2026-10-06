@@ -110,7 +110,8 @@ export function runCliLifecycle(name: string, target: LifecycleTarget): void {
           assertEquals(requests.length, responses.length)
           assertEquals(
             requests.map((r) => r.cmd),
-            ["ping", "ping", "state", "state", "no_such_command", "quit"],
+            // Boot: ping, the Trial's seed, the first state; then what the agent sent, then quit.
+            ["ping", "seed", "state", "ping", "state", "state", "no_such_command", "quit"],
           )
           for (const [i, req] of requests.entries()) assertEquals(responses[i].id, req.id)
         })

@@ -120,7 +120,7 @@ Deno.test("a hung game is killed by process group when the wall-clock limit expi
     assert(later.stderr.includes("wall_clock"), later.stderr)
 
     const stop = await sandbox.cli(["stop", session])
-    assertEquals(stop.code, 0, stop.stderr)
+    assertEquals(stop.code, 2, stop.stderr) // a hang the watchdog had to kill is a harness error
     assertEquals(jsonOut(stop).ended, "wall_clock")
     const events = (await readTranscript(transcript)).flatMap((r) => r.event ? [r] : [])
     assertEquals(events.at(-1)?.event, "end")
