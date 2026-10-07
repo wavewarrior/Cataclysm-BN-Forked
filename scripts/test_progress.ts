@@ -49,9 +49,12 @@ const clock = (ms: number): string => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`
 }
 
-const red = (s: string) => `\x1b[31m${s}\x1b[0m`
-const green = (s: string) => `\x1b[32m${s}\x1b[0m`
-const dim = (s: string) => `\x1b[2m${s}\x1b[0m`
+// Escapes only on a real terminal, so piped output and captured logs stay plain text.
+const color = Deno.stdout.isTerminal() && !Deno.env.get("NO_COLOR")
+const paint = (code: number) => (s: string) => color ? `\x1b[${code}m${s}\x1b[0m` : s
+const red = paint(31)
+const green = paint(32)
+const dim = paint(2)
 
 const args = [...Deno.args]
 const exe = takeOption(args, "--exe") ?? newestExe()
