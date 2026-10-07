@@ -12,9 +12,12 @@ Pre-load script for Windows builds with Ninja Multi-Config and MSVC.
 
 #]=======================================================================]
 
-# Ensure /bigobj is set — vcpkg toolchain can override CMAKE_CXX_FLAGS_INIT.
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /bigobj")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /bigobj")
+# /bigobj, plus /utf-8 as in build-scripts/MSVC.cmake (the CI toolchain, which this preset
+# does not load): the vendored fmt static_asserts "Unicode support requires compiling with
+# /utf-8". Added as compile options, NOT by setting CMAKE_<LANG>_FLAGS here: this file runs
+# before project() initialises those, so a normal variable would shadow CMake's MSVC
+# defaults (/DWIN32 /D_WINDOWS /EHsc) and every TU would build without C++ unwinding (C4530).
+add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:/bigobj;/utf-8>")
 
 # --- Box2D physics: ON by default for this preset -------------------------
 # The root CMakeLists declares `option(BOX2D "..." OFF)`, a global default that
