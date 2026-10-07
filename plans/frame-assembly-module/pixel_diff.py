@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""THROWAWAY REFERENCE for the frame-assembly equivalence gate: the plan ticket ports this to a Deno
-script (or a `bnplay compare` operation) that reuses `tools/bnplay/frames.ts` `decodeFrame`, then
-deletes this file. Do not commit it as a tool.
+"""REFERENCE ALGORITHM for the frame-assembly equivalence gate, committed so ticket T0 (the
+`bnplay compare` operation) can port it to a Deno script that reuses `tools/bnplay/frames.ts`
+`decodeFrame`; T0 then deletes this file. Not a supported tool.
 
 Pixel-count frame comparison for the frame-assembly equivalence gate.
 
