@@ -3,18 +3,14 @@
  * starts no game doing so. (The determinism self-check boots two real games; run it by hand with
  * `bnplay doctor --self-check` under the game lock.)
  *
- * Environment (all optional), as in real_driver.test.ts:
- *   BNPLAY_BINARY   tiles binary (default out/build/osx-arm-slim/src/cataclysm-bn-tiles)
- *   BNPLAY_BASEPATH checkout the binary was built from (default this checkout)
+ * Environment (all optional), as in real_driver.test.ts: BNPLAY_BINARY, BNPLAY_BASEPATH.
  */
 import { assertEquals, assertRejects } from "@std/assert"
-import { fromFileUrl, join } from "@std/path"
+import { join } from "@std/path"
+import { loadConfig } from "./config.ts"
 import { makeSandbox } from "./testkit.ts"
 
-const repo = fromFileUrl(new URL("../../", import.meta.url)).replace(/\/$/, "")
-const binary = Deno.env.get("BNPLAY_BINARY") ??
-  join(repo, "out/build/osx-arm-slim/src/cataclysm-bn-tiles")
-const basepath = Deno.env.get("BNPLAY_BASEPATH") ?? repo
+const { binary, basepath } = loadConfig()
 
 Deno.test({
   name: "doctor finds the driver flag in the real binary without starting a game",

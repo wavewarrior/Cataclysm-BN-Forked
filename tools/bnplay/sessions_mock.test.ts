@@ -99,7 +99,7 @@ Deno.test("an idle session is reaped by process group, keeps its transcript and 
     const { session, transcript } = await start(sandbox)
     const spawned = await sandbox.cli(["step", session, '{"cmd":"spawn_child"}'])
     const child = jsonOut<{ child_pid: number }>(spawned).child_pid
-    assert(pidAlive(child))
+    assert(await pidAlive(child))
     // The client now goes away without ever calling stop, as a crashed one would.
 
     assert(
@@ -109,7 +109,7 @@ Deno.test("an idle session is reaped by process group, keeps its transcript and 
       ),
       "the game was still running long after the idle timeout",
     )
-    assert(await eventually(() => !pidAlive(child)), "grandchild survived the reaper")
+    assert(await eventually(async () => !(await pidAlive(child))), "grandchild survived the reaper")
 
     const records = await readTranscript(transcript)
     assert(

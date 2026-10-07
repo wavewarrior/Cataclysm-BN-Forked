@@ -4,9 +4,10 @@
  * logged after readiness, `list` shows whether each baseline still matches its fixture.
  */
 import { assert, assertEquals, assertNotEquals } from "@std/assert"
-import { join } from "@std/path"
+import { basename, join } from "@std/path"
 import {
   eventually,
+  FAILING_BINARY,
   jsonOut,
   makeFakeWorld,
   makeSandbox,
@@ -39,7 +40,7 @@ Deno.test("fixture add clones a save into the library and never modifies the sou
     const res = await sandbox.cli(["fixture", "add", save])
     assertEquals(res.code, 0, res.stderr)
 
-    const name = save.split("/").at(-1)!
+    const name = basename(save)
     const added = jsonOut<{ fixture: string; path: string; baseline: string }>(res)
     assertEquals(added.fixture, name)
     assertEquals(added.path, join(sandbox.fixtures, name))
@@ -354,7 +355,7 @@ Deno.test("a game that dies at boot leaves the previous baseline in place", asyn
 
     // A daemon whose game binary dies at boot.
     await sandbox.cli(["shutdown"])
-    const res = await baseline(sandbox, "kept", { BNPLAY_BINARY: "/usr/bin/false" })
+    const res = await baseline(sandbox, "kept", { BNPLAY_BINARY: FAILING_BINARY })
     assertEquals(res.code, 2)
     assert(res.stderr.includes("boot"), res.stderr)
     const [entry] = await list(sandbox)

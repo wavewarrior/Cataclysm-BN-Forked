@@ -4,7 +4,7 @@
  * whatever the agent asked for, and a windowless Episode refuses it.
  */
 import { assert, assertEquals } from "@std/assert"
-import { join } from "@std/path"
+import { join, normalize, SEPARATOR } from "@std/path"
 import { jsonOut, makeFakeWorld, makeSandbox, pidsMatching } from "./testkit.ts"
 import type { Sandbox } from "./testkit.ts"
 
@@ -46,17 +46,23 @@ Deno.test("a capture goes through step and lands under the Episode's own artifac
       assertEquals(final.outcome, "completed", JSON.stringify(final))
       const c = final.capture as Capture
       assertEquals(c.mode, "final")
-      assertEquals(c.frame.startsWith(captures + "/"), true, c.frame)
-      assertEquals(c.map.startsWith(captures + "/"), true, c.map)
+      assertEquals(normalize(c.frame).startsWith(captures + SEPARATOR), true, c.frame)
+      assertEquals(normalize(c.map).startsWith(captures + SEPARATOR), true, c.map)
       assert((await Deno.stat(c.frame)).size > 0 && (await Deno.stat(c.map)).size > 0)
 
       const state = await step(sandbox, session, { cmd: "capture", mode: "state" })
       assertEquals((state.capture as Capture).mode, "state")
-      assertEquals((state.capture as Capture).frame.startsWith(captures + "/"), true)
+      assertEquals(
+        normalize((state.capture as Capture).frame).startsWith(captures + SEPARATOR),
+        true,
+      )
 
       // Where the agent says the files go does not matter: they stay with the Episode.
       const asked = await step(sandbox, session, { cmd: "capture", dir: elsewhere })
-      assertEquals((asked.capture as Capture).frame.startsWith(captures + "/"), true)
+      assertEquals(
+        normalize((asked.capture as Capture).frame).startsWith(captures + SEPARATOR),
+        true,
+      )
       assertEquals([...Deno.readDirSync(elsewhere)], [])
 
       // The report points at where they are.

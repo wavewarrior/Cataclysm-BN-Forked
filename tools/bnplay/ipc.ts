@@ -37,6 +37,20 @@ export async function* readLines(stream: ReadableStream<Uint8Array>): AsyncGener
 }
 
 /**
+ * Opens a connection to the daemon of `home`. Windows: loopback TCP on the port the daemon
+ * recorded. No port file (or a truncated one left by a crash) reads as NotFound and a stale port
+ * as ConnectionRefused, which daemonState() both treats as "absent".
+ */
+export async function connectDaemon(home: string): Promise<Deno.Conn> {
+  if (!IS_WINDOWS) return await Deno.connect({ transport: "unix", path: socketPath(home) })
+  const port = Number((await Deno.readTextFile(portPath(home))).trim())
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new Deno.errors.NotFound(`no daemon port recorded in ${portPath(home)}`)
+  }
+  return await Deno.connect({ hostname: "127.0.0.1", port })
+}
+
+/**
  * Sends one request to the daemon and returns its reply. Rejects when no daemon answers; with
  * `timeoutMs` it also rejects when the daemon does not reply in time.
  */
@@ -45,19 +59,7 @@ export async function call(
   request: DaemonRequest,
   timeoutMs?: number,
 ): Promise<DaemonReply> {
-  // Windows: loopback TCP on the port the daemon recorded. No port file (or a truncated one left
-  // by a crash) reads as NotFound and a stale port as ConnectionRefused, which daemonState()
-  // both treats as "absent".
-  let conn: Deno.Conn
-  if (IS_WINDOWS) {
-    const port = Number((await Deno.readTextFile(portPath(home))).trim())
-    if (!Number.isInteger(port) || port <= 0 || port > 65535) {
-      throw new Deno.errors.NotFound(`no daemon port recorded in ${portPath(home)}`)
-    }
-    conn = await Deno.connect({ hostname: "127.0.0.1", port })
-  } else {
-    conn = await Deno.connect({ transport: "unix", path: socketPath(home) })
-  }
+  const conn = await connectDaemon(home)
   const timer = timeoutMs === undefined ? undefined : setTimeout(() => conn.close(), timeoutMs)
   try {
     await conn.write(new TextEncoder().encode(JSON.stringify(request) + "\n"))
