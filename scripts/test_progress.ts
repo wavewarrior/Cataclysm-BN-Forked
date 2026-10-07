@@ -67,15 +67,18 @@ if (!exe) {
 const env = { SDL_ASSERT: Deno.env.get("SDL_ASSERT") ?? "always_ignore" }
 console.log(`${exe}  (built ${Deno.statSync(exe).mtime?.toLocaleString()})`)
 
-const listing = await new Deno.Command(exe, {
-  args: [...args, "--list-tests", "--verbosity", "quiet"],
-  env,
-  stdin: "null",
-  stderr: "null",
-}).output()
-const testNames = new Set(
-  new TextDecoder().decode(listing.stdout).split(/\r?\n/).filter((l) => l.trim()),
-)
+const listNames = async (listArgs: string[]): Promise<Set<string>> => {
+  const { stdout } = await new Deno.Command(exe, {
+    args: [...listArgs, "--list-tests", "--verbosity", "quiet"],
+    env,
+    stdin: "null",
+    stderr: "null",
+  }).output()
+  return new Set(new TextDecoder().decode(stdout).split(/\r?\n/).filter((l) => l.trim()))
+}
+const testNames = await listNames(args)
+// Cases Catch2 counts as "failed as expected" rather than failed.
+const expectedToFail = await listNames(["[!shouldfail],[!mayfail]"])
 const total = testNames.size
 console.log(`${total} test cases; full output -> ${logPath}`)
 
@@ -91,8 +94,12 @@ const child = new Deno.Command(exe, {
 }).spawn()
 
 const start = Date.now()
-const durations: { name: string; seconds: number }[] = []
-const failed: string[] = []
+// Catch2 reruns a case once per leaf SECTION and prints the case's name and duration after each
+// run, so a name repeats: count each case once and add up its runs.
+const durations = new Map<string, number>()
+const failed = new Set<string>()
+const failedAsExpected = new Set<string>()
+let catchTotals = "" // Catch2's own "test cases: ..." line, the ground truth for the counts
 // Cases run one at a time and Catch2 prints a case's failures before its own duration line, so
 // a failure seen since the previous case finished belongs to the next listed case to finish.
 let pendingFail = false
@@ -102,18 +109,20 @@ const encoder = new TextEncoder()
 const write = (s: string) => Deno.stdout.writeSync(encoder.encode(s))
 
 const bar = (final = false) => {
-  const done = durations.length
+  const done = durations.size
   const width = 30
   const filled = total ? Math.min(width, Math.round((done / total) * width)) : 0
   const elapsed = Date.now() - start
   const eta = done ? clock((elapsed / done) * Math.max(0, total - done)) : "?"
   const pct = total ? ((done / total) * 100).toFixed(1) : "?"
-  const counts = `${green(`pass ${done - failed.length}`)} ${
-    failed.length ? red(`fail ${failed.length}`) : "fail 0"
-  }`
+  const passed = done - failed.size - failedAsExpected.size
+  const expected = failedAsExpected.size ? ` xfail ${failedAsExpected.size}` : ""
+  const counts = `${green(`pass ${passed}`)} ${
+    failed.size ? red(`fail ${failed.size}`) : "fail 0"
+  }${expected}`
   const head = `[${"#".repeat(filled)}${"-".repeat(width - filled)}] ${done}/${total} ${pct}% | `
   const tail = ` | ${clock(elapsed)} ETA ${eta} | `
-  const plainCounts = `pass ${done - failed.length} fail ${failed.length}`
+  const plainCounts = `pass ${passed} fail ${failed.size}${expected}`
   // A bar wider than the console wraps, and "\r" then only redraws its last row.
   const room = tty
     ? Deno.consoleSize().columns - 1 - head.length - plainCounts.length - tail.length
@@ -128,18 +137,22 @@ const onLine = (line: string) => {
   const duration = line.match(/^(\d+\.\d+) s: (.+)$/)
   if (duration && testNames.has(duration[2])) {
     const [, seconds, name] = duration
-    durations.push({ name, seconds: Number(seconds) })
+    durations.set(name, (durations.get(name) ?? 0) + Number(seconds))
     last = name
     if (pendingFail) {
       pendingFail = false
-      failed.push(name)
-      if (tty) write("\r\x1b[2K")
-      console.log(`${red("FAIL")} ${name}`)
+      if (expectedToFail.has(name)) failedAsExpected.add(name)
+      else if (!failed.has(name)) {
+        failed.add(name)
+        if (tty) write("\r\x1b[2K")
+        console.log(`${red("FAIL")} ${name}`)
+      }
     }
     bar()
     return
   }
   if (/FAILED:|failed with exception|Fatal error condition/.test(line)) pendingFail = true
+  if (line.startsWith("test cases:")) catchTotals = line
 }
 
 const pump = async (stream: ReadableStream<Uint8Array>, isStdout: boolean) => {
@@ -165,18 +178,24 @@ if (tty) write("\r\x1b[2K")
 bar(true)
 console.log("")
 console.log("slowest:")
-for (const { name, seconds } of durations.toSorted((a, b) => b.seconds - a.seconds).slice(0, 5)) {
+for (const [name, seconds] of [...durations].toSorted((a, b) => b[1] - a[1]).slice(0, 5)) {
   console.log(`  ${seconds.toFixed(1).padStart(7)} s  ${name}`)
 }
 console.log(
-  failed.length
-    ? red(`${failed.length} failed:\n  ${failed.join("\n  ")}`)
-    : green(`all ${durations.length} passed`),
+  failed.size
+    ? red(`${failed.size} failed:\n  ${[...failed].join("\n  ")}`)
+    : green(`no unexpected failures in ${durations.size} cases`),
 )
-// A crash or abort prints no duration line for the case it killed.
-if (code !== 0 && durations.length < total) {
+if (failedAsExpected.size) {
   console.log(
-    red(`stopped early: ${total - durations.length} cases never finished; last finished: ${last}`),
+    `${failedAsExpected.size} failed as expected:\n  ${[...failedAsExpected].join("\n  ")}`,
+  )
+}
+if (catchTotals) console.log(`Catch2: ${catchTotals.replace(/\s+/g, " ")}`)
+// A crash or abort prints no duration line for the case it killed.
+if (code !== 0 && durations.size < total) {
+  console.log(
+    red(`stopped early: ${total - durations.size} cases never finished; last finished: ${last}`),
   )
 }
 console.log(`exit ${code}; log ${logPath}`)
