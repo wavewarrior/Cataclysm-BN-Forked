@@ -139,6 +139,7 @@ Add `mode = "windowed"` (and optionally `window_size = [1280, 720]`) to the Tria
 
 Windowed init fails without two shader sources, `data/shaders/lighting/src/emitter_glow.vert.hlsl` and `emitter_glow.frag.hlsl`. They were never committed (`/data/shaders/` is gitignored, `.gitignore` line 29; the 45 sibling shader files were force-added; no build step generates them). A fresh clone or worktree must copy them from the main checkout:
 `cp <main-checkout>/data/shaders/lighting/src/emitter_glow.*.hlsl <basepath>/data/shaders/lighting/src/`. `bnplay doctor --trial <windowed.toml>` checks them, a display session and stray game windows.
+On Windows (D3D12, verified 2026-10-07) the game boots windowed without them: `emitter_glow_pass` logs `failed to load shader source` and the glow pass stays off. `doctor --trial` still fails the check, so a capture there runs without the glow effect.
 
 `bnplay step <s> '{"cmd":"capture","tag":"original"}'` writes the final frame and a paired map snapshot under the Episode's `captures/` directory and reports `capture.frame`, `capture.map`, `width`, `height`. `mode:"state"` skips lighting and interface passes. A hidden, minimised or locked window answers `outcome: refused`, `reason: no_drawable`: never compare against a missing or stale frame. Capture oracles in the Trial compare tagged frames, all judged against a paired same-state null:
 ```toml
@@ -150,6 +151,10 @@ toggled = "toggled"
 restored = "restored"
 factor = 2             # effect must exceed factor x the null's noise
 ```
+
+Toggles that work: the `probe_light_on` / `probe_light_off` Scenes (`run_scene`) add and remove one `radiant_core` two tiles east of the avatar. A `set_time` jump mid-Episode does not: the built-in `turn_counter` oracle fails it (the turn moves without `time_passed`), and a jump past `turn_limit` ends the Episode.
+
+**Open limitation (Windows, verified 2026-10-07): same-state captures are not deterministic.** The avatar's tile changes shading on successive rendered frames (not with wall-clock time: a 20 s idle changes nothing; the next capture does), cycling through a few states while the rest of the frame stays byte-identical. Neither tile idle animations (`ANIMATIONS`) nor shader `anim_time` is the cause. The paired null is a single pair, so it reads 0 or about 2e-5 depending on where in the cycle the two `original` captures land. The toggled check is reliable for an effect far above that (the light toggle is about 4e-4); the restored check is not: with a 0 null, a restore that lands on another phase of the cycle fails (seen: 1.5e-5 against 0), and with a nonzero null it passes. Until this is fixed, read a triplet's restore verdict from a crop that excludes the avatar's tile.
 
 ## Driver unavailable
 
