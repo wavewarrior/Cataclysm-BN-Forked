@@ -14,6 +14,7 @@
 #include "cached_options.h"
 #include "cata_tiles.h"
 #include "dynamic_atlas.h"
+#include "frame_camera.h"
 #include "frame_executor.h"
 #include "frame_history.h"
 #include "frame_plan.h"
@@ -134,12 +135,10 @@ static auto begin_frame( lighting::render_state &rs ) -> std::optional<lighting:
 static auto build_lighting( lighting::render_state &rs ) -> bool;
 static auto flush_and_gather_rc( lighting::render_state &rs, lighting::frame_context &ctx,
                                  bool rc_rebuild, frame_executor &exec ) -> void;
-static auto assemble_light_inputs( lighting::render_state &rs,
-                                   lighting::frame_context &ctx ) -> void;
+static auto assemble_light_inputs( lighting::render_state &rs ) -> void;
 static auto maybe_push_menu_background( lighting::render_state &rs,
                                         lighting::frame_context &ctx ) -> void;
-static auto draw_lighting_overlays( lighting::render_state &rs,
-                                    lighting::frame_context &ctx ) -> void;
+static auto draw_lighting_overlays( lighting::render_state &rs ) -> void;
 static auto composite_ui_pass_a( lighting::render_state &rs, lighting::frame_context &ctx,
                                  int proj_w, int proj_h ) -> void;
 static auto composite_avatar_pass( lighting::render_state &rs,
@@ -151,6 +150,48 @@ static auto render_world_pass_w( lighting::render_state &rs, lighting::frame_con
 static auto tonemap_pass_t( lighting::render_state &rs, lighting::frame_context &ctx ) -> void;
 static auto composite_swapchain_pass_b( lighting::render_state &rs, lighting::frame_context &ctx,
                                         int proj_w, int proj_h ) -> void;
+
+// The frame's camera (T3, #108): derived ONCE per frame by `run_frame_plan` and read by
+// every consumer in this TU, replacing the six sites that re-derived it and could
+// disagree. File-static rather than a parameter because `run_frame_plan`'s signature is
+// pinned by the GPU-lane test (issue #130); it is written before the first step runs and
+// never touched again, so within a frame it behaves as a value. `s_emo` is a write-only
+// PUBLICATION of it (see `assemble_light_inputs`), not a source.
+static frame_camera s_frame_camera;
+
+/// The day's raw facts, read where the two derivations read them, fed to the pure
+/// `derive_frame_camera`. The tile-context origin is stale between redraws BY DESIGN
+/// (`cata_tiles::draw` owns it); the clip rect is recomputed from the player instead.
+static auto derive_live_frame_camera( const lighting::frame_context &ctx ) -> frame_camera
+{
+    frame_camera_source src;
+    src.have_game = static_cast<bool>( g );
+    if( g ) {
+        src.player_x = g->u.bub_pos().x();
+        src.player_y = g->u.bub_pos().y();
+        src.player_z = g->u.bub_pos().z();
+        src.view_offset_x = g->u.view_offset.x();
+        src.view_offset_y = g->u.view_offset.y();
+    }
+    src.pos_x = POSX;
+    src.pos_y = POSY;
+    src.have_tile_context = static_cast<bool>( tilecontext );
+    if( tilecontext ) {
+        src.tile_w = tilecontext->get_tile_width();
+        src.tile_h = tilecontext->get_tile_height();
+        src.screentile_w = tilecontext->get_screentile_width();
+        src.screentile_h = tilecontext->get_screentile_height();
+        const point o = tilecontext->get_tile_map_origin().raw();
+        src.map_origin_x = o.x;
+        src.map_origin_y = o.y;
+        const point op = tilecontext->get_drawing_pixel_offset();
+        src.draw_off_px_x = op.x;
+        src.draw_off_px_y = op.y;
+    }
+    src.screen_w = static_cast<int>( ctx.swapchain_w );
+    src.screen_h = static_cast<int>( ctx.swapchain_h );
+    return derive_frame_camera( src );
+}
 
 auto begin_frame( lighting::render_state &rs ) -> std::optional<lighting::frame_context>
 {
@@ -263,19 +304,17 @@ if( g && world_generator && world_generator->active_world ) {
     rebuild.vis = d.vis;
 }
 
-    if( cursor_light_emitter::enabled && g && tilecontext
+    if( cursor_light_emitter::enabled && g && s_frame_camera.have_tile_context
         && world_generator && world_generator->active_world ) {
     float msx = 0.0f, msy = 0.0f;
     SDL_GetMouseState( &msx, &msy );
-        const point o  = tilecontext->get_tile_map_origin().raw();
-        const point op = tilecontext->get_drawing_pixel_offset();
-        const int   tw = std::max( 1, tilecontext->get_tile_width() );
-        const int   th = std::max( 1, tilecontext->get_tile_height() );
-        cursor_light_emitter::wx = ( msx - static_cast<float>( op.x ) )
-                                   / static_cast<float>( tw ) + static_cast<float>( o.x );
-        cursor_light_emitter::wy = ( msy - static_cast<float>( op.y ) )
-                                   / static_cast<float>( th ) + static_cast<float>( o.y );
-        cursor_light_emitter::wz = static_cast<float>( g->u.bub_pos().z() );
+        // The inverse of the drawing transform, from the frame's camera (T3):
+        // the stale tile-context origin and the raw pixel offset, clamped tile
+        // size — the expression this site hand-wrote.
+        const std::pair<float, float> w = s_frame_camera.world_tile_at( msx, msy );
+        cursor_light_emitter::wx = w.first;
+        cursor_light_emitter::wy = w.second;
+        cursor_light_emitter::wz = static_cast<float>( s_frame_camera.player_z );
     }
 
     // Dev test lights/sounds: keep the hovered world-tile fresh regardless of
@@ -283,48 +322,29 @@ if( g && world_generator && world_generator->active_world ) {
     // (see place_test_light()/place_test_sound()), so closing the panel for
     // an unobstructed view no longer breaks click-to-place. Placed lights are
     // no longer auto-cleared on close; use the panel's "clear placed" button.
-    if( g && tilecontext && world_generator && world_generator->active_world ) {
+    if( g && s_frame_camera.have_tile_context && world_generator
+        && world_generator->active_world ) {
     float msx = 0.0f, msy = 0.0f;
     SDL_GetMouseState( &msx, &msy );
-        const point o  = tilecontext->get_tile_map_origin().raw();
-        const point op = tilecontext->get_drawing_pixel_offset();
-        const int   tw = std::max( 1, tilecontext->get_tile_width() );
-        const int   th = std::max( 1, tilecontext->get_tile_height() );
-        dev_test_lights::hover_wx = ( msx - static_cast<float>( op.x ) )
-                                    / static_cast<float>( tw ) + static_cast<float>( o.x );
-        dev_test_lights::hover_wy = ( msy - static_cast<float>( op.y ) )
-                                    / static_cast<float>( th ) + static_cast<float>( o.y );
-        dev_test_lights::hover_wz = static_cast<float>( g->u.bub_pos().z() );
+        const std::pair<float, float> w = s_frame_camera.world_tile_at( msx, msy );
+        dev_test_lights::hover_wx = w.first;
+        dev_test_lights::hover_wy = w.second;
+        dev_test_lights::hover_wz = static_cast<float>( s_frame_camera.player_z );
     }
 
     dbg( DL::Debug ) << "[render] build_and_submit_lighting START";
     // B1: bound the SDF rebuild to the on-screen tile rect. Origin + extent come
-    // from cata_tiles (bubble-local tile coords, same space as the SDF grid).
-    // No tilecontext (e.g. main menu) → cam_w=0 → whole-bubble fallback.
-    int cam_x0 = -1, cam_y0 = -1, cam_w = 0, cam_h = 0;
-    if( tilecontext ) {
-    if( g ) {
-            // Compute camera origin from current player position rather than reading
-            // tilecontext->get_tile_map_origin(), which is only updated by
-            // cata_tiles::draw() and can be stale on frames where refresh_display
-            // fires without a preceding redraw (e.g. pump_events at end of turn).
-            // Matches cata_tiles::draw() formula: o = floor(center + subtile) - POS.
-            // Subtile offset omitted (<1 tile error, irrelevant for clip region).
-            const float cx = static_cast<float>( g->u.bub_pos().x() + g->u.view_offset.x() );
-            const float cy = static_cast<float>( g->u.bub_pos().y() + g->u.view_offset.y() );
-            cam_x0 = static_cast<int>( std::floor( cx ) ) - POSX;
-            cam_y0 = static_cast<int>( std::floor( cy ) ) - POSY;
-        } else {
-            const point cam_o = tilecontext->get_tile_map_origin().raw();
-            cam_x0 = cam_o.x;
-            cam_y0 = cam_o.y;
-        }
-        cam_w  = tilecontext->get_screentile_width();
-        cam_h  = tilecontext->get_screentile_height();
-    }
+    // from the frame's camera (T3): bubble-local tile coords (the same space as
+    // the SDF grid), recomputed from the PLAYER rather than read from
+    // `tilecontext->get_tile_map_origin()`, which is only updated by
+    // `cata_tiles::draw()` and can be stale on frames where refresh_display
+    // fires without a preceding redraw (e.g. pump_events at end of turn).
+    // Whole-bubble (no tile context, e.g. the main menu) keeps the -1/-1/0/0
+    // sentinel the consumer's `cam_w > 0` fallback expects.
+    const frame_camera &fcam = s_frame_camera;
     lighting::frame_lighting_result fr =
         lighting::build_and_submit_lighting( rs, rebuild, /*want_hud_snapshot=*/true,
-            g_skylight_bleed, cam_x0, cam_y0, cam_w, cam_h );
+            g_skylight_bleed, fcam.cam_x0, fcam.cam_y0, fcam.cam_w, fcam.cam_h );
     rc_rebuild = fr.built_pertile;
     DebugLogFL( DL::Info, DC::Main )
             << "[flash][gpu] rebuild: struct=" << rebuild.structure
@@ -333,8 +353,8 @@ if( g && world_generator && world_generator->active_world ) {
             << " origin=" << ( g ? g->m.get_abs_sub().raw().to_string() : "?" )
             << " px=" << px << " py=" << py
             << " gen=" << ( g ? std::to_string( gen ) : "?" )
-            << " cam_xy0=" << cam_x0 << "," << cam_y0
-            << " cam_wh=" << cam_w << "x" << cam_h;
+            << " cam_xy0=" << fcam.cam_x0 << "," << fcam.cam_y0
+            << " cam_wh=" << fcam.cam_w << "x" << fcam.cam_h;
     if( fr.built_pertile ) {
     s_emo.trans_at_player    = fr.trans_at_player;
     s_emo.sdf_W_at_submit    = fr.sdf_W;
@@ -734,41 +754,48 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     }
 }
 
-auto assemble_light_inputs( lighting::render_state &rs,
-                            lighting::frame_context &ctx ) -> void
+auto assemble_light_inputs( lighting::render_state &rs ) -> void
 {
     if( !rs.collector() ) {
     return;
 }
 
 lighting::render_state::frame_light_inputs in{};
-in.tile_pixel_size = tilecontext
-                     ? static_cast<float>( tilecontext->get_tile_width() )
-                     : 32.0f;
-in.z_level         = g ? static_cast<float>( g->u.bub_pos().z() ) : 0.0f;
+// T3 (#108): the stamp and z-level from the camera. The mirror's `tile_px`
+// receives the same stamp below; the consumer's `tile_pixel_size` is the raw
+// tile width whenever a tile context exists, and 32 otherwise — exactly what
+// this site computed from `tilecontext` before.
+in.tile_pixel_size = s_frame_camera.tile_stamp_px;
+in.z_level         = static_cast<float>( s_frame_camera.player_z );
 in.ambient         = 0.05f;
 
-if( g && tilecontext && in.tile_pixel_size > 0.0f ) {
-    const point map_origin  = tilecontext->get_tile_map_origin().raw();
-        const point draw_offset = tilecontext->get_drawing_pixel_offset();
-        in.camera_off_x = static_cast<float>( draw_offset.x ) / in.tile_pixel_size
-                          - static_cast<float>( map_origin.x );
-        in.camera_off_y = static_cast<float>( draw_offset.y ) / in.tile_pixel_size
-                          - static_cast<float>( map_origin.y );
-        s_emo.cam_off_x = in.camera_off_x;
-        s_emo.cam_off_y = in.camera_off_y;
-        s_emo.tile_px   = in.tile_pixel_size;
-        s_emo.op_x      = static_cast<float>( draw_offset.x );
-        s_emo.op_y      = static_cast<float>( draw_offset.y );
-        s_emo.player_x  = g->u.bub_pos().x();
-        s_emo.player_y  = g->u.bub_pos().y();
-        s_emo.player_z  = g->u.bub_pos().z();
-        s_emo.screen_w  = static_cast<int>( ctx.swapchain_w );
-        s_emo.screen_h  = static_cast<int>( ctx.swapchain_h );
-        s_emo.map_origin_x = map_origin.x;
-        s_emo.map_origin_y = map_origin.y;
-        s_emo.draw_off_px_x = draw_offset.x;
-        s_emo.draw_off_px_y = draw_offset.y;
+    // T3 (#108): every value below comes from the frame's camera, derived once at
+    // the head of `run_frame_plan`. The gate is `float_camera_valid` — the same
+    // `g && tilecontext && tile_pixel_size > 0` this branch tested. `s_emo` is a
+    // WRITE-ONLY publication for the F4 panel and the frame dump (their readers
+    // did not change); the frame's passes read the camera, never the mirror. The
+    // three-way branch is kept exactly: valid writes everything, the debug-zero
+    // branch writes the zero-filled set with the RAW stamp as `tile_px`, and
+    // otherwise the mirror keeps what it holds (reachable only on startup frames,
+    // where it still holds these same defaults).
+    const frame_camera &fcam = s_frame_camera;
+    if( fcam.float_camera_valid ) {
+        in.camera_off_x = fcam.cam_off_x;
+        in.camera_off_y = fcam.cam_off_y;
+        s_emo.cam_off_x = fcam.cam_off_x;
+        s_emo.cam_off_y = fcam.cam_off_y;
+        s_emo.tile_px   = fcam.tile_px;
+        s_emo.op_x      = fcam.op_x;
+        s_emo.op_y      = fcam.op_y;
+        s_emo.player_x  = fcam.player_x;
+        s_emo.player_y  = fcam.player_y;
+        s_emo.player_z  = fcam.player_z;
+        s_emo.screen_w  = fcam.screen_w;
+        s_emo.screen_h  = fcam.screen_h;
+        s_emo.map_origin_x = fcam.map_origin_x;
+        s_emo.map_origin_y = fcam.map_origin_y;
+        s_emo.draw_off_px_x = fcam.draw_off_px_x;
+        s_emo.draw_off_px_y = fcam.draw_off_px_y;
     } else if( g_dbg_lighting ) {
     s_emo.cam_off_x = 0.f;
     s_emo.cam_off_y = 0.f;
@@ -778,8 +805,8 @@ if( g && tilecontext && in.tile_pixel_size > 0.0f ) {
     s_emo.player_x  = 0;
     s_emo.player_y  = 0;
     s_emo.player_z  = 0;
-    s_emo.screen_w  = static_cast<int>( ctx.swapchain_w );
-        s_emo.screen_h  = static_cast<int>( ctx.swapchain_h );
+        s_emo.screen_w  = fcam.screen_w;
+        s_emo.screen_h  = fcam.screen_h;
         s_emo.map_origin_x = 0;
         s_emo.map_origin_y = 0;
         s_emo.draw_off_px_x = 0;
@@ -936,8 +963,7 @@ auto maybe_push_menu_background( lighting::render_state &rs,
     }
 }
 
-auto draw_lighting_overlays( lighting::render_state &rs,
-                             lighting::frame_context &ctx ) -> void
+auto draw_lighting_overlays( lighting::render_state &rs ) -> void
 {
     struct transient_routing_guard {
         lighting::render_state &rs;
@@ -949,14 +975,18 @@ auto draw_lighting_overlays( lighting::render_state &rs,
 
     if( g_dbg_lighting ) {
         constexpr float OL_PI = 3.14159265358979323846f;
-        const float tp  = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
-        const float sw  = static_cast<float>( ctx.swapchain_w );
-        const float sh  = static_cast<float>( ctx.swapchain_h );
+        // T3 (#108): the camera, not the mirror. `pub_*` is what the mirror
+        // held after publication this frame; `s_emo.snap` stays the emitter
+        // snapshot `build_lighting` wrote — that is not camera state.
+        const frame_camera &fcam = s_frame_camera;
+        const float tp  = fcam.pub_tile_px() > 0.f ? fcam.pub_tile_px() : 32.f;
+        const float sw  = static_cast<float>( fcam.screen_w );
+        const float sh  = static_cast<float>( fcam.screen_h );
 
         // ── Tier 4: grid lines ─────────────────────────────────────────────
         {
-            const float anchor_x = std::fmod( s_emo.op_x, tp );
-            const float anchor_y = std::fmod( s_emo.op_y, tp );
+            const float anchor_x = std::fmod( fcam.pub_op_x(), tp );
+            const float anchor_y = std::fmod( fcam.pub_op_y(), tp );
             for( float x = anchor_x; x < sw; x += tp ) {
                 rs.queue_ui_rect( x, 0.f, 1.f, sh, 0.25f, 0.25f, 0.30f, 0.35f );
             }
@@ -969,9 +999,9 @@ auto draw_lighting_overlays( lighting::render_state &rs,
         static bool emo_cam_logged = false;
         if( !emo_cam_logged ) {
             emo_cam_logged = true;
-            dbg( DL::Debug ) << "overlay: cam=(" << s_emo.cam_off_x << ","
-                             << s_emo.cam_off_y << ") tile_px=" << s_emo.tile_px
-                             << " op=(" << s_emo.op_x << "," << s_emo.op_y
+            dbg( DL::Debug ) << "overlay: cam=(" << fcam.pub_cam_off_x() << ","
+                             << fcam.pub_cam_off_y() << ") tile_px=" << fcam.pub_tile_px()
+                             << " op=(" << fcam.pub_op_x() << "," << fcam.pub_op_y()
                              << ") snap=" << s_emo.snap.size();
         }
         for( const auto &e : s_emo.snap ) {
@@ -982,8 +1012,9 @@ auto draw_lighting_overlays( lighting::render_state &rs,
             // (the HUD-bar/sidebar pixel offset) off its true tile. Confirmed
             // empirically: the player cross sat exactly op_y (128px) south of
             // the player's real screen position.
-            const float sx  = ( e.pos_x + s_emo.cam_off_x ) * tp;
-            const float sy  = ( e.pos_y + s_emo.cam_off_y ) * tp;
+            const std::pair<float, float> sp = fcam.screen_pos_of( e.pos_x, e.pos_y, tp );
+            const float sx = sp.first;
+            const float sy = sp.second;
             const float rpx = e.radius * tp;
             const float cr  = e.r > 0.01f ? e.r : 1.0f;
             const float cg  = e.g > 0.01f ? e.g : 1.0f;
@@ -999,8 +1030,11 @@ auto draw_lighting_overlays( lighting::render_state &rs,
 
         // Player cross (bright green) at map-coord player pos.
         {
-            const float px = ( s_emo.player_x + s_emo.cam_off_x ) * tp;
-            const float py = ( s_emo.player_y + s_emo.cam_off_y ) * tp;
+            const std::pair<float, float> sp = fcam.screen_pos_of(
+                    static_cast<float>( fcam.pub_player_x() ),
+                    static_cast<float>( fcam.pub_player_y() ), tp );
+            const float px = sp.first;
+            const float py = sp.second;
             rs.queue_ui_rect( px - 12.f, py - 1.f, 24.f, 2.f, 0.f, 1.f, 0.f, 1.f );
             rs.queue_ui_rect( px - 1.f, py - 12.f, 2.f, 24.f, 0.f, 1.f, 0.f, 1.f );
         }
@@ -1246,7 +1280,7 @@ auto render_world_pass_w( lighting::render_state &rs,
     // Box2D debug overlay — coloured wireframes over the world.  Lines were
     // populated earlier in cata_tiles::draw() → PhysicsWorld::draw_debug().
     if( rs.debug_lines().count() > 0 && rs.debug_lines().ready() ) {
-        const float tp = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
+        const float tp = s_frame_camera.pub_tile_px() > 0.f ? s_frame_camera.pub_tile_px() : 32.f;
         // cam = tile-space camera origin so that:
         //   pixel = (tile - cam) * tile_px
         //   ndc   = pixel / (proj * 0.5) - 1
@@ -1258,8 +1292,8 @@ auto render_world_pass_w( lighting::render_state &rs,
         // wireframe op_y/tile_px tiles too LOW (1.5 tiles at op=(0,48), tile 32)
         // — the "colliders sit below the walls" report. X was unaffected only
         // because op_x is 0 in non-iso mode, which hid the same error there.
-        const float cam_x = -s_emo.cam_off_x;
-        const float cam_y = -s_emo.cam_off_y;
+        const float cam_x = -s_frame_camera.pub_cam_off_x();
+        const float cam_y = -s_frame_camera.pub_cam_off_y();
         rs.debug_lines().record( { .cb = ctx.cmd_buffer, .target = wt->texture(),
                                    .target_w = wt->width(), .target_h = wt->height(),
                                    .proj_w = static_cast<std::uint32_t>( proj_w ),
@@ -1281,7 +1315,7 @@ auto render_world_pass_w( lighting::render_state &rs,
     // fire/torch should still visually read as a light source. See
     // emitter_glow_pass.h.
     if( g && g_glow_enable && !s_emo.snap.empty() && !lighting::overmap_view_open ) {
-        const float tp = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
+        const float tp = s_frame_camera.pub_tile_px() > 0.f ? s_frame_camera.pub_tile_px() : 32.f;
         // Cull to the player's z-level and a generous on-screen radius so the
         // instance list stays small regardless of how many emitters exist in
         // the loaded reality bubble.
@@ -1305,9 +1339,9 @@ auto render_world_pass_w( lighting::render_state &rs,
             if( e.shape != static_cast<std::uint32_t>( lighting::emitter_shape::OMNI ) ) {
                 continue;
             }
-            if( static_cast<int>( e.pos_z ) != s_emo.player_z ) { continue; }
-            const float dx = e.pos_x - static_cast<float>( s_emo.player_x );
-            const float dy = e.pos_y - static_cast<float>( s_emo.player_y );
+            if( static_cast<int>( e.pos_z ) != s_frame_camera.pub_player_z() ) { continue; }
+            const float dx = e.pos_x - static_cast<float>( s_frame_camera.pub_player_x() );
+            const float dy = e.pos_y - static_cast<float>( s_frame_camera.pub_player_y() );
             if( dx * dx + dy * dy > CULL_RADIUS_TILES * CULL_RADIUS_TILES ) { continue; }
             if( e.radius <= 0.01f ) { continue; }
             const int ex = static_cast<int>( e.pos_x );
@@ -1317,8 +1351,9 @@ auto render_world_pass_w( lighting::render_state &rs,
             const lit_level ell = glow_lc.inbounds( epos ) ? glow_lc.visibility_cache[glow_lc.idx( ex, ey )]
                                   : lit_level::BLANK;
             if( glow_map.get_visibility( ell, glow_vis_cache ) != VIS_CLEAR ) { continue; }
-            const float sx = ( e.pos_x + s_emo.cam_off_x ) * tp;
-            const float sy = ( e.pos_y + s_emo.cam_off_y ) * tp;
+            const std::pair<float, float> sp = s_frame_camera.screen_pos_of( e.pos_x, e.pos_y, tp );
+            const float sx = sp.first;
+            const float sy = sp.second;
             // 0,0,0 encodes "uncolored white" (gpu_emitter.h convention).
             float cr = e.r > 0.01f ? e.r : 1.0f;
             float cg = e.g > 0.01f ? e.g : 1.0f;
@@ -1373,7 +1408,7 @@ auto render_world_pass_w( lighting::render_state &rs,
     // the player already sees the window (the emitter-glow-pass FoW lesson).
     if( g && ( g_shaft_enable || g_dust_enable ) && !s_emo.snap.empty() &&
         !diagnostic_view_active() && !lighting::overmap_view_open ) {
-        const float tp = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
+        const float tp = s_frame_camera.pub_tile_px() > 0.f ? s_frame_camera.pub_tile_px() : 32.f;
         constexpr float CULL_RADIUS_TILES = 48.f;
         // Minimum direct-sun term (snapshot.cpp: 225 * cos(facing) * sun_intensity)
         // for a window to cast a visible shaft. Rejects grazing sun (beam parallel
@@ -1393,9 +1428,9 @@ auto render_world_pass_w( lighting::render_state &rs,
         const visibility_variables &shaft_vis_cache = shaft_map.get_visibility_variables_cache();
         for( const auto &e : s_emo.snap ) {
             if( e.shape != static_cast<std::uint32_t>( lighting::emitter_shape::CONE ) ) { continue; }
-            if( static_cast<int>( e.pos_z ) != s_emo.player_z ) { continue; }
-            const float dx = e.pos_x - static_cast<float>( s_emo.player_x );
-            const float dy = e.pos_y - static_cast<float>( s_emo.player_y );
+            if( static_cast<int>( e.pos_z ) != s_frame_camera.pub_player_z() ) { continue; }
+            const float dx = e.pos_x - static_cast<float>( s_frame_camera.pub_player_x() );
+            const float dy = e.pos_y - static_cast<float>( s_frame_camera.pub_player_y() );
             if( dx * dx + dy * dy > CULL_RADIUS_TILES * CULL_RADIUS_TILES ) { continue; }
             if( e.radius <= 0.01f ) { continue; }
             const int ex = static_cast<int>( e.pos_x );
@@ -1431,9 +1466,9 @@ auto render_world_pass_w( lighting::render_state &rs,
             const float strength = std::clamp( e.radius / 6.0f, 0.1f, 2.0f ) * g_shaft_intensity;
 
             if( g_shaft_enable && strength > 0.01f ) {
-                const float sx = ( e.pos_x + s_emo.cam_off_x ) * tp;
-                const float sy = ( e.pos_y + s_emo.cam_off_y ) * tp;
-                shaft_instances.push_back( { .cx = sx, .cy = sy,
+                const std::pair<float, float> sp =
+                        s_frame_camera.screen_pos_of( e.pos_x, e.pos_y, tp );
+                shaft_instances.push_back( { .cx = sp.first, .cy = sp.second,
                                              .dir_x = dir_x, .dir_y = dir_y,
                                              .length_px = base_len_tiles * tp,
                                              .half_width_px = std::max( 1.0f, g_shaft_width * tp ),
@@ -1468,8 +1503,8 @@ auto render_world_pass_w( lighting::render_state &rs,
                                   ? std::clamp( now_s - s_dust_last_s, 0.0f, 0.25f ) : 0.0f;
             s_dust_last_s = now_s;
             const lighting::dust_mote_params dp{
-                .camera_off_x = s_emo.cam_off_x,
-                .camera_off_y = s_emo.cam_off_y,
+                .camera_off_x = s_frame_camera.pub_cam_off_x(),
+                .camera_off_y = s_frame_camera.pub_cam_off_y(),
                 .tile_pixel_size = tp,
                 .proj_w = static_cast<float>( proj_w ),
                 .proj_h = static_cast<float>( proj_h ),
@@ -1499,25 +1534,26 @@ auto render_world_pass_w( lighting::render_state &rs,
         rp.active          = true;
         rp.intensity       = weather_rain_intensity();
         rp.wind_angle      = 270.f; // wind from west (left-to-right on screen)
-        // Step 6a (atmospheric-lighting-coherence plan): repointed from the removed
-        // g_vol_params to s_emo, which carries the identical per-frame camera_off_x/y
-        // + tile_pixel_size (filled earlier this frame, see s_emo.cam_off_x/y/tile_px
-        // above) — same values, one fewer per-frame struct.
-        rp.camera_off_x    = s_emo.cam_off_x;
-        rp.camera_off_y    = s_emo.cam_off_y;
-        rp.tile_pixel_size = s_emo.tile_px;
+        // T3 (#108): the frame's camera, published values — the same numbers
+        // `s_emo` carried into this struct every frame (Step 6a repointed the
+        // removed g_vol_params to the mirror; the camera is its source now).
+        rp.camera_off_x    = s_frame_camera.pub_cam_off_x();
+        rp.camera_off_y    = s_frame_camera.pub_cam_off_y();
+        rp.tile_pixel_size = s_frame_camera.pub_tile_px();
         rp.proj_w          = static_cast<float>( proj_w );
         rp.proj_h          = static_cast<float>( proj_h );
 
-        if( g && tilecontext && world_generator && world_generator->active_world
-            && rp.tile_pixel_size > 0.f ) {
+        if( g && s_frame_camera.have_tile_context && world_generator
+            && world_generator->active_world && rp.tile_pixel_size > 0.f ) {
             map &m = get_map();
             const int z = g->u.bub_pos().z();
             const level_cache &mc = m.access_cache( z );
             const int mapsize = m.getmapsize();
             const int map_w = mapsize * SEEX;
             const int map_h = mapsize * SEEY;
-            const point o = tilecontext->get_tile_map_origin().raw();
+            // The spawn origin is the stale tile-context origin, carried by
+            // the camera (T3) — the same value this site read from tilecontext.
+            const point o( s_frame_camera.map_origin_x, s_frame_camera.map_origin_y );
             const int cache_n = static_cast<int>( mc.outside_cache.size() );
 
             const int tiles_x = static_cast<int>( wt->width()  / rp.tile_pixel_size ) + 2;
@@ -1556,19 +1592,21 @@ auto render_world_pass_w( lighting::render_state &rs,
     if( have_sound_pulses ) {
         const float speed = g_sound_wave_speed;
         const double now = dev_test_lights::pulse_now_s();
-        const float tp = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
+        const float tp = s_frame_camera.pub_tile_px() > 0.f ? s_frame_camera.pub_tile_px() : 32.f;
         std::vector<lighting::sound_wave_instance> instances;
         instances.reserve( 32 );
         for( const auto &p : dev_test_lights::sound_pulses ) {
-            if( p.z != s_emo.player_z ) { continue; }
+            if( p.z != s_frame_camera.pub_player_z() ) { continue; }
             const float max_r = std::clamp( p.volume, std::min( g_sound_wave_min_radius,
                                             g_sound_wave_max_radius ), g_sound_wave_max_radius );
             const float radius = static_cast<float>( now - p.spawn_s ) * speed;
             const float life = std::clamp( 1.f - radius / max_r, 0.f, 1.f );
             if( life <= 0.f ) { continue; }
-            const float sx = ( p.source.x() + 0.5f + s_emo.cam_off_x ) * tp + s_emo.op_x;
-            const float sy = ( p.source.y() + 0.5f + s_emo.cam_off_y ) * tp + s_emo.op_y;
-            instances.push_back( { .source_x = sx, .source_y = sy,
+            // T3 (#108): the named double-add (issue #127), preserved verbatim.
+            const std::pair<float, float> pp = s_frame_camera.sound_pulse_pos_of(
+                    static_cast<float>( p.source.x() ) + 0.5f,
+                    static_cast<float>( p.source.y() ) + 0.5f, tp );
+            instances.push_back( { .source_x = pp.first, .source_y = pp.second,
                                    .radius_px = radius * tp, .life = life } );
         }
         if( !instances.empty() ) {
@@ -1576,10 +1614,10 @@ auto render_world_pass_w( lighting::render_state &rs,
                                       ? static_cast<float>( wt->width() ) / static_cast<float>( proj_w )
                                       : 1.f;
             const lighting::snd_frag_params fp {
-                .camera_off_x = static_cast<float>( s_emo.cam_off_x ),
-                .camera_off_y = static_cast<float>( s_emo.cam_off_y ),
-                .op_x = s_emo.op_x,
-                .op_y = s_emo.op_y,
+                .camera_off_x = s_frame_camera.pub_cam_off_x(),
+                .camera_off_y = s_frame_camera.pub_cam_off_y(),
+                .op_x = s_frame_camera.pub_op_x(),
+                .op_y = s_frame_camera.pub_op_y(),
                 .tile_px_inv = tp > 0.f ? 1.f / tp : 0.f,
                 .pixel_ratio = pixel_ratio,
                 .sdf_map_w = static_cast<std::uint32_t>( rs.sdf().map_w() ),
@@ -1869,13 +1907,16 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
         .target_w = target_w,
         .target_h = target_h,
     };
-    if( g_hud_part_mask_play && tilecontext && g
+    if( g_hud_part_mask_play && s_frame_camera.have_tile_context && g
         && world_generator && world_generator->active_world ) {
-        const point off = tilecontext->get_drawing_pixel_offset();
-        const float map_w = static_cast<float>( tilecontext->get_screentile_width() *
-                                                tilecontext->get_tile_width() );
-        const float map_h = static_cast<float>( tilecontext->get_screentile_height() *
-                                                tilecontext->get_tile_height() );
+        // T3 (#108): the raw tile-context facts, carried by the camera — the
+        // play-area rect multiplies the RAW tile heights, so it reads the raw
+        // fields, not the square `tile_px`.
+        const point off( s_frame_camera.draw_off_px_x, s_frame_camera.draw_off_px_y );
+        const float map_w = static_cast<float>( s_frame_camera.screentile_w *
+                                                s_frame_camera.tile_w );
+        const float map_h = static_cast<float>( s_frame_camera.screentile_h *
+                                                s_frame_camera.tile_h );
         const float sx = proj_w > 0 ? static_cast<float>( target_w ) / static_cast<float>( proj_w ) : 1.f;
         const float sy = proj_h > 0 ? static_cast<float>( target_h ) / static_cast<float>( proj_h ) : 1.f;
         part_draw.play_x0 = static_cast<float>( off.x ) * sx;
@@ -1945,6 +1986,10 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
 auto run_frame_plan( lighting::render_state &rs, lighting::frame_context &ctx,
                      frame_executor &exec ) -> void
 {
+    // T3 (#108): the frame's camera, derived ONCE here — before the first
+    // step runs — and read by every consumer in this TU. The whole frame
+    // agrees on it; the six re-derivations it replaces could disagree.
+    s_frame_camera = derive_live_frame_camera( ctx );
     bool rc_rebuild = false;
     int proj_w = 0;
     int proj_h = 0;
@@ -1970,7 +2015,7 @@ auto run_frame_plan( lighting::render_state &rs, lighting::frame_context &ctx,
                 break;
             case frame_step_kind::assemble:
                 dbg( DL::Debug ) << "[render] assemble_light_inputs";
-                assemble_light_inputs( rs, ctx );
+                assemble_light_inputs( rs );
                 break;
             case frame_step_kind::menu_background:
                 dbg( DL::Debug ) << "[render] maybe_push_menu_background";
@@ -1985,7 +2030,7 @@ auto run_frame_plan( lighting::render_state &rs, lighting::frame_context &ctx,
                     proj_h = static_cast<int>( ctx.swapchain_h );
                 }
                 dbg( DL::Debug ) << "[render] draw_lighting_overlays";
-                draw_lighting_overlays( rs, ctx );
+                draw_lighting_overlays( rs );
                 break;
             case frame_step_kind::ui_composite:
                 dbg( DL::Debug ) << "[render] composite_ui_pass_a";
