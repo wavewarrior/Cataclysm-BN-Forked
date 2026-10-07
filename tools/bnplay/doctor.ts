@@ -402,6 +402,72 @@ async function shaderSourceCheck(config: Config): Promise<Check> {
   }
 }
 
+/** The compute shader blob format the game loads on this platform (gpu_lm.cpp preferred_ext). */
+export const COMPILED_SHADER_EXTENSION = IS_WINDOWS
+  ? ".dxil"
+  : Deno.build.os === "darwin"
+  ? ".msl"
+  : ".spv"
+
+/**
+ * The build compiles every `src/shaders/*.hlsl` into `data/shaders/<name>.<format>` inside the
+ * source tree (CMakeLists.txt, target cata_shaders), and `/data/shaders/` is gitignored, so a
+ * checkout that was never built has none. The game still runs, logging `SDL_GPU: lm: shader blob
+ * not found` and `SDL_GPU lighting dispatch failed`, and the avatar perceives differently: a
+ * real-binary Episode on such a basepath gets `monster_in_view` interruptions and refused waits
+ * that the built checkout does not.
+ */
+export async function compiledShaderCheck(config: Config): Promise<Check> {
+  const name = "compiled_shaders"
+  const sources = join(config.basepath, "src", "shaders")
+  const compiled = join(config.basepath, "data", "shaders")
+  const missing: string[] = []
+  const stale: string[] = []
+  try {
+    for await (const entry of Deno.readDir(sources)) {
+      if (!entry.isFile || !entry.name.endsWith(".hlsl")) continue
+      const blob = entry.name.slice(0, -".hlsl".length) + COMPILED_SHADER_EXTENSION
+      const built = await Deno.stat(join(compiled, blob)).catch(() => undefined)
+      if (!built?.isFile) missing.push(blob)
+      else if ((built.mtime ?? 0) < ((await Deno.stat(join(sources, entry.name))).mtime ?? 0)) {
+        stale.push(blob)
+      }
+    }
+  } catch {
+    return {
+      name,
+      status: "warn",
+      summary: `no shader sources at ${sources}, so the compiled shaders cannot be checked`,
+      message: "Point BNPLAY_BASEPATH at the checkout the binary was built from.",
+    }
+  }
+  const remedy = "Point BNPLAY_BASEPATH at the checkout the binary was built from, build the " +
+    "cata_shaders target in this tree (cmake --build <build dir> --target cata_shaders), or copy " +
+    `data/shaders/*${COMPILED_SHADER_EXTENSION} from the checkout the binary was built from.`
+  if (missing.length > 0) {
+    return {
+      name,
+      status: "fail",
+      summary: `${missing.length} compiled shader(s) missing under ${compiled}: ${
+        missing.join(", ")
+      }`,
+      message: "The game runs its vision without the GPU passes and sees differently " +
+        `(SDL_GPU: lm: shader blob not found in its log). ${remedy}`,
+      details: missing,
+    }
+  }
+  if (stale.length > 0) {
+    return {
+      name,
+      status: "warn",
+      summary: `${stale.length} compiled shader(s) older than their source: ${stale.join(", ")}`,
+      message: `They may not match the source the game was built from. ${remedy}`,
+      details: stale,
+    }
+  }
+  return { name, status: "ok", summary: `every src/shaders/*.hlsl is compiled under ${compiled}` }
+}
+
 /** The checks only a windowed Trial needs; a windowless Trial never sees them. */
 async function windowedChecks(config: Config, liveUserdirs: string[]): Promise<Check[]> {
   return [
@@ -635,6 +701,7 @@ export async function runDoctor(config: Config, options: DoctorOptions): Promise
   const checks = [
     await driverFlagCheck(config),
     await binaryFreshnessCheck(config),
+    await compiledShaderCheck(config),
     ...await fixtureChecks(config, options.fixture),
     await strayCheck(config, options.liveUserdirs),
     ...(options.trial?.window ? await windowedChecks(config, options.liveUserdirs) : []),

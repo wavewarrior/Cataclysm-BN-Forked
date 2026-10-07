@@ -1,7 +1,8 @@
 /** Helpers shared by the bnplay tests: sandboxes, the CLI as a subprocess, process and tree checks. */
 import { delay } from "@std/async"
 import { dirname, fromFileUrl, join } from "@std/path"
-import { IS_WINDOWS } from "./config.ts"
+import { type Config, IS_WINDOWS } from "./config.ts"
+import { compiledShaderCheck } from "./doctor.ts"
 import { cloneTree } from "./episode.ts"
 import { windowsProcesses } from "./machine.ts"
 import type { TranscriptRecord } from "./transcript.ts"
@@ -27,6 +28,18 @@ export function realSave(): string {
   if (save) return save
   if (IS_WINDOWS) throw new Error("set BNPLAY_SAVE to the Bairdford save directory to clone")
   return join(Deno.env.get("HOME") ?? "", "Library/Application Support/Cataclysm-BN/save/Bairdford")
+}
+
+/**
+ * Refuses a basepath the real game would play differently from: one without the compiled compute
+ * shaders (doctor's `compiled_shaders` check). The game runs anyway, so without this the tests
+ * fail far from the cause, on refused waits and `monster_in_view` interruptions.
+ */
+export async function requireCompiledShaders(config: Config): Promise<void> {
+  const check = await compiledShaderCheck(config)
+  if (check.status === "fail") {
+    throw new Error(`BNPLAY_BASEPATH ${config.basepath}: ${check.summary}. ${check.message}`)
+  }
 }
 
 /** Arguments of the `deno` process that runs `bnplay <args>`. */

@@ -37,12 +37,14 @@ import { cloneTree } from "./episode.ts"
 import { runItemContract } from "./item_contract.ts"
 import { runMenuContract } from "./menu_contract.ts"
 import { runSceneContract } from "./scene_contract.ts"
-import { realSave, REPO } from "./testkit.ts"
+import { realSave, REPO, requireCompiledShaders } from "./testkit.ts"
 import { runTimeContract } from "./time_contract.ts"
 import type { WindowSize } from "./trial.ts"
 import { runViewContract } from "./view_contract.ts"
 
-const { binary, basepath } = loadConfig()
+const config = loadConfig()
+const { binary, basepath } = config
+await requireCompiledShaders(config)
 const world = "Bairdford"
 
 /**

@@ -26,6 +26,9 @@ Deno.test({
       const flag = report.checks.find((c: { name: string }) => c.name === "driver_flag")
       assertEquals(flag.status, "ok", JSON.stringify(flag))
       assertEquals(report.driver_available, true)
+      // A built basepath has a compiled blob for every compute shader source.
+      const shaders = report.checks.find((c: { name: string }) => c.name === "compiled_shaders")
+      assertEquals(shaders.status, "ok", JSON.stringify(shaders))
       // No Episode was started: the daemon never made an Episode directory.
       await assertRejects(() => Deno.stat(join(sandbox.home, "episodes")), Deno.errors.NotFound)
     } finally {

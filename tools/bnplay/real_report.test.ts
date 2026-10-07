@@ -9,9 +9,18 @@
 import { assert, assertEquals } from "@std/assert"
 import { join } from "@std/path"
 import { loadConfig } from "./config.ts"
-import { jsonOut, makeSandbox, pidsMatching, readTranscript, realSave } from "./testkit.ts"
+import {
+  jsonOut,
+  makeSandbox,
+  pidsMatching,
+  readTranscript,
+  realSave,
+  requireCompiledShaders,
+} from "./testkit.ts"
 
-const { binary, basepath } = loadConfig()
+const config = loadConfig()
+const { binary, basepath } = config
+await requireCompiledShaders(config)
 
 type Report = {
   verdict: string

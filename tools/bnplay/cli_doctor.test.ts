@@ -6,6 +6,7 @@
 import { assert, assertEquals } from "@std/assert"
 import { basename, dirname, join } from "@std/path"
 import { IS_WINDOWS } from "./config.ts"
+import { COMPILED_SHADER_EXTENSION } from "./doctor.ts"
 import {
   makeFakeWorld,
   makeSandbox,
@@ -81,6 +82,8 @@ type RigOptions = {
   binaryText?: string
   /** Leave out the lighting shader sources a windowed game cannot start without. */
   noShaders?: boolean
+  /** Leave out the compiled compute shader the build writes under data/shaders. */
+  noCompiledShaders?: boolean
   /** What `launchctl managername` says: `Aqua` is a graphical login session. */
   session?: string
   env?: Record<string, string>
@@ -110,6 +113,13 @@ async function withRig(opts: RigOptions, body: (rig: Rig) => Promise<void>): Pro
       await Deno.writeTextFile(join(shaders, name), "// shader\n")
     }
   }
+  await Deno.mkdir(join(source, "src", "shaders"), { recursive: true })
+  await Deno.writeTextFile(join(source, "src", "shaders", "lm_seen_compute.hlsl"), "// compute\n")
+  if (!opts.noCompiledShaders) {
+    const compiled = join(source, "data", "shaders", `lm_seen_compute${COMPILED_SHADER_EXTENSION}`)
+    await Deno.mkdir(dirname(compiled), { recursive: true })
+    await Deno.writeTextFile(compiled, "blob\n")
+  }
   const launchctl = join(dir, "launchctl")
   await Deno.writeTextFile(launchctl, `#!/bin/sh\necho ${opts.session ?? "Aqua"}\n`)
   if (!IS_WINDOWS) await Deno.chmod(launchctl, 0o755)
@@ -121,6 +131,7 @@ async function withRig(opts: RigOptions, body: (rig: Rig) => Promise<void>): Pro
   const now = Date.now() / 1000
   await Deno.utime(join(source, "src", "main.cpp"), now - 120, now - 120)
   await Deno.utime(join(source, "src", "lighting", "gpu.cpp"), now - 90, now - 90)
+  await Deno.utime(join(source, "src", "shaders", "lm_seen_compute.hlsl"), now - 90, now - 90)
   await Deno.utime(binary, now - 30, now - 30)
 
   const sandbox = await makeSandbox({
@@ -191,6 +202,7 @@ Deno.test("doctor passes on a healthy setup and starts no game", async () => {
       const name of [
         "driver_flag",
         "binary_fresh",
+        "compiled_shaders",
         "fixture",
         "baseline",
         "stray_processes",
@@ -232,6 +244,36 @@ Deno.test("doctor reports a stale binary and names the newer source and the rebu
     const fixed = await rig.doctor()
     assertEquals(fixed.code, 0)
     assertEquals(check(fixed.report, "binary_fresh").status, "ok")
+  })
+})
+
+Deno.test("doctor reports compiled shaders the basepath lacks or that predate their source", async () => {
+  await withRig({ noCompiledShaders: true }, async (rig) => {
+    const blob = `lm_seen_compute${COMPILED_SHADER_EXTENSION}`
+    const missing = await rig.doctor()
+    assertEquals(missing.code, 1)
+    assertEquals(missing.report.healthy, false)
+    const shaders = check(missing.report, "compiled_shaders")
+    assertEquals(shaders.status, "fail")
+    assert(shaders.summary.includes(blob), shaders.summary)
+    assert(shaders.message?.includes("cata_shaders"), shaders.message)
+    assert(shaders.message?.includes("BNPLAY_BASEPATH"), shaders.message)
+
+    // Built, but before the source last changed: it may not match.
+    const compiled = join(rig.source, "data", "shaders", blob)
+    await Deno.mkdir(dirname(compiled), { recursive: true })
+    await Deno.writeTextFile(compiled, "blob\n")
+    const old = Date.now() / 1000 - 600
+    await Deno.utime(compiled, old, old)
+    const stale = await rig.doctor()
+    assertEquals(stale.code, 0, "a stale shader warns, it does not fail")
+    assertEquals(check(stale.report, "compiled_shaders").status, "warn")
+
+    const now = Date.now() / 1000
+    await Deno.utime(compiled, now, now)
+    const fixed = await rig.doctor()
+    assertEquals(check(fixed.report, "compiled_shaders").status, "ok")
+    assertEquals(fixed.code, 0)
   })
 })
 

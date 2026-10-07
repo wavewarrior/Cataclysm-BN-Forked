@@ -10,9 +10,18 @@ import { assert, assertEquals } from "@std/assert"
 import { join } from "@std/path"
 import { loadConfig } from "./config.ts"
 import { linesInWindow } from "./gamelog.ts"
-import { jsonOut, makeSandbox, pidsMatching, realSave, treeSnapshot } from "./testkit.ts"
+import {
+  jsonOut,
+  makeSandbox,
+  pidsMatching,
+  realSave,
+  requireCompiledShaders,
+  treeSnapshot,
+} from "./testkit.ts"
 
-const { binary, basepath } = loadConfig()
+const config = loadConfig()
+const { binary, basepath } = config
+await requireCompiledShaders(config)
 
 type Entry = { fixture: string; baseline: string; lines?: number; stale?: string[] }
 
