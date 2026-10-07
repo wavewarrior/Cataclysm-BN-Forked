@@ -99,6 +99,8 @@ export class Episode {
   #inFlight = 0
   #finishing?: Promise<void>
   #exitCode = 0
+  /** The game's own exit code, kept only when it was asked to end. */
+  #gameExit?: number
   #queue: Promise<unknown> = Promise.resolve()
   readonly #oracles: OracleRun
   readonly #renderer: RendererRun
@@ -348,6 +350,7 @@ export class Episode {
       requests: this.#requests,
       failure: this.#failure,
       captures: this.#captured ? this.capturesPath : undefined,
+      gameExit: this.#gameExit,
     }
   }
 
@@ -437,6 +440,7 @@ export class Episode {
     }
     const normal = reason === "stop" || reason === "turn_limit" || reason === "died"
     this.#exitCode = normal ? driverExit : HARNESS_ERROR_EXIT_CODE
+    if (normal) this.#gameExit = driverExit
     this.#transcript.add({ event: "end", detail: { reason, exit_code: this.#exitCode } })
     this.#transcript.close()
     // The clone is the heavy part; the transcript and logs stay.

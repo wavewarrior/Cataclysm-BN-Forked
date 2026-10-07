@@ -52,6 +52,10 @@ its own noise: `mock_log_boot.txt` is logged during boot, before the first ping 
 
 A world with `mock_diverge` makes the first `wait` report a random `pain`, so two same-seed Episodes
 of it disagree there, as the real game's same-seed Episodes sometimes do.
+
+A world with `mock_quit_crash` answers `quit` and then crashes instead of exiting cleanly, as the
+real game did on Windows after drawing the overmap: an access violation (0xC0000005) on Windows,
+SIGSEGV elsewhere.
 """
 from __future__ import annotations
 
@@ -60,6 +64,7 @@ import json
 import os
 import random
 import re
+import signal
 import struct
 import subprocess
 import sys
@@ -556,6 +561,14 @@ def key(rid: int, game: Game, req: dict) -> dict:
     return observation(rid, game)
 
 
+def crash() -> None:
+    """Ends the process the way a crashed game does: an access violation, or SIGSEGV."""
+    sys.stdout.flush()
+    if os.name == "nt":
+        os._exit(-1073741819)  # 0xC0000005 as the signed int _exit takes on Windows
+    os.kill(os.getpid(), signal.SIGSEGV)
+
+
 def main() -> int:
     argv = sys.argv[1:]
     fd = option(argv, "--driver-fd")
@@ -593,6 +606,7 @@ def main() -> int:
     debug_log.log_script("mock_log_boot.txt")
     game = Game(deny)
     game.diverge = os.path.exists(os.path.join(userdir, "save", world, "mock_diverge"))
+    quit_crash = os.path.exists(os.path.join(userdir, "save", world, "mock_quit_crash"))
     ready = False
 
     def reply(resp: dict) -> None:
@@ -651,6 +665,8 @@ def main() -> int:
             reply({"id": rid, "status": "ok"})
             time.sleep(DebugLog.QUIT_DELAY_S)
             debug_log.log_script("mock_log_quit.txt")
+            if quit_crash:
+                crash()
             return 0
         elif cmd == "info":
             reply({"id": rid, "status": "ok", "userdir": userdir, "world": world, "pid": os.getpid()})

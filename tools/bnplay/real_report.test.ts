@@ -82,6 +82,7 @@ Deno.test({
       const results = Object.fromEntries(report.oracles.map((o) => [o.name, o.result]))
       assertEquals(results, {
         alive: "pass",
+        clean_exit: "pass",
         game_log: "pass",
         turn_counter: "pass",
         commands: "pass",

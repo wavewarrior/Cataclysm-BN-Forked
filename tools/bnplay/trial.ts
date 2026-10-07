@@ -129,7 +129,14 @@ export type RendererOracleSpec = {
 }
 
 /** Names the built-in checks report under; a Trial oracle may not reuse them. */
-export const BUILT_IN_ORACLES = ["alive", "game_log", "turn_counter", "commands", "window_size"]
+export const BUILT_IN_ORACLES = [
+  "alive",
+  "game_log",
+  "turn_counter",
+  "commands",
+  "window_size",
+  "clean_exit",
+]
 
 /** Wall-clock limit applied when a Trial does not set one: an Episode never runs unbounded. */
 export const DEFAULT_WALL_CLOCK_LIMIT_S = 300
