@@ -15,6 +15,8 @@
  *                          final composite only) occluded, as with the screen locked, so there is
  *                          nothing to draw into. No frame is written and an earlier one is never
  *                          returned in its place.
+ * Captures of one unchanged state are the same file, byte for byte, however far apart in wall time
+ * they are drawn: the paired null of every capture oracle stands on it.
  * A windowless game has no window to capture: `capture` is a protocol error there. A capture takes
  * no game time.
  */
@@ -68,6 +70,12 @@ function pngSize(bytes: Uint8Array): { width: number; height: number } | undefin
   if (bytes.length < 24 || signature.some((b, i) => bytes[i] !== b)) return undefined
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   return { width: view.getUint32(16), height: view.getUint32(20) }
+}
+
+/** The SHA-256 of a file's bytes, as hex. */
+async function sha256(path: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", await Deno.readFile(path))
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("")
 }
 
 /** Registers the capture contract under `name`; what it asks of the driver follows `target.window`. */
@@ -209,6 +217,22 @@ export function runCaptureContract(name: string, target: ContractTarget): void {
           assertEquals(JSON.parse(await Deno.readTextFile(c.map)).turn, turn)
         }
       })
+
+      await t.step(
+        "captures of one unchanged state are the same frame, byte for byte",
+        async () => {
+          // Spread over more than two seconds of wall time: an animation on the wall clock (the
+          // creature sprites' idle sway, period about 4 s, once was) shows up as differing frames.
+          const turn = await turnOf(driver)
+          const hashes: string[] = []
+          for (let n = 0; n < 8; n++) {
+            if (n > 0) await delay(300)
+            hashes.push(await sha256(captured(await driver.send({ cmd: "capture", dir })).frame))
+          }
+          assertEquals(await turnOf(driver), turn)
+          assertEquals(hashes, hashes.map(() => hashes[0]), `the frames of turn ${turn} differ`)
+        },
+      )
 
       await t.step(
         "a bad request is a protocol error, leaves no file and costs no time",
