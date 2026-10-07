@@ -1,5 +1,6 @@
 #include "state_helpers.h"
 
+#include "avatar.h"
 #include "calendar.h"
 #include "cata_arena.h"
 #include "coop_session.h"
@@ -46,6 +47,13 @@ auto clear_states(const enum_bitset<test_state>& states) -> void {
 
     if (normalized_states.test(state::map)) {
         clear_map();
+        // clear_avatar() placed the avatar relative to the bubble anchor the previous test
+        // left, and clear_map() may have re-anchored the bubble since. Left there, the
+        // avatar's absolute position puts the reality bubble somewhere other than the map,
+        // so bub_to_abs() and the map disagree for the rest of the test.
+        if (normalized_states.test(state::avatar)) {
+            g->u.setpos(map_local_to_abs(get_map(), tripoint_bub_ms(60, 60, 0)));
+        }
     } else {
         if (normalized_states.test(state::npc)) { clear_npcs(); }
         if (normalized_states.test(state::creature)) { clear_creatures(); }
