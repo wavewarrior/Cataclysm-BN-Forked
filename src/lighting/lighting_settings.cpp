@@ -6,6 +6,7 @@
 // destinations point at the legacy knob globals that later tickets move group by
 // group, so the addresses are always the live ones. The header stays SDL-free.
 
+#include "lighting/rmlui_layer.h"
 #include "sdl_lighting_devui.h"
 
 #include <algorithm>
@@ -41,7 +42,7 @@ auto lighting_knob_table() -> std::span<const knob_entry>
         { "dither_amt", knob_kind::value, knob_keys | knob_panel, &debug_params::dither_amt, knob_range{ 0.f, 2.f, 0.01f }, knob_range{ 0.f, 1.f, 0.1f } },
         { "dither_bands", knob_kind::value, knob_keys | knob_panel, &debug_params::dither_bands, knob_range{ 1.f, 32.f, 1.f }, knob_range{ 1.f, 16.f, 1.f } },
         // The key channel for the debug mode is F7's cycle, not F8/F9 stepping.
-        { "debug_mode", knob_kind::mode, knob_keys | knob_panel, &debug_params::debug_mode, std::nullopt, std::nullopt },
+        { "debug_mode", knob_kind::mode, knob_keys | knob_panel, &debug_params::debug_mode, std::nullopt, std::nullopt, "dbg_mode_idx" },
         // ---- legacy globals; the owning ticket moves them into settings ----
         { "gi_albedo", knob_kind::value, knob_file | knob_panel, &g_gi_albedo, knob_range{ 0.f, 1.f, 0.01f }, std::nullopt },
         { "gi_feedback", knob_kind::value, knob_file | knob_panel, &g_gi_feedback, knob_range{ 0.f, 0.9f, 0.01f }, std::nullopt },

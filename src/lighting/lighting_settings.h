@@ -152,6 +152,10 @@ struct knob_entry {
     /// Key limits, cross-checked against the old `lighting_dbg_range`
     /// constants by a test. Absent when F8/F9 do not write the knob.
     std::optional<knob_range> keys;
+    /// Name the F4 markup binds the widget under, when it differs from `name`
+    /// (the debug mode's select is `dbg_mode_idx`). Trailing and empty by
+    /// default so the table spells it only where it differs.
+    std::string_view widget;
 };
 
 /// The knob table: every name the `/tmp/cata_knob` chain accepted, plus the
