@@ -1,6 +1,7 @@
 #include "driver_loop.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -14,6 +15,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -43,6 +45,7 @@
 #include "path_info.h"
 #include "player_activity.h"
 #include "rng.h"
+#include "sidebar_anim.h"
 #include "ui_manager.h"
 
 namespace
@@ -781,18 +784,33 @@ auto run_key( const input_event &evt, const snapshot &before ) -> action_result
     return { .time_passed = spent || budget < max_turns_per_request };
 }
 
+/// How long `present_frame` waits at most for the HUD's tweens to end.
+constexpr auto hud_settle_limit = std::chrono::milliseconds( 2000 );
+
 /// Draws the game into the window and presents it, so a fresh frame exists while the driver
 /// waits for its next request. The window is only ever redrawn here: nobody is typing, so no
 /// input loop does it. Events are pumped first (a keypress is dropped) to keep the window
 /// responsive and to apply a resize before the draw. A failed draw leaves the window as it was
 /// and never fails the request that follows.
+///
+/// The HUD's tweens (a new log row fading in, a changed value pulsing) play out on the wall
+/// clock, so the window is redrawn until they end, at most `hud_settle_limit`: a capture then
+/// shows the state the tweens settle on, never one of their frames.
 auto present_frame() -> void
 {
     try {
+        const auto draw = []() -> void {
+            g->invalidate_main_ui_adaptor();
+            ui_manager::redraw_invalidated();
+            refresh_display();
+        };
         inp_mngr.pump_events();
-        g->invalidate_main_ui_adaptor();
-        ui_manager::redraw_invalidated();
-        refresh_display();
+        draw();
+        const auto deadline = std::chrono::steady_clock::now() + hud_settle_limit;
+        while( sidebar_requires_animation() && std::chrono::steady_clock::now() < deadline ) {
+            std::this_thread::sleep_for( std::chrono::milliseconds( 16 ) );
+            draw();
+        }
     } catch( const std::exception &err ) {
         std::cerr << "driver: the frame could not be drawn: " << err.what() << "\n";
     }
