@@ -303,6 +303,20 @@ TEST_CASE("grabbed_shopping_cart_can_be_pushed_with_debug_noclip", "[vehicle][gr
     check_avatar_still_grabs(cart);
 }
 
+// A grab must not outlive the test that made it: clear_all_state() wipes the cart,
+// and a grab still pointing at its tile would steer the next test's movement.
+TEST_CASE("clear_all_state_releases_a_vehicle_grab", "[vehicle][grab]") {
+    clear_all_state();
+    set_ramp(60, false, true);
+    setup_grabbed_shopping_cart(tripoint_bub_ms(61, 60, 0), tripoint_bub_ms(62, 60, 0));
+
+    clear_all_state();
+
+    auto& player_character = get_avatar();
+    CHECK(player_character.get_grab_type() == OBJECT_NONE);
+    CHECK(player_character.grab_point == tripoint_rel_ms::zero());
+}
+
 TEST_CASE("grabbed_shopping_cart_can_be_pushed_up_ramp", "[vehicle][ramp][grab]") {
     clear_all_state();
     set_ramp(60, true, true);

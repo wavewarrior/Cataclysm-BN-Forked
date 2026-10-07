@@ -138,7 +138,11 @@ void clear_character(player& dummy, bool debug_storage) {
     dummy.invalidate_crafting_inventory();
 }
 
-void clear_avatar() { clear_character(g->u); }
+void clear_avatar() {
+    clear_character(g->u);
+    // The grabbed furniture or vehicle does not survive clear_map().
+    g->u.grab(OBJECT_NONE);
+}
 
 void process_activity(player& dummy) {
     do {
