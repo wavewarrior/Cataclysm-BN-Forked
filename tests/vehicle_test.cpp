@@ -1186,6 +1186,9 @@ auto make_presteer_fixture() -> vehicle* {
     REQUIRE(veh_ptr != nullptr);
     REQUIRE(veh_ptr->box2d_position_authority);
     veh_ptr->engine_on = true;
+    // clear_all_state() parks the avatar at (60,60,0), inside the car. Unboarded, it is
+    // a pedestrian the first move rams, which bleeds speed and can roll a random skid.
+    get_avatar().setpos(tripoint_bub_ms(60, 50, 0));
     return veh_ptr;
 }
 
