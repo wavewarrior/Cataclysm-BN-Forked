@@ -6,7 +6,7 @@
     },
     "docs:gen": {
       "description": "automated documentation generation for CLI and Lua API",
-      "command": "deno fmt",
+      "command": "deno fmt docs/en/dev/reference/cli_options.md docs/en/mod/lua/reference/lua.md",
       "dependencies": ["docs:gen:cli", "docs:gen:lua"],
     },
     "docs:gen:cli": "deno run --allow-run=$CATA_EXE --allow-env=CATA_EXE --allow-write=docs ./scripts/gen_cli_docs.ts --output docs/en/dev/reference/cli_options.md",
