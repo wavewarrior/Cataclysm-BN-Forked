@@ -111,3 +111,75 @@ Deno.test({
     }
   },
 })
+
+Deno.test({
+  name: "a real Episode counts from its pinned clock and a mid-Episode set_time spends no turns",
+  sanitizeOps: false,
+  sanitizeResources: false,
+  async fn() {
+    const sandbox = await makeSandbox({
+      binary,
+      env: {
+        BNPLAY_BASEPATH: basepath,
+        BNPLAY_BOOT_TIMEOUT_MS: "60000",
+        BNPLAY_BASELINE_IDLE_MS: "2000",
+      },
+    })
+    try {
+      const added = await sandbox.cli(["fixture", "add", realSave()])
+      assertEquals(added.code, 0, added.stderr)
+      const fixture = jsonOut<{ fixture: string }>(added).fixture
+      const baseline = await sandbox.cli(["fixture", "baseline", fixture])
+      assertEquals(baseline.code, 0, baseline.stderr)
+
+      // Every clock here is 3 turns past a multiple of 9, so the few turns played never reach the
+      // game's 9-turn morale self-check (character_turn.cpp), which reports the fixture avatar's
+      // "Stylish" morale as inconsistent and would fail game_log for a reason unrelated to the clock.
+      const trial = await sandbox.trial(`
+        fixture = "${fixture}"
+        seed = 7
+        time_of_day = "08:02"
+        turn_limit = 3
+        wall_clock_limit_s = 150
+      `)
+      const started = await sandbox.cli(["start", trial])
+      assertEquals(started.code, 0, started.stderr)
+      const session = jsonOut<{ session: string }>(started).session
+      const step = async (request: object) => {
+        const res = await sandbox.cli(["step", session, JSON.stringify(request)])
+        assertEquals(res.code, 0, res.stderr)
+        return jsonOut<Record<string, unknown>>(res)
+      }
+
+      const pinned = (await step({ cmd: "state" })).turn as number
+      assertEquals(pinned % 86_400, 8 * 3_600 + 120, "the first state is at the pinned time of day")
+      for (const time of ["20:02", "02:02"]) {
+        const jumped = await step({ cmd: "set_time", time })
+        assertEquals(jumped.time, time)
+        assertEquals(jumped.episode_ended, undefined, `the jump to ${time} spent no turns`)
+      }
+      // The first action after load may complete a partial turn, so two waits cross three turns.
+      assertEquals((await step({ cmd: "wait", turns: 2 })).episode_ended, undefined)
+      assertEquals((await step({ cmd: "wait", turns: 2 })).episode_ended, "turn_limit")
+
+      const stop = await sandbox.cli(["stop", session])
+      assertEquals(stop.code, 0, stop.stdout + stop.stderr)
+      const report = jsonOut<Report>(stop)
+      assertEquals(report.ended, "turn_limit")
+      assertEquals(report.verdict, "pass", JSON.stringify(report.oracles))
+      assertEquals(report.oracles.find((o) => o.name === "turn_counter")?.result, "pass")
+      // The ping carries no turn, so the Episode counts from the pinned clock, not the save's.
+      assertEquals(report.turns?.first, pinned)
+      const records = await readTranscript(report.transcript)
+      const ping = records.find((r) => r.response?.ready === true)?.response
+      assert(ping !== undefined && !("turn" in ping), JSON.stringify(ping))
+      assertEquals(
+        records.flatMap((r) => r.request ? [r.request.cmd] : []).slice(0, 4),
+        ["ping", "seed", "set_time", "state"],
+      )
+      assertEquals(await pidsMatching(join(sandbox.home, "episodes", session)), [])
+    } finally {
+      await sandbox.cleanup()
+    }
+  },
+})
