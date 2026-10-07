@@ -15,6 +15,7 @@
       "cacheVariables": {
         "CMAKE_PROJECT_INCLUDE_BEFORE": "${sourceDir}/build-scripts/${presetName}.cmake",
         "CMAKE_TOOLCHAIN_FILE": "C:/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_MANIFEST_DIR": "${sourceDir}/msvc-full-features",
         "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
         "DYNAMIC_LINKING": "False",
         "CMAKE_CONFIGURATION_TYPES": "Debug;RelWithDebInfo;Release",
