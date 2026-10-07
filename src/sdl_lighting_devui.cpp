@@ -60,24 +60,9 @@
 
 EmitterOverlayState s_emo;
 
-namespace
-{
-// DIAGNOSTIC (temporary): CATA_DBG_MODE=N forces a shader debug mode at startup
-// (scripted F7 sweeps can't reliably inject the key). 0 = off.
-auto dbg_mode_from_env() -> uint32_t
-{
-    if( const char * e = std::getenv( "CATA_DBG_MODE" ); e != nullptr ) {
-        return static_cast<uint32_t>( std::strtoul( e, nullptr, 10 ) ) % 18u;
-    }
-    return 0u;
-}
-} // namespace
-
 bool g_dbg_lighting = true;
 bool g_dbg_lighting_shader = false;
-lighting::debug_params g_dbg_params{ .debug_mode = dbg_mode_from_env() };
 bool g_sun_arrow = false;
-bool g_rc_readback = false;
 float g_tonemap_exposure = 0.35f;
 float g_tonemap_min_ev = -12.47393f;
 float g_tonemap_max_ev = 4.026069f;
@@ -89,8 +74,6 @@ bool g_bloom_enable = false;
 // daylight scan (Step 3) and window light shafts (Step 6) it feeds both
 // ship enabled by default.
 bool g_sky_sun_enable = true;
-bool g_force_rc_rebuild = false;
-bool g_rebuild_once = false;
 bool g_force_world_redraw = false;
 float g_bloom_threshold = 1.0f;
 float g_bloom_intensity = 0.5f;
@@ -146,7 +129,6 @@ float g_hud_part_alpha_scale = 1.0f;
 float g_hud_part_size_scale = 1.0f;
 float g_hud_part_speed_scale = 1.0f;
 bool g_shadow_debug = false;
-uint32_t g_current_dbg_mode = dbg_mode_from_env();
 float g_skylight_bleed = 0.5f;
 // Hover-outline (HOVER_OUTLINE_PLAN.md) — CPU-side, no shader cbuffer.
 bool g_outline_enable = true;
@@ -273,8 +255,9 @@ auto g_sound_category = 0;        // index into sound_t enum (0=background)
 // Slice 8 — proxies for controls whose backing globals aren't directly bindable
 // (uint32 fields, <select> indices, size_t counts, read-only diagnostics text).
 int g_devui_dbg_mode = static_cast<int>
-                       ( g_current_dbg_mode ); // <select> proxy → g_current_dbg_mode (event-applied)
-int g_devui_shadow_steps = 16;  // reconciled with uint g_dbg_params.shadow_steps each frame
+                       ( lighting::live_settings().debug_mode() ); // <select> proxy → debug mode (event-applied)
+int g_devui_shadow_steps =
+    16;  // reconciled with uint lighting::live_settings().debug.shadow_steps each frame
 int g_devui_placed = 0;         // mirrors dev_test_lights::lights.size() each frame
 int g_runic_template = 0;       // <select> proxy → runic force_template+1 (event-applied)
 bool g_runic_auto_regen = true; // bump regen when a runic field changes (cf. ImGui auto-regen)
@@ -601,10 +584,10 @@ void devui_rml_open()
     } );
     // Slice 3 — Effects tab tuning params (live lighting). Floats two-way bound to the
     // same globals the ImGui sliders drive; the game render reads them each frame.
-    c.Bind( "nrm_amount", &g_dbg_params.nrm_amount );
-    c.Bind( "nrm_relief", &g_dbg_params.nrm_relief );
-    c.Bind( "nrm_elev", &g_dbg_params.nrm_elev );
-    c.Bind( "nrm_entity_amount", &g_dbg_params.nrm_entity_amount );
+    c.Bind( "nrm_amount", &lighting::live_settings().debug.nrm_amount );
+    c.Bind( "nrm_relief", &lighting::live_settings().debug.nrm_relief );
+    c.Bind( "nrm_elev", &lighting::live_settings().debug.nrm_elev );
+    c.Bind( "nrm_entity_amount", &lighting::live_settings().debug.nrm_entity_amount );
     // Camera follow knobs (CPU-only; pushed into game::main_camera_ in draw_ter).
     c.Bind( "cam_smooth", &camera_dbg::smooth_speed );
     c.Bind( "cam_lookahead", &camera_dbg::look_ahead );
@@ -663,43 +646,43 @@ void devui_rml_open()
     } );
     c.Bind( "shadow_debug", &g_shadow_debug );
     c.Bind( "seen_force_full_rebuild", &g_seen_force_full_rebuild );
-    c.Bind( "shadow_mask_str", &g_dbg_params.shadow_mask_str );
-    c.Bind( "mem_dim", &g_dbg_params.mem_dim );
-    c.Bind( "mem_radius", &g_dbg_params.mem_radius );
+    c.Bind( "shadow_mask_str", &lighting::live_settings().debug.shadow_mask_str );
+    c.Bind( "mem_dim", &lighting::live_settings().debug.mem_dim );
+    c.Bind( "mem_radius", &lighting::live_settings().debug.mem_radius );
     // Grid-decoupled lighting knobs (art-texel quantisation, sub-tile occluders,
     // palette shade ramps). texels_per_tile is DATA, not a knob — not bound.
-    c.Bind( "light_quant", &g_dbg_params.light_quant );
-    c.Bind( "occ_soft_gain", &g_dbg_params.occ_soft_gain );
-    c.Bind( "self_eps_tall", &g_dbg_params.self_eps_tall );
-    c.Bind( "vis_curve", &g_dbg_params.vis_curve );
-    c.Bind( "vis_radius", &g_dbg_params.vis_radius );
-    c.Bind( "ramp_enable", &g_dbg_params.ramp_enable );
-    c.Bind( "ramp_steps", &g_dbg_params.ramp_steps );
-    c.Bind( "ramp_chroma", &g_dbg_params.ramp_chroma );
-    c.Bind( "guard_amount", &g_dbg_params.guard_amount );
-    c.Bind( "gi_bilat", &g_dbg_params.gi_bilat );
+    c.Bind( "light_quant", &lighting::live_settings().debug.light_quant );
+    c.Bind( "occ_soft_gain", &lighting::live_settings().debug.occ_soft_gain );
+    c.Bind( "self_eps_tall", &lighting::live_settings().debug.self_eps_tall );
+    c.Bind( "vis_curve", &lighting::live_settings().debug.vis_curve );
+    c.Bind( "vis_radius", &lighting::live_settings().debug.vis_radius );
+    c.Bind( "ramp_enable", &lighting::live_settings().debug.ramp_enable );
+    c.Bind( "ramp_steps", &lighting::live_settings().debug.ramp_steps );
+    c.Bind( "ramp_chroma", &lighting::live_settings().debug.ramp_chroma );
+    c.Bind( "guard_amount", &lighting::live_settings().debug.guard_amount );
+    c.Bind( "gi_bilat", &lighting::live_settings().debug.gi_bilat );
     c.Bind( "gi_albedo", &g_gi_albedo );
     c.Bind( "gi_feedback", &g_gi_feedback );
-    c.Bind( "vis_edge", &g_dbg_params.vis_edge );
-    c.Bind( "flicker_gain", &g_dbg_params.flicker_gain );
+    c.Bind( "vis_edge", &lighting::live_settings().debug.vis_edge );
+    c.Bind( "flicker_gain", &lighting::live_settings().debug.flicker_gain );
     // Procedural normal atlas V offset (0 = feature off, 0.5 = double-height page) and
     // the SIGNED strength of the per-sprite vertical-face arc, both swept live.
-    c.Bind( "nrm_atlas_v", &g_dbg_params.nrm_atlas_v );
-    c.Bind( "face_arc", &g_dbg_params.face_arc );
-    c.Bind( "nrm_radial_amount", &g_dbg_params.nrm_radial_amount );
-    c.Bind( "cloud_strength", &g_dbg_params.cloud_strength );
-    c.Bind( "cloud_scale", &g_dbg_params.cloud_scale );
-    c.Bind( "cloud_wind_x", &g_dbg_params.cloud_wind_x );
-    c.Bind( "cloud_wind_y", &g_dbg_params.cloud_wind_y );
-    c.Bind( "cloud_threshold", &g_dbg_params.cloud_threshold );
-    c.Bind( "cloud_softness", &g_dbg_params.cloud_softness );
-    c.Bind( "sway_amp", &g_dbg_params.sway_amp );
-    c.Bind( "sway_freq", &g_dbg_params.sway_freq );
-    c.Bind( "ripple_k", &g_dbg_params.ripple_k );
-    c.Bind( "gust_amp", &g_dbg_params.gust_amp );
-    c.Bind( "gust_freq", &g_dbg_params.gust_freq );
-    c.Bind( "part_radius", &g_dbg_params.part_radius );
-    c.Bind( "part_strength", &g_dbg_params.part_strength );
+    c.Bind( "nrm_atlas_v", &lighting::live_settings().debug.nrm_atlas_v );
+    c.Bind( "face_arc", &lighting::live_settings().debug.face_arc );
+    c.Bind( "nrm_radial_amount", &lighting::live_settings().debug.nrm_radial_amount );
+    c.Bind( "cloud_strength", &lighting::live_settings().debug.cloud_strength );
+    c.Bind( "cloud_scale", &lighting::live_settings().debug.cloud_scale );
+    c.Bind( "cloud_wind_x", &lighting::live_settings().debug.cloud_wind_x );
+    c.Bind( "cloud_wind_y", &lighting::live_settings().debug.cloud_wind_y );
+    c.Bind( "cloud_threshold", &lighting::live_settings().debug.cloud_threshold );
+    c.Bind( "cloud_softness", &lighting::live_settings().debug.cloud_softness );
+    c.Bind( "sway_amp", &lighting::live_settings().debug.sway_amp );
+    c.Bind( "sway_freq", &lighting::live_settings().debug.sway_freq );
+    c.Bind( "ripple_k", &lighting::live_settings().debug.ripple_k );
+    c.Bind( "gust_amp", &lighting::live_settings().debug.gust_amp );
+    c.Bind( "gust_freq", &lighting::live_settings().debug.gust_freq );
+    c.Bind( "part_radius", &lighting::live_settings().debug.part_radius );
+    c.Bind( "part_strength", &lighting::live_settings().debug.part_strength );
     c.Bind( "outline_enable", &g_outline_enable );
     c.Bind( "outline_thickness", &g_outline_thickness );
     c.Bind( "outline_alpha", &g_outline_alpha );
@@ -717,9 +700,9 @@ void devui_rml_open()
     c.Bind( "hover_line_fade_ends", &g_hover_line_fade_ends );
     // Slice 8 — Lighting tab. Floats two-way bound to the same globals the ImGui sliders
     // drive; debug_mode + shadow_steps are uint32 so they go through int proxies.
-    c.Bind( "emitter_scale", &g_dbg_params.emitter_scale );
-    c.Bind( "sun_scale", &g_dbg_params.sun_scale );
-    c.Bind( "sky_scale", &g_dbg_params.sky_scale );
+    c.Bind( "emitter_scale", &lighting::live_settings().debug.emitter_scale );
+    c.Bind( "sun_scale", &lighting::live_settings().debug.sun_scale );
+    c.Bind( "sky_scale", &lighting::live_settings().debug.sky_scale );
     c.Bind( "skylight_bleed", &g_skylight_bleed );
     c.Bind( "tonemap_exposure", &g_tonemap_exposure );
     c.Bind( "tonemap_min_ev", &g_tonemap_min_ev );
@@ -747,34 +730,34 @@ void devui_rml_open()
     c.Bind( "grade_ca", &g_grade_ca );
     c.Bind( "depth_lean_str", &g_depth_lean_str );
     c.Bind( "depth_dark_str", &g_depth_dark_str );
-    c.Bind( "dither_amt", &g_dbg_params.dither_amt );
-    c.Bind( "dither_bands", &g_dbg_params.dither_bands );
-    c.Bind( "gi_strength", &g_dbg_params.gi_strength );
-    c.Bind( "shadow_k", &g_dbg_params.shadow_k );
+    c.Bind( "dither_amt", &lighting::live_settings().debug.dither_amt );
+    c.Bind( "dither_bands", &lighting::live_settings().debug.dither_bands );
+    c.Bind( "gi_strength", &lighting::live_settings().debug.gi_strength );
+    c.Bind( "shadow_k", &lighting::live_settings().debug.shadow_k );
     c.Bind( "shadow_steps", &g_devui_shadow_steps ); // int proxy → uint each frame
     // P5b: sky/sun quality knobs (sky_sun.comp cbuffer, read each frame)
-    c.Bind( "sky_dirs", &g_dbg_params.sky_dirs );
-    c.Bind( "sky_reach", &g_dbg_params.sky_reach );
-    c.Bind( "portal_dirs", &g_dbg_params.portal_dirs );
-    c.Bind( "portal_reach", &g_dbg_params.portal_reach );
-    c.Bind( "sun_steps", &g_dbg_params.sun_steps );
-    c.Bind( "sun_penumbra", &g_dbg_params.sun_penumbra );
-    c.Bind( "sun_soft", &g_dbg_params.sun_soft );
-    c.Bind( "light_eps", &g_dbg_params.light_eps );
-    c.Bind( "max_shadow_k", &g_dbg_params.max_shadow_k );
-    c.Bind( "ao_strength", &g_dbg_params.ao_strength );
-    c.Bind( "night_floor", &g_dbg_params.night_floor );
-    c.Bind( "day_floor", &g_dbg_params.day_floor );
+    c.Bind( "sky_dirs", &lighting::live_settings().debug.sky_dirs );
+    c.Bind( "sky_reach", &lighting::live_settings().debug.sky_reach );
+    c.Bind( "portal_dirs", &lighting::live_settings().debug.portal_dirs );
+    c.Bind( "portal_reach", &lighting::live_settings().debug.portal_reach );
+    c.Bind( "sun_steps", &lighting::live_settings().debug.sun_steps );
+    c.Bind( "sun_penumbra", &lighting::live_settings().debug.sun_penumbra );
+    c.Bind( "sun_soft", &lighting::live_settings().debug.sun_soft );
+    c.Bind( "light_eps", &lighting::live_settings().debug.light_eps );
+    c.Bind( "max_shadow_k", &lighting::live_settings().debug.max_shadow_k );
+    c.Bind( "ao_strength", &lighting::live_settings().debug.ao_strength );
+    c.Bind( "night_floor", &lighting::live_settings().debug.night_floor );
+    c.Bind( "day_floor", &lighting::live_settings().debug.day_floor );
     c.Bind( "dbg_mode_idx", &g_devui_dbg_mode );
     c.Bind( "dbg_mode_names", &g_dbg_mode_names );
     c.BindEventCallback( "dbg_mode", []( Rml::DataModelHandle, Rml::Event &,
     const Rml::VariantList & ) {
-        g_current_dbg_mode = static_cast<uint32_t>( std::max( 0, g_devui_dbg_mode ) );
-        g_dbg_params.debug_mode = g_current_dbg_mode;
+        lighting::live_settings().set_debug_mode( static_cast<uint32_t>( std::max( 0,
+                g_devui_dbg_mode ) ) );
     } );
     c.BindEventCallback(
         "rc_readback",
-    []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { g_rc_readback = true; } );
+    []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { lighting::live_settings().pulses.rc_readback = true; } );
     // Slice 8 — Effects tab cursor-light controls (colour is on the Colour tab).
     c.Bind( "cursor_enable", &cursor_light_emitter::enabled );
     c.Bind( "cursor_radius", &cursor_light_emitter::radius );
@@ -1009,8 +992,8 @@ void devui_rml_open()
     g_runic_template_names = {"Auto", "Centred", "Thirds", "Fixed-interval"};
     // Order MUST match lighting::hud_emitter_type — the <select> index is the enum.
     g_hud_part_type_names = {"ember", "dust", "pollen", "snow", "leaf"};
-    g_devui_dbg_mode = static_cast<int>( g_current_dbg_mode );
-    g_devui_shadow_steps = static_cast<int>( g_dbg_params.shadow_steps );
+    g_devui_dbg_mode = static_cast<int>( lighting::live_settings().debug_mode() );
+    g_devui_shadow_steps = static_cast<int>( lighting::live_settings().debug.shadow_steps );
     g_runic_template = lighting::runic_cfg().force_template + 1;
     g_devui_model = c.GetModelHandle();
     Rml::ElementDocument* doc =
@@ -1170,23 +1153,27 @@ void rml_tick()
         devui_rml_open();
         if( g_devui_doc != nullptr ) {
             // Slice 8 per-frame sync of the values that can't two-way bind directly.
-            // shadow_steps (uint): reconcile with the int proxy — whichever side changed wins.
+            // Both knobs are uint storage behind an int widget: the panel wins only when ITS
+            // proxy moved, otherwise the storage (any other channel) wins. `last` always takes
+            // the final proxy, so a /tmp/cata_knob shadow_steps write survives the open panel.
             static int last_ss = -1;
-            if( g_devui_shadow_steps != last_ss ) {
-                g_dbg_params.shadow_steps = static_cast<uint32_t>(
-                                                std::max( 1, g_devui_shadow_steps ) );
-            } else {
-                g_devui_shadow_steps = static_cast<int>( g_dbg_params.shadow_steps );
+            {
+                auto &dbg = lighting::live_settings().debug;
+                const auto r = lighting::knob_reconcile_int_proxy( { .proxy = g_devui_shadow_steps, .last = last_ss },
+                               static_cast<int>( dbg.shadow_steps ), std::max( 1, g_devui_shadow_steps ) );
+                dbg.shadow_steps = static_cast<uint32_t>( r.store );
+                g_devui_shadow_steps = r.store;
+                last_ss = r.last;
             }
-            // debug_mode (uint32): reconcile with the int proxy — whichever side changed wins.
             static int last_dm = -1;
-            if( g_devui_dbg_mode != last_dm ) {
-                g_current_dbg_mode = static_cast<uint32_t>( std::max( 0, g_devui_dbg_mode ) );
-                g_dbg_params.debug_mode = g_current_dbg_mode;
-            } else {
-                g_devui_dbg_mode = static_cast<int>( g_current_dbg_mode );
+            {
+                auto &settings = lighting::live_settings();
+                const auto r = lighting::knob_reconcile_int_proxy( { .proxy = g_devui_dbg_mode, .last = last_dm },
+                               static_cast<int>( settings.debug_mode() ), std::max( 0, g_devui_dbg_mode ) );
+                settings.set_debug_mode( static_cast<uint32_t>( r.store ) );
+                g_devui_dbg_mode = r.store;
+                last_dm = r.last;
             }
-            last_dm = g_devui_dbg_mode;
             // placed-light count (size_t → int readout).
             g_devui_placed = static_cast<int>( dev_test_lights::lights.size() );
             // runic auto-regen: bump regen when any edited field changed (cheap field sum).

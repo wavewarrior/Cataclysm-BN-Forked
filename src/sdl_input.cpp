@@ -13,6 +13,8 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <string_view>
+#include <variant>
 #include <string>
 
 #include "cached_options.h" // test_mode
@@ -51,6 +53,20 @@ static constexpr int ERR = -1;
 
 namespace
 {
+
+/// F8/F9: move a keys-channel knob one table step toward `delta`'s sign,
+/// clamped to the table's key range (the old `lighting_dbg_range` numbers).
+void key_step_knob( std::string_view name, float delta )
+{
+    const lighting::knob_entry *e = lighting::knob_find( name );
+    if( e == nullptr || !e->keys ) {
+        return;
+    }
+    if( const auto *p = std::get_if<float lighting::debug_params::*>( &e->dest ) ) {
+        float &v = lighting::live_settings().debug.**p;
+        v = lighting::knob_key_step( *e->keys, v, delta );
+    }
+}
 
 auto sdl_keycode_opposite_arrow( SDL_Keycode key ) -> SDL_Keycode
 {
@@ -502,23 +518,16 @@ void CheckMessages( display_context &d )
             mf >> m;
             std::filesystem::remove( "/tmp/cata_dbg_mode", ec );
             if( m >= 0 && m < 18 ) {
-                g_current_dbg_mode = static_cast<std::uint32_t>( m );
-                g_dbg_params.debug_mode = g_current_dbg_mode;
-                dbg( DL::Info ) << "lighting debug mode " << g_current_dbg_mode << " (file)";
+                lighting::live_settings().set_debug_mode( static_cast<std::uint32_t>( m ) );
+                dbg( DL::Info ) << "lighting debug mode " << lighting::live_settings().debug_mode() << " (file)";
             }
         }
     }
     // DIAGNOSTIC (temporary): /tmp/cata_knob containing "name value" sets a
-    // lighting DebugParams knob (mirrors the F4 sliders) and is consumed. Live
-    // bisection without driving the RmlUi panel. Known names: vis_curve,
-    // vis_radius, ao_strength, ramp_enable, shadow_mask_str, sun_scale,
-    // sky_scale, gi_strength, cloud_strength, nrm_amount, gi_albedo,
-    // gi_feedback, rc_readback, sun_arrow, guard_amount, portal_dirs,
-    // portal_reach, sky_sun_enable, flicker_gain, shaft_enable,
-    // shaft_intensity, shaft_length_scale, shaft_width, dust_enable,
-    // dust_density, dust_size, dust_drift, crt_world, shadow_steps,
-    // max_shadow_k, gi_bilat, light_eps, force_rc_rebuild, gi_enable,
-    // force_world_redraw.
+    // lighting knob (mirrors the F4 sliders) and is consumed. Live bisection
+    // without driving the RmlUi panel. Every name resolves through the knob
+    // table (`lighting::lighting_knob_table()`); the file channel writes raw,
+    // with no range clamp.
     {
         std::error_code ec;
         if( std::filesystem::exists( "/tmp/cata_knob", ec ) ) {
@@ -526,52 +535,7 @@ void CheckMessages( display_context &d )
             std::string kn;
             float kv = 0.0f;
             if( kf >> kn >> kv ) {
-                auto& dp = g_dbg_params;
-                bool ok = true;
-                if( kn == "vis_curve" ) dp.vis_curve = kv;
-                else if( kn == "vis_radius" ) dp.vis_radius = kv;
-                else if( kn == "ao_strength" ) dp.ao_strength = kv;
-                else if( kn == "ramp_enable" ) dp.ramp_enable = kv;
-                else if( kn == "shadow_mask_str" ) dp.shadow_mask_str = kv;
-                else if( kn == "sun_scale" ) dp.sun_scale = kv;
-                else if( kn == "sky_scale" ) dp.sky_scale = kv;
-                else if( kn == "gi_strength" ) dp.gi_strength = kv;
-                else if( kn == "cloud_strength" ) dp.cloud_strength = kv;
-                else if( kn == "nrm_amount" ) dp.nrm_amount = kv;
-                else if( kn == "gi_albedo" ) g_gi_albedo = kv;
-                else if( kn == "gi_feedback" ) g_gi_feedback = kv;
-                else if( kn == "rc_readback" ) g_rc_readback = kv > 0.5f;
-                else if( kn == "sun_arrow" ) g_sun_arrow = kv > 0.5f;
-                else if( kn == "guard_amount" ) dp.guard_amount = kv;
-                else if( kn == "portal_dirs" ) dp.portal_dirs = kv;
-                else if( kn == "portal_reach" ) dp.portal_reach = kv;
-                else if( kn == "sky_sun_enable" ) g_sky_sun_enable = kv > 0.5f;
-                else if( kn == "flicker_gain" ) dp.flicker_gain = kv;
-                else if( kn == "shaft_enable" ) g_shaft_enable = kv > 0.5f;
-                else if( kn == "shaft_intensity" ) g_shaft_intensity = kv;
-                else if( kn == "shaft_length_scale" ) g_shaft_length_scale = kv;
-                else if( kn == "shaft_width" ) g_shaft_width = kv;
-                else if( kn == "dust_enable" ) g_dust_enable = kv > 0.5f;
-                else if( kn == "dust_density" ) g_dust_density = kv;
-                else if( kn == "dust_size" ) g_dust_size = kv;
-                else if( kn == "dust_drift" ) g_dust_drift = kv;
-                else if( kn == "glow_enable" ) g_glow_enable = kv > 0.5f;
-                else if( kn == "glow_intensity" ) g_glow_intensity = kv;
-                else if( kn == "glow_radius" ) g_glow_radius = kv;
-                else if( kn == "glow_saturation" ) g_glow_saturation = kv;
-                else if( kn == "crt_world" ) rmlui_layer::crt().crt_world = kv > 0.5f;
-                else if( kn == "shadow_steps" ) dp.shadow_steps = static_cast<std::uint32_t>( std::max( 1.0f, kv ) );
-                else if( kn == "max_shadow_k" ) dp.max_shadow_k = kv;
-                else if( kn == "gi_bilat" ) dp.gi_bilat = kv;
-                else if( kn == "light_eps" ) dp.light_eps = kv;
-                else if( kn == "force_rc_rebuild" ) {
-                    // 2 = one rebuild on the next frame (leaves continuous forcing off).
-                    g_rebuild_once = kv > 1.5f;
-                    g_force_rc_rebuild = kv > 0.5f && kv <= 1.5f;
-                }
-                else if( kn == "gi_enable" ) g_gi_enable = kv > 0.5f;
-                else if( kn == "force_world_redraw" ) g_force_world_redraw = kv > 0.5f;
-                else ok = false;
+                const bool ok = lighting::knob_apply_file( lighting::live_settings(), kn, kv );
                 std::filesystem::remove( "/tmp/cata_knob", ec );
                 dbg( DL::Info ) << "knob " << kn << " = " << kv << ( ok ? "" : " (unknown)" );
             }
@@ -756,57 +720,48 @@ void CheckMessages( display_context &d )
                     // 9 = surface normal (Sobel), 10 = AO, 11 = shadow mask (game tiles only),
                     // 15 = vision frontier (frontier_cov), 16 = light_mode
                     // (red=unlit, green=gpu_lit, blue=memory).
-                    g_current_dbg_mode = ( g_current_dbg_mode + 1 ) % 18u;
-                    g_dbg_params.debug_mode = g_current_dbg_mode;
+                    lighting::live_settings().set_debug_mode( ( lighting::live_settings().debug_mode() + 1 ) % 18u );
                     // Log the mode we LANDED on. Scripted verification cycles this key
                     // N times and then measures a capture; a single dropped keypress
                     // would otherwise leave the capture silently showing a different
                     // mode, which reads as a result rather than as a miss. This turns
                     // "I pressed it the right number of times" into positive evidence.
-                    dbg( DL::Info ) << "lighting debug mode " << g_current_dbg_mode;
+                    dbg( DL::Info ) << "lighting debug mode " << lighting::live_settings().debug_mode();
                     break;
                 } else if( lc == KEY_F( 8 ) ) {
                     // F8: decrease emitter/sun/sky scales.
                     // Shift+F8: less dither.  Ctrl+F8: fewer dither bands.
-                    using namespace lighting_dbg_range;
-                    if( ev.key.mod & SDL_KMOD_ALT ) {
-                        g_dbg_params.gi_strength =
-                            std::max( GI_MIN, g_dbg_params.gi_strength - GI_STEP );
-                    } else if( ev.key.mod & SDL_KMOD_CTRL ) {
-                        g_dbg_params.dither_bands =
-                            std::max( DBND_MIN, g_dbg_params.dither_bands - DBND_STEP );
-                    } else if( ev.key.mod & SDL_KMOD_SHIFT ) {
-                        g_dbg_params.dither_amt =
-                            std::max( DAMT_MIN, g_dbg_params.dither_amt - DAMT_STEP );
-                    } else {
-                        g_dbg_params.emitter_scale =
-                            std::max( SCALE_MIN, g_dbg_params.emitter_scale - SCALE_STEP );
-                        g_dbg_params.sun_scale =
-                            std::max( SCALE_MIN, g_dbg_params.sun_scale - SCALE_STEP );
-                        g_dbg_params.sky_scale =
-                            std::max( SCALE_MIN, g_dbg_params.sky_scale - SCALE_STEP );
+                    {
+                        const auto down = []( std::string_view n ) { key_step_knob( n, -1.0f ); };
+                        if( ev.key.mod & SDL_KMOD_ALT ) {
+                            down( "gi_strength" );
+                        } else if( ev.key.mod & SDL_KMOD_CTRL ) {
+                            down( "dither_bands" );
+                        } else if( ev.key.mod & SDL_KMOD_SHIFT ) {
+                            down( "dither_amt" );
+                        } else {
+                            down( "emitter_scale" );
+                            down( "sun_scale" );
+                            down( "sky_scale" );
+                        }
                     }
                     break;
                 } else if( lc == KEY_F( 9 ) ) {
                     // F9: increase emitter/sun/sky scales.
                     // Shift+F9: more dither.  Ctrl+F9: more dither bands.
-                    using namespace lighting_dbg_range;
-                    if( ev.key.mod & SDL_KMOD_ALT ) {
-                        g_dbg_params.gi_strength =
-                            std::min( GI_MAX, g_dbg_params.gi_strength + GI_STEP );
-                    } else if( ev.key.mod & SDL_KMOD_CTRL ) {
-                        g_dbg_params.dither_bands =
-                            std::min( DBND_MAX, g_dbg_params.dither_bands + DBND_STEP );
-                    } else if( ev.key.mod & SDL_KMOD_SHIFT ) {
-                        g_dbg_params.dither_amt =
-                            std::min( DAMT_MAX, g_dbg_params.dither_amt + DAMT_STEP );
-                    } else {
-                        g_dbg_params.emitter_scale =
-                            std::min( SCALE_MAX, g_dbg_params.emitter_scale + SCALE_STEP );
-                        g_dbg_params.sun_scale =
-                            std::min( SCALE_MAX, g_dbg_params.sun_scale + SCALE_STEP );
-                        g_dbg_params.sky_scale =
-                            std::min( SCALE_MAX, g_dbg_params.sky_scale + SCALE_STEP );
+                    {
+                        const auto up = []( std::string_view n ) { key_step_knob( n, 1.0f ); };
+                        if( ev.key.mod & SDL_KMOD_ALT ) {
+                            up( "gi_strength" );
+                        } else if( ev.key.mod & SDL_KMOD_CTRL ) {
+                            up( "dither_bands" );
+                        } else if( ev.key.mod & SDL_KMOD_SHIFT ) {
+                            up( "dither_amt" );
+                        } else {
+                            up( "emitter_scale" );
+                            up( "sun_scale" );
+                            up( "sky_scale" );
+                        }
                     }
                     break;
                 } else if( lc == KEY_F( 10 ) ) {

@@ -21,6 +21,7 @@
 // into one), the rebuild mode (two bools collapse into one `force_rebuild`), the
 // `rc_readback` pulse, and `shadow_steps`' panel proxy.
 
+#include <cstdlib>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -92,6 +93,28 @@ struct lighting_settings {
     }
 };
 
+/// The debug mode's seed: `CATA_DBG_MODE`, taken modulo the 18 modes. The
+/// environment reaches the debug mode only here (it used to be read twice).
+inline auto dbg_mode_from_env() -> std::uint32_t
+{
+    if( const char *e = std::getenv( "CATA_DBG_MODE" ); e != nullptr ) {
+        return static_cast<std::uint32_t>( std::strtoul( e, nullptr, 10 ) ) % 18u;
+    }
+    return 0u;
+}
+
+/// The single live owner every channel (file, keys, panel) writes and every
+/// pass reads. Seeded once from the environment.
+inline auto live_settings() -> lighting_settings &   // *NOPAD*
+{
+    static lighting_settings s = [] {
+        auto x = lighting_settings{};
+        x.debug.debug_mode = dbg_mode_from_env();
+        return x;
+    }();
+    return s;
+}
+
 /// What a knob is, deciding how a channel writes it.
 enum class knob_kind : std::uint8_t {
     value,  /// continuous number
@@ -126,9 +149,9 @@ struct knob_special {
 /// ticket owns; plain addresses cover globals a later ticket moves (so the table
 /// is complete from the start and the drift test covers every old-chain name
 /// today); the tags cover the three destinations above.
-using knob_dest = std::variant<
-    float debug_params::*, std::uint32_t debug_params::*,
-    float *, bool *, knob_special >;
+using knob_dest = std::variant <
+                  float debug_params::*, std::uint32_t debug_params::*,
+                  float *, bool *, knob_special >;
 
 /// Optional per-channel range. The panel's limits live in the markup; the keys'
 /// limits are the old `lighting_dbg_range` constants. Several knobs have
@@ -149,8 +172,8 @@ struct knob_entry {
     /// Panel limits, cross-checked against `data/gui/devui.rml` by a test.
     /// Absent when the knob has no ranged widget in the markup.
     std::optional<knob_range> panel;
-    /// Key limits, cross-checked against the old `lighting_dbg_range`
-    /// constants by a test. Absent when F8/F9 do not write the knob.
+    /// Key limits (F8/F9). The numbers are the former `lighting_dbg_range`
+    /// constants, pinned by a test. Absent when F8/F9 do not write the knob.
     std::optional<knob_range> keys;
     /// Name the F4 markup binds the widget under, when it differs from `name`
     /// (the debug mode's select is `dbg_mode_idx`). Trailing and empty by
