@@ -38,7 +38,7 @@ export type Trial = {
   timeOfDay?: string
   /** Wall-clock limit, enforced outside the game; the Episode is killed when it expires. */
   wallClockLimitS: number
-  /** End the Episode after this many game turns. */
+  /** End the Episode after this many game turns spent; a `set_time` jump spends none. */
   turnLimit?: number
   /**
    * Attach a view of this radius (in tiles) to every response, so a dense Trial needs no extra

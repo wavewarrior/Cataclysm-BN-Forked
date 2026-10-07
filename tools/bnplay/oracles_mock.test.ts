@@ -530,6 +530,59 @@ Deno.test("the Trial's turn limit ends the Episode after that many turns", async
   })
 })
 
+Deno.test("a mid-Episode set_time is a jump, not time spent: no turn_counter failure, no turn limit", async () => {
+  await withSandbox(async (sandbox) => {
+    const session = await start(
+      sandbox,
+      `turn_limit = 10
+       [[oracle]]
+       name = "moves by turn 10"
+       field = "moved"
+       operator = "eq"
+       value = true
+       mode = "by-turn-10"
+       severity = "warn"`,
+    )
+    assertEquals((await step(sandbox, session, { cmd: "wait", turns: 3 })).json?.turn, 1003)
+    const forward = await step(sandbox, session, {
+      cmd: "set_time",
+      date: "0001-01-02",
+      time: "00:00",
+    })
+    assertEquals(forward.code, 0, forward.stderr)
+    assertEquals(forward.json?.turn, 86_400)
+    assertEquals(forward.json?.episode_ended, undefined, "the forward jump spent no turns")
+    const backward = await step(sandbox, session, {
+      cmd: "set_time",
+      date: "0001-01-01",
+      time: "00:00",
+    })
+    assertEquals(backward.code, 0, backward.stderr)
+    assertEquals(backward.json?.turn, 0)
+    assertEquals(backward.json?.episode_ended, undefined)
+
+    // The 3 turns spent before the jumps still count: 6 more leave one short of the limit.
+    assertEquals(
+      (await step(sandbox, session, { cmd: "wait", turns: 6 })).json?.episode_ended,
+      undefined,
+    )
+    const last = (await step(sandbox, session, { cmd: "wait", turns: 1 })).json!
+    assertEquals(last.episode_ended, "turn_limit")
+    assertEquals(last.turn, 7)
+
+    const { code, report } = await finish(sandbox, session)
+    assertEquals(report.ended, "turn_limit")
+    assertEquals(oracle(report, "turn_counter")?.result, "pass")
+    assertEquals(code, 0)
+    // A by-turn oracle counts spent turns too: decided by the last wait, at 10, not by a jump.
+    const late = oracle(report, "moves by turn 10")!
+    assertEquals(late.result, "warn")
+    assertEquals(late.first_fail?.index, last.id)
+    assertEquals(late.first_fail?.elapsed, 10)
+    assertEquals(report.turns, { first: 1000, last: 7 })
+  })
+})
+
 Deno.test("an idle-reaped session reports a harness error", async () => {
   await withSandbox(async (sandbox) => {
     const session = await start(sandbox)

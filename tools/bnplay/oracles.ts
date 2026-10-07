@@ -18,7 +18,7 @@ export type FirstFail = {
   index: number
   /** The game's turn counter at the failing observation, when it had one. */
   turn?: number
-  /** Game turns since the Episode's first state. */
+  /** Game turns spent since the Episode's first state, not counting `set_time` jumps. */
   elapsed?: number
   why: string
 }
@@ -98,6 +98,8 @@ export class OracleRun {
   readonly #tracked: Tracked[]
   #firstTurn?: number
   #lastTurn?: number
+  /** The net turns `set_time` moved the counter by: a deliberate jump, not game time spent. */
+  #jumped = 0
   /** The first time-passing observation may complete a partial turn without moving the counter. */
   #timePassedSeen = false
   #turnCounter?: FirstFail
@@ -119,14 +121,29 @@ export class OracleRun {
     return this.#lastTurn
   }
 
+  /** Game turns spent since the first state, `set_time` jumps left out; undefined before one. */
+  get spentTurns(): number | undefined {
+    return this.#lastTurn === undefined ? undefined : this.#spent(this.#lastTurn)
+  }
+
+  #spent(turn: number): number {
+    return turn - (this.#firstTurn ?? turn) - this.#jumped
+  }
+
   observe({ index, request, response }: Observation): void {
     this.#lastIndex = index
     if (response.status !== "ok") return
     const turn = typeof response.turn === "number" ? response.turn : undefined
-    if (turn !== undefined) this.#firstTurn ??= turn
+    if (turn !== undefined) {
+      this.#firstTurn ??= turn
+      // `set_time` pins the clock: the counter is rebased on the jump, which spends no game time.
+      if (request.cmd === "set_time" && this.#lastTurn !== undefined) {
+        this.#jumped += turn - this.#lastTurn
+      }
+    }
     const at = {
       index,
-      ...(turn === undefined ? {} : { turn, elapsed: turn - (this.#firstTurn ?? turn) }),
+      ...(turn === undefined ? {} : { turn, elapsed: this.#spent(turn) }),
     }
     if (turn !== undefined) this.#checkTurnCounter(at, request, response, turn)
     this.#checkCommands(at, request, response)
@@ -144,7 +161,7 @@ export class OracleRun {
     const timePassed = response.time_passed === true
     const after = this.#timePassedSeen
     if (timePassed) this.#timePassedSeen = true
-    if (previous === undefined || this.#turnCounter) return
+    if (previous === undefined || this.#turnCounter || request.cmd === "set_time") return
     let why: string | undefined
     if (turn < previous) {
       why = `the turn counter went backwards, ${previous} to ${turn}`
@@ -228,9 +245,9 @@ export class OracleRun {
       // The Episode is over and the condition never held by its turn: that is a failure.
       const first: FirstFail = {
         index: this.#lastIndex,
-        ...(this.#lastTurn === undefined || this.#firstTurn === undefined
+        ...(this.#lastTurn === undefined
           ? {}
-          : { turn: this.#lastTurn, elapsed: this.#lastTurn - this.#firstTurn }),
+          : { turn: this.#lastTurn, elapsed: this.#spent(this.#lastTurn) }),
         why: `${spec.field} ${spec.operator} ${describe(spec.value)} never held; ` +
           `the Episode ended before turn ${spec.mode.byTurn} was decided`,
       }

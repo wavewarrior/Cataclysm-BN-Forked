@@ -282,13 +282,11 @@ export class Episode {
     })
   }
 
-  /** True once the game turn counter has moved as far as the Trial's turn limit allows. */
+  /** True once the game has spent as many turns as the Trial's turn limit allows. */
   #turnLimitReached(): boolean {
     const { turnLimit } = this.#trial
-    const first = this.#oracles.firstTurn
-    const last = this.#oracles.lastTurn
-    return turnLimit !== undefined && first !== undefined && last !== undefined &&
-      last - first >= turnLimit
+    const spent = this.#oracles.spentTurns
+    return turnLimit !== undefined && spent !== undefined && spent >= turnLimit
   }
 
   /** Asks the game to quit and reaps it; a game that will not quit is ended as a hang or a death. */
