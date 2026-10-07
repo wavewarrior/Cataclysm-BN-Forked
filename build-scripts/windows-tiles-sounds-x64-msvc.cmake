@@ -18,8 +18,11 @@ Pre-load script for Windows builds with Ninja Multi-Config and MSVC.
 # before project() initialises those, so a normal variable would shadow CMake's MSVC
 # defaults (/DWIN32 /D_WINDOWS /EHsc) and every TU would build without C++ unwinding (C4530).
 add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:/bigobj;/utf-8>")
-# cata_test-tiles' PDB passes 6 GB on relinks and then fails LNK1140 ("limit exceeded for
-# program database"); larger PDB pages raise the ceiling (16 KiB pages allow 16 GB).
+# CMake's MSVC default links /debug configs /INCREMENTAL, which updates the PDB in place so it
+# fragments and grows on every relink (3.6 -> 5.4 GB in a day) until LNK1140 "limit exceeded
+# for program database". CI's MSVC.cmake passes /INCREMENTAL:NO for this; the larger PDB page
+# size is only headroom. Debug keeps incremental linking (set further down).
+add_link_options("$<$<CONFIG:RelWithDebInfo,Release>:/INCREMENTAL:NO>")
 add_link_options("$<$<LINK_LANGUAGE:C,CXX>:/PDBPAGESIZE:16384>")
 
 # --- Box2D physics: ON by default for this preset -------------------------
