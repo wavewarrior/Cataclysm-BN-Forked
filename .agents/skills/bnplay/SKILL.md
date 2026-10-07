@@ -135,6 +135,7 @@ Spend tokens only when the cheaper rung cannot answer: the lean `step` response;
 - **A stale binary produces phantom diagnoses.** Run `doctor` before trusting any Episode; rebuild when it says the binary predates `src/`. A copied binary gets a new mtime and passes the check: copy only fresh builds.
 - **Memory.** Default cap is 2 concurrent sessions; `doctor` fails below 1 GB free swap. Do not raise `BNPLAY_MAX_SESSIONS` on a machine that is swapping.
 - **Daemon socket.** `BNPLAY_HOME` (default `out/bnplay`, one directory per Episode holding `transcript.jsonl` and `userdir/config/debug.log`) must keep the socket path under 100 bytes.
+- **Windows Bairdford fails `game_log` on a multiple of 9 turns** (verified 2026-10-07; this is the game's issue, not bnplay's). Every 9 turns the game checks morale consistency (`character_turn.cpp:252`), and on this avatar it logs `ERROR DEBUGMSG ... morale.cpp:950 Morale "Stylish" is inconsistent: lhs 7 != rhs N/A`. That happens whenever an Episode's turns cross a multiple of 9, with or without `set_time`: a plain 12-turn Episode fails, and so does `time_of_day = "08:00"` (08:00 is a multiple of 9 turns). Short Episodes that pass `game_log` dodge the check; they do not show the avatar is clean.
 
 ## Windowed mode (renderer changes only)
 
