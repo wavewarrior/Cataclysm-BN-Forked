@@ -1,5 +1,7 @@
 #include "driver_window.h"
 
+#include "calendar.h"
+
 #include <algorithm>
 #include <charconv>
 #include <string>
@@ -55,4 +57,12 @@ auto request_driver_window( const driver_window_size &size ) -> void
 auto requested_driver_window() -> std::optional<driver_window_size>
 {
     return requested_window;
+}
+
+auto driver_frame_clock() -> std::optional<double>
+{
+    if( !requested_window ) {
+        return std::nullopt;
+    }
+    return to_turn<double>( calendar::turn );
 }

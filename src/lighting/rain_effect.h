@@ -63,6 +63,10 @@ struct rain_params {
     // top-left quadrant (half-scale) on a HiDPI display.
     float proj_w = 0.f;
     float proj_h = 0.f;
+
+    // Take one simulation step() after drawing the drops: in normal play every drawn frame is
+    // a step. The windowed driver's stills step by the game clock instead and only draw.
+    bool advance = true;
 };
 
 class rain_effect {
@@ -100,6 +104,10 @@ public:
     void record(
         SDL_GPUCommandBuffer* cb, SDL_GPUTexture* world_tex, std::uint32_t world_w,
         std::uint32_t world_h, const rain_params& params);
+
+    // One simulation step: every drop falls, a drop that lands becomes a splash ring, and the
+    // rings age. record() takes one per drawn frame unless `rain_params::advance` is false.
+    void step();
 
 private:
     // Spawn an impact-splash ring at world tile (wx, wy). Internal — driven

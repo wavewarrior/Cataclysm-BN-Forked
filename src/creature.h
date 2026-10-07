@@ -245,8 +245,8 @@ struct animation_tuning {
 // Render-side per-frame update: detects new sim events via the *_seq counters, latches
 // wall-time, pops the hit ring, and computes the output offsets/tilt/scale/flash.
 // Offsets are in PIXELS except slide_offset_{x,y} which are in TILE units (the renderer
-// scales those by tile_pixel_size, since they must track zoom). `wall_now` is SDL
-// wall-clock seconds (monotonic). No SDL dependency lives here.
+// scales those by tile_pixel_size, since they must track zoom). `wall_now` is SDL wall-clock
+// seconds (monotonic), or the game clock for the agent driver's stills. No SDL dependency here.
 void update_animation_state(
     animation_state& state, const animation_tuning& tuning, double wall_now,
     float idle_phase = 0.f );

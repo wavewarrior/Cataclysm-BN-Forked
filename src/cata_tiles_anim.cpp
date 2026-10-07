@@ -12,6 +12,7 @@
 #include "catacharset.h"
 #include "clzones.h"
 #include "cursesdef.h"
+#include "driver_window.h"
 #include "field.h"
 #include "game.h"
 #include "json.h"
@@ -108,6 +109,10 @@ void cata_tiles::refresh_anim_frame()
 {
     creatures_anim_active_ = false; // re-evaluated as creatures/tiles draw this frame
     anim_wall_now_ = static_cast<double>( SDL_GetTicks() ) / 1000.0;
+    // The windowed driver's captures are stills of the game state: its sprites run on the game
+    // clock (see driver_frame_clock).
+    const std::optional<double> still_clock = driver_frame_clock();
+    anim_sprite_now_ = still_clock.value_or( anim_wall_now_ );
     if( s_anim_override ) { // F4 live-tuning owns the struct; don't re-read options
         anim_enabled_ = true;
         return;
@@ -127,6 +132,13 @@ void cata_tiles::refresh_anim_frame()
     t.hit_flash_intensity = static_cast<float>( get_option<float>( "SPRITE_HIT_FLASH_INTENSITY" ) );
     t.attack_amplitude = static_cast<float>( get_option<float>( "SPRITE_ATTACK_AMPLITUDE" ) );
     t.attack_duration = static_cast<float>( get_option<float>( "SPRITE_ATTACK_DURATION" ) );
+    if( still_clock ) {
+        // An event reaction starts on the first frame that draws it and plays out in frame time,
+        // which stands still on the game clock: draw it at rest, as it ends.
+        t.move_bob = false;
+        t.hit_reaction = false;
+        t.attack_lunge = false;
+    }
 }
 
 sprite_xform cata_tiles::compute_anim_xform( const Creature& c ) const
@@ -136,7 +148,7 @@ sprite_xform cata_tiles::compute_anim_xform( const Creature& c ) const
     // Per-creature idle phase (from tile position) so a horde doesn't sway in unison.
     const tripoint_bub_ms cp = c.bub_pos();
     const float idle_phase = static_cast<float>( ( cp.x() * 7 + cp.y() * 13 ) & 15 ) * 0.3927f;
-    update_animation_state( c.anim_state, s_anim_tuning, anim_wall_now_, idle_phase );
+    update_animation_state( c.anim_state, s_anim_tuning, anim_sprite_now_, idle_phase );
     const animation_state& a = c.anim_state;
     x.off_x = a.hit_offset_x + a.attack_offset_x + a.idle_offset_x
               + a.slide_offset_x * static_cast<float>( tile_width );
@@ -167,7 +179,11 @@ bool cata_tiles::creatures_require_animation() const { return creatures_anim_act
 
 void cata_tiles::register_tile_hit( const tripoint_bub_ms& p, float dir_x, float dir_y )
 {
-    if( !get_option<bool>( "SPRITE_ANIMATIONS" ) || !get_option<bool>( "SPRITE_TILE_HIT" ) ) { return; }
+    // The windowed driver's stills show a smashed tile at rest (see refresh_anim_frame).
+    if( !get_option<bool>( "SPRITE_ANIMATIONS" ) || !get_option<bool>( "SPRITE_TILE_HIT" ) ||
+        driver_frame_clock() ) {
+        return;
+    }
     tile_hits_[p] = tile_hit_state{static_cast<double>( SDL_GetTicks() ) / 1000.0, dir_x, dir_y};
 }
 

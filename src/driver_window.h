@@ -41,3 +41,9 @@ auto request_driver_window( const driver_window_size &size ) -> void;
 
 /// The window `request_driver_window` asked for; empty when the boot is not windowed.
 auto requested_driver_window() -> std::optional<driver_window_size>;
+
+/// The clock, in seconds, that the frames of the windowed driver boot animate on: the game clock,
+/// a second a turn. The driver draws a frame per request and captures stills of the game state, so
+/// an animation must not move while the state does not: the same state draws the same frame. Empty
+/// when the boot is not windowed; frames then animate on the wall clock.
+auto driver_frame_clock() -> std::optional<double>;

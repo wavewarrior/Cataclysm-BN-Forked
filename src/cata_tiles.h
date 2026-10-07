@@ -1606,6 +1606,9 @@ class cata_tiles
         sprite_xform active_anim_xform_;
         // Per-frame animation context, refreshed once at the top of draw().
         double anim_wall_now_ = 0.0; // SDL wall-clock seconds
+        // Clock of the creature sprite animations, seconds: the wall clock, or the game clock for
+        // the windowed agent driver's stills (see refresh_anim_frame).
+        double anim_sprite_now_ = 0.0;
         bool anim_enabled_ = false;  // master option AND tiles path
         // True if any sprite animation produced motion this frame (breathing, a decaying
         // event reaction, or a live tile-hit). Drives the redraw pump. Reset each draw().

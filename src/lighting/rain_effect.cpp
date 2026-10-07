@@ -232,6 +232,21 @@ void rain_effect::add_splash(float wx, float wy, float intensity) {
     });
 }
 
+void rain_effect::step() {
+    constexpr float DESCENT = 0.13f; // tiles/step
+    auto it = droplets_.begin();
+    while (it != droplets_.end()) {
+        it->fall -= DESCENT;
+        if (it->fall <= 0.f) {
+            add_splash(it->world_x, it->world_y, it->opacity); // ring at the landing tile
+            it = droplets_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    update_splashes();
+}
+
 void rain_effect::update_splashes() {
     auto it = splashes_.begin();
     while (it != splashes_.end()) {
@@ -286,16 +301,13 @@ void rain_effect::record(
     const float wind_rad = params.wind_angle * 3.14159265f / 180.f;
     const float drop_rot = std::sin(-wind_rad) * 0.3f;
 
-    // ---- Advance drops + build streak instances (WORLD-targeted) ---------
+    // ---- Build streak instances (WORLD-targeted) -------------------------
     // Each drop falls (in tiles) toward its landing tile; on impact it dies and
     // spawns a splash ring there, so the streak you see is the splash you see.
-    constexpr float DESCENT = 0.13f;   // tiles/frame
     constexpr float LEAN_TILES = 0.5f; // wind drift at spawn, straightens on impact
     std::vector<quad_instance> droplet_inst;
     droplet_inst.reserve(droplets_.size());
-    auto it = droplets_.begin();
-    while (it != droplets_.end()) {
-        rain_droplet& d = *it;
+    for (const rain_droplet& d : droplets_) {
         const float landing_x = (d.world_x + params.camera_off_x) * tp;
         const float landing_y = (d.world_y + params.camera_off_y) * tp;
         const float prog = d.fall0 > 0.f ? d.fall / d.fall0 : 0.f; // 1=spawn → 0=impact
@@ -322,17 +334,9 @@ void rain_effect::record(
             qi.rotation = drop_rot;
             droplet_inst.push_back(qi);
         }
-
-        d.fall -= DESCENT;
-        if (d.fall <= 0.f) {
-            add_splash(d.world_x, d.world_y, d.opacity); // ring at the landing tile
-            it = droplets_.erase(it);
-        } else {
-            ++it;
-        }
     }
 
-    update_splashes();
+    if (params.advance) { step(); }
 
     // ---- Build splash-ring instances (WORLD-locked, projected) -----------
     std::vector<quad_instance> splash_inst;

@@ -23,6 +23,7 @@
 #include "profile.h"
 #include "output.h"
 #include "point.h"
+#include "driver_window.h"
 #include "sdl_display.h"
 #include "sdl_font.h"
 #include "sdl_fonts.h"
@@ -84,6 +85,35 @@ static const char *g_phase_name[10] = {
 /// The tonal half of this was already handled the same way: `ramp_enable` lerps AgX out
 /// of `tonemap.frag` because palette-ramp output is display-referred.
 static auto diagnostic_view_active() -> bool { return g_current_dbg_mode >= 6u; }
+
+/// Seconds, wrapped at 1000, that the sprite shaders animate at (foliage sway, emitter flicker,
+/// cloud drift): the wall clock, or the windowed driver's game clock, so that its stills hold
+/// still (see driver_frame_clock).
+static auto shader_anim_seconds() -> float
+{
+    if( const std::optional<double> still_clock = driver_frame_clock() ) {
+        return static_cast<float>( std::fmod( *still_clock, 1000.0 ) );
+    }
+    return std::fmod( static_cast<float>( SDL_GetTicks() ) / 1000.0f, 1000.0f );
+}
+
+/// The rain simulation steps the windowed driver's stills take this frame: a second's worth of
+/// frames (60) per game second, and none while the game clock stands still, so every frame of one
+/// game state draws the same rain. Every drop and ring lives well under 60 steps, so a longer gap
+/// draws the same settled rain as a second does. Empty in normal play, where each drawn frame
+/// takes one step (see rain_params::advance).
+static auto rain_still_steps() -> std::optional<int>
+{
+    static std::optional<double> s_last_clock;
+    const std::optional<double> still_clock = driver_frame_clock();
+    if( !still_clock ) {
+        return std::nullopt;
+    }
+    const double elapsed = s_last_clock ? *still_clock - *s_last_clock : 0.0;
+    s_last_clock = still_clock;
+    constexpr double steps_per_second = 60.0;
+    return static_cast<int>( std::clamp( elapsed, 0.0, 1.0 ) * steps_per_second );
+}
 
 // Full-screen identity-blit quad (origin, full UV, white tint, no rotation, unlit).
 // TWO callers, and the unlit default is load-bearing for one of them:
@@ -836,7 +866,7 @@ if( g && tilecontext && in.tile_pixel_size > 0.0f ) {
     in.sun.sp_pad = g_dbg_lighting_shader ? 1.0f : 0.0f;
 
     in.debug = g_dbg_params;
-    in.debug.anim_time = std::fmod( static_cast<float>( SDL_GetTicks() ) / 1000.0f, 1000.0f );
+    in.debug.anim_time = shader_anim_seconds();
     // Stage 1 (gpu-daylight black-scene plan): published so a live gpu_lit tile
     // can be told apart from a dead sky/sun pass instead of both reading as
     // plain dark — see sprite.frag.hlsl's magenta tint and sky_sun_pass.h.
@@ -1511,6 +1541,10 @@ auto render_world_pass_w( lighting::render_state &rs,
         rp.tile_pixel_size = s_emo.tile_px;
         rp.proj_w          = static_cast<float>( proj_w );
         rp.proj_h          = static_cast<float>( proj_h );
+        // A drawn frame is one rain step, which record() takes; the windowed driver's stills take
+        // theirs here, by the game clock, and record() only draws.
+        const std::optional<int> still_steps = rain_still_steps();
+        rp.advance = !still_steps.has_value();
 
         if( g && tilecontext && world_generator && world_generator->active_world
             && rp.tile_pixel_size > 0.f ) {
@@ -1533,19 +1567,24 @@ auto render_world_pass_w( lighting::render_state &rs,
             std::uniform_real_distribution<float> dj( 0.f, 0.35f );
 
             const int spawn = static_cast<int>( rp.intensity * 22.f );
-            for( int i = 0; i < spawn; ++i ) {
-                const int tx = o.x + dx( rain_rng );
-                const int ty = o.y + dy( rain_rng );
-                if( tx < 0 || ty < 0 || tx >= map_w || ty >= map_h ) {
-                    continue;
+            for( int round = 0; round < still_steps.value_or( 1 ); ++round ) {
+                for( int i = 0; i < spawn; ++i ) {
+                    const int tx = o.x + dx( rain_rng );
+                    const int ty = o.y + dy( rain_rng );
+                    if( tx < 0 || ty < 0 || tx >= map_w || ty >= map_h ) {
+                        continue;
+                    }
+                    const int idx = tx * map_h + ty; // x-major (matches frame_build)
+                    if( idx < cache_n && mc.outside_cache[idx] ) { // sky-exposed only
+                        // Sub-tile landing position (not grid-locked). The drop dies
+                        // here and spawns its splash + dark impact decal at this tile.
+                        const float fx = static_cast<float>( tx ) + dj( rain_rng ) + 0.15f;
+                        const float fy = static_cast<float>( ty ) + dj( rain_rng ) + 0.15f;
+                        rs.rain().add_drop( fx, fy, 0.45f + dj( rain_rng ) );
+                    }
                 }
-                const int idx = tx * map_h + ty; // x-major (matches frame_build)
-                if( idx < cache_n && mc.outside_cache[idx] ) { // sky-exposed only
-                    // Sub-tile landing position (not grid-locked). The drop dies
-                    // here and spawns its splash + dark impact decal at this tile.
-                    const float fx = static_cast<float>( tx ) + dj( rain_rng ) + 0.15f;
-                    const float fy = static_cast<float>( ty ) + dj( rain_rng ) + 0.15f;
-                    rs.rain().add_drop( fx, fy, 0.45f + dj( rain_rng ) );
+                if( still_steps ) {
+                    rs.rain().step();
                 }
             }
         }
