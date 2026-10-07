@@ -98,8 +98,6 @@ export class OracleRun {
   readonly #tracked: Tracked[]
   #firstTurn?: number
   #lastTurn?: number
-  /** The first time-passing observation may complete a partial turn without moving the counter. */
-  #timePassedSeen = false
   #turnCounter?: FirstFail
   #commandsBroken?: FirstFail
   #lastIndex = 0
@@ -142,8 +140,6 @@ export class OracleRun {
     const previous = this.#lastTurn
     this.#lastTurn = turn
     const timePassed = response.time_passed === true
-    const after = this.#timePassedSeen
-    if (timePassed) this.#timePassedSeen = true
     if (previous === undefined || this.#turnCounter) return
     let why: string | undefined
     if (turn < previous) {
@@ -151,8 +147,7 @@ export class OracleRun {
     } else if (turn > previous && !timePassed) {
       why = `the turn counter moved ${previous} to ${turn} but time_passed is false`
     } else if (
-      after && timePassed && turn === previous && request.cmd === "wait" &&
-      response.outcome === "completed"
+      timePassed && turn === previous && request.cmd === "wait" && response.outcome === "completed"
     ) {
       why = `a completed wait reported time_passed but the turn counter stayed at ${turn}`
     }

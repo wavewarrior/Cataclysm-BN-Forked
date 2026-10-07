@@ -65,7 +65,7 @@ Deno.test({
       assertEquals(started.code, 0, started.stderr)
       const session = jsonOut<{ session: string }>(started).session
 
-      // The first action after load may complete a partial turn, so two waits cross three turns.
+      // Each wait spends two turns: the first leaves the Episode under its limit of 3, the second ends it.
       const wait = ["step", session, '{"cmd":"wait","turns":2}']
       const first = await sandbox.cli(wait)
       assertEquals(first.code, 0, first.stderr)

@@ -113,7 +113,7 @@ Every response: `id`, `status` (`ok` or `error`), `boundary` (`turn_complete` or
 | `interrupted` | `reason`: `turn_cap`, `monster_in_view`, `pain`, `noise`, `other` |
 | `died` | terminal; the Episode ends |
 
-Time passes only when moves were spent: a cancelled menu or blocked move changes nothing. The first action after load may complete a partial turn (a `wait` of 2 can advance 1). The Bairdford avatar starts enclosed by vehicle walls (concrete in the Windows stand-in, where `move up` is refused with "You can't climb here"), so every compass `move` is `blocked`; use `wait` for time-based checks or another fixture.
+Time passes only when moves were spent: a cancelled menu or blocked move changes nothing. Every world step moves the turn, the first after load too. A world saved mid-turn (the avatar out of moves) makes the first action finish that turn first, so a `wait` of 2 can advance 3. The Bairdford avatar starts enclosed by vehicle walls (concrete in the Windows stand-in, where `move up` is refused with "You can't climb here"), so every compass `move` is `blocked`; use `wait` for time-based checks or another fixture.
 
 ## Escalation ladder
 

@@ -55,7 +55,7 @@ export function runTimeContract(name: string, target: ContractTarget): void {
         const sync = async () => {
           now = (await driver.send({ cmd: "state" })).turn as number
         }
-        /** Time agrees with the flag once the first-action partial turn is behind us. */
+        /** Time agrees with the flag: a request that spent time moved the turn, one that did not left it. */
         const assertTimeAgrees = (res: DriverResponse) => {
           if (res.time_passed) {
             assert((res.turn as number) > now, "time passed but turn did not move")
@@ -63,18 +63,14 @@ export function runTimeContract(name: string, target: ContractTarget): void {
           now = res.turn as number
         }
 
-        await t.step(
-          "the first action after load may complete a partial turn without moving the counter",
-          async () => {
-            const res = await driver.send({ cmd: "wait", turns: 1 })
-            assertEquals(res.status, "ok")
-            assertEquals(res.outcome, "completed")
-            assertEquals(res.time_passed, true)
-            // The counter may stay where it was or move by the turn that was spent: both are fine.
-            assert((res.turn as number) >= loadTurn, "turn went backwards")
-            assert((res.turn as number) <= loadTurn + 1, "more than one turn for one wait")
-          },
-        )
+        await t.step("the first action after load advances the turn it spends", async () => {
+          const res = await driver.send({ cmd: "wait", turns: 1 })
+          assertEquals(res.status, "ok")
+          assertEquals(res.outcome, "completed")
+          assertEquals(res.time_passed, true)
+          // The first world step after a load moves the clock like every other one.
+          assertEquals(res.turn, loadTurn + 1)
+        })
 
         await t.step("wait N advances N turns and reports time_passed", async () => {
           await sync()
