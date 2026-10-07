@@ -77,12 +77,12 @@ struct old_gate {
 // stays a transcription on purpose - it is the historical side of the pin.
 struct new_gate {
     frame_history history;
-    bool force_once = false;
+    lighting::lighting_pulses pulses;
     int rebuilds_in_window = 0;
 
     auto decide( const K::rebuild_plan &plan ) -> lighting_like_pair {
         const rebuild_decision d = gate_and_commit_frame_history(
-            { history, plan, {}, force_once, rebuilds_in_window } );
+            { history, plan, {}, pulses, rebuilds_in_window } );
         return lighting_like_pair{ d.structure, d.vis };
     }
 };

@@ -23,6 +23,7 @@
 #include "options.h"
 #include "player.h"
 #include "mod_tileset.h"
+#include "lighting/lighting_settings.h"
 
 #include <algorithm>
 #include <functional>

@@ -10,6 +10,7 @@ namespace lighting
 {
 class render_state;
 struct frame_context;
+struct lighting_settings;
 } // namespace lighting
 
 class frame_executor;
@@ -19,5 +20,8 @@ class frame_executor;
 /// context; the GPU-lane render test calls it with its own plan, report and executor, so
 /// the order the plan asserts is the order the real pass bodies run (issue 130).
 /// Timings and skip records land in `exec`'s report; the caller owns `exec.finish()`.
+/// `cfg` is the lighting settings the whole frame reads (the live ones from
+/// `refresh_display`, a test's own otherwise); the commit and readback steps take
+/// its one-shot pulses, so it is not const.
 auto run_frame_plan( lighting::render_state &rs, lighting::frame_context &ctx,
-                     frame_executor &exec ) -> void;
+                     frame_executor &exec, lighting::lighting_settings &cfg ) -> void;

@@ -5,8 +5,6 @@
 #include <string>
 #include <vector>
 
-#include "lighting/lighting_settings.h"
-
 namespace lighting
 {
 

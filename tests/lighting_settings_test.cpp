@@ -266,6 +266,13 @@ TEST_CASE( "the debug mode has one home", "[lighting_settings]" )
     s.set_debug_mode( 6u );
     CHECK( s.debug.debug_mode == 6u );
     CHECK( s.diagnostic_view_active() );
+    // F7 advances and wraps after the last mode.
+    s.set_debug_mode( debug_mode_count - 1u );
+    s.cycle_debug_mode();
+    CHECK( s.debug_mode() == 0u );
+    s.cycle_debug_mode();
+    CHECK( s.debug_mode() == 1u );
+    s.set_debug_mode( 6u );
     // The file channel does not write it: `/tmp/cata_dbg_mode` and `CATA_DBG_MODE` do.
     CHECK_FALSE( knob_apply_file( s, "debug_mode", 9.0f ) );
     CHECK( s.debug_mode() == 6u );

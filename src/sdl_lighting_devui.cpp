@@ -1,4 +1,5 @@
 #include "sdl_lighting_devui.h"
+#include "lighting/lighting_settings.h"
 
 #include "driver_capture.h"
 #include "avatar.h"

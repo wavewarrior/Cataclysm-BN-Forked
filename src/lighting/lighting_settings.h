@@ -33,6 +33,9 @@
 namespace lighting
 {
 
+/// The number of debug visualisation modes (0..17); F7 cycles through them.
+inline constexpr std::uint32_t debug_mode_count = 18u;
+
 /// How the structure rebuild is forced. Collapses the old
 /// `g_force_rc_rebuild` / `g_rebuild_once` pair; the file channel's
 /// `force_rc_rebuild 1` is `every_frame` and `force_rc_rebuild 2` is `once`,
@@ -86,6 +89,10 @@ struct lighting_settings {
     void set_debug_mode( std::uint32_t m ) {
         debug.debug_mode = m;
     }
+    /// F7: advance to the next mode, wrapping after the last.
+    void cycle_debug_mode() {
+        debug.debug_mode = ( debug.debug_mode + 1u ) % debug_mode_count;
+    }
     /// The frame's diagnostic-view predicate: modes 6 and up take the
     /// full-screen identity quad instead of the lit world.
     auto diagnostic_view_active() const -> bool {
@@ -98,7 +105,7 @@ struct lighting_settings {
 inline auto dbg_mode_from_env() -> std::uint32_t
 {
     if( const char *e = std::getenv( "CATA_DBG_MODE" ); e != nullptr ) {
-        return static_cast<std::uint32_t>( std::strtoul( e, nullptr, 10 ) ) % 18u;
+        return static_cast<std::uint32_t>( std::strtoul( e, nullptr, 10 ) ) % debug_mode_count;
     }
     return 0u;
 }

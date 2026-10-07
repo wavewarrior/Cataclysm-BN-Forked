@@ -33,6 +33,7 @@
 #include "sdl_fonts.h"
 #include "sdl_geometry.h"
 #include "sdl_lighting_devui.h"
+#include "lighting/lighting_settings.h"
 #include "sdl_render_frame.h"
 #include "hud_shake.h"
 #include "sdl_wrappers.h"
@@ -102,7 +103,6 @@ perf_window s_perf_window;
 ///
 /// The tonal half of this was already handled the same way: `ramp_enable` lerps AgX out
 /// of `tonemap.frag` because palette-ramp output is display-referred.
-static auto diagnostic_view_active() -> bool { return lighting::live_settings().diagnostic_view_active(); }
 
 // Full-screen identity-blit quad (origin, full UV, white tint, no rotation, unlit).
 // TWO callers, and the unlit default is load-bearing for one of them:
@@ -132,10 +132,13 @@ static lighting::sprite_instance fullscreen_quad( float w, float h )
 // Forward-declared (static) so calls resolve regardless of definition order and
 // the definitions below take internal linkage.
 static auto begin_frame( lighting::render_state &rs ) -> std::optional<lighting::frame_context>;
-static auto build_lighting( lighting::render_state &rs ) -> bool;
+static auto build_lighting( lighting::render_state &rs,
+                            lighting::lighting_settings &cfg ) -> bool;
 static auto flush_and_gather_rc( lighting::render_state &rs, lighting::frame_context &ctx,
-                                 bool rc_rebuild, frame_executor &exec ) -> void;
-static auto assemble_light_inputs( lighting::render_state &rs ) -> void;
+                                 bool rc_rebuild, frame_executor &exec,
+                                 lighting::lighting_settings &cfg ) -> void;
+static auto assemble_light_inputs( lighting::render_state &rs,
+                                   const lighting::lighting_settings &cfg ) -> void;
 static auto maybe_push_menu_background( lighting::render_state &rs,
                                         lighting::frame_context &ctx ) -> void;
 static auto draw_lighting_overlays( lighting::render_state &rs ) -> void;
@@ -146,8 +149,10 @@ static auto composite_avatar_pass( lighting::render_state &rs,
 static auto composite_vehicle_pass( lighting::render_state &rs,
                                     lighting::frame_context &ctx ) -> void;
 static auto render_world_pass_w( lighting::render_state &rs, lighting::frame_context &ctx,
-                                 int proj_w, int proj_h ) -> void;
-static auto tonemap_pass_t( lighting::render_state &rs, lighting::frame_context &ctx ) -> void;
+                                 int proj_w, int proj_h,
+                                 const lighting::lighting_settings &cfg ) -> void;
+static auto tonemap_pass_t( lighting::render_state &rs, lighting::frame_context &ctx,
+                            const lighting::lighting_settings &cfg ) -> void;
 static auto composite_swapchain_pass_b( lighting::render_state &rs, lighting::frame_context &ctx,
                                         int proj_w, int proj_h ) -> void;
 
@@ -233,7 +238,7 @@ if( !rs.ready() ) {
 // Structure rebuilds since the last [render][perf] window (reported as rebuilds=k/n).
 namespace { int s_rebuild_in_window = 0; } // namespace
 
-auto build_lighting( lighting::render_state &rs ) -> bool
+auto build_lighting( lighting::render_state &rs, lighting::lighting_settings &cfg ) -> bool
 {
     ZoneScopedN( "render_build_lighting" );
     bool rc_rebuild = false;
@@ -291,23 +296,18 @@ if( g && world_generator && world_generator->active_world ) {
     // far enough that newly-scrolled-in occluders would still be carrying their
     // coarse tile-square fallback seed. Camera pan itself does not force it: the
     // SDF is bubble-indexed, panning one tile per step does not change its content.
-    auto &pulses = lighting::live_settings().pulses;
-    const bool once_armed = pulses.force_rebuild == lighting::force_rebuild_mode::once;
+    auto &pulses = cfg.pulses;
     const rebuild_gate_knobs knobs {
         sdl_lighting_devui::devui_visible(),
-        pulses.force_rebuild == lighting::force_rebuild_mode::every_frame, once_armed
+        pulses.force_rebuild == lighting::force_rebuild_mode::every_frame,
+        pulses.force_rebuild == lighting::force_rebuild_mode::once
     };
-    bool force_once = once_armed;
     // Decide, then commit right after the decision and before anything is
-    // rebuilt: clears the force-once knob, bumps the window's rebuild counter
-    // and advances the stamps, in the order the file-statics were written at
-    // :258-294 before this cutover.
+    // rebuilt: the commit takes the force-once pulse, bumps the window's rebuild
+    // counter and advances the stamps, in the order the file-statics were written
+    // at :258-294 before this cutover.
     const rebuild_decision d = gate_and_commit_frame_history(
-            { rs.history(), plan, knobs, force_once, s_rebuild_in_window } );
-    // The commit step spent the one-shot; take it out of the settings too.
-    if( once_armed ) {
-        pulses.take_force_once();
-    }
+            { rs.history(), plan, knobs, pulses, s_rebuild_in_window } );
     rebuild.structure = d.structure;
     rebuild.vis = d.vis;
 }
@@ -541,7 +541,7 @@ static auto time_of_day_grade( float hour ) -> tod_grade
 
 auto flush_and_gather_rc( lighting::render_state &rs,
                           lighting::frame_context &ctx, bool rc_rebuild,
-                          frame_executor &exec ) -> void
+                          frame_executor &exec, lighting::lighting_settings &cfg ) -> void
 {
     ZoneScopedN( "render_flush_gather_rc" );
     // The fused lighting group: this body IS the plan's six lighting steps, in this
@@ -577,7 +577,7 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     if( sdf_populated && rs.gpu_sdf().ready() && rs.sdf().trans_buffer() ) {
     rs.gpu_sdf().record( ctx.cmd_buffer, rs.sdf().trans_buffer(),
                              rs.sdf().sdf_buffer(), map_w, map_h,
-                             rs.occluders(), lighting::live_settings().debug.occ_soft_gain );
+                             rs.occluders(), cfg.debug.occ_soft_gain );
         sdf_ran = true;
         // Step 2/3 diagnostic: the seed's new input. Fires only on an SDF rebuild,
         // not per frame, so it is safe at Info level. `partial` is the positive
@@ -595,7 +595,7 @@ auto flush_and_gather_rc( lighting::render_state &rs,
                 << " partial=" << ( occ.quads().size() - hard )
                 << " captured_tiles=" << captured
                 << " grid=" << occ.width() << "x" << occ.height()
-                << " soft_gain=" << lighting::live_settings().debug.occ_soft_gain;
+                << " soft_gain=" << cfg.debug.occ_soft_gain;
     } else if( sdf_populated ) {
     sdf_reason = !rs.gpu_sdf().ready() ? "gpu_sdf_ready" : "trans_buf";
     }
@@ -626,15 +626,15 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     kp.sun_dir_y    = sp.sun_dir_y;
     kp.sun_sin_elev = sp.sun_sin_elev;
     // Step 3: sky-portal scan knobs (roofed probes only).
-    kp.portal_reach = lighting::live_settings().debug.portal_reach;
-    kp.portal_dirs  = static_cast<std::uint32_t>( std::max( 1.0f, lighting::live_settings().debug.portal_dirs ) );
+    kp.portal_reach = cfg.debug.portal_reach;
+    kp.portal_dirs  = static_cast<std::uint32_t>( std::max( 1.0f, cfg.debug.portal_dirs ) );
         // P5b: F4-tunable sky/sun quality knobs.
-        kp.sky_dirs     = static_cast<std::uint32_t>( std::max( 1.0f, lighting::live_settings().debug.sky_dirs ) );
-        kp.sky_reach    = lighting::live_settings().debug.sky_reach;
-        kp.sun_steps    = static_cast<std::uint32_t>( std::max( 1.0f, lighting::live_settings().debug.sun_steps ) );
-        kp.sun_penumbra = static_cast<std::uint32_t>( std::max( 1.0f, lighting::live_settings().debug.sun_penumbra ) );
+        kp.sky_dirs     = static_cast<std::uint32_t>( std::max( 1.0f, cfg.debug.sky_dirs ) );
+        kp.sky_reach    = cfg.debug.sky_reach;
+        kp.sun_steps    = static_cast<std::uint32_t>( std::max( 1.0f, cfg.debug.sun_steps ) );
+        kp.sun_penumbra = static_cast<std::uint32_t>( std::max( 1.0f, cfg.debug.sun_penumbra ) );
         kp.sdf_ss       = static_cast<std::uint32_t>( lighting::SDF_SUPERSAMPLE );
-        kp.sun_soft     = lighting::live_settings().debug.sun_soft;
+        kp.sun_soft     = cfg.debug.sun_soft;
         rs.sky().record( ctx.cmd_buffer, rs.sdf().occ_buffer(), rs.sdf().sdf_buffer(),
                          map_w, map_h, kp );
         sky_ran = true;
@@ -690,8 +690,8 @@ auto flush_and_gather_rc( lighting::render_state &rs,
         rp.map_w         = map_w;
         rp.map_h         = map_h;
         rp.current_z     = g ? static_cast<float>( g->u.bub_pos().z() ) : 0.0f;
-        rp.shadow_k      = lighting::live_settings().debug.shadow_k;
-        rp.shadow_steps  = lighting::live_settings().debug.shadow_steps;
+        rp.shadow_k      = cfg.debug.shadow_k;
+        rp.shadow_steps  = cfg.debug.shadow_steps;
         // P2: sun/sky surface-radiance injection. gi_field.comp adds
         // sky_color*SkyBuf.rgb + sun_color*SkyBuf.a to each tile's field so the
         // bounce pass propagates daylight into shadowed/indoor neighbours.
@@ -753,7 +753,7 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     }
 
     exec.split( frame_step_kind::rc_readback );
-    if( lighting::live_settings().pulses.take_rc_readback() ) {
+    if( cfg.pulses.take_rc_readback() ) {
         if( rs.gi().ready() && rs.sdf().populated() ) {
             rs.gi().debug_log_stats( static_cast<std::uint32_t>( rs.sdf().map_w() ),
                                      static_cast<std::uint32_t>( rs.sdf().map_h() ) );
@@ -761,7 +761,8 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     }
 }
 
-auto assemble_light_inputs( lighting::render_state &rs ) -> void
+auto assemble_light_inputs( lighting::render_state &rs,
+                            const lighting::lighting_settings &cfg ) -> void
 {
     if( !rs.collector() ) {
     return;
@@ -866,7 +867,7 @@ in.ambient         = 0.05f;
     }
     in.sun.sp_pad = g_dbg_lighting_shader ? 1.0f : 0.0f;
 
-    in.debug = lighting::live_settings().debug;
+    in.debug = cfg.debug;
     in.debug.anim_time = std::fmod( static_cast<float>( SDL_GetTicks() ) / 1000.0f, 1000.0f );
     // Stage 1 (gpu-daylight black-scene plan): published so a live gpu_lit tile
     // can be told apart from a dead sky/sun pass instead of both reading as
@@ -885,14 +886,14 @@ in.ambient         = 0.05f;
     // been loaded, where ramp_enable's lerp makes the value moot anyway.
     {
         static int last_ramp_steps = -1;
-        const int want = std::clamp( static_cast<int>( lighting::live_settings().debug.ramp_steps ), 2, 16 );
+        const int want = std::clamp( static_cast<int>( cfg.debug.ramp_steps ), 2, 16 );
         if( want != last_ramp_steps ) {
             last_ramp_steps = want;
             rs.build_palette_ramps( want );
         }
         const int baked = rs.palette_steps();
         in.debug.ramp_steps = baked > 0 ? static_cast<float>( baked )
-                              : lighting::live_settings().debug.ramp_steps;
+                              : cfg.debug.ramp_steps;
     }
     // Native tileset tile width in ART texels (32 for MSX++). Distinct from
     // in.tile_pixel_size, which is the ZOOMED on-screen width. Step 1 quantises the
@@ -1148,7 +1149,8 @@ auto composite_vehicle_pass( lighting::render_state &rs, lighting::frame_context
 }
 
 auto render_world_pass_w( lighting::render_state &rs,
-                          lighting::frame_context &ctx, int proj_w, int proj_h ) -> void
+                          lighting::frame_context &ctx, int proj_w, int proj_h,
+                          const lighting::lighting_settings &cfg ) -> void
 {
     // Void backdrop behind every transparent sprite pixel (grass gaps, tree/fence
     // cutouts, broken windows, sway animation edges, …). MUST stay a plain clear
@@ -1414,7 +1416,7 @@ auto render_world_pass_w( lighting::render_state &rs,
     // as the emitter-glow builder above, so a shaft/mote can only appear where
     // the player already sees the window (the emitter-glow-pass FoW lesson).
     if( g && ( g_shaft_enable || g_dust_enable ) && !s_emo.snap.empty() &&
-        !diagnostic_view_active() && !lighting::overmap_view_open ) {
+        !cfg.diagnostic_view_active() && !lighting::overmap_view_open ) {
         const float tp = s_frame_camera.pub_tile_px() > 0.f ? s_frame_camera.pub_tile_px() : 32.f;
         constexpr float CULL_RADIUS_TILES = 48.f;
         // Minimum direct-sun term (snapshot.cpp: 225 * cos(facing) * sun_intensity)
@@ -1527,7 +1529,7 @@ auto render_world_pass_w( lighting::render_state &rs,
         }
     }
 
-    if( g_bloom_enable && rs.bloom().ready() && !diagnostic_view_active() ) {
+    if( g_bloom_enable && rs.bloom().ready() && !cfg.diagnostic_view_active() ) {
         rs.bloom().record( ctx.cmd_buffer, wt->texture(),
                            wt->width(), wt->height(),
                            g_bloom_threshold, g_bloom_intensity );
@@ -1644,7 +1646,8 @@ auto render_world_pass_w( lighting::render_state &rs,
 }
 
 auto tonemap_pass_t( lighting::render_state &rs,
-                     lighting::frame_context &ctx ) -> void
+                     lighting::frame_context &ctx,
+                     const lighting::lighting_settings &cfg ) -> void
 {
     lighting::ui_composite_target *wt   = rs.world_target();
     lighting::ui_composite_target *wldr = rs.world_ldr_target();
@@ -1692,7 +1695,7 @@ auto tonemap_pass_t( lighting::render_state &rs,
         // at green tile edges. Zeroing the spatial post effects removes the fringe
         // rather than forcing every consumer to tolerate it. The tonal transform is
         // already handled: `ramp_enable` lerps AgX out for the same reason.
-        if( diagnostic_view_active() ) {
+        if( cfg.diagnostic_view_active() ) {
             grade.ca_amount = 0.0f;
             grade.grain_amount = 0.0f;
             grade.vignette_amount = 0.0f;
@@ -1701,7 +1704,7 @@ auto tonemap_pass_t( lighting::render_state &rs,
         rs.tonemap().record( ctx.cmd_buffer, wt->texture(), rs.gpu_sampler(),
                              wldr->texture(), wldr->width(), wldr->height(),
                              g_tonemap_exposure, g_tonemap_min_ev, g_tonemap_max_ev,
-                             lighting::live_settings().debug.ramp_enable, grade );
+                             cfg.debug.ramp_enable, grade );
     }
 }
 
@@ -1991,7 +1994,7 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
 /// `exec.split` inside `flush_and_gather_rc`. Declared in `sdl_render_frame.h` so the
 /// GPU-lane render test can drive the same dispatch with its own plan and report.
 auto run_frame_plan( lighting::render_state &rs, lighting::frame_context &ctx,
-                     frame_executor &exec ) -> void
+                     frame_executor &exec, lighting::lighting_settings &cfg ) -> void
 {
     // T3 (#108): the frame's camera, derived ONCE here — before the first
     // step runs — and read by every consumer in this TU. The whole frame
@@ -2004,7 +2007,7 @@ auto run_frame_plan( lighting::render_state &rs, lighting::frame_context &ctx,
         switch( step->kind ) {
             case frame_step_kind::build_lighting:
                 dbg( DL::Debug ) << "[render] build_lighting";
-                rc_rebuild = build_lighting( rs );
+                rc_rebuild = build_lighting( rs, cfg );
                 break;
             // The fused lighting group: the loop dispatches the group head only. The
             // body consumes the remaining members with its own `split` calls, which
@@ -2012,7 +2015,7 @@ auto run_frame_plan( lighting::render_state &rs, lighting::frame_context &ctx,
             // would run the group twice.
             case frame_step_kind::collector_flush:
                 dbg( DL::Debug ) << "[render] flush_and_gather_rc";
-                flush_and_gather_rc( rs, ctx, rc_rebuild, exec );
+                flush_and_gather_rc( rs, ctx, rc_rebuild, exec, cfg );
                 break;
             case frame_step_kind::gpu_sdf:
             case frame_step_kind::sky_sun:
@@ -2022,7 +2025,7 @@ auto run_frame_plan( lighting::render_state &rs, lighting::frame_context &ctx,
                 break;
             case frame_step_kind::assemble:
                 dbg( DL::Debug ) << "[render] assemble_light_inputs";
-                assemble_light_inputs( rs );
+                assemble_light_inputs( rs, cfg );
                 break;
             case frame_step_kind::menu_background:
                 dbg( DL::Debug ) << "[render] maybe_push_menu_background";
@@ -2053,11 +2056,11 @@ auto run_frame_plan( lighting::render_state &rs, lighting::frame_context &ctx,
                 break;
             case frame_step_kind::world_pass:
                 dbg( DL::Debug ) << "[render] render_world_pass_w";
-                render_world_pass_w( rs, ctx, proj_w, proj_h );
+                render_world_pass_w( rs, ctx, proj_w, proj_h, cfg );
                 break;
             case frame_step_kind::tonemap:
                 dbg( DL::Debug ) << "[render] tonemap_pass_t";
-                tonemap_pass_t( rs, ctx );
+                tonemap_pass_t( rs, ctx, cfg );
                 break;
             case frame_step_kind::swapchain_composite:
                 dbg( DL::Debug ) << "[render] composite_swapchain_pass_b";
@@ -2151,7 +2154,7 @@ void refresh_display()
     if( !ctx ) {
         return;
     }
-    run_frame_plan( rs, *ctx, exec );
+    run_frame_plan( rs, *ctx, exec, lighting::live_settings() );
     exec.finish();
     if( report.order_violation() ) {
         DebugLogFL( DL::Error, DC::Main )

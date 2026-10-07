@@ -46,7 +46,7 @@ auto scene( const int dx = 0, const int dy = 0, const int dz = 0,
 /// visible at the FIRST one.
 struct frame_probe {
     frame_history history;
-    bool force_once = false;
+    lighting::lighting_pulses pulses;
     int rebuilds_in_window = 0;
     int passes = 0;
 };
@@ -55,7 +55,7 @@ auto run_frame( frame_probe &fp, const K::rebuild_plan &plan,
                 const rebuild_gate_knobs &knobs = {} ) -> rebuild_decision
 {
     const rebuild_decision d = gate_and_commit_frame_history(
-            { fp.history, plan, knobs, fp.force_once, fp.rebuilds_in_window } );
+            { fp.history, plan, knobs, fp.pulses, fp.rebuilds_in_window } );
     ++fp.passes;
     return d;
 }
@@ -196,7 +196,7 @@ TEST_CASE( "frame_history: force-once rebuilds once and the commit clears the kn
     frame_probe fp;
     run_frame( fp, scene() );          // warm the history: both stamps set
     fp.rebuilds_in_window = 0;
-    fp.force_once = true;
+    fp.pulses.force_rebuild = lighting::force_rebuild_mode::once;
     const rebuild_gate_knobs armed{ false, false, true };
     const rebuild_decision d = run_frame( fp, scene(), armed );
     CHECK( d.structure );
@@ -204,7 +204,7 @@ TEST_CASE( "frame_history: force-once rebuilds once and the commit clears the kn
     CHECK( fp.rebuilds_in_window == 1 );
     // The commit step consumed the one-shot: the same knobs object the frame
     // started with is now disarmed, and the next quiet frame rebuilds nothing.
-    CHECK_FALSE( fp.force_once );
+    CHECK( fp.pulses.force_rebuild == lighting::force_rebuild_mode::none );
     CHECK_FALSE( run_frame( fp, scene() ).structure );
 }
 
@@ -243,18 +243,30 @@ TEST_CASE( "frame_history: the commit lands after the decision and before any pa
     // the rebuild, failing the `structure` check), the window's rebuild counter
     // already counts this frame, and the stamps already advanced.
     frame_probe fp;
-    fp.force_once = true;
+    fp.pulses.force_rebuild = lighting::force_rebuild_mode::once;
     const rebuild_gate_knobs armed{ false, false, true };
     const rebuild_decision d = run_frame( fp, scene( 0, 0, 0, 9 ), armed );
     REQUIRE( fp.passes == 1 );
     CHECK( d.structure );
-    CHECK_FALSE( fp.force_once );
+    CHECK( fp.pulses.force_rebuild == lighting::force_rebuild_mode::none );
     CHECK( fp.rebuilds_in_window == 1 );
     CHECK( fp.history.last_occluder == 9u );
     CHECK( fp.history.last_struct_px == 60 );
     // A commit BELOW the passes would leave the knob armed for the next frame.
     // Same stamps as the armed frame, so only a stale one-shot could fire.
     CHECK_FALSE( run_frame( fp, scene( 0, 0, 0, 9 ) ).structure );
+}
+
+TEST_CASE( "frame_history: continuous forcing is never consumed by the commit",
+           "[frame_history]" )
+{
+    frame_probe fp;
+    run_frame( fp, scene() );
+    fp.pulses.force_rebuild = lighting::force_rebuild_mode::every_frame;
+    const rebuild_gate_knobs every{ false, true, false };
+    CHECK( run_frame( fp, scene(), every ).structure );
+    CHECK( fp.pulses.force_rebuild == lighting::force_rebuild_mode::every_frame );
+    CHECK( run_frame( fp, scene(), every ).structure );
 }
 
 TEST_CASE( "frame_history: a frame with no decision leaves history and knobs alone",
@@ -267,9 +279,9 @@ TEST_CASE( "frame_history: a frame with no decision leaves history and knobs alo
     frame_probe fp;
     run_frame( fp, scene() );
     const frame_history before = fp.history;
-    fp.force_once = true;
+    fp.pulses.force_rebuild = lighting::force_rebuild_mode::once;
     fp.rebuilds_in_window = 4;
     CHECK( fp.history == before );
-    CHECK( fp.force_once );
+    CHECK( fp.pulses.force_rebuild == lighting::force_rebuild_mode::once );
     CHECK( fp.rebuilds_in_window == 4 );
 }

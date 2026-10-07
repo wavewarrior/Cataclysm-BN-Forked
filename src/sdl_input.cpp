@@ -32,6 +32,7 @@
 #include "ui_manager.h" // ui_manager::invalidate, ui_manager::redraw_invalidated
 #include "sdl_lighting_devui.h"
 #include "lighting/gpu_device.h"
+#include "lighting/lighting_settings.h"
 #include "lighting/dev_test_lights.h"
 #include "avatar.h"
 #include "game.h"
@@ -56,16 +57,19 @@ namespace
 
 /// F8/F9: move a keys-channel knob one table step toward `delta`'s sign,
 /// clamped to the table's key range (the old `lighting_dbg_range` numbers).
-void key_step_knob( std::string_view name, float delta )
+auto key_step_knob( std::string_view name, float delta ) -> void
 {
     const lighting::knob_entry *e = lighting::knob_find( name );
-    if( e == nullptr || !e->keys ) {
+    const auto *member = e == nullptr ? nullptr :
+                         std::get_if<float lighting::debug_params::*>( &e->dest );
+    if( e == nullptr || !e->keys || member == nullptr ) {
+        // A programmer error (a misspelt name or a knob F8/F9 do not own): say so
+        // instead of leaving the key dead.
+        debugmsg( "F8/F9 knob '%s' is not a key-steppable float knob", std::string( name ) );
         return;
     }
-    if( const auto *p = std::get_if<float lighting::debug_params::*>( &e->dest ) ) {
-        float &v = lighting::live_settings().debug.**p;
-        v = lighting::knob_key_step( *e->keys, v, delta );
-    }
+    float &v = lighting::live_settings().debug.**member;
+    v = lighting::knob_key_step( *e->keys, v, delta );
 }
 
 auto sdl_keycode_opposite_arrow( SDL_Keycode key ) -> SDL_Keycode
@@ -517,7 +521,7 @@ void CheckMessages( display_context &d )
             int m = -1;
             mf >> m;
             std::filesystem::remove( "/tmp/cata_dbg_mode", ec );
-            if( m >= 0 && m < 18 ) {
+            if( m >= 0 && static_cast<std::uint32_t>( m ) < lighting::debug_mode_count ) {
                 lighting::live_settings().set_debug_mode( static_cast<std::uint32_t>( m ) );
                 dbg( DL::Info ) << "lighting debug mode " << lighting::live_settings().debug_mode() << " (file)";
             }
@@ -720,7 +724,7 @@ void CheckMessages( display_context &d )
                     // 9 = surface normal (Sobel), 10 = AO, 11 = shadow mask (game tiles only),
                     // 15 = vision frontier (frontier_cov), 16 = light_mode
                     // (red=unlit, green=gpu_lit, blue=memory).
-                    lighting::live_settings().set_debug_mode( ( lighting::live_settings().debug_mode() + 1 ) % 18u );
+                    lighting::live_settings().cycle_debug_mode();
                     // Log the mode we LANDED on. Scripted verification cycles this key
                     // N times and then measures a capture; a single dropped keypress
                     // would otherwise leave the capture silently showing a different

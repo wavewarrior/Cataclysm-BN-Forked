@@ -389,7 +389,8 @@ TEST_CASE("render_regression", "[.gpu][render]") {
         REQUIRE(ctx.valid());
         INFO("swapchain drawable: " << (ctx.swapchain_tex ? "present" : "null"));
 
-        run_frame_plan(rs, ctx, exec);
+        lighting::lighting_settings cfg;
+        run_frame_plan(rs, ctx, exec, cfg);
         exec.finish();
         rs.device().submit_frame(ctx);
 

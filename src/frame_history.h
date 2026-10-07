@@ -8,6 +8,7 @@
 #include <optional>
 
 #include "level_cache_freshness.h"
+#include "lighting/lighting_settings.h"
 
 // Previous-frame gate state for the lighting rebuild decision (T2 of the
 // frame-assembly module, ADR decision 1 of #59): the five stamps the gate in
@@ -127,12 +128,12 @@ inline auto decide_lighting_rebuild( const frame_history &hist,
 
 /// Options for the commit step (more than three operands, so a struct).
 /// The counters are passed by reference because their owners stay where they
-/// are: the one-shot knob is a knob global until the settings ticket, and the
+/// are: the one-shot knob lives in the lighting settings' pulses, and the
 /// rebuild counter is the TU-static behind the `[render][perf]` line.
 struct frame_history_commit_args {
     frame_history &history;
     const rebuild_decision &decision;
-    bool &force_once;
+    lighting::lighting_pulses &pulses;
     int &rebuilds_in_window;
 };
 
@@ -143,7 +144,7 @@ struct frame_history_commit_args {
 inline auto commit_frame_history( const frame_history_commit_args &args ) -> void
 {
     const rebuild_decision &d = args.decision;
-    args.force_once = false;
+    args.pulses.take_force_once();
     if( d.counted_rebuild ) {
         ++args.rebuilds_in_window;
     }
@@ -157,7 +158,7 @@ struct frame_history_gate_args {
     frame_history &history;
     const level_cache_freshness::rebuild_plan &plan;
     rebuild_gate_knobs knobs;
-    bool &force_once;
+    lighting::lighting_pulses &pulses;
     int &rebuilds_in_window;
 };
 
@@ -170,7 +171,7 @@ inline auto gate_and_commit_frame_history( const frame_history_gate_args &args )
 -> rebuild_decision   // *NOPAD*
 {
     const rebuild_decision d = decide_lighting_rebuild( args.history, args.plan, args.knobs );
-    commit_frame_history( { args.history, d, args.force_once, args.rebuilds_in_window } );
+    commit_frame_history( { args.history, d, args.pulses, args.rebuilds_in_window } );
     return d;
 }
 
