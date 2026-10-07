@@ -4,7 +4,12 @@
 #include <filesystem>
 #include <fstream>
 #include <thread>
+#if defined(_WIN32)
+#include <process.h>
+#define getpid _getpid
+#else
 #include <unistd.h>
+#endif
 
 #include "options.h"
 #include "path_info.h"

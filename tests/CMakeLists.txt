@@ -7,11 +7,14 @@ if (BUILD_TESTING)
 
     # coop_integration_test.cpp talks raw BSD sockets (arpa/inet.h, netinet/in.h,
     # sys/select.h, unistd.h) and coordinates the two processes through /tmp
-    # control files.  None of that exists on Windows, so drop it there rather
-    # than failing the whole test binary to compile.
+    # control files.  driver_loop_test.cpp serves the agent driver over a
+    # socketpair(AF_UNIX), the only bidirectional single-descriptor channel
+    # --driver-fd accepts.  None of that exists on Windows, so drop both there
+    # rather than failing the whole test binary to compile.
     if (WIN32)
         list(REMOVE_ITEM CATACLYSM_BN_TEST_SOURCES
-                ${CMAKE_SOURCE_DIR}/tests/coop_integration_test.cpp)
+                ${CMAKE_SOURCE_DIR}/tests/coop_integration_test.cpp
+                ${CMAKE_SOURCE_DIR}/tests/driver_loop_test.cpp)
     endif ()
 
     # Enabling benchmarks
