@@ -102,9 +102,10 @@ class Daemon {
         if (request.op === "shutdown") await shutdown()
       }
     } catch (e) {
+      // Windows reports a peer that closed first as an aborted connection (WSAECONNABORTED).
       if (
         e instanceof Deno.errors.BrokenPipe || e instanceof Deno.errors.ConnectionReset ||
-        e instanceof Deno.errors.NotConnected
+        e instanceof Deno.errors.ConnectionAborted || e instanceof Deno.errors.NotConnected
       ) {
         this.#log(`client hung up: ${e.message}`) // a CLI that timed out and left; expected
       } else {
