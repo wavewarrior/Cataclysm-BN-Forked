@@ -198,5 +198,6 @@ if (code !== 0 && durations.size < total) {
     red(`stopped early: ${total - durations.size} cases never finished; last finished: ${last}`),
   )
 }
+console.log(`exit ${code}; log ${logPath}`)
 // A crash exit (e.g. 0xC0000005, negative here) does not survive Deno.exit's byte: keep it non-zero.
 Deno.exit(code === 0 ? 0 : code > 0 && code < 256 ? code : 1)
