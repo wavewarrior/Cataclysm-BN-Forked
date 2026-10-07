@@ -90,8 +90,9 @@ const child = new Deno.Command(exe, {
 const start = Date.now()
 const durations: { name: string; seconds: number }[] = []
 const failed: string[] = []
-let header: string | undefined // test named by the latest Catch2 "----- name -----" block
-const failing = new Set<string>()
+// Cases run one at a time and Catch2 prints a case's failures before its own duration line, so
+// a failure seen since the previous case finished belongs to the next listed case to finish.
+let pendingFail = false
 let last = ""
 const tty = Deno.stdout.isTerminal()
 const encoder = new TextEncoder()
@@ -107,11 +108,14 @@ const bar = (final = false) => {
   const counts = `${green(`pass ${done - failed.length}`)} ${
     failed.length ? red(`fail ${failed.length}`) : "fail 0"
   }`
-  const line = `[${"#".repeat(filled)}${
-    "-".repeat(width - filled)
-  }] ${done}/${total} ${pct}% | ${counts} | ${clock(elapsed)} ETA ${eta} | ${
-    dim(last.slice(0, 60))
-  }`
+  const head = `[${"#".repeat(filled)}${"-".repeat(width - filled)}] ${done}/${total} ${pct}% | `
+  const tail = ` | ${clock(elapsed)} ETA ${eta} | `
+  const plainCounts = `pass ${done - failed.length} fail ${failed.length}`
+  // A bar wider than the console wraps, and "\r" then only redraws its last row.
+  const room = tty
+    ? Deno.consoleSize().columns - 1 - head.length - plainCounts.length - tail.length
+    : 60
+  const line = `${head}${counts}${tail}${dim(last.slice(0, Math.max(0, room)))}`
   if (tty) write(`\r\x1b[2K${line}`)
   else if (final || done % 25 === 0) console.log(line)
 }
@@ -123,7 +127,8 @@ const onLine = (line: string) => {
     const [, seconds, name] = duration
     durations.push({ name, seconds: Number(seconds) })
     last = name
-    if (failing.has(name)) {
+    if (pendingFail) {
+      pendingFail = false
       failed.push(name)
       if (tty) write("\r\x1b[2K")
       console.log(`${red("FAIL")} ${name}`)
@@ -131,30 +136,24 @@ const onLine = (line: string) => {
     bar()
     return
   }
-  if (/FAILED:|failed with exception|Fatal error condition/.test(line) && header) {
-    failing.add(header)
-  }
+  if (/FAILED:|failed with exception|Fatal error condition/.test(line)) pendingFail = true
 }
 
-let afterRule = false // a Catch2 failure block opens with a "-----" rule, then the test name
-const pump = async (stream: ReadableStream<Uint8Array>) => {
+const pump = async (stream: ReadableStream<Uint8Array>, isStdout: boolean) => {
   let pending = ""
   for await (const chunk of stream.pipeThrough(new TextDecoderStream())) {
     await log.write(encoder.encode(chunk))
     pending += chunk
     const lines = pending.split(/\r?\n/)
     pending = lines.pop() ?? ""
-    for (const line of lines) {
-      if (afterRule && testNames.has(line)) header = line
-      afterRule = line.startsWith("-----")
-      onLine(line)
-    }
+    // Catch2 reports on stdout; stderr carries only game logging.
+    if (isStdout) lines.forEach(onLine)
   }
 }
 
 const interval = tty ? setInterval(bar, 1000) : undefined
 bar()
-await Promise.all([pump(child.stdout), pump(child.stderr)])
+await Promise.all([pump(child.stdout, true), pump(child.stderr, false)])
 const { code } = await child.status
 clearInterval(interval)
 log.close()
@@ -171,5 +170,11 @@ console.log(
     ? red(`${failed.length} failed:\n  ${failed.join("\n  ")}`)
     : green(`all ${durations.length} passed`),
 )
+// A crash or abort prints no duration line for the case it killed.
+if (code !== 0 && durations.length < total) {
+  console.log(
+    red(`stopped early: ${total - durations.length} cases never finished; last finished: ${last}`),
+  )
+}
 console.log(`exit ${code}; log ${logPath}`)
 Deno.exit(code)
