@@ -605,7 +605,15 @@ auto item::prepare_for_location_removal() -> void
     }
 
     auto storage_temperature = temperature_flag::TEMP_NORMAL;
-    const auto vehicle_loc = dynamic_cast<vehicle_item_location *>( loc );
+    // An item inside a container in vehicle cargo takes the cargo part's temperature from the
+    // vehicle itself, as the cargo item does: looking the vehicle up on the map by position
+    // (rot::temp::for_location) misses vehicles at the bubble edge and raised "Expected vehicle".
+    const item *outermost = this;
+    while( outermost->where() == item_location_type::container &&
+           outermost->parent_item() != nullptr ) {
+        outermost = outermost->parent_item();
+    }
+    const auto vehicle_loc = dynamic_cast<vehicle_item_location *>( outermost->loc );
     if( vehicle_loc != nullptr ) {
         storage_temperature = vehicle_loc->storage_temperature();
     } else if( where() == item_location_type::map ) {
