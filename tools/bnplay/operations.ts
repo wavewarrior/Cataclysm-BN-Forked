@@ -8,12 +8,13 @@
 import { resolve } from "@std/path"
 import type { DriverRequest } from "./client.ts"
 import { loadConfig } from "./config.ts"
+import { DEFAULT_DILATE, DEFAULT_MAX_CHANGED } from "./compare.ts"
 import { call, type DaemonRequest, daemonState, ensureDaemon } from "./ipc.ts"
 
 /** A caller's input that is not valid for the operation it names. */
 export class UsageError extends Error {}
 
-export type ParamKind = "string" | "boolean" | "object" | "path"
+export type ParamKind = "string" | "boolean" | "object" | "path" | "paths" | "number"
 
 export type Param = {
   /** Name of the MCP argument; the CLI flag is `--name` with `_` written as `-`. */
@@ -25,6 +26,8 @@ export type Param = {
   cli: "arg" | "flag"
   /** CLI only: how the usage line writes the argument. */
   placeholder?: string
+  /** A `paths` parameter: the CLI flag may be given once per file. */
+  repeat?: boolean
 }
 
 export type OperationName = Exclude<DaemonRequest["op"], "ping">
@@ -204,6 +207,62 @@ export const OPERATIONS: { [K in OperationName]: Operation<K> } = {
       trial: a.trial as string | undefined,
     }),
   },
+  compare: {
+    cli: ["compare"],
+    description:
+      "Frame-equivalence gate: the pixels that changed outside an A/A noise mask. --base names " +
+      "at least three frames of one unchanged state (each occurrence one file; two launches are " +
+      "best) and their pairwise disagreements, grown by --dilate pixels, form the mask. Each " +
+      "--test frame is compared with every base frame and its best match reported: changed pixels " +
+      "outside the mask, their share of the frame, the largest channel delta and their bounding " +
+      "box. Verdict pass at or under --max-changed changed pixels (default 1500, about 0.04% of a " +
+      "2560x1440 frame); the exit code is the verdict. Frames of different sizes are refused by " +
+      "name. Give the frames of one state each, never a whole captures/ directory: mixing states " +
+      "into the mask excuses the very change you are looking for.",
+    params: [
+      {
+        name: "base",
+        kind: "paths",
+        description: "Frame of the unchanged state, one per --base (at least three)",
+        required: true,
+        cli: "flag",
+        placeholder: "<frame.bmp>",
+        repeat: true,
+      },
+      {
+        name: "test",
+        kind: "paths",
+        description: "Frame to compare, one per --test",
+        required: true,
+        cli: "flag",
+        placeholder: "<frame.bmp>",
+        repeat: true,
+      },
+      {
+        name: "max_changed",
+        kind: "number",
+        description: "Changed pixels a test frame may show and still pass (default 1500)",
+        required: false,
+        cli: "flag",
+        placeholder: "<n>",
+      },
+      {
+        name: "dilate",
+        kind: "number",
+        description: "How far the noise mask is grown in each direction (default 2)",
+        required: false,
+        cli: "flag",
+        placeholder: "<px>",
+      },
+    ],
+    request: (a) => ({
+      op: "compare",
+      base: a.base as string[],
+      test: a.test as string[],
+      max_changed: (a.max_changed as number | undefined) ?? DEFAULT_MAX_CHANGED,
+      dilate: (a.dilate as number | undefined) ?? DEFAULT_DILATE,
+    }),
+  },
   shutdown: {
     cli: ["shutdown"],
     description: "End every Episode and stop the resident daemon.",
@@ -265,6 +324,22 @@ export function validateInput(name: OperationName, raw: unknown): Record<string,
         }
         input[param.name] = value
         break
+      case "number": {
+        const n = typeof value === "number" ? value : Number(value)
+        if (!Number.isSafeInteger(n) || n < 0) {
+          throw new UsageError(`${label}: ${param.name} must be a non-negative whole number`)
+        }
+        input[param.name] = n
+        break
+      }
+      case "paths": {
+        const items = Array.isArray(value) ? value : [value]
+        if (items.length === 0 || items.some((v) => typeof v !== "string" || v === "")) {
+          throw new UsageError(`${label}: ${param.name} must be one or more file paths`)
+        }
+        input[param.name] = items.map((v) => resolve(v as string))
+        break
+      }
     }
   }
   return input
