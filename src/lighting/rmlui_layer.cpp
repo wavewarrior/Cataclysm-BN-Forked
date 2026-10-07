@@ -532,6 +532,10 @@ void shutdown() {
     if (!g_attempted) { return; }
     // Tear RmlUi down before the interfaces it points at, then release the
     // render interface's GPU resources before the device is destroyed.
+    // g_world_geom owns Rml::Geometry, whose destructor releases through RmlUi's render
+    // manager: release it while that still exists. Left to static destruction it ran after
+    // Rml::Shutdown() and crashed the exit of any game that had drawn world text (the overmap).
+    g_world_geom.clear();
     if (g_ready) { Rml::Shutdown(); }
     g_open_docs.clear();
     g_passive_docs.clear();
