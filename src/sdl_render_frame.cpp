@@ -102,7 +102,7 @@ perf_window s_perf_window;
 ///
 /// The tonal half of this was already handled the same way: `ramp_enable` lerps AgX out
 /// of `tonemap.frag` because palette-ramp output is display-referred.
-static auto diagnostic_view_active() -> bool { return g_current_dbg_mode >= 6u; }
+static auto diagnostic_view_active() -> bool { return lighting::live_settings().diagnostic_view_active(); }
 
 // Full-screen identity-blit quad (origin, full UV, white tint, no rotation, unlit).
 // TWO callers, and the unlit default is load-bearing for one of them:
@@ -291,15 +291,23 @@ if( g && world_generator && world_generator->active_world ) {
     // far enough that newly-scrolled-in occluders would still be carrying their
     // coarse tile-square fallback seed. Camera pan itself does not force it: the
     // SDF is bubble-indexed, panning one tile per step does not change its content.
+    auto &pulses = lighting::live_settings().pulses;
+    const bool once_armed = pulses.force_rebuild == lighting::force_rebuild_mode::once;
     const rebuild_gate_knobs knobs {
-        sdl_lighting_devui::devui_visible(), g_force_rc_rebuild, g_rebuild_once
+        sdl_lighting_devui::devui_visible(),
+        pulses.force_rebuild == lighting::force_rebuild_mode::every_frame, once_armed
     };
+    bool force_once = once_armed;
     // Decide, then commit right after the decision and before anything is
     // rebuilt: clears the force-once knob, bumps the window's rebuild counter
     // and advances the stamps, in the order the file-statics were written at
     // :258-294 before this cutover.
     const rebuild_decision d = gate_and_commit_frame_history(
-            { rs.history(), plan, knobs, g_rebuild_once, s_rebuild_in_window } );
+            { rs.history(), plan, knobs, force_once, s_rebuild_in_window } );
+    // The commit step spent the one-shot; take it out of the settings too.
+    if( once_armed ) {
+        pulses.take_force_once();
+    }
     rebuild.structure = d.structure;
     rebuild.vis = d.vis;
 }
@@ -569,7 +577,7 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     if( sdf_populated && rs.gpu_sdf().ready() && rs.sdf().trans_buffer() ) {
     rs.gpu_sdf().record( ctx.cmd_buffer, rs.sdf().trans_buffer(),
                              rs.sdf().sdf_buffer(), map_w, map_h,
-                             rs.occluders(), g_dbg_params.occ_soft_gain );
+                             rs.occluders(), lighting::live_settings().debug.occ_soft_gain );
         sdf_ran = true;
         // Step 2/3 diagnostic: the seed's new input. Fires only on an SDF rebuild,
         // not per frame, so it is safe at Info level. `partial` is the positive
@@ -587,7 +595,7 @@ auto flush_and_gather_rc( lighting::render_state &rs,
                 << " partial=" << ( occ.quads().size() - hard )
                 << " captured_tiles=" << captured
                 << " grid=" << occ.width() << "x" << occ.height()
-                << " soft_gain=" << g_dbg_params.occ_soft_gain;
+                << " soft_gain=" << lighting::live_settings().debug.occ_soft_gain;
     } else if( sdf_populated ) {
     sdf_reason = !rs.gpu_sdf().ready() ? "gpu_sdf_ready" : "trans_buf";
     }
@@ -618,15 +626,15 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     kp.sun_dir_y    = sp.sun_dir_y;
     kp.sun_sin_elev = sp.sun_sin_elev;
     // Step 3: sky-portal scan knobs (roofed probes only).
-    kp.portal_reach = g_dbg_params.portal_reach;
-    kp.portal_dirs  = static_cast<std::uint32_t>( std::max( 1.0f, g_dbg_params.portal_dirs ) );
+    kp.portal_reach = lighting::live_settings().debug.portal_reach;
+    kp.portal_dirs  = static_cast<std::uint32_t>( std::max( 1.0f, lighting::live_settings().debug.portal_dirs ) );
         // P5b: F4-tunable sky/sun quality knobs.
-        kp.sky_dirs     = static_cast<std::uint32_t>( std::max( 1.0f, g_dbg_params.sky_dirs ) );
-        kp.sky_reach    = g_dbg_params.sky_reach;
-        kp.sun_steps    = static_cast<std::uint32_t>( std::max( 1.0f, g_dbg_params.sun_steps ) );
-        kp.sun_penumbra = static_cast<std::uint32_t>( std::max( 1.0f, g_dbg_params.sun_penumbra ) );
+        kp.sky_dirs     = static_cast<std::uint32_t>( std::max( 1.0f, lighting::live_settings().debug.sky_dirs ) );
+        kp.sky_reach    = lighting::live_settings().debug.sky_reach;
+        kp.sun_steps    = static_cast<std::uint32_t>( std::max( 1.0f, lighting::live_settings().debug.sun_steps ) );
+        kp.sun_penumbra = static_cast<std::uint32_t>( std::max( 1.0f, lighting::live_settings().debug.sun_penumbra ) );
         kp.sdf_ss       = static_cast<std::uint32_t>( lighting::SDF_SUPERSAMPLE );
-        kp.sun_soft     = g_dbg_params.sun_soft;
+        kp.sun_soft     = lighting::live_settings().debug.sun_soft;
         rs.sky().record( ctx.cmd_buffer, rs.sdf().occ_buffer(), rs.sdf().sdf_buffer(),
                          map_w, map_h, kp );
         sky_ran = true;
@@ -682,8 +690,8 @@ auto flush_and_gather_rc( lighting::render_state &rs,
         rp.map_w         = map_w;
         rp.map_h         = map_h;
         rp.current_z     = g ? static_cast<float>( g->u.bub_pos().z() ) : 0.0f;
-        rp.shadow_k      = g_dbg_params.shadow_k;
-        rp.shadow_steps  = g_dbg_params.shadow_steps;
+        rp.shadow_k      = lighting::live_settings().debug.shadow_k;
+        rp.shadow_steps  = lighting::live_settings().debug.shadow_steps;
         // P2: sun/sky surface-radiance injection. gi_field.comp adds
         // sky_color*SkyBuf.rgb + sun_color*SkyBuf.a to each tile's field so the
         // bounce pass propagates daylight into shadowed/indoor neighbours.
@@ -745,9 +753,8 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     }
 
     exec.split( frame_step_kind::rc_readback );
-    if( g_rc_readback ) {
-    g_rc_readback = false;
-    if( rs.gi().ready() && rs.sdf().populated() ) {
+    if( lighting::live_settings().pulses.take_rc_readback() ) {
+        if( rs.gi().ready() && rs.sdf().populated() ) {
             rs.gi().debug_log_stats( static_cast<std::uint32_t>( rs.sdf().map_w() ),
                                      static_cast<std::uint32_t>( rs.sdf().map_h() ) );
         }
@@ -859,7 +866,7 @@ in.ambient         = 0.05f;
     }
     in.sun.sp_pad = g_dbg_lighting_shader ? 1.0f : 0.0f;
 
-    in.debug = g_dbg_params;
+    in.debug = lighting::live_settings().debug;
     in.debug.anim_time = std::fmod( static_cast<float>( SDL_GetTicks() ) / 1000.0f, 1000.0f );
     // Stage 1 (gpu-daylight black-scene plan): published so a live gpu_lit tile
     // can be told apart from a dead sky/sun pass instead of both reading as
@@ -878,14 +885,14 @@ in.ambient         = 0.05f;
     // been loaded, where ramp_enable's lerp makes the value moot anyway.
     {
         static int last_ramp_steps = -1;
-        const int want = std::clamp( static_cast<int>( g_dbg_params.ramp_steps ), 2, 16 );
+        const int want = std::clamp( static_cast<int>( lighting::live_settings().debug.ramp_steps ), 2, 16 );
         if( want != last_ramp_steps ) {
             last_ramp_steps = want;
             rs.build_palette_ramps( want );
         }
         const int baked = rs.palette_steps();
         in.debug.ramp_steps = baked > 0 ? static_cast<float>( baked )
-                              : g_dbg_params.ramp_steps;
+                              : lighting::live_settings().debug.ramp_steps;
     }
     // Native tileset tile width in ART texels (32 for MSX++). Distinct from
     // in.tile_pixel_size, which is the ZOOMED on-screen width. Step 1 quantises the
@@ -1694,7 +1701,7 @@ auto tonemap_pass_t( lighting::render_state &rs,
         rs.tonemap().record( ctx.cmd_buffer, wt->texture(), rs.gpu_sampler(),
                              wldr->texture(), wldr->width(), wldr->height(),
                              g_tonemap_exposure, g_tonemap_min_ev, g_tonemap_max_ev,
-                             g_dbg_params.ramp_enable, grade );
+                             lighting::live_settings().debug.ramp_enable, grade );
     }
 }
 
