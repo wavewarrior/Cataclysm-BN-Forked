@@ -29,6 +29,27 @@ async function output(command: string, args: string[]): Promise<string> {
 
 const round = (n: number) => Math.round(n * 10) / 10
 
+/** A running process as `Win32_Process` reports it; `age` is in seconds. */
+export type WindowsProcess = { pid: number; ppid: number; age: number; command: string }
+
+/**
+ * Every process on this Windows machine except the PowerShell that lists them, from CIM. A command
+ * line this user may not read is empty.
+ */
+export async function windowsProcesses(): Promise<WindowsProcess[]> {
+  const script = "@(Get-CimInstance Win32_Process | Where-Object ProcessId -ne $PID | " +
+    "ForEach-Object { [pscustomobject]@{ pid = [int]$_.ProcessId; " +
+    "ppid = [int]$_.ParentProcessId; age = $(if ($_.CreationDate) " +
+    "{ [int]((Get-Date) - $_.CreationDate).TotalSeconds } else { 0 }); " +
+    "command = [string]$_.CommandLine } })"
+  const text = (await output("powershell", [
+    "-NoProfile",
+    "-Command",
+    `ConvertTo-Json -Compress -InputObject ${script}`,
+  ])).trim()
+  return text ? JSON.parse(text) : []
+}
+
 /** `vm.loadavg`: `{ 2.06 1.52 1.40 }`. */
 export function parseLoadAverage(text: string): [number, number, number] {
   const m = /^\{\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\}/.exec(text.trim())

@@ -12,7 +12,7 @@ import type { DriverResponse } from "./client.ts"
 import { type Config, IS_WINDOWS } from "./config.ts"
 import { type Episode, HarnessError } from "./episode.ts"
 import { fixtureStatus, listFixtures } from "./fixtures.ts"
-import { type MachineSample, sampleMachine } from "./machine.ts"
+import { type MachineSample, sampleMachine, windowsProcesses } from "./machine.ts"
 import { FIXTURE_NAME, type Trial } from "./trial.ts"
 
 /** The flag that makes the game open a real window (its value is `WxH`). */
@@ -211,26 +211,25 @@ type DriverProcess = { pid: number; elapsed: string; command: string }
 
 const PS_LINE = /^\s*(\d+)\s+(\S+)\s+(.*)$/
 
-/** Every process running the game binary, from `ps` (Windows: CIM, with the age in seconds). */
+/**
+ * Every process whose command line names the game binary, from `ps` (Windows: CIM, with the age
+ * in seconds), so a game run through a wrapper or an interpreter counts too.
+ */
 async function gameProcesses(config: Config): Promise<DriverProcess[]> {
+  const executable = basename(config.binary).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
   if (IS_WINDOWS) {
-    const script = `@(Get-CimInstance Win32_Process -Filter "Name='${basename(config.binary)}'" | ` +
-      `ForEach-Object { [pscustomobject]@{ pid = [int]$_.ProcessId; ` +
-      `age = [int]((Get-Date) - $_.CreationDate).TotalSeconds; command = [string]$_.CommandLine } })`
-    const out = await new Deno.Command("powershell", {
-      args: ["-NoProfile", "-Command", `ConvertTo-Json -Compress -InputObject ${script}`],
-      stdout: "piped",
-      stderr: "null",
-    }).output()
-    const text = new TextDecoder().decode(out.stdout).trim()
-    const rows: { pid: number; age: number; command: string }[] = text ? JSON.parse(text) : []
-    return rows.map((r) => ({ pid: r.pid, elapsed: `${r.age}s`, command: r.command }))
+    // Windows file names ignore case, and a quoted argument ends in `"`.
+    const named = new RegExp(`(^|[\\s/\\\\"])${executable}(["\\s]|$)`, "i")
+    return (await windowsProcesses()).filter((p) => named.test(p.command)).map((p) => ({
+      pid: p.pid,
+      elapsed: `${p.age}s`,
+      command: p.command,
+    }))
   }
   const out = await new Deno.Command("ps", {
     args: ["-axo", "pid=,etime=,command="],
     stdout: "piped",
   }).output()
-  const executable = basename(config.binary).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
   const named = new RegExp(`(^|[\\s/])${executable}(\\s|$)`)
   const found: DriverProcess[] = []
   for (const line of new TextDecoder().decode(out.stdout).split("\n")) {
@@ -288,7 +287,8 @@ async function displaySessionCheck(config: Config): Promise<Check> {
         name,
         status: "fail",
         summary: "no interactive Windows session (SESSIONNAME is unset)",
-        message: "A windowed game needs the logged-in desktop; a windowless Trial needs no display.",
+        message:
+          "A windowed game needs the logged-in desktop; a windowless Trial needs no display.",
       }
   }
   let session: string
