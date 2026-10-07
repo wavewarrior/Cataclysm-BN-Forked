@@ -447,11 +447,16 @@ int main( int argc, char* argv[] )
                         _setmode( 0, _O_BINARY );
                         _setmode( driver_reply_fd, _O_BINARY );
                     }
-                    _dup2( _fileno( stderr ), _fileno( stdout ) );
-                    // A GUI-subsystem exe's CRT does not update the OS handle; code that writes
-                    // through GetStdHandle( STD_OUTPUT_HANDLE ) must not reach the protocol pipe.
-                    SetStdHandle( STD_OUTPUT_HANDLE,
-                                  reinterpret_cast<HANDLE>( _get_osfhandle( _fileno( stderr ) ) ) );
+                    // Without a stderr handle (_fileno == -2) both calls would hit the CRT's
+                    // invalid-parameter handler and fast-fail the process.
+                    if( _fileno( stderr ) >= 0 ) {
+                        _dup2( _fileno( stderr ), _fileno( stdout ) );
+                        // A GUI-subsystem exe's CRT does not update the OS handle; code that
+                        // writes through GetStdHandle( STD_OUTPUT_HANDLE ) must not reach the
+                        // protocol pipe.
+                        SetStdHandle( STD_OUTPUT_HANDLE,
+                                      reinterpret_cast<HANDLE>( _get_osfhandle( _fileno( stderr ) ) ) );
+                    }
 #else
                     if( driver_fd == 0 ) {
                         driver_reply_fd = dup( STDOUT_FILENO );
