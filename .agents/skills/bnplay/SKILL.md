@@ -10,6 +10,8 @@ description: Use when asked to playtest, verify gameplay, drive or run the game,
 - The game stays resident between your calls; you pay the 7 to 10 s boot once per Episode.
 - **Trial** (TOML): defines the test. **Episode**: one run of it. **Scene**: a Lua setup script (see GLOSSARY.md).
 
+**Windows** (verified 2026-10-07): windowless Episodes work. The game serves the protocol on its stdin/stdout (`--driver-fd 0`; Windows cannot hand a child fd 3) and the daemon listens on loopback TCP, its port in `<BNPLAY_HOME>/daemon.port`. The default binary is `out/msvc/src/RelWithDebInfo/cataclysm-bn-tiles.exe` (see `cbn-windows-build-test-plumbing`). Clones are plain copies (no copy-on-write); `doctor` reads processes and memory through CIM, so "swap" is free commit; there is no load average. Make a fixture with Play Now in an EMPTY private user dir (`--userdir out/genfix/`), so the world gets only the in-repo default mods: Play Now otherwise reuses any existing empty world with its third-party mods, and a mod that fails to load drops you silently back on the main menu. Not ported: windowed mode and `capture`, and the test suite (`deno task test:bnplay` still assumes macOS).
+
 The same operations exist as a CLI and as MCP tools:
 
 - **CLI**: below, `bnplay <op>` means `deno task bnplay <op>` from the repo root. The result is JSON on stdout; a failure is one `bnplay: <reason>` line on stderr with exit 2 (deno adds its own banner on stderr).
