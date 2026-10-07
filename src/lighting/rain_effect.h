@@ -16,6 +16,7 @@
 
 #include <SDL3/SDL_gpu.h>
 #include <cstdint>
+#include <random>
 #include <vector>
 
 namespace lighting {
@@ -141,6 +142,9 @@ private:
     static constexpr int MAX_SPLASHES = 1024;
     std::vector<rain_droplet> droplets_;
     std::vector<rain_splash> splashes_;
+    // Spawn jitter. The effect's own generator: a frame drawn must never draw from the game's
+    // RNG (rng.h), or how often the window redraws would change the simulation.
+    std::mt19937 rng_{0x5A1Eu};
 };
 
 } // namespace lighting

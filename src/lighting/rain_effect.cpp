@@ -3,7 +3,6 @@
 #include "debug.h"
 #include "lighting/gpu_device.h"
 #include "lighting/shader_compiler.h"
-#include "rng.h"
 
 #include <algorithm>
 #include <cmath>
@@ -210,7 +209,8 @@ void rain_effect::add_drop(float wx, float wy, float opacity) {
     // Short fall (~1.3 tiles, jittered) so the streak appears just above its
     // landing tile and visibly drops onto it — in top-down ortho a long fall
     // reads as sliding across the ground rather than falling from the sky.
-    const float fall0 = 1.0f + static_cast<float>(rng(0, 60)) / 100.f; // tiles
+    std::uniform_int_distribution<int> fall_jitter(0, 60);
+    const float fall0 = 1.0f + static_cast<float>(fall_jitter(rng_)) / 100.f; // tiles
     rain_droplet d{};
     d.world_x = wx;
     d.world_y = wy;
@@ -222,12 +222,13 @@ void rain_effect::add_drop(float wx, float wy, float opacity) {
 
 void rain_effect::add_splash(float wx, float wy, float intensity) {
     if (static_cast<int>(splashes_.size()) >= MAX_SPLASHES) { return; }
+    std::uniform_int_distribution<uint32_t> life_jitter(0u, 4u);
     splashes_.push_back(rain_splash{
         wx,
         wy,
         intensity,
         0u,
-        8u + static_cast<uint32_t>(rng(0, 4)),
+        8u + life_jitter(rng_),
     });
 }
 
