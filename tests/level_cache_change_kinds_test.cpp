@@ -1226,9 +1226,9 @@ TEST_CASE(
         .at = vehicle_tile,
         .transparency = true,
         .scope = level_cache_freshness::terrain_changed::transparency_scope::level,
-        .seen_probe = tripoint_bub_ms::zero(),
         .support_above = false,
         .memory_seen = false,
+        .seen_probe = tripoint_bub_ms::zero(),
     } );
     const std::vector<std::string> via_kind = capture( here, base );
 
@@ -1251,9 +1251,9 @@ TEST_CASE(
             .at = vehicle_tile,
             .transparency = true,
             .scope = level_cache_freshness::terrain_changed::transparency_scope::level,
-            .seen_probe = probe,
             .support_above = false,
             .memory_seen = false,
+            .seen_probe = probe,
         } );
         return level_cache_freshness::stale( m.access_cache( 0 ), level_cache_part::seen );
     };
@@ -1280,9 +1280,9 @@ TEST_CASE(
     base = capture_generations( here );
     level_cache_freshness::report( here, level_cache_freshness::terrain_changed {
         .at = tripoint_bub_ms( 0, 0, z + 1 ),
-        .floor_level = true,
         .support_above = false,
         .memory_seen = false,
+        .floor_level = true,
     } );
     const std::vector<std::string> via_kind = capture( here, base );
 
