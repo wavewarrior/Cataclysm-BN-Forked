@@ -3721,6 +3721,12 @@ void Character::learn_recipe( const recipe* const rec )
     learned_recipes->include( rec );
 }
 
+void Character::forget_all_recipes()
+{
+    *learned_recipes = recipe_subset();
+    *autolearn_skills_stamp = SkillLevelMap();
+}
+
 bool Character::can_learn_by_disassembly( const recipe &rec ) const
 {
     return !rec.learn_by_disassembly.empty() &&

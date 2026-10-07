@@ -91,6 +91,9 @@ void clear_character(player& dummy, bool debug_storage) {
     dummy.environmental_revert_effect();
 
     dummy.clear_skills();
+    // Learned recipes outlive clear_skills(): a recipe one test taught (or autolearned
+    // at a raised skill) would otherwise stay known in every later test.
+    dummy.forget_all_recipes();
     dummy.clear_morale();
     dummy.activity->set_to_null();
     // Make sure any lingering safe references from the activity are removed

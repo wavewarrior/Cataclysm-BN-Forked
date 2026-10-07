@@ -2251,6 +2251,8 @@ for( const auto& elem : worn ) {
 
         bool knows_recipe( const recipe* rec ) const;
         void learn_recipe( const recipe* rec );
+        /** Forgets every learned recipe; autolearn recipes are re-derived from skills on next use. */
+        void forget_all_recipes();
         bool can_learn_by_disassembly( const recipe& rec ) const;
 
         /** Checks permanent morale for consistency and recovers it when an inconsistency is found. */
