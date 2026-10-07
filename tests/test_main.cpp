@@ -25,6 +25,7 @@
 #include "distribution_grid.h"
 #include "filesystem.h"
 #include "game.h"
+#include "gamemode.h"
 #include "init.h"
 #include "language.h"
 #include "loading_ui.h"
@@ -251,6 +252,9 @@ static void init_global_game_state(
 
     g = std::make_unique<game>();
     g->new_game = true;
+    // Starting or loading a game always sets a game mode (game_setup.cpp, game_save.cpp), and
+    // handle_action calls into it; without one, an action before any world step derefs null.
+    g->gamemode = std::make_unique<special_game>();
     g->load_static_data();
 
     world_generator->set_active_world(nullptr);

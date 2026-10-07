@@ -1201,6 +1201,8 @@ class game: public submap_load_listener
         quit_status uquit;
         /** True if the game has just started or loaded, else false. */
         bool new_game = false;
+        /** The special game mode; starting or loading a game always sets one. */
+        std::unique_ptr<special_game> gamemode;
 
         const scenario *scen = nullptr;
         std::vector<shared_ptr_fast<monster>> coming_to_stairs;
@@ -1328,8 +1330,6 @@ class game: public submap_load_listener
         bool zones_manager_open = false;
         /** Zone manager toggle for submap grid overlay (only active while the UI is open) */
         bool zone_submap_grid_overlay = false;
-
-        std::unique_ptr<special_game> gamemode;
 
         int user_action_counter = 0; // Times the user has input an action
 
