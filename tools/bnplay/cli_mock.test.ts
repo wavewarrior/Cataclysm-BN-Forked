@@ -106,36 +106,56 @@ Deno.test("a caller-supplied request id cannot derail the Episode", async () => 
   })
 })
 
+/**
+ * One try at a hang the wall clock has to kill. The clock runs from boot, and the CLI calls before
+ * the hang spend it: on a loaded machine it can expire before `hang` is sent, and with nothing in
+ * flight that is a plain wall-clock ending (exit 3), not this case. Such a try is reported as not
+ * judged (false); a try with `hang` in flight is judged in full.
+ */
+async function hungGameTry(sandbox: Sandbox, limitS: number): Promise<boolean> {
+  const { session, transcript } = await start(
+    sandbox,
+    `fixture = "bairdford"\nwall_clock_limit_s = ${limitS}\n`,
+  )
+  const child = (await step<{ child_pid: number }>(sandbox, session, "spawn_child")).json?.child_pid
+  const spawned = child !== undefined && await pidAlive(child)
+  const started = performance.now()
+  const hung = child === undefined ? undefined : await step(sandbox, session, "hang")
+  const waited = performance.now() - started
+  // What the kill left behind, read before anything else could clean it up.
+  const childGone = child === undefined || await eventually(async () => !(await pidAlive(child)))
+  const leftover = await pidsMatching(join(sandbox.home, "episodes", session))
+  const later = await step(sandbox, session, "state")
+  const stop = await sandbox.cli(["stop", session])
+  const records = await readTranscript(transcript)
+  if (!records.some((r) => r.request?.cmd === "hang")) return false
+
+  assert(spawned, "the grandchild was not running before the hang")
+  assertEquals(hung!.code, 2)
+  assert(hung!.stderr.includes("wall_clock"), hung!.stderr)
+  assert(waited < (limitS + 8) * 1000, "the watchdog did not fire in time")
+  assert(childGone, "grandchild survived the kill")
+  assertEquals(leftover, [])
+  assertEquals(later.code, 2)
+  assert(later.stderr.includes("wall_clock"), later.stderr)
+  assertEquals(stop.code, 2, stop.stderr) // a hang the watchdog had to kill is a harness error
+  assertEquals(jsonOut(stop).ended, "wall_clock")
+  const events = records.flatMap((r) => r.event ? [r] : [])
+  assertEquals(events.at(-1)?.event, "end")
+  assertEquals(events.at(-1)?.detail?.reason, "wall_clock")
+  return true
+}
+
 Deno.test("a hung game is killed by process group when the wall-clock limit expires", async () => {
-  await withSandbox(async (sandbox) => {
-    const { session, transcript } = await start(
-      sandbox,
-      `fixture = "bairdford"\nwall_clock_limit_s = 4\n`,
-    )
-    const child = (await step<{ child_pid: number }>(sandbox, session, "spawn_child")).json!
-      .child_pid
-    assert(await pidAlive(child))
-
-    const started = performance.now()
-    const hung = await step(sandbox, session, "hang")
-    assertEquals(hung.code, 2)
-    assert(hung.stderr.includes("wall_clock"), hung.stderr)
-    assert(performance.now() - started < 12_000, "the watchdog did not fire in time")
-
-    assert(await eventually(async () => !(await pidAlive(child))), "grandchild survived the kill")
-    assertEquals(await pidsMatching(join(sandbox.home, "episodes", session)), [])
-
-    const later = await step(sandbox, session, "state")
-    assertEquals(later.code, 2)
-    assert(later.stderr.includes("wall_clock"), later.stderr)
-
-    const stop = await sandbox.cli(["stop", session])
-    assertEquals(stop.code, 2, stop.stderr) // a hang the watchdog had to kill is a harness error
-    assertEquals(jsonOut(stop).ended, "wall_clock")
-    const events = (await readTranscript(transcript)).flatMap((r) => r.event ? [r] : [])
-    assertEquals(events.at(-1)?.event, "end")
-    assertEquals(events.at(-1)?.detail?.reason, "wall_clock")
-  })
+  // A try the clock overtook proves nothing either way; the next gets twice the time.
+  for (const limitS of [4, 8, 16, 32]) {
+    let judged = false
+    await withSandbox(async (sandbox) => {
+      judged = await hungGameTry(sandbox, limitS)
+    })
+    if (judged) return
+  }
+  throw new Error("the wall clock expired before the hang was sent on every try, up to 32 s")
 })
 
 Deno.test("a request that gets no answer in time kills the game and ends the Episode", async () => {
