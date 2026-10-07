@@ -463,6 +463,9 @@ LOG_MARKERS = [
     ("rml_open", re.compile(r"rmlui_layer: opened document")),
     ("unknown_token", re.compile(r"unknown rcss token")),
     ("shutdown", re.compile(r"Log shutdown\.")),
+    # g->load() failed: the game exits cleanly (code -999) and this one line is the reason,
+    # buried among thousands of mod JSON warnings.
+    ("load_failed", re.compile(r"cannot load world|contains no saves|Bad save json")),
 ]
 
 
@@ -476,15 +479,18 @@ def log_digest(path: Path, offset: int = 0, tail: int = 6) -> str:
         lines = fh.read().splitlines()
     counts = {name: 0 for name, _ in LOG_MARKERS}
     hits: list[str] = []
+    fatal: list[str] = []
     for ln in lines:
         for name, rx in LOG_MARKERS:
             if rx.search(ln):
                 counts[name] += 1
-                if name in ("errors", "unknown_token") and len(hits) < tail:
+                if name == "load_failed":
+                    fatal.append(ln.strip()[:300])
+                elif name in ("errors", "unknown_token") and len(hits) < tail:
                     hits.append(ln.strip()[:160])
     head = (f"log +{size - offset}B {len(lines)} lines " +
             " ".join(f"{k}={v}" for k, v in counts.items() if v))
-    return "\n".join([head] + [f"  ! {h}" for h in hits])
+    return "\n".join([head] + [f"  !! {f}" for f in fatal] + [f"  ! {h}" for h in hits])
 
 
 # --------------------------------------------------------------------------- scenario
@@ -539,8 +545,18 @@ def op_launch(ctx: Ctx, args: list[str]) -> None:
             env[k] = v
         else:
             argv.append(a)
+    if "--world" in argv[:-1]:
+        # g->load() needs a character (#<base64>.sav). A world holding only map memory
+        # (#<base64>.sqlite3) makes the game debugmsg "contains no saves" and exit cleanly,
+        # which looks exactly like a crash.
+        world = ctx.install / "save" / argv[argv.index("--world") + 1]
+        if not any(world.glob("*.sav")):
+            raise SystemExit(f"NO_CHARACTER: {world} has no *.sav; --world would exit at load")
     log = ctx.install / "config" / "debug.log"
-    ctx.log_offset = 0
+    # debug.cpp rotates debug.log to .prev only when it is >= 1 MiB; a smaller log is
+    # APPENDED to, and scanning it from 0 would let `waitlog` match the previous run.
+    size = log.stat().st_size if log.exists() else 0
+    ctx.log_offset = size if size < 1024 * 1024 else 0
     ctx.proc = subprocess.Popen([str(exe), *argv], cwd=str(ctx.install), env=env,
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     t0 = time.time()
@@ -622,18 +638,26 @@ def op_waitlog(ctx: Ctx, args: list[str]) -> None:
     t0 = time.time()
     scan, tail = ctx.log_offset, ""
     while (time.time() - t0) * 1000 < timeout_ms:
+        # Sampled BEFORE the read, so a game that logs the line and then exits is still
+        # scanned once more before we call it gone.
+        exited = ctx.proc is not None and ctx.proc.poll() is not None
         if path.exists() and path.stat().st_size > scan:
             with path.open("r", encoding="utf-8", errors="replace") as fh:
                 fh.seek(scan)
                 chunk = fh.read()
                 scan = fh.tell()   # exact; len(chunk) drifts on replaced bytes
             tail, _, keep = (tail + chunk).rpartition("\n")
-            for ln in tail.splitlines():
+            for ln in (tail + "\n" + keep if exited else tail).splitlines():
                 if rx.search(ln):
                     ctx.say(f"waitlog {args[0]!r}: hit after "
                             f"{int((time.time() - t0) * 1000)}ms")
                     return
             tail = keep
+        # A game that already exited never logs the line: fail now with its last words
+        # instead of burning the whole timeout (a --world with no character exits in ~12 s).
+        if exited:
+            raise SystemExit(f"EXITED rc={ctx.proc.returncode} while waiting for {args[0]!r}; "
+                             + log_digest(path, ctx.log_offset))
         time.sleep(0.2)
     raise SystemExit(f"WAITLOG_TIMEOUT {args[0]!r}")
 
