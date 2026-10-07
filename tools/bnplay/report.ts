@@ -12,7 +12,7 @@
 import type { Config } from "./config.ts"
 import type { EndReason } from "./episode.ts"
 import { fixtureStatus, readBaseline } from "./fixtures.ts"
-import { linesInWindow, stampTime, withoutStamp } from "./gamelog.ts"
+import { CLOCK_SLACK_MS, linesInWindow, stampTime, withoutStamp } from "./gamelog.ts"
 import type { FirstFail, OracleResult, OracleRun, Progress } from "./oracles.ts"
 import type { RendererRun } from "./renderer.ts"
 import type { Trial } from "./trial.ts"
@@ -105,9 +105,15 @@ function aliveCheck(input: ReportInput): OracleResult {
   return { name: "alive", result: "fail", first_fail, decisive: true }
 }
 
-/** The first request that was answered at or after `at`: the one the line was logged during. */
+/**
+ * The first request that was answered at or after `at`: the one the line was logged during. The
+ * game logs before it answers, so a line stamped just after an answer, within the clocks'
+ * disagreement, still belongs to that request.
+ */
 function requestAt(requests: RequestTiming[], at: number): number {
-  const during = requests.find((r) => r.answeredAt !== undefined && r.answeredAt >= at)
+  const during = requests.find((r) =>
+    r.answeredAt !== undefined && r.answeredAt + CLOCK_SLACK_MS >= at
+  )
   return (during ?? requests.at(-1))?.index ?? 0
 }
 
