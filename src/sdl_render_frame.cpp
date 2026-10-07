@@ -14,6 +14,9 @@
 #include "cached_options.h"
 #include "cata_tiles.h"
 #include "dynamic_atlas.h"
+#include "frame_executor.h"
+#include "frame_plan.h"
+#include "frame_report.h"
 #include "game_constants.h"
 #include "level_cache_freshness.h"
 #include "map.h"
@@ -58,17 +61,31 @@ static float g_body_ms_avg = 0.0f;
 // External linkage: toggled from game::toggle_debug_fps() via sdl_render_frame.h.
 bool g_show_fps = false;
 
-// Per-phase render-body timing — pins which refresh_display stage produces the
-// render_body spikes seen while walking. Indexed 0..9 in call order; sum+max
-// accumulate over the SAME 120-frame window as the [render][perf] line and reset
-// with it (logged + zeroed in the frame_perf destructor). Diagnostic; remove once
-// the spike source is identified.
-static double      g_phase_sum[10] = {};
-static double      g_phase_max[10] = {};
-static const char *g_phase_name[10] = {
-    "begin", "build_light", "flush_gather", "assemble", "menu_bg",
-    "overlays", "ui_a", "world_w", "tonemap", "swap_b"
+// Per-phase render-body timing is owned by the frame plan: `frame_executor` times each
+// step into a `frame_report`, and the 120-frame window in `refresh_display` aggregates
+// the report under the ten legacy phase names (`frame_lap_names`).
+namespace
+{
+/// Sums and maxes of the ten legacy phases over the current 120-frame window. A
+/// frame's contribution to a lap is that lap's per-frame total (`frame_report::lap_ms`),
+/// so a multi-step lap (`flush_gather`, `ui_a`) is sampled as one number, as before.
+struct perf_window {
+    std::array<double, 10> sum{};
+    std::array<double, 10> max{};
+    void accumulate( const frame_report &report ) {
+        for( std::size_t i = 0; i < sum.size(); ++i ) {
+            const double ms = report.lap_ms( i );
+            sum[i] += ms;
+            max[i] = std::max( max[i], ms );
+        }
+    }
+    void reset() {
+        sum.fill( 0.0 );
+        max.fill( 0.0 );
+    }
 };
+perf_window s_perf_window;
+} // namespace
 
 /// True while a REPLACE-mode lighting debug view is selected (F7 modes 6 and up).
 ///
@@ -115,7 +132,7 @@ static lighting::sprite_instance fullscreen_quad( float w, float h )
 static auto begin_frame( lighting::render_state &rs ) -> std::optional<lighting::frame_context>;
 static auto build_lighting( lighting::render_state &rs ) -> bool;
 static auto flush_and_gather_rc( lighting::render_state &rs, lighting::frame_context &ctx,
-                                 bool rc_rebuild ) -> void;
+                                 bool rc_rebuild, frame_executor &exec ) -> void;
 static auto assemble_light_inputs( lighting::render_state &rs,
                                    lighting::frame_context &ctx ) -> void;
 static auto maybe_push_menu_background( lighting::render_state &rs,
@@ -526,13 +543,18 @@ static auto time_of_day_grade( float hour ) -> tod_grade
 }
 
 auto flush_and_gather_rc( lighting::render_state &rs,
-                          lighting::frame_context &ctx, bool rc_rebuild ) -> void
+                          lighting::frame_context &ctx, bool rc_rebuild,
+                          frame_executor &exec ) -> void
 {
     ZoneScopedN( "render_flush_gather_rc" );
+    // The fused lighting group: this body IS the plan's six lighting steps, in this
+    // order. Each `split` closes the member before it and opens the next, so the
+    // executor's timings and the plan's asserted order cannot drift apart.
     if( rs.collector() ) {
     rs.collector()->flush_to_render_cb( ctx.cmd_buffer );
     }
 
+    exec.split( frame_step_kind::gpu_sdf );
     // P3.3: GPU JFA SDF — the SOLE writer of sdf_storage_. Recorded INDEPENDENTLY
     // of GI/sky pipeline readiness: the CPU Euclidean DT it replaced never
     // depended on them, and a backend that fails to create the GI/sky compute
@@ -581,6 +603,7 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     sdf_reason = !rs.gpu_sdf().ready() ? "gpu_sdf_ready" : "trans_buf";
     }
 
+    exec.split( frame_step_kind::sky_sun );
     // Celestial light params drive BOTH the sky/sun pass and the GI daylight
     // injection, so derive them once whenever either might run. Weather-
     // independent (intensity/colour applied fragment-side); cheap, so no wait
@@ -659,6 +682,7 @@ auto flush_and_gather_rc( lighting::render_state &rs,
         }
     }
 
+    exec.split( frame_step_kind::gi );
     // GI: gated independently of sky/sun readiness — a dead sky pass must not
     // disable indirect light, and vice versa (the bug this stage fixes).
     bool gi_ran = false;
@@ -701,7 +725,8 @@ auto flush_and_gather_rc( lighting::render_state &rs,
         rs.gi().record( { .cmd = ctx.cmd_buffer,
                           .bufs = { .emitter = rs.collector()->emitter_buffer(),
                                     .sdf = rs.sdf().sdf_buffer(), .sky = rs.sky().sky_buffer(),
-                                    .albedo = rs.sdf().albedo_buffer() },
+                                    .albedo = rs.sdf().albedo_buffer()
+                                  },
                           .w = map_w, .h = map_h, .params = rp } );
         gi_ran = true;
     } else if( !g_gi_enable ) {
@@ -709,14 +734,16 @@ auto flush_and_gather_rc( lighting::render_state &rs,
 } else if( sdf_populated ) {
     gi_reason = !rs.gi().ready() ? "gi_ready" : "collector";
     }
+    exec.split( frame_step_kind::gi_feedback );
     // Feedback iterations the last structure rebuild queued (gi_compute_pass::
     // record) run one per frame on the frames that follow it.
     if( !gi_ran && g_gi_enable && rs.collector() && rs.sdf().populated() ) {
-        rs.gi().record_pending( ctx.cmd_buffer,
-                                { .emitter = rs.collector()->emitter_buffer(),
-                                  .sdf = rs.sdf().sdf_buffer(), .sky = rs.sky().sky_buffer(),
-                                  .albedo = rs.sdf().albedo_buffer() },
-                                static_cast<std::uint32_t>( std::max( 0, rs.collector()->last_count() ) ) );
+    rs.gi().record_pending( ctx.cmd_buffer, {
+            .emitter = rs.collector()->emitter_buffer(),
+            .sdf = rs.sdf().sdf_buffer(), .sky = rs.sky().sky_buffer(),
+            .albedo = rs.sdf().albedo_buffer()
+        },
+        static_cast<std::uint32_t>( std::max( 0, rs.collector()->last_count() ) ) );
     }
 
     if( rc_rebuild ) {
@@ -728,6 +755,7 @@ auto flush_and_gather_rc( lighting::render_state &rs,
                 << " map=" << map_w << "x" << map_h;
     }
 
+    exec.split( frame_step_kind::rc_readback );
     if( g_rc_readback ) {
     g_rc_readback = false;
     if( rs.gi().ready() && rs.sdf().populated() ) {
@@ -1942,11 +1970,17 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
 
 void refresh_display()
 {
+    // Declared before the RAII logger so the report it points at outlives the
+    // destructor (locals unwind in reverse order of declaration).
+    frame_report report;
     // perf probe: render-body time + wall-clock period between frames (the
     // period includes the sim/turn work between renders). Rolling avg every
     // 120 frames → tells render-bound vs sim-bound. RAII so all return paths log.
+    // The per-phase timings come from the plan executor: one `frame_report` per frame,
+    // accumulated into the window below.
     struct frame_perf {
         std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
+        const frame_report *report = nullptr;
         ~frame_perf() {
             using clk = std::chrono::steady_clock;
             const clk::time_point now = clk::now();
@@ -1963,6 +1997,10 @@ void refresh_display()
             sum_body += body_ms;
             max_body = std::max( max_body, body_ms );
             ++n;
+            // Per-phase spike attribution: charge this frame's per-lap totals.
+            if( report ) {
+                s_perf_window.accumulate( *report );
+            }
             // Publish running averages EVERY frame (not just at the 120-frame
             // boundary) so the overlay isn't pinned at 0 during the first window
             // after launch/enable.
@@ -1980,16 +2018,16 @@ void refresh_display()
                         << " rebuilds=" << s_rebuild_in_window << "/" << n;
                 // Per-phase breakdown (avg/max ms) — which stage owns the spike.
                 std::string ph;
-                for( int i = 0; i < 10; ++i ) {
-                    ph += string_format( " %s=%.2f/%.2f", g_phase_name[i],
-                                         g_phase_sum[i] / n, g_phase_max[i] );
-                    g_phase_sum[i] = 0.0;
-                    g_phase_max[i] = 0.0;
+                for( std::size_t i = 0; i < s_perf_window.sum.size(); ++i ) {
+                    ph += string_format( " %s=%.2f/%.2f",
+                                         std::string( frame_lap_name( i ) ).c_str(),
+                                         s_perf_window.sum[i] / n, s_perf_window.max[i] );
                 }
                 DebugLogFL( DL::Info, DC::Main ) << "[render][perf][phase avg/max ms]" << ph;
                 sum_body = max_body = sum_period = max_period = 0.0;
                 n = 0;
                 s_rebuild_in_window = 0;
+                s_perf_window.reset();
             }
         }
     } _fp;
@@ -2000,62 +2038,93 @@ void refresh_display()
 
     auto &rs = lighting::get_render_state();
 
-    // Per-phase spike attribution (see g_phase_* above). lap(i) charges the time
-    // since the previous lap to phase i; maxes are logged with the 120-frame window.
-    std::chrono::steady_clock::time_point _pt = std::chrono::steady_clock::now();
-    auto lap = [&]( int idx ) {
-        const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
-        const double ms = std::chrono::duration<double, std::milli>( now - _pt ).count();
-        g_phase_sum[idx] += ms;
-        g_phase_max[idx] = std::max( g_phase_max[idx], ms );
-        _pt = now;
-    };
+    // The frame runs as one executor loop over the plan: the loop's step boundaries
+    // ARE the phase timings, so the order the tests assert is the order dispatched.
+    // `begin_frame` is the precondition outside the plan and owns the `begin` lap.
+    const frame_plan plan = default_frame_plan();
+    frame_executor exec( plan, report );
+    _fp.report = &report;
 
     dbg( DL::Debug ) << "[render] begin_frame";
+    exec.begin_precondition();
     auto ctx = begin_frame( rs );
-    lap( 0 );
+    exec.end_precondition();
     if( !ctx ) {
         return;
     }
 
-    const bool rc_rebuild = build_lighting( rs );
-    lap( 1 );
-    dbg( DL::Debug ) << "[render] flush_and_gather_rc";
-    flush_and_gather_rc( rs, *ctx, rc_rebuild );
-    lap( 2 );
-    dbg( DL::Debug ) << "[render] assemble_light_inputs";
-    assemble_light_inputs( rs, *ctx );
-    lap( 3 );
-    dbg( DL::Debug ) << "[render] maybe_push_menu_background";
-    maybe_push_menu_background( rs, *ctx );
-    lap( 4 );
-
+    bool rc_rebuild = false;
     int proj_w = 0;
     int proj_h = 0;
-    SDL_GetWindowSize( g_display.window.get(), &proj_w, &proj_h );
-    if( proj_w <= 0 || proj_h <= 0 ) {
-        proj_w = static_cast<int>( ctx->swapchain_w );
-        proj_h = static_cast<int>( ctx->swapchain_h );
+    while( const std::optional<frame_step> step = exec.next_step() ) {
+        switch( step->kind ) {
+            case frame_step_kind::build_lighting:
+                dbg( DL::Debug ) << "[render] build_lighting";
+                rc_rebuild = build_lighting( rs );
+                break;
+            // The fused lighting group: the loop dispatches the group head only. The
+            // body consumes the remaining members with its own `split` calls, which
+            // advance the plan cursor, so those cases are inert here — dispatching one
+            // would run the group twice.
+            case frame_step_kind::collector_flush:
+                dbg( DL::Debug ) << "[render] flush_and_gather_rc";
+                flush_and_gather_rc( rs, *ctx, rc_rebuild, exec );
+                break;
+            case frame_step_kind::gpu_sdf:
+            case frame_step_kind::sky_sun:
+            case frame_step_kind::gi:
+            case frame_step_kind::gi_feedback:
+            case frame_step_kind::rc_readback:
+                break;
+            case frame_step_kind::assemble:
+                dbg( DL::Debug ) << "[render] assemble_light_inputs";
+                assemble_light_inputs( rs, *ctx );
+                break;
+            case frame_step_kind::menu_background:
+                dbg( DL::Debug ) << "[render] maybe_push_menu_background";
+                maybe_push_menu_background( rs, *ctx );
+                break;
+            case frame_step_kind::overlays:
+                // The projection size is queried where it always was: between the menu
+                // background and the overlays, i.e. inside the `overlays` lap.
+                SDL_GetWindowSize( g_display.window.get(), &proj_w, &proj_h );
+                if( proj_w <= 0 || proj_h <= 0 ) {
+                    proj_w = static_cast<int>( ctx->swapchain_w );
+                    proj_h = static_cast<int>( ctx->swapchain_h );
+                }
+                dbg( DL::Debug ) << "[render] draw_lighting_overlays";
+                draw_lighting_overlays( rs, *ctx );
+                break;
+            case frame_step_kind::ui_composite:
+                dbg( DL::Debug ) << "[render] composite_ui_pass_a";
+                composite_ui_pass_a( rs, *ctx, proj_w, proj_h );
+                break;
+            case frame_step_kind::avatar_composite:
+                dbg( DL::Debug ) << "[render] composite_avatar_pass";
+                composite_avatar_pass( rs, *ctx );
+                break;
+            case frame_step_kind::vehicle_composite:
+                dbg( DL::Debug ) << "[render] composite_vehicle_pass";
+                composite_vehicle_pass( rs, *ctx );
+                break;
+            case frame_step_kind::world_pass:
+                dbg( DL::Debug ) << "[render] render_world_pass_w";
+                render_world_pass_w( rs, *ctx, proj_w, proj_h );
+                break;
+            case frame_step_kind::tonemap:
+                dbg( DL::Debug ) << "[render] tonemap_pass_t";
+                tonemap_pass_t( rs, *ctx );
+                break;
+            case frame_step_kind::swapchain_composite:
+                dbg( DL::Debug ) << "[render] composite_swapchain_pass_b";
+                composite_swapchain_pass_b( rs, *ctx, proj_w, proj_h );
+                break;
+        }
     }
-
-    dbg( DL::Debug ) << "[render] draw_lighting_overlays";
-    draw_lighting_overlays( rs, *ctx );
-    lap( 5 );
-    dbg( DL::Debug ) << "[render] composite_ui_pass_a";
-    composite_ui_pass_a( rs, *ctx, proj_w, proj_h );
-    dbg( DL::Debug ) << "[render] composite_avatar_pass";
-    composite_avatar_pass( rs, *ctx );
-    dbg( DL::Debug ) << "[render] composite_vehicle_pass";
-    composite_vehicle_pass( rs, *ctx );
-    lap( 6 );
-    dbg( DL::Debug ) << "[render] render_world_pass_w";
-    render_world_pass_w( rs, *ctx, proj_w, proj_h );
-    lap( 7 );
-    dbg( DL::Debug ) << "[render] tonemap_pass_t";
-    tonemap_pass_t( rs, *ctx );
-    lap( 8 );
-    dbg( DL::Debug ) << "[render] composite_swapchain_pass_b";
-    composite_swapchain_pass_b( rs, *ctx, proj_w, proj_h );
-    lap( 9 );
+    exec.finish();
+    if( report.order_violation() ) {
+        DebugLogFL( DL::Error, DC::Main )
+                << "[render][plan] lighting split out of plan order";
+    }
     dbg( DL::Debug ) << "[render] refresh_display COMPLETE";
 }
