@@ -15,6 +15,7 @@
 #include "cata_tiles.h"
 #include "dynamic_atlas.h"
 #include "frame_executor.h"
+#include "frame_history.h"
 #include "frame_plan.h"
 #include "frame_report.h"
 #include "game_constants.h"
@@ -219,22 +220,10 @@ auto build_lighting( lighting::render_state &rs ) -> bool
 // When a door opens (structure++), vis does NOT need to rebuild. When the player
 // walks in static terrain, only vis rebuilds — SDF/sun_sdf/sky_vis are skipped.
 // T8/ADR-0002: the freshness stamps themselves live in the rebuild plan, derived
-// here at the consumption point; what stays file-local is only what is genuinely
-// frame-local: the pose tuple each buffer was last rebuilt FOR, the occluder stamp
-// the SDF was last baked against, and the camera-drift anchor.
-static std::optional<level_cache_freshness::pose_stamps> last_struct_pose;
-static std::optional<level_cache_freshness::pose_stamps> last_vis_pose;
-static std::uint64_t last_occluder = 0;
-// Step 2/3: the JFA seed is now rasterised from the sprite footprints captured by
-// cata_tiles, so it depends on WHICH TILES WERE DRAWN, not only on the transparency
-// cache. A tile that was off-camera at the last rebuild falls back to its TransBuf
-// square (exactly the pre-Step-3 behaviour, so it degrades gracefully), but it would
-// stay square until the next submap shift. Rebuilding per walked tile would undo the
-// LIGHTING_PERF_PLAN gate, so instead allow the camera to drift this many tiles from
-// the last structure rebuild before forcing a fresh one.
-static constexpr int SDF_CAM_DRIFT_TILES = 4;
-static int           last_struct_px = INT_MIN;
-static int           last_struct_py = INT_MIN;
+// here at the consumption point. T2: the previous-frame stamps the gate compares
+// them against are a `frame_history` value owned by `render_state` (the buffers
+// they describe live there, so they share its lifetime) — see frame_history.h.
+// The decision is pure; the commit below performs today's writes, in today's order.
 
 lighting::lighting_rebuild_flags rebuild{};
 int px = 0, py = 0;
@@ -261,37 +250,17 @@ if( g && world_generator && world_generator->active_world ) {
     // far enough that newly-scrolled-in occluders would still be carrying their
     // coarse tile-square fallback seed. Camera pan itself does not force it: the
     // SDF is bubble-indexed, panning one tile per step does not change its content.
-    const bool cam_drifted =
-        last_struct_px == INT_MIN
-        || std::abs( px - last_struct_px ) >= SDF_CAM_DRIFT_TILES
-        || std::abs( py - last_struct_py ) >= SDF_CAM_DRIFT_TILES;
-    const bool pose_shifted = !last_struct_pose
-        || last_struct_pose->bubble_origin != plan.pose.bubble_origin
-        || last_struct_pose->viewer.z() != plan.pose.viewer.z();
-    // g_rebuild_once: file knob `force_rc_rebuild 2` -> exactly one structure rebuild.
-    rebuild.structure = sdl_lighting_devui::devui_visible() || g_force_rc_rebuild
-                        || g_rebuild_once
-                        || gen != last_occluder || pose_shifted || cam_drifted;
-    g_rebuild_once = false;
-
-    // vis depends on player position - the seen_cache shadowcast origin.
-    // When the player moves, FOV changes even if terrain hasn't.
-    // When terrain changes (structure rebuild), vis is already covered by
-    // rebuild.structure because seen_cache is rebuilt alongside transparency_cache.
-    rebuild.vis = sdl_lighting_devui::devui_visible()
-                  || !last_vis_pose
-                  || last_vis_pose->viewer != plan.pose.viewer;
-
-    if( rebuild.structure ) {
-        ++s_rebuild_in_window;
-        last_occluder = gen;
-        last_struct_pose = plan.pose;
-        last_struct_px = px;
-        last_struct_py = py;
-    }
-    if( rebuild.vis ) {
-        last_vis_pose = plan.pose;
-    }
+    const rebuild_gate_knobs knobs {
+        sdl_lighting_devui::devui_visible(), g_force_rc_rebuild, g_rebuild_once
+    };
+    // Decide, then commit right after the decision and before anything is
+    // rebuilt: clears the force-once knob, bumps the window's rebuild counter
+    // and advances the stamps, in the order the file-statics were written at
+    // :258-294 before this cutover.
+    const rebuild_decision d = gate_and_commit_frame_history(
+            { rs.history(), plan, knobs, g_rebuild_once, s_rebuild_in_window } );
+    rebuild.structure = d.structure;
+    rebuild.vis = d.vis;
 }
 
     if( cursor_light_emitter::enabled && g && tilecontext

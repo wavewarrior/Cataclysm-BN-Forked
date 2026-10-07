@@ -21,6 +21,7 @@
 #include "emitter_glow_pass.h"
 #include "event_queue.h"
 #include "font_engine.h"
+#include "frame_history.h"
 #include "gi_compute_pass.h"
 #include "godray_shaft_pass.h"
 #include "gpu_atlas.h"
@@ -473,6 +474,14 @@ public:
     /// pinned-hour or weather scaling. Zeroed before the first frame.
     auto current_sun() const noexcept -> const sun_params& { return last_frame_inputs_.sun; }
 
+    // Previous-frame gate state for the lighting rebuild decision (T2): the
+    // five stamps, as a value. Read by the frame's gate (and, from T4, copied
+    // into `frame_inputs`); written only by the commit step right after
+    // planning. Fresh by construction; no reset on world change in the
+    // migration (issue #125).
+    auto history() const noexcept -> const frame_history& { return history_; }
+    auto history() noexcept -> frame_history& { return history_; }
+
     // Large multi-tile terrain decals (cosmetic overlays).
     terrain_decals::manager& decals() noexcept { return decals_; }
 
@@ -587,6 +596,9 @@ private:
     // can stamp the shadow_batcher_ with the same sun/geometry (the shear is
     // vertex-side; no lighting storage buffers are bound for the mask).
     frame_light_inputs last_frame_inputs_;
+
+    // The rebuild gate's previous-frame stamps (T2); see `history()` above.
+    frame_history history_;
 
     // Tonemapped LDR resolve of world_target_ (swapchain format) + the
     // fullscreen tonemap pass that produces it.
