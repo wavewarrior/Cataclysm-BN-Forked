@@ -6,7 +6,8 @@
 -- What the contracts need, and how this provides it:
 --   * every compass move is blocked: the eight neighbours become concrete walls. `move up` logs
 --     "You can't climb here" under the roof, the blocked move with a message the time contract
---     repeats (a locked door does not do: the avatar walks through it)
+--     repeats (a locked door does not do: under the roof the avatar is inside, and walking into
+--     a t_door_locked unlocks its deadbolt and opens it, as its OPENCLOSE_INSIDE flag intends)
 --   * nothing hostile in view for a 1000-turn wait: the walls are opaque
 --   * the avatar wields a pocket knife and carries a smartphone, a lighter and a plastic bottle of
 --     clean water, and nothing it could wear
