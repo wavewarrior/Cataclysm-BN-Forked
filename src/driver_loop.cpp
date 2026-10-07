@@ -842,7 +842,7 @@ auto capture_line( int id, const JsonObject &jo, bool windowed ) -> std::string
 
 } // namespace
 
-auto run_driver_loop( int fd, const driver_options &options ) -> bool
+auto run_driver_loop( int in_fd, const driver_options &options ) -> bool
 {
     const std::string path = options.deny_list_path.empty() ?
                              PATH_INFO::datadir() + default_deny_list_name : options.deny_list_path;
@@ -853,7 +853,9 @@ auto run_driver_loop( int fd, const driver_options &options ) -> bool
     scenes_directory = options.scenes_dir;
     driver_serving = true;
     attached_view_radius = 0;
-    line_reader in( fd );
+    line_reader in( in_fd );
+    // Every response below goes to `fd`.
+    const auto fd = options.reply_fd >= 0 ? options.reply_fd : in_fd;
     std::string line;
     while( true ) {
         if( options.windowed ) {
