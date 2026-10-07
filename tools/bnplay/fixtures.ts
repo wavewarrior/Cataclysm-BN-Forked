@@ -8,7 +8,7 @@
  */
 import { createHash } from "node:crypto"
 import { basename, join } from "@std/path"
-import { HarnessError, run } from "./episode.ts"
+import { cloneTree, HarnessError } from "./episode.ts"
 import { FIXTURE_NAME } from "./trial.ts"
 
 /** Files the game itself takes as proof that a directory is a world (worldfactory.cpp). */
@@ -63,7 +63,7 @@ export async function addFixture(
   // half-copied world that a Trial could pick up.
   const staging = join(fixtures, `.adding-${crypto.randomUUID().slice(0, 8)}`)
   try {
-    await run("cp", ["-cR", real, staging])
+    await cloneTree(real, staging)
     await Deno.rename(staging, path)
   } catch (e) {
     await Deno.remove(staging, { recursive: true }).catch(() => undefined)

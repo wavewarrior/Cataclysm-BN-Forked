@@ -5,6 +5,7 @@
  * clone, so the source fixture is never touched), its own process group (killed whole on any hang)
  * and a wall-clock watchdog that runs outside the game.
  */
+import { copy } from "@std/fs"
 import { join } from "@std/path"
 import {
   type Driver,
@@ -13,7 +14,7 @@ import {
   DriverTimeout,
   spawnDriver,
 } from "./client.ts"
-import type { Config } from "./config.ts"
+import { type Config, IS_WINDOWS } from "./config.ts"
 import { OracleRun } from "./oracles.ts"
 import { RendererRun } from "./renderer.ts"
 import type { ReportInput, RequestTiming } from "./report.ts"
@@ -54,11 +55,20 @@ const HARNESS_ERROR_EXIT_CODE = 2
 /** Time a graceful `quit` gets before the Episode is killed instead. */
 const QUIT_TIMEOUT_MS = 10_000
 
-export async function run(cmd: string, args: string[]): Promise<void> {
+async function run(cmd: string, args: string[]): Promise<void> {
   const out = await new Deno.Command(cmd, { args, stdout: "null", stderr: "piped" }).output()
   if (!out.success) {
     throw new Error(`${cmd} failed: ${new TextDecoder().decode(out.stderr).trim()}`)
   }
+}
+
+/**
+ * Clones a world directory. macOS: copy-on-write (`cp -c`), so a clone costs no disk. Windows has
+ * no such clone; a plain recursive copy keeps the same isolation.
+ */
+export async function cloneTree(source: string, target: string): Promise<void> {
+  if (IS_WINDOWS) await copy(source, target)
+  else await run("cp", ["-cR", source, target])
 }
 
 export class Episode {
@@ -130,11 +140,10 @@ export class Episode {
       detail: { session: id, world: episode.world, trial, userdir: episode.#userdir },
     })
     try {
-      await run("cp", [
-        "-cR",
+      await cloneTree(
         join(config.fixtures, trial.fixture),
         join(episode.#userdir, "save", episode.world),
-      ])
+      )
     } catch (e) {
       await episode.#finish("boot_failure")
       throw new HarnessError(`cloning fixture \`${trial.fixture}\` failed: ${(e as Error).message}`)

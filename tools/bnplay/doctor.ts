@@ -9,7 +9,7 @@ import { Buffer } from "node:buffer"
 import { basename, dirname, join } from "@std/path"
 import { delay } from "@std/async"
 import type { DriverResponse } from "./client.ts"
-import type { Config } from "./config.ts"
+import { type Config, IS_WINDOWS } from "./config.ts"
 import { type Episode, HarnessError } from "./episode.ts"
 import { fixtureStatus, listFixtures } from "./fixtures.ts"
 import { type MachineSample, sampleMachine } from "./machine.ts"
@@ -211,8 +211,21 @@ type DriverProcess = { pid: number; elapsed: string; command: string }
 
 const PS_LINE = /^\s*(\d+)\s+(\S+)\s+(.*)$/
 
-/** Every process running the game binary, from `ps`. */
+/** Every process running the game binary, from `ps` (Windows: CIM, with the age in seconds). */
 async function gameProcesses(config: Config): Promise<DriverProcess[]> {
+  if (IS_WINDOWS) {
+    const script = `@(Get-CimInstance Win32_Process -Filter "Name='${basename(config.binary)}'" | ` +
+      `ForEach-Object { [pscustomobject]@{ pid = [int]$_.ProcessId; ` +
+      `age = [int]((Get-Date) - $_.CreationDate).TotalSeconds; command = [string]$_.CommandLine } })`
+    const out = await new Deno.Command("powershell", {
+      args: ["-NoProfile", "-Command", `ConvertTo-Json -Compress -InputObject ${script}`],
+      stdout: "piped",
+      stderr: "null",
+    }).output()
+    const text = new TextDecoder().decode(out.stdout).trim()
+    const rows: { pid: number; age: number; command: string }[] = text ? JSON.parse(text) : []
+    return rows.map((r) => ({ pid: r.pid, elapsed: `${r.age}s`, command: r.command }))
+  }
   const out = await new Deno.Command("ps", {
     args: ["-axo", "pid=,etime=,command="],
     stdout: "piped",
@@ -248,7 +261,11 @@ async function strayCheck(config: Config, liveUserdirs: string[]): Promise<Check
     summary: `${strays.length} stray driver process(es), not owned by this daemon: ` +
       strays.map((s) => `pid ${s.pid} (running ${s.elapsed})`).join(", "),
     message: "Each holds about 1 GB and only one game should run at a time. If nobody else is " +
-      `using them, end them: kill -KILL ${strays.map((s) => s.pid).join(" ")}`,
+      `using them, end them: ${
+        IS_WINDOWS
+          ? strays.map((s) => `taskkill /F /PID ${s.pid}`).join(" & ")
+          : `kill -KILL ${strays.map((s) => s.pid).join(" ")}`
+      }`,
     details: strays,
   }
 }
@@ -262,6 +279,18 @@ const GRAPHICAL_SESSION = "Aqua"
  */
 async function displaySessionCheck(config: Config): Promise<Check> {
   const name = "display_session"
+  if (IS_WINDOWS) {
+    // An interactive logon names its session (Console, RDP-Tcp#N); a service has none.
+    const session = Deno.env.get("SESSIONNAME")
+    return session
+      ? { name, status: "ok", summary: `an interactive Windows session (${session})` }
+      : {
+        name,
+        status: "fail",
+        summary: "no interactive Windows session (SESSIONNAME is unset)",
+        message: "A windowed game needs the logged-in desktop; a windowless Trial needs no display.",
+      }
+  }
   let session: string
   try {
     const out = await new Deno.Command(config.launchctl, {
@@ -314,8 +343,10 @@ async function strayWindowCheck(config: Config, liveUserdirs: string[]): Promise
     summary: `${strays.length} game process(es) with a window, not owned by this daemon: ` +
       strays.map((s) => `pid ${s.pid} (running ${s.elapsed})`).join(", "),
     message: "A game window other than the Trial's can occlude it, and a capture of an occluded " +
-      `window is refused. Close the game, or if nobody is using it: kill -KILL ${
-        strays.map((s) => s.pid).join(" ")
+      `window is refused. Close the game, or if nobody is using it: ${
+        IS_WINDOWS
+          ? strays.map((s) => `taskkill /F /PID ${s.pid}`).join(" & ")
+          : `kill -KILL ${strays.map((s) => s.pid).join(" ")}`
       }`,
     details: strays,
   }

@@ -5,7 +5,7 @@
  */
 import { join } from "@std/path"
 import { captureBaseline } from "./baseline.ts"
-import { type Config, loadConfig, socketPath } from "./config.ts"
+import { type Config, IS_WINDOWS, loadConfig, portPath, socketPath } from "./config.ts"
 import { runDoctor } from "./doctor.ts"
 import { Episode, HarnessError } from "./episode.ts"
 import { addFixture, fixtureStatus, listFixtures } from "./fixtures.ts"
@@ -31,12 +31,20 @@ class Daemon {
   }
 
   async serve(): Promise<void> {
-    const path = socketPath(this.#config.home)
+    // Windows: loopback TCP on an OS-chosen port, recorded in daemon.port for the clients.
+    const path = IS_WINDOWS ? portPath(this.#config.home) : socketPath(this.#config.home)
     await Deno.mkdir(this.#config.home, { recursive: true })
     // Another daemon already owns this home, even a slow one: never remove a live socket.
     if ((await daemonState(this.#config.home)) !== "absent") return
-    await Deno.remove(path).catch(() => undefined) // a stale socket from a dead daemon
-    const listener = Deno.listen({ transport: "unix", path })
+    await Deno.remove(path).catch(() => undefined) // a stale socket or port file from a dead daemon
+    const listener = IS_WINDOWS
+      ? Deno.listen({ hostname: "127.0.0.1", port: 0 })
+      : Deno.listen({ transport: "unix", path })
+    if (IS_WINDOWS) {
+      // Rename into place, so a client never reads a half-written port.
+      await Deno.writeTextFile(`${path}.tmp`, String((listener.addr as Deno.NetAddr).port))
+      await Deno.rename(`${path}.tmp`, path)
+    }
     this.#log(`listening on ${path} pid ${Deno.pid}`)
     // A resident daemon holds games for other sessions; a stray error is logged, not fatal.
     globalThis.addEventListener("unhandledrejection", (event) => {
@@ -55,7 +63,11 @@ class Daemon {
       this.#log("shut down")
       Deno.exit(0)
     }
-    for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
+    // Windows delivers only SIGINT and SIGBREAK to Deno.
+    const signals = IS_WINDOWS
+      ? (["SIGINT", "SIGBREAK"] as const)
+      : (["SIGTERM", "SIGINT", "SIGHUP"] as const)
+    for (const signal of signals) {
       Deno.addSignalListener(signal, () => void shutdown())
     }
 

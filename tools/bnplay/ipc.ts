@@ -5,7 +5,7 @@
 import { delay } from "@std/async"
 import { dirname, fromFileUrl, join } from "@std/path"
 import type { DriverRequest } from "./client.ts"
-import { REPO_ROOT, socketPath } from "./config.ts"
+import { IS_WINDOWS, portPath, REPO_ROOT, socketPath } from "./config.ts"
 
 export type DaemonRequest =
   | { op: "ping" }
@@ -45,7 +45,19 @@ export async function call(
   request: DaemonRequest,
   timeoutMs?: number,
 ): Promise<DaemonReply> {
-  const conn = await Deno.connect({ transport: "unix", path: socketPath(home) })
+  // Windows: loopback TCP on the port the daemon recorded. No port file (or a truncated one left
+  // by a crash) reads as NotFound and a stale port as ConnectionRefused, which daemonState()
+  // both treats as "absent".
+  let conn: Deno.Conn
+  if (IS_WINDOWS) {
+    const port = Number((await Deno.readTextFile(portPath(home))).trim())
+    if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+      throw new Deno.errors.NotFound(`no daemon port recorded in ${portPath(home)}`)
+    }
+    conn = await Deno.connect({ hostname: "127.0.0.1", port })
+  } else {
+    conn = await Deno.connect({ transport: "unix", path: socketPath(home) })
+  }
   const timer = timeoutMs === undefined ? undefined : setTimeout(() => conn.close(), timeoutMs)
   try {
     await conn.write(new TextEncoder().encode(JSON.stringify(request) + "\n"))
@@ -96,35 +108,48 @@ export async function ensureDaemon(home: string): Promise<void> {
     )
   }
   await Deno.mkdir(home, { recursive: true })
-  // Own session, so closing the shell that started it does not take the games down with it; its
-  // stdout and stderr go to the daemon log so a crash leaves a trace.
-  const daemon = new Deno.Command("/usr/bin/python3", {
-    args: [
-      "-c",
-      "import os, sys\n" +
-      "os.setsid()\n" +
-      "fd = os.open(sys.argv[1], os.O_WRONLY | os.O_CREAT | os.O_APPEND)\n" +
-      "os.dup2(fd, 1)\n" +
-      "os.dup2(fd, 2)\n" +
-      "os.execv(sys.argv[2], sys.argv[2:])",
-      join(home, "daemon.log"),
-      Deno.execPath(),
-      "run",
-      "--allow-run",
-      "--allow-read",
-      "--allow-net",
-      "--allow-write",
-      "--allow-env",
-      "--config",
-      join(REPO_ROOT, "deno.jsonc"),
-      MAIN,
-      "daemon",
-    ],
-    cwd: REPO_ROOT,
-    stdin: "null",
-    stdout: "null",
-    stderr: "null",
-  }).spawn()
+  const daemonArgs = [
+    "run",
+    "--allow-run",
+    "--allow-read",
+    "--allow-net",
+    "--allow-write",
+    "--allow-env",
+    "--config",
+    join(REPO_ROOT, "deno.jsonc"),
+    MAIN,
+    "daemon",
+  ]
+  // Own session (Windows: detached, own process group), so closing the shell that started it
+  // does not take the games down with it. On POSIX its stdout and stderr go to the daemon log so
+  // a crash leaves a trace; on Windows the daemon's own log (daemon.ts) is the trace.
+  const daemon = IS_WINDOWS
+    ? new Deno.Command(Deno.execPath(), {
+      args: daemonArgs,
+      cwd: REPO_ROOT,
+      stdin: "null",
+      stdout: "null",
+      stderr: "null",
+      detached: true,
+    }).spawn()
+    : new Deno.Command("/usr/bin/python3", {
+      args: [
+        "-c",
+        "import os, sys\n" +
+        "os.setsid()\n" +
+        "fd = os.open(sys.argv[1], os.O_WRONLY | os.O_CREAT | os.O_APPEND)\n" +
+        "os.dup2(fd, 1)\n" +
+        "os.dup2(fd, 2)\n" +
+        "os.execv(sys.argv[2], sys.argv[2:])",
+        join(home, "daemon.log"),
+        Deno.execPath(),
+        ...daemonArgs,
+      ],
+      cwd: REPO_ROOT,
+      stdin: "null",
+      stdout: "null",
+      stderr: "null",
+    }).spawn()
   daemon.unref()
   const deadline = Date.now() + DAEMON_START_TIMEOUT_MS
   while (Date.now() < deadline) {

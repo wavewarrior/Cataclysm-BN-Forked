@@ -5,6 +5,7 @@
  * failure, and a timed-out driver is killed by process group so no game process lingers.
  */
 import { dirname, fromFileUrl, join } from "@std/path"
+import { IS_WINDOWS } from "./config.ts"
 import type { WindowSize } from "./trial.ts"
 
 export type DriverRequest = { cmd: string; [key: string]: unknown }
@@ -86,22 +87,26 @@ const SHIM = join(dirname(fromFileUrl(import.meta.url)), "fd_shim.py")
 export function spawnDriver(opts: SpawnOptions): Driver {
   const firstTimeout = opts.firstTimeoutMs ?? 60_000
   const requestTimeout = opts.requestTimeoutMs ?? 10_000
-  const child = new Deno.Command("/usr/bin/python3", {
-    args: [
-      SHIM,
-      "--",
-      opts.binary,
-      "--userdir",
-      opts.userdir + "/",
-      "--world",
-      opts.world,
-      "--dont-debugmsg",
-      "--basepath",
-      opts.basepath,
-      ...(opts.denyList ? ["--driver-deny-list", opts.denyList] : []),
-      ...(opts.scenesDir ? ["--driver-scenes", opts.scenesDir] : []),
-      ...(opts.window ? ["--driver-windowed", `${opts.window.width}x${opts.window.height}`] : []),
-    ],
+  const gameArgs = [
+    "--userdir",
+    opts.userdir + "/",
+    "--world",
+    opts.world,
+    "--dont-debugmsg",
+    "--basepath",
+    opts.basepath,
+    ...(opts.denyList ? ["--driver-deny-list", opts.denyList] : []),
+    ...(opts.scenesDir ? ["--driver-scenes", opts.scenesDir] : []),
+    ...(opts.window ? ["--driver-windowed", `${opts.window.width}x${opts.window.height}`] : []),
+  ]
+  // Windows cannot hand a child an extra descriptor and has no process groups: the game serves
+  // the protocol on its own stdin/stdout (`--driver-fd 0`) and is killed by pid. Elsewhere the
+  // shim gives it a socketpair on fd 3 and leads a process group.
+  const [command, args] = IS_WINDOWS
+    ? [opts.binary, [...gameArgs, "--driver-fd", "0"]]
+    : ["/usr/bin/python3", [SHIM, "--", opts.binary, ...gameArgs]]
+  const child = new Deno.Command(command, {
+    args,
     stdin: "piped",
     stdout: "piped",
     stderr: opts.stderr ?? "null",

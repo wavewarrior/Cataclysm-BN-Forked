@@ -1,8 +1,10 @@
 /**
  * What the machine has to spare right now: load, memory and swap, read from macOS (`sysctl`,
- * `vm_stat`). Every reading that cannot be taken is left out and named in `unreadable`, never
- * guessed.
+ * `vm_stat`) or, on Windows, from `Win32_OperatingSystem` (Windows has no load average, and
+ * `Deno.systemMemoryInfo()` reports 0 available and 0 swap free there). Every reading that cannot
+ * be taken is left out and named in `unreadable`, never guessed.
  */
+import { IS_WINDOWS } from "./config.ts"
 
 export type MachineSample = {
   /** 1, 5 and 15 minute load averages. */
@@ -60,6 +62,26 @@ export function parseAvailableMemory(text: string): number {
 export async function sampleMachine(): Promise<MachineSample> {
   const sample: MachineSample = { cpus: navigator.hardwareConcurrency }
   const unreadable: string[] = []
+  if (IS_WINDOWS) {
+    // Free physical memory, and the commit limit as "swap": Windows pages against commit, so free
+    // commit is what a new game can take before the machine starts to thrash. CIM reports KiB.
+    try {
+      const [free, commitTotal, commitFree] = (await output("powershell", [
+        "-NoProfile",
+        "-Command",
+        "$o = Get-CimInstance Win32_OperatingSystem; " +
+        '"$($o.FreePhysicalMemory) $($o.TotalVirtualMemorySize) $($o.FreeVirtualMemory)"',
+      ])).trim().split(/\s+/).map((kib) => round(Number(kib) / 1024))
+      sample.memory_available_mb = free
+      sample.swap_total_mb = commitTotal
+      sample.swap_free_mb = commitFree
+      sample.swap_used_mb = round(commitTotal - commitFree)
+    } catch (e) {
+      unreadable.push(`memory and commit: ${(e as Error).message}`)
+    }
+    sample.unreadable = [...unreadable, "load: Windows has no load average"]
+    return sample
+  }
   try {
     sample.load_average = parseLoadAverage(await output("sysctl", ["-n", "vm.loadavg"]))
   } catch (e) {

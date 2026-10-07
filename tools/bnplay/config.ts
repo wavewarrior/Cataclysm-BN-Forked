@@ -5,7 +5,8 @@
  *                           (default out/bnplay in the repo)
  *   BNPLAY_FIXTURES         fixture library, one directory per fixture holding a world save
  *                           (default tools/bnplay/fixtures, gitignored)
- *   BNPLAY_BINARY           game binary (default out/build/osx-arm-slim/src/cataclysm-bn-tiles)
+ *   BNPLAY_BINARY           game binary (default out/build/osx-arm-slim/src/cataclysm-bn-tiles;
+ *                           on Windows out/msvc/src/RelWithDebInfo/cataclysm-bn-tiles.exe)
  *   BNPLAY_BASEPATH         `--basepath` for the game (default the repo root)
  *   BNPLAY_SCENES           directory of the Lua Scenes `run_scene` and a Trial's `scene` run
  *                           (default tools/visual_verify/scenes)
@@ -39,6 +40,9 @@ import { dirname, fromFileUrl, join } from "@std/path"
 
 const here = dirname(fromFileUrl(import.meta.url))
 export const REPO_ROOT = dirname(dirname(here))
+
+/** Windows has no unix sockets in Deno, no process groups and no `--driver-fd 3` inheritance. */
+export const IS_WINDOWS = Deno.build.os === "windows"
 
 export type Config = {
   home: string
@@ -79,8 +83,9 @@ export function loadConfig(): Config {
   return {
     home: Deno.env.get("BNPLAY_HOME") ?? join(REPO_ROOT, "out", "bnplay"),
     fixtures: Deno.env.get("BNPLAY_FIXTURES") ?? join(here, "fixtures"),
-    binary: Deno.env.get("BNPLAY_BINARY") ??
-      join(REPO_ROOT, "out", "build", "osx-arm-slim", "src", "cataclysm-bn-tiles"),
+    binary: Deno.env.get("BNPLAY_BINARY") ?? (IS_WINDOWS
+      ? join(REPO_ROOT, "out", "msvc", "src", "RelWithDebInfo", "cataclysm-bn-tiles.exe")
+      : join(REPO_ROOT, "out", "build", "osx-arm-slim", "src", "cataclysm-bn-tiles")),
     basepath: Deno.env.get("BNPLAY_BASEPATH") ?? REPO_ROOT,
     scenesDir: Deno.env.get("BNPLAY_SCENES") ?? join(REPO_ROOT, "tools", "visual_verify", "scenes"),
     bootTimeoutMs: positiveInteger("BNPLAY_BOOT_TIMEOUT_MS", 60_000),
@@ -105,4 +110,12 @@ export function socketPath(home: string): string {
     throw new Error(`BNPLAY_HOME is too long for a unix socket path: ${path}`)
   }
   return path
+}
+
+/**
+ * Windows: the daemon listens on loopback TCP on a port the OS picks and records it here, since
+ * Deno has no unix sockets on Windows.
+ */
+export function portPath(home: string): string {
+  return join(home, "daemon.port")
 }
