@@ -3,7 +3,7 @@
 #
 # PREREQUISITE: a THROWAWAY clone of an explored save, --var WORLD=<name>.
 #
-# F7 cycles debug_mode 0..16 and logs the mode it lands on, so every capture is gated on
+# F7 cycles debug_mode 0..17 and logs the mode it lands on, so every capture is gated on
 # `waitlog` rather than on a keypress count. Views captured, and what each one settles:
 #
 #   6  SDF occupancy       red = wall (s~0) -> green = open (s>=8). Shows which tiles the

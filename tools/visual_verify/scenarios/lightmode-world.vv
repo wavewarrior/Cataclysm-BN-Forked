@@ -25,10 +25,10 @@
 # pitch, moving whole-frame mean luma by 19.7 and manufacturing a 67% "signal" out of
 # nothing.
 #
-# F7 cycles debug_mode 0..16 and LOGS the mode it landed on. Fifteen presses reach
-# view 15 (vision frontier, frontier_cov in GREEN), one more reaches view 16
-# (categorical light_mode: red unlit / green gpu_lit / blue memory), one more wraps to
-# 0. Presses are issued individually rather than as {F7*15} because batched repeats
+# F7 cycles debug_mode 0..17 (`% 18u` in the F7 handler, src/sdl_input.cpp) and LOGS the mode
+# it landed on. Fifteen presses reach view 15 (vision frontier, frontier_cov in GREEN), one
+# more reaches view 16 (categorical light_mode: red unlit / green gpu_lit / blue memory), and
+# two more (17, then 0) wrap back. Presses are issued individually rather than as {F7*15} because batched repeats
 # get dropped -- and every capture is gated on `waitlog` confirming the mode from the
 # log, so a dropped press fails the run instead of silently handing back a capture of
 # the wrong mode.
@@ -104,9 +104,11 @@ waitlog "lighting debug mode 16" timeout=20000
 wait 2500
 shot mode16 avg=6
 
-# ---- wrap to 0 and require the scene to come back identically ----
+# ---- wrap to 0 (via 17) and require the scene to come back identically ----
 key "{F7}"
-waitlog "lighting debug mode 0" timeout=20000
+waitlog "lighting debug mode 17$" timeout=20000
+key "{F7}"
+waitlog "lighting debug mode 0$" timeout=20000
 wait 3000
 shot world_restored avg=12
 diff world world_restored as=restore in=play

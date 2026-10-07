@@ -139,7 +139,9 @@ waitlog "lighting debug mode 16" timeout=20000
 wait 2000
 shot night_mode16 avg=6
 key "{F7}"
-waitlog "lighting debug mode 0" timeout=20000
+waitlog "lighting debug mode 17$" timeout=20000
+key "{F7}"
+waitlog "lighting debug mode 0$" timeout=20000
 wait 2500
 
 log

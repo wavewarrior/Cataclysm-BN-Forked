@@ -33,53 +33,54 @@ diff base base_again as=same_state in=play grid=0
 stats base in=play
 
 # ---- change under test: replace this block, keeping 1 -> 0 -> 1 ----
-# F7 cycles the lighting debug view 0..17 (18 modes; a new mode needs one more press below) and logs the mode it landed on; presses are sent one
-# at a time because batched repeats get dropped.
+# F7 cycles the lighting debug view through 18 modes, 0..17: `% 18u` in the F7 handler,
+# src/sdl_input.cpp. A new debug view changes that count; every press below is gated on the
+# mode it must land on, so a dropped key or a changed count fails at the step, not later.
 key "{F7}"
-waitlog "lighting debug mode 1" timeout=20000
+waitlog "lighting debug mode 1$" timeout=20000
 wait 2500
 shot toggled avg=12
 diff base toggled as=toggled in=play grid=0
+# Assert the toggle before the restore leg, so an abort there cannot hide a dead toggle.
+assert toggled.changed > same_state.changed * 2
 key "{F7}"
-wait 300
+waitlog "lighting debug mode 2$" timeout=20000
 key "{F7}"
-wait 300
+waitlog "lighting debug mode 3$" timeout=20000
 key "{F7}"
-wait 300
+waitlog "lighting debug mode 4$" timeout=20000
 key "{F7}"
-wait 300
+waitlog "lighting debug mode 5$" timeout=20000
 key "{F7}"
-wait 300
+waitlog "lighting debug mode 6$" timeout=20000
 key "{F7}"
-wait 300
+waitlog "lighting debug mode 7$" timeout=20000
 key "{F7}"
-wait 300
+waitlog "lighting debug mode 8$" timeout=20000
 key "{F7}"
-wait 300
+waitlog "lighting debug mode 9$" timeout=20000
 key "{F7}"
-wait 300
+waitlog "lighting debug mode 10$" timeout=20000
 key "{F7}"
-wait 300
+waitlog "lighting debug mode 11$" timeout=20000
 key "{F7}"
-wait 300
+waitlog "lighting debug mode 12$" timeout=20000
 key "{F7}"
-wait 300
+waitlog "lighting debug mode 13$" timeout=20000
 key "{F7}"
-wait 300
+waitlog "lighting debug mode 14$" timeout=20000
 key "{F7}"
-wait 300
+waitlog "lighting debug mode 15$" timeout=20000
 key "{F7}"
-wait 300
+waitlog "lighting debug mode 16$" timeout=20000
 key "{F7}"
-wait 300
+waitlog "lighting debug mode 17$" timeout=20000
 key "{F7}"
-waitlog "lighting debug mode 0" timeout=20000
+waitlog "lighting debug mode 0$" timeout=20000
 wait 2500
 shot restored avg=12
 diff base restored as=restore in=play grid=0
-# A lone before/after proves nothing: the toggle must move pixels AND the restore must land
-# back inside the paired null.
-assert toggled.changed > same_state.changed * 2
+# A lone before/after proves nothing: the restore must land back inside the paired null.
 assert restore.changed <= same_state.changed * 3
 # ---- end ----
 
