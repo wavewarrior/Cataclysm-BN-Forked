@@ -18,6 +18,9 @@ Pre-load script for Windows builds with Ninja Multi-Config and MSVC.
 # before project() initialises those, so a normal variable would shadow CMake's MSVC
 # defaults (/DWIN32 /D_WINDOWS /EHsc) and every TU would build without C++ unwinding (C4530).
 add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:/bigobj;/utf-8>")
+# cata_test-tiles' PDB passes 6 GB on relinks and then fails LNK1140 ("limit exceeded for
+# program database"); larger PDB pages raise the ceiling (16 KiB pages allow 16 GB).
+add_link_options("$<$<LINK_LANGUAGE:C,CXX>:/PDBPAGESIZE:16384>")
 
 # --- Box2D physics: ON by default for this preset -------------------------
 # The root CMakeLists declares `option(BOX2D "..." OFF)`, a global default that
