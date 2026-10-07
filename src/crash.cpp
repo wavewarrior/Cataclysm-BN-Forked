@@ -21,6 +21,7 @@
 #include <dbghelp.h>
 #endif
 
+#include "cached_options.h"
 #include "debug.h"
 #include "driver_window.h"
 #include "get_version.h"
@@ -87,10 +88,11 @@ extern "C" {
                  << "\nVERSION: " << getVersionString()
                  << "\nTYPE: " << type
                  << "\nMESSAGE: " << msg;
-        // A driver window has nobody at the keyboard: a modal box would hold the crashed game
-        // (and a dialog on the user's desktop) until the supervisor's watchdog kills it. The
-        // report below goes to stderr and the crash file as usual.
-        if( !requested_driver_window() &&
+        // A driver window or a test run has nobody at the keyboard: a modal box would hold the
+        // crashed process (and a dialog on the user's desktop) until a watchdog kills it, so a
+        // crashing test hung its runner instead of failing. The report below goes to stderr and
+        // the crash file as usual.
+        if( !requested_driver_window() && !test_mode &&
             SDL_ShowSimpleMessageBox( SDL_MESSAGEBOX_ERROR, "Error",
                                       log_text.str().c_str(), nullptr ) != 0 ) {
             log_text << "Error creating SDL message box: " << SDL_GetError() << '\n';
