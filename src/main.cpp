@@ -20,6 +20,7 @@
 #include <vector>
 #if defined(_WIN32)
 #include "platform_win.h"
+#include <io.h>
 #else
 #include <csignal>
 #include <unistd.h>
@@ -432,7 +433,11 @@ int main( int argc, char* argv[] )
                     driver_fd = atoi( params[0] );
                     // Stray stdout writes (cata_printf, SDL, RmlUi, Lua print) must never
                     // reach the protocol channel: move stdout onto stderr.
+#if defined(_WIN32)
+                    _dup2( _fileno( stderr ), _fileno( stdout ) );
+#else
                     dup2( STDERR_FILENO, STDOUT_FILENO );
+#endif
                     return 1;
                 }
             },
