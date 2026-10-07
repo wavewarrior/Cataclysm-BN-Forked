@@ -1,19 +1,17 @@
-# Template: launch a fixture world, prove the frame is live, and prove input lands.
-# Copy it and replace the "change under test" block.
+# Template: launch a fixture world, prove the frame is live, prove input lands AND restores.
+# Copy it and replace the "change under test" block (keep a restore step in it).
 #
-# Fixture: a THROWAWAY world with a character (#<base64>.sav) whose mods.json lists only
-# in-repo mods (data/mods). Third-party mods under <install>/mods can fail at HEAD, and the
-# game then exits cleanly (code -999) at load. Build it once (Python):
+# Fixture: a world made by Play Now in a PRIVATE, EMPTY user dir, so it carries only the in-repo
+# default mods (data/mods/default.json) and no third-party mods from <install>/mods:
 #
-#   src = install/save/<world with a .sav>;  dst = install/save/WinFixture
-#   shutil.copytree(src, dst)
-#   repo = ids of every data/mods/**/modinfo.json
-#   mods.json = [m for m in mods.json if m == "bn" or m in repo]
+#   cataclysm-bn-tiles.exe --dont-debugmsg --userdir <repo>/out/genfix/   (New Game > Play Now)
+#   gold copy: <repo>/out/genfix/save/<World>  (bnplay keeps the same world as fixture "Barnum")
 #
-#   python tools/visual_verify/vv.py run tools/visual_verify/scenarios/fixture-smoke.vv --var WORLD=WinFixture
+# Re-clone the world from the gold copy before EVERY run: the game autosaves while it runs, so a
+# reused clone starts each run from a different state (measured 0.07% - 1.35% frame drift).
 #
-# The world saves nothing (stop kills the game), but re-clone it whenever runs must start
-# from identical state.
+#   shutil.rmtree(install/save/VVFIX, True); shutil.copytree(gold, install/save/VVFIX)
+#   python tools/visual_verify/vv.py run tools/visual_verify/scenarios/fixture-smoke.vv --var WORLD=VVFIX
 launch --dont-debugmsg --world ${WORLD}
 waitlog "opened document .*sidebar_hud.rml" timeout=300000
 focus
@@ -34,14 +32,55 @@ shot base_again avg=12
 diff base base_again as=same_state in=play grid=0
 stats base in=play
 
-# ---- change under test: replace this block ----
-# F7 cycles the lighting debug view and logs the mode it landed on.
+# ---- change under test: replace this block, keeping 1 -> 0 -> 1 ----
+# F7 cycles the lighting debug view 0..17 (18 modes; a new mode needs one more press below) and logs the mode it landed on; presses are sent one
+# at a time because batched repeats get dropped.
 key "{F7}"
 waitlog "lighting debug mode 1" timeout=20000
 wait 2500
 shot toggled avg=12
 diff base toggled as=toggled in=play grid=0
+key "{F7}"
+wait 300
+key "{F7}"
+wait 300
+key "{F7}"
+wait 300
+key "{F7}"
+wait 300
+key "{F7}"
+wait 300
+key "{F7}"
+wait 300
+key "{F7}"
+wait 300
+key "{F7}"
+wait 300
+key "{F7}"
+wait 300
+key "{F7}"
+wait 300
+key "{F7}"
+wait 300
+key "{F7}"
+wait 300
+key "{F7}"
+wait 300
+key "{F7}"
+wait 300
+key "{F7}"
+wait 300
+key "{F7}"
+wait 300
+key "{F7}"
+waitlog "lighting debug mode 0" timeout=20000
+wait 2500
+shot restored avg=12
+diff base restored as=restore in=play grid=0
+# A lone before/after proves nothing: the toggle must move pixels AND the restore must land
+# back inside the paired null.
 assert toggled.changed > same_state.changed * 2
+assert restore.changed <= same_state.changed * 3
 # ---- end ----
 
 log
