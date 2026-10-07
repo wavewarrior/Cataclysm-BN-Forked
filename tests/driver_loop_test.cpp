@@ -390,6 +390,51 @@ TEST_CASE("driver_loop_smash_breaks_furniture_and_open_air_has_nothing_to_smash"
     CHECK_FALSE(out[3].flag("time_passed"));
 }
 
+// `move` goes through the game's own movement, so a locked door does what it does at the keyboard:
+// from outside it stops the avatar ("That door is locked!", which the test binary's fake message
+// log cannot show); from inside (under a roof) walking into it unlocks the deadbolt and opens it,
+// as the door's OPENCLOSE_INSIDE flag intends.
+TEST_CASE("driver_loop_move_into_a_locked_door_is_blocked_outside_and_opens_it_inside", "[driver]") {
+    auto& u = setup();
+    auto& here = get_map();
+    const tripoint_bub_ms door = centre + point_east;
+    const auto locked = ter_id("t_door_locked");
+    here.ter_set(door, locked);
+
+    SECTION("from outside the move is blocked and the avatar stays put") {
+        rebuild_level_cache(0);
+        REQUIRE(here.is_outside(centre));
+        const auto turn_before = to_turn<int>(calendar::turn);
+
+        const auto out = converse({R"({"id":1,"cmd":"move","dir":"e"})"});
+
+        CAPTURE(out[0].line);
+        CHECK(out[0].text("outcome") == "blocked");
+        CHECK_FALSE(out[0].flag("time_passed"));
+        CHECK_FALSE(out[0].flag("moved"));
+        CHECK(u.bub_pos() == centre);
+        CHECK(here.ter(door) == locked);
+        CHECK(to_turn<int>(calendar::turn) == turn_before);
+    }
+
+    SECTION("from inside the first move opens the door and the second walks through it") {
+        for (const tripoint_bub_ms& pos : here.points_in_radius(centre, 3)) { here.ter_set(pos + tripoint_above, ter_id("t_flat_roof")); }
+        rebuild_level_cache(0);
+        REQUIRE_FALSE(here.is_outside(centre));
+
+        const auto out = converse({R"({"id":1,"cmd":"move","dir":"e"})", R"({"id":2,"cmd":"move","dir":"e"})"});
+
+        CAPTURE(out[0].line);
+        CHECK(out[0].text("outcome") == "completed");
+        CHECK(out[0].flag("time_passed"));
+        CHECK_FALSE(out[0].flag("moved"));
+        CAPTURE(out[1].line);
+        CHECK(out[1].flag("moved"));
+        CHECK(here.ter(door) == ter_id("t_door_o"));
+        CHECK(u.bub_pos() == door);
+    }
+}
+
 TEST_CASE("driver_loop_combat_commands_reject_a_bad_target_as_a_protocol_error", "[driver]") {
     setup();
     const auto turn_before = to_turn<int>(calendar::turn);
