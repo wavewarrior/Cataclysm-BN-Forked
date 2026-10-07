@@ -447,15 +447,17 @@ int main( int argc, char* argv[] )
                         _setmode( 0, _O_BINARY );
                         _setmode( driver_reply_fd, _O_BINARY );
                     }
-                    // Without a stderr handle (_fileno == -2) both calls would hit the CRT's
-                    // invalid-parameter handler and fast-fail the process.
-                    if( _fileno( stderr ) >= 0 ) {
-                        _dup2( _fileno( stderr ), _fileno( stdout ) );
+                    // Stray stdout goes to stderr, or to NUL when no stderr was inherited
+                    // (_fileno == -2; passing that on would fast-fail in the CRT's
+                    // invalid-parameter handler). Either way it never reaches the protocol pipe.
+                    const auto sink = _fileno( stderr ) >= 0 ? _fileno( stderr ) : _open( "NUL", _O_WRONLY );
+                    if( sink >= 0 && _fileno( stdout ) >= 0 ) {
+                        _dup2( sink, _fileno( stdout ) );
+                    }
+                    if( sink >= 0 ) {
                         // A GUI-subsystem exe's CRT does not update the OS handle; code that
-                        // writes through GetStdHandle( STD_OUTPUT_HANDLE ) must not reach the
-                        // protocol pipe.
-                        SetStdHandle( STD_OUTPUT_HANDLE,
-                                      reinterpret_cast<HANDLE>( _get_osfhandle( _fileno( stderr ) ) ) );
+                        // writes through GetStdHandle( STD_OUTPUT_HANDLE ) must not reach it.
+                        SetStdHandle( STD_OUTPUT_HANDLE, reinterpret_cast<HANDLE>( _get_osfhandle( sink ) ) );
                     }
 #else
                     if( driver_fd == 0 ) {
