@@ -144,6 +144,7 @@ export function spawnDriver(opts: SpawnOptions): Driver {
     pending.clear()
   }
 
+  let streamEnded = false
   const reader = (async () => {
     const dec = new TextDecoder()
     let buf = ""
@@ -169,6 +170,7 @@ export function spawnDriver(opts: SpawnOptions): Driver {
         p.resolve(rec)
       }
     }
+    streamEnded = true
     rejectAll("driver stream ended")
   })()
 
@@ -182,6 +184,9 @@ export function spawnDriver(opts: SpawnOptions): Driver {
     what: string,
   ): Promise<DriverResponse> => {
     if (closed) return Promise.reject(new Error("driver closed"))
+    // A game that died between requests: writing would only feed a dead pipe and wait out the
+    // timer (on Windows the write does not fail), misreporting the death as a hang.
+    if (streamEnded) return Promise.reject(new Error("driver stream ended"))
     const limit = timeoutMs ?? (sentFirst ? requestTimeout : firstTimeout)
     sentFirst = true
     return new Promise<DriverResponse>((resolve, reject) => {
