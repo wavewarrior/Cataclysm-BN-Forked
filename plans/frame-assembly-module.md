@@ -149,6 +149,7 @@ Filed under the spec [#104](https://github.com/wavewarrior/Cataclysm-BN-Forked/i
 | T17 | [CRT, cursor-light and menu-emitter knobs move into lighting settings](https://github.com/wavewarrior/Cataclysm-BN-Forked/issues/122) | T11 | audit; pixel + daytime |
 | T18 | [Remaining knob globals move and the DebugParams cbuffer is asserted against the shader](https://github.com/wavewarrior/Cataclysm-BN-Forked/issues/123) | T12-T17 | cbuffer assertion |
 | T19 | [Pass accessors on render_state become private to the frame-assembly module](https://github.com/wavewarrior/Cataclysm-BN-Forked/issues/124) | T5, T6, T7, T8, T10 | project builds |
+| T20 | [GPU-lane test: a plan executes in order against the real render state](https://github.com/wavewarrior/Cataclysm-BN-Forked/issues/130) | T1 | GPU-lane section; non-GPU suite unaffected |
 
 Parallel tracks: T0 first; then T1; after T1 the camera/history/inputs/plan track (T2-T10) and the settings track (T11-T18, from T11 once T1 and T2 are done) are independent; T19 closes the contract last. Knob-group tickets T12-T17 are independent of each other but touch the same files, so merge them one at a time.
 
