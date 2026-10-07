@@ -31,6 +31,8 @@ const PARAM_TYPES: Record<Param["kind"], string> = {
   path: "string",
   boolean: "boolean",
   object: "object",
+  paths: "array",
+  number: "integer",
 }
 
 /** The tool descriptors of `tools/list`, one per operation. */
@@ -44,6 +46,7 @@ export function listTools(): object[] {
         type: "object",
         properties: Object.fromEntries(op.params.map((p) => [p.name, {
           type: PARAM_TYPES[p.kind],
+          ...(p.kind === "paths" ? { items: { type: "string" } } : {}),
           description: p.description,
         }])),
         required: op.params.filter((p) => p.required).map((p) => p.name),

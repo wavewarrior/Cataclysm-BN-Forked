@@ -5,6 +5,7 @@
  */
 import { join } from "@std/path"
 import { captureBaseline } from "./baseline.ts"
+import { CompareError, runCompare } from "./compare.ts"
 import { type Config, loadConfig, socketPath } from "./config.ts"
 import { runDoctor } from "./doctor.ts"
 import { Episode, HarnessError } from "./episode.ts"
@@ -149,6 +150,8 @@ class Daemon {
             ok: true,
             result: await this.#doctor(request.fixture, request.self_check, request.trial),
           }
+        case "compare":
+          return { ok: true, result: await runCompare(request) }
         case "ping":
           return { ok: true, result: {} }
         case "shutdown":
@@ -158,7 +161,7 @@ class Daemon {
           return { ok: false, error: `unknown daemon operation ${JSON.stringify(request)}` }
       }
     } catch (e) {
-      if (e instanceof HarnessError || e instanceof TrialError) {
+      if (e instanceof HarnessError || e instanceof TrialError || e instanceof CompareError) {
         return { ok: false, error: e.message }
       }
       this.#log(`internal error: ${(e as Error).stack ?? e}`)
