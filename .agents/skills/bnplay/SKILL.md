@@ -138,7 +138,7 @@ Spend tokens only when the cheaper rung cannot answer: the lean `step` response;
 
 Add `mode = "windowed"` (and optionally `window_size = [1280, 720]`) to the Trial. A real, visible window opens in a screen corner on the user's desktop without taking focus: leave it alone, and run one windowed session at a time (a second is refused). It needs a graphical login session, so not over ssh.
 
-On macOS, windowed init fails without two shader sources, `data/shaders/lighting/src/emitter_glow.vert.hlsl` and `emitter_glow.frag.hlsl`. They were never committed (`/data/shaders/` is gitignored, `.gitignore` line 29; the 45 sibling shader files were force-added; no build step generates them). A fresh clone or worktree must copy them from the main checkout:
+Earlier notes (macOS) said windowed init fails without two shader sources, `data/shaders/lighting/src/emitter_glow.vert.hlsl` and `emitter_glow.frag.hlsl`; not re-verified, and `render_state.cpp` ignores the glow pass's init result. They were never committed (`/data/shaders/` is gitignored, `.gitignore` line 29; the 45 sibling shader files were force-added; no build step generates them). A fresh clone or worktree must copy them from the main checkout:
 `cp <main-checkout>/data/shaders/lighting/src/emitter_glow.*.hlsl <basepath>/data/shaders/lighting/src/`. `bnplay doctor --trial <windowed.toml>` checks them, a display session and stray game windows.
 On Windows (D3D12, verified 2026-10-07) the game boots windowed without them: `emitter_glow_pass` logs `failed to load shader source` and the glow pass stays off. `doctor --trial` still fails the check, so a capture there runs without the glow effect.
 
