@@ -1766,10 +1766,10 @@ void vehicle::open_or_close( const int part_index, const bool opening )
         .transparency = true,
         // Opening or closing a part repaints the whole level's transparency cache.
         .scope = level_cache_freshness::terrain_changed::transparency_scope::level,
-        // The old pair dirtied the seen cache at the part's own tile.
-        .seen_probe = part_location,
         .support_above = false,
         .memory_seen = false,
+        // The old pair dirtied the seen cache at the part's own tile.
+        .seen_probe = part_location,
     } );
     const int dist = rl_dist( get_player_character().bub_pos(), part_location );
     if( dist < 20 ) {

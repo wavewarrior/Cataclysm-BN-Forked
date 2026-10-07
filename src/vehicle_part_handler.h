@@ -47,19 +47,19 @@ class DefaultRemovePartHandler : public RemovePartHandler
                 .transparency = true,
                 // A part edit repaints the whole level's transparency cache.
                 .scope = level_cache_freshness::terrain_changed::transparency_scope::level,
-                // The old pair probed the bubble origin, not the part's tile.
-                .seen_probe = tripoint_bub_ms::zero(),
                 .support_above = false,
                 .memory_seen = false,
+                // The old pair probed the bubble origin, not the part's tile.
+                .seen_probe = tripoint_bub_ms::zero(),
             } );
         }
         void report_part_floor_change( const int z ) override {
             map &here = get_map();
             level_cache_freshness::report( here, level_cache_freshness::terrain_changed {
                 .at = tripoint_bub_ms( 0, 0, z ),
-                .floor_level = true,
                 .support_above = false,
                 .memory_seen = false,
+                .floor_level = true,
             } );
         }
         void removed( vehicle &veh, const int part ) override {
