@@ -13,7 +13,11 @@
 #   3. Write /tmp/cata_build_gi_scene (a 7x7 room with coloured walls and a light; it gives the
 #      lighting passes occluders), consume it with one `state` request, then `force_rc_rebuild 2`
 #      and a few `state` requests. Night, because GPU lighting is invisible against daylight.
-#   4. `capture` with a tag, one tag per state. `capture` twice for the A/A pair of each state.
+#   4. Burn two `capture` requests tagged `warmup` first (captures #1 and #2 of an Episode are
+#      transient states, about 1.8M px off the settled one; capture #3 onward is settled). Then
+#      `capture` with a tag, one tag per state, with `force_rc_rebuild 2` written immediately
+#      before a rebuild capture. Masks come from frames at the SAME capture positions across two
+#      or more launches; two consecutive captures are not an A/A pair.
 #   5. `stop`, then read the Episode's userdir/config/debug.log: every knob must show its
 #      `knob <name> = <v>` acknowledgement and none `(unknown)`; a rebuild capture must have a
 #      `[flash][gpu] rebuild: struct=1 ... rc=1` line before its `frame capture: wrote` line, a
