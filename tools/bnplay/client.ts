@@ -100,11 +100,14 @@ export function spawnDriver(opts: SpawnOptions): Driver {
     ...(opts.window ? ["--driver-windowed", `${opts.window.width}x${opts.window.height}`] : []),
   ]
   // Windows cannot hand a child an extra descriptor and has no process groups: the game serves
-  // the protocol on its own stdin/stdout (`--driver-fd 0`) and is killed by pid. Elsewhere the
-  // shim gives it a socketpair on fd 3 and leads a process group.
-  const [command, args] = IS_WINDOWS
-    ? [opts.binary, [...gameArgs, "--driver-fd", "0"]]
-    : ["/usr/bin/python3", [SHIM, "--", opts.binary, ...gameArgs]]
+  // the protocol on its own stdin/stdout (`--driver-fd 0`) and is killed by pid. A Python binary
+  // (the mock driver) runs under `python`, since Windows has no shebang lines. Elsewhere the shim
+  // gives it a socketpair on fd 3 and leads a process group.
+  const [command, args] = !IS_WINDOWS
+    ? ["/usr/bin/python3", [SHIM, "--", opts.binary, ...gameArgs]]
+    : opts.binary.toLowerCase().endsWith(".py")
+    ? ["python", [opts.binary, ...gameArgs, "--driver-fd", "0"]]
+    : [opts.binary, [...gameArgs, "--driver-fd", "0"]]
   const child = new Deno.Command(command, {
     args,
     stdin: "piped",

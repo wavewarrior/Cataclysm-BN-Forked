@@ -3,8 +3,9 @@
 
 The contract suites run against this and against the real binary, so the supervisor can be tested
 end to end without a 7 to 10 second, 1 GB boot. It is started exactly like the game (the fd shim
-execs it with `--driver-fd N` appended) and accepts the game's other flags, including
-`--driver-deny-list <file>`.
+execs it with `--driver-fd N` appended; on Windows the client runs it under `python` with
+`--driver-fd 0`, requests on stdin and answers on stdout) and accepts the game's other flags,
+including `--driver-deny-list <file>`.
 
 Protocol commands (same as the real driver): `ping`, `state`, `wait`, `move`, `seed`, `set_time`,
 `action`,
@@ -578,20 +579,26 @@ def main() -> int:
         return 2
     debug_log = DebugLog(userdir, world)
     atexit.register(debug_log.close)
+    if fd == "0":
+        # As the game does: answer on a private copy of stdout, and move stdout onto stderr.
+        chan_in = os.fdopen(0, "rb", buffering=0)
+        chan_out = os.fdopen(os.dup(1), "wb", buffering=0)
+        os.dup2(2, 1)
+    else:
+        chan_in = chan_out = os.fdopen(int(fd), "r+b", buffering=0)
     # Output on the game's own stdout must never reach the protocol channel.
     print("MOCK STDOUT NOISE (must never reach the client)", flush=True)
     # A real game takes seconds to boot; MOCK_BOOT_DELAY_S makes starts overlap in tests.
     time.sleep(float(os.environ.get("MOCK_BOOT_DELAY_S", "0")))
     debug_log.log_script("mock_log_boot.txt")
-    chan = os.fdopen(int(fd), "r+b", buffering=0)
     game = Game(deny)
     game.diverge = os.path.exists(os.path.join(userdir, "save", world, "mock_diverge"))
     ready = False
 
     def reply(resp: dict) -> None:
-        chan.write((json.dumps(resp) + "\n").encode())
+        chan_out.write((json.dumps(resp) + "\n").encode())
 
-    for raw in chan:
+    for raw in chan_in:
         line = raw.decode("utf-8").strip()
         if not line:
             continue
@@ -648,7 +655,7 @@ def main() -> int:
         elif cmd == "info":
             reply({"id": rid, "status": "ok", "userdir": userdir, "world": world, "pid": os.getpid()})
         elif cmd == "dirty":
-            with open(os.path.join(userdir, "save", world, "scribble"), "w") as f:
+            with open(os.path.join(userdir, "save", world, "scribble"), "w", newline="\n") as f:
                 f.write("written by the mock\n")
             reply({"id": rid, "status": "ok"})
         elif cmd == "log":
@@ -664,7 +671,7 @@ def main() -> int:
             game.turn += 1
             reply(observation(rid, game))
         elif cmd == "spawn_child":
-            child = subprocess.Popen(["/bin/sleep", "311"])
+            child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(311)"])
             reply({"id": rid, "status": "ok", "child_pid": child.pid})
         elif cmd in COMBAT_REACH:
             reply(combat(rid, game, req, cmd))
