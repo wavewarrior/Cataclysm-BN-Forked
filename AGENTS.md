@@ -156,6 +156,11 @@ auto print_button( const catacurses::window &w, const button_options &opts ) -> 
 - After opening or updating a Cataclysm-BN PR, track `gh pr checks` until CI finishes or a concrete blocker is identified; inspect failing job logs, fix branch-owned failures, commit, and push before finalizing. For transient or infrastructure failures, rerun when permitted or report the exact failing job and evidence.
 - Before running broad formatter targets, prefer file-scoped formatting for touched files when available; if only a broad target exists, inspect and revert unrelated formatter-only changes before continuing.
 
+### WHEN a decision is the user's (grilling, wayfinder HITL tickets, design choices)
+
+- **MUST** put the decisions to the user with the `ask` tool (one call per round, a question per decision, 2-5 options with tradeoffs in `description`, `recommended` set). **MUST NOT** present them as numbered or formatted questions in the chat reply, and **MUST NOT** restate the skill's format back to the user.
+- **MUST** verify every flag, function, call site and number a question names (open the lines, or get `file:line` from a sub-agent) before asking. A scout summary is a lead, not a fact. If a fact is still being fetched, ask only the questions that do not depend on it.
+
 ### WHEN creating a plan
 
 **MUST** write the plan to two places simultaneously:
