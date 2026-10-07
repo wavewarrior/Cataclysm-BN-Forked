@@ -116,8 +116,8 @@ struct viewer_pose {
  * plan stays meaningful even when two plans are derived before one applies.
  */
 struct residency_snapshot {
-    std::array<std::uint64_t, OVERMAP_LAYERS> generation;
-    std::uint64_t shift;
+    std::array<std::uint64_t, OVERMAP_LAYERS> generation{};
+    std::uint64_t shift = 0;
 };
 /** The pose a build was derived for; compared opaquely, never interpreted. */
 struct pose_stamps {
@@ -133,12 +133,12 @@ struct pose_stamps {
  * plan is the single carrier of both the dirty-level sets and the residency stamps.
  */
 struct rebuild_plan {
-    bool structure;
+    bool structure = false;
     std::vector<int> structure_levels;
     std::vector<int> transparency_levels, floor_levels, vehicle_floor_levels,
                      vehicle_obscured_levels;
-    lightmap_disposition lightmap;
-    bool visibility;
+    lightmap_disposition lightmap = lightmap_disposition::defer_without_escalation;
+    bool visibility = false;
     residency_snapshot residency;
     /**
      * Per-level occluder-set stamp for the render-frame gate: the fold of the
@@ -146,7 +146,7 @@ struct rebuild_plan {
      * by. An absolute stamp like the residency ones: compared opaquely, never
      * interpreted by the gate.
      */
-    std::array<std::uint64_t, OVERMAP_LAYERS> occluder;
+    std::array<std::uint64_t, OVERMAP_LAYERS> occluder{};
     pose_stamps pose;
 };
         /**
