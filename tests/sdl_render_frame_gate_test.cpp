@@ -9,6 +9,7 @@
 #include "calendar.h"
 #include "catch/catch_amalgamated.hpp"
 #include "coordinates.h"
+#include "frame_history.h"
 #include "game.h"
 #include "game_constants.h"
 #include "level_cache_freshness.h"
@@ -25,8 +26,8 @@
 // functions - the retired fold (kept verbatim below as `old_gate`) and the new
 // plan-fed gate - over the same scenario matrix and require identical verdicts, so
 // the cutover is proven equal on the frame-gate contract, not merely plausible.
-// The frame gate itself is TU-static in the renderer and unreachable headlessly;
-// this is the deepest reachable seam where the equivalence is checkable.
+// Since T2 the plan-fed side below is the SHIPPED type itself (frame_history.h),
+// not a transcription: this pin checks the real decision and commit step.
 
 namespace {
 
@@ -70,39 +71,19 @@ struct old_gate {
     }
 };
 
-// The shipped gate, transcribed from the post-T8 sdl_render_frame.cpp.
+// The shipped gate, now the REAL type (T2): a `frame_history` value driven by
+// the same pure decision and commit step the frame runs, so this pin exercises
+// the shipped code instead of a transcription of it. The retired fold above
+// stays a transcription on purpose - it is the historical side of the pin.
 struct new_gate {
-    std::optional<K::pose_stamps> last_struct_pose;
-    std::optional<K::pose_stamps> last_vis_pose;
-    std::uint64_t last_occluder = 0;
-    int last_struct_px = INT_MIN;
-    int last_struct_py = INT_MIN;
+    frame_history history;
+    bool force_once = false;
+    int rebuilds_in_window = 0;
 
     auto decide( const K::rebuild_plan &plan ) -> lighting_like_pair {
-        lighting_like_pair r;
-        const int z = plan.pose.viewer.z();
-        const std::uint64_t gen =
-            plan.occluder[static_cast<size_t>( z + OVERMAP_DEPTH )];
-        const int px = plan.pose.viewer.x();
-        const int py = plan.pose.viewer.y();
-        const bool cam_drifted = last_struct_px == INT_MIN
-            || std::abs( px - last_struct_px ) >= DRIFT_TILES
-            || std::abs( py - last_struct_py ) >= DRIFT_TILES;
-        const bool pose_shifted = !last_struct_pose
-            || last_struct_pose->bubble_origin != plan.pose.bubble_origin
-            || last_struct_pose->viewer.z() != plan.pose.viewer.z();
-        r.structure = gen != last_occluder || pose_shifted || cam_drifted;
-        r.vis = !last_vis_pose || last_vis_pose->viewer != plan.pose.viewer;
-        if( r.structure ) {
-            last_occluder = gen;
-            last_struct_pose = plan.pose;
-            last_struct_px = px;
-            last_struct_py = py;
-        }
-        if( r.vis ) {
-            last_vis_pose = plan.pose;
-        }
-        return r;
+        const rebuild_decision d = gate_and_commit_frame_history(
+            { history, plan, {}, force_once, rebuilds_in_window } );
+        return lighting_like_pair{ d.structure, d.vis };
     }
 };
 
