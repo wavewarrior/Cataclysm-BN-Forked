@@ -1840,6 +1840,8 @@ auto game::post_action_world_step() -> void
     static double _perf_sim = 0.0, _perf_cache = 0.0, _perf_mon = 0.0, _perf_world = 0.0;
     static int    _perf_n = 0;
     cleanup_arenas();
+    // As in do_turn: a world step that runs always advances the clock, the first after a load too.
+    new_game = false;
     if( try_activity_fixed_window_skip() ) {
     return;
 }
@@ -1867,15 +1869,11 @@ const auto npcperf = asleep && get_option<bool>( "SLEEP_SKIP_NPC" );
     }
     // Actual stuff
     {
-        if( new_game ) {
-            new_game = false;
-        } else {
-            if( !gamemode ) {
-                gamemode = std::make_unique<special_game>();
-            }
-            gamemode->per_turn();
-            calendar::turn += 1_turns;
+        if( !gamemode ) {
+            gamemode = std::make_unique<special_game>();
         }
+        gamemode->per_turn();
+        calendar::turn += 1_turns;
     }
     // Reset dimension swap flag now that the map is fully loaded and turn is processing
     swapping_dimensions = false;
