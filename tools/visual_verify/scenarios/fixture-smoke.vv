@@ -1,0 +1,48 @@
+# Template: launch a fixture world, prove the frame is live, and prove input lands.
+# Copy it and replace the "change under test" block.
+#
+# Fixture: a THROWAWAY world with a character (#<base64>.sav) whose mods.json lists only
+# in-repo mods (data/mods). Third-party mods under <install>/mods can fail at HEAD, and the
+# game then exits cleanly (code -999) at load. Build it once (Python):
+#
+#   src = install/save/<world with a .sav>;  dst = install/save/WinFixture
+#   shutil.copytree(src, dst)
+#   repo = ids of every data/mods/**/modinfo.json
+#   mods.json = [m for m in mods.json if m == "bn" or m in repo]
+#
+#   python tools/visual_verify/vv.py run tools/visual_verify/scenarios/fixture-smoke.vv --var WORLD=WinFixture
+#
+# The world saves nothing (stop kills the game), but re-clone it whenever runs must start
+# from identical state.
+launch --dont-debugmsg --world ${WORLD}
+waitlog "opened document .*sidebar_hud.rml" timeout=300000
+focus
+settle timeout=25000
+
+# The window can resize ~1.5 s after load; discard one frame and settle again.
+shot warmup avg=4
+wait 6000
+settle timeout=15000
+
+# Play area only: the HUD sidebar and message bar are drawn unlit.
+rect play 0.25,0.12,0.30,0.70
+
+# Paired null: the same state captured twice.
+shot base avg=12
+wait 1500
+shot base_again avg=12
+diff base base_again as=same_state in=play grid=0
+stats base in=play
+
+# ---- change under test: replace this block ----
+# F7 cycles the lighting debug view and logs the mode it landed on.
+key "{F7}"
+waitlog "lighting debug mode 1" timeout=20000
+wait 2500
+shot toggled avg=12
+diff base toggled as=toggled in=play grid=0
+assert toggled.changed > same_state.changed * 2
+# ---- end ----
+
+log
+stop
