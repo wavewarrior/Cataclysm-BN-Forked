@@ -1,26 +1,27 @@
 # Renderer-equivalence Trial for the frame-assembly module (Map: Frame-assembly module).
 # Windowed, so `capture` produces the final composite frame. Run by hand through bnplay once per
 # binary (set BNPLAY_BINARY to the binary under test), then compare the two Episodes' frames with
-# plans/frame-assembly-module/pixel_diff.py (bnplay's own oracles compare tags inside one Episode).
+# `bnplay compare --base <before frames> --test <after frames>` (bnplay's own oracles compare tags
+# inside one Episode; `compare` is what compares across Episodes).
 #
-# Scene: the Trial sets no `scene`. After `start`, write /tmp/cata_build_gi_scene (a 7x7 room with
-# coloured walls and a light; it gives the lighting passes occluders) and send one `state` request
-# to consume it, then `force_rc_rebuild 2` and a few `state` requests. Night, because GPU lighting
-# is invisible against daylight.
-#
-# Knobs go through /tmp/cata_knob, ONE name/value per file and one cheap `state` request per knob
-# (the file is consumed by the next request's frame pump; nothing pumps while the driver waits
-# in read_line). Freeze first: flicker_gain 0, cloud_strength 0, dust_enable 0, shaft_enable 0.
-# A knob written immediately before `capture` lands in that frame. Verify each knob's
-# `knob <name> = <v>` ack in the Episode's userdir/config/debug.log after `stop` (the log
-# lags the request), none with `(unknown)`. Verify a rebuild capture hit its branch: the
-# `[flash][gpu] rebuild: struct=1 ... rc=1` line preceding that capture's `frame capture: wrote`
-# line; a steady capture has `struct=0 vis=0 rc=0`.
-#
-# Measured on osx-arm-slim, 2026-10-07. Nulls (changed pixels outside the noise mask, ~0.002 to
-# 0.037% of the 2560x1440 frame): within a launch 36 to 1,400 px; across launches 177 to 1,281 px
-# (launch-1 mask) and 59 to 112 px (6-frame mask). Consecutive frames differ by a toggling strip
-# near the map centre (1,871 px), so take at least three base frames for the mask.
+# Procedure, one step per request:
+#   1. `bnplay doctor --trial tools/bnplay/trials/equivalence.trial.toml` must be healthy.
+#   2. `start` this Trial. Freeze the animation knobs FIRST, one per request: write
+#      `flicker_gain 0` to /tmp/cata_knob, then send one `state` request to consume it; repeat for
+#      `cloud_strength 0`, `dust_enable 0`, `shaft_enable 0`. Nothing pumps frames while the driver
+#      waits in read_line, so a knob written immediately before `capture` lands in that frame.
+#   3. Write /tmp/cata_build_gi_scene (a 7x7 room with coloured walls and a light; it gives the
+#      lighting passes occluders), consume it with one `state` request, then `force_rc_rebuild 2`
+#      and a few `state` requests. Night, because GPU lighting is invisible against daylight.
+#   4. `capture` with a tag, one tag per state. `capture` twice for the A/A pair of each state.
+#   5. `stop`, then read the Episode's userdir/config/debug.log: every knob must show its
+#      `knob <name> = <v>` acknowledgement and none `(unknown)`; a rebuild capture must have a
+#      `[flash][gpu] rebuild: struct=1 ... rc=1` line before its `frame capture: wrote` line, a
+#      steady capture `struct=0 vis=0 rc=0`. A knob whose ack is missing never reached the frame,
+#      so its pixels prove nothing.
+#   6. `bnplay compare --base <three or more frames of the unchanged state> --test <the other
+#      frames>`; the exit code is the verdict. See the bnplay skill for the noise floor and the
+#      scene-coverage and camera limits.
 fixture = "Bairdford"
 seed = 7
 start_date = "0001-03-10"
