@@ -1968,6 +1968,84 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
     sdl_lighting_devui::maybe_dump_map( rs.device().frame_count(), rs.device().last_dump_frame() );
 }
 
+/// The plan dispatch: pulls the next runnable step from `exec` and runs its body. The
+/// loop's own boundaries are the step timings, so the order the plan asserts is the
+/// order the bodies run; the fused lighting group consumes its own members with
+/// `exec.split` inside `flush_and_gather_rc`. Declared in `sdl_render_frame.h` so the
+/// GPU-lane render test can drive the same dispatch with its own plan and report.
+auto run_frame_plan( lighting::render_state &rs, lighting::frame_context &ctx,
+                     frame_executor &exec ) -> void
+{
+    bool rc_rebuild = false;
+    int proj_w = 0;
+    int proj_h = 0;
+    while( const std::optional<frame_step> step = exec.next_step() ) {
+        switch( step->kind ) {
+            case frame_step_kind::build_lighting:
+                dbg( DL::Debug ) << "[render] build_lighting";
+                rc_rebuild = build_lighting( rs );
+                break;
+            // The fused lighting group: the loop dispatches the group head only. The
+            // body consumes the remaining members with its own `split` calls, which
+            // advance the plan cursor, so those cases are inert here — dispatching one
+            // would run the group twice.
+            case frame_step_kind::collector_flush:
+                dbg( DL::Debug ) << "[render] flush_and_gather_rc";
+                flush_and_gather_rc( rs, ctx, rc_rebuild, exec );
+                break;
+            case frame_step_kind::gpu_sdf:
+            case frame_step_kind::sky_sun:
+            case frame_step_kind::gi:
+            case frame_step_kind::gi_feedback:
+            case frame_step_kind::rc_readback:
+                break;
+            case frame_step_kind::assemble:
+                dbg( DL::Debug ) << "[render] assemble_light_inputs";
+                assemble_light_inputs( rs, ctx );
+                break;
+            case frame_step_kind::menu_background:
+                dbg( DL::Debug ) << "[render] maybe_push_menu_background";
+                maybe_push_menu_background( rs, ctx );
+                break;
+            case frame_step_kind::overlays:
+                // The projection size is queried where it always was: between the menu
+                // background and the overlays, i.e. inside the `overlays` lap.
+                SDL_GetWindowSize( g_display.window.get(), &proj_w, &proj_h );
+                if( proj_w <= 0 || proj_h <= 0 ) {
+                    proj_w = static_cast<int>( ctx.swapchain_w );
+                    proj_h = static_cast<int>( ctx.swapchain_h );
+                }
+                dbg( DL::Debug ) << "[render] draw_lighting_overlays";
+                draw_lighting_overlays( rs, ctx );
+                break;
+            case frame_step_kind::ui_composite:
+                dbg( DL::Debug ) << "[render] composite_ui_pass_a";
+                composite_ui_pass_a( rs, ctx, proj_w, proj_h );
+                break;
+            case frame_step_kind::avatar_composite:
+                dbg( DL::Debug ) << "[render] composite_avatar_pass";
+                composite_avatar_pass( rs, ctx );
+                break;
+            case frame_step_kind::vehicle_composite:
+                dbg( DL::Debug ) << "[render] composite_vehicle_pass";
+                composite_vehicle_pass( rs, ctx );
+                break;
+            case frame_step_kind::world_pass:
+                dbg( DL::Debug ) << "[render] render_world_pass_w";
+                render_world_pass_w( rs, ctx, proj_w, proj_h );
+                break;
+            case frame_step_kind::tonemap:
+                dbg( DL::Debug ) << "[render] tonemap_pass_t";
+                tonemap_pass_t( rs, ctx );
+                break;
+            case frame_step_kind::swapchain_composite:
+                dbg( DL::Debug ) << "[render] composite_swapchain_pass_b";
+                composite_swapchain_pass_b( rs, ctx, proj_w, proj_h );
+                break;
+        }
+    }
+}
+
 void refresh_display()
 {
     // Declared before the RAII logger so the report it points at outlives the
@@ -2052,75 +2130,7 @@ void refresh_display()
     if( !ctx ) {
         return;
     }
-
-    bool rc_rebuild = false;
-    int proj_w = 0;
-    int proj_h = 0;
-    while( const std::optional<frame_step> step = exec.next_step() ) {
-        switch( step->kind ) {
-            case frame_step_kind::build_lighting:
-                dbg( DL::Debug ) << "[render] build_lighting";
-                rc_rebuild = build_lighting( rs );
-                break;
-            // The fused lighting group: the loop dispatches the group head only. The
-            // body consumes the remaining members with its own `split` calls, which
-            // advance the plan cursor, so those cases are inert here — dispatching one
-            // would run the group twice.
-            case frame_step_kind::collector_flush:
-                dbg( DL::Debug ) << "[render] flush_and_gather_rc";
-                flush_and_gather_rc( rs, *ctx, rc_rebuild, exec );
-                break;
-            case frame_step_kind::gpu_sdf:
-            case frame_step_kind::sky_sun:
-            case frame_step_kind::gi:
-            case frame_step_kind::gi_feedback:
-            case frame_step_kind::rc_readback:
-                break;
-            case frame_step_kind::assemble:
-                dbg( DL::Debug ) << "[render] assemble_light_inputs";
-                assemble_light_inputs( rs, *ctx );
-                break;
-            case frame_step_kind::menu_background:
-                dbg( DL::Debug ) << "[render] maybe_push_menu_background";
-                maybe_push_menu_background( rs, *ctx );
-                break;
-            case frame_step_kind::overlays:
-                // The projection size is queried where it always was: between the menu
-                // background and the overlays, i.e. inside the `overlays` lap.
-                SDL_GetWindowSize( g_display.window.get(), &proj_w, &proj_h );
-                if( proj_w <= 0 || proj_h <= 0 ) {
-                    proj_w = static_cast<int>( ctx->swapchain_w );
-                    proj_h = static_cast<int>( ctx->swapchain_h );
-                }
-                dbg( DL::Debug ) << "[render] draw_lighting_overlays";
-                draw_lighting_overlays( rs, *ctx );
-                break;
-            case frame_step_kind::ui_composite:
-                dbg( DL::Debug ) << "[render] composite_ui_pass_a";
-                composite_ui_pass_a( rs, *ctx, proj_w, proj_h );
-                break;
-            case frame_step_kind::avatar_composite:
-                dbg( DL::Debug ) << "[render] composite_avatar_pass";
-                composite_avatar_pass( rs, *ctx );
-                break;
-            case frame_step_kind::vehicle_composite:
-                dbg( DL::Debug ) << "[render] composite_vehicle_pass";
-                composite_vehicle_pass( rs, *ctx );
-                break;
-            case frame_step_kind::world_pass:
-                dbg( DL::Debug ) << "[render] render_world_pass_w";
-                render_world_pass_w( rs, *ctx, proj_w, proj_h );
-                break;
-            case frame_step_kind::tonemap:
-                dbg( DL::Debug ) << "[render] tonemap_pass_t";
-                tonemap_pass_t( rs, *ctx );
-                break;
-            case frame_step_kind::swapchain_composite:
-                dbg( DL::Debug ) << "[render] composite_swapchain_pass_b";
-                composite_swapchain_pass_b( rs, *ctx, proj_w, proj_h );
-                break;
-        }
-    }
+    run_frame_plan( rs, *ctx, exec );
     exec.finish();
     if( report.order_violation() ) {
         DebugLogFL( DL::Error, DC::Main )
