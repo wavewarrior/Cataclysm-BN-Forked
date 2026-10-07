@@ -21,6 +21,8 @@ local you = gapi.get_avatar()
 local p = you:get_pos_ms()
 local moves = you:get_moves()
 
+---@param dx integer
+---@param dy integer
 local function at(dx, dy)
   return p + coords.tripoint_rel_ms(dx, dy, 0)
 end
@@ -45,6 +47,8 @@ for dx = -1, 1 do
 end
 
 -- `count` is the charge count for a tool: a smartphone needs at least 5 for its flashlight.
+---@param id string
+---@param count? integer
 local function give(id, count)
   return you:create_item(ItypeId.new(id), count or 1)
 end
