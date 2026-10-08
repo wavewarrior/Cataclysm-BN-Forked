@@ -149,6 +149,9 @@ export async function runTicket(
   const deadline = Date.now() + config.ticketWallClockMin * 60_000
   const remaining = () => deadline - Date.now()
   const n = issue.number
+  const started = Date.now()
+  const say = (msg: string) =>
+    console.log(`#${n} +${((Date.now() - started) / 60000).toFixed(1)}m ${msg}`)
 
   const block = async (reason: string): Promise<TicketResult> => {
     console.log(`#${n} blocked: ${reason}`)
@@ -223,6 +226,7 @@ export async function runTicket(
       )
     }
 
+    say("implementer done; running the gate")
     // Gate + review loop; gate failures and reviewer FAILs share one retry budget.
     let retries = 0
     let verdict: Verdict = "FAIL"
@@ -232,6 +236,7 @@ export async function runTicket(
       if (remaining() <= 0) {
         return await block(`wall clock of ${config.ticketWallClockMin} min exceeded`)
       }
+      say(`gate attempt ${retries + 1}`)
       const gateRun = await runToLog(
         ["deno", "task", "gate", "--tier", "full", "--base", base],
         join(fdir, "gate-run.log"),
@@ -242,6 +247,18 @@ export async function runTicket(
         () => undefined,
       )
       let feedback: string
+      // A tooling failure cannot be fixed by the implementer; retrying only burns minutes.
+      if (stamp && stamp.infraSteps.length > 0) {
+        const steps = await Promise.all(stamp.infraSteps.map(async (name) => ({
+          name,
+          tail: await tailFile(join(fdir, "logs", `${name}.log`), 40),
+        })))
+        return await block(
+          `the gate broke in its own tooling (not the change): ${stamp.infraSteps.join(", ")}.\n\n${
+            steps.map((s) => `### ${s.name}\n${s.tail}`).join("\n\n")
+          }`,
+        )
+      }
       if (gateRun !== 0 || !stamp?.ok) {
         const steps = await Promise.all(
           (stamp?.failedSteps ?? ["gate"]).map(async (name) => ({
@@ -258,6 +275,7 @@ export async function runTicket(
         }
         feedback = gateFailurePrompt(steps)
       } else {
+        say("gate passed; reviewing")
         const review = await runReview({ issue, path, fdir, implPane, base, ticketPath, remaining })
         if (review.kind === "error") return await block(review.reason)
         verdict = review.verdict
@@ -271,12 +289,20 @@ export async function runTicket(
         feedback = reviewFailurePrompt(findings)
       }
       retries++
+      const headBefore = await git(path, "rev-parse", "HEAD")
       outcome = await agentPrompt(implName, feedback, remaining())
       if (outcome.state !== "idle" && outcome.state !== "done") {
         return await block(`implementer ended ${outcome.state} while fixing: ${outcome.detail}`)
       }
+      // No new commit means the same tree would fail the same gate: stop rather than re-run it.
+      if ((await git(path, "rev-parse", "HEAD")) === headBefore) {
+        return await block(
+          `the implementer made no commit after feedback; the gate would fail the same way.\n\n${feedback}`,
+        )
+      }
     }
 
+    say(`review ${verdict}; pushing`)
     // Success: the driver pushes (pre-push re-verifies stamp + verdict) and opens the draft PR.
     const push = await run(["git", "push", "origin", `${branch}:${branch}`], {
       cwd: path,

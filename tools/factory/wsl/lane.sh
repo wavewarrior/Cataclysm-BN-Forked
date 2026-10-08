@@ -27,7 +27,7 @@ cd "$LANE_HOME/src"
 git fetch --quiet "$COMMON_DIR" "refs/heads/$BRANCH"
 if [ "$(git rev-parse FETCH_HEAD)" != "$SHA" ]; then
     echo "lane.sh: branch $BRANCH moved (expected $SHA, fetched $(git rev-parse FETCH_HEAD))" >&2
-    exit 1
+    exit 2
 fi
 git checkout --quiet --detach FETCH_HEAD
 git reset --quiet --hard
@@ -102,7 +102,7 @@ echo "lane.sh: building the cata-* plugin"
         ninja -C "$PLUGIN_BUILD" CataAnalyzerPlugin
 } >"$LANE_HOME/plugin-build.log" 2>&1 || {
     tail -n 60 "$LANE_HOME/plugin-build.log"
-    exit 1
+    exit 2
 }
 
 echo "lane.sh: configuring the game for compile_commands.json"
@@ -114,7 +114,7 @@ cmake -S . -B "$BUILD_PATH" -G Ninja \
     -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON \
     >"$LANE_HOME/configure.log" 2>&1 || {
     tail -n 60 "$LANE_HOME/configure.log"
-    exit 1
+    exit 2
 }
 
 # 2. clang-tidy on new/changed lines. Command-line checks merge onto .clang-tidy, so cata-*
@@ -127,7 +127,7 @@ for need in modernize-use-trailing-return-type modernize-use-auto cata-no-long c
     echo "$listed" | grep -q "$need" || {
         echo "lane.sh: check $need is not enabled; refusing to report a clean result" >&2
         echo "$listed" >&2
-        exit 1
+        exit 2
     }
 done
 

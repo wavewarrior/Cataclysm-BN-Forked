@@ -17,6 +17,7 @@ const stamp = (patch: Partial<Stamp> = {}): Stamp => ({
   ok: true,
   finishedAt: "2026-01-01T00:00:00Z",
   failedSteps: [],
+  infraSteps: [],
   ticket: 7,
   ...patch,
 })

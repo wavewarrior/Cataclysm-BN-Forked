@@ -55,6 +55,7 @@ Deno.test("the PR body links the issue, reports the gate and reviewer, and keeps
     ok: true,
     finishedAt: "2026-01-01T00:00:00Z",
     failedSteps: [],
+    infraSteps: [],
     ticket: 12,
   }
   const template =

@@ -24,10 +24,14 @@ export type Stamp = {
   ok: boolean
   finishedAt: string
   failedSteps: string[]
+  /// Failed steps whose cause is the tooling, not the change (see StepResult.infra).
+  infraSteps: string[]
   ticket: number | null
 }
 
-export type StepResult = { ok: boolean; note?: string }
+/// `infra`: the failure is in the factory's tooling or machine, not in the change; retrying the
+/// implementer cannot fix it, so the driver blocks the ticket at once.
+export type StepResult = { ok: boolean; note?: string; infra?: boolean }
 
 export type GateContext = {
   cwd: string
@@ -46,6 +50,8 @@ export type GateContext = {
 export type Step = {
   name: string
   tier: Tier
+  /// Minutes-long: skipped once any earlier step has failed, so a cheap failure returns fast.
+  slow?: boolean
   run: (ctx: GateContext) => Promise<StepResult>
 }
 
@@ -156,8 +162,14 @@ const STEPS: Step[] = [
   {
     name: "json-lint",
     tier: "fast",
+    slow: true,
     run: async (ctx) => {
-      if (!(await exists(GIT_BASH))) return { ok: false, note: `${GIT_BASH} not found` }
+      // Unchanged JSON was validated when it landed; checking all of it costs ~2.5 minutes a run.
+      const changed = (await changedFiles(ctx.cwd, ctx.base)).filter((f) => f.endsWith(".json"))
+      if (changed.length === 0) return { ok: true, note: "no JSON changed" }
+      if (!(await exists(GIT_BASH))) {
+        return { ok: false, infra: true, note: `${GIT_BASH} not found` }
+      }
       // lint-json.sh prefers `python3`, and the Microsoft Store alias in WindowsApps answers to
       // it but fails on every file. Drop WindowsApps and put a real interpreter first.
       const path = [
@@ -167,20 +179,33 @@ const STEPS: Step[] = [
       const code = await ctx.exec("json-lint", [GIT_BASH, "build-scripts/lint-json.sh"], {
         PATH: path,
       })
-      return { ok: code === 0 }
+      if (code === 0) return { ok: true }
+      // Only a failure on a file this change touched is the implementer's to fix.
+      const log = await Deno.readTextFile(ctx.logPath("json-lint")).catch(() => "")
+      const failing = new Set([...log.matchAll(/^FAILED: (.+)$/gm)].map((m) => m[1].trim()))
+      const mine = changed.filter((f) => failing.has(f))
+      return mine.length > 0
+        ? { ok: false, note: `invalid JSON in: ${mine.join(", ")}` }
+        : { ok: false, infra: true, note: "lint-json failed on files this change did not touch" }
     },
   },
   {
     name: "wsl-lane",
     tier: "fast",
+    slow: true,
     run: async (ctx) => {
+      const touched = (await changedFiles(ctx.cwd, ctx.base)).some((f) =>
+        /\.(?:cpp|h|hpp|json)$/.test(f)
+      )
+      if (!touched) return { ok: true, note: "no C++ or JSON changed" }
       const code = await runWslLane({
         cwd: ctx.cwd,
         base: ctx.base,
         factoryDir: ctx.factoryDir,
         logPath: ctx.logPath("wsl-lane"),
       })
-      return { ok: code === 0 }
+      // lane.sh exits 1 for findings and 2 when its own setup broke (fetch, plugin, configure).
+      return { ok: code === 0, infra: code === 2 }
     },
   },
   {
@@ -200,7 +225,7 @@ const STEPS: Step[] = [
         "-DCATA_FORMAT_TARGETS=OFF",
         "-DLUA_DOCS_ON_BUILD=OFF",
       ], KEEP_CWD)
-      if (cfg !== 0) return { ok: false, note: "cmake configure failed" }
+      if (cfg !== 0) return { ok: false, infra: true, note: "cmake configure failed" }
       const code = await ctx.exec(
         "build",
         ["cmd", "/c", "C:\\WORK\\bnbuild.bat", BUILD_PRESET],
@@ -210,7 +235,7 @@ const STEPS: Step[] = [
       const dirty = await git(ctx.cwd, "status", "--porcelain")
       return dirty === ""
         ? { ok: true }
-        : { ok: false, note: `the build modified the tree:\n${dirty}` }
+        : { ok: false, infra: true, note: `the build modified the tree:\n${dirty}` }
     },
   },
   {
@@ -392,11 +417,12 @@ export async function runGate(opts: GateOptions): Promise<Stamp> {
     exec: (step, cmd, env) => runToLog(cmd, join(logs, `${step}.log`), { cwd: opts.cwd, env }),
   }
   const failed: string[] = []
+  const infra: string[] = []
   for (const step of STEPS) {
     if (opts.only) {
       if (!opts.only.includes(step.name)) continue
     } else if (step.tier === "full" && opts.tier === "fast") continue
-    if (step.tier === "full" && failed.length > 0) {
+    if ((step.tier === "full" || step.slow) && failed.length > 0) {
       console.log(`SKIP ${step.name} (an earlier step failed)`)
       continue
     }
@@ -415,6 +441,7 @@ export async function runGate(opts: GateOptions): Promise<Stamp> {
     )
     if (!result.ok) {
       failed.push(step.name)
+      if (result.infra) infra.push(step.name)
       if (result.note) console.log(result.note)
       console.log(await tailFile(ctx.logPath(step.name), 60))
     }
@@ -426,6 +453,7 @@ export async function runGate(opts: GateOptions): Promise<Stamp> {
     ok: failed.length === 0,
     finishedAt: new Date().toISOString(),
     failedSteps: failed,
+    infraSteps: infra,
     ticket: ctx.ticket?.number ?? null,
   }
   if (!opts.only) {
