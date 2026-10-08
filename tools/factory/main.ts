@@ -23,7 +23,7 @@ import {
 } from "./gh.ts"
 import { agentList, ensureServer, workspaceClose } from "./herdr.ts"
 import { acquireLane, lanePathFor, readLanes, releaseLane } from "./lanes.ts"
-import { git } from "./util.ts"
+import { git, mainRepoRoot } from "./util.ts"
 
 const repoRoot = () => git(".", "rev-parse", "--show-toplevel")
 
@@ -59,13 +59,16 @@ async function runLoop(opts: { max: number; issue?: number }): Promise<void> {
     throw new Error("GitHub Actions is disabled on the fork; refusing to open PRs without CI")
   }
   await ensureServer()
-  const repo = await repoRoot()
+  const repo = await mainRepoRoot(".")
   const running = new Set<Promise<void>>()
   let started = 0
+  // `gh issue list` reads a search index that lags a label edit by seconds, so a ticket we just
+  // claimed can still be listed as ready. Remember what this process started.
+  const startedIssues = new Set<number>()
   while (started < opts.max) {
-    const ready = opts.issue !== undefined
-      ? (await listIssues(["factory:ready"])).filter((i) => i.number === opts.issue)
-      : await listIssues(["factory:ready"])
+    const ready = (await listIssues(["factory:ready"])).filter((i) =>
+      !startedIssues.has(i.number) && (opts.issue === undefined || i.number === opts.issue)
+    )
     const next = await pickNext(ready, isClosed)
     if (!next) break
     const lane = await acquireLane(next.number)
@@ -77,6 +80,7 @@ async function runLoop(opts: { max: number; issue?: number }): Promise<void> {
       continue
     }
     await claim(next)
+    startedIssues.add(next.number)
     started++
     console.log(`lane ${lane.n}: #${next.number} ${next.title}`)
     const job: Promise<void> = runTicket(next, lane, { repo })

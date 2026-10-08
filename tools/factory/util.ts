@@ -71,6 +71,11 @@ export function gitDir(cwd: string): Promise<string> {
   return git(cwd, "rev-parse", "--absolute-git-dir")
 }
 
+/// The primary checkout that owns the shared `.git` (herdr only creates worktrees from it).
+export async function mainRepoRoot(cwd: string): Promise<string> {
+  return dirname(await git(cwd, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+}
+
 export async function factoryDir(cwd: string): Promise<string> {
   const dir = join(await gitDir(cwd), "factory")
   await Deno.mkdir(dir, { recursive: true })
