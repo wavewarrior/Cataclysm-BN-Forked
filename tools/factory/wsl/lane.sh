@@ -83,18 +83,37 @@ fi
 echo "lane.sh: tidy on $(wc -l <"$LANE_HOME/files.txt") file(s)"
 
 BUILD_PATH="$LANE_HOME/build"
-export BUILD_PATH
-# build-clang-tidy-plugin.sh ends in a non-idempotent `ln -s`; clear the old link first.
-rm -f compile_commands.json
-echo "lane.sh: configuring and building the cata-* plugin"
-SOUND=0 bash build-scripts/build-clang-tidy-plugin.sh >"$LANE_HOME/plugin-build.log" 2>&1 || {
+PLUGIN_BUILD="$LANE_HOME/plugin"
+
+# The game's own configure vendors DirectXShaderCompiler (an LLVM fork) whose targets collide with
+# find_package(Clang), so build-clang-tidy-plugin.sh cannot do both at once. Build the plugin as
+# its own project, and configure the game separately only for compile_commands.json.
+echo "lane.sh: building the cata-* plugin"
+{
+    cmake -S tools/clang-tidy-plugin -B "$PLUGIN_BUILD" -G Ninja \
+        -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DLLVM_DIR="$(llvm-config --cmakedir)" -DCMAKE_PREFIX_PATH="$(llvm-config --prefix)" &&
+        ninja -C "$PLUGIN_BUILD" CataAnalyzerPlugin
+} >"$LANE_HOME/plugin-build.log" 2>&1 || {
     tail -n 60 "$LANE_HOME/plugin-build.log"
+    exit 1
+}
+
+echo "lane.sh: configuring the game for compile_commands.json"
+cmake -S . -B "$BUILD_PATH" -G Ninja \
+    -DBACKTRACE=ON -DSOUND=0 -DLIBBACKTRACE=0 -DLINKER=mold -DLUA=ON \
+    -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
+    -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+    >"$LANE_HOME/configure.log" 2>&1 || {
+    tail -n 60 "$LANE_HOME/configure.log"
     exit 1
 }
 
 # 2. clang-tidy on new/changed lines. Command-line checks merge onto .clang-tidy, so cata-*
 # stays on; confirm that before trusting an empty result.
-PLUGIN="$BUILD_PATH/tools/clang-tidy-plugin/libCataAnalyzerPlugin.so"
+PLUGIN="$PLUGIN_BUILD/libCataAnalyzerPlugin.so"
 CHECKS="modernize-use-trailing-return-type,modernize-use-auto"
 WERROR="modernize-use-trailing-return-type,modernize-use-auto,cata-*"
 listed="$(clang-tidy --load="$PLUGIN" --checks="$CHECKS" --list-checks 2>&1)"

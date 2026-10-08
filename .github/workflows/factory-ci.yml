@@ -105,10 +105,20 @@ jobs:
       - uses: denoland/setup-deno@v2
         with: { cache: true }
 
-      - name: build clang-tidy plugin
+      # The game's configure vendors DirectXShaderCompiler (an LLVM fork) whose targets collide with
+      # find_package(Clang), so the plugin is its own project; the game is configured separately
+      # only for compile_commands.json.
+      - name: build clang-tidy plugin and configure the game
         run: |
-          pip install --break-system-packages lit
-          bash ./build-scripts/build-clang-tidy-plugin.sh
+          cmake -S tools/clang-tidy-plugin -B plugin -G Ninja \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Release \
+            -DLLVM_DIR="$(llvm-config --cmakedir)" -DCMAKE_PREFIX_PATH="$(llvm-config --prefix)"
+          ninja -C plugin CataAnalyzerPlugin
+          cmake -S . -B build -G Ninja \
+            -DBACKTRACE=ON -DSOUND=0 -DLIBBACKTRACE=0 -DLINKER=mold -DLUA=ON \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo
 
       - name: C++ format check on changed files
         run: |
@@ -129,7 +139,7 @@ jobs:
           if ! grep -q '[^[:space:]]' files.txt; then echo "No files to analyze."; exit 0; fi
           checks="$(jq -r '.lintOnNewLines.checks | map(select(startswith("cata") | not)) | join(",")' tools/factory/config.json)"
           werror="$(jq -r '.lintOnNewLines.warningsAsErrors | join(",")' tools/factory/config.json)"
-          plugin="$PWD/build/tools/clang-tidy-plugin/libCataAnalyzerPlugin.so"
+          plugin="$PWD/plugin/libCataAnalyzerPlugin.so"
           clang-tidy --load="$plugin" --checks="$checks" --list-checks | grep -q cata-no-long
           xargs -a files.txt -n1 -P"$(nproc)" clang-tidy -quiet --load="$plugin" -p build \
             --checks="$checks" --warnings-as-errors="$werror" \

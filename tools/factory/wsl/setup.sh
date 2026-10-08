@@ -60,7 +60,9 @@ export SHADERCROSS="$shadercross_exe"
 export PATH="$(dirname "$shadercross_exe"):\$HOME/.local/bin:\$PATH"
 EOF
 
-pip install --break-system-packages lit || true
+# lit 23 rejects the plugin's lit.cfg (execute_external); 18.x runs it. FileCheck is for check_clang_tidy.py.
+pip install --break-system-packages 'lit==18.1.8' || true
+$SUDO ln -sf "/usr/lib/llvm-$LLVM_VERSION/bin/FileCheck" /usr/local/bin/FileCheck
 
 echo "--- versions ---"
 clang-tidy --version | head -n 2
