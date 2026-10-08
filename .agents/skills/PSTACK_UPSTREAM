@@ -1,0 +1,5 @@
+source=https://github.com/IgorKhramtsov/pstack-skills
+commit=ce47cecd1514e630d9427435240d005c1b0dcb9a
+vendored=2026-10-08
+skills=interrogate blast-radius arena create-verification-skill maintain-verification-skill pstack-runtime
+notes=pstack-runtime is a skill in the same repo (not a separate package) and is the host-capability contract the other five load at run time; it is vendored with them. poteto-mode, autopilot-* and every pstack playbook are intentionally NOT vendored: they overlap to-spec/implement. Validated with scripts/validate.py on the clone before copying (44 skills, 95 Markdown files).
