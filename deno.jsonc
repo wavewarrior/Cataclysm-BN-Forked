@@ -39,11 +39,31 @@
       "description": "agent playtest supervisor: start, step and stop Episodes, manage the fixture library; `mcp` serves the same operations as MCP tools over stdio (see tools/bnplay/main.ts)",
       "command": "deno run --allow-run --allow-env --allow-read --allow-write --allow-net tools/bnplay/main.ts",
     },
+    "gate": {
+      "description": "factory gate for the current worktree: deno gate --tier fast|full --base <ref> (see tools/factory/gate.ts)",
+      "command": "deno run -A tools/factory/gate.ts",
+    },
+    "factory": {
+      "description": "agentic software factory driver: install, emit-config, release, run, status, stop (see tools/factory/main.ts)",
+      "command": "deno run -A tools/factory/main.ts",
+    },
   },
-  "test": { "include": ["scripts", ".agents"] },
+  "test": { "include": ["scripts", ".agents", "tools/factory"] },
   "lint": {
-    "include": ["scripts", "build-scripts", ".agents", "tools/bnplay"],
-    "rules": { "exclude": ["no-unversioned-import", "no-import-prefix"] },
+    "include": [
+      "scripts",
+      "build-scripts",
+      ".agents",
+      "tools/bnplay",
+      "tools/factory",
+      ".omp/hooks",
+    ],
+    "plugins": ["./tools/factory/lint_plugin.ts"],
+    "rules": {
+      "tags": ["recommended"],
+      "include": ["repo-rules/no-skipped-tests", "repo-rules/no-unreasoned-suppress"],
+      "exclude": ["no-unversioned-import", "no-import-prefix"],
+    },
   },
   "unstable": ["raw-imports", "fmt-component", "temporal"],
   "fmt": {
@@ -53,6 +73,8 @@
       "build-scripts",
       ".agents",
       "tools/bnplay",
+      "tools/factory",
+      ".omp/hooks",
       "doc",
       "docs",
       "*.md",
