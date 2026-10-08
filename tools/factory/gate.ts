@@ -158,7 +158,12 @@ const STEPS: Step[] = [
     tier: "fast",
     run: async (ctx) => {
       if (!(await exists(GIT_BASH))) return { ok: false, note: `${GIT_BASH} not found` }
-      const path = `${Deno.env.get("PATH") ?? ""};C:\\Python312`
+      // lint-json.sh prefers `python3`, and the Microsoft Store alias in WindowsApps answers to
+      // it but fails on every file. Drop WindowsApps and put a real interpreter first.
+      const path = [
+        "C:\\Python312",
+        ...(Deno.env.get("PATH") ?? "").split(";").filter((p) => p && !p.includes("WindowsApps")),
+      ].join(";")
       const code = await ctx.exec("json-lint", [GIT_BASH, "build-scripts/lint-json.sh"], {
         PATH: path,
       })
