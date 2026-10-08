@@ -11,8 +11,6 @@ struct pair {
 template<typename... Ts>
 struct tuple {
 };
-template<typename A, typename B>
-pair<A, B> make_pair( A a, B b );
 } // namespace std
 
 std::pair<int, int> by_value();
@@ -30,7 +28,7 @@ const std::pair<int, int> const_value();
 
 auto deduced() {
     // CHECK-MESSAGES: warning: return a named struct instead of std::pair/std::tuple [cata-no-pair-tuple-return]
-    return std::make_pair( 1, 2 );
+    return std::pair<int, int> { 1, 2 };
 }
 
 struct holder {
