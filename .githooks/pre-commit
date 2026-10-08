@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Dependency-free replacement for the `fmt` hook in .pre-commit-config.yaml.
+# Formats only staged files, so the hook never touches unstaged work (repo-wide
+# `deno fmt` would reformat every dirty .md/.ts).
+# Enable once per clone: git config core.hooksPath .githooks
+set -euo pipefail
+export PATH="$HOME/.deno/bin:$PATH"
+
+build-scripts/check-skills.sh
+
+cpp_files=()
+json_files=()
+doc_files=()
+lua_files=()
+while IFS= read -r -d '' file; do
+    [[ -f "$file" ]] || continue
+    case "$file" in
+        *.cpp | *.h | *.hpp) cpp_files+=("$file") ;;
+        *.json) json_files+=("$file") ;;
+        *.md | *.ts) doc_files+=("$file") ;;
+        *.lua) lua_files+=("$file") ;;
+    esac
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+((${#cpp_files[@]})) && build-scripts/format-cpp.sh "${cpp_files[@]}"
+((${#json_files[@]})) && build-scripts/format-json.sh "${json_files[@]}"
+((${#doc_files[@]})) && deno fmt "${doc_files[@]}"
+((${#lua_files[@]})) && deno task dprint fmt "${lua_files[@]}"
+
+git add -- "${cpp_files[@]:-}" "${json_files[@]:-}" "${doc_files[@]:-}" "${lua_files[@]:-}" 2>/dev/null || true
