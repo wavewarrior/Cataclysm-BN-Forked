@@ -188,7 +188,8 @@ const STEPS: Step[] = [
     tier: "full",
     run: async (ctx) => {
       // The lane's own out/ dir. Re-run configure every time (cheap once cached) so the format
-      // targets stay OFF: with them ON the build reformats the whole tracked tree.
+      // and Lua-doc targets stay OFF: LUA_DOCS_ON_BUILD runs `deno task docs:gen`, which reformats
+      // the whole tracked tree after every build.
       const cfg = await ctx.exec("build", [
         "cmd",
         "/c",
@@ -197,6 +198,7 @@ const STEPS: Step[] = [
         "--preset",
         "win",
         "-DCATA_FORMAT_TARGETS=OFF",
+        "-DLUA_DOCS_ON_BUILD=OFF",
       ], KEEP_CWD)
       if (cfg !== 0) return { ok: false, note: "cmake configure failed" }
       const code = await ctx.exec(
