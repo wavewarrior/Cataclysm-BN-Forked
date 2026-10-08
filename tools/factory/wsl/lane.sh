@@ -106,6 +106,7 @@ cmake -S . -B "$BUILD_PATH" -G Ninja \
     -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
     -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+    -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON \
     >"$LANE_HOME/configure.log" 2>&1 || {
     tail -n 60 "$LANE_HOME/configure.log"
     exit 1

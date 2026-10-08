@@ -182,24 +182,28 @@ const STEPS: Step[] = [
     name: "build",
     tier: "full",
     run: async (ctx) => {
-      // The lane's own out/ dir; configure once (a fresh worktree has none).
-      if (!(await exists(join(ctx.cwd, BUILD_DIR, "CMakeCache.txt")))) {
-        const cfg = await ctx.exec("build", [
-          "cmd",
-          "/c",
-          "C:\\WORK\\bnenv.bat",
-          "cmake",
-          "--preset",
-          "win",
-        ], KEEP_CWD)
-        if (cfg !== 0) return { ok: false, note: "cmake configure failed" }
-      }
+      // The lane's own out/ dir. Re-run configure every time (cheap once cached) so the format
+      // targets stay OFF: with them ON the build reformats the whole tracked tree.
+      const cfg = await ctx.exec("build", [
+        "cmd",
+        "/c",
+        "C:\\WORK\\bnenv.bat",
+        "cmake",
+        "--preset",
+        "win",
+        "-DCATA_FORMAT_TARGETS=OFF",
+      ], KEEP_CWD)
+      if (cfg !== 0) return { ok: false, note: "cmake configure failed" }
       const code = await ctx.exec(
         "build",
         ["cmd", "/c", "C:\\WORK\\bnbuild.bat", BUILD_PRESET],
         KEEP_CWD,
       )
-      return { ok: code === 0 }
+      if (code !== 0) return { ok: false }
+      const dirty = await git(ctx.cwd, "status", "--porcelain")
+      return dirty === ""
+        ? { ok: true }
+        : { ok: false, note: `the build modified the tree:\n${dirty}` }
     },
   },
   {

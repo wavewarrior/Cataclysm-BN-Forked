@@ -118,7 +118,8 @@ jobs:
             -DBACKTRACE=ON -DSOUND=0 -DLIBBACKTRACE=0 -DLINKER=mold -DLUA=ON \
             -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON
 
       - name: C++ format check on changed files
         run: |
