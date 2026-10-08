@@ -12,7 +12,16 @@ import { config } from "./config.ts"
 import { changedFiles, violations } from "./protected_paths.ts"
 import { describe as describeRun, evaluateRun, grown } from "./ratchet.ts"
 import { listItems, type Ticket } from "./ticket.ts"
-import { factoryDir, fmtSeconds, git, mainRepoRoot, run, runToLog, tailFile } from "./util.ts"
+import {
+  factoryDir,
+  fmtSeconds,
+  git,
+  mainRepoRoot,
+  run,
+  runToLog,
+  runToLogUntil,
+  tailFile,
+} from "./util.ts"
 import { runWslLane } from "./wsl.ts"
 
 export type Tier = "fast" | "full"
@@ -91,6 +100,14 @@ const STEPS: Step[] = [
     tier: "fast",
     run: async (ctx) => {
       const status = await git(ctx.cwd, "status", "--porcelain")
+      if (
+        status === "" && (await git(ctx.cwd, "rev-list", "--count", `${ctx.base}..HEAD`)) === "0"
+      ) {
+        return {
+          ok: false,
+          note: "the branch has no commits beyond the base; nothing was implemented",
+        }
+      }
       return status === ""
         ? { ok: true }
         : { ok: false, note: `uncommitted or untracked files; commit them first:\n${status}` }
@@ -250,18 +267,23 @@ const STEPS: Step[] = [
       if (!exe) return { ok: false, note: `no cata_test-tiles.exe under ${BUILD_DIR}` }
       for (const tag of tags) {
         await Deno.remove(join(ctx.cwd, "test_user_dir"), { recursive: true }).catch(() => {})
-        const code = await ctx.exec("catch2-tags", [
-          "deno",
-          "task",
-          "test:progress",
-          "--exe",
-          exe,
-          "--log",
-          join(ctx.factoryDir, "logs", "catch2-tag.log"),
-          tag,
-          "--rng-seed",
-          "1",
-        ])
+        const { code } = await runToLogUntil(
+          [
+            "deno",
+            "task",
+            "test:progress",
+            "--exe",
+            exe,
+            "--log",
+            join(ctx.factoryDir, "logs", "catch2-tag.log"),
+            tag,
+            "--rng-seed",
+            "1",
+          ],
+          ctx.logPath("catch2-tags"),
+          (line) => line.startsWith("FAIL "),
+          { cwd: ctx.cwd },
+        )
         const log = await Deno.readTextFile(ctx.logPath("catch2-tags")).catch(() => "")
         const ran = [...log.matchAll(/^(\d+) test cases;/gm)].at(-1)?.[1]
         if (ran === undefined || Number(ran) === 0) {
@@ -279,18 +301,26 @@ const STEPS: Step[] = [
       const exe = await findTestExe(ctx.cwd)
       if (!exe) return { ok: false, note: `no cata_test-tiles.exe under ${BUILD_DIR}` }
       await Deno.remove(join(ctx.cwd, "test_user_dir"), { recursive: true }).catch(() => {})
-      await ctx.exec("baseline-ratchet", [
-        "deno",
-        "task",
-        "test:progress",
-        "--exe",
-        exe,
-        "--log",
-        join(ctx.factoryDir, "logs", "catch2-full.log"),
-        "~[.]",
-        "--rng-seed",
-        "1",
-      ])
+      await runToLogUntil(
+        [
+          "deno",
+          "task",
+          "test:progress",
+          "--exe",
+          exe,
+          "--log",
+          join(ctx.factoryDir, "logs", "catch2-full.log"),
+          "~[.]",
+          "--rng-seed",
+          "1",
+        ],
+        ctx.logPath("baseline-ratchet"),
+        // Stop at the first failure that is not in the baseline: the rest of a 12-minute run
+        // cannot change the verdict.
+        (line) =>
+          line.startsWith("FAIL ") && !config.baselineFailures.includes(line.slice(5).trim()),
+        { cwd: ctx.cwd },
+      )
       const log = await Deno.readTextFile(ctx.logPath("baseline-ratchet"))
       const result = evaluateRun(log, config.baselineFailures)
       const base = await run(["git", "show", `${ctx.base}:tools/factory/config.json`], {

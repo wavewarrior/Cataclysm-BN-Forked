@@ -59,6 +59,57 @@ export async function runToLog(
   }
 }
 
+/// Like runToLog, but kills the child as soon as `stopWhen` accepts a (colour-stripped) output line.
+/// A long suite that has already failed should not run to the end. Returns the exit code and
+/// whether it was cut short.
+export async function runToLogUntil(
+  cmd: string[],
+  logPath: string,
+  stopWhen: (line: string) => boolean,
+  opts: RunOptions = {},
+): Promise<{ code: number; stopped: boolean }> {
+  await Deno.mkdir(dirname(logPath), { recursive: true })
+  const log = await Deno.open(logPath, { write: true, create: true, append: true })
+  let stopped = false
+  try {
+    await log.write(new TextEncoder().encode(`$ ${cmd.join(" ")}\n`))
+    const child = new Deno.Command(cmd[0], {
+      args: cmd.slice(1),
+      cwd: opts.cwd,
+      env: opts.env,
+      stdin: "null",
+      stdout: "piped",
+      stderr: "piped",
+    }).spawn()
+    const pump = async (stream: ReadableStream<Uint8Array>) => {
+      let pending = ""
+      const decoder = new TextDecoder()
+      for await (const chunk of stream) {
+        await log.write(chunk)
+        pending += decoder.decode(chunk, { stream: true })
+        const lines = pending.split(/\r?\n/)
+        pending = lines.pop() ?? ""
+        // deno-lint-ignore no-control-regex -- stripping ANSI colour escapes
+        if (!stopped && lines.some((l) => stopWhen(l.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "")))) {
+          stopped = true
+          // /T: the test binary is a grandchild of `deno task`.
+          if (Deno.build.os === "windows") {
+            await run(["taskkill", "/PID", String(child.pid), "/T", "/F"])
+          } else child.kill("SIGKILL")
+        }
+      }
+    }
+    await Promise.all([pump(child.stdout), pump(child.stderr)])
+    const status = await child.status
+    await log.write(
+      new TextEncoder().encode(`\n[exit ${status.code}${stopped ? ", stopped early" : ""}]\n`),
+    )
+    return { code: status.code, stopped }
+  } finally {
+    log.close()
+  }
+}
+
 /// `git <args>` in `cwd`; throws with git's stderr on failure. Returns trimmed stdout.
 export async function git(cwd: string, ...args: string[]): Promise<string> {
   const r = await run(["git", ...args], { cwd })
