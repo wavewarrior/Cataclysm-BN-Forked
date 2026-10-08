@@ -1,6 +1,6 @@
 #pragma once
 #ifndef CATA_SRC_LIGHTING_LIGHTING_SETTINGS_H
-#define CATA_SRC_LIGHTING_LIGHTING_SETTINGS_H
+#    define CATA_SRC_LIGHTING_LIGHTING_SETTINGS_H
 
 // One owner for the lighting knobs (issue 116 of the frame-assembly module).
 //
@@ -21,17 +21,16 @@
 // into one), the rebuild mode (two bools collapse into one `force_rebuild`), the
 // `rc_readback` pulse, and `shadow_steps`' panel proxy.
 
-#include <cstdlib>
-#include <cstdint>
-#include <optional>
-#include <span>
-#include <string_view>
-#include <variant>
+#    include "lighting/debug_params.h"
 
-#include "lighting/debug_params.h"
+#    include <cstdint>
+#    include <cstdlib>
+#    include <optional>
+#    include <span>
+#    include <string_view>
+#    include <variant>
 
-namespace lighting
-{
+namespace lighting {
 
 /// The number of debug visualisation modes (0..17); F7 cycles through them.
 inline constexpr std::uint32_t debug_mode_count = 18u;
@@ -59,9 +58,7 @@ struct lighting_pulses {
     /// True iff a one-shot structure rebuild was armed; disarms it.
     auto take_force_once() -> bool {
         const bool armed = force_rebuild == force_rebuild_mode::once;
-        if( armed ) {
-            force_rebuild = force_rebuild_mode::none;
-        }
+        if (armed) { force_rebuild = force_rebuild_mode::none; }
         return armed;
     }
     /// True iff an RC cascade readback was requested; clears the request.
@@ -83,36 +80,27 @@ struct lighting_settings {
     /// The debug mode's single home. Used to be stored three times
     /// (`g_current_dbg_mode`, `g_dbg_params.debug_mode`, `g_devui_dbg_mode`)
     /// and seeded twice from `CATA_DBG_MODE`.
-    auto debug_mode() const -> std::uint32_t {
-        return debug.debug_mode;
-    }
-    void set_debug_mode( std::uint32_t m ) {
-        debug.debug_mode = m;
-    }
+    auto debug_mode() const -> std::uint32_t { return debug.debug_mode; }
+    void set_debug_mode(std::uint32_t m) { debug.debug_mode = m; }
     /// F7: advance to the next mode, wrapping after the last.
-    void cycle_debug_mode() {
-        debug.debug_mode = ( debug.debug_mode + 1u ) % debug_mode_count;
-    }
+    void cycle_debug_mode() { debug.debug_mode = (debug.debug_mode + 1u) % debug_mode_count; }
     /// The frame's diagnostic-view predicate: modes 6 and up take the
     /// full-screen identity quad instead of the lit world.
-    auto diagnostic_view_active() const -> bool {
-        return debug.debug_mode >= 6u;
-    }
+    auto diagnostic_view_active() const -> bool { return debug.debug_mode >= 6u; }
 };
 
 /// The debug mode's seed: `CATA_DBG_MODE`, taken modulo the 18 modes. The
 /// environment reaches the debug mode only here (it used to be read twice).
-inline auto dbg_mode_from_env() -> std::uint32_t
-{
-    if( const char *e = std::getenv( "CATA_DBG_MODE" ); e != nullptr ) {
-        return static_cast<std::uint32_t>( std::strtoul( e, nullptr, 10 ) ) % debug_mode_count;
+inline auto dbg_mode_from_env() -> std::uint32_t {
+    if (const char* e = std::getenv("CATA_DBG_MODE"); e != nullptr) {
+        return static_cast<std::uint32_t>(std::strtoul(e, nullptr, 10)) % debug_mode_count;
     }
     return 0u;
 }
 
 /// The single live owner every channel (file, keys, panel) writes and every
 /// pass reads. Seeded once from the environment.
-inline auto live_settings() -> lighting_settings &   // *NOPAD*
+inline auto live_settings() -> lighting_settings& // *NOPAD*
 {
     static lighting_settings s = [] {
         auto x = lighting_settings{};
@@ -133,8 +121,8 @@ enum class knob_kind : std::uint8_t {
 /// Which channels may write a knob. The file channel is the scripted escape
 /// hatch; `keys` is F8/F9; `panel` is the F4 dev UI.
 enum knob_channel : unsigned {
-    knob_file  = 1u << 0,
-    knob_keys  = 1u << 1,
+    knob_file = 1u << 0,
+    knob_keys = 1u << 1,
     knob_panel = 1u << 2,
 };
 
@@ -148,17 +136,14 @@ struct knob_special {
         rc_readback,
         crt_world,
     } which;
-    bool operator==( const knob_special &o ) const {
-        return which == o.which;
-    }
+    bool operator==(const knob_special& o) const { return which == o.which; }
 };
 /// Where a knob's value lives. Pointer-to-member forms cover the storage this
 /// ticket owns; plain addresses cover globals a later ticket moves (so the table
 /// is complete from the start and the drift test covers every old-chain name
 /// today); the tags cover the three destinations above.
-using knob_dest = std::variant <
-                  float debug_params::*, std::uint32_t debug_params::*,
-                  float *, bool *, knob_special >;
+using knob_dest =
+    std::variant<float debug_params::*, std::uint32_t debug_params::*, float*, bool*, knob_special>;
 
 /// Optional per-channel range. The panel's limits live in the markup; the keys'
 /// limits are the old `lighting_dbg_range` constants. Several knobs have
@@ -195,17 +180,17 @@ struct knob_entry {
 auto lighting_knob_table() -> std::span<const knob_entry>;
 
 /// Look up a knob by file-channel name. Null when the name is unknown.
-auto knob_find( std::string_view name ) -> const knob_entry *; // *NOPAD*
+auto knob_find(std::string_view name) -> const knob_entry*; // *NOPAD*
 
 /// The file channel: raw write, no clamp (the measurement escape hatch), bools
 /// from `value > 0.5`. Returns false for an unknown name, exactly as the old
 /// if-chain reported `(unknown)`.
-auto knob_apply_file( lighting_settings &s, std::string_view name, float value ) -> bool;
+auto knob_apply_file(lighting_settings& s, std::string_view name, float value) -> bool;
 
 /// A key press: move `cur` one `step` toward `delta`'s sign, clamped to `range`.
 /// Reproduces the old `std::max( MIN, x - STEP )` / `std::min( MAX, x + STEP )`
 /// pair, which is the same arithmetic.
-auto knob_key_step( const knob_range &range, float cur, float delta ) -> float;
+auto knob_key_step(const knob_range& range, float cur, float delta) -> float;
 
 /// The F4 panel's int-proxy reconciliation, as a pure function. Two knobs
 /// (shadow_steps, debug_mode) are uint storage behind an int widget, so each
@@ -228,8 +213,8 @@ struct int_proxy_result {
 };
 /// `store_clamped` is what the storage becomes when the panel wins (shadow_steps
 /// floors at 1, the debug mode at 0).
-auto knob_reconcile_int_proxy( const int_proxy_state &s, int store_now, int store_clamped )
--> int_proxy_result;
+auto knob_reconcile_int_proxy(const int_proxy_state& s, int store_now, int store_clamped)
+    -> int_proxy_result;
 
 } // namespace lighting
 
