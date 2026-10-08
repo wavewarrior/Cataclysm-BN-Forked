@@ -55,7 +55,7 @@ Passing run (real output, trimmed): `{"session":"814f5a63","verdict":"pass","exi
 
 ## Read the report
 
-- **Exit code** (of `stop` and `report`):
+- **Exit code** (of `stop` and `report`; of `compare` it is its own verdict, 0 pass / 1 fail):
   - `0` pass.
   - `1` an oracle failed.
   - `2` harness error: boot failure, game hung or died, idle reaper, daemon shutdown. Any bnplay refusal prints `bnplay: <reason>` and exits 2.
@@ -146,6 +146,31 @@ toggled = "toggled"
 restored = "restored"
 factor = 2             # effect must exceed factor x the null's noise
 ```
+
+### Proving a renderer change changed nothing: `bnplay compare`
+
+Capture oracles judge tags inside one Episode. To compare frames of **two** Episodes (before and after binary), use `bnplay compare` (`tools/bnplay/compare.ts`, also the MCP tool `compare`). It counts pixels with **any** channel difference outside an A/A noise mask and prints their share of the frame, the largest channel delta and their bounding box; the exit code is the verdict (0 pass, 1 fail, 2 a refusal). Never the whole-frame mean difference: a mean averages a local regression away.
+
+```
+bnplay compare --base <frame> --base <frame> --base <frame> --test <frame> [--max-changed N] [--dilate PX]
+```
+
+`--base` (given once per file) are frames of **one unchanged state**, at least three, ideally from two launches; their pairwise disagreements, dilated two pixels, are the mask. Each `--test` frame is compared with every base frame and its best match reported. Give the frames of one state each, never a whole `captures/` directory: an Episode's directory mixes knob states, and a mask built from all of it excuses the very change you are looking for. Frames of different sizes are refused by name. Default gate `--max-changed 1500` (about 0.04% of a 2560x1440 frame); a positive control must exceed 5,000.
+
+Procedure, one request per step (the Trial is `tools/bnplay/trials/equivalence.trial.toml`: windowed 1280x720 = 2560x1440 capture, Bairdford, night — GPU lighting is invisible in daylight):
+
+1. `bnplay doctor --trial tools/bnplay/trials/equivalence.trial.toml` must be healthy.
+2. **Freeze the animation knobs first**, ONE name/value per `/tmp/cata_knob` write, each consumed by one cheap `state` request: `flicker_gain 0`, `cloud_strength 0`, `dust_enable 0`, `shaft_enable 0`. Nothing pumps frames while the driver waits in `read_line`, so a knob written immediately before `capture` lands in that frame.
+3. Write `/tmp/cata_build_gi_scene` (a 7x7 room with coloured walls and a light — the lighting passes need occluders), consume it with one `state`, then `force_rc_rebuild 2` and a few `state`s.
+4. **Burn two warm-up captures** (tag `warmup`, never use them in a mask): within an Episode the captures are in transient states by capture position, not by elapsed time. Capture #1 and #2 are each about 1.8M pixels from the settled state, identically in every binary, and capture #3 onward is the settled cluster, so `state` requests do not settle it. Then `capture` with a tag per state. Build every mask from frames at the SAME capture positions across two or more launches (at least three same-state frames); never treat two consecutive captures as an A/A pair, and never mix capture positions into one mask. A rebuild capture needs `force_rc_rebuild 2` written immediately before it.
+5. `stop`, THEN read the Episode's `userdir/config/debug.log` (the log lags the request): every knob must show its `knob <name> = <v>` acknowledgement and none `(unknown)`; a rebuild capture must have a `[flash][gpu] rebuild: struct=1 ... rc=1` line before its `frame capture: wrote` line, a steady capture `struct=0 vis=0 rc=0`. A knob with no ack never reached a frame, so its pixels prove nothing.
+6. `bnplay compare` the before-Episode frames against the after-Episode frames.
+
+Which knobs a scene can see (measured 2026-10-07, osx-arm-slim): the windowed night scene sees AO, GI, sky, `vis_radius`, `ramp_enable`, `crt_world`; `shadow_mask_str` is visible in neither it nor the daytime run. Measured noise floor: 36 to 1,815 changed pixels (0.001% to 0.037%) between settled frames of the same state at the same capture positions, within a launch and across launches; consecutive frames differ by a toggling strip of about 1,871 pixels, so a mask needs at least three frames, and two consecutive captures are never an A/A pair (see step 4). Base frames must come from launches of the same Trial and scene as the test frames. A regression smaller than about a 40x40 block is invisible unless the compare is cropped. The main menu is not pixel-gateable (its A/A noise exceeds a `ramp_enable` change there).
+
+Camera-coverage limit: the windowed driver runs the whole-bubble camera path, so a camera-dependent change is invisible to this Trial. Cover it with the interactive daytime recipe instead: a free-running launch at the real viewport (`CATA_MEASURE_IMMEDIATE=1`, `force_world_redraw 1`, scratch userdir with `AUTOSAVE` off) — that run sees sun, sky, normals, glow and GI.
+
+Two traps when the pixels do not move: a **stale binary** (`doctor`'s `binary_fresh` check; the binary under test lives at `out/build/osx-arm-slim/src/`, never the repo-root copy), and a **PCH cache restored from another build directory** — every translation unit fails with `malformed or corrupted precompiled file ... probe-dxc`; delete `src/CMakeFiles/cataclysm-bn-tiles-common.dir/cmake_pch.hxx.pch`, run `CCACHE_RECACHE=1 ninja` on that `.pch` edge, check `strings -a <pch> | grep -c build/probe-` is 0, then rebuild (commit `cab7aec3e8` shares PCHs across differently named build directories).
 
 ## Driver unavailable
 

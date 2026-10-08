@@ -1,0 +1,35 @@
+# Renderer-equivalence Trial for the frame-assembly module (Map: Frame-assembly module).
+# Windowed, so `capture` produces the final composite frame. Run by hand through bnplay once per
+# binary (set BNPLAY_BINARY to the binary under test), then compare the two Episodes' frames with
+# `bnplay compare --base <before frames> --test <after frames>` (bnplay's own oracles compare tags
+# inside one Episode; `compare` is what compares across Episodes).
+#
+# Procedure, one step per request:
+#   1. `bnplay doctor --trial tools/bnplay/trials/equivalence.trial.toml` must be healthy.
+#   2. `start` this Trial. Freeze the animation knobs FIRST, one per request: write
+#      `flicker_gain 0` to /tmp/cata_knob, then send one `state` request to consume it; repeat for
+#      `cloud_strength 0`, `dust_enable 0`, `shaft_enable 0`. Nothing pumps frames while the driver
+#      waits in read_line, so a knob written immediately before `capture` lands in that frame.
+#   3. Write /tmp/cata_build_gi_scene (a 7x7 room with coloured walls and a light; it gives the
+#      lighting passes occluders), consume it with one `state` request, then `force_rc_rebuild 2`
+#      and a few `state` requests. Night, because GPU lighting is invisible against daylight.
+#   4. Burn two `capture` requests tagged `warmup` first (captures #1 and #2 of an Episode are
+#      transient states, about 1.8M px off the settled one; capture #3 onward is settled). Then
+#      `capture` with a tag, one tag per state, with `force_rc_rebuild 2` written immediately
+#      before a rebuild capture. Masks come from frames at the SAME capture positions across two
+#      or more launches; two consecutive captures are not an A/A pair.
+#   5. `stop`, then read the Episode's userdir/config/debug.log: every knob must show its
+#      `knob <name> = <v>` acknowledgement and none `(unknown)`; a rebuild capture must have a
+#      `[flash][gpu] rebuild: struct=1 ... rc=1` line before its `frame capture: wrote` line, a
+#      steady capture `struct=0 vis=0 rc=0`. A knob whose ack is missing never reached the frame,
+#      so its pixels prove nothing.
+#   6. `bnplay compare --base <three or more frames of the unchanged state> --test <the other
+#      frames>`; the exit code is the verdict. See the bnplay skill for the noise floor and the
+#      scene-coverage and camera limits.
+fixture = "Bairdford"
+seed = 7
+start_date = "0001-03-10"
+time_of_day = "23:00"
+wall_clock_limit_s = 1500
+mode = "windowed"
+window_size = [1280, 720]

@@ -23,6 +23,7 @@
 #include "options.h"
 #include "player.h"
 #include "mod_tileset.h"
+#include "lighting/lighting_settings.h"
 
 #include <algorithm>
 #include <functional>
@@ -606,7 +607,7 @@ void cata_tiles::load_tileset(
     // The F4 ramp_steps slider is the BAKE REQUEST; render_state::palette_steps() is
     // the authoritative row stride the shader indexes with.
     if( lighting::render_state * rs = &lighting::get_render_state(); rs->ready() ) {
-        rs->build_palette_ramps( static_cast<int>( g_dbg_params.ramp_steps ) );
+        rs->build_palette_ramps( static_cast<int>( lighting::live_settings().debug.ramp_steps ) );
     }
 
     set_draw_scale( 16 );
