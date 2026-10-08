@@ -2,6 +2,7 @@
 #include "DeterminismCheck.h"
 #include "JsonTranslationInputCheck.h"
 #include "NoLongCheck.h"
+#include "NoPairTupleReturnCheck.h"
 #include "NoStaticGettextCheck.h"
 #include "PointInitializationCheck.h"
 #include "SimplifyPointConstructorsCheck.h"
@@ -41,6 +42,7 @@ public:
         CheckFactories.registerCheck<DeterminismCheck>("cata-determinism");
         CheckFactories.registerCheck<JsonTranslationInputCheck>("cata-json-translation-input");
         CheckFactories.registerCheck<NoLongCheck>("cata-no-long");
+        CheckFactories.registerCheck<NoPairTupleReturnCheck>("cata-no-pair-tuple-return");
         CheckFactories.registerCheck<NoStaticGettextCheck>("cata-no-static-gettext");
         CheckFactories.registerCheck<PointInitializationCheck>("cata-point-initialization");
         CheckFactories.registerCheck<SimplifyPointConstructorsCheck>(

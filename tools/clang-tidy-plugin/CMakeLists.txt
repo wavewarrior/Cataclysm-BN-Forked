@@ -12,6 +12,7 @@ set(CataAnalyzerSrc
     DeterminismCheck.cpp
     JsonTranslationInputCheck.cpp
     NoLongCheck.cpp
+    NoPairTupleReturnCheck.cpp
     NoStaticGettextCheck.cpp
     PointInitializationCheck.cpp
     SimplifyPointConstructorsCheck.cpp
