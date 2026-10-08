@@ -25,7 +25,11 @@
     "AGENTS.md",
     ".omp/rules/**",
     "tools/clang-tidy-plugin/**",
-    "build-scripts/**"
+    "build-scripts/**",
+    "docs/agents/**",
+    ".agents/skills/**",
+    ".claude/skills/**",
+    ".omp/**"
   ],
   "baselineFailures": [
     "box2d_terrain_colliders_build_and_rebuild",
@@ -36,6 +40,7 @@
     "MSX++UnDeadPeopleEdition cross-sheet tile sprites are anchored to their sheet",
     "the rebuild plan lists the levels the dirty state licenses for rebuild"
   ],
+  "baselineFailuresLinux": [],
   "lintOnNewLines": {
     "checks": [
       "modernize-use-trailing-return-type",

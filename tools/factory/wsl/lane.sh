@@ -80,6 +80,11 @@ fi
 if [ ! -s "$LANE_HOME/files.txt" ]; then
     exit "$status"
 fi
+if [ "$(cat "$LINE_FILTER")" = "[]" ]; then
+    # clang-tidy treats an empty line filter as "no filtering", so there is nothing safe to run.
+    echo "lane.sh: no added or changed C++ lines; skipping clang-tidy"
+    exit "$status"
+fi
 echo "lane.sh: tidy on $(wc -l <"$LANE_HOME/files.txt") file(s)"
 
 BUILD_PATH="$LANE_HOME/build"

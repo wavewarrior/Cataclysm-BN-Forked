@@ -49,7 +49,7 @@ export function prTitle(title: string): string {
 }
 
 export function implementerPrompt(issue: Issue, ticketPath: string): string {
-  return `/skill:implement Implement GitHub issue #${issue.number} (${issue.title}). The full ticket is in ${ticketPath}: read it first and follow it exactly. Add or update the tests it names, commit your work to the current branch with conventional-commit messages, and stop. Do not push, open PRs or use gh.`
+  return `/skill:implement Implement GitHub issue #${issue.number} (${issue.title}). The full ticket is in ${ticketPath}: read it first and follow it exactly. Add or update the tests it names, commit your work to the current branch with conventional-commit messages, and stop. Do not push, open PRs or use gh. Do not build and do not run cata_test: this shell has no compiler environment, and the gate builds and runs the ticket's test tags for you.`
 }
 
 export function reviewerPrompt(opts: {

@@ -12,7 +12,7 @@ import { config } from "./config.ts"
 import { changedFiles, violations } from "./protected_paths.ts"
 import { describe as describeRun, evaluateRun, grown } from "./ratchet.ts"
 import { listItems, type Ticket } from "./ticket.ts"
-import { factoryDir, fmtSeconds, git, run, runToLog, tailFile } from "./util.ts"
+import { factoryDir, fmtSeconds, git, mainRepoRoot, run, runToLog, tailFile } from "./util.ts"
 import { runWslLane } from "./wsl.ts"
 
 export type Tier = "fast" | "full"
@@ -289,32 +289,55 @@ const STEPS: Step[] = [
       if (trials.length === 0) {
         return { ok: false, note: "gameplay/render ticket lists no '## Episodes'" }
       }
-      if ((await ctx.exec("bnplay", ["deno", "task", "bnplay", "doctor"])) !== 0) {
-        return { ok: false, note: "bnplay doctor is unhealthy" }
+      // The fixture library is gitignored, so a fresh worktree has none: use the main checkout's.
+      // Home, binary and basepath default to this worktree, so each lane runs its own daemon.
+      const env = {
+        BNPLAY_FIXTURES: join(await mainRepoRoot(ctx.cwd), "tools", "bnplay", "fixtures"),
       }
-      for (const trial of trials) {
-        const started = await run(["deno", "task", "bnplay", "start", trial], { cwd: ctx.cwd })
+      const bn = async (...args: string[]) => {
+        const r = await run(["deno", "task", "bnplay", ...args], { cwd: ctx.cwd, env })
         await Deno.writeTextFile(
           ctx.logPath("bnplay"),
-          `start ${trial}: ${started.stdout}${started.stderr}\n`,
-          { append: true },
+          `bnplay ${args.join(" ")}\n${r.stdout}${r.stderr}\n`,
+          {
+            append: true,
+          },
         )
-        const session = started.code === 0
-          ? JSON.parse(started.stdout.trim().split("\n").at(-1)!).session
-          : undefined
-        if (!session) return { ok: false, note: `could not start Episode ${trial}` }
-        const stopped = await run(["deno", "task", "bnplay", "stop", String(session)], {
-          cwd: ctx.cwd,
-        })
-        await Deno.writeTextFile(
-          ctx.logPath("bnplay"),
-          `stop ${trial}: ${stopped.stdout}${stopped.stderr}\n`,
-          { append: true },
-        )
-        // 0 pass; 1 oracle failed, 2 harness error, 3 inconclusive all fail the gate.
-        if (stopped.code !== 0) {
-          return { ok: false, note: `Episode ${trial} verdict ${stopped.code}` }
+        return r
+      }
+      try {
+        if ((await bn("doctor")).code !== 0) {
+          return { ok: false, note: "bnplay doctor is unhealthy" }
         }
+        // An entry is `<trial.toml>` or `<trial.toml> <steps.jsonl>`: one driver request per line is
+        // sent with `bnplay step` before `stop`. Without steps this only proves boot and clean exit.
+        for (const entry of trials) {
+          const [trial, stepsFile] = entry.split(/\s+/)
+          const started = await bn("start", trial)
+          const session = started.code === 0
+            ? JSON.parse(started.stdout.trim().split("\n").at(-1)!).session
+            : undefined
+          if (!session) return { ok: false, note: `could not start Episode ${trial}` }
+          if (stepsFile) {
+            const lines = (await Deno.readTextFile(join(ctx.cwd, stepsFile))).split(/\r?\n/).filter(
+              (l) => l.trim(),
+            )
+            for (const line of lines) {
+              const stepped = await bn("step", String(session), line)
+              if (stepped.code !== 0) {
+                await bn("stop", String(session))
+                return { ok: false, note: `Episode ${trial}: step refused: ${line}` }
+              }
+            }
+          }
+          // 0 pass; 1 oracle failed, 2 harness error, 3 inconclusive all fail the gate.
+          const stopped = await bn("stop", String(session))
+          if (stopped.code !== 0) {
+            return { ok: false, note: `Episode ${trial} verdict ${stopped.code}` }
+          }
+        }
+      } finally {
+        await bn("shutdown")
       }
       return { ok: true, note: `${trials.length} Episode(s) passed` }
     },
@@ -339,11 +362,24 @@ export type GateOptions = {
 
 /// Run the gate; returns the stamp (also written to disk).
 export async function runGate(opts: GateOptions): Promise<Stamp> {
+  if (opts.only) {
+    const unknown = opts.only.filter((name) => !STEPS.some((s) => s.name === name))
+    if (unknown.length > 0) {
+      throw new Error(
+        `unknown gate step(s): ${unknown.join(", ")}; known: ${
+          STEPS.map((s) => s.name).join(", ")
+        }`,
+      )
+    }
+  }
   const fdir = await factoryDir(opts.cwd)
   const logs = join(fdir, "logs")
-  await Deno.remove(logs, { recursive: true }).catch(() => {})
+  // A partial run must not destroy the evidence of a full one.
+  if (!opts.only) {
+    await Deno.remove(logs, { recursive: true }).catch(() => {})
+    await Deno.remove(join(fdir, "gate-stamp.json")).catch(() => {})
+  }
   await Deno.mkdir(logs, { recursive: true })
-  await Deno.remove(join(fdir, "gate-stamp.json")).catch(() => {})
   const ctx: GateContext = {
     cwd: opts.cwd,
     tier: opts.tier,

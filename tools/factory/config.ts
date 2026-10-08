@@ -33,6 +33,11 @@ export const config = {
     ".omp/rules/**",
     "tools/clang-tidy-plugin/**",
     "build-scripts/**",
+    // What shapes a lane's own behaviour: rules, skills and settings.
+    "docs/agents/**",
+    ".agents/skills/**",
+    ".claude/skills/**",
+    ".omp/**",
   ] as readonly string[],
   /// Exact Catch2 case names allowed to fail in the full run. May only shrink. Recorded from a
   /// full `~[.]` run, seed 1, on the integration tip (observed list, not a remembered one).
@@ -45,6 +50,10 @@ export const config = {
     "MSX++UnDeadPeopleEdition cross-sheet tile sprites are anchored to their sheet",
     "the rebuild plan lists the levels the dirty state licenses for rebuild",
   ] as readonly string[],
+  /// The same list for the Linux CI build (clang, software GPU), which fails a different set than
+  /// MSVC. Empty until one `workflow_dispatch` run of factory-ci records it; make `linux-tests`
+  /// a required check only after that.
+  baselineFailuresLinux: [] as readonly string[],
   /// New or changed C++ lines must satisfy these; legacy lines are exempt (clang-tidy --line-filter).
   lintOnNewLines: {
     checks: ["modernize-use-trailing-return-type", "modernize-use-auto", "cata-*"],

@@ -136,6 +136,8 @@ jobs:
       - name: clang-tidy on new and changed lines
         run: |
           deno task affected-files --base "origin/$BASE_REF" --head HEAD --output affected_files.txt
+          # An empty line filter means "no filtering" to clang-tidy, so nothing added = nothing to check.
+          if [ "$(cat line-filter.json)" = "[]" ]; then echo "No added or changed C++ lines."; exit 0; fi
           grep -E '^(src|tests)/.*\.(cpp|h|hpp)$' affected_files.txt > files.txt || true
           if ! grep -q '[^[:space:]]' files.txt; then echo "No files to analyze."; exit 0; fi
           checks="$(jq -r '.lintOnNewLines.checks | map(select(startswith("cata") | not)) | join(",")' tools/factory/config.json)"
@@ -239,7 +241,7 @@ jobs:
           sleep 1
           deno task test:progress --exe build/tests/cata_test-tiles \
             --log catch2-full.log "~[.]" --rng-seed 1 --gpu-backend=software 2>&1 | tee test-progress.out || true
-          deno run -A tools/factory/ratchet.ts --log test-progress.out
+          deno run -A tools/factory/ratchet.ts --log test-progress.out --platform linux
 
       - uses: actions/upload-artifact@v4
         if: always()

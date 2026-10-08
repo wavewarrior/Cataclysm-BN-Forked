@@ -28,6 +28,13 @@ export type Ticket = {
   sections: Partial<Record<SectionName, string>>
 }
 
+/// Headings the `to-tickets` skill writes, accepted for the factory's own names.
+const ALIASES: Record<string, SectionName> = {
+  "what to build": "Goal",
+  "acceptance criteria": "Acceptance",
+  "blocked by": "Depends on",
+}
+
 /// Split a markdown body on its `## ` headings. Unknown headings are ignored.
 export function parseSections(body: string): Partial<Record<SectionName, string>> {
   const out: Partial<Record<SectionName, string>> = {}
@@ -40,7 +47,8 @@ export function parseSections(body: string): Partial<Record<SectionName, string>
     const heading = line.match(/^##\s+(.+?)\s*$/)
     if (heading) {
       flush()
-      const name = SECTIONS.find((s) => s.toLowerCase() === heading[1].toLowerCase())
+      const key = heading[1].toLowerCase()
+      const name = SECTIONS.find((s) => s.toLowerCase() === key) ?? ALIASES[key]
       current = name
       lines = []
     } else if (current !== undefined) {

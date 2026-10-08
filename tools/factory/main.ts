@@ -29,10 +29,11 @@ const repoRoot = () => git(".", "rev-parse", "--show-toplevel")
 
 async function install(): Promise<void> {
   const root = await repoRoot()
-  // Local config lives in the common .git/config, so every worktree shares it.
-  await git(root, "config", "--local", "core.hooksPath", ".githooks")
-  await git(root, "config", "--local", "push.default", "nothing")
-  console.log("installed: core.hooksPath=.githooks, push.default=nothing")
+  // Per worktree, not shared: a shared core.hooksPath would also switch the hooks on for every
+  // other worktree of the clone, including branches whose hooks predate these.
+  await git(root, "config", "--local", "extensions.worktreeConfig", "true")
+  await git(root, "config", "--worktree", "core.hooksPath", ".githooks")
+  console.log(`installed in ${root}: core.hooksPath=.githooks (this worktree only)`)
 }
 
 async function emitConfig(): Promise<void> {

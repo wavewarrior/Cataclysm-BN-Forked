@@ -39,3 +39,8 @@ Deno.test("matchingGlobs reports every glob that matched", () => {
   )
   assertEquals(globToRegExp("a.b").test("axb"), false)
 })
+
+Deno.test("matching is case-insensitive because the protected files live on NTFS", () => {
+  assert(matchesAny("TOOLS/Factory/gate.ts", ["tools/factory/**"]))
+  assert(matchesAny(".Clang-Tidy", [".clang-tidy"]))
+})

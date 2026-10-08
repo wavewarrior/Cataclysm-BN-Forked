@@ -29,7 +29,8 @@ export function globToRegExp(glob: string): RegExp {
       out += c.replace(/[.+^${}()|[\]\\?]/g, "\\$&")
     }
   }
-  return new RegExp(`^${out}$`)
+  // NTFS is case-insensitive: `TOOLS/Factory/x.ts` is the protected file.
+  return new RegExp(`^${out}$`, "i")
 }
 
 /// True when `path` (repo-relative) matches any glob.

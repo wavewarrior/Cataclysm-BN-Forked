@@ -70,3 +70,12 @@ Deno.test("branch names strip the conventional-commit prefix and cap the slug", 
   assertEquals(branchName("factory/", 9, "!!!"), "factory/9-ticket")
   assertEquals(branchName("factory/", 9, "a".repeat(80)).length, "factory/9-".length + 40)
 })
+
+Deno.test("the to-tickets skill's own headings count as the factory's sections", () => {
+  const s = parseSections(
+    "## What to build\nx\n\n## Acceptance criteria\n- y\n\n## Blocked by\n- #4\n",
+  )
+  assertEquals(s["Goal"], "x")
+  assertEquals(s["Acceptance"], "- y")
+  assertEquals(dependsOn(s), [4])
+})

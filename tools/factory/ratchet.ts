@@ -3,7 +3,7 @@
 ///
 /// Input is the output of `deno task test:progress` (scripts/test_progress.ts), which prints one
 /// `FAIL <case name>` line per unexpected failure and a `stopped early:` line when the binary
-/// crashed. Usage: deno run -A tools/factory/ratchet.ts --log <file> [--config <config.json>]
+/// crashed. Usage: deno run -A tools/factory/ratchet.ts --log <file> [--config <config.json>] [--platform linux]
 import { fromFileUrl } from "@std/path"
 
 export type RatchetResult = {
@@ -77,7 +77,9 @@ if (import.meta.main) {
   }
   const configPath = option(Deno.args, "--config") ??
     fromFileUrl(new URL("./config.json", import.meta.url))
-  const baseline: string[] = JSON.parse(await Deno.readTextFile(configPath)).baselineFailures
+  const cfg = JSON.parse(await Deno.readTextFile(configPath))
+  const linux = option(Deno.args, "--platform") === "linux"
+  const baseline: string[] = linux ? cfg.baselineFailuresLinux : cfg.baselineFailures
   const result = evaluateRun(await Deno.readTextFile(logPath), baseline)
   console.log(describe(result))
   Deno.exit(result.ok ? 0 : 1)
