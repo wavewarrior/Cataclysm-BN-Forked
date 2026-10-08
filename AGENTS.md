@@ -202,6 +202,28 @@ deno task docs:gen
 
 - **Commit**: Commit **ATOMICALLY**. **MUST** Follow [Conventional Commits](./docs/en/contribute/changelog_guidelines.md). **MUST NOT** add body/footer unless critical.
 
+## Factory (unattended lanes)
+
+GitHub issues on the fork are the queue. `deno task factory run` gives each `factory:ready` ticket its own herdr worktree (`wt-factory-<issue>`), runs an implementer, then `deno task gate --tier full`, then a read-only reviewer, and only then pushes a `factory/*` branch and opens a draft PR into `feature/improvements`. The human approves a spec once (`deno task factory release <slug>`) and merges PRs. Design: `plans/agentic-software-factory.md`; numbers and the protected-path list: `tools/factory/config.ts`.
+
+One skill owns each phase:
+
+| Phase                  | Skill                                                                                                                 |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| triage                 | `triage`                                                                                                              |
+| design                 | `grill-with-docs`                                                                                                     |
+| spec                   | `to-spec`                                                                                                             |
+| tickets                | `to-tickets`: must emit `.github/ISSUE_TEMPLATE/factory-ticket.md` sections, labels `factory:draft` and `spec:<slug>` |
+| implement              | `implement` with `tdd`                                                                                                |
+| bug diagnosis          | `diagnosing-bugs`                                                                                                     |
+| adversarial review     | `interrogate`, then `code-review`, then `blast-radius` for a `src/` change touching a header with more than 10 usages |
+| verification authoring | `create-verification-skill`                                                                                           |
+
+Do not enable `poteto-mode`, `autopilot-*` or any pstack playbook: they overlap `to-spec` and `implement`. Vendored pstack skills are pinned in `.agents/skills/PSTACK_UPSTREAM`.
+
+- **MUST** in a factory lane (`FACTORY_LANE=1`): never push, merge, call `gh`, or edit protected paths (`tools/factory/**`, `.omp/hooks/**`, `.githooks/**`, `.github/workflows/**`, lint and format configs, `deno.jsonc`, `AGENTS.md`, `tools/clang-tidy-plugin/**`, `build-scripts/**`). The hook, the pre-push check and CI all enforce it. If blocked, say what you need in your final message and stop.
+- The gate (`deno task gate`) is the only definition of done. New or changed C++ lines must satisfy `modernize-use-trailing-return-type`, `modernize-use-auto` and `cata-*` (including `cata-no-pair-tuple-return`); legacy lines in a touched file are exempt.
+
 ## WHEN working on i18n / PO context, or translating docs
 
 Follow [docs/agents/i18n.md](./docs/agents/i18n.md): full coverage of every named meaning, `msgfmt` + `check_po_printf_format.py` gates before PR, glossary search in the target PO before coining a term.

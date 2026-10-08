@@ -7,7 +7,7 @@
 ///   status             tickets by label, lane locks and herdr agents
 ///   stop <issue>       close a ticket's panes and mark it blocked
 import { Command } from "@cliffy/command"
-import { fromFileUrl, join } from "@std/path"
+import { fromFileUrl } from "@std/path"
 import { config } from "./config.ts"
 import { pickNext, runTicket } from "./driver.ts"
 import {
@@ -23,7 +23,7 @@ import {
 } from "./gh.ts"
 import { agentList, ensureServer, workspaceClose } from "./herdr.ts"
 import { acquireLane, lanePathFor, readLanes, releaseLane } from "./lanes.ts"
-import { git, run } from "./util.ts"
+import { git } from "./util.ts"
 
 const repoRoot = () => git(".", "rev-parse", "--show-toplevel")
 
@@ -144,7 +144,4 @@ if (import.meta.main) {
     .command("stop <issue:number>", "Stop a ticket and mark it blocked.")
     .action((_, issue) => stop(issue))
     .parse(Deno.args)
-  // Keep `run` honest about non-zero worktree state.
-  void run
-  void join
 }
