@@ -1,6 +1,6 @@
 #pragma once
 #ifndef CATA_SRC_LIGHTING_DEBUG_PARAMS_H
-#define CATA_SRC_LIGHTING_DEBUG_PARAMS_H
+#    define CATA_SRC_LIGHTING_DEBUG_PARAMS_H
 
 // The DebugParams cbuffer, moved verbatim out of `lighting/sprite_batcher.h` so the
 // SDL-free `lighting/lighting_settings.h` can own it by value (sprite_batcher.h
@@ -9,10 +9,9 @@
 // `sprite_batcher.cpp` as before and repeated here so the guarantee travels with
 // the struct.
 
-#include <cstdint>
+#    include <cstdint>
 
-namespace lighting
-{
+namespace lighting {
 // Debug visualisation + runtime tuning knobs (DebugParams cbuffer at
 // register(b2, space3); 272 bytes; wire-stable). debug_mode dispatches per-
 // component visualisations in the fragment shader; emitter/sun/sky_scale
@@ -176,8 +175,7 @@ struct debug_params {
     float sky_valid = 0.0f;
     float flicker_gain = 1.0f; // Step 5: fire/torch flicker master gain; 0=frozen. Was cloud_pad1.
 };
-static_assert( sizeof( debug_params ) == 272,
-               "debug_params wire-stable with DebugParams cbuffer" );
+static_assert(sizeof(debug_params) == 272, "debug_params wire-stable with DebugParams cbuffer");
 
 } // namespace lighting
 

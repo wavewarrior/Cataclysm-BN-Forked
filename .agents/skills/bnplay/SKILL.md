@@ -69,25 +69,25 @@ Passing run (real output, trimmed): `{"session":"814f5a63","verdict":"pass","exi
 
 Every request is `{"cmd":"<name>", ...}`; a malformed or unknown one answers `{"status":"error","error":"..."}` and costs nothing (the game survives).
 
-| Command | Arguments | Notes |
-|---|---|---|
-| `state` | | observation, no game time |
-| `move` | `dir`: `n ne e se s sw w nw up down` | |
-| `wait` | `turns` >= 1 | |
-| `sleep` | `max_turns` | |
-| `pickup drop wield wear take_off eat drink use read reload` | `item` (id from `query inventory`); `eat`/`drink`: `anyway`; `use`: `method` when the item has several | an invented or stale id is a protocol error; a valid id the game rejects is `refused` with its message |
-| `craft` | `recipe` id (e.g. `pointy_stick`), `max_turns` | |
-| `melee fire smash` | `dir` or `pos`: `[dx,dy]` offset from the avatar | |
-| `action` | `name`: any game action (`pause`, `inventory`, `look`, `map`, `messages`) | raw passthrough; see deny list |
-| `key` | `key` (e.g. `ESC`) | answers an open menu only |
-| `view` | `radius` 1 to 10 | ASCII `grid`, `legend`, `creatures` and `items` with `dx`,`dy`,`id` |
-| `query` | `topic`: `inventory` or `effects` | item ids are stable only within the Episode; names carry colour markup and are truncated |
-| `run_scene` | `name` (a `.lua` in `tools/visual_verify/scenes`, or `BNPLAY_SCENES`) | response has `scene: {status, lines}` |
-| `attach_view` | `radius` 0 to 10 (0 detaches) | |
-| `seed` | `seed` | |
-| `set_time` | `date` `YYYY-SS-DD` and/or `time` `HH:MM` | pins the game clock (a Trial's `start_date`, `time_of_day`); answers `turn`, `date`, `time`; refuses an impossible value |
-| `capture` | `tag`, `mode` `final` or `state` | windowed Episodes only |
-| `quit` | | prefer `bnplay stop` |
+| Command                                                     | Arguments                                                                                              | Notes                                                                                                                    |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `state`                                                     |                                                                                                        | observation, no game time                                                                                                |
+| `move`                                                      | `dir`: `n ne e se s sw w nw up down`                                                                   |                                                                                                                          |
+| `wait`                                                      | `turns` >= 1                                                                                           |                                                                                                                          |
+| `sleep`                                                     | `max_turns`                                                                                            |                                                                                                                          |
+| `pickup drop wield wear take_off eat drink use read reload` | `item` (id from `query inventory`); `eat`/`drink`: `anyway`; `use`: `method` when the item has several | an invented or stale id is a protocol error; a valid id the game rejects is `refused` with its message                   |
+| `craft`                                                     | `recipe` id (e.g. `pointy_stick`), `max_turns`                                                         |                                                                                                                          |
+| `melee fire smash`                                          | `dir` or `pos`: `[dx,dy]` offset from the avatar                                                       |                                                                                                                          |
+| `action`                                                    | `name`: any game action (`pause`, `inventory`, `look`, `map`, `messages`)                              | raw passthrough; see deny list                                                                                           |
+| `key`                                                       | `key` (e.g. `ESC`)                                                                                     | answers an open menu only                                                                                                |
+| `view`                                                      | `radius` 1 to 10                                                                                       | ASCII `grid`, `legend`, `creatures` and `items` with `dx`,`dy`,`id`                                                      |
+| `query`                                                     | `topic`: `inventory` or `effects`                                                                      | item ids are stable only within the Episode; names carry colour markup and are truncated                                 |
+| `run_scene`                                                 | `name` (a `.lua` in `tools/visual_verify/scenes`, or `BNPLAY_SCENES`)                                  | response has `scene: {status, lines}`                                                                                    |
+| `attach_view`                                               | `radius` 0 to 10 (0 detaches)                                                                          |                                                                                                                          |
+| `seed`                                                      | `seed`                                                                                                 |                                                                                                                          |
+| `set_time`                                                  | `date` `YYYY-SS-DD` and/or `time` `HH:MM`                                                              | pins the game clock (a Trial's `start_date`, `time_of_day`); answers `turn`, `date`, `time`; refuses an impossible value |
+| `capture`                                                   | `tag`, `mode` `final` or `state`                                                                       | windowed Episodes only                                                                                                   |
+| `quit`                                                      |                                                                                                        | prefer `bnplay stop`                                                                                                     |
 
 Multi-turn commands (`craft`, `sleep`, `read`, `reload`, some `use`) take `max_turns`; the default runs until the activity ends or is interrupted, and one request is capped at 1000 turns (`interrupted`, reason `turn_cap`).
 
@@ -97,16 +97,16 @@ Multi-turn commands (`craft`, `sleep`, `read`, `reload`, some `use`) take `max_t
 
 Every response: `id`, `status` (`ok` or `error`), `boundary` (`turn_complete` or `needs_input`), `turn`, `time_passed`, `moved`, `new_messages` (only what this action logged; content-based, includes repeats), `prompt` (open menu name or null), vitals `hp pain stamina hunger thirst` (flat keys), `outcome`. Optional: `reason`, `detail`, `turns`, `progress`, `truncated`, `view`, `episode_ended`. Ceiling about 1.5K tokens.
 
-| `outcome` | Meaning |
-|---|---|
-| `completed` | it happened (check `time_passed`) |
-| `blocked` | the move spent no time and did not change position: a wall, or a game message refusal such as "You can't walk through that" (`detail` or `new_messages` holds it) |
-| `refused` | the game rejected it; `detail` holds the game's message |
-| `no_effect` | accepted, nothing observable changed |
-| `awaiting_input` | a menu is open; see `prompt` |
-| `unsupported` | deny list or no-fiber guard; `reason` says which |
-| `interrupted` | `reason`: `turn_cap`, `monster_in_view`, `pain`, `noise`, `other` |
-| `died` | terminal; the Episode ends |
+| `outcome`        | Meaning                                                                                                                                                           |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `completed`      | it happened (check `time_passed`)                                                                                                                                 |
+| `blocked`        | the move spent no time and did not change position: a wall, or a game message refusal such as "You can't walk through that" (`detail` or `new_messages` holds it) |
+| `refused`        | the game rejected it; `detail` holds the game's message                                                                                                           |
+| `no_effect`      | accepted, nothing observable changed                                                                                                                              |
+| `awaiting_input` | a menu is open; see `prompt`                                                                                                                                      |
+| `unsupported`    | deny list or no-fiber guard; `reason` says which                                                                                                                  |
+| `interrupted`    | `reason`: `turn_cap`, `monster_in_view`, `pain`, `noise`, `other`                                                                                                 |
+| `died`           | terminal; the Episode ends                                                                                                                                        |
 
 Time passes only when moves were spent: a cancelled menu or blocked move changes nothing. The first action after load may complete a partial turn (a `wait` of 2 can advance 1). The Bairdford avatar starts enclosed by vehicle walls, so every compass `move` is `blocked`; use `wait` for time-based checks or another fixture.
 
@@ -137,6 +137,7 @@ Windowed init fails without two shader sources, `data/shaders/lighting/src/emitt
 `cp <main-checkout>/data/shaders/lighting/src/emitter_glow.*.hlsl <basepath>/data/shaders/lighting/src/`. `bnplay doctor --trial <windowed.toml>` checks them, a display session and stray game windows.
 
 `bnplay step <s> '{"cmd":"capture","tag":"original"}'` writes the final frame and a paired map snapshot under the Episode's `captures/` directory and reports `capture.frame`, `capture.map`, `width`, `height`. `mode:"state"` skips lighting and interface passes. A hidden, minimised or locked window answers `outcome: refused`, `reason: no_drawable`: never compare against a missing or stale frame. Capture oracles in the Trial compare tagged frames, all judged against a paired same-state null:
+
 ```toml
 [[oracle]]
 name = "glow toggles"
@@ -180,18 +181,18 @@ Two traps when the pixels do not move: a **stale binary** (`doctor`'s `binary_fr
 
 Environment of the process that starts the daemon. Set it before the first `bnplay` call; run `bnplay shutdown` first to change it. Full list: header of `tools/bnplay/config.ts`. Tests: `deno task test:bnplay`.
 
-| Variable | Default | Sets |
-|---|---|---|
-| `BNPLAY_BINARY` | `out/build/osx-arm-slim/src/cataclysm-bn-tiles` | game binary |
-| `BNPLAY_BASEPATH` | this repo | checkout whose `data/` and `src/` the binary was built from |
-| `BNPLAY_HOME` | `out/bnplay` | daemon state: socket, one directory per Episode |
-| `BNPLAY_FIXTURES` | `tools/bnplay/fixtures` | fixture library |
-| `BNPLAY_SCENES` | `tools/visual_verify/scenes` | where `run_scene` and a Trial's `scene` find Scenes |
-| `BNPLAY_BOOT_TIMEOUT_MS` | 60000 | first ping |
-| `BNPLAY_STEP_TIMEOUT_MS` | 30000 | a request that spends no game time |
-| `BNPLAY_TURN_TIMEOUT_MS` | 100 | extra time per turn a request may spend |
-| `BNPLAY_MAX_SESSIONS` | 2 | concurrent Episodes |
-| `BNPLAY_ENDED_SESSIONS_KEPT` | 20 | ended sessions `report` still knows |
-| `BNPLAY_IDLE_TIMEOUT_MS` | 600000 | idle reaper |
-| `BNPLAY_MIN_FREE_MEMORY_MB` | 1024 | `doctor` memory floor |
-| `BNPLAY_MIN_FREE_SWAP_MB` | 1024 | `doctor` swap floor |
+| Variable                     | Default                                         | Sets                                                        |
+| ---------------------------- | ----------------------------------------------- | ----------------------------------------------------------- |
+| `BNPLAY_BINARY`              | `out/build/osx-arm-slim/src/cataclysm-bn-tiles` | game binary                                                 |
+| `BNPLAY_BASEPATH`            | this repo                                       | checkout whose `data/` and `src/` the binary was built from |
+| `BNPLAY_HOME`                | `out/bnplay`                                    | daemon state: socket, one directory per Episode             |
+| `BNPLAY_FIXTURES`            | `tools/bnplay/fixtures`                         | fixture library                                             |
+| `BNPLAY_SCENES`              | `tools/visual_verify/scenes`                    | where `run_scene` and a Trial's `scene` find Scenes         |
+| `BNPLAY_BOOT_TIMEOUT_MS`     | 60000                                           | first ping                                                  |
+| `BNPLAY_STEP_TIMEOUT_MS`     | 30000                                           | a request that spends no game time                          |
+| `BNPLAY_TURN_TIMEOUT_MS`     | 100                                             | extra time per turn a request may spend                     |
+| `BNPLAY_MAX_SESSIONS`        | 2                                               | concurrent Episodes                                         |
+| `BNPLAY_ENDED_SESSIONS_KEPT` | 20                                              | ended sessions `report` still knows                         |
+| `BNPLAY_IDLE_TIMEOUT_MS`     | 600000                                          | idle reaper                                                 |
+| `BNPLAY_MIN_FREE_MEMORY_MB`  | 1024                                            | `doctor` memory floor                                       |
+| `BNPLAY_MIN_FREE_SWAP_MB`    | 1024                                            | `doctor` swap floor                                         |

@@ -1,11 +1,4 @@
-#include <array>
-#include <chrono>
-#include <climits>
-#include <cmath>
-#include <cstdint>
-#include <optional>
 #include "avatar.h"
-
 #include "calendar.h"
 #include "catch/catch_amalgamated.hpp"
 #include "coordinates.h"
@@ -18,6 +11,13 @@
 #include "point.h"
 #include "state_helpers.h"
 #include "type_id.h"
+
+#include <array>
+#include <chrono>
+#include <climits>
+#include <cmath>
+#include <cstdint>
+#include <optional>
 
 // T8 equivalence pin (ADR-0002): the render-frame gate in sdl_render_frame.cpp used
 // to fold `transparency_generation ^ ( outside_generation * prime )` from the live
@@ -44,29 +44,27 @@ struct lighting_like_pair {
 struct old_gate {
     std::uint64_t last_gen = 0;
     int last_z = INT_MIN;
-    point last_origin{ INT_MIN, INT_MIN };
+    point last_origin{INT_MIN, INT_MIN};
     std::optional<tripoint_bub_ms> last_player;
     int last_struct_px = INT_MIN;
     int last_struct_py = INT_MIN;
 
-    auto decide( std::uint64_t gen, int z, point origin, tripoint_bub_ms player )
-    -> lighting_like_pair {
+    auto decide(std::uint64_t gen, int z, point origin, tripoint_bub_ms player)
+        -> lighting_like_pair {
         lighting_like_pair r;
-        const bool cam_drifted = last_struct_px == INT_MIN
-            || std::abs( player.x() - last_struct_px ) >= DRIFT_TILES
-            || std::abs( player.y() - last_struct_py ) >= DRIFT_TILES;
+        const bool cam_drifted =
+            last_struct_px == INT_MIN || std::abs(player.x() - last_struct_px) >= DRIFT_TILES
+            || std::abs(player.y() - last_struct_py) >= DRIFT_TILES;
         r.structure = gen != last_gen || z != last_z || origin != last_origin || cam_drifted;
         r.vis = !last_player || *last_player != player;
-        if( r.structure ) {
+        if (r.structure) {
             last_gen = gen;
             last_z = z;
             last_origin = origin;
             last_struct_px = player.x();
             last_struct_py = player.y();
         }
-        if( r.vis ) {
-            last_player = player;
-        }
+        if (r.vis) { last_player = player; }
         return r;
     }
 };
@@ -80,103 +78,103 @@ struct new_gate {
     lighting::lighting_pulses pulses;
     int rebuilds_in_window = 0;
 
-    auto decide( const K::rebuild_plan &plan ) -> lighting_like_pair {
+    auto decide(const K::rebuild_plan& plan) -> lighting_like_pair {
         const rebuild_decision d = gate_and_commit_frame_history(
-            { history, plan, {}, pulses, rebuilds_in_window } );
-        return lighting_like_pair{ d.structure, d.vis };
+            {history, plan, {}, pulses, rebuilds_in_window});
+        return lighting_like_pair{d.structure, d.vis};
     }
 };
 
 auto set_up_gate_map() -> void {
     clear_all_state();
-    build_test_map( ter_id( "t_dirt" ) );
-    g->place_player( tripoint_bub_ms( 60, 60, 0 ) );
-    set_time( calendar::turn_zero + 12_hours );
+    build_test_map(ter_id("t_dirt"));
+    g->place_player(tripoint_bub_ms(60, 60, 0));
+    set_time(calendar::turn_zero + 12_hours);
     get_avatar().recalc_sight_limits();
     refresh_level_cache();
 }
 
-auto current_fold( map &here, const int z ) -> std::uint64_t {
-    const level_cache &ch = here.get_cache_ref( z );
-    return K::transparency_generation( ch ) ^ ( K::outside_generation( ch ) * OUTSIDE_PRIME );
+auto current_fold(map& here, const int z) -> std::uint64_t {
+    const level_cache& ch = here.get_cache_ref(z);
+    return K::transparency_generation(ch) ^ (K::outside_generation(ch) * OUTSIDE_PRIME);
 }
 
 } // namespace
 
-TEST_CASE( "the plan's occluder stamp equals the retired frame-gate fold",
-           "[render_frame_gate][level_cache_freshness]" ) {
+TEST_CASE(
+    "the plan's occluder stamp equals the retired frame-gate fold",
+    "[render_frame_gate][level_cache_freshness]") {
     set_up_gate_map();
-    map &here = get_map();
-    const auto pose = K::pose_of_viewer( get_avatar(), 0 );
-    const auto plan = K::plan_for( here, pose, K::lightmap_policy::skip );
-    CHECK( plan.occluder[static_cast<size_t>( OVERMAP_DEPTH )] ==
-           current_fold( here, 0 ) );
+    map& here = get_map();
+    const auto pose = K::pose_of_viewer(get_avatar(), 0);
+    const auto plan = K::plan_for(here, pose, K::lightmap_policy::skip);
+    CHECK(plan.occluder[static_cast<size_t>(OVERMAP_DEPTH)] == current_fold(here, 0));
 
     // A terrain edit advances the transparency generation; the stamp follows.
-    here.ter_set( tripoint_bub_ms( 62, 60, 0 ), ter_id( "t_wall" ) );
-    const auto edited = K::plan_for( here, pose, K::lightmap_policy::skip );
-    CHECK( edited.occluder[static_cast<size_t>( OVERMAP_DEPTH )] ==
-           current_fold( here, 0 ) );
-    CHECK( edited.occluder[static_cast<size_t>( OVERMAP_DEPTH )] !=
-           plan.occluder[static_cast<size_t>( OVERMAP_DEPTH )] );
+    here.ter_set(tripoint_bub_ms(62, 60, 0), ter_id("t_wall"));
+    const auto edited = K::plan_for(here, pose, K::lightmap_policy::skip);
+    CHECK(edited.occluder[static_cast<size_t>(OVERMAP_DEPTH)] == current_fold(here, 0));
+    CHECK(edited.occluder[static_cast<size_t>(OVERMAP_DEPTH)]
+          != plan.occluder[static_cast<size_t>(OVERMAP_DEPTH)]);
 }
 
-TEST_CASE( "the plan-fed frame gate agrees with the retired fold on the matrix",
-           "[render_frame_gate][level_cache_freshness]" ) {
+TEST_CASE(
+    "the plan-fed frame gate agrees with the retired fold on the matrix",
+    "[render_frame_gate][level_cache_freshness]") {
     old_gate old_g;
     new_gate new_g;
 
-    auto step = [&]( const tripoint_bub_ms &viewer ) {
-        map &here = get_map();
-        const auto plan = K::plan_for( here, K::pose_of_viewer( get_avatar(), viewer.z() ),
-                                       K::lightmap_policy::skip );
-        const auto a = old_g.decide( current_fold( here, viewer.z() ), viewer.z(),
-                                     here.get_abs_sub().raw(), viewer );
-        const auto b = new_g.decide( plan );
-        CHECK( a.structure == b.structure );
-        CHECK( a.vis == b.vis );
+    auto step = [&](const tripoint_bub_ms& viewer) {
+        map& here = get_map();
+        const auto plan = K::
+            plan_for(here, K::pose_of_viewer(get_avatar(), viewer.z()), K::lightmap_policy::skip);
+        const auto a = old_g.decide(
+            current_fold(here, viewer.z()), viewer.z(), here.get_abs_sub().raw(), viewer);
+        const auto b = new_g.decide(plan);
+        CHECK(a.structure == b.structure);
+        CHECK(a.vis == b.vis);
     };
 
-    SECTION( "quiet frames rebuild neither buffer" ) {
+    SECTION("quiet frames rebuild neither buffer") {
         set_up_gate_map();
-        step( get_avatar().bub_pos() );   // first frame forces both
-        step( get_avatar().bub_pos() );
-        step( get_avatar().bub_pos() );
+        step(get_avatar().bub_pos()); // first frame forces both
+        step(get_avatar().bub_pos());
+        step(get_avatar().bub_pos());
     }
 
-    SECTION( "a terrain edit forces structure only" ) {
+    SECTION("a terrain edit forces structure only") {
         set_up_gate_map();
-        map &here = get_map();
-        step( get_avatar().bub_pos() );
-        here.ter_set( tripoint_bub_ms( 62, 60, 0 ), ter_id( "t_wall" ) );
-        step( get_avatar().bub_pos() );
+        map& here = get_map();
+        step(get_avatar().bub_pos());
+        here.ter_set(tripoint_bub_ms(62, 60, 0), ter_id("t_wall"));
+        step(get_avatar().bub_pos());
     }
 
-    SECTION( "a player move forces vis only" ) {
+    SECTION("a player move forces vis only") {
         set_up_gate_map();
-        step( get_avatar().bub_pos() );
-        g->place_player( tripoint_bub_ms( 61, 60, 0 ) );
-        step( get_avatar().bub_pos() );
+        step(get_avatar().bub_pos());
+        g->place_player(tripoint_bub_ms(61, 60, 0));
+        step(get_avatar().bub_pos());
     }
 
-    SECTION( "camera drift within tolerance forces nothing" ) {
+    SECTION("camera drift within tolerance forces nothing") {
         set_up_gate_map();
-        step( get_avatar().bub_pos() );
-        g->place_player( tripoint_bub_ms( 62, 60, 0 ) );
-        step( get_avatar().bub_pos() );   // 2 tiles: under DRIFT_TILES
+        step(get_avatar().bub_pos());
+        g->place_player(tripoint_bub_ms(62, 60, 0));
+        step(get_avatar().bub_pos()); // 2 tiles: under DRIFT_TILES
     }
 
-    SECTION( "camera drift past tolerance forces structure" ) {
+    SECTION("camera drift past tolerance forces structure") {
         set_up_gate_map();
-        step( get_avatar().bub_pos() );
-        g->place_player( tripoint_bub_ms( 64, 60, 0 ) );
-        step( get_avatar().bub_pos() );   // 4 tiles: at DRIFT_TILES
+        step(get_avatar().bub_pos());
+        g->place_player(tripoint_bub_ms(64, 60, 0));
+        step(get_avatar().bub_pos()); // 4 tiles: at DRIFT_TILES
     }
 
-    SECTION( "a z change forces both" ) {
+    SECTION("a z change forces both") {
         set_up_gate_map();
-        step( get_avatar().bub_pos() );
-        g->place_player( tripoint_bub_ms( 60, 60, 1 ) );
-        step( get_avatar().bub_pos() );
+        step(get_avatar().bub_pos());
+        g->place_player(tripoint_bub_ms(60, 60, 1));
+        step(get_avatar().bub_pos());
     }
 }
