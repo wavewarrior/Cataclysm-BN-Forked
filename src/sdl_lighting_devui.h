@@ -8,7 +8,6 @@
 namespace lighting
 {
 
-struct debug_params;
 struct gpu_emitter;
 
 } // namespace lighting
@@ -30,26 +29,13 @@ struct EmitterOverlayState {
 
 extern EmitterOverlayState s_emo;
 
-// Clamp ranges + key-step sizes for the F8/F9 handlers and the F4 sliders.
-// Single source so the two input paths can't drift.
-namespace lighting_dbg_range
-{
-inline constexpr float SCALE_MIN = 0.0f, SCALE_MAX = 10.0f, SCALE_STEP = 0.1f;
-inline constexpr float GI_MIN = 0.0f, GI_MAX = 2.0f, GI_STEP = 0.05f;
-inline constexpr float DAMT_MIN = 0.0f, DAMT_MAX = 1.0f, DAMT_STEP = 0.1f;
-inline constexpr float DBND_MIN = 1.0f, DBND_MAX = 16.0f, DBND_STEP = 1.0f;
-} // namespace lighting_dbg_range
 
 // Master toggle for the lighting debug HUD.
 extern bool g_dbg_lighting;
 // When true, the fragment shader replaces lighting output with a heatmap.
 extern bool g_dbg_lighting_shader;
-// Runtime tuning state for shader debug modes.
-extern lighting::debug_params g_dbg_params;
 // Sun-direction arrow overlay (points toward the sun at the player). F4 checkbox.
 extern bool g_sun_arrow;
-// One-shot readback of the RC cascade texture (logs stats).
-extern bool g_rc_readback;
 // Tonemap pass controls (F4 sliders).
 extern float g_tonemap_exposure;
 extern float g_tonemap_min_ev;
@@ -59,10 +45,6 @@ extern bool g_bloom_enable;
 // Phase 1 (coop-priority-gk-lighting): SDF sun-march compute dispatch gate.
 // Disabled by default; keep code, allow runtime A/B via F4 without rebuilding.
 extern bool g_sky_sun_enable;
-// Measurement knob (file channel only): forces a structure rebuild every frame.
-extern bool g_force_rc_rebuild;
-// Measurement knob: `force_rc_rebuild 2` requests exactly one structure rebuild.
-extern bool g_rebuild_once;
 // Measurement knob (file channel only): the idle input loop re-invalidates and
 // redraws the main UI every iteration, so sprite shading runs every frame.
 extern bool g_force_world_redraw;
@@ -155,10 +137,6 @@ extern float g_hud_part_size_scale;
 extern float g_hud_part_speed_scale;
 // Silhouette sun-shadow mask kill-gate.
 extern bool g_shadow_debug;
-// Current debug mode display (0-7, cycles through modes).
-extern uint32_t g_current_dbg_mode;
-// Per-contribution scales live in g_dbg_params.{emitter,sun,sky}_scale (single
-// source of truth, consumed by the renderer); no standalone copies.
 // Indoor daylight bleed strength.
 extern float g_skylight_bleed;
 // Hover-outline controls (CPU-side; see HOVER_OUTLINE_PLAN.md).

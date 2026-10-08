@@ -68,6 +68,52 @@ the player through the sub-tile distance field, so a corner cutting sight reads 
 instead of a tile staircase.
 _Avoid_: shadow ray, LOS fade
 
+## Frame assembly
+
+**Frame assembly**:
+The module that produces one rendered frame: it derives the frame's inputs once, plans which steps run and why, executes them in order, and reports what happened.
+_Avoid_: render loop, frame orchestration
+
+**Frame inputs**:
+The by-value snapshot of everything one frame reads (camera, time and weather values, the knobs that decide which steps run, which passes are ready, the rebuild plan, the previous frame's history), built once after the frame's drawable is acquired.
+_Avoid_: frame state, render context
+
+**Frame camera**:
+The camera of one frame, derived once: the integer tile rectangle lighting is built over, the float offset and tile size passes draw with, and whether the frame is cropped to the screen or covers the whole reality bubble.
+_Avoid_: viewport, camera offset (that is one part of it)
+
+**Frame plan**:
+The ordered, named steps of one frame, each marked run or skip with a reason, computed as a pure function of the frame inputs. Not the Rebuild plan, which says which level caches to rebuild.
+_Avoid_: pass list, phase list, frame graph
+
+**Frame report**:
+What a frame actually did: each step's status, reason and duration, the gates that could only be resolved mid-frame, any capture written, and why no frame was produced when none was.
+_Avoid_: frame log, perf stats
+
+**Frame history**:
+What the previous frames established that this frame's rebuild decision compares against: which world state the lighting fields were last built for.
+_Avoid_: cache state, last-frame statics
+
+**Plan law**:
+An ordering or dependency rule about a frame plan that a test asserts without a GPU, such as the step that stamps lighting inputs preceding every step that begins a pass.
+_Avoid_: invariant (too general)
+
+**Capture request**:
+The ask that a frame's final image and the matching map state be written to files, however it was made: by the driver, a key, a trigger file or an environment setting.
+_Avoid_: screenshot (the in-game screenshot is the state view, a different image)
+
+**Lighting settings**:
+The single owner of every lighting knob's value, with its range and the channels allowed to write it.
+_Avoid_: debug params (only the part uploaded to the GPU), knob globals
+
+**Knob table**:
+The list of every lighting knob with its name, type, default, range and kind, from which the runtime channels and tests read.
+_Avoid_: knob registry, settings map
+
+**Knob channel**:
+One of the three ways a knob is set while the game runs: the F4 panel, the function keys, or the knob file.
+_Avoid_: input path, writer
+
 ## Vehicles
 
 **Heading**:

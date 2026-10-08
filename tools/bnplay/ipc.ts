@@ -17,6 +17,13 @@ export type DaemonRequest =
   | { op: "fixture_baseline"; name: string }
   | { op: "fixture_list" }
   | { op: "doctor"; fixture?: string; self_check: boolean; trial?: string }
+  | {
+    op: "compare"
+    base: string[]
+    test: string[]
+    max_changed: number
+    dilate: number
+  }
   | { op: "shutdown" }
 
 export type DaemonReply = { ok: true; result: object } | { ok: false; error: string }

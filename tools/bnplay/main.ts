@@ -4,7 +4,9 @@
  *   bnplay start <trial.toml>            boot an Episode from a Trial; prints the session id
  *   bnplay step <session> '<json>'       send one command; prints the lean response
  *   bnplay stop <session>                end the Episode; prints its report and exits with its verdict
- *   bnplay report <session>              print the report of an Episode (running or ended)
+ *   bnplay compare --base <frame> ... --test <frame> ...
+ *                                        frame-equivalence gate: changed pixels outside an A/A
+ *                                        noise mask; exits with its verdict (0 pass, 1 fail)
  *   bnplay fixture add <save> [name]     clone a world save into the fixture library
  *   bnplay fixture baseline <name>       boot the fixture and record its post-readiness game log
  *   bnplay fixture list                  show each fixture and whether its baseline is fresh
@@ -25,11 +27,12 @@
  * `bnplay daemon` runs the daemon in the foreground.
  *
  * MCP: `bnplay mcp` serves the same operations as typed tools (start, step, stop, report,
- * fixture_add, fixture_baseline, fixture_list, doctor, shutdown) over stdio, as a thin client of
- * the same daemon. Arguments are named like the CLI's (`step` takes `session` and `command`, an
- * object; `doctor` takes `fixture` and `self_check`). A result is the JSON the CLI prints, as
- * structured content; a refusal (what the CLI prints on stderr with exit 2) is a tool error. A
- * verdict (`exit_code` in the report) and `healthy: false` are results, not errors. Mount it from
+ * fixture_add, fixture_baseline, fixture_list, doctor, compare, shutdown) over stdio, as a thin
+ * client of the same daemon. Arguments are named like the CLI's (`step` takes `session` and
+ * `command`, an object; `doctor` takes `fixture` and `self_check`; `compare` takes `base` and `test`
+ * as arrays of paths). A result is the JSON the CLI prints, as structured content; a refusal (what
+ * the CLI prints on stderr with exit 2) is a tool error. A verdict (`exit_code` in the report or in
+ * a `compare` result) and `healthy: false` are results, not errors. Mount it from
  * an MCP host with the command
  *   deno run --allow-run --allow-env --allow-read --allow-write --allow-net \
  *     --config deno.jsonc tools/bnplay/main.ts mcp
@@ -50,7 +53,8 @@ async function main(args: string[]): Promise<number> {
   const result = await runRequest(request)
   console.log(JSON.stringify(result))
   if (
-    (request.op === "stop" || request.op === "report") && "exit_code" in result &&
+    (request.op === "stop" || request.op === "report" || request.op === "compare") &&
+    "exit_code" in result &&
     typeof result.exit_code === "number"
   ) {
     return result.exit_code

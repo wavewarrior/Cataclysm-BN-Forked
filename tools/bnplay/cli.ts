@@ -14,7 +14,7 @@ function usageLine(name: OperationName): string {
   const op = OPERATIONS[name]
   const args = op.params.filter((p) => p.cli === "arg").map((p) => p.placeholder)
   const flags = op.params.filter((p) => p.cli === "flag").map((p) =>
-    `[${flagName(p)}${p.kind === "boolean" ? "" : ` ${p.placeholder}`}]`
+    `[${flagName(p)}${p.kind === "boolean" ? "" : ` ${p.placeholder}${p.repeat ? " ..." : ""}`}]`
   )
   return ["  bnplay", ...op.cli, ...args, ...flags].join(" ")
 }
@@ -50,7 +50,12 @@ export function parseArgs(args: string[]): { name: OperationName; request: Daemo
       if (flag.kind === "boolean") {
         raw[flag.name] = true
       } else if (i + 1 < rest.length) {
-        raw[flag.name] = parseValue(flag, rest[++i])
+        const value = parseValue(flag, rest[++i])
+        if (flag.repeat) {
+          raw[flag.name] = [...(raw[flag.name] as unknown[] ?? []), value]
+        } else {
+          raw[flag.name] = value
+        }
       } else {
         throw new UsageError(`${label}: ${token} needs a value\n${USAGE}`)
       }

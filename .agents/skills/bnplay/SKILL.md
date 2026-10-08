@@ -60,7 +60,7 @@ Passing run (real output, trimmed): `{"session":"814f5a63","verdict":"pass","exi
 
 ## Read the report
 
-- **Exit code** (of `stop` and `report`):
+- **Exit code** (of `stop` and `report`; of `compare` it is its own verdict, 0 pass / 1 fail):
   - `0` pass.
   - `1` an oracle failed.
   - `2` harness error: boot failure, game hung or died, idle reaper, daemon shutdown. Any bnplay refusal prints `bnplay: <reason>` and exits 2.
@@ -74,25 +74,25 @@ Passing run (real output, trimmed): `{"session":"814f5a63","verdict":"pass","exi
 
 Every request is `{"cmd":"<name>", ...}`; a malformed or unknown one answers `{"status":"error","error":"..."}` and costs nothing (the game survives).
 
-| Command | Arguments | Notes |
-|---|---|---|
-| `state` | | observation, no game time |
-| `move` | `dir`: `n ne e se s sw w nw up down` | |
-| `wait` | `turns` >= 1 | |
-| `sleep` | `max_turns` | |
-| `pickup drop wield wear take_off eat drink use read reload` | `item` (id from `query inventory`); `eat`/`drink`: `anyway`; `use`: `method` when the item has several | an invented or stale id is a protocol error; a valid id the game rejects is `refused` with its message |
-| `craft` | `recipe` id (e.g. `pointy_stick`), `max_turns` | |
-| `melee fire smash` | `dir` or `pos`: `[dx,dy]` offset from the avatar | |
-| `action` | `name`: any game action (`pause`, `inventory`, `look`, `map`, `messages`) | raw passthrough; see deny list |
-| `key` | `key` (e.g. `ESC`) | answers an open menu only |
-| `view` | `radius` 1 to 10 | ASCII `grid`, `legend`, `creatures` and `items` with `dx`,`dy`,`id` |
-| `query` | `topic`: `inventory` or `effects` | item ids are stable only within the Episode; names carry colour markup and are truncated |
-| `run_scene` | `name` (a `.lua` in `tools/visual_verify/scenes`, or `BNPLAY_SCENES`) | response has `scene: {status, lines}` |
-| `attach_view` | `radius` 0 to 10 (0 detaches) | |
-| `seed` | `seed` | |
-| `set_time` | `date` `YYYY-SS-DD` and/or `time` `HH:MM` | pins the game clock (a Trial's `start_date`, `time_of_day`); answers `turn`, `date`, `time`; refuses an impossible value |
-| `capture` | `tag`, `mode` `final` or `state` | windowed Episodes only |
-| `quit` | | prefer `bnplay stop` |
+| Command                                                     | Arguments                                                                                              | Notes                                                                                                                    |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `state`                                                     |                                                                                                        | observation, no game time                                                                                                |
+| `move`                                                      | `dir`: `n ne e se s sw w nw up down`                                                                   |                                                                                                                          |
+| `wait`                                                      | `turns` >= 1                                                                                           |                                                                                                                          |
+| `sleep`                                                     | `max_turns`                                                                                            |                                                                                                                          |
+| `pickup drop wield wear take_off eat drink use read reload` | `item` (id from `query inventory`); `eat`/`drink`: `anyway`; `use`: `method` when the item has several | an invented or stale id is a protocol error; a valid id the game rejects is `refused` with its message                   |
+| `craft`                                                     | `recipe` id (e.g. `pointy_stick`), `max_turns`                                                         |                                                                                                                          |
+| `melee fire smash`                                          | `dir` or `pos`: `[dx,dy]` offset from the avatar                                                       |                                                                                                                          |
+| `action`                                                    | `name`: any game action (`pause`, `inventory`, `look`, `map`, `messages`)                              | raw passthrough; see deny list                                                                                           |
+| `key`                                                       | `key` (e.g. `ESC`)                                                                                     | answers an open menu only                                                                                                |
+| `view`                                                      | `radius` 1 to 10                                                                                       | ASCII `grid`, `legend`, `creatures` and `items` with `dx`,`dy`,`id`                                                      |
+| `query`                                                     | `topic`: `inventory` or `effects`                                                                      | item ids are stable only within the Episode; names carry colour markup and are truncated                                 |
+| `run_scene`                                                 | `name` (a `.lua` in `tools/visual_verify/scenes`, or `BNPLAY_SCENES`)                                  | response has `scene: {status, lines}`                                                                                    |
+| `attach_view`                                               | `radius` 0 to 10 (0 detaches)                                                                          |                                                                                                                          |
+| `seed`                                                      | `seed`                                                                                                 |                                                                                                                          |
+| `set_time`                                                  | `date` `YYYY-SS-DD` and/or `time` `HH:MM`                                                              | pins the game clock (a Trial's `start_date`, `time_of_day`); answers `turn`, `date`, `time`; refuses an impossible value |
+| `capture`                                                   | `tag`, `mode` `final` or `state`                                                                       | windowed Episodes only                                                                                                   |
+| `quit`                                                      |                                                                                                        | prefer `bnplay stop`                                                                                                     |
 
 Multi-turn commands (`craft`, `sleep`, `read`, `reload`, some `use`) take `max_turns`; the default runs until the activity ends or is interrupted, and one request is capped at 1000 turns (`interrupted`, reason `turn_cap`).
 
@@ -102,16 +102,16 @@ Multi-turn commands (`craft`, `sleep`, `read`, `reload`, some `use`) take `max_t
 
 Every response: `id`, `status` (`ok` or `error`), `boundary` (`turn_complete` or `needs_input`), `turn`, `time_passed`, `moved`, `new_messages` (only what this action logged; content-based, includes repeats), `prompt` (open menu name or null), vitals `hp pain stamina hunger thirst` (flat keys), `outcome`. Optional: `reason`, `detail`, `turns`, `progress`, `truncated`, `view`, `episode_ended`. Ceiling about 1.5K tokens.
 
-| `outcome` | Meaning |
-|---|---|
-| `completed` | it happened (check `time_passed`) |
-| `blocked` | the move spent no time and did not change position: a wall, or a game message refusal such as "You can't walk through that" (`detail` or `new_messages` holds it) |
-| `refused` | the game rejected it; `detail` holds the game's message |
-| `no_effect` | accepted, nothing observable changed |
-| `awaiting_input` | a menu is open; see `prompt` |
-| `unsupported` | deny list or no-fiber guard; `reason` says which |
-| `interrupted` | `reason`: `turn_cap`, `monster_in_view`, `pain`, `noise`, `other` |
-| `died` | terminal; the Episode ends |
+| `outcome`        | Meaning                                                                                                                                                           |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `completed`      | it happened (check `time_passed`)                                                                                                                                 |
+| `blocked`        | the move spent no time and did not change position: a wall, or a game message refusal such as "You can't walk through that" (`detail` or `new_messages` holds it) |
+| `refused`        | the game rejected it; `detail` holds the game's message                                                                                                           |
+| `no_effect`      | accepted, nothing observable changed                                                                                                                              |
+| `awaiting_input` | a menu is open; see `prompt`                                                                                                                                      |
+| `unsupported`    | deny list or no-fiber guard; `reason` says which                                                                                                                  |
+| `interrupted`    | `reason`: `turn_cap`, `monster_in_view`, `pain`, `noise`, `other`                                                                                                 |
+| `died`           | terminal; the Episode ends                                                                                                                                        |
 
 Time passes only when moves were spent: a cancelled menu or blocked move changes nothing. The first action after load may complete a partial turn (a `wait` of 2 can advance 1). The Bairdford avatar starts enclosed by vehicle walls (concrete in the Windows stand-in, where `move up` is refused with "You can't climb here"), so every compass `move` is `blocked`; use `wait` for time-based checks or another fixture.
 
@@ -143,6 +143,7 @@ Earlier notes (macOS) said windowed init fails without two shader sources, `data
 On Windows (D3D12, verified 2026-10-07) the game boots windowed without them: `emitter_glow_pass` logs `failed to load shader source` and the glow pass stays off. `doctor --trial` still fails the check, so a capture there runs without the glow effect.
 
 `bnplay step <s> '{"cmd":"capture","tag":"original"}'` writes the final frame and a paired map snapshot under the Episode's `captures/` directory and reports `capture.frame`, `capture.map`, `width`, `height`. `mode:"state"` skips lighting and interface passes. A hidden, minimised or locked window answers `outcome: refused`, `reason: no_drawable`: never compare against a missing or stale frame. Capture oracles in the Trial compare tagged frames, all judged against a paired same-state null:
+
 ```toml
 [[oracle]]
 name = "glow toggles"
@@ -157,6 +158,31 @@ Toggles that work: the `probe_light_on` / `probe_light_off` Scenes (`run_scene`)
 
 **Open limitation (Windows, verified 2026-10-07): same-state captures are not deterministic.** The avatar's tile changes shading on successive rendered frames (not with wall-clock time: a 20 s idle changes nothing; the next capture does), cycling through a few states while the rest of the frame stays byte-identical. Cause unknown: one probe each, disabling tile idle animations under the driver window and pinning shader `anim_time` to 0, left the cycle unchanged (both reverted). The paired null is a single pair, so it reads 0 or about 2e-5 depending on where in the cycle the two `original` captures land. The toggled check is reliable for an effect far above that (the light toggle is about 4e-4); the restored check is not: with a 0 null, a restore that lands on another phase of the cycle fails (seen: 1.5e-5 against 0), and with a nonzero null it passes. Until this is fixed, read a triplet's restore verdict from a crop that excludes the avatar's tile.
 
+### Proving a renderer change changed nothing: `bnplay compare`
+
+Capture oracles judge tags inside one Episode. To compare frames of **two** Episodes (before and after binary), use `bnplay compare` (`tools/bnplay/compare.ts`, also the MCP tool `compare`). It counts pixels with **any** channel difference outside an A/A noise mask and prints their share of the frame, the largest channel delta and their bounding box; the exit code is the verdict (0 pass, 1 fail, 2 a refusal). Never the whole-frame mean difference: a mean averages a local regression away.
+
+```
+bnplay compare --base <frame> --base <frame> --base <frame> --test <frame> [--max-changed N] [--dilate PX]
+```
+
+`--base` (given once per file) are frames of **one unchanged state**, at least three, ideally from two launches; their pairwise disagreements, dilated two pixels, are the mask. Each `--test` frame is compared with every base frame and its best match reported. Give the frames of one state each, never a whole `captures/` directory: an Episode's directory mixes knob states, and a mask built from all of it excuses the very change you are looking for. Frames of different sizes are refused by name. Default gate `--max-changed 1500` (about 0.04% of a 2560x1440 frame); a positive control must exceed 5,000.
+
+Procedure, one request per step (the Trial is `tools/bnplay/trials/equivalence.trial.toml`: windowed 1280x720 = 2560x1440 capture, Bairdford, night — GPU lighting is invisible in daylight):
+
+1. `bnplay doctor --trial tools/bnplay/trials/equivalence.trial.toml` must be healthy.
+2. **Freeze the animation knobs first**, ONE name/value per `/tmp/cata_knob` write, each consumed by one cheap `state` request: `flicker_gain 0`, `cloud_strength 0`, `dust_enable 0`, `shaft_enable 0`. Nothing pumps frames while the driver waits in `read_line`, so a knob written immediately before `capture` lands in that frame.
+3. Write `/tmp/cata_build_gi_scene` (a 7x7 room with coloured walls and a light — the lighting passes need occluders), consume it with one `state`, then `force_rc_rebuild 2` and a few `state`s.
+4. **Burn two warm-up captures** (tag `warmup`, never use them in a mask): within an Episode the captures are in transient states by capture position, not by elapsed time. Capture #1 and #2 are each about 1.8M pixels from the settled state, identically in every binary, and capture #3 onward is the settled cluster, so `state` requests do not settle it. Then `capture` with a tag per state. Build every mask from frames at the SAME capture positions across two or more launches (at least three same-state frames); never treat two consecutive captures as an A/A pair, and never mix capture positions into one mask. A rebuild capture needs `force_rc_rebuild 2` written immediately before it.
+5. `stop`, THEN read the Episode's `userdir/config/debug.log` (the log lags the request): every knob must show its `knob <name> = <v>` acknowledgement and none `(unknown)`; a rebuild capture must have a `[flash][gpu] rebuild: struct=1 ... rc=1` line before its `frame capture: wrote` line, a steady capture `struct=0 vis=0 rc=0`. A knob with no ack never reached a frame, so its pixels prove nothing.
+6. `bnplay compare` the before-Episode frames against the after-Episode frames.
+
+Which knobs a scene can see (measured 2026-10-07, osx-arm-slim): the windowed night scene sees AO, GI, sky, `vis_radius`, `ramp_enable`, `crt_world`; `shadow_mask_str` is visible in neither it nor the daytime run. Measured noise floor: 36 to 1,815 changed pixels (0.001% to 0.037%) between settled frames of the same state at the same capture positions, within a launch and across launches; consecutive frames differ by a toggling strip of about 1,871 pixels, so a mask needs at least three frames, and two consecutive captures are never an A/A pair (see step 4). Base frames must come from launches of the same Trial and scene as the test frames. A regression smaller than about a 40x40 block is invisible unless the compare is cropped. The main menu is not pixel-gateable (its A/A noise exceeds a `ramp_enable` change there).
+
+Camera-coverage limit: the windowed driver runs the whole-bubble camera path, so a camera-dependent change is invisible to this Trial. Cover it with the interactive daytime recipe instead: a free-running launch at the real viewport (`CATA_MEASURE_IMMEDIATE=1`, `force_world_redraw 1`, scratch userdir with `AUTOSAVE` off) — that run sees sun, sky, normals, glow and GI.
+
+Two traps when the pixels do not move: a **stale binary** (`doctor`'s `binary_fresh` check; the binary under test lives at `out/build/osx-arm-slim/src/`, never the repo-root copy), and a **PCH cache restored from another build directory** — every translation unit fails with `malformed or corrupted precompiled file ... probe-dxc`; delete `src/CMakeFiles/cataclysm-bn-tiles-common.dir/cmake_pch.hxx.pch`, run `CCACHE_RECACHE=1 ninja` on that `.pch` edge, check `strings -a <pch> | grep -c build/probe-` is 0, then rebuild (commit `cab7aec3e8` shares PCHs across differently named build directories).
+
 ## Driver unavailable
 
 `doctor` reports `driver_available:false` and lists the fallbacks; bnplay never emulates the driver. Use: file triggers (`touch /tmp/cata_dump_trigger` for a frame and map dump; `echo <0-17> > /tmp/cata_dbg_mode`; `/tmp/cata_knob`; skill `cbn-headless-file-trigger-verification`; global filenames, one game at a time), the Windows harness (`tools/visual_verify/README.md`), and the Catch2 suite (`./out/build/osx-arm-slim/tests/cata_test-tiles "[tag]"`, AGENTS.md). Remember the ESC trap there.
@@ -165,18 +191,18 @@ Toggles that work: the `probe_light_on` / `probe_light_off` Scenes (`run_scene`)
 
 Environment of the process that starts the daemon. Set it before the first `bnplay` call; run `bnplay shutdown` first to change it. Full list: header of `tools/bnplay/config.ts`. Tests: `deno task test:bnplay`.
 
-| Variable | Default | Sets |
-|---|---|---|
-| `BNPLAY_BINARY` | `out/build/osx-arm-slim/src/cataclysm-bn-tiles` | game binary |
-| `BNPLAY_BASEPATH` | this repo | checkout whose `data/` and `src/` the binary was built from |
-| `BNPLAY_HOME` | `out/bnplay` | daemon state: socket, one directory per Episode |
-| `BNPLAY_FIXTURES` | `tools/bnplay/fixtures` | fixture library |
-| `BNPLAY_SCENES` | `tools/visual_verify/scenes` | where `run_scene` and a Trial's `scene` find Scenes |
-| `BNPLAY_BOOT_TIMEOUT_MS` | 60000 | first ping |
-| `BNPLAY_STEP_TIMEOUT_MS` | 30000 | a request that spends no game time |
-| `BNPLAY_TURN_TIMEOUT_MS` | 100 | extra time per turn a request may spend |
-| `BNPLAY_MAX_SESSIONS` | 2 | concurrent Episodes |
-| `BNPLAY_ENDED_SESSIONS_KEPT` | 20 | ended sessions `report` still knows |
-| `BNPLAY_IDLE_TIMEOUT_MS` | 600000 | idle reaper |
-| `BNPLAY_MIN_FREE_MEMORY_MB` | 1024 | `doctor` memory floor |
-| `BNPLAY_MIN_FREE_SWAP_MB` | 1024 | `doctor` swap floor |
+| Variable                     | Default                                         | Sets                                                        |
+| ---------------------------- | ----------------------------------------------- | ----------------------------------------------------------- |
+| `BNPLAY_BINARY`              | `out/build/osx-arm-slim/src/cataclysm-bn-tiles` | game binary                                                 |
+| `BNPLAY_BASEPATH`            | this repo                                       | checkout whose `data/` and `src/` the binary was built from |
+| `BNPLAY_HOME`                | `out/bnplay`                                    | daemon state: socket, one directory per Episode             |
+| `BNPLAY_FIXTURES`            | `tools/bnplay/fixtures`                         | fixture library                                             |
+| `BNPLAY_SCENES`              | `tools/visual_verify/scenes`                    | where `run_scene` and a Trial's `scene` find Scenes         |
+| `BNPLAY_BOOT_TIMEOUT_MS`     | 60000                                           | first ping                                                  |
+| `BNPLAY_STEP_TIMEOUT_MS`     | 30000                                           | a request that spends no game time                          |
+| `BNPLAY_TURN_TIMEOUT_MS`     | 100                                             | extra time per turn a request may spend                     |
+| `BNPLAY_MAX_SESSIONS`        | 2                                               | concurrent Episodes                                         |
+| `BNPLAY_ENDED_SESSIONS_KEPT` | 20                                              | ended sessions `report` still knows                         |
+| `BNPLAY_IDLE_TIMEOUT_MS`     | 600000                                          | idle reaper                                                 |
+| `BNPLAY_MIN_FREE_MEMORY_MB`  | 1024                                            | `doctor` memory floor                                       |
+| `BNPLAY_MIN_FREE_SWAP_MB`    | 1024                                            | `doctor` swap floor                                         |

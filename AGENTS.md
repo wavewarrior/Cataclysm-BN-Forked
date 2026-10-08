@@ -40,26 +40,9 @@
 | `build-scripts/` | Shell scripts for build, lint, and validation tasks.                                                                        |
 | `tools/`         | Standalone utility programs (e.g. `check_po_printf_format.py`).                                                             |
 
-## Important Files
+## God files
 
-| File                     | Lines | Role                                                                                             |
-| ------------------------ | ----- | ------------------------------------------------------------------------------------------------ |
-| `src/character.cpp`      | 11713 | Largest source file — player/NPC character logic, stats, effects, inventory.                     |
-| `src/map.cpp`            | 9817  | Chunked tile map, streaming, procedural generation, terrain interaction.                         |
-| `src/iuse.cpp`           | 8919  | Item-use system — dispatches all item interactions.                                              |
-| `src/vehicle.cpp`        | 8430  | Vehicle construction, parts, movement, and physics integration.                                  |
-| `src/iexamine.cpp`       | 8186  | Examine/dispatch system for item and terrain examination.                                        |
-| `src/iuse_actor.cpp`     | 7879  | Actor-driven item-use activities (cooking, sewing, etc.).                                        |
-| `src/activity_actor.cpp` | 7426  | Activity system — long-running player actions with interruption handling.                        |
-| `src/game.cpp`           | 7196  | Central orchestrator — game loop, tick processing, global state, subsystem init.                 |
-| `src/overmap.cpp`        | 6700  | World-overview map for long-distance travel and wilderness generation.                           |
-| `src/mapgen.cpp`         | 6555  | Map generation engine — parses JSON mapgen rules into terrain.                                   |
-| `src/avatar.cpp`         | 1580  | Avatar-specific player behavior (extends character).                                             |
-| `src/CMakeLists.txt`     | —     | Source compilation, target definitions, header/source globs.                                     |
-| `CMakePresets.json`      | —     | Build presets: `linux-slim`, `osx-arm-slim`, `linux-full`, `windows-tiles-sounds-x64-msvc`, etc. |
-| `tests/test_main.cpp`    | —     | Catch2 v3 test runner — initializes full game state, mods, world, RNG seeding.                   |
-| `tests/map_helpers.h`    | —     | Test fixtures: `build_test_map`, `spawn_test_monster`, and map manipulation helpers.             |
-| `tests/player_helpers.h` | —     | Test helpers: `spawn_npc`, `arm_character`, and player state setup.                              |
+The largest sources are `src/character.cpp`, `src/map.cpp`, `src/iuse.cpp`, `src/vehicle.cpp`, `src/iexamine.cpp`, `src/iuse_actor.cpp`, `src/activity_actor.cpp`, `src/game.cpp`, `src/overmap.cpp`, `src/mapgen.cpp`. Expect long compiles and heavy coupling when touching them; `wc -l` for current sizes.
 
 ## Coding Standards (new/modified code)
 
@@ -148,13 +131,12 @@ auto print_button( const catacurses::window &w, const button_options &opts ) -> 
 
 ### WHEN given a link to an issue
 
-- **Context**: Fetch issue details via GitHub MCP.
-- **Branch**: Use `coderabbitai/git-worktree-runner` to create branch: `git gtr new <type>/<issue-id>/<issue-slug>`
-  - type MUST be one of: `feat`, `fix`, `refactor`, `chore`, `build`, `ci`
-- **Code**: Refer to [code changes](#when-working-on-code-changes).
-- **PR**: Use [Template](./.github/pull_request_template.md). **DO NOT ADD fluff**. create via `git push && gh pr create --web --fill`.
-- After opening or updating a Cataclysm-BN PR, track `gh pr checks` until CI finishes or a concrete blocker is identified; inspect failing job logs, fix branch-owned failures, commit, and push before finalizing. For transient or infrastructure failures, rerun when permitted or report the exact failing job and evidence.
-- Before running broad formatter targets, prefer file-scoped formatting for touched files when available; if only a broad target exists, inspect and revert unrelated formatter-only changes before continuing.
+Follow [docs/agents/pr-workflow.md](./docs/agents/pr-workflow.md): worktree branch `<type>/<issue-id>/<issue-slug>`, then the `pr` skill for title/body/evidence.
+
+### WHEN a decision is the user's (grilling, wayfinder HITL tickets, design choices)
+
+- **MUST** put the decisions to the user with the `ask` tool (one call per round, a question per decision, 2-5 options with tradeoffs in `description`, `recommended` set). **MUST NOT** present them as numbered or formatted questions in the chat reply, and **MUST NOT** restate the skill's format back to the user.
+- **MUST** verify every flag, function, call site and number a question names (open the lines, or get `file:line` from a sub-agent) before asking. A scout summary is a lead, not a fact. If a fact is still being fetched, ask only the questions that do not depend on it.
 
 ### WHEN creating a plan
 
@@ -216,58 +198,19 @@ cmake --build --preset linux-full --target cataclysm-bn-tiles cata_test-tiles
 deno task docs:gen
 ```
 
-- **Binary path (HARD — verify before trusting ANY test result)**: where
-  `cataclysm-bn-tiles` and `cata_test-tiles` land depends on the build type the cache was
-  **first** configured with. `CMakeLists.txt:256-265` sets `CMAKE_RUNTIME_OUTPUT_DIRECTORY`
-  to the repo root only when `CMAKE_BUILD_TYPE` is `Debug`, and it is a `CACHE` variable, so
-  once a Debug configure writes it, every later build of that preset keeps going to the root
-  until the cache is cleared. Debug → `./cataclysm-bn-tiles`, `./cata_test-tiles`.
-  RelWithDebInfo/Release (the current `osx-arm-slim`) → `out/build/<preset>/src/` and
-  `out/build/<preset>/tests/`. Whichever location is NOT live holds a leftover that still
-  runs, still exits 0/1, and silently reports results for code that no longer exists. A stale
-  binary once produced a full phantom diagnosis of a "missing sidebar widget" that did not
-  exist: the old build asserted `== 30` while the tree asserted `== 31`. Never trust either
-  path's reputation; compare mtimes against the build you just ran:
-  ```sh
-  ls -lT ./cata_test-tiles out/build/osx-arm-slim/tests/cata_test-tiles \
-         ./cataclysm-bn-tiles out/build/osx-arm-slim/src/cataclysm-bn-tiles
-  <newest>/cata_test-tiles "[filter]" --rng-seed 1
-  ```
-  The same applies to the game binary before any in-game check.
+- **Binary path (HARD — verify before trusting ANY test result)**: under `osx-arm-slim` (RelWithDebInfo) the live binaries are `out/build/osx-arm-slim/src/cataclysm-bn-tiles` and `out/build/osx-arm-slim/tests/cata_test-tiles`; the repo-root copies are stale Debug-era leftovers that still run and still exit 0/1 for code that no longer exists. NEVER trust either path's reputation: `ls -lT` all four and run the newest. Incident history and diagnostics: skill `cbn-osx-slim-binary-launch-path`.
 
 - **Commit**: Commit **ATOMICALLY**. **MUST** Follow [Conventional Commits](./docs/en/contribute/changelog_guidelines.md). **MUST NOT** add body/footer unless critical.
 
-## WHEN working on i18n / PO context
+## WHEN working on i18n / PO context, or translating docs
 
-- **MUST NOT** reduce requested string/context coverage for review risk or churn. If the user names a word and its meanings, handle every named meaning.
-- If adding JSON context requires loader support, add loader support instead of leaving a source uncontexted.
-- **MUST** run `msgfmt -f -c -o /tmp/ko.mo lang/po/ko.po` after touching Korean PO files and fix reported errors before PR.
-- **MUST** run `./tools/check_po_printf_format.py` after touching PO files and fix reported errors before PR.
-- Do not call PO/printf errors pre-existing to skip them when the task touches that locale or validation path.
-- If a mistake is found during the task, update AGENTS/skill immediately and fix the current branch before summarizing.
+Follow [docs/agents/i18n.md](./docs/agents/i18n.md): full coverage of every named meaning, `msgfmt` + `check_po_printf_format.py` gates before PR, glossary search in the target PO before coining a term.
 
-## WHEN translating docs
+## Token Optimization
 
-When translating, MUST search for correct glossary, e.g
-
-```sh
-rg -C2 -i '<<TARGET>>' lang/po/<<LANG>>.po | rg -v '^(#:|--)' | head -n 20
-rg -C2 -i 'speedway' lang/po/ko.po | rg -v '^(#:|--)' | head -n 20
-```
-
-## Token Optimization (MANDATORY for verbose outputs)
-
-Use installed token reduction tools to compress tool outputs before they enter context:
-
-- **rtk** — Prepend `rtk` to terminal commands with verbose output (builds, tests, git logs, large listings):
-  ```sh
-  rtk cmake --build --preset windows-tiles-sounds-x64-msvc --target cataclysm-bn-tiles
-  rtk ./out/build/win-rel-deb/tests/cata_test-tiles "[filter]"
-  rtk git log --oneline -50
-  ```
-- **Headroom** — Compress large file contents or search results via Python `execute_code` when output exceeds ~2000 chars.
-
-See `token-optimization` skill for details. Track savings with `rtk gain`.
+- Prepend `rtk` to inherently verbose commands (builds, test runs, git logs, large listings) to compress their output before it enters context.
+- The harness routes shell `grep`/`cat`/`find` to the dedicated `grep`/`read`/`glob` tools; write shell commands accordingly instead of fighting the block.
+- Page large outputs instead of dumping them: `read` line ranges, `artifact://<id>` for spilled tool output, and `proc://<name>:-80` for the tail of a build/service log.
 
 ### Playtesting and visual verification
 
