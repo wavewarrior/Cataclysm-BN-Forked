@@ -23,7 +23,7 @@ void NoPairTupleReturnCheck::registerMatchers(MatchFinder* Finder) {
                                  hasUnqualifiedDesugaredType(templateSpecializationType(
                                          hasDeclaration(namedDecl(IsPairOrTuple)))));
     Finder->addMatcher(functionDecl(returns(PairOrTuple), unless(isImplicit()),
-                                    unless(isTemplateInstantiation()), unless(isDeleted()))
+                                    unless(ast_matchers::isTemplateInstantiation()), unless(isDeleted()))
                        .bind("fn"), this);
 }
 
