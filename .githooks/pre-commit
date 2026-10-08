@@ -22,6 +22,13 @@ while IFS= read -r -d '' file; do
     esac
 done < <(git diff --cached --name-only --diff-filter=ACMR -z)
 
+# A factory lane has no MSVC/clang environment in its shell; the gate's wsl-lane step checks C++ and
+# JSON formatting (clang-format 22, astyle, json_formatter) and is the authority there.
+if [[ "${FACTORY_LANE:-}" == 1 ]]; then
+    cpp_files=()
+    json_files=()
+fi
+
 ((${#cpp_files[@]})) && build-scripts/format-cpp.sh "${cpp_files[@]}"
 ((${#json_files[@]})) && build-scripts/format-json.sh "${json_files[@]}"
 ((${#doc_files[@]})) && deno fmt "${doc_files[@]}"
