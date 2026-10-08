@@ -1,35 +1,7 @@
 /// Windows-side driver of the WSL lint lane (tools/factory/wsl/lane.sh).
 import { dirname, fromFileUrl, join } from "@std/path"
+import { lineFilterFromDiff } from "./line_filter.ts"
 import { git, run, runToLog } from "./util.ts"
-
-export type LineRange = [number, number]
-export type LineFilter = { name: string; lines: LineRange[] }[]
-
-const CPP = /\.(?:cpp|h|hpp)$/
-
-/// Parse `git diff -U0` output into clang-tidy's `--line-filter` shape. Only added/changed lines
-/// count (the `+c,d` side of a hunk); pure deletions and non-C++ files are dropped.
-export function lineFilterFromDiff(diff: string): LineFilter {
-  const files = new Map<string, LineRange[]>()
-  let current: string | undefined
-  for (const line of diff.split(/\r?\n/)) {
-    const file = line.match(/^\+\+\+ (?:b\/(.+)|\/dev\/null)$/)
-    if (file) {
-      current = file[1] !== undefined && CPP.test(file[1]) ? file[1] : undefined
-      continue
-    }
-    const hunk = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/)
-    if (hunk && current !== undefined) {
-      const start = Number(hunk[1])
-      const count = hunk[2] === undefined ? 1 : Number(hunk[2])
-      if (count === 0) continue
-      const ranges = files.get(current) ?? []
-      ranges.push([start, start + count - 1])
-      files.set(current, ranges)
-    }
-  }
-  return [...files].map(([name, lines]) => ({ name, lines }))
-}
 
 /// `C:\a\b` or `C:/a/b` -> `/mnt/c/a/b`.
 export function toWslPath(path: string): string {
@@ -71,6 +43,11 @@ export async function runWslLane(opts: WslLaneOptions): Promise<number> {
   const affectedPath = join(factoryDir, "affected-files.txt")
   await Deno.writeTextFile(lineFilterPath, JSON.stringify(filter))
   await Deno.writeTextFile(changedPath, filter.map((f) => f.name).join("\n"))
+  const changedJsonPath = join(factoryDir, "changed-json.txt")
+  await Deno.writeTextFile(
+    changedJsonPath,
+    await git(cwd, "diff", "--name-only", "--diff-filter=d", `${base}...HEAD`, "--", "*.json"),
+  )
 
   const affected = await run(
     ["deno", "task", "affected-files", "--base", base, "--head", "HEAD", "--output", affectedPath],
@@ -101,5 +78,6 @@ export async function runWslLane(opts: WslLaneOptions): Promise<number> {
     toWslPath(affectedPath),
     toWslPath(lineFilterPath),
     toWslPath(changedPath),
+    toWslPath(changedJsonPath),
   ], logPath)
 }

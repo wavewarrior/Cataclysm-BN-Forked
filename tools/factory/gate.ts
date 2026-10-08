@@ -125,9 +125,10 @@ const STEPS: Step[] = [
       // fmt and lint look at the files this change touches: the tree has pre-existing drift
       // (60 unformatted files, 4 lint findings) that a lane must neither fix nor be blamed for.
       // `deno test` runs everything. One at a time: they share a log.
-      const changed = (await changedFiles(ctx.cwd, ctx.base)).filter((f) =>
-        Deno.statSync(join(ctx.cwd, f), { throwIfNoEntry: false })?.isFile
-      )
+      const changed: string[] = []
+      for (const f of await changedFiles(ctx.cwd, ctx.base)) {
+        if (await exists(join(ctx.cwd, f), { isFile: true })) changed.push(f)
+      }
       const fmtFiles = changed.filter((f) => /\.(?:ts|tsx|js|jsonc?|md|ya?ml)$/.test(f))
       const lintFiles = changed.filter((f) => /\.(?:ts|tsx|js)$/.test(f))
       const codes: number[] = []
@@ -317,7 +318,13 @@ export async function loadTicket(dir: string): Promise<Ticket | undefined> {
   }
 }
 
-export type GateOptions = { cwd: string; tier: Tier; base: string }
+export type GateOptions = {
+  cwd: string
+  tier: Tier
+  base: string
+  /// Run just these steps (CI reuses single steps). Writes no stamp: a partial run proves nothing.
+  only?: string[]
+}
 
 /// Run the gate; returns the stamp (also written to disk).
 export async function runGate(opts: GateOptions): Promise<Stamp> {
@@ -339,7 +346,9 @@ export async function runGate(opts: GateOptions): Promise<Stamp> {
   }
   const failed: string[] = []
   for (const step of STEPS) {
-    if (step.tier === "full" && opts.tier === "fast") continue
+    if (opts.only) {
+      if (!opts.only.includes(step.name)) continue
+    } else if (step.tier === "full" && opts.tier === "fast") continue
     if (step.tier === "full" && failed.length > 0) {
       console.log(`SKIP ${step.name} (an earlier step failed)`)
       continue
@@ -372,7 +381,9 @@ export async function runGate(opts: GateOptions): Promise<Stamp> {
     failedSteps: failed,
     ticket: ctx.ticket?.number ?? null,
   }
-  await Deno.writeTextFile(join(fdir, "gate-stamp.json"), JSON.stringify(stamp, null, 2))
+  if (!opts.only) {
+    await Deno.writeTextFile(join(fdir, "gate-stamp.json"), JSON.stringify(stamp, null, 2))
+  }
   return stamp
 }
 
@@ -381,14 +392,20 @@ if (import.meta.main) {
     .name("gate")
     .description("Run the factory gate for the current worktree.")
     .option("--tier <tier:string>", "fast (no game build) or full", { default: "fast" })
+    .option("--only <steps:string>", "comma-separated step names to run alone (no stamp)")
     .option("--base <ref:string>", "ref to diff against", {
       default: `origin/${config.integrationBranch}`,
     })
-    .action(async ({ tier, base }) => {
+    .action(async ({ tier, base, only }) => {
       if (tier !== "fast" && tier !== "full") {
         throw new Error(`--tier must be fast or full, got ${tier}`)
       }
-      const stamp = await runGate({ cwd: Deno.cwd(), tier, base })
+      const stamp = await runGate({
+        cwd: Deno.cwd(),
+        tier,
+        base,
+        only: only?.split(",").map((s) => s.trim()),
+      })
       console.log(
         stamp.ok ? `GATE PASS (${tier})` : `GATE FAIL (${tier}): ${stamp.failedSteps.join(", ")}`,
       )

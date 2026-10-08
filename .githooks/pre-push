@@ -1,0 +1,5 @@
+#!/bin/sh
+# Factory lanes may push only a commit that passed the full gate and the reviewer.
+# Inert for everyone else. Logic lives in tools/factory/check_push.ts (stdin: git's pre-push lines).
+[ "$FACTORY_LANE" = "1" ] || exit 0
+exec deno run -A "$(git rev-parse --show-toplevel)/tools/factory/check_push.ts"
