@@ -12,16 +12,28 @@ cd "$repo_root"
 repo_owned=(pr bnplay)
 status=0
 
-for entry in .claude/skills/*; do
-    name="${entry##*/}"
-    if [[ ! -L "$entry" ]]; then
-        echo "error: $entry is not a symlink (git config core.symlinks must be true); fix: ln -sfn ../../.agents/skills/$name $entry" >&2
-        status=1
-    elif [[ "$(readlink "$entry")" != "../../.agents/skills/$name" || ! -d ".agents/skills/$name" ]]; then
-        echo "error: $entry must link to ../../.agents/skills/$name (found $(readlink "$entry"))" >&2
-        status=1
-    fi
-done
+if [[ "$(git config --bool core.symlinks || echo true)" == "false" ]]; then
+    # Windows without symlink privilege: the working tree holds plain files by design, so judge
+    # what git records instead: a symlink entry (mode 120000) whose blob is the right target.
+    while read -r mode sha _ path; do
+        name="${path##*/}"
+        if [[ "$mode" != 120000 || "$(git cat-file -p "$sha")" != "../../.agents/skills/$name" || ! -d ".agents/skills/$name" ]]; then
+            echo "error: $path must be recorded as a symlink to ../../.agents/skills/$name (mode $mode)" >&2
+            status=1
+        fi
+    done < <(git ls-files -s .claude/skills)
+else
+    for entry in .claude/skills/*; do
+        name="${entry##*/}"
+        if [[ ! -L "$entry" ]]; then
+            echo "error: $entry is not a symlink (git config core.symlinks must be true); fix: ln -sfn ../../.agents/skills/$name $entry" >&2
+            status=1
+        elif [[ "$(readlink "$entry")" != "../../.agents/skills/$name" || ! -d ".agents/skills/$name" ]]; then
+            echo "error: $entry must link to ../../.agents/skills/$name (found $(readlink "$entry"))" >&2
+            status=1
+        fi
+    done
+fi
 
 for name in "${repo_owned[@]}"; do
     if [[ -f skills-lock.json ]] && grep -q "\"$name\": {" skills-lock.json; then
