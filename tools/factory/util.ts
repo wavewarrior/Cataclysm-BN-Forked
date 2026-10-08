@@ -47,10 +47,10 @@ export async function runToLog(
       stdout: "piped",
       stderr: "piped",
     }).spawn()
-    await Promise.all([
-      child.stdout.pipeTo(log.writable, { preventClose: true }),
-      child.stderr.pipeTo(log.writable, { preventClose: true }),
-    ])
+    const pump = async (stream: ReadableStream<Uint8Array>) => {
+      for await (const chunk of stream) await log.write(chunk)
+    }
+    await Promise.all([pump(child.stdout), pump(child.stderr)])
     const status = await child.status
     await log.write(new TextEncoder().encode(`\n[exit ${status.code}]\n`))
     return status.code
