@@ -1,7 +1,19 @@
 // RUN: %check_clang_tidy %s cata-no-pair-tuple-return %t -- --load=%cata_plugin --
 
-#include <tuple>
-#include <utility>
+// The harness runs with -nostdinc++, so declare the two std templates the check looks for.
+namespace std
+{
+template<typename A, typename B>
+struct pair {
+    A first;
+    B second;
+};
+template<typename... Ts>
+struct tuple {
+};
+template<typename A, typename B>
+pair<A, B> make_pair( A a, B b );
+} // namespace std
 
 std::pair<int, int> by_value();
 // CHECK-MESSAGES: warning: return a named struct instead of std::pair/std::tuple [cata-no-pair-tuple-return]
