@@ -1,0 +1,44 @@
+{
+  "integrationBranch": "feature/improvements",
+  "repo": "wavewarrior/Cataclysm-BN-Forked",
+  "maxLanes": 2,
+  "maxFixRetries": 2,
+  "ticketWallClockMin": 90,
+  "models": {
+    "implementer": "anthropic/claude-sonnet-5-5",
+    "reviewer": "anthropic/claude-opus-5-5",
+    "workhorse": "anthropic/claude-haiku-5-5"
+  },
+  "branchPrefix": "factory/",
+  "worktreeRoot": "C:/WORK/GIT_REPOS",
+  "lockDir": "C:/WORK/factory-lanes",
+  "protectedPaths": [
+    "tools/factory/**",
+    ".omp/hooks/**",
+    ".githooks/**",
+    ".github/workflows/**",
+    ".clang-tidy",
+    ".clang-format",
+    ".astylerc",
+    "deno.jsonc",
+    "dprint.json",
+    "AGENTS.md",
+    ".omp/rules/**",
+    "tools/clang-tidy-plugin/**",
+    "build-scripts/**"
+  ],
+  "baselineFailures": [],
+  "lintOnNewLines": {
+    "checks": [
+      "modernize-use-trailing-return-type",
+      "modernize-use-auto",
+      "cata-*"
+    ],
+    "warningsAsErrors": [
+      "modernize-use-trailing-return-type",
+      "modernize-use-auto",
+      "cata-*"
+    ]
+  },
+  "requireCi": true
+}
