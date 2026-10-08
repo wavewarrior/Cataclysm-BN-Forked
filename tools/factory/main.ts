@@ -67,11 +67,20 @@ async function runLoop(opts: { max: number; issue?: number }): Promise<void> {
   // claimed can still be listed as ready. Remember what this process started.
   const startedIssues = new Set<number>()
   while (started < opts.max) {
-    const ready = (await listIssues(["factory:ready"])).filter((i) =>
-      !startedIssues.has(i.number) && (opts.issue === undefined || i.number === opts.issue)
-    )
+    // A named ticket is read directly: the label list is a search index that can lag an edit.
+    const listed = opts.issue === undefined
+      ? await listIssues(["factory:ready"])
+      : [await getIssue(opts.issue)].filter((i) =>
+        i.state === "OPEN" && i.labels.includes("factory:ready")
+      )
+    const ready = listed.filter((i) => !startedIssues.has(i.number))
     const next = await pickNext(ready, isClosed)
-    if (!next) break
+    if (!next) {
+      if (started === 0) {
+        console.log("no factory:ready ticket to run (or its dependencies are still open)")
+      }
+      break
+    }
     const lane = await acquireLane(next.number)
     if (!lane) {
       if (running.size === 0) {
