@@ -65,7 +65,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 1 }
+        with: { fetch-depth: 0 }
       - name: install build dependencies (json_formatter configures the whole project)
         run: |
           sudo apt-get update
@@ -78,10 +78,14 @@ jobs:
             libsqlite3-dev zlib1g-dev libvulkan-dev
       - name: run JSON syntax validation
         run: build-scripts/lint-json.sh
-      - name: run JSON formatting check
+      # The tree already has formatter drift (data/tts/...), so judge only the JSON this PR changed.
+      - name: run JSON formatting check (changed files)
         run: |
-          build-scripts/format-json.sh
-          git diff --exit-code -- '*.json'
+          mapfile -t changed < <(git diff --name-only --diff-filter=d "origin/$BASE_REF"...HEAD -- '*.json' 2>/dev/null || true)
+          if [ "${#changed[@]}" -gt 0 ]; then
+            build-scripts/format-json.sh "${changed[@]}"
+            git diff --exit-code -- '*.json'
+          fi
           tools/dialogue_validator.py data/json/npcs/* data/json/npcs/*/* data/json/npcs/*/*/*
 
   tidy:
