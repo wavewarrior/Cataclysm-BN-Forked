@@ -21,7 +21,7 @@ Design and rationale: `plans/agentic-software-factory.md`. Every number and the 
 ```sh
 gh api -X PUT repos/wavewarrior/Cataclysm-BN-Forked/branches/feature/improvements/protection --input - <<'JSON'
 {
-  "required_status_checks": { "strict": false, "contexts": ["guard", "deno", "json", "tidy", "linux-tests"] },
+  "required_status_checks": { "strict": false, "contexts": ["guard", "deno", "json", "tidy"] },
   "enforce_admins": false,
   "required_pull_request_reviews": null,
   "restrictions": null,
