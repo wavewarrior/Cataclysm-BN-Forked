@@ -36,7 +36,18 @@ jobs:
       - env: { DEBIAN_FRONTEND: noninteractive }
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends astyle gettext
+          sudo apt-get install -y --no-install-recommends gettext make g++
+
+      - name: Install pinned astyle
+        # apt ships astyle 3.1, which rewrites a trailing return type `-> T` into `- > T`
+        # and drops the space in `*tp`. Pin the version contributors run locally.
+        run: |
+          curl -sSfL -o /tmp/astyle.tar.bz2 \
+            'https://downloads.sourceforge.net/project/astyle/astyle/astyle%203.6/astyle-3.6.16.tar.bz2'
+          tar -xjf /tmp/astyle.tar.bz2 -C /tmp
+          make -C /tmp/astyle-3.6.16/build/gcc -j"$(nproc)"
+          sudo install -m 0755 /tmp/astyle-3.6.16/build/gcc/astyle /usr/local/bin/astyle
+          astyle --version
 
       - name: Setup C++ format tools
         uses: aminya/setup-cpp@v1
@@ -60,17 +71,24 @@ jobs:
           path: ${{ env.DENO_DIR }}
           key: deno-${{ hashFiles('deno.lock') }}
 
+      - name: List files changed by this pull request
+        # Formatting the whole tree puts hundreds of untouched files in every autofix
+        # commit, so the fork formats only what the pull request changes.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr diff "${{ github.event.pull_request.number }}" --name-only > /tmp/changed.txt
+
       - name: format C++ files
-        run: build-scripts/format-cpp.sh
+        run: /usr/bin/grep -E '\.(cpp|h|hpp)$' /tmp/changed.txt | xargs -r build-scripts/format-cpp.sh
 
       - name: format Markdown and TypeScript files
-        run: deno fmt
+        run: /usr/bin/grep -E '\.(md|ts)$' /tmp/changed.txt | xargs -r deno fmt
 
       - name: format Lua files
-        run: deno task dprint fmt
+        run: /usr/bin/grep -E '\.lua$' /tmp/changed.txt | xargs -r deno task dprint fmt
 
       - name: format JSON
-        run: build-scripts/format-json.sh
+        run: /usr/bin/grep -E '\.json$' /tmp/changed.txt | xargs -r build-scripts/format-json.sh
 
       # autofix.ci cannot edit .github directory due to security reasons
       - name: unstage .github
