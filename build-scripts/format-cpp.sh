@@ -36,6 +36,12 @@ append_astyle_source() {
         return
     fi
 
+    case "$file" in
+        src/fmtlib_*.h|src/minicoro.h)
+            return
+            ;;
+    esac
+
     if [[ "$file" =~ ^src/[^/]+\.(cpp|h)$ ]]; then
         astyle_sources+=( "$file" )
     fi
