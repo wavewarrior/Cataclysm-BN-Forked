@@ -7,6 +7,7 @@
 ///   status             tickets by label, lane locks and herdr agents
 ///   stop <issue>       close a ticket's panes and mark it blocked
 ///   watch              poll for ready tickets; run a pass as soon as one is pickable
+///   boot               open the factory herdr workspace: operator, watcher and status panes
 import { Command } from "@cliffy/command"
 import { fromFileUrl } from "@std/path"
 import { config } from "./config.ts"
@@ -25,7 +26,16 @@ import {
   listIssues,
   mapStatus,
 } from "./gh.ts"
-import { agentList, ensureServer, workspaceClose } from "./herdr.ts"
+import {
+  agentList,
+  ensureServer,
+  paneRun,
+  paneSplit,
+  workspaceClose,
+  workspaceCreate,
+  workspaceFind,
+  workspaceFocus,
+} from "./herdr.ts"
 import { publishDrafts, type TicketDraft, validateDrafts } from "./publish.ts"
 import { acquireLane, lanePathFor, readLanes, releaseLane } from "./lanes.ts"
 import { git, mainRepoRoot } from "./util.ts"
@@ -206,6 +216,31 @@ async function runWatch(opts: { intervalSec: number; once?: boolean }): Promise<
   }
 }
 
+const FACTORY_WORKSPACE = "factory"
+
+/// Open the factory workspace: an operator shell, the watcher and the status board. Re-running it
+/// focuses the open workspace instead of starting a second watcher.
+async function boot(): Promise<void> {
+  await ensureServer()
+  const open = await workspaceFind(FACTORY_WORKSPACE)
+  if (open) {
+    await workspaceFocus(open)
+    console.log(`factory workspace already open (${open})`)
+    return
+  }
+  const ws = await workspaceCreate({ cwd: await repoRoot(), label: FACTORY_WORKSPACE })
+  await paneRun(ws.rootPane, "call tools\\factory\\env.cmd")
+  await paneRun(
+    ws.rootPane,
+    "echo Operator: run omp here for the wayfinder and factory-launch skills.",
+  )
+  const watcher = await paneSplit(ws.rootPane, {}, "right")
+  await paneRun(watcher, "tools\\factory\\watch.cmd")
+  const status = await paneSplit(watcher, {}, "down")
+  await paneRun(status, "tools\\factory\\status.cmd")
+  console.log(`factory workspace ${ws.workspaceId} ready`)
+}
+
 if (import.meta.main) {
   await new Command()
     .name("factory")
@@ -239,6 +274,8 @@ if (import.meta.main) {
     .option("--interval <seconds:number>", "seconds between polls", { default: 60 })
     .option("--once", "poll once, run a pass if there is work, then exit")
     .action(({ interval, once }) => runWatch({ intervalSec: interval, once }))
+    .command("boot", "Open the factory herdr workspace: operator, watcher and status panes.")
+    .action(boot)
     .command("stop <issue:number>", "Stop a ticket and mark it blocked.")
     .action((_, issue) => stop(issue))
     .parse(Deno.args)

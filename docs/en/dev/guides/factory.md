@@ -47,6 +47,7 @@ For a feature too big for one session:
 - Write tickets with `.github/ISSUE_TEMPLATE/factory-ticket.md` (the `to-tickets` skill emits it). They start as
   `factory:draft` + `spec:<slug>`.
 - `deno task factory release <slug>` flips the spec to `factory:ready`. That is the approval.
+- `tools\factory\boot.cmd` opens the `factory` herdr workspace: an operator shell in the checkout, the watcher pane and a status board that redraws every 60 s. Re-running it focuses the open workspace instead of starting a second watcher. Each ticket's agent panes are still created by the driver in its own worktree.
 - `tools\factory\watch.cmd` (or `deno task factory watch [--interval 60] [--once]`) is the poller to keep running in a herdr cmd pane. Every interval it lists `factory:ready` tickets; when one can be picked up it runs a driver pass, otherwise it prints one idle line and waits. If another driver holds every implementer lane, it waits quietly without backing off. Ctrl+C finishes the current pass and exits; a second Ctrl+C exits at once, and tickets already running keep their panes (check `status`).
 - `deno task factory run [--max N] [--issue N]` is the one-shot pass the watcher runs. `status` shows tickets, lane locks and herdr agents; `stop <issue>` closes a ticket's panes and marks it blocked.
 - A ticket ends as a draft PR (`factory:review`) or `factory:blocked` with the reason in an issue comment. Worktrees

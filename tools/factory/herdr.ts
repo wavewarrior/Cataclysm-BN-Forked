@@ -24,6 +24,15 @@ async function ok(args: string[]): Promise<Record<string, unknown>> {
   return (r.json.result ?? {}) as Record<string, unknown>
 }
 
+/// For commands that print nothing on success (`pane run`, `workspace focus`); only the exit code counts.
+async function act(args: string[]): Promise<void> {
+  const r = await herdr(args)
+  if (r.code !== 0) throw new Error(`herdr ${args.join(" ")} failed (${r.code}): ${r.text}`)
+}
+export async function paneRun(pane: string, command: string): Promise<void> {
+  await act(["pane", "run", pane, command])
+}
+
 function field<T>(obj: unknown, ...path: string[]): T {
   let cur: unknown = obj
   for (const key of path) {
@@ -47,7 +56,7 @@ export async function ensureServer(): Promise<void> {
   throw new Error("herdr server did not start")
 }
 
-export type Worktree = { workspaceId: string; rootPane: string }
+export type Workspace = { workspaceId: string; rootPane: string }
 
 export async function worktreeCreate(opts: {
   cwd: string
@@ -55,7 +64,7 @@ export async function worktreeCreate(opts: {
   base: string
   path: string
   label: string
-}): Promise<Worktree> {
+}): Promise<Workspace> {
   const result = await ok([
     "worktree",
     "create",
@@ -89,16 +98,42 @@ export async function paneSplit(
   return field<string>(await ok(args), "pane", "pane_id")
 }
 
-export async function paneRun(pane: string, command: string): Promise<void> {
-  await ok(["pane", "run", pane, command])
-}
-
 export async function paneClose(pane: string): Promise<void> {
   await herdr(["pane", "close", pane])
 }
 
 export async function workspaceClose(workspace: string): Promise<void> {
   await herdr(["workspace", "close", workspace])
+}
+
+/// The id of the open workspace labelled `label`, if any.
+export async function workspaceFind(label: string): Promise<string | undefined> {
+  const list = (await ok(["workspace", "list"])).workspaces as {
+    label?: string
+    workspace_id: string
+  }[]
+  return list.find((w) => w.label === label)?.workspace_id
+}
+
+export async function workspaceFocus(workspace: string): Promise<void> {
+  await act(["workspace", "focus", workspace])
+}
+
+/// Create and focus a workspace whose first pane is rooted at `cwd`.
+export async function workspaceCreate(opts: { cwd: string; label: string }): Promise<Workspace> {
+  const result = await ok([
+    "workspace",
+    "create",
+    "--cwd",
+    opts.cwd,
+    "--label",
+    opts.label,
+    "--focus",
+  ])
+  return {
+    workspaceId: field<string>(result, "workspace", "workspace_id"),
+    rootPane: field<string>(result, "root_pane", "pane_id"),
+  }
 }
 
 export async function agentStart(opts: {
