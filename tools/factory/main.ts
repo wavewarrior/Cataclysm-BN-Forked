@@ -233,7 +233,7 @@ async function boot(): Promise<void> {
     await paneRun(ws.rootPane, "call tools\\factory\\env.cmd")
     await paneRun(
       ws.rootPane,
-      "echo Operator: run omp here for the wayfinder and factory-launch skills.",
+      "omp",
     )
     const watcher = await paneSplit(ws.rootPane, {}, "right")
     await paneRun(watcher, "tools\\factory\\watch.cmd")
