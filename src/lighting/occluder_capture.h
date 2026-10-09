@@ -22,12 +22,10 @@
 // motion would force a rebuild every single frame. Creature sun shadows already
 // come from the screen-space silhouette pass (shadow.vert / shadow.frag).
 #include <SDL3/SDL_gpu.h>
-
 #include <cstdint>
 #include <vector>
 
-namespace lighting
-{
+namespace lighting {
 
 /// One sprite's footprint over ONE tile. Wire-stable with OccQuad in
 /// occ_raster.comp.hlsl (12 floats, stride 48).
@@ -39,55 +37,54 @@ namespace lighting
 /// the unrotated silhouette and a rotated fence/wall/hull would seed the wrong
 /// shape. occ_raster inverts this transform per subcell instead, which also gets
 /// tall sprites, tile_type::offset and depth extrusion right for free.
-struct occluder_quad {          // 48 bytes
-    float u0, v0, uw, vh;       // FULL sprite atlas rect, normalised, flip folded in
-    float tile_x, tile_y;       // bubble-local tile this footprint is seeded into
-    float cx, cy;               // quad centre minus tile screen origin, in TILE units
-    float sw, sh;               // quad size in TILE units
-    float rot;                  // quad rotation, radians, screen-clockwise (sprite.vert)
-    float block;                // 0..1 opacity multiplier from the transparency cache
+struct occluder_quad {    // 48 bytes
+    float u0, v0, uw, vh; // FULL sprite atlas rect, normalised, flip folded in
+    float tile_x, tile_y; // bubble-local tile this footprint is seeded into
+    float cx, cy;         // quad centre minus tile screen origin, in TILE units
+    float sw, sh;         // quad size in TILE units
+    float rot;            // quad rotation, radians, screen-clockwise (sprite.vert)
+    float block;          // 0..1 opacity multiplier from the transparency cache
 };
-static_assert( sizeof( occluder_quad ) == 48, "occluder_quad wire-stable with OccQuad" );
+static_assert(sizeof(occluder_quad) == 48, "occluder_quad wire-stable with OccQuad");
 
 /// CPU-side companion to occluder_quad, parallel by index. The atlas page a quad
 /// samples cannot live in the GPU struct: one compute dispatch reads one texture,
 /// so gpu_sdf_pass sorts the quads by page and issues one dispatch per run.
 struct occluder_page {
-    SDL_GPUTexture *tex = nullptr;
+    SDL_GPUTexture* tex = nullptr;
     int atlas_w = 0;
     int atlas_h = 0;
-    auto operator<=>( const occluder_page & ) const = default; // *NOPAD*
+    auto operator<=>(const occluder_page&) const = default; // *NOPAD*
 };
 
 /// Per-frame accumulator. Cleared by begin(), filled from cata_tiles' terrain/
 /// furniture/vpart draws, drained by gpu_sdf_pass.
-class occluder_capture
-{
-    public:
-        /// Drop last frame's quads and clear the captured mask. Cheap: the quad vector
-        /// keeps its capacity and the mask is only memset over the live tile area.
-        auto begin() -> void;
-        /// Record one footprint and mark its tile as captured. Out-of-range tiles and
-        /// quads with no GPU atlas page are dropped.
-        auto push( const occluder_quad &q, const occluder_page &page ) -> void;
-        auto quads() const -> const std::vector<occluder_quad> & { return quads_; } // *NOPAD*
-        /// Parallel to quads(): the atlas page each quad samples.
-        auto pages() const -> const std::vector<occluder_page> & { return pages_; } // *NOPAD*
-        /// Tile-res mask: 1 where at least one quad was captured, else 0. x-major
-        /// (mask[x * h + y]), matching the TransBuf / SdfBuf layout. occ_base.comp
-        /// uses it to fall back to the tile-square seed for tiles nothing drew —
-        /// that is what keeps off-camera walls casting their shadows into view.
-        auto captured_mask() const -> const std::vector<std::uint8_t> & { return captured_; } // *NOPAD*
-        auto resize( int w, int h ) -> void;
-        auto width() const -> int { return w_; }
-        auto height() const -> int { return h_; }
+class occluder_capture {
+public:
+    /// Drop last frame's quads and clear the captured mask. Cheap: the quad vector
+    /// keeps its capacity and the mask is only memset over the live tile area.
+    auto begin() -> void;
+    /// Record one footprint and mark its tile as captured. Out-of-range tiles and
+    /// quads with no GPU atlas page are dropped.
+    auto push(const occluder_quad& q, const occluder_page& page) -> void;
+    auto quads() const -> const std::vector<occluder_quad>& { return quads_; } // *NOPAD*
+    /// Parallel to quads(): the atlas page each quad samples.
+    auto pages() const -> const std::vector<occluder_page>& { return pages_; } // *NOPAD*
+    /// Tile-res mask: 1 where at least one quad was captured, else 0. x-major
+    /// (mask[x * h + y]), matching the TransBuf / SdfBuf layout. occ_base.comp
+    /// uses it to fall back to the tile-square seed for tiles nothing drew —
+    /// that is what keeps off-camera walls casting their shadows into view.
+    auto captured_mask() const -> const std::vector<std::uint8_t>& { return captured_; } // *NOPAD*
+    auto resize(int w, int h) -> void;
+    auto width() const -> int { return w_; }
+    auto height() const -> int { return h_; }
 
-    private:
-        std::vector<occluder_quad> quads_;
-        std::vector<occluder_page> pages_;
-        std::vector<std::uint8_t> captured_;
-        int w_ = 0;
-        int h_ = 0;
+private:
+    std::vector<occluder_quad> quads_;
+    std::vector<occluder_page> pages_;
+    std::vector<std::uint8_t> captured_;
+    int w_ = 0;
+    int h_ = 0;
 };
 
 } // namespace lighting

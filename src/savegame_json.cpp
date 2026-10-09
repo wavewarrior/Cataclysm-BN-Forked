@@ -181,7 +181,7 @@ static void deserialize( weak_ptr_fast<monster> &obj, JsonIn &jsin )
 void item_contents::serialize( JsonOut &json ) const
 {
     if( !items.empty() ) {
-    json.start_object();
+        json.start_object();
 
         json.member( "items", items );
 
@@ -205,7 +205,7 @@ void player_activity::serialize( JsonOut &json ) const
     json.member( "type", type );
 
     if( !type.is_null() ) {
-    json.member( "actor", actor );
+        json.member( "actor", actor );
         json.member( "index", index );
         json.member( "position", position );
         json.member( "coords", coords );
@@ -329,7 +329,7 @@ void requirement_data::serialize( JsonOut &json ) const
     json.start_object();
 
     if( !is_null() ) {
-    json.member( "blacklisted", blacklisted );
+        json.member( "blacklisted", blacklisted );
         const std::vector<std::vector<item_comp>> req_comps = get_components();
         const std::vector<std::vector<tool_comp>> tool_comps = get_tools();
         const std::vector<std::vector<quality_requirement>> quality_comps = get_qualities();
@@ -358,8 +358,7 @@ void requirement_data::deserialize( JsonIn &jsin )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ///// skill.h
-void SkillLevel::serialize( JsonOut &json ) const
-{
+void SkillLevel::serialize( JsonOut &json ) const {
     json.start_object();
     json.member( "level", level() );
     json.member( "exercise", exercise( true ) );
@@ -467,8 +466,8 @@ void consumption_event::deserialize( JsonIn &jsin )
 void location_inventory::json_save_invcache( JsonOut &json ) const
 {
     json.start_array();
-for( const auto &elem : inv.invlet_cache.get_invlets_by_id() ) {
-    json.start_object();
+    for( const auto &elem : inv.invlet_cache.get_invlets_by_id() ) {
+        json.start_object();
         json.member( elem.first.str() );
         json.start_array();
         for( const auto &_sym : elem.second ) {
@@ -509,8 +508,8 @@ void location_inventory::json_load_invcache( JsonIn &jsin )
 void location_inventory::json_save_items( JsonOut &json ) const
 {
     json.start_array();
-for( const auto &elem : inv.items ) {
-    for( const auto &elem_stack_iter : elem ) {
+    for( const auto &elem : inv.items ) {
+        for( const auto &elem_stack_iter : elem ) {
             elem_stack_iter->serialize( json );
         }
     }
@@ -588,7 +587,7 @@ void dimension_info::serialize( JsonOut &jsout ) const
     jsout.member( "world_type", world_type );
     jsout.member( "display_name", display_name );
     if( pocket_info.has_value() ) {
-    jsout.member( "pocket_info", *pocket_info );
+        jsout.member( "pocket_info", *pocket_info );
     }
     jsout.end_object();
 }
@@ -618,10 +617,10 @@ void pocket_dimension_data::serialize( JsonOut &jsout ) const
     jsout.member( "return_world_type", return_world_type );
     jsout.member( "return_point", return_point );
     if( last_player_exit.has_value() ) {
-    jsout.member( "last_player_exit", *last_player_exit );
+        jsout.member( "last_player_exit", *last_player_exit );
     }
     if( lifetime.has_value() ) {
-    jsout.member( "lifetime", *lifetime );
+        jsout.member( "lifetime", *lifetime );
     }
     jsout.end_object();
 }
@@ -821,11 +820,10 @@ void split_deferred()
 
 } // namespace charge_removal_blacklist
 
-namespace to_cbc_migration
-{
+namespace to_cbc_migration {
 static std::set<itype_id> the_list;
 
-void load( const JsonObject &jo )
+void load( const JsonObject & jo )
 {
     std::set<std::string> d = jo.get_tags( "list" );
     for( const std::string &s : d ) {
@@ -838,7 +836,7 @@ void reset()
     the_list.clear();
 }
 
-static bool migration_required( const item &i )
+static bool migration_required( const item & i )
 {
     if( !i.count_by_charges() ) {
         return false;
@@ -874,8 +872,7 @@ void migrate( std::vector<detached_ptr<item>> &stack )
 }
 } // namespace to_cbc_migration
 
-namespace
-{
+namespace {
 
 namespace damage_instance_serialization
 {
@@ -887,7 +884,7 @@ struct serialized_damage_unit {
     float res_mult = 1.0f;
     float damage_multiplier = 1.0f;
 
-    auto serialize( JsonOut &jsout ) const -> void {
+    auto serialize( JsonOut & jsout ) const -> void {
         jsout.start_array();
         jsout.write( type );
         jsout.write( amount );
@@ -897,7 +894,7 @@ struct serialized_damage_unit {
         jsout.end_array();
     }
 
-    auto deserialize( JsonIn &jsin ) -> void {
+    auto deserialize( JsonIn & jsin ) -> void {
         jsin.start_array();
         jsin.read( type );
         jsin.read( amount );
@@ -908,12 +905,13 @@ struct serialized_damage_unit {
     }
 };
 
-auto serialize_damage_instance( const damage_instance &dmg ) -> std::vector<serialized_damage_unit>
+auto serialize_damage_instance( const damage_instance & dmg ) -> std::vector < serialized_damage_unit >
 {
-    auto result = std::vector<serialized_damage_unit> {};
-    for( const auto &du : dmg.damage_units ) {
+    auto result = std::vector < serialized_damage_unit > {};
+    for( const auto &du : dmg.damage_units )
+    {
         result.push_back( {
-            static_cast<int>( du.type ),
+            static_cast < int > ( du.type ),
             du.amount,
             du.res_pen,
             du.res_mult,
@@ -923,13 +921,14 @@ auto serialize_damage_instance( const damage_instance &dmg ) -> std::vector<seri
     return result;
 }
 
-auto deserialize_damage_instance( const std::vector<serialized_damage_unit> &serialized ) ->
+auto deserialize_damage_instance( const std::vector < serialized_damage_unit > &serialized ) ->
 damage_instance
 {
     auto result = damage_instance{};
-    for( const auto &sdu : serialized ) {
+    for( const auto &sdu : serialized )
+    {
         result.damage_units.emplace_back(
-            static_cast<damage_type>( sdu.type ),
+            static_cast < damage_type > ( sdu.type ),
             sdu.amount,
             sdu.res_pen,
             sdu.res_mult,
@@ -943,7 +942,7 @@ damage_instance
 
 } // namespace
 
-template<typename Archive>
+template < typename Archive >
 void item::io( Archive &archive )
 {
 
@@ -964,7 +963,7 @@ void item::io( Archive &archive )
             corpse = &mtype_id( id ).obj();
         }
     };
-    archive.template io<const itype>( "typeid", type, load_type, []( const itype & i ) {
+    archive.template io < const itype > ( "typeid", type, load_type, []( const itype & i ) {
         return i.get_id().str();
     }, io::required_tag() );
 
@@ -995,7 +994,7 @@ void item::io( Archive &archive )
         archive.io( "turns_active", type->tool->turns_active, 0 );
     }
     archive.io( "is_favorite", is_favorite, false );
-    archive.io( "item_counter", item_counter, static_cast<decltype( item_counter )>( 0 ) );
+    archive.io( "item_counter", item_counter, static_cast < decltype( item_counter ) > ( 0 ) );
     archive.io( "rot", rot, 0_turns );
     archive.io( "last_rot_check", last_rot_check, calendar::start_of_cataclysm );
     if constexpr( !Archive::is_input::value ) {
@@ -1006,8 +1005,8 @@ void item::io( Archive &archive )
         erase_if( techniques, []( const matec_id & technique ) { return !technique.is_valid(); } );
     }
     {
-        auto serialized_melee = std::vector<damage_instance_serialization::serialized_damage_unit> {};
-        auto serialized_ranged = std::vector<damage_instance_serialization::serialized_damage_unit> {};
+        auto serialized_melee = std::vector < damage_instance_serialization::serialized_damage_unit > {};
+        auto serialized_ranged = std::vector < damage_instance_serialization::serialized_damage_unit > {};
 
         archive.io( "melee_damage_bonus", serialized_melee );
         archive.io( "ranged_damage_bonus", serialized_ranged );
@@ -1027,11 +1026,11 @@ void item::io( Archive &archive )
     archive.io( "item_tags", item_tags, io::empty_default_tag() );
     archive.io( "components", components, io::empty_default_tag() );
     archive.io( "recipe_charges", recipe_charges, 1 );
-    archive.template io<const itype>( "curammo", curammo, load_curammo,
+    archive.template io < const itype > ( "curammo", curammo, load_curammo,
     []( const itype & i ) {
         return i.get_id().str();
     } );
-    archive.template io<const mtype>( "corpse", corpse, load_corpse,
+    archive.template io < const mtype > ( "corpse", corpse, load_corpse,
     []( const mtype & i ) {
         return i.id.str();
     } );
@@ -1040,7 +1039,7 @@ void item::io( Archive &archive )
     archive.io( "light_width", light.width, nolight.width );
     archive.io( "light_dir", light.direction, nolight.direction );
 
-    static const cata::value_ptr<relic> null_relic_ptr = nullptr;
+    static const cata::value_ptr < relic > null_relic_ptr = nullptr;
     archive.io( "relic_data", relic_data, null_relic_ptr );
 
     if constexpr( Archive::is_input::value ) {
@@ -1066,7 +1065,7 @@ void item::io( Archive &archive )
     double float_damage = 0;
     if( archive.read( "damage", float_damage ) ) {
         damage_ = std::min( std::max( min_damage(),
-                                      static_cast<int>( float_damage * itype::damage_scale ) ),
+                                      static_cast < int > ( float_damage * itype::damage_scale ) ),
                             max_damage() );
     }
 
@@ -1094,7 +1093,7 @@ void item::io( Archive &archive )
     if( note_read ) {
         snip_id = SNIPPET.migrate_hash_to_id( note );
     } else {
-        std::optional<std::string> snip;
+        std::optional < std::string > snip;
         if( archive.read( "snippet_id", snip ) && snip ) {
             snip_id = snippet_id( snip.value() );
         }
@@ -1171,23 +1170,23 @@ void item::deserialize( JsonIn &jsin )
         legacy_fast_forward_time();
     }
     if( data.has_array( "contents" ) ) {
-        std::vector<detached_ptr<item>> items;
+        std::vector < detached_ptr < item>> items;
         data.read( "contents", items );
-        for( detached_ptr<item> &obj : items ) {
+        for( detached_ptr < item > &obj : items ) {
             contents.insert_item( std::move( obj ) );
         }
     } else {
         data.read( "contents", contents );
     }
     if( data.has_member( "item_kill_tracker" ) ) {
-        kills = std::make_unique<kill_tracker>( false );
+        kills = std::make_unique < kill_tracker > ( false );
         data.read( "item_kill_tracker", kills );
     }
 
     if( data.has_member( "id" ) ) {
-        safe_reference<item>::id_type id;
+        safe_reference < item >::id_type id;
         data.read( "id", id );
-        safe_reference<item>::register_load( this, id );
+        safe_reference < item >::register_load( this, id );
     }
 
     // Sealed item migration: items with "unseals_into" set should always have contents
@@ -1199,29 +1198,29 @@ void item::deserialize( JsonIn &jsin )
 void item::serialize( JsonOut &json ) const
 {
     io::JsonObjectOutputArchive archive( json );
-    const_cast<item *>( this )->io( archive );
+    const_cast < item * > ( this )->io( archive );
 
     if( !melee_damage_bonus.damage_units.empty() ) {
-    json.member( "melee_damage_bonus",
-                 damage_instance_serialization::serialize_damage_instance( melee_damage_bonus ) );
+        json.member( "melee_damage_bonus",
+                     damage_instance_serialization::serialize_damage_instance( melee_damage_bonus ) );
     }
 
     if( !ranged_damage_bonus.damage_units.empty() ) {
-    json.member( "ranged_damage_bonus",
-                 damage_instance_serialization::serialize_damage_instance( ranged_damage_bonus ) );
+        json.member( "ranged_damage_bonus",
+                     damage_instance_serialization::serialize_damage_instance( ranged_damage_bonus ) );
     }
 
     if( !contents.empty() ) {
-    json.member( "contents", contents );
+        json.member( "contents", contents );
     }
     if( kills ) {
-    json.member( "item_kill_tracker" );
+        json.member( "item_kill_tracker" );
         kills->serialize( json );
     }
 
-    safe_reference<item>::id_type id = safe_reference<item>::lookup_id( this );
-    if( id != safe_reference<item>::ID_NONE ) {
-    json.member( "id", id );
+    safe_reference < item >::id_type id = safe_reference < item >::lookup_id( this );
+    if( id != safe_reference < item >::ID_NONE ) {
+        json.member( "id", id );
     }
 
 }
@@ -1397,8 +1396,8 @@ void faction::serialize( JsonOut &json ) const
     json.member( "opinion_of", opinion_of );
     json.member( "relations" );
     json.start_object();
-for( const auto &rel_data : relations_ ) {
-    json.member( rel_data.first );
+    for( const auto &rel_data : relations_ ) {
+        json.member( rel_data.first );
         json.start_object();
         for( const auto &rel_flag : npc_factions::relation_strs ) {
             json.member( rel_flag.first, rel_data.second.test( rel_flag.second ) );
@@ -1419,9 +1418,9 @@ void Creature::store( JsonOut &jsout ) const
     // killer is dead (as per definition) and should not be stored.
 
     // Because JSON requires string keys we need to convert our int keys
-    std::unordered_map<std::string, std::unordered_map<std::string, effect>> tmp_map;
-for( const auto &maps : *effects ) {
-    for( const auto &i : maps.second ) {
+    std::unordered_map < std::string, std::unordered_map < std::string, effect>> tmp_map;
+    for( const auto &maps : *effects ) {
+        for( const auto &i : maps.second ) {
             if( i.second.is_removed() ) {
                 continue;
             }
@@ -1471,7 +1470,7 @@ void Creature::load( const JsonObject &jsin )
 
     if( jsin.has_object( "effects" ) ) {
         // Because JSON requires string keys we need to convert back to our bp keys
-        std::unordered_map<std::string, std::unordered_map<std::string, effect>> tmp_map;
+        std::unordered_map < std::string, std::unordered_map < std::string, effect>> tmp_map;
         jsin.read( "effects", tmp_map );
         int key_num = 0;
         for( const auto &maps : tmp_map ) {
@@ -1484,7 +1483,7 @@ void Creature::load( const JsonObject &jsin )
                 if( !( std::istringstream( i.first ) >> key_num ) ) {
                     key_num = 0;
                 }
-                const bodypart_str_id &bp = convert_bp( static_cast<body_part>( key_num ) );
+                const bodypart_str_id &bp = convert_bp( static_cast < body_part > ( key_num ) );
                 const effect &e = i.second;
 
                 ( *effects )[id][bp] = e;
@@ -1532,10 +1531,10 @@ void player_morale::morale_subtype::serialize( JsonOut &json ) const
     json.start_object();
     json.member_as_string( "subtype_type", subtype_type );
     switch( subtype_type ) {
-    case morale_subtype_t::single:
-        break;
-    case morale_subtype_t::by_item:
-        json.member( "item_type", item_type->get_id() );
+        case morale_subtype_t::single:
+            break;
+        case morale_subtype_t::by_item:
+            json.member( "item_type", item_type->get_id() );
             break;
         case morale_subtype_t::by_effect:
             json.member( "eff_type", eff_type );
@@ -1562,7 +1561,7 @@ void player_morale::morale_subtype::deserialize( JsonIn &jsin )
             break;
         default:
             debugmsg( "invalid or missing morale_subtype_t: %d",
-                      static_cast<int>( subtype_type ) );
+                      static_cast < int > ( subtype_type ) );
             subtype_type = morale_subtype_t::single;
     }
 }
@@ -1609,7 +1608,7 @@ struct mm_elem {
     memorized_terrain_tile terrain;
     int symbol;
 
-    bool operator==( const mm_elem &rhs ) const {
+    bool operator==( const mm_elem & rhs ) const {
         return symbol == rhs.symbol && tile == rhs.tile && terrain == rhs.terrain;
     }
 };
@@ -1642,7 +1641,7 @@ void mm_submap::serialize( JsonOut &jsout ) const
         jsout.end_array();
     };
 
-for( const auto p : submap_tiles() ) {
+    for( const auto p : submap_tiles() ) {
         const mm_elem elem = { tile( p ), terrain_tile( p ), symbol( p ) };
         if( p.x() == 0 && p.y() == 0 ) {
             last = elem;
@@ -1713,9 +1712,9 @@ void mm_region::serialize( JsonOut &jsout ) const
     jsout.start_array();
     // NOLINTNEXTLINE(modernize-loop-convert): leaving as is for readability
     for( size_t y = 0; y < MM_REG_SIZE; y++ ) {
-    // NOLINTNEXTLINE(modernize-loop-convert): leaving as is for readability
-    for( size_t x = 0; x < MM_REG_SIZE; x++ ) {
-            const shared_ptr_fast<mm_submap> &sm = submaps[x][y];
+        // NOLINTNEXTLINE(modernize-loop-convert): leaving as is for readability
+        for( size_t x = 0; x < MM_REG_SIZE; x++ ) {
+            const shared_ptr_fast < mm_submap > &sm = submaps[x][y];
             if( sm->is_empty() ) {
                 jsout.write_null();
             } else {
@@ -1733,8 +1732,8 @@ void mm_region::deserialize( JsonIn &jsin )
     for( size_t y = 0; y < MM_REG_SIZE; y++ ) {
         // NOLINTNEXTLINE(modernize-loop-convert): leaving as is for readability
         for( size_t x = 0; x < MM_REG_SIZE; x++ ) {
-            shared_ptr_fast<mm_submap> &sm = submaps[x][y];
-            sm = make_shared_fast<mm_submap>();
+            shared_ptr_fast < mm_submap > &sm = submaps[x][y];
+            sm = make_shared_fast < mm_submap > ();
             if( jsin.test_null() ) {
                 jsin.skip_null();
             } else {
@@ -1751,7 +1750,7 @@ void map_memory::load_legacy( JsonIn &jsin )
         int symbol;
         memorized_terrain_tile tile;
     };
-    std::map<tripoint_abs_ms, mig_elem> elems;
+    std::map < tripoint_abs_ms, mig_elem > elems;
 
     jsin.start_array();
     jsin.start_array();
@@ -1779,9 +1778,9 @@ void map_memory::load_legacy( JsonIn &jsin )
     }
     jsin.end_array();
 
-    for( const std::pair<const tripoint_abs_ms, mig_elem> &elem : elems ) {
-        const auto cp = project_remain<coords::sm>( elem.first );
-        shared_ptr_fast<mm_submap> sm = find_submap( cp.quotient_tripoint );
+    for( const std::pair < const tripoint_abs_ms, mig_elem > &elem : elems ) {
+        const auto cp = project_remain < coords::sm > ( elem.first );
+        shared_ptr_fast < mm_submap > sm = find_submap( cp.quotient_tripoint );
         if( !sm ) {
             sm = allocate_submap( cp.quotient_tripoint );
         }
@@ -1841,7 +1840,7 @@ void addiction::deserialize( JsonIn &jsin )
 {
     JsonObject jo = jsin.get_object();
     jo.allow_omitted_members();
-    type = static_cast<add_type>( jo.get_int( "type_enum" ) );
+    type = static_cast < add_type > ( jo.get_int( "type_enum" ) );
     intensity = jo.get_int( "intensity" );
     jo.read( "sated", sated );
 }
@@ -1963,15 +1962,15 @@ void kill_tracker::serialize( JsonOut &jsout ) const
     jsout.start_object();
     jsout.member( "kills" );
     jsout.start_object();
-for( auto &elem : kills ) {
-    jsout.member( elem.first.str(), elem.second );
+    for( auto &elem : kills ) {
+        jsout.member( elem.first.str(), elem.second );
     }
     jsout.end_object();
 
     jsout.member( "npc_kills" );
     jsout.start_array();
-for( auto &elem : npc_kills ) {
-    jsout.write( elem );
+    for( auto &elem : npc_kills ) {
+        jsout.write( elem );
     }
     jsout.end_array();
     jsout.end_object();
@@ -2010,7 +2009,7 @@ void cata_variant::deserialize( JsonIn &jsin )
 void event_multiset::serialize( JsonOut &jsout ) const
 {
     jsout.start_object();
-    std::vector<counts_type::value_type> copy( counts_.begin(), counts_.end() );
+    std::vector < counts_type::value_type > copy( counts_.begin(), counts_.end() );
     jsout.member( "event_counts", copy );
     jsout.end_object();
 }
@@ -2019,7 +2018,7 @@ void event_multiset::deserialize( JsonIn &jsin )
 {
     JsonObject jo = jsin.get_object();
     jo.allow_omitted_members();
-    std::vector<std::pair<cata::event::data_type, int>> copy;
+    std::vector < std::pair < cata::event::data_type, int>> copy;
     jo.read( "event_counts", copy );
     counts_ = { copy.begin(), copy.end() };
 }
@@ -2037,7 +2036,7 @@ void stats_tracker::deserialize( JsonIn &jsin )
     JsonObject jo = jsin.get_object();
     jo.allow_omitted_members();
     jo.read( "data", data );
-    for( std::pair<const event_type, event_multiset> &d : data ) {
+    for( std::pair < const event_type, event_multiset > &d : data ) {
         d.second.set_type( d.first );
     }
     jo.read( "initial_scores", initial_scores );
@@ -2054,8 +2053,8 @@ void submap::store( JsonOut &jsout ) const
     jsout.start_array();
     std::string last_id;
     int num_same = 1;
-for( const auto sm_ms : submap_tiles() ) {
-    const std::string this_id = ter[sm_ms.x()][sm_ms.y()].obj().id.str();
+    for( const auto sm_ms : submap_tiles() ) {
+        const std::string this_id = ter[sm_ms.x()][sm_ms.y()].obj().id.str();
         if( !last_id.empty() ) {
             if( this_id == last_id ) {
                 num_same++;
@@ -2078,7 +2077,7 @@ for( const auto sm_ms : submap_tiles() ) {
     }
     // Because of the RLE scheme we have to do one last pass
     if( num_same == 1 ) {
-    jsout.write( last_id );
+        jsout.write( last_id );
     } else {
         jsout.start_array();
         jsout.write( last_id );
@@ -2093,9 +2092,9 @@ for( const auto sm_ms : submap_tiles() ) {
     jsout.start_array();
     int lastrad = -1;
     int count = 0;
-for( const auto p : submap_tiles() ) {
-    // Save radiation, re-examine this because it doesn't look like it works right
-    int r = get_radiation( p );
+    for( const auto p : submap_tiles() ) {
+        // Save radiation, re-examine this because it doesn't look like it works right
+        int r = get_radiation( p );
         if( r == lastrad ) {
             count++;
         } else {
@@ -2114,7 +2113,7 @@ for( const auto p : submap_tiles() ) {
     // Omitted entirely when all tiles are zero to keep typical saves compact.
     if( std::ranges::any_of( &scent_values[0][0], &scent_values[0][0] + SEEX * SEEY,
     []( int v ) { return v != 0; } ) ) {
-    jsout.member( "scent_values" );
+        jsout.member( "scent_values" );
         jsout.start_array();
         int last_scent = -1;
         int scent_count = 0;
@@ -2141,9 +2140,9 @@ for( const auto p : submap_tiles() ) {
 
     jsout.member( "furniture" );
     jsout.start_array();
-for( const auto p : submap_tiles() ) {
-    // Save furniture
-    if( get_furn( p ) ) {
+    for( const auto p : submap_tiles() ) {
+        // Save furniture
+        if( get_furn( p ) ) {
             jsout.start_array();
             jsout.write( p.x() );
             jsout.write( p.y() );
@@ -2155,8 +2154,8 @@ for( const auto p : submap_tiles() ) {
 
     jsout.member( "items" );
     jsout.start_array();
-for( const auto sm_ms : submap_tiles() ) {
-    if( !itm[sm_ms.x()][sm_ms.y()].empty() ) {
+    for( const auto sm_ms : submap_tiles() ) {
+        if( !itm[sm_ms.x()][sm_ms.y()].empty() ) {
             jsout.write( sm_ms.x() );
             jsout.write( sm_ms.y() );
             jsout.write( itm[sm_ms.x()][sm_ms.y()] );
@@ -2166,9 +2165,9 @@ for( const auto sm_ms : submap_tiles() ) {
 
     jsout.member( "traps" );
     jsout.start_array();
-for( const auto p : submap_tiles() ) {
-    // Save traps
-    if( get_trap( p ) ) {
+    for( const auto p : submap_tiles() ) {
+        // Save traps
+        if( get_trap( p ) ) {
             jsout.start_array();
             jsout.write( p.x() );
             jsout.write( p.y() );
@@ -2181,9 +2180,9 @@ for( const auto p : submap_tiles() ) {
 
     jsout.member( "fields" );
     jsout.start_array();
-for( const auto sm_ms : submap_tiles() ) {
-    // Save fields
-    if( fld[sm_ms.x()][sm_ms.y()].field_count() > 0 ) {
+    for( const auto sm_ms : submap_tiles() ) {
+        // Save fields
+        if( fld[sm_ms.x()][sm_ms.y()].field_count() > 0 ) {
             jsout.write( sm_ms.x() );
             jsout.write( sm_ms.y() );
             jsout.start_array();
@@ -2201,8 +2200,8 @@ for( const auto sm_ms : submap_tiles() ) {
     // Write out as array of arrays of single entries
     jsout.member( "cosmetics" );
     jsout.start_array();
-for( const auto &cosm : cosmetics ) {
-    jsout.start_array();
+    for( const auto &cosm : cosmetics ) {
+        jsout.start_array();
         jsout.write( cosm.pos.x() );
         jsout.write( cosm.pos.y() );
         jsout.write( cosm.type );
@@ -2214,8 +2213,8 @@ for( const auto &cosm : cosmetics ) {
     // Output the spawn points
     jsout.member( "spawns" );
     jsout.start_array();
-for( auto &elem : spawns ) {
-    jsout.start_array();
+    for( auto &elem : spawns ) {
+        jsout.start_array();
         // TODO: json should know how to write string_ids
         jsout.write( elem.type.str() );
         jsout.write( elem.count );
@@ -2231,17 +2230,17 @@ for( auto &elem : spawns ) {
 
     jsout.member( "vehicles" );
     jsout.start_array();
-for( auto &elem : vehicles ) {
-    // json lib doesn't know how to turn a vehicle * into a vehicle,
-    // so we have to iterate manually.
-    jsout.write( *elem );
+    for( auto &elem : vehicles ) {
+        // json lib doesn't know how to turn a vehicle * into a vehicle,
+        // so we have to iterate manually.
+        jsout.write( *elem );
     }
     jsout.end_array();
 
     jsout.member( "partial_constructions" );
     jsout.start_array();
-for( auto &elem : partial_constructions ) {
-    jsout.write( elem.first.x() );
+    for( auto &elem : partial_constructions ) {
+        jsout.write( elem.first.x() );
         jsout.write( elem.first.y() );
         jsout.write( elem.first.z() );
         jsout.write( elem.second->counter );
@@ -2255,11 +2254,11 @@ for( auto &elem : partial_constructions ) {
     jsout.end_array();
 
     if( legacy_computer ) {
-    // it's possible that no access to computers has been made and legacy_computer
-    // is not cleared
-    jsout.member( "computers", *legacy_computer );
+        // it's possible that no access to computers has been made and legacy_computer
+        // is not cleared
+        jsout.member( "computers", *legacy_computer );
     } else if( !computers.empty() ) {
-    jsout.member( "computers" );
+        jsout.member( "computers" );
         jsout.start_array();
         for( auto &elem : computers ) {
             jsout.write( elem.first );
@@ -2270,16 +2269,16 @@ for( auto &elem : partial_constructions ) {
 
     jsout.member( "active_furniture" );
     jsout.start_array();
-for( auto &pr : active_furniture ) {
-    jsout.write( pr.first );
+    for( auto &pr : active_furniture ) {
+        jsout.write( pr.first );
         pr.second.serialize( jsout );
     }
     jsout.end_array();
 
     jsout.member( "furniture_vars" );
     jsout.start_array();
-for( const auto &[key, value] : frn_vars ) {
-    if( value.empty() ) {
+    for( const auto &[key, value] : frn_vars ) {
+        if( value.empty() ) {
             continue;
         }
         jsout.write( key );
@@ -2289,8 +2288,8 @@ for( const auto &[key, value] : frn_vars ) {
 
     jsout.member( "terrain_vars" );
     jsout.start_array();
-for( const auto &[key, value] : ter_vars ) {
-    if( value.empty() ) {
+    for( const auto &[key, value] : ter_vars ) {
+        if( value.empty() ) {
             continue;
         }
         jsout.write( key );
@@ -2299,8 +2298,8 @@ for( const auto &[key, value] : ter_vars ) {
     jsout.end_array();
     jsout.member( "transformer_last_run" );
     jsout.start_array();
-for( const auto &pr : transformer_last_run ) {
-    jsout.write( pr.first );
+    for( const auto &pr : transformer_last_run ) {
+        jsout.write( pr.first );
         jsout.write( pr.second );
     }
     jsout.end_array();
@@ -2320,7 +2319,7 @@ void submap::load( JsonIn &jsin, const std::string &member_name, int version,
         jsin.start_array();
         // terrain is encoded using simple RLE
         int remaining = 0;
-        int_id<ter_t> iid;
+        int_id < ter_t > iid;
         for( const auto sm_ms : submap_tiles() ) {
             if( !remaining ) {
                 if( jsin.test_string() ) {
@@ -2383,7 +2382,7 @@ void submap::load( JsonIn &jsin, const std::string &member_name, int version,
             const point_sm_ms p( i, j );
             jsin.start_array();
             while( !jsin.end_array() ) {
-                detached_ptr<item> tmp;
+                detached_ptr < item > tmp;
                 jsin.read( tmp );
 
                 if( tmp->is_emissive() ) {
@@ -2402,9 +2401,9 @@ void submap::load( JsonIn &jsin, const std::string &member_name, int version,
         }
         for( auto &it1 : itm ) {
             for( auto &it2 : it1 ) {
-                std::vector<detached_ptr<item>> cleared = it2.clear();
+                std::vector < detached_ptr < item>> cleared = it2.clear();
                 to_cbc_migration::migrate( cleared );
-                for( detached_ptr<item> &item : cleared ) {
+                for( detached_ptr < item > &item : cleared ) {
                     it2.push_back( std::move( item ) );
                 }
             }
@@ -2464,7 +2463,7 @@ void submap::load( JsonIn &jsin, const std::string &member_name, int version,
         }
     } else if( member_name == "cosmetics" ) {
         jsin.start_array();
-        std::map<std::string, std::string> tcosmetics;
+        std::map < std::string, std::string > tcosmetics;
 
         while( !jsin.end_array() ) {
             jsin.start_array();
@@ -2510,7 +2509,7 @@ void submap::load( JsonIn &jsin, const std::string &member_name, int version,
     } else if( member_name == "vehicles" ) {
         jsin.start_array();
         while( !jsin.end_array() ) {
-            std::unique_ptr<vehicle> tmp = std::make_unique<vehicle>();
+            std::unique_ptr < vehicle > tmp = std::make_unique < vehicle > ();
             jsin.read( *tmp );
             vehicles.push_back( std::move( tmp ) );
         }
@@ -2522,7 +2521,7 @@ void submap::load( JsonIn &jsin, const std::string &member_name, int version,
             int k = jsin.get_int();
             auto sm_pt = tripoint_sm_ms( i, j, k );
             auto abs_pt = tripoint_abs_ms( offset.x() + i, offset.y() + j, k );
-            std::unique_ptr<partial_con> pc = std::make_unique<partial_con>( abs_pt, dim );
+            std::unique_ptr < partial_con > pc = std::make_unique < partial_con > ( abs_pt, dim );
             pc->counter = jsin.get_int();
             if( jsin.test_int() ) {
                 // Oops, int id incorrectly saved by legacy code, just load it and hope for the best
@@ -2532,7 +2531,7 @@ void submap::load( JsonIn &jsin, const std::string &member_name, int version,
             }
             jsin.start_array();
             while( !jsin.end_array() ) {
-                detached_ptr<item> tmp;
+                detached_ptr < item > tmp;
                 jsin.read( tmp );
                 pc->components.push_back( std::move( tmp ) );
             }
@@ -2550,7 +2549,7 @@ void submap::load( JsonIn &jsin, const std::string &member_name, int version,
         } else {
             // only load legacy data here, but do not update to std::map, since
             // the terrain may not have been loaded yet.
-            legacy_computer = std::make_unique<computer>( "BUGGED_COMPUTER", -100 );
+            legacy_computer = std::make_unique < computer > ( "BUGGED_COMPUTER", -100 );
             jsin.read( *legacy_computer );
         }
     } else if( member_name == "active_furniture" ) {
@@ -2706,13 +2705,13 @@ void uistatedata::serialize( JsonOut &json ) const
     json.start_object();
     for( auto &e : input_history ) {
         json.member( e.first );
-        const std::vector<std::string> &history = e.second;
+        const std::vector < std::string > &history = e.second;
         json.start_array();
         int save_start = 0;
         if( history.size() > input_history_save_max ) {
             save_start = history.size() - input_history_save_max;
         }
-        for( std::vector<std::string>::const_iterator hit = history.begin() + save_start;
+        for( std::vector < std::string >::const_iterator hit = history.begin() + save_start;
              hit != history.end(); ++hit ) {
             json.write( *hit );
         }
@@ -2769,7 +2768,7 @@ void uistatedata::deserialize( const JsonObject &jo )
     jo.read( "list_item_priority_active", list_item_priority_active );
 
     for( const JsonMember member : jo.get_object( "input_history" ) ) {
-        std::vector<std::string> &v = gethistory( member.name() );
+        std::vector < std::string > &v = gethistory( member.name() );
         v.clear();
         for( const std::string line : member.get_array() ) {
             v.push_back( line );

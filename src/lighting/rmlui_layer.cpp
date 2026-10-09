@@ -2,11 +2,11 @@
 
 #include "debug.h"
 #include "gpu_device.h"
-#include "path_info.h"
 #include "menu_plexus.h"
+#include "path_info.h"
+#include "render_state.h"
 #include "rml_length.h"
 #include "rmlui_proc_texture.h"
-#include "render_state.h"
 #include "rmlui_render_interface.h"
 #include "rmlui_system_interface.h"
 #include "ui_theme.h"
@@ -111,15 +111,15 @@ struct world_text_item {
 };
 // Floating combat text items (Phase 5): arcing damage/healing numbers.
 struct combat_text_item {
-    float x = 0.f, y = 0.f;       // current screen position (logical px)
-    float ox = 0.f, oy = 0.f;     // initial position
+    float x = 0.f, y = 0.f;   // current screen position (logical px)
+    float ox = 0.f, oy = 0.f; // initial position
     std::string text;
     unsigned int rgba = 0xFFFFFFFFu;
     float font_scale = 1.0f;
     float lifetime_ms = 1200.f;
     float age_ms = 0.f;
-    float vx = 0.f, vy = -30.f;   // velocity px/sec
-    float ay = 5.f;               // gravity px/sec^2
+    float vx = 0.f, vy = -30.f; // velocity px/sec
+    float ay = 5.f;             // gravity px/sec^2
 };
 std::vector<combat_text_item> g_combat_text;
 // This frame's submitted items (cleared by world_text_begin, drained next frame).
@@ -152,8 +152,8 @@ int g_plexus_tex_w = 0;
 int g_plexus_tex_h = 0;
 
 auto plexus_active() -> bool {
-    return g_ready && g_context && lighting::g_plexus_visible &&
-           lighting::plexus_width() > 0 && lighting::plexus_height() > 0;
+    return g_ready && g_context && lighting::g_plexus_visible && lighting::plexus_width() > 0
+        && lighting::plexus_height() > 0;
 }
 
 // Advance the plexus simulation (wall-clock gated) and upload the pixel buffer
@@ -161,15 +161,15 @@ auto plexus_active() -> bool {
 // (OUTSIDE the render pass) so stepping and uploading are atomic — the render
 // pass always draws the freshest frame, independent of game-loop speed.
 void rebuild_plexus_geom() {
-    if( !plexus_active() ) { return; }
+    if (!plexus_active()) { return; }
 
     // Wall-clock gate: advance the simulation at a fixed ~20fps regardless of
     // how fast the game loop or GPU frame rate runs.
     {
         static auto last_step = std::chrono::steady_clock::now();
         const auto now = std::chrono::steady_clock::now();
-        if( lighting::plexus_get_config().enabled &&
-            now - last_step >= std::chrono::milliseconds( 50 ) ) {
+        if (lighting::plexus_get_config().enabled
+            && now - last_step >= std::chrono::milliseconds(50)) {
             lighting::plexus_step();
             last_step = now;
         }
@@ -178,43 +178,39 @@ void rebuild_plexus_geom() {
     const unsigned gen = lighting::plexus_generation();
     const int pw = lighting::plexus_width();
     const int ph = lighting::plexus_height();
-    if( gen == g_plexus_uploaded_gen && pw == g_plexus_tex_w && ph == g_plexus_tex_h ) {
-        return;
-    }
+    if (gen == g_plexus_uploaded_gen && pw == g_plexus_tex_w && ph == g_plexus_tex_h) { return; }
     // Release prior resources.
-    if( g_plexus_tex_handle ) {
-        g_render->ReleaseTexture( g_plexus_tex_handle );
+    if (g_plexus_tex_handle) {
+        g_render->ReleaseTexture(g_plexus_tex_handle);
         g_plexus_tex_handle = 0;
     }
-    if( g_plexus_geom_handle ) {
-        g_render->ReleaseGeometry( g_plexus_geom_handle );
+    if (g_plexus_geom_handle) {
+        g_render->ReleaseGeometry(g_plexus_geom_handle);
         g_plexus_geom_handle = 0;
     }
 
-    const auto &px = lighting::plexus_pixels();
-    if( px.empty() ) { return; }
+    const auto& px = lighting::plexus_pixels();
+    if (px.empty()) { return; }
     g_plexus_tex_handle = g_render->GenerateTexture(
-                              { reinterpret_cast<const Rml::byte *>( px.data() ),
-                                static_cast<std::size_t>( pw * ph * 4 ) },
-    { pw, ph } );
-    if( !g_plexus_tex_handle ) { return; }
+        {reinterpret_cast<const Rml::byte*>(px.data()), static_cast<std::size_t>(pw * ph * 4)},
+        {pw, ph});
+    if (!g_plexus_tex_handle) { return; }
 
     // Quad spans the full physical screen; the GPU stretches the logical-res
     // texture via UVs 0-1.
     int sw = 0, sh = 0;
-    SDL_GetWindowSizeInPixels( g_window, &sw, &sh );
-    const auto fw = static_cast<float>( sw > 0 ? sw : pw );
-    const auto fh = static_cast<float>( sh > 0 ? sh : ph );
-    const Rml::ColourbPremultiplied white{ 255, 255, 255, 255 };
+    SDL_GetWindowSizeInPixels(g_window, &sw, &sh);
+    const auto fw = static_cast<float>(sw > 0 ? sw : pw);
+    const auto fh = static_cast<float>(sh > 0 ? sh : ph);
+    const Rml::ColourbPremultiplied white{255, 255, 255, 255};
     const Rml::Vertex verts[] = {
-        { { 0, 0 }, white, { 0, 0 } },
-        { { fw, 0 }, white, { 1, 0 } },
-        { { fw, fh }, white, { 1, 1 } },
-        { { 0, fh }, white, { 0, 1 } },
+        {{0, 0}, white, {0, 0}},
+        {{fw, 0}, white, {1, 0}},
+        {{fw, fh}, white, {1, 1}},
+        {{0, fh}, white, {0, 1}},
     };
-    const int idxs[] = { 0, 1, 2, 0, 2, 3 };
-    g_plexus_geom_handle = g_render->CompileGeometry(
-                               { verts, 4 }, { idxs, 6 } );
+    const int idxs[] = {0, 1, 2, 0, 2, 3};
+    g_plexus_geom_handle = g_render->CompileGeometry({verts, 4}, {idxs, 6});
 
     g_plexus_uploaded_gen = gen;
     g_plexus_tex_w = pw;
@@ -287,40 +283,39 @@ void build_world_text() {
     };
     for (const world_text_item& it : g_world_text) { emit(it); }
     // Combat text: emit with per-item font_scale and age-based alpha fade.
-    for( const combat_text_item &it : g_combat_text ) {
+    for (const combat_text_item& it : g_combat_text) {
         // Age-based alpha: full opacity for first 60%, linear fade to 0 over last 40%.
         const float life_ratio = it.age_ms / it.lifetime_ms;
-        const float fade_alpha = life_ratio < 0.6f ? 1.0f : 1.0f - ( life_ratio - 0.6f ) / 0.4f;
-        const unsigned int faded_rgba = ( it.rgba & 0xFFFFFF00u )
-                                        | ( static_cast<unsigned int>( ( it.rgba & 0xFFu ) * fade_alpha ) );
-        const Rml::byte r = ( faded_rgba >> 24 ) & 0xFFu;
-        const Rml::byte g = ( faded_rgba >> 16 ) & 0xFFu;
-        const Rml::byte b = ( faded_rgba >> 8 ) & 0xFFu;
+        const float fade_alpha = life_ratio < 0.6f ? 1.0f : 1.0f - (life_ratio - 0.6f) / 0.4f;
+        const unsigned int faded_rgba =
+            (it.rgba & 0xFFFFFF00u) | (static_cast<unsigned int>((it.rgba & 0xFFu) * fade_alpha));
+        const Rml::byte r = (faded_rgba >> 24) & 0xFFu;
+        const Rml::byte g = (faded_rgba >> 16) & 0xFFu;
+        const Rml::byte b = (faded_rgba >> 8) & 0xFFu;
         const Rml::byte a = faded_rgba & 0xFFu;
-        const Rml::ColourbPremultiplied col(
-            static_cast<Rml::byte>( r * a / 255 ), static_cast<Rml::byte>( g * a / 255 ),
-            static_cast<Rml::byte>( b * a / 255 ), a );
+        const Rml::ColourbPremultiplied
+            col(static_cast<Rml::byte>(r * a / 255), static_cast<Rml::byte>(g * a / 255),
+                static_cast<Rml::byte>(b * a / 255), a);
         static const Rml::String world_text_lang;
-        const Rml::TextShapingContext shaping{ world_text_lang };
+        const Rml::TextShapingContext shaping{world_text_lang};
         Rml::TexturedMeshList meshes;
         // Scale the font face by font_scale (crits get 1.5x).
         const float scaled_px = g_world_text_px * it.font_scale;
         const Rml::FontFaceHandle scaled_face = fe->GetFontFaceHandle(
             WORLD_TEXT_FAMILY, Rml::Style::FontStyle::Normal, Rml::Style::FontWeight::Auto,
-            scaled_px );
-        if( scaled_face == 0 ) {
-            continue;
-        }
-        fe->GenerateString( rm, scaled_face, Rml::FontEffectsHandle( 0 ), it.text,
-                            Rml::Vector2f( 0.f, 0.f ), col, 1.0f, shaping, meshes );
-        for( Rml::TexturedMesh &tm : meshes ) {
+            scaled_px);
+        if (scaled_face == 0) { continue; }
+        fe->GenerateString(
+            rm, scaled_face, Rml::FontEffectsHandle(0), it.text, Rml::Vector2f(0.f, 0.f), col, 1.0f,
+            shaping, meshes);
+        for (Rml::TexturedMesh& tm : meshes) {
             world_text_geom out;
-            out.geom = rm.MakeGeometry( std::move( tm.mesh ) );
+            out.geom = rm.MakeGeometry(std::move(tm.mesh));
             out.texture = tm.texture;
             out.pos = Rml::Vector2f(
                 it.x * g_density_ratio + g_world_text_dx,
-                it.y * g_density_ratio + static_cast<float>( scaled_px ) + g_world_text_dy );
-            g_world_geom.push_back( std::move( out ) );
+                it.y * g_density_ratio + static_cast<float>(scaled_px) + g_world_text_dy);
+            g_world_geom.push_back(std::move(out));
         }
     }
     if (g_hud_active) { emit(g_hud_text); }
@@ -438,10 +433,12 @@ bool init(lighting::gpu_device& dev) {
     // Serve the "?avatar:<gen>" decorator source from render_state's portrait target.
     // Registered here, once, because the resolver is called lazily per LoadTexture —
     // so it tolerates the target not existing yet and survives its reallocation.
-    g_render->set_borrowed_texture_source( []() -> SDL_GPUTexture* {
-        lighting::ui_composite_target *at = lighting::get_render_state().avatar_target();
-        return at ? at->texture() : nullptr;
-    }, lighting::AVATAR_TARGET_PX, lighting::AVATAR_TARGET_PX );
+    g_render->set_borrowed_texture_source(
+        []() -> SDL_GPUTexture* {
+            lighting::ui_composite_target* at = lighting::get_render_state().avatar_target();
+            return at ? at->texture() : nullptr;
+        },
+        lighting::AVATAR_TARGET_PX, lighting::AVATAR_TARGET_PX);
 
     // Load the theme tokens and install the stylesheet preprocessor BEFORE
     // Initialise, so the very first document's .rcss gets {{token}} substitution.
@@ -497,7 +494,7 @@ bool init(lighting::gpu_device& dev) {
 
     // Source Code Pro — bundled for the RmlUi HUD. Loaded non-fallback so the
     // HUD document can target it explicitly; Terminus remains the fallback.
-    for (const char *f : { "SourceCodePro-Regular.ttf", "SourceCodePro-Semibold.ttf" }) {
+    for (const char* f : {"SourceCodePro-Regular.ttf", "SourceCodePro-Semibold.ttf"}) {
         const std::string p = PATH_INFO::fontdir() + f;
         if (!Rml::LoadFontFace(p, false)) {
             dbg(DL::Warn) << "rmlui_layer: LoadFontFace failed for " << p;
@@ -772,13 +769,13 @@ unsigned crt_a255(float a01) {
 
 // Options for composing a runic frame decorator string.
 struct runic_frame_opts {
-    int pw = 0; // panel border-box width (display px)
-    int ph = 0; // panel border-box height (display px)
+    int pw = 0;        // panel border-box width (display px)
+    int ph = 0;        // panel border-box height (display px)
     int ring_disp = 0; // RUNE_RING * dr
-    int need = 0; // minimum dimension threshold
+    int need = 0;      // minimum dimension threshold
     unsigned seed = 0;
-    int t_h = 0; // horizontal template
-    int t_v = 1; // vertical template
+    int t_h = 0;    // horizontal template
+    int t_v = 1;    // vertical template
     unsigned g = 0; // regen cache-bust token
     int FRAME_INSET = 0;
     float dr = 1.0f;
@@ -797,11 +794,8 @@ using rml::px;
 
 /// Compose the runic frame decorator string for a given element size.
 /// Returns empty string if the element is too small for the frame.
-auto compose_runic_frame( const runic_frame_opts &opts ) -> std::string
-{
-    if( opts.pw < opts.need || opts.ph < opts.need ) {
-        return "";
-    }
+auto compose_runic_frame(const runic_frame_opts& opts) -> std::string {
+    if (opts.pw < opts.need || opts.ph < opts.need) { return ""; }
 
     const int hlen = static_cast<int>(std::lround((opts.pw - 2 * opts.FRAME_INSET) / opts.dr));
     const int vlen = static_cast<int>(std::lround((opts.ph - 2 * opts.FRAME_INSET) / opts.dr));
@@ -811,54 +805,56 @@ auto compose_runic_frame( const runic_frame_opts &opts ) -> std::string
 
     // Build decorator segments
     std::string out;
-    const char *sep = "";
+    const char* sep = "";
 
-    auto append = [&]( const char *fmt, auto ...args ) {
-        if( out.empty() ) {
+    auto append = [&](const char* fmt, auto... args) {
+        if (out.empty()) {
             sep = "";
         } else {
             sep = ", ";
         }
         char buf[512];
-        std::snprintf( buf, sizeof(buf), fmt, args... );
+        std::snprintf(buf, sizeof(buf), fmt, args...);
         out += sep;
         out += buf;
     };
 
     // Edges
-    if( !opts.no_top ) {
-        append( "image( ?proc:runic-hedge:%d:%u:%d:G%u none scale-none %dpx %dpx ) border-box",
-                hlen, opts.seed, opts.t_h, opts.g, opts.FRAME_INSET, opts.FRAME_INSET );
+    if (!opts.no_top) {
+        append("image( ?proc:runic-hedge:%d:%u:%d:G%u none scale-none %dpx %dpx ) border-box", hlen,
+               opts.seed, opts.t_h, opts.g, opts.FRAME_INSET, opts.FRAME_INSET);
     }
-    if( !opts.no_bottom ) {
-        append( "image( ?proc:runic-hedge:%d:%u:%d:G%u flip-vertical scale-none %dpx %dpx ) border-box",
-                hlen, opts.seed, opts.t_h, opts.g, opts.FRAME_INSET, far_y );
+    if (!opts.no_bottom) {
+        append(
+            "image( ?proc:runic-hedge:%d:%u:%d:G%u flip-vertical scale-none %dpx %dpx ) border-box",
+            hlen, opts.seed, opts.t_h, opts.g, opts.FRAME_INSET, far_y);
     }
-    if( !opts.no_left ) {
-        append( "image( ?proc:runic-vedge:%d:%u:%d:G%u none scale-none %dpx %dpx ) border-box",
-                vlen, opts.seed, opts.t_v, opts.g, opts.FRAME_INSET, opts.FRAME_INSET );
+    if (!opts.no_left) {
+        append("image( ?proc:runic-vedge:%d:%u:%d:G%u none scale-none %dpx %dpx ) border-box", vlen,
+               opts.seed, opts.t_v, opts.g, opts.FRAME_INSET, opts.FRAME_INSET);
     }
-    if( !opts.no_right ) {
-        append( "image( ?proc:runic-vedge:%d:%u:%d:G%u flip-horizontal scale-none %dpx %dpx ) border-box",
-                vlen, opts.seed, opts.t_v, opts.g, far_x, opts.FRAME_INSET );
+    if (!opts.no_right) {
+        append(
+            "image( ?proc:runic-vedge:%d:%u:%d:G%u flip-horizontal scale-none %dpx %dpx ) border-box",
+            vlen, opts.seed, opts.t_v, opts.g, far_x, opts.FRAME_INSET);
     }
 
     // Corners: original emits TL, BL, BR only (TR = #runic-close interactive button)
     // Suppression: corner omitted when EITHER adjacent edge is suppressed
-    if( !( opts.no_top || opts.no_left ) ) {
+    if (!(opts.no_top || opts.no_left)) {
         // TL
-        append( "image( ?proc:runic-corner:G%u none scale-none %dpx %dpx ) border-box",
-                opts.g, opts.FRAME_INSET, opts.FRAME_INSET );
+        append("image( ?proc:runic-corner:G%u none scale-none %dpx %dpx ) border-box", opts.g,
+               opts.FRAME_INSET, opts.FRAME_INSET);
     }
-    if( !( opts.no_bottom || opts.no_left ) ) {
+    if (!(opts.no_bottom || opts.no_left)) {
         // BL
-        append( "image( ?proc:runic-corner:G%u flip-vertical scale-none %dpx %dpx ) border-box",
-                opts.g, opts.FRAME_INSET, far_y );
+        append("image( ?proc:runic-corner:G%u flip-vertical scale-none %dpx %dpx ) border-box",
+               opts.g, opts.FRAME_INSET, far_y);
     }
-    if( !( opts.no_bottom || opts.no_right ) ) {
+    if (!(opts.no_bottom || opts.no_right)) {
         // BR
-        append( "image( ?proc:runic-corner:G%u rotate-180 scale-none %dpx %dpx ) border-box",
-                opts.g, far_x, far_y );
+        append("image( ?proc:runic-corner:G%u rotate-180 scale-none %dpx %dpx ) border-box", opts.g,
+               far_x, far_y);
     }
 
     return out;
@@ -941,16 +937,24 @@ void apply_crt() {
             const bool no_left = pe->IsClassSet("runic-no-left");
             const bool no_right = pe->IsClassSet("runic-no-right");
 
-            std::string frame_str = compose_runic_frame( runic_frame_opts {
-                .pw = pw, .ph = ph, .ring_disp = ring_disp, .need = need,
-                .seed = seed, .t_h = t_h, .t_v = t_v, .g = g,
-                .FRAME_INSET = FRAME_INSET, .dr = dr,
-                .no_top = no_top, .no_bottom = no_bottom,
-                .no_left = no_left, .no_right = no_right
-            } );
+            std::string frame_str = compose_runic_frame(runic_frame_opts{
+                .pw = pw,
+                .ph = ph,
+                .ring_disp = ring_disp,
+                .need = need,
+                .seed = seed,
+                .t_h = t_h,
+                .t_v = t_v,
+                .g = g,
+                .FRAME_INSET = FRAME_INSET,
+                .dr = dr,
+                .no_top = no_top,
+                .no_bottom = no_bottom,
+                .no_left = no_left,
+                .no_right = no_right});
 
             char frame[2048];
-            if( frame_str.empty() ) {
+            if (frame_str.empty()) {
                 (void)std::snprintf(frame, sizeof(frame), "%s", fallback);
             } else {
                 (void)std::snprintf(frame, sizeof(frame), "%s", frame_str.c_str());
@@ -1070,19 +1074,27 @@ void apply_crt() {
                 const bool no_left = reg->IsClassSet("runic-no-left");
                 const bool no_right = reg->IsClassSet("runic-no-right");
 
-                std::string frame_str = compose_runic_frame( runic_frame_opts {
-                    .pw = rpw, .ph = rph, .ring_disp = ring_disp, .need = need,
-                    .seed = seed, .t_h = t_h, .t_v = t_v, .g = g,
-                    .FRAME_INSET = FRAME_INSET, .dr = dr,
-                    .no_top = no_top, .no_bottom = no_bottom,
-                    .no_left = no_left, .no_right = no_right
-                } );
+                std::string frame_str = compose_runic_frame(runic_frame_opts{
+                    .pw = rpw,
+                    .ph = rph,
+                    .ring_disp = ring_disp,
+                    .need = need,
+                    .seed = seed,
+                    .t_h = t_h,
+                    .t_v = t_v,
+                    .g = g,
+                    .FRAME_INSET = FRAME_INSET,
+                    .dr = dr,
+                    .no_top = no_top,
+                    .no_bottom = no_bottom,
+                    .no_left = no_left,
+                    .no_right = no_right});
 
-                const std::string frame_id = "runic-frame-" + std::string( reg->GetId() );
-                Rml::Element* fr = doc->GetElementById( frame_id.c_str() );
+                const std::string frame_id = "runic-frame-" + std::string(reg->GetId());
+                Rml::Element* fr = doc->GetElementById(frame_id.c_str());
                 if (fr == nullptr) {
                     Rml::ElementPtr fp = doc->CreateElement("div");
-                    fp->SetId( frame_id.c_str() );
+                    fp->SetId(frame_id.c_str());
                     fr = doc->AppendChild(std::move(fp));
                 }
                 if (fr != nullptr) {
@@ -1119,17 +1131,14 @@ void apply_crt() {
                 const int len = static_cast<int>(std::lround(epw / dr));
                 if (len < 1) { continue; }
 
-                const unsigned seed = rcfg.use_fixed_seed
-                    ? rcfg.seed
-                    : (static_cast<unsigned>(epw) * 73856093u);
+                const unsigned seed =
+                    rcfg.use_fixed_seed ? rcfg.seed : (static_cast<unsigned>(epw) * 73856093u);
                 const unsigned g = rcfg.regen;
 
                 const bool flip = ed->IsClassSet("runic-edge-top");
                 const std::string dec = std::format(
-                    "image( ?proc:runic-rule:{}:{}:G{} {} scale-none 0px {}px ) border-box",
-                    len, seed, g,
-                    flip ? "flip-vertical" : "none",
-                    flip ? 0 : (esz.y - 4));
+                    "image( ?proc:runic-rule:{}:{}:G{} {} scale-none 0px {}px ) border-box", len,
+                    seed, g, flip ? "flip-vertical" : "none", flip ? 0 : (esz.y - 4));
 
                 const std::string frame_id = "runic-frame-" + std::string(ed->GetId());
                 Rml::Element* fr = doc->GetElementById(frame_id.c_str());
@@ -1230,7 +1239,10 @@ void prepare(SDL_GPUCommandBuffer* cb) {
     const bool doc = g_ready && any_open() && g_context != nullptr;
     const bool wt = world_text_have();
     const bool px = plexus_active();
-    if (!doc && !wt && !px) { g_world_geom.clear(); return; }
+    if (!doc && !wt && !px) {
+        g_world_geom.clear();
+        return;
+    }
     // Pre-render OUTSIDE the render pass so geometry compiles immediately (not
     // deferred by begin_render_pass). Then upload_pending uploads the compiled
     // data to GPU buffers. The real render pass's ctx->Render() reuses the cached
@@ -1294,33 +1306,27 @@ void world_text_add(float screen_x, float screen_y, const std::string& utf8, uns
     g_world_text.push_back(world_text_item{screen_x, screen_y, utf8, rgba});
 }
 // Combat text: submit a floating damage/healing number.
-auto combat_text_add( const combat_text_options &opts ) -> void
-{
-    g_combat_text.emplace_back( combat_text_item{
-        opts.x, opts.y, opts.x, opts.y,
-        opts.text, opts.rgba, opts.font_scale,
-        opts.lifetime_ms, 0.f, opts.vx, opts.vy, opts.ay } );
+auto combat_text_add(const combat_text_options& opts) -> void {
+    g_combat_text.emplace_back(combat_text_item{
+        opts.x, opts.y, opts.x, opts.y, opts.text, opts.rgba, opts.font_scale, opts.lifetime_ms,
+        0.f, opts.vx, opts.vy, opts.ay});
 }
 
 // Advance combat text items by dt_ms, remove expired.
-auto combat_text_tick( float dt_ms ) -> void
-{
+auto combat_text_tick(float dt_ms) -> void {
     const float dt_sec = dt_ms / 1000.0f;
-    for( auto &item : g_combat_text ) {
+    for (auto& item : g_combat_text) {
         item.age_ms += dt_ms;
         item.vy += item.ay * dt_sec;
         item.x += item.vx * dt_sec;
         item.y += item.vy * dt_sec;
     }
-    std::erase_if( g_combat_text, []( const combat_text_item &it ) {
+    std::erase_if(g_combat_text, [](const combat_text_item& it) {
         return it.age_ms >= it.lifetime_ms;
-    } );
+    });
 }
 
-auto combat_text_active() -> bool
-{
-    return !g_combat_text.empty();
-}
+auto combat_text_active() -> bool { return !g_combat_text.empty(); }
 
 bool world_text_active() { return world_text_have(); }
 

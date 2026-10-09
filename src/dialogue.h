@@ -128,10 +128,10 @@ struct talk_effect_fun_t {
 
         void operator()( const dialogue &d ) const {
             if( !function ) {
-            return;
+                return;
+            }
+            return function( d );
         }
-        return function( d );
-    }
 };
 
 /**
@@ -154,33 +154,33 @@ struct talk_effect_t {
       */
     talk_topic next_topic = talk_topic( "TALK_NONE" );
 
-        talk_topic apply( dialogue &d ) const;
-        dialogue_consequence get_consequence( const dialogue &d ) const;
+    talk_topic apply( dialogue &d ) const;
+    dialogue_consequence get_consequence( const dialogue &d ) const;
 
-        /**
-          * Sets an effect and consequence based on function pointer.
-          */
-        void set_effect( talkfunction_ptr );
-        void set_effect( const talk_effect_fun_t & );
-        /**
-          * Sets an effect to a function object and consequence to explicitly given one.
-          */
-        void set_effect_consequence( const talk_effect_fun_t &fun, dialogue_consequence con );
-        void set_effect_consequence( const std::function<void( npc &p )> &ptr, dialogue_consequence con );
+    /**
+      * Sets an effect and consequence based on function pointer.
+      */
+    void set_effect( talkfunction_ptr );
+    void set_effect( const talk_effect_fun_t & );
+    /**
+      * Sets an effect to a function object and consequence to explicitly given one.
+      */
+    void set_effect_consequence( const talk_effect_fun_t &fun, dialogue_consequence con );
+    void set_effect_consequence( const std::function<void( npc &p )> &ptr, dialogue_consequence con );
 
-        void load_effect( const JsonObject &jo );
-        void parse_sub_effect( const JsonObject &jo );
-        void parse_string_effect( const std::string &effect_id, const JsonObject &jo );
+    void load_effect( const JsonObject & jo );
+    void parse_sub_effect( const JsonObject & jo );
+    void parse_string_effect( const std::string & effect_id, const JsonObject & jo );
 
-        talk_effect_t() = default;
-        talk_effect_t( const JsonObject & );
+    talk_effect_t() = default;
+    talk_effect_t( const JsonObject & );
 
-        /**
-         * Functions that are called when the response is chosen.
-         */
-        std::vector<talk_effect_fun_t> effects;
-    private:
-        dialogue_consequence guaranteed_consequence = dialogue_consequence::none;
+    /**
+     * Functions that are called when the response is chosen.
+     */
+    std::vector<talk_effect_fun_t> effects;
+private:
+    dialogue_consequence guaranteed_consequence = dialogue_consequence::none;
 };
 
 /**
@@ -340,10 +340,10 @@ struct dynamic_line_t {
 
         std::string operator()( const dialogue &d ) const {
             if( !function ) {
-            return std::string{};
+                return std::string{};
+            }
+            return function( d );
         }
-        return function( d );
-    }
 };
 
 /**
@@ -352,9 +352,9 @@ struct dynamic_line_t {
  */
 class json_talk_response
 {
-private:
-    talk_response actual_response;
-    std::function<bool( const dialogue & )> condition;
+    private:
+        talk_response actual_response;
+        std::function<bool( const dialogue & )> condition;
         bool is_switch = false;
         bool is_default = false;
 

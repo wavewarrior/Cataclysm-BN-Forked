@@ -184,7 +184,7 @@ int item::get_base_env_resist_w_filter() const
 bool item::is_power_armor() const
 {
     return ( has_flag( flag_POWERARMOR_EXO ) || has_flag( flag_POWERARMOR_EXTERNAL ) ||
-    has_flag( flag_POWERARMOR_MOD ) );
+             has_flag( flag_POWERARMOR_MOD ) );
 }
 
 bool item::is_non_rigid() const
@@ -328,12 +328,12 @@ int item::get_encumber_when_containing(
 layer_level item::get_layer() const
 {
     if( type->armor ) {
-    // We assume that an item will never have per-item flags defining its
-    // layer, so we can defer to the itype.
-    return type->layer;
-}
+        // We assume that an item will never have per-item flags defining its
+        // layer, so we can defer to the itype.
+        return type->layer;
+    }
 
-if( has_flag( flag_PERSONAL ) ) {
+    if( has_flag( flag_PERSONAL ) ) {
         return PERSONAL_LAYER;
     } else if( has_flag( flag_SKINTIGHT ) ) {
         return UNDERWEAR_LAYER;
@@ -506,17 +506,17 @@ int item::stab_resist( bool to_self ) const
 int item::bullet_resist( bool to_self ) const
 {
     return phys_resist(
-           *this, DT_BULLET, clothing_mod_type_bullet, &material_type::bullet_resist, to_self );
+               *this, DT_BULLET, clothing_mod_type_bullet, &material_type::bullet_resist, to_self );
 }
 
 int item::acid_resist( bool to_self, int base_env_resist ) const
 {
     if( to_self ) {
-    // Currently no items are damaged by acid
-    return INT_MAX;
-}
+        // Currently no items are damaged by acid
+        return INT_MAX;
+    }
 
-if( is_null() ) { return 0.0; }
+    if( is_null() ) { return 0.0; }
 
     float resist = 0.0;
     float mod = get_clothing_mod_val( clothing_mod_type_acid );
@@ -538,21 +538,21 @@ if( is_null() ) { return 0.0; }
 
     const int env = get_env_resist( base_env_resist );
     if( env < 10 ) {
-    // Low env protection means it doesn't prevent acid seeping in.
-    resist *= env / 10.0f;
-}
+        // Low env protection means it doesn't prevent acid seeping in.
+        resist *= env / 10.0f;
+    }
 
-return std::lround( resist + mod );
+    return std::lround( resist + mod );
 }
 
 int item::fire_resist( bool to_self, int base_env_resist ) const
 {
     if( to_self ) {
-    // Fire damages items in a different way
-    return INT_MAX;
-}
+        // Fire damages items in a different way
+        return INT_MAX;
+    }
 
-if( is_null() ) { return 0.0; }
+    if( is_null() ) { return 0.0; }
 
     float mod = get_clothing_mod_val( clothing_mod_type_fire );
 
@@ -572,32 +572,32 @@ if( is_null() ) { return 0.0; }
 
     const int env = get_env_resist( base_env_resist );
     if( env < 10 ) {
-    // Iron resists immersion in magma, iron-clad knight won't.
-    resist *= env / 10.0f;
-}
+        // Iron resists immersion in magma, iron-clad knight won't.
+        resist *= env / 10.0f;
+    }
 
-return std::lround( resist + mod );
+    return std::lround( resist + mod );
 }
 
 int item::damage_resist( damage_type dt, bool to_self ) const
 {
     switch( dt ) {
-    case DT_NULL:
-    case NUM_DT:
-        return 0;
-    case DT_TRUE:
-    case DT_BIOLOGICAL:
-    case DT_ELECTRIC:
-    case DT_COLD:
-    case DT_DARK:
-    case DT_LIGHT:
-    case DT_PSI:
-        // Currently hardcoded:
-        // Items can never be damaged by those types
-        // But they provide 0 protection from them
-        return to_self ? INT_MAX : 0;
-    case DT_BASH:
-        return bash_resist( to_self );
+        case DT_NULL:
+        case NUM_DT:
+            return 0;
+        case DT_TRUE:
+        case DT_BIOLOGICAL:
+        case DT_ELECTRIC:
+        case DT_COLD:
+        case DT_DARK:
+        case DT_LIGHT:
+        case DT_PSI:
+            // Currently hardcoded:
+            // Items can never be damaged by those types
+            // But they provide 0 protection from them
+            return to_self ? INT_MAX : 0;
+        case DT_BASH:
+            return bash_resist( to_self );
         case DT_CUT:
             return cut_resist( to_self );
         case DT_ACID:
@@ -672,7 +672,7 @@ side item::get_side() const
 {
     // MSVC complains if directly cast double to enum
     return static_cast<side>( static_cast<int>( get_var( "lateral",
-           static_cast<int>( side::BOTH ) ) ) );
+                              static_cast<int>( side::BOTH ) ) ) );
 }
 
 bool item::set_side( side s )
@@ -693,7 +693,7 @@ bool item::swap_side() { return set_side( opposite_side( get_side() ) ); }
 bool item::is_worn_only_with( const item& it ) const
 {
     return ( ( has_flag( flag_POWERARMOR_EXTERNAL ) || has_flag( flag_POWERARMOR_MOD ) )
-    && it.has_flag( flag_POWERARMOR_EXO ) );
+             && it.has_flag( flag_POWERARMOR_EXO ) );
 }
 
 item::sizing item::get_sizing( const Character& who ) const
@@ -748,8 +748,8 @@ item::sizing item::get_sizing( const Character& who ) const
 
 bool item::has_clothing_mod() const
 {
-for( const clothing_mod &cm : clothing_mods::get_all() ) {
-    if( has_own_flag( cm.flag ) ) {
+    for( const clothing_mod &cm : clothing_mods::get_all() ) {
+        if( has_own_flag( cm.flag ) ) {
             return true;
         }
     }

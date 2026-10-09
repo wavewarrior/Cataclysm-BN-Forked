@@ -75,8 +75,8 @@ class main_menu
         std::vector<std::string> templates;
         int extra_w = 0;
         std::vector<save_t> savegames;
-        std::vector<std::pair<inclusive_rectangle<point>, std::pair<int, int>>> main_menu_sub_button_map;
-        std::vector<std::pair<inclusive_rectangle<point>, int>> main_menu_button_map;
+        std::vector<std::pair<inclusive_rectangle<point>, std::pair<int, int >>> main_menu_sub_button_map;
+        std::vector<std::pair<inclusive_rectangle<point>, int >> main_menu_button_map;
 
         void init_windows();
 

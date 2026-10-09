@@ -253,28 +253,31 @@ auto game::has_activity_skip_active_fire() -> bool
     return has_fire;
 }
 
-auto game::can_activity_fixed_window_skip( const time_duration &duration ) -> bool
-{
-    if( new_game || queue_screenshot || uquit == QUIT_WATCH ) {
+auto game::can_activity_fixed_window_skip( const time_duration &duration ) -> bool {
+    if( new_game || queue_screenshot || uquit == QUIT_WATCH )
+    {
         if( log_activity_skip_state ) {
             add_msg( "Preparing quitting or screenshot, skip state impossible" );
         }
         return false;
     }
     if( duration <= 0_turns || !get_weather().weather_id ||
-        get_weather().nextweather <= calendar::turn ) {
+        get_weather().nextweather <= calendar::turn )
+    {
         if( log_activity_skip_state ) {
             add_msg( "Need to process weather" );
         }
         return false;
     }
-    if( debug_infinite_speed_can_freeze_time() ) {
+    if( debug_infinite_speed_can_freeze_time() )
+    {
         if( log_activity_skip_state ) {
             add_msg( "Time is frozen" );
         }
         return false;
     }
-    if( !u.in_sleep_state() ) {
+    if( !u.in_sleep_state() )
+    {
         if( !u.activity || !*u.activity || u.activity->complete() || u.has_destination() ||
             u.is_mounted() ) {
             if( log_activity_skip_state ) {
@@ -299,32 +302,38 @@ auto game::can_activity_fixed_window_skip( const time_duration &duration ) -> bo
             return false;
         }
     }
-    if( u.in_vehicle && u.controlling_vehicle ) {
+    if( u.in_vehicle && u.controlling_vehicle )
+    {
         if( log_activity_skip_state ) {
             add_msg( "You are controlling a vehicle" );
         }
         return false;
     }
-    if( m.field_at( u.bub_pos() ).field_count() > 0 ) {
+    if( m.field_at( u.bub_pos() ).field_count() > 0 )
+    {
         return false;
     }
-    if( has_activity_skip_active_fire() ) {
+    if( has_activity_skip_active_fire() )
+    {
         if( log_activity_skip_state ) {
             add_msg( "Fire is being processed, cannot skip time" );
         }
         return false;
     }
-    if( has_activity_skip_relevant_vehicle() ) {
+    if( has_activity_skip_relevant_vehicle() )
+    {
         return false;
     }
     if( const std::optional<time_point> event_time = timed_events.next_event_time();
-        event_time && *event_time <= calendar::turn + duration ) {
+        event_time && *event_time <= calendar::turn + duration )
+    {
         if( log_activity_skip_state ) {
             add_msg( "Upcoming timed event, cannot skip time" );
         }
         return false;
     }
-    if( has_activity_skip_blocking_npc_state() ) {
+    if( has_activity_skip_blocking_npc_state() )
+    {
         if( log_activity_skip_state ) {
             add_msg( "New NPCs generated, cannot skip time" );
         }
@@ -347,7 +356,7 @@ auto game::execute_activity_fixed_window_skip( const time_duration &duration ) -
      * process_activity() to consume, avoiding a wasted first iteration.
      */
     u.moves = 0;
-for( const auto turn_index : std::views::iota( 0, dur_turns ) ) {
+    for( const auto turn_index : std::views::iota( 0, dur_turns ) ) {
         if( is_game_over() || ( ( !u.activity || !*u.activity ) && !u.in_sleep_state() ) ) {
             if( log_activity_skip_state ) {
                 add_msg( "Activity lost, cannot skip time" );
@@ -446,8 +455,8 @@ for( const auto turn_index : std::views::iota( 0, dur_turns ) ) {
         if( critter_tracker->size() > 0 || has_active_npcs ) {
             sounds::process_sounds();
             m.build_map_cache( level_cache_freshness::plan_for( m,
-                level_cache_freshness::pose_of_viewer( u, get_levz() ),
-                level_cache_freshness::lightmap_policy::skip ) );
+                               level_cache_freshness::pose_of_viewer( u, get_levz() ),
+                               level_cache_freshness::lightmap_policy::skip ) );
             if( critter_tracker->size() > 0 ) {
                 monmove( monster_activity_ai_mode::activity_skip, &activity_monsters );
                 if( critter_tracker->size() != monster_count ) {
@@ -568,8 +577,7 @@ auto game::run_activity_skip_batch_turns( const int skipped_turns ) -> void
     Pathfinding::clear_d_maps();
 }
 
-auto game::run_activity_cadence_boundary() -> void
-{
+auto game::run_activity_cadence_boundary() -> void {
     ZoneScopedN( "activity_cadence_boundary" );
     weather_manager &weather = get_weather();
     weather.clear_temp_cache();
@@ -578,30 +586,33 @@ auto game::run_activity_cadence_boundary() -> void
     level_cache_freshness::report( m, level_cache_freshness::light_changed {
         .visibility = true,
     } );
-    if( action_time_scale::once_every_this_tick( activity_time_cadence::fixed_window() ) ) {
+    if( action_time_scale::once_every_this_tick( activity_time_cadence::fixed_window() ) )
+    {
         overmap_npc_move();
     }
     Pathfinding::clear_d_maps();
     handle_wait_activity_redraw( true );
 }
 
-auto game::try_activity_fixed_window_skip() -> bool
-{
+auto game::try_activity_fixed_window_skip() -> bool {
     ZoneScopedN( "activity_fixed_window_try" );
-    if( activity_fixed_window_force_normal_turn_ ) {
+    if( activity_fixed_window_force_normal_turn_ )
+    {
         activity_fixed_window_force_normal_turn_ = false;
         if( log_activity_skip_state ) {
             add_msg( "Forced Normal Turn" );
         }
         return false;
     }
-    if( ( !u.activity || !*u.activity ) && !u.in_sleep_state() ) {
+    if( ( !u.activity || !*u.activity ) && !u.in_sleep_state() )
+    {
         if( log_activity_skip_state ) {
             add_msg( "No Activity" );
         }
         return false;
     }
-    if( calendar::turn < next_activity_fixed_window_check_ ) {
+    if( calendar::turn < next_activity_fixed_window_check_ )
+    {
         if( log_activity_skip_state ) {
             add_msg(
                 string_format( "Before Next Fixed Window Check in %s turns",
@@ -609,24 +620,27 @@ auto game::try_activity_fixed_window_skip() -> bool
         }
         return false;
     }
-const auto duration = activity_fixed_window_duration();
-if( !can_activity_fixed_window_skip( duration ) ) {
-    next_activity_fixed_window_check_ = calendar::turn + 1_minutes;
-    return false;
-}
-const auto skipped_turns = execute_activity_fixed_window_skip( duration );
-if( skipped_turns <= 0 ) {
-    next_activity_fixed_window_check_ = calendar::turn + 1_minutes;
-    if( log_activity_skip_state ) {
-        add_msg( "No Turns Were Skipped" );
+    const auto duration = activity_fixed_window_duration();
+    if( !can_activity_fixed_window_skip( duration ) )
+    {
+        next_activity_fixed_window_check_ = calendar::turn + 1_minutes;
+        return false;
     }
-    return false;
-}
-TracyPlot( "Activity Fixed Window Skipped Turns", int64_t{ skipped_turns } );
-next_activity_fixed_window_check_ = calendar::turn;
-const auto full_window_turns = to_turns<int>( activity_time_cadence::fixed_window() );
-if( skipped_turns >= full_window_turns || get_weather().nextweather <= calendar::turn ) {
-    run_activity_cadence_boundary();
+    const auto skipped_turns = execute_activity_fixed_window_skip( duration );
+    if( skipped_turns <= 0 )
+    {
+        next_activity_fixed_window_check_ = calendar::turn + 1_minutes;
+        if( log_activity_skip_state ) {
+            add_msg( "No Turns Were Skipped" );
+        }
+        return false;
+    }
+    TracyPlot( "Activity Fixed Window Skipped Turns", int64_t{ skipped_turns } );
+    next_activity_fixed_window_check_ = calendar::turn;
+    const auto full_window_turns = to_turns<int>( activity_time_cadence::fixed_window() );
+    if( skipped_turns >= full_window_turns || get_weather().nextweather <= calendar::turn )
+    {
+        run_activity_cadence_boundary();
     }
     return true;
 }
@@ -660,7 +674,8 @@ auto game::handle_wait_activity_redraw( const bool force ) -> void
         ZoneScopedN( "wait_redraw" );
         if( force || first_redraw_since_waiting_started ||
             action_time_scale::once_every_this_tick( std::min( 1_minutes, wait_refresh_rate ) ) ) {
-            if( force || first_redraw_since_waiting_started || action_time_scale::once_every_this_tick( wait_refresh_rate ) ) {
+            if( force || first_redraw_since_waiting_started ||
+                action_time_scale::once_every_this_tick( wait_refresh_rate ) ) {
                 ui_manager::redraw();
             }
 

@@ -166,191 +166,195 @@ auto require_unique_member( sol::table &owner_dt, const Key &key ) -> void
 template<typename Val>
 struct doc_typename;
 
-template<typename Val>
+template < typename Val >
 std::string doc_typename_impl()
 {
     //static_assert(luna_traits<Val>::impl, "Type must implement luna_traits" );
-    if constexpr( luna_traits<Val>::impl ) {
-        return std::string( luna_traits<Val>::name );
+    if constexpr( luna_traits < Val >::impl ) {
+        return std::string( luna_traits < Val >::name );
     } else {
-        using ValNoPtr = std::remove_pointer_t<Val>;
-        using ValBare = remove_cv_ref_t<ValNoPtr>;
-        if constexpr( luna_traits<ValBare>::impl ) {
-            return std::string( luna_traits<ValBare>::name );
+        using ValNoPtr = std::remove_pointer_t < Val >;
+        using ValBare = remove_cv_ref_t < ValNoPtr >;
+        if constexpr( luna_traits < ValBare >::impl ) {
+            return std::string( luna_traits < ValBare >::name );
         } else {
-            const std::string &str = sol::detail::demangle<Val>();
+            const std::string &str = sol::detail::demangle < Val > ();
             return std::string( "CppVal<" ) + str + ">";
         }
     }
 }
 
-template<typename Val>
+template < typename Val >
 struct doc_typename {
     std::string operator()() const {
-        auto str = doc_typename_impl<Val>();
+        auto str = doc_typename_impl < Val > ();
         return str;
     }
 };
 
-template<typename Val>
+template < typename Val >
 std::string doc_type()
 {
-    return doc_typename<std::remove_cvref_t<Val>> {}();
+    return doc_typename < std::remove_cvref_t < Val>> {}();
 }
 
-template<typename Ref>
-struct doc_typename<sol::basic_object<Ref>> {
+template < typename Ref >
+struct doc_typename < sol::basic_object < Ref>> {
     std::string operator()() const {
         return "any";
     }
 };
 
-template<>
-struct doc_typename<sol::nil_t> {
+template < >
+struct doc_typename < sol::nil_t > {
     std::string operator()() const {
         return "nil";
     }
 };
 
-template<typename ...Args>
-struct doc_typename<std::variant<Args...>> {
+template < typename ...Args >
+struct doc_typename < std::variant < Args...>> {
     std::string operator()() const {
         std::string ret = "Variant( ";
         bool is_first = true;
-        ( [&]() {
+        ( [&]()
+        {
             if( is_first ) {
                 is_first = false;
             } else {
                 ret += ", ";
             }
-            ret += doc_type<Args>();
+            ret += doc_type < Args > ();
         }
         (), ... );
         return ret + " )";
     }
 };
 
-template<typename T, typename U>
-struct doc_typename<std::pair<T, U>> {
+template < typename T, typename U >
+struct doc_typename < std::pair < T, U>> {
     std::string operator()() const {
         std::string ret = "Pair( ";
-        ret += doc_type<T>();
+        ret += doc_type < T > ();
         ret += ", ";
-        ret += doc_type<U>();
+        ret += doc_type < U > ();
         return ret + " )";
     }
 };
 
-template<typename ...Args>
-struct doc_typename<std::tuple<Args...>> {
+template < typename ...Args >
+struct doc_typename < std::tuple < Args...>> {
     std::string operator()() const {
         std::string ret = "(";
         bool is_first = true;
-        ( [&]() {
+        ( [&]()
+        {
             if( is_first ) {
                 is_first = false;
             } else {
                 ret += ",";
             }
             ret += " ";
-            ret += doc_type<Args>();
+            ret += doc_type < Args > ();
         }
         (), ... );
-        if( !is_first ) {
+        if( !is_first )
+        {
             ret += " ";
         }
         return ret + ")";
     }
 };
 
-template<typename Val>
-struct doc_typename<sol::optional<Val>> {
+template < typename Val >
+struct doc_typename < sol::optional < Val>> {
     std::string operator()() const {
         std::string ret = "Opt( ";
-        ret += doc_type<Val>();
+        ret += doc_type < Val > ();
         return ret + " )";
     }
 };
 
-template<typename Val>
-struct doc_typename<std::optional<Val>> : doc_typename<sol::optional<Val>> {};
+template < typename Val >
+struct doc_typename < std::optional < Val>> : doc_typename<sol::optional < Val >> {};
 
-template<typename Val, std::size_t N>
-struct doc_typename<std::array<Val, N>> {
+template < typename Val, std::size_t N >
+struct doc_typename < std::array < Val, N>> {
     std::string operator()() const {
         std::string ret = "Array( ";
-        ret += doc_type<Val>();
+        ret += doc_type < Val > ();
         ret += ", ";
         ret += std::to_string( N );
         return ret + " )";
     }
 };
 
-template<typename Val>
-struct doc_typename< std::vector<Val> > {
+template < typename Val >
+struct doc_typename < std::vector < Val> > {
     std::string operator()() const {
         std::string ret = "Vector( ";
-        ret += doc_type<Val>();
+        ret += doc_type < Val > ();
         return ret + " )";
     }
 };
 
-template<typename Val>
-struct doc_typename<std::set<Val>> {
+template < typename Val >
+struct doc_typename < std::set < Val>> {
     std::string operator()() const {
         std::string ret = "Set( ";
-        ret += doc_type<Val>();
+        ret += doc_type < Val > ();
         return ret + " )";
     }
 };
 
-template<typename Key, typename Val>
-struct doc_typename<std::map<Key, Val>> {
+template < typename Key, typename Val >
+struct doc_typename < std::map < Key, Val>> {
     std::string operator()() const {
         std::string ret = "Dict( ";
-        ret += doc_type<Key>();
+        ret += doc_type < Key > ();
         ret += ", ";
-        ret += doc_type<Val>();
+        ret += doc_type < Val > ();
         return ret + " )";
     }
 };
 
-template<typename Ret, typename ...Args>
-struct doc_typename<std::function<Ret( Args... )>> {
+template < typename Ret, typename ...Args >
+struct doc_typename < std::function < Ret( Args... )>> {
     std::string operator()() const {
         std::string ret = "Func";
-        ret += doc_type<std::tuple<Args...>>();
-        if constexpr( !std::is_same_v<Ret, void> ) {
+        ret += doc_type < std::tuple < Args...>>();
+        if constexpr( !std::is_same_v < Ret, void > )
+        {
             ret += " -> ";
-            ret += doc_type<Ret>();
+            ret += doc_type < Ret > ();
         }
         return ret;
     }
 };
 
-template<typename ...Args>
-std::vector<std::string> doc_type_list()
+template < typename ...Args >
+std::vector < std::string > doc_type_list()
 {
-    std::vector<std::string> ret;
+    std::vector < std::string > ret;
     ( (
-          ret.push_back( doc_type<Args>() )
+          ret.push_back( doc_type < Args > () )
       ), ... );
     return ret;
 }
 
-template<typename RetVal, typename ...Args>
-std::vector<std::string> doc_one_constructor( std::function<RetVal( Args... )> )
+template < typename RetVal, typename ...Args >
+std::vector < std::string > doc_one_constructor( std::function < RetVal( Args... ) > )
 {
-    return doc_type_list<Args...>();
+    return doc_type_list < Args... > ();
 }
 
-template<typename ...Args>
-void doc_constructors( sol::table &dt, const sol::constructor_list<Args...> & )
+template < typename ...Args >
+void doc_constructors( sol::table &dt, const sol::constructor_list < Args... > & )
 {
-    std::vector<std::vector<std::string>> ctors;
+    std::vector < std::vector < std::string>> ctors;
 
     ( (
-          ctors.push_back( doc_one_constructor( std::function<Args>( nullptr ) ) )
+          ctors.push_back( doc_one_constructor( std::function < Args > ( nullptr ) ) )
       ), ... );
 
     dt[KEY_CONSTRUCT] = ctors;
@@ -358,17 +362,17 @@ void doc_constructors( sol::table &dt, const sol::constructor_list<Args...> & )
 
 inline void doc_constructors( sol::table &dt, const sol::no_construction & )
 {
-    std::vector<std::vector<std::string>> ctors;
+    std::vector < std::vector < std::string>> ctors;
     dt[KEY_CONSTRUCT] = ctors;
 }
 
-template<typename ...Args>
-void doc_bases( sol::table &dt, const sol::bases<Args...> & )
+template < typename ...Args >
+void doc_bases( sol::table &dt, const sol::bases < Args... > & )
 {
-    std::vector<std::string> bases;
+    std::vector < std::string > bases;
 
     ( (
-          bases.push_back( doc_type<Args>() )
+          bases.push_back( doc_type < Args > () )
       ), ... );
 
     dt[KEY_BASES] = bases;
@@ -376,7 +380,7 @@ void doc_bases( sol::table &dt, const sol::bases<Args...> & )
 
 inline void doc_bases( sol::table &dt, const no_bases_t & )
 {
-    std::vector<std::string> ctors;
+    std::vector < std::string > ctors;
     dt[KEY_BASES] = ctors;
 }
 
@@ -395,30 +399,30 @@ inline sol::table get_global_doctable( sol::state_view &lua )
     }
 }
 
-template<typename Class>
+template < typename Class >
 inline sol::table get_type_doctable( sol::state_view &lua )
 {
-    static_assert( detail::luna_traits<Class>::impl, "Type must implement luna_traits<T>" );
+    static_assert( detail::luna_traits < Class >::impl, "Type must implement luna_traits<T>" );
 
     sol::table gdt = get_global_doctable( lua );
-    return gdt[detail::KEY_TYPES][detail::luna_traits<Class>::name];
+    return gdt[detail::KEY_TYPES][detail::luna_traits < Class >::name];
 }
 
-template<typename Class>
+template < typename Class >
 inline sol::table get_enum_doctable( sol::state_view &lua )
 {
-    static_assert( detail::luna_traits<Class>::impl, "Type must implement luna_traits<T>" );
+    static_assert( detail::luna_traits < Class >::impl, "Type must implement luna_traits<T>" );
 
     sol::table gdt = get_global_doctable( lua );
-    return gdt[detail::KEY_ENUMS][detail::luna_traits<Class>::name];
+    return gdt[detail::KEY_ENUMS][detail::luna_traits < Class >::name];
 }
 
-template<typename Class, typename Value>
-void doc_member( sol::table &dt, sol::types<Value Class::*> && )
+template < typename Class, typename Value >
+void doc_member( sol::table &dt, sol::types < Value Class::* > && )
 {
     dt[KEY_MEMBER_TYPE] = MEMBER_IS_VAR;
     add_comment( dt, KEY_MEMBER_COMMENT );
-    dt[KEY_MEMBER_VARIABLE_TYPE] = doc_type<Value>();
+    dt[KEY_MEMBER_VARIABLE_TYPE] = doc_type < Value > ();
 }
 
 // Olanti! Curse thee for what I must do!
@@ -426,9 +430,9 @@ void doc_member( sol::table &dt, sol::types<Value Class::*> && )
 // It also has some pretty significant issues with intuiting the type of the
 // property it's working with.
 // TODO: Resolve these issues.
-template<typename GetClass, typename GetVal>
+template < typename GetClass, typename GetVal >
 void doc_member( sol::table &dt,
-                 sol::types<sol::property_wrapper<GetVal GetClass::*, sol::detail::no_prop>> && )
+                 sol::types < sol::property_wrapper < GetVal GetClass::*, sol::detail::no_prop>> && )
 {
     dt[KEY_MEMBER_TYPE] = MEMBER_IS_VAR;
     add_comment( dt, KEY_MEMBER_COMMENT );
@@ -437,165 +441,165 @@ void doc_member( sol::table &dt,
      * help avert it for certain types, but I would much prefer the root problem
      * solved.
      */
-    dt[KEY_MEMBER_VARIABLE_TYPE] = doc_type<GetVal>();
+    dt[KEY_MEMBER_VARIABLE_TYPE] = doc_type < GetVal > ();
 }
 
-template<typename Class, typename Value>
-void doc_member( sol::table &dt, sol::types<sol::readonly_wrapper<Value Class::*>> && )
+template < typename Class, typename Value >
+void doc_member( sol::table &dt, sol::types < sol::readonly_wrapper < Value Class::*>> && )
 {
     dt[KEY_MEMBER_TYPE] = MEMBER_IS_VAR;
     add_comment( dt, KEY_MEMBER_COMMENT );
-    dt[KEY_MEMBER_VARIABLE_TYPE] = doc_type<Value>();
+    dt[KEY_MEMBER_VARIABLE_TYPE] = doc_type < Value > ();
 }
 
-template<typename Class, bool add_self_arg, typename RetVal, typename ...Args>
-void doc_member_fx_impl2( sol::table &dt, sol::types<RetVal> &&, sol::types<Args...> && )
+template < typename Class, bool add_self_arg, typename RetVal, typename ...Args >
+void doc_member_fx_impl2( sol::table &dt, sol::types < RetVal > &&, sol::types < Args... > && )
 {
-    dt[KEY_MEMBER_RETVAL] = doc_type<RetVal>();
+    dt[KEY_MEMBER_RETVAL] = doc_type < RetVal > ();
     if constexpr( add_self_arg ) {
-        dt[KEY_MEMBER_ARGS] = doc_type_list<Class, Args...>();
+        dt[KEY_MEMBER_ARGS] = doc_type_list < Class, Args... > ();
     } else {
-        dt[KEY_MEMBER_ARGS] = doc_type_list<Args...>();
+        dt[KEY_MEMBER_ARGS] = doc_type_list < Args... > ();
     }
 }
 
-template<typename Class, typename Function>
-void doc_member_fx_overload( sol::table &dt, std::vector<sol::table> &overloads )
+template < typename Class, typename Function >
+void doc_member_fx_overload( sol::table &dt, std::vector < sol::table > &overloads )
 {
     sol::state_view lua( dt.lua_state() );
     sol::table overload = lua.create_table();
     overloads.push_back( overload );
-    using RetVal = typename fx_traits<Function>::return_type;
-    using Args = typename fx_traits<Function>::args_list;
-    constexpr bool add_self_arg = !fx_traits<Function>::is_member_function;
-    doc_member_fx_impl2<Class, add_self_arg>( overload, sol::types<RetVal>(), Args() );
+    using RetVal = typename fx_traits < Function >::return_type;
+    using Args = typename fx_traits < Function >::args_list;
+    constexpr bool add_self_arg = !fx_traits < Function >::is_member_function;
+    doc_member_fx_impl2 < Class, add_self_arg > ( overload, sol::types < RetVal > (), Args() );
 }
 
-template<typename Class, typename ...Functions>
-void doc_member_fx_impl( sol::table &dt, sol::types<Functions...> && )
+template < typename Class, typename ...Functions >
+void doc_member_fx_impl( sol::table &dt, sol::types < Functions... > && )
 {
     dt[KEY_MEMBER_TYPE] = MEMBER_IS_FUNC;
     add_comment( dt, KEY_MEMBER_COMMENT );
-    std::vector<sol::table> overloads;
+    std::vector < sol::table > overloads;
 
     ( [&]() {
-        doc_member_fx_overload<Class, Functions>( dt, overloads );
+        doc_member_fx_overload < Class, Functions > ( dt, overloads );
     }
     (), ... );
     dt[KEY_MEMBER_OVERLOADS] = overloads;
 }
 
-template<typename Class, typename ...Functions>
-void doc_member_fx( sol::table &dt, sol::types<sol::overload_set<Functions...>> && )
+template < typename Class, typename ...Functions >
+void doc_member_fx( sol::table &dt, sol::types < sol::overload_set < Functions...>> && )
 {
-    doc_member_fx_impl<Class>( dt, sol::types<Functions...>() );
+    doc_member_fx_impl < Class > ( dt, sol::types < Functions... > () );
 }
 
-template<typename Class, typename Func>
-void doc_member_fx( sol::table &dt, sol::types<Func> && )
+template < typename Class, typename Func >
+void doc_member_fx( sol::table &dt, sol::types < Func > && )
 {
-    doc_member_fx_impl<Class>( dt, sol::types<Func>() );
+    doc_member_fx_impl < Class > ( dt, sol::types < Func > () );
 }
 
-template<typename Value>
+template < typename Value >
 void doc_free( sol::table &dt, Value val )
 {
     dt[KEY_MEMBER_TYPE] = MEMBER_IS_VAR;
     add_comment( dt, KEY_MEMBER_COMMENT );
-    dt[KEY_MEMBER_VARIABLE_TYPE] = doc_type<Value>();
+    dt[KEY_MEMBER_VARIABLE_TYPE] = doc_type < Value > ();
     dt[KEY_MEMBER_VARIABLE_HAS_VALUE] = true;
     dt[KEY_MEMBER_VARIABLE_VALUE] = val;
 }
 
-template<typename RetVal, typename ...Args>
-void doc_free_fx_impl2( sol::table &dt, sol::types<RetVal> &&, sol::types<Args...> && )
+template < typename RetVal, typename ...Args >
+void doc_free_fx_impl2( sol::table &dt, sol::types < RetVal > &&, sol::types < Args... > && )
 {
-    dt[KEY_MEMBER_RETVAL] = doc_type<RetVal>();
-    dt[KEY_MEMBER_ARGS] = doc_type_list<Args...>();
+    dt[KEY_MEMBER_RETVAL] = doc_type < RetVal > ();
+    dt[KEY_MEMBER_ARGS] = doc_type_list < Args... > ();
 }
 
-template<typename Function>
-void doc_free_fx_overload( sol::table &dt, std::vector<sol::table> &overloads )
+template < typename Function >
+void doc_free_fx_overload( sol::table &dt, std::vector < sol::table > &overloads )
 {
     sol::state_view lua( dt.lua_state() );
     sol::table overload = lua.create_table();
     overloads.push_back( overload );
-    using RetVal = typename fx_traits<Function>::return_type;
-    using Args = typename fx_traits<Function>::args_list;
-    doc_free_fx_impl2( overload, sol::types<RetVal>(), Args() );
+    using RetVal = typename fx_traits < Function >::return_type;
+    using Args = typename fx_traits < Function >::args_list;
+    doc_free_fx_impl2( overload, sol::types < RetVal > (), Args() );
 }
 
-template<typename ...Functions>
-void doc_free_fx_impl( sol::table &dt, sol::types<Functions...> && )
+template < typename ...Functions >
+void doc_free_fx_impl( sol::table &dt, sol::types < Functions... > && )
 {
     dt[KEY_MEMBER_TYPE] = MEMBER_IS_FUNC;
     add_comment( dt, KEY_MEMBER_COMMENT );
-    std::vector<sol::table> overloads;
+    std::vector < sol::table > overloads;
     ( [&]() {
-        doc_free_fx_overload<Functions>( dt, overloads );
+        doc_free_fx_overload < Functions > ( dt, overloads );
     }
     (), ... );
     dt[KEY_MEMBER_OVERLOADS] = overloads;
 }
 
-template<typename ...Functions>
-void doc_free_fx( sol::table &dt, sol::types<sol::overload_set<Functions...>> && )
+template < typename ...Functions >
+void doc_free_fx( sol::table &dt, sol::types < sol::overload_set < Functions...>> && )
 {
-    doc_free_fx_impl( dt, sol::types<Functions...>() );
+    doc_free_fx_impl( dt, sol::types < Functions... > () );
 }
 
-template<typename Func>
-void doc_free_fx( sol::table &dt, sol::types<Func> && )
+template < typename Func >
+void doc_free_fx( sol::table &dt, sol::types < Func > && )
 {
-    doc_free_fx_impl( dt, sol::types<Func>() );
+    doc_free_fx_impl( dt, sol::types < Func > () );
 }
 
-template<typename Key>
+template < typename Key >
 sol::table make_type_member_doctable( sol::table type_dt, const Key &key )
 {
     sol::state_view lua( type_dt.lua_state() );
-    std::vector<sol::object> &members = type_dt[ detail::KEY_MEMBER ];
+    std::vector < sol::object > &members = type_dt[ detail::KEY_MEMBER ];
     sol::table member_dt = lua.create_table();
     member_dt[detail::KEY_MEMBER_NAME] = key;
     members.push_back( member_dt );
     return member_dt;
 }
 
-template<typename Value, typename Class, typename Key>
-auto doc_member_fake( sol::usertype<Class> &ut, Key &&key )
+template < typename Value, typename Class, typename Key >
+auto doc_member_fake( sol::usertype < Class > &ut, Key &&key )
 {
     sol::state_view lua( ut.lua_state() );
-    sol::table type_dt = detail::get_type_doctable<Class>( lua );
+    sol::table type_dt = detail::get_type_doctable < Class > ( lua );
     sol::table member_dt = detail::make_type_member_doctable( type_dt, key );
 
     member_dt[KEY_MEMBER_TYPE] = MEMBER_IS_VAR;
     add_comment( member_dt, KEY_MEMBER_COMMENT );
-    member_dt[KEY_MEMBER_VARIABLE_TYPE] = doc_type<Value>();
+    member_dt[KEY_MEMBER_VARIABLE_TYPE] = doc_type < Value > ();
 }
 
 } // namespace detail
 
-template<typename Class, typename ConstructorScheme, typename Bases>
-sol::usertype<Class> new_usertype(
+template < typename Class, typename ConstructorScheme, typename Bases >
+sol::usertype < Class > new_usertype(
     sol::state_view &lua,
     Bases &&bases,
     ConstructorScheme &&constructor
 )
 {
-    static_assert( detail::luna_traits<Class>::impl, "Type must implement luna_traits<T>" );
+    static_assert( detail::luna_traits < Class >::impl, "Type must implement luna_traits<T>" );
 
     // Ensure global doctable exists
     sol::table global_dt = detail::get_global_doctable( lua );
 
-    constexpr std::string_view name = detail::luna_traits<Class>::name;
+    constexpr std::string_view name = detail::luna_traits < Class >::name;
 
     // Register Sol usertype
-    sol::usertype<Class> ut;
-    using BasesBare = detail::remove_cv_ref_t<Bases>;
-    if constexpr( std::is_same_v<BasesBare, no_bases_t> ) {
-        ut = lua.new_usertype<Class>( name, constructor );
+    sol::usertype < Class > ut;
+    using BasesBare = detail::remove_cv_ref_t < Bases >;
+    if constexpr( std::is_same_v < BasesBare, no_bases_t > ) {
+        ut = lua.new_usertype < Class > ( name, constructor );
     } else {
-        ut = lua.new_usertype<Class>( name, constructor, sol::base_classes, bases );
+        ut = lua.new_usertype < Class > ( name, constructor, sol::base_classes, bases );
     }
 
     // Create doctable for this type
@@ -609,7 +613,7 @@ sol::usertype<Class> new_usertype(
     detail::add_comment( type_dt, detail::KEY_USERTYPE_COMMENT );
 
     // Init members table
-    type_dt[detail::KEY_MEMBER] = std::vector<sol::object>();
+    type_dt[detail::KEY_MEMBER] = std::vector < sol::object > ();
 
     // Document constructors (or lack thereof)
     detail::doc_constructors( type_dt, constructor );
@@ -619,110 +623,110 @@ sol::usertype<Class> new_usertype(
 
     // Add helper method to get name under which usertype is bound in Lua
     ut[detail::KEY_GET_TYPE] = []() -> std::string_view {
-        return detail::luna_traits<Class>::name;
+        return detail::luna_traits < Class >::name;
     };
 
     return ut;
 }
 
-template<typename Class, typename Key, typename Func >
+template < typename Class, typename Key, typename Func >
 void set_fx(
-    sol::usertype<Class> &ut,
+    sol::usertype < Class > &ut,
     Key &&key,
     Func value
 )
 {
     sol::state_view lua( ut.lua_state() );
-    sol::table type_dt = detail::get_type_doctable<Class>( lua );
+    sol::table type_dt = detail::get_type_doctable < Class > ( lua );
     detail::require_unique_member( type_dt, key );
 
     // Due to a bug in sol2, on GCC build protected function call may call wrong lambda
     // https://github.com/ThePhD/sol2/issues/1444
     // This happens if we register with table.set( key, func ), but for
     // some reason table[key] = func makes it work fine.
-    ut[ key ] = std::forward<Func>( value );
+    ut[ key ] = std::forward < Func > ( value );
 
     sol::table member_dt = detail::make_type_member_doctable( type_dt, key );
-    detail::doc_member_fx<Class>( member_dt, sol::types<Func>() );
+    detail::doc_member_fx < Class > ( member_dt, sol::types < Func > () );
 }
 
-template<typename Class, typename Key, typename Value>
+template < typename Class, typename Key, typename Value >
 void set(
-    sol::usertype<Class> &ut,
+    sol::usertype < Class > &ut,
     Key &&key,
     Value &&value
 )
 {
     sol::state_view lua( ut.lua_state() );
-    sol::table type_dt = detail::get_type_doctable<Class>( lua );
+    sol::table type_dt = detail::get_type_doctable < Class > ( lua );
     detail::require_unique_member( type_dt, key );
-    ut[ key ] = std::forward<Value>( value );
+    ut[ key ] = std::forward < Value > ( value );
 
     sol::table member_dt = detail::make_type_member_doctable( type_dt, key );
-    detail::doc_member<Class>( member_dt, sol::types<Value>() );
+    detail::doc_member < Class > ( member_dt, sol::types < Value > () );
 }
 
-template<typename Class, typename Key, typename Getter, typename Setter>
+template < typename Class, typename Key, typename Getter, typename Setter >
 void set_prop(
-    sol::usertype<Class> &ut,
+    sol::usertype < Class > &ut,
     Key &&key,
     Getter &&get,
     Setter &&set
 )
 {
-    using std_function_type = decltype( std::function{std::forward<Getter>( get )} );
+    using std_function_type = decltype( std::function{std::forward < Getter > ( get )} );
     using Value = std_function_type::result_type;
     sol::state_view lua( ut.lua_state() );
-    sol::table type_dt = detail::get_type_doctable<Class>( lua );
+    sol::table type_dt = detail::get_type_doctable < Class > ( lua );
     detail::require_unique_member( type_dt, key );
-    ut[ key ] = sol::property( std::forward<Getter>( get ), std::forward<Setter>( set ) );
-    detail::doc_member_fake<Value, Class>( ut, key );
+    ut[ key ] = sol::property( std::forward < Getter > ( get ), std::forward < Setter > ( set ) );
+    detail::doc_member_fake < Value, Class > ( ut, key );
 }
 
 
-template<typename Class, typename Key, typename Getter>
+template < typename Class, typename Key, typename Getter >
 void set_prop(
-    sol::usertype<Class> &ut,
+    sol::usertype < Class > &ut,
     Key &&key,
     Getter &&get
 )
 {
-    using std_function_type = decltype( std::function{std::forward<Getter>( get )} );
+    using std_function_type = decltype( std::function{std::forward < Getter > ( get )} );
     using Value = std_function_type::result_type;
     sol::state_view lua( ut.lua_state() );
-    sol::table type_dt = detail::get_type_doctable<Class>( lua );
+    sol::table type_dt = detail::get_type_doctable < Class > ( lua );
     detail::require_unique_member( type_dt, key );
-    ut[ key ] = sol::property( std::forward<Getter>( get ) );
-    detail::doc_member_fake<Value, Class>( ut, key );
+    ut[ key ] = sol::property( std::forward < Getter > ( get ) );
+    detail::doc_member_fake < Value, Class > ( ut, key );
 }
 
-template<typename E>
+template < typename E >
 struct userenum {
     sol::table t;
     bool finalized = false;
 
     ~userenum() {
         if( !finalized ) {
-            debugmsg( "Userenum<%s> has not been finalized!", detail::luna_traits<E>::name );
+            debugmsg( "Userenum<%s> has not been finalized!", detail::luna_traits < E >::name );
             std::abort();
         }
     }
 };
 
-template<typename Enum>
-userenum<Enum> begin_enum(
+template < typename Enum >
+userenum < Enum > begin_enum(
     sol::state_view &lua
 )
 {
-    static_assert( detail::luna_traits<Enum>::impl, "Type must implement luna_traits<T>" );
+    static_assert( detail::luna_traits < Enum >::impl, "Type must implement luna_traits<T>" );
 
     sol::table ut = lua.create_table();
-    return userenum<Enum> { ut };
+    return userenum < Enum > { ut };
 }
 
-template<typename Enum, typename Key>
+template < typename Enum, typename Key >
 void add_val(
-    userenum<Enum> &e,
+    userenum < Enum > &e,
     const Key &key,
     const Enum &value
 )
@@ -730,13 +734,13 @@ void add_val(
     e.t[key] = value;
 }
 
-template<typename Enum>
+template < typename Enum >
 void finalize_enum(
-    userenum<Enum> &e
+    userenum < Enum > &e
 )
 {
     sol::state_view lua( e.t.lua_state() );
-    constexpr std::string_view name = detail::luna_traits<Enum>::name;
+    constexpr std::string_view name = detail::luna_traits < Enum >::name;
 
     // Ensure global doctable exists
     sol::table global_dt = detail::get_global_doctable( lua );
@@ -784,7 +788,7 @@ inline userlib begin_lib(
     global_dt[detail::KEY_LIBS][name] = lib_dt;
 
     // Init members table
-    lib_dt[detail::KEY_MEMBER] = std::vector<sol::object>();
+    lib_dt[detail::KEY_MEMBER] = std::vector < sol::object > ();
 
     // Library comment
     detail::add_comment( lib_dt, detail::KEY_LIB_COMMENT );
@@ -798,7 +802,7 @@ inline userlib begin_lib(
     return userlib { t, name, lib_dt };
 }
 
-template<typename Key, typename Func >
+template < typename Key, typename Func >
 void set_fx(
     userlib &lib,
     Key &&key,
@@ -811,13 +815,13 @@ void set_fx(
     // https://github.com/ThePhD/sol2/issues/1444
     // This happens if we register with table.set( key, func ), but for
     // some reason table[key] = func makes it work fine.
-    lib.t[ key ] = std::forward<Func>( value );
+    lib.t[ key ] = std::forward < Func > ( value );
 
     sol::table member_dt = detail::make_type_member_doctable( lib.dt, key );
-    detail::doc_free_fx( member_dt, sol::types<Func>() );
+    detail::doc_free_fx( member_dt, sol::types < Func > () );
 }
 
-template<typename Key, typename Value>
+template < typename Key, typename Value >
 void set(
     userlib &lib,
     Key &&key,
@@ -851,10 +855,10 @@ inline void doc( const std::string &doc )
     detail::current_comment.push_back( doc );
 }
 
-template<typename ... Ts>
+template < typename ... Ts >
 inline void doc_params( const Ts &... args )
 {
-    auto cc = []<typename T>( const T & t ) {
+    auto cc = [] < typename T > ( const T & t ) {
         auto com = std::format( "@param {}", t );
         detail::current_comment.push_back( com );
     };

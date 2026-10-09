@@ -124,7 +124,7 @@ auto resolve_layout_entry_name( const panel_layout_entry &entry,
                                 const std::map<std::string, std::string> &lua_name_by_id ) -> std::optional<std::string>
 {
     if( entry.lua_id ) {
-    const auto it = lua_name_by_id.find( *entry.lua_id );
+        const auto it = lua_name_by_id.find( *entry.lua_id );
         if( it == lua_name_by_id.end() ) {
             return std::nullopt;
         }
@@ -167,20 +167,20 @@ struct lua_widget_line {
 };
 
 auto split_widget_lines( const std::string &text,
-                         const nc_color color ) -> std::vector<lua_widget_line>
+                         const nc_color color ) -> std::vector < lua_widget_line >
 {
     auto parts = text | std::views::split( '\n' )
     | std::views::transform( [color]( const auto & part ) {
         return lua_widget_line{
-            .text = std::ranges::to<std::string>( part ),
+            .text = std::ranges::to < std::string > ( part ),
             .color = color,
         };
     } );
-    return std::ranges::to<std::vector<lua_widget_line>>( parts );
+    return std::ranges::to < std::vector < lua_widget_line>>( parts );
 }
 
-auto append_widget_lines( std::vector<lua_widget_line> &out,
-                          std::vector<lua_widget_line> &&more ) -> void
+auto append_widget_lines( std::vector < lua_widget_line > &out,
+                          std::vector < lua_widget_line > &&more ) -> void
 {
     std::ranges::move( more, std::back_inserter( out ) );
 }
@@ -190,57 +190,57 @@ auto lua_panel_name( const cata::lua_sidebar_widgets::widget_entry &widget ) -> 
     return widget.name.empty() ? widget.id : widget.name;
 }
 
-auto resolve_widget_color( const sol::object &obj ) -> std::optional<nc_color>
+auto resolve_widget_color( const sol::object &obj ) -> std::optional < nc_color >
 {
     if( !obj.valid() || obj == sol::lua_nil ) {
         return std::nullopt;
     }
-    if( obj.is<color_id>() ) {
-        return get_all_colors().get( obj.as<color_id>() );
+    if( obj.is < color_id > () ) {
+        return get_all_colors().get( obj.as < color_id > () );
     }
-    if( obj.is<std::string>() ) {
-        const auto id = get_all_colors().name_to_id( obj.as<std::string>(),
+    if( obj.is < std::string > () ) {
+        const auto id = get_all_colors().name_to_id( obj.as < std::string > (),
                         report_color_error::no );
         return get_all_colors().get( id );
     }
     return std::nullopt;
 }
 
-auto to_widget_lines( const sol::object &value ) -> std::vector<lua_widget_line>
+auto to_widget_lines( const sol::object &value ) -> std::vector < lua_widget_line >
 {
     if( !value.valid() || value == sol::lua_nil ) {
         return {};
     }
-    if( value.is<std::string>() ) {
-        return split_widget_lines( value.as<std::string>(), c_light_gray );
+    if( value.is < std::string > () ) {
+        return split_widget_lines( value.as < std::string > (), c_light_gray );
     }
-    if( !value.is<sol::table>() ) {
+    if( !value.is < sol::table > () ) {
         return {};
     }
 
-    auto lines = std::vector<lua_widget_line> {};
-    auto table = value.as<sol::table>();
-    const auto count = static_cast<size_t>( table.size() );
+    auto lines = std::vector < lua_widget_line > {};
+    auto table = value.as < sol::table > ();
+    const auto count = static_cast < size_t > ( table.size() );
     auto indices = std::views::iota( size_t{ 1 }, count + 1 );
     std::ranges::for_each( indices, [&]( const size_t idx ) {
-        auto entry = table.get<sol::object>( idx );
+        auto entry = table.get < sol::object > ( idx );
         if( !entry.valid() || entry == sol::lua_nil ) {
             return;
         }
-        if( entry.is<std::string>() ) {
+        if( entry.is < std::string > () ) {
             append_widget_lines( lines,
-                                 split_widget_lines( entry.as<std::string>(), c_light_gray ) );
+                                 split_widget_lines( entry.as < std::string > (), c_light_gray ) );
             return;
         }
-        if( !entry.is<sol::table>() ) {
+        if( !entry.is < sol::table > () ) {
             return;
         }
-        auto entry_tbl = entry.as<sol::table>();
-        auto text = entry_tbl.get_or<std::string>( "text", "" );
+        auto entry_tbl = entry.as < sol::table > ();
+        auto text = entry_tbl.get_or < std::string > ( "text", "" );
         if( text.empty() ) {
             return;
         }
-        auto color_obj = entry_tbl.get<sol::object>( "color" );
+        auto color_obj = entry_tbl.get < sol::object > ( "color" );
         auto color = resolve_widget_color( color_obj ).value_or( c_light_gray );
         append_widget_lines( lines, split_widget_lines( text, color ) );
     } );
@@ -248,7 +248,7 @@ auto to_widget_lines( const sol::object &value ) -> std::vector<lua_widget_line>
 }
 
 auto get_lua_widget_lines( const cata::lua_sidebar_widgets::widget_entry &widget,
-                           const int width, const int height ) -> std::vector<lua_widget_line>
+                           const int width, const int height ) -> std::vector < lua_widget_line >
 {
     try {
         auto res = widget.draw( width, height );
@@ -257,10 +257,10 @@ auto get_lua_widget_lines( const cata::lua_sidebar_widgets::widget_entry &widget
         if( return_count == 0 ) {
             return {};
         }
-        auto lines = std::vector<lua_widget_line> {};
+        auto lines = std::vector < lua_widget_line > {};
         auto indices = std::views::iota( 0, return_count );
         std::ranges::for_each( indices, [&]( const int idx ) {
-            auto value = res.get<sol::object>( idx );
+            auto value = res.get < sol::object > ( idx );
             append_widget_lines( lines, to_widget_lines( value ) );
         } );
         return lines;
@@ -273,18 +273,18 @@ auto get_lua_widget_lines( const cata::lua_sidebar_widgets::widget_entry &widget
 auto should_render_lua_widget( const cata::lua_sidebar_widgets::widget_entry &widget ) -> bool
 {
     if( widget.panel_visible_fn ) {
-    try {
-        auto res = ( *widget.panel_visible_fn )();
+        try {
+            auto res = ( *widget.panel_visible_fn )();
             check_func_result( res );
             if( res.return_count() == 0 ) {
                 return true;
             }
-            auto obj = res.get<sol::object>();
+            auto obj = res.get < sol::object > ();
             if( !obj.valid() || obj == sol::lua_nil ) {
                 return true;
             }
-            if( obj.is<bool>() ) {
-                return obj.as<bool>();
+            if( obj.is < bool > () ) {
+                return obj.as < bool > ();
             }
         } catch( const std::runtime_error &err ) {
             debugmsg( "Failed to get Lua sidebar widget '%s' visibility: %s", widget.id, err.what() );
@@ -295,10 +295,10 @@ auto should_render_lua_widget( const cata::lua_sidebar_widgets::widget_entry &wi
         return false;
     }
     if( !widget.render ) {
-    return true;
-}
-try {
-    auto res = ( *widget.render )();
+        return true;
+    }
+    try {
+        auto res = ( *widget.render )();
         check_func_result( res );
         if( res.return_count() == 0 ) {
             return true;
@@ -306,12 +306,12 @@ try {
         if( res.return_count() == 0 ) {
             return true;
         }
-        auto obj = res.get<sol::object>();
+        auto obj = res.get < sol::object > ();
         if( !obj.valid() || obj == sol::lua_nil ) {
             return true;
         }
-        if( obj.is<bool>() ) {
-            return obj.as<bool>();
+        if( obj.is < bool > () ) {
+            return obj.as < bool > ();
         }
         return true;
     } catch( const std::runtime_error &err ) {
@@ -329,14 +329,14 @@ auto draw_lua_widget_panel( const cata::lua_sidebar_widgets::widget_entry &widge
     const auto lines = get_lua_widget_lines( widget, window_width, window_height );
     const auto layout_id = panel_manager::get_manager().get_current_layout_id();
     const auto add_leading_space = layout_id == "labels" || layout_id == "labels-narrow";
-    const auto max_lines = static_cast<size_t>( window_height );
+    const auto max_lines = static_cast < size_t > ( window_height );
     const auto count = std::min( lines.size(), max_lines );
     auto indices = std::views::iota( size_t{ 0 }, count );
     std::ranges::for_each( indices, [&]( const size_t idx ) {
         const auto &line = lines[idx];
         auto cur_color = line.color;
         const auto display_text = add_leading_space ? " " + line.text : line.text;
-        print_colored_text( w, point( 0, static_cast<int>( idx ) ), cur_color, line.color,
+        print_colored_text( w, point( 0, static_cast < int > ( idx ) ), cur_color, line.color,
                             display_text, report_color_error::no );
     } );
     wnoutrefresh( w );
@@ -358,8 +358,7 @@ auto make_lua_widget_panel( const cata::lua_sidebar_widgets::widget_entry &widge
     };
     auto render_func = [widget_id]() -> bool {
         const auto *entry = cata::lua_sidebar_widgets::find_widget( widget_id );
-        if( entry == nullptr )
-        {
+        if( entry == nullptr ) {
             return false;
         }
         return should_render_lua_widget( *entry );
@@ -371,22 +370,21 @@ auto make_lua_widget_panel( const cata::lua_sidebar_widgets::widget_entry &widge
     // allow more lines). Stage 5's widget engine will unify this via get_wgt_height.
     wp.dynamic_height = [widget_id, width]() -> int {
         const auto *entry = cata::lua_sidebar_widgets::find_widget( widget_id );
-        if( entry == nullptr )
-        {
+        if( entry == nullptr ) {
             return 0;
         }
         const int ceiling = std::max( entry->height, 1 );
         const auto lines = get_lua_widget_lines( *entry, width, ceiling );
-        return std::clamp( static_cast<int>( lines.size() ), 1, ceiling );
+        return std::clamp( static_cast < int > ( lines.size() ), 1, ceiling );
     };
     return wp;
 }
 } // namespace
 
 // constructor
-window_panel::window_panel( std::function<void( avatar &, const catacurses::window & )>
+window_panel::window_panel( std::function < void( avatar &, const catacurses::window & ) >
                             draw_func, const std::string &nm, int ht, int wd, bool default_toggle_,
-                            std::function<bool()> render_func,  bool force_draw )
+                            std::function < bool() > render_func,  bool force_draw )
 {
     draw = std::move( draw_func );
     name = nm;
@@ -402,25 +400,25 @@ window_panel::window_panel( std::function<void( avatar &, const catacurses::wind
 // panels prettify and helper functions
 // ====================================
 
-static std::pair<nc_color, std::string> str_string( const avatar &p )
+static std::pair < nc_color, std::string > str_string( const avatar &p )
 {
     const nc_color clr = color_compare_base( p.get_str_base(), p.get_str() );
     return std::make_pair( clr, _( "Str " ) + value_trimmed( p.get_str() ) );
 }
 
-static std::pair<nc_color, std::string> dex_string( const avatar &p )
+static std::pair < nc_color, std::string > dex_string( const avatar &p )
 {
     const nc_color clr = color_compare_base( p.get_dex_base(), p.get_dex() );
     return std::make_pair( clr, _( "Dex " ) + value_trimmed( p.get_dex() ) );
 }
 
-static std::pair<nc_color, std::string> int_string( const avatar &p )
+static std::pair < nc_color, std::string > int_string( const avatar &p )
 {
     const nc_color clr = color_compare_base( p.get_int_base(), p.get_int() );
     return std::make_pair( clr, _( "Int " ) + value_trimmed( p.get_int() ) );
 }
 
-static std::pair<nc_color, std::string> per_string( const avatar &p )
+static std::pair < nc_color, std::string > per_string( const avatar &p )
 {
     const nc_color clr = color_compare_base( p.get_per_base(), p.get_per() );
     return std::make_pair( clr, _( "Per " ) + value_trimmed( p.get_per() ) );
@@ -429,12 +427,12 @@ static std::pair<nc_color, std::string> per_string( const avatar &p )
 int window_panel::get_height() const
 {
     if( dynamic_height ) {
-    return dynamic_height();
+        return dynamic_height();
     }
     if( height != -1 ) {
-    return height;
-} else if( pixel_minimap_option ) {
-    const int minimap_height = get_option<int>( "PIXEL_MINIMAP_HEIGHT" );
+        return height;
+    } else if( pixel_minimap_option ) {
+        const int minimap_height = get_option < int > ( "PIXEL_MINIMAP_HEIGHT" );
         return minimap_height > 0 ? minimap_height : width / 2;
     } else {
         return 0;
@@ -468,7 +466,7 @@ static nc_color value_color( int stat )
     return valuecolor;
 }
 
-static std::pair<nc_color, int> morale_stat( const avatar &u )
+static std::pair < nc_color, int > morale_stat( const avatar &u )
 {
     const int morale_int = u.get_morale_level();
     nc_color morale_color = c_white;
@@ -481,7 +479,7 @@ static std::pair<nc_color, int> morale_stat( const avatar &u )
 }
 
 
-static std::pair<nc_color, std::string> mana_stat( const player &u )
+static std::pair < nc_color, std::string > mana_stat( const player &u )
 {
     nc_color c_mana = c_red;
     std::string s_mana;
@@ -524,7 +522,7 @@ static std::pair<nc_color, std::string> mana_stat( const player &u )
 static bool spell_panel()
 {
     // If a mod says to always show it, then return early
-    if( get_option<bool>( "ALWAYS_SHOW_MANA" ) ) {
+    if( get_option < bool > ( "ALWAYS_SHOW_MANA" ) ) {
         return true;
     }
     // Also return early if we're below our maximum capacity
@@ -532,7 +530,7 @@ static bool spell_panel()
         return true;
     }
     // Determine if any of the spells the player has take mana to cast
-    std::vector<spell_id> spells = get_avatar().magic->spells();
+    std::vector < spell_id > spells = get_avatar().magic->spells();
     bool has_manacasting = false;
     for( spell_id sp : spells ) {
         spell temp_spell = get_avatar().magic->get_spell( sp );
@@ -555,9 +553,9 @@ bool default_render()
 // Optional show/hide predicates a widget can name via "show_if" — the data-driven
 // equivalent of the render_func gate the hardcoded panels pass (spell_panel,
 // veh_panel). std::function so the TU-static predicates bind directly.
-static const std::map<std::string, std::function<bool()>> &render_predicate_registry()
+static const std::map < std::string, std::function < bool()>> &render_predicate_registry()
 {
-    static const std::map<std::string, std::function<bool()>> reg = {
+    static const std::map < std::string, std::function < bool()>> reg = {
         { "spell_panel", spell_panel },
         { "veh_panel", veh_panel },
         // Registered unconditionally so non-coop builds hide the panel outright
@@ -597,11 +595,11 @@ struct hud_rml_model {
     Rml::String veh_rml;
     Rml::DataModelHandle handle;
 };
-std::unique_ptr<hud_rml_model> g_hud_data;
+std::unique_ptr < hud_rml_model > g_hud_data;
 Rml::ElementDocument *g_hud_doc = nullptr;
 
 // Previous log window seq range, for pruning stale animation keys.
-std::pair<unsigned, unsigned> g_hud_log_prev_seq = { 0, 0 };
+std::pair < unsigned, unsigned > g_hud_log_prev_seq = { 0, 0 };
 // Newest row's text at the last rebuild. A repeated message coalesces into the
 // existing entry (Messages::add_msg bumps its count and leaves its seq alone), so
 // the seq range alone would never notice the "x N" suffix that get_with_count()
@@ -644,24 +642,24 @@ auto hud_dp_ratio() -> float
 ///
 /// nullopt when there is nothing to measure: toggle off, RmlUi not ready, or a
 /// degenerate context.
-auto hud_layout_now( int log_lines, bool show_vehicle ) -> std::optional<hud_runic::layout>
+auto hud_layout_now( int log_lines, bool show_vehicle ) -> std::optional < hud_runic::layout >
 {
     if( !sidebar_hud_rmlui_enabled() || !rmlui_layer::ready() ) {
-    return std::nullopt;
-}
-Rml::Context *ctx = rmlui_layer::context();
-if( ctx == nullptr ) {
-    return std::nullopt;
-}
-const auto dims = ctx->GetDimensions();
-if( dims.x <= 0 || dims.y <= 0 ) {
-    return std::nullopt;
-}
-const auto ratio = hud_dp_ratio();
-return hud_runic::layout_for( {
-    .ctx_w_dp = dims.x / ratio,
-    .ctx_h_dp = dims.y / ratio,
-    .sidebar_right = get_option<std::string>( "SIDEBAR_POSITION" ) == "right",
+        return std::nullopt;
+    }
+    Rml::Context *ctx = rmlui_layer::context();
+    if( ctx == nullptr ) {
+        return std::nullopt;
+    }
+    const auto dims = ctx->GetDimensions();
+    if( dims.x <= 0 || dims.y <= 0 ) {
+        return std::nullopt;
+    }
+    const auto ratio = hud_dp_ratio();
+    return hud_runic::layout_for( {
+        .ctx_w_dp = dims.x / ratio,
+        .ctx_h_dp = dims.y / ratio,
+        .sidebar_right = get_option < std::string > ( "SIDEBAR_POSITION" ) == "right",
         .log_lines = log_lines,
         .show_vehicle = show_vehicle,
         .soma_expanded = uistate.hud_soma_expanded } );
@@ -681,7 +679,7 @@ auto terminal_rows_for( float strip_h_dp ) -> int
     if( fontheight <= 0 ) {
         return 0;
     }
-    return static_cast<int>( std::ceil( strip_h_dp * hud_dp_ratio() / fontheight ) );
+    return static_cast < int > ( std::ceil( strip_h_dp * hud_dp_ratio() / fontheight ) );
 }
 
 // ── Redundant property-write suppression ────────────────────────────────────
@@ -726,12 +724,12 @@ struct hud_rect_cache {
     long w = 0;
     long h = 0;
 };
-std::unordered_map<std::string, hud_rect_cache> g_hud_rect_cache;
+std::unordered_map < std::string, hud_rect_cache > g_hud_rect_cache;
 
 /// The layout `sidebar_hud_apply_rect` last ran on. Every value it writes is a
 /// pure function of this object, so an equal layout means an identical write
 /// set and the whole pass can be skipped.
-std::optional<hud_runic::layout> g_hud_rect_layout;
+std::optional < hud_runic::layout > g_hud_rect_layout;
 
 /// Exact value equality — deliberately not the quantised compare used per
 /// property. `layout_for` runs the same deterministic arithmetic on the same
@@ -754,7 +752,7 @@ struct hud_shake_cache {
     long dx = 0;
     long dy = 0;
 };
-std::unordered_map<std::string, hud_shake_cache> g_hud_shake_cache;
+std::unordered_map < std::string, hud_shake_cache > g_hud_shake_cache;
 
 /// Last `display` written to `hud-vehicle`: -1 none yet, 0 `none`, 1 `block`.
 int g_hud_veh_display = -1;
@@ -802,7 +800,7 @@ void sidebar_hud_open()
     // Fixed-region model: bind each string directly. Seven fields and no others —
     // the three frame-stroke rows the cell grid needed (the status rule, the keys
     // rule, the radar frame) are CSS borders and .nc-rule divs in the document now.
-    g_hud_data = std::make_unique<hud_rml_model>();
+    g_hud_data = std::make_unique < hud_rml_model > ();
     c.Bind( "status_row1_rml", &g_hud_data->status_row1_rml );
     c.Bind( "status_row2_rml", &g_hud_data->status_row2_rml );
     c.Bind( "soma_rml", &g_hud_data->soma_rml );
@@ -922,7 +920,7 @@ void sidebar_hud_sync( avatar &u )
         if( g_hud_prev_total_hp >= 0 && total_hp < g_hud_prev_total_hp ) {
             const auto dmg = g_hud_prev_total_hp - total_hp;
             const auto max_hp = u.get_hp_max();
-            const auto intensity = std::clamp( static_cast<float>( dmg ) / max_hp, 0.0f, 1.0f );
+            const auto intensity = std::clamp( static_cast < float > ( dmg ) / max_hp, 0.0f, 1.0f );
             hud_shake::trigger( intensity );
             hud_anim::feed( { .element_id = "hud-vignette", .spec_icon = "hud_vignette",
                               .value = intensity, .is_critical = false } );
@@ -942,7 +940,7 @@ void sidebar_hud_sync( avatar &u )
     // window, RmlUi mid-resize) fails here, and advancing the seq window on such a
     // frame would leave the next successful frame with a matching range and a
     // matching tail — so the messages that arrived meanwhile would never be drawn.
-    const auto frame_layout = hud_layout_now( static_cast<int>( msgs.size() ),
+    const auto frame_layout = hud_layout_now( static_cast < int > ( msgs.size() ),
                               u.controlling_vehicle );
     if( !frame_layout ) {
         return;
@@ -961,12 +959,12 @@ void sidebar_hud_sync( avatar &u )
     // scrolled out of view.
     const auto log_rows = std::floor( ( l.log.h - hud_runic::head_h - hud_runic::chrome_h ) /
                                       hud_runic::row_h );
-    const auto granted = static_cast<std::size_t>( std::max( 0.0f, log_rows ) );
+    const auto granted = static_cast < std::size_t > ( std::max( 0.0f, log_rows ) );
     if( msgs.size() > granted ) {
         // Drop the OLDEST: recent_messages_rich yields chronologically, so the
         // newest message is at the back and must always survive the clip.
         msgs.erase( msgs.begin(),
-                    msgs.begin() + static_cast<std::ptrdiff_t>( msgs.size() - granted ) );
+                    msgs.begin() + static_cast < std::ptrdiff_t > ( msgs.size() - granted ) );
     }
 
     const auto prev_seq = g_hud_log_prev_seq;
@@ -1134,7 +1132,7 @@ auto sidebar_hud_anim_tick() -> void
     static std::uint32_t last_ms = 0;
     const std::uint32_t now = sidebar_anim::now_ms();
     if( last_ms > 0 ) {
-        const float dt = std::max( 0.0f, static_cast<float>( now - last_ms ) ) / 1000.0f;
+        const float dt = std::max( 0.0f, static_cast < float > ( now - last_ms ) ) / 1000.0f;
         hud_shake::tick( dt );
     }
     last_ms = now;
@@ -1185,7 +1183,7 @@ auto sidebar_hud_anim_tick() -> void
 
 // Resolve a widget's "show_if" to a window_panel render predicate (the data-driven
 // equivalent of the hardcoded panels' render_func). Empty / unknown → always show.
-static std::function<bool()> resolve_widget_show_if( const widget &w )
+static std::function < bool() > resolve_widget_show_if( const widget &w )
 {
     const std::string &gate = w.show_if();
     if( gate.empty() ) {
@@ -1260,7 +1258,7 @@ static nc_color value_widget_color( const widget &w, int val, const avatar &u )
 // Max for a bounded value var — the divisor for a fill bar. nullopt → unbounded,
 // so the widget shows a right-aligned number with no bar (pain/speed/morale/etc.
 // have no clean ceiling). Only vars with a real max getter qualify.
-static std::optional<int> value_var_max( widget_var var, const avatar &u )
+static std::optional < int > value_var_max( widget_var var, const avatar &u )
 {
     switch( var ) {
         case widget_var::stamina:
@@ -1291,7 +1289,7 @@ static std::string value_widget_name( const widget_id &id )
             c = ' ';
             at_word_start = true;
         } else if( at_word_start ) {
-            c = toupper( static_cast<unsigned char>( c ) );
+            c = toupper( static_cast < unsigned char > ( c ) );
             at_word_start = false;
         }
     }
@@ -1306,24 +1304,23 @@ window_panel make_value_widget_panel( const widget &w, int width )
 {
     const widget_id id = w.getId();
     const auto hud_produce = [id]( avatar & u ) -> std::string {
-        if( !id.is_valid() )
-    {
-        return "";
-    }
-    const widget &wd = *id; // static widget data; u carries the live state
-    const auto val = wd.get_var_value( u );
-    const auto val_color = value_widget_color( wd, val, u );
-    const auto label = wd.label().translated();
-    // Right-hand readout: a fill bar + percent for bounded vars (those with a
-    // max), else the raw number. Reuses get_hp_bar's 5-cell bar string so it
-    // reads like the native HP/stamina panels.
-    const auto vmax = value_var_max( wd.var(), u );
-    auto rhs = std::string();
-    if( vmax && *vmax > 0 )
-    {
-        // Clamp the percent to match get_hp_bar's clamped bar — val can exceed
-        // max (e.g. buffs) and would otherwise print ">100%" beside a full bar.
-        const auto pct = std::clamp( 100 * val / *vmax, 0, 100 );
+        if( !id.is_valid() ) {
+            return "";
+        }
+        const widget &wd = *id; // static widget data; u carries the live state
+        const auto val = wd.get_var_value( u );
+        const auto val_color = value_widget_color( wd, val, u );
+        const auto label = wd.label().translated();
+        // Right-hand readout: a fill bar + percent for bounded vars (those with a
+        // max), else the raw number. Reuses get_hp_bar's 5-cell bar string so it
+        // reads like the native HP/stamina panels.
+        const auto vmax = value_var_max( wd.var(), u );
+        auto rhs = std::string();
+        if( vmax && *vmax > 0 )
+        {
+            // Clamp the percent to match get_hp_bar's clamped bar — val can exceed
+            // max (e.g. buffs) and would otherwise print ">100%" beside a full bar.
+            const auto pct = std::clamp( 100 * val / *vmax, 0, 100 );
             rhs = get_hp_bar( val, *vmax ).first + string_format( " %d%%", pct );
         } else
         {
@@ -1345,8 +1342,8 @@ window_panel make_value_widget_panel( const widget &w, int width )
 static auto bodygraph_bp_color( const avatar &u, const bodypart_id &bp, widget_var dim ) -> nc_color
 {
     switch( dim ) {
-    case widget_var::body_graph:
-        return u.limb_color( bp.id(), true, true, true );
+        case widget_var::body_graph:
+            return u.limb_color( bp.id(), true, true, true );
         case widget_var::body_graph_temp: {
             const auto temp_conv = u.get_part_temp_cur( bp );
             if( temp_conv > BODYTEMP_SCORCHING ) {
@@ -1396,8 +1393,7 @@ window_panel make_bodygraph_widget_panel( const widget &w, int width )
     const auto hud_produce = [dim]( avatar & u ) -> std::string {
         std::string out;
         bool first = true;
-        for( const bodypart_id &bp : u.get_all_body_parts( true ) )
-        {
+        for( const bodypart_id &bp : u.get_all_body_parts( true ) ) {
             if( !first ) {
                 out += "\n";
             }
@@ -1432,13 +1428,13 @@ static window_panel make_widget_panel( const widget &w, int width )
 // them into `layouts`, keyed by the widget id (e.g. "custom"). Called post-load
 // so widget::get_all() is populated. Custom layouts are opt-in — they never
 // replace a built-in or auto-switch a player.
-static void inject_widget_layouts( std::map<std::string, std::vector<window_panel>> &layouts )
+static void inject_widget_layouts( std::map < std::string, std::vector < window_panel>> &layouts )
 {
     for( const widget &sb : widget::get_all() ) {
         if( sb.style() != "sidebar" ) {
             continue;
         }
-        std::vector<window_panel> panels;
+        std::vector < window_panel > panels;
         for( const widget_id &child : sb._widgets ) {
             if( child.is_valid() ) {
                 panels.push_back( make_widget_panel( *child, sb.width() ) );
@@ -1459,7 +1455,7 @@ panel_manager::panel_manager()
     current_layout_id = "custom";
 }
 
-std::vector<window_panel> &panel_manager::get_current_layout()
+std::vector < window_panel > &panel_manager::get_current_layout()
 {
     auto kv = layouts.find( current_layout_id );
     if( kv != layouts.end() ) {
@@ -1473,7 +1469,7 @@ std::vector<window_panel> &panel_manager::get_current_layout()
     if( !layouts.empty() ) {
         return layouts.begin()->second;
     }
-    static std::vector<window_panel> empty_layout;
+    static std::vector < window_panel > empty_layout;
     return empty_layout;
 }
 
@@ -1489,7 +1485,7 @@ bool panel_manager::has_layout( const std::string &id ) const
 
 int panel_manager::get_width_right()
 {
-    if( get_option<std::string>( "SIDEBAR_POSITION" ) == "left" ) {
+    if( get_option < std::string > ( "SIDEBAR_POSITION" ) == "left" ) {
         return width_left;
     }
     return width_right;
@@ -1497,7 +1493,7 @@ int panel_manager::get_width_right()
 
 int panel_manager::get_width_left()
 {
-    if( get_option<std::string>( "SIDEBAR_POSITION" ) == "left" ) {
+    if( get_option < std::string > ( "SIDEBAR_POSITION" ) == "left" ) {
         return width_right;
     }
     return width_left;
@@ -1528,7 +1524,7 @@ void panel_manager::reload_widget_layouts()
         const auto saved = saved_layouts.find( kv.first );
         if( saved != saved_layouts.end() ) {
             apply_saved_layout_entries( kv.second, saved->second,
-                                        std::map<std::string, std::string> {} );
+                                        std::map < std::string, std::string > {} );
         }
     }
     // Built-in layouts were removed (Tier-10 curses rip-out), so update_offsets is no
@@ -1543,8 +1539,8 @@ void panel_manager::reload_widget_layouts()
 auto panel_manager::sync_lua_panels() -> void
 {
     const auto &widgets = cata::lua_sidebar_widgets::get_widgets();
-    auto lua_name_by_id = std::map<std::string, std::string> {};
-    auto next_names = std::set<std::string> {};
+    auto lua_name_by_id = std::map < std::string, std::string > {};
+    auto next_names = std::set < std::string > {};
     std::ranges::for_each( widgets, [&]( const cata::lua_sidebar_widgets::widget_entry & widget ) {
         const auto panel_name = lua_panel_name( widget );
         lua_name_by_id.insert_or_assign( widget.id, panel_name );
@@ -1555,22 +1551,21 @@ auto panel_manager::sync_lua_panels() -> void
     lua_panel_names = next_names;
     auto &saved_layouts = saved_panel_layouts();
 
-    auto find_saved_entry = [&]( const std::vector<panel_layout_entry> &entries,
+    auto find_saved_entry = [&]( const std::vector < panel_layout_entry > &entries,
     const std::string & widget_id ) {
         return std::ranges::find_if( entries, [&]( const panel_layout_entry & entry ) {
             return entry.lua_id && *entry.lua_id == widget_id;
         } );
     };
 
-    auto compute_insert_index = [&]( const std::vector<panel_layout_entry> &entries,
+    auto compute_insert_index = [&]( const std::vector < panel_layout_entry > &entries,
                                      const std::string & widget_id,
-    const std::vector<window_panel> &layout ) -> std::optional<int> {
+    const std::vector < window_panel > &layout ) -> std::optional < int > {
         const auto entry_it = find_saved_entry( entries, widget_id );
-        if( entry_it == entries.end() )
-        {
+        if( entry_it == entries.end() ) {
             return std::nullopt;
         }
-        const auto entry_index = static_cast<size_t>(
+        const auto entry_index = static_cast < size_t > (
             std::ranges::distance( entries.begin(), entry_it ) );
         auto before_view = entries | std::views::take( entry_index );
         const auto insert_index = std::ranges::count_if( before_view, [&]( const panel_layout_entry & entry )
@@ -1582,10 +1577,10 @@ auto panel_manager::sync_lua_panels() -> void
             const auto match = std::ranges::find( layout, *resolved_name, &window_panel::get_name );
             return match != layout.end();
         } );
-        return static_cast<int>( insert_index );
+        return static_cast < int > ( insert_index );
     };
 
-    auto sync_layout = [&]( const std::string & layout_id, std::vector<window_panel> &layout ) {
+    auto sync_layout = [&]( const std::string & layout_id, std::vector < window_panel > &layout ) {
         std::erase_if( layout, [&]( const window_panel & panel ) {
             const auto name = panel.get_name();
             return previous_names.contains( name ) && !next_names.contains( name );
@@ -1599,7 +1594,7 @@ auto panel_manager::sync_lua_panels() -> void
             auto existing = std::ranges::find( layout, panel_name, &window_panel::get_name );
             if( existing == layout.end() ) {
                 auto new_panel = make_lua_widget_panel( widget, layout_width );
-                auto saved_index = std::optional<int> {};
+                auto saved_index = std::optional < int > {};
                 if( saved_entries != nullptr ) {
                     const auto entry_it = find_saved_entry( *saved_entries, widget.id );
                     if( entry_it != saved_entries->end() ) {
@@ -1608,13 +1603,13 @@ auto panel_manager::sync_lua_panels() -> void
                     }
                 }
                 if( saved_index ) {
-                    const auto max_index = static_cast<int>( layout.size() );
+                    const auto max_index = static_cast < int > ( layout.size() );
                     const auto insert_at = std::clamp( *saved_index, 0, max_index );
                     auto it = layout.begin();
                     std::ranges::advance( it, insert_at );
                     layout.insert( it, std::move( new_panel ) );
                 } else if( widget.order ) {
-                    const auto max_index = static_cast<int>( layout.size() );
+                    const auto max_index = static_cast < int > ( layout.size() );
                     const auto desired_index = std::max( 0, *widget.order - 1 );
                     const auto insert_at = std::clamp( desired_index, 0, max_index );
                     auto it = layout.begin();
@@ -1668,7 +1663,7 @@ void panel_manager::serialize( JsonOut &json )
 
     json.start_array();
     const auto &widgets = cata::lua_sidebar_widgets::get_widgets();
-    auto lua_id_by_name = std::map<std::string, std::string> {};
+    auto lua_id_by_name = std::map < std::string, std::string > {};
     std::ranges::for_each( widgets, [&]( const cata::lua_sidebar_widgets::widget_entry & widget ) {
         const auto panel_name = lua_panel_name( widget );
         lua_id_by_name.insert_or_assign( panel_name, widget.id );
@@ -1726,7 +1721,7 @@ void panel_manager::deserialize( JsonIn &jsin )
         // after world load), so at this point it is absent from `layouts`. We
         // still consume + preserve its entries: skipping the field here left it
         // unvisited and tripped JsonObject::report_unvisited at load.
-        auto entries = std::vector<panel_layout_entry> {};
+        auto entries = std::vector < panel_layout_entry > {};
         const auto panels_array = joLayout.get_array( "panels" );
         const auto panels_count = panels_array.size();
         auto panel_indices = std::views::iota( size_t{ 0 }, panels_count );
@@ -1734,7 +1729,7 @@ void panel_manager::deserialize( JsonIn &jsin )
             const auto joPanel = panels_array.get_object( panel_index );
             auto name = joPanel.get_string( "name" );
             const auto toggle = joPanel.get_bool( "toggle", true );
-            auto lua_id = std::optional<std::string> {};
+            auto lua_id = std::optional < std::string > {};
             if( joPanel.has_member( "lua_id" ) ) {
                 lua_id = joPanel.get_string( "lua_id" );
             }
@@ -1749,7 +1744,7 @@ void panel_manager::deserialize( JsonIn &jsin )
         auto layout_iter = layouts.find( layout_id );
         if( layout_iter != layouts.end() ) {
             apply_saved_layout_entries( layout_iter->second, entries,
-                                        std::map<std::string, std::string> {} );
+                                        std::map < std::string, std::string > {} );
         }
         saved_layouts[layout_id] = std::move( entries );
     } );
@@ -1775,9 +1770,9 @@ struct adm_rml_layout {
 };
 struct adm_rml_data {
     Rml::String title_rml;
-    Rml::Vector<adm_rml_panel> panels;
+    Rml::Vector < adm_rml_panel > panels;
     Rml::String col1_rml;
-    Rml::Vector<adm_rml_layout> layouts;
+    Rml::Vector < adm_rml_layout > layouts;
     Rml::DataModelHandle handle;
 };
 
@@ -1790,15 +1785,15 @@ void register_panel_adm_rml_types( Rml::DataModelConstructor &c )
     if( g_panel_adm_types_registered ) {
         return;
     }
-    Rml::StructHandle<adm_rml_panel> ph = c.RegisterStruct<adm_rml_panel>();
+    Rml::StructHandle < adm_rml_panel > ph = c.RegisterStruct < adm_rml_panel > ();
     ph.RegisterMember( "name_rml", &adm_rml_panel::name_rml );
     ph.RegisterMember( "selected", &adm_rml_panel::selected );
     ph.RegisterMember( "is_source", &adm_rml_panel::is_source );
-    c.RegisterArray<Rml::Vector<adm_rml_panel>>();
-    Rml::StructHandle<adm_rml_layout> lh = c.RegisterStruct<adm_rml_layout>();
+    c.RegisterArray < Rml::Vector < adm_rml_panel>>();
+    Rml::StructHandle < adm_rml_layout > lh = c.RegisterStruct < adm_rml_layout > ();
     lh.RegisterMember( "name_rml", &adm_rml_layout::name_rml );
     lh.RegisterMember( "selected", &adm_rml_layout::selected );
-    c.RegisterArray<Rml::Vector<adm_rml_layout>>();
+    c.RegisterArray < Rml::Vector < adm_rml_layout>>();
     g_panel_adm_types_registered = true;
 }
 } // namespace
@@ -1822,7 +1817,7 @@ void panel_manager::show_adm()
     ctxt.register_action( "MOVE_PANEL" );
     ctxt.register_action( "TOGGLE_PANEL" );
 
-    const std::vector<int> column_widths = { 17, 37, 17 };
+    const std::vector < int > column_widths = { 17, 37, 17 };
 
     size_t current_col = 0;
     size_t current_row = 0;
@@ -1834,7 +1829,7 @@ void panel_manager::show_adm()
     bool exit = false;
     // map of row the panel is on vs index
     // panels not renderable due to game configuration will not be in this map
-    std::map<size_t, size_t> row_indices;
+    std::map < size_t, size_t > row_indices;
 
     g->show_panel_adm = true;
     g->invalidate_main_ui_adaptor();
@@ -1843,8 +1838,8 @@ void panel_manager::show_adm()
 
     ui_adaptor ui;
     ui.on_screen_resize( [&]( ui_adaptor & ui ) {
-        const auto panel_rows = static_cast<int>( layouts[current_layout_id].size() );
-        const auto layout_rows = static_cast<int>( layouts.size() );
+        const auto panel_rows = static_cast < int > ( layouts[current_layout_id].size() );
+        const auto layout_rows = static_cast < int > ( layouts.size() );
         const auto desired_rows = std::max( panel_rows, layout_rows );
         const auto window_height = std::clamp( desired_rows + 1, 21, TERMY - 2 );
         w = catacurses::newwin( window_height, 75,
@@ -1858,7 +1853,7 @@ void panel_manager::show_adm()
     // `rml_data` before `rml` so the doc tears down while the model is alive. The
     // doc is rebuilt each frame from the live cursor + layout state; the keyboard
     // owns all editing.
-    std::unique_ptr<adm_rml_data> rml_data;
+    std::unique_ptr < adm_rml_data > rml_data;
     rml_doc rml;
     const auto sync_rml = [&]() {
         if( !rml || !rml_data ) {
@@ -1878,12 +1873,12 @@ void panel_manager::show_adm()
             size_t index = 0;
             bool is_source = false;
         };
-        std::vector<disp_row> ordered;
-        for( const std::pair<const size_t, size_t> &ri : row_indices ) {
+        std::vector < disp_row > ordered;
+        for( const std::pair < const size_t, size_t > &ri : row_indices ) {
             const size_t r = ri.first;
             const size_t idx = ri.second;
             if( swapping && idx == source_index ) {
-                ordered.push_back( disp_row{ static_cast<int>( current_row ), idx, true } );
+                ordered.push_back( disp_row{ static_cast < int > ( current_row ), idx, true } );
                 continue;
             }
             int offset = 0;
@@ -1894,7 +1889,7 @@ void panel_manager::show_adm()
                     offset = 1;
                 }
             }
-            ordered.push_back( disp_row{ static_cast<int>( r ) + offset, idx, false } );
+            ordered.push_back( disp_row{ static_cast < int > ( r ) + offset, idx, false } );
         }
         std::sort( ordered.begin(), ordered.end(),
         []( const disp_row & a, const disp_row & b ) {
@@ -1906,7 +1901,7 @@ void panel_manager::show_adm()
             const nc_color col = dr.is_source ? c_yellow
                                  : ( panels[dr.index].toggle ? c_white : c_dark_gray );
             row.name_rml = cata_text_to_rml( colorize( _( panels[dr.index].get_name() ), col ) );
-            row.selected = current_col == 0 && dr.row == static_cast<int>( current_row );
+            row.selected = current_col == 0 && dr.row == static_cast < int > ( current_row );
             row.is_source = dr.is_source;
             d.panels.push_back( std::move( row ) );
         }
@@ -1944,7 +1939,7 @@ void panel_manager::show_adm()
     };
     rml.open( panel_adm_rmlui_enabled(), "panel_adm", ctxt,
     [&]( Rml::DataModelConstructor & c ) {
-        rml_data = std::make_unique<adm_rml_data>();
+        rml_data = std::make_unique < adm_rml_data > ();
         register_panel_adm_rml_types( c );
         c.Bind( "title_rml", &rml_data->title_rml );
         c.Bind( "panels", &rml_data->panels );
@@ -1977,7 +1972,7 @@ void panel_manager::show_adm()
         }
 
         const size_t num_rows = current_col == 0 ? row_indices.size() : layouts.size();
-        current_row = clamp<size_t>( current_row, 0, num_rows - 1 );
+        current_row = clamp < size_t > ( current_row, 0, num_rows - 1 );
 
         ui_manager::redraw();
 

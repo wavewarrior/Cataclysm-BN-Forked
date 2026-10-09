@@ -24,13 +24,12 @@ struct transparent_less_than {
  * O(n) insertion, O(log(n)) lookup, only one allocation at any given time.
  */
 template<typename T, typename Compare = transparent_less_than, typename Data = std::vector<T>>
-class flat_set : private Compare, Data
-{
+class flat_set : private Compare, Data {
     private:
         template<typename Cmp, typename Sfinae, typename = void>
         struct has_is_transparent {};
-        template<typename Cmp, typename Sfinae>
-        struct has_is_transparent<Cmp, Sfinae, typename Cmp::is_transparent> {
+        template < typename Cmp, typename Sfinae >
+        struct has_is_transparent < Cmp, Sfinae, typename Cmp::is_transparent > {
             using type = void;
         };
 
@@ -49,24 +48,27 @@ class flat_set : private Compare, Data
         using reverse_iterator = const_reverse_iterator;
 
         flat_set() = default;
-        flat_set( const key_compare &kc ) : Compare( kc ) {}
-        template<typename InputIt>
-        flat_set( InputIt first, InputIt last ) : Data( first, last ) {
+        flat_set( const key_compare & kc ) : Compare( kc ) {}
+        template < typename InputIt >
+        flat_set( InputIt first, InputIt last ) : Data( first, last )
+        {
             sort_data();
         }
-        template<typename InputIt>
-        flat_set( InputIt first, InputIt last, const key_compare &kc ) :
-            Compare( kc ), Data( first, last ) {
+        template < typename InputIt >
+        flat_set( InputIt first, InputIt last, const key_compare & kc ) :
+            Compare( kc ), Data( first, last )
+        {
             sort_data();
         }
-        flat_set( std::initializer_list<value_type> init ) : Data( init ) {
+        flat_set( std::initializer_list < value_type > init ) : Data( init )
+        {
             sort_data();
         }
 
-        const key_compare &key_comp() const {
+        const key_compare & key_comp() const {
             return *this;
         }
-        const value_compare &value_comp() const {
+        const value_compare & value_comp() const {
             return *this;
         }
 
@@ -99,69 +101,75 @@ class flat_set : private Compare, Data
             return Data::operator[]( i );
         }
 
-        const_iterator lower_bound( const T &t ) const {
+        const_iterator lower_bound( const T & t ) const {
             return std::lower_bound( begin(), end(), t, key_comp() );
         }
-        template<typename K, typename = typename has_is_transparent<Compare, K>::type>
-        const_iterator lower_bound( const K &k ) const {
+        template < typename K, typename = typename has_is_transparent < Compare, K>::type >
+        const_iterator lower_bound( const K & k ) const {
             return std::lower_bound( begin(), end(), k, key_comp() );
         }
-        const_iterator upper_bound( const T &t ) const {
+        const_iterator upper_bound( const T & t ) const {
             return std::upper_bound( begin(), end(), t, key_comp() );
         }
-        template<typename K, typename = typename has_is_transparent<Compare, K>::type>
-        const_iterator upper_bound( const K &k ) const {
+        template < typename K, typename = typename has_is_transparent < Compare, K>::type >
+        const_iterator upper_bound( const K & k ) const {
             return std::upper_bound( begin(), end(), k, key_comp() );
         }
-        std::pair<const_iterator, const_iterator> equal_range( const T &t ) const {
+        std::pair < const_iterator, const_iterator > equal_range( const T & t ) const {
             return { lower_bound( t ), upper_bound( t ) };
         }
-        template<typename K, typename = typename has_is_transparent<Compare, K>::type>
-        std::pair<const_iterator, const_iterator> equal_range( const K &k ) const {
+        template < typename K, typename = typename has_is_transparent < Compare, K>::type >
+        std::pair < const_iterator, const_iterator > equal_range( const K & k ) const {
             return { lower_bound( k ), upper_bound( k ) };
         }
 
-        const_iterator find( const value_type &value ) const {
+        const_iterator find( const value_type & value ) const {
             auto at = lower_bound( value );
-            if( at != end() && *at == value ) {
+            if( at != end() && *at == value )
+            {
                 return at;
             }
             return end();
         }
-        template<typename K, typename = typename has_is_transparent<Compare, K>::type>
-        const_iterator find( const K &k ) const {
+        template < typename K, typename = typename has_is_transparent < Compare, K>::type >
+        const_iterator find( const K & k ) const {
             auto at = lower_bound( k );
-            if( at != end() && *at == k ) {
+            if( at != end() && *at == k )
+            {
                 return at;
             }
             return end();
         }
-        size_type count( const T &t ) const {
+        size_type count( const T & t ) const {
             auto at = lower_bound( t );
             return at != end() && *at == t;
         }
-        template<typename K, typename = typename has_is_transparent<Compare, K>::type>
-        size_type count( const K &k ) const {
+        template < typename K, typename = typename has_is_transparent < Compare, K>::type >
+        size_type count( const K & k ) const {
             auto at = lower_bound( k );
             return at != end() && *at == k;
         }
 
-        iterator insert( iterator, const value_type &value ) {
+        iterator insert( iterator, const value_type & value )
+        {
             /// TODO: Use insertion hint
             return insert( value ).first;
         }
-        iterator insert( iterator, value_type &&value ) {
+        iterator insert( iterator, value_type &&value )
+        {
             /// TODO: Use insertion hint
             return insert( std::move( value ) ).first;
         }
-        std::pair<iterator, bool> insert( const value_type &value ) {
+        std::pair < iterator, bool > insert( const value_type & value )
+        {
             auto at = lower_bound( value );
             if( at != end() && *at == value ) {
                 return { at, false };
             }
             return { Data::insert( at, value ), true };
         }
-        std::pair<iterator, bool> insert( value_type &&value ) {
+        std::pair < iterator, bool > insert( value_type &&value )
+        {
             auto at = lower_bound( value );
             if( at != end() && *at == value ) {
                 return { at, false };
@@ -169,8 +177,9 @@ class flat_set : private Compare, Data
             return { Data::insert( at, std::move( value ) ), true };
         }
 
-        template<typename InputIt>
-        void insert( InputIt first, InputIt last ) {
+        template < typename InputIt >
+        void insert( InputIt first, InputIt last )
+        {
             /// TODO: could be faster when inserting only a few elements
             Data::insert( end(), first, last );
             sort_data();
@@ -178,7 +187,8 @@ class flat_set : private Compare, Data
 
         using Data::clear;
         using Data::erase;
-        size_type erase( const value_type &value ) {
+        size_type erase( const value_type & value )
+        {
             auto at = find( value );
             if( at != end() ) {
                 erase( at );
@@ -187,10 +197,10 @@ class flat_set : private Compare, Data
             return 0;
         }
 
-        friend void swap( flat_set &l, flat_set &r )  noexcept {
+        friend void swap( flat_set & l, flat_set & r )  noexcept {
             using std::swap;
-            swap( static_cast<Compare &>( l ), static_cast<Compare &>( r ) );
-            swap( static_cast<Data &>( l ), static_cast<Data &>( r ) );
+            swap( static_cast < Compare & > ( l ), static_cast < Compare & > ( r ) );
+            swap( static_cast < Data & > ( l ), static_cast < Data & > ( r ) );
         }
 #define FLAT_SET_OPERATOR( op ) \
     friend bool operator op( const flat_set &l, const flat_set &r ) { \
@@ -204,10 +214,11 @@ class flat_set : private Compare, Data
         FLAT_SET_OPERATOR( >= )
 #undef FLAT_SET_OPERATOR
     private:
-        const Data &data() const {
+        const Data & data() const {
             return *this;
         }
-        void sort_data() {
+        void sort_data()
+        {
             std::sort( Data::begin(), Data::end(), key_comp() );
             auto new_end = std::unique( Data::begin(), Data::end() );
             Data::erase( new_end, end() );

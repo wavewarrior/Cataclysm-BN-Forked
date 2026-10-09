@@ -883,19 +883,19 @@ void iexamine::fvat_full( player &p, const tripoint_bub_ms &examp )
 static auto fluid_grid_tank_capacity( const furn_t &furn ) -> std::optional<units::volume>
 {
     if( !furn.fluid_grid ) {
+        return std::nullopt;
+    }
+    const auto &fluid_grid = *furn.fluid_grid;
+    if( fluid_grid.role != fluid_grid_role::tank ) {
+        return std::nullopt;
+    }
+    if( fluid_grid.capacity ) {
+        return fluid_grid.capacity;
+    }
+    if( fluid_grid.use_keg_capacity ) {
+        return furn.keg_capacity;
+    }
     return std::nullopt;
-}
-const auto &fluid_grid = *furn.fluid_grid;
-if( fluid_grid.role != fluid_grid_role::tank ) {
-    return std::nullopt;
-}
-if( fluid_grid.capacity ) {
-    return fluid_grid.capacity;
-}
-if( fluid_grid.use_keg_capacity ) {
-    return furn.keg_capacity;
-}
-return std::nullopt;
 }
 
 static auto is_fluid_grid_tank( const furn_t &furn ) -> bool
@@ -907,19 +907,19 @@ static auto confirm_fluid_grid_contamination( const tripoint_abs_omt &pos_abs_om
         const itype_id &liquid_type ) -> bool
 {
     if( !fluid_grid::would_contaminate( pos_abs_omt, liquid_type ) ) {
-    return true;
-}
-const auto clean_available =
-    fluid_grid::liquid_charges_at( pos_abs_omt, itype_water_clean ) > 0;
-const auto dirty_available =
-    fluid_grid::liquid_charges_at( pos_abs_omt, itype_water ) > 0;
-if( liquid_type == itype_water_clean && dirty_available ) {
-    return query_yn(
-               _( "Adding clean water to this grid containing tainted water will contaminate your clean water.  Continue?" ) );
+        return true;
+    }
+    const auto clean_available =
+        fluid_grid::liquid_charges_at( pos_abs_omt, itype_water_clean ) > 0;
+    const auto dirty_available =
+        fluid_grid::liquid_charges_at( pos_abs_omt, itype_water ) > 0;
+    if( liquid_type == itype_water_clean && dirty_available ) {
+        return query_yn(
+                   _( "Adding clean water to this grid containing tainted water will contaminate your clean water.  Continue?" ) );
     }
     if( liquid_type == itype_water && clean_available ) {
-    return query_yn(
-               _( "Adding tainted water to this grid containing clean water will contaminate your clean water.  Continue?" ) );
+        return query_yn(
+                   _( "Adding tainted water to this grid containing clean water will contaminate your clean water.  Continue?" ) );
     }
     return query_yn( string_format(
                          _( "Adding %s will contaminate the fluid grid's water supply.  Continue?" ),
@@ -1005,8 +1005,7 @@ void iexamine::keg( player &p, const tripoint_bub_ms &examp )
     };
     const auto tank_contains_only_water = [&]( const tripoint_bub_ms & where ) -> bool {
         auto items = here.i_at( where );
-        const auto has_non_water = std::ranges::any_of( items, [&]( const item * it )
-        {
+        const auto has_non_water = std::ranges::any_of( items, [&]( const item * it ) {
             return it != nullptr && it->made_of( LIQUID ) &&
             it->typeId() != itype_water && it->typeId() != itype_water_clean;
         } );

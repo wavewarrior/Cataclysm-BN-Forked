@@ -719,9 +719,9 @@ std::string weather_forecast( const point_abs_sm &abs_sm_pos )
     //weather_report += "Across <region>, skies ranged from <cloudiest> to <clearest>.  ";
     // TODO: Add fake reports for nearby cities
     // TODO: fix point types
-    const auto abs_ms_pos = tripoint_abs_ms( project_to<coords::ms>( abs_sm_pos ), 0 );
+    const auto abs_ms_pos = tripoint_abs_ms( project_to < coords::ms > ( abs_sm_pos ), 0 );
 
-    const time_point now_hour = calendar::turn - time_duration::from_minutes( minute_of_hour<int>
+    const time_point now_hour = calendar::turn - time_duration::from_minutes( minute_of_hour < int >
                                 ( calendar::turn ) );
     bool now_is_day = is_day( now_hour );
 
@@ -729,7 +729,7 @@ std::string weather_forecast( const point_abs_sm &abs_sm_pos )
     bool last_is_day = now_is_day;
     time_point last_hour = now_hour;
 
-    std::array<forecast_period, NUM_FORECAST_PERIODS> periods = { {} };
+    std::array < forecast_period, NUM_FORECAST_PERIODS > periods = { {} };
 
     const auto &wgen = weather.get_cur_weather_gen();
     while( true ) {
@@ -810,15 +810,15 @@ std::string print_temperature( units::temperature temperature, int decimals )
         return string_format( "%.*f", decimals, value );
     };
 
-    if( get_option<std::string>( "USE_CELSIUS" ) == "celsius" ) {
+    if( get_option < std::string > ( "USE_CELSIUS" ) == "celsius" ) {
         return string_format( pgettext( "temperature in Celsius", "%s°C" ),
-                              text( units::to_celsius<double>( temperature ) ) );
-    } else if( get_option<std::string>( "USE_CELSIUS" ) == "kelvin" ) {
+                              text( units::to_celsius < double > ( temperature ) ) );
+    } else if( get_option < std::string > ( "USE_CELSIUS" ) == "kelvin" ) {
         return string_format( pgettext( "temperature in Kelvin", "%sK" ),
-                              text( units::to_kelvins<double>( temperature ) ) );
+                              text( units::to_kelvins < double > ( temperature ) ) );
     } else {
         return string_format( pgettext( "temperature in Fahrenheit", "%sF" ),
-                              text( units::to_fahrenheit<double>( temperature ) ) );
+                              text( units::to_fahrenheit < double > ( temperature ) ) );
     }
 }
 
@@ -871,7 +871,7 @@ static double local_windchill_hightemp( double temperature_f, double humidity, d
     // for large values of temperature. This is presumably due to the
     // model being designed for reasonable ambient temperature values,
     // rather than extremely high ones.
-    double windchill_c = 0.33 * std::min<float>( 150.00, humidity / 100.00 * 6.105 *
+    double windchill_c = 0.33 * std::min < float > ( 150.00, humidity / 100.00 * 6.105 *
                          std::exp( 17.27 * temperature_c / ( 237.70 + temperature_c ) ) )
                          - 0.70 * wind_meters_per_sec
                          - 4.00;
@@ -1030,7 +1030,7 @@ double get_local_windpower( double windpower, const oter_id &omter, const tripoi
         return 0;
     }
     rl_vec2d windvec = convert_wind_to_coord( winddirection );
-    int tmpwind = static_cast<int>( windpower );
+    int tmpwind = static_cast < int > ( windpower );
     tripoint_abs_ms triblocker( location + point( windvec.x, windvec.y ) );
     // Over map terrain may modify the effect of wind.
     if( is_ot_match( "forest", omter, ot_match_type::type ) ||
@@ -1044,7 +1044,7 @@ double get_local_windpower( double windpower, const oter_id &omter, const tripoi
     if( is_wind_blocker( abs_to_bub( triblocker ) ) ) {
         tmpwind = tmpwind / 10;
     }
-    return static_cast<double>( tmpwind );
+    return static_cast < double > ( tmpwind );
 }
 
 bool is_wind_blocker( const tripoint_bub_ms &location )
@@ -1089,7 +1089,7 @@ std::string get_wind_desc( double windpower )
 
 rl_vec2d convert_wind_to_coord( const int angle )
 {
-    static const std::array<std::pair<int, rl_vec2d>, 9> outputs = {{
+    static const std::array < std::pair < int, rl_vec2d>, 9 > outputs = {{
             { 330, rl_vec2d( 0, -1 ) },
             { 301, rl_vec2d( -1, -1 ) },
             { 240, rl_vec2d( -1, 0 ) },
@@ -1101,7 +1101,7 @@ rl_vec2d convert_wind_to_coord( const int angle )
             { 0, rl_vec2d( 0, -1 ) }
         }
     };
-    for( const std::pair<int, rl_vec2d> &val : outputs ) {
+    for( const std::pair < int, rl_vec2d > &val : outputs ) {
         if( angle >= val.first ) {
             return val.second;
         }
@@ -1132,7 +1132,7 @@ weather_manager::weather_manager()
 
 weather_manager::~weather_manager() = default;
 
-const weather_generator &weather_manager::get_cur_weather_gen() const
+const weather_generator & weather_manager::get_cur_weather_gen() const
 {
     const overmap &om = g->get_cur_om();
     const regional_settings &settings = om.get_settings();
@@ -1172,7 +1172,8 @@ void weather_manager::update_weather()
     }
 
     if( weather_id != old_weather && g->u.has_activity( ACT_WAIT_WEATHER ) ) {
-        g->u.assign_activity( std::make_unique<player_activity>( std::make_unique<wait_activity_actor>
+        g->u.assign_activity( std::make_unique < player_activity > ( std::make_unique < wait_activity_actor
+                              >
                               ( wait_type::WAIT_WEATHER ) ) );
     }
 
@@ -1254,7 +1255,7 @@ auto weather_manager::get_temperature( const tripoint_abs_ms &location ) const -
     if( location.z() >= 0 ) {
         // Surface: full influence from current weather
         base_temp = temperature;
-    } else if( !get_option<bool>( "UNDERGROUND_TEMPERATURE_INFLUENCED_BY_SURFACE" ) ) {
+    } else if( !get_option < bool > ( "UNDERGROUND_TEMPERATURE_INFLUENCED_BY_SURFACE" ) ) {
         // Default behavior: underground is always annual average
         base_temp = temperatures::annual_average;
     } else {
@@ -1283,34 +1284,34 @@ auto weather_manager::get_temperature( const tripoint_abs_ms &location ) const -
 auto weather_manager::get_temperature( const tripoint_abs_omt &location ) const ->
 units::temperature
 {
-    if( location.z() < 0 && !get_option<bool>( "UNDERGROUND_TEMPERATURE_INFLUENCED_BY_SURFACE" ) ) {
-    // Default behavior: underground is always annual average
-    return temperatures::annual_average;
-}
+    if( location.z() < 0 && !get_option < bool > ( "UNDERGROUND_TEMPERATURE_INFLUENCED_BY_SURFACE" ) ) {
+        // Default behavior: underground is always annual average
+        return temperatures::annual_average;
+    }
 
-auto abs_ms = project_to<coords::ms>( location );
-w_point w = get_cur_weather_gen().get_weather( abs_ms, calendar::turn, g->get_seed() );
+    auto abs_ms = project_to < coords::ms > ( location );
+    w_point w = get_cur_weather_gen().get_weather( abs_ms, calendar::turn, g->get_seed() );
 
-if( location.z() >= 0 ) {
-    // Surface: full influence from current weather
-    return w.temperature;
-}
+    if( location.z() >= 0 ) {
+        // Surface: full influence from current weather
+        return w.temperature;
+    }
 
-// Underground: gradual transition to annual average
-if( location.z() <= -3 ) {
-    // Deep underground: always annual average (0% surface influence)
-    return temperatures::annual_average;
-}
+    // Underground: gradual transition to annual average
+    if( location.z() <= -3 ) {
+        // Deep underground: always annual average (0% surface influence)
+        return temperatures::annual_average;
+    }
 
-// z=-1: 50%, z=-2: 25%
-const double influence_factor = location.z() == -1 ? 0.5 : 0.25;
+    // z=-1: 50%, z=-2: 25%
+    const double influence_factor = location.z() == -1 ? 0.5 : 0.25;
 
-const double annual_avg_c = units::to_celsius( temperatures::annual_average );
-const double current_temp_c = units::to_celsius( w.temperature );
-const double temp_diff_c = current_temp_c - annual_avg_c;
-const double base_temp_c = annual_avg_c + temp_diff_c * influence_factor;
+    const double annual_avg_c = units::to_celsius( temperatures::annual_average );
+    const double current_temp_c = units::to_celsius( w.temperature );
+    const double temp_diff_c = current_temp_c - annual_avg_c;
+    const double base_temp_c = annual_avg_c + temp_diff_c * influence_factor;
 
-return units::from_celsius( base_temp_c );
+    return units::from_celsius( base_temp_c );
 }
 
 auto weather_manager::get_water_temperature( const tripoint_abs_ms & ) const -> units::temperature
@@ -1323,10 +1324,9 @@ void weather_manager::clear_temp_cache()
     temperature_cache.clear();
 }
 
-namespace weather
-{
+namespace weather {
 
-bool is_sheltered( const map &m, const tripoint_bub_ms &p )
+bool is_sheltered( const map & m, const tripoint_bub_ms & p )
 {
     const optional_vpart_position vp = m.veh_at( p );
 
@@ -1335,11 +1335,11 @@ bool is_sheltered( const map &m, const tripoint_bub_ms &p )
              ( vp && vp->is_inside() ) );
 }
 
-bool is_in_sunlight( const map &m, const tripoint_bub_ms &p, const weather_type_id &weather )
+bool is_in_sunlight( const map & m, const tripoint_bub_ms & p, const weather_type_id & weather )
 {
     // TODO: Remove that game reference and include light in weather data
     return m.is_outside( p ) && g->light_level( p.z() ) >= 40 && !is_night( calendar::turn ) &&
-           weather->sun_intensity >= sun_intensity_type::light;
+            weather->sun_intensity >= sun_intensity_type::light;
 }
 
 } // namespace weather

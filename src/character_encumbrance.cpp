@@ -64,8 +64,8 @@ units::mass Character::get_weight() const
 {
     if( has_trait( trait_DEBUG_WEIGHTLESSNESS ) ) { return 0_gram; }
 
-const auto worn_weight = std::ranges::fold_left( worn, 0_gram,
-[]( const auto sum, const auto * const itm ) { return sum + itm->weight(); } );
+    const auto worn_weight = std::ranges::fold_left( worn, 0_gram,
+    []( const auto sum, const auto * const itm ) { return sum + itm->weight(); } );
 
     auto ret = bodyweight();          // The base weight of the player's body
     ret += inv.weight();              // Weight of the stored inventory
@@ -195,8 +195,8 @@ bool Character::is_wearing_power_armor( bool* hasHelmet ) const
 
 bool Character::is_wearing_active_power_armor() const
 {
-for( const auto &w : worn ) {
-    if( w->has_flag( flag_POWERARMOR_EXO ) && w->is_active() ) {
+    for( const auto &w : worn ) {
+        if( w->has_flag( flag_POWERARMOR_EXO ) && w->is_active() ) {
             return true;
         }
     }
@@ -205,8 +205,8 @@ for( const auto &w : worn ) {
 
 bool Character::is_wearing_active_optcloak() const
 {
-for( const auto &w : worn ) {
-    if( w->is_active() && w->has_flag( flag_ACTIVE_CLOAKING ) ) {
+    for( const auto &w : worn ) {
+        if( w->is_active() && w->has_flag( flag_ACTIVE_CLOAKING ) ) {
             return true;
         }
     }
@@ -405,17 +405,17 @@ static void apply_mut_encumbrance(
 void Character::mut_cbm_encumb( char_encumbrance_data& vals ) const
 {
 
-for( const bionic &i : get_bionic_collection() ) {
-    const bionic_id &bid = i.id;
-    for( const std::pair<const bodypart_str_id, int> &element : bid->encumbrance ) {
+    for( const bionic &i : get_bionic_collection() ) {
+        const bionic_id &bid = i.id;
+        for( const std::pair<const bodypart_str_id, int> &element : bid->encumbrance ) {
             vals.elems[element.first].encumbrance += element.second;
         }
     }
 
     // Lower penalty for bps covered only by XL armor
     const auto oversize = exclusive_flag_coverage( flag_OVERSIZE );
-for( const trait_id &mut : get_mutations() ) {
-    apply_mut_encumbrance( vals, mut, oversize );
+    for( const trait_id &mut : get_mutations() ) {
+        apply_mut_encumbrance( vals, mut, oversize );
     }
 
     for( const auto &id : get_all_body_parts() ) {

@@ -713,7 +713,7 @@ static int dirent_mbstowcs_s(
     size_t sizeInWords, const char *mbstr, size_t /*count*/ )
 {
     const int required_size = MultiByteToWideChar( CP_UTF8, 0, mbstr, -1, NULL, 0 ) + 1;
-    if( required_size > static_cast<int>( sizeInWords ) ) {
+    if( required_size > static_cast < int > ( sizeInWords ) ) {
         return 1;
     }
     const int n = MultiByteToWideChar( CP_UTF8, 0, mbstr, -1, wcstr, required_size );
@@ -733,7 +733,7 @@ static int dirent_wcstombs_s(
     size_t sizeInBytes, const wchar_t *wcstr, size_t /*count*/ )
 {
     const int required_size = WideCharToMultiByte( CP_UTF8, 0, wcstr, -1, NULL, 0, NULL, 0 ) + 1;
-    if( required_size > static_cast<int>( sizeInBytes ) ) {
+    if( required_size > static_cast < int > ( sizeInBytes ) ) {
         return 1;
     }
     const int n = WideCharToMultiByte( CP_UTF8, 0, wcstr, -1, mbstr, required_size, NULL, 0 );

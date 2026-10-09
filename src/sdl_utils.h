@@ -69,11 +69,11 @@ struct sdl_render_state {
     constexpr static bool has_blend_mode =
         ( Flags & sdl_render_state_flags::blend_mode ) == sdl_render_state_flags::blend_mode;
 
-    using tRT = std::conditional_t<has_render_target, std::tuple<SDL_Texture *>, std::tuple<>>;
-    using tCR = std::conditional_t<has_clip_rect, std::tuple<SDL_Rect, bool>, std::tuple<>>;
-    using tVP = std::conditional_t<has_viewport, std::tuple<SDL_Rect>, std::tuple<>>;
-    using tDC = std::conditional_t<has_draw_color, std::tuple<SDL_Color>, std::tuple<>>;
-    using tBM = std::conditional_t<has_blend_mode, std::tuple<SDL_BlendMode>, std::tuple<>>;
+    using tRT = std::conditional_t<has_render_target, std::tuple<SDL_Texture *>, std::tuple< >>;
+    using tCR = std::conditional_t<has_clip_rect, std::tuple<SDL_Rect, bool>, std::tuple< >>;
+    using tVP = std::conditional_t<has_viewport, std::tuple<SDL_Rect>, std::tuple< >>;
+    using tDC = std::conditional_t<has_draw_color, std::tuple<SDL_Color>, std::tuple< >>;
+    using tBM = std::conditional_t<has_blend_mode, std::tuple<SDL_BlendMode>, std::tuple< >>;
 
     constexpr static ptrdiff_t render_target_idx =
         has_render_target

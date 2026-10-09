@@ -66,20 +66,21 @@ constexpr float row_height_dp = 34.0f;
 } // namespace
 
 auto show_context_menu( const point &screen_pos,
-                        const std::vector<context_action> &actions ) -> std::optional<action_id>
-{
-    if( actions.empty() ) {
-    return std::nullopt;
-}
+                        const std::vector<context_action> &actions ) -> std::optional<action_id> {
+    if( actions.empty() )
+    {
+        return std::nullopt;
+    }
 
-// This screen has no curses content at all (it's RmlUi-only, like the
-// Character::conduct_blood_analysis blood-test popup), but ui_adaptor still
-// needs a positioned window to anchor its invalidation bookkeeping — a
-// throwaway 1x1 window is never actually drawn into.
-catacurses::window w;
-ui_adaptor ui;
-ui.on_screen_resize( [&]( ui_adaptor & ui ) {
-    w = catacurses::newwin( 1, 1, point_zero );
+    // This screen has no curses content at all (it's RmlUi-only, like the
+    // Character::conduct_blood_analysis blood-test popup), but ui_adaptor still
+    // needs a positioned window to anchor its invalidation bookkeeping — a
+    // throwaway 1x1 window is never actually drawn into.
+    catacurses::window w;
+    ui_adaptor ui;
+    ui.on_screen_resize( [&]( ui_adaptor & ui )
+    {
+        w = catacurses::newwin( 1, 1, point_zero );
         ui.position_from_window( w );
     } );
     ui.mark_resize();
@@ -92,7 +93,8 @@ ui.on_screen_resize( [&]( ui_adaptor & ui ) {
     ctxt.register_action( "HELP_KEYBINDINGS" );
 
     const int n = static_cast<int>( actions.size() );
-    const auto find_next_enabled = [&]( int from, int dir ) {
+    const auto find_next_enabled = [&]( int from, int dir )
+    {
         int idx = from;
         for( int step = 0; step < n; ++step ) {
             idx = ( idx + dir + n ) % n;
@@ -112,7 +114,8 @@ ui.on_screen_resize( [&]( ui_adaptor & ui ) {
     // members until RemoveDataModel).
     std::unique_ptr<ctx_menu_session> data;
     rml_doc rml;
-    const auto sync_rml = [&]() {
+    const auto sync_rml = [&]()
+    {
         if( !rml ) {
             return;
         }
@@ -129,7 +132,8 @@ ui.on_screen_resize( [&]( ui_adaptor & ui ) {
         data->handle.DirtyVariable( "rows" );
     };
 
-    rml.open( true, "context_menu", ctxt, [&]( Rml::DataModelConstructor & c ) {
+    rml.open( true, "context_menu", ctxt, [&]( Rml::DataModelConstructor & c )
+    {
         data = std::make_unique<ctx_menu_session>();
         register_ctx_menu_rml_types( c );
         c.Bind( "rows", &data->rows );
@@ -158,23 +162,25 @@ ui.on_screen_resize( [&]( ui_adaptor & ui ) {
         data->handle = c.GetModelHandle();
     } );
 
-    if( !rml ) {
-    return std::nullopt; // RmlUi not ready — no fallback UI for this component
-}
+    if( !rml )
+    {
+        return std::nullopt; // RmlUi not ready — no fallback UI for this component
+    }
 
-// Position: SDL mouse/window coordinates are logical points; RmlUi's own
-// ProcessMouseMove path (rmlui_layer.cpp) scales them up into its context
-// space by density_ratio() BEFORE SetDensityIndependentPixelRatio applies
-// density_ratio()*ui_scale() on top of that — the density_ratio() factors
-// cancel, so a raw screen coordinate converts to dp by dividing by
-// ui_scale() alone. Context::GetDimensions(), in contrast, already reports
-// physical-pixel context space directly, so clamping IT needs the full
-// density_ratio()*ui_scale() divisor.
-const float scale = rmlui_layer::ui_scale() > 0.0f ? rmlui_layer::ui_scale() : 1.0f;
-float left_dp = screen_pos.x / scale;
-float top_dp = screen_pos.y / scale;
-if( Rml::Context * ctx = rmlui_layer::context() ) {
-    const float ratio = rmlui_layer::density_ratio() * scale;
+    // Position: SDL mouse/window coordinates are logical points; RmlUi's own
+    // ProcessMouseMove path (rmlui_layer.cpp) scales them up into its context
+    // space by density_ratio() BEFORE SetDensityIndependentPixelRatio applies
+    // density_ratio()*ui_scale() on top of that — the density_ratio() factors
+    // cancel, so a raw screen coordinate converts to dp by dividing by
+    // ui_scale() alone. Context::GetDimensions(), in contrast, already reports
+    // physical-pixel context space directly, so clamping IT needs the full
+    // density_ratio()*ui_scale() divisor.
+    const float scale = rmlui_layer::ui_scale() > 0.0f ? rmlui_layer::ui_scale() : 1.0f;
+    float left_dp = screen_pos.x / scale;
+    float top_dp = screen_pos.y / scale;
+    if( Rml::Context * ctx = rmlui_layer::context() )
+    {
+        const float ratio = rmlui_layer::density_ratio() * scale;
         if( ratio > 0.0f ) {
             const Rml::Vector2i dims = ctx->GetDimensions();
             const float menu_height_dp = static_cast<float>( n ) * row_height_dp;
@@ -189,12 +195,14 @@ if( Rml::Context * ctx = rmlui_layer::context() ) {
     data->handle.DirtyVariable( "left_style" );
     data->handle.DirtyVariable( "top_style" );
 
-    ui.on_redraw( [&]( const ui_adaptor & ) {
+    ui.on_redraw( [&]( const ui_adaptor & )
+    {
         sync_rml();
     } );
 
-    while( !result && !dismissed ) {
-    ui_manager::redraw();
+    while( !result && !dismissed )
+    {
+        ui_manager::redraw();
         const std::string action = ctxt.handle_input();
         if( action == "QUIT" ) {
             dismissed = true;

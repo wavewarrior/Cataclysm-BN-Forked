@@ -414,8 +414,8 @@ public:
                 << "sprite_batcher [" << (label ? label : "?")
                 << "]: frag binding layout mismatch — storage_buffers="
                 << f.resources.num_storage_buffers << " (expected " << FRAG_SBUF_COUNT
-                << ") storage_textures=" << f.resources.num_storage_textures
-                << " (expected " << FRAG_STORAGE_TEX_COUNT << ")";
+                << ") storage_textures=" << f.resources.num_storage_textures << " (expected "
+                << FRAG_STORAGE_TEX_COUNT << ")";
             throw std::runtime_error("sprite frag binding layout mismatch");
         }
 
@@ -762,8 +762,8 @@ public:
                     if (s.is_lit && (s_diag_first_lit || s_diag_lit % 300 == 1)) {
                         s_diag_first_lit = false;
                         DebugLogFL(DL::Info, DC::Main)
-                            << "[segdiag] LIT segment #" << s_diag_lit << ": sun_intensity="
-                            << lp_sun_use.sun_intensity << " sky_intensity="
+                            << "[segdiag] LIT segment #" << s_diag_lit
+                            << ": sun_intensity=" << lp_sun_use.sun_intensity << " sky_intensity="
                             << lp_sun_use.sky_intensity << " sdf_map_w=" << lp_use.sdf_map_w
                             << " emitter_count=" << lp_use.emitter_count
                             << " ambient=" << lp_use.ambient << " count=" << s.count;

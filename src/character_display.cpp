@@ -260,8 +260,8 @@ static std::string get_encumbrance_description( const Character &who, const body
         case bp_eyes:
             s += string_format(
                      _( "Perception when checking traps or firing ranged weapons: <color_white>%+d</color>\n"
-                        "Dispersion when throwing items: <color_white>%+d</color>\n"
-                        "Night vision range: <color_white>%+.1f</color>" ),
+               "Dispersion when throwing items: <color_white>%+d</color>\n"
+               "Night vision range: <color_white>%+.1f</color>" ),
                      -( eff_encumbrance / 10 ),
                      eff_encumbrance * 10,
                      vision::nv_range_from_eye_encumbrance( eff_encumbrance ) );
@@ -317,8 +317,7 @@ static bool is_cqb_skill( const skill_id &id )
     return std::ranges::contains( cqb_skills, id );
 }
 
-namespace
-{
+namespace {
 enum class player_display_tab {
     stats,
     encumbrance,
@@ -361,7 +360,8 @@ static player_display_tab prev_tab( const player_display_tab tab )
 struct HeaderSkill {
     const Skill *skill;
     bool is_header;
-    HeaderSkill( const Skill *skill, bool is_header ): skill( skill ), is_header( is_header ) {
+    HeaderSkill( const Skill * skill, bool is_header ): skill( skill ), is_header( is_header )
+    {
     }
 };
 
@@ -393,8 +393,8 @@ int character_display::display_empty_handed_base_damage( const Character &you )
             per_hand += mut->bash_dmg_bonus + mut->cut_dmg_bonus + mut->pierce_dmg_bonus;
 
             // Random bonuses are more fiddly, since we want baseline numbers let's just report the minimum
-            const std::pair<int, int> rand_bash = mut->rand_bash_bonus;
-            const std::pair<int, int> rand_cut = mut->rand_cut_bonus;
+            const std::pair < int, int > rand_bash = mut->rand_bash_bonus;
+            const std::pair < int, int > rand_cut = mut->rand_cut_bonus;
             per_hand += rand_bash.first + rand_cut.first;
 
             // Extra skill bonus is also fairly simple, but each type of fixed bonus can trigger it separately
@@ -425,10 +425,10 @@ static bool handle_player_display_action( Character &you, unsigned int &line,
         const ui_adaptor &ui_stats, const ui_adaptor &ui_encumb,
         const ui_adaptor &ui_traits, const ui_adaptor &ui_bionics,
         const ui_adaptor &ui_effects, const ui_adaptor &ui_skills,
-        const std::vector<trait_id> &traitslist,
-        const std::vector<std::pair<bionic, int>> &bionicslist,
-        const std::vector<std::pair<std::string, std::string>> &effect_name_and_text,
-        const std::vector<HeaderSkill> &skillslist )
+        const std::vector < trait_id > &traitslist,
+        const std::vector < std::pair < bionic, int>> &bionicslist,
+        const std::vector < std::pair < std::string, std::string>> &effect_name_and_text,
+        const std::vector < HeaderSkill > &skillslist )
 {
     const auto invalidate_tab = [&]( const player_display_tab tab ) {
         switch( tab ) {
@@ -462,7 +462,7 @@ static bool handle_player_display_action( Character &you, unsigned int &line,
             line_end = 6;
             break;
         case player_display_tab::encumbrance: {
-            const std::vector<std::pair<bodypart_str_id, bool>> bps = list_and_combine_bps( you, nullptr );
+            const std::vector < std::pair < bodypart_str_id, bool>> bps = list_and_combine_bps( you, nullptr );
             line_end = bps.size();
             break;
         }
@@ -526,8 +526,8 @@ static bool handle_player_display_action( Character &you, unsigned int &line,
             default:
                 break;
             case player_display_tab::stats:
-                if( line < 4 && get_option<bool>( "STATS_THROUGH_KILLS" ) && you.is_avatar() ) {
-                    character_display::upgrade_stat_prompt( *you.as_avatar(), static_cast<character_stat>( line ) );
+                if( line < 4 && get_option < bool > ( "STATS_THROUGH_KILLS" ) && you.is_avatar() ) {
+                    character_display::upgrade_stat_prompt( *you.as_avatar(), static_cast < character_stat > ( line ) );
                 }
                 invalidate_tab( curtab );
                 break;
@@ -576,7 +576,7 @@ static bool handle_player_display_action( Character &you, unsigned int &line,
     return done;
 }
 
-static std::pair<unsigned, unsigned> calculate_shared_column_win_height(
+static std::pair < unsigned, unsigned > calculate_shared_column_win_height(
     const unsigned available_height, unsigned first_win_size_y_max, unsigned second_win_size_y_max )
 /**
  * Calculate max allowed height of two windows sharing column space.
@@ -600,8 +600,7 @@ static std::pair<unsigned, unsigned> calculate_shared_column_win_height(
     return std::make_pair( first_win_size_y_max, second_win_size_y_max );
 }
 
-namespace
-{
+namespace {
 // ── RmlUi character-sheet model (the '@' screen, §8.1 backlog) ───────────────
 // One row of a tab-panel list: colour-tagged text + cursor flag (the highlight is
 // CSS .selected, scoped under the active panel — so only the focused tab shows it).
@@ -613,12 +612,12 @@ struct cs_row {
 // panel / tip bar / focus-following info pane (single strings). Mirrors disp_info's
 // 6 tabs + speed + info + tip; producers below reproduce each draw_* as text.
 struct cs_session {
-    Rml::Vector<cs_row> stats;
-    Rml::Vector<cs_row> encumb;
-    Rml::Vector<cs_row> skills;
-    Rml::Vector<cs_row> traits;
-    Rml::Vector<cs_row> bionics;
-    Rml::Vector<cs_row> effects;
+    Rml::Vector < cs_row > stats;
+    Rml::Vector < cs_row > encumb;
+    Rml::Vector < cs_row > skills;
+    Rml::Vector < cs_row > traits;
+    Rml::Vector < cs_row > bionics;
+    Rml::Vector < cs_row > effects;
     bool stats_active = false;
     bool encumb_active = false;
     bool skills_active = false;
@@ -631,31 +630,29 @@ struct cs_session {
     Rml::DataModelHandle handle;
 };
 bool g_cs_types_registered = false;
-void register_cs_rml_types( Rml::DataModelConstructor &c )
+void register_cs_rml_types( Rml::DataModelConstructor & c )
 {
     if( g_cs_types_registered ) {
         return;
     }
     g_cs_types_registered = true;
-    Rml::StructHandle<cs_row> rh = c.RegisterStruct<cs_row>();
+    Rml::StructHandle < cs_row > rh = c.RegisterStruct < cs_row > ();
     rh.RegisterMember( "text_rml", &cs_row::text_rml );
     rh.RegisterMember( "selected", &cs_row::selected );
-    c.RegisterArray<Rml::Vector<cs_row>>();
+    c.RegisterArray < Rml::Vector < cs_row>>();
 }
 
 // Each producer reproduces the row CONTENT of the matching draw_*_tab as a
 // colour-tagged string (the curses draw stays pristine for A/B). Base colours
 // only — the cursor highlight is the CSS .selected accent, not the curses h_* one.
 
-std::vector<cs_row> cs_stats_rows( const Character &you, unsigned line, bool active )
+std::vector < cs_row > cs_stats_rows( const Character & you, unsigned line, bool active )
 {
-    std::vector<cs_row> out;
+    std::vector < cs_row > out;
     const auto stat_color = []( int cur, int max ) -> nc_color {
-        if( cur <= 0 )
-        {
+        if( cur <= 0 ) {
             return c_dark_gray;
-        } else if( cur < max / 2 )
-        {
+        } else if( cur < max / 2 ) {
             return c_red;
         } else if( cur < max )
         {
@@ -686,21 +683,21 @@ std::vector<cs_row> cs_stats_rows( const Character &you, unsigned line, bool act
     return out;
 }
 
-std::vector<cs_row> cs_encumb_rows( const Character &you, unsigned line, bool active )
+std::vector < cs_row > cs_encumb_rows( const Character & you, unsigned line, bool active )
 {
-    std::vector<cs_row> out;
+    std::vector < cs_row > out;
     // Reuse the shared producer built for armor_layers (colour-tagged rows).
-    const std::vector<std::string> lines = character_display::encumbrance_lines( you );
+    const std::vector < std::string > lines = character_display::encumbrance_lines( you );
     for( size_t i = 0; i < lines.size(); ++i ) {
         out.push_back( { cata_text_to_rml( lines[i] ), active && line == i } );
     }
     return out;
 }
 
-std::vector<cs_row> cs_traits_rows( const std::vector<trait_id> &traitslist, unsigned line,
-                                    bool active )
+std::vector < cs_row > cs_traits_rows( const std::vector < trait_id > &traitslist, unsigned line,
+                                       bool active )
 {
-    std::vector<cs_row> out;
+    std::vector < cs_row > out;
     for( size_t i = 0; i < traitslist.size(); ++i ) {
         const mutation_branch &mdata = traitslist[i].obj();
         out.push_back( { cata_text_to_rml( colorize( mdata.name(), mdata.get_display_color() ) ),
@@ -709,11 +706,11 @@ std::vector<cs_row> cs_traits_rows( const std::vector<trait_id> &traitslist, uns
     return out;
 }
 
-std::vector<cs_row> cs_bionics_rows( const Character &you,
-                                     const std::vector<std::pair<bionic, int>> &bionicslist,
-                                     unsigned line, bool active )
+std::vector < cs_row > cs_bionics_rows( const Character & you,
+                                        const std::vector < std::pair < bionic, int>> &bionicslist,
+                                        unsigned line, bool active )
 {
-    std::vector<cs_row> out;
+    std::vector < cs_row > out;
     // Power header (pos 1 in curses) — never selectable.
     out.push_back( { cata_text_to_rml( string_format(
                                            _( "Bionic Power: <color_light_blue>%1$d</color> / <color_light_blue>%2$d</color>" ),
@@ -730,11 +727,11 @@ std::vector<cs_row> cs_bionics_rows( const Character &you,
     return out;
 }
 
-std::vector<cs_row> cs_effects_rows(
-    const std::vector<std::pair<std::string, std::string>> &effect_name_and_text,
+std::vector < cs_row > cs_effects_rows(
+    const std::vector < std::pair < std::string, std::string>> &effect_name_and_text,
     unsigned line, bool active )
 {
-    std::vector<cs_row> out;
+    std::vector < cs_row > out;
     for( size_t i = 0; i < effect_name_and_text.size(); ++i ) {
         out.push_back( { cata_text_to_rml( colorize( effect_name_and_text[i].first, c_light_gray ) ),
                          active && line == i } );
@@ -742,10 +739,10 @@ std::vector<cs_row> cs_effects_rows(
     return out;
 }
 
-std::vector<cs_row> cs_skills_rows( Character &you, unsigned line, bool active,
-                                    const std::vector<HeaderSkill> &skillslist )
+std::vector < cs_row > cs_skills_rows( Character & you, unsigned line, bool active,
+                                       const std::vector < HeaderSkill > &skillslist )
 {
-    std::vector<cs_row> out;
+    std::vector < cs_row > out;
     for( size_t i = 0; i < skillslist.size(); ++i ) {
         const Skill *aSkill = skillslist[i].skill;
         if( skillslist[i].is_header ) {
@@ -792,9 +789,9 @@ std::vector<cs_row> cs_skills_rows( Character &you, unsigned line, bool active,
     return out;
 }
 
-std::string cs_speed_text( const Character &you, const std::map<std::string, int> &speed_effects )
+std::string cs_speed_text( const Character & you, const std::map < std::string, int > &speed_effects )
 {
-    std::vector<std::string> lines;
+    std::vector < std::string > lines;
     const int newmoves = you.get_speed();
     const int runcost = you.run_cost( 100 );
     lines.push_back( string_format( _( "Base Move Cost: %s" ),
@@ -846,7 +843,8 @@ std::string cs_speed_text( const Character &you, const std::map<std::string, int
             pen_line( _( "Cold-Blooded" ), pen, bonus );
         }
     }
-    const int quick_bonus = static_cast<int>( std::round( ( you.mutation_value( "speed_modifier" ) - 1 )
+    const int quick_bonus = static_cast < int > ( std::round( ( you.mutation_value( "speed_modifier" ) -
+                            1 )
                             * 100 ) );
     if( quick_bonus != 0 ) {
         pen_line( _( "Mutations" ), quick_bonus, quick_bonus >= 0 );
@@ -856,7 +854,7 @@ std::string cs_speed_text( const Character &you, const std::map<std::string, int
     if( ench_speed != 0 ) {
         pen_line( _( "Misc Speed" ), ench_speed, ench_speed > 0 );
     }
-    for( const std::pair<const std::string, int> &se : speed_effects ) {
+    for( const std::pair < const std::string, int > &se : speed_effects ) {
         pen_line( se.first, se.second, se.second > 0 );
     }
     std::string out;
@@ -869,7 +867,7 @@ std::string cs_speed_text( const Character &you, const std::map<std::string, int
     return cata_text_to_rml( out );
 }
 
-std::string cs_tip_text( const Character &you, const std::string &race, const input_context &ctxt )
+std::string cs_tip_text( const Character & you, const std::string & race, const input_context & ctxt )
 {
     const char *gender = you.male ? _( "Male" ) : _( "Female" );
     std::string head;
@@ -890,11 +888,11 @@ std::string cs_tip_text( const Character &you, const std::string &race, const in
     return cata_text_to_rml( head );
 }
 
-std::string cs_info_text( const Character &you, unsigned line, player_display_tab curtab,
-                          const std::vector<trait_id> &traitslist,
-                          const std::vector<std::pair<bionic, int>> &bionicslist,
-                          const std::vector<std::pair<std::string, std::string>> &effect_name_and_text,
-                          const std::vector<HeaderSkill> &skillslist )
+std::string cs_info_text( const Character & you, unsigned line, player_display_tab curtab,
+                          const std::vector < trait_id > &traitslist,
+                          const std::vector < std::pair < bionic, int>> &bionicslist,
+                          const std::vector < std::pair < std::string, std::string>> &effect_name_and_text,
+                          const std::vector < HeaderSkill > &skillslist )
 {
     std::string s;
     switch( curtab ) {
@@ -902,7 +900,7 @@ std::string cs_info_text( const Character &you, unsigned line, player_display_ta
             if( line == 0 ) {
                 s = colorize(
                         _( "Strength affects your melee damage, the amount of weight you can carry, your total HP, "
-                           "your resistance to many diseases, and the effectiveness of actions which require brute force." ),
+                   "your resistance to many diseases, and the effectiveness of actions which require brute force." ),
                         c_magenta ) + "\n\n";
                 s += string_format( _( "Base HP: <color_white>%d</color>" ),
                                     you.get_part_hp_max( bodypart_id( "torso" ) ) ) + "\n";
@@ -921,7 +919,7 @@ std::string cs_info_text( const Character &you, unsigned line, player_display_ta
             } else if( line == 2 ) {
                 s = colorize(
                         _( "Intelligence is less important in most situations, but it is vital for more complex tasks like "
-                           "electronics crafting.  It also affects how much skill you can pick up from reading a book." ),
+                   "electronics crafting.  It also affects how much skill you can pick up from reading a book." ),
                         c_magenta ) + "\n\n";
                 if( you.rust_rate() ) {
                     s += string_format( _( "Skill rust: <color_white>%d%%</color>" ), you.rust_rate() ) + "\n";
@@ -945,7 +943,7 @@ std::string cs_info_text( const Character &you, unsigned line, player_display_ta
             }
             break;
         case player_display_tab::encumbrance: {
-            const std::vector<std::pair<bodypart_str_id, bool>> bps = list_and_combine_bps( you, nullptr );
+            const std::vector < std::pair < bodypart_str_id, bool>> bps = list_and_combine_bps( you, nullptr );
             if( line < bps.size() ) {
                 s = get_encumbrance_description( you, bps[line].first, bps[line].second );
             }
@@ -999,10 +997,10 @@ std::string cs_info_text( const Character &you, unsigned line, player_display_ta
 }
 } // namespace
 
-std::vector<std::pair<std::string, std::string>> character_display::effect_name_and_text(
+std::vector < std::pair < std::string, std::string>> character_display::effect_name_and_text(
     const Character &ch )
 {
-    std::vector<std::pair<std::string, std::string>> effect_name_and_text;
+    std::vector < std::pair < std::string, std::string>> effect_name_and_text;
     for( auto &elem : ch.get_all_effects() ) {
         for( auto &_effect_it : elem.second ) {
             const std::string tmp = _effect_it.second.disp_name();
@@ -1064,17 +1062,17 @@ std::vector<std::pair<std::string, std::string>> character_display::effect_name_
       ) {
         effect_name_and_text.emplace_back( _( "In Sunlight" ),
                                            _( "The sunlight irritates you.\n"
-                                              "Strength - 1;    Dexterity - 1;    Intelligence - 1;    Perception - 1" )
+           "Strength - 1;    Dexterity - 1;    Intelligence - 1;    Perception - 1" )
                                          );
     } else if( ch.has_trait( trait_id( "TROGLO2" ) ) && g->is_in_sunlight( ch.bub_pos() ) ) {
         effect_name_and_text.emplace_back( _( "In Sunlight" ),
                                            _( "The sunlight irritates you badly.\n"
-                                              "Strength - 2;    Dexterity - 2;    Intelligence - 2;    Perception - 2" )
+           "Strength - 2;    Dexterity - 2;    Intelligence - 2;    Perception - 2" )
                                          );
     } else if( ch.has_trait( trait_id( "TROGLO3" ) ) && g->is_in_sunlight( ch.bub_pos() ) ) {
         effect_name_and_text.emplace_back( _( "In Sunlight" ),
                                            _( "The sunlight irritates you terribly.\n"
-                                              "Strength - 4;    Dexterity - 4;    Intelligence - 4;    Perception - 4" )
+           "Strength - 4;    Dexterity - 4;    Intelligence - 4;    Perception - 4" )
                                          );
     }
 
@@ -1088,20 +1086,21 @@ std::vector<std::pair<std::string, std::string>> character_display::effect_name_
 
 void character_display::disp_info( Character &ch )
 {
-    std::vector<std::pair<std::string, std::string>> effect_name_and_text =
+    std::vector < std::pair < std::string, std::string>> effect_name_and_text =
         character_display::effect_name_and_text( ch );
 
-    const unsigned int effect_win_size_y_max = 1 + static_cast<unsigned>( effect_name_and_text.size() );
+    const unsigned int effect_win_size_y_max = 1 + static_cast < unsigned >
+        ( effect_name_and_text.size() );
 
-    std::vector<trait_id> traitslist = ch.get_mutations( false );
+    std::vector < trait_id > traitslist = ch.get_mutations( false );
     std::ranges::sort( traitslist, trait_display_sort );
-    const unsigned int trait_win_size_y_max = 1 + static_cast<unsigned>( traitslist.size() );
+    const unsigned int trait_win_size_y_max = 1 + static_cast < unsigned > ( traitslist.size() );
 
-    std::multimap<bionic_id, bionic> bionics_map;
+    std::multimap < bionic_id, bionic > bionics_map;
     for( const auto &elem : *ch.my_bionics ) {
         bionics_map.emplace( elem.id, elem );
     }
-    std::vector<std::pair<bionic, int>> bionics_list;
+    std::vector < std::pair < bionic, int>> bionics_list;
     for( auto it = bionics_map.begin(); it != bionics_map.end(); ) {
         const auto [k, v] = *it;
         int d = 0;
@@ -1114,8 +1113,7 @@ void character_display::disp_info( Character &ch )
 
     using bionic_pair = decltype( bionics_list )::value_type;
     std::ranges::sort( bionics_list, []( const bionic_pair & a, const bionic_pair & b ) -> bool {
-        if( a.first.info().activated != b.first.info().activated )
-        {
+        if( a.first.info().activated != b.first.info().activated ) {
             return a.first.info().activated;
         }
         constexpr auto less = bionic_sort_less{ bionic_ui_sort_mode::NAME };
@@ -1123,7 +1121,7 @@ void character_display::disp_info( Character &ch )
     } );
     const unsigned int bionics_win_size_y_max = 2 + bionics_list.size();
 
-    const std::vector<const Skill *> player_skill = Skill::get_skills_sorted_by(
+    const std::vector < const Skill * > player_skill = Skill::get_skills_sorted_by(
     [&]( const Skill & a, const Skill & b ) {
         skill_displayType_id type_a = a.display_category();
         skill_displayType_id type_b = b.display_category();
@@ -1132,7 +1130,7 @@ void character_display::disp_info( Character &ch )
                                   std::make_pair( type_b, b.name() ) );
     } );
 
-    std::vector<HeaderSkill> skillslist;
+    std::vector < HeaderSkill > skillslist;
     skill_displayType_id prev_type = skill_displayType_id::NULL_ID();
     for( auto &s : player_skill ) {
         if( s->display_category() != prev_type ) {
@@ -1174,9 +1172,9 @@ void character_display::disp_info( Character &ch )
     ctxt.register_action( "CHANGE_NAME", to_translation( "Change name" ) );
     ctxt.register_action( "HELP_KEYBINDINGS" );
 
-    std::map<std::string, int> speed_effects;
+    std::map < std::string, int > speed_effects;
     for( auto &elem : ch.get_all_effects() ) {
-        for( std::pair<const bodypart_str_id, effect> &_effect_it : elem.second ) {
+        for( std::pair < const bodypart_str_id, effect > &_effect_it : elem.second ) {
             effect &it = _effect_it.second;
             bool reduced = ch.resists_effect( it );
             int move_adjust = it.get_mod( "SPEED", reduced );
@@ -1299,7 +1297,8 @@ void character_display::disp_info( Character &ch )
     ui_adaptor ui_traits;
     ui_traits.on_screen_resize( [&]( ui_adaptor & ui_traits ) {
         std::tie( trait_win_size_y, bionics_win_size_y ) = calculate_shared_column_win_height(
-                static_cast<unsigned>( TERMY ) - infooffsetybottom, trait_win_size_y_max, bionics_win_size_y_max );
+                static_cast < unsigned > ( TERMY ) - infooffsetybottom, trait_win_size_y_max,
+                bionics_win_size_y_max );
         w_traits = catacurses::newwin( trait_win_size_y, grid_width,
                                        point( grid_width + 1, infooffsetybottom ) );
         w_traits_border = catacurses::newwin( trait_win_size_y + 1, grid_width + 2,
@@ -1323,7 +1322,8 @@ void character_display::disp_info( Character &ch )
     ui_adaptor ui_bionics;
     ui_bionics.on_screen_resize( [&]( ui_adaptor & ui_bionics ) {
         std::tie( trait_win_size_y, bionics_win_size_y ) = calculate_shared_column_win_height(
-                static_cast<unsigned>( TERMY ) - infooffsetybottom, trait_win_size_y_max, bionics_win_size_y_max );
+                static_cast < unsigned > ( TERMY ) - infooffsetybottom, trait_win_size_y_max,
+                bionics_win_size_y_max );
         w_bionics = catacurses::newwin( bionics_win_size_y, grid_width,
                                         point( grid_width + 1,
                                                infooffsetybottom + trait_win_size_y + 1 ) );
@@ -1367,7 +1367,7 @@ void character_display::disp_info( Character &ch )
     border_helper::border_info &border_effects = borders.add_border();
     ui_adaptor ui_effects;
     ui_effects.on_screen_resize( [&]( ui_adaptor & ui_effects ) {
-        const unsigned int maxy = static_cast<unsigned>( TERMY );
+        const unsigned int maxy = static_cast < unsigned > ( TERMY );
         effect_win_size_y = effect_win_size_y_max;
         if( effect_win_size_y + infooffsetybottom > maxy ) {
             effect_win_size_y = maxy - infooffsetybottom;
@@ -1416,7 +1416,7 @@ void character_display::disp_info( Character &ch )
     border_helper::border_info &border_skills = borders.add_border();
     ui_adaptor ui_skills;
     ui_skills.on_screen_resize( [&]( ui_adaptor & ui_skills ) {
-        const unsigned int maxy = static_cast<unsigned>( TERMY );
+        const unsigned int maxy = static_cast < unsigned > ( TERMY );
         skill_win_size_y = skill_win_size_y_max;
         if( skill_win_size_y + infooffsetybottom > maxy ) {
             skill_win_size_y = maxy - infooffsetybottom;
@@ -1475,7 +1475,7 @@ void character_display::upgrade_stat_prompt( avatar &you, const character_stat &
     const int free_points = you.free_upgrade_points();
 
     if( free_points <= 0 ) {
-        std::optional<int> xp_remains = you.kill_xp_for_next_point();
+        std::optional < int > xp_remains = you.kill_xp_for_next_point();
         if( !xp_remains ) {
             popup( _( "You've already reached maximum level." ) );
         } else {

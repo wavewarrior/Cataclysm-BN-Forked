@@ -175,7 +175,7 @@ void item::combat_info( std::vector<iteminfo> &info, const iteminfo_query *parts
             insert_separation_line( info );
             info.emplace_back( "DESCRIPTION",
                                _( "You know how to use this with these martial arts "
-                                  "styles: " ) + valid_styles );
+               "styles: " ) + valid_styles );
         }
     }
 
@@ -185,11 +185,11 @@ void item::combat_info( std::vector<iteminfo> &info, const iteminfo_query *parts
         if( has_flag( flag_REACH3 ) ) {
             info.emplace_back( "DESCRIPTION",
                                _( "* This item can be used to make <stat>long reach "
-                                  "attacks</stat>." ) );
+               "attacks</stat>." ) );
         } else {
             info.emplace_back( "DESCRIPTION",
                                _( "* This item can be used to make <stat>reach "
-                                  "attacks</stat>." ) );
+               "attacks</stat>." ) );
         }
     }
 

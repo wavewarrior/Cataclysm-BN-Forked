@@ -354,7 +354,7 @@ struct mtype {
 
         struct pet_training_level_flags {
             int level = 0;
-            std::vector<m_flag> flags;
+            std::vector < m_flag > flags;
         };
 
         struct pet_training_multipliers {
@@ -365,14 +365,14 @@ struct mtype {
             float dodge = 1.15f;
             int max_level = 3;
             int min_skill = 3;
-            std::vector<pet_training_level_flags> level_flags;
+            std::vector < pet_training_level_flags > level_flags;
         };
         // Per-level stat multipliers when this monster is trained as a pet.
         // Absent means this monster cannot be trained.
-        std::optional<pet_training_multipliers> pet_training;
+        std::optional < pet_training_multipliers > pet_training;
 
-        std::set<scenttype_id> scents_tracked; /**Types of scent tracked by this mtype*/
-        std::set<scenttype_id> scents_ignored; /**Types of scent ignored by this mtype*/
+        std::set < scenttype_id > scents_tracked; /**Types of scent tracked by this mtype*/
+        std::set < scenttype_id > scents_ignored; /**Types of scent ignored by this mtype*/
 
         int sk_dodge = 0;       /** dodge skill */
 
@@ -399,11 +399,11 @@ struct mtype {
 
         unsigned int def_chance; // How likely a special "defensive" move is to trigger (0-100%, default 0)
         // special attack frequencies and function pointers
-        std::map<std::string, mtype_special_attack> special_attacks;
-        std::vector<std::string> special_attacks_names; // names of attacks, in json load order
+        std::map < std::string, mtype_special_attack > special_attacks;
+        std::vector < std::string > special_attacks_names; // names of attacks, in json load order
 
-        std::vector<mon_action_death>  dies;       // What happens when this monster dies
-        std::vector<std::function<void( monster & )>> on_death;
+        std::vector < mon_action_death >  dies;    // What happens when this monster dies
+        std::vector < std::function < void( monster & )>> on_death;
 
         // This monster's special "defensive" move that may trigger when the monster is attacked.
         // Note that this can be anything, and is not necessarily beneficial to the monster
@@ -419,11 +419,11 @@ struct mtype {
         mtype_id fungalize_into;
 
         // Monster reproduction variables
-        std::optional<time_duration> baby_timer;
+        std::optional < time_duration > baby_timer;
         int baby_count;
         mtype_id baby_monster;
         itype_id baby_egg;
-        std::vector<std::string> baby_flags;
+        std::vector < std::string > baby_flags;
 
         // Monster's ability to destroy terrain and vehicles
         int bash_skill;
@@ -438,8 +438,8 @@ struct mtype {
 
         // Do we indiscriminately attack characters, or should we wait until one annoys us?
         bool aggro_character = true;
-        std::optional<std::string> lua_attitude;
-        std::optional<std::string> lua_ai;
+        std::optional < std::string > lua_attitude;
+        std::optional < std::string > lua_ai;
 
         mtype();
         /**
@@ -471,7 +471,7 @@ struct mtype {
         item_group_id monster_weapon;
 
         /** Emission sources that cycle each turn the monster remains alive */
-        std::map<emit_id, time_duration> emit_fields;
+        std::map < emit_id, time_duration > emit_fields;
 
         pathfinding_settings legacy_path_settings;
         pathfinding_settings legacy_path_settings_buffed;
@@ -488,7 +488,7 @@ struct mtype {
         // We rely on external options to construct pathfinding options
         //   which are subject to change by rebalancing mods
         //   thus necessiating a late load
-        std::unordered_map<std::string, std::variant<float, bool, int>> recorded_path_settings;
+        std::unordered_map < std::string, std::variant < float, bool, int>> recorded_path_settings;
         void setup_pathfinding_deferred();
 
         // Used to fetch the properly pluralized monster type name
@@ -497,14 +497,14 @@ struct mtype {
         bool has_flag( m_flag flag ) const;
         void set_flag( m_flag flag, bool state = true );
         bool made_of( const material_id &material ) const;
-        bool made_of_any( const std::set<material_id> &materials ) const;
+        bool made_of_any( const std::set < material_id > &materials ) const;
         bool has_anger_trigger( mon_trigger trigger ) const;
         bool has_fear_trigger( mon_trigger trigger ) const;
         bool has_placate_trigger( mon_trigger trigger ) const;
         bool in_category( const std::string &category ) const;
         bool in_species( const species_id &spec ) const;
         bool in_species( const species_type &spec ) const;
-        std::vector<std::string> species_descriptions() const;
+        std::vector < std::string > species_descriptions() const;
         //Used for corpses.
         field_type_id bloodType() const;
         field_type_id gibType() const;

@@ -153,7 +153,8 @@ void safemode::show( const std::string &custom_name_in, bool is_safemode_in )
     const int header_height = 4;
     int content_height = 0;
 
-    enum Columns : int {
+    enum Columns :
+        int {
         COLUMN_RULE,
         COLUMN_ATTITUDE,
         COLUMN_PROXIMITY,
@@ -923,7 +924,7 @@ void safemode::serialize( JsonOut &json ) const
 
     auto &temp_rules = ( is_character ) ? character_rules : global_rules;
     for( auto &elem : temp_rules ) {
-    json.start_object();
+        json.start_object();
 
         json.member( "rule", elem.rule );
         json.member( "active", elem.active );

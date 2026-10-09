@@ -41,7 +41,7 @@ std::unordered_set<sidebar_anim::anim_prop> g_warned_props;
 auto warn_once( sidebar_anim::anim_prop prop ) -> void
 {
     if( g_warned_props.insert( prop ).second ) {
-    dbg( DL::Warn ) << "hud_anim: channel "
+        dbg( DL::Warn ) << "hud_anim: channel "
                         << static_cast<int>( prop )
                         << " is not yet implemented (Phase 3)";
     }
@@ -59,8 +59,8 @@ struct apply_channel_opts {
 auto apply_channel( const apply_channel_opts &opts ) -> void
 {
     switch( opts.prop ) {
-    case sidebar_anim::anim_prop::alpha:
-        if( opts.value != 1.0f ) {
+        case sidebar_anim::anim_prop::alpha:
+            if( opts.value != 1.0f ) {
                 opts.el->SetProperty( "opacity", std::format( "{:.3f}", opts.value ) );
                 *opts.prop_set = true;
                 *opts.was_animating = true;

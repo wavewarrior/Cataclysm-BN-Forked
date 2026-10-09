@@ -78,8 +78,8 @@ void Character::passive_absorb_hit( const bodypart_id& bp, damage_unit& du ) con
     // >0 check because some mutations provide negative armor
     // Thin skin check goes before subdermal armor plates because SUBdermal
     if( du.amount > 0.0f ) {
-    // HACK: Get rid of this as soon as CUT and STAB are split
-    if( du.type == DT_STAB ) {
+        // HACK: Get rid of this as soon as CUT and STAB are split
+        if( du.type == DT_STAB ) {
             damage_unit du_copy = du;
             du_copy.type = DT_CUT;
             du.amount -= mutation_armor( bp, du_copy );
@@ -410,8 +410,7 @@ float Character::bionic_armor_bonus( const bodypart_id& bp, damage_type dt ) con
 }
 
 std::map<bodypart_id, int> Character::get_armor_fire(
-    const std::map<bodypart_id, std::vector<const item *>> &clothing_map ) const
-{
+    const std::map<bodypart_id, std::vector<const item *>> &clothing_map ) const {
     return get_all_armor_type( DT_HEAT, clothing_map );
 }
 

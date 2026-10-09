@@ -9,8 +9,7 @@
 // coverage-vs-transparency split (a window blocking light despite
 // transmitting it).
 
-TEST_CASE("classify_tile_occlusion open air transmits and has no height", "[lighting]")
-{
+TEST_CASE("classify_tile_occlusion open air transmits and has no height", "[lighting]") {
     const lighting::tile_occlusion_query q{
         .transparency = LIGHT_TRANSPARENCY_OPEN_AIR,
         .coverage = 0,
@@ -20,8 +19,7 @@ TEST_CASE("classify_tile_occlusion open air transmits and has no height", "[ligh
     CHECK(out.height == 0.0f);
 }
 
-TEST_CASE("classify_tile_occlusion solid wall blocks at full coverage height", "[lighting]")
-{
+TEST_CASE("classify_tile_occlusion solid wall blocks at full coverage height", "[lighting]") {
     const lighting::tile_occlusion_query q{
         .transparency = LIGHT_TRANSPARENCY_SOLID,
         .coverage = 100,
@@ -34,8 +32,7 @@ TEST_CASE("classify_tile_occlusion solid wall blocks at full coverage height", "
 TEST_CASE(
     "classify_tile_occlusion window transmits despite high coverage — daylight still "
     "reaches interiors",
-    "[lighting]")
-{
+    "[lighting]") {
     // Regression: coverage 60 lands exactly on sky_sun.comp's SKY_WALL_H = 0.60
     // blocking threshold. A window (transparent, coverage 60) must never be
     // treated as a solid wall — the whole point of deriving "blocks light"
@@ -49,9 +46,7 @@ TEST_CASE(
     CHECK(out.height == 0.0f);
 }
 
-TEST_CASE("classify_tile_occlusion tree seeds the SDF but has zero march height",
-          "[lighting]")
-{
+TEST_CASE("classify_tile_occlusion tree seeds the SDF but has zero march height", "[lighting]") {
     // Phase 2.3: tree sun shadows come exclusively from the screen-space
     // silhouette mask, so a tree must not carry OccBuf height (which would make
     // the sun march and the sky-dome walk shadow it a second time). It stays
@@ -72,8 +67,7 @@ TEST_CASE("classify_tile_occlusion tree seeds the SDF but has zero march height"
     CHECK(wall_out.height > 0.0f);
 }
 
-TEST_CASE("classify_tile_occlusion vehicle obstacle over open air still blocks", "[lighting]")
-{
+TEST_CASE("classify_tile_occlusion vehicle obstacle over open air still blocks", "[lighting]") {
     const lighting::tile_occlusion_query q{
         .transparency = LIGHT_TRANSPARENCY_OPEN_AIR,
         .coverage = 0,
@@ -84,9 +78,7 @@ TEST_CASE("classify_tile_occlusion vehicle obstacle over open air still blocks",
     CHECK(out.height >= 1.0f);
 }
 
-TEST_CASE("classify_tile_occlusion invalid terrain during world load never blocks",
-          "[lighting]")
-{
+TEST_CASE("classify_tile_occlusion invalid terrain during world load never blocks", "[lighting]") {
     const lighting::tile_occlusion_query q{
         .transparency = LIGHT_TRANSPARENCY_SOLID,
         .coverage = 100,
@@ -97,9 +89,8 @@ TEST_CASE("classify_tile_occlusion invalid terrain during world load never block
     CHECK(out.height == 0.0f);
 }
 
-TEST_CASE("classify_tile_occlusion carries roof and open-sky flags through unchanged",
-          "[lighting]")
-{
+TEST_CASE(
+    "classify_tile_occlusion carries roof and open-sky flags through unchanged", "[lighting]") {
     const lighting::tile_occlusion_query q{
         .transparency = LIGHT_TRANSPARENCY_OPEN_AIR,
         .floor_above = true,

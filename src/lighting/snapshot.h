@@ -22,8 +22,8 @@ namespace lighting {
 // sun: current sun direction/intensity/colour (render_state::current_sun()),
 // used to light window "portal" cone emitters by the sun's incidence angle
 // on each window's outward-facing side.
-std::vector<gpu_emitter> build_emitter_snapshot(event_queue& eq, float frame_ms,
-                                                 const sun_params& sun);
+std::vector<gpu_emitter> build_emitter_snapshot(
+    event_queue& eq, float frame_ms, const sun_params& sun);
 
 /// Bubble-local whole-tile rectangle.
 struct emitter_view_rect {
@@ -42,7 +42,7 @@ inline constexpr int EMITTER_VIEW_MARGIN_TILES = 4;
 /// grown by EMITTER_VIEW_MARGIN_TILES comes first; returns that count. The rest
 /// provably contribute nothing to on-screen sprite shading (point_light_atten is 0
 /// at dist >= radius). Degenerate rect (w or h <= 0) → untouched, returns size().
-auto partition_emitters_by_view(std::vector<gpu_emitter>& emitters,
-                                const emitter_view_rect& view) -> int;
+auto partition_emitters_by_view(std::vector<gpu_emitter>& emitters, const emitter_view_rect& view)
+    -> int;
 
 } // namespace lighting

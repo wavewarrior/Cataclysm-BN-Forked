@@ -4,7 +4,6 @@
 #include "coordinates.h"
 #include "field_type.h"
 #include "game.h"
-
 #include "game_constants.h"
 #include "item.h"
 #include "line.h"

@@ -108,7 +108,7 @@ char keybind( const std::string& opt, const std::string& context )
 }
 
 void vehicle::add_toggle_to_opts(
-    std::vector<uilist_entry> &options, std::vector<std::function<void()>> &actions,
+    std::vector<uilist_entry> &options, std::vector<std::function<void() >> &actions,
     const std::string& name, char key, const std::string& flag )
 {
     using namespace std::views;
@@ -138,9 +138,8 @@ void vehicle::add_toggle_to_opts(
     options.emplace_back( -1, allow, key, msg );
 
     actions.emplace_back( [ =, this] {
-for( const auto p : found )
-    {
-        auto& e = parts[p];
+        for( const auto p : found ) {
+            auto& e = parts[p];
             if( e.enabled != state ) {
                 add_msg( state ? _( "Turned on %s" ) : _( "Turned off %s." ), e.name() );
                 e.enabled = state;
@@ -257,7 +256,7 @@ void vehicle::control_doors()
 }
 
 void vehicle::set_electronics_menu_options(
-    std::vector<uilist_entry> &options, std::vector<std::function<void()>> &actions )
+    std::vector<uilist_entry> &options, std::vector<std::function<void() >> &actions )
 {
     auto add_toggle = [&]( const std::string & name, char key, const std::string & flag ) {
         add_toggle_to_opts( options, actions, name, key, flag );
@@ -315,15 +314,16 @@ void vehicle::set_electronics_menu_options(
             camera_on ? colorize( _( "Turn off camera system" ), c_pink ) : _( "Turn on camera system" ),
             keybind( "TOGGLE_CAMERA" ) );
         actions.emplace_back( [&] {
-            if( camera_on )
-        {
-            camera_on = false;
-            add_msg( _( "Camera system disabled" ) );
-            } else if( fuel_left( fuel_type_battery, true ) )
+            if( camera_on ) {
+                camera_on = false;
+                add_msg( _( "Camera system disabled" ) );
+            }
+            else if( fuel_left( fuel_type_battery, true ) )
             {
                 camera_on = true;
                 add_msg( _( "Camera system enabled" ) );
-            } else
+            }
+            else
             {
                 add_msg( _( "Camera system won't turn on" ) );
             }
@@ -351,16 +351,17 @@ void vehicle::control_electronics()
 
         set_electronics_menu_options( options, actions );
 
-        if( has_part( "ENGINE" ) ) {
+        if( has_part( "ENGINE" ) )
+        {
             options.emplace_back(
                 engine_on ? _( "Turn off the engine" ) : _( "Turn on the engine" ), keybind( "TOGGLE_"
-                        "ENGINE" ) );
+                           "ENGINE" ) );
             actions.emplace_back( [&] {
-                if( engine_on )
-            {
-                engine_on = false;
-                stop_engines();
-                } else
+                if( engine_on ) {
+                    engine_on = false;
+                    stop_engines();
+                }
+                else
                 {
                     start_engines();
                     valid_option = false;
@@ -597,7 +598,7 @@ void vehicle::toggle_autopilot()
     smenu.addentry_col(
         FOLLOW, true, 'F', _( "Follow…" ), "",
         string_format( _( "Program the autopilot to follow you.  It might be a good idea to have a "
-                          "remote control available to tell it to stop, too." ) ) );
+                      "remote control available to tell it to stop, too." ) ) );
     smenu.addentry_col(
         STOP, true, 'S', _( "Stop…" ), "",
         string_format( _( "Stop all autopilot related activities." ) ) );
@@ -673,10 +674,9 @@ void vehicle::use_controls( const tripoint_bub_ms& pos )
     if( remote ) {
         options.emplace_back( _( "Stop controlling" ), keybind( "RELEASE_CONTROLS" ) );
         actions.emplace_back( [&] {
-            if( confirm_stop_driving() )
-        {
-            you.controlling_vehicle = false;
-            g->setremoteveh( nullptr );
+            if( confirm_stop_driving() ) {
+                you.controlling_vehicle = false;
+                g->setremoteveh( nullptr );
                 add_msg( _( "You stop controlling the vehicle." ) );
                 refresh();
             }
@@ -684,14 +684,14 @@ void vehicle::use_controls( const tripoint_bub_ms& pos )
 
         has_electronic_controls = has_part( "CTRL_ELECTRONIC" ) || has_part( "REMOTE_CONTROLS" );
 
-    } else if( veh_pointer_or_null( g->m.veh_at( pos ) ) == this ) {
+    }
+    else if( veh_pointer_or_null( g->m.veh_at( pos ) ) == this ) {
         if( you.controlling_vehicle ) {
             options.emplace_back( _( "Let go of controls" ), keybind( "RELEASE_CONTROLS" ) );
             actions.emplace_back( [&] {
-                if( confirm_stop_driving() )
-            {
-                you.controlling_vehicle = false;
-                add_msg( _( "You let go of the controls." ) );
+                if( confirm_stop_driving() ) {
+                    you.controlling_vehicle = false;
+                    add_msg( _( "You let go of the controls." ) );
                     refresh();
                 }
             } );
@@ -714,12 +714,10 @@ void vehicle::use_controls( const tripoint_bub_ms& pos )
         if( you.controlling_vehicle || ( remote && engine_on ) ) {
             options.emplace_back( _( "Stop driving" ), keybind( "TOGGLE_ENGINE" ) );
             actions.emplace_back( [&] {
-                if( !confirm_stop_driving() )
-            {
-                return;
-            } else if( engine_on && has_engine_type_not( fuel_type_muscle, true ) )
-            {
-                add_msg( _( "You turn the engine off and let go of the controls." ) );
+                if( !confirm_stop_driving() ) {
+                    return;
+                } else if( engine_on && has_engine_type_not( fuel_type_muscle, true ) ) {
+                    add_msg( _( "You turn the engine off and let go of the controls." ) );
                     sound_event se;
                     se.origin = pos;
                     se.volume = 40;
@@ -733,8 +731,8 @@ void vehicle::use_controls( const tripoint_bub_ms& pos )
                 }
 
                 for( size_t e = 0; e < engines.size(); ++e )
-            {
-                if( is_engine_on( e ) ) {
+                {
+                    if( is_engine_on( e ) ) {
                         const vpart_info& einfo = part_info( e );
                         const std::string& engine_id = einfo.get_id().str();
                         const int noise = einfo.engine_noise_factor();
@@ -763,21 +761,19 @@ void vehicle::use_controls( const tripoint_bub_ms& pos )
         } else if( has_engine_type_not( fuel_type_muscle, true ) ) {
             options.emplace_back(
                 engine_on ? _( "Turn off the engine" ) : _( "Turn on the engine" ), keybind( "TOGGLE_"
-                        "ENGINE" ) );
+                           "ENGINE" ) );
             actions.emplace_back( [&] {
-                if( engine_on )
-            {
-                engine_on = false;
-                sound_event se;
-                se.origin = pos;
-                se.volume = 40;
-                se.category = sounds::sound_t::movement;
-                se.movement_noise = true;
-                se.description = _( "the engine go silent" );
+                if( engine_on ) {
+                    engine_on = false;
+                    sound_event se;
+                    se.origin = pos;
+                    se.volume = 40;
+                    se.category = sounds::sound_t::movement;
+                    se.movement_noise = true;
+                    se.description = _( "the engine go silent" );
                     sounds::sound( se );
                     stop_engines();
-                } else
-                {
+                } else {
                     start_engines();
                 }
                 refresh();
@@ -803,8 +799,8 @@ void vehicle::use_controls( const tripoint_bub_ms& pos )
 
     options.emplace_back(
         cruise_on ? _( "Disable cruise control" ) : _( "Enable cruise control" ), keybind( "TOGGLE_"
-                "CRUISE_"
-                "CONTROL" ) );
+                   "CRUISE_"
+                   "CONTROL" ) );
     actions.emplace_back( [&] {
         cruise_on = !cruise_on;
         add_msg( cruise_on ? _( "Cruise control turned on" ) : _( "Cruise control turned off" ) );
@@ -832,10 +828,10 @@ void vehicle::use_controls( const tripoint_bub_ms& pos )
 
     options.emplace_back(
         tracking_on ? _( "Forget vehicle position" ) : _( "Remember vehicle position" ), keybind( "TOGGL"
-                "E_"
-                "TRACK"
-                "IN"
-                "G" ) );
+                     "E_"
+                     "TRACK"
+                     "IN"
+                     "G" ) );
     actions.emplace_back( [&] { toggle_tracking(); } );
 
     if( ( is_foldable() || tags.contains( "convertible" ) ) && !remote ) {
@@ -968,7 +964,7 @@ bool vehicle::fold_up()
     if( g->u.controlling_vehicle ) {
         add_msg( m_warning,
                  _( "As the pitiless metal bars close on your nether regions, you reconsider trying "
-                    "to fold the %s while riding it." ),
+           "to fold the %s while riding it." ),
                  name );
         return false;
     }
@@ -1055,20 +1051,20 @@ double vehicle::engine_cold_factor( const int e ) const
 int vehicle::engine_start_time( const int e ) const
 {
     if( !is_engine_on( e ) || part_info( engines[e] ).has_flag( "E_STARTS_INSTANTLY" )
-    || !engine_fuel_left( e ) ) {
-    return 0;
-}
+        || !engine_fuel_left( e ) ) {
+        return 0;
+    }
 
-const double dmg = parts[engines[e]].damage_percent();
+    const double dmg = parts[engines[e]].damage_percent();
 
-// non-linear range [100-1000]; f(0.0) = 100, f(0.6) = 250, f(0.8) = 500, f(0.9) = 1000
-// diesel engines with working glow plugs always start with f = 0.6 (or better)
-const double cold = 100 / tanh( 1 - std::min( engine_cold_factor( e ), 0.9 ) );
+    // non-linear range [100-1000]; f(0.0) = 100, f(0.6) = 250, f(0.8) = 500, f(0.9) = 1000
+    // diesel engines with working glow plugs always start with f = 0.6 (or better)
+    const double cold = 100 / tanh( 1 - std::min( engine_cold_factor( e ), 0.9 ) );
 
-// watts to old vhp = watts / 373
-// divided by magic 16 = watts / 6000
-const double watts_per_time = 6000;
-return part_vpower_w( engines[e], true ) / watts_per_time + 100 * dmg + cold;
+    // watts to old vhp = watts / 373
+    // divided by magic 16 = watts / 6000
+    const double watts_per_time = 6000;
+    return part_vpower_w( engines[e], true ) / watts_per_time + 100 * dmg + cold;
 }
 
 bool vehicle::start_engine( const int e )
@@ -1362,7 +1358,8 @@ void vehicle::reload_seeds( const tripoint_bub_ms& pos )
             std::vector<detached_ptr<item>> used_seed;
             if( item::count_by_charges( seed_id ) ) {
                 used_seed = p.use_charges( seed_id, actual_amount );
-            } else {
+            }
+            else {
                 used_seed = p.use_amount( seed_id, actual_amount );
             }
             used_seed.front()->set_age( 0_turns );
@@ -1478,7 +1475,8 @@ void vehicle::transform_terrain()
             if( new_field.id() ) {
                 g->m.add_field( start_pos, new_field, ttd.post_field_intensity, ttd.post_field_age );
             }
-        } else {
+        }
+        else {
             const int speed = std::abs( velocity );
             int v_damage = rng( 3, speed );
             damage( vp.part_index(), v_damage, DT_BASH, false );
@@ -1872,8 +1870,8 @@ void vehicle::use_bike_rack( int part )
         std::string cur_vehicle;
 
         const auto add_vehicle =
-            []( std::vector<int> &carried_parts, std::vector<std::vector<int>> &carried_vehicles,
-        std::vector<int> &carry_rack, std::vector<std::vector<int>> &carrying_racks ) {
+            []( std::vector<int> &carried_parts, std::vector<std::vector<int >> &carried_vehicles,
+        std::vector<int> &carry_rack, std::vector<std::vector<int >> &carrying_racks ) {
             if( !carry_rack.empty() ) {
                 carrying_racks.emplace_back( carry_rack );
                 carried_vehicles.emplace_back( carried_parts );
@@ -1957,8 +1955,7 @@ void vehicle::interact_with( const tripoint_bub_ms& pos, int interact_part )
 
     auto turret = turret_query( bub_to_abs( pos ) );
     const auto turret_menu_name = [&turret]() -> std::string {
-        if( !turret )
-        {
+        if( !turret ) {
             return {};
         }
         const auto *const ammo_data = turret.ammo_data();

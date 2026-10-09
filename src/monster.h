@@ -259,23 +259,23 @@ class monster: public Creature, public location_visitable<monster>
         /// Nullptr = not built this tick (fall back to for_each_monster).
         struct spatial_grid_t {
             static constexpr int bucket_size = 8;
-            using key_t = std::pair<int, int>;
-            std::unordered_map<key_t, std::vector<monster *>, cata::tuple_hash> buckets;
+            using key_t = std::pair < int, int >;
+            std::unordered_map < key_t, std::vector < monster *>, cata::tuple_hash > buckets;
         };
         struct compute_plan_context {
-            const std::vector<monster *> *monsters;
-            const std::vector<npc *> *npcs;
+            const std::vector < monster * > *monsters;
+            const std::vector < npc * > *npcs;
             const faction_snap_t *faction_snap;
             const hostile_fac_map_t *hostile_fac_map;
             const spatial_grid_t *spatial_grid;
             constexpr compute_plan_context() noexcept
                 : monsters( nullptr ),
-                  npcs( nullptr ),
-                  faction_snap( nullptr ),
-                  hostile_fac_map( nullptr ),
-                  spatial_grid( nullptr ) {}
+                npcs( nullptr ),
+                faction_snap( nullptr ),
+                hostile_fac_map( nullptr ),
+                spatial_grid( nullptr ) {}
             constexpr compute_plan_context(
-                const std::vector<monster *> *m, const std::vector<npc *> *n, const faction_snap_t *fs,
+                const std::vector < monster * > *m, const std::vector < npc * > *n, const faction_snap_t *fs,
                 const hostile_fac_map_t *hfm, const spatial_grid_t *sg = nullptr ) noexcept
                 : monsters( m ),
                   npcs( n ),
@@ -566,7 +566,7 @@ class monster: public Creature, public location_visitable<monster>
         void on_pet_bonding( Character *ch );
 
         // Add an item to inventory
-        void add_item( detached_ptr<item>&& it );
+        void add_item( detached_ptr < item > && it );
         // check mech power levels and modify it.
         bool use_mech_power( int amt );
         bool check_mech_powered() const;
@@ -574,11 +574,11 @@ class monster: public Creature, public location_visitable<monster>
 
         void process_items();
 
-        const std::vector<item *> &get_items() const;
-        detached_ptr<item> remove_item( item* it );
-        location_vector<item>::iterator remove_item(
-            location_vector<item>::iterator& it, detached_ptr<item> *result = nullptr );
-        std::vector<detached_ptr<item>> clear_items();
+        const std::vector < item * > &get_items() const;
+        detached_ptr < item > remove_item( item* it );
+        location_vector < item >::iterator remove_item(
+            location_vector < item >::iterator& it, detached_ptr < item > *result = nullptr );
+        std::vector < detached_ptr < item>> clear_items();
         void drop_items();
         void drop_items( const tripoint_bub_ms& p );
 
@@ -651,7 +651,7 @@ class monster: public Creature, public location_visitable<monster>
         uint32_t cached_npc_attitude_epoch = 0;
         mfaction_id cached_npc_attitude_faction;
         Attitude cached_npc_attitude = A_NEUTRAL;
-        std::unordered_map<mfaction_id, int> faction_anger; //< Per-faction anger tracking
+        std::unordered_map < mfaction_id, int > faction_anger; //< Per-faction anger tracking
         // Our faction (species, for most monsters)
         mfaction_id faction;
         // If we're related to a mission
@@ -691,14 +691,14 @@ class monster: public Creature, public location_visitable<monster>
 
         bool aggro_character = true;
 
-        std::optional<time_point> lastseen_turn;
+        std::optional < time_point > lastseen_turn;
 
         // Stair data.
         int staircount;
 
         // Ammunition if we use a gun.
-        std::map<itype_id, int> ammo;
-        auto ammo_slot_items( const itype_id &ammo_id ) const -> std::vector<itype_id>;
+        std::map < itype_id, int > ammo;
+        auto ammo_slot_items( const itype_id &ammo_id ) const -> std::vector < itype_id >;
         auto ammo_capacity_for_slot( const itype_id &ammo_id ) const -> int;
         auto ammo_count_for_slot( const itype_id &ammo_id ) const -> int;
         auto loaded_ammo_for_slot( const itype_id &ammo_id ) const -> itype_id;
@@ -708,7 +708,7 @@ class monster: public Creature, public location_visitable<monster>
          * Only useful for robots and the like, the monster must have at least
          * a non-empty item id as revert_to_itype.
          */
-        detached_ptr<item> to_item() const;
+        detached_ptr < item > to_item() const;
         /**
          * Initialize values like speed / hp from data of an item.
          * This applies to robotic monsters that are spawned by invoking an item (e.g. turret),
@@ -731,9 +731,9 @@ class monster: public Creature, public location_visitable<monster>
         void on_load();
 
         const pathfinding_settings &get_legacy_pathfinding_settings() const override;
-        std::set<tripoint_bub_ms> get_legacy_path_avoid() const override;
+        std::set < tripoint_bub_ms > get_legacy_path_avoid() const override;
 
-        std::pair<PathfindingSettings, RouteSettings> get_pathfinding_pair() const override;
+        std::pair < PathfindingSettings, RouteSettings > get_pathfinding_pair() const override;
 
         // Discard the cached movement path so the monster replans on its next turn.
         void clear_path() {
@@ -747,28 +747,28 @@ class monster: public Creature, public location_visitable<monster>
         void decrement_summon_timer();
 
         item *get_tack_item() const;
-        detached_ptr<item> set_tack_item( detached_ptr<item>&& to );
-        detached_ptr<item> remove_tack_item();
+        detached_ptr < item > set_tack_item( detached_ptr < item > && to );
+        detached_ptr < item > remove_tack_item();
 
         item *get_tied_item() const;
-        detached_ptr<item> set_tied_item( detached_ptr<item>&& to );
-        detached_ptr<item> remove_tied_item();
+        detached_ptr < item > set_tied_item( detached_ptr < item > && to );
+        detached_ptr < item > remove_tied_item();
 
         item *get_armor_item() const;
-        detached_ptr<item> set_armor_item( detached_ptr<item>&& to );
-        detached_ptr<item> remove_armor_item();
+        detached_ptr < item > set_armor_item( detached_ptr < item > && to );
+        detached_ptr < item > remove_armor_item();
 
         item *get_storage_item() const;
-        detached_ptr<item> set_storage_item( detached_ptr<item>&& to );
-        detached_ptr<item> remove_storage_item();
+        detached_ptr < item > set_storage_item( detached_ptr < item > && to );
+        detached_ptr < item > remove_storage_item();
 
         item *get_battery_item() const;
-        detached_ptr<item> set_battery_item( detached_ptr<item>&& to );
-        detached_ptr<item> remove_battery_item();
+        detached_ptr < item > set_battery_item( detached_ptr < item > && to );
+        detached_ptr < item > remove_battery_item();
 
-        void add_corpse_component( detached_ptr<item>&& it );
-        detached_ptr<item> remove_corpse_component( item& it );
-        std::vector<detached_ptr<item>> remove_corpse_components();
+        void add_corpse_component( detached_ptr < item > && it );
+        detached_ptr < item > remove_corpse_component( item& it );
+        std::vector < detached_ptr < item>> remove_corpse_components();
 
         // Faction-specific anger tracking
         void add_faction_anger( mfaction_id target_faction, int amount );
@@ -776,7 +776,7 @@ class monster: public Creature, public location_visitable<monster>
 
         const lua_monster_callback_actor *get_lua_callbacks() const;
 
-        std::set<m_flag> monster_flags;
+        std::set < m_flag > monster_flags;
 
 
     private:
@@ -796,7 +796,7 @@ class monster: public Creature, public location_visitable<monster>
         void trigger_character_aggro( const char* reason );
         void trigger_character_aggro_chance( int chance, const char* reason );
 
-        location_vector<item> corpse_components; // Hack to make bionic corpses generate CBMs on death
+        location_vector < item > corpse_components; // Hack to make bionic corpses generate CBMs on death
 
     private:
         struct legacy_position_context {
@@ -805,7 +805,7 @@ class monster: public Creature, public location_visitable<monster>
         };
 
         int hp;
-        std::map<std::string, mon_special_attack> special_attacks;
+        std::map < std::string, mon_special_attack > special_attacks;
         // Absolute map-square position for active and overmap-stored monsters.
         tripoint_abs_ms pos_abs;
         tripoint_bub_ms goal;
@@ -817,14 +817,14 @@ class monster: public Creature, public location_visitable<monster>
         bool upgrades;
         int upgrade_time;
         bool reproduces;
-        std::optional<time_point> baby_timer;
+        std::optional < time_point > baby_timer;
         time_point udder_timer;
         monster_horde_attraction horde_attraction;
         /** Found path. Note: Not used by monsters that don't pathfind! **/
-        std::vector<tripoint_bub_ms> path;
+        std::vector < tripoint_bub_ms > path;
         bool repath_requested = false;
-        std::bitset<NUM_MEFF> effect_cache;
-        std::optional<time_duration> summon_time_limit = std::nullopt;
+        std::bitset < NUM_MEFF > effect_cache;
+        std::optional < time_duration > summon_time_limit = std::nullopt;
 
 
         player *find_dragged_foe();
@@ -832,16 +832,16 @@ class monster: public Creature, public location_visitable<monster>
 
     protected:
         bool has_processable_items = false;
-        location_ptr<item, false> tied_item;    // item used to tie the monster
-        location_ptr<item, false> tack_item;    // item representing saddle and reins and such
-        location_ptr<item, false> armor_item;   // item of armor the monster may be wearing
-        location_ptr<item, false> storage_item; // storage item for monster carrying items
-        location_ptr<item, false> battery_item; // item to power mechs
-        location_vector<item> inv;              // Inventory
+        location_ptr < item, false > tied_item; // item used to tie the monster
+        location_ptr < item, false > tack_item; // item representing saddle and reins and such
+        location_ptr < item, false > armor_item; // item of armor the monster may be wearing
+        location_ptr < item, false > storage_item; // storage item for monster carrying items
+        location_ptr < item, false > battery_item; // item to power mechs
+        location_vector < item > inv;           // Inventory
         auto store( JsonOut& json, bool include_local_state ) const -> void;
         auto load(
             const JsonObject& data,
-            const std::optional<legacy_position_context> &legacy_context = std::nullopt ) -> void;
+            const std::optional < legacy_position_context > &legacy_context = std::nullopt ) -> void;
 
         /** Processes monster-specific effects of an effect. */
         void process_one_effect( effect& it, bool is_new ) override;

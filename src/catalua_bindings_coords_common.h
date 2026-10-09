@@ -24,10 +24,10 @@ auto lua_project_tripoint_to( const lua_tripoint_coord &coord,
                               const std::string &result_scale ) -> std::optional<lua_tripoint_coord>;
 auto lua_project_point_remain_to( const lua_point_coord &coord,
                                   const std::string &result_scale ) ->
-std::tuple<std::optional<lua_point_coord>, std::optional<lua_point_coord>>;
+std::tuple<std::optional<lua_point_coord>, std::optional<lua_point_coord >>;
 auto lua_project_tripoint_remain_to( const lua_tripoint_coord &coord,
                                      const std::string &result_scale ) ->
-std::tuple<std::optional<lua_tripoint_coord>, std::optional<lua_point_coord>>;
+std::tuple<std::optional<lua_tripoint_coord>, std::optional<lua_point_coord >>;
 auto lua_project_remain_to( const sol::object &val,
                             const std::string &result_scale ) -> std::tuple<lua_coord_result, std::optional<lua_point_coord>>;
 auto lua_project_combine( const sol::object &coarse, const sol::object &fine ) -> lua_coord_result;
@@ -61,8 +61,8 @@ auto origin_lua_name( coords::origin origin ) -> std::string_view;
 auto scale_lua_name( coords::scale scale ) -> std::string_view;
 auto origin_type_name( coords::origin origin ) -> std::string_view;
 auto scale_type_name( coords::scale scale ) -> std::string_view;
-auto parse_origin( std::string_view name ) -> std::optional<coords::origin>;
-auto parse_scale( std::string_view name ) -> std::optional<coords::scale>;
+auto parse_origin( std::string_view name ) -> std::optional < coords::origin >;
+auto parse_scale( std::string_view name ) -> std::optional < coords::scale >;
 auto is_registered_coord( coords::origin origin, coords::scale scale ) -> bool;
 auto has_remainder_origin( coords::scale scale ) -> bool;
 auto exact_scale_conversion( coords::scale source, coords::scale result ) -> bool;
@@ -85,9 +85,9 @@ auto project_xy( const point &raw, coords::scale source, coords::scale result ) 
 auto project_tripoint_raw( const tripoint &raw, coords::scale source,
                            coords::scale result ) -> tripoint;
 auto project_to( const lua_point_coord &coord,
-                 coords::scale result ) -> std::optional<lua_point_coord>;
+                 coords::scale result ) -> std::optional < lua_point_coord >;
 auto project_to( const lua_tripoint_coord &coord,
-                 coords::scale result ) -> std::optional<lua_tripoint_coord>;
+                 coords::scale result ) -> std::optional < lua_tripoint_coord >;
 auto same_coord_kind( const lua_point_coord &lhs, const lua_point_coord &rhs ) -> bool;
 auto same_coord_kind( const lua_tripoint_coord &lhs, const lua_tripoint_coord &rhs ) -> bool;
 

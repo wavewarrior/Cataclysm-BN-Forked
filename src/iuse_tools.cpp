@@ -656,8 +656,7 @@ int iuse::radio_on( player* p, item* it, bool t, const tripoint_bub_ms& pos )
             message = obscure_message( message, [&]() -> int {
                 int signal_roll = dice( 10, tref.signal_strength * 3 );
                 int static_roll = dice( 10, 100 );
-                if( static_roll > signal_roll )
-                {
+                if( static_roll > signal_roll ) {
                     if( static_roll < signal_roll * 1.1 && one_in( 4 ) ) {
                         return 0;
                     } else {
@@ -930,7 +929,7 @@ int iuse::crowbar( player* p, item* it, bool, const tripoint_bub_ms& pos )
             p->add_msg_if_player(
                 m_info,
                 _( "You attempt to pry open your wallet "
-                   "but alas.  You are just too miserly." ) );
+               "but alas.  You are just too miserly." ) );
         } else if( !ter->has_flag( "LOCKED" ) && ter->open ) {
             p->add_msg_if_player( m_info, _( "You notice the door is unlocked, so you simply open "
                                              "it." ) );

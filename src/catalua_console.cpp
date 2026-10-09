@@ -292,7 +292,7 @@ void show_lua_console_impl()
         } else {
             s.hints_rml = rml_escape( string_format(
                                           _( "Enter: edit   Up/Down: history   PgUp/PgDn: scroll log   %s: expanded input   "
-                                             "Esc: quit" ),
+               "Esc: quit" ),
                                           ctxt.get_desc( "TOGGLE_EXPANDED" ) ) );
         }
 
@@ -351,29 +351,34 @@ void show_lua_console_impl()
         if( act == "QUIT" ) {
             // Close
             return;
-        } else if( act == "HISTORY_UP" ) {
+        }
+        else if( act == "HISTORY_UP" ) {
             int sz = num_history_entries();
             if( sz != 0 && history_cursor != 0 ) {
                 if( history_cursor == CURRENT_INPUT ) {
                     history_cursor = sz - 1;
-                } else {
+                }
+                else {
                     history_cursor = std::max( 0, history_cursor - 1 );
                 }
             }
             // Update input preview
             ui.invalidate_ui();
-        } else if( act == "HISTORY_DOWN" ) {
+        }
+        else if( act == "HISTORY_DOWN" ) {
             int sz = num_history_entries();
             if( sz != 0 && history_cursor != CURRENT_INPUT ) {
                 if( history_cursor == sz - 1 ) {
                     history_cursor = CURRENT_INPUT;
-                } else {
+                }
+                else {
                     history_cursor = std::min( history_cursor + 1, sz - 1 );
                 }
             }
             // Update input preview
             ui.invalidate_ui();
-        } else if( act == "SCROLL_UP" || act == "SCROLL_TOP" ) {
+        }
+        else if( act == "SCROLL_UP" || act == "SCROLL_TOP" ) {
             int limit = std::max( 0, static_cast<int>( log_folded.size() ) - log_size.y );
             if( act == "SCROLL_TOP" ) {
                 log_scroll_pos = limit;

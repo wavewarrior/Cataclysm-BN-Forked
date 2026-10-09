@@ -356,7 +356,7 @@ auto submap_load_manager::evict_omt_column( const omt_column_key &key ) -> void
 auto submap_load_manager::evict_oldest_retained_omts( std::size_t count ) -> void
 {
     while( count > 0 && !retained_omts_.empty() ) {
-    const auto key = retained_omts_.front();
+        const auto key = retained_omts_.front();
         retained_omts_.pop_front();
         retained_omt_index_.erase( key );
         evict_omt_column( key );
@@ -380,15 +380,15 @@ auto submap_load_manager::process_retained_omt_eviction() -> void
     TracyPlot( "Retained OMT Lazy Border Cap Add",
                static_cast<int64_t>( lazy_border_cap_add ) );
     if( retained <= soft_cap ) {
-    TracyPlot( "Retained OMT Evict Budget", int64_t{ 0 } );
+        TracyPlot( "Retained OMT Evict Budget", int64_t{ 0 } );
         return;
     }
 
     auto budget = retained_omt_base_budget();
     if( retained > panic_cap ) {
-    budget = retained - hard_cap;
-} else {
-    if( retained > hard_cap ) {
+        budget = retained - hard_cap;
+    } else {
+        if( retained > hard_cap ) {
             const auto scale = std::min( retained_omt_max_budget_scale,
                                          divide_round_up_size( retained, hard_cap ) );
             budget *= scale;
@@ -442,8 +442,8 @@ auto submap_load_manager::complete_lazy_omt_result_on_main_thread( const omt_key
         lazy_omt_load_result result ) -> lazy_omt_load_result
 {
     if( !result.generation.needs_main_thread() ) {
-    return result;
-}
+        return result;
+    }
 
     auto &mb = MAPBUFFER_REGISTRY.get( key.first );
     auto completed = load_lazy_omt_zlevel_data( mb, key.second, {
@@ -552,7 +552,7 @@ auto submap_load_manager::start_lazy_omt_job( const omt_key &key ) -> lazy_omt_s
     }
 
     if( mapgen_has_any_direct_lua_generator() ) {
-    const auto terrain_type = get_overmapbuffer( key.first ).ter( key.second );
+        const auto terrain_type = get_overmapbuffer( key.first ).ter( key.second );
         const auto mapgen_id = terrain_type->get_mapgen_id();
         if( mapgen_id_has_direct_lua_generator( mapgen_id ) ) {
             const auto selected_mapgen = pick_mapgen_func( mapgen_id );
@@ -691,7 +691,7 @@ auto submap_load_manager::process_lazy_border_preload() -> void
     TracyPlot( "Lazy Border Z Jobs Queue", static_cast<int64_t>( queued ) );
     TracyPlot( "Lazy Border Z Jobs In-Flight", static_cast<int64_t>( lazy_omt_futures_.size() ) );
     if( queued == 0 ) {
-    TracyPlot( "Lazy Border OMT Budget", int64_t{ 0 } );
+        TracyPlot( "Lazy Border OMT Budget", int64_t{ 0 } );
         TracyPlot( "Lazy Border Z Jobs Started", int64_t{ 0 } );
         return;
     }
@@ -759,7 +759,7 @@ auto submap_load_manager::process_lazy_border_preload() -> void
 
     const auto current_turn = to_turn<int>( calendar::turn );
     if( current_turn == lazy_omt_last_credit_turn_ ) {
-    TracyPlot( "Lazy Border OMT Budget", int64_t{ 0 } );
+        TracyPlot( "Lazy Border OMT Budget", int64_t{ 0 } );
         TracyPlot( "Lazy Border Z Jobs Started", int64_t{ 0 } );
         return;
     }
@@ -1189,16 +1189,16 @@ auto submap_load_manager::is_simulated( const dimension_id &dim_id,
         covered_by_lazy_only = true;
     }
     if( covered_by_lazy_only ) {
-    return false;
-}
-// No request covers this position.  Two distinct cases:
-//   • requests_ is empty  — map was loaded directly (e.g. in tests via
-//     map::load) without going through the request system.  Treat the
-//     submap as simulated so items, fields, and NPCs are processed normally.
-//   • requests_ is non-empty — the submap was loaded as a omt-alignment
-//     overflow beyond the lazy-border zone (odd bubble size forces an extra
-//     row/column of submaps to be resident).  It should not be simulated.
-return requests_.empty();
+        return false;
+    }
+    // No request covers this position.  Two distinct cases:
+    //   • requests_ is empty  — map was loaded directly (e.g. in tests via
+    //     map::load) without going through the request system.  Treat the
+    //     submap as simulated so items, fields, and NPCs are processed normally.
+    //   • requests_ is non-empty — the submap was loaded as a omt-alignment
+    //     overflow beyond the lazy-border zone (odd bubble size forces an extra
+    //     row/column of submaps to be resident).  It should not be simulated.
+    return requests_.empty();
 }
 
 auto submap_load_manager::is_loaded( const dimension_id &dim_id,

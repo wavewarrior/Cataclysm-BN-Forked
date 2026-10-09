@@ -112,26 +112,26 @@ void gate_data::check() const
     const ter_str_id winch_tid( id.str() );
 
     if( !winch_tid.is_valid() ) {
-    debugmsg( "Gates \"%s\" have no terrain of the same name, working as a winch.", id.c_str() );
+        debugmsg( "Gates \"%s\" have no terrain of the same name, working as a winch.", id.c_str() );
     } else if( winch_tid->examine != controls_gate ) {
-    debugmsg( "Terrain \"%s\" can't control gates, but gates \"%s\" depend on it.",
-              winch_tid.c_str(), id.c_str() );
+        debugmsg( "Terrain \"%s\" can't control gates, but gates \"%s\" depend on it.",
+                  winch_tid.c_str(), id.c_str() );
     }
 
     if( !door.is_valid() ) {
-    debugmsg( "Invalid door \"%s\" in \"%s\".", door.c_str(), id.c_str() );
+        debugmsg( "Invalid door \"%s\" in \"%s\".", door.c_str(), id.c_str() );
     }
     if( !floor.is_valid() ) {
-    debugmsg( "Invalid floor \"%s\" in \"%s\".", floor.c_str(), id.c_str() );
+        debugmsg( "Invalid floor \"%s\" in \"%s\".", floor.c_str(), id.c_str() );
     }
-for( const auto &elem : walls ) {
-    if( !elem.is_valid() ) {
+    for( const auto &elem : walls ) {
+        if( !elem.is_valid() ) {
             debugmsg( "Invalid wall \"%s\" in \"%s\".", elem.c_str(), id.c_str() );
         }
     }
 
     if( moves < 0 ) {
-    debugmsg( "Gates \"%s\" grant moves.", id.c_str() );
+        debugmsg( "Gates \"%s\" grant moves.", id.c_str() );
     }
 }
 

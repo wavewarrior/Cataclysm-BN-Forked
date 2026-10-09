@@ -220,9 +220,9 @@ static void put_into_vehicle(
             case item_drop_reason::too_large:
                 c.add_msg_if_player(
                     vgettext( "There's no room in your inventory for the %s, so you drop it into "
-                              "the %s's %s.",
-                              "There's no room in your inventory for the %s, so you drop them into "
-                              "the %s's %s.",
+                          "the %s's %s.",
+                          "There's no room in your inventory for the %s, so you drop them into "
+                          "the %s's %s.",
                               dropcount ),
                     it_name, veh.name, part_name );
                 break;
@@ -522,13 +522,12 @@ static std::list<pickup::act_item> convert_to_items(
     return res;
 }
 
-namespace pickup
-{
+namespace pickup {
 
 // Prepares items for dropping by reordering them so that the drop
 // cost is minimal and "dependent" items get taken off first.
 // Implements the "backpack" logic.
-std::list<act_item> reorder_for_dropping( Character& p, const drop_locations& drop )
+std::list<act_item> reorder_for_dropping( Character & p, const drop_locations & drop )
 {
     std::list<act_item> res = convert_to_items( p, drop, [&p]( item & loc ) {
         return p.is_wielding( loc );
@@ -825,7 +824,8 @@ void stash_activity_actor::do_turn( player_activity &, Character& who )
             who.cancel_activity();
             pet->remove_effect( effect_ai_waiting );
         }
-    } else {
+    }
+    else {
         who.add_msg_if_player( _( "The pet has moved somewhere else." ) );
         who.cancel_activity();
     }

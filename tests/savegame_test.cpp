@@ -1,10 +1,5 @@
 #include "cata_utility.h"
 #include "catch/catch_amalgamated.hpp"
-
-#include <filesystem>
-#include <sstream>
-#include <string>
-
 #include "debug.h"
 #include "filesystem.h"
 #include "game.h"
@@ -13,6 +8,7 @@
 #include "worldfactory.h"
 
 #include <filesystem>
+#include <sstream>
 #include <string>
 
 namespace fs = std::filesystem;

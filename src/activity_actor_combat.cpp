@@ -640,9 +640,9 @@ void spellcasting_activity_actor::finish( player_activity& act, Character& who )
             p.add_msg_if_player(
                 game_message_params{m_bad, gmf_bypass_cooldown},
                 _( "Your spell "
-                   "can't find a "
-                   "suitable "
-                   "target." ) );
+               "can't find a "
+               "suitable "
+               "target." ) );
             return;
         }
     }
@@ -653,7 +653,7 @@ void spellcasting_activity_actor::finish( player_activity& act, Character& who )
         p.add_msg_if_player(
             game_message_params{m_bad, gmf_bypass_cooldown},
             _( "You lose your "
-               "concentration!" ) );
+           "concentration!" ) );
         if( !spell_being_cast.is_max_level() && level_override == -1 ) {
             spell_being_cast.gain_exp( exp_gained / 5 );
             p.add_msg_if_player(
@@ -712,7 +712,7 @@ void spellcasting_activity_actor::finish( player_activity& act, Character& who )
                 p.add_msg_if_player(
                     m_good,
                     _( "Something about how this spell works just clicked!  "
-                       "You gained a level!" ) );
+                   "You gained a level!" ) );
             } else {
                 spell_being_cast.gain_exp( exp_gained );
                 p.add_msg_if_player(
@@ -1268,9 +1268,9 @@ void operation_activity_actor::do_turn( player_activity& act, Character& who )
             p->add_msg_player_or_npc(
                 m_bad,
                 _( "The Autodoc is moving erratically through the rest of its program, not actually "
-                   "stitching your wounds." ),
+               "stitching your wounds." ),
                 _( "The Autodoc is moving erratically through the rest of its program, not actually "
-                   "stitching <npcname>'s wounds." ) );
+               "stitching <npcname>'s wounds." ) );
         }
     }
 
@@ -1311,7 +1311,7 @@ void operation_activity_actor::finish( player_activity& act, Character& who )
             if( operation_type == "install" ) {
                 add_msg( m_warning,
                          _( "The Autodoc completes installation and activates bionic but "
-                            "reports about complications during operation." ) );
+                   "reports about complications during operation." ) );
                 const auto autodocs = here.find_furnitures_or_vparts_with_flag_in_radius(
                                           p->bub_pos(), 1, flag_AUTODOC );
                 sound_event se;
@@ -1346,7 +1346,7 @@ void operation_activity_actor::finish( player_activity& act, Character& who )
             if( operation_type == "install" ) {
                 add_msg( m_warning,
                          _( "Bionic was installed and activated but a complication "
-                            "happened during operation!" ) );
+                   "happened during operation!" ) );
             } else {
                 add_msg( m_bad, _( "The operation is a failure." ) );
             }

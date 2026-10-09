@@ -184,9 +184,7 @@ TEST_CASE(
     auto shots_fired = 0;
     for (const auto _ : std::views::iota(0, max_bursts)) {
         (void)_;
-        if (shots_fired >= target_shots) {
-            break;
-        }
+        if (shots_fired >= target_shots) { break; }
         const auto target = map_local_to_abs(here, vehicle_origin) + tripoint_rel_ms(10, 0, 0);
         shots_fired += turret.fire(player_character, target);
     }

@@ -583,7 +583,7 @@ void pickaxe_activity_actor::do_turn( player_activity &, Character& who )
 void pickaxe_activity_actor::finish( player_activity& act, Character& who )
 {
     map& here = get_map();
-    const tripoint_bub_ms pos( abs_to_bub(target) );
+    const tripoint_bub_ms pos( abs_to_bub( target ) );
     apply_mining_exertion( who, progress.get_moves_total() );
     act.set_to_null();
     who.add_msg_player_or_npc( m_good, _( "You finish digging." ), _( "<npcname> finishes digging." ) );
@@ -934,7 +934,8 @@ void plant_seed_activity_actor::finish( player_activity& act, Character& who )
     std::vector<detached_ptr<item>> used_seed;
     if( item::count_by_charges( seed_id ) ) {
         used_seed = who.use_charges( seed_id, 1 );
-    } else {
+    }
+    else {
         used_seed = who.use_amount( seed_id, 1 );
     }
     if( !used_seed.empty() ) {
@@ -946,9 +947,11 @@ void plant_seed_activity_actor::finish( player_activity& act, Character& who )
         here.add_item_or_charges( examp, std::move( used_seed.front() ) );
         if( here.has_flag_furn( seed_id->seed->required_terrain_flag, examp ) ) {
             here.furn_set( examp, furn_str_id( here.furn( examp )->plant->transform ) );
-        } else if( seed_id->seed->required_terrain_flag == flag_PLANTABLE ) {
+        }
+        else if( seed_id->seed->required_terrain_flag == flag_PLANTABLE ) {
             here.set( examp, t_dirt, f_plant_seed );
-        } else {
+        }
+        else {
             here.furn_set( examp, f_plant_seed );
         }
         who.add_msg_player_or_npc(
@@ -1510,13 +1513,13 @@ void lockpick_activity_actor::finish( player_activity& act, Character& who )
             who.add_msg_if_player(
                 m_bad,
                 _( "The lock stumps your efforts to pick it, and you "
-                   "destroy your tool." ) );
+               "destroy your tool." ) );
             destroy = true;
         } else {
             who.add_msg_if_player(
                 m_bad,
                 _( "The lock stumps your efforts to pick it, and you "
-                   "damage your tool." ) );
+               "damage your tool." ) );
         }
     } else {
         who.add_msg_if_player( m_bad, _( "The lock stumps your efforts to pick it." ) );
@@ -1591,7 +1594,7 @@ std::optional<tripoint_bub_ms> lockpick_activity_actor::select_location( avatar&
         you.add_msg_if_player(
             m_info,
             _( "You can pick your friends, and you can pick your nose, "
-               "but you can't pick your friend's nose." ) );
+           "but you can't pick your friend's nose." ) );
     } else if( !terr_type->open.is_null() ) {
         you.add_msg_if_player( m_info, _( "That door isn't locked." ) );
     } else {

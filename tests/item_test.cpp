@@ -19,7 +19,7 @@
 #include <memory>
 #include <type_traits>
 
-static_assert( std::is_same_v<units::volume::value_type, std::int64_t> );
+static_assert(std::is_same_v<units::volume::value_type, std::int64_t>);
 
 TEST_CASE("item_volume", "[item]") {
     // Need to pick some item here which is count_by_charges and for which each
@@ -40,18 +40,18 @@ TEST_CASE("item_volume", "[item]") {
 }
 
 TEST_CASE("large_item_storage_volumes", "[item][volume]") {
-    constexpr auto legacy_int_limit_ml = static_cast<std::int64_t>( std::numeric_limits<int>::max() );
-    const auto volume_above_legacy_int_limit = units::from_milliliter( legacy_int_limit_ml + 1 );
-    CHECK( units::to_milliliter( volume_above_legacy_int_limit ) == legacy_int_limit_ml + 1 );
+    constexpr auto legacy_int_limit_ml = static_cast<std::int64_t>(std::numeric_limits<int>::max());
+    const auto volume_above_legacy_int_limit = units::from_milliliter(legacy_int_limit_ml + 1);
+    CHECK(units::to_milliliter(volume_above_legacy_int_limit) == legacy_int_limit_ml + 1);
 
     const item& large_container = *item::spawn_temporary("test_large_container");
     CHECK(large_container.get_container_capacity() == 3000000_liter);
 }
 
 TEST_CASE("charge_volume_calculation_uses_wide_intermediate", "[item][volume]") {
-    item &battery = *item::spawn_temporary( "battery", calendar::start_of_cataclysm,
-                                            item::default_charges_tag() );
-    REQUIRE( battery.count_by_charges() );
+    item& battery = *item::spawn_temporary(
+        "battery", calendar::start_of_cataclysm, item::default_charges_tag());
+    REQUIRE(battery.count_by_charges());
 
     const auto volume_with_int_overflowing_product = units::from_milliliter(
         static_cast<std::int64_t>(std::numeric_limits<int>::max()) / 2 + 1);

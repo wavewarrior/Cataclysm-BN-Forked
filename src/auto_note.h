@@ -28,7 +28,7 @@ class auto_note_manager_gui
         /// and their auto note status with every call of initialize(). All changes to this
         /// will be applied to the per-character auto notes settings object after the user
         /// closes the GUI.
-        std::unordered_map<string_id<map_extra>, std::pair<const map_extra, bool>> mapExtraCache;
+        std::unordered_map<string_id<map_extra>, std::pair<const map_extra, bool >> mapExtraCache;
 
         /// All map extra types that will be displayed in the GUI.
         std::vector<string_id<map_extra>> displayCache;

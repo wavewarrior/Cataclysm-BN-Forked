@@ -14,9 +14,8 @@ namespace lighting {
 // ---- Pipeline helper -------------------------------------------------------
 
 static auto make_emitter_glow_pipeline(
-    SDL_GPUDevice* dev, SDL_GPUShader* vert, SDL_GPUShader* frag,
-    SDL_GPUTextureFormat fmt) -> SDL_GPUGraphicsPipeline*
-{
+    SDL_GPUDevice* dev, SDL_GPUShader* vert, SDL_GPUShader* frag, SDL_GPUTextureFormat fmt)
+    -> SDL_GPUGraphicsPipeline* {
     // Pure additive blend (same convention as bloom_composite.frag.hlsl):
     // colour accumulates, alpha stays 0 so target alpha is unaffected.
     SDL_GPUColorTargetBlendState blend{};
@@ -55,8 +54,7 @@ emitter_glow_pass::~emitter_glow_pass() { shutdown(); }
 
 // ---- Init -------------------------------------------------------------------
 
-auto emitter_glow_pass::init(gpu_device& dev, SDL_GPUTextureFormat target_format) -> bool
-{
+auto emitter_glow_pass::init(gpu_device& dev, SDL_GPUTextureFormat target_format) -> bool {
     shutdown();
     dev_ = &dev;
     target_format_ = target_format;
@@ -107,8 +105,14 @@ auto emitter_glow_pass::init(gpu_device& dev, SDL_GPUTextureFormat target_format
 
     if (!storage_ || !xfer_) {
         dbg(DL::Error) << "emitter_glow_pass: instance buffer create failed";
-        if (storage_) { SDL_ReleaseGPUBuffer(dev.raw(), storage_); storage_ = nullptr; }
-        if (xfer_) { SDL_ReleaseGPUTransferBuffer(dev.raw(), xfer_); xfer_ = nullptr; }
+        if (storage_) {
+            SDL_ReleaseGPUBuffer(dev.raw(), storage_);
+            storage_ = nullptr;
+        }
+        if (xfer_) {
+            SDL_ReleaseGPUTransferBuffer(dev.raw(), xfer_);
+            xfer_ = nullptr;
+        }
         return false;
     }
 
@@ -119,8 +123,7 @@ auto emitter_glow_pass::init(gpu_device& dev, SDL_GPUTextureFormat target_format
 
 // ---- Shutdown ---------------------------------------------------------------
 
-auto emitter_glow_pass::shutdown() noexcept -> void
-{
+auto emitter_glow_pass::shutdown() noexcept -> void {
     if (dev_ && dev_->ready()) {
         if (pipeline_) { SDL_ReleaseGPUGraphicsPipeline(dev_->raw(), pipeline_); }
         if (vert_) { SDL_ReleaseGPUShader(dev_->raw(), vert_); }
@@ -139,8 +142,7 @@ auto emitter_glow_pass::shutdown() noexcept -> void
 // ---- Upload -------------------------------------------------------------------
 
 auto emitter_glow_pass::upload_instances(
-    SDL_GPUCommandBuffer* cb, const std::vector<emitter_glow_instance>& insts) -> bool
-{
+    SDL_GPUCommandBuffer* cb, const std::vector<emitter_glow_instance>& insts) -> bool {
     if (insts.empty()) { return false; }
     const Uint32 count = static_cast<Uint32>(std::min(insts.size(), size_t(MAX_INSTANCES)));
     const Uint32 bytes = count * sizeof(emitter_glow_instance);
@@ -172,8 +174,7 @@ auto emitter_glow_pass::upload_instances(
 
 // ---- Per-frame record -----------------------------------------------------
 
-auto emitter_glow_pass::record(const emitter_glow_record_options& opts) -> void
-{
+auto emitter_glow_pass::record(const emitter_glow_record_options& opts) -> void {
     if (!ready() || !opts.cb || !opts.target || opts.proj_w == 0 || opts.proj_h == 0) { return; }
     if (!opts.instances || opts.instances->empty()) { return; }
 
@@ -186,7 +187,7 @@ auto emitter_glow_pass::record(const emitter_glow_record_options& opts) -> void
         float proj_h;
         float pad0 = 0.f;
         float pad1 = 0.f;
-    } params{ .proj_w = static_cast<float>( opts.proj_w ), .proj_h = static_cast<float>( opts.proj_h ) };
+    } params{.proj_w = static_cast<float>(opts.proj_w), .proj_h = static_cast<float>(opts.proj_h)};
 
     SDL_GPUColorTargetInfo ct{};
     ct.texture = opts.target;
@@ -202,8 +203,9 @@ auto emitter_glow_pass::record(const emitter_glow_record_options& opts) -> void
     SDL_BindGPUVertexStorageBuffers(rp, 0, &storage_, 1);
     SDL_PushGPUVertexUniformData(opts.cb, 0, &params, sizeof(params));
     // Draw 6 vertices (unit quad) x N instances.
-    SDL_DrawGPUPrimitives(rp, /*vertex_count=*/6, /*instance_count=*/count,
-                          /*first_vertex=*/0, /*first_instance=*/0);
+    SDL_DrawGPUPrimitives(
+        rp, /*vertex_count=*/6, /*instance_count=*/count,
+        /*first_vertex=*/0, /*first_instance=*/0);
     SDL_EndGPURenderPass(rp);
 }
 

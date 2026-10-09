@@ -57,12 +57,12 @@ struct mapgen_parameters {
     using iterator = std::unordered_map<std::string, mapgen_parameter>::const_iterator;
 
     iterator add_unique_parameter(
-        const std::string &prefix, const mapgen_value<std::string> &def, cata_variant_type,
+        const std::string & prefix, const mapgen_value<std::string> &def, cata_variant_type,
         mapgen_parameter_scope );
 
     mapgen_parameters params_for_scope( mapgen_parameter_scope scope ) const;
     mapgen_arguments get_args( const mapgendata &, mapgen_parameter_scope scope ) const;
-    void check_and_merge( const mapgen_parameters &, const std::string &context,
+    void check_and_merge( const mapgen_parameters &, const std::string & context,
                           mapgen_parameter_scope up_to_scope = mapgen_parameter_scope::last );
 };
 

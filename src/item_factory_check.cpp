@@ -68,11 +68,11 @@
 
 void Item_factory::check_definitions() const
 {
-for( const auto &elem : m_templates ) {
-    std::string msg;
-    const itype *type = &elem.second;
+    for( const auto &elem : m_templates ) {
+        std::string msg;
+        const itype *type = &elem.second;
 
-    if( !type->category_force.is_valid() ) {
+        if( !type->category_force.is_valid() ) {
             msg += "undefined category " + type->category_force.str() + "\n";
         }
 
@@ -436,7 +436,7 @@ for( const auto &elem : m_templates ) {
             }
         }
 
-        for( const std::pair<const string_id<ammunition_type>, std::set<itype_id>> &ammo_variety :
+        for( const std::pair<const string_id<ammunition_type>, std::set<itype_id >> &ammo_variety :
              type->magazines ) {
             if( ammo_variety.second.empty() ) {
                 msg += string_format( "no magazine specified for %s\n", ammo_variety.first.str() );
@@ -446,14 +446,17 @@ for( const auto &elem : m_templates ) {
                 if( mag_ptr == nullptr ) {
                     msg += string_format( "magazine \"%s\" specified for \"%s\" does not exist\n",
                                           magazine.str(), ammo_variety.first.str() );
-                } else if( !mag_ptr->magazine ) {
+                }
+                else if( !mag_ptr->magazine ) {
                     msg += string_format(
                                "magazine \"%s\" specified for \"%s\" is not a magazine\n", magazine.str(),
                                ammo_variety.first.str() );
-                } else if( !mag_ptr->magazine->type.contains( ammo_variety.first ) ) {
+                }
+                else if( !mag_ptr->magazine->type.contains( ammo_variety.first ) ) {
                     msg += string_format( "magazine \"%s\" does not take compatible ammo\n", magazine );
-                } else if( mag_ptr->has_flag( flag_SPEEDLOADER ) &&
-                           mag_ptr->magazine->capacity > type->gun->clip ) {
+                }
+                else if( mag_ptr->has_flag( flag_SPEEDLOADER ) &&
+                         mag_ptr->magazine->capacity > type->gun->clip ) {
                     msg += string_format(
                                "speedloader %s capacity (%d) is bigger than gun capacity (%d).\n",
                                magazine.str(), mag_ptr->magazine->capacity, type->gun->clip );
@@ -521,8 +524,8 @@ for( const auto &elem : m_templates ) {
         }
         debugmsg( "warnings for type %s:\n%s", type->id.c_str(), msg );
     }
-for( const auto &e : migrations ) {
-    if( !m_templates.contains( e.second.replace ) ) {
+    for( const auto &e : migrations ) {
+        if( !m_templates.contains( e.second.replace ) ) {
             debugmsg( "Invalid migration target: %s", e.second.replace.c_str() );
         }
         for( const auto &c : e.second.contents ) {
@@ -531,8 +534,8 @@ for( const auto &e : migrations ) {
             }
         }
     }
-for( const auto &elem : m_template_groups ) {
-    elem.second->check_consistency( elem.first.str() );
+    for( const auto &elem : m_template_groups ) {
+        elem.second->check_consistency( elem.first.str() );
         inp_mngr.pump_events();
     }
 }

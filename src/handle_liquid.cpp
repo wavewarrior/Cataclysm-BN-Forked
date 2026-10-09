@@ -131,7 +131,8 @@ static bool get_liquid_target( item &liquid, const int radius, liquid_dest_opt &
                                         liquid.where() != item_location_type::monster ) ) {
         if( g->u.can_consume_for_bionic( liquid ) ) {
             menu.addentry( -1, true, 'e', _( "Fuel bionic with it" ) );
-        } else {
+        }
+        else {
             menu.addentry( -1, true, 'e', _( "Consume it" ) );
         }
 

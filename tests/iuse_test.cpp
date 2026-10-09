@@ -2,8 +2,8 @@
 #include "bodypart.h"
 #include "cached_options.h"
 #include "calendar.h"
-#include "catch/catch_amalgamated.hpp"
 #include "cata_utility.h"
+#include "catch/catch_amalgamated.hpp"
 #include "character_id.h"
 #include "flag.h"
 #include "game.h"
@@ -309,9 +309,11 @@ TEST_CASE("bionic_scanner_marks_new_corpse_after_activation", "[iuse][bionic_sca
     corpse->add_component(item::spawn("bio_electrosense", calendar::turn));
     auto* const corpse_ptr = corpse.get();
     REQUIRE_FALSE(here.add_item_or_charges(corpse_pos, std::move(corpse), false));
-    level_cache_freshness::report( here, level_cache_freshness::light_changed {
-        .scope = level_cache_freshness::light_changed::lightmap_scope::none,
-        .visibility = true } );
+    level_cache_freshness::report(
+        here,
+        level_cache_freshness::light_changed{
+            .scope = level_cache_freshness::light_changed::lightmap_scope::none,
+            .visibility = true});
 
     you.process_items();
 
@@ -411,10 +413,10 @@ TEST_CASE("bionic_scanner_updates_same_monster_corpse_pile_display", "[iuse][bio
     const auto cbm_display_name = cbm_corpse_ptr->display_name();
     const auto empty_display_name = empty_corpse_ptr->display_name();
     using Catch::Matchers::ContainsSubstring;
-    CHECK_THAT( cbm_display_name, ContainsSubstring( "bionic detected" ) );
-    CHECK_THAT( empty_display_name, ContainsSubstring( "scanned" ) );
-    CHECK_THAT( cbm_display_name, !ContainsSubstring( "corpse of a zombie technician (fresh)" ) );
-    CHECK_THAT( empty_display_name, !ContainsSubstring( "corpse of a zombie technician (fresh)" ) );
+    CHECK_THAT(cbm_display_name, ContainsSubstring("bionic detected"));
+    CHECK_THAT(empty_display_name, ContainsSubstring("scanned"));
+    CHECK_THAT(cbm_display_name, !ContainsSubstring("corpse of a zombie technician (fresh)"));
+    CHECK_THAT(empty_display_name, !ContainsSubstring("corpse of a zombie technician (fresh)"));
 }
 
 TEST_CASE(
@@ -467,13 +469,13 @@ TEST_CASE(
         }
         return result;
     };
-    const auto solar_info = item_info_text( *solar_corpse_ptr );
-    const auto storage_info = item_info_text( *storage_corpse_ptr );
+    const auto solar_info = item_info_text(*solar_corpse_ptr);
+    const auto storage_info = item_info_text(*storage_corpse_ptr);
     using Catch::Matchers::ContainsSubstring;
-    CHECK_THAT( solar_info, ContainsSubstring( "Solar Panels CBM" ) );
-    CHECK_THAT( solar_info, !ContainsSubstring( "Power Storage CBM" ) );
-    CHECK_THAT( storage_info, ContainsSubstring( "Power Storage CBM" ) );
-    CHECK_THAT( storage_info, !ContainsSubstring( "Solar Panels CBM" ) );
+    CHECK_THAT(solar_info, ContainsSubstring("Solar Panels CBM"));
+    CHECK_THAT(solar_info, !ContainsSubstring("Power Storage CBM"));
+    CHECK_THAT(storage_info, ContainsSubstring("Power Storage CBM"));
+    CHECK_THAT(storage_info, !ContainsSubstring("Solar Panels CBM"));
 }
 
 TEST_CASE(

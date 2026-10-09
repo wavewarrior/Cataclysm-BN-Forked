@@ -226,11 +226,10 @@ TEST_CASE("vehicle_cargo_uses_full_part_volume", "[vehicle][cargo][volume]") {
     const auto vehicle_origin = tripoint_bub_ms(60, 60, 0);
     auto* veh_ptr = here.add_vehicle(vproto_id("none"), vehicle_origin, 0_degrees, 0, 0);
     REQUIRE(veh_ptr != nullptr);
-    REQUIRE(veh_ptr->install_part(tripoint_mnt_veh::zero(), vpart_id("frame_vertical"),
-                                  true) >= 0);
+    REQUIRE(veh_ptr->install_part(tripoint_mnt_veh::zero(), vpart_id("frame_vertical"), true) >= 0);
 
-    const auto cargo_index = veh_ptr->install_part(tripoint_mnt_veh::zero(),
-                             vpart_id("test_large_cargo_space"), true);
+    const auto cargo_index =
+        veh_ptr->install_part(tripoint_mnt_veh::zero(), vpart_id("test_large_cargo_space"), true);
     REQUIRE(cargo_index >= 0);
 
     CHECK(veh_ptr->max_volume(cargo_index) == 3000000_liter);
@@ -283,10 +282,10 @@ TEST_CASE("detaching_opaque_vehicle_invalidates_transparency_cache", "[vehicle][
     const auto origin = tripoint_bub_ms(60, 60, 0);
     auto* veh_ptr = here.add_vehicle(vproto_id("none"), origin, 0_degrees, 0, 0);
     REQUIRE(veh_ptr != nullptr);
-    REQUIRE(veh_ptr->install_part(tripoint_mnt_veh::zero(), vpart_id("frame_horizontal"),
-                                  true) >= 0);
-    const auto board = veh_ptr->install_part(tripoint_mnt_veh::zero(),
-                       vpart_id("clothboard_horizontal"), true);
+    REQUIRE(
+        veh_ptr->install_part(tripoint_mnt_veh::zero(), vpart_id("frame_horizontal"), true) >= 0);
+    const auto board =
+        veh_ptr->install_part(tripoint_mnt_veh::zero(), vpart_id("clothboard_horizontal"), true);
     REQUIRE(board >= 0);
 
     const auto board_pos = veh_ptr->bub_part_location(board);
@@ -497,10 +496,12 @@ TEST_CASE("can autodrive", "[vehicle][autodrive]") {
     you.omt_path = {current_omt + tripoint_rel_omt(1, 0, 0)};
     veh_ptr->is_autodriving = true;
 
-    level_cache_freshness::report( here, level_cache_freshness::light_changed {
-        .scope = level_cache_freshness::light_changed::lightmap_scope::none,
-        .visibility = true } );
-    REQUIRE( level_cache_freshness::visibility_stale( here, you.bub_pos() ) );
+    level_cache_freshness::report(
+        here,
+        level_cache_freshness::light_changed{
+            .scope = level_cache_freshness::light_changed::lightmap_scope::none,
+            .visibility = true});
+    REQUIRE(level_cache_freshness::visibility_stale(here, you.bub_pos()));
 
     CHECK(veh_ptr->do_autodrive(you) == autodrive_result::ok);
 }
@@ -809,9 +810,7 @@ TEST_CASE("box2d_authority_vehicle_bashes_terrain", "[vehicle][box2d]") {
     pw->on_submap_loaded(here, project_to<coords::sm>(bub_to_abs(obstacle)));
     REQUIRE(pw->terrain_body_count() > colliders_before);
 
-    for (int turn = 0; turn < 5 && here.ter(obstacle) == before; ++turn) {
-        here.vehmove();
-    }
+    for (int turn = 0; turn < 5 && here.ter(obstacle) == before; ++turn) { here.vehmove(); }
 
     CHECK(here.ter(obstacle) != before);
     // The wall changing alone doesn't prove the *vehicle* paid for it — assert the
@@ -1157,9 +1156,7 @@ TEST_CASE("vehicle_move_notifications_per_turn", "[vehicle][perf]") {
     // replay per z per turn, regardless of how many tiles were crossed --
     // measured before C2: ~5-6 per turn at this cruise speed (2,2,7,5,6,5,6,
     // 6,5,6 recorded pre-batching).
-    for (const unsigned count : per_turn_counts) {
-        CHECK(count == 1);
-    }
+    for (const unsigned count : per_turn_counts) { CHECK(count == 1); }
 
     // A parked vehicle (no movement this turn) must emit zero notifications.
     veh.cruise_velocity = 0;

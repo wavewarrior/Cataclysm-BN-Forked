@@ -167,7 +167,7 @@ void string_input_popup::show_history( utf8_wrapper& ret )
 void string_input_popup::add_to_history( const std::string& value ) const
 {
     if( !_identifier.empty() && !value.empty() ) {
-    std::vector<std::string> &hist = uistate.gethistory( _identifier );
+        std::vector<std::string> &hist = uistate.gethistory( _identifier );
         if( hist.empty() || hist[hist.size() - 1] != value ) { hist.push_back( value ); }
     }
 }

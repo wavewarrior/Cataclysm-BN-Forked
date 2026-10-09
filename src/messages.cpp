@@ -88,12 +88,12 @@ struct game_message : public JsonDeserializer, public JsonSerializer {
 
     nc_color get_color( const time_point &current ) const {
         if( is_new( current ) ) {
-        // color for new messages
-        return msgtype_to_color( type, false );
+            // color for new messages
+            return msgtype_to_color( type, false );
 
         } else if( is_recent( current ) ) {
-        // color for slightly old messages
-        return msgtype_to_color( type, true );
+            // color for slightly old messages
+            return msgtype_to_color( type, true );
         }
 
         // color for old messages
@@ -434,8 +434,7 @@ bool Messages::has_undisplayed_messages()
 {
     return player_messages.has_undisplayed_messages();
 }
-namespace Messages
-{
+namespace Messages {
 
 // ── RmlUi render path (full UI→RmlUi migration, §8.1 gate-blocker backlog) ────
 // The full message-LOG screen (display_messages, the ESC log). A scrolling text
@@ -454,7 +453,7 @@ struct messages_rml_row {
     Rml::String text_rml;
 };
 struct messages_rml_data {
-    Rml::Vector<messages_rml_row> rows;
+    Rml::Vector < messages_rml_row > rows;
     Rml::String footer_rml;
     Rml::DataModelHandle handle;
 };
@@ -469,15 +468,15 @@ struct messages_filter_help_data {
 
 bool g_messages_types_registered = false;
 
-void register_messages_rml_types( Rml::DataModelConstructor &c )
+void register_messages_rml_types( Rml::DataModelConstructor & c )
 {
     if( g_messages_types_registered ) {
         return;
     }
-    Rml::StructHandle<messages_rml_row> rh = c.RegisterStruct<messages_rml_row>();
+    Rml::StructHandle < messages_rml_row > rh = c.RegisterStruct < messages_rml_row > ();
     rh.RegisterMember( "time_rml", &messages_rml_row::time_rml );
     rh.RegisterMember( "text_rml", &messages_rml_row::text_rml );
-    c.RegisterArray<Rml::Vector<messages_rml_row>>();
+    c.RegisterArray < Rml::Vector < messages_rml_row>>();
     g_messages_types_registered = true;
 }
 } // namespace
@@ -490,8 +489,7 @@ bool &messages_rmlui_enabled()
     return enabled;
 }
 
-namespace Messages
-{
+namespace Messages {
 
 // NOLINTNEXTLINE(cata-xy)
 class dialog
@@ -501,12 +499,12 @@ class dialog
         void run();
     private:
         void init_first_time();
-        void init( ui_adaptor &ui );
+        void init( ui_adaptor & ui );
         void show();
-        void input( const ui_adaptor &ui );
-        void do_filter( const std::string &filter_str );
+        void input( const ui_adaptor & ui );
+        void do_filter( const std::string & filter_str );
         void set_size();
-        static std::vector<std::string> filter_help_text( int width );
+        static std::vector < std::string > filter_help_text( int width );
 
         // RmlUi render path (see the file note above).
         void sync_rml();
@@ -545,7 +543,7 @@ class dialog
         int w_fh_height = 0; // Filter help window position
         catacurses::window w_filter_help; // Filter help window
 
-        std::vector<std::string> help_text; // Folded filter help text
+        std::vector < std::string > help_text; // Folded filter help text
 
         string_input_popup filter;
         bool filtering = false;
@@ -554,16 +552,16 @@ class dialog
         input_context ctxt;
 
         // Message indices and folded strings
-        std::vector<std::pair<size_t, std::string>> folded_all;
+        std::vector < std::pair < size_t, std::string>> folded_all;
         // Indices of filtered messages
-        std::vector<size_t> folded_filtered;
+        std::vector < size_t > folded_filtered;
 
         size_t offset = 0; // Index of the first printed message
 
         bool canceled = false;
         bool errored = false;
 
-        std::optional<ime_sentry> filter_sentry;
+        std::optional < ime_sentry > filter_sentry;
 
         bool first_init = true;
 
@@ -573,12 +571,12 @@ class dialog
         // frames after open to scroll the pane to the newest end (matching the
         // curses initial offset) once RmlUi has laid the rows out.
         rml_doc rml;
-        std::unique_ptr<messages_rml_data> rml_data;
+        std::unique_ptr < messages_rml_data > rml_data;
         int rml_initial_scroll_frames = 0;
 
         // Filter-help backdrop (data declared before the doc so it outlives it,
         // per rml_screen.h). Opened only while `filtering` and the log doc is RML.
-        std::unique_ptr<messages_filter_help_data> filter_help_data;
+        std::unique_ptr < messages_filter_help_data > filter_help_data;
         rml_doc filter_help_rml;
 };
 } // namespace Messages
@@ -592,7 +590,8 @@ Messages::dialog::dialog()
 inline void Messages::dialog::set_size()
 {
     w_width
-        = std::min( TERMX, static_cast<int>( FULL_SCREEN_WIDTH * ( uistate.msg_window_wide_display ? 1.8 :
+        = std::min( TERMX, static_cast < int > ( FULL_SCREEN_WIDTH * ( uistate.msg_window_wide_display ?
+                    1.8 :
                     1 ) ) );
     w_height = std::min( TERMY, uistate.msg_window_full_height_display ? TERMY : FULL_SCREEN_HEIGHT );
     w_x = ( TERMX - w_width ) / 2;
@@ -636,13 +635,13 @@ void Messages::dialog::init( ui_adaptor &ui )
         return;
     }
     msg_width = w_width - border_width * 2 - time_width - padding_width;
-    max_lines = static_cast<size_t>( w_height - border_width * 2 );
+    max_lines = static_cast < size_t > ( w_height - border_width * 2 );
 
     // Initialize filter help text and window
     w_fh_width = w_width;
     w_fh_x = w_x;
     help_text = filter_help_text( w_fh_width - border_width * 2 );
-    w_fh_height = static_cast<int>( help_text.size() ) + border_width * 2;
+    w_fh_height = static_cast < int > ( help_text.size() ) + border_width * 2;
     w_fh_y = w_y + w_height - w_fh_height;
     w_filter_help = catacurses::newwin( w_fh_height, w_fh_width, point( w_fh_x, w_fh_y ) );
 
@@ -675,7 +674,7 @@ void Messages::dialog::init( ui_adaptor &ui )
     // open on this instance, preserving rml_data across re-inits.
     rml.open( messages_rmlui_enabled(), "messages", ctxt,
     [&]( Rml::DataModelConstructor & c ) {
-        rml_data = std::make_unique<messages_rml_data>();
+        rml_data = std::make_unique < messages_rml_data > ();
         register_messages_rml_types( c );
         c.Bind( "rows", &rml_data->rows );
         c.Bind( "footer_rml", &rml_data->footer_rml );
@@ -721,11 +720,11 @@ void Messages::dialog::open_filter_help_rml()
 {
     filter_help_rml.open( messages_rmlui_enabled(), "messages_filter_help", ctxt,
     [&]( Rml::DataModelConstructor & c ) {
-        filter_help_data = std::make_unique<messages_filter_help_data>();
+        filter_help_data = std::make_unique < messages_filter_help_data > ();
         // Build the syntax help unfolded (huge width → foldstring only breaks on
         // the format's explicit \n; RmlUi re-wraps), then join and convert the
         // colour tags to RML spans.
-        const std::vector<std::string> lines = filter_help_text( 10000 );
+        const std::vector < std::string > lines = filter_help_text( 10000 );
         std::string joined;
         for( size_t i = 0; i < lines.size(); ++i ) {
             joined += lines[i];
@@ -832,7 +831,7 @@ void Messages::dialog::input( const ui_adaptor &ui )
             filter.text( filter_str );
             do_filter( filter_str );
         } else if( action == "COPY_MESSAGE" ) {
-            const auto type_names = msg_type_and_names() | std::ranges::to<std::map>();
+            const auto type_names = msg_type_and_names() | std::ranges::to < std::map > ();
 
             auto format_as_logfmt = [&]( const size_t msg_ind ) {
                 const auto &msg = player_messages.history( msg_ind );
@@ -843,7 +842,7 @@ void Messages::dialog::input( const ui_adaptor &ui )
 
                 const auto escaped_message = replace_all( remove_color_tags( msg.get_with_count() ), "\"", "\\\"" );
                 return string_format( "turn=%-9d time=\"%s\" type=%-8s message=\"%s\"\n",
-                                      to_turn<int>( msg_time ),
+                                      to_turn < int > ( msg_time ),
                                       to_string_clipped( calendar::turn - msg_time, clipped_align::right ),
                                       type_name,
                                       escaped_message );
@@ -851,11 +850,11 @@ void Messages::dialog::input( const ui_adaptor &ui )
 
             const auto lines = folded_filtered
             | std::views::transform( [&]( const size_t idx ) { return folded_all[idx].first; } )
-            | std::ranges::to<std::set>()
+            | std::ranges::to < std::set > ()
             | std::views::reverse
             | std::views::transform( format_as_logfmt );
 
-            const auto clipboard_text = std::ranges::fold_left( lines, std::string{}, std::plus<> {} );
+            const auto clipboard_text = std::ranges::fold_left( lines, std::string{}, std::plus < > {} );
 
             DebugLog( DL::Info, DC::Main ) << " MESSAGE LOG COPY:\n" << clipboard_text;
             std::string popup_msg = _( "Messages written to debug.log" );
@@ -1001,7 +1000,7 @@ void Messages::dialog::rml_scroll( int dir )
     e->SetScrollTop( e->GetScrollTop() + delta );
 }
 
-std::vector<std::string> Messages::dialog::filter_help_text( int width )
+std::vector < std::string > Messages::dialog::filter_help_text( int width )
 {
     const auto &help_fmt = _(
                                "<color_light_gray>The default is to search the entire message log.  "

@@ -62,9 +62,9 @@ inv_chars( "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#&()+.:;=@[\\
 bool invlet_wrapper::valid( const int invlet ) const
 {
     if( invlet > std::numeric_limits<char>::max() || invlet < std::numeric_limits<char>::min() ) {
-    return false;
-}
-return find( static_cast<char>( invlet ) ) != std::string::npos;
+        return false;
+    }
+    return find( static_cast<char>( invlet ) ) != std::string::npos;
 }
 
 invlet_favorites::invlet_favorites( const std::unordered_map<itype_id, std::string> &map )
@@ -649,7 +649,7 @@ std::vector<detached_ptr<item>> location_inventory::reduce_stack( const int posi
     return ret;
 }
 
-item &inventory::remove_item( const item *it )
+item & inventory::remove_item( const item *it )
 {
     auto tmp = remove_items_with( [&it]( const item & i ) {
         return &i == it;
@@ -663,7 +663,7 @@ item &inventory::remove_item( const item *it )
     return null_item_reference();
 }
 
-item &inventory::remove_item( const int position )
+item & inventory::remove_item( const int position )
 {
     if( position < 0 || static_cast<size_t>( position ) >= items.size() ) {
         return null_item_reference();
@@ -758,7 +758,7 @@ std::vector<detached_ptr<item>> location_inventory::dump_remove( )
     return dest;
 }
 
-const item &inventory::find_item( int position ) const
+const item & inventory::find_item( int position ) const
 {
     if( position < 0 || position >= static_cast<int>( items.size() ) ) {
         return null_item_reference();
@@ -770,7 +770,7 @@ const item &inventory::find_item( int position ) const
     return *iter->front();
 }
 
-item &inventory::find_item( int position )
+item & inventory::find_item( int position )
 {
     return const_cast<item &>( const_cast<const inventory *>( this )->find_item( position ) );
 }
@@ -880,8 +880,8 @@ int inventory::worst_item_value( npc *p ) const
 
 bool inventory::has_enough_painkiller( int pain ) const
 {
-for( const auto &elem : items ) {
-    const item &it = *elem.front();
+    for( const auto &elem : items ) {
+        const item &it = *elem.front();
         if( ( pain <= 35 && it.typeId() == itype_aspirin ) ||
             ( pain >= 50 && it.typeId() == itype_oxycodone ) ||
             it.typeId() == itype_tramadol || it.typeId() == itype_codeine ) {
@@ -891,7 +891,7 @@ for( const auto &elem : items ) {
     return false;
 }
 
-item *inventory::most_appropriate_painkiller( int pain )
+item * inventory::most_appropriate_painkiller( int pain )
 {
     int difference = 9999;
     item *ret = &null_item_reference();
@@ -1086,20 +1086,20 @@ void inventory::update_quality_cache()
     } );
 }
 
-const std::map<quality_id, std::map<int, int>> &inventory::get_quality_cache() const
-{
+const std::map<quality_id, std::map<int, int>> &inventory::get_quality_cache() const {
     return quality_cache;
 }
 
-int inventory::count_item( const itype_id &item_type ) const
-{
+int inventory::count_item( const itype_id &item_type ) const {
     int num = 0;
     const itype_bin bin = get_binned_items();
-    if( !bin.contains( item_type ) ) {
+    if( !bin.contains( item_type ) )
+    {
         return num;
     }
     const std::list<const item *> items = get_binned_items().find( item_type )->second;
-    for( const item *it : items ) {
+    for( const item *it : items )
+    {
         num += it->count();
     }
     return num;
@@ -1237,17 +1237,17 @@ invlets_bitset inventory::allocated_invlets() const
     return invlets;
 }
 
-const itype_bin &inventory::get_binned_items() const
+const itype_bin & inventory::get_binned_items() const
 {
     if( binned ) {
-    return binned_items;
-}
+        return binned_items;
+    }
 
-binned_items.clear();
+    binned_items.clear();
 
-// HACK: Hack warning
-inventory *this_nonconst = const_cast<inventory *>( this );
-this_nonconst->visit_items( [ this ]( item * e ) {
+    // HACK: Hack warning
+    inventory *this_nonconst = const_cast<inventory *>( this );
+    this_nonconst->visit_items( [ this ]( item * e ) {
         binned_items[ e->typeId() ].push_back( e );
         return VisitResponse::NEXT;
     } );
@@ -1282,11 +1282,11 @@ location_inventory::~location_inventory()
 
 location_inventory::location_inventory( item_location *location ) : loc( location ) {}
 
-location_inventory &location_inventory::operator=( location_inventory &&source )
+location_inventory & location_inventory::operator=( location_inventory &&source )
 noexcept
 {
-for( auto &stack : source.inv.items ) {
-    for( item * const &it : stack ) {
+    for( auto &stack : source.inv.items ) {
+        for( item * const &it : stack ) {
             it->remove_location();
             it->set_location( &*loc );
         }
@@ -1320,7 +1320,7 @@ void location_inventory::add_items( std::vector<detached_ptr<item>> &newits, boo
 }
 
 template<bool IsCached>
-item &location_inventory::add_item_internal( detached_ptr<item> &&newit, bool keep_invlet,
+item & location_inventory::add_item_internal( detached_ptr<item> &&newit, bool keep_invlet,
         bool assign_invlet, bool should_stack )
 {
     if( !newit ) {
@@ -1359,13 +1359,13 @@ item &location_inventory::add_item_internal( detached_ptr<item> &&newit, bool ke
     }
 }
 
-item &location_inventory::add_item( detached_ptr<item> &&newit, bool keep_invlet,
-                                    bool assign_invlet, bool should_stack )
+item & location_inventory::add_item( detached_ptr<item> &&newit, bool keep_invlet,
+                                     bool assign_invlet, bool should_stack )
 {
     return add_item_internal<false>( std::move( newit ), keep_invlet, assign_invlet, should_stack );
 }
 
-item &location_inventory::add_item_by_items_type_cache( detached_ptr<item> &&newit,
+item & location_inventory::add_item_by_items_type_cache( detached_ptr<item> &&newit,
         bool keep_invlet, bool assign_invlet, bool should_stack )
 {
     return add_item_internal<true>( std::move( newit ), keep_invlet, assign_invlet, should_stack );
@@ -1391,11 +1391,11 @@ detached_ptr<item> location_inventory::remove_item( int position )
     return detached_ptr<item>( obj );
 }
 
-const item &location_inventory::find_item( int position ) const
+const item & location_inventory::find_item( int position ) const
 {
     return inv.find_item( position );
 }
-item &location_inventory::find_item( int position )
+item & location_inventory::find_item( int position )
 {
     return inv.find_item( position );
 }
@@ -1442,7 +1442,7 @@ bool location_inventory::has_enough_painkiller( int pain ) const
 {
     return inv.has_enough_painkiller( pain );
 }
-item *location_inventory::most_appropriate_painkiller( int pain )
+item * location_inventory::most_appropriate_painkiller( int pain )
 {
     return inv.most_appropriate_painkiller( pain );
 }
@@ -1507,7 +1507,7 @@ invlets_bitset location_inventory::allocated_invlets() const
     return inv.allocated_invlets();
 }
 
-const itype_bin &location_inventory::get_binned_items() const
+const itype_bin & location_inventory::get_binned_items() const
 {
     return inv.get_binned_items();
 }
@@ -1532,8 +1532,7 @@ void location_inventory::update_quality_cache()
     return inv.update_quality_cache();
 }
 
-const std::map<quality_id, std::map<int, int>> &location_inventory::get_quality_cache() const
-{
+const std::map<quality_id, std::map<int, int>> &location_inventory::get_quality_cache() const {
     return inv.get_quality_cache();
 }
 
@@ -1542,7 +1541,6 @@ void location_inventory::build_items_type_cache()
     return inv.build_items_type_cache();
 }
 
-const inventory &location_inventory::as_inventory() const
-{
+const inventory &location_inventory::as_inventory() const {
     return inv;
 }

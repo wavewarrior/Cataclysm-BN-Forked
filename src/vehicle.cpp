@@ -142,7 +142,7 @@ auto vehicle::get_cargo_recharge_targets() -> std::vector<cargo_recharge_target>
     if( cargo_recharge_targets_dirty ) {
         cargo_recharge_targets_.clear();
         for( const vpart_reference &vp : get_parts_including_carried( VPFLAG_CARGO ) ) {
-            for( item *&outer : get_items( static_cast<int>( vp.part_index() ) ) ) {
+            for( item * &outer : get_items( static_cast<int>( vp.part_index() ) ) ) {
                 outer->visit_items( [this, &vp]( item * it ) {
                     if( !is_cargo_recharge_candidate( *it ) ) {
                         return VisitResponse::NEXT;
@@ -482,15 +482,15 @@ bool vehicle::player_in_control( const Character &who ) const
     // Debug switch to prevent vehicles from skidding
     // without having to place the player in them.
     if( tags.contains( "IN_CONTROL_OVERRIDE" ) ) {
-    return true;
-}
+        return true;
+    }
 
-const optional_vpart_position vp = g->m.veh_at( who.bub_pos() );
-if( vp && &vp->vehicle() == this &&
+    const optional_vpart_position vp = g->m.veh_at( who.bub_pos() );
+    if( vp && &vp->vehicle() == this &&
         ( ( part_with_feature( vp->part_index(), "CONTROL_ANIMAL", true ) >= 0 &&
             has_engine_type( fuel_type_animal, false ) && has_harnessed_animal() ) ||
-              ( part_with_feature( vp->part_index(), VPFLAG_CONTROLS, false ) >= 0 ) ) &&
-            who.controlling_vehicle ) {
+          ( part_with_feature( vp->part_index(), VPFLAG_CONTROLS, false ) >= 0 ) ) &&
+        who.controlling_vehicle ) {
         return true;
     }
 
@@ -1423,8 +1423,8 @@ int vehicle::lift_strength() const
 
 bool vehicle::has_structural_part( const tripoint_mnt_veh &dp ) const
 {
-for( const int elem : parts_at_relative( dp, false ) ) {
-    if( part_info( elem ).location == part_location_structure &&
+    for( const int elem : parts_at_relative( dp, false ) ) {
+        if( part_info( elem ).location == part_location_structure &&
             !part_info( elem ).has_flag( "PROTRUSION" ) ) {
             return true;
         }
@@ -1434,8 +1434,8 @@ for( const int elem : parts_at_relative( dp, false ) ) {
 
 bool vehicle::has_structural_or_extendable_part( const tripoint_mnt_veh &dp ) const
 {
-for( const int elem : parts_at_relative( dp, false ) ) {
-    if( ( part_info( elem ).location == part_location_structure &&
+    for( const int elem : parts_at_relative( dp, false ) ) {
+        if( ( part_info( elem ).location == part_location_structure &&
               !part_info( elem ).has_flag( "PROTRUSION" ) ) ||
             part_info( elem ).has_flag( VPFLAG_EXTENDABLE ) ) {
             return true;
@@ -1450,8 +1450,8 @@ for( const int elem : parts_at_relative( dp, false ) ) {
  * */
 bool vehicle::is_structural_part_removed() const
 {
-for( const vpart_reference &vp : get_all_parts() ) {
-    if( vp.part().removed && vp.info().location == part_location_structure ) {
+    for( const vpart_reference &vp : get_all_parts() ) {
+        if( vp.part().removed && vp.info().location == part_location_structure ) {
             return true;
         }
     }
@@ -1526,7 +1526,7 @@ void vehicle::update_overmap( const tripoint_abs_sm &prev_sm )
 units::mass vehicle::total_mass() const
 {
     if( mass_dirty ) {
-    refresh_mass();
+        refresh_mass();
     }
 
     return mass_cache;
@@ -1555,7 +1555,7 @@ tripoint_mnt_veh vehicle::rotated_center_of_mass() const
 tripoint_mnt_veh vehicle::local_center_of_mass() const
 {
     if( mass_center_no_precalc_dirty ) {
-    calc_mass_center( false );
+        calc_mass_center( false );
     }
 
     return mass_center_no_precalc;
@@ -1647,11 +1647,11 @@ float vehicle::strain() const
 bool vehicle::sufficient_wheel_config() const
 {
     if( wheelcache.empty() ) {
-    // No wheels!
-    return false;
-} else if( wheelcache.size() == 1 ) {
-    //Has to be a stable wheel, and one wheel can only support a 1-3 tile vehicle
-    if( !part_info( wheelcache.front() ).has_flag( "STABLE" ) ||
+        // No wheels!
+        return false;
+    } else if( wheelcache.size() == 1 ) {
+        //Has to be a stable wheel, and one wheel can only support a 1-3 tile vehicle
+        if( !part_info( wheelcache.front() ).has_flag( "STABLE" ) ||
             all_parts_at_location( part_location_structure ).size() > 3 ) {
             return false;
         }
@@ -1689,10 +1689,10 @@ auto vehicle::vehicle_damage_summary() const -> std::pair<std::string, nc_color>
 bool vehicle::is_owned_by( const Character &c, bool available_to_take ) const
 {
     if( owner.is_null() ) {
-    return available_to_take;
-}
-if( !c.get_faction() ) {
-    debugmsg( "vehicle::is_owned_by() player %s has no faction", c.disp_name() );
+        return available_to_take;
+    }
+    if( !c.get_faction() ) {
+        debugmsg( "vehicle::is_owned_by() player %s has no faction", c.disp_name() );
         return false;
     }
     return c.get_faction()->id() == get_owner();
@@ -1701,10 +1701,10 @@ if( !c.get_faction() ) {
 bool vehicle::is_old_owner( const Character &c, bool available_to_take ) const
 {
     if( old_owner.is_null() ) {
-    return available_to_take;
-}
-if( !c.get_faction() ) {
-    debugmsg( "vehicle::is_old_owner() player %s has no faction", c.disp_name() );
+        return available_to_take;
+    }
+    if( !c.get_faction() ) {
+        debugmsg( "vehicle::is_old_owner() player %s has no faction", c.disp_name() );
         return false;
     }
     return c.get_faction()->id() == get_old_owner();
@@ -1713,7 +1713,7 @@ if( !c.get_faction() ) {
 std::string vehicle::get_owner_name() const
 {
     if( !g->faction_manager_ptr->get( owner ) ) {
-    debugmsg( "vehicle::get_owner_name() vehicle %s has no valid nor null faction id ", disp_name() );
+        debugmsg( "vehicle::get_owner_name() vehicle %s has no valid nor null faction id ", disp_name() );
         return _( "no owner" );
     }
     return _( g->faction_manager_ptr->get( owner )->name() );
@@ -1859,8 +1859,8 @@ bool vehicle::valid_wheel_config() const
 float vehicle::steering_effectiveness() const
 {
     if( is_floating ) {
-    // I'M ON A BOAT
-    return can_float() ? 1.0f : 0.0f;
+        // I'M ON A BOAT
+        return can_float() ? 1.0f : 0.0f;
     }
     if( is_flying || has_sufficient_lift( true ) ) {
         // I'M IN THE AIR
@@ -1888,8 +1888,8 @@ float vehicle::steering_effectiveness() const
     // TODO: return something less than 1.0 if the steering isn't so good
     // (unbalanced, long wheelbase, back-heavy vehicle with front wheel steering,
     // etc)
-for( int p : steering ) {
-    if( parts[ p ].is_available() ) {
+    for( int p : steering ) {
+        if( parts[ p ].is_available() ) {
             return 1.0f;
         }
     }
@@ -2103,7 +2103,7 @@ namespace distribution_graph
 
 template <bool IsConst,
           typename Vehicle = std::conditional_t<IsConst, const vehicle, vehicle>,
-          typename Grid = std::conditional_t<IsConst, const distribution_grid, distribution_grid>>
+          typename Grid = std::conditional_t<IsConst, const distribution_grid, distribution_grid >>
 struct vehicle_or_grid {
     enum class type_t : char {
         vehicle,
@@ -2123,15 +2123,15 @@ struct vehicle_or_grid {
         , grid( grid )
     {}
 
-    bool operator==( const vehicle_or_grid &other ) const {
+    bool operator == ( const vehicle_or_grid &other ) const {
         return veh == other.veh && grid == other.grid;
     }
 
-    bool operator==( const vehicle *veh ) const {
+    bool operator == ( const vehicle *veh ) const {
         return this->veh == veh;
     }
 
-    bool operator==( const distribution_grid *grid ) const {
+    bool operator == ( const distribution_grid *grid ) const {
         return this->grid == grid;
     }
 };
@@ -2156,7 +2156,7 @@ void traverse( StartPoint &start,
     // Not all connected elements are here.
     std::queue<vehicle_or_grid<IsConst>> connected_elements;
     // For fast checking if we should visit some neighbour.
-    std::unordered_set<vehicle_or_grid<IsConst>, hash> visited_elements;
+    std::unordered_set<vehicle_or_grid<IsConst>, hash > visited_elements;
     connected_elements.emplace( &start );
     visited_elements.insert( &start );
     auto &grid_tracker = get_distribution_grid_tracker();
@@ -2546,8 +2546,8 @@ void vehicle::slow_leak()
 
 bool vehicle::is_foldable() const
 {
-for( const vpart_reference &vp : get_all_parts() ) {
-    if( !vp.has_feature( "FOLDABLE" ) ) {
+    for( const vpart_reference &vp : get_all_parts() ) {
+        if( !vp.has_feature( "FOLDABLE" ) ) {
             return false;
         }
     }

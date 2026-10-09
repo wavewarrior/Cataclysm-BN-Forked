@@ -539,10 +539,10 @@ void salvage_activity_actor::serialize( JsonOut &jsout ) const
 bool item::is_salvageable( bool strict ) const
 {
     if( is_null() ) {
-    return false;
-}
-for( auto &mat : made_of() ) {
-    if( salvage::all_salvagable_materials.contains( mat ) ) {
+        return false;
+    }
+    for( auto &mat : made_of() ) {
+        if( salvage::all_salvagable_materials.contains( mat ) ) {
             if( !strict ) {
                 return !has_flag( flag_NO_SALVAGE );
             }

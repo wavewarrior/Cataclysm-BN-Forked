@@ -64,7 +64,7 @@ auto load() -> void
         } else {
             s_state.texture_streaming = tristate_from_legacy_int(
                                             jObj.get_int( "texture_streaming",
-                                                    static_cast<int>( tristate::auto_select ) ) );
+                                                static_cast<int>( tristate::auto_select ) ) );
         }
     },
     true );

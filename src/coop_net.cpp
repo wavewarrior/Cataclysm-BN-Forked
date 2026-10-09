@@ -24,7 +24,7 @@ auto write_be32( uint32_t v, uint8_t* out ) -> void
 auto read_be32( const uint8_t* in ) -> uint32_t
 {
     return ( static_cast<uint32_t>( in[0] ) << 24 ) | ( static_cast<uint32_t>( in[1] ) << 16 )
-    | ( static_cast<uint32_t>( in[2] ) << 8 ) | static_cast<uint32_t>( in[3] );
+           | ( static_cast<uint32_t>( in[2] ) << 8 ) | static_cast<uint32_t>( in[3] );
 }
 
 /// Blocking recv of exactly `len` bytes.
@@ -71,8 +71,8 @@ namespace coop_net
 auto send( NET_StreamSocket* sock, const std::string& payload ) -> bool
 {
     if( payload.size() > 0xFFFF'FFFFu ) { return false; }
-std::array<uint8_t, 4> hdr{};
-write_be32( static_cast<uint32_t>( payload.size() ), hdr.data() );
+    std::array<uint8_t, 4> hdr{};
+    write_be32( static_cast<uint32_t>( payload.size() ), hdr.data() );
     // Header first, then payload — two separate queuing calls are safe because
     // SDL3_net buffers both before flushing to the OS.
     return NET_WriteToStreamSocket( sock, hdr.data(), 4 )

@@ -143,15 +143,14 @@ void emitter_collector::flush_to_render_cb(SDL_GPUCommandBuffer* cb) {
     // trans_storage_, so transparency presence is the real upload trigger.
     if (rs_.sdf().ready() && !transparency.empty() && runtime_w > 0 && runtime_h > 0) {
         rs_.sdf().upload(
-            cp, rs_.device().raw(), runtime_w, runtime_h, transparency, sdf, sky_vis, occ,
-            albedo);
+            cp, rs_.device().raw(), runtime_w, runtime_h, transparency, sdf, sky_vis, occ, albedo);
     }
 
     SDL_EndGPUCopyPass(cp);
 
     last_count_.store(count, std::memory_order_relaxed);
-    last_view_count_.store(view_count < 0 ? count : std::min(view_count, count),
-                           std::memory_order_relaxed);
+    last_view_count_
+        .store(view_count < 0 ? count : std::min(view_count, count), std::memory_order_relaxed);
 }
 
 } // namespace lighting

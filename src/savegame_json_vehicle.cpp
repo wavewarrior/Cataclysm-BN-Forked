@@ -297,8 +297,8 @@ void vehicle_part::serialize( JsonOut &json ) const
     json.member( "enabled", enabled );
     json.member( "flags", flags );
     if( !carry_names.empty() ) {
-    std::stack<std::string, std::vector<std::string> > carry_copy = carry_names;
-    json.member( "carry" );
+        std::stack<std::string, std::vector<std::string> > carry_copy = carry_names;
+        json.member( "carry" );
         json.start_array();
         while( !carry_copy.empty() ) {
             json.write( carry_copy.top() );
@@ -309,23 +309,23 @@ void vehicle_part::serialize( JsonOut &json ) const
     json.member( "passenger_id", passenger_id );
     json.member( "crew_id", crew_id );
     if( z_terrain[0] ) {
-    json.member( "z_offset", z_terrain[0] );
+        json.member( "z_offset", z_terrain[0] );
     }
     json.member( "items", items );
     if( target.first != tripoint_abs_ms::min() ) {
-    json.member( "target_first_x", target.first.x() );
+        json.member( "target_first_x", target.first.x() );
         json.member( "target_first_y", target.first.y() );
         json.member( "target_first_z", target.first.z() );
     }
     if( target.second != tripoint_abs_ms::min() ) {
-    json.member( "target_second_x", target.second.x() );
+        json.member( "target_second_x", target.second.x() );
         json.member( "target_second_y", target.second.y() );
         json.member( "target_second_z", target.second.z() );
     }
     json.member( "ammo_pref", ammo_pref );
     json.member( "part_color", part_color_ );
     if( portal_tap_linked ) {
-    json.member( "portal_tap_linked", portal_tap_linked );
+        json.member( "portal_tap_linked", portal_tap_linked );
         json.member( "portal_tap_dim_id", portal_tap_dim_id.str() );
         json.member( "portal_tap_pos", portal_tap_pos.raw() );
     }
@@ -362,12 +362,12 @@ namespace
 auto read_legacy_vehicle_pivot( const JsonObject &data, tripoint_mnt_veh &pivot ) -> void
 {
     if( !data.has_member( "pivot" ) ) {
-    return;
-}
+        return;
+    }
 
-const auto pivot_json = data.get_array( "pivot" );
-if( pivot_json.size() != 2 && pivot_json.size() != 3 ) {
-    data.throw_error( "vehicle pivot must have 2 or 3 coordinates", "pivot" );
+    const auto pivot_json = data.get_array( "pivot" );
+    if( pivot_json.size() != 2 && pivot_json.size() != 3 ) {
+        data.throw_error( "vehicle pivot must have 2 or 3 coordinates", "pivot" );
     }
 
     const auto z = pivot_json.size() == 3 ? pivot_json.get_int( 2 ) : 0;
@@ -377,13 +377,13 @@ if( pivot_json.size() != 2 && pivot_json.size() != 3 ) {
 auto read_saved_vehicle_parts( const JsonObject &data, std::vector<vehicle_part> &parts ) -> void
 {
     if( !data.has_array( "parts" ) ) {
-    return;
-}
+        return;
+    }
 
-parts.clear();
-const auto part_array = data.get_array( "parts" );
-for( auto part_index = size_t{ 0 }; part_index < part_array.size(); ++part_index ) {
-    auto part = vehicle_part();
+    parts.clear();
+    const auto part_array = data.get_array( "parts" );
+    for( auto part_index = size_t{ 0 }; part_index < part_array.size(); ++part_index ) {
+        auto part = vehicle_part();
         try {
             part_array.read( part_index, part, true );
             parts.push_back( std::move( part ) );
@@ -647,8 +647,8 @@ void vehicle::serialize( JsonOut &json ) const
     json.member( "labels", labels );
     json.member( "zones" );
     json.start_array();
-for( auto const &z : loot_zones ) {
-    json.start_object();
+    for( auto const &z : loot_zones ) {
+        json.start_object();
         json.member( "point", z.first );
         json.member( "zone", z.second );
         json.end_object();
@@ -656,7 +656,7 @@ for( auto const &z : loot_zones ) {
     json.end_array();
     tripoint_bub_ms other_tow_temp_point;
     if( is_towed() ) {
-    vehicle *tower = tow_data.get_towed_by();
+        vehicle *tower = tow_data.get_towed_by();
         if( tower ) {
             other_tow_temp_point = tower->bub_part_location( tower->get_tow_part() );
         }

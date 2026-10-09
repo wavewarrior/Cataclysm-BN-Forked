@@ -3,6 +3,7 @@
 #include "vehicle.h"
 #include "vehicle_part.h"
 #include "vpart_range.h"
+
 #include <box2d/box2d.h>
 #include <climits>
 #include <cmath>
@@ -43,32 +44,27 @@ static constexpr float TILE_M = 1.78816f;
 /// A one-tile vehicle is NOT degenerate — hw = hh = 0.5 * TILE_M gives a valid box —
 /// and neither is a straight line of parts, so no legitimate footprint is rejected
 /// here.  Only a completely empty part list is.
-inline auto vehicle_box2d_shape( const vehicle &v ) -> std::optional<b2Polygon>
-{
+inline auto vehicle_box2d_shape(const vehicle& v) -> std::optional<b2Polygon> {
     auto min_mx = INT_MAX;
     auto max_mx = INT_MIN;
     auto min_my = INT_MAX;
     auto max_my = INT_MIN;
-    for( const auto &vp : v.get_all_parts() ) {
-        if( vp.part().removed ) {
-            continue;
-        }
+    for (const auto& vp : v.get_all_parts()) {
+        if (vp.part().removed) { continue; }
         const auto m = vp.mount();
-        min_mx = std::min( min_mx, m.x() );
-        max_mx = std::max( max_mx, m.x() );
-        min_my = std::min( min_my, m.y() );
-        max_my = std::max( max_my, m.y() );
+        min_mx = std::min(min_mx, m.x());
+        max_mx = std::max(max_mx, m.x());
+        min_my = std::min(min_my, m.y());
+        max_my = std::max(max_my, m.y());
     }
     // No non-removed part contributed an extent.  Returning here also keeps the
     // INT_MAX - INT_MIN signed overflow below unreachable.
-    if( min_mx > max_mx ) {
-        return std::nullopt;
-    }
-    const auto hw = ( max_mx - min_mx + 1 ) / 2.0f * TILE_M;
-    const auto hh = ( max_my - min_my + 1 ) / 2.0f * TILE_M;
-    const auto cx = ( min_mx + max_mx ) / 2.0f * TILE_M;  // local-frame centre offset
-    const auto cy = ( min_my + max_my ) / 2.0f * TILE_M;
-    return b2MakeOffsetBox( hw, hh, { cx, cy }, 0.0f );
+    if (min_mx > max_mx) { return std::nullopt; }
+    const auto hw = (max_mx - min_mx + 1) / 2.0f * TILE_M;
+    const auto hh = (max_my - min_my + 1) / 2.0f * TILE_M;
+    const auto cx = (min_mx + max_mx) / 2.0f * TILE_M; // local-frame centre offset
+    const auto cy = (min_my + max_my) / 2.0f * TILE_M;
+    return b2MakeOffsetBox(hw, hh, {cx, cy}, 0.0f);
 }
 
 /// Rotate a part's local mount offset by `angle_rads` to get its world-space offset.
@@ -79,14 +75,12 @@ inline auto vehicle_box2d_shape( const vehicle &v ) -> std::optional<b2Polygon>
 /// @param p          Vehicle part whose mount offset to rotate.
 /// @param angle_rads Heading angle in radians (CCW from +x; from `vehicle::physics_angle`).
 /// @return Part offset in rotated world frame, as integer tile coordinates.
-inline auto part_world_offset( const vehicle_part &p, float angle_rads ) -> point_rel_ms
-{
-    const float mx = static_cast<float>( p.mount.x() );
-    const float my = static_cast<float>( p.mount.y() );
-    const float c  = std::cos( angle_rads );
-    const float s  = std::sin( angle_rads );
+inline auto part_world_offset(const vehicle_part& p, float angle_rads) -> point_rel_ms {
+    const float mx = static_cast<float>(p.mount.x());
+    const float my = static_cast<float>(p.mount.y());
+    const float c = std::cos(angle_rads);
+    const float s = std::sin(angle_rads);
     return point_rel_ms{
-        static_cast<int>( std::round( mx * c - my * s ) ),
-        static_cast<int>( std::round( mx * s + my * c ) )
-    };
+        static_cast<int>(std::round(mx * c - my * s)),
+        static_cast<int>(std::round(mx * s + my * c))};
 }

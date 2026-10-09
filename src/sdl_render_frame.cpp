@@ -201,9 +201,9 @@ static auto derive_live_frame_camera( const lighting::frame_context &ctx ) -> fr
 auto begin_frame( lighting::render_state &rs ) -> std::optional<lighting::frame_context>
 {
     if( test_mode ) {
-    return std::nullopt;
-}
-if( !rs.ready() ) {
+        return std::nullopt;
+    }
+    if( !rs.ready() ) {
         return std::nullopt;
     }
     // RmlUi: lazy init; init() self-guards so this only truly attempts once.
@@ -224,12 +224,12 @@ if( !rs.ready() ) {
         return std::nullopt;
     }
     if( !ctx.swapchain_tex ) {
-    // Acquire succeeded but the drawable is transiently unavailable (window
-    // occluded/minimised, or a timing gap during the rapid loading-screen
-    // frames). Presenting a nil drawable aborts on Metal
-    // (presentDrawable: "drawable must not be nil"), so CANCEL the command
-    // buffer — submit_frame would present and crash.
-    rs.device().cancel_frame( ctx );
+        // Acquire succeeded but the drawable is transiently unavailable (window
+        // occluded/minimised, or a timing gap during the rapid loading-screen
+        // frames). Presenting a nil drawable aborts on Metal
+        // (presentDrawable: "drawable must not be nil"), so CANCEL the command
+        // buffer — submit_frame would present and crash.
+        rs.device().cancel_frame( ctx );
         return std::nullopt;
     }
     return ctx;
@@ -243,79 +243,79 @@ auto build_lighting( lighting::render_state &rs, lighting::lighting_settings &cf
     ZoneScopedN( "render_build_lighting" );
     bool rc_rebuild = false;
     if( !rs.collector() ) {
-    return rc_rebuild;
-}
+        return rc_rebuild;
+    }
 
-// P3: gate SDF rebuild on transparency_generation change, not turn.
-// Creatures moving don't change the SDF (they're emitters only, not occluders).
-// Only terrain/furniture/field/vehicle transparency changes matter.
-//
-// Origin term tracks the BUBBLE (abs-sub) origin, NOT the camera. The SDF/vis/
-// skyvis are bubble-indexed (W=H=mapsize*SEEX, transparency_cache[x*H+y]), and
-// light_pos reaches the shader in bubble-tile coords, so panning the camera one
-// tile per step does NOT change their content — only the reality bubble shifting
-// (map reload) does. The old camera-origin term forced a full 2x supersampled DT
-// recompute every walk-step (the horde walk-lag); the bubble origin fires only on
-// an actual shift. Emitters refresh every frame outside this gate, so decoupling
-// from camera scroll does not freeze moving lights.
-//
-// P4: split rebuild_pertile into two independent gates so each buffer only
-// rebuilds when its actual dependency changed:
-//   rebuild_structure — SDF, sun_sdf, sky_vis (transparency_generation + z + origin)
-//   rebuild_vis       — FOV visibility mask (player position change)
-// When a door opens (structure++), vis does NOT need to rebuild. When the player
-// walks in static terrain, only vis rebuilds — SDF/sun_sdf/sky_vis are skipped.
-// T8/ADR-0002: the freshness stamps themselves live in the rebuild plan, derived
-// here at the consumption point. T2: the previous-frame stamps the gate compares
-// them against are a `frame_history` value owned by `render_state` (the buffers
-// they describe live there, so they share its lifetime) — see frame_history.h.
-// The decision is pure; the commit below performs today's writes, in today's order.
+    // P3: gate SDF rebuild on transparency_generation change, not turn.
+    // Creatures moving don't change the SDF (they're emitters only, not occluders).
+    // Only terrain/furniture/field/vehicle transparency changes matter.
+    //
+    // Origin term tracks the BUBBLE (abs-sub) origin, NOT the camera. The SDF/vis/
+    // skyvis are bubble-indexed (W=H=mapsize*SEEX, transparency_cache[x*H+y]), and
+    // light_pos reaches the shader in bubble-tile coords, so panning the camera one
+    // tile per step does NOT change their content — only the reality bubble shifting
+    // (map reload) does. The old camera-origin term forced a full 2x supersampled DT
+    // recompute every walk-step (the horde walk-lag); the bubble origin fires only on
+    // an actual shift. Emitters refresh every frame outside this gate, so decoupling
+    // from camera scroll does not freeze moving lights.
+    //
+    // P4: split rebuild_pertile into two independent gates so each buffer only
+    // rebuilds when its actual dependency changed:
+    //   rebuild_structure — SDF, sun_sdf, sky_vis (transparency_generation + z + origin)
+    //   rebuild_vis       — FOV visibility mask (player position change)
+    // When a door opens (structure++), vis does NOT need to rebuild. When the player
+    // walks in static terrain, only vis rebuilds — SDF/sun_sdf/sky_vis are skipped.
+    // T8/ADR-0002: the freshness stamps themselves live in the rebuild plan, derived
+    // here at the consumption point. T2: the previous-frame stamps the gate compares
+    // them against are a `frame_history` value owned by `render_state` (the buffers
+    // they describe live there, so they share its lifetime) — see frame_history.h.
+    // The decision is pure; the commit below performs today's writes, in today's order.
 
-lighting::lighting_rebuild_flags rebuild{};
-int px = 0, py = 0;
-std::uint64_t gen = 0;
-if( g && world_generator && world_generator->active_world ) {
-    // ADR-0002: derive the plan at the consumption point. The skip policy is the
-    // gate's honest demand: it needs pose and occluder stamps only, and must not
-    // escalate a lightmap bit a frame rebuild cannot clear.
-    const int z = g->u.bub_pos().z();
-    const auto plan = level_cache_freshness::plan_for( g->m,
-        level_cache_freshness::pose_of_viewer( g->u, z ),
-        level_cache_freshness::lightmap_policy::skip );
-    // Occluder-set stamp for the viewed level: the module folds transparency and
-    // outside advances (sky_vis is built on a different schedule; without that term
-    // a snapshot taken before the map populated outside_cache stayed zero forever,
-    // killing the sun term). Compared opaquely, never interpreted.
-    gen = plan.occluder[static_cast<size_t>( z + OVERMAP_DEPTH )];
-    px = plan.pose.viewer.x();
-    py = plan.pose.viewer.y();
+    lighting::lighting_rebuild_flags rebuild{};
+    int px = 0, py = 0;
+    std::uint64_t gen = 0;
+    if( g && world_generator && world_generator->active_world ) {
+        // ADR-0002: derive the plan at the consumption point. The skip policy is the
+        // gate's honest demand: it needs pose and occluder stamps only, and must not
+        // escalate a lightmap bit a frame rebuild cannot clear.
+        const int z = g->u.bub_pos().z();
+        const auto plan = level_cache_freshness::plan_for( g->m,
+                          level_cache_freshness::pose_of_viewer( g->u, z ),
+                          level_cache_freshness::lightmap_policy::skip );
+        // Occluder-set stamp for the viewed level: the module folds transparency and
+        // outside advances (sky_vis is built on a different schedule; without that term
+        // a snapshot taken before the map populated outside_cache stayed zero forever,
+        // killing the sun term). Compared opaquely, never interpreted.
+        gen = plan.occluder[static_cast<size_t>( z + OVERMAP_DEPTH )];
+        px = plan.pose.viewer.x();
+        py = plan.pose.viewer.y();
 
-    // Rebuild the SDF on an occluder-set change (gen), z change, map shift (a shift
-    // moves the bubble's contents, so the map-local SDF must realign immediately or
-    // shadows drift behind the camera for a frame), or once the camera has drifted
-    // far enough that newly-scrolled-in occluders would still be carrying their
-    // coarse tile-square fallback seed. Camera pan itself does not force it: the
-    // SDF is bubble-indexed, panning one tile per step does not change its content.
-    auto &pulses = cfg.pulses;
-    const rebuild_gate_knobs knobs {
-        sdl_lighting_devui::devui_visible(),
-        pulses.force_rebuild == lighting::force_rebuild_mode::every_frame,
-        pulses.force_rebuild == lighting::force_rebuild_mode::once
-    };
-    // Decide, then commit right after the decision and before anything is
-    // rebuilt: the commit takes the force-once pulse, bumps the window's rebuild
-    // counter and advances the stamps, in the order the file-statics were written
-    // at :258-294 before this cutover.
-    const rebuild_decision d = gate_and_commit_frame_history(
-            { rs.history(), plan, knobs, pulses, s_rebuild_in_window } );
-    rebuild.structure = d.structure;
-    rebuild.vis = d.vis;
-}
+        // Rebuild the SDF on an occluder-set change (gen), z change, map shift (a shift
+        // moves the bubble's contents, so the map-local SDF must realign immediately or
+        // shadows drift behind the camera for a frame), or once the camera has drifted
+        // far enough that newly-scrolled-in occluders would still be carrying their
+        // coarse tile-square fallback seed. Camera pan itself does not force it: the
+        // SDF is bubble-indexed, panning one tile per step does not change its content.
+        auto &pulses = cfg.pulses;
+        const rebuild_gate_knobs knobs {
+            sdl_lighting_devui::devui_visible(),
+            pulses.force_rebuild == lighting::force_rebuild_mode::every_frame,
+            pulses.force_rebuild == lighting::force_rebuild_mode::once
+        };
+        // Decide, then commit right after the decision and before anything is
+        // rebuilt: the commit takes the force-once pulse, bumps the window's rebuild
+        // counter and advances the stamps, in the order the file-statics were written
+        // at :258-294 before this cutover.
+        const rebuild_decision d = gate_and_commit_frame_history(
+        { rs.history(), plan, knobs, pulses, s_rebuild_in_window } );
+        rebuild.structure = d.structure;
+        rebuild.vis = d.vis;
+    }
 
     if( cursor_light_emitter::enabled && g && s_frame_camera.have_tile_context
         && world_generator && world_generator->active_world ) {
-    float msx = 0.0f, msy = 0.0f;
-    SDL_GetMouseState( &msx, &msy );
+        float msx = 0.0f, msy = 0.0f;
+        SDL_GetMouseState( &msx, &msy );
         // The inverse of the drawing transform, from the frame's camera (T3):
         // the stale tile-context origin and the raw pixel offset, clamped tile
         // size — the expression this site hand-wrote.
@@ -332,8 +332,8 @@ if( g && world_generator && world_generator->active_world ) {
     // no longer auto-cleared on close; use the panel's "clear placed" button.
     if( g && s_frame_camera.have_tile_context && world_generator
         && world_generator->active_world ) {
-    float msx = 0.0f, msy = 0.0f;
-    SDL_GetMouseState( &msx, &msy );
+        float msx = 0.0f, msy = 0.0f;
+        SDL_GetMouseState( &msx, &msy );
         const std::pair<float, float> w = s_frame_camera.world_tile_at( msx, msy );
         dev_test_lights::hover_wx = w.first;
         dev_test_lights::hover_wy = w.second;
@@ -364,15 +364,15 @@ if( g && world_generator && world_generator->active_world ) {
             << " cam_xy0=" << fcam.cam_x0 << "," << fcam.cam_y0
             << " cam_wh=" << fcam.cam_w << "x" << fcam.cam_h;
     if( fr.built_pertile ) {
-    s_emo.trans_at_player    = fr.trans_at_player;
-    s_emo.sdf_W_at_submit    = fr.sdf_W;
-    s_emo.sdf_size_at_submit = fr.sdf_size;
-}
-// s_emo.snap is now consumed every frame by the emitter_glow_pass (decorative
-// light-glow overlay), not just the g_dbg_lighting debug crosshair overlay
-// further below — so this must stay unconditional.
-s_emo.snap = std::move( fr.snapshot_copy );
-return rc_rebuild;
+        s_emo.trans_at_player    = fr.trans_at_player;
+        s_emo.sdf_W_at_submit    = fr.sdf_W;
+        s_emo.sdf_size_at_submit = fr.sdf_size;
+    }
+    // s_emo.snap is now consumed every frame by the emitter_glow_pass (decorative
+    // light-glow overlay), not just the g_dbg_lighting debug crosshair overlay
+    // further below — so this must stay unconditional.
+    s_emo.snap = std::move( fr.snapshot_copy );
+    return rc_rebuild;
 }
 
 // Stage 2b.2: the directional celestial light is the sun by day, the moon by
@@ -393,7 +393,7 @@ static float weather_cloud_mult()
 static auto weather_rain_intensity() -> float
 {
     if( g ) {
-    const weather_type_id wid = get_weather().weather_id;
+        const weather_type_id wid = get_weather().weather_id;
         if( wid.is_valid() && wid->rains ) {
             switch( wid->precip ) {
                 case precip_class::very_light:
@@ -470,8 +470,7 @@ static auto forced_celestial_hour() -> const std::optional<float> &// *NOPAD*
 {
     static const std::optional<float> forced = []() -> std::optional<float> {
         const char *const raw = std::getenv( "CBN_FORCE_SUN_HOUR" );
-        if( !raw )
-        {
+        if( !raw ) {
             return std::nullopt;
         }
         char *end = nullptr;
@@ -548,7 +547,7 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     // order. Each `split` closes the member before it and opens the next, so the
     // executor's timings and the plan's asserted order cannot drift apart.
     if( rs.collector() ) {
-    rs.collector()->flush_to_render_cb( ctx.cmd_buffer );
+        rs.collector()->flush_to_render_cb( ctx.cmd_buffer );
     }
 
     exec.split( frame_step_kind::gpu_sdf );
@@ -575,7 +574,7 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     bool sdf_ran = false;
     std::string sdf_reason = "rc_or_sdf_buf";
     if( sdf_populated && rs.gpu_sdf().ready() && rs.sdf().trans_buffer() ) {
-    rs.gpu_sdf().record( ctx.cmd_buffer, rs.sdf().trans_buffer(),
+        rs.gpu_sdf().record( ctx.cmd_buffer, rs.sdf().trans_buffer(),
                              rs.sdf().sdf_buffer(), map_w, map_h,
                              rs.occluders(), cfg.debug.occ_soft_gain );
         sdf_ran = true;
@@ -597,7 +596,7 @@ auto flush_and_gather_rc( lighting::render_state &rs,
                 << " grid=" << occ.width() << "x" << occ.height()
                 << " soft_gain=" << cfg.debug.occ_soft_gain;
     } else if( sdf_populated ) {
-    sdf_reason = !rs.gpu_sdf().ready() ? "gpu_sdf_ready" : "trans_buf";
+        sdf_reason = !rs.gpu_sdf().ready() ? "gpu_sdf_ready" : "trans_buf";
     }
 
     exec.split( frame_step_kind::sky_sun );
@@ -619,15 +618,15 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     bool sky_ran = false;
     std::string sky_reason = "rc_or_sdf_buf";
     if( g_sky_sun_enable && sdf_populated && rs.sky().ready() && rs.sdf().occ_buffer() ) {
-    lighting::sky_sun_params kp{};
-    kp.map_w        = map_w;
-    kp.map_h        = map_h;
-    kp.sun_dir_x    = sp.sun_dir_x;
-    kp.sun_dir_y    = sp.sun_dir_y;
-    kp.sun_sin_elev = sp.sun_sin_elev;
-    // Step 3: sky-portal scan knobs (roofed probes only).
-    kp.portal_reach = cfg.debug.portal_reach;
-    kp.portal_dirs  = static_cast<std::uint32_t>( std::max( 1.0f, cfg.debug.portal_dirs ) );
+        lighting::sky_sun_params kp{};
+        kp.map_w        = map_w;
+        kp.map_h        = map_h;
+        kp.sun_dir_x    = sp.sun_dir_x;
+        kp.sun_dir_y    = sp.sun_dir_y;
+        kp.sun_sin_elev = sp.sun_sin_elev;
+        // Step 3: sky-portal scan knobs (roofed probes only).
+        kp.portal_reach = cfg.debug.portal_reach;
+        kp.portal_dirs  = static_cast<std::uint32_t>( std::max( 1.0f, cfg.debug.portal_dirs ) );
         // P5b: F4-tunable sky/sun quality knobs.
         kp.sky_dirs     = static_cast<std::uint32_t>( std::max( 1.0f, cfg.debug.sky_dirs ) );
         kp.sky_reach    = cfg.debug.sky_reach;
@@ -639,9 +638,9 @@ auto flush_and_gather_rc( lighting::render_state &rs,
                          map_w, map_h, kp );
         sky_ran = true;
     } else if( !g_sky_sun_enable ) {
-    sky_reason = "disabled";
-} else if( sdf_populated ) {
-    sky_reason = !rs.sky().ready() ? "sky_ready" : "occ_buf";
+        sky_reason = "disabled";
+    } else if( sdf_populated ) {
+        sky_reason = !rs.sky().ready() ? "sky_ready" : "occ_buf";
     }
 
     // Stage 5 (gpu-daylight black-scene plan): the one-shot readback confirms
@@ -662,9 +661,9 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     // reads as "the game crashes" even though it is technically non-fatal.
     if( g && world_generator && world_generator->active_world
         && !forced_celestial_hour() && rs.sky().ready() ) {
-    static int gp_frames = 0;
-    static bool reported = false;
-    if( !reported && ++gp_frames == 120 ) {
+        static int gp_frames = 0;
+        static bool reported = false;
+        if( !reported && ++gp_frames == 120 ) {
             reported = true;
             const float gameplay = g->natural_light_level( g->u.bub_pos().z() );
             const auto m = rs.sky().readback_means(
@@ -685,8 +684,8 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     bool gi_ran = false;
     std::string gi_reason = "rc_or_sdf_buf";
     if( g_gi_enable && sdf_populated && rs.gi().ready() && rs.collector() ) {
-    lighting::gi_params rp{};
-    rp.emitter_count = static_cast<std::uint32_t>( std::max( 0, rs.collector()->last_count() ) );
+        lighting::gi_params rp{};
+        rp.emitter_count = static_cast<std::uint32_t>( std::max( 0, rs.collector()->last_count() ) );
         rp.map_w         = map_w;
         rp.map_h         = map_h;
         rp.current_z     = g ? static_cast<float>( g->u.bub_pos().z() ) : 0.0f;
@@ -727,15 +726,15 @@ auto flush_and_gather_rc( lighting::render_state &rs,
                           .w = map_w, .h = map_h, .params = rp } );
         gi_ran = true;
     } else if( !g_gi_enable ) {
-    gi_reason = "disabled";
-} else if( sdf_populated ) {
-    gi_reason = !rs.gi().ready() ? "gi_ready" : "collector";
+        gi_reason = "disabled";
+    } else if( sdf_populated ) {
+        gi_reason = !rs.gi().ready() ? "gi_ready" : "collector";
     }
     exec.split( frame_step_kind::gi_feedback );
     // Feedback iterations the last structure rebuild queued (gi_compute_pass::
     // record) run one per frame on the frames that follow it.
     if( !gi_ran && g_gi_enable && rs.collector() && rs.sdf().populated() ) {
-    rs.gi().record_pending( ctx.cmd_buffer, {
+        rs.gi().record_pending( ctx.cmd_buffer, {
             .emitter = rs.collector()->emitter_buffer(),
             .sdf = rs.sdf().sdf_buffer(), .sky = rs.sky().sky_buffer(),
             .albedo = rs.sdf().albedo_buffer()
@@ -744,7 +743,7 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     }
 
     if( rc_rebuild ) {
-    DebugLogFL( DL::Info, DC::Main )
+        DebugLogFL( DL::Info, DC::Main )
                 << "[lighting][passes] rc=1"
                 << " sdf=" << ( sdf_ran ? "ran" : ( "skip:" + sdf_reason ) )
                 << " sky=" << ( sky_ran ? "ran" : ( "skip:" + sky_reason ) )
@@ -765,17 +764,17 @@ auto assemble_light_inputs( lighting::render_state &rs,
                             const lighting::lighting_settings &cfg ) -> void
 {
     if( !rs.collector() ) {
-    return;
-}
+        return;
+    }
 
-lighting::render_state::frame_light_inputs in{};
-// T3 (#108): the stamp and z-level from the camera. The mirror's `tile_px`
-// receives the same stamp below; the consumer's `tile_pixel_size` is the raw
-// tile width whenever a tile context exists, and 32 otherwise — exactly what
-// this site computed from `tilecontext` before.
-in.tile_pixel_size = s_frame_camera.tile_stamp_px;
-in.z_level         = static_cast<float>( s_frame_camera.player_z );
-in.ambient         = 0.05f;
+    lighting::render_state::frame_light_inputs in{};
+    // T3 (#108): the stamp and z-level from the camera. The mirror's `tile_px`
+    // receives the same stamp below; the consumer's `tile_pixel_size` is the raw
+    // tile width whenever a tile context exists, and 32 otherwise — exactly what
+    // this site computed from `tilecontext` before.
+    in.tile_pixel_size = s_frame_camera.tile_stamp_px;
+    in.z_level         = static_cast<float>( s_frame_camera.player_z );
+    in.ambient         = 0.05f;
 
     // T3 (#108): every value below comes from the frame's camera, derived once at
     // the head of `run_frame_plan`. The gate is `float_camera_valid` — the same
@@ -805,14 +804,14 @@ in.ambient         = 0.05f;
         s_emo.draw_off_px_x = fcam.draw_off_px_x;
         s_emo.draw_off_px_y = fcam.draw_off_px_y;
     } else if( g_dbg_lighting ) {
-    s_emo.cam_off_x = 0.f;
-    s_emo.cam_off_y = 0.f;
-    s_emo.tile_px   = in.tile_pixel_size;
-    s_emo.op_x      = 0.f;
-    s_emo.op_y      = 0.f;
-    s_emo.player_x  = 0;
-    s_emo.player_y  = 0;
-    s_emo.player_z  = 0;
+        s_emo.cam_off_x = 0.f;
+        s_emo.cam_off_y = 0.f;
+        s_emo.tile_px   = in.tile_pixel_size;
+        s_emo.op_x      = 0.f;
+        s_emo.op_y      = 0.f;
+        s_emo.player_x  = 0;
+        s_emo.player_y  = 0;
+        s_emo.player_z  = 0;
         s_emo.screen_w  = fcam.screen_w;
         s_emo.screen_h  = fcam.screen_h;
         s_emo.map_origin_x = 0;
@@ -832,7 +831,7 @@ in.ambient         = 0.05f;
     // "pinned to 12" while sun_intensity still dumped as ~0 and frame luma did not move.
     // When the hour is pinned this is a synthetic sun for measurement, so skip weather.
     if( g && !forced_celestial_hour() ) {
-    const float base = sunlight( calendar::turn, false );
+        const float base = sunlight( calendar::turn, false );
         const weather_type_id wid = get_weather().weather_id;
         if( base > 1.0f && wid.is_valid() ) {
             const int mod = wid->light_modifier;
@@ -853,8 +852,8 @@ in.ambient         = 0.05f;
     // separate them. Paired with [segdiag] in sprite_batcher, which reports the value
     // that actually reaches the GPU after the per-segment is_lit zeroing.
     if( std::getenv( "CBN_DIAG_SEG_LIGHTING" ) ) {
-    static int diag_frame = 0;
-    if( ++diag_frame % 120 == 1 ) {
+        static int diag_frame = 0;
+        if( ++diag_frame % 120 == 1 ) {
             dbg( DL::Info ) << "[sundiag] hour=" << sun_hour
                             << " pinned=" << ( forced_celestial_hour() ? "yes" : "no" )
                             << " raw_after_celestial=" << diag_sun_raw
@@ -875,7 +874,7 @@ in.ambient         = 0.05f;
     in.debug.sky_valid =
         ( rs.sky().ready() && rs.sky().dispatches() > 0 ) ? 1.0f : 0.0f;
     if( g ) {
-    in.debug.player_x = static_cast<float>( g->u.bub_pos().x() ) + 0.5f;
+        in.debug.player_x = static_cast<float>( g->u.bub_pos().x() ) + 0.5f;
         in.debug.player_y = static_cast<float>( g->u.bub_pos().y() ) + 0.5f;
     }
     // Step 7: the shader indexes RampBuf as `pal_row * ramp_steps + shade`, so
@@ -920,8 +919,8 @@ in.ambient         = 0.05f;
 
     static int emit_dbg_frame = 0;
     if( ++emit_dbg_frame >= 120 ) {
-    emit_dbg_frame = 0;
-    dbg( DL::Debug ) << "lighting: n_emit=" << rs.collector()->last_count()
+        emit_dbg_frame = 0;
+        dbg( DL::Debug ) << "lighting: n_emit=" << rs.collector()->last_count()
                          << " emitter_buf=" << ( rs.collector()->emitter_buffer() ? "ok" : "NULL" )
                          << " sdf_buf=" << ( rs.sdf().sdf_buffer() ? "ok" : "NULL" )
                          << " sampler=" << ( rs.gpu_sampler() ? "ok" : "NULL" )
@@ -1039,8 +1038,8 @@ auto draw_lighting_overlays( lighting::render_state &rs ) -> void
         // Player cross (bright green) at map-coord player pos.
         {
             const std::pair<float, float> sp = fcam.screen_pos_of(
-                    static_cast<float>( fcam.pub_player_x() ),
-                    static_cast<float>( fcam.pub_player_y() ), tp );
+                                                   static_cast<float>( fcam.pub_player_x() ),
+                                                   static_cast<float>( fcam.pub_player_y() ), tp );
             const float px = sp.first;
             const float py = sp.second;
             rs.queue_ui_rect( px - 12.f, py - 1.f, 24.f, 2.f, 0.f, 1.f, 0.f, 1.f );
@@ -1476,7 +1475,7 @@ auto render_world_pass_w( lighting::render_state &rs,
 
             if( g_shaft_enable && strength > 0.01f ) {
                 const std::pair<float, float> sp =
-                        s_frame_camera.screen_pos_of( e.pos_x, e.pos_y, tp );
+                    s_frame_camera.screen_pos_of( e.pos_x, e.pos_y, tp );
                 shaft_instances.push_back( { .cx = sp.first, .cy = sp.second,
                                              .dir_x = dir_x, .dir_y = dir_y,
                                              .length_px = base_len_tiles * tp,
@@ -1613,8 +1612,8 @@ auto render_world_pass_w( lighting::render_state &rs,
             if( life <= 0.f ) { continue; }
             // T3 (#108): the named double-add (issue #127), preserved verbatim.
             const std::pair<float, float> pp = s_frame_camera.sound_pulse_pos_of(
-                    static_cast<float>( p.source.x() ) + 0.5f,
-                    static_cast<float>( p.source.y() ) + 0.5f, tp );
+                                                   static_cast<float>( p.source.x() ) + 0.5f,
+                                                   static_cast<float>( p.source.y() ) + 0.5f, tp );
             instances.push_back( { .source_x = pp.first, .source_y = pp.second,
                                    .radius_px = radius * tp, .life = life } );
         }
@@ -1722,35 +1721,35 @@ constexpr float HUD_PART_BASE_ALPHA = 0.5f;
 auto hud_emitter_base_rate( lighting::hud_emitter_type t ) -> float
 {
     switch( t ) {
-    case lighting::hud_emitter_type::ember:
-        return 2.5f;
-    case lighting::hud_emitter_type::dust:
-        return 3.0f;
-    case lighting::hud_emitter_type::pollen:
-        return 2.0f;
-    case lighting::hud_emitter_type::snow:
-        return 8.0f;
-    case lighting::hud_emitter_type::leaf:
-        return 3.0f;
-}
-return 3.0f;
+        case lighting::hud_emitter_type::ember:
+            return 2.5f;
+        case lighting::hud_emitter_type::dust:
+            return 3.0f;
+        case lighting::hud_emitter_type::pollen:
+            return 2.0f;
+        case lighting::hud_emitter_type::snow:
+            return 8.0f;
+        case lighting::hud_emitter_type::leaf:
+            return 3.0f;
+    }
+    return 3.0f;
 }
 
 auto hud_emitter_enabled( lighting::hud_emitter_type t ) -> bool
 {
     switch( t ) {
-    case lighting::hud_emitter_type::ember:
-        return g_hud_part_ember_enable;
-    case lighting::hud_emitter_type::dust:
-        return g_hud_part_dust_enable;
-    case lighting::hud_emitter_type::pollen:
-        return g_hud_part_pollen_enable;
-    case lighting::hud_emitter_type::snow:
-        return g_hud_part_snow_enable;
-    case lighting::hud_emitter_type::leaf:
-        return g_hud_part_leaf_enable;
-}
-return true;
+        case lighting::hud_emitter_type::ember:
+            return g_hud_part_ember_enable;
+        case lighting::hud_emitter_type::dust:
+            return g_hud_part_dust_enable;
+        case lighting::hud_emitter_type::pollen:
+            return g_hud_part_pollen_enable;
+        case lighting::hud_emitter_type::snow:
+            return g_hud_part_snow_enable;
+        case lighting::hud_emitter_type::leaf:
+            return g_hud_part_leaf_enable;
+    }
+    return true;
 }
 
 auto composite_swapchain_pass_b( lighting::render_state &rs,

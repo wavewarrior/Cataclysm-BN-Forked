@@ -197,11 +197,10 @@ int main( int argc, char* argv[] )
                     "Sets the random number generator's seed value",
                     section_default,
                     [&seed]( int num_args, const char **params ) -> int {
-                        if( num_args < 1 )
-                    {
-                        return -1;
-                    }
-                    const unsigned char *hash_input = reinterpret_cast<const unsigned char *>( params[0] );
+                        if( num_args < 1 ) {
+                            return -1;
+                        }
+                        const unsigned char *hash_input = reinterpret_cast<const unsigned char *>( params[0] );
                         seed = djb2_hash( hash_input );
                         return 1;
                     }
@@ -223,8 +222,7 @@ int main( int argc, char* argv[] )
                     [&check_mods, &opts]( int n, const char *params[] ) -> int {
                         check_mods = true;
                         test_mode = true;
-                        for( int i = 0; i < n; ++i )
-                        {
+                        for( int i = 0; i < n; ++i ) {
                             opts.emplace_back( params[ i ] );
                         }
                         return 0;
@@ -246,19 +244,18 @@ int main( int argc, char* argv[] )
                     "Dumps item stats",
                     section_default,
                     [&dump, &dmode, &opts]( int n, const char *params[] ) -> int {
-                        if( n < 1 )
-                    {
-                        return -1;
-                    }
-                    test_mode = true;
-                    dump = params[ 0 ];
-                    for( int i = 2; i < n; ++i )
-                    {
-                        opts.emplace_back( params[ i ] );
+                        if( n < 1 ) {
+                            return -1;
+                        }
+                        test_mode = true;
+                        dump = params[ 0 ];
+                        for( int i = 2; i < n; ++i )
+                        {
+                            opts.emplace_back( params[ i ] );
                         }
                         if( n >= 2 )
-                    {
-                        if( !strcmp( params[ 1 ], "TSV" ) ) {
+                        {
+                            if( !strcmp( params[ 1 ], "TSV" ) ) {
                                 dmode = dump_mode::TSV;
                                 return 0;
                             } else if( !strcmp( params[ 1 ], "HTML" ) ) {
@@ -276,19 +273,18 @@ int main( int argc, char* argv[] )
                     "Load world",
                     section_default,
                     [&world]( int n, const char *params[] ) -> int {
-                        if( n < 1 )
-                    {
-                        return -1;
+                        if( n < 1 ) {
+                            return -1;
+                        }
+                        world = params[0];
+                        return 1;
                     }
-                    world = params[0];
-                    return 1;
-                }
-            },
-            {
-                "--basepath", "<path>",
-                "Base path for all game data subdirectories",
-                section_default,
-                []( int num_args, const char **params )
+                },
+                {
+                    "--basepath", "<path>",
+                    "Base path for all game data subdirectories",
+                    section_default,
+                    []( int num_args, const char **params )
                     {
                         if( num_args < 1 ) {
                             return -1;
@@ -314,11 +310,10 @@ int main( int argc, char* argv[] )
                     "Instructs map-sharing code to use this name for your character.",
                     section_map_sharing,
                     []( int num_args, const char **params ) -> int {
-                        if( num_args < 1 )
-                    {
-                        return -1;
-                    }
-                    MAP_SHARING::setUsername( params[0] );
+                        if( num_args < 1 ) {
+                            return -1;
+                        }
+                        MAP_SHARING::setUsername( params[0] );
                         return 1;
                     }
                 },
@@ -328,11 +323,10 @@ int main( int argc, char* argv[] )
                     "access to the cheat functions.",
                     section_map_sharing,
                     []( int num_args, const char **params ) -> int {
-                        if( num_args < 1 )
-                    {
-                        return -1;
-                    }
-                    MAP_SHARING::addAdmin( params[0] );
+                        if( num_args < 1 ) {
+                            return -1;
+                        }
+                        MAP_SHARING::addAdmin( params[0] );
                         return 1;
                     }
                 },
@@ -341,11 +335,10 @@ int main( int argc, char* argv[] )
                     "Informs map-sharing code that you're running inside a debugger",
                     section_map_sharing,
                     []( int num_args, const char **params ) -> int {
-                        if( num_args < 1 )
-                    {
-                        return -1;
-                    }
-                    MAP_SHARING::addDebugger( params[0] );
+                        if( num_args < 1 ) {
+                            return -1;
+                        }
+                        MAP_SHARING::addDebugger( params[0] );
                         return 1;
                     }
                 },
@@ -364,11 +357,10 @@ int main( int argc, char* argv[] )
                     "Base path for user-overrides to files from the ./data directory and named below",
                     section_user_directory,
                     []( int num_args, const char **params ) -> int {
-                        if( num_args < 1 )
-                    {
-                        return -1;
-                    }
-                    PATH_INFO::init_user_dir( params[0] );
+                        if( num_args < 1 ) {
+                            return -1;
+                        }
+                        PATH_INFO::init_user_dir( params[0] );
                         PATH_INFO::set_standard_filenames();
                         return 1;
                     }
@@ -387,139 +379,142 @@ int main( int argc, char* argv[] )
                     "Generate Lua docs to given path and exit",
                     section_default,
                     [&]( int num_args, const char **params ) -> int {
-                        if( num_args < 1 )
-                    {
-                        return -1;
-                    }
-                    test_mode = true;
-                    lua_doc_output_path = params[0];
-                    return 0;
-                }
-            },
-            {
-                "--lua-types", "<output path>",
-                "Generate Lua types to given path and exit",
-                section_default,
-                [&]( int num_args, const char **params ) -> int {
-                        if( num_args < 1 )
-                    {
-                        return -1;
-                    }
-                    test_mode = true;
-                    lua_types_output_path = params[0];
-                    return 0;
-                }
-            },
-            {
-                "--gpu-backend", "<driver>",
-                "Override the SDL_GPU backend driver for diagnostics (vulkan / direct3d12 / metal / software).",
-                nullptr,
-                []( int num_args, const char **params ) -> int {
-                    if( num_args < 1 ) {
-                        return -1;
-                    }
-#if defined(CATA_SDL)
-                    preload_config::set_gpu_backend_override( params[0] );
-#endif
-                    return 1;
-                }
-            },
-            {
-                "--driver-fd", "<N>",
-                "Serve the line-JSON agent driver protocol on inherited file descriptor N; 0 reads requests from stdin and answers on stdout (the only form Windows supports). Without a window unless --driver-windowed is also given.",
-                section_default,
-                [&driver_fd, &driver_reply_fd]( int num_args, const char **params ) -> int {
-                    if( num_args < 1 ) {
-                        return -1;
-                    }
-                    driver_fd = atoi( params[0] );
-                    // Stray stdout writes (cata_printf, SDL, RmlUi, Lua print) must never
-                    // reach the protocol channel: move stdout onto stderr. With N = 0 the
-                    // protocol keeps a private copy of the original stdout first.
-#if defined(_WIN32)
-                    if( driver_fd == 0 ) {
-                        driver_reply_fd = _dup( _fileno( stdout ) );
-                        if( driver_reply_fd < 0 ) {
-                            std::cerr << "driver: --driver-fd 0 needs a stdout pipe; none was inherited\n";
+                        if( num_args < 1 ) {
                             return -1;
                         }
-                        // Text mode would turn "\n" into "\r\n" and stop reading at ^Z.
-                        _setmode( 0, _O_BINARY );
-                        _setmode( driver_reply_fd, _O_BINARY );
+                        test_mode = true;
+                        lua_doc_output_path = params[0];
+                        return 0;
                     }
-                    // Stray stdout goes to stderr, or to NUL when no stderr was inherited
-                    // (_fileno == -2; passing that on would fast-fail in the CRT's
-                    // invalid-parameter handler). Either way it never reaches the protocol pipe.
-                    const auto sink = _fileno( stderr ) >= 0 ? _fileno( stderr ) : _open( "NUL", _O_WRONLY );
-                    if( sink >= 0 && _fileno( stdout ) >= 0 ) {
-                        _dup2( sink, _fileno( stdout ) );
+                },
+                {
+                    "--lua-types", "<output path>",
+                    "Generate Lua types to given path and exit",
+                    section_default,
+                    [&]( int num_args, const char **params ) -> int {
+                        if( num_args < 1 ) {
+                            return -1;
+                        }
+                        test_mode = true;
+                        lua_types_output_path = params[0];
+                        return 0;
                     }
-                    if( sink >= 0 ) {
-                        // A GUI-subsystem exe's CRT does not update the OS handle; code that
-                        // writes through GetStdHandle( STD_OUTPUT_HANDLE ) must not reach it.
-                        SetStdHandle( STD_OUTPUT_HANDLE, reinterpret_cast<HANDLE>( _get_osfhandle( sink ) ) );
-                    }
-#else
-                    if( driver_fd == 0 ) {
-                        driver_reply_fd = dup( STDOUT_FILENO );
-                    }
-                    dup2( STDERR_FILENO, STDOUT_FILENO );
+                },
+                {
+                    "--gpu-backend", "<driver>",
+                    "Override the SDL_GPU backend driver for diagnostics (vulkan / direct3d12 / metal / software).",
+                    nullptr,
+                    []( int num_args, const char **params ) -> int {
+                        if( num_args < 1 ) {
+                            return -1;
+                        }
+#if defined(CATA_SDL)
+                        preload_config::set_gpu_backend_override( params[0] );
 #endif
-                    return 1;
-                }
-            },
-            {
-                "--driver-windowed", "<WxH>",
-                "With --driver-fd, open a real, visible game window of this size in pixels, in a corner of the screen and without taking focus, instead of running windowless.",
-                section_default,
-                [&driver_windowed]( int num_args, const char **params ) -> int {
-                    if( num_args < 1 ) {
-                        return -1;
+                        return 1;
                     }
-                    const std::optional<driver_window_size> size = parse_driver_window_size( params[0] );
-                    if( !size ) {
-                        return -1;
+                },
+                {
+                    "--driver-fd", "<N>",
+                    "Serve the line-JSON agent driver protocol on inherited file descriptor N; 0 reads requests from stdin and answers on stdout (the only form Windows supports). Without a window unless --driver-windowed is also given.",
+                    section_default,
+                    [&driver_fd, &driver_reply_fd]( int num_args, const char **params ) -> int {
+                        if( num_args < 1 ) {
+                            return -1;
+                        }
+                        driver_fd = atoi( params[0] );
+                        // Stray stdout writes (cata_printf, SDL, RmlUi, Lua print) must never
+                        // reach the protocol channel: move stdout onto stderr. With N = 0 the
+                        // protocol keeps a private copy of the original stdout first.
+#if defined(_WIN32)
+                        if( driver_fd == 0 )
+                        {
+                            driver_reply_fd = _dup( _fileno( stdout ) );
+                            if( driver_reply_fd < 0 ) {
+                                std::cerr << "driver: --driver-fd 0 needs a stdout pipe; none was inherited\n";
+                                return -1;
+                            }
+                            // Text mode would turn "\n" into "\r\n" and stop reading at ^Z.
+                            _setmode( 0, _O_BINARY );
+                            _setmode( driver_reply_fd, _O_BINARY );
+                        }
+                        // Stray stdout goes to stderr, or to NUL when no stderr was inherited
+                        // (_fileno == -2; passing that on would fast-fail in the CRT's
+                        // invalid-parameter handler). Either way it never reaches the protocol pipe.
+                        const auto sink = _fileno( stderr ) >= 0 ? _fileno( stderr ) : _open( "NUL", _O_WRONLY );
+                        if( sink >= 0 && _fileno( stdout ) >= 0 )
+                        {
+                            _dup2( sink, _fileno( stdout ) );
+                        }
+                        if( sink >= 0 )
+                        {
+                            // A GUI-subsystem exe's CRT does not update the OS handle; code that
+                            // writes through GetStdHandle( STD_OUTPUT_HANDLE ) must not reach it.
+                            SetStdHandle( STD_OUTPUT_HANDLE, reinterpret_cast<HANDLE>( _get_osfhandle( sink ) ) );
+                        }
+#else
+                        if( driver_fd == 0 )
+                        {
+                            driver_reply_fd = dup( STDOUT_FILENO );
+                        }
+                        dup2( STDERR_FILENO, STDOUT_FILENO );
+#endif
+                        return 1;
                     }
-                    request_driver_window( *size );
-                    driver_windowed = true;
-                    return 1;
-                }
-            },
-            {
-                "--driver-deny-list", "<path>",
-                "Load the driver's deny list from this file instead of data/driver_deny_list.json.",
-                section_default,
-                [&driver_deny_list]( int num_args, const char **params ) -> int {
-                    if( num_args < 1 ) {
-                        return -1;
+                },
+                {
+                    "--driver-windowed", "<WxH>",
+                    "With --driver-fd, open a real, visible game window of this size in pixels, in a corner of the screen and without taking focus, instead of running windowless.",
+                    section_default,
+                    [&driver_windowed]( int num_args, const char **params ) -> int {
+                        if( num_args < 1 ) {
+                            return -1;
+                        }
+                        const std::optional<driver_window_size> size = parse_driver_window_size( params[0] );
+                        if( !size )
+                        {
+                            return -1;
+                        }
+                        request_driver_window( *size );
+                        driver_windowed = true;
+                        return 1;
                     }
-                    driver_deny_list = params[0];
-                    return 1;
-                }
-            },
-            {
-                "--driver-scenes", "<dir>",
-                "Look for the driver's run_scene Scenes in this directory instead of tools/visual_verify/scenes.",
-                section_default,
-                [&driver_scenes]( int num_args, const char **params ) -> int {
-                    if( num_args < 1 ) {
-                        return -1;
+                },
+                {
+                    "--driver-deny-list", "<path>",
+                    "Load the driver's deny list from this file instead of data/driver_deny_list.json.",
+                    section_default,
+                    [&driver_deny_list]( int num_args, const char **params ) -> int {
+                        if( num_args < 1 ) {
+                            return -1;
+                        }
+                        driver_deny_list = params[0];
+                        return 1;
                     }
-                    driver_scenes = params[0];
-                    return 1;
+                },
+                {
+                    "--driver-scenes", "<dir>",
+                    "Look for the driver's run_scene Scenes in this directory instead of tools/visual_verify/scenes.",
+                    section_default,
+                    [&driver_scenes]( int num_args, const char **params ) -> int {
+                        if( num_args < 1 ) {
+                            return -1;
+                        }
+                        driver_scenes = params[0];
+                        return 1;
+                    }
                 }
             }
-        }
-    };
+        };
 
-    // The following arguments are dependent on one or more of the previous flags and are run
-    // in a second pass.
-    const std::array<arg_handler, 8> second_pass_arguments = {{
-            {
-                "--worldmenu", nullptr,
-                "Enables the world menu in the map-sharing code",
-                section_map_sharing,
-                []( int, const char ** ) -> int {
+        // The following arguments are dependent on one or more of the previous flags and are run
+        // in a second pass.
+        const std::array<arg_handler, 8> second_pass_arguments = {{
+                {
+                    "--worldmenu", nullptr,
+                    "Enables the world menu in the map-sharing code",
+                    section_map_sharing,
+                    []( int, const char ** ) -> int {
                         MAP_SHARING::setWorldmenu( true );
                         return true;
                     }
@@ -529,11 +524,10 @@ int main( int argc, char* argv[] )
                     "Sub directory from which game data is loaded",
                     nullptr,
                     []( int num_args, const char **params ) -> int {
-                        if( num_args < 1 )
-                    {
-                        return -1;
-                    }
-                    PATH_INFO::set_datadir( params[0] );
+                        if( num_args < 1 ) {
+                            return -1;
+                        }
+                        PATH_INFO::set_datadir( params[0] );
                         return 1;
                     }
                 },
@@ -542,11 +536,10 @@ int main( int argc, char* argv[] )
                     "Subdirectory for game saves",
                     section_user_directory,
                     []( int num_args, const char **params ) -> int {
-                        if( num_args < 1 )
-                    {
-                        return -1;
-                    }
-                    PATH_INFO::set_savedir( params[0] );
+                        if( num_args < 1 ) {
+                            return -1;
+                        }
+                        PATH_INFO::set_savedir( params[0] );
                         return 1;
                     }
                 },
@@ -555,11 +548,10 @@ int main( int argc, char* argv[] )
                     "Subdirectory for game configuration",
                     section_user_directory,
                     []( int num_args, const char **params ) -> int {
-                        if( num_args < 1 )
-                    {
-                        return -1;
-                    }
-                    PATH_INFO::set_config_dir( params[0] );
+                        if( num_args < 1 ) {
+                            return -1;
+                        }
+                        PATH_INFO::set_config_dir( params[0] );
                         return 1;
                     }
                 },
@@ -568,11 +560,10 @@ int main( int argc, char* argv[] )
                     "Subdirectory for memorials",
                     section_user_directory,
                     []( int num_args, const char **params ) -> int {
-                        if( num_args < 1 )
-                    {
-                        return -1;
-                    }
-                    PATH_INFO::set_memorialdir( params[0] );
+                        if( num_args < 1 ) {
+                            return -1;
+                        }
+                        PATH_INFO::set_memorialdir( params[0] );
                         return 1;
                     }
                 },
@@ -581,11 +572,10 @@ int main( int argc, char* argv[] )
                     "Name of the options file within the configdir",
                     section_user_directory,
                     []( int num_args, const char **params ) -> int {
-                        if( num_args < 1 )
-                    {
-                        return -1;
-                    }
-                    PATH_INFO::set_options( params[0] );
+                        if( num_args < 1 ) {
+                            return -1;
+                        }
+                        PATH_INFO::set_options( params[0] );
                         return 1;
                     }
                 },
@@ -594,11 +584,10 @@ int main( int argc, char* argv[] )
                     "Name of the autopickup options file within the configdir",
                     nullptr,
                     []( int num_args, const char **params ) -> int {
-                        if( num_args < 1 )
-                    {
-                        return -1;
-                    }
-                    PATH_INFO::set_autopickup( params[0] );
+                        if( num_args < 1 ) {
+                            return -1;
+                        }
+                        PATH_INFO::set_autopickup( params[0] );
                         return 1;
                     }
                 },
@@ -607,11 +596,10 @@ int main( int argc, char* argv[] )
                     "Name of the message of the day file within the motd directory",
                     nullptr,
                     []( int num_args, const char **params ) -> int {
-                        if( num_args < 1 )
-                    {
-                        return -1;
-                    }
-                    PATH_INFO::set_motd( params[0] );
+                        if( num_args < 1 ) {
+                            return -1;
+                        }
+                        PATH_INFO::set_motd( params[0] );
                         return 1;
                     }
                 },

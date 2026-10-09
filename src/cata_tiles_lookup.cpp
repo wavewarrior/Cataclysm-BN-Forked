@@ -228,8 +228,8 @@ std::optional<tile_lookup_res> cata_tiles::find_tile_looks_like_by_string_id(
 {
     const string_id<T> s_id( id );
     if( !s_id.is_valid() ) { return std::nullopt; }
-const T& obj = s_id.obj();
-return find_tile_looks_like( obj.looks_like, category, looks_like_jumps_limit - 1 );
+    const T& obj = s_id.obj();
+    return find_tile_looks_like( obj.looks_like, category, looks_like_jumps_limit - 1 );
 }
 
 auto cata_tiles::find_tile_looks_like(

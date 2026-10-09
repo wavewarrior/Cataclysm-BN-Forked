@@ -16,11 +16,10 @@
 #include <string>
 #include <vector>
 
-static units::volume parse_volume_quantity( const std::string &json )
-{
-    std::istringstream buffer( json );
-    JsonIn jsin( buffer );
-    return read_from_json_string<units::volume>( jsin, units::volume_units );
+static units::volume parse_volume_quantity(const std::string& json) {
+    std::istringstream buffer(json);
+    JsonIn jsin(buffer);
+    return read_from_json_string<units::volume>(jsin, units::volume_units);
 }
 
 TEST_CASE("units_have_correct_ratios", "[units]") {

@@ -620,7 +620,7 @@ void haul()
     }
 }
 
-void smash( const std::optional<tripoint_bub_ms>& target )
+void smash( const std::optional<tripoint_bub_ms> &target )
 {
     player& u = g->u;
     map& here = get_map();
@@ -656,7 +656,7 @@ void smash( const std::optional<tripoint_bub_ms>& target )
 
     // The agent driver names the tile itself; the player is asked where otherwise.
     const std::optional<tripoint_bub_ms> smashp_ = target ? target
-            : choose_adjacent( _( "Smash where?" ), true );
+        : choose_adjacent( _( "Smash where?" ), true );
     if( !smashp_ ) { return; }
     auto smashp = *smashp_;
 
@@ -1278,7 +1278,7 @@ void loot()
         menu.addentry_desc(
             SortLoot, true, 'o', _( "Sort out my loot" ),
             _( "Sorts out the loot from Loot: Unsorted zone to nearby appropriate Loot zones.  Uses "
-               "empty space in your inventory or utilizes a cart, if you are holding one." ) );
+           "empty space in your inventory or utilizes a cart, if you are holding one." ) );
     }
 
     if( flags & FertilizePlots ) {
@@ -1478,15 +1478,18 @@ void fire()
 
                 actions.emplace_back( [&] { u.invoke_item( w, "holster" ); } );
 
-            } else if( w->is_gun() && w->has_flag( flag_WORN_GUN ) ) {
+            }
+            else if( w->is_gun() && w->has_flag( flag_WORN_GUN ) ) {
                 options.push_back( "Fire: " + w->display_name() );
                 actions.emplace_back( [&] { avatar_action::fire_ranged_gear( u, w ); } );
                 do_autofire = true;
-            } else if( w->is_gun() && w->gunmod_find( itype_shoulder_strap ) ) {
+            }
+            else if( w->is_gun() && w->gunmod_find( itype_shoulder_strap ) ) {
                 // wield item currently worn using shoulder strap
                 options.push_back( "Wield: " + w->display_name() );
                 actions.emplace_back( [&] { u.wield( *w ); } );
-            } else if( w->is_gun() && w->gunmod_find( itype_pistol_lanyard ) ) {
+            }
+            else if( w->is_gun() && w->gunmod_find( itype_pistol_lanyard ) ) {
                 // wield item currently worn using pistol lanyard
                 options.push_back( "Wield: " + w->display_name() );
                 actions.emplace_back( [&] { u.wield( *w ); } );
@@ -1495,7 +1498,8 @@ void fire()
         if( !options.empty() ) {
             if( options.size() == 1 && do_autofire ) {
                 actions[0]();
-            } else {
+            }
+            else {
                 int sel = uilist( _( "Do what?" ), options );
                 if( sel >= 0 ) { actions[sel](); }
             }
@@ -1571,16 +1575,16 @@ auto start_spellcasting_activity( player& u, spell& sp ) -> void
 auto try_cast_spell( player& u, spell& sp ) -> bool
 {
     if( !( sp.has_flag( spell_flag::BRAWL ) || sp.has_flag( spell_flag::PHYSICAL ) )
-    && u.has_trait( trait_BRAWLER ) ) {
-    add_msg( game_message_params{m_bad, gmf_bypass_cooldown}, _( "Pfft, that spell is for "
-             "COWARDS, and a Brawler like "
-             "you is no coward!" ) );
+        && u.has_trait( trait_BRAWLER ) ) {
+        add_msg( game_message_params{m_bad, gmf_bypass_cooldown}, _( "Pfft, that spell is for "
+                 "COWARDS, and a Brawler like "
+                 "you is no coward!" ) );
         return false;
     }
 
     const auto blockers = sp.get_blocker_muts();
     if( !blockers.empty() ) {
-    for( const auto& blocker : blockers ) {
+        for( const auto& blocker : blockers ) {
             if( u.has_trait( blocker ) ) {
                 add_msg( game_message_params{m_bad, gmf_bypass_cooldown},
                          _( "Your %s mutation prevents you from casting this spell!" ),
@@ -1592,20 +1596,20 @@ auto try_cast_spell( player& u, spell& sp ) -> bool
 
     if( u.is_armed() && !( sp.has_flag( spell_flag::NO_HANDS ) || sp.has_flag( spell_flag::PHYSICAL ) )
         && !u.primary_weapon().has_flag( flag_MAGIC_FOCUS ) && u.primary_weapon().is_two_handed( u ) ) {
-    add_msg( game_message_params{m_bad, gmf_bypass_cooldown}, _( "You need at least one hand "
-             "free to cast this spell!" ) );
+        add_msg( game_message_params{m_bad, gmf_bypass_cooldown}, _( "You need at least one hand "
+                 "free to cast this spell!" ) );
         return false;
     }
 
     if( !u.magic->has_enough_energy( u, sp ) ) {
-    add_msg( game_message_params{m_bad, gmf_bypass_cooldown},
-             _( "You don't have enough %s to cast the spell." ), sp.energy_string() );
+        add_msg( game_message_params{m_bad, gmf_bypass_cooldown},
+                 _( "You don't have enough %s to cast the spell." ), sp.energy_string() );
         return false;
     }
 
     if( sp.energy_source() == hp_energy && !u.has_quality( qual_CUT ) ) {
-    add_msg( game_message_params{m_bad, gmf_bypass_cooldown}, _( "You cannot cast Blood Magic "
-             "without a cutting implement." ) );
+        add_msg( game_message_params{m_bad, gmf_bypass_cooldown}, _( "You cannot cast Blood Magic "
+                 "without a cutting implement." ) );
         return false;
     }
 

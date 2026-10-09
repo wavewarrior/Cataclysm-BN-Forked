@@ -146,11 +146,11 @@ int vehicle::find_part( const item &it ) const
     return idx != parts.end() ? std::distance( parts.begin(), idx ) : INT_MIN;
 }
 
-std::vector<detached_ptr<item>> vehicle_part::pieces_for_broken_part() const
-{
+std::vector<detached_ptr<item>> vehicle_part::pieces_for_broken_part() const {
     const item_group_id &group = info().breaks_into_group;
     // TODO: make it optional? Or use id of empty item group?
-    if( !group ) {
+    if( !group )
+    {
         return {};
     }
 
@@ -161,8 +161,8 @@ std::vector<int> vehicle::parts_at_relative( const tripoint_mnt_veh &dp,
         const bool use_cache ) const
 {
     if( !use_cache ) {
-    std::vector<int> res;
-    for( const vpart_reference &vp : get_all_parts() ) {
+        std::vector<int> res;
+        for( const vpart_reference &vp : get_all_parts() ) {
             if( vp.mount() == dp && !vp.part().removed ) {
                 res.push_back( static_cast<int>( vp.part_index() ) );
             }
@@ -247,12 +247,12 @@ std::optional<vpart_reference> optional_vpart_position::part_displayed() const
 int vehicle::part_with_feature( int part, vpart_bitflags const flag, bool unbroken ) const
 {
     if( part_flag( part, flag ) && ( !unbroken || !parts[part].is_broken() ) ) {
-    return part;
-}
-const auto it = relative_parts.find( parts[part].mount );
-if( it != relative_parts.end() ) {
-    const std::vector<int> &parts_here = it->second;
-    for( auto &i : parts_here ) {
+        return part;
+    }
+    const auto it = relative_parts.find( parts[part].mount );
+    if( it != relative_parts.end() ) {
+        const std::vector<int> &parts_here = it->second;
+        for( auto &i : parts_here ) {
             if( part_flag( i, flag ) && ( !unbroken || !parts[i].is_broken() ) ) {
                 return i;
             }
@@ -467,62 +467,62 @@ int vehicle::next_part_to_open( int p, bool outside ) const
 vehicle_part_with_feature_range<std::string> vehicle::get_avail_parts( std::string feature ) const
 {
     return vehicle_part_with_feature_range<std::string>( const_cast<vehicle &>( *this ),
-    std::move( feature ),
-    ( part_status_flag::working |
-    part_status_flag::available ) );
+            std::move( feature ),
+            ( part_status_flag::working |
+              part_status_flag::available ) );
 }
 
 vehicle_part_with_feature_range<vpart_bitflags> vehicle::get_avail_parts(
     const vpart_bitflags feature ) const
 {
     return vehicle_part_with_feature_range<vpart_bitflags>( const_cast<vehicle &>( *this ), feature,
-    ( part_status_flag::working |
-    part_status_flag::available ) );
+            ( part_status_flag::working |
+              part_status_flag::available ) );
 }
 
 vehicle_part_with_feature_range<std::string> vehicle::get_parts_including_carried(
     std::string feature ) const
 {
     return vehicle_part_with_feature_range<std::string>( const_cast<vehicle &>( *this ),
-    std::move( feature ), part_status_flag::working );
+            std::move( feature ), part_status_flag::working );
 }
 
 vehicle_part_with_feature_range<vpart_bitflags> vehicle::get_parts_including_carried(
     const vpart_bitflags feature ) const
 {
     return vehicle_part_with_feature_range<vpart_bitflags>( const_cast<vehicle &>( *this ), feature,
-    part_status_flag::working );
+            part_status_flag::working );
 }
 
 vehicle_part_with_feature_range<std::string> vehicle::get_any_parts( std::string feature ) const
 {
     return vehicle_part_with_feature_range<std::string>( const_cast<vehicle &>( *this ),
-    std::move( feature ), part_status_flag::any );
+            std::move( feature ), part_status_flag::any );
 }
 
 vehicle_part_with_feature_range<vpart_bitflags> vehicle::get_any_parts(
     const vpart_bitflags feature ) const
 {
     return vehicle_part_with_feature_range<vpart_bitflags>( const_cast<vehicle &>( *this ), feature,
-    part_status_flag::any );
+            part_status_flag::any );
 }
 
 vehicle_part_with_feature_range<std::string> vehicle::get_enabled_parts( std::string feature ) const
 {
     return vehicle_part_with_feature_range<std::string>( const_cast<vehicle &>( *this ),
-    std::move( feature ),
-    ( part_status_flag::enabled |
-    part_status_flag::working |
-    part_status_flag::available ) );
+            std::move( feature ),
+            ( part_status_flag::enabled |
+              part_status_flag::working |
+              part_status_flag::available ) );
 }
 
 vehicle_part_with_feature_range<vpart_bitflags> vehicle::get_enabled_parts(
     const vpart_bitflags feature ) const
 {
     return vehicle_part_with_feature_range<vpart_bitflags>( const_cast<vehicle &>( *this ), feature,
-    ( part_status_flag::enabled |
-    part_status_flag::working |
-    part_status_flag::available ) );
+            ( part_status_flag::enabled |
+              part_status_flag::working |
+              part_status_flag::available ) );
 }
 
 /**
@@ -699,8 +699,8 @@ bool vehicle::part_flag( int part, const vpart_bitflags flag ) const
 
 int vehicle::part_at( const tripoint_rel_ms &dp ) const
 {
-for( const vpart_reference &vp : get_all_parts() ) {
-    const vehicle_part &p = vp.part();
+    for( const vpart_reference &vp : get_all_parts() ) {
+        const vehicle_part &p = vp.part();
         if( !p.removed &&
             p.precalc[0] == dp.xy() &&
             p.mount.z() + p.z_terrain[0] == dp.z() ) {
@@ -801,30 +801,30 @@ const struct {
     bool flipV;
     bool swapXY;
 } rotation_info[24] = {
-    {static_cast<float>( tan( units::to_radians( 0_degrees ) ) ),  false, false,   false}, //0 degrees
-    {static_cast<float>( tan( units::to_radians( 15_degrees ) ) ), false, false,   false},
-    {static_cast<float>( tan( units::to_radians( 30_degrees ) ) ), false, false,   false},
-    {static_cast<float>( -tan( units::to_radians( 45_degrees ) ) ), true,  false, true}, //45 degrees
-    {static_cast<float>( -tan( units::to_radians( 30_degrees ) ) ), true,  false, true},
-    {static_cast<float>( -tan( units::to_radians( 15_degrees ) ) ), true,  false, true},
-    {static_cast<float>( tan( units::to_radians( 0_degrees ) ) ),  true,  false,   true}, //90 degrees
-    {static_cast<float>( tan( units::to_radians( 15_degrees ) ) ), true,  false,   true},
-    {static_cast<float>( tan( units::to_radians( 30_degrees ) ) ), true,  false,   true},
-    {static_cast<float>( tan( units::to_radians( 45_degrees ) ) ), true,  false,   true}, //135 degrees
-    {static_cast<float>( -tan( units::to_radians( 30_degrees ) ) ), true,  true,  false},
-    {static_cast<float>( -tan( units::to_radians( 15_degrees ) ) ), true,  true,  false},
-    {static_cast<float>( tan( units::to_radians( 0_degrees ) ) ),  true,  true,    false}, //180 degrees
-    {static_cast<float>( tan( units::to_radians( 15_degrees ) ) ), true,  true,    false},
-    {static_cast<float>( tan( units::to_radians( 30_degrees ) ) ), true,  true,    false},
-    {static_cast<float>( -tan( units::to_radians( 45_degrees ) ) ), false, true,  true}, //225 degrees
-    {static_cast<float>( -tan( units::to_radians( 30_degrees ) ) ), false, true,  true},
-    {static_cast<float>( -tan( units::to_radians( 15_degrees ) ) ), false, true,  true},
-    {static_cast<float>( tan( units::to_radians( 0_degrees ) ) ),  false,  true,   true}, //270 degrees
-    {static_cast<float>( tan( units::to_radians( 15_degrees ) ) ), false,  true,   true},
-    {static_cast<float>( tan( units::to_radians( 30_degrees ) ) ), false,  true,   true},
-    {static_cast<float>( tan( units::to_radians( 45_degrees ) ) ), false,  true,   true}, //315 degrees
-    {static_cast<float>( -tan( units::to_radians( 30_degrees ) ) ), false,  false, false},
-    {static_cast<float>( -tan( units::to_radians( 15_degrees ) ) ), false,  false, false},
+    {static_cast < float > ( tan( units::to_radians( 0_degrees ) ) ),  false, false,   false}, //0 degrees
+    {static_cast < float > ( tan( units::to_radians( 15_degrees ) ) ), false, false,   false},
+    {static_cast < float > ( tan( units::to_radians( 30_degrees ) ) ), false, false,   false},
+    {static_cast < float > ( -tan( units::to_radians( 45_degrees ) ) ), true,  false, true}, //45 degrees
+    {static_cast < float > ( -tan( units::to_radians( 30_degrees ) ) ), true,  false, true},
+    {static_cast < float > ( -tan( units::to_radians( 15_degrees ) ) ), true,  false, true},
+    {static_cast < float > ( tan( units::to_radians( 0_degrees ) ) ),  true,  false,   true}, //90 degrees
+    {static_cast < float > ( tan( units::to_radians( 15_degrees ) ) ), true,  false,   true},
+    {static_cast < float > ( tan( units::to_radians( 30_degrees ) ) ), true,  false,   true},
+    {static_cast < float > ( tan( units::to_radians( 45_degrees ) ) ), true,  false,   true}, //135 degrees
+    {static_cast < float > ( -tan( units::to_radians( 30_degrees ) ) ), true,  true,  false},
+    {static_cast < float > ( -tan( units::to_radians( 15_degrees ) ) ), true,  true,  false},
+    {static_cast < float > ( tan( units::to_radians( 0_degrees ) ) ),  true,  true,    false}, //180 degrees
+    {static_cast < float > ( tan( units::to_radians( 15_degrees ) ) ), true,  true,    false},
+    {static_cast < float > ( tan( units::to_radians( 30_degrees ) ) ), true,  true,    false},
+    {static_cast < float > ( -tan( units::to_radians( 45_degrees ) ) ), false, true,  true}, //225 degrees
+    {static_cast < float > ( -tan( units::to_radians( 30_degrees ) ) ), false, true,  true},
+    {static_cast < float > ( -tan( units::to_radians( 15_degrees ) ) ), false, true,  true},
+    {static_cast < float > ( tan( units::to_radians( 0_degrees ) ) ),  false,  true,   true}, //270 degrees
+    {static_cast < float > ( tan( units::to_radians( 15_degrees ) ) ), false,  true,   true},
+    {static_cast < float > ( tan( units::to_radians( 30_degrees ) ) ), false,  true,   true},
+    {static_cast < float > ( tan( units::to_radians( 45_degrees ) ) ), false,  true,   true}, //315 degrees
+    {static_cast < float > ( -tan( units::to_radians( 30_degrees ) ) ), false,  false, false},
+    {static_cast < float > ( -tan( units::to_radians( 15_degrees ) ) ), false,  false, false},
 };
 
 tripoint_rel_ms vehicle::coord_translate( const tripoint_mnt_veh &p ) const
@@ -871,7 +871,7 @@ tripoint_rel_ms vehicle::rotate_to_world( units::angle dir, const tripoint_mnt_v
 
     tripoint result;
     result.x = relative.x();
-    result.y = relative.y() + static_cast<int>( skew );
+    result.y = relative.y() + static_cast < int > ( skew );
 
     if( rotation_info[increment].swapXY ) {
         std::swap( result.x, result.y );
@@ -903,7 +903,7 @@ tripoint_mnt_veh vehicle::rotate_to_local( units::angle dir, const tripoint_mnt_
     }
 
     float skew = std::trunc( result.x * rotation_info[increment].gradient );
-    result.y -= static_cast<int>( skew );
+    result.y -= static_cast < int > ( skew );
     result += pivot.raw();
 
     return tripoint_mnt_veh( result );
@@ -933,7 +933,7 @@ void vehicle::precalc_mounts( int idir, units::angle dir, const tripoint_mnt_veh
     if( idir < 0 || idir > 1 ) {
         idir = 0;
     }
-    std::unordered_map<tripoint_mnt_veh, point_rel_ms> mount_to_precalc;
+    std::unordered_map < tripoint_mnt_veh, point_rel_ms > mount_to_precalc;
     for( auto &p : parts ) {
         if( p.removed ) {
             continue;
@@ -956,11 +956,11 @@ void vehicle::refresh_precalc( float physics_angle )
     const float s = std::sin( physics_angle );
     for( auto &p : parts ) {
         if( p.removed ) { continue; }
-        const float mx = static_cast<float>( p.mount.x() );
-        const float my = static_cast<float>( p.mount.y() );
+        const float mx = static_cast < float > ( p.mount.x() );
+        const float my = static_cast < float > ( p.mount.y() );
         p.precalc[0] = point_rel_ms{
-            static_cast<int>( std::round( mx * c - my * s ) ),
-            static_cast<int>( std::round( mx * s + my * c ) )
+            static_cast < int > ( std::round( mx * c - my * s ) ),
+            static_cast < int > ( std::round( mx * s + my * c ) )
         };
     }
 }
@@ -1028,24 +1028,24 @@ bool vehicle::allowed_move( const tripoint_mnt_veh &from, const tripoint_mnt_veh
     } );
 }
 
-std::vector<int> vehicle::boarded_parts() const
+std::vector < int > vehicle::boarded_parts() const
 {
-    std::vector<int> res;
+    std::vector < int > res;
     for( const vpart_reference &vp : get_avail_parts( VPFLAG_BOARDABLE ) ) {
         if( vp.part().has_flag( vehicle_part::passenger_flag ) ) {
-            res.push_back( static_cast<int>( vp.part_index() ) );
+            res.push_back( static_cast < int > ( vp.part_index() ) );
         }
     }
     return res;
 }
 
-std::vector<rider_data> vehicle::get_riders() const
+std::vector < rider_data > vehicle::get_riders() const
 {
-    std::vector<rider_data> res;
+    std::vector < rider_data > res;
     for( const vpart_reference &vp : get_avail_parts( VPFLAG_BOARDABLE ) ) {
-        Creature *rider = get_passenger( static_cast<int>( vp.part_index() ) );
+        Creature *rider = get_passenger( static_cast < int > ( vp.part_index() ) );
         if( !rider ) {
-            rider = get_pet( static_cast<int>( vp.part_index() ) );
+            rider = get_pet( static_cast < int > ( vp.part_index() ) );
         }
         if( rider ) {
             rider_data r;
@@ -1057,7 +1057,7 @@ std::vector<rider_data> vehicle::get_riders() const
     return res;
 }
 
-player *vehicle::get_passenger( int p ) const
+player * vehicle::get_passenger( int p ) const
 {
     const auto &target_mount = parts[p].mount;
     for( auto &part : parts ) {
@@ -1065,13 +1065,13 @@ player *vehicle::get_passenger( int p ) const
             continue;
         }
         if( part.info().has_flag( "BOARDABLE" ) && part.has_flag( vehicle_part::passenger_flag ) ) {
-            return g->critter_by_id<player>( part.passenger_id );
+            return g->critter_by_id < player > ( part.passenger_id );
         }
     }
     return nullptr;
 }
 
-monster *vehicle::get_pet( int p ) const
+monster * vehicle::get_pet( int p ) const
 {
     p = part_with_feature( p, VPFLAG_BOARDABLE, false );
     if( p < 0 ) {
@@ -1089,7 +1089,7 @@ monster *vehicle::get_pet( int p ) const
     // boardable tile (e.g. one about to be run over) must never be adopted
     // as this vehicle's pet, or it would be exempted from collision here and
     // dragged around as an occupant by commit_occupants().
-    monster *const found = g->critter_at<monster>( bub_part_location( p ), true );
+    monster *const found = g->critter_at < monster > ( bub_part_location( p ), true );
     if( found != nullptr && found->friendly != 0 ) {
         parts[p].animal_ref = g->shared_from( *found );
     }
@@ -1100,17 +1100,17 @@ void vehicle::clear_pet_ref( int p )
 {
     p = part_with_feature( p, VPFLAG_BOARDABLE, false );
     if( p >= 0 ) {
-        parts[p].animal_ref = weak_ptr_fast<monster>();
+        parts[p].animal_ref = weak_ptr_fast < monster > ();
     }
 }
 
 void vehicle::rebuild_occupant_refs()
 {
     for( const vpart_reference &vp : get_avail_parts( VPFLAG_BOARDABLE ) ) {
-        const int p = static_cast<int>( vp.part_index() );
+        const int p = static_cast < int > ( vp.part_index() );
         vehicle_part &part = parts[p];
         if( part.has_flag( vehicle_part::passenger_flag ) ) {
-            if( player *psg = g->critter_by_id<player>( part.passenger_id ); psg != nullptr ) {
+            if( player *psg = g->critter_by_id < player > ( part.passenger_id ); psg != nullptr ) {
                 psg->boarded_vehicle = handle();
                 psg->boarded_part = p;
             }
@@ -1120,7 +1120,7 @@ void vehicle::rebuild_occupant_refs()
         // get_pet()'s own cold path, including the friendly-only adoption
         // guard (a hostile monster merely standing on the tile is not ours).
         const tripoint_bub_ms part_pos = bub_part_location( p );
-        if( monster *mon = g->critter_at<monster>( part_pos, true );
+        if( monster *mon = g->critter_at < monster > ( part_pos, true );
             mon != nullptr && mon->friendly != 0 && mon->has_effect( effect_harnessed ) ) {
             part.animal_ref = g->shared_from( *mon );
             mon->boarded_vehicle = handle();
@@ -1147,7 +1147,7 @@ tripoint_bub_ms vehicle::bub_part_location( const int &index ) const
 tripoint_bub_ms vehicle::bub_part_location( const vehicle_part &pt ) const
 {
     return bub_ms_location() + tripoint_rel_ms( pt.precalc[0],
-    pt.mount.z() + pt.z_terrain[0] );
+            pt.mount.z() + pt.z_terrain[0] );
 }
 
 tripoint_abs_ms vehicle::abs_part_location( const int &index ) const
@@ -1158,5 +1158,5 @@ tripoint_abs_ms vehicle::abs_part_location( const int &index ) const
 tripoint_abs_ms vehicle::abs_part_location( const vehicle_part &pt ) const
 {
     return abs_ms_location() + tripoint_rel_ms( pt.precalc[0],
-    pt.mount.z() + pt.z_terrain[0] );
+            pt.mount.z() + pt.z_terrain[0] );
 }

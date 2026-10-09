@@ -640,7 +640,7 @@ bool game::handle_action()
                 if( const std::optional<std::string> hint = press_x_if_bound( ACTION_KEYBINDINGS ) ) {
                     add_msg( m_info,
                              _( "%s at any time to see and edit keybindings relevant to "
-                                "the current context." ),
+                       "the current context." ),
                              *hint );
                 }
             }
@@ -765,7 +765,8 @@ bool game::handle_action()
                     && ( u.has_active_item_with_action( "RADIOCONTROL" )
                          || u.has_active_bionic( bio_remote ) ) ) {
                     rcdrive( get_delta_from_movement_action( act, iso_rotate::yes ) );
-                } else if( veh_ctrl ) {
+                }
+                else if( veh_ctrl ) {
                     // vehicle control uses x for steering and y for ac/deceleration,
                     // so no rotation needed
                     pldrive( get_delta_from_movement_action( act, iso_rotate::no )
@@ -2007,7 +2008,8 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
                       u.has_active_bionic( bio_remote ) ) ) {
                     ZoneScopedN( "handle_action_remote_drive" );
                     rcdrive( get_delta_from_movement_action( act, iso_rotate::yes ) );
-                } else if( veh_ctrl ) {
+                }
+                else if( veh_ctrl ) {
                     ZoneScopedN( "handle_action_vehicle_drive" );
                     // vehicle control uses x for steering and y for ac/deceleration,
                     // so no rotation needed
@@ -2893,7 +2895,7 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
                 } else {
                     add_msg( _( "THIEF_MODE CONTAINED BAD VALUE [ %s ]!" ),
                              g->u.get_value( "THIEF_"
-                                             "MODE" ) );
+                                    "MODE" ) );
                 }
                 break;
 
@@ -3026,9 +3028,9 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
     // The local action already executed above for instant visual feedback
     // (local prediction).  The host mirrors via execute_client_action().
     if( coop_client_ ) {
-    // Build a typed command and forward it to the host proxy.
-    // Fire is queued from inside modal_fiber_ above; burst-fire below.
-    const auto move_cmd = make_player_move_cmd( act, iso_rotate::yes );
+        // Build a typed command and forward it to the host proxy.
+        // Fire is queued from inside modal_fiber_ above; burst-fire below.
+        const auto move_cmd = make_player_move_cmd( act, iso_rotate::yes );
         if( veh_ctrl && move_cmd.kind == player_cmd_kind::move ) {
             // D1: driving — the local pldrive() above gave instant feedback; the host
             // runs the authoritative pldrive() on the proxy.  Steering/throttle use the

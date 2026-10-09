@@ -173,16 +173,16 @@ auto horde_should_avoid_vehicle_tile( const map &here, const tripoint_bub_ms &p,
                                       const mongroup &group ) -> bool
 {
     if( !group.horde ) {
-    return false;
-}
+        return false;
+    }
 
-const auto vp = here.veh_at( p );
-if( !vp ) {
-    return false;
-}
+    const auto vp = here.veh_at( p );
+    if( !vp ) {
+        return false;
+    }
 
-const auto &veh = vp->vehicle();
-return veh.is_owned_by( get_avatar() );
+    const auto &veh = vp->vehicle();
+    return veh.is_owned_by( get_avatar() );
 }
 
 } // namespace

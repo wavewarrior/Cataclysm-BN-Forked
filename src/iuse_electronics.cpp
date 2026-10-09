@@ -1257,8 +1257,8 @@ static std::string format_object_pair_article( const std::pair<std::string, int>
     return format_object_pair(
                pair,
                pgettext( "Article 'a', replace it with empty "
-                         "string if it is not used in language",
-                         "a " ) );
+              "string if it is not used in language",
+              "a " ) );
 }
 static std::string format_object_pair_no_article( const std::pair<std::string, int> &pair )
 {
@@ -1763,7 +1763,7 @@ static extended_photo_def photo_def_for_camera_point(
     // TODO: fix point types
     const oter_id& cur_ter =
         get_overmapbuffer( get_map().get_bound_dimension() ).ter( tripoint_abs_omt( project_to<coords::omt>(
-                    bub_to_abs( aim_point ) ) ) );
+                bub_to_abs( aim_point ) ) ) );
     std::string overmap_desc = string_format(
                                    _( "In the background you can see a %s" ),
                                    colorize( cur_ter->get_name(), cur_ter->get_color() ) );
@@ -2345,7 +2345,7 @@ int iuse::ehandcuffs( player* p, item* it, bool t, const tripoint_bub_ms& pos )
                 it->deactivate();
                 add_msg( m_good,
                          _( "The %s crackle with electricity from your bionic, then come off your "
-                            "hands!" ),
+                   "hands!" ),
                          it->tname() );
 
                 return it->type->charges_to_use();
@@ -2544,13 +2544,12 @@ int iuse::radiocaron( player* p, item* it, bool t, const tripoint_bub_ms& pos )
 static void emit_radio_signal( player &p, const flag_id &signal )
 {
     const auto visitor = [&]( item & it, const tripoint_bub_ms & loc ) -> VisitResponse {
-        if( it.has_flag( flag_RADIO_ACTIVATION ) && it.has_flag( signal ) )
-    {
-        sound_event se;
-        se.origin = loc;
-        se.volume = 50;
-        se.category = sounds::sound_t::alarm;
-        se.description = _( "beep" );
+        if( it.has_flag( flag_RADIO_ACTIVATION ) && it.has_flag( signal ) ) {
+            sound_event se;
+            se.origin = loc;
+            se.volume = 50;
+            se.category = sounds::sound_t::alarm;
+            se.description = _( "beep" );
             se.id = "misc";
             se.variant = "beep";
             sounds::sound( se );
@@ -2679,14 +2678,14 @@ int iuse::radiocontrol( player* p, item* it, bool t, const tripoint_bub_ms & )
 
         std::vector<item *> bombs = p->items_with( [&]( const item & it ) -> bool {
             return it.has_flag( flag_RADIO_ACTIVATION ) && it.has_flag( flag_BOMB )
-            && it.has_flag( signal );
+                     && it.has_flag( signal );
         } );
 
         if( !bombs.empty() ) {
             p->add_msg_if_player(
                 m_warning,
                 _( "The %s in your inventory would explode on this signal.  Place it down before "
-                   "sending the signal." ),
+               "sending the signal." ),
                 bombs.front()->display_name() );
             return 0;
         }

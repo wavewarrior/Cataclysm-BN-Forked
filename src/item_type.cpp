@@ -152,7 +152,7 @@ int item::chip_resistance( bool worst ) const
 std::optional<resistances> item::damage_resistance_override() const
 {
     if( is_null() || !type->armor ) {
-    return std::optional<resistances>();
+        return std::optional<resistances>();
     }
 
     return type->armor->resistance;
@@ -218,9 +218,9 @@ nc_color item::damage_color() const
 {
     // TODO: unify with veh_interact::countDurability
     switch( damage_level( 4 ) ) {
-    default:
-        // reinforced
-        if( damage() <= min_damage() ) {
+        default:
+            // reinforced
+            if( damage() <= min_damage() ) {
                 // fully reinforced
                 return c_green;
             } else {
@@ -246,9 +246,9 @@ nc_color item::damage_color() const
 std::string item::damage_symbol() const
 {
     switch( damage_level( 4 ) ) {
-    default:
-        // reinforced
-        return _( R"(++)" );
+        default:
+            // reinforced
+            return _( R"(++)" );
         case 0:
             return _( R"(||)" );
         case 1:
@@ -341,9 +341,9 @@ bool item::is_two_handed( const Character &guy ) const
 const std::vector<material_id> &item::made_of() const
 {
     if( is_corpse() ) {
-    return corpse->mat;
-}
-return type->materials;
+        return corpse->mat;
+    }
+    return type->materials;
 }
 
 const std::map<quality_id, int> &item::quality_of() const
@@ -403,42 +403,42 @@ bool item::contents_normally_made_of( const phase_id phase ) const
 bool item::made_of( phase_id phase ) const
 {
     if( is_null() ) {
-    return false;
-}
-return type->phase == phase;
+        return false;
+    }
+    return type->phase == phase;
 }
 
 bool item::conductive() const
 {
     if( is_null() ) {
-    return false;
-}
+        return false;
+    }
 
-if( has_flag( flag_CONDUCTIVE ) ) {
-    return true;
-}
+    if( has_flag( flag_CONDUCTIVE ) ) {
+        return true;
+    }
 
-if( has_flag( flag_NONCONDUCTIVE ) ) {
-    return false;
-}
+    if( has_flag( flag_NONCONDUCTIVE ) ) {
+        return false;
+    }
 
-// If any material has electricity resistance equal to or lower than flesh (1) we are conductive.
-const std::vector<const material_type *> &mats = made_of_types();
-return std::ranges::any_of( mats, []( const material_type * mt ) {
-    return mt->elec_resist() <= 1;
+    // If any material has electricity resistance equal to or lower than flesh (1) we are conductive.
+    const std::vector<const material_type *> &mats = made_of_types();
+    return std::ranges::any_of( mats, []( const material_type * mt ) {
+        return mt->elec_resist() <= 1;
     } );
 }
 
 bool item::reinforceable() const
 {
     if( is_null() || has_flag( flag_NO_REPAIR ) ) {
-    return false;
-}
+        return false;
+    }
 
-// If a material is reinforceable, so are we
-const std::vector<const material_type *> &mats = made_of_types();
-return std::ranges::any_of( mats, []( const material_type * mt ) {
-    return mt->reinforces();
+    // If a material is reinforceable, so are we
+    const std::vector<const material_type *> &mats = made_of_types();
+    return std::ranges::any_of( mats, []( const material_type * mt ) {
+        return mt->reinforces();
     } );
 }
 
@@ -460,12 +460,12 @@ bool item::is_firearm() const
 int item::get_reload_time() const
 {
     if( !is_gun() && !is_magazine() ) {
-    return 0;
-}
+        return 0;
+    }
 
-int reload_time = is_gun() ? type->gun->reload_time : type->magazine->reload_time;
-for( const item *mod : gunmods() ) {
-    reload_time = ( reload_time * ( 100 + mod->type->gunmod->reload_modifier ) / 100 );
+    int reload_time = is_gun() ? type->gun->reload_time : type->magazine->reload_time;
+    for( const item *mod : gunmods() ) {
+        reload_time = ( reload_time * ( 100 + mod->type->gunmod->reload_modifier ) / 100 );
     }
 
     return reload_time;
@@ -543,7 +543,7 @@ bool item::is_food_container() const
     namespace ranges = std::ranges;
     return ranges::any_of( contents.all_items_top(), []( const item * contained_item ) {
         return contained_item != nullptr &&
-        ( contained_item->is_food() || contained_item->is_food_container() );
+               ( contained_item->is_food() || contained_item->is_food_container() );
     } ) || ( is_craft() && craft_data_->making->create_result()->is_food_container() );
 }
 
@@ -627,12 +627,12 @@ bool item::is_melee( damage_type dt ) const
 const islot_armor *item::find_armor_data() const
 {
     if( type->armor ) {
-    return &*type->armor;
-}
-// Currently the only way to make a non-armor item into armor is to install a gun mod.
-// The gunmods are stored in the items contents, as are the contents of a container, and the
-// tools in a tool belt (a container actually), or the ammo in a quiver (container again).
-for( const item *mod : gunmods() ) {
+        return &*type->armor;
+    }
+    // Currently the only way to make a non-armor item into armor is to install a gun mod.
+    // The gunmods are stored in the items contents, as are the contents of a container, and the
+    // tools in a tool belt (a container actually), or the ammo in a quiver (container again).
+    for( const item *mod : gunmods() ) {
         if( mod->type->armor ) {
             return &*mod->type->armor;
         }
@@ -802,10 +802,10 @@ bool item::is_container_empty() const
 bool item::is_container_full( bool allow_bucket ) const
 {
     if( is_container_empty() ) {
-    return false;
-}
-if( is_watertight_container() ) {
-    return get_remaining_capacity_for_liquid( contents.front(), allow_bucket ) == 0;
+        return false;
+    }
+    if( is_watertight_container() ) {
+        return get_remaining_capacity_for_liquid( contents.front(), allow_bucket ) == 0;
     } else if( !is_reloadable_with( contents.front().typeId() ) ) {
         return true;
     } else {
@@ -818,12 +818,12 @@ if( is_watertight_container() ) {
 bool item::can_unload_liquid() const
 {
     if( is_container_empty() ) {
-    return true;
-}
+        return true;
+    }
 
-const item &cts = contents.front();
-bool cts_is_frozen_liquid = cts.made_of( LIQUID ) && cts.made_of( SOLID );
-return is_bucket() || !cts_is_frozen_liquid;
+    const item &cts = contents.front();
+    bool cts_is_frozen_liquid = cts.made_of( LIQUID ) && cts.made_of( SOLID );
+    return is_bucket() || !cts_is_frozen_liquid;
 }
 
 bool item::can_reload_with( const ammotype &ammo ) const
@@ -845,15 +845,15 @@ bool item::is_reloadable_helper( const itype_id &ammo, bool now ) const
 {
     // empty ammo is passed for listing possible ammo apparently, so it needs to return true.
     if( !is_reloadable() ) {
-    return false;
-} else if( is_watertight_container() ) {
-    if( ammo.is_empty() ) {
+        return false;
+    } else if( is_watertight_container() ) {
+        if( ammo.is_empty() ) {
             return now ? !is_container_full() : true;
         } else {
             return now ? ( is_container_empty() || contents.front().typeId() == ammo ) : true;
         }
     } else if( is_container() ) {
-    if( ammo.is_empty() ) {
+        if( ammo.is_empty() ) {
             return now ? !is_container_full() : true;
         } else if( ammo->phase == LIQUID ) {
             return false;
@@ -861,7 +861,7 @@ bool item::is_reloadable_helper( const itype_id &ammo, bool now ) const
             return now ? ( is_container_empty() || contents.front().typeId() == ammo ) : true;
         }
     } else if( magazine_integral() ) {
-    if( !ammo.is_empty() ) {
+        if( !ammo.is_empty() ) {
             if( now && ammo_data() ) {
                 if( ammo_current() != ammo ) {
                     return false;
@@ -893,18 +893,18 @@ bool item::is_pocket_dimension_key() const
 bool item::is_funnel_container( units::volume &bigger_than ) const
 {
     if( !is_bucket() && !is_watertight_container() ) {
-    return false;
-}
-// TODO: consider linking funnel to item or -making- it an active item
-if( get_container_capacity() <= bigger_than ) {
-    return false; // skip contents check, performance
-}
-if(
+        return false;
+    }
+    // TODO: consider linking funnel to item or -making- it an active item
+    if( get_container_capacity() <= bigger_than ) {
+        return false; // skip contents check, performance
+    }
+    if(
         contents.empty() ||
         contents.front().typeId() == itype_water ||
         contents.front().typeId() == itype_water_acid ||
         contents.front().typeId() == itype_water_acid_weak ) {
-    bigger_than = get_container_capacity();
+        bigger_than = get_container_capacity();
         return true;
     }
     return false;
@@ -1004,7 +1004,7 @@ bool item::operator<( const item& other ) const
 const std::string &item::get_category_id() const
 {
     if( is_container() && !contents.empty() ) {
-    return contents.front().get_category().get_id().str();
+        return contents.front().get_category().get_id().str();
     }
 
     static item_category null_category;
@@ -1015,7 +1015,7 @@ const std::string &item::get_category_id() const
 const item_category &item::get_category() const
 {
     if( is_container() && !contents.empty() ) {
-    return contents.front().get_category();
+        return contents.front().get_category();
     }
 
     static item_category null_category;

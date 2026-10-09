@@ -25,7 +25,8 @@ bool lcmatch( const std::string &str, const std::string &qry )
         if( whaystack.find( wneedle ) != std::wstring::npos ) {
             return true;
         }
-    } else {
+    }
+    else {
         std::string needle;
         needle.reserve( qry.size() );
         std::transform( qry.begin(), qry.end(), std::back_inserter( needle ), tolower );
@@ -34,7 +35,8 @@ bool lcmatch( const std::string &str, const std::string &qry )
         haystack.reserve( str.size() );
         std::transform( str.begin(), str.end(), std::back_inserter( haystack ), tolower );
 
-        if( haystack.find( needle ) != std::string::npos ) {
+        if( haystack.find( needle ) != std::string::npos )
+        {
             return true;
         }
     }
@@ -71,11 +73,13 @@ bool match_include_exclude( const std::string &text, std::string filter )
 
         std::string term = iPos == std::string::npos ? filter : filter.substr( 0, iPos );
         const bool exclude = term.substr( 0, 1 ) == "-";
-        if( exclude ) {
+        if( exclude )
+        {
             term = term.substr( 1 );
         }
 
-        if( ( !found || exclude ) && lcmatch( text, term ) ) {
+        if( ( !found || exclude ) && lcmatch( text, term ) )
+        {
             if( exclude ) {
                 return false;
             }
@@ -83,7 +87,8 @@ bool match_include_exclude( const std::string &text, std::string filter )
             found = true;
         }
 
-        if( iPos != std::string::npos ) {
+        if( iPos != std::string::npos )
+        {
             filter = filter.substr( iPos + 1, filter.size() );
         }
     } while( iPos != std::string::npos );

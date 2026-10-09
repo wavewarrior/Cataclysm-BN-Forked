@@ -53,21 +53,21 @@ struct item_penalties {
 
     int badness() const {
         return !body_parts_with_stacking_penalty.empty() +
-        !body_parts_with_out_of_order_penalty.empty();
+               !body_parts_with_out_of_order_penalty.empty();
     }
 
     nc_color color_for_stacking_badness() const {
         switch( badness() ) {
-        case 0:
-            return c_light_gray;
-        case 1:
-            return c_yellow;
-        case 2:
-            return c_light_red;
+            case 0:
+                return c_light_gray;
+            case 1:
+                return c_yellow;
+            case 2:
+                return c_light_red;
+        }
+        debugmsg( "Unexpected badness %d", badness() );
+        return c_light_gray;
     }
-    debugmsg( "Unexpected badness %d", badness() );
-    return c_light_gray;
-}
 };
 
 // Figure out encumbrance penalties this clothing is involved in
@@ -562,9 +562,9 @@ void show_armor_layers_ui( Character& who )
                             + colorize( string_format( "  << %s >>", name ), c_yellow ) );
         data->hint_rml = cata_text_to_rml( string_format(
                                                _( "[<color_yellow>%s</color>] Hide sprite.  "
-                                                   "[<color_yellow>%s</color>] Change side.  "
-                                                   "Press [<color_yellow>%s</color>] for help.  "
-                                                   "Press [<color_yellow>%s</color>] to change keybindings." ),
+           "[<color_yellow>%s</color>] Change side.  "
+           "Press [<color_yellow>%s</color>] for help.  "
+           "Press [<color_yellow>%s</color>] to change keybindings." ),
                                                ctxt.get_desc( "TOGGLE_CLOTH" ), ctxt.get_desc( "CHANGE_SIDE" ),
                                                ctxt.get_desc( "USAGE_HELP" ), ctxt.get_desc( "HELP_KEYBINDINGS" ) ) );
 
@@ -949,27 +949,27 @@ void show_armor_layers_ui( Character& who )
         } else if( action == "USAGE_HELP" ) {
             popup_getkey(
                 _( "Use the [<color_yellow>arrow- or keypad keys</color>] to navigate the left "
-                   "list.\n"
-                   "[<color_yellow>%s</color>] to select highlighted armor for reordering.\n"
-                   "[<color_yellow>%s</color>] / [<color_yellow>%s</color>] to scroll the right "
-                   "list.\n"
-                   "[<color_yellow>%s</color>] to assign special inventory letters to clothing.\n"
-                   "[<color_yellow>%s</color>] to change the side on which item is worn.\n"
-                   "[<color_yellow>%s</color>] to sort armor into natural layer order.\n"
-                   "[<color_yellow>%s</color>] to equip a new item.\n"
-                   "[<color_yellow>%s</color>] to equip a new item at the currently selected "
-                   "position.\n"
-                   "[<color_yellow>%s</color>] to remove selected armor from oneself.\n"
-                   "\n"
-                   "\n"
-                   "Encumbrance explanation:\n"
-                   "\n"
-                   "<color_light_gray>The first number is the summed encumbrance from all clothing "
-                   "on that bodypart.  The second number is an additional encumbrance penalty "
-                   "caused by wearing either multiple items on one of the bodypart's layers or "
-                   "wearing items the wrong way (e.g. a shirt over a backpack).  "
-                   "The sum of these values is the effective encumbrance value "
-                   "your character has for that bodypart.</color>" ),
+               "list.\n"
+               "[<color_yellow>%s</color>] to select highlighted armor for reordering.\n"
+               "[<color_yellow>%s</color>] / [<color_yellow>%s</color>] to scroll the right "
+               "list.\n"
+               "[<color_yellow>%s</color>] to assign special inventory letters to clothing.\n"
+               "[<color_yellow>%s</color>] to change the side on which item is worn.\n"
+               "[<color_yellow>%s</color>] to sort armor into natural layer order.\n"
+               "[<color_yellow>%s</color>] to equip a new item.\n"
+               "[<color_yellow>%s</color>] to equip a new item at the currently selected "
+               "position.\n"
+               "[<color_yellow>%s</color>] to remove selected armor from oneself.\n"
+               "\n"
+               "\n"
+               "Encumbrance explanation:\n"
+               "\n"
+               "<color_light_gray>The first number is the summed encumbrance from all clothing "
+               "on that bodypart.  The second number is an additional encumbrance penalty "
+               "caused by wearing either multiple items on one of the bodypart's layers or "
+               "wearing items the wrong way (e.g. a shirt over a backpack).  "
+               "The sum of these values is the effective encumbrance value "
+               "your character has for that bodypart.</color>" ),
                 ctxt.get_desc( "MOVE_ARMOR" ), ctxt.get_desc( "PREV_TAB" ), ctxt.get_desc( "NEXT_TAB" ),
                 ctxt.get_desc( "ASSIGN_INVLETS" ), ctxt.get_desc( "CHANGE_SIDE" ),
                 ctxt.get_desc( "TOGGLE_CLOTH" ), ctxt.get_desc( "SORT_ARMOR" ),

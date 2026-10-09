@@ -524,8 +524,9 @@ static int resume_craft() {
     return turns;
 }
 
-static auto make_food_craft_with_components(const recipe& recipe_to_make,
-    std::vector<detached_ptr<item>> components) -> detached_ptr<item> {
+static auto make_food_craft_with_components(
+    const recipe& recipe_to_make, std::vector<detached_ptr<item>> components)
+    -> detached_ptr<item> {
     auto craft = item::spawn(&recipe_to_make, 1, std::move(components), std::vector<item_comp>{});
     craft->set_tools_to_continue(true);
     craft->set_var("craft_tools_fully_prepaid", 1);
@@ -543,19 +544,22 @@ static auto make_food_craft(const recipe& recipe_to_make, const bool with_pine_n
     return make_food_craft_with_components(recipe_to_make, std::move(components));
 }
 
-static auto make_woods_soup_components(const bool with_pine_nuts) -> std::vector<detached_ptr<item>> {
+static auto make_woods_soup_components(const bool with_pine_nuts)
+    -> std::vector<detached_ptr<item>> {
     auto components = std::vector<detached_ptr<item>>{};
     components.push_back(item::spawn("broth", calendar::turn, 2));
     components.push_back(item::spawn("meat_smoked", calendar::turn, 1));
-    components.push_back(with_pine_nuts ? item::spawn("pine_nuts", calendar::turn, 2) :
-                          item::spawn("chili_pepper_roasted", calendar::turn, 2));
+    components.push_back(
+        with_pine_nuts
+            ? item::spawn("pine_nuts", calendar::turn, 2)
+            : item::spawn("chili_pepper_roasted", calendar::turn, 2));
     return components;
 }
 
-static auto make_woods_soup_craft(const recipe& recipe_to_make,
-    const bool with_pine_nuts) -> detached_ptr<item> {
-    return make_food_craft_with_components(recipe_to_make,
-                                            make_woods_soup_components(with_pine_nuts));
+static auto make_woods_soup_craft(const recipe& recipe_to_make, const bool with_pine_nuts)
+    -> detached_ptr<item> {
+    return make_food_craft_with_components(
+        recipe_to_make, make_woods_soup_components(with_pine_nuts));
 }
 
 static auto expected_woods_soup_kcal(const Character& you, const bool with_pine_nuts) -> int {
@@ -610,8 +614,8 @@ static auto resume_and_finish_craft(avatar& you, item& target) -> void {
     finish_craft_activity(you);
 }
 
-TEST_CASE("resuming in-progress food craft completes the activated craft",
-    "[crafting][food][resume]") {
+TEST_CASE(
+    "resuming in-progress food craft completes the activated craft", "[crafting][food][resume]") {
     clear_all_state();
     clear_map();
     clear_avatar();

@@ -343,10 +343,10 @@ void craft_activity_actor::do_turn( player_activity& act, Character& who )
     if( !craft_item ) {
         who.add_msg_player_or_npc(
             _( "You no longer have the in progress craft in your possession.  "
-               "You stop crafting.  "
-               "Reactivate the in progress craft to continue crafting." ),
+           "You stop crafting.  "
+           "Reactivate the in progress craft to continue crafting." ),
             _( "<npcname> no longer has the in progress craft in their possession.  "
-               "<npcname> stops crafting." ) );
+           "<npcname> stops crafting." ) );
         act.set_to_null();
         return;
     }
@@ -731,18 +731,18 @@ auto butchery_activity_actor::setup_next_target( player_activity& act, Character
 {
     if( this->targets.empty() ) { return false; }
 
-safe_reference<item> &target = this->targets.back();
-player& p = static_cast<player &>( who );
+    safe_reference<item> &target = this->targets.back();
+    player& p = static_cast<player &>( who );
 
-// Check if the corpse still exists
-if( !target || target.is_destroyed() ) {
-    p.add_msg_if_player( m_bad, _( "The corpse completely rotted away!" ) );
+    // Check if the corpse still exists
+    if( !target || target.is_destroyed() ) {
+        p.add_msg_if_player( m_bad, _( "The corpse completely rotted away!" ) );
         this->targets.pop_back();
         return setup_next_target( act, who );
     }
 
     if( !target->is_corpse() ) {
-    this->targets.pop_back();
+        this->targets.pop_back();
         return setup_next_target( act, who );
     }
 
@@ -756,19 +756,19 @@ if( !target || target.is_destroyed() ) {
     };
 
     if( setup.can_do == butchery_possibility::never ) {
-    act.set_to_null();
+        act.set_to_null();
         print_reasons();
         return false;
     }
 
     if( setup.can_do == butchery_possibility::not_this ) {
-    this->targets.pop_back();
+        this->targets.pop_back();
         print_reasons();
         return setup_next_target( act, who );
     }
 
     if( setup.can_do == butchery_possibility::need_confirmation ) {
-    if( p.is_player() ) {
+        if( p.is_player() ) {
             if( query_yn( _( "Would you dare desecrate the mortal remains of a fellow human "
                              "being?" ) ) ) {
                 switch( rng( 1, 3 ) ) {
@@ -776,7 +776,7 @@ if( !target || target.is_destroyed() ) {
                         p.add_msg_if_player(
                             m_bad,
                             _( "You clench your teeth at the prospect of "
-                               "this gruesome job." ) );
+                           "this gruesome job." ) );
                         break;
                     case 2:
                         p.add_msg_if_player( m_bad, _( "This will haunt you in your dreams." ) );
@@ -785,8 +785,8 @@ if( !target || target.is_destroyed() ) {
                         p.add_msg_if_player(
                             m_bad,
                             _( "You try to look away, but this gruesome "
-                               "image will stay on your mind for some "
-                               "time." ) );
+                           "image will stay on your mind for some "
+                           "time." ) );
                         break;
                 }
                 g->u.add_morale( MORALE_BUTCHER, -50, 0, 2_days, 3_hours );
@@ -890,22 +890,22 @@ void butchery_activity_actor::finish( player_activity& act, Character& who )
                 p.add_msg_if_player(
                     m_warning,
                     _( "You hack up the corpse so unskillfully, that "
-                       "there is nothing left to salvage from this "
-                       "bloody mess." ) );
+                   "there is nothing left to salvage from this "
+                   "bloody mess." ) );
                 break;
             case 2:
                 p.add_msg_if_player(
                     m_warning,
                     _( "You wanted to cut the corpse, but instead you "
-                       "hacked the meat, spilled the guts all over it, "
-                       "and made a bloody mess." ) );
+                   "hacked the meat, spilled the guts all over it, "
+                   "and made a bloody mess." ) );
                 break;
             case 3:
                 p.add_msg_if_player(
                     m_warning,
                     _( "You made so many mistakes during the process "
-                       "that you doubt even vultures will be interested "
-                       "in what's left of it." ) );
+                   "that you doubt even vultures will be interested "
+                   "in what's left of it." ) );
                 break;
         }
 
@@ -984,22 +984,22 @@ void butchery_activity_actor::finish( player_activity& act, Character& who )
                         p.add_msg_if_player(
                             m_warning,
                             _( "You unskillfully hack up the corpse and "
-                               "chop off some excess body parts.  You're "
-                               "left wondering how you did so poorly." ) );
+                           "chop off some excess body parts.  You're "
+                           "left wondering how you did so poorly." ) );
                         break;
                     case 2:
                         p.add_msg_if_player(
                             m_warning,
                             _( "Your unskilled hands slip and damage the "
-                               "corpse.  You still hope it's not a total "
-                               "waste though." ) );
+                           "corpse.  You still hope it's not a total "
+                           "waste though." ) );
                         break;
                     case 3:
                         p.add_msg_if_player(
                             m_warning,
                             _( "You did something wrong and hacked the "
-                               "corpse badly.  Maybe it's still "
-                               "recoverable." ) );
+                           "corpse badly.  Maybe it's still "
+                           "recoverable." ) );
                         break;
                 }
                 corpse_item.set_flag( flag_FIELD_DRESS_FAILED );
@@ -1012,15 +1012,15 @@ void butchery_activity_actor::finish( player_activity& act, Character& who )
                         p.add_msg_if_player(
                             m_good,
                             _( "You slice the corpse's belly and remove "
-                               "intestines and organs, until you're "
-                               "confident that it will not rot from "
-                               "inside." ) );
+                           "intestines and organs, until you're "
+                           "confident that it will not rot from "
+                           "inside." ) );
                         break;
                     case 3:
                         p.add_msg_if_player(
                             m_good,
                             _( "You remove guts and excess parts, preparing "
-                               "the corpse for later use." ) );
+                           "the corpse for later use." ) );
                         break;
                 }
                 corpse_item.set_flag( flag_FIELD_DRESS );

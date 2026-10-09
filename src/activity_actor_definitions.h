@@ -1239,8 +1239,8 @@ class butchery_activity_actor: public activity_actor
 
         activity_id get_type() const override {
             switch( type ) {
-            case BUTCHER:
-                return activity_id( "ACT_BUTCHER" );
+                case BUTCHER:
+                    return activity_id( "ACT_BUTCHER" );
                 case BUTCHER_FULL:
                     return activity_id( "ACT_BUTCHER_FULL" );
                 case F_DRESS:
@@ -1433,7 +1433,7 @@ class wait_activity_actor: public activity_actor
 
         void start( player_activity &act, Character & ) override {
             if( wait_duration > 0_minutes ) {
-            progress.emplace( _( "Waiting" ), to_moves<int>( wait_duration ) );
+                progress.emplace( _( "Waiting" ), to_moves<int>( wait_duration ) );
             }
         }
         void do_turn( player_activity &, Character & ) override {}

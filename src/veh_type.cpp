@@ -904,7 +904,7 @@ const std::vector<vpart_info> &vpart_info::get_all()
 std::string vpart_info::name() const
 {
     if( name_.empty() ) {
-    return item::nname( item );
+        return item::nname( item );
     } else {
         return name_.translated();
     }
@@ -1104,8 +1104,7 @@ int vpart_info::wheel_area() const
     return has_flag( VPFLAG_WHEEL ) ? wheel_info->contact_area : 0;
 }
 
-std::vector<std::pair<std::string, int>> vpart_info::wheel_terrain_mod() const
-{
+std::vector<std::pair<std::string, int>> vpart_info::wheel_terrain_mod() const {
     const std::vector<std::pair<std::string, int>> null_map;
     return has_flag( VPFLAG_WHEEL ) ? wheel_info->terrain_mod : null_map;
 }
@@ -1151,12 +1150,12 @@ int vpart_info::get_conversion_charges() const
 const std::pair<itype_id, int> vpart_info::get_conversion_input() const
 {
     return has_flag( "CONVERTER" ) ? std::make_pair( converter_info->input,
-    converter_info->input_step ) : std::make_pair( itype_id::NULL_ID(), 0 );
+            converter_info->input_step ) : std::make_pair( itype_id::NULL_ID(), 0 );
 }
 const std::pair<itype_id, int> vpart_info::get_conversion_output() const
 {
     return has_flag( "CONVERTER" ) ? std::make_pair( converter_info->output,
-    converter_info->output_step ) : std::make_pair( itype_id::NULL_ID(), 0 );
+            converter_info->output_step ) : std::make_pair( itype_id::NULL_ID(), 0 );
 }
 
 const std::vector<itype_id> vpart_info::craftertools() const
@@ -1171,7 +1170,7 @@ const std::optional<vpslot_workbench> &vpart_info::get_workbench_info() const
 
 /** @relates string_id */
 template<>
-const vehicle_prototype &string_id<vehicle_prototype>::obj() const
+const vehicle_prototype & string_id<vehicle_prototype>::obj() const
 {
     const auto iter = vtypes.find( *this );
     if( iter == vtypes.end() ) {
@@ -1208,7 +1207,7 @@ vehicle_prototype::vehicle_prototype( const std::string &name,
 vehicle_prototype::vehicle_prototype( vehicle_prototype && )  noexcept = default;
 vehicle_prototype::~vehicle_prototype() = default;
 
-vehicle_prototype &vehicle_prototype::operator=( vehicle_prototype && )  noexcept = default;
+vehicle_prototype & vehicle_prototype::operator=( vehicle_prototype && )  noexcept = default;
 
 /**
  *Caches a vehicle definition from a JsonObject to be loaded after itypes is initialized.

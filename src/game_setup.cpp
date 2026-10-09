@@ -744,16 +744,16 @@ bool game::start_game()
 
     level_cache_freshness::invalidate_level( m, get_levz() );
     m.build_map_cache( level_cache_freshness::plan_for( m,
-        level_cache_freshness::pose_of_viewer( u, get_levz() ),
-        level_cache_freshness::lightmap_policy::normal ) );
+                       level_cache_freshness::pose_of_viewer( u, get_levz() ),
+                       level_cache_freshness::lightmap_policy::normal ) );
     // Do this after the map cache has been built!
     start_loc.place_player( u, lev.z() );
     update_map( u );
     // ...but then rebuild it, because we want visibility cache to avoid spawning monsters in sight
     level_cache_freshness::invalidate_level( m, get_levz() );
     m.build_map_cache( level_cache_freshness::plan_for( m,
-        level_cache_freshness::pose_of_viewer( u, get_levz() ),
-        level_cache_freshness::lightmap_policy::normal ) );
+                       level_cache_freshness::pose_of_viewer( u, get_levz() ),
+                       level_cache_freshness::lightmap_policy::normal ) );
     // Start the overmap with out immediate neighborhood visible, this needs to be after place_player
     get_overmapbuffer( current_dimension_id_ ).reveal( u.abs_omt_pos().xy(),
             get_option<int>( "DISTANCE_INITIAL_VISIBILITY" ), 0 );
@@ -1361,9 +1361,8 @@ bool game::cleanup_at_end()
         // Last words: RmlUi uses standalone string_input_popup (its own doc);
         // curses path embeds the popup into the rip window at the name position.
         const std::string sLastWords = [&]() -> std::string {
-            if( rml )
-        {
-            return string_input_popup()
+            if( rml ) {
+                return string_input_popup()
                 .title( _( "Last Words" ) )
                 .max_length( iMaxWidth - 4 - 1 )
                 .query_string();
@@ -1731,7 +1730,8 @@ bool game::travel_to_dimension( const dimension_id &dim_id,
         }
     }
 
-    add_msg( m_debug, "[DIM] Switched active dimension: '%s' \xe2\x86\x92 '%s'", old_dim_id.c_str(), dim_id.c_str() );
+    add_msg( m_debug, "[DIM] Switched active dimension: '%s' \xe2\x86\x92 '%s'", old_dim_id.c_str(),
+             dim_id.c_str() );
 
     // bind_dimension() redirects all subsequent loadn() / generation calls to
     // the target MAPBUFFER_REGISTRY slot.  Submaps for old_dim_id stay in their
@@ -1788,7 +1788,7 @@ bool game::travel_to_dimension( const dimension_id &dim_id,
         // when the destination is far from the current position.
         const tripoint_abs_sm target_load_origin = load_pos.value_or( current_abs_sm );
         player.setpos( project_to<coords::ms>( target_load_origin +
-                                   tripoint_rel_sm( g_half_mapsize, g_half_mapsize, 0 ) ) );
+                                               tripoint_rel_sm( g_half_mapsize, g_half_mapsize, 0 ) ) );
         load_map( target_load_origin, false );
 
         add_msg( m_debug, "[DIM] Loaded new dimension '%s' map", dim_id );
@@ -1806,8 +1806,8 @@ bool game::travel_to_dimension( const dimension_id &dim_id,
             }
         }
         here.build_map_cache( level_cache_freshness::plan_for( here,
-            level_cache_freshness::pose_of_viewer( u, target_load_origin.z() ),
-            level_cache_freshness::lightmap_policy::normal ) );
+                              level_cache_freshness::pose_of_viewer( u, target_load_origin.z() ),
+                              level_cache_freshness::lightmap_policy::normal ) );
 
         load_npcs();
         here.spawn_monsters( true );

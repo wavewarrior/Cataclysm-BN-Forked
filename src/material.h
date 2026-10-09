@@ -23,8 +23,7 @@ using mat_compacts_into = std::vector<itype_id>;
 using material_list = std::vector<material_type>;
 using material_id_list = std::vector<material_id>;
 
-class material_type
-{
+class material_type {
     public:
         material_id id;
         bool was_loaded = false;
@@ -70,7 +69,7 @@ class material_type
     public:
         material_type();
 
-        void load( const JsonObject &jsobj, const std::string &src );
+        void load( const JsonObject & jsobj, const std::string & src );
         void check() const;
 
         material_id ident() const;
@@ -108,23 +107,22 @@ class material_type
         bool soft() const;
         bool reinforces() const;
 
-        double vitamin( const vitamin_id &id ) const {
+        double vitamin( const vitamin_id & id ) const {
             const auto iter = _vitamins.find( id );
             return iter != _vitamins.end() ? iter->second : 0;
         }
 
-        const mat_burn_data &burn_data( size_t intensity ) const;
-        const mat_burn_products &burn_products() const;
-        const material_id_list &compact_accepts() const;
-        const mat_compacts_into &compacts_into() const;
+        const mat_burn_data & burn_data( size_t intensity ) const;
+        const mat_burn_products & burn_products() const;
+        const material_id_list & compact_accepts() const;
+        const mat_compacts_into & compacts_into() const;
 
         LUA_TYPE_OPS( material_type, id );
 };
 
-namespace materials
-{
+namespace materials {
 
-void load( const JsonObject &jo, const std::string &src );
+void load( const JsonObject & jo, const std::string & src );
 void check();
 void reset();
 

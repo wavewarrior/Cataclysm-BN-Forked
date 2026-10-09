@@ -22,11 +22,9 @@
 // Draw order is queue order: call these after the sprites they overlay.
 
 #include <SDL3/SDL_rect.h>
-
 #include <span>
 
-namespace lighting
-{
+namespace lighting {
 
 /// Straight RGBA, each component in 0..1.
 struct overlay_color {
@@ -37,11 +35,11 @@ struct overlay_color {
 };
 
 /// Build an overlay_color from the 0..255 channels SDL callers already have.
-auto overlay_color_from_bytes( int r, int g, int b, int a ) -> overlay_color;
+auto overlay_color_from_bytes(int r, int g, int b, int a) -> overlay_color;
 
 /// Axis-aligned filled rectangle. The crispest primitive here — prefer it over
 /// overlay_line for horizontal/vertical edges.
-auto overlay_rect( const SDL_FRect &r, const overlay_color &color ) -> void;
+auto overlay_rect(const SDL_FRect& r, const overlay_color& color) -> void;
 
 /// Filled quad centred on `centre`, rotated clockwise about that centre.
 struct overlay_quad_options {
@@ -51,7 +49,7 @@ struct overlay_quad_options {
     float rotation = 0.0f; //< radians, clockwise (screen space, y down)
     overlay_color color{};
 };
-auto overlay_quad( const overlay_quad_options &opts ) -> void;
+auto overlay_quad(const overlay_quad_options& opts) -> void;
 
 /// Line segment of `thickness` px. Axis-aligned segments degrade to an exact
 /// overlay_rect; everything else becomes one rotated quad.
@@ -61,7 +59,7 @@ struct overlay_line_options {
     float thickness = 2.0f;
     overlay_color color{};
 };
-auto overlay_line( const overlay_line_options &opts ) -> void;
+auto overlay_line(const overlay_line_options& opts) -> void;
 
 /// Open polyline through `points` (the SDL_RenderLines equivalent).
 struct overlay_polyline_options {
@@ -69,7 +67,7 @@ struct overlay_polyline_options {
     float thickness = 2.0f;
     overlay_color color{};
 };
-auto overlay_polyline( const overlay_polyline_options &opts ) -> void;
+auto overlay_polyline(const overlay_polyline_options& opts) -> void;
 
 /// Circle outline approximated by `segments` chords.
 struct overlay_ring_options {
@@ -79,7 +77,7 @@ struct overlay_ring_options {
     int segments = 28;
     overlay_color color{};
 };
-auto overlay_ring( const overlay_ring_options &opts ) -> void;
+auto overlay_ring(const overlay_ring_options& opts) -> void;
 
 /// Filled circular wedge: apex at `apex`, bisector pointing along `angle`,
 /// opening `half_angle` either side, reaching `radius` px.
@@ -104,6 +102,6 @@ struct overlay_wedge_options {
     int slabs = 24;
     overlay_color color{};
 };
-auto overlay_wedge( const overlay_wedge_options &opts ) -> void;
+auto overlay_wedge(const overlay_wedge_options& opts) -> void;
 
 } // namespace lighting

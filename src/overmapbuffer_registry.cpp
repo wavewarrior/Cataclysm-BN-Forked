@@ -85,18 +85,15 @@ overmapbuffer_registry &registry()
 
 } // namespace
 
-auto get_overmapbuffer( const dimension_id &dim_id ) -> overmapbuffer &
-{
+auto get_overmapbuffer( const dimension_id &dim_id ) -> overmapbuffer & {
     return registry().get( dim_id );
 }
 
-auto has_any_overmapbuffer( const dimension_id &dim_id ) -> bool
-{
+auto has_any_overmapbuffer( const dimension_id &dim_id ) -> bool {
     return registry().has_any_loaded( dim_id );
 }
 
-auto unload_overmapbuffer_dimension( const dimension_id &dim_id ) -> void
-{
+auto unload_overmapbuffer_dimension( const dimension_id &dim_id ) -> void {
     registry().unload_dimension( dim_id );
 }
 

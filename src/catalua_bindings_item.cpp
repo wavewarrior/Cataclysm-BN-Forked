@@ -38,7 +38,7 @@ auto artifact_effect_names( const std::vector<art_effect_passive> &effects
                           ) -> std::vector<std::string>
 {
     return effects
-           | std::views::transform( []( const art_effect_passive effect ) {
+    | std::views::transform( []( const art_effect_passive effect ) {
         return io::enum_to_string( effect );
     } )
     | std::ranges::to<std::vector>();
@@ -48,7 +48,7 @@ auto artifact_effect_names( const std::vector<art_effect_active> &effects
                           ) -> std::vector<std::string>
 {
     return effects
-           | std::views::transform( []( const art_effect_active effect ) {
+    | std::views::transform( []( const art_effect_active effect ) {
         return io::enum_to_string( effect );
     } )
     | std::ranges::to<std::vector>();
@@ -57,8 +57,8 @@ auto artifact_effect_names( const std::vector<art_effect_active> &effects
 auto artifact_effect_description( const art_effect_passive effect ) -> std::string
 {
     switch( effect ) {
-    case AEP_NULL:
-        return _( "No effect" );
+        case AEP_NULL:
+            return _( "No effect" );
         case AEP_STR_UP:
             return _( "Strength +4" );
         case AEP_DEX_UP:
@@ -146,8 +146,8 @@ auto artifact_effect_description( const art_effect_passive effect ) -> std::stri
 auto artifact_effect_description( const art_effect_active effect ) -> std::string
 {
     switch( effect ) {
-    case AEA_NULL:
-        return _( "No effect" );
+        case AEA_NULL:
+            return _( "No effect" );
         case AEA_STORM:
             return _( "Emits shock fields" );
         case AEA_FIREBALL:
@@ -222,7 +222,7 @@ auto artifact_effect_descriptions( const std::vector<art_effect_passive> &effect
                                  ) -> std::vector<std::string>
 {
     return effects
-           | std::views::transform( []( const art_effect_passive effect ) {
+    | std::views::transform( []( const art_effect_passive effect ) {
         return artifact_effect_description( effect );
     } )
     | std::ranges::to<std::vector>();
@@ -232,7 +232,7 @@ auto artifact_effect_descriptions( const std::vector<art_effect_active> &effects
                                  ) -> std::vector<std::string>
 {
     return effects
-           | std::views::transform( []( const art_effect_active effect ) {
+    | std::views::transform( []( const art_effect_active effect ) {
         return artifact_effect_description( effect );
     } )
     | std::ranges::to<std::vector>();
@@ -241,8 +241,8 @@ auto artifact_effect_descriptions( const std::vector<art_effect_active> &effects
 auto artifact_charge_description( const art_charge charge ) -> std::string
 {
     switch( charge ) {
-    case ARTC_NULL:
-        return _( "No charges" );
+        case ARTC_NULL:
+            return _( "No charges" );
         case ARTC_TIME:
             return _( "Recharges over time" );
         case ARTC_SOLAR:
@@ -264,8 +264,8 @@ auto artifact_charge_description( const art_charge charge ) -> std::string
 auto artifact_charge_req_description( const art_charge_req charge_req ) -> std::string
 {
     switch( charge_req ) {
-    case ACR_NULL:
-        return _( "No special requirement" );
+        case ACR_NULL:
+            return _( "No special requirement" );
         case ACR_EQUIP:
             return _( "Must be equipped" );
         case ACR_SKIN:
@@ -584,7 +584,7 @@ void reg_item( sol::state &lua )
         []( const item & self, int max ) -> int {
             return self.damage_level( max );
         }
-        ) );
+                      ) );
 
         DOC( "Get minimum possible damage value (can be negative for reinforced items). Default is -1000, configurable via 'damage_states' in JSON." );
         luna::set_fx( ut, "get_min_damage", &item::min_damage );

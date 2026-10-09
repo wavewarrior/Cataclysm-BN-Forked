@@ -245,7 +245,7 @@ void deploy_furn_actor::info( const item &, std::vector<iteminfo> &dump ) const
         dump.emplace_back(
             "DESCRIPTION",
             string_format( _( "Can be <info>activated</info> to deploy as furniture "
-                              "(<stat>%s</stat>)." ),
+                          "(<stat>%s</stat>)." ),
                            furn_name ) );
     } else {
         std::string furn_usages =
@@ -253,7 +253,7 @@ void deploy_furn_actor::info( const item &, std::vector<iteminfo> &dump ) const
         dump.emplace_back(
             "DESCRIPTION",
             string_format( _( "Can be <info>activated</info> to deploy as furniture "
-                              "(<stat>%s</stat>), which can then be used as %s." ),
+                          "(<stat>%s</stat>), which can then be used as %s." ),
                            furn_name, furn_usages ) );
     }
 }
@@ -267,7 +267,7 @@ int deploy_furn_actor::use( player& p, item& it, bool t, const tripoint_bub_ms& 
 {
     if( t ) { return 0; }
 
-if( p.is_mounted() ) {
+    if( p.is_mounted() ) {
         p.add_msg_if_player( m_info, _( "You cannot do that while mounted." ) );
         return 0;
     }
@@ -310,7 +310,7 @@ if( p.is_mounted() ) {
     // It shouldn't be possible to deploy a NOITEM furniture on top of items.
     const furn_t &furn_obj = furn_type.obj();
     if( ( furn_obj.has_flag( TFLAG_SEALED ) || furn_obj.has_flag( TFLAG_NOITEM ) )
-            && !here.i_at( pnt ).empty() ) {
+        && !here.i_at( pnt ).empty() ) {
         p.add_msg_if_player( m_info, _( "Can't put that here - items in the way." ) );
         return 0;
     }
@@ -437,8 +437,7 @@ void reveal_map_actor::reveal_targets( const tripoint_abs_omt& map ) const
     for( auto& place : places ) { omb.reveal( place, 0 ); }
 }
 
-void reveal_map_actor::show_revealed( player& p, item& item, const tripoint_abs_omt& center ) const
-{
+void reveal_map_actor::show_revealed( player& p, item& item, const tripoint_abs_omt& center ) const {
     uistate.overmap_highlighted_omts.clear();
 
     omt_find_params params{};
@@ -459,13 +458,15 @@ void reveal_map_actor::show_revealed( player& p, item& item, const tripoint_abs_
     // Group tiles by name
     std::multimap<std::string, tripoint_abs_omt> mm;
     std::set<std::string> utypes;
-for( auto& place : places ) {
-    auto desc = get_overmapbuffer( p.get_dimension() ).ter( place ).id().obj().get_name();
+    for( auto& place : places )
+    {
+        auto desc = get_overmapbuffer( p.get_dimension() ).ter( place ).id().obj().get_name();
         mm.insert( {desc, place} );
         utypes.insert( desc );
     }
 
-    if( utypes.empty() ) {
+    if( utypes.empty() )
+    {
         p.add_msg_if_player( _( "There isn't anything new on the %s." ), item.tname() );
         return;
     }
@@ -473,7 +474,8 @@ for( auto& place : places ) {
     // Show selector for each group
     std::vector<std::string> otypes( utypes.begin(), utypes.end() );
     uilist ui;
-    for( uint64_t i = 0; i < otypes.size(); ++i ) {
+    for( uint64_t i = 0; i < otypes.size(); ++i )
+    {
         auto& desc = otypes[i];
         ui.addentry( i, true, MENU_AUTOASSIGN, string_format( "%s (%d)", desc, mm.count( desc ) ) );
     }
@@ -481,8 +483,8 @@ for( auto& place : places ) {
 
     if( ui.ret < 0 ) { return; }
 
-const tripoint_abs_omt plrPos = p.abs_omt_pos();
-auto eqRange = mm.equal_range( otypes[ui.ret] );
+    const tripoint_abs_omt plrPos = p.abs_omt_pos();
+    auto eqRange = mm.equal_range( otypes[ui.ret] );
 
     // TODO: Cluster tripoints to collapse direct neighbor tiles (helipads, etc)?
 
@@ -491,14 +493,15 @@ auto eqRange = mm.equal_range( otypes[ui.ret] );
     // Shouldn't ever be hit, since multimap shouldn't have an entry with no overmap tiles, but
     if( sz == 0 ) { return; }
 
-std::transform(
-    eqRange.first, eqRange.second,
-                   std::inserter( uistate.overmap_highlighted_omts, uistate.overmap_highlighted_omts.end() ),
-                       []( const auto & e ) -> tripoint_abs_omt { return e.second; } );
+    std::transform(
+        eqRange.first, eqRange.second,
+        std::inserter( uistate.overmap_highlighted_omts, uistate.overmap_highlighted_omts.end() ),
+        []( const auto & e ) -> tripoint_abs_omt { return e.second; } );
 
     // Only one overmap tile of type
-    if( sz == 1 ) {
-    ui::omap::choose_point( eqRange.first->second );
+    if( sz == 1 )
+    {
+        ui::omap::choose_point( eqRange.first->second );
         return;
     }
 
@@ -509,12 +512,14 @@ std::transform(
 
     if( ui.ret < 0 ) { return; }
 
-if( ui.ret == 1 ) {
-    // Pick random
-    auto it = eqRange.first;
-    std::advance( it, rng( 0, sz - 1 ) );
+    if( ui.ret == 1 )
+    {
+        // Pick random
+        auto it = eqRange.first;
+        std::advance( it, rng( 0, sz - 1 ) );
         ui::omap::choose_point( it->second );
-    } else {
+    } else
+    {
         // Pick closest
         const auto pred_dist =
             [&]( const std::pair<std::string, tripoint_abs_omt> &a,
@@ -531,10 +536,10 @@ if( ui.ret == 1 ) {
 int reveal_map_actor::use( player& p, item& it, bool, const tripoint_bub_ms & ) const
 {
     if( !it.already_used_by_player( p ) && g->get_levz() < 0 ) {
-    p.add_msg_if_player( _( "You should read your %s when you get to the surface." ), it.tname() );
+        p.add_msg_if_player( _( "You should read your %s when you get to the surface." ), it.tname() );
         return 0;
     } else if( !character_funcs::can_see_fine_details( p ) ) {
-    p.add_msg_if_player( _( "It's too dark to read." ) );
+        p.add_msg_if_player( _( "It's too dark to read." ) );
         return 0;
     }
 
@@ -542,7 +547,7 @@ int reveal_map_actor::use( player& p, item& it, bool, const tripoint_bub_ms & ) 
     const auto mapPos = it.get_var( "reveal_map_center_omt", plrPos );
 
     if( it.already_used_by_player( p ) ) {
-    show_revealed( p, it, mapPos );
+        show_revealed( p, it, mapPos );
         return 0;
     }
 
@@ -618,11 +623,11 @@ ret_val<bool> firestarter_actor::can_use(
     const Character& p, const item& it, bool, const tripoint_bub_ms & ) const
 {
     if( p.is_underwater() ) {
-    return ret_val<bool>::make_failure( _( "You can't do that while underwater." ) );
+        return ret_val<bool>::make_failure( _( "You can't do that while underwater." ) );
     }
 
     if( !( it.has_flag( flag_USE_UPS ) && p.has_charges( itype_UPS, it.ammo_required() ) )
-            && ( it.ammo_remaining() < it.ammo_required() ) ) {
+        && ( it.ammo_remaining() < it.ammo_required() ) ) {
         return ret_val<bool>::make_failure( _( "This tool doesn't have enough charges." ) );
     }
 
@@ -638,9 +643,9 @@ float firestarter_actor::light_mod( const tripoint_bub_ms& pos ) const
 {
     if( !need_sunlight ) { return 1.0f; }
 
-const float light_level = g->natural_light_level( pos.z() );
+    const float light_level = g->natural_light_level( pos.z() );
     if( get_weather().weather_id->sun_intensity >= sun_intensity_type::normal
-            && light_level >= 60.0f && weather::is_sheltered( get_map(), pos ) ) {
+        && light_level >= 60.0f && weather::is_sheltered( get_map(), pos ) ) {
         return std::pow( light_level / 80.0f, 8 );
     }
 
@@ -661,8 +666,8 @@ int firestarter_actor::use( player& p, item& it, bool t, const tripoint_bub_ms& 
 {
     if( t ) { return 0; }
 
-auto pos = spos;
-float light = light_mod( p.bub_pos() );
+    auto pos = spos;
+    float light = light_mod( p.bub_pos() );
     if( !prep_firestarter_use( p, pos ) ) { return 0; }
 
     double skill_level = p.get_skill_level( skill_survival );
@@ -693,7 +698,7 @@ float light = light_mod( p.bub_pos() );
     p.assign_activity(
         std::make_unique<player_activity>(
             std::make_unique<start_fire_activity_actor>( &it, bub_to_abs( pos ), potential_skill_gain,
-                moves ) ) );
+                    moves ) ) );
     p.activity->add_tool( &it );
     p.activity->values.push_back( g->natural_light_level( pos.z() ) );
     // charges to use are handled by the activity
@@ -729,12 +734,12 @@ std::unique_ptr<iuse_actor> inscribe_actor::clone() const
 bool inscribe_actor::item_inscription( item& tool, item& cut ) const
 {
     if( !cut.made_of( SOLID ) ) {
-    add_msg( m_info, _( "You can't inscribe an item that isn't solid!" ) );
+        add_msg( m_info, _( "You can't inscribe an item that isn't solid!" ) );
         return false;
     }
 
     if( material_restricted && !cut.made_of_any( material_whitelist ) ) {
-    std::string lower_verb = verb.translated();
+        std::string lower_verb = verb.translated();
         std::transform( lower_verb.begin(), lower_verb.end(), lower_verb.begin(), ::tolower );
         add_msg( m_info, _( "You can't %1$s %2$s because of the material it is made of." ), lower_verb,
                  cut.display_name() );
@@ -755,26 +760,26 @@ bool inscribe_actor::item_inscription( item& tool, item& cut ) const
     std::string carving;
     std::string carving_tool;
     switch( menu.ret ) {
-    case INSCRIPTION_LABEL:
-        carving = "item_label";
-        carving_tool = "item_label_tool";
-        break;
-    case INSCRIPTION_NOTE:
-        carving = "item_note";
-        carving_tool = "item_note_tool";
-        break;
-    default:
-        return false;
-}
+        case INSCRIPTION_LABEL:
+            carving = "item_label";
+            carving_tool = "item_label_tool";
+            break;
+        case INSCRIPTION_NOTE:
+            carving = "item_note";
+            carving_tool = "item_note_tool";
+            break;
+        default:
+            return false;
+    }
 
-const bool hasnote = cut.has_var( carving );
-std::string messageprefix =
-    ( hasnote ? _( "(To delete, clear the text and confirm)\n" ) : "" ) +
-    //~ %1$s: gerund (e.g. carved), %2$s: item name
-    string_format( pgettext( "carving", "%1$s on the %2$s is: " ), gerund, cut.type_name() );
+    const bool hasnote = cut.has_var( carving );
+    std::string messageprefix =
+        ( hasnote ? _( "(To delete, clear the text and confirm)\n" ) : "" ) +
+        //~ %1$s: gerund (e.g. carved), %2$s: item name
+        string_format( pgettext( "carving", "%1$s on the %2$s is: " ), gerund, cut.type_name() );
 
-string_input_popup popup;
-popup.title( string_format( _( "%s what?" ), verb ) )
+    string_input_popup popup;
+    popup.title( string_format( _( "%s what?" ), verb ) )
          .width( 64 )
          .text( hasnote ? cut.get_var( carving ) : std::string() )
          .description( messageprefix )
@@ -782,9 +787,9 @@ popup.title( string_format( _( "%s what?" ), verb ) )
          .max_length( 128 )
          .query();
     if( popup.canceled() ) { return false; }
-const std::string message = popup.text();
-if( message.empty() ) {
-    cut.erase_var( carving );
+    const std::string message = popup.text();
+    if( message.empty() ) {
+        cut.erase_var( carving );
         cut.erase_var( carving_tool );
     } else {
         cut.set_var( carving, message );
@@ -798,24 +803,24 @@ int inscribe_actor::use( player& p, item& it, bool t, const tripoint_bub_ms & ) 
 {
     if( t ) { return 0; }
 
-int choice = INT_MAX;
-if( on_terrain && on_items ) {
-    uilist imenu;
-    imenu.text = string_format( _( "%s on what?" ), verb );
+    int choice = INT_MAX;
+    if( on_terrain && on_items ) {
+        uilist imenu;
+        imenu.text = string_format( _( "%s on what?" ), verb );
         imenu.addentry( 0, true, MENU_AUTOASSIGN, _( "The terrain" ) );
         imenu.addentry( 1, true, MENU_AUTOASSIGN, _( "An item" ) );
         imenu.query();
         choice = imenu.ret;
     } else if( on_terrain ) {
-    choice = 0;
-} else {
-    choice = 1;
-}
+        choice = 0;
+    } else {
+        choice = 1;
+    }
 
-if( choice < 0 || choice > 1 ) { return 0; }
+    if( choice < 0 || choice > 1 ) { return 0; }
 
-if( choice == 0 ) {
-    const auto dest_ = choose_adjacent( _( "Write where?" ) );
+    if( choice == 0 ) {
+        const auto dest_ = choose_adjacent( _( "Write where?" ) );
         if( !dest_ ) { return 0; }
         return iuse::
                handle_ground_graffiti( p, &it, string_format( _( "%s what?" ), verb ), dest_.value() );
@@ -823,12 +828,12 @@ if( choice == 0 ) {
 
     item* loc = game_menus::inv::titled_menu( get_avatar(), _( "Inscribe which item?" ) );
     if( !loc ) {
-    p.add_msg_if_player( m_info, _( "Never mind." ) );
+        p.add_msg_if_player( m_info, _( "Never mind." ) );
         return 0;
     }
     item& cut = *loc;
     if( &cut == &it ) {
-    p.add_msg_if_player( _( "You try to bend your %s, but fail." ), it.tname() );
+        p.add_msg_if_player( _( "You try to bend your %s, but fail." ), it.tname() );
         return 0;
     }
     // inscribe_item returns false if the action fails or is canceled somehow.
@@ -886,7 +891,7 @@ bool cauterize_actor::cauterize_effect( player& p, item& it, bool force )
 int cauterize_actor::use( player& p, item& it, bool t, const tripoint_bub_ms & ) const
 {
     if( t ) { return 0; }
-if( p.is_mounted() ) {
+    if( p.is_mounted() ) {
         p.add_msg_if_player( m_info, _( "You cannot do that while mounted." ) );
         return 0;
     }
@@ -894,7 +899,7 @@ if( p.is_mounted() ) {
     bool did_cauterize = false;
 
     if( has_disease ) {
-    did_cauterize = cauterize_effect( p, it, false );
+        did_cauterize = cauterize_effect( p, it, false );
     } else {
         const bool can_have_fun =
             p.has_trait( trait_MASOCHIST ) || p.has_trait( trait_MASOCHIST_MED )
@@ -907,8 +912,8 @@ if( p.is_mounted() ) {
 
     if( !did_cauterize ) { return 0; }
 
-if( flame ) {
-    p.use_charges( itype_fire, 4 );
+    if( flame ) {
+        p.use_charges( itype_fire, 4 );
         return 0;
 
     } else {
@@ -920,17 +925,17 @@ ret_val<bool> cauterize_actor::can_use(
     const Character& p, const item& it, bool, const tripoint_bub_ms & ) const
 {
     if( !p.has_effect( effect_bite ) && !p.has_effect( effect_bleed ) && !p.has_trait( trait_MASOCHIST )
-    && !p.has_trait( trait_MASOCHIST_MED ) && !p.has_trait( trait_CENOBITE ) ) {
+        && !p.has_trait( trait_MASOCHIST_MED ) && !p.has_trait( trait_CENOBITE ) ) {
 
-    return ret_val<bool>::make_failure( _( "You are not bleeding or bitten, there is no need to "
-                                           "cauterize yourself." ) );
+        return ret_val<bool>::make_failure( _( "You are not bleeding or bitten, there is no need to "
+                                               "cauterize yourself." ) );
     }
     if( p.is_mounted() ) {
-    return ret_val<bool>::make_failure( _( "You cannot cauterize while mounted." ) );
+        return ret_val<bool>::make_failure( _( "You cannot cauterize while mounted." ) );
     }
 
     if( flame ) {
-    if( !p.has_charges( itype_fire, 4 ) ) {
+        if( !p.has_charges( itype_fire, 4 ) ) {
             return ret_val<bool>::make_failure( _( "You need a source of flame (4 charges worth) "
                                                    "before you can cauterize yourself." ) );
         }
@@ -942,7 +947,7 @@ ret_val<bool> cauterize_actor::can_use(
     }
 
     if( p.is_underwater() ) {
-    return ret_val<bool>::make_failure( _( "You can't do that while underwater." ) );
+        return ret_val<bool>::make_failure( _( "You can't do that while underwater." ) );
     }
 
     return ret_val<bool>::make_success();
@@ -958,15 +963,15 @@ std::unique_ptr<iuse_actor> enzlave_actor::clone() const
 int enzlave_actor::use( player& p, item& it, bool t, const tripoint_bub_ms & ) const
 {
     if( t ) { return 0; }
-if( p.is_mounted() ) {
+    if( p.is_mounted() ) {
         p.add_msg_if_player( m_info, _( "You cannot do that while mounted." ) );
         return 0;
     }
     map_stack items = get_map().i_at( p.bub_pos() );
     std::vector<const item *> corpses;
 
-for( item * const& corpse_candidate : items ) {
-    const mtype* mt = corpse_candidate->get_mtype();
+    for( item * const& corpse_candidate : items ) {
+        const mtype* mt = corpse_candidate->get_mtype();
         if( corpse_candidate->is_corpse() && mt->in_species( ZOMBIE )
             && mt->made_of( material_id( "flesh" ) ) && mt->in_species( HUMAN )
             && corpse_candidate->is_active() && !corpse_candidate->has_var( "zlave" ) ) {
@@ -992,7 +997,7 @@ for( item * const& corpse_candidate : items ) {
     // but it doesn't make you feel any less bad about it.
     /** @EFFECT_SURVIVAL increases tolerance for enzlavement */
     if( p.get_morale_level()
-            <= ( 15 * ( tolerance_level - p.get_skill_level( skill_survival ) ) ) - 150 ) {
+        <= ( 15 * ( tolerance_level - p.get_skill_level( skill_survival ) ) ) - 150 ) {
         add_msg( m_neutral, _( "The prospect of cutting up the corpse and letting it rise again as a "
                                "slave is too much for you to deal with right now." ) );
         return 0;
@@ -1008,15 +1013,15 @@ for( item * const& corpse_candidate : items ) {
     amenu.query();
 
     if( amenu.ret < 0 ) {
-    p.add_msg_if_player( _( "Make love, not zlave." ) );
+        p.add_msg_if_player( _( "Make love, not zlave." ) );
         return 0;
     }
 
     if( tolerance_level == 0 ) {
-    // You just don't care, no message.
-} else if( tolerance_level <= 5 ) {
-    add_msg( m_neutral, _( "Well, it's more constructive than just chopping 'em into gooey "
-                           "meat…" ) );
+        // You just don't care, no message.
+    } else if( tolerance_level <= 5 ) {
+        add_msg( m_neutral, _( "Well, it's more constructive than just chopping 'em into gooey "
+                               "meat…" ) );
     } else {
         add_msg( m_bad, _( "You feel horrible for mutilating and enslaving someone's corpse." ) );
 
@@ -1080,15 +1085,15 @@ ret_val<bool> enzlave_actor::can_use(
 
     // TODO: Extract such checks into some kind of 'stat_requirements' class.
     if( p.get_skill_level( skill_survival ) < 1 ) {
-    //~ %s - name of the required skill.
-    return ret_val<bool>::make_failure( _( "You need at least %s 1." ), skill_survival->name() );
+        //~ %s - name of the required skill.
+        return ret_val<bool>::make_failure( _( "You need at least %s 1." ), skill_survival->name() );
     }
     if( p.is_mounted() ) {
-    return ret_val<bool>::make_failure( _( "You cannot do that while mounted." ) );
+        return ret_val<bool>::make_failure( _( "You cannot do that while mounted." ) );
     }
     if( p.get_skill_level( skill_firstaid ) < 1 ) {
-    //~ %s - name of the required skill.
-    return ret_val<bool>::make_failure( _( "You need at least %s 1." ), skill_firstaid->name() );
+        //~ %s - name of the required skill.
+        return ret_val<bool>::make_failure( _( "You need at least %s 1." ), skill_firstaid->name() );
     }
 
     return ret_val<bool>::make_success();
@@ -1114,8 +1119,8 @@ int fireweapon_off_actor::use( player& p, item& it, bool t, const tripoint_bub_m
 {
     if( t ) { return 0; }
 
-if( it.charges <= 0 ) {
-    p.add_msg_if_player( _( lacks_fuel_message ) );
+    if( it.charges <= 0 ) {
+        p.add_msg_if_player( _( lacks_fuel_message ) );
         return 0;
     }
 
@@ -1150,11 +1155,11 @@ ret_val<bool> fireweapon_off_actor::can_use(
     const Character& p, const item& it, bool, const tripoint_bub_ms & ) const
 {
     if( it.charges < it.type->charges_to_use() ) {
-    return ret_val<bool>::make_failure( _( "This tool doesn't have enough charges." ) );
+        return ret_val<bool>::make_failure( _( "This tool doesn't have enough charges." ) );
     }
 
     if( p.is_underwater() ) {
-    return ret_val<bool>::make_failure( _( "You can't do that while underwater." ) );
+        return ret_val<bool>::make_failure( _( "You can't do that while underwater." ) );
     }
 
     return ret_val<bool>::make_success();
@@ -1241,7 +1246,7 @@ std::unique_ptr<iuse_actor> manualnoise_actor::clone() const
 int manualnoise_actor::use( player& p, item& it, bool t, const tripoint_bub_ms & ) const
 {
     if( t ) { return 0; }
-if( it.type->charges_to_use() != 0 && it.charges < it.type->charges_to_use() ) {
+    if( it.type->charges_to_use() != 0 && it.charges < it.type->charges_to_use() ) {
         p.add_msg_if_player( _( no_charges_message ) );
         return 0;
     }
@@ -1270,7 +1275,7 @@ ret_val<bool> manualnoise_actor::can_use(
     const Character &, const item& it, bool, const tripoint_bub_ms & ) const
 {
     if( it.charges < it.type->charges_to_use() ) {
-    return ret_val<bool>::make_failure( _( "This tool doesn't have enough charges." ) );
+        return ret_val<bool>::make_failure( _( "This tool doesn't have enough charges." ) );
     }
 
     return ret_val<bool>::make_success();
@@ -1297,33 +1302,33 @@ void musical_instrument_actor::load( const JsonObject& obj )
 int musical_instrument_actor::use( player& p, item& it, bool t, const tripoint_bub_ms & ) const
 {
     if( p.is_mounted() ) {
-    p.add_msg_player_or_npc(
-        m_bad, _( "You can't play music while mounted." ),
-        _( "<npcname> can't play music while mounted." ) );
+        p.add_msg_player_or_npc(
+            m_bad, _( "You can't play music while mounted." ),
+            _( "<npcname> can't play music while mounted." ) );
         it.deactivate();
         return 0;
     }
     if( p.is_underwater() ) {
-    p.add_msg_player_or_npc(
-        m_bad, _( "You can't play music underwater" ),
-        _( "<npcname> can't play music underwater" ) );
+        p.add_msg_player_or_npc(
+            m_bad, _( "You can't play music underwater" ),
+            _( "<npcname> can't play music underwater" ) );
         it.deactivate();
         return 0;
     }
 
     if( p.has_effect( effect_sleep ) || p.has_effect( effect_stunned ) ||
         p.has_effect( effect_asthma ) ) {
-    p.add_msg_player_or_npc(
-        m_bad, _( "You stop playing your %s" ), _( "<npcname> stops playing their %s" ),
-        it.display_name() );
+        p.add_msg_player_or_npc(
+            m_bad, _( "You stop playing your %s" ), _( "<npcname> stops playing their %s" ),
+            it.display_name() );
         it.deactivate();
         return 0;
     }
 
     if( !t && it.is_active() ) {
-    p.add_msg_player_or_npc(
-        _( "You stop playing your %s" ), _( "<npcname> stops playing their %s" ),
-        it.display_name() );
+        p.add_msg_player_or_npc(
+            _( "You stop playing your %s" ), _( "<npcname> stops playing their %s" ),
+            it.display_name() );
         it.deactivate();
         return 0;
     }
@@ -1332,45 +1337,45 @@ int musical_instrument_actor::use( player& p, item& it, bool t, const tripoint_b
     // TODO: Distinguish instruments played with hands and with mouth, consider encumbrance
     const int inv_pos = p.get_item_position( &it );
     if( inv_pos >= 0 || inv_pos == INT_MIN ) {
-    p.add_msg_player_or_npc(
-        m_bad, _( "You need to hold or wear %s to play it" ),
-        _( "<npcname> needs to hold or wear %s to play it" ), it.display_name() );
+        p.add_msg_player_or_npc(
+            m_bad, _( "You need to hold or wear %s to play it" ),
+            _( "<npcname> needs to hold or wear %s to play it" ), it.display_name() );
         it.deactivate();
         return 0;
     }
 
     // At speed this low you can't coordinate your actions well enough to play the instrument
     if( p.get_speed() <= 25 + speed_penalty ) {
-    p.add_msg_player_or_npc(
-        m_bad, _( "You feel too weak to play your %s" ),
-        _( "<npcname> feels too weak to play their %s" ), it.display_name() );
+        p.add_msg_player_or_npc(
+            m_bad, _( "You feel too weak to play your %s" ),
+            _( "<npcname> feels too weak to play their %s" ), it.display_name() );
         it.deactivate();
         return 0;
     }
 
     // We can play the music now
     if( !it.is_active() ) {
-    p.add_msg_player_or_npc(
-        m_good, _( "You start playing your %s" ), _( "<npcname> starts playing their %s" ),
-        it.display_name() );
+        p.add_msg_player_or_npc(
+            m_good, _( "You start playing your %s" ), _( "<npcname> starts playing their %s" ),
+            it.display_name() );
         it.activate();
     }
 
     if( p.get_effect_int( effect_playing_instrument ) <= speed_penalty ) {
-    // Only re-apply the effect if it wouldn't lower the intensity
-    p.add_effect( effect_playing_instrument, 2_turns, bodypart_str_id::NULL_ID(), speed_penalty );
+        // Only re-apply the effect if it wouldn't lower the intensity
+        p.add_effect( effect_playing_instrument, 2_turns, bodypart_str_id::NULL_ID(), speed_penalty );
     }
 
     std::string desc = "music";
     /** @EFFECT_PER increases morale bonus when playing an instrument */
     const int morale_effect = fun + fun_bonus * p.per_cur;
     if( morale_effect >= 0 && action_time_scale::once_every_this_tick( description_frequency ) ) {
-    if( !player_descriptions.empty() && p.is_player() ) {
+        if( !player_descriptions.empty() && p.is_player() ) {
             desc = _( random_entry( player_descriptions ) );
         }
     } else if( morale_effect < 0 && action_time_scale::once_every_this_tick( 1_minutes ) ) {
-    // No musical skills = possible morale penalty
-    if( p.is_player() ) {
+        // No musical skills = possible morale penalty
+        if( p.is_player() ) {
             desc = _( "You produce an annoying sound" );
         } else {
             desc = string_format( _( "%s produces an annoying sound" ), p.disp_name( false ) );
@@ -1378,7 +1383,7 @@ int musical_instrument_actor::use( player& p, item& it, bool t, const tripoint_b
         // Continuous sound messages only print every so often, so this ensures when it does print
         // it'll be the right one.
     } else if( !npc_descriptions.empty() && p.is_npc() ) {
-    desc = string_format( _( "%1$s %2$s" ), p.disp_name( false ), random_entry( npc_descriptions ) );
+        desc = string_format( _( "%1$s %2$s" ), p.disp_name( false ), random_entry( npc_descriptions ) );
     }
 
     sound_event se;
@@ -1390,8 +1395,8 @@ int musical_instrument_actor::use( player& p, item& it, bool t, const tripoint_b
     se.from_npc = !se.from_player;
     se.faction = p.get_faction()->id();
     if( morale_effect >= 0 ) {
-    se.id = "musical_instrument";
-    se.variant = it.typeId().str();
+        se.id = "musical_instrument";
+        se.variant = it.typeId().str();
         sounds::sound( se );
     } else {
         se.id = "musical_instrument_bad";
@@ -1415,10 +1420,10 @@ ret_val<bool> musical_instrument_actor::can_use(
 {
     // TODO: (maybe): Mouth encumbrance? Smoke? Lack of arms? Hand encumbrance?
     if( p.is_underwater() ) {
-    return ret_val<bool>::make_failure( _( "You can't do that while underwater." ) );
+        return ret_val<bool>::make_failure( _( "You can't do that while underwater." ) );
     }
     if( p.is_mounted() ) {
-    return ret_val<bool>::make_failure( _( "You can't do that while mounted." ) );
+        return ret_val<bool>::make_failure( _( "You can't do that while mounted." ) );
     }
 
     return ret_val<bool>::make_success();
@@ -1449,15 +1454,15 @@ void learn_spell_actor::info( const item &, std::vector<iteminfo> &dump ) const
 int learn_spell_actor::use( player& p, item &, bool, const tripoint_bub_ms & ) const
 {
     if( !character_funcs::can_see_fine_details( p ) ) {
-    p.add_msg_if_player( _( "It's too dark to read." ) );
+        p.add_msg_if_player( _( "It's too dark to read." ) );
         return 0;
     }
     std::vector<uilist_entry> uilist_initializer;
     uilist spellbook_uilist;
     spellbook_callback sp_cb;
     bool know_it_all = true;
-for( const std::string& sp_id_str : spells ) {
-    const spell_id sp_id( sp_id_str );
+    for( const std::string& sp_id_str : spells ) {
+        const spell_id sp_id( sp_id_str );
         sp_cb.add_spell( sp_id );
         uilist_entry entry( sp_id.obj().name.translated() );
         if( p.magic->knows_spell( sp_id ) ) {
@@ -1482,7 +1487,7 @@ for( const std::string& sp_id_str : spells ) {
     }
 
     if( know_it_all ) {
-    add_msg( m_info, _( "You already know everything this could teach you." ) );
+        add_msg( m_info, _( "You already know everything this could teach you." ) );
         return 0;
     }
 
@@ -1496,14 +1501,14 @@ for( const std::string& sp_id_str : spells ) {
     spellbook_uilist.query();
     const int action = spellbook_uilist.ret;
     if( action < 0 ) { return 0; }
-const bool knows_spell = p.magic->knows_spell( spells[action] );
-std::string mode = "learn";
-bool gain_level = false;
-if( knows_spell ) {
-    mode = "study";
-    const int study_time = uilist(
-    _( "Spend how long studying?" ), {
-        {to_moves<int>( 30_minutes ), true, -1, _( "30 minutes" )},
+    const bool knows_spell = p.magic->knows_spell( spells[action] );
+    std::string mode = "learn";
+    bool gain_level = false;
+    if( knows_spell ) {
+        mode = "study";
+        const int study_time = uilist(
+        _( "Spend how long studying?" ), {
+            {to_moves<int>( 30_minutes ), true, -1, _( "30 minutes" )},
             {to_moves<int>( 1_hours ), true, -1, _( "1 hour" )},
             {to_moves<int>( 2_hours ), true, -1, _( "2 hours" )},
             {to_moves<int>( 4_hours ), true, -1, _( "4 hours" )},
@@ -1550,20 +1555,20 @@ void cast_spell_actor::info( const item &, std::vector<iteminfo> &dump ) const
 int cast_spell_actor::use( player& p, item& it, bool, const tripoint_bub_ms & ) const
 {
     if( need_worn && !p.is_worn( it ) ) {
-    p.add_msg_if_player(
-        m_info, _( "You need to wear the %1$s before activating it." ), it.tname() );
+        p.add_msg_if_player(
+            m_info, _( "You need to wear the %1$s before activating it." ), it.tname() );
         return 0;
     }
     if( need_wielding && !p.is_wielding( it ) ) {
-    p.add_msg_if_player(
-        m_info, _( "You need to wield the %1$s before activating it." ), it.tname() );
+        p.add_msg_if_player(
+            m_info, _( "You need to wield the %1$s before activating it." ), it.tname() );
         return 0;
     }
 
     spell casting = spell( spell_id( item_spell ) );
     bool mana_override = false;
     if( it.has_flag( flag_USE_PLAYER_ENERGY ) ) {
-    if( p.magic->has_enough_energy( p, casting ) ) {
+        if( p.magic->has_enough_energy( p, casting ) ) {
             mana_override = true;
         } else {
             p.add_msg_if_player( m_info, _( "You lack the energy to cast %s." ), casting.name() );
@@ -1607,43 +1612,43 @@ void holster_actor::load( const JsonObject& obj )
 bool holster_actor::can_holster( const item& obj ) const
 {
     if( obj.volume() > max_volume || obj.volume() < min_volume ) { return false; }
-if( max_weight > 0_gram && obj.weight() > max_weight ) { return false; }
-if( obj.is_active() ) { return false; }
-return std::any_of( flags.begin(), flags.end(),
-[&]( const std::string & f ) { return obj.has_flag( flag_id( f ) ); } )
+    if( max_weight > 0_gram && obj.weight() > max_weight ) { return false; }
+    if( obj.is_active() ) { return false; }
+    return std::any_of( flags.begin(), flags.end(),
+    [&]( const std::string & f ) { return obj.has_flag( flag_id( f ) ); } )
     || std::find( skills.begin(), skills.end(), obj.gun_skill() ) != skills.end();
 }
 
 detached_ptr<item> holster_actor::store( player& p, item& holster, detached_ptr<item>&& obj ) const
 {
     if( obj->is_null() || holster.is_null() ) {
-    debugmsg( "Null item was passed to holster_actor" );
+        debugmsg( "Null item was passed to holster_actor" );
         return std::move( obj );
     }
 
     // if selected item is unsuitable inform the player why not
     if( obj->volume() > max_volume ) {
-    p.add_msg_if_player(
-        m_info, _( "Your %1$s is too big to fit in your %2$s" ), obj->tname(), holster.tname() );
+        p.add_msg_if_player(
+            m_info, _( "Your %1$s is too big to fit in your %2$s" ), obj->tname(), holster.tname() );
         return std::move( obj );
     }
 
     if( obj->volume() < min_volume ) {
-    p.add_msg_if_player(
-        m_info, _( "Your %1$s is too small to fit in your %2$s" ), obj->tname(), holster.tname() );
+        p.add_msg_if_player(
+            m_info, _( "Your %1$s is too small to fit in your %2$s" ), obj->tname(), holster.tname() );
         return std::move( obj );
     }
 
     if( max_weight > 0_gram && obj->weight() > max_weight ) {
-    p.add_msg_if_player(
-        m_info, _( "Your %1$s is too heavy to fit in your %2$s" ), obj->tname(), holster.tname() );
+        p.add_msg_if_player(
+            m_info, _( "Your %1$s is too heavy to fit in your %2$s" ), obj->tname(), holster.tname() );
         return std::move( obj );
     }
 
     if( obj->is_active() ) {
-    p.add_msg_if_player(
-        m_info, _( "You don't think putting your %1$s in your %2$s is a good idea" ),
-        obj->tname(), holster.tname() );
+        p.add_msg_if_player(
+            m_info, _( "You don't think putting your %1$s in your %2$s is a good idea" ),
+            obj->tname(), holster.tname() );
         return std::move( obj );
     }
 
@@ -1667,7 +1672,7 @@ detached_ptr<item> holster_actor::store( player& p, item& holster, detached_ptr<
 int holster_actor::use( player& p, item& it, bool, const tripoint_bub_ms & ) const
 {
     if( p.is_wielding( it ) ) {
-    p.add_msg_if_player( _( "You need to unwield your %s before using it." ), it.tname() );
+        p.add_msg_if_player( _( "You need to unwield your %s before using it." ), it.tname() );
         return 0;
     }
 
@@ -1687,7 +1692,7 @@ int holster_actor::use( player& p, item& it, bool, const tripoint_bub_ms & ) con
 
     item* internal_item = nullptr;
     if( opts.size() > 1 ) {
-    int ret = uilist( string_format( _( "Use %s" ), it.tname() ), opts );
+        int ret = uilist( string_format( _( "Use %s" ), it.tname() ), opts );
         if( ret < 0 ) {
             pos = -2;
         } else {
@@ -1697,20 +1702,20 @@ int holster_actor::use( player& p, item& it, bool, const tripoint_bub_ms & ) con
             internal_item = *iter;
         }
     } else if( !it.contents.empty() ) {
-    internal_item = &it.contents.front();
+        internal_item = &it.contents.front();
     }
 
     if( pos < -1 ) {
-    p.add_msg_if_player( _( "Never mind." ) );
+        p.add_msg_if_player( _( "Never mind." ) );
         return 0;
     }
 
     if( pos >= 0 ) {
-    // Worn holsters ignore penalty effects (e.g. GRABBED) when determining number of moves to
-    // consume
-    bool penalties;
-    int cost;
-    if( p.is_worn( it ) ) {
+        // Worn holsters ignore penalty effects (e.g. GRABBED) when determining number of moves to
+        // consume
+        bool penalties;
+        int cost;
+        if( p.is_worn( it ) ) {
             penalties = false;
             cost = draw_cost;
         } else {
@@ -1736,20 +1741,20 @@ void holster_actor::info( const item &, std::vector<iteminfo> &dump ) const
 {
     std::string message =
         vgettext( "Can be activated to store a suitable item.",
-        "Can be activated to store suitable items.", multi );
+                  "Can be activated to store suitable items.", multi );
     dump.emplace_back( "DESCRIPTION", message );
     dump.emplace_back( "TOOL", _( "Num items: " ), "<num>", iteminfo::no_flags, multi );
     dump.emplace_back(
-    "TOOL", _( "Item volume: Min: " ), string_format( "<num> %s", volume_units_abbr() ),
-    iteminfo::is_decimal | iteminfo::no_newline | iteminfo::lower_is_better,
-    convert_volume( min_volume.value() ) );
+        "TOOL", _( "Item volume: Min: " ), string_format( "<num> %s", volume_units_abbr() ),
+        iteminfo::is_decimal | iteminfo::no_newline | iteminfo::lower_is_better,
+        convert_volume( min_volume.value() ) );
     dump.emplace_back( "TOOL", _( "  Max: " ), string_format( "<num> %s", volume_units_abbr() ),
-    iteminfo::is_decimal, convert_volume( max_volume.value() ) );
+                       iteminfo::is_decimal, convert_volume( max_volume.value() ) );
 
     if( max_weight > 0_gram ) {
-    dump.emplace_back(
-        "TOOL", _( "Max item weight: " ), string_format( _( "<num> %s" ), weight_units() ),
-        iteminfo::is_decimal, convert_weight( max_weight ) );
+        dump.emplace_back(
+            "TOOL", _( "Max item weight: " ), string_format( _( "<num> %s" ), weight_units() ),
+            iteminfo::is_decimal, convert_weight( max_weight ) );
     }
 }
 
@@ -1772,9 +1777,9 @@ void bandolier_actor::load( const JsonObject& obj )
 void bandolier_actor::info( const item &, std::vector<iteminfo> &dump ) const
 {
     if( !ammo.empty() ) {
-    auto str = enumerate_as_string(
-                   ammo.begin(), ammo.end(),
-    [&]( const ammotype & a ) { return string_format( "<stat>%s</stat>", a->name() ); },
+        auto str = enumerate_as_string(
+                       ammo.begin(), ammo.end(),
+        [&]( const ammotype & a ) { return string_format( "<stat>%s</stat>", a->name() ); },
         enumeration_conjunction::or_ );
 
         dump.emplace_back(
@@ -1790,13 +1795,13 @@ void bandolier_actor::info( const item &, std::vector<iteminfo> &dump ) const
 bool bandolier_actor::is_valid_ammo_type( const itype& t ) const
 {
     if( !t.ammo ) { return false; }
-return ammo.contains( t.ammo->type );
+    return ammo.contains( t.ammo->type );
 }
 
 bool bandolier_actor::can_store( const item& bandolier, const item& obj ) const
 {
     if( !bandolier.contents.empty()
-    && ( bandolier.contents.front().typeId() != obj.typeId()
+        && ( bandolier.contents.front().typeId() != obj.typeId()
              || bandolier.contents.front().charges >= capacity ) ) {
         return false;
     }
@@ -1807,7 +1812,7 @@ bool bandolier_actor::can_store( const item& bandolier, const item& obj ) const
 bool bandolier_actor::reload( player& p, item& obj ) const
 {
     if( !obj.is_bandolier() ) {
-    debugmsg( "Invalid item passed to bandolier_actor" );
+        debugmsg( "Invalid item passed to bandolier_actor" );
         return false;
     }
     // find all nearby compatible ammo (matching type currently contained if appropriate)
@@ -1816,7 +1821,7 @@ bool bandolier_actor::reload( player& p, item& obj ) const
     } );
 
     if( found.empty() ) {
-    p.add_msg_if_player( m_bad, _( "No matching ammo for the %1$s" ), obj.type_name() );
+        p.add_msg_if_player( m_bad, _( "No matching ammo for the %1$s" ), obj.type_name() );
         return false;
     }
 
@@ -1828,14 +1833,14 @@ bool bandolier_actor::reload( player& p, item& obj ) const
 
     item_reload_option sel = character_funcs::select_ammo( p, obj, std::move( opts ) );
     if( !sel ) {
-    return false; // canceled menu
-}
+        return false; // canceled menu
+    }
 
-p.mod_moves( -sel.moves() );
+    p.mod_moves( -sel.moves() );
 
-// add or stack the ammo dependent upon existing contents
-if( obj.contents.empty() ) {
-    obj.put_in( sel.ammo->split( sel.qty() ) );
+    // add or stack the ammo dependent upon existing contents
+    if( obj.contents.empty() ) {
+        obj.put_in( sel.ammo->split( sel.qty() ) );
     } else {
         obj.contents.front().charges += sel.qty();
         if( sel.ammo->charges > sel.qty() ) {
@@ -1855,7 +1860,7 @@ if( obj.contents.empty() ) {
 int bandolier_actor::use( player& p, item& it, bool, const tripoint_bub_ms & ) const
 {
     if( p.is_wielding( it ) ) {
-    p.add_msg_if_player( _( "You need to unwield your %s before using it." ), it.type_name() );
+        p.add_msg_if_player( _( "You need to unwield your %s before using it." ), it.type_name() );
         return 0;
     }
 
@@ -1872,8 +1877,7 @@ int bandolier_actor::use( player& p, item& it, bool, const tripoint_bub_ms & ) c
     menu.addentry( -1, !it.contents.empty(), 'u', _( "Unload %s" ), it.type_name() );
 
     actions.emplace_back( [&] {
-        it.contents.front().attempt_detach( [&p]( detached_ptr<item>&& it )
-        {
+        it.contents.front().attempt_detach( [&p]( detached_ptr<item>&& it ) {
             it = p.i_add_or_drop( std::move( it ) );
             if( it ) { p.add_msg_if_player( _( "Never mind." ) ); }
             return std::move( it );

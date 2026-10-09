@@ -154,13 +154,13 @@ auto start_join() -> void
         string_input_popup().title( _( "Enter host IP (or IP:port):" ) ).width( 30 ).query_string();
 
     if( ip.empty() ) {
-    return; // cancelled
-}
+        return; // cancelled
+    }
 
-int port = get_option<int>( "COOP_PORT" );
-// Parse "ip:port" syntax — last colon wins (supports bare IPv4 and bracketed IPv6).
-if( const auto colon = ip.rfind( ':' ); colon != std::string::npos ) {
-    const std::string port_str = ip.substr( colon + 1 );
+    int port = get_option<int>( "COOP_PORT" );
+    // Parse "ip:port" syntax — last colon wins (supports bare IPv4 and bracketed IPv6).
+    if( const auto colon = ip.rfind( ':' ); colon != std::string::npos ) {
+        const std::string port_str = ip.substr( colon + 1 );
         try {
             port = std::stoi( port_str );
         } catch( ... ) {
@@ -176,18 +176,18 @@ if( const auto colon = ip.rfind( ':' ); colon != std::string::npos ) {
 
     auto cli = std::make_unique<coop_client>();
     if( !cli->connect( ip, port ) ) {
-    popup( string_format( _( "Failed to connect to %s:%d." ), ip, port ) );
+        popup( string_format( _( "Failed to connect to %s:%d." ), ip, port ) );
         return;
     }
 
     if( !cli->handshake() ) {
-    popup( _( "Handshake failed." ) );
+        popup( _( "Handshake failed." ) );
         cli->shutdown();
         return;
     }
 
     if( !cli->receive_world_seed() ) {
-    popup( _( "Failed to receive world seed." ) );
+        popup( _( "Failed to receive world seed." ) );
         cli->shutdown();
         return;
     }
@@ -197,7 +197,7 @@ if( const auto colon = ip.rfind( ':' ); colon != std::string::npos ) {
     // g->setup() can take several seconds on modded worlds — sending after it would always
     // race-lose against wait_for_join_info(3000).
     if( !cli->send_join_info() ) {
-    DebugLog( DL::Info, DC::Main ) << "[coop] send_join_info failed — host uses spawn fallback";
+        DebugLog( DL::Info, DC::Main ) << "[coop] send_join_info failed — host uses spawn fallback";
     }
 
     try {
@@ -221,12 +221,12 @@ if( const auto colon = ip.rfind( ':' ); colon != std::string::npos ) {
 auto show_coop_popup( const std::string& message ) -> bool
 {
     return query_popup()
-    .context( "COOP_POPUP" )
-    .message( "%s", message )
-    .option( "CONFIRM" )
-    .option( "QUIT" )
-    .allow_cancel( true )
-    .query()
-    .action == "CONFIRM";
+           .context( "COOP_POPUP" )
+           .message( "%s", message )
+           .option( "CONFIRM" )
+           .option( "QUIT" )
+           .allow_cancel( true )
+           .query()
+           .action == "CONFIRM";
 }
 

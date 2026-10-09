@@ -221,7 +221,8 @@ target_handler::trajectory target_ui::run()
 
     avatar& player_character = *you;
     on_out_of_scope cleanup( [&here, &player_character]() {
-        level_cache_freshness::invalidate_level( here, player_character.bub_pos().z() + player_character.view_offset.z() );
+        level_cache_freshness::invalidate_level( here,
+                player_character.bub_pos().z() + player_character.view_offset.z() );
     } );
 
     shared_ptr_fast<game::draw_callback_t> target_ui_cb = make_shared_fast<game::draw_callback_t>(

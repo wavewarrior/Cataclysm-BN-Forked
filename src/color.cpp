@@ -722,8 +722,7 @@ void color_manager::clear()
     }
 }
 
-namespace
-{
+namespace {
 // RmlUi model for the Colors editor (color_manager::show_gui). One row per colour
 // entry; per-cell colours baked via cata_text_to_rml. sel_col marks the active
 // column on the current row (1 = Normal group, 2 = Invert group).
@@ -737,23 +736,23 @@ struct cm_row {
 };
 struct cm_session {
     Rml::String header_rml;
-    Rml::Vector<cm_row> rows;
+    Rml::Vector < cm_row > rows;
     Rml::DataModelHandle handle;
 };
 bool g_cm_types_registered = false;
-void register_cm_rml_types( Rml::DataModelConstructor &c )
+void register_cm_rml_types( Rml::DataModelConstructor & c )
 {
     if( g_cm_types_registered ) {
         return;
     }
-    Rml::StructHandle<cm_row> rh = c.RegisterStruct<cm_row>();
+    Rml::StructHandle < cm_row > rh = c.RegisterStruct < cm_row > ();
     rh.RegisterMember( "name_rml", &cm_row::name_rml );
     rh.RegisterMember( "def_rml", &cm_row::def_rml );
     rh.RegisterMember( "custom_rml", &cm_row::custom_rml );
     rh.RegisterMember( "inv_def_rml", &cm_row::inv_def_rml );
     rh.RegisterMember( "inv_custom_rml", &cm_row::inv_custom_rml );
     rh.RegisterMember( "sel_col", &cm_row::sel_col );
-    c.RegisterArray<Rml::Vector<cm_row>>();
+    c.RegisterArray < Rml::Vector < cm_row>>();
     g_cm_types_registered = true;
 }
 } // namespace
@@ -771,7 +770,7 @@ void color_manager::show_gui()
 
     point iOffset;
 
-    std::vector<int> vLines;
+    std::vector < int > vLines;
     vLines.push_back( -1 );
     vLines.push_back( 48 );
 
@@ -809,7 +808,7 @@ void color_manager::show_gui()
     ctxt.register_action( "LOAD_TEMPLATE" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
 
-    std::map<std::string, color_struct> name_color_map;
+    std::map < std::string, color_struct > name_color_map;
 
     for( const auto &pr : name_map ) {
         name_color_map[pr.first] = color_array[pr.second];
@@ -880,7 +879,7 @@ void color_manager::show_gui()
             }
         } else if( action == "DOWN" ) {
             iCurrentLine++;
-            if( iCurrentLine >= static_cast<int>( iMaxColors ) ) {
+            if( iCurrentLine >= static_cast < int > ( iMaxColors ) ) {
                 iCurrentLine = 0;
             }
         } else if( action == "LEFT" ) {
@@ -926,7 +925,7 @@ void color_manager::show_gui()
 
                 ui_templates.query();
 
-                if( ui_templates.ret >= 0 && static_cast<size_t>( ui_templates.ret ) < vFiles.size() ) {
+                if( ui_templates.ret >= 0 && static_cast < size_t > ( ui_templates.ret ) < vFiles.size() ) {
                     bStuffChanged = true;
 
                     clear();
@@ -986,7 +985,7 @@ void color_manager::show_gui()
 
             ui_colors.query();
 
-            if( ui_colors.ret >= 0 && static_cast<size_t>( ui_colors.ret ) < name_color_map.size() ) {
+            if( ui_colors.ret >= 0 && static_cast < size_t > ( ui_colors.ret ) < name_color_map.size() ) {
                 bStuffChanged = true;
 
                 auto iter = name_color_map.begin();
@@ -1046,8 +1045,8 @@ void color_manager::load_custom( const std::string &sPath )
 void color_manager::serialize( JsonOut &json ) const
 {
     json.start_array();
-for( auto &entry : color_array ) {
-    if( !entry.name_custom.empty() || !entry.name_invert_custom.empty() ) {
+    for( auto &entry : color_array ) {
+        if( !entry.name_custom.empty() || !entry.name_invert_custom.empty() ) {
             json.start_object();
 
             json.member( "name", id_to_name( entry.col_id ) );

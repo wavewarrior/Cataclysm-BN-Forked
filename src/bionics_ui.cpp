@@ -259,9 +259,9 @@ static std::string bionics_hints_text( bionic_menu_mode mode, const input_contex
 {
     std::string desc_append = string_format(
                                   _( "[<color_yellow>%s</color>] Reassign, [<color_yellow>%s</color>] Switch tabs, "
-                                     "[<color_yellow>%s</color>] Toggle fuel saving mode, "
-                                     "[<color_yellow>%s</color>] Toggle sprite visibility, "
-                                     "[<color_yellow>%s</color>] Toggle auto start mode." ),
+       "[<color_yellow>%s</color>] Toggle fuel saving mode, "
+       "[<color_yellow>%s</color>] Toggle sprite visibility, "
+       "[<color_yellow>%s</color>] Toggle auto start mode." ),
                                   ctxt.get_desc( "REASSIGN" ), ctxt.get_desc( "NEXT_TAB" ), ctxt.get_desc( "TOGGLE_SAFE_FUEL" ),
                                   ctxt.get_desc( "TOGGLE_SPRITE" ),
                                   ctxt.get_desc( "TOGGLE_AUTO_START" ) );

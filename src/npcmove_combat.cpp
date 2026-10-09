@@ -284,12 +284,12 @@ float npc::evaluate_enemy( const Creature &target ) const
 {
     ZoneScopedN( "evaluate_enemy" );
     if( target.is_monster() ) {
-    const monster &mon = dynamic_cast<const monster &>( target );
+        const monster &mon = dynamic_cast<const monster &>( target );
         float diff = static_cast<float>( mon.type->difficulty );
         return std::min( diff, NPC_DANGER_MAX );
     } else if( target.is_npc() || target.is_player() ) {
-    return std::min( character_danger( dynamic_cast<const player &>( target ) ),
-                     NPC_DANGER_MAX );
+        return std::min( character_danger( dynamic_cast<const player &>( target ) ),
+                         NPC_DANGER_MAX );
     } else {
         return 0.0f;
     }
@@ -1303,13 +1303,15 @@ void npc::execute_action( const npc_cmd_t &cmd )
                     // We probably wanted to go there in the last turn
                     priority = 4;
 
-                } else if( available_seat( pt ) ) {
+                }
+                else if( available_seat( pt ) ) {
                     // Assuming player "owns" a sensible vehicle seats should be in good spots to
                     // occupy Prefer our assigned seat if we have one
                     const npc* who = pt.crew();
                     priority = who && who->getID() == getID() ? 3 : 2;
 
-                } else if( vp.is_inside() ) {
+                }
+                else if( vp.is_inside() ) {
                     priority = 1;
                 }
 

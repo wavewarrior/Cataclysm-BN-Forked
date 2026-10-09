@@ -267,7 +267,7 @@ void item::food_info( const item *food_item, std::vector<iteminfo> &info,
         parts->test( iteminfo_parts::FOOD_POISON ) ) {
         info.emplace_back( "DESCRIPTION",
                            _( "* On closer inspection, this appears to be "
-                              "<bad>poisonous</bad>." ) );
+           "<bad>poisonous</bad>." ) );
     }
 
     ///\EFFECT_SURVIVAL >=5 allows detection of hallucinogenic food
@@ -275,15 +275,15 @@ void item::food_info( const item *food_item, std::vector<iteminfo> &info,
         parts->test( iteminfo_parts::FOOD_HALLUCINOGENIC ) ) {
         info.emplace_back( "DESCRIPTION",
                            _( "* On closer inspection, this appears to be "
-                              "<neutral>hallucinogenic</neutral>." ) );
+           "<neutral>hallucinogenic</neutral>." ) );
     }
 
     if( food_item->goes_bad() && parts->test( iteminfo_parts::FOOD_ROT ) ) {
         const std::string rot_time = to_string_clipped( food_item->get_shelf_life() );
         info.emplace_back( "DESCRIPTION",
                            string_format( _( "* This food is <neutral>perishable</neutral>, "
-                                             "and at room temperature has an estimated nominal "
-                                             "shelf life of <info>%s</info>." ), rot_time ) );
+                          "and at room temperature has an estimated nominal "
+                          "shelf life of <info>%s</info>." ), rot_time ) );
 
 
         if( parts->test( iteminfo_parts::FOOD_ROT_STORAGE ) ) {
@@ -336,18 +336,18 @@ void item::food_info( const item *food_item, std::vector<iteminfo> &info,
         if( food_item->has_flag( flag_NO_PARASITES ) ) {
             info.emplace_back( "DESCRIPTION",
                                _( "* It seems that deep freezing <good>killed all "
-                                  "parasites</good>." ) );
+               "parasites</good>." ) );
         }
         if( food_item->rotten() ) {
             if( you.has_enchantment_flag( ench_flag_EAT_ROTTEN ) ) {
                 info.emplace_back( "DESCRIPTION",
                                    _( "This food has started to <neutral>rot</neutral>, "
-                                      "but <info>you can tolerate it</info>." ) );
+                   "but <info>you can tolerate it</info>." ) );
             } else {
                 info.emplace_back( "DESCRIPTION",
                                    _( "This food has started to <bad>rot</bad>. "
-                                      "<info>Eating</info> it would be a <bad>very bad "
-                                      "idea</bad>." ) );
+                   "<info>Eating</info> it would be a <bad>very bad "
+                   "idea</bad>." ) );
             }
         }
     }

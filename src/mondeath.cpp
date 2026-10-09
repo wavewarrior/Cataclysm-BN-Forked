@@ -896,19 +896,25 @@ void mdeath::detonate( monster &z )
     for( const itype_id &bomb_id : pre_dets ) {
         if( bomb_id.str() == "bot_grenade_hack" ) {
             dets.emplace_back( "grenade_act", 5 );
-        } else if( bomb_id.str() == "bot_flashbang_hack" ) {
+        }
+        else if( bomb_id.str() == "bot_flashbang_hack" ) {
             dets.emplace_back( "flashbang_act", 5 );
-        } else if( bomb_id.str() == "bot_gasbomb_hack" ) {
+        }
+        else if( bomb_id.str() == "bot_gasbomb_hack" ) {
             dets.emplace_back( "gasbomb_act", 20 );
-        } else if( bomb_id.str() == "bot_c4_hack" ) {
+        }
+        else if( bomb_id.str() == "bot_c4_hack" ) {
             dets.emplace_back( "c4armed", 10 );
-        } else if( bomb_id.str() == "bot_mininuke_hack" ) {
+        }
+        else if( bomb_id.str() == "bot_mininuke_hack" ) {
             dets.emplace_back( "mininuke_act", 20 );
-        } else {
+        }
+        else {
             // Get the transformation item
             const iuse_transform *actor = dynamic_cast<const iuse_transform *>(
-                                              bomb_id->get_use( "transform" )->get_actor_ptr() );
-            if( actor == nullptr ) {
+                bomb_id->get_use( "transform" )->get_actor_ptr() );
+            if( actor == nullptr )
+            {
                 // Invalid bomb item, move to the next ammo item
                 add_msg( m_debug, "Invalid bomb type in detonate mondeath for %s.", z.name() );
                 continue;

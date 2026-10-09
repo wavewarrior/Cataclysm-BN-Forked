@@ -2221,7 +2221,7 @@ void mapgen_forest( mapgendata &dat )
     static constexpr int margin_y = SEEY * 2 / 3;
 
     const auto get_blended_feature = [&no_ter_furn, &max_factor, &factor,
-                  &get_feature_for_neighbor, &dat]( const point_omt_ms & p ) {
+    &get_feature_for_neighbor, &dat]( const point_omt_ms & p ) {
         // Pick one random feature from each biome according to the biome defs and save it into a lookup.
         // We'll blend these features together below based on the current and adjacent terrains.
         std::map<oter_id, ter_furn_id> biome_features;
@@ -2847,19 +2847,24 @@ void mapgen_lake_shore( mapgendata &dat )
             }
             if( fallback < 2 ) {
                 line_segments.push_back( { slots[i], { max_b / 2, 0 } } );
-            } else if( fallback < 4 ) {
+            }
+            else if( fallback < 4 ) {
                 line_segments.push_back( { slots[i], { 0, max_b / 2 } } );
-            } else if( fallback < 6 ) {
+            }
+            else if( fallback < 6 ) {
                 line_segments.push_back( { slots[i], { max_b / 2, max_b } } );
-            } else if( fallback < 8 ) {
+            }
+            else if( fallback < 8 ) {
                 line_segments.push_back( { slots[i], { max_b, max_b / 2 } } );
             }
-        } else if( pair == i + next ) {
+        }
+        else if( pair == i + next ) {
             // We returned to our neighbour on same side, let's connect them in the middle
             point_omt_ms mid = { max_b / 2, max_b / 2 };
             line_segments.push_back( { mid, slots[i] } );
             line_segments.push_back( { mid, slots[pair] } );
-        } else {
+        }
+        else {
             // Make a shore line with given two points
             line_segments.push_back( { slots[i], slots[pair] } );
         }
@@ -2950,7 +2955,7 @@ void mapgen_lake_shore( mapgendata &dat )
 
     const auto fill_deep_water = [&]( const point_omt_ms & starting_point ) {
         std::vector<point_omt_ms> water_points = ff::point_flood_fill_4_connected( starting_point, visited,
-                should_fill );
+            should_fill );
         for( auto &wp : water_points ) {
             m->ter_set( wp, water_tile );
             m->furn_set( wp, f_null );

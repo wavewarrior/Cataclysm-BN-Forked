@@ -435,7 +435,7 @@ bool aim_activity_actor::load_RAS_weapon()
 
     const auto ammo_location_is_valid = [&]() -> bool {
         if( !you.ammo_location ) { return false; }
-    if( !gun->can_reload_with( you.ammo_location->typeId() ) ) { return false; }
+        if( !gun->can_reload_with( you.ammo_location->typeId() ) ) { return false; }
         if( square_dist( you.abs_pos(), you.ammo_location->abs_pos() ) > 1 ) { return false; }
         return true;
     };
@@ -1136,7 +1136,8 @@ void move_items_activity_actor::do_turn( player_activity& act, Character& who )
         vec.push_back( std::move( newit ) );
         if( to_vehicle ) {
             put_into_vehicle_or_drop( who, item_drop_reason::deliberate, vec, abs_to_bub( dest ) );
-        } else {
+        }
+        else {
             drop_on_map( who, item_drop_reason::deliberate, vec, abs_to_bub( dest ) );
         }
     }
@@ -1148,8 +1149,7 @@ void move_items_activity_actor::do_turn( player_activity& act, Character& who )
     }
 }
 
-void move_items_activity_actor::serialize( JsonOut& jsout ) const
-{
+void move_items_activity_actor::serialize( JsonOut& jsout ) const {
     jsout.start_object();
 
     jsout.member( "progress", progress );
@@ -2232,8 +2232,8 @@ std::unique_ptr<activity_actor> armor_layers_activity_actor::deserialize( JsonIn
 activity_id consume_menu_activity_actor::get_type() const
 {
     switch( menu_type ) {
-    case consume_menu_type::EAT:
-        return activity_id( "ACT_EAT_MENU" );
+        case consume_menu_type::EAT:
+            return activity_id( "ACT_EAT_MENU" );
         case consume_menu_type::FOOD:
             return activity_id( "ACT_CONSUME_FOOD_MENU" );
         case consume_menu_type::DRINK:
@@ -2342,8 +2342,8 @@ std::unique_ptr<activity_actor> firstaid_activity_actor::deserialize( JsonIn& js
 activity_id wood_chop_activity_actor::get_type() const
 {
     switch( chop_type ) {
-    case wood_chop_type::TREE:
-        return activity_id( "ACT_CHOP_TREE" );
+        case wood_chop_type::TREE:
+            return activity_id( "ACT_CHOP_TREE" );
         case wood_chop_type::LOGS:
             return activity_id( "ACT_CHOP_LOGS" );
         case wood_chop_type::PLANKS:

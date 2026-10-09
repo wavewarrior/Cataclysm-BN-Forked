@@ -1,8 +1,8 @@
 #pragma once
 #ifndef CATA_SRC_LIGHTING_NOISE_UTILS_H
-#define CATA_SRC_LIGHTING_NOISE_UTILS_H
+#    define CATA_SRC_LIGHTING_NOISE_UTILS_H
 
-#include <cstdint>
+#    include <cstdint>
 
 // Integer hash (3 ints -> uint32) and bilinearly-interpolated value noise.
 // Seeded so a given position is deterministic across launches.

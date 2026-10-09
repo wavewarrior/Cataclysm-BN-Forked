@@ -146,20 +146,20 @@ bool vehicle::can_mount( const tripoint_mnt_veh &dp, const vpart_id &id ) const
 {
     // The part has to actually exist.
     if( !id.is_valid() ) {
-    return false;
-}
+        return false;
+    }
 
-// It also has to be a real part, not the null part
-const vpart_info &part = id.obj();
-if( part.has_flag( "NOINSTALL" ) ) {
-    return false;
-}
+    // It also has to be a real part, not the null part
+    const vpart_info &part = id.obj();
+    if( part.has_flag( "NOINSTALL" ) ) {
+        return false;
+    }
 
-const std::vector<int> parts_in_square = parts_at_relative( dp, false );
+    const std::vector<int> parts_in_square = parts_at_relative( dp, false );
 
-// New Subpath for balloon type structures when on the edge
-if( part.has_flag( "EXTENDABLE" ) ) {
-    if( parts_in_square.empty() ) {
+    // New Subpath for balloon type structures when on the edge
+    if( part.has_flag( "EXTENDABLE" ) ) {
+        if( parts_in_square.empty() ) {
             // There needs to be parts for these
             if( !parts.empty() ) {
                 if( !has_structural_or_extendable_part( dp ) &&
@@ -178,10 +178,10 @@ if( part.has_flag( "EXTENDABLE" ) ) {
     }
     // First part in an empty square MUST be a structural part
     if( parts_in_square.empty() && part.location != part_location_structure ) {
-    return false;
-}
-// If its a part that harnesses animals that don't allow placing on it.
-if( !parts_in_square.empty() && part_info( parts_in_square[0] ).has_flag( "ANIMAL_CTRL" ) ) {
+        return false;
+    }
+    // If its a part that harnesses animals that don't allow placing on it.
+    if( !parts_in_square.empty() && part_info( parts_in_square[0] ).has_flag( "ANIMAL_CTRL" ) ) {
         return false;
     }
     // No other part can be placed on a protrusion
@@ -200,8 +200,8 @@ if( !parts_in_square.empty() && part_info( parts_in_square[0] ).has_flag( "ANIMA
     }
 
     //No part type can stack with itself, or any other part in the same slot
-for( const auto &elem : parts_in_square ) {
-    const vpart_info &other_part = parts[elem].info();
+    for( const auto &elem : parts_in_square ) {
+        const vpart_info &other_part = parts[elem].info();
 
         //Parts with no location can stack with each other (but not themselves)
         if( part.get_id() == other_part.get_id() ||
@@ -219,7 +219,7 @@ for( const auto &elem : parts_in_square ) {
     // All parts after the first must be installed on or next to an existing part
     // the exception is when a single tile only structural object is being repaired
     if( !parts.empty() ) {
-    if( !is_structural_part_removed() &&
+        if( !is_structural_part_removed() &&
             !has_structural_part( dp ) &&
             !has_structural_part( dp + point_east ) &&
             !has_structural_part( dp + point_south ) &&
@@ -232,13 +232,13 @@ for( const auto &elem : parts_in_square ) {
     // only one exclusive engine allowed
     std::string empty;
     if( has_engine_conflict( &part, empty ) ) {
-    return false;
-}
+        return false;
+    }
 
-// Check all the flags of the part to see if they require other flags
-// If other flags are required check if those flags are present
-for( const std::string &flag : part.get_flags() ) {
-    if( !json_flag::get( flag ).requires_flag().empty() ) {
+    // Check all the flags of the part to see if they require other flags
+    // If other flags are required check if those flags are present
+    for( const std::string &flag : part.get_flags() ) {
+        if( !json_flag::get( flag ).requires_flag().empty() ) {
             bool anchor_found = false;
             for( const auto &elem : parts_in_square ) {
                 if( part_info( elem ).has_flag( json_flag::get( flag ).requires_flag() ) ) {
@@ -253,7 +253,7 @@ for( const std::string &flag : part.get_flags() ) {
 
     //Mirrors cannot be mounted on OPAQUE parts
     if( part.has_flag( "VISION" ) && !part.has_flag( "CAMERA" ) ) {
-    for( const auto &elem : parts_in_square ) {
+        for( const auto &elem : parts_in_square ) {
             if( part_info( elem ).has_flag( "OPAQUE" ) ) {
                 return false;
             }
@@ -261,7 +261,7 @@ for( const std::string &flag : part.get_flags() ) {
     }
     //Opaque parts cannot be mounted on mirrors parts
     if( part.has_flag( "OPAQUE" ) ) {
-    for( const auto &elem : parts_in_square ) {
+        for( const auto &elem : parts_in_square ) {
             if( part_info( elem ).has_flag( "VISION" ) &&
                 !part_info( elem ).has_flag( "CAMERA" ) ) {
                 return false;
@@ -271,7 +271,7 @@ for( const std::string &flag : part.get_flags() ) {
 
     //Turret mounts must NOT be installed on other (modded) turret mounts
     if( part.has_flag( "TURRET_MOUNT" ) ) {
-    for( const auto &elem : parts_in_square ) {
+        for( const auto &elem : parts_in_square ) {
             if( part_info( elem ).has_flag( "TURRET_MOUNT" ) ) {
                 return false;
             }
@@ -280,7 +280,7 @@ for( const std::string &flag : part.get_flags() ) {
 
     //Don't allow turret controls or laser designators on manual-only turrets.
     if( part.has_flag( "TURRET_CONTROLS" ) || part.has_flag( "LASER_DESIGNATOR" ) ) {
-    for( const auto &elem : parts_in_square ) {
+        for( const auto &elem : parts_in_square ) {
             if( part_info( elem ).has_flag( "MANUAL" ) ) {
                 return false;
             }
@@ -300,15 +300,15 @@ bool vehicle::can_unmount( const int p ) const
 bool vehicle::can_unmount( const int p, std::string &reason ) const
 {
     if( p < 0 || p > static_cast<int>( parts.size() ) ) {
-    return false;
-}
+        return false;
+    }
 
-// Find all the flags on parts in this tile that require other flags
-const auto pt = parts[p].mount;
-std::vector<int> parts_here = parts_at_relative( pt, false );
+    // Find all the flags on parts in this tile that require other flags
+    const auto pt = parts[p].mount;
+    std::vector<int> parts_here = parts_at_relative( pt, false );
 
-if( part_info( p ).has_flag( "NOREMOVE_SECURITY" ) ) {
-    const auto [c, s] = get_controls_and_security();
+    if( part_info( p ).has_flag( "NOREMOVE_SECURITY" ) ) {
+        const auto [c, s] = get_controls_and_security();
         if( s >= 0 ) {
             reason = string_format( _( "Remove the %1$s %2$s first." ), name, part_info( s ).name() );
             return false;
@@ -317,8 +317,8 @@ if( part_info( p ).has_flag( "NOREMOVE_SECURITY" ) ) {
 
     const auto no_remove_closed = part_info( p ).has_flag( "NOREMOVE_CLOSED" );
     const auto no_remove_open =  part_info( p ).has_flag( "NOREMOVE_OPEN" );
-for( const auto &elem : parts_here ) {
-    const auto is_openable = part_info( elem ).has_flag( "OPENABLE" );
+    for( const auto &elem : parts_here ) {
+        const auto is_openable = part_info( elem ).has_flag( "OPENABLE" );
         const auto is_working = !parts[elem].is_broken();
         if( no_remove_closed && is_openable && is_working && !parts[elem].open ) {
             reason = string_format( _( "Open the attached %s first." ), part_info( elem ).name() );
@@ -344,7 +344,7 @@ for( const auto &elem : parts_here ) {
 
     //Can't remove an animal part if the animal is still contained
     if( parts[p].has_flag( vehicle_part::animal_flag ) ) {
-    reason = _( "Remove carried animal first." );
+        reason = _( "Remove carried animal first." );
         return false;
     }
 
@@ -352,7 +352,7 @@ for( const auto &elem : parts_here ) {
     if( part_info( p ).location == part_location_structure ||
         part_info( p ).has_flag( VPFLAG_EXTENDABLE ) ) {
 
-    std::vector<int> parts_in_square = parts_at_relative( parts[p].mount, false );
+        std::vector<int> parts_in_square = parts_at_relative( parts[p].mount, false );
         /* To remove a structural part, there can be only structural parts left
          * in that square (might be more than one in the case of wreckage) */
         for( auto &elem : parts_in_square ) {
@@ -595,7 +595,8 @@ bool vehicle::try_to_rack_nearby_vehicle( const std::vector<std::vector<int>> &l
                 test_veh = veh_pointer_or_null( g->m.veh_at( search_pos ) );
                 if( test_veh == nullptr || test_veh == this ) {
                     continue;
-                } else if( test_veh != carry_vehs[ i ] ) {
+                }
+                else if( test_veh != carry_vehs[ i ] ) {
                     carry_vehs[ i ] = test_veh;
                     partial_matches[ i ].clear();
                 }

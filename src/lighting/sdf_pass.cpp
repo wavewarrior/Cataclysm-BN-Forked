@@ -128,8 +128,8 @@ void sdf_pass::init(gpu_device& dev, int map_w, int map_h) {
             if (tb) {
                 void* mp = SDL_MapGPUTransferBuffer(d, tb, false);
                 if (mp) {
-                    std::fill_n(reinterpret_cast<float*>(mp),
-                                 static_cast<long>(alb_bytes / 4), 1.0f);
+                    std::fill_n(reinterpret_cast<float*>(mp), static_cast<long>(alb_bytes / 4),
+                                1.0f);
                     SDL_UnmapGPUTransferBuffer(d, tb);
                     SDL_GPUCommandBuffer* cb = SDL_AcquireGPUCommandBuffer(d);
                     if (cb) {
@@ -308,24 +308,22 @@ void sdf_pass::upload(
     // term off (`sky_vis > 0.05`) and makes any normal-dependent change invisible.
     // If nonzero is high here but the fragment still reads ~0, the fault is the index
     // math (origin/stride), not the fill.
-    if( std::getenv( "CBN_DIAG_SEG_LIGHTING" ) ) {
+    if (std::getenv("CBN_DIAG_SEG_LIGHTING")) {
         static int diag_n = 0;
         ++diag_n;
-        if( diag_n <= 2 || diag_n % 60 == 0 ) {
-            const Uint32 have = static_cast<Uint32>( sky_vis.size() );
+        if (diag_n <= 2 || diag_n % 60 == 0) {
+            const Uint32 have = static_cast<Uint32>(sky_vis.size());
             Uint32 nz = 0;
             unsigned char mx = 0;
-            for( Uint32 i = 0; i < have && i < pixel_count; ++i ) {
+            for (Uint32 i = 0; i < have && i < pixel_count; ++i) {
                 nz += sky_vis[i] != 0u ? 1u : 0u;
                 mx = sky_vis[i] > mx ? sky_vis[i] : mx;
             }
-            DebugLogFL( DL::Info, DC::Main )
-                    << "[skyvisdiag] n=" << diag_n << " size=" << have
-                    << " pixel_count=" << pixel_count
-                    << " uploaded=" << ( have >= pixel_count ? "yes" : "NO (skipped)" )
-                    << " nonzero=" << nz << " max=" << static_cast<int>( mx )
-                    << " runtime=" << runtime_w << "x" << runtime_h
-                    << " map=" << map_w_ << "x" << map_h_;
+            DebugLogFL(DL::Info, DC::Main)
+                << "[skyvisdiag] n=" << diag_n << " size=" << have << " pixel_count=" << pixel_count
+                << " uploaded=" << (have >= pixel_count ? "yes" : "NO (skipped)")
+                << " nonzero=" << nz << " max=" << static_cast<int>(mx) << " runtime=" << runtime_w
+                << "x" << runtime_h << " map=" << map_w_ << "x" << map_h_;
         }
     }
     if (skyvis_storage_ && xfer_skyvis_f_ && static_cast<Uint32>(sky_vis.size()) >= pixel_count) {
@@ -373,7 +371,6 @@ void sdf_pass::upload(
             }
         }
     }
-
 }
 
 } // namespace lighting

@@ -173,16 +173,16 @@ auto horde_should_avoid_vehicle_tile( const map &here, const tripoint_bub_ms &p,
                                       const mongroup &group ) -> bool
 {
     if( !group.horde ) {
-    return false;
-}
+        return false;
+    }
 
-const auto vp = here.veh_at( p );
-if( !vp ) {
-    return false;
-}
+    const auto vp = here.veh_at( p );
+    if( !vp ) {
+        return false;
+    }
 
-const auto &veh = vp->vehicle();
-return veh.is_owned_by( get_avatar() );
+    const auto &veh = vp->vehicle();
+    return veh.is_owned_by( get_avatar() );
 }
 
 } // namespace
@@ -214,16 +214,16 @@ bool map::has_furn( const tripoint_bub_ms& p ) const { return furn( p ) != f_nul
 furn_id map::furn( const tripoint_bub_ms &p ) const
 {
     if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) {
-    return f_null;
-}
+        return f_null;
+    }
 
-point_sm_ms l;
-submap *const current_submap = get_submap_at( tripoint_bub_ms( p ), l );
-if( current_submap == nullptr ) {
-    return f_null;
-}
+    point_sm_ms l;
+    submap *const current_submap = get_submap_at( tripoint_bub_ms( p ), l );
+    if( current_submap == nullptr ) {
+        return f_null;
+    }
 
-return current_submap->get_furn( l );
+    return current_submap->get_furn( l );
 }
 
 void map::furn_set(
@@ -333,16 +333,16 @@ ter_id map::ter( const tripoint_bub_ms& p ) const
 {
     // Check dimension bounds first - out-of-bounds areas show boundary terrain
     if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) {
-    return get_mapbuffer().get_boundary_terrain();
+        return get_mapbuffer().get_boundary_terrain();
     }
 
     point_sm_ms l;
     submap *const current_submap = get_submap_at( tripoint_bub_ms( p ), l );
     if( current_submap == nullptr ) {
-    return t_null;
-}
+        return t_null;
+    }
 
-return current_submap->get_ter( l );
+    return current_submap->get_ter( l );
 }
 
 uint8_t map::get_known_connections(
@@ -539,8 +539,8 @@ int map::move_cost_internal(
 
 bool map::is_wall_adjacent( const tripoint_bub_ms &center ) const
 {
-for( const tripoint_bub_ms &p : points_in_radius( center, 1 ) ) {
-    if( p != center && impassable( p ) ) {
+    for( const tripoint_bub_ms &p : points_in_radius( center, 1 ) ) {
+        if( p != center && impassable( p ) ) {
             return true;
         }
     }
@@ -551,16 +551,16 @@ int map::move_cost( const tripoint_bub_ms& p, const vehicle* ignored_vehicle ) c
 {
     // Dimension bounds are always impassable
     if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) {
-    return 0;
-}
+        return 0;
+    }
 
-const furn_t &furniture = furn( p ).obj();
-const ter_t &terrain = ter( p ).obj();
-const optional_vpart_position vp = veh_at( p );
-vehicle *const veh = ( !vp || &vp->vehicle() == ignored_vehicle ) ? nullptr : &vp->vehicle();
-const int part = veh ? vp->part_index() : -1;
+    const furn_t &furniture = furn( p ).obj();
+    const ter_t &terrain = ter( p ).obj();
+    const optional_vpart_position vp = veh_at( p );
+    vehicle *const veh = ( !vp || &vp->vehicle() == ignored_vehicle ) ? nullptr : &vp->vehicle();
+    const int part = veh ? vp->part_index() : -1;
 
-return move_cost_internal( furniture, terrain, veh, part );
+    return move_cost_internal( furniture, terrain, veh, part );
 }
 
 bool map::impassable( const tripoint_bub_ms& p ) const { return !passable( p ); }
@@ -614,51 +614,51 @@ bool map::valid_move(
     // Used to account for the fact that older versions of GCC can trip on the if statement here.
     assert( to.z() > std::numeric_limits<int>::min() );
     if( std::abs( from.x() - to.x() ) > 1 || std::abs( from.y() - to.y() ) > 1 ||
-    std::abs( from.z() - to.z() ) > 1 ) {
-    return false;
-}
+        std::abs( from.z() - to.z() ) > 1 ) {
+        return false;
+    }
 
-if( from.z() == to.z() ) {
-    // But here we need to, to prevent bashing critters
-    return passable( to ) || ( bash && inbounds( to ) );
-}
+    if( from.z() == to.z() ) {
+        // But here we need to, to prevent bashing critters
+        return passable( to ) || ( bash && inbounds( to ) );
+    }
 
-const bool going_up = from.z() < to.z();
+    const bool going_up = from.z() < to.z();
 
-const auto &up_p = tripoint_bub_ms( going_up ? to : from );
-const auto &down_p = tripoint_bub_ms( going_up ? from : to );
+    const auto &up_p = tripoint_bub_ms( going_up ? to : from );
+    const auto &down_p = tripoint_bub_ms( going_up ? from : to );
 
-const maptile up = maptile_at( up_p );
-const ter_t &up_ter = up.get_ter_t();
-if( up_ter.id.is_null() ) {
-    return false;
-}
-// Checking for ledge is a workaround for the case when mapgen doesn't
-// actually make a valid ledge drop location with zlevels on, this forces
-// at least one zlevel drop and if down_ter is impassible it's probably
-// inside a wall, we could workaround that further but it's unnecessary.
-const bool up_is_ledge = tr_at( up_p ).loadid == tr_ledge;
+    const maptile up = maptile_at( up_p );
+    const ter_t &up_ter = up.get_ter_t();
+    if( up_ter.id.is_null() ) {
+        return false;
+    }
+    // Checking for ledge is a workaround for the case when mapgen doesn't
+    // actually make a valid ledge drop location with zlevels on, this forces
+    // at least one zlevel drop and if down_ter is impassible it's probably
+    // inside a wall, we could workaround that further but it's unnecessary.
+    const bool up_is_ledge = tr_at( up_p ).loadid == tr_ledge;
 
-if( up_ter.movecost == 0 ) {
-    // Unpassable tile
-    return false;
-}
+    if( up_ter.movecost == 0 ) {
+        // Unpassable tile
+        return false;
+    }
 
-const maptile down = maptile_at( down_p );
-const ter_t &down_ter = down.get_ter_t();
-if( down_ter.id.is_null() ) {
-    return false;
-}
+    const maptile down = maptile_at( down_p );
+    const ter_t &down_ter = down.get_ter_t();
+    if( down_ter.id.is_null() ) {
+        return false;
+    }
 
-if( !up_is_ledge && down_ter.movecost == 0 ) {
-    // Unpassable tile
-    return false;
-}
+    if( !up_is_ledge && down_ter.movecost == 0 ) {
+        // Unpassable tile
+        return false;
+    }
 
-if( !up_ter.has_flag( TFLAG_NO_FLOOR ) && !up_ter.has_flag( TFLAG_GOES_DOWN ) && !up_is_ledge &&
+    if( !up_ter.has_flag( TFLAG_NO_FLOOR ) && !up_ter.has_flag( TFLAG_GOES_DOWN ) && !up_is_ledge &&
         !via_ramp ) {
-    // Can't move from up to down
-    if( std::abs( from.x() - to.x() ) == 1 || std::abs( from.y() - to.y() ) == 1 ) {
+        // Can't move from up to down
+        if( std::abs( from.x() - to.x() ) == 1 || std::abs( from.y() - to.y() ) == 1 ) {
             // Break the move into two - vertical then horizontal
             tripoint_bub_ms midpoint( down_p.xy(), up_p.z() );
             return valid_move( down_p, midpoint, bash, flying, via_ramp )
@@ -669,72 +669,72 @@ if( !up_ter.has_flag( TFLAG_NO_FLOOR ) && !up_ter.has_flag( TFLAG_GOES_DOWN ) &&
 
     if( !flying && !down_ter.has_flag( TFLAG_GOES_UP ) && !down_ter.has_flag( TFLAG_RAMP ) &&
         !up_is_ledge && !via_ramp ) {
-    // Can't safely reach the lower tile
-    return false;
-}
+        // Can't safely reach the lower tile
+        return false;
+    }
 
-if( bash ) {
-    return true;
-}
-// get_cache() has no bounds check on z, and maptile_at's mapbuffer fallback
-// can return non-null terrain for positions outside the reality bubble.
-if( !inbounds( down_p ) || !inbounds_z( up_p.z() ) ) {
-    return up.get_furn_t().movecost >= 0;
+    if( bash ) {
+        return true;
+    }
+    // get_cache() has no bounds check on z, and maptile_at's mapbuffer fallback
+    // can return non-null terrain for positions outside the reality bubble.
+    if( !inbounds( down_p ) || !inbounds_z( up_p.z() ) ) {
+        return up.get_furn_t().movecost >= 0;
     }
 
     int part_up;
     const vehicle *veh_up = veh_at_internal( up_p, part_up );
     if( veh_up != nullptr && !veh_at( up_p ).part_with_feature( VPFLAG_NOCOLLIDEBELOW, false ) ) {
-    // TODO: Hatches below the vehicle
-    return false;
-}
+        // TODO: Hatches below the vehicle
+        return false;
+    }
 
-int part_down;
-const vehicle *veh_down = veh_at_internal( down_p, part_down );
-if( veh_down != nullptr && veh_down->roof_at_part( part_down ) >= 0 ) {
-    // TODO: OPEN (and only open) hatches from above
-    return false;
-}
+    int part_down;
+    const vehicle *veh_down = veh_at_internal( down_p, part_down );
+    if( veh_down != nullptr && veh_down->roof_at_part( part_down ) >= 0 ) {
+        // TODO: OPEN (and only open) hatches from above
+        return false;
+    }
 
-// Currently only furniture can block movement if everything else is OK
-// TODO: Vehicles with boards in the given spot
-return up.get_furn_t().movecost >= 0;
+    // Currently only furniture can block movement if everything else is OK
+    // TODO: Vehicles with boards in the given spot
+    return up.get_furn_t().movecost >= 0;
 }
 
 double map::ranged_target_size( const tripoint_bub_ms &p ) const
 {
     if( impassable( p ) ) {
-    return 1.0;
-}
+        return 1.0;
+    }
 
-if( !has_floor( p ) ) {
-    return 0.0;
-}
+    if( !has_floor( p ) ) {
+        return 0.0;
+    }
 
-// TODO: Handle cases like shrubs, trees, furniture, sandbags...
-return 0.1;
+    // TODO: Handle cases like shrubs, trees, furniture, sandbags...
+    return 0.1;
 }
 
 int map::climb_difficulty( const tripoint_bub_ms &p ) const
 {
     if( p.z() > OVERMAP_HEIGHT || p.z() < -OVERMAP_DEPTH ) {
-    debugmsg( "climb_difficulty on out of bounds point: %d, %d, %d", p.x(), p.y(), p.z() );
+        debugmsg( "climb_difficulty on out of bounds point: %d, %d, %d", p.x(), p.y(), p.z() );
         return INT_MAX;
     }
 
     int best_difficulty = INT_MAX;
     int blocks_movement = 0;
     if( has_flag( "LADDER", p ) ) {
-    // Really easy, but you have to stand on the tile
-    return 1;
-} else if( has_flag( TFLAG_RAMP, p ) || has_flag( TFLAG_RAMP_UP, p ) ||
+        // Really easy, but you have to stand on the tile
+        return 1;
+    } else if( has_flag( TFLAG_RAMP, p ) || has_flag( TFLAG_RAMP_UP, p ) ||
                has_flag( TFLAG_RAMP_DOWN, p ) ) {
-    // We're on something stair-like, so halfway there already
-    best_difficulty = 7;
-}
+        // We're on something stair-like, so halfway there already
+        best_difficulty = 7;
+    }
 
-for( const auto &pt : points_in_radius( p, 1 ) ) {
-    if( impassable_ter_furn( pt ) ) {
+    for( const auto &pt : points_in_radius( p, 1 ) ) {
+        if( impassable_ter_furn( pt ) ) {
             // TODO: Non-hardcoded climbability
             best_difficulty = std::min( best_difficulty, 10 );
             blocks_movement++;
@@ -754,16 +754,16 @@ for( const auto &pt : points_in_radius( p, 1 ) ) {
 bool map::has_floor( const tripoint_bub_ms &p, bool visible_only ) const
 {
     if( p.z() < -OVERMAP_DEPTH || p.z() > OVERMAP_HEIGHT ) {
-    return false;
-}
+        return false;
+    }
 
-point_sm_ms l;
-submap *sm = get_submap_at( tripoint_bub_ms( p ), l );
-if( !sm ) {
-    return false;
-}
-if( sm->floor_dirty ) {
-    const int smx = divide_round_to_minus_infinity( p.x(), SEEX );
+    point_sm_ms l;
+    submap *sm = get_submap_at( tripoint_bub_ms( p ), l );
+    if( !sm ) {
+        return false;
+    }
+    if( sm->floor_dirty ) {
+        const int smx = divide_round_to_minus_infinity( p.x(), SEEX );
         const int smy = divide_round_to_minus_infinity( p.y(), SEEY );
         sm->rebuild_floor_cache( *this, tripoint_bub_sm( smx, smy, p.z() ) );
     }
@@ -805,19 +805,19 @@ bool map::supports_above( const tripoint_bub_ms& p ) const
 bool map::has_floor_or_support( const tripoint_bub_ms &p ) const
 {
     if( p.z() < -OVERMAP_DEPTH || p.z() > OVERMAP_HEIGHT ) {
-    return false;
-}
+        return false;
+    }
 
     if( has_floor( p ) ) {
-    return true;
-}
-// Nothing below the lowest level to hang from.
-if( p.z() <= -OVERMAP_DEPTH ) {
-    return false;
-}
-// An impassable terrain/furniture/vehicle below supports the tile above it.
-// Deliberately not routed through valid_move(): open air carries tr_ledge, and
-// ledges bypass valid_move()'s "solid tile below blocks the drop" rule.
-return supports_above( tripoint_bub_ms( p.xy(), p.z() - 1 ) );
+        return true;
+    }
+    // Nothing below the lowest level to hang from.
+    if( p.z() <= -OVERMAP_DEPTH ) {
+        return false;
+    }
+    // An impassable terrain/furniture/vehicle below supports the tile above it.
+    // Deliberately not routed through valid_move(): open air carries tr_ledge, and
+    // ledges bypass valid_move()'s "solid tile below blocks the drop" rule.
+    return supports_above( tripoint_bub_ms( p.xy(), p.z() - 1 ) );
 }
 

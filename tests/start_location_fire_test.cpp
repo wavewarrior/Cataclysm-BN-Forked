@@ -56,8 +56,7 @@ TEST_CASE(
         (here.has_flag("FLAMMABLE", interior_far) || here.has_flag("FLAMMABLE_ASH", interior_far)));
 
     // bad_day passes the player's OMT to burn().
-    const tripoint_abs_omt omtstart = project_to<coords::omt>(
-        get_avatar().abs_pos());
+    const tripoint_abs_omt omtstart = project_to<coords::omt>(get_avatar().abs_pos());
 
     const start_location sl;
     sl.burn(omtstart, /*count=*/3, /*rad=*/3);

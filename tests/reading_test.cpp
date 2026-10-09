@@ -458,17 +458,18 @@ TEST_CASE("active night vision tiers allow fine detail vision in darkness", "[re
     SECTION("standard light amp goggles provide poor fine detail vision") {
         REQUIRE(!dummy.wear_item(item::spawn("goggles_nv_on"), false));
 
-        CHECK(character_funcs::fine_detail_vision_mod(dummy) <= character_funcs::FINE_VISION_THRESHOLD);
+        CHECK(character_funcs::fine_detail_vision_mod(dummy)
+              <= character_funcs::FINE_VISION_THRESHOLD);
         CHECK(character_funcs::can_see_fine_details(dummy));
     }
 
     SECTION("enhanced light amp goggles provide perfect fine detail vision") {
         REQUIRE(!dummy.wear_item(item::spawn("goggles_nv_enhanced_on"), false));
 
-        CHECK(character_funcs::fine_detail_vision_mod(dummy) == character_funcs::FINE_VISION_PERFECT);
+        CHECK(
+            character_funcs::fine_detail_vision_mod(dummy) == character_funcs::FINE_VISION_PERFECT);
         CHECK(character_funcs::can_see_fine_details(dummy));
     }
-
 }
 
 TEST_CASE("Losing book during reading", "[reading][book]") {

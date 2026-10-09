@@ -46,8 +46,9 @@ struct emitter_glow_instance {
     float strength; // opacity/intensity multiplier, roughly 0..1
     float pad0;     // reserved, keeps the struct a multiple of 16 bytes
 };
-static_assert(sizeof(emitter_glow_instance) == 32,
-              "emitter_glow_instance must be 32 bytes (wire-stable with vert shader)");
+static_assert(
+    sizeof(emitter_glow_instance) == 32,
+    "emitter_glow_instance must be 32 bytes (wire-stable with vert shader)");
 
 // Per-record parameters for the glow pass.
 struct emitter_glow_record_options {
@@ -71,8 +72,7 @@ public:
 
     auto shutdown() noexcept -> void;
 
-    auto ready() const noexcept -> bool
-    {
+    auto ready() const noexcept -> bool {
         return dev_ != nullptr && pipeline_ != nullptr && storage_ != nullptr && xfer_ != nullptr;
     }
 
@@ -81,8 +81,8 @@ public:
     auto record(const emitter_glow_record_options& opts) -> void;
 
 private:
-    auto upload_instances(
-        SDL_GPUCommandBuffer* cb, const std::vector<emitter_glow_instance>& insts) -> bool;
+    auto upload_instances(SDL_GPUCommandBuffer* cb, const std::vector<emitter_glow_instance>& insts)
+        -> bool;
 
     gpu_device* dev_ = nullptr;
     SDL_GPUTextureFormat target_format_ = SDL_GPU_TEXTUREFORMAT_INVALID;

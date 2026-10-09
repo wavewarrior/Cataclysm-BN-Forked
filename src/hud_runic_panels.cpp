@@ -68,13 +68,13 @@ struct gauge_row_options {
 auto gauge_row( const gauge_row_options &o ) -> std::string
 {
     return hud_runic::row( o.critical ? "hud-row crit" : "hud-row", {},
-           std::format( R"(<span class="hud-cell-name {}">{}</span>)"
-                        R"(<div class="hud-cell-meter">{}</div>)"
-                        R"(<span class="hud-cell-val {}">{}</span>)",
-                        hud_runic::ink_class( o.name_ink ), rml_escape( o.name ),
-                        hud_runic::pips( { .cur = o.cur, .max = o.max } ),
-                        hud_runic::ink_class( o.value_ink ),
-                        rml_escape( o.value ) ) );
+                           std::format( R"(<span class="hud-cell-name {}">{}</span>)"
+                                        R"(<div class="hud-cell-meter">{}</div>)"
+                                        R"(<span class="hud-cell-val {}">{}</span>)",
+                                        hud_runic::ink_class( o.name_ink ), rml_escape( o.name ),
+                                        hud_runic::pips( { .cur = o.cur, .max = o.max } ),
+                                        hud_runic::ink_class( o.value_ink ),
+                                        rml_escape( o.value ) ) );
 }
 
 // --- The body figure -------------------------------------------------------

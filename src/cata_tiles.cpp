@@ -395,8 +395,8 @@ cata_tiles::~cata_tiles() = default;
 auto tileset::sprite_file_source( const int sprite_index ) const
 -> std::optional<tileset::sprite_file_ref>
 {
-for( const sheet_span& s : sheet_spans ) {
-    if( sprite_index < s.first_index || sprite_index >= s.first_index + s.count
+    for( const sheet_span& s : sheet_spans ) {
+        if( sprite_index < s.first_index || sprite_index >= s.first_index + s.count
             || s.columns <= 0 ) {
             continue;
         }
@@ -427,9 +427,9 @@ std::optional<tile_lookup_res> tileset::find_tile_type_by_season(
     if( iter == tile_ids_by_season[season].end() ) { return std::nullopt; }
     auto& res = iter->second;
     if( res.season_tile ) {
-    return *res.season_tile;
-} else if( res.default_tile ) { // can skip this check, but just in case
-    return tile_lookup_res( iter->first, *res.default_tile );
+        return *res.season_tile;
+    } else if( res.default_tile ) { // can skip this check, but just in case
+        return tile_lookup_res( iter->first, *res.default_tile );
     }
     debugmsg( "empty record found in `tile_ids_by_season` for key: %s", id );
     return std::nullopt;
@@ -2063,7 +2063,7 @@ void cata_tiles::get_window_tile_counts(
     const int width, const int height, int &columns, int &rows ) const
 {
     if( tile_iso ) {
-    columns = std::ceil( static_cast<double>( width ) / tile_width ) * 2 + 4;
+        columns = std::ceil( static_cast<double>( width ) / tile_width ) * 2 + 4;
         rows = std::ceil( static_cast<double>( height ) / ( tile_width / 2.0 - 1 ) ) * 2 + 4;
     } else {
         columns = std::ceil( static_cast<double>( width ) / tile_width );
@@ -3084,10 +3084,10 @@ auto get_map_memory_of_at( const tripoint_bub_ms& p ) -> std::optional<memorized
 {
     if( !g->u.should_show_map_memory() ) { return std::nullopt; }
 
-const memorized_terrain_tile t = g->u.get_memorized_tile( bub_to_abs( p ) );
-if( !string_id<T>( t.tile ).is_valid() ) { return std::nullopt; }
+    const memorized_terrain_tile t = g->u.get_memorized_tile( bub_to_abs( p ) );
+    if( !string_id<T>( t.tile ).is_valid() ) { return std::nullopt; }
 
-return t;
+    return t;
 }
 
 template <>
@@ -3096,14 +3096,14 @@ auto get_map_memory_of_at<vpart_info>( const tripoint_bub_ms& p )
 {
     if( !g->u.should_show_map_memory() ) { return std::nullopt; }
 
-const memorized_terrain_tile t = g->u.get_memorized_tile(
-                                     bub_to_abs( tripoint_bub_ms( p ) ) );
+    const memorized_terrain_tile t = g->u.get_memorized_tile(
+                                         bub_to_abs( tripoint_bub_ms( p ) ) );
     if( !t.tile.starts_with( "vp_" ) ) { return std::nullopt; }
 
-const auto actual_part = t.tile.substr( 3 );
-if( !string_id<vpart_info>( actual_part ).is_valid() ) { return std::nullopt; }
+    const auto actual_part = t.tile.substr( 3 );
+    if( !string_id<vpart_info>( actual_part ).is_valid() ) { return std::nullopt; }
 
-return t;
+    return t;
 }
 
 bool cata_tiles::has_memory_at( const tripoint_bub_ms& p )
@@ -3121,10 +3121,10 @@ auto cata_tiles::get_ter_memory_at( const tripoint_bub_ms& p )
 -> std::optional<memorized_terrain_tile>
 {
     if( !g->u.should_show_map_memory() ) { return std::nullopt; }
-const memorized_terrain_tile t = g->u.get_terrain_tile(
-                                     bub_to_abs( tripoint_bub_ms( p ) ) );
+    const memorized_terrain_tile t = g->u.get_terrain_tile(
+                                         bub_to_abs( tripoint_bub_ms( p ) ) );
     if( t.tile.empty() ) { return std::nullopt; }
-return t;
+    return t;
 }
 
 auto cata_tiles::get_furn_memory_at( const tripoint_bub_ms& p )

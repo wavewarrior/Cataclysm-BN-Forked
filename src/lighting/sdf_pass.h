@@ -108,9 +108,9 @@ private:
                                                 // floats/tile)
     SDL_GPUTransferBuffer* xfer_occ_ = nullptr; // float bytes for occ_storage_
     SDL_GPUBuffer* albedo_storage_ = nullptr;   // GI albedo bleed (tile-res, 4 floats/tile)
-    SDL_GPUTransferBuffer* xfer_albedo_ = nullptr; // float bytes for albedo_storage_
-    SDL_GPUBuffer* trans_storage_ = nullptr;    // P3 JFA input (TransBuf, floats)
-    SDL_GPUTransferBuffer* xfer_trans_f_ = nullptr; // float bytes for trans_storage_
+    SDL_GPUTransferBuffer* xfer_albedo_ = nullptr;   // float bytes for albedo_storage_
+    SDL_GPUBuffer* trans_storage_ = nullptr;         // P3 JFA input (TransBuf, floats)
+    SDL_GPUTransferBuffer* xfer_trans_f_ = nullptr;  // float bytes for trans_storage_
     SDL_GPUTransferBuffer* xfer_sky_vis_ = nullptr;  // R8 bytes for sky_vis_tex_
     SDL_GPUTransferBuffer* xfer_skyvis_f_ = nullptr; // float bytes for skyvis_storage_
     int map_w_ = 0; // physical texture extent (REALITY_BUBBLE_SIZE_MAX*SEEX)

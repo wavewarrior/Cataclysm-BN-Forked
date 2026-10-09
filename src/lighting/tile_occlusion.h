@@ -17,17 +17,17 @@ struct tile_occlusion_query {
     float transparency = 0.0f;
     /// map::coverage() — the ranged-COVER gameplay stat, 0..100.
     int coverage = 0;
-    bool is_tree = false;              ///< TFLAG_TREE
-    bool is_vehicle_obstacle = false;  ///< veh_at()->obstacle_at_part()
-    bool floor_above = false;          ///< floor_cache(z+1)
-    bool outside = false;              ///< outside_cache
-    bool terrain_valid = true;         ///< ter(p).is_valid(); false during world load
+    bool is_tree = false;             ///< TFLAG_TREE
+    bool is_vehicle_obstacle = false; ///< veh_at()->obstacle_at_part()
+    bool floor_above = false;         ///< floor_cache(z+1)
+    bool outside = false;             ///< outside_cache
+    bool terrain_valid = true;        ///< ter(p).is_valid(); false during world load
 };
 
 /// The single occlusion verdict every lighting consumer derives from.
 struct tile_occlusion {
-    bool blocks_light = false;  ///< opaque to light; the ONLY predicate that may seed the SDF
-    float height = 0.0f;        ///< occluder height in tiles; 0 when the tile transmits
+    bool blocks_light = false; ///< opaque to light; the ONLY predicate that may seed the SDF
+    float height = 0.0f;       ///< occluder height in tiles; 0 when the tile transmits
     bool roofed = false;
     bool open_sky = false;
 };
@@ -56,21 +56,17 @@ struct tile_occlusion {
 ///    SDF: point-light shadows, AO and GI occlusion keep working off the trunk
 ///    footprint.
 ///  - roofed / open_sky are carried through unchanged from the query.
-constexpr auto classify_tile_occlusion( const tile_occlusion_query &q ) -> tile_occlusion
-{
+constexpr auto classify_tile_occlusion(const tile_occlusion_query& q) -> tile_occlusion {
     tile_occlusion out{};
     const bool transmits = !q.terrain_valid || q.transparency > 0.0f;
-    out.blocks_light = ( q.terrain_valid && !transmits ) || q.is_vehicle_obstacle;
+    out.blocks_light = (q.terrain_valid && !transmits) || q.is_vehicle_obstacle;
 
-    float h = ( !q.terrain_valid || transmits )
-                  ? 0.0f
-                  : std::clamp( static_cast<float>( q.coverage ) / 100.0f, 0.0f, 1.0f );
-    if( q.is_vehicle_obstacle ) {
-        h = std::max( h, 1.0f );
-    }
-    if( q.is_tree ) {
-        h = 0.0f;
-    }
+    float h =
+        (!q.terrain_valid || transmits)
+            ? 0.0f
+            : std::clamp(static_cast<float>(q.coverage) / 100.0f, 0.0f, 1.0f);
+    if (q.is_vehicle_obstacle) { h = std::max(h, 1.0f); }
+    if (q.is_tree) { h = 0.0f; }
     out.height = h;
 
     out.roofed = q.floor_above;

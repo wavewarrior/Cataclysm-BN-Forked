@@ -1,7 +1,4 @@
 #include "catch/catch_amalgamated.hpp"
-
-#include <ranges>
-
 #include "coordinates.h"
 #include "game_constants.h"
 #include "map.h"
@@ -12,6 +9,8 @@
 #include "veh_type.h"
 #include "vehicle.h"
 #include "vehicle_part.h"
+
+#include <ranges>
 
 // Regression test for issue #9590: the multi-z "3-story rope ladder" (vehicle part
 // ladder_3, flag LADDER, length 3) must be detectable along the whole rope it hangs,

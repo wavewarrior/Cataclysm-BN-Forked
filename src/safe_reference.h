@@ -169,14 +169,14 @@ class safe_reference
         auto remove() -> void {
             resolve_redirects();
             if( rec == nullptr ) {
-            return;
-        }
-        // resolve_redirects() above only follows pointers; the map erases below
-        // are the structural mutations that need the lock.
-        const std::lock_guard<std::mutex> guard( records_mutex );
-        //Check if we're the last in-memory reference
-        if( rec->mem_count == 1 ) {
-            if( base_id( rec->id ) == ID_NONE ) {
+                return;
+            }
+            // resolve_redirects() above only follows pointers; the map erases below
+            // are the structural mutations that need the lock.
+            const std::lock_guard<std::mutex> guard( records_mutex );
+            //Check if we're the last in-memory reference
+            if( rec->mem_count == 1 ) {
+                if( base_id( rec->id ) == ID_NONE ) {
                     //If the record doesn't have an ID it's ok to just forget it
                     records_by_pointer.erase( rec->target.p );
                     delete rec;
@@ -233,24 +233,24 @@ class safe_reference
         auto is_unloaded() const -> bool {
             resolve_redirects();
             if( is_unassigned() ) {
-            return false;
+                return false;
+            }
+            if( is_destroyed() ) {
+                return false;
+            }
+            return ( rec->target.p == nullptr || ( !rec->target.p->is_loaded() &&
+                                                   !rec->target.p->is_detached() ) );
         }
-        if( is_destroyed() ) {
-            return false;
-        }
-        return ( rec->target.p == nullptr || ( !rec->target.p->is_loaded() &&
-                                               !rec->target.p->is_detached() ) );
-    }
 
-    auto is_destroyed() const -> bool {
+        auto is_destroyed() const -> bool {
             resolve_redirects();
             if( is_unassigned() ) {
-            return false;
+                return false;
+            }
+            return ( rec->id & DESTROYED_MASK ) != 0;
         }
-        return ( rec->id & DESTROYED_MASK ) != 0;
-    }
 
-    auto serialize() const -> id_type {
+        auto serialize() const -> id_type {
             if( rec == nullptr ) {
                 return ID_NONE;
             }
@@ -268,15 +268,15 @@ class safe_reference
         auto deserialize( id_type id ) -> void {
             fill( id );
             if( rec == nullptr ) {
-            return;
+                return;
+            }
+            if( rec->json_count != 0 ) {
+                rec->json_count--;
+            } // else { this is indicative of save scumming }
+            rec->mem_count++;
         }
-        if( rec->json_count != 0 ) {
-            rec->json_count--;
-        } // else { this is indicative of save scumming }
-        rec->mem_count++;
-    }
 
-    auto get_const() const -> const T* { // *NOPAD*
+        auto get_const() const -> const T* { // *NOPAD*
             if( !rec || !rec->target.p ) {
                 //TODO! more safety and proper error
                 return nullptr;
@@ -307,22 +307,22 @@ class safe_reference
 
         auto operator==( const T &against ) const -> bool {
             if( !rec ) {
-            return false;
+                return false;
+            }
+            resolve_redirects();
+            return rec->target.p == &against;
         }
-        resolve_redirects();
-        return rec->target.p == &against;
-    }
 
-    auto operator==( const T *against ) const -> bool {
+        auto operator==( const T *against ) const -> bool {
             if( !rec ) {
-            return against == nullptr;
+                return against == nullptr;
+            }
+            resolve_redirects();
+            return rec->target.p == against;
         }
-        resolve_redirects();
-        return rec->target.p == against;
-    }
 
-    template <typename U>
-    auto operator!=( const U against ) const -> bool { return !( *this == against ); }
+        template <typename U>
+        auto operator!=( const U against ) const -> bool { return !( *this == against ); }
 
         /**
          * Merge the secondary object into the primary. This means all
@@ -360,48 +360,48 @@ class safe_reference
 
             //If the secondary doesn't have an ID
             if( sec_rec->id == ID_NONE ) {
-            sec_rec->id = REDIRECTED_MASK;
-            sec_rec->target.redirect = pri_rec;
-            pri_rec->mem_count++;
-        } else {
-            //This is the worse case, we actually need a redirect
-            sec_rec->id = sec_rec->id | REDIRECTED_MASK;
-            sec_rec->target.redirect = pri_rec;
-            pri_rec->mem_count++;
+                sec_rec->id = REDIRECTED_MASK;
+                sec_rec->target.redirect = pri_rec;
+                pri_rec->mem_count++;
+            } else {
+                //This is the worse case, we actually need a redirect
+                sec_rec->id = sec_rec->id | REDIRECTED_MASK;
+                sec_rec->target.redirect = pri_rec;
+                pri_rec->mem_count++;
+            }
         }
-    }
 
 };
 
 template<typename T>
 class cache_reference
 {
-private:
-    T *p;
-protected:
-    using ref_list = std::vector<cache_reference<T>*>;
-    using ref_map = std::unordered_map<const T *, ref_list>;
+    private:
+        T *p;
+    protected:
+        using ref_list = std::vector<cache_reference<T>*>;
+        using ref_map = std::unordered_map<const T *, ref_list>;
 
-    using ref_map_it = typename ref_map::iterator;
+        using ref_map_it = typename ref_map::iterator;
 
-    inline static ref_map reference_map;
-    // Guards all access to reference_map.  Needed because preload_omt() deserialises
-    // submaps (including their active_item_cache) on worker threads, which constructs
-    // cache_reference objects concurrently.  Uncontended on the main thread so the
-    // cost during normal gameplay is a single atomic CAS per lock/unlock.
-    inline static std::mutex reference_map_mutex_;
+        inline static ref_map reference_map;
+        // Guards all access to reference_map.  Needed because preload_omt() deserialises
+        // submaps (including their active_item_cache) on worker threads, which constructs
+        // cache_reference objects concurrently.  Uncontended on the main thread so the
+        // cost during normal gameplay is a single atomic CAS per lock/unlock.
+        inline static std::mutex reference_map_mutex_;
 
-    auto invalidate() -> void {
+        auto invalidate() -> void {
             p = nullptr;
         }
 
         auto add_to_map() -> void {
             if( !p ) {
-            return;
-        }
-        auto lk = std::lock_guard( reference_map_mutex_ );
-        ref_map_it search = reference_map.find( p );
-        if( search != reference_map.end() ) {
+                return;
+            }
+            auto lk = std::lock_guard( reference_map_mutex_ );
+            ref_map_it search = reference_map.find( p );
+            if( search != reference_map.end() ) {
                 search->second.push_back( this );
             } else {
                 reference_map.insert( {p, {this}} );
@@ -410,11 +410,11 @@ protected:
 
         auto remove_from_map() -> void {
             if( !p ) {
-            return;
-        }
-        auto lk = std::lock_guard( reference_map_mutex_ );
-        ref_map_it search = reference_map.find( p );
-        if( search != reference_map.end() ) {
+                return;
+            }
+            auto lk = std::lock_guard( reference_map_mutex_ );
+            ref_map_it search = reference_map.find( p );
+            if( search != reference_map.end() ) {
                 ref_list &list = search->second;
                 list.erase( std::remove( list.begin(), list.end(), this ), list.end() );
                 if( list.empty() ) {

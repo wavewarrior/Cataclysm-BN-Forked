@@ -38,8 +38,7 @@ class cartesian_product_view_2
         R1 r1_;
         R2 r2_;
     public:
-        class iterator
-        {
+        class iterator {
                 using It1 = std::ranges::iterator_t<R1>;
                 using It2 = std::ranges::iterator_t<R2>;
                 It1 it1_;
@@ -49,7 +48,7 @@ class cartesian_product_view_2
                 It2 end2_;
             public:
                 using value_type =
-                    std::tuple<std::ranges::range_value_t<R1>, std::ranges::range_value_t<R2>>;
+                std::tuple<std::ranges::range_value_t<R1>, std::ranges::range_value_t<R2 >>;
                 using difference_type = std::ptrdiff_t;
                 using iterator_category = std::input_iterator_tag;
 
@@ -77,7 +76,7 @@ class cartesian_product_view_2
                     ++( *this );
                     return tmp;
                 }
-                friend auto operator==( const iterator &a, const iterator &b ) -> bool {
+                friend auto operator == ( const iterator &a, const iterator &b ) -> bool {
                     return a.it1_ == b.it1_ && ( a.it1_ == a.end1_ || a.it2_ == b.it2_ );
                 }
         };
@@ -88,11 +87,11 @@ class cartesian_product_view_2
 
         auto begin() -> iterator {
             return iterator( std::ranges::begin( r1_ ), std::ranges::end( r1_ ),
-            std::ranges::begin( r2_ ), std::ranges::end( r2_ ) );
+                             std::ranges::begin( r2_ ), std::ranges::end( r2_ ) );
         }
         auto end() -> iterator {
             return iterator( std::ranges::end( r1_ ), std::ranges::end( r1_ ),
-            std::ranges::begin( r2_ ), std::ranges::end( r2_ ) );
+                             std::ranges::begin( r2_ ), std::ranges::end( r2_ ) );
         }
 };
 
@@ -101,8 +100,7 @@ class cartesian_product_view_2
 template<std::ranges::input_range R1, std::ranges::input_range R2,
          std::ranges::input_range R3>
 class cartesian_product_view_3
-    : public std::ranges::view_interface<cartesian_product_view_3<R1, R2, R3>>
-{
+    : public std::ranges::view_interface<cartesian_product_view_3<R1, R2, R3>> {
         R1 r1_;
         R2 r2_;
         R3 r3_;
@@ -122,8 +120,8 @@ class cartesian_product_view_3
                 It3 end3_;
             public:
                 using value_type =
-                    std::tuple<std::ranges::range_value_t<R1>, std::ranges::range_value_t<R2>,
-                    std::ranges::range_value_t<R3>>;
+                std::tuple<std::ranges::range_value_t<R1>, std::ranges::range_value_t<R2>,
+                std::ranges::range_value_t<R3 >>;
                 using difference_type = std::ptrdiff_t;
                 using iterator_category = std::input_iterator_tag;
 
@@ -131,7 +129,8 @@ class cartesian_product_view_3
                 iterator( It1 it1, It1 end1, It2 begin2, It2 end2, It3 begin3, It3 end3 )
                     : it1_( it1 ), it2_( begin2 ), it3_( begin3 ),
                       end1_( end1 ), begin2_( begin2 ), end2_( end2 ),
-                      begin3_( begin3 ), end3_( end3 ) {
+                      begin3_( begin3 ), end3_( end3 )
+                {
                     if( it1_ != end1_ && ( begin2_ == end2_ || begin3_ == end3_ ) ) {
                         it1_ = end1_;
                     }
@@ -142,7 +141,8 @@ class cartesian_product_view_3
                 }
                 auto operator++() -> iterator & { // *NOPAD*
                     ++it3_;
-                    if( it3_ == end3_ ) {
+                    if( it3_ == end3_ )
+                    {
                         it3_ = begin3_;
                         ++it2_;
                         if( it2_ == end2_ ) {
@@ -157,8 +157,9 @@ class cartesian_product_view_3
                     ++( *this );
                     return tmp;
                 }
-                friend auto operator==( const iterator &a, const iterator &b ) -> bool {
-                    if( a.it1_ == a.end1_ && b.it1_ == b.end1_ ) {
+                friend auto operator == ( const iterator &a, const iterator &b ) -> bool {
+                    if( a.it1_ == a.end1_ && b.it1_ == b.end1_ )
+                    {
                         return true;
                     }
                     return a.it1_ == b.it1_ && a.it2_ == b.it2_ && a.it3_ == b.it3_;
@@ -171,13 +172,13 @@ class cartesian_product_view_3
 
         auto begin() -> iterator {
             return iterator( std::ranges::begin( r1_ ), std::ranges::end( r1_ ),
-            std::ranges::begin( r2_ ), std::ranges::end( r2_ ),
-            std::ranges::begin( r3_ ), std::ranges::end( r3_ ) );
+                             std::ranges::begin( r2_ ), std::ranges::end( r2_ ),
+                             std::ranges::begin( r3_ ), std::ranges::end( r3_ ) );
         }
         auto end() -> iterator {
             return iterator( std::ranges::end( r1_ ), std::ranges::end( r1_ ),
-            std::ranges::begin( r2_ ), std::ranges::end( r2_ ),
-            std::ranges::begin( r3_ ), std::ranges::end( r3_ ) );
+                             std::ranges::begin( r2_ ), std::ranges::end( r2_ ),
+                             std::ranges::begin( r3_ ), std::ranges::end( r3_ ) );
         }
 };
 
@@ -186,18 +187,18 @@ class cartesian_product_view_3
 struct cartesian_product_fn {
     template<std::ranges::viewable_range R1, std::ranges::viewable_range R2>
     auto operator()( R1 &&r1, R2 &&r2 ) const {
-        return detail::cartesian_product_view_2<std::views::all_t<R1>, std::views::all_t<R2>>(
-               std::views::all( std::forward<R1>( r1 ) ),
-        std::views::all( std::forward<R2>( r2 ) ) );
+        return detail::cartesian_product_view_2<std::views::all_t<R1>, std::views::all_t<R2 >> (
+            std::views::all( std::forward<R1>( r1 ) ),
+            std::views::all( std::forward<R2>( r2 ) ) );
     }
     template<std::ranges::viewable_range R1, std::ranges::viewable_range R2,
              std::ranges::viewable_range R3>
     auto operator()( R1 &&r1, R2 &&r2, R3 &&r3 ) const {
         return detail::cartesian_product_view_3<std::views::all_t<R1>, std::views::all_t<R2>,
-               std::views::all_t<R3>>(
-               std::views::all( std::forward<R1>( r1 ) ),
-        std::views::all( std::forward<R2>( r2 ) ),
-        std::views::all( std::forward<R3>( r3 ) ) );
+        std::views::all_t<R3 >> (
+                                 std::views::all( std::forward<R1>( r1 ) ),
+                                 std::views::all( std::forward<R2>( r2 ) ),
+                                 std::views::all( std::forward<R3>( r3 ) ) );
     }
 };
 

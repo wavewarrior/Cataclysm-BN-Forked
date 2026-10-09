@@ -128,12 +128,12 @@ auto uniform_terrain_for_omt( const dimension_id &dimension_id,
 
     const auto terrain_type = get_overmapbuffer( dimension_id ).ter( omt_addr );
     if( terrain_type == air ) {
-    return t_open_air;
-}
-if( terrain_type == rock ) {
-    return t_rock;
-}
-return std::nullopt;
+        return t_open_air;
+    }
+    if( terrain_type == rock ) {
+        return t_rock;
+    }
+    return std::nullopt;
 }
 
 auto add_uniform_omt( mapbuffer &dest, const tripoint_abs_sm &base,
@@ -1625,18 +1625,22 @@ submap *mapbuffer::lookup_submap( const tripoint_abs_sm &p )
 
     try {
         bool found = false;
-        if( !pending_data.empty() ) {
+        if( !pending_data.empty() )
+        {
             std::istringstream iss( pending_data );
             JsonIn jsin( iss );
             deserialize_into_vec( jsin, loaded, already_loaded );
             found = true;
-        } else {
+        }
+        else {
             found = g->get_active_world()->read_map_omt( dimension_id_.str(), omt_addr,
-            [this, &loaded, &already_loaded]( JsonIn & jsin ) {
+                [this, &loaded, &already_loaded]( JsonIn & jsin )
+            {
                 deserialize_into_vec( jsin, loaded, already_loaded );
             } );
         }
-        if( !found ) {
+        if( !found )
+        {
             return nullptr;
         }
     } catch( const std::exception &err ) {
@@ -1664,9 +1668,9 @@ submap *mapbuffer::lookup_submap( const tripoint_abs_sm &p )
 }
 
 auto mapbuffer::get_submap( const tripoint_abs_sm &p,
-                            const mapbuffer_lookup_options options ) -> submap *
-{
-    switch( options.mode ) {
+                            const mapbuffer_lookup_options options ) -> submap * {
+    switch( options.mode )
+    {
         case mapbuffer_lookup_mode::simulated_only:
             if( !submap_loader.is_simulated( dimension_id_, p ) ) {
                 return nullptr;
@@ -1784,9 +1788,9 @@ auto mapbuffer::for_each_simulated_submap_position(
 }
 
 auto mapbuffer::for_each_simulated_submap(
-    const std::function<void( const tripoint_abs_sm &, submap & )> &fn ) -> void
-{
-    for_each_simulated_submap_position( [&]( const tripoint_abs_sm & pos ) {
+    const std::function<void( const tripoint_abs_sm &, submap & )> &fn ) -> void {
+    for_each_simulated_submap_position( [&]( const tripoint_abs_sm & pos )
+    {
         auto *const sm = lookup_submap_in_memory( pos );
         if( sm != nullptr ) {
             fn( pos, *sm );
@@ -2955,8 +2959,7 @@ auto mapbuffer::add_item_or_charges( const tripoint_abs_ms &p, detached_ptr<item
 
     auto valid_tile = [&]( const tripoint_abs_ms & target ) -> std::optional<mapbuffer_tile_lookup> {
         auto tile = lookup_tile( *this, target, options.lookup );
-        if( !tile )
-        {
+        if( !tile ) {
             return std::nullopt;
         }
         if( tile_has_flag( *tile, "DESTROY_ITEM" ) )
@@ -4038,9 +4041,11 @@ bool mapbuffer::preload_omt( const tripoint_abs_omt &omt_addr )
         std::istringstream iss( pending_data );
         JsonIn jsin( iss );
         deserialize_into_vec( jsin, loaded, already_loaded );
-    } else {
+    }
+    else {
         g->get_active_world()->read_map_omt( dimension_id_.str(), omt_addr,
-        [this, &loaded, &already_loaded]( JsonIn & jsin ) {
+                                             [this, &loaded, &already_loaded]( JsonIn & jsin )
+        {
             deserialize_into_vec( jsin, loaded, already_loaded );
         } );
     }
@@ -4065,20 +4070,21 @@ bool mapbuffer::preload_omt( const tripoint_abs_omt &omt_addr )
 }
 
 auto mapbuffer::generate_omt( const tripoint_abs_omt &omt_addr,
-                              const mapbuffer_generate_omt_options &options ) -> mapgen_result
-{
+                              const mapbuffer_generate_omt_options &options ) -> mapgen_result {
     ZoneScopedN( "mapbuffer_generate_omt" );
     const auto base = project_to<coords::sm>( omt_addr );
     const auto all_loaded =
-        lookup_submap_in_memory( base )
-        && lookup_submap_in_memory( base + point_east )
-        && lookup_submap_in_memory( base + point_south )
-        && lookup_submap_in_memory( base + point_south_east );
-    if( all_loaded ) {
-    return {};
-}
+    lookup_submap_in_memory( base )
+    && lookup_submap_in_memory( base + point_east )
+    && lookup_submap_in_memory( base + point_south )
+    && lookup_submap_in_memory( base + point_south_east );
+    if( all_loaded )
+    {
+        return {};
+    }
 
-if( const auto uniform_terrain = uniform_terrain_for_omt( dimension_id_, omt_addr ) ) {
+    if( const auto uniform_terrain = uniform_terrain_for_omt( dimension_id_, omt_addr ) )
+    {
         ZoneScopedN( "mapbuffer_generate_uniform_omt" );
         const auto generated = add_uniform_omt( *this, base, *uniform_terrain );
         if( generated ) {
@@ -4099,10 +4105,12 @@ if( const auto uniform_terrain = uniform_terrain_for_omt( dimension_id_, omt_add
             .use_selected_mapgen = options.use_selected_mapgen,
             .selected_mapgen = options.selected_mapgen,
         } );
-        if( generate_result.needs_main_thread() ) {
+        if( generate_result.needs_main_thread() )
+        {
             return generate_result;
         }
-        if( !generate_result.is_generated() ) {
+        if( !generate_result.is_generated() )
+        {
             return generate_result;
         }
     }

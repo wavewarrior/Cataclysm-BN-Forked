@@ -13,18 +13,18 @@ constexpr size_t cursor_kind_count = 4;
 auto to_sdl_system_cursor( cursor_kind kind ) -> SDL_SystemCursor
 {
     switch( kind ) {
-    case cursor_kind::hand:
-        // "Pointer that indicates a link. Usually a pointing hand." — the
-        // closest SDL3 system cursor to a classic hand/interact pointer.
-        return SDL_SYSTEM_CURSOR_POINTER;
-    case cursor_kind::crosshair:
-        return SDL_SYSTEM_CURSOR_CROSSHAIR;
-    case cursor_kind::forbidden:
-        return SDL_SYSTEM_CURSOR_NOT_ALLOWED;
-    case cursor_kind::arrow:
-        break;
-}
-return SDL_SYSTEM_CURSOR_DEFAULT;
+        case cursor_kind::hand:
+            // "Pointer that indicates a link. Usually a pointing hand." — the
+            // closest SDL3 system cursor to a classic hand/interact pointer.
+            return SDL_SYSTEM_CURSOR_POINTER;
+        case cursor_kind::crosshair:
+            return SDL_SYSTEM_CURSOR_CROSSHAIR;
+        case cursor_kind::forbidden:
+            return SDL_SYSTEM_CURSOR_NOT_ALLOWED;
+        case cursor_kind::arrow:
+            break;
+    }
+    return SDL_SYSTEM_CURSOR_DEFAULT;
 }
 
 std::array<SDL_Cursor *, cursor_kind_count> cached_cursors{ nullptr, nullptr, nullptr, nullptr };
@@ -55,8 +55,8 @@ auto set_game_cursor( cursor_kind kind ) -> void
 
 auto destroy_game_cursors() -> void
 {
-for( SDL_Cursor * &cursor : cached_cursors ) {
-    if( cursor != nullptr ) {
+    for( SDL_Cursor * &cursor : cached_cursors ) {
+        if( cursor != nullptr ) {
             SDL_DestroyCursor( cursor );
             cursor = nullptr;
         }

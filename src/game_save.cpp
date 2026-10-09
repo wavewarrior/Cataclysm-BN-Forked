@@ -673,8 +673,8 @@ bool game::load( const save_t &name )
     // then re-invalidate so the first real in-game draw rebuilds everything again.
     level_cache_freshness::invalidate_level( m, get_levz() );
     m.build_map_cache( level_cache_freshness::plan_for( m,
-        level_cache_freshness::pose_of_viewer( u, get_levz() ),
-        level_cache_freshness::lightmap_policy::normal ) );
+                       level_cache_freshness::pose_of_viewer( u, get_levz() ),
+                       level_cache_freshness::lightmap_policy::normal ) );
     m.update_visibility_cache( get_levz() );
     level_cache_freshness::invalidate_level( m, get_levz() );
 
@@ -932,7 +932,8 @@ void game::process_artifact( item &it, Character &who )
 
     if( it.is_tool() ) {
         // Recharge it if necessary
-        if( it.ammo_remaining() < it.ammo_capacity() && action_time_scale::once_every_this_tick( 1_minutes ) ) {
+        if( it.ammo_remaining() < it.ammo_capacity() &&
+            action_time_scale::once_every_this_tick( 1_minutes ) ) {
             //Before incrementing charge, check that any extra requirements are met
             if( check_art_charge_req( it ) ) {
                 switch( it.type->artifact->charge_type ) {

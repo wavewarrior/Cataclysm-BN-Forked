@@ -81,20 +81,19 @@ void cata::detail::reg_bionics( sol::state &lua )
         DOC( "Activates this bionic on the given character. Optional block_message (default true) suppresses messages." );
         luna::set_fx( ut, "activate", []( UT_CLASS & bio, Character & ch,
         std::optional<bool> block_message ) -> bool {
-            if( !ch.has_bionic( bio.id ) )
-        {
-            return false;
-        }
-        bionic &real_bio = ch.get_bionic_state( bio.id );
-        real_bio.powered = real_bio.info().has_flag( STATIC( flag_id( "BIONIC_TOGGLED" ) ) ) ||
+            if( !ch.has_bionic( bio.id ) ) {
+                return false;
+            }
+            bionic &real_bio = ch.get_bionic_state( bio.id );
+            real_bio.powered = real_bio.info().has_flag( STATIC( flag_id( "BIONIC_TOGGLED" ) ) ) ||
                                        real_bio.info().charge_time > 0;
             if( real_bio.info().charge_time > 0 )
-        {
-            real_bio.charge_timer = real_bio.info().charge_time;
+            {
+                real_bio.charge_timer = real_bio.info().charge_time;
             }
             if( !real_bio.id->enchantments.empty() )
-        {
-            ch.recalculate_enchantment_cache();
+            {
+                ch.recalculate_enchantment_cache();
             }
             return ch.activate_bionic( real_bio, block_message.value_or( true ) );
         } );
@@ -102,19 +101,18 @@ void cata::detail::reg_bionics( sol::state &lua )
         DOC( "Deactivates this bionic on the given character. Optional block_message (default true) suppresses messages." );
         luna::set_fx( ut, "deactivate", []( UT_CLASS & bio, Character & ch,
         std::optional<bool> block_message ) -> bool {
-            if( !ch.has_bionic( bio.id ) )
-        {
-            return false;
-        }
-        bionic &real_bio = ch.get_bionic_state( bio.id );
-        return ch.deactivate_bionic( real_bio, block_message.value_or( true ) );
-    } );
+            if( !ch.has_bionic( bio.id ) ) {
+                return false;
+            }
+            bionic &real_bio = ch.get_bionic_state( bio.id );
+            return ch.deactivate_bionic( real_bio, block_message.value_or( true ) );
+        } );
 
         // to_string
         luna::set_fx( ut, sol::meta_function::to_string,
         []( const UT_CLASS & bio ) -> std::string {
             return string_format( "%s[%s]",
-            luna::detail::luna_traits<UT_CLASS>::name, bio.id.c_str() );
+                                  luna::detail::luna_traits<UT_CLASS>::name, bio.id.c_str() );
         } );
     }
 #undef UT_CLASS
@@ -167,8 +165,7 @@ void cata::detail::mod_bionic_data( sol::state &lua )
         DOC( "Returns stat bonuses as a table mapping stat name to bonus value." );
         luna::set_fx( ut, "stat_bonus", []( const UT_CLASS & bd ) -> std::map<std::string, int> {
             std::map<std::string, int> rv;
-            for( const auto &pair : bd.stat_bonus )
-            {
+            for( const auto &pair : bd.stat_bonus ) {
                 rv[get_stat_name( pair.first )] = pair.second;
             }
             return rv;
@@ -183,8 +180,7 @@ void cata::detail::mod_bionic_data( sol::state &lua )
         luna::set_fx( ut, "fuel_opts", []( const UT_CLASS & bd ) -> std::vector<std::string> {
             std::vector<std::string> rv;
             rv.reserve( bd.fuel_opts.size() );
-            for( const auto &f : bd.fuel_opts )
-            {
+            for( const auto &f : bd.fuel_opts ) {
                 rv.push_back( f.str() );
             }
             return rv;
@@ -198,9 +194,8 @@ void cata::detail::mod_bionic_data( sol::state &lua )
         DOC( "Returns the coverage power gen penalty, or nil if not set." );
         luna::set_fx( ut, "coverage_power_gen_penalty",
         []( const UT_CLASS & bd ) -> sol::optional<float> {
-            if( bd.coverage_power_gen_penalty.has_value() )
-        {
-            return bd.coverage_power_gen_penalty.value();
+            if( bd.coverage_power_gen_penalty.has_value() ) {
+                return bd.coverage_power_gen_penalty.value();
             }
             return sol::nullopt;
         } );
@@ -214,8 +209,7 @@ void cata::detail::mod_bionic_data( sol::state &lua )
         DOC( "Environmental protection by body part." );
         luna::set_fx( ut, "env_protec", []( const UT_CLASS & bd ) -> std::map<std::string, int> {
             std::map<std::string, int> rv;
-            for( const auto &p : bd.env_protec )
-            {
+            for( const auto &p : bd.env_protec ) {
                 rv[p.first.str()] = p.second;
             }
             return rv;
@@ -223,8 +217,7 @@ void cata::detail::mod_bionic_data( sol::state &lua )
         DOC( "Bash protection by body part." );
         luna::set_fx( ut, "bash_protec", []( const UT_CLASS & bd ) -> std::map<std::string, int> {
             std::map<std::string, int> rv;
-            for( const auto &p : bd.bash_protec )
-            {
+            for( const auto &p : bd.bash_protec ) {
                 rv[p.first.str()] = p.second;
             }
             return rv;
@@ -232,8 +225,7 @@ void cata::detail::mod_bionic_data( sol::state &lua )
         DOC( "Cut protection by body part." );
         luna::set_fx( ut, "cut_protec", []( const UT_CLASS & bd ) -> std::map<std::string, int> {
             std::map<std::string, int> rv;
-            for( const auto &p : bd.cut_protec )
-            {
+            for( const auto &p : bd.cut_protec ) {
                 rv[p.first.str()] = p.second;
             }
             return rv;
@@ -241,8 +233,7 @@ void cata::detail::mod_bionic_data( sol::state &lua )
         DOC( "Bullet protection by body part." );
         luna::set_fx( ut, "bullet_protec", []( const UT_CLASS & bd ) -> std::map<std::string, int> {
             std::map<std::string, int> rv;
-            for( const auto &p : bd.bullet_protec )
-            {
+            for( const auto &p : bd.bullet_protec ) {
                 rv[p.first.str()] = p.second;
             }
             return rv;
@@ -252,8 +243,7 @@ void cata::detail::mod_bionic_data( sol::state &lua )
         DOC( "Body parts occupied by this bionic and slot space required." );
         luna::set_fx( ut, "occupied_bodyparts", []( const UT_CLASS & bd ) -> std::map<std::string, int> {
             std::map<std::string, int> rv;
-            for( const auto &p : bd.occupied_bodyparts )
-            {
+            for( const auto &p : bd.occupied_bodyparts ) {
                 rv[p.first.str()] = p.second;
             }
             return rv;
@@ -261,8 +251,7 @@ void cata::detail::mod_bionic_data( sol::state &lua )
         DOC( "Encumbrance caused by this bionic on each body part." );
         luna::set_fx( ut, "encumbrance", []( const UT_CLASS & bd ) -> std::map<std::string, int> {
             std::map<std::string, int> rv;
-            for( const auto &p : bd.encumbrance )
-            {
+            for( const auto &p : bd.encumbrance ) {
                 rv[p.first.str()] = p.second;
             }
             return rv;
@@ -278,8 +267,7 @@ void cata::detail::mod_bionic_data( sol::state &lua )
         luna::set_fx( ut, "canceled_mutations", []( const UT_CLASS & bd ) -> std::vector<std::string> {
             std::vector<std::string> rv;
             rv.reserve( bd.canceled_mutations.size() );
-            for( const auto &m : bd.canceled_mutations )
-            {
+            for( const auto &m : bd.canceled_mutations ) {
                 rv.push_back( m.str() );
             }
             return rv;
@@ -290,8 +278,7 @@ void cata::detail::mod_bionic_data( sol::state &lua )
         luna::set_fx( ut, "enchantments", []( const UT_CLASS & bd ) -> std::vector<std::string> {
             std::vector<std::string> rv;
             rv.reserve( bd.enchantments.size() );
-            for( const auto &eid : bd.enchantments )
-            {
+            for( const auto &eid : bd.enchantments ) {
                 rv.push_back( eid.str() );
             }
             return rv;
@@ -301,8 +288,7 @@ void cata::detail::mod_bionic_data( sol::state &lua )
         DOC( "Spells learned when this bionic is installed, mapped to level." );
         luna::set_fx( ut, "learned_spells", []( const UT_CLASS & bd ) -> std::map<std::string, int> {
             std::map<std::string, int> rv;
-            for( const auto &p : bd.learned_spells )
-            {
+            for( const auto &p : bd.learned_spells ) {
                 rv[p.first.str()] = p.second;
             }
             return rv;
@@ -313,8 +299,7 @@ void cata::detail::mod_bionic_data( sol::state &lua )
         luna::set_fx( ut, "included_bionics", []( const UT_CLASS & bd ) -> std::vector<std::string> {
             std::vector<std::string> rv;
             rv.reserve( bd.included_bionics.size() );
-            for( const auto &b : bd.included_bionics )
-            {
+            for( const auto &b : bd.included_bionics ) {
                 rv.push_back( b.str() );
             }
             return rv;
@@ -327,8 +312,7 @@ void cata::detail::mod_bionic_data( sol::state &lua )
         DOC( "Available upgrade paths for this bionic." );
         luna::set_fx( ut, "available_upgrades", []( const UT_CLASS & bd ) -> std::vector<std::string> {
             std::vector<std::string> rv;
-            for( const auto &b : bd.available_upgrades )
-            {
+            for( const auto &b : bd.available_upgrades ) {
                 rv.push_back( b.str() );
             }
             return rv;
@@ -338,8 +322,7 @@ void cata::detail::mod_bionic_data( sol::state &lua )
         luna::set_fx( ut, "required_bionics", []( const UT_CLASS & bd ) -> std::vector<std::string> {
             std::vector<std::string> rv;
             rv.reserve( bd.required_bionics.size() );
-            for( const auto &b : bd.required_bionics )
-            {
+            for( const auto &b : bd.required_bionics ) {
                 rv.push_back( b.str() );
             }
             return rv;
@@ -355,8 +338,7 @@ void cata::detail::mod_bionic_data( sol::state &lua )
         DOC( "Returns the set of flag IDs on this bionic definition." );
         luna::set_fx( ut, "flags", []( const UT_CLASS & bd ) -> std::vector<std::string> {
             std::vector<std::string> rv;
-            for( const auto &f : bd.flags )
-            {
+            for( const auto &f : bd.flags ) {
                 rv.push_back( f.str() );
             }
             return rv;
@@ -374,7 +356,7 @@ void cata::detail::mod_bionic_data( sol::state &lua )
         luna::set_fx( ut, sol::meta_function::to_string,
         []( const UT_CLASS & bd ) -> std::string {
             return string_format( "%s[%s]",
-            luna::detail::luna_traits<UT_CLASS>::name, bd.id.c_str() );
+                                  luna::detail::luna_traits<UT_CLASS>::name, bd.id.c_str() );
         } );
     }
 #undef UT_CLASS

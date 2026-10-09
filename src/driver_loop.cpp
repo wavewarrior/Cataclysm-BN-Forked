@@ -120,7 +120,7 @@ auto begin_response( JsonOut &jo, const std::optional<int> &id,
     jo.start_object();
     jo.member( "id" );
     if( id ) {
-    jo.write( *id );
+        jo.write( *id );
     } else {
         jo.write_null();
     }
@@ -704,7 +704,7 @@ auto load_deny_list( const std::string &path ) -> std::expected<void, std::strin
         deny_list = parse_deny_list( jsin );
     } );
     if( !read ) {
-    return std::unexpected( "cannot load the deny list " + path );
+        return std::unexpected( "cannot load the deny list " + path );
     }
     return {};
 }
@@ -969,8 +969,7 @@ auto run_driver_loop( int in_fd, const driver_options &options ) -> bool
                 write_all( fd, observation_line( { .id = *id, .before = before,
                                                    .result = guarded( before, [&]()
                 {
-                    return run_typed( { .run = [&]()
-                    {
+                    return run_typed( { .run = [&]() {
                         return driver_combat::run_command( *combat_kind, target );
                     }, .max_turns = *max_turns }, before );
                 } ) } ) );
@@ -993,8 +992,7 @@ auto run_driver_loop( int in_fd, const driver_options &options ) -> bool
                 write_all( fd, observation_line( { .id = *id, .before = before,
                                                    .result = guarded( before, [&]()
                 {
-                    return run_typed( { .run = [&]()
-                    {
+                    return run_typed( { .run = [&]() {
                         return driver_items::run_command( *item_kind, *found, options );
                     }, .max_turns = *max_turns }, before );
                 } ) } ) );
@@ -1013,8 +1011,7 @@ auto run_driver_loop( int in_fd, const driver_options &options ) -> bool
                 write_all( fd, observation_line( { .id = *id, .before = before,
                                                    .result = guarded( before, [&]()
                 {
-                    return run_typed( { .run = [&]()
-                    {
+                    return run_typed( { .run = [&]() {
                         return driver_items::run_craft( recipe );
                     }, .max_turns = *max_turns }, before );
                 } ) } ) );
@@ -1028,8 +1025,7 @@ auto run_driver_loop( int in_fd, const driver_options &options ) -> bool
                 write_all( fd, observation_line( { .id = *id, .before = before,
                                                    .result = guarded( before, [&]()
                 {
-                    return run_typed( { .run = []()
-                    {
+                    return run_typed( { .run = []() {
                         return driver_items::run_sleep();
                     }, .max_turns = *max_turns }, before );
                 } ) } ) );
@@ -1128,8 +1124,8 @@ auto driver_mode_active() -> bool
 auto driver_note_interruption( std::string_view reason ) -> void
 {
     if( driver_serving && !interruption ) {
-    interruption = reason;
-}
+        interruption = reason;
+    }
 }
 
 driver_blocking_read::driver_blocking_read()

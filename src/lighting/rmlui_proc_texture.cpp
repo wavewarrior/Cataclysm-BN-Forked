@@ -729,13 +729,9 @@ std::vector<std::uint8_t> gen_runic_frame(const std::string& variant, int& out_w
         const rgba ink = light_col(cfg);
         for (int x = 0; x < rl; ++x) {
             // Solid line at y=0
-            if (corrode_keep(x, 0, 0, rseed)) {
-                put(px, out_w, out_h, x, 0, ink);
-            }
+            if (corrode_keep(x, 0, 0, rseed)) { put(px, out_w, out_h, x, 0, ink); }
             // Dashed line at y=2: 6px on / 3px off
-            if ((x % 9) < 6 && corrode_keep(x, 2, 2, rseed)) {
-                put(px, out_w, out_h, x, 2, ink);
-            }
+            if ((x % 9) < 6 && corrode_keep(x, 2, 2, rseed)) { put(px, out_w, out_h, x, 2, ink); }
         }
         return px;
     }
@@ -810,7 +806,7 @@ std::vector<std::uint8_t> gen_runic_frame(const std::string& variant, int& out_w
         // Scale: fit a 5-cell glyph + 2px wall + 2px pad inside sz.
         const int gs = std::max(1, (sz - 4) / 5);
         const int glyph_w = 5 * gs;
-        const int total = glyph_w + 4; // 2px wall on each side
+        const int total = glyph_w + 4;   // 2px wall on each side
         const int ox = (sz - total) / 2; // centre the box
         const int oy = (sz - total) / 2;
         // Draw border box.
@@ -827,9 +823,7 @@ std::vector<std::uint8_t> gen_runic_frame(const std::string& variant, int& out_w
         std::uniform_int_distribution<int> bit(0, 99);
         int grid[5][3];
         for (int gy = 0; gy < 5; ++gy) {
-            for (int gx = 0; gx < 3; ++gx) {
-                grid[gy][gx] = (bit(gen) < cfg.fill_pct) ? 1 : 0;
-            }
+            for (int gx = 0; gx < 3; ++gx) { grid[gy][gx] = (bit(gen) < cfg.fill_pct) ? 1 : 0; }
         }
         const int gx0 = ox + 2; // inside the wall
         const int gy0 = oy + 2;

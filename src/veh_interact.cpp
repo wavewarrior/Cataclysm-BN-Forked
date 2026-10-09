@@ -156,10 +156,10 @@ bool &veh_interact_rmlui_enabled()
     return enabled;
 }
 
-auto spawn_debug_install_base( const vpart_info& vpinfo ) -> detached_ptr<item>
-{
+auto spawn_debug_install_base( const vpart_info& vpinfo ) -> detached_ptr<item> {
     auto spawned = item::spawn( vpinfo.item );
-    if( vpinfo.fuel_type == fuel_type_battery && spawned->ammo_capacity() > 0 ) {
+    if( vpinfo.fuel_type == fuel_type_battery && spawned->ammo_capacity() > 0 )
+    {
         spawned->ammo_set( spawned->ammo_default(), -1 );
     }
     return spawned;
@@ -1400,7 +1400,8 @@ void veh_interact::do_mend()
     auto sel = [toggling]( const vehicle_part & pt ) {
         if( toggling ) {
             return !pt.faults_potential().empty();
-        } else {
+        }
+        else {
             return !pt.faults().empty();
         }
     };
@@ -2078,7 +2079,8 @@ void veh_interact::do_assign_crew()
         menu.query();
         if( menu.ret == 0 ) {
             pt.unset_crew();
-        } else if( menu.ret > 0 ) {
+        }
+        else if( menu.ret > 0 ) {
             const auto& who = *g->critter_by_id<npc>( character_id( menu.ret ) );
             veh->assign_seat( pt, who );
         }
@@ -2316,7 +2318,7 @@ std::vector<std::string> veh_interact::stats_lines() const
         if( is_boat ) {
             stat( string_format(
                       _( "Water Safe/Top Speed: "
-                         "<color_light_green>%3d</color>/<color_light_red>%3d</color> %s" ),
+               "<color_light_green>%3d</color>/<color_light_red>%3d</color> %s" ),
                       vel_to_int( veh->safe_water_velocity( false, !veh->engine_on ) ),
                       vel_to_int( veh->max_water_velocity( false, !veh->engine_on ) ),
                       velocity_units( VU_VEHICLE ) ) );

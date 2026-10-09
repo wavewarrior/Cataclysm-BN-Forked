@@ -37,227 +37,227 @@ class location_vector
     public:
         struct const_iterator;
         struct iterator {
-            public:
-                friend const_iterator;
-                friend location_vector;
-                using iterator_category = std::random_access_iterator_tag;
-                using difference_type   = std::ptrdiff_t;
-                using value_type        = T*;
-                using pointer           = T **;
-                using reference         = T *&;
+        public:
+            friend const_iterator;
+            friend location_vector;
+            using iterator_category = std::random_access_iterator_tag;
+            using difference_type   = std::ptrdiff_t;
+            using value_type        = T*;
+            using pointer           = T **;
+            using reference         = T *&;
 
-                iterator( );
-                iterator( typename std::vector<T *>::iterator it, const location_vector<T> &home );
-                iterator( const iterator &source );
-                iterator( iterator &&source ) noexcept ;
-                iterator &operator=( const iterator &source );
-                iterator &operator=( iterator &&source ) noexcept ;
+            iterator( );
+            iterator( typename std::vector < T * >::iterator it, const location_vector < T > &home );
+            iterator( const iterator & source );
+            iterator( iterator &&source ) noexcept ;
+            iterator &operator=( const iterator & source );
+            iterator &operator=( iterator &&source ) noexcept ;
 
-                reference operator*() const {
-                    return *it;
-                }
-                pointer operator->() {
-                    return &*it;
-                }
+            reference operator*() const {
+                return *it;
+            }
+            pointer operator->() {
+                return &*it;
+            }
 
-                iterator &operator++() {
-                    it++;
-                    return *this;
-                }
+            iterator & operator++() {
+                it++;
+                return *this;
+            }
 
-                iterator &operator--() {
-                    it--;
-                    return *this;
-                }
+            iterator & operator--() {
+                it--;
+                return *this;
+            }
 
-                iterator operator++( int ) {
-                    iterator tmp = *this;
-                    ++( *this );
-                    return tmp;
-                }
-                iterator operator--( int ) {
-                    iterator tmp = *this;
-                    --( *this );
-                    return tmp;
-                }
+            iterator operator++( int ) {
+                iterator tmp = *this;
+                ++( *this );
+                return tmp;
+            }
+            iterator operator--( int ) {
+                iterator tmp = *this;
+                --( *this );
+                return tmp;
+            }
 
-                iterator &operator+=( difference_type t ) {
-                    it += t;
-                    return *this;
-                }
+            iterator & operator+=( difference_type t ) {
+                it += t;
+                return *this;
+            }
 
-                iterator &operator-=( difference_type t ) {
-                    it -= t;
-                    return *this;
-                }
+            iterator & operator-=( difference_type t ) {
+                it -= t;
+                return *this;
+            }
 
-                difference_type operator-( const iterator &rhs ) const {
-                    return it - rhs.it;
-                }
+            difference_type operator-( const iterator & rhs ) const {
+                return it - rhs.it;
+            }
 
-                friend iterator operator+( difference_type n, const iterator &term ) {
-                    return term + n;
-                }
+            friend iterator operator+( difference_type n, const iterator & term ) {
+                return term + n;
+            }
 
-                friend iterator operator+( const iterator &term, difference_type n ) {
-                    return iterator( term.it + n, *term.home );
-                }
+            friend iterator operator+( const iterator & term, difference_type n ) {
+                return iterator( term.it + n, *term.home );
+            }
 
-                friend iterator operator-( const iterator &term, difference_type n ) {
-                    return iterator( term.it - n, *term.home );
-                }
+            friend iterator operator-( const iterator & term, difference_type n ) {
+                return iterator( term.it - n, *term.home );
+            }
 
-                friend bool operator== ( const iterator &a, const iterator &b ) {
-                    return a.it == b.it;
-                };
-                friend bool operator!= ( const iterator &a, const iterator &b ) {
-                    return a.it != b.it;
-                };
+            friend bool operator== ( const iterator & a, const iterator & b ) {
+                return a.it == b.it;
+            };
+            friend bool operator!= ( const iterator & a, const iterator & b ) {
+                return a.it != b.it;
+            };
 
-                friend bool operator< ( const iterator &a, const iterator &b ) {
-                    return a.it < b.it;
-                };
-                friend bool operator<= ( const iterator &a, const iterator &b ) {
-                    return a.it <= b.it;
-                };
-                friend bool operator> ( const iterator &a, const iterator &b ) {
-                    return a.it > b.it;
-                };
-                friend bool operator>= ( const iterator &a, const iterator &b ) {
-                    return a.it >= b.it;
-                };
+            friend bool operator< ( const iterator & a, const iterator & b ) {
+                return a.it < b.it;
+            };
+            friend bool operator<= ( const iterator & a, const iterator & b ) {
+                return a.it <= b.it;
+            };
+            friend bool operator> ( const iterator & a, const iterator & b ) {
+                return a.it > b.it;
+            };
+            friend bool operator>= ( const iterator & a, const iterator & b ) {
+                return a.it >= b.it;
+            };
 
-            private:
-                typename std::vector<T *>::iterator it;
-                const location_vector<T> *home = nullptr;
+private:
+            typename std::vector < T * >::iterator it;
+            const location_vector < T > *home = nullptr;
         };
 
         struct const_iterator {
-            public:
-                friend iterator;
-                friend location_vector;
-                using iterator_category = std::random_access_iterator_tag;
-                using difference_type   = std::ptrdiff_t;
-                using value_type        = T * const;
-                using pointer           = T * const*;
-                using reference         = T * const&;
+        public:
+            friend iterator;
+            friend location_vector;
+            using iterator_category = std::random_access_iterator_tag;
+            using difference_type   = std::ptrdiff_t;
+            using value_type        = T * const;
+            using pointer           = T * const*;
+            using reference         = T * const&;
 
-                const_iterator( );
-                const_iterator( typename std::vector<T *>::const_iterator it, const location_vector<T> &home );
-                const_iterator( const iterator &source );
-                const_iterator( iterator &&source );
-                const_iterator( const const_iterator &source );
-                const_iterator( const_iterator &&source ) noexcept ;
-                const_iterator &operator=( const const_iterator &source );
-                const_iterator &operator=( const_iterator &&source ) noexcept ;
+            const_iterator( );
+            const_iterator( typename std::vector < T * >::const_iterator it, const location_vector < T > &home );
+            const_iterator( const iterator & source );
+            const_iterator( iterator &&source );
+            const_iterator( const const_iterator & source );
+            const_iterator( const_iterator &&source ) noexcept ;
+            const_iterator &operator=( const const_iterator & source );
+            const_iterator &operator=( const_iterator &&source ) noexcept ;
 
-                reference operator*() const {
-                    return *it;
-                }
-                pointer operator->() {
-                    return &*it;
-                }
+            reference operator*() const {
+                return *it;
+            }
+            pointer operator->() {
+                return &*it;
+            }
 
-                const_iterator &operator++() {
-                    it++;
-                    return *this;
-                }
+            const_iterator & operator++() {
+                it++;
+                return *this;
+            }
 
-                const_iterator &operator--() {
-                    it--;
-                    return *this;
-                }
+            const_iterator & operator--() {
+                it--;
+                return *this;
+            }
 
-                const_iterator operator++( int ) {
-                    const_iterator tmp = *this;
-                    ++( *this );
-                    return tmp;
-                }
-                const_iterator operator--( int ) {
-                    const_iterator tmp = *this;
-                    --( *this );
-                    return tmp;
-                }
+            const_iterator operator++( int ) {
+                const_iterator tmp = *this;
+                ++( *this );
+                return tmp;
+            }
+            const_iterator operator--( int ) {
+                const_iterator tmp = *this;
+                --( *this );
+                return tmp;
+            }
 
-                const_iterator &operator+=( difference_type t ) {
-                    it += t;
-                    return *this;
-                }
+            const_iterator & operator+=( difference_type t ) {
+                it += t;
+                return *this;
+            }
 
-                const_iterator &operator-=( difference_type t ) {
-                    it -= t;
-                    return *this;
-                }
+            const_iterator & operator-=( difference_type t ) {
+                it -= t;
+                return *this;
+            }
 
-                difference_type operator-( const const_iterator &rhs ) const {
-                    return it - rhs.it;
-                }
+            difference_type operator-( const const_iterator & rhs ) const {
+                return it - rhs.it;
+            }
 
-                friend const_iterator operator+( difference_type n, const const_iterator &term ) {
-                    return term + n;
-                }
+            friend const_iterator operator+( difference_type n, const const_iterator & term ) {
+                return term + n;
+            }
 
-                friend const_iterator operator+( const const_iterator &term, difference_type n ) {
-                    return const_iterator( term.it + n, *term.home );
-                }
+            friend const_iterator operator+( const const_iterator & term, difference_type n ) {
+                return const_iterator( term.it + n, *term.home );
+            }
 
-                friend const_iterator operator-( const const_iterator &term, difference_type n ) {
-                    return const_iterator( term.it - n, *term.home );
-                }
+            friend const_iterator operator-( const const_iterator & term, difference_type n ) {
+                return const_iterator( term.it - n, *term.home );
+            }
 
-                friend bool operator== ( const const_iterator &a, const const_iterator &b ) {
-                    return a.it == b.it;
-                };
-                friend bool operator!= ( const const_iterator &a, const const_iterator &b ) {
-                    return a.it != b.it;
-                };
+            friend bool operator== ( const const_iterator & a, const const_iterator & b ) {
+                return a.it == b.it;
+            };
+            friend bool operator!= ( const const_iterator & a, const const_iterator & b ) {
+                return a.it != b.it;
+            };
 
-                friend bool operator< ( const const_iterator &a, const const_iterator &b ) {
-                    return a.it < b.it;
-                };
-                friend bool operator<= ( const const_iterator &a, const const_iterator &b ) {
-                    return a.it <= b.it;
-                };
-                friend bool operator> ( const const_iterator &a, const const_iterator &b ) {
-                    return a.it > b.it;
-                };
-                friend bool operator>= ( const const_iterator &a, const const_iterator &b ) {
-                    return a.it >= b.it;
-                };
+            friend bool operator< ( const const_iterator & a, const const_iterator & b ) {
+                return a.it < b.it;
+            };
+            friend bool operator<= ( const const_iterator & a, const const_iterator & b ) {
+                return a.it <= b.it;
+            };
+            friend bool operator> ( const const_iterator & a, const const_iterator & b ) {
+                return a.it > b.it;
+            };
+            friend bool operator>= ( const const_iterator & a, const const_iterator & b ) {
+                return a.it >= b.it;
+            };
 
-            private:
-                typename std::vector<T *>::const_iterator it;
-                const location_vector<T> *home;
+private:
+            typename std::vector < T * >::const_iterator it;
+            const location_vector < T > *home;
         };
-        using reverse_iterator = std::reverse_iterator<iterator>;
-        using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+        using reverse_iterator = std::reverse_iterator < iterator >;
+        using const_reverse_iterator = std::reverse_iterator < const_iterator >;
 
         location_vector() = default;
-        location_vector( location<T> *loc );
-        location_vector( location<T> *loc, std::vector<detached_ptr<T>> &from );
+        location_vector( location < T > *loc );
+        location_vector( location < T > *loc, std::vector < detached_ptr<T >> &from );
         location_vector( location_vector && ) = delete;
         location_vector &operator=( location_vector && ) noexcept ;
 
         ~location_vector();
 
-        location<T> *get_location() const;
+        location < T > *get_location() const;
 
-        void push_back( detached_ptr<T> &&obj );
+        void push_back( detached_ptr < T > &&obj );
         size_t size() const;
         bool empty() const;
         T *back() const;
         T *front() const;
-        detached_ptr<T> remove( T * );
-        const std::vector<T *> &as_vector() const;
+        detached_ptr < T > remove( T * );
+        const std::vector < T * > &as_vector() const;
 
         iterator erase( const_iterator it,
-                        detached_ptr<T> *out = nullptr );
+                        detached_ptr < T > *out = nullptr );
         iterator insert( iterator it,
-                         detached_ptr<T> &&obj );
+                         detached_ptr < T > &&obj );
 
         iterator insert( iterator it,
-                         typename std::vector<detached_ptr<T>>::iterator start,
-                         typename std::vector<detached_ptr<T>>::iterator end );
+                         typename std::vector < detached_ptr < T>>::iterator start,
+                         typename std::vector < detached_ptr < T>>::iterator end );
         const_iterator begin() const;
         const_iterator end() const;
         iterator begin();
@@ -270,18 +270,18 @@ class location_vector
         reverse_iterator rend();
         const_iterator cbegin() const;
         const_iterator cend() const;
-        std::vector<detached_ptr<T>> clear();
+        std::vector < detached_ptr < T>> clear();
 
-        void remove_with( std::function < detached_ptr<T>( detached_ptr<T> && ) > cb );
+        void remove_with( std::function < detached_ptr < T>( detached_ptr<T > && ) > cb );
 
         void move_by( const tripoint_rel_ms &offset );
 
         void set_dimension( const dimension_id &dim );
 
-        void init_location( location<T> *new_loc );
+        void init_location( location < T > *new_loc );
 
         /** this is needed until vehicles are GOs */
-        void set_loc_hack( location<T> *loc );
+        void set_loc_hack( location < T > *loc );
 
         void on_destroy();
 };

@@ -155,8 +155,7 @@ auto cata::detail::reg_monster_groups( sol::state &lua ) -> void
     []() -> std::vector<MonsterGroup> {
         namespace views = std::views;
         return MonsterGroupManager::get_all_group_ids()
-        | views::transform( []( const mongroup_id & group_id )
-        {
+        | views::transform( []( const mongroup_id & group_id ) {
             return group_id.obj();
         } )
         | std::ranges::to<std::vector<MonsterGroup>>();

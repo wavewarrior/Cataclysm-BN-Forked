@@ -16,8 +16,8 @@
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
-#include <optional>
 #include <functional>
+#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -55,9 +55,7 @@ auto pool_bucket(std::uint32_t bytes) -> std::uint32_t {
     return std::bit_ceil(std::max(bytes, POOL_MIN_BYTES));
 }
 
-auto align_up(std::uint32_t v, std::uint32_t a) -> std::uint32_t {
-    return (v + a - 1) & ~(a - 1);
-}
+auto align_up(std::uint32_t v, std::uint32_t a) -> std::uint32_t { return (v + a - 1) & ~(a - 1); }
 
 // Per-RenderGeometry vertex uniform (register b0, space1 in rmlui.vert.hlsl).
 // 80 bytes: 16-byte translation/viewport + 64-byte transform matrix.
@@ -163,7 +161,7 @@ struct rmlui_render_interface::impl {
     // more would pin tens of megabytes to save a decode that is already rare.
     std::string sheet_path;
     SDL_Surface* sheet_rgba = nullptr;
-    std::uint64_t sheet_frame = 0;   //< frame of the last crop, for the idle release
+    std::uint64_t sheet_frame = 0; //< frame of the last crop, for the idle release
 
     // Deferred frees (run KEEP_FRAMES after the freeing frame).
     std::uint64_t frame = 0;
@@ -608,10 +606,8 @@ void rmlui_render_interface::upload_pending(SDL_GPUCommandBuffer* cb) {
         const std::uint32_t vbytes = static_cast<std::uint32_t>(
             g.verts.size() * sizeof(Rml::Vertex));
         const std::uint32_t ibytes = static_cast<std::uint32_t>(g.idx.size() * sizeof(int));
-        g.vbuf = p->acquire_buffer(
-            p->vbuf_pool, SDL_GPU_BUFFERUSAGE_VERTEX, vbytes, g.vbuf_cap);
-        g.ibuf = p->acquire_buffer(
-            p->ibuf_pool, SDL_GPU_BUFFERUSAGE_INDEX, ibytes, g.ibuf_cap);
+        g.vbuf = p->acquire_buffer(p->vbuf_pool, SDL_GPU_BUFFERUSAGE_VERTEX, vbytes, g.vbuf_cap);
+        g.ibuf = p->acquire_buffer(p->ibuf_pool, SDL_GPU_BUFFERUSAGE_INDEX, ibytes, g.ibuf_cap);
         if (!g.vbuf || !g.ibuf) {
             dbg(DL::Error) << "rmlui: geometry buffer alloc failed: " << SDL_GetError();
             // Whichever half succeeded never reached the GPU — recycle it now.
@@ -746,23 +742,23 @@ void rmlui_render_interface::RenderGeometry(
     SDL_SetGPUScissor(p->rp, &sc);
 
     vert_params vp{};
-    if( p->active_transform.has_value() ) {
+    if (p->active_transform.has_value()) {
         // Bake translation into the transform matrix to avoid double-applying.
         auto tf = p->active_transform.value();
-        auto *raw = tf.data();
+        auto* raw = tf.data();
         raw[12] += translation.x;
         raw[13] += translation.y;
-        std::memcpy( vp.transform, raw, sizeof( vp.transform ) );
+        std::memcpy(vp.transform, raw, sizeof(vp.transform));
     } else {
         vp.translation_x = translation.x;
         vp.translation_y = translation.y;
-        std::memset( vp.transform, 0, sizeof( vp.transform ) );
-        vp.transform[0] = 1.f, vp.transform[5] = 1.f,
-        vp.transform[10] = 1.f, vp.transform[15] = 1.f;
+        std::memset(vp.transform, 0, sizeof(vp.transform));
+        vp.transform[0] = 1.f, vp.transform[5] = 1.f, vp.transform[10] = 1.f,
+        vp.transform[15] = 1.f;
     }
-    vp.viewport_w = static_cast<float>( p->proj_w );
-    vp.viewport_h = static_cast<float>( p->proj_h );
-    SDL_PushGPUVertexUniformData( p->cb, 0, &vp, sizeof( vp ) );
+    vp.viewport_w = static_cast<float>(p->proj_w);
+    vp.viewport_h = static_cast<float>(p->proj_h);
+    SDL_PushGPUVertexUniformData(p->cb, 0, &vp, sizeof(vp));
 
     SDL_DrawGPUIndexedPrimitives(p->rp, g.idx_count, 1, 0, 0, 0);
 }
@@ -892,22 +888,22 @@ void rmlui_render_interface::RenderShader(
     SDL_SetGPUScissor(p->rp, &sc);
 
     vert_params vp{};
-    if( p->active_transform.has_value() ) {
+    if (p->active_transform.has_value()) {
         auto tf = p->active_transform.value();
-        auto *raw = tf.data();
+        auto* raw = tf.data();
         raw[12] += translation.x;
         raw[13] += translation.y;
-        std::memcpy( vp.transform, raw, sizeof( vp.transform ) );
+        std::memcpy(vp.transform, raw, sizeof(vp.transform));
     } else {
         vp.translation_x = translation.x;
         vp.translation_y = translation.y;
-        std::memset( vp.transform, 0, sizeof( vp.transform ) );
-        vp.transform[0] = 1.f, vp.transform[5] = 1.f,
-        vp.transform[10] = 1.f, vp.transform[15] = 1.f;
+        std::memset(vp.transform, 0, sizeof(vp.transform));
+        vp.transform[0] = 1.f, vp.transform[5] = 1.f, vp.transform[10] = 1.f,
+        vp.transform[15] = 1.f;
     }
-    vp.viewport_w = static_cast<float>( p->proj_w );
-    vp.viewport_h = static_cast<float>( p->proj_h );
-    SDL_PushGPUVertexUniformData( p->cb, 0, &vp, sizeof( vp ) );
+    vp.viewport_w = static_cast<float>(p->proj_w);
+    vp.viewport_h = static_cast<float>(p->proj_h);
+    SDL_PushGPUVertexUniformData(p->cb, 0, &vp, sizeof(vp));
     SDL_PushGPUFragmentUniformData(p->cb, 0, &gp, sizeof(gp));
 
     SDL_DrawGPUIndexedPrimitives(p->rp, g.idx_count, 1, 0, 0, 0);
@@ -954,11 +950,14 @@ Rml::TextureHandle rmlui_render_interface::LoadTexture(
         const std::string spec = proc.substr(8);
         int sx = 0, sy = 0, sw = 0, sh = 0;
         std::size_t pos = 0;
-        int *const fields[4] = {&sx, &sy, &sw, &sh};
+        int* const fields[4] = {&sx, &sy, &sw, &sh};
         bool parsed = true;
-        for (int *f : fields) {
+        for (int* f : fields) {
             const std::size_t colon = spec.find(':', pos);
-            if (colon == std::string::npos) { parsed = false; break; }
+            if (colon == std::string::npos) {
+                parsed = false;
+                break;
+            }
             *f = std::atoi(spec.substr(pos, colon - pos).c_str());
             pos = colon + 1;
         }
@@ -991,9 +990,9 @@ Rml::TextureHandle rmlui_render_interface::LoadTexture(
             if (src_y < 0 || src_y >= rgba->h) { continue; }
             const int copy_w = std::min(sw, rgba->w - sx);
             if (copy_w <= 0) { continue; }
-            const auto *src = static_cast<const std::uint8_t*>(rgba->pixels) +
-                              static_cast<std::size_t>(src_y) * rgba->pitch +
-                              static_cast<std::size_t>(sx) * 4;
+            const auto* src =
+                static_cast<const std::uint8_t*>(rgba->pixels)
+                + static_cast<std::size_t>(src_y) * rgba->pitch + static_cast<std::size_t>(sx) * 4;
             std::memcpy(px.data() + static_cast<std::size_t>(row) * sw * 4, src,
                         static_cast<std::size_t>(copy_w) * 4);
         }
@@ -1004,8 +1003,8 @@ Rml::TextureHandle rmlui_render_interface::LoadTexture(
         texture_dimensions = Rml::Vector2i(sw, sh);
         const std::uint64_t sph = p->next_tex++;
         p->textures.emplace(sph, stex);
-        dbg(DL::Info) << "rmlui_sprite: cropped " << sw << "x" << sh << " from " << path
-                      << " at " << sx << "," << sy << " handle=" << sph;
+        dbg(DL::Info) << "rmlui_sprite: cropped " << sw << "x" << sh << " from " << path << " at "
+                      << sx << "," << sy << " handle=" << sph;
         return static_cast<Rml::TextureHandle>(sph);
     }
     // Borrowed textures: "?avatar:<generation>" hands back a texture the RENDERER owns
@@ -1025,8 +1024,8 @@ Rml::TextureHandle rmlui_render_interface::LoadTexture(
         const std::uint64_t bh = p->next_tex++;
         p->textures.emplace(bh, borrowed_tex);
         p->borrowed.insert(bh);
-        dbg(DL::Info) << "rmlui_borrowed: bound \"" << source << "\" "
-                      << p->borrowed_w << "x" << p->borrowed_h << " handle=" << bh;
+        dbg(DL::Info) << "rmlui_borrowed: bound \"" << source << "\" " << p->borrowed_w << "x"
+                      << p->borrowed_h << " handle=" << bh;
         return static_cast<Rml::TextureHandle>(bh);
     }
     Rml::String path = source;
@@ -1038,11 +1037,13 @@ Rml::TextureHandle rmlui_render_interface::LoadTexture(
         // Sized rasterization only makes sense for an .svg source; a non-svg
         // path with a stray "?px=" marker just loses the (meaningless) suffix.
         static const std::string svg_ext = ".svg";
-        const bool is_svg = query_pos >= svg_ext.size() &&
-            path.compare(query_pos - svg_ext.size(), svg_ext.size(), svg_ext) == 0;
-        if (is_svg && !digits.empty() &&
-            std::all_of(digits.begin(), digits.end(),
-                        [](unsigned char c) { return std::isdigit(c) != 0; })) {
+        const bool is_svg =
+            query_pos >= svg_ext.size()
+            && path.compare(query_pos - svg_ext.size(), svg_ext.size(), svg_ext) == 0;
+        if (is_svg && !digits.empty()
+            && std::all_of(digits.begin(), digits.end(), [](unsigned char c) {
+                   return std::isdigit(c) != 0;
+               })) {
             svg_px = std::atoi(digits.c_str());
         }
         if (is_svg && svg_px <= 0) {
@@ -1064,9 +1065,7 @@ Rml::TextureHandle rmlui_render_interface::LoadTexture(
             }
         }
     }
-    if (!surf) {
-        surf = IMG_Load(path.c_str());
-    }
+    if (!surf) { surf = IMG_Load(path.c_str()); }
     if (!surf) {
         dbg(DL::Warn) << "rmlui: LoadTexture failed for " << source << ": " << SDL_GetError();
         return 0;

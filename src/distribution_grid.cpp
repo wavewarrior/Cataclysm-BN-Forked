@@ -173,7 +173,7 @@ int distribution_grid::mod_resource( int amt, bool recurse )
 int distribution_grid::get_resource( bool recurse ) const
 {
     if( !recurse ) {
-    if( cached_amount_here ) {
+        if( cached_amount_here ) {
             return *cached_amount_here;
         } else {
             cached_amount_here = 0;
@@ -181,8 +181,8 @@ int distribution_grid::get_resource( bool recurse ) const
     }
     int res = 0;
     std::vector<vehicle *> connected_vehicles;
-for( const auto &c : contents ) {
-    submap *const sm = mb.lookup_submap( c.first );
+    for( const auto &c : contents ) {
+        submap *const sm = mb.lookup_submap( c.first );
         for( const tile_location &loc : c.second ) {
             battery_tile *battery = furn_in_submap<battery_tile>( sm, loc );
             if( battery != nullptr ) {
@@ -217,13 +217,13 @@ for( const auto &c : contents ) {
         res = connected_vehicles.front()->fuel_left( itype_battery, true );
     }
     if( !recurse ) {
-    cached_amount_here = res;
-    return res;
-}
+        cached_amount_here = res;
+        return res;
+    }
 
-// Chain to grids linked via grid_link_tile portals.
-// recurse=false on remote calls prevents infinite loops.
-std::ranges::for_each( flat_contents, [&]( const tripoint_abs_ms & pos ) {
+    // Chain to grids linked via grid_link_tile portals.
+    // recurse=false on remote calls prevents infinite loops.
+    std::ranges::for_each( flat_contents, [&]( const tripoint_abs_ms & pos ) {
         auto *glt = active_tiles::furn_at<grid_link_tile>( pos, mb );
         if( !glt || !glt->linked || glt->paused ) {
             return;
@@ -751,7 +751,7 @@ distribution_grid &distribution_grid_tracker::grid_at( const tripoint_abs_ms &p 
 const distribution_grid &distribution_grid_tracker::grid_at( const tripoint_abs_ms &p ) const
 {
     return const_cast<const distribution_grid &>(
-           const_cast<distribution_grid_tracker *>( this )->grid_at( p ) );
+               const_cast<distribution_grid_tracker *>( this )->grid_at( p ) );
 }
 
 std::uintptr_t distribution_grid_tracker::debug_grid_id( const tripoint_abs_omt &omp ) const

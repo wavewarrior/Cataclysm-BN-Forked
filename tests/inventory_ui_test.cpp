@@ -1,6 +1,5 @@
-#include "catch/catch_amalgamated.hpp"
-
 #include "avatar.h"
+#include "catch/catch_amalgamated.hpp"
 #include "inventory_ui.h"
 #include "item.h"
 #include "player_helpers.h"

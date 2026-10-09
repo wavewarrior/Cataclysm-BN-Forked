@@ -71,8 +71,7 @@ void cata::detail::reg_requirement( sol::state &lua )
     DOC( "Look up requirement_data by ID string. Returns nil if not found." );
     luna::set_fx( lib, "get", []( const std::string & id_str ) -> std::optional<requirement_data> {
         requirement_id id( id_str );
-        if( id.is_valid() )
-        {
+        if( id.is_valid() ) {
             return *id;
         }
         return std::nullopt;

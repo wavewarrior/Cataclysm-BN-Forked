@@ -1,14 +1,14 @@
-#include "catch/catch_amalgamated.hpp"
 #include "activity_type.h"
 #include "avatar.h"
 #include "calendar.h"
+#include "catch/catch_amalgamated.hpp"
 #include "driver_loop.h"
 #include "game.h"
 #include "item.h"
 #include "json.h"
-#include "monster.h"
 #include "map.h"
 #include "map_helpers.h"
+#include "monster.h"
 #include "player_activity.h"
 #include "recipe.h"
 #include "rng.h"
@@ -16,15 +16,14 @@
 #include "type_id.h"
 
 #include <algorithm>
-#include <sys/socket.h>
-#include <unistd.h>
-
 #include <filesystem>
 #include <fstream>
 #include <map>
 #include <sstream>
 #include <string>
+#include <sys/socket.h>
 #include <thread>
+#include <unistd.h>
 #include <vector>
 
 // The activity commands over the real wire, in this process: what the Bairdford fixture cannot
@@ -81,8 +80,9 @@ struct reply {
 /// Serves `requests`, one line each, and returns the response to each in turn. `scenes_dir` is
 /// where `run_scene` looks for Scenes; empty selects the driver's default. `windowed` serves as
 /// the windowed driver does, which in this process has no window.
-auto converse(const std::vector<std::string>& requests, const std::string& scenes_dir = "",
-              bool windowed = false) -> std::vector<reply> {
+auto converse(
+    const std::vector<std::string>& requests, const std::string& scenes_dir = "",
+    bool windowed = false) -> std::vector<reply> {
     int fds[2];
     REQUIRE(socketpair(AF_UNIX, SOCK_STREAM, 0, fds) == 0);
 
@@ -94,7 +94,9 @@ auto converse(const std::vector<std::string>& requests, const std::string& scene
         std::string pending;
         for (const std::string& request : requests) {
             const std::string line = request + "\n";
-            if (write(fds[1], line.data(), line.size()) != static_cast<ssize_t>(line.size())) { break; }
+            if (write(fds[1], line.data(), line.size()) != static_cast<ssize_t>(line.size())) {
+                break;
+            }
             while (pending.find('\n') == std::string::npos) {
                 char chunk[4096];
                 const ssize_t got = read(fds[1], chunk, sizeof(chunk));
@@ -108,7 +110,8 @@ auto converse(const std::vector<std::string>& requests, const std::string& scene
         // Hanging up ends the loop.
         close(fds[1]);
     });
-    const auto served = run_driver_loop(fds[0], {.deny_list_path = deny.string(), .scenes_dir = scenes_dir, .windowed = windowed});
+    const auto served = run_driver_loop(
+        fds[0], {.deny_list_path = deny.string(), .scenes_dir = scenes_dir, .windowed = windowed});
     agent.join();
     close(fds[0]);
     std::filesystem::remove(deny);
@@ -295,7 +298,8 @@ TEST_CASE("driver_loop_melee_kills_and_the_next_swing_finds_nothing", "[driver]"
     CHECK_FALSE(out.back().flag("time_passed"));
 }
 
-TEST_CASE("driver_loop_melee_at_an_empty_tile_or_an_ally_is_refused_and_costs_nothing", "[driver]") {
+TEST_CASE(
+    "driver_loop_melee_at_an_empty_tile_or_an_ally_is_refused_and_costs_nothing", "[driver]") {
     auto& u = setup();
     auto& pet = spawn_test_monster("mon_zombie", centre + point_west);
     pet.friendly = -1;
@@ -395,10 +399,10 @@ TEST_CASE("driver_loop_combat_commands_reject_a_bad_target_as_a_protocol_error",
     const auto turn_before = to_turn<int>(calendar::turn);
     std::vector<std::string> requests;
     for (const char* cmd : {"melee", "fire", "smash"}) {
-        for (const char* target : {R"()", R"(,"dir":"sideways")", R"(,"dir":3)", R"(,"dir":"up")",
-                                   R"(,"dir":"e","pos":[1,0])", R"(,"pos":[])", R"(,"pos":[1])",
-                                   R"(,"pos":[1,2,3])", R"(,"pos":[1.5,0])", R"(,"pos":"e")",
-                                   R"(,"pos":[0,0])", R"(,"pos":[0,"x"])"}) {
+        for (const char* target :
+             {R"()", R"(,"dir":"sideways")", R"(,"dir":3)", R"(,"dir":"up")",
+              R"(,"dir":"e","pos":[1,0])", R"(,"pos":[])", R"(,"pos":[1])", R"(,"pos":[1,2,3])",
+              R"(,"pos":[1.5,0])", R"(,"pos":"e")", R"(,"pos":[0,0])", R"(,"pos":[0,"x"])"}) {
             requests.push_back(std::string(R"({"id":1,"cmd":")") + cmd + "\"" + target + "}");
         }
     }
@@ -422,8 +426,8 @@ TEST_CASE("driver_loop_the_avatar_dying_ends_the_response_with_died", "[driver]"
     auto& u = setup();
     rng_set_engine_seed(1);
     u.set_all_parts_hp_cur(1);
-    for (const tripoint_rel_ms& around : {tripoint_rel_ms(1, 0, 0), tripoint_rel_ms(-1, 0, 0),
-                                           tripoint_rel_ms(0, -1, 0)}) {
+    for (const tripoint_rel_ms& around :
+         {tripoint_rel_ms(1, 0, 0), tripoint_rel_ms(-1, 0, 0), tripoint_rel_ms(0, -1, 0)}) {
         spawn_test_monster("mon_zombie", centre + around);
     }
 
@@ -434,7 +438,9 @@ TEST_CASE("driver_loop_the_avatar_dying_ends_the_response_with_died", "[driver]"
     const auto out = converse(swings);
 
     CHECK(u.is_dead_state());
-    const auto first = std::ranges::find_if(out, [](const reply& r) { return r.text("outcome") == "died"; });
+    const auto first = std::ranges::find_if(out, [](const reply& r) {
+        return r.text("outcome") == "died";
+    });
     REQUIRE(first != out.end());
     // Death is terminal: nothing the agent asks afterwards changes the answer, and nothing hangs.
     for (auto each = first; each != out.end(); ++each) {
@@ -451,7 +457,9 @@ auto grid_rows(const reply& r, bool nested) -> int {
     auto jsin = JsonIn(in);
     auto jo = jsin.get_object();
     jo.allow_omitted_members();
-    if (!nested) { return jo.has_array("grid") ? static_cast<int>(jo.get_array("grid").size()) : -1; }
+    if (!nested) {
+        return jo.has_array("grid") ? static_cast<int>(jo.get_array("grid").size()) : -1;
+    }
     if (!jo.has_object("view")) { return -1; }
     auto view = jo.get_object("view");
     view.allow_omitted_members();
@@ -532,13 +540,23 @@ TEST_CASE("driver_loop_attached_view_does_not_outlive_the_session", "[driver]") 
     CHECK(grid_rows(out[0], true) == -1);
 }
 
-TEST_CASE("driver_loop_attached_view_keeps_the_response_within_the_ceiling_and_says_when_it_cut", "[driver]") {
+TEST_CASE(
+    "driver_loop_attached_view_keeps_the_response_within_the_ceiling_and_says_when_it_cut",
+    "[driver]") {
     auto& u = setup();
-    for (int i = 0; i < 30; ++i) { get_map().add_item_or_charges(centre + tripoint_rel_ms(1 + i % 6, i / 6 - 2, 0), item::spawn("tank_gun_auto")); }
-    for (int i = 0; i < 14; ++i) { spawn_test_monster("mon_zombie", centre + tripoint_rel_ms(-1 - i % 7, -3 + i / 7 * 3 + i % 2, 0)); }
+    for (int i = 0; i < 30; ++i) {
+        get_map().add_item_or_charges(
+            centre + tripoint_rel_ms(1 + i % 6, i / 6 - 2, 0), item::spawn("tank_gun_auto"));
+    }
+    for (int i = 0; i < 14; ++i) {
+        spawn_test_monster(
+            "mon_zombie", centre + tripoint_rel_ms(-1 - i % 7, -3 + i / 7 * 3 + i % 2, 0));
+    }
     // A full inventory query is the longest answer the lean part of a response can carry.
     for (int i = 0; i < 30; ++i) { u.i_add(item::spawn("tank_gun_auto")); }
-    for (int i = 0; i < 12; ++i) { get_map().add_item_or_charges(centre, item::spawn("tank_gun_auto")); }
+    for (int i = 0; i < 12; ++i) {
+        get_map().add_item_or_charges(centre, item::spawn("tank_gun_auto"));
+    }
     u.recalc_sight_limits();
     build_map_cache_from_plan(get_map(), centre.z());
 
@@ -573,7 +591,9 @@ struct scene_dir {
     explicit scene_dir(const std::map<std::string, std::string>& scenes) {
         std::filesystem::remove_all(path);
         std::filesystem::create_directories(path);
-        for (const auto& [name, source] : scenes) { std::ofstream(path / (name + ".lua")) << source; }
+        for (const auto& [name, source] : scenes) {
+            std::ofstream(path / (name + ".lua")) << source;
+        }
     }
     ~scene_dir() { std::filesystem::remove_all(path); }
     scene_dir(const scene_dir&) = delete;
@@ -605,22 +625,28 @@ auto scene_of(const reply& r) -> scene_report {
 }
 
 auto has_line_with(const scene_report& scene, const std::string& text) -> bool {
-    return std::ranges::any_of(scene.lines, [&](const std::string& line) { return line.find(text) != std::string::npos; });
+    return std::ranges::any_of(scene.lines, [&](const std::string& line) {
+        return line.find(text) != std::string::npos;
+    });
 }
 
 } // namespace
 
 TEST_CASE("driver_loop_run_scene_reports_what_the_scene_logged_in_no_time", "[driver]") {
     setup();
-    const scene_dir scenes({{"logs", "gdebug.log_info(\"LOGS_RESULT first\")\nprint(\"LOGS_RESULT second\")\nreturn true"},
-        {"quiet", "return true"}});
+    const scene_dir scenes(
+        {{"logs",
+          "gdebug.log_info(\"LOGS_RESULT first\")\nprint(\"LOGS_RESULT second\")\nreturn true"},
+         {"quiet", "return true"}});
     const auto turn_before = to_turn<int>(calendar::turn);
 
-    const auto out = converse({
-        R"({"id":1,"cmd":"run_scene","name":"logs"})",
-        R"({"id":2,"cmd":"run_scene","name":"logs"})",
-        R"({"id":3,"cmd":"run_scene","name":"quiet"})",
-    }, scenes.path.string());
+    const auto out = converse(
+        {
+            R"({"id":1,"cmd":"run_scene","name":"logs"})",
+            R"({"id":2,"cmd":"run_scene","name":"logs"})",
+            R"({"id":3,"cmd":"run_scene","name":"quiet"})",
+        },
+        scenes.path.string());
 
     for (const reply& each : out) {
         CAPTURE(each.line);
@@ -644,7 +670,9 @@ TEST_CASE("driver_loop_run_scene_reports_what_the_scene_logged_in_no_time", "[dr
     CHECK(out[0].line.find("\"new_messages\":[]") != std::string::npos);
 }
 
-TEST_CASE("driver_loop_a_failing_scene_reports_failed_with_its_lines_and_the_driver_carries_on", "[driver]") {
+TEST_CASE(
+    "driver_loop_a_failing_scene_reports_failed_with_its_lines_and_the_driver_carries_on",
+    "[driver]") {
     setup();
     const scene_dir scenes({
         {"raises", "gdebug.log_info(\"RAISES_RESULT before\")\nerror(\"scene exploded\")"},
@@ -652,12 +680,14 @@ TEST_CASE("driver_loop_a_failing_scene_reports_failed_with_its_lines_and_the_dri
         {"no_syntax", "this is not lua"},
     });
 
-    const auto out = converse({
-        R"({"id":1,"cmd":"run_scene","name":"raises"})",
-        R"({"id":2,"cmd":"run_scene","name":"says_no"})",
-        R"({"id":3,"cmd":"run_scene","name":"no_syntax"})",
-        R"({"id":4,"cmd":"state"})",
-    }, scenes.path.string());
+    const auto out = converse(
+        {
+            R"({"id":1,"cmd":"run_scene","name":"raises"})",
+            R"({"id":2,"cmd":"run_scene","name":"says_no"})",
+            R"({"id":3,"cmd":"run_scene","name":"no_syntax"})",
+            R"({"id":4,"cmd":"state"})",
+        },
+        scenes.path.string());
 
     for (const size_t i : {0, 1, 2}) {
         CAPTURE(i, out[i].line);
@@ -680,16 +710,18 @@ TEST_CASE("driver_loop_run_scene_rejects_a_bad_or_unknown_name_as_a_protocol_err
     const scene_dir scenes({{"real", "return true"}});
     const auto turn_before = to_turn<int>(calendar::turn);
 
-    const auto out = converse({
-        R"({"id":1,"cmd":"run_scene"})",
-        R"({"id":2,"cmd":"run_scene","name":3})",
-        R"({"id":3,"cmd":"run_scene","name":""})",
-        R"({"id":4,"cmd":"run_scene","name":"no_such_scene"})",
-        R"({"id":5,"cmd":"run_scene","name":"../real"})",
-        R"({"id":6,"cmd":"run_scene","name":"real.lua"})",
-        R"({"id":7,"cmd":"run_scene","name":"a/b"})",
-        R"({"id":8,"cmd":"state"})",
-    }, scenes.path.string());
+    const auto out = converse(
+        {
+            R"({"id":1,"cmd":"run_scene"})",
+            R"({"id":2,"cmd":"run_scene","name":3})",
+            R"({"id":3,"cmd":"run_scene","name":""})",
+            R"({"id":4,"cmd":"run_scene","name":"no_such_scene"})",
+            R"({"id":5,"cmd":"run_scene","name":"../real"})",
+            R"({"id":6,"cmd":"run_scene","name":"real.lua"})",
+            R"({"id":7,"cmd":"run_scene","name":"a/b"})",
+            R"({"id":8,"cmd":"state"})",
+        },
+        scenes.path.string());
 
     for (const size_t i : {0, 1, 2, 3, 4, 5, 6}) {
         CAPTURE(i, out[i].line);
@@ -702,12 +734,15 @@ TEST_CASE("driver_loop_run_scene_rejects_a_bad_or_unknown_name_as_a_protocol_err
 
 TEST_CASE("driver_loop_run_scene_cuts_a_long_result_and_says_so", "[driver]") {
     setup();
-    const scene_dir scenes({{"chatty",
-        "for i = 1, 200 do gdebug.log_info(\"CHATTY_RESULT line \" .. i .. string.rep(\"x\", 400)) end\nreturn true"}});
+    const scene_dir scenes(
+        {{"chatty",
+          "for i = 1, 200 do gdebug.log_info(\"CHATTY_RESULT line \" .. i .. string.rep(\"x\", 400)) end\nreturn true"}});
 
-    const auto out = converse({
-        R"({"id":1,"cmd":"run_scene","name":"chatty"})",
-    }, scenes.path.string());
+    const auto out = converse(
+        {
+            R"({"id":1,"cmd":"run_scene","name":"chatty"})",
+        },
+        scenes.path.string());
 
     const scene_report scene = scene_of(out[0]);
     CHECK(scene.status == "passed");
@@ -722,14 +757,17 @@ TEST_CASE("driver_loop_the_lighting_scenes_run_unchanged_through_run_scene", "[d
     setup();
     const tripoint_bub_ms light = centre + tripoint_rel_ms(12, 0, 0);
 
-    const auto out = converse({
-        R"({"id":1,"cmd":"run_scene","name":"lightone"})",
-        R"({"id":2,"cmd":"run_scene","name":"lightmobs"})",
-        R"({"id":3,"cmd":"run_scene","name":"lightscene"})",
-        R"({"id":4,"cmd":"run_scene","name":"shadowtest"})",
-    }, "tools/visual_verify/scenes");
+    const auto out = converse(
+        {
+            R"({"id":1,"cmd":"run_scene","name":"lightone"})",
+            R"({"id":2,"cmd":"run_scene","name":"lightmobs"})",
+            R"({"id":3,"cmd":"run_scene","name":"lightscene"})",
+            R"({"id":4,"cmd":"run_scene","name":"shadowtest"})",
+        },
+        "tools/visual_verify/scenes");
 
-    const std::vector<std::string> tags{"LIGHTONE_RESULT", "LIGHTMOBS_RESULT", "LIGHTSCENE_RESULT", "SHADOWTEST_RESULT"};
+    const std::vector<std::string>
+        tags{"LIGHTONE_RESULT", "LIGHTMOBS_RESULT", "LIGHTSCENE_RESULT", "SHADOWTEST_RESULT"};
     for (size_t i = 0; i < out.size(); ++i) {
         CAPTURE(i, out[i].line);
         CHECK(out[i].text("status") == "ok");
@@ -745,7 +783,9 @@ TEST_CASE("driver_loop_the_lighting_scenes_run_unchanged_through_run_scene", "[d
 // has: what is checked here is what an agent sees when the window gives no frame. The frames
 // themselves are checked against the real windowed binary by tools/bnplay/capture_contract.ts.
 
-TEST_CASE("driver_loop_capture_without_a_window_is_a_protocol_error_that_names_the_windowed_mode", "[driver]") {
+TEST_CASE(
+    "driver_loop_capture_without_a_window_is_a_protocol_error_that_names_the_windowed_mode",
+    "[driver]") {
     setup();
     const auto turn_before = to_turn<int>(calendar::turn);
     const auto dir = bnplay_temp("capture_test_windowless");
@@ -771,15 +811,17 @@ TEST_CASE("driver_loop_capture_rejects_a_bad_dir_or_mode_as_a_protocol_error", "
     setup();
     const auto turn_before = to_turn<int>(calendar::turn);
 
-    const auto out = converse({
-        R"({"id":1,"cmd":"capture"})",
-        R"({"id":2,"cmd":"capture","dir":""})",
-        R"({"id":3,"cmd":"capture","dir":7})",
-        R"({"id":4,"cmd":"capture","dir":"relative/dir"})",
-        R"({"id":5,"cmd":"capture","dir":"/tmp/bnplay_capture_test_bad","mode":"lighting"})",
-        R"({"id":6,"cmd":"capture","dir":"/tmp/bnplay_capture_test_bad","mode":3})",
-        R"({"id":7,"cmd":"state"})",
-    }, "", true);
+    const auto out = converse(
+        {
+            R"({"id":1,"cmd":"capture"})",
+            R"({"id":2,"cmd":"capture","dir":""})",
+            R"({"id":3,"cmd":"capture","dir":7})",
+            R"({"id":4,"cmd":"capture","dir":"relative/dir"})",
+            R"({"id":5,"cmd":"capture","dir":"/tmp/bnplay_capture_test_bad","mode":"lighting"})",
+            R"({"id":6,"cmd":"capture","dir":"/tmp/bnplay_capture_test_bad","mode":3})",
+            R"({"id":7,"cmd":"state"})",
+        },
+        "", true);
 
     for (size_t i = 0; i < 6; ++i) {
         CAPTURE(i, out[i].line);
@@ -791,21 +833,25 @@ TEST_CASE("driver_loop_capture_rejects_a_bad_dir_or_mode_as_a_protocol_error", "
     CHECK_FALSE(std::filesystem::exists("/tmp/bnplay_capture_test_bad"));
 }
 
-TEST_CASE("driver_loop_capture_with_no_drawable_is_refused_and_never_returns_an_old_frame", "[driver]") {
+TEST_CASE(
+    "driver_loop_capture_with_no_drawable_is_refused_and_never_returns_an_old_frame", "[driver]") {
     auto& u = setup();
     const auto turn_before = to_turn<int>(calendar::turn);
     const auto moves_before = u.moves;
     const auto dir = bnplay_temp("capture_test_refused");
     std::filesystem::remove_all(dir);
     std::filesystem::create_directories(dir);
-    // A frame left from an earlier capture, under the name the first capture of this turn would take.
+    // A frame left from an earlier capture, under the name the first capture of this turn would
+    // take.
     const auto old_frame = dir / ("turn-" + std::to_string(turn_before) + "-1-final.bmp");
     std::ofstream(old_frame) << "an old frame";
 
-    const auto out = converse({
-        "{\"id\":1,\"cmd\":\"capture\",\"dir\":\"" + dir.string() + "\"}",
-        "{\"id\":2,\"cmd\":\"capture\",\"dir\":\"" + dir.string() + "\",\"mode\":\"state\"}",
-    }, "", true);
+    const auto out = converse(
+        {
+            "{\"id\":1,\"cmd\":\"capture\",\"dir\":\"" + dir.string() + "\"}",
+            "{\"id\":2,\"cmd\":\"capture\",\"dir\":\"" + dir.string() + "\",\"mode\":\"state\"}",
+        },
+        "", true);
 
     for (const reply& each : out) {
         CAPTURE(each.line);
@@ -819,7 +865,9 @@ TEST_CASE("driver_loop_capture_with_no_drawable_is_refused_and_never_returns_an_
     CHECK(u.moves == moves_before);
     // Nothing was written, and the old frame is neither reported nor touched.
     std::vector<std::string> names;
-    for (const auto& entry : std::filesystem::directory_iterator(dir)) { names.push_back(entry.path().filename().string()); }
+    for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+        names.push_back(entry.path().filename().string());
+    }
     CHECK(names == std::vector<std::string>{old_frame.filename().string()});
     std::ifstream in(old_frame);
     std::string content;

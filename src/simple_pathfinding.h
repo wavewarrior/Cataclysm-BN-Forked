@@ -62,7 +62,7 @@ struct node_score {
 // previous node in the path as context.
 template<typename Point>
 using two_node_scoring_fn =
-    std::function<node_score( directed_node<Point>, std::optional<directed_node<Point>> )>;
+    std::function<node_score( directed_node<Point>, std::optional<directed_node<Point >> )>;
 
 // non-templated implementation
 directed_path<point> greedy_path( point source, point dest, point max,
@@ -84,7 +84,7 @@ requires( Point::dimension == 2 )
 {
     directed_path<Point> res;
     const two_node_scoring_fn<point> point_scorer
-    = [scorer]( directed_node<point> current, std::optional<directed_node<point>> prev ) {
+    = [scorer]( directed_node<point> current, std::optional<directed_node<point >> prev ) {
         std::optional<directed_node<Point>> prev_node;
         if( prev ) {
             prev_node = directed_node<Point>( Point( prev->pos ), prev->dir );
@@ -113,7 +113,7 @@ struct omt_score {
     static const omt_score rejected;
 };
 
-using omt_scoring_fn = std::function<omt_score( tripoint_abs_omt )>;
+using omt_scoring_fn = std::function < omt_score( tripoint_abs_omt ) >;
 
 /**
  * Uses A* to find an approximately-cheapest path from source to destination (in 3D).
@@ -124,9 +124,9 @@ using omt_scoring_fn = std::function<omt_score( tripoint_abs_omt )>;
  * @param scorer function that returns the omt_score for the given OMT
  * @param max_cost Maximum path cost (optional)
  */
-simple_path<tripoint_abs_omt> find_overmap_path( const tripoint_abs_omt &source,
+simple_path < tripoint_abs_omt > find_overmap_path( const tripoint_abs_omt &source,
         const tripoint_abs_omt &dest, int radius, omt_scoring_fn scorer,
-        std::optional<int> max_cost = std::nullopt );
+        std::optional < int > max_cost = std::nullopt );
 
 } // namespace pf
 

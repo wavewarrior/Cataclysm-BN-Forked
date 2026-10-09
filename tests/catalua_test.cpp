@@ -462,8 +462,8 @@ TEST_CASE("lua_typed_coords_projection", "[lua]") {
     CHECK(test_data.get<int>("distance") == 3);
     CHECK(test_data.get<std::string>("named_bub_point") == "PointBubMs(3,4)");
     CHECK(test_data.get<std::string>("named_abs_tripoint") == "TripointAbsMs(5,6,7)");
-    CHECK(test_data.get<std::string>("named_abs_tripoint_from_typed_point") ==
-          "TripointAbsMs(8,9,10)");
+    CHECK(test_data.get<std::string>("named_abs_tripoint_from_typed_point")
+          == "TripointAbsMs(8,9,10)");
 
     // Validate project_remain_omt example from the typed-coordinates documentation.
     CHECK(test_data.get<std::string>("doc_remain_omt_quotient") == "TripointAbsOmt(1,1,2)");
@@ -495,11 +495,11 @@ TEST_CASE("voltmeter_lua_uses_typed_coordinates", "[lua][voltmeter]") {
 
 TEST_CASE("luna_rejects_duplicate_member_registration", "[lua]") {
     auto lua = make_lua_state();
-    auto lib = luna::begin_lib( lua, "duplicate_member_test" );
-    luna::set_fx( lib, "same_name", []() -> int { return 1; } );
-    CHECK_THROWS_WITH( luna::set_fx( lib, "same_name", []() -> int { return 2; } ),
-                       Catch::Matchers::ContainsSubstring( "Duplicate Lua binding registration" ) );
-    luna::finalize_lib( lib );
+    auto lib = luna::begin_lib(lua, "duplicate_member_test");
+    luna::set_fx(lib, "same_name", []() -> int { return 1; });
+    CHECK_THROWS_WITH(luna::set_fx(lib, "same_name", []() -> int { return 2; }),
+                      Catch::Matchers::ContainsSubstring("Duplicate Lua binding registration"));
+    luna::finalize_lib(lib);
 }
 
 TEST_CASE("lua_coord_cpp_helpers", "[lua]") {

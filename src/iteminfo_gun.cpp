@@ -58,11 +58,11 @@ void item::magazine_info( std::vector<iteminfo> &info, const iteminfo_query *par
                           bool /*debug*/ ) const
 {
     if( !is_magazine() || has_flag( flag_NO_RELOAD ) ) {
-    return;
-}
+        return;
+    }
 
-if( parts->test( iteminfo_parts::MAGAZINE_CAPACITY ) ) {
-    for( const ammotype &at : ammo_types() ) {
+    if( parts->test( iteminfo_parts::MAGAZINE_CAPACITY ) ) {
+        for( const ammotype &at : ammo_types() ) {
             const std::string fmt = string_format( vgettext( "<num> round of %s",
                                                    "<num> rounds of %s", ammo_capacity() ),
                                                    at->name() );
@@ -71,8 +71,8 @@ if( parts->test( iteminfo_parts::MAGAZINE_CAPACITY ) ) {
         }
     }
     if( parts->test( iteminfo_parts::MAGAZINE_RELOAD ) ) {
-    info.emplace_back( "MAGAZINE", _( "Reload time: " ), _( "<num> moves per round" ),
-                       iteminfo::lower_is_better, type->magazine->reload_time );
+        info.emplace_back( "MAGAZINE", _( "Reload time: " ), _( "<num> moves per round" ),
+                           iteminfo::lower_is_better, type->magazine->reload_time );
     }
     insert_separation_line( info );
 }
@@ -81,20 +81,20 @@ void item::ammo_info( std::vector<iteminfo> &info, const iteminfo_query *parts, 
                       bool /* debug */ ) const
 {
     if( is_gun() || !ammo_data() || !parts->test( iteminfo_parts::AMMO_REMAINING_OR_TYPES ) ) {
-    return;
-}
+        return;
+    }
 
-const std::string space = "  ";
-if( ammo_remaining() > 0 ) {
-    info.emplace_back( "AMMO", _( "<bold>Ammunition</bold>: " ),
-                       ammo_data()->nname( ammo_remaining() ) );
+    const std::string space = "  ";
+    if( ammo_remaining() > 0 ) {
+        info.emplace_back( "AMMO", _( "<bold>Ammunition</bold>: " ),
+                           ammo_data()->nname( ammo_remaining() ) );
     } else if( is_ammo() ) {
-    info.emplace_back( "AMMO", _( "<bold>Ammunition type</bold>: " ), ammo_type()->name() );
+        info.emplace_back( "AMMO", _( "<bold>Ammunition type</bold>: " ), ammo_type()->name() );
     }
 
     const islot_ammo &ammo = *ammo_data()->ammo;
     if( !ammo.damage.empty() || ammo.force_stat_display ) {
-    bool has_flat_dmg = !ammo.damage.empty() && ammo.damage.damage_units.front().amount > 0;
+        bool has_flat_dmg = !ammo.damage.empty() && ammo.damage.damage_units.front().amount > 0;
         bool display_flat_dmg = parts->test( iteminfo_parts::AMMO_DAMAGE_VALUE );
         // TODO: Multiple units
         bool has_dmg_multiplier = ammo.damage.damage_units.front().damage_multiplier != 1.0;
@@ -192,31 +192,31 @@ if( ammo_remaining() > 0 ) {
     std::vector<std::string> fx;
     if( ammo.shape &&
         parts->test( iteminfo_parts::AMMO_SHAPE ) ) {
-    fx.emplace_back( string_format(
-                         _( "This ammo will produce effects with the following shape:\n<bold>%s</bold>" ),
-                         ammo.shape->get_description() ) );
+        fx.emplace_back( string_format(
+                             _( "This ammo will produce effects with the following shape:\n<bold>%s</bold>" ),
+                             ammo.shape->get_description() ) );
     }
     if( ammo.ammo_effects.contains( ammo_effect_RECYCLED ) &&
         parts->test( iteminfo_parts::AMMO_FX_RECYCLED ) ) {
-    fx.emplace_back(
-        _( "This ammo has been <info>hand-loaded</info> and has a <bad>small chance to misfire</bad>." ) );
+        fx.emplace_back(
+            _( "This ammo has been <info>hand-loaded</info> and has a <bad>small chance to misfire</bad>." ) );
     }
     if( ammo.ammo_effects.contains( ammo_effect_BLACKPOWDER ) &&
         parts->test( iteminfo_parts::AMMO_FX_BLACKPOWDER ) ) {
-    fx.emplace_back(
-        _( "This ammo has been loaded with <bad>blackpowder</bad>, and will quickly "
+        fx.emplace_back(
+            _( "This ammo has been loaded with <bad>blackpowder</bad>, and will quickly "
            "clog up most guns, and cause rust if the gun is not cleaned." ) );
     }
     if( ammo.ammo_effects.contains( ammo_effect_NEVER_MISFIRES ) &&
         parts->test( iteminfo_parts::AMMO_FX_CANTMISSFIRE ) ) {
-    fx.emplace_back( _( "This ammo <good>never misfires</good>." ) );
+        fx.emplace_back( _( "This ammo <good>never misfires</good>." ) );
     }
     if( ammo.ammo_effects.contains( ammo_effect_INCENDIARY ) &&
         parts->test( iteminfo_parts::AMMO_FX_INCENDIARY ) ) {
-    fx.emplace_back( _( "This ammo <neutral>starts fires</neutral>." ) );
+        fx.emplace_back( _( "This ammo <neutral>starts fires</neutral>." ) );
     }
     if( !fx.empty() ) {
-    insert_separation_line( info );
+        insert_separation_line( info );
         for( const std::string &e : fx ) {
             info.emplace_back( "AMMO", e );
         }
@@ -706,67 +706,67 @@ void item::gunmod_info( std::vector<iteminfo> &info, const iteminfo_query *parts
                         bool /* debug */ ) const
 {
     if( !is_gunmod() ) {
-    return;
-}
-const islot_gunmod &mod = *type->gunmod;
+        return;
+    }
+    const islot_gunmod &mod = *type->gunmod;
 
-if( is_gun() && parts->test( iteminfo_parts::DESCRIPTION_GUNMOD ) ) {
-    info.emplace_back( "DESCRIPTION",
-                       _( "This mod <info>must be attached to a gun</info>, "
-                          "it can not be fired separately." ) );
+    if( is_gun() && parts->test( iteminfo_parts::DESCRIPTION_GUNMOD ) ) {
+        info.emplace_back( "DESCRIPTION",
+                           _( "This mod <info>must be attached to a gun</info>, "
+           "it can not be fired separately." ) );
     }
     if( has_flag( flag_REACH_ATTACK ) && parts->test( iteminfo_parts::DESCRIPTION_GUNMOD_REACH ) ) {
-    info.emplace_back( "DESCRIPTION",
-                       _( "When attached to a gun, <good>allows</good> making "
-                          "<info>reach melee attacks</info> with it." ) );
+        info.emplace_back( "DESCRIPTION",
+                           _( "When attached to a gun, <good>allows</good> making "
+           "<info>reach melee attacks</info> with it." ) );
     }
     if( mod.dispersion != 0 && parts->test( iteminfo_parts::GUNMOD_DISPERSION ) ) {
-    info.emplace_back( "GUNMOD", _( "Dispersion modifier: " ), "",
-                       iteminfo::lower_is_better | iteminfo::show_plus,
-                       mod.dispersion );
+        info.emplace_back( "GUNMOD", _( "Dispersion modifier: " ), "",
+                           iteminfo::lower_is_better | iteminfo::show_plus,
+                           mod.dispersion );
     }
     if( mod.sight_dispersion != -1 && parts->test( iteminfo_parts::GUNMOD_DISPERSION_SIGHT ) ) {
-    info.emplace_back( "GUNMOD", _( "Sight dispersion: " ), "",
-                       iteminfo::lower_is_better, mod.sight_dispersion );
+        info.emplace_back( "GUNMOD", _( "Sight dispersion: " ), "",
+                           iteminfo::lower_is_better, mod.sight_dispersion );
     }
     if( mod.aim_speed >= 0 && parts->test( iteminfo_parts::GUNMOD_AIMSPEED ) ) {
-    info.emplace_back( "GUNMOD", _( "Aim speed: " ), "",
-                       iteminfo::lower_is_better, mod.aim_speed );
+        info.emplace_back( "GUNMOD", _( "Aim speed: " ), "",
+                           iteminfo::lower_is_better, mod.aim_speed );
     }
     int total_damage = static_cast<int>( mod.damage.total_damage() );
     if( total_damage != 0 && parts->test( iteminfo_parts::GUNMOD_DAMAGE ) ) {
-    info.emplace_back( "GUNMOD", _( "Damage: " ), "", iteminfo::show_plus,
-                       total_damage );
+        info.emplace_back( "GUNMOD", _( "Damage: " ), "", iteminfo::show_plus,
+                           total_damage );
     }
     int pierce = get_ranged_pierce( mod );
     if( get_ranged_pierce( mod ) != 0 && parts->test( iteminfo_parts::GUNMOD_ARMORPIERCE ) ) {
-    info.emplace_back( "GUNMOD", _( "Armor-pierce: " ), "", iteminfo::show_plus,
-                       pierce );
+        info.emplace_back( "GUNMOD", _( "Armor-pierce: " ), "", iteminfo::show_plus,
+                           pierce );
     }
     if( mod.handling != 0 && parts->test( iteminfo_parts::GUNMOD_HANDLING ) ) {
-    info.emplace_back( "GUNMOD", _( "Handling modifier: " ), "",
-                       iteminfo::show_plus, mod.handling );
+        info.emplace_back( "GUNMOD", _( "Handling modifier: " ), "",
+                           iteminfo::show_plus, mod.handling );
     }
     if( mod.range != 0 && parts->test( iteminfo_parts::GUNMOD_RANGE ) ) {
-    info.emplace_back( "GUNMOD", _( "Range modifier: " ), "",
-                       iteminfo::show_plus, mod.range );
+        info.emplace_back( "GUNMOD", _( "Range modifier: " ), "",
+                           iteminfo::show_plus, mod.range );
     }
     if( !type->mod->ammo_modifier.empty() && parts->test( iteminfo_parts::GUNMOD_AMMO ) ) {
-    for( const ammotype &at : type->mod->ammo_modifier ) {
+        for( const ammotype &at : type->mod->ammo_modifier ) {
             info.emplace_back( "GUNMOD", string_format( _( "Ammo: <stat>%s</stat>" ),
                                at->name() ) );
         }
     }
     if( mod.reload_modifier != 0 && parts->test( iteminfo_parts::GUNMOD_RELOAD ) ) {
-    info.emplace_back( "GUNMOD", _( "Reload modifier: " ), _( "<num>%" ),
-                       iteminfo::lower_is_better, mod.reload_modifier );
+        info.emplace_back( "GUNMOD", _( "Reload modifier: " ), _( "<num>%" ),
+                           iteminfo::lower_is_better, mod.reload_modifier );
     }
     if( mod.min_str_required_mod > 0 && parts->test( iteminfo_parts::GUNMOD_STRENGTH ) ) {
-    info.emplace_back( "GUNMOD", _( "Minimum strength required modifier: " ),
-                       mod.min_str_required_mod );
+        info.emplace_back( "GUNMOD", _( "Minimum strength required modifier: " ),
+                           mod.min_str_required_mod );
     }
     if( !mod.add_mod.empty() && parts->test( iteminfo_parts::GUNMOD_ADD_MOD ) ) {
-    insert_separation_line( info );
+        insert_separation_line( info );
 
         std::string mod_loc_str = _( "<bold>Adds mod locations: </bold> " );
 
@@ -787,7 +787,7 @@ if( is_gun() && parts->test( iteminfo_parts::DESCRIPTION_GUNMOD ) ) {
     insert_separation_line( info );
 
     if( parts->test( iteminfo_parts::GUNMOD_USEDON ) ) {
-    std::string used_on_str = _( "<bold>Used on:</bold>" );
+        std::string used_on_str = _( "<bold>Used on:</bold>" );
 
         if( !mod.usable.empty() ) {
             used_on_str += _( "\n  Specific: " ) + enumerate_as_string( mod.usable.begin(),
@@ -813,7 +813,7 @@ if( is_gun() && parts->test( iteminfo_parts::DESCRIPTION_GUNMOD ) ) {
     }
 
     if( !( mod.exclusion.empty() && mod.exclusion_category.empty() ) &&
-            parts->test( iteminfo_parts::GUNMOD_EXCLUSION ) ) {
+        parts->test( iteminfo_parts::GUNMOD_EXCLUSION ) ) {
         std::string exclusion_str = _( "<bold>Cannot be used on:</bold>" );
 
         if( !mod.exclusion.empty() ) {
@@ -840,12 +840,12 @@ if( is_gun() && parts->test( iteminfo_parts::DESCRIPTION_GUNMOD ) ) {
     }
 
     if( parts->test( iteminfo_parts::GUNMOD_LOCATION ) ) {
-    info.emplace_back( "GUNMOD", string_format( _( "Location: %s" ),
-                       mod.location.name() ) );
+        info.emplace_back( "GUNMOD", string_format( _( "Location: %s" ),
+                           mod.location.name() ) );
     }
 
     if( !mod.blacklist_mod.empty() && parts->test( iteminfo_parts::GUNMOD_BLACKLIST_MOD ) ) {
-    std::string mod_black_str = _( "<bold>Incompatible with mod location: </bold> " );
+        std::string mod_black_str = _( "<bold>Incompatible with mod location: </bold> " );
 
         int iternum = 0;
         for( const gunmod_location &black : mod.blacklist_mod ) {

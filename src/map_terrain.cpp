@@ -173,16 +173,16 @@ auto horde_should_avoid_vehicle_tile( const map &here, const tripoint_bub_ms &p,
                                       const mongroup &group ) -> bool
 {
     if( !group.horde ) {
-    return false;
-}
+        return false;
+    }
 
-const auto vp = here.veh_at( p );
-if( !vp ) {
-    return false;
-}
+    const auto vp = here.veh_at( p );
+    if( !vp ) {
+        return false;
+    }
 
-const auto &veh = vp->vehicle();
-return veh.is_owned_by( get_avatar() );
+    const auto &veh = vp->vehicle();
+    return veh.is_owned_by( get_avatar() );
 }
 
 } // namespace
@@ -205,10 +205,10 @@ bool map::has_flag( const std::string& flag, const tripoint_bub_ms& p ) const
 bool map::can_put_items( const tripoint_bub_ms &p ) const
 {
     if( can_put_items_ter_furn( p ) ) {
-    return true;
-}
-const optional_vpart_position vp = veh_at( p );
-return static_cast<bool>( vp.part_with_feature( "CARGO", true ) );
+        return true;
+    }
+    const optional_vpart_position vp = veh_at( p );
+    return static_cast<bool>( vp.part_with_feature( "CARGO", true ) );
 }
 
 bool map::can_put_items_ter_furn( const tripoint_bub_ms& p ) const
@@ -330,14 +330,14 @@ bool map::can_open_door_ter(
 {
 
     if( has_flag( str_OPENCLOSE_INSIDE, p ) && !inside ) {
-    return false;
-}
+        return false;
+    }
 
-if( !std::visit( can_open_while_mounted{}, who ) ) {
-    return false;
-}
+    if( !std::visit( can_open_while_mounted{}, who ) ) {
+        return false;
+    }
 
-return true;
+    return true;
 }
 
 
@@ -362,9 +362,8 @@ bool map::open_door_ter(
     ter_set( p, ter.open );
 
     const auto is_schizo = std::visit( []<typename T>( T u ) -> bool {
-        if constexpr( std::is_same_v<T, Character *> )
-    {
-        return u->has_trait( trait_id( "SCHIZOPHRENIC" ) ) || u->has_artifact_with( AEP_SCHIZO );
+        if constexpr( std::is_same_v<T, Character *> ) {
+            return u->has_trait( trait_id( "SCHIZOPHRENIC" ) ) || u->has_artifact_with( AEP_SCHIZO );
         }
         return false;
     }, who );
@@ -390,14 +389,14 @@ bool map::can_open_door_furn(
 {
 
     if( has_flag( str_OPENCLOSE_INSIDE, p ) && !inside ) {
-    return false;
-}
+        return false;
+    }
 
-if( !std::visit( can_open_while_mounted{}, who ) ) {
-    return false;
-}
+    if( !std::visit( can_open_while_mounted{}, who ) ) {
+        return false;
+    }
 
-return true;
+    return true;
 }
 
 
@@ -471,9 +470,8 @@ bool map::open_door_veh(
 
     const auto is_owner = std::visit(
     [&]<typename T>( T u ) -> bool {
-        if constexpr( std::is_same_v<T, Character *> )
-    {
-        return vp->vehicle().is_owned_by( *u );
+        if constexpr( std::is_same_v<T, Character *> ) {
+            return vp->vehicle().is_owned_by( *u );
         }
         return false;
     },
@@ -616,14 +614,14 @@ void map::adjust_radiation( const tripoint_bub_ms& p, const int delta )
 int map::get_temperature( const tripoint_bub_ms &p ) const
 {
     if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) {
-    return 0;
-}
+        return 0;
+    }
 
-const submap *sm = get_submap_at( tripoint_bub_ms( p ) );
-if( !sm ) {
-    return 0;
-}
-return sm->get_temperature();
+    const submap *sm = get_submap_at( tripoint_bub_ms( p ) );
+    if( !sm ) {
+        return 0;
+    }
+    return sm->get_temperature();
 }
 
 void map::set_temperature( const tripoint_bub_ms& p, int new_temperature )
@@ -645,18 +643,18 @@ bool map::can_see_trap_at( const tripoint_bub_ms& p, const Character& c ) const
 const trap &map::tr_at( const tripoint_bub_ms &p ) const
 {
     if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) {
-    return tr_null.obj();
+        return tr_null.obj();
     }
 
     point_sm_ms l;
     submap* const current_submap = get_submap_at( tripoint_bub_ms( p ), l );
 
     if( current_submap == nullptr ) {
-    return tr_null.obj();
+        return tr_null.obj();
     }
 
     if( current_submap->get_ter( l ).obj().trap != tr_null ) {
-    return current_submap->get_ter( l ).obj().trap.obj();
+        return current_submap->get_ter( l ).obj().trap.obj();
     }
 
     return current_submap->get_trap( l ).obj();
@@ -796,7 +794,7 @@ void map::remove_trap( const tripoint_bub_ms& p )
 const field &map::field_at( const tripoint_bub_ms &p ) const
 {
     if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) {
-    nulfield = field();
+        nulfield = field();
         return nulfield;
     }
 
@@ -804,7 +802,7 @@ const field &map::field_at( const tripoint_bub_ms &p ) const
     submap* const current_submap = get_submap_at( tripoint_bub_ms( p ), l );
 
     if( current_submap == nullptr ) {
-    nulfield = field();
+        nulfield = field();
         return nulfield;
     }
 
@@ -893,7 +891,8 @@ int map::get_field_intensity( const tripoint_bub_ms& p, const field_type_id& typ
 
 bool map::has_field_at( const tripoint_bub_ms& p, bool check_bounds )
 {
-    if( check_bounds && get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) { return false; }
+    if( check_bounds &&
+        get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) { return false; }
     point_sm_ms l;
     const submap* sm = get_submap_at( tripoint_bub_ms( p ), l );
     return sm != nullptr && sm->field_count > 0;

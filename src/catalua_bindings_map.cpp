@@ -178,9 +178,9 @@ auto configure_vehicle_locks( vehicle &veh, const replace_vehicle_request &reque
 {
     if( !request.options.locks.has_value() || *request.options.locks ) { return; }
 
-for( auto index = veh.part_count(); index > 0; --index ) {
-    const auto part_index = index - 1;
-    if( veh.part_with_feature( part_index, "DOOR_LOCKING", false ) == part_index ) {
+    for( auto index = veh.part_count(); index > 0; --index ) {
+        const auto part_index = index - 1;
+        if( veh.part_with_feature( part_index, "DOOR_LOCKING", false ) == part_index ) {
             veh.remove_part( part_index );
         }
     }
@@ -458,8 +458,7 @@ void cata::detail::reg_map( sol::state &lua )
         luna::set_fx( ut, "get_items_in_radius", []( map & m, const tripoint_bub_ms & p,
         int radius ) -> std::vector<map_stack> {
             std::vector<map_stack> items;
-            for( const auto pt : m.points_in_radius( p, radius ) )
-            {
+            for( const auto pt : m.points_in_radius( p, radius ) ) {
                 items.push_back( m.i_at( pt ) );
             }
             return items;
@@ -527,8 +526,7 @@ void cata::detail::reg_map( sol::state &lua )
         luna::set_fx( ut, "move_item_to", []( map & m, const tripoint_bub_ms & from, item * it,
         const tripoint_bub_ms & to ) -> void {
             detached_ptr<item> detached = m.i_rem( from, it );
-            if( detached )
-            {
+            if( detached ) {
                 m.add_item_or_charges( to, std::move( detached ) );
             }
         } );
@@ -638,8 +636,7 @@ void cata::detail::reg_map( sol::state &lua )
         luna::set_fx( ut, "get_items_in_radius", []( mapgen_constructor & m,
         const point_omt_ms & p, int radius ) -> std::vector<map_stack> {
             std::vector<map_stack> items;
-            for( const auto pt : m.points_in_radius( p, radius ) )
-            {
+            for( const auto pt : m.points_in_radius( p, radius ) ) {
                 items.push_back( m.i_at( pt ) );
             }
             return items;
@@ -657,8 +654,7 @@ void cata::detail::reg_map( sol::state &lua )
                       []( mapgen_constructor & m ) -> std::vector<vehicle *> { return m.get_vehicles(); } );
         luna::set_fx( ut, "replace_vehicle", []( mapgen_constructor & m, vehicle * target,
         const std::string & vehicle_id, const sol::optional<sol::table> &opts ) -> bool {
-            if( target == nullptr )
-            {
+            if( target == nullptr ) {
                 return false;
             }
             const auto replacement = make_replace_vehicle_request( vehicle_id, replace_vehicle_target{

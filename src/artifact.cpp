@@ -598,16 +598,16 @@ namespace
 auto set_artifact_origin( itype &def ) -> void
 {
     if( !def.src.empty() ) {
-    return;
-}
-def.src.emplace_back( def.get_id(), mod_id( "bn" ) );
+        return;
+    }
+    def.src.emplace_back( def.get_id(), mod_id( "bn" ) );
 }
 
 } // namespace
 
 //Dreams for each charge req
 static const std::array<artifact_dream_datum, NUM_ACRS> artifact_dream_data = { {
-    {   {translate_marker( "The %s is somehow vaguely dissatisfied even though it doesn't want anything.  Seeing this is a bug!" )},
+        {   {translate_marker( "The %s is somehow vaguely dissatisfied even though it doesn't want anything.  Seeing this is a bug!" )},
             {translate_marker( "The %s is satisfied, as it should be because it has no standards.  Seeing this is a bug!" )},
             100,  0
         }, { {translate_marker( "Your %s feels needy, like it wants to be held." )},
@@ -968,7 +968,7 @@ itype_id new_natural_artifact( artifact_natural_property prop )
     // Three possibilities: good passive + bad passive, good active + bad active,
     // and bad passive + good active
     bool good_passive = false, bad_passive = false,
-         good_active  = false, bad_active  = false;
+                               good_active  = false, bad_active  = false;
     switch( rng( 1, 3 ) ) {
         case 1:
             good_passive = true;
@@ -1336,8 +1336,8 @@ void it_artifact_tool::serialize( JsonOut &json ) const
     json.member( "price", price );
     json.member( "materials" );
     json.start_array();
-for( const material_id &mat : materials ) {
-    json.write( mat );
+    for( const material_id &mat : materials ) {
+        json.write( mat );
     }
     json.end_array();
     json.member( "volume", volume );
@@ -1359,7 +1359,7 @@ for( const material_id &mat : materials ) {
     json.member( "turns_per_charge", tool->turns_per_charge );
     const auto &revert_to = tool->revert_to;
     if( revert_to ) {
-    json.member( "revert_to", *revert_to );
+        json.member( "revert_to", *revert_to );
     }
 
     // artifact data
@@ -1393,8 +1393,8 @@ void it_artifact_armor::serialize( JsonOut &json ) const
     json.member( "price", price );
     json.member( "materials" );
     json.start_array();
-for( const material_id &mat : materials ) {
-    json.write( mat );
+    for( const material_id &mat : materials ) {
+        json.write( mat );
     }
     json.end_array();
     json.member( "volume", volume );

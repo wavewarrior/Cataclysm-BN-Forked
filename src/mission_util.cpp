@@ -534,9 +534,11 @@ bool mission_util::load_funcs( const JsonObject &jo,
     if( jo.has_string( "reveal_om_ter" ) ) {
         const std::string target_terrain = jo.get_string( "reveal_om_ter" );
         set_reveal( target_terrain, funcs );
-    } else if( jo.has_member( "reveal_om_ter" ) ) {
+    }
+    else if( jo.has_member( "reveal_om_ter" ) ) {
         set_reveal_any( jo.get_array( "reveal_om_ter" ), funcs );
-    } else if( jo.has_member( "assign_mission_target" ) ) {
+    }
+    else if( jo.has_member( "assign_mission_target" ) ) {
         JsonObject mission_target = jo.get_object( "assign_mission_target" );
         set_assign_om_target( mission_target, funcs );
     }
@@ -546,8 +548,10 @@ bool mission_util::load_funcs( const JsonObject &jo,
         if( !set_update_mapgen( update_mapgen, funcs ) ) {
             return false;
         }
-    } else {
-        for( JsonObject update_mapgen : jo.get_array( "update_mapgen" ) ) {
+    }
+    else {
+        for( JsonObject update_mapgen : jo.get_array( "update_mapgen" ) )
+        {
             if( !set_update_mapgen( update_mapgen, funcs ) ) {
                 return false;
             }

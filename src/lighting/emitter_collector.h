@@ -37,8 +37,8 @@ public:
     // only; no locking, no thread wake.
     void submit(
         std::vector<gpu_emitter> snapshot, std::vector<uint8_t> transparency = {},
-        std::vector<float> sdf = {}, std::vector<uint8_t> sky_vis = {},
-        int runtime_w = 0, int runtime_h = 0,
+        std::vector<float> sdf = {}, std::vector<uint8_t> sky_vis = {}, int runtime_w = 0,
+        int runtime_h = 0,
         // Stage 2b: unified coverage occluder, tile-res, 2 floats/tile.
         std::vector<float> occ = {},
         // GI albedo bleed: tile-res, 4 floats/tile (rgb 0..1 + pad).
@@ -75,7 +75,7 @@ private:
     // flush_to_render_cb(). Single-threaded: no mutex needed.
     std::vector<gpu_emitter> pending_;
     std::vector<uint8_t> pending_transparency_;
-    std::vector<float> pending_occ_; // Stage 2b coverage occluder
+    std::vector<float> pending_occ_;    // Stage 2b coverage occluder
     std::vector<float> pending_albedo_; // GI albedo bleed (4 floats/tile)
     std::vector<float> pending_sdf_;
     std::vector<uint8_t> pending_sky_vis_;

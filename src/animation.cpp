@@ -146,25 +146,25 @@ auto get_bullet_dir( const std::vector<tripoint_bub_ms> &trajectory, size_t i ) 
 [[maybe_unused]] auto get_bullet_rotation( direction dir ) -> int
 {
     switch( dir ) {
-    case direction::NORTH:
-        return 0;
-    case direction::NORTHEAST:
-        return 5;
-    case direction::EAST:
-        return 3;
-    case direction::SOUTHEAST:
-        return 8;
-    case direction::SOUTH:
-        return 2;
-    case direction::SOUTHWEST:
-        return 7;
-    case direction::WEST:
-        return 1;
-    case direction::NORTHWEST:
-        return 6;
-    default:
-        return 0;
-}
+        case direction::NORTH:
+            return 0;
+        case direction::NORTHEAST:
+            return 5;
+        case direction::EAST:
+            return 3;
+        case direction::SOUTHEAST:
+            return 8;
+        case direction::SOUTH:
+            return 2;
+        case direction::SOUTHWEST:
+            return 7;
+        case direction::WEST:
+            return 1;
+        case direction::NORTHWEST:
+            return 6;
+        default:
+            return 0;
+    }
 }
 
 } // namespace
@@ -334,22 +334,22 @@ auto make_projectile_particle( const char bullet, const std::string &custom_spri
 -> particle
 {
     if( !custom_sprite.empty() ) {
-    return particle{ .style = particle_style::sprite, .sprite = custom_sprite };
-}
-switch( bullet ) {
-    case '#': // flame
-        return particle{ .style = particle_style::tracer,
-                         .tint_r = 1.5f, .tint_g = 0.45f, .tint_b = 0.08f,
-                         .size_px = 4.0f, .length_px = 26.0f };
-    case '`': // shrapnel
-        return particle{ .style = particle_style::tracer,
-                         .tint_r = 0.9f, .tint_g = 0.95f, .tint_b = 1.0f,
-                         .size_px = 2.0f, .length_px = 12.0f };
-    default: // ordinary bullet
-        return particle{ .style = particle_style::tracer,
-                         .tint_r = 1.4f, .tint_g = 1.15f, .tint_b = 0.55f,
-                         .size_px = 3.0f, .length_px = 22.0f };
-}
+        return particle{ .style = particle_style::sprite, .sprite = custom_sprite };
+    }
+    switch( bullet ) {
+        case '#': // flame
+            return particle{ .style = particle_style::tracer,
+                             .tint_r = 1.5f, .tint_g = 0.45f, .tint_b = 0.08f,
+                             .size_px = 4.0f, .length_px = 26.0f };
+        case '`': // shrapnel
+            return particle{ .style = particle_style::tracer,
+                             .tint_r = 0.9f, .tint_g = 0.95f, .tint_b = 1.0f,
+                             .size_px = 2.0f, .length_px = 12.0f };
+        default: // ordinary bullet
+            return particle{ .style = particle_style::tracer,
+                             .tint_r = 1.4f, .tint_g = 1.15f, .tint_b = 0.55f,
+                             .size_px = 3.0f, .length_px = 22.0f };
+    }
 }
 
 } // namespace
@@ -591,33 +591,33 @@ void game::draw_cursor( const tripoint_bub_ms &p )
 auto game::draw_aim_crosshair( point pixel ) -> void
 {
     if( !tilecontext ) { return; }
-tilecontext->init_draw_aim_crosshair( pixel );
+    tilecontext->init_draw_aim_crosshair( pixel );
 }
 
 auto game::draw_aim_cone( const point_bub_ms &src, float aim_rad,
                           float spread_half_rad, int max_range, int z ) -> void
 {
     if( !tilecontext ) { return; }
-tilecontext->init_draw_aim_cone( src, aim_rad, spread_half_rad, max_range, z );
+    tilecontext->init_draw_aim_cone( src, aim_rad, spread_half_rad, max_range, z );
 }
 
 auto game::draw_throw_arc( const tripoint_bub_ms &src, const tripoint_bub_ms &dst,
                            float charge ) -> void
 {
     if( !tilecontext ) { return; }
-tilecontext->init_draw_throw_arc( src, dst, charge );
+    tilecontext->init_draw_throw_arc( src, dst, charge );
 }
 
 auto game::draw_throw_impact( const tripoint_bub_ms &dst, float max_radius_tiles ) -> void
 {
     if( !tilecontext ) { return; }
-tilecontext->init_draw_throw_impact( dst, max_radius_tiles );
+    tilecontext->init_draw_throw_impact( dst, max_radius_tiles );
 }
 
 auto game::void_throw_impact() -> void
 {
     if( !tilecontext ) { return; }
-tilecontext->void_throw_impact();
+    tilecontext->void_throw_impact();
 }
 
 void game::draw_highlight( const tripoint_bub_ms &p )

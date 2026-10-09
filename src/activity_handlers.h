@@ -167,36 +167,35 @@ void drop_on_map(
 void drop_on_map(
     Character& c, item_drop_reason reason, detached_ptr<item>&& it, const tripoint_bub_ms& where );
 
-namespace activity_handlers
-{
+namespace activity_handlers {
 
-bool resume_for_multi_activities( player& p );
+bool resume_for_multi_activities( player & p );
 void perform_zone_activity_turn(
-    player* p, const zone_type_id& ztype,
+    player * p, const zone_type_id & ztype,
     const std::function<bool( const tripoint_bub_ms & )> &tile_filter,
     const std::function<void( player& p, const tripoint_bub_ms & )> &tile_action,
-    const std::string& finished_msg );
+    const std::string & finished_msg );
 /** activity_do_turn functions: */
-void drop_do_turn( player_activity* act, player* p );
-void stash_do_turn( player_activity* act, player* p );
-void wear_do_turn( player_activity* act, player* p );
-void move_items_do_turn( player_activity* act, player* p );
-void armor_layers_do_turn( player_activity* act, player* p );
-void repair_item_do_turn( player_activity* act, player* p );
+void drop_do_turn( player_activity * act, player * p );
+void stash_do_turn( player_activity * act, player * p );
+void wear_do_turn( player_activity * act, player * p );
+void move_items_do_turn( player_activity * act, player * p );
+void armor_layers_do_turn( player_activity * act, player * p );
+void repair_item_do_turn( player_activity * act, player * p );
 
 
 /** activity_finish functions: */
-void longsalvage_finish( player_activity* act, player* p );
-void reload_finish( player_activity* act, player* p );
-void repair_item_finish( player_activity* act, player* p );
-void mend_item_finish( player_activity* act, player* p );
-void gunmod_add_finish( player_activity* act, player* p );
-void toolmod_add_finish( player_activity* act, player* p );
-void jackhammer_finish( player_activity* act, player* p );
-void fill_pit_finish( player_activity* act, player* p );
-void unload_mag_finish( player_activity* act, player* p );
+void longsalvage_finish( player_activity * act, player * p );
+void reload_finish( player_activity * act, player * p );
+void repair_item_finish( player_activity * act, player * p );
+void mend_item_finish( player_activity * act, player * p );
+void gunmod_add_finish( player_activity * act, player * p );
+void toolmod_add_finish( player_activity * act, player * p );
+void jackhammer_finish( player_activity * act, player * p );
+void fill_pit_finish( player_activity * act, player * p );
+void unload_mag_finish( player_activity * act, player * p );
 
-void try_sleep_query( player_activity* act, player* p );
+void try_sleep_query( player_activity * act, player * p );
 
 
 } // namespace activity_handlers

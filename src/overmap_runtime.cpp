@@ -271,27 +271,27 @@ void overmap::ter_set( const tripoint_om_omt &p, const oter_id &id )
 bool overmap::seen( const tripoint_om_omt &p ) const
 {
     if( !inbounds( p ) ) {
-    return false;
-}
-return layer[p.z() + OVERMAP_DEPTH].visible[p.x()][p.y()];
+        return false;
+    }
+    return layer[p.z() + OVERMAP_DEPTH].visible[p.x()][p.y()];
 }
 
 bool overmap::is_explored( const tripoint_om_omt &p ) const
 {
     if( !inbounds( p ) ) {
-    return false;
-}
-return layer[p.z() + OVERMAP_DEPTH].explored[p.x()][p.y()];
+        return false;
+    }
+    return layer[p.z() + OVERMAP_DEPTH].explored[p.x()][p.y()];
 }
 
 bool overmap::has_note( const tripoint_om_omt &p ) const
 {
     if( p.z() < -OVERMAP_DEPTH || p.z() > OVERMAP_HEIGHT ) {
-    return false;
-}
+        return false;
+    }
 
-for( const om_note &i : layer[p.z() + OVERMAP_DEPTH].notes ) {
-    if( i.p == p.xy() ) {
+    for( const om_note &i : layer[p.z() + OVERMAP_DEPTH].notes ) {
+        if( i.p == p.xy() ) {
             return true;
         }
     }
@@ -300,7 +300,7 @@ for( const om_note &i : layer[p.z() + OVERMAP_DEPTH].notes ) {
 
 bool overmap::is_marked_dangerous( const tripoint_om_omt &p ) const
 {
-for( const om_note &i : layer[p.z() + OVERMAP_DEPTH].notes ) {
+    for( const om_note &i : layer[p.z() + OVERMAP_DEPTH].notes ) {
         if( !i.dangerous ) {
             continue;
         } else if( p.xy() == i.p ) {
@@ -825,15 +825,15 @@ void overmap::for_each_npc( const std::function<void( npc & )> &callback )
 
 void overmap::for_each_npc( const std::function<void( const npc & )> &callback ) const
 {
-for( auto &guy : npcs ) {
-    callback( *guy );
+    for( auto &guy : npcs ) {
+        callback( *guy );
     }
 }
 
 shared_ptr_fast<npc> overmap::find_npc( const character_id &id ) const
 {
-for( const auto &guy : npcs ) {
-    if( guy->getID() == id ) {
+    for( const auto &guy : npcs ) {
+        if( guy->getID() == id ) {
             return guy;
         }
     }
@@ -843,13 +843,13 @@ for( const auto &guy : npcs ) {
 bool overmap::is_omt_generated( const tripoint_om_omt &loc ) const
 {
     if( !inbounds( loc ) ) {
-    return false;
-}
+        return false;
+    }
 
-// Location is local to this overmap, but we need global submap coordinates
-// for the mapbuffer lookup.
-tripoint_abs_sm global_sm_loc =
-    project_to<coords::sm>( project_combine( pos(), loc ) );
+    // Location is local to this overmap, but we need global submap coordinates
+    // for the mapbuffer lookup.
+    tripoint_abs_sm global_sm_loc =
+        project_to<coords::sm>( project_combine( pos(), loc ) );
 
     // TODO: fix point types
     const bool is_generated =

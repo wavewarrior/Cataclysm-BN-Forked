@@ -134,10 +134,10 @@ struct conditional_t {
 
         bool operator()( const T &d ) const {
             if( !condition ) {
-            return false;
+                return false;
+            }
+            return condition( d );
         }
-        return condition( d );
-    }
 };
 
 #if !defined(MACOSX)

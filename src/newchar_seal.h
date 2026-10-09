@@ -168,15 +168,15 @@ inline auto classify( int col, int row ) -> layer
 inline auto glow_at( const phase &p, float theta ) -> float
 {
     if( p.struck ) {
-    return struck_level;
-}
-const float behind = nc_apt::behind( p.arc, theta );
-// `behind` wraps, so a bearing the bead has not reached yet reports nearly a full turn — always
-// more than the arc travelled so far, which is what rejects it with the same comparison.
-if( behind > p.arc ) {
-    return 0.0F;
-}
-return std::max( weld_level, 1.0F - behind / tail );
+        return struck_level;
+    }
+    const float behind = nc_apt::behind( p.arc, theta );
+    // `behind` wraps, so a bearing the bead has not reached yet reports nearly a full turn — always
+    // more than the arc travelled so far, which is what rejects it with the same comparison.
+    if( behind > p.arc ) {
+        return 0.0F;
+    }
+    return std::max( weld_level, 1.0F - behind / tail );
 }
 
 /// Brightness of node `i`'s socket. Same curve as the thread it sits on, so a node cannot flare out
@@ -200,7 +200,7 @@ inline auto node_alpha_of( float glow_01 ) -> int
 {
     const float g = std::clamp( glow_01, 0.0F, 1.0F );
     return node_floor_alpha +
-           static_cast<int>( std::lround( g * static_cast<float>( 255 - node_floor_alpha ) ) );
+           static_cast < int > ( std::lround( g * static_cast < float > ( 255 - node_floor_alpha ) ) );
 }
 
 } // namespace nc_seal

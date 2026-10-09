@@ -293,14 +293,14 @@ auto get_projectile_animation_symbol( const projectile& proj ) -> char
 {
     const auto stream =
         proj.has_effect( ammo_effect_STREAM ) || proj.has_effect( ammo_effect_STREAM_BIG )
-    || proj.has_effect( ammo_effect_JET );
+        || proj.has_effect( ammo_effect_JET );
     return stream ? '#' : '*';
 }
 
 auto projectile_draws_as_line( const projectile& proj ) -> bool
 {
     return proj.has_effect( ammo_effect_DRAW_AS_LINE ) ||
-    get_option<bool>( "BULLETS_AS_LASERS" );
+           get_option<bool>( "BULLETS_AS_LASERS" );
 }
 
 auto add_grouped_shot_hit(
@@ -547,9 +547,9 @@ double occupied_tile_fraction( creature_size target_size )
 double Creature::ranged_target_size() const
 {
     if( const_cast<Creature &>( *this ).uncanny_dodge() ) {
-    return 0.0;
-}
-return effective_target_size();
+        return 0.0;
+    }
+    return effective_target_size();
 }
 
 auto Creature::effective_target_size() const -> double
@@ -1825,7 +1825,7 @@ static std::vector<std::string> ranged_chance_lines(
 
         out.push_back( string_format(
                            _( "<color_white>[%s]</color> %s %s: Moves to fire: "
-                              "<color_light_blue>%d</color>" ),
+           "<color_light_blue>%d</color>" ),
                            hotkey, label, aim_l, moves_to_fire ) );
 
         double confidence = confidence_estimate( range, target_size, current_dispersion );
@@ -2082,7 +2082,7 @@ static void cycle_action( item& weap, const tripoint_bub_ms& pos )
         const itype_id casing = *weap.ammo_data()->ammo->casing;
         if( parent.has_flag( flag_RELOAD_EJECT ) || gunmod_find_with( parent, []( auto * e ) -> bool {
         return e->has_flag( flag_BRASS_CATCHER );
-    } ) ) {
+        } ) ) {
             detached_ptr<item> det = item::spawn( casing );
             det->set_flag( flag_CASING );
             parent.put_in( std::move( det ) );
@@ -2105,7 +2105,7 @@ static void cycle_action( item& weap, const tripoint_bub_ms& pos )
         detached_ptr<item> linkage = item::spawn( *mag->type->magazine->linkage, calendar::turn, 1 );
         if( gunmod_find_with( parent, []( auto * e ) -> bool {
         return e->has_flag( flag_BRASS_CATCHER );
-    } ) ) {
+        } ) ) {
             linkage->set_flag( flag_CASING );
             parent.put_in( std::move( linkage ) );
         } else if( cargo.empty() ) {
@@ -2184,16 +2184,16 @@ void ranged::make_gun_sound_effect( const Character& who, bool burst, const item
 item::sound_data item::gun_noise( const bool burst ) const
 {
     if( !is_gun() ) {
-    return { 0, "" };
-}
+        return { 0, "" };
+    }
 
-int noise = calc_gun_volume( *this );
+    int noise = calc_gun_volume( *this );
 
-if( type->weapon_category.contains( weapon_cat_WATER_CANNONS ) ) {
-    return { noise, _( "Splash!" ) };
+    if( type->weapon_category.contains( weapon_cat_WATER_CANNONS ) ) {
+        return { noise, _( "Splash!" ) };
 
-} else if( type->weapon_category.contains( weapon_cat_MAGNETIC ) ) {
-    if( noise < 20 ) {
+    } else if( type->weapon_category.contains( weapon_cat_MAGNETIC ) ) {
+        if( noise < 20 ) {
             return { noise, burst ? _( "tz-tz-tzk!" ) : _( "tzk!" ) };
         } else if( noise < 80 ) {
             return { noise, burst ? _( "Brzzip!" ) : _( "tz-Zing!" ) };
@@ -2204,7 +2204,7 @@ if( type->weapon_category.contains( weapon_cat_WATER_CANNONS ) ) {
         }
 
     } else if( type->weapon_category.contains( weapon_cat_PNEUMATIC ) ) {
-    if( noise < 10 ) {
+        if( noise < 10 ) {
             return { noise, burst ? _( "P-p-p-pft!" ) : _( "pft!" ) };
         } else if( noise < 20 ) {
             return {noise, burst ? _( "F-F-Foomp!" ) : _( "Foomp!" )};
@@ -2215,22 +2215,22 @@ if( type->weapon_category.contains( weapon_cat_WATER_CANNONS ) ) {
         }
 
     } else if( type->weapon_category.contains( weapon_cat_ROCKET_LAUNCHERS ) ) {
-    return { noise, _( "Fwsss!" ) };
-} else if( type->weapon_category.contains( weapon_cat_GRENADE_LAUNCHERS ) ) {
-    return { noise, _( "Thump!" ) };
-} else if( type->weapon_category.contains( weapon_cat_FLAMETHROWERS ) ||
+        return { noise, _( "Fwsss!" ) };
+    } else if( type->weapon_category.contains( weapon_cat_GRENADE_LAUNCHERS ) ) {
+        return { noise, _( "Thump!" ) };
+    } else if( type->weapon_category.contains( weapon_cat_FLAMETHROWERS ) ||
                type->weapon_category.contains( weapon_cat_SPRAY_GUNS ) ) {
-    return { noise, _( "Fwoosh!" ) };
-} else if( type->weapon_category.contains( weapon_cat_S_XBOWS ) ||
+        return { noise, _( "Fwoosh!" ) };
+    } else if( type->weapon_category.contains( weapon_cat_S_XBOWS ) ||
                type->weapon_category.contains( weapon_cat_M_XBOWS ) ) {
-    return { noise, _( "thonk!" ) };
-} else if( type->weapon_category.contains( weapon_cat_ELASTIC ) ) {
-    return { noise, _( "whizz!" ) };
-}
+        return { noise, _( "thonk!" ) };
+    } else if( type->weapon_category.contains( weapon_cat_ELASTIC ) ) {
+        return { noise, _( "whizz!" ) };
+    }
 
-if( type->weapon_category.contains( weapon_cat_ENERGY_WEAPONS ) ) {
-    // Lasers and plasma
-    if( noise < 40 ) {
+    if( type->weapon_category.contains( weapon_cat_ENERGY_WEAPONS ) ) {
+        // Lasers and plasma
+        if( noise < 40 ) {
             return { noise, _( "Fzzt!" ) };
         } else if( noise < 60 ) {
             return { noise, _( "Pew!" ) };
@@ -2242,7 +2242,7 @@ if( type->weapon_category.contains( weapon_cat_ENERGY_WEAPONS ) ) {
 
         // Default behavior for normal guns without sound class defined.
     } else if( noise > 0 ) {
-    if( noise < 50 ) {
+        if( noise < 50 ) {
             return { noise, burst ? _( "Brrrip!" ) : _( "plink!" ) };
         } else if( noise < 120 ) {
             return { noise, burst ? _( "Brrrap!" ) : _( "bang!" ) };
@@ -2349,11 +2349,11 @@ auto npc_ai::best_mode_for_range( const Character& who, const item& firing, int 
 {
     const int shots =
         who.is_wielding( firing )
-    ? character_funcs::ammo_count_for( who, firing )
-    : item_funcs::shots_remaining( who, firing );
+        ? character_funcs::ammo_count_for( who, firing )
+        : item_funcs::shots_remaining( who, firing );
 
     if( !firing.is_gun() || firing.is_gunmod() || shots == 0 ) {
-    return std::make_pair( gun_mode_id(), std::nullopt );
+        return std::make_pair( gun_mode_id(), std::nullopt );
     }
     int min_recoil = MAX_RECOIL;
     min_recoil = ranged::get_most_accurate_sight( who, firing );
@@ -2468,16 +2468,15 @@ double ranged::recoil_total( const Character& who )
     return std::max( 0.0, base_recoil + ench_recoil_bonus );
 }
 
-namespace ranged
-{
+namespace ranged {
 
-std::vector<Creature *> targetable_creatures( const Character& c, const int range )
+std::vector<Creature *> targetable_creatures( const Character & c, const int range )
 {
     return targetable_creatures( c, range, turret_data() );
 }
 
 std::vector<Creature *> targetable_creatures(
-    const Character& c, const int range, const turret_data& turret )
+    const Character & c, const int range, const turret_data & turret )
 {
     const vehicle* veh_from_turret = turret ? turret.get_veh() : nullptr;
     return g->get_creatures_if( [&c, range, veh_from_turret]( const Creature & critter ) -> bool {
@@ -2538,7 +2537,7 @@ std::vector<Creature *> targetable_creatures(
     } );
 }
 
-int burst_penalty( const Character& p, const item& gun, int gun_recoil )
+int burst_penalty( const Character & p, const item & gun, int gun_recoil )
 {
     ///\EFFECT_DEX reduces burst penalty by flat amount
     int dex_effect = p.get_dex() * 10;
@@ -2664,7 +2663,7 @@ auto ranged::gunmode_checks_weapon(
                         && you.get_power_level() >= units::from_kilojoule( ups_drain ) ) ) ) {
                 messages.push_back( string_format(
                                         _( "You need a UPS with at least %2$d charges or an advanced UPS with at least "
-                                           "%3$d charges to fire the %1$s!" ),
+                   "%3$d charges to fire the %1$s!" ),
                                         gmode->tname(), ups_drain, adv_ups_drain ) );
                 result = false;
             }
@@ -2684,7 +2683,7 @@ auto ranged::gunmode_checks_weapon(
             && !you.worn_with_flag( flag_HEAVY_WEAPON_SUPPORT ) ) {
             messages.push_back( string_format(
                                     _( "You must stand near acceptable terrain or furniture to fire the %s.  A table, a "
-                                       "mound of dirt, a broken window, etc." ),
+               "mound of dirt, a broken window, etc." ),
                                     gmode->tname() ) );
             result = false;
         }

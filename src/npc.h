@@ -1485,8 +1485,7 @@ void deactivate_weapon_cbm( npc& who );
 // returns list of reloadable cbms.
 std::vector<std::pair<bionic_id, item *>> find_reloadable_cbms( npc& who );
 
-namespace npc_overmap
-{
+namespace npc_overmap {
 /** Radius of the area in which we count NPCs for random spawn chance. */
 static constexpr int density_search_radius = 120;
 /** Chance that a random NPC spawns somewhere on overmap. */

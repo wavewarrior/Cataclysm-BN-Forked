@@ -156,10 +156,10 @@ auto monster::load( const JsonObject &data,
     }
     auto stored_pos_abs = tripoint_abs_ms::zero();
     if( data.read( "pos_abs", stored_pos_abs ) ) {
-    pos_abs = stored_pos_abs;
-}
-if( has_legacy_x && has_legacy_y ) {
-    if( legacy_context ) {
+        pos_abs = stored_pos_abs;
+    }
+    if( has_legacy_x && has_legacy_y ) {
+        if( legacy_context ) {
             const auto abs_sm_pos = project_combine( legacy_context->om_pos, legacy_context->submap_pos );
             const auto legacy_remainder = project_remain<coords::sm>( legacy_bub_pos );
             pos_abs = project_combine( abs_sm_pos, legacy_remainder.remainder );
@@ -171,7 +171,7 @@ if( has_legacy_x && has_legacy_y ) {
     wandf = 0;
     wander_pos = abs_to_bub( pos_abs );
     if( !legacy_context ) {
-    auto stored_wander_pos_abs = tripoint_abs_ms::zero();
+        auto stored_wander_pos_abs = tripoint_abs_ms::zero();
         if( data.read( "wander_pos_abs", stored_wander_pos_abs ) ) {
             data.read( "wandf", wandf );
             wander_pos = abs_to_bub( stored_wander_pos_abs );
@@ -187,30 +187,30 @@ if( has_legacy_x && has_legacy_y ) {
         }
     }
     if( data.has_object( "tied_item" ) ) {
-    JsonIn *tied_item_json = data.get_raw( "tied_item" );
+        JsonIn *tied_item_json = data.get_raw( "tied_item" );
         set_tied_item( item::spawn( *tied_item_json ) );
     }
     if( data.has_object( "tack_item" ) ) {
-    JsonIn *tack_item_json = data.get_raw( "tack_item" );
+        JsonIn *tack_item_json = data.get_raw( "tack_item" );
         set_tack_item( item::spawn( *tack_item_json ) );
     }
     if( data.has_object( "armor_item" ) ) {
-    JsonIn *armor_item_json = data.get_raw( "armor_item" );
+        JsonIn *armor_item_json = data.get_raw( "armor_item" );
         set_armor_item( item::spawn( *armor_item_json ) );
     }
     if( data.has_object( "storage_item" ) ) {
-    JsonIn *storage_item_json = data.get_raw( "storage_item" );
+        JsonIn *storage_item_json = data.get_raw( "storage_item" );
         set_storage_item( item::spawn( *storage_item_json ) );
     }
     if( data.has_object( "battery_item" ) ) {
-    JsonIn *battery_item_json = data.get_raw( "battery_item" );
+        JsonIn *battery_item_json = data.get_raw( "battery_item" );
         set_battery_item( item::spawn( *battery_item_json ) );
     }
     data.read( "hp", hp );
 
     // sp_timeout indicates an old save, prior to the special_attacks refactor
     if( data.has_array( "sp_timeout" ) ) {
-    JsonArray parray = data.get_array( "sp_timeout" );
+        JsonArray parray = data.get_array( "sp_timeout" );
         size_t index = 0;
         int ptimeout = 0;
         while( parray.has_more() && index < type->special_attacks_names.size() ) {
@@ -230,7 +230,7 @@ if( has_legacy_x && has_legacy_y ) {
 
     // special_attacks indicates a save after the special_attacks refactor
     if( data.has_object( "special_attacks" ) ) {
-    for( const JsonMember member : data.get_object( "special_attacks" ) ) {
+        for( const JsonMember member : data.get_object( "special_attacks" ) ) {
             JsonObject saobject = member.get_object();
             saobject.allow_omitted_members();
             auto &entry = special_attacks[member.name()];
@@ -240,9 +240,9 @@ if( has_legacy_x && has_legacy_y ) {
     }
 
     // make sure the loaded monster has every special attack its type says it should have
-for( auto &sa : type->special_attacks ) {
-    const std::string &aname = sa.first;
-    if( !special_attacks.contains( aname ) ) {
+    for( auto &sa : type->special_attacks ) {
+        const std::string &aname = sa.first;
+        if( !special_attacks.contains( aname ) ) {
             auto &entry = special_attacks[aname];
             entry.cooldown = rng( 0, sa.second->cooldown );
         }
@@ -259,7 +259,7 @@ for( auto &sa : type->special_attacks ) {
     data.read( "morale", morale );
 
     if( data.has_member( "faction_anger" ) ) {
-    JsonObject ja = data.get_object( "faction_anger" );
+        JsonObject ja = data.get_object( "faction_anger" );
         for( const auto &member : ja ) {
             mfaction_str_id faction_str( member.name() );
             faction_anger[mfaction_id( faction_str )] = member.get_int();
@@ -274,7 +274,7 @@ for( auto &sa : type->special_attacks ) {
     std::vector<tripoint> plans;
     data.read( "plans", plans );
     if( !plans.empty() ) {
-    goal = tripoint_bub_ms( plans.back() );
+        goal = tripoint_bub_ms( plans.back() );
     }
 
     data.read( "summon_time_limit", summon_time_limit );
@@ -293,7 +293,7 @@ for( auto &sa : type->special_attacks ) {
     baby_timer.reset();
     data.read( "baby_timer", baby_timer );
     if( baby_timer && *baby_timer == calendar::before_time_starts ) {
-    baby_timer.reset();
+        baby_timer.reset();
     }
 
     data.read( "udder_timer", udder_timer );
@@ -305,8 +305,8 @@ for( auto &sa : type->special_attacks ) {
     data.read( "dragged_foe_id", dragged_foe_id );
 
     if( data.has_int( "ammo" ) && !type->starting_ammo.empty() ) {
-    // Legacy loading for ammo.
-    normalize_ammo( data.get_int( "ammo" ) );
+        // Legacy loading for ammo.
+        normalize_ammo( data.get_int( "ammo" ) );
     } else {
         data.read( "ammo", ammo );
         // legacy loading for milkable creatures, fix mismatch.
@@ -321,14 +321,14 @@ for( auto &sa : type->special_attacks ) {
 
     faction = mfaction_str_id( data.get_string( "faction", "" ) );
     if( !data.read( "last_updated", last_updated ) ) {
-    last_updated = calendar::turn;
-}
+        last_updated = calendar::turn;
+    }
     auto raw_dimension_id = std::string{};
     data.read( "dimension_id", raw_dimension_id );
     set_dimension( dimension_id( raw_dimension_id ) );
-data.read( "mounted_player_id", mounted_player_id );
-data.read( "path", path );
-data.read( "monster_flags", monster_flags );
+    data.read( "mounted_player_id", mounted_player_id );
+    data.read( "path", path );
+    data.read( "monster_flags", monster_flags );
 }
 
 /*
@@ -357,7 +357,7 @@ auto monster::store( JsonOut &json, bool include_local_state ) const -> void
     json.member( "unique_name", unique_name );
     json.member( "pos_abs", pos_abs );
     if( include_local_state ) {
-    json.member( "wander_pos_abs", bub_to_abs( wander_pos ) );
+        json.member( "wander_pos_abs", bub_to_abs( wander_pos ) );
         json.member( "wandf", wandf );
     }
     json.member( "hp", hp );
@@ -375,7 +375,7 @@ auto monster::store( JsonOut &json, bool include_local_state ) const -> void
     json.member( "morale", morale );
 
     if( !faction_anger.empty() ) {
-    json.member( "faction_anger" );
+        json.member( "faction_anger" );
         json.start_object();
         for( const auto &pair : faction_anger ) {
             json.member( pair.first.id().str(), pair.second );
@@ -387,19 +387,19 @@ auto monster::store( JsonOut &json, bool include_local_state ) const -> void
     json.member( "aggro_character", aggro_character );
     json.member( "stairscount", staircount );
     if( tied_item ) {
-    json.member( "tied_item", *tied_item );
+        json.member( "tied_item", *tied_item );
     }
     if( tack_item ) {
-    json.member( "tack_item", *tack_item );
+        json.member( "tack_item", *tack_item );
     }
     if( armor_item ) {
-    json.member( "armor_item", *armor_item );
+        json.member( "armor_item", *armor_item );
     }
     if( storage_item ) {
-    json.member( "storage_item", *storage_item );
+        json.member( "storage_item", *storage_item );
     }
     if( battery_item ) {
-    json.member( "battery_item", *battery_item );
+        json.member( "battery_item", *battery_item );
     }
     // Store the relative position of the goal so it loads correctly after a map shift.
     json.member( "destination", goal - bub_pos() );
@@ -417,7 +417,7 @@ auto monster::store( JsonOut &json, bool include_local_state ) const -> void
     json.member( "summon_time_limit", summon_time_limit );
 
     if( horde_attraction > MHA_NULL && horde_attraction < NUM_MONSTER_HORDE_ATTRACTION ) {
-    json.member( "horde_attraction", horde_attraction );
+        json.member( "horde_attraction", horde_attraction );
     }
     json.member( "inv", inv );
     json.member( "corpse_components", corpse_components );

@@ -353,9 +353,9 @@ void Item_factory::init()
     add_iuse( "FUNGICIDE", &iuse::fungicide );
     add_iuse( "GASMASK", &iuse::gasmask,
               translate_marker( "Can be activated to <good>increase environmental "
-                                "protection</good>.  Will consume charges when active, "
-                                "but <info>only when environmental hazards are "
-                                "present</info>."
+                      "protection</good>.  Will consume charges when active, "
+                      "but <info>only when environmental hazards are "
+                      "present</info>."
                               ) );
     add_iuse( "GEIGER", &iuse::geiger );
     add_iuse( "DEBUG_GRENADE", &iuse::debug_grenade );
@@ -527,18 +527,18 @@ void Item_factory::init()
 bool Item_factory::check_ammo_type( std::string &msg, const ammotype &ammo ) const
 {
     if( ammo.is_null() ) {
-    return false;
-}
+        return false;
+    }
 
-if( !ammo.is_valid() ) {
-    msg += string_format( "ammo type %s is not known\n", ammo.c_str() );
+    if( !ammo.is_valid() ) {
+        msg += string_format( "ammo type %s is not known\n", ammo.c_str() );
         return false;
     }
 
     if( std::none_of( m_templates.begin(),
-        m_templates.end(), [&ammo]( const decltype( m_templates )::value_type & e ) {
-        return e.second.ammo && e.second.ammo->type == ammo;
-    } ) ) {
+    m_templates.end(), [&ammo]( const decltype( m_templates )::value_type & e ) {
+    return e.second.ammo && e.second.ammo->type == ammo;
+} ) ) {
         msg += string_format( "there is no actual ammo of type %s defined\n", ammo.c_str() );
         return false;
     }
@@ -550,7 +550,7 @@ if( !ammo.is_valid() ) {
 const itype *Item_factory::find_template( const itype_id &id ) const
 {
     if( !frozen ) {
-    debugmsg( "Tried to load item definitions before finalization. This is bad, very bad" );
+        debugmsg( "Tried to load item definitions before finalization. This is bad, very bad" );
         assert( frozen );
     }
 
@@ -2678,18 +2678,18 @@ bool Item_factory::has_template( const itype_id &id ) const
 std::vector<const itype *> Item_factory::all() const
 {
     if( !frozen ) {
-    debugmsg( "Tried to load item definitions before finalization. This is bad, very bad" );
+        debugmsg( "Tried to load item definitions before finalization. This is bad, very bad" );
         assert( frozen );
     }
 
     std::vector<const itype *> res;
     res.reserve( m_templates.size() + m_runtimes.size() );
 
-for( const auto &e : m_templates ) {
-    res.push_back( &e.second );
+    for( const auto &e : m_templates ) {
+        res.push_back( &e.second );
     }
-for( const auto &e : m_runtimes ) {
-    res.push_back( e.second.get() );
+    for( const auto &e : m_runtimes ) {
+        res.push_back( e.second.get() );
     }
 
     return res;

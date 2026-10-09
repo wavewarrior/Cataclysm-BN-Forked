@@ -278,7 +278,7 @@ void map::player_in_field( player& u )
                 u.add_msg_if_player(
                     m_bad,
                     _( "The sludge is thick and sticky.  You struggle to "
-                       "pull free." ) );
+                   "pull free." ) );
                 u.moves -= cur.get_field_intensity() * 300;
                 cur.set_field_intensity( 0 );
             }
@@ -429,8 +429,8 @@ void map::player_in_field( player& u )
                     u.add_msg_player_or_npc(
                         _( "These flames do not burn you." ),
                         _( "Those flames do "
-                           "not burn "
-                           "<npcname>." ) );
+                       "not burn "
+                       "<npcname>." ) );
                 }
             }
         }
@@ -459,15 +459,15 @@ void map::player_in_field( player& u )
                     u.add_msg_player_or_npc(
                         _( "The electric cloud doesn't affect you." ),
                         _( "The "
-                           "electri"
-                           "c "
-                           "cloud "
-                           "doesn'"
-                           "t seem "
-                           "to "
-                           "affect "
-                           "<npcnam"
-                           "e>." ) );
+                       "electri"
+                       "c "
+                       "cloud "
+                       "doesn'"
+                       "t seem "
+                       "to "
+                       "affect "
+                       "<npcnam"
+                       "e>." ) );
                 }
             }
         }
@@ -940,8 +940,7 @@ void map::propagate_field(
 // Called by world_tick() for ALL loaded submaps every turn.
 // ============================================================================
 
-namespace
-{
+namespace {
 
 // Lightweight tile handle to any loaded submap.
 struct SubTile {
@@ -953,7 +952,7 @@ struct SubTile {
     [[nodiscard]] auto get_field() const -> field & { return sm->get_field( local ); }
     [[nodiscard]] auto get_ter_t() const -> const ter_t & { return sm->get_ter( local ).obj(); }
     [[nodiscard]] auto get_furn_t() const -> const furn_t & { return sm->get_furn( local ).obj(); }
-    [[nodiscard]] auto get_items() const -> location_vector<item> & {
+    [[nodiscard]] auto get_items() const -> location_vector < item > & {
         return sm->get_items( local );
     } // *NOPAD*
 };
@@ -963,21 +962,24 @@ struct field_cache_dirty_context {
     dimension_id const &dimension;
 };
 
-auto mark_field_cache_dirty( field_cache_dirty_context const &ctx,
-                             const tripoint_abs_sm &abs_sm,
-                             const field_type_id &type ) -> void
+auto mark_field_cache_dirty( field_cache_dirty_context const & ctx,
+                             const tripoint_abs_sm & abs_sm,
+                             const field_type_id & type ) -> void
 {
-    if( !type ) {
+    if( !type )
+    {
         return;
     }
     const auto &data = type.obj();
-    if( !data.dirty_transparency_cache && data.is_transparent() ) {
+    if( !data.dirty_transparency_cache && data.is_transparent() )
+    {
         return;
     }
-    if( !submap_loader.is_properly_requested( ctx.dimension, abs_sm ) ) {
+    if( !submap_loader.is_properly_requested( ctx.dimension, abs_sm ) )
+    {
         return;
     }
-    const auto bub_pos = abs_to_bub( project_to<coords::ms>( abs_sm ) );
+    const auto bub_pos = abs_to_bub( project_to < coords::ms > ( abs_sm ) );
     level_cache_freshness::report( ctx.here, level_cache_freshness::terrain_changed {
         .at = bub_pos,
         .transparency = true,
@@ -989,8 +991,8 @@ auto mark_field_cache_dirty( field_cache_dirty_context const &ctx,
 // Resolve `local + delta` crossing submap boundaries via mapbuffer.
 // Returns an invalid SubTile if the neighbour is not loaded.
 auto neighbor_tile(
-    submap* base, const tripoint_abs_sm& base_pos, const point_sm_ms& local, const point& delta,
-    mapbuffer& mb ) -> SubTile
+    submap * base, const tripoint_abs_sm & base_pos, const point_sm_ms & local, const point & delta,
+    mapbuffer & mb ) -> SubTile
 {
     const auto nx = local.x() + delta.x;
     const auto ny = local.y() + delta.y;
@@ -1004,11 +1006,12 @@ auto neighbor_tile(
 }
 
 // Add a field to dst, maintaining field_count and field_cache.
-auto sub_add_field( SubTile& dst, field_type_id type, int intensity, time_duration age )
+auto sub_add_field( SubTile & dst, field_type_id type, int intensity, time_duration age )
 -> field_entry *
 {
     if( !dst.valid() ) { return nullptr; }
-    if( dst.get_field().add_field( type, intensity, age ) ) {
+    if( dst.get_field().add_field( type, intensity, age ) )
+    {
         ++dst.sm->field_count;
         dst.sm->field_cache.push_back( dst.local );
         dst.sm->is_uniform = false;
@@ -1025,56 +1028,64 @@ auto sub_add_field( SubTile& dst, field_type_id type, int intensity, time_durati
 }
 
 // True if the tile allows movement (movecost > 0).
-auto sub_passable( const SubTile &tile ) -> bool
+auto sub_passable( const SubTile & tile ) -> bool
 {
-    if( !tile.valid() ) {
-    return false;
-}
-const auto &ter = tile.get_ter_t();
-const auto &frn = tile.get_furn_t();
-if( ter.movecost == 0 ) {
-    return false;
-}
-if( frn.movecost < 0 ) {
-    return false;
-}
-return true;
+    if( !tile.valid() )
+    {
+        return false;
+    }
+    const auto &ter = tile.get_ter_t();
+    const auto &frn = tile.get_furn_t();
+    if( ter.movecost == 0 )
+    {
+        return false;
+    }
+    if( frn.movecost < 0 )
+    {
+        return false;
+    }
+    return true;
 }
 
 // Simplified gas spread check (no wind / vehicle-rotation).
-auto gas_can_spread_sub( const field_entry &cur, const SubTile &dst ) -> bool
+auto gas_can_spread_sub( const field_entry & cur, const SubTile & dst ) -> bool
 {
-    if( !dst.valid() ) {
-    return false;
-}
-const auto *f = dst.get_field().find_field( cur.get_field_type() );
-if( f != nullptr && f->get_field_intensity() >= cur.get_field_intensity() ) {
-    return false;
-}
-const auto &ter = dst.get_ter_t();
-const auto &frn = dst.get_furn_t();
-if( ter.movecost == 0 || frn.movecost < 0 ) {
-    return ter_furn_has_flag( ter, frn, TFLAG_PERMEABLE );
+    if( !dst.valid() )
+    {
+        return false;
+    }
+    const auto *f = dst.get_field().find_field( cur.get_field_type() );
+    if( f != nullptr && f->get_field_intensity() >= cur.get_field_intensity() )
+    {
+        return false;
+    }
+    const auto &ter = dst.get_ter_t();
+    const auto &frn = dst.get_furn_t();
+    if( ter.movecost == 0 || frn.movecost < 0 )
+    {
+        return ter_furn_has_flag( ter, frn, TFLAG_PERMEABLE );
     }
     return true;
 }
 
 // Transfer gas from cur's tile into dst.
-auto gas_spread_sub( field_cache_dirty_context const &dirty, field_entry &cur,
-                     SubTile &dst ) -> void
+auto gas_spread_sub( field_cache_dirty_context const & dirty, field_entry & cur,
+                     SubTile & dst ) -> void
 {
     const auto type = cur.get_field_type();
     const auto age = cur.get_field_age();
     const auto intens = cur.get_field_intensity();
     const auto age_frac = age / intens;
     auto* f = dst.get_field().find_field( type );
-    if( f != nullptr ) {
+    if( f != nullptr )
+    {
         f->set_field_intensity( f->get_field_intensity() + 1 );
         cur.set_field_intensity( intens - 1 );
         f->set_field_age( f->get_field_age() + age_frac );
         cur.set_field_age( age - age_frac );
         mark_field_cache_dirty( dirty, dst.abs_sm, type );
-    } else if( dst.get_field().add_field( type, 1, 0_turns ) ) {
+    } else if( dst.get_field().add_field( type, 1, 0_turns ) )
+    {
         ++dst.sm->field_count;
         dst.sm->field_cache.push_back( dst.local );
         dst.sm->is_uniform = false;
@@ -1088,7 +1099,7 @@ auto gas_spread_sub( field_cache_dirty_context const &dirty, field_entry &cur,
 
 } // anonymous namespace
 
-static const std::array<point, 8> eight_dirs_sm = {
+static const std::array < point, 8 > eight_dirs_sm = {
     {{-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}}
 };
 
@@ -1098,20 +1109,20 @@ auto process_fields_in_submap( const dimension_id &dim, submap &sm,
 {
     ZoneScopedN( "process_fields_in_submap" );
     if( sm.field_count == 0 ) {
-    return false;
-}
+        return false;
+    }
 
     map &map = get_map();
     const auto in_bubble = submap_loader.is_properly_requested( dim, pos );
     const auto dirty_context = field_cache_dirty_context{ map, dim };
 
-auto has_fire = false;
-// Snapshot before iterating: wandering-field spread can push_back to sm.field_cache
-// within the same submap (line ~1742), which would invalidate the range iterators.
-// Newly-added entries are newborn (age 0) and skip all effects anyway, so processing
-// them next tick is correct behaviour.
-const auto field_positions = sm.field_cache;
-std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
+    auto has_fire = false;
+    // Snapshot before iterating: wandering-field spread can push_back to sm.field_cache
+    // within the same submap (line ~1742), which would invalidate the range iterators.
+    // Newly-added entries are newborn (age 0) and skip all effects anyway, so processing
+    // them next tick is correct behaviour.
+    const auto field_positions = sm.field_cache;
+    std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
         auto &curfield = sm.get_field( local );
 
         bool dirty_transparency_cache = false;
@@ -1145,7 +1156,7 @@ std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
                 }
                 curfield.remove_field( it++ );
                 if( in_bubble && dirty_transparency_cache ) {
-                    const auto bub_pos = abs_to_bub( project_to<coords::ms>( pos ) );
+                    const auto bub_pos = abs_to_bub( project_to < coords::ms > ( pos ) );
                     level_cache_freshness::report( map, level_cache_freshness::terrain_changed {
                         .at = bub_pos,
                         .transparency = true,
@@ -1202,7 +1213,7 @@ std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
                 // --- Item burning ---
                 auto& items_here = sm.get_items( local );
                 if( !is_sealed && !items_here.empty() ) {
-                    std::vector<detached_ptr<item>> new_content;
+                    std::vector < detached_ptr < item>> new_content;
                     // NOTE: item detonation skipped — requires map context for explosions.
                     auto frd = fire_data( cur.get_field_intensity(), !can_spread );
                     const auto max_c = cur.get_field_intensity() * 2;
@@ -1218,7 +1229,7 @@ std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
                         }
                         if( destroyed ) {
                             std::ranges::
-                            for_each( fuel->contents.clear_items(), [&]( detached_ptr<item> &ci ) {
+                            for_each( fuel->contents.clear_items(), [&]( detached_ptr < item > &ci ) {
                                 if( !ci->is_irremovable() ) {
                                     new_content.push_back( std::move( ci ) );
                                 }
@@ -1229,7 +1240,7 @@ std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
                             ++fuel_it;
                         }
                     }
-                    std::ranges::for_each( new_content, [&]( detached_ptr<item> &prod ) {
+                    std::ranges::for_each( new_content, [&]( detached_ptr < item > &prod ) {
                         items_here.push_back( std::move( prod ) );
                     } );
                     time_added = 1_turns * roll_remainder( frd.fuel_produced * tick_turns );
@@ -1306,7 +1317,7 @@ std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
 
                 if( can_spread && cur.get_field_intensity() > 1 && one_in( 3 ) ) {
                     // Flashpoint: fuel adjacent fires from our excess age.
-                    const auto end_it = static_cast<size_t>( rng( 0, 7 ) );
+                    const auto end_it = static_cast < size_t > ( rng( 0, 7 ) );
                     std::ranges::for_each( std::views::iota( 0u, 8u ), [&]( size_t c ) {
                         if( cur.get_field_age() >= 0_turns ) { return; }
                         const auto i = ( end_it + 1 + c ) % 8;
@@ -1351,7 +1362,7 @@ std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
 
                 // Fire spreading to adjacent tiles.
                 if( can_spread ) {
-                    const auto end_i = static_cast<size_t>( rng( 0, 7 ) );
+                    const auto end_i = static_cast < size_t > ( rng( 0, 7 ) );
                     std::ranges::for_each( std::views::iota( 0u, 8u ), [&]( size_t c ) {
                         if( one_in( cur.get_field_intensity() * 2 ) ) { return; }
                         auto dst = get_nb( eight_dirs_sm[( end_i + 1 + c ) % 8] );
@@ -1438,7 +1449,7 @@ std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
                         }
                     }
                     if( !spread_done ) {
-                        const auto start = static_cast<size_t>( rng( 0, 7 ) );
+                        const auto start = static_cast < size_t > ( rng( 0, 7 ) );
                         std::ranges::for_each( std::views::iota( 0u, 8u ), [&]( size_t c ) {
                             if( spread_done ) { return; }
                             auto dst =
@@ -1489,7 +1500,7 @@ std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
                         }
                     }
                 } else {
-                    std::vector<point> grounded;
+                    std::vector < point > grounded;
                     std::ranges::for_each( eight_dirs_sm, [&]( const point & d ) {
                         auto dst = neighbor_tile( &sm, pos, local, d, mb );
                         if( dst.valid() && !sub_passable( dst ) ) { grounded.push_back( d ); }
@@ -1629,7 +1640,7 @@ std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
                         continue;
                     }
                     it->set_age( 0_turns );
-                    std::vector<point> valid_dirs;
+                    std::vector < point > valid_dirs;
                     std::ranges::for_each( eight_dirs_sm, [&]( const point & d ) {
                         auto dst = neighbor_tile( &sm, pos, local, d, mb );
                         if( dst.valid() && dst.get_field().find_field( fd_push_items ) ) {
@@ -1640,7 +1651,7 @@ std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
                         const auto target_d = random_entry( valid_dirs );
                         auto dst = neighbor_tile( &sm, pos, local, target_d, mb );
                         if( dst.valid() ) {
-                            detached_ptr<item> detached;
+                            detached_ptr < item > detached;
                             push_it = items.erase( push_it, &detached );
                             dst.get_items().push_back( std::move( detached ) );
                             // Creature interactions skipped (no creatures outside render bubble).
@@ -1653,7 +1664,7 @@ std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
 
             // ---- fd_bees ------------------------------------------------
             if( !is_newborn && cur_fd_type_id == fd_bees ) {
-                static const std::array<field_type_id, 18> bee_killers = {
+                static const std::array < field_type_id, 18 > bee_killers = {
                     {
                         fd_web, fd_fire, fd_smoke, fd_toxic_gas, fd_tear_gas, fd_relax_gas,
                         fd_nuke_gas, fd_gas_vent, fd_smoke_vent, fd_fungicidal_gas,
@@ -1668,7 +1679,7 @@ std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
                     cur.set_field_intensity( 0 );
                 } else {
                     // Wander randomly (player-chasing skipped — no player outside bubble).
-                    const auto start = static_cast<size_t>( rng( 0, 7 ) );
+                    const auto start = static_cast < size_t > ( rng( 0, 7 ) );
                     std::ranges::for_each( std::views::iota( 0u, 8u ), [&]( size_t c ) {
                         auto dst =
                             neighbor_tile( &sm, pos, local, eight_dirs_sm[( start + c ) % 8], mb );
@@ -1720,7 +1731,7 @@ std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
             cur.set_field_age( cur.get_field_age() + action_time_scale::calendar_duration_this_tick() );
             const auto& fdata = cur.get_field_type().obj();
             if( fdata.half_life > 0_turns && cur.get_field_age() > 0_turns
-                && dice( 2, to_turns<int>( cur.get_field_age() ) ) > to_turns<int>( fdata.half_life ) ) {
+                && dice( 2, to_turns < int > ( cur.get_field_age() ) ) > to_turns < int > ( fdata.half_life ) ) {
                 cur.set_field_age( 0_turns );
                 cur.set_field_intensity( cur.get_field_intensity() - 1 );
             }
@@ -1755,7 +1766,7 @@ std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
             }
 
             if( in_bubble && dirty_transparency_cache ) {
-                const auto bub_pos = abs_to_bub( project_to<coords::ms>( pos ) );
+                const auto bub_pos = abs_to_bub( project_to < coords::ms > ( pos ) );
                 level_cache_freshness::report( map, level_cache_freshness::terrain_changed {
                     .at = bub_pos,
                     .transparency = true,
@@ -1779,13 +1790,13 @@ std::ranges::for_each( field_positions, [&]( const point_sm_ms & local ) {
     //
     // The bitset tracks which of the 144 submap tiles have already been kept so
     // duplicates are discarded in the same pass that removes dead entries.
-    std::bitset<SEEX * SEEY> seen;
+    std::bitset < SEEX * SEEY > seen;
     sm.field_cache.erase(
         std::ranges::remove_if(
             sm.field_cache,
     [&]( const point_sm_ms & local ) {
         if( !sm.get_field( local ).displayed_field_type() ) { return true; }
-        const auto idx = static_cast<std::size_t>( local.x() + local.y() * SEEX );
+        const auto idx = static_cast < std::size_t > ( local.x() + local.y() * SEEX );
         if( seen.test( idx ) ) { return true; }
         seen.set( idx );
         return false;

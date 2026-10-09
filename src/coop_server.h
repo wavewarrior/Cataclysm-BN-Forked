@@ -303,13 +303,13 @@ struct coop_server {
         };
         pending_mark_t pending_mark_;
         // Reconnection / join phase state
-        std::atomic<bool> client_disconnected_{false};
+        std::atomic < bool > client_disconnected_{false};
         static constexpr int RECONNECT_TIMEOUT_TICKS = 300; // 5 minutes at 1Hz
         int reconnect_countdown_ = 0;
         // Async client join — background handshake thread + captured seed data
-        std::atomic<client_join_phase> join_phase_{client_join_phase::listening};
+        std::atomic < client_join_phase > join_phase_{client_join_phase::listening};
         std::jthread handshake_thread_;
-        std::atomic<int> handshake_result_{0}; ///< 0=pending, 1=ok, -1=failed
+        std::atomic < int > handshake_result_{0}; ///< 0=pending, 1=ok, -1=failed
         // Captured on the main thread before launching the handshake bg thread.
         // Read by run_handshake_bg() only — no concurrent access.
         int pending_seed_turn_ = 0;

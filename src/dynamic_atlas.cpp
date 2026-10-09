@@ -74,17 +74,17 @@ struct stripe_texture_packer final : detail::texture_packer {
                                   const uint32_t height ) override {
 
         if( std::cmp_greater( width, bounds.w ) || std::cmp_greater( height, bounds.h ) ) {
-        return std::nullopt;
-    }
+            return std::nullopt;
+        }
 
-    const auto r_height = round_up( height, min_size );
+        const auto r_height = round_up( height, min_size );
 
-    auto it = std::ranges::find_if( stripes, [&]( const stripe & s ) {
-        return s.x_remainder >= width && s.height == r_height;
-    } );
+        auto it = std::ranges::find_if( stripes, [&]( const stripe & s ) {
+            return s.x_remainder >= width && s.height == r_height;
+        } );
 
-    if( it == stripes.end() ) {
-        if( r_height > y_remainder || y_remainder < min_size ) {
+        if( it == stripes.end() ) {
+            if( r_height > y_remainder || y_remainder < min_size ) {
                 return std::nullopt;
             }
 
@@ -112,31 +112,31 @@ struct stripe_texture_packer final : detail::texture_packer {
 
         s.x_remainder -= width;
         if( s.x_remainder < min_size ) {
-        s.x_remainder = 0;
-    }
+            s.x_remainder = 0;
+        }
 
-    return rect;
-}
+        return rect;
+    }
 };
 
 struct null_texture_packer final : detail::texture_packer {
 
-bool has_contents;
+    bool has_contents;
 
-explicit null_texture_packer( const SDL_Rect &bounds )
+    explicit null_texture_packer( const SDL_Rect &bounds )
         : texture_packer( bounds )
         , has_contents( false ) {
     }
 
     std::optional<SDL_Rect> pack( const uint32_t width, const uint32_t height ) override {
         if( has_contents
-        || std::cmp_greater( width, bounds.w )
-        || std::cmp_greater( height, bounds.h ) ) {
-        return std::nullopt;
-    }
-    has_contents = true;
-    return bounds;
-};
+            || std::cmp_greater( width, bounds.w )
+            || std::cmp_greater( height, bounds.h ) ) {
+            return std::nullopt;
+        }
+        has_contents = true;
+        return bounds;
+    };
 };
 
 auto dynamic_atlas::update_staging_area(
@@ -478,10 +478,10 @@ atlas_texture dynamic_atlas::allocate_sprite_internal( const int w, const int h 
 SDL_GPUTexture *dynamic_atlas::find_gpu_texture( SDL_Texture *legacy_tex ) const
 {
     if( !legacy_tex ) {
-    return nullptr;
-}
-for( const auto &s : sheets ) {
-    if( s.texture.get() == legacy_tex ) {
+        return nullptr;
+    }
+    for( const auto &s : sheets ) {
+        if( s.texture.get() == legacy_tex ) {
             return s.gpu_texture.get();
         }
     }
@@ -491,9 +491,9 @@ for( const auto &s : sheets ) {
 dynamic_atlas::gpu_lookup dynamic_atlas::find_gpu_texture_full( SDL_Texture *legacy_tex ) const
 {
     if( !legacy_tex ) {
-    return { nullptr, 0, 0 };
-}
-const auto it = std::ranges::find_if( sheets, [legacy_tex]( const sprite_sheet & s ) {
+        return { nullptr, 0, 0 };
+    }
+    const auto it = std::ranges::find_if( sheets, [legacy_tex]( const sprite_sheet & s ) {
         return s.texture.get() == legacy_tex;
     } );
     if( it == sheets.end() ) {
@@ -601,9 +601,9 @@ auto dynamic_atlas::upload_sprite_normal( SDL_Texture *legacy_tex, const SDL_Rec
 auto dynamic_atlas::normal_v_offset( SDL_Texture *legacy_tex ) const -> float
 {
     if( !ENABLE_NORMAL_ATLAS || !legacy_tex ) {
-    return 0.0f;
-}
-const auto it = std::ranges::find_if( sheets, [legacy_tex]( const sprite_sheet & s ) {
+        return 0.0f;
+    }
+    const auto it = std::ranges::find_if( sheets, [legacy_tex]( const sprite_sheet & s ) {
         return s.texture.get() == legacy_tex;
     } );
     if( it == sheets.end() || !it->gpu_texture || it->gpu_atlas_height <= it->atlas_height ) {
@@ -615,16 +615,16 @@ const auto it = std::ranges::find_if( sheets, [legacy_tex]( const sprite_sheet &
 auto dynamic_atlas::normal_v_offset() const -> float
 {
     if( !ENABLE_NORMAL_ATLAS ) {
-    return 0.0f;
-}
-// The fragment `nrm_atlas_v` uniform is GLOBAL to a frame, not per segment, so it
-// needs one value for the whole atlas. That is well defined here because every
-// page is allocated with the same derived `colour_h` (allocate_sprite computes it
-// from the same caps every time), hence the same 0.5 ratio. Report the first page
-// that actually has a GPU mirror; pages without one are never sampled through the
-// GPU path anyway. Returns 0.0f when there is no such page, which the shader reads
-// as "feature disabled" and falls back to surface_normal().
-const auto usable = std::ranges::find_if( sheets, []( const sprite_sheet & s ) {
+        return 0.0f;
+    }
+    // The fragment `nrm_atlas_v` uniform is GLOBAL to a frame, not per segment, so it
+    // needs one value for the whole atlas. That is well defined here because every
+    // page is allocated with the same derived `colour_h` (allocate_sprite computes it
+    // from the same caps every time), hence the same 0.5 ratio. Report the first page
+    // that actually has a GPU mirror; pages without one are never sampled through the
+    // GPU path anyway. Returns 0.0f when there is no such page, which the shader reads
+    // as "feature disabled" and falls back to surface_normal().
+    const auto usable = std::ranges::find_if( sheets, []( const sprite_sheet & s ) {
         return s.gpu_texture && s.gpu_atlas_height > s.atlas_height;
     } );
     if( usable == sheets.end() ) {

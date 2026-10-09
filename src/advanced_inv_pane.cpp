@@ -60,15 +60,15 @@ bool advanced_inventory_pane::is_filtered( const advanced_inv_listitem &it ) con
 bool advanced_inventory_pane::is_filtered( const item &it ) const
 {
     if( it.has_flag( STATIC( flag_id( "HIDDEN_ITEM" ) ) ) ) {
-    return true;
-}
-if( filter.empty() ) {
-    return false;
-}
+        return true;
+    }
+    if( filter.empty() ) {
+        return false;
+    }
 
-const std::string str = it.tname();
-if( !filtercache.contains( str ) ) {
-    const auto filter_fn = item_filter_from_string( filter );
+    const std::string str = it.tname();
+    if( !filtercache.contains( str ) ) {
+        const auto filter_fn = item_filter_from_string( filter );
         filtercache[str] = filter_fn;
 
         return !filter_fn( it );

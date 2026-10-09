@@ -14,8 +14,7 @@ class is_pimpl_helper<pimpl<T>> : public std::true_type
 {
 };
 template<typename T>
-class is_pimpl : public is_pimpl_helper<std::decay_t<T>>
-{
+class is_pimpl : public is_pimpl_helper<std::decay_t<T>> {
 };
 /**
  * This is a wrapper for implementing the pointer-to-implementation technique,
@@ -29,8 +28,7 @@ class is_pimpl : public is_pimpl_helper<std::decay_t<T>>
  * The constructor forwards all its arguments to the constructor of @ref T.
  */
 template <typename T>
-class pimpl : private std::unique_ptr<T>
-{
+class pimpl : private std::unique_ptr<T> {
     public:
         // Original second template arguments was `std::enable_if<std::is_constructible<T, Args>::value>`,
         // but this caused errors in few compilers when `T` was not a complete type.
@@ -45,7 +43,8 @@ class pimpl : private std::unique_ptr<T>
         explicit pimpl( const pimpl<T> &rhs ) : std::unique_ptr<T>( new T( *rhs ) ) { }
         explicit pimpl( pimpl<T> &&rhs )  noexcept : std::unique_ptr<T>( new T( std::move( *rhs ) ) ) { }
 
-        pimpl<T> &operator=( const pimpl<T> &rhs ) {
+        pimpl<T> &operator=( const pimpl<T> &rhs )
+        {
             operator*() = *rhs;
             return *this;
         }
@@ -63,12 +62,13 @@ class pimpl : private std::unique_ptr<T>
 
         /// Forwards the stream to `T::deserialize`.
         template<typename JsonStream>
-        void deserialize( JsonStream &stream ) {
+        void deserialize( JsonStream & stream )
+        {
             operator*().deserialize( stream );
         }
         /// Forwards the stream to `T::serialize`.
         template<typename JsonStream>
-        void serialize( JsonStream &stream ) const {
+        void serialize( JsonStream & stream ) const {
             operator*().serialize( stream );
         }
 };

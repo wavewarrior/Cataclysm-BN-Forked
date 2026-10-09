@@ -285,7 +285,7 @@ float npc::vehicle_danger( int radius ) const
 
     // TODO: check for most dangerous vehicle?
     for( size_t i = 0; i < vehicles.size(); ++i ) {
-    const wrapped_vehicle &wrapped_veh = vehicles[i];
+        const wrapped_vehicle &wrapped_veh = vehicles[i];
         if( wrapped_veh.v->is_moving() ) {
             // FIXME: this can't be the right way to do this
             units::angle facing = wrapped_veh.v->face.dir();
@@ -377,25 +377,25 @@ int npc::value( const item &it ) const
 int npc::value( const item &it, int market_price ) const
 {
     if( it.is_dangerous() || ( it.has_flag( flag_BOMB ) && it.is_active() ) || it.made_of( LIQUID ) ) {
-    // NPCs won't be interested in buying active explosives or spilled liquids
-    return -1000;
-}
+        // NPCs won't be interested in buying active explosives or spilled liquids
+        return -1000;
+    }
 
-// faction currency trades at market price
-if( my_fac && my_fac->currency() == it.typeId() ) {
-    return market_price;
-}
+    // faction currency trades at market price
+    if( my_fac && my_fac->currency() == it.typeId() ) {
+        return market_price;
+    }
 
-int ret = 0;
-double weapon_val = npc_ai::weapon_value( *this, it, it.ammo_capacity() )
-                    - npc_ai::wielded_value( *this );
-if( weapon_val > 0 ) {
-    ret += weapon_val;
-}
+    int ret = 0;
+    double weapon_val = npc_ai::weapon_value( *this, it, it.ammo_capacity() )
+                        - npc_ai::wielded_value( *this );
+    if( weapon_val > 0 ) {
+        ret += weapon_val;
+    }
 
-if( it.is_food() ) {
-    int comestval = 0;
-    if( nutrition_for( it ) > 0 || it.get_comestible()->quench > 0 ) {
+    if( it.is_food() ) {
+        int comestval = 0;
+        if( nutrition_for( it ) > 0 || it.get_comestible()->quench > 0 ) {
             comestval++;
         }
         if( max_stored_kcal() - get_stored_kcal() > 500 ) {
@@ -411,7 +411,7 @@ if( it.is_food() ) {
     }
 
     if( it.is_ammo() ) {
-    const ammotype &at = it.ammo_type();
+        const ammotype &at = it.ammo_type();
         if( primary_weapon().is_gun() && primary_weapon().ammo_types().contains( at ) ) {
             // TODO: magazines - don't count ammo as usable if the weapon isn't.
             ret += 14;
@@ -429,9 +429,9 @@ if( it.is_food() ) {
     }
 
     if( it.is_book() ) {
-    auto &book = *it.type->book;
-    ret += book.fun;
-    if( book.skill && get_skill_level( book.skill ) < book.level &&
+        auto &book = *it.type->book;
+        ret += book.fun;
+        if( book.skill && get_skill_level( book.skill ) < book.level &&
             get_skill_level( book.skill ) >= book.req ) {
             ret += book.level * 3;
         }
@@ -442,10 +442,10 @@ if( it.is_food() ) {
 
     // TODO: Sometimes we want more than one tool?  Also we don't want EVERY tool.
     if( it.is_tool() && !has_amount( it.typeId(), 1 ) ) {
-    ret += market_price * 0.2; // 20% premium for fresh tools
-}
-ret += market_price;
-return ret;
+        ret += market_price * 0.2; // 20% premium for fresh tools
+    }
+    ret += market_price;
+    return ret;
 }
 
 bool npc::has_painkiller()
@@ -456,7 +456,7 @@ bool npc::has_painkiller()
 bool npc::took_painkiller() const
 {
     return ( has_effect( effect_pkill1 ) || has_effect( effect_pkill2 ) ||
-    has_effect( effect_pkill3 ) || has_effect( effect_pkill_l ) );
+             has_effect( effect_pkill3 ) || has_effect( effect_pkill_l ) );
 }
 
 int npc::get_faction_ver() const
@@ -493,7 +493,7 @@ bool npc::guaranteed_hostile() const
 Attitude npc::attitude_to( const Creature &other ) const
 {
     if( other.is_npc() || other.is_player() ) {
-    const player &guy = dynamic_cast<const player &>( other );
+        const player &guy = dynamic_cast<const player &>( other );
         // check faction relationships first
         const auto *guy_fac = guy.get_faction();
         if( my_fac != nullptr && guy_fac != nullptr ) {
@@ -509,42 +509,42 @@ Attitude npc::attitude_to( const Creature &other ) const
     }
 
     if( is_player_ally() ) {
-    // Friendly NPCs share player's alliances
-    return g->u.attitude_to( other );
+        // Friendly NPCs share player's alliances
+        return g->u.attitude_to( other );
     }
 
     if( other.is_npc() ) {
-    // Hostile NPCs are also hostile towards player's allies
-    if( is_enemy() && other.attitude_to( g->u ) == Attitude::A_FRIENDLY ) {
+        // Hostile NPCs are also hostile towards player's allies
+        if( is_enemy() && other.attitude_to( g->u ) == Attitude::A_FRIENDLY ) {
             return Attitude::A_HOSTILE;
         }
 
         return Attitude::A_NEUTRAL;
     } else if( other.is_player() ) {
-    // For now, make it symmetric.
-    return other.attitude_to( *this );
+        // For now, make it symmetric.
+        return other.attitude_to( *this );
     }
 
     // TODO: Get rid of the ugly cast without duplicating checks
     const monster &m = dynamic_cast<const monster &>( other );
     switch( m.attitude( this ) ) {
-    case MATT_FOLLOW:
-    case MATT_FPASSIVE:
-    case MATT_IGNORE:
-    case MATT_FLEE:
-        return Attitude::A_NEUTRAL;
-    case MATT_FRIEND:
-    case MATT_ZLAVE:
-        return Attitude::A_FRIENDLY;
-    case MATT_ATTACK:
-        return Attitude::A_HOSTILE;
-    case MATT_NULL:
-    case MATT_UNKNOWN:
-    case NUM_MONSTER_ATTITUDES:
-        break;
-}
+        case MATT_FOLLOW:
+        case MATT_FPASSIVE:
+        case MATT_IGNORE:
+        case MATT_FLEE:
+            return Attitude::A_NEUTRAL;
+        case MATT_FRIEND:
+        case MATT_ZLAVE:
+            return Attitude::A_FRIENDLY;
+        case MATT_ATTACK:
+            return Attitude::A_HOSTILE;
+        case MATT_NULL:
+        case MATT_UNKNOWN:
+        case NUM_MONSTER_ATTITUDES:
+            break;
+    }
 
-return Attitude::A_NEUTRAL;
+    return Attitude::A_NEUTRAL;
 }
 
 float npc::danger_assessment()
@@ -709,7 +709,7 @@ void npc::die( Creature *nkiller )
 mfaction_id npc::get_monster_faction() const
 {
     if( my_fac && my_fac->mon_faction().is_valid() ) {
-    return my_fac->mon_faction();
+        return my_fac->mon_faction();
     }
 
     // legacy checks
@@ -719,11 +719,11 @@ mfaction_id npc::get_monster_faction() const
     static const string_id<monfaction> bee_fac( "bee" );
 
     if( is_player_ally() ) {
-    return player_fac.id();
+        return player_fac.id();
     }
 
     if( has_trait( trait_BEE ) ) {
-    return bee_fac.id();
+        return bee_fac.id();
     }
 
     return human_fac.id();
@@ -775,21 +775,21 @@ npc_companion_mission npc::get_companion_mission() const
 attitude_group npc::get_attitude_group( npc_attitude att ) const
 {
     switch( att ) {
-    case NPCATT_MUG:
-    case NPCATT_WAIT_FOR_LEAVE:
-    case NPCATT_KILL:
-        return attitude_group::hostile;
-    case NPCATT_FLEE:
-    case NPCATT_FLEE_TEMP:
-        return attitude_group::fearful;
-    case NPCATT_FOLLOW:
-    case NPCATT_ACTIVITY:
-    case NPCATT_LEAD:
-        return attitude_group::friendly;
-    default:
-        break;
-}
-return attitude_group::neutral;
+        case NPCATT_MUG:
+        case NPCATT_WAIT_FOR_LEAVE:
+        case NPCATT_KILL:
+            return attitude_group::hostile;
+        case NPCATT_FLEE:
+        case NPCATT_FLEE_TEMP:
+            return attitude_group::fearful;
+        case NPCATT_FOLLOW:
+        case NPCATT_ACTIVITY:
+        case NPCATT_LEAD:
+            return attitude_group::friendly;
+        default:
+            break;
+    }
+    return attitude_group::neutral;
 }
 
 npc_attitude npc::get_attitude() const

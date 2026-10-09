@@ -104,14 +104,14 @@ class player_activity
 
         int get_moves_left() const {
             if( actor ) {
-            return actor->progress.get_moves_left();
+                return actor->progress.get_moves_left();
             }
             return moves_left;
         }
 
         bool complete() const {
             if( actor ) {
-            return actor->progress.complete();
+                return actor->progress.complete();
             }
             return moves_left <= 0;
         }
@@ -138,7 +138,7 @@ class player_activity
         bool rooted() const { return type != activity_id::NULL_ID() && type->rooted(); }
         auto has_idle_bubble_effect() const -> bool {
             return type != activity_id::NULL_ID()
-                   && type->bubble_effect() == activity_bubble_effect::idle;
+            && type->bubble_effect() == activity_bubble_effect::idle;
         }
         auto has_special_turns() const -> bool {
             return type != activity_id::NULL_ID() && type->special();

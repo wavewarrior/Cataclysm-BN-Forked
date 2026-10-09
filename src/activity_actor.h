@@ -270,7 +270,7 @@ class activity_actor
         */
         virtual float calc_skill_factor( const Character &/*who*/,
                                          const std::vector<activity_req<skill_id>> &/*skills*/ ) const {
-            return -1.0f;
+            return - 1.0f;
         }
 
         /*

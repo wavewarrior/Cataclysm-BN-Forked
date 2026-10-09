@@ -146,8 +146,7 @@ class JsonIn;
 /**
  * Class for storing translation context and raw string for deferred translation
  **/
-class translation
-{
+class translation {
     public:
         struct plural_tag {};
 
@@ -240,8 +239,8 @@ class translation
         /**
          * Compare translations by their context, raw strings (singular / plural), and no-translation flag
          */
-        bool operator==( const translation &that ) const;
-        bool operator!=( const translation &that ) const;
+        bool operator == ( const translation &that ) const;
+        bool operator != ( const translation &that ) const;
 
         /**
          * Only used for migrating old snippet hashes into snippet ids.
@@ -256,22 +255,22 @@ class translation
         }
 
     private:
-        translation( const std::string &ctxt, const std::string &raw );
-        translation( const std::string &raw );
-        translation( const std::string &raw, const std::string &raw_pl, plural_tag );
-        translation( const std::string &ctxt, const std::string &raw, const std::string &raw_pl,
+        translation( const std::string & ctxt, const std::string & raw );
+        translation( const std::string & raw );
+        translation( const std::string & raw, const std::string & raw_pl, plural_tag );
+        translation( const std::string & ctxt, const std::string & raw, const std::string & raw_pl,
                      plural_tag );
         struct no_translation_tag {};
-        translation( const std::string &str, no_translation_tag );
+        translation( const std::string & str, no_translation_tag );
 
-        cata::value_ptr<std::string> ctxt = nullptr;
+        cata::value_ptr < std::string > ctxt = nullptr;
         std::string raw;
-        cata::value_ptr<std::string> raw_pl = nullptr;
+        cata::value_ptr < std::string > raw_pl = nullptr;
         bool needs_translation = false;
         // translation cache. For "plural" translation only latest `num` is optimistically cached
         mutable int cached_language_version = INVALID_LANGUAGE_VERSION;
         mutable int cached_num = 0; // `num`, which `cached_translation` corresponds to
-        mutable cata::value_ptr<std::string> cached_translation;
+        mutable cata::value_ptr < std::string > cached_translation;
 };
 
 /**
@@ -293,7 +292,7 @@ translation no_translation( const std::string &str );
 /**
  * Stream output and concatenation of translations. Singular forms are used.
  **/
-std::ostream &operator<<( std::ostream &out, const translation &t );
+std::ostream & operator<<( std::ostream &out, const translation &t );
 std::string operator+( const translation &lhs, const std::string &rhs );
 std::string operator+( const std::string &lhs, const translation &rhs );
 std::string operator+( const translation &lhs, const translation &rhs );
@@ -306,40 +305,44 @@ std::string operator+( const translation &lhs, const translation &rhs );
 // achieved by sorting a list of pairs where the first element of the pair is
 // the translated name.
 struct localized_comparator {
-    template<typename T, typename U>
-    bool operator()( const std::pair<T, U> &l, const std::pair<T, U> &r ) const {
-        if( ( *this )( l.first, r.first ) ) {
-        return true;
+    template < typename T, typename U >
+    bool operator()( const std::pair < T, U > &l, const std::pair < T, U > &r ) const {
+        if( ( *this )( l.first, r.first ) )
+        {
+            return true;
+        }
+        if( ( *this )( r.first, l.first ) )
+        {
+            return false;
+        }
+        return ( *this )( l.second, r.second );
     }
-    if( ( *this )( r.first, l.first ) ) {
-        return false;
-    }
-    return ( *this )( l.second, r.second );
-}
 
-template<typename Head, typename... Tail>
-bool operator()( const std::tuple<Head, Tail...> &l,
-                     const std::tuple<Head, Tail...> &r ) const {
-        if( ( *this )( std::get<0>( l ), std::get<0>( r ) ) ) {
-        return true;
+    template < typename Head, typename... Tail >
+    bool operator()( const std::tuple < Head, Tail... > &l,
+                     const std::tuple < Head, Tail... > &r ) const {
+        if( ( *this )( std::get < 0 > ( l ), std::get < 0 > ( r ) ) )
+        {
+            return true;
+        }
+        if( ( *this )( std::get < 0 > ( r ), std::get < 0 > ( l ) ) )
+        {
+            return false;
+        }
+        constexpr std::make_index_sequence < sizeof...( Tail ) > Ints{};
+        return ( *this )( tie_tail( l, Ints ), tie_tail( r, Ints ) );
     }
-    if( ( *this )( std::get<0>( r ), std::get<0>( l ) ) ) {
-        return false;
-    }
-    constexpr std::make_index_sequence<sizeof...( Tail )> Ints{};
-    return ( *this )( tie_tail( l, Ints ), tie_tail( r, Ints ) );
-}
 
-template<typename T>
-bool operator()( const T &l, const T &r ) const {
+    template < typename T >
+    bool operator()( const T & l, const T & r ) const {
         return l < r;
     }
 
     bool operator()( const std::string &, const std::string & ) const;
     bool operator()( const std::wstring &, const std::wstring & ) const;
 
-    template<typename Head, typename... Tail, size_t... Ints>
-    auto tie_tail( const std::tuple<Head, Tail...> &t, std::index_sequence<Ints...> ) const {
+    template < typename Head, typename... Tail, size_t... Ints >
+    auto tie_tail( const std::tuple < Head, Tail... > &t, std::index_sequence < Ints... > ) const {
         return std::tie( std::get < Ints + 1 > ( t )... );
     }
 };

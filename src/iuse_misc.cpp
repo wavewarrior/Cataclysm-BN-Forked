@@ -1762,7 +1762,7 @@ int iuse::toggle_heats_food( player *p, item *it, bool, const tripoint_bub_ms & 
         it->set_flag( json_flag_HEATS_FOOD );
         p->add_msg_if_player(
             _( "You will try to use %s to heat food next time you eat something that should be "
-               "eaten hot." ),
+           "eaten hot." ),
             it->tname().c_str() );
     } else {
         it->unset_flag( json_flag_HEATS_FOOD );

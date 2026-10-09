@@ -297,7 +297,7 @@ bool item::will_explode_in_fire() const
 {
     if( type->explode_in_fire ) { return true; }
 
-if( type->ammo && ( type->ammo->special_cookoff || type->ammo->cookoff ) ) { return true; }
+    if( type->ammo && ( type->ammo->special_cookoff || type->ammo->cookoff ) ) { return true; }
 
     // Most containers do nothing to protect the contents from fire
     if( !is_magazine() || !type->magazine->protects_contents ) {
@@ -310,7 +310,7 @@ if( type->ammo && ( type->ammo->special_cookoff || type->ammo->cookoff ) ) { ret
 }
 
 detached_ptr<item> item::detonate(
-    detached_ptr<item>&& self, const tripoint_bub_ms& p, std::vector<detached_ptr<item>> &drops )
+    detached_ptr<item>&& self, const tripoint_bub_ms& p, std::vector<detached_ptr<item >> &drops )
 {
     if( self->type->explosion ) {
         explosion_handler::explosion( p, self->type->explosion, self->activated_by );

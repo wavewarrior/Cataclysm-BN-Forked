@@ -53,13 +53,13 @@ coop_server::~coop_server() { shutdown(); }
 auto coop_server::listen( uint16_t port ) -> bool
 {
     if( !NET_Init() ) {
-    DebugLog( DL::Error, DC::Main ) << "[coop] NET_Init failed: " << SDL_GetError();
+        DebugLog( DL::Error, DC::Main ) << "[coop] NET_Init failed: " << SDL_GetError();
         return false;
     }
     net_initialized_ = true;
     server_sock_ = NET_CreateServer( nullptr, port, 0 );
     if( !server_sock_ ) {
-    DebugLog( DL::Error, DC::Main ) << "[coop] NET_CreateServer failed: " << SDL_GetError();
+        DebugLog( DL::Error, DC::Main ) << "[coop] NET_CreateServer failed: " << SDL_GetError();
         return false;
     }
     DebugLog( DL::Info, DC::Main ) << "[coop] listening on port " << port;
@@ -69,8 +69,8 @@ auto coop_server::listen( uint16_t port ) -> bool
 auto coop_server::try_accept() -> bool
 {
     if( transport_ ) { return true; }
-NET_StreamSocket* candidate = nullptr;
-if( !NET_AcceptClient( server_sock_, &candidate ) || !candidate ) { return false; }
+    NET_StreamSocket* candidate = nullptr;
+    if( !NET_AcceptClient( server_sock_, &candidate ) || !candidate ) { return false; }
     while( NET_GetConnectionStatus( candidate ) == 0 ) { SDL_Delay( 10 ); }
     if( NET_GetConnectionStatus( candidate ) < 0 ) {
         NET_DestroyStreamSocket( candidate );
@@ -85,8 +85,8 @@ auto coop_server::wait_for_client() -> bool
 {
     // Short-circuit if try_accept() already stored the client.
     if( transport_ ) { return true; }
-while( true ) {
-    if( try_accept() ) { return true; }
+    while( true ) {
+        if( try_accept() ) { return true; }
         SDL_Delay( 100 );
     }
 }
@@ -461,28 +461,28 @@ auto coop_server::try_pop_chat() -> std::optional<chat_entry>
 auto coop_server::coop_world_tick() -> void
 {
     if( !coop_session::get().is_host() ) {
-    return;
-}
+        return;
+    }
 
-// --- Pre-connected phases: host plays normally while join FSM runs ---
-const auto phase = join_phase_.load();
-if( phase == client_join_phase::listening ||
+    // --- Pre-connected phases: host plays normally while join FSM runs ---
+    const auto phase = join_phase_.load();
+    if( phase == client_join_phase::listening ||
         phase == client_join_phase::handshaking ||
         phase == client_join_phase::finalizing ) {
-    process_pending_join();
+        process_pending_join();
         g->post_action_world_step();
         return;
     }
 
     // Check for unexpected client disconnect — transition to reconnect window
     if( client_disconnected_.exchange( false ) ) {
-    handle_client_disconnect();
+        handle_client_disconnect();
     }
 
     // While awaiting reconnection: try to accept, count down, skip normal action processing
     if( phase == client_join_phase::disconnected ) {
-    --reconnect_countdown_;
-    if( reconnect_countdown_ <= 0 ) {
+        --reconnect_countdown_;
+        if( reconnect_countdown_ <= 0 ) {
             add_msg( m_bad, _( "Reconnection timed out. Listening for a new partner..." ) );
             DebugLog( DL::Info, DC::Main ) << "[coop] reconnect timeout — back to listening";
             // Despawn stale proxy NPC — a new client will spawn a fresh one.
@@ -523,8 +523,8 @@ if( phase == client_join_phase::listening ||
     // so the A4 delta sync carries ev_count=1 regardless of the current tile state.
     // Used by the resync integration test to trigger the client's hash-mismatch detection.
     if( pending_test_event_for_resync_ ) {
-    pending_test_event_for_resync_ = false;
-    if( auto * log = coop_mutation_log::current() ) {
+        pending_test_event_for_resync_ = false;
+        if( auto * log = coop_mutation_log::current() ) {
             log->push( { .type = coop_event_type::terrain_changed,
                          .pos  = tripoint_abs_ms{ 999, 999, 0 }, // far-offscreen: no real tile
                          .value = 1 } );
@@ -544,13 +544,13 @@ if( phase == client_join_phase::listening ||
     //    actions.
     npc* proxy = g->critter_by_id<npc>( coop_session::get().proxy_npc_id );
     if( proxy ) {
-    // C3a: mirror client's reported HP percentage onto the proxy so host-side
-    // NPC AI and combat calculations see the correct health state.
-    // IMPORTANT: always clamp to std::max(1,...) — never 0.  Setting any body
-    // part to 0 triggers is_dead_state() → cleanup_dead() → npc::die(), which
-    // spawns a corpse, drops inventory, and erases the proxy permanently.
-    // The proxy is a session placeholder; client death is signalled via C3b only.
-    const int pct = client_hp_pct_.load();
+        // C3a: mirror client's reported HP percentage onto the proxy so host-side
+        // NPC AI and combat calculations see the correct health state.
+        // IMPORTANT: always clamp to std::max(1,...) — never 0.  Setting any body
+        // part to 0 triggers is_dead_state() → cleanup_dead() → npc::die(), which
+        // spawns a corpse, drops inventory, and erases the proxy permanently.
+        // The proxy is a session placeholder; client death is signalled via C3b only.
+        const int pct = client_hp_pct_.load();
         for( const bodypart_id& bp : proxy->get_all_body_parts() ) {
             const int max_hp = proxy->get_part_hp_max( bp );
             proxy->set_part_hp_cur( bp, std::max( 1, max_hp * pct / 100 ) );
@@ -662,19 +662,19 @@ if( phase == client_join_phase::listening ||
     // avatar reports dead.  The proxy stays alive (HP clamped to 1) so it remains
     // a valid session placeholder.  Full respawn / session-end logic is deferred.
     if( client_dead_.load() && !client_death_announced_ ) {
-    client_death_announced_ = true;
-    add_msg( m_warning, _( "Your co-op partner has died." ) );
+        client_death_announced_ = true;
+        add_msg( m_warning, _( "Your co-op partner has died." ) );
     } else if( !client_dead_.load() ) {
-    client_death_announced_ = false; // reset if partner respawns
-}
+        client_death_announced_ = false; // reset if partner respawns
+    }
 
 
-// F2: process pending trade offer from client
-{
-    std::optional<std::string> trade_offer;
+    // F2: process pending trade offer from client
     {
-        std::scoped_lock lk{ action_mtx_ };
-        trade_offer = std::move( pending_trade_offer_json_ );
+        std::optional<std::string> trade_offer;
+        {
+            std::scoped_lock lk{ action_mtx_ };
+            trade_offer = std::move( pending_trade_offer_json_ );
             pending_trade_offer_json_.reset();
         }
         if( trade_offer.has_value() && !trade_offer->empty() ) {
@@ -696,19 +696,19 @@ if( phase == client_join_phase::listening ||
 
     // F3: tap-on-shoulder from client — cancel host's current activity
     if( pending_tap_.exchange( false ) ) {
-    if( g->u.activity ) { g->u.cancel_activity(); }
+        if( g->u.activity ) { g->u.cancel_activity(); }
         add_msg( m_info, _( "[%s] taps you on the shoulder!" ),
                  coop_session::get().partner_name );
     }
 
     // F5: team activity speed-up — reduce host activity progress when both doing same task
     if( g->u.activity ) {
-    std::string client_verb;
-    {
-        std::scoped_lock lk{ chat_mtx_ };
-        client_verb = client_activity_str_;
-    }
-    if( !client_verb.empty() ) {
+        std::string client_verb;
+        {
+            std::scoped_lock lk{ chat_mtx_ };
+            client_verb = client_activity_str_;
+        }
+        if( !client_verb.empty() ) {
             const std::string host_verb = g->u.activity->get_verb().translated();
             if( host_verb == client_verb ) {
                 g->u.activity->moves_left = std::max( 0,
@@ -719,15 +719,15 @@ if( phase == client_join_phase::listening ||
 
     // G2: client downed detection and countdown
     if( client_hp_pct_.load() == 0 && !client_dead_.load() && !client_downed_.load() ) {
-    client_downed_.store( true );
+        client_downed_.store( true );
         client_down_turns_remaining_ = COOP_DOWN_TIMEOUT_TURNS;
         send_chat( string_format( _( "[ALERT] %s is critically wounded! %d seconds remaining!" ),
                                   coop_session::get().partner_name,
                                   COOP_DOWN_TIMEOUT_TURNS ) );
     }
     if( client_downed_.load() ) {
-    --client_down_turns_remaining_;
-    if( client_down_turns_remaining_ > 0 && client_down_turns_remaining_ % 10 == 0 ) {
+        --client_down_turns_remaining_;
+        if( client_down_turns_remaining_ > 0 && client_down_turns_remaining_ % 10 == 0 ) {
             send_chat( string_format( _( "[%s is downed] %d seconds remaining..." ),
                                       coop_session::get().partner_name,
                                       client_down_turns_remaining_ ) );
@@ -753,8 +753,8 @@ if( phase == client_join_phase::listening ||
 auto coop_server::maybe_fast_forward() -> bool
 {
     if( !both_idle() ) { return false; }
-g->main_loop_accum_ms_ = COOP_FAST_FORWARD_ACCUM_MS;
-return true;
+    g->main_loop_accum_ms_ = COOP_FAST_FORWARD_ACCUM_MS;
+    return true;
 }
 
 auto coop_server::both_idle() const -> bool
@@ -774,16 +774,16 @@ auto coop_server::execute_player_cmd( npc* proxy, const player_cmd_t &cmd, const
 -> void
 {
     if( !proxy ) { return; }
-using K = player_cmd_kind;
+    using K = player_cmd_kind;
     switch( cmd.kind ) {
-    case K::move: {
-        // Authoritative client position: setpos(), not move_to().
-        // move_to() pathfinds and may stumble diagonally on blocked tiles.
-        // Read-modify-write in one frame (abs) — bub_pos() is avatar-bubble-
-        // relative while setpos(tripoint_bub_ms) is map-relative; mixing them
-        // via a bub_pos() read + bub-space arithmetic + setpos(bub_ms) write
-        // silently drifts whenever those two frames aren't identical.
-        const tripoint_abs_ms dest_abs = proxy->abs_pos() + cmd.delta;
+        case K::move: {
+            // Authoritative client position: setpos(), not move_to().
+            // move_to() pathfinds and may stumble diagonally on blocked tiles.
+            // Read-modify-write in one frame (abs) — bub_pos() is avatar-bubble-
+            // relative while setpos(tripoint_bub_ms) is map-relative; mixing them
+            // via a bub_pos() read + bub-space arithmetic + setpos(bub_ms) write
+            // silently drifts whenever those two frames aren't identical.
+            const tripoint_abs_ms dest_abs = proxy->abs_pos() + cmd.delta;
             const tripoint_bub_ms dest = abs_to_map_local( g->m, dest_abs );
             if( !g->m.inbounds( dest ) ) { break; }
             // Driving needs a real boarded proxy: unboard first (writing the position of a
@@ -868,12 +868,12 @@ using K = player_cmd_kind;
 auto coop_server::apply_pickup_manifest( const std::string& ctx_json ) -> void
 {
     if( ctx_json.empty() ) { return; }
-std::istringstream iss( ctx_json );
-JsonIn jin( iss );
-JsonObject root = jin.get_object();
-root.allow_omitted_members();
-for( JsonObject entry : root.get_array( "items" ) ) {
-    entry.allow_omitted_members();
+    std::istringstream iss( ctx_json );
+    JsonIn jin( iss );
+    JsonObject root = jin.get_object();
+    root.allow_omitted_members();
+    for( JsonObject entry : root.get_array( "items" ) ) {
+        entry.allow_omitted_members();
         const tripoint_abs_ms abs_pos{
             entry.get_int( "tx" ), entry.get_int( "ty" ), entry.get_int( "tz" )};
         const itype_id type( entry.get_string( "type" ) );
@@ -920,12 +920,12 @@ for( JsonObject entry : root.get_array( "items" ) ) {
 auto coop_server::apply_drop_manifest( const std::string& ctx_json ) -> void
 {
     if( ctx_json.empty() ) { return; }
-std::istringstream iss( ctx_json );
-JsonIn jin( iss );
-JsonObject root = jin.get_object();
-root.allow_omitted_members();
-for( JsonObject entry : root.get_array( "items" ) ) {
-    entry.allow_omitted_members();
+    std::istringstream iss( ctx_json );
+    JsonIn jin( iss );
+    JsonObject root = jin.get_object();
+    root.allow_omitted_members();
+    for( JsonObject entry : root.get_array( "items" ) ) {
+        entry.allow_omitted_members();
         const tripoint_abs_ms abs_pos{
             entry.get_int( "tx" ), entry.get_int( "ty" ), entry.get_int( "tz" )};
         const std::string item_json = entry.get_string( "data" );
@@ -988,18 +988,18 @@ auto arm_proxy_from_ctx( npc* proxy, JsonObject& ctx, bool require_gun ) -> bool
 auto coop_server::apply_terrain_change( const std::string &ctx_json ) -> void
 {
     if( ctx_json.empty() ) { return; }
-std::istringstream iss( ctx_json );
-JsonIn jin( iss );
-JsonObject root = jin.get_object();
-root.allow_omitted_members();
-const tripoint_abs_ms abs_pos{
-    root.get_int( "tx" ), root.get_int( "ty" ), root.get_int( "tz" )};
-const std::string ter_name  = root.get_string( "ter",  "" );
-const std::string furn_name = root.get_string( "furn", "" );
-const tripoint_bub_ms bub = abs_to_map_local( g->m, abs_pos );
-if( !g->m.inbounds( bub ) ) { return; }
-if( !ter_name.empty() ) {
-    const ter_str_id t( ter_name );
+    std::istringstream iss( ctx_json );
+    JsonIn jin( iss );
+    JsonObject root = jin.get_object();
+    root.allow_omitted_members();
+    const tripoint_abs_ms abs_pos{
+        root.get_int( "tx" ), root.get_int( "ty" ), root.get_int( "tz" )};
+    const std::string ter_name  = root.get_string( "ter",  "" );
+    const std::string furn_name = root.get_string( "furn", "" );
+    const tripoint_bub_ms bub = abs_to_map_local( g->m, abs_pos );
+    if( !g->m.inbounds( bub ) ) { return; }
+    if( !ter_name.empty() ) {
+        const ter_str_id t( ter_name );
         if( t.is_valid() ) {
             g->m.ter_set( bub, t );
         } else {
@@ -1008,7 +1008,7 @@ if( !ter_name.empty() ) {
         }
     }
     if( !furn_name.empty() ) {
-    const furn_str_id f( furn_name );
+        const furn_str_id f( furn_name );
         if( f.is_valid() ) {
             g->m.furn_set( bub, f );
         } else {
@@ -1026,64 +1026,64 @@ auto coop_server::execute_client_action(
 {
     if( !proxy ) { return; }
 
-// Try the typed path first: movement and simple no-payload commands.
-const auto move_cmd = parse_move_cmd( key );
-if( move_cmd.kind == player_cmd_kind::move ) {
-    execute_player_cmd( proxy, move_cmd, seq );
+    // Try the typed path first: movement and simple no-payload commands.
+    const auto move_cmd = parse_move_cmd( key );
+    if( move_cmd.kind == player_cmd_kind::move ) {
+        execute_player_cmd( proxy, move_cmd, seq );
         return;
     }
     if( key == "PAUSE" || key == "WAIT" ) {
-    execute_player_cmd( proxy, player_cmd_t{.kind = player_cmd_kind::pause}, seq );
+        execute_player_cmd( proxy, player_cmd_t{.kind = player_cmd_kind::pause}, seq );
         return;
     }
     if( key == "PICKUP" ) {
-    // C1 (Option B): client picked up items locally; mirror the exact removals on the host.
-    proxy->moves -= proxy->get_speed();
+        // C1 (Option B): client picked up items locally; mirror the exact removals on the host.
+        proxy->moves -= proxy->get_speed();
         apply_pickup_manifest( ctx_json );
         return;
     }
     if( key == "DROP" ) {
-    // C2a (Option B): client dropped items locally; mirror the additions on the host.
-    proxy->moves -= proxy->get_speed();
+        // C2a (Option B): client dropped items locally; mirror the additions on the host.
+        proxy->moves -= proxy->get_speed();
         apply_drop_manifest( ctx_json );
         return;
     }
     if( key == "TERRAIN_CHANGE" ) {
-    // C2b: client opened/closed a door or otherwise mutated terrain.
-    apply_terrain_change( ctx_json );
+        // C2b: client opened/closed a door or otherwise mutated terrain.
+        apply_terrain_change( ctx_json );
         return;
     }
     if( key == "SLEEP" ) {
-    execute_player_cmd( proxy, player_cmd_t{.kind = player_cmd_kind::sleep}, seq );
+        execute_player_cmd( proxy, player_cmd_t{.kind = player_cmd_kind::sleep}, seq );
         return;
     }
     if( key == "CRAFT" ) {
-    execute_player_cmd( proxy, player_cmd_t{.kind = player_cmd_kind::craft}, seq );
+        execute_player_cmd( proxy, player_cmd_t{.kind = player_cmd_kind::craft}, seq );
         return;
     }
     if( key == "EAT" ) {
-    execute_player_cmd( proxy, make_player_eat_cmd(), seq );
+        execute_player_cmd( proxy, make_player_eat_cmd(), seq );
         return;
     }
     if( key == "RELOAD" ) {
-    execute_player_cmd( proxy, make_player_reload_cmd(), seq );
+        execute_player_cmd( proxy, make_player_reload_cmd(), seq );
         return;
     }
     if( key == "USE" ) {
-    execute_player_cmd( proxy, make_player_use_cmd(), seq );
+        execute_player_cmd( proxy, make_player_use_cmd(), seq );
         return;
     }
     if( key == "VEH_CONTROL" ) {
-    // D1: the client took or let go of the controls (and maybe turned the engine
-    // on/off).  Mirror it on the proxy so the host's sim sees a driver.
-    // Mirrors start_engines_activity_actor::finish(): is_engine_on() is "part
-    // available && enabled" and the actor's start loop enables every unbroken engine
-    // first (vehicle_use.cpp:1243-1247), so we apply the same enable-all guard and
-    // derive engine_on from how many engines actually started.
-    bool on = false;
-    bool engine = false;
-    try {
-        if( !ctx_json.empty() ) {
+        // D1: the client took or let go of the controls (and maybe turned the engine
+        // on/off).  Mirror it on the proxy so the host's sim sees a driver.
+        // Mirrors start_engines_activity_actor::finish(): is_engine_on() is "part
+        // available && enabled" and the actor's start loop enables every unbroken engine
+        // first (vehicle_use.cpp:1243-1247), so we apply the same enable-all guard and
+        // derive engine_on from how many engines actually started.
+        bool on = false;
+        bool engine = false;
+        try {
+            if( !ctx_json.empty() ) {
                 std::istringstream iss( ctx_json );
                 JsonIn jin( iss );
                 JsonObject ctx = jin.get_object();
@@ -1127,12 +1127,12 @@ if( move_cmd.kind == player_cmd_kind::move ) {
         return;
     }
     if( key == "VEH_DRIVE" ) {
-    // D1: throttle/steer/vertical input from the client's driver seat.
-    int dx = 0;
-    int dy = 0;
-    int dz = 0;
-    try {
-        if( !ctx_json.empty() ) {
+        // D1: throttle/steer/vertical input from the client's driver seat.
+        int dx = 0;
+        int dy = 0;
+        int dz = 0;
+        try {
+            if( !ctx_json.empty() ) {
                 std::istringstream iss( ctx_json );
                 JsonIn jin( iss );
                 JsonObject ctx = jin.get_object();
@@ -1152,7 +1152,7 @@ if( move_cmd.kind == player_cmd_kind::move ) {
         return;
     }
     if( key == "MELEE" ) {
-    if( !ctx_json.empty() ) {
+        if( !ctx_json.empty() ) {
             std::istringstream iss( ctx_json );
             JsonIn jin( iss );
             JsonObject ctx = jin.get_object();
@@ -1169,7 +1169,7 @@ if( move_cmd.kind == player_cmd_kind::move ) {
         return;
     }
     if( key == "BUTCHER" ) {
-    if( !ctx_json.empty() ) {
+        if( !ctx_json.empty() ) {
             std::istringstream iss( ctx_json );
             JsonIn jin( iss );
             JsonObject ctx = jin.get_object();
@@ -1187,7 +1187,7 @@ if( move_cmd.kind == player_cmd_kind::move ) {
         return;
     }
     if( key == "ITEM_REMOVE" ) {
-    if( !ctx_json.empty() ) {
+        if( !ctx_json.empty() ) {
             std::istringstream iss( ctx_json );
             JsonIn jin( iss );
             JsonObject ctx = jin.get_object();
@@ -1206,7 +1206,7 @@ if( move_cmd.kind == player_cmd_kind::move ) {
         return;
     }
     if( key == "ITEM_REMOVE_ALL" ) {
-    if( !ctx_json.empty() ) {
+        if( !ctx_json.empty() ) {
             std::istringstream iss( ctx_json );
             JsonIn jin( iss );
             JsonObject ctx = jin.get_object();
@@ -1218,7 +1218,7 @@ if( move_cmd.kind == player_cmd_kind::move ) {
         return;
     }
     if( key == "FIELD_SET" ) {
-    if( !ctx_json.empty() ) {
+        if( !ctx_json.empty() ) {
             std::istringstream iss( ctx_json );
             JsonIn jin( iss );
             JsonObject ctx = jin.get_object();
@@ -1234,11 +1234,11 @@ if( move_cmd.kind == player_cmd_kind::move ) {
         return;
     }
     if( key == "CAST_SPELL" ) {
-    if( proxy ) { proxy->moves -= proxy->get_speed(); }
+        if( proxy ) { proxy->moves -= proxy->get_speed(); }
         return;
     }
     if( key == "WEAR" ) {
-    if( proxy && !ctx_json.empty() ) {
+        if( proxy && !ctx_json.empty() ) {
             try {
                 std::istringstream iss( ctx_json );
                 JsonIn jin( iss );
@@ -1251,7 +1251,7 @@ if( move_cmd.kind == player_cmd_kind::move ) {
         return;
     }
     if( key == "WORN_SYNC" ) {
-    if( proxy && !ctx_json.empty() ) {
+        if( proxy && !ctx_json.empty() ) {
             proxy->worn.clear();
             try {
                 std::istringstream iss( ctx_json );
@@ -1268,7 +1268,7 @@ if( move_cmd.kind == player_cmd_kind::move ) {
         return;
     }
     if( key == "EMOTE" ) {
-    if( !ctx_json.empty() ) {
+        if( !ctx_json.empty() ) {
             try {
                 std::istringstream iss( ctx_json );
                 JsonIn jin( iss );
@@ -1302,7 +1302,7 @@ if( move_cmd.kind == player_cmd_kind::move ) {
 
     // Target-position paths: both SMASH and FIRE use typed commands (B3 Phase 5/6).
     if( key == "SMASH" ) {
-    if( !ctx_json.empty() ) {
+        if( !ctx_json.empty() ) {
             std::istringstream iss( ctx_json );
             JsonIn jin( iss );
             JsonObject ctx = jin.get_object();
@@ -1317,7 +1317,7 @@ if( move_cmd.kind == player_cmd_kind::move ) {
             proxy->moves -= proxy->get_speed();
         }
     } else if( key == "FIRE" ) {
-    if( !ctx_json.empty() ) {
+        if( !ctx_json.empty() ) {
             std::istringstream iss( ctx_json );
             JsonIn jin( iss );
             JsonObject ctx = jin.get_object();
@@ -1335,7 +1335,7 @@ if( move_cmd.kind == player_cmd_kind::move ) {
             proxy->moves -= proxy->get_speed();
         }
     } else if( key == "MOVE_UP" || key == "MOVE_DOWN" ) {
-    const auto vc = parse_vertical_move_ctx( ctx_json );
+        const auto vc = parse_vertical_move_ctx( ctx_json );
         if( vc ) {
             // Use the absolute landing position directly (see execute_player_cmd's
             // K::move comment) rather than round-tripping through the avatar-
@@ -1411,23 +1411,23 @@ auto coop_server::resolve_fire_at_seq(
 {
     if( !proxy ) { return; }
 
-// A5.3: client sends tx/ty/tz as tripoint_abs_ms (globally consistent).
-// Derive target_bub for fire_gun + inbounds checks on this machine's reality bubble.
-const tripoint_abs_ms target_abs{target_ax, target_ay, target_az};
-const tripoint_bub_ms target_bub = abs_to_map_local( g->m, target_abs );
+    // A5.3: client sends tx/ty/tz as tripoint_abs_ms (globally consistent).
+    // Derive target_bub for fire_gun + inbounds checks on this machine's reality bubble.
+    const tripoint_abs_ms target_abs{target_ax, target_ay, target_az};
+    const tripoint_bub_ms target_bub = abs_to_map_local( g->m, target_abs );
 
-// A5.3 lag compensation: find the snapshot closest to the client's fire-seq and
-// temporarily reposition the creature that was at the target tile in that snapshot
-// but has since moved.  creature_moved events are filtered from the delta stream
-// (build_and_send_sync streamable filter), so these temp setpos calls do not appear
-// in the client's event log.  The monster section in the next sync always shows the
-// authoritative final position.
-monster* lag_target = nullptr;
-tripoint_bub_ms lag_original_bub;
+    // A5.3 lag compensation: find the snapshot closest to the client's fire-seq and
+    // temporarily reposition the creature that was at the target tile in that snapshot
+    // but has since moved.  creature_moved events are filtered from the delta stream
+    // (build_and_send_sync streamable filter), so these temp setpos calls do not appear
+    // in the client's event log.  The monster section in the next sync always shows the
+    // authoritative final position.
+    monster* lag_target = nullptr;
+    tripoint_bub_ms lag_original_bub;
 
-const int cid_at_target = coop_lag_find_target( position_history_, seq, target_abs );
-if( cid_at_target >= 0 ) {
-    for( const auto& [ptr, id] : monster_id_map_ ) {
+    const int cid_at_target = coop_lag_find_target( position_history_, seq, target_abs );
+    if( cid_at_target >= 0 ) {
+        for( const auto& [ptr, id] : monster_id_map_ ) {
             if( id == cid_at_target && !ptr->is_dead() ) {
                 lag_target = const_cast<monster *>( ptr );
                 break;
@@ -1672,7 +1672,7 @@ auto coop_server::handle_client_disconnect() -> void
 {
     // Join receiver_thread_ — it has already exited the loop
     if( receiver_thread_.joinable() ) {
-    receiver_thread_.request_stop();
+        receiver_thread_.request_stop();
         receiver_thread_.join();
     }
     // Drop the dead transport socket
@@ -1694,12 +1694,12 @@ auto coop_server::accept_reconnect() -> bool
 {
     // try_accept() is non-blocking; returns false if no pending connection
     if( !try_accept() ) {
-    return false;
-}
-// A new TCP connection is established — read one packet and expect reconnect
-std::string buf;
-if( !transport_->recv( buf, 100 ) ) { // short timeout — avoid stalling main thread
-    DebugLog( DL::Error, DC::Main ) << "[coop] accept_reconnect: recv failed";
+        return false;
+    }
+    // A new TCP connection is established — read one packet and expect reconnect
+    std::string buf;
+    if( !transport_->recv( buf, 100 ) ) { // short timeout — avoid stalling main thread
+        DebugLog( DL::Error, DC::Main ) << "[coop] accept_reconnect: recv failed";
         transport_.reset();
         return false;
     }
@@ -1758,8 +1758,8 @@ auto coop_server::has_client() const -> bool
 auto coop_server::process_pending_join() -> void
 {
     switch( join_phase_.load() ) {
-    case client_join_phase::listening: {
-        if( !server_sock_ || !try_accept() ) {
+        case client_join_phase::listening: {
+            if( !server_sock_ || !try_accept() ) {
                 return;
             }
             // Client TCP connected — capture main-thread state for the bg handshake.
@@ -1846,7 +1846,7 @@ auto coop_server::finalize_client_join() -> void
         client_join_pos_.value_or( g->u.abs_pos() );
     spawn_proxy_npc( proxy_spawn, "Partner" );
     if( !send_initial_sync() ) {
-    DebugLog( DL::Error, DC::Main ) << "[coop] initial sync failed — dropping client";
+        DebugLog( DL::Error, DC::Main ) << "[coop] initial sync failed — dropping client";
         transport_.reset();
         join_phase_.store( client_join_phase::listening );
         return;
@@ -1975,10 +1975,10 @@ auto coop_server::shutdown() -> void
 auto coop_server::send_chat( const std::string& text ) -> void
 {
     if( !running_ ) { return; }
-std::ostringstream oss;
-JsonOut jout( oss );
-jout.start_object();
-jout.member( "t", static_cast<int>( coop_pkt::chat ) );
+    std::ostringstream oss;
+    JsonOut jout( oss );
+    jout.start_object();
+    jout.member( "t", static_cast<int>( coop_pkt::chat ) );
     jout.member( "d" );
     jout.start_object();
     jout.member( "from", "host" );
@@ -2017,8 +2017,8 @@ auto coop_server::resolve_trade_offer( const std::string& offer_json, bool accep
 auto coop_server::send_raw( const std::string& json ) -> void
 {
     if( !running_ ) { return; }
-std::scoped_lock lk{send_mtx_};
-if( send_q_.size() >= 64 ) { send_q_.pop_front(); }
+    std::scoped_lock lk{send_mtx_};
+    if( send_q_.size() >= 64 ) { send_q_.pop_front(); }
     send_q_.push_back( json );
 }
 

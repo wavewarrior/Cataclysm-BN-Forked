@@ -443,17 +443,17 @@ auto submap::rebuild_outside_cache( const level_cache *above,
                                     const tripoint_bub_sm &grid_pos ) -> void
 {
     if( !outside_dirty ) {
-    return;
-}
-// Base case: OVERMAP_HEIGHT — everything is open sky.
-if( above == nullptr ) {
-    std::ranges::fill( std::span( &outside_cache[0][0], SEEX * SEEY ), true );
+        return;
+    }
+    // Base case: OVERMAP_HEIGHT — everything is open sky.
+    if( above == nullptr ) {
+        std::ranges::fill( std::span( &outside_cache[0][0], SEEX * SEEY ), true );
         std::ranges::fill( std::span( &sheltered_cache[0][0], SEEX * SEEY ), false );
         outside_dirty = false;
         return;
     }
     const auto abs_p = project_to<coords::ms>( grid_pos ).xy();
-for( const auto &p : submap_tiles() ) {
+    for( const auto &p : submap_tiles() ) {
         // A tile is outside if any tile in the 3×3 at z+1 satisfies:
         // (outside at z+1) AND (no floor at z+1 blocking the path).
         // Out-of-bounds neighbours (edge of loaded map) are treated as inside.
@@ -490,10 +490,10 @@ for( const auto &p : submap_tiles() ) {
 auto submap::rebuild_floor_cache( const map &m, const tripoint_bub_sm &grid_pos ) -> void
 {
     if( !floor_dirty ) {
-    return;
-}
-// Default: has floor (non-zero).
-std::ranges::fill( std::span( &floor_cache[0][0], SEEX * SEEY ), '\x01' );
+        return;
+    }
+    // Default: has floor (non-zero).
+    std::ranges::fill( std::span( &floor_cache[0][0], SEEX * SEEY ), '\x01' );
 
     const bool lowest_z = grid_pos.z() <= -OVERMAP_DEPTH;
     const submap* below = lowest_z ? nullptr
@@ -514,9 +514,9 @@ std::ranges::fill( std::span( &floor_cache[0][0], SEEX * SEEY ), '\x01' );
 auto submap::rebuild_pf_cache( const map &m, const tripoint_bub_sm &grid_pos ) -> void
 {
     if( !pf_dirty ) {
-    return;
-}
-for( const auto &sp : submap_tiles() ) {
+        return;
+    }
+    for( const auto &sp : submap_tiles() ) {
         const tripoint_bub_ms p = project_combine( grid_pos, sp );
         auto cur_value = PF_NORMAL;
 
@@ -562,11 +562,11 @@ for( const auto &sp : submap_tiles() ) {
 auto submap::rebuild_transparency_cache( const map &m, const tripoint_bub_sm &grid_pos ) -> void
 {
     if( !transparency_dirty ) {
-    return;
-}
-// outside_cache must be current before applying the weather sight penalty.
-if( outside_dirty ) {
-    const level_cache *above = ( grid_pos.z() < OVERMAP_HEIGHT )
+        return;
+    }
+    // outside_cache must be current before applying the weather sight penalty.
+    if( outside_dirty ) {
+        const level_cache *above = ( grid_pos.z() < OVERMAP_HEIGHT )
                                    ? &m.get_cache_ref( grid_pos.z() + 1 )
                                    : nullptr;
         rebuild_outside_cache( above, grid_pos );

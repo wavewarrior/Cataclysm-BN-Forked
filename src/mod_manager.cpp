@@ -44,9 +44,9 @@ bool string_id<MOD_INFORMATION>::is_valid() const
 auto MOD_INFORMATION::name() const -> std::string
 {
     if( translatable_info.name().empty() ) {
-    // "No name" gets confusing if many mods have no name
-    //~ name of a mod that has no name entry, (%s is the mods identifier)
-    return string_format( _( "No name (%s)" ), ident.c_str() );
+        // "No name" gets confusing if many mods have no name
+        //~ name of a mod that has no name entry, (%s is the mods identifier)
+        return string_format( _( "No name (%s)" ), ident.c_str() );
     } else {
         return translatable_info.name();
     }
@@ -55,7 +55,7 @@ auto MOD_INFORMATION::name() const -> std::string
 auto MOD_INFORMATION::name_raw() const -> std::string
 {
     if( translatable_info.name_raw().empty() ) {
-    return string_format( "No name (%s)", ident.c_str() );
+        return string_format( "No name (%s)", ident.c_str() );
     } else {
         return translatable_info.name_raw();
     }
@@ -532,10 +532,10 @@ translatable_mod_info::translatable_mod_info( std::string name,
 auto translatable_mod_info::name() -> std::string
 {
     if( name_raw_.empty() ) {
-    return "";
-}
-if( language_version != detail::get_current_language_version() ) {
-    update();
+        return "";
+    }
+    if( language_version != detail::get_current_language_version() ) {
+        update();
     }
     return name_tr;
 }
@@ -548,10 +548,10 @@ auto translatable_mod_info::name_raw() const -> std::string
 auto translatable_mod_info::description() -> std::string
 {
     if( description_raw.empty() ) {
-    return "";
-}
-if( language_version != detail::get_current_language_version() ) {
-    update();
+        return "";
+    }
+    if( language_version != detail::get_current_language_version() ) {
+        update();
     }
     return description_tr;
 }

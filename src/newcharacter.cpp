@@ -99,7 +99,7 @@ static const trait_flag_str_id flag_FEMALE_PREFERRED( "FEMALE_PREFERRED" );
 static auto profession_age_limits_enabled() -> bool
 {
     if( world_generator && world_generator->active_world ) {
-    return world_generator->active_world->info->WORLD_OPTIONS["ENFORCE_PROFESSION_AGE_RANGE"]
+        return world_generator->active_world->info->WORLD_OPTIONS["ENFORCE_PROFESSION_AGE_RANGE"]
                .value_as<bool>();
     }
     return false;
@@ -108,7 +108,7 @@ static auto profession_age_limits_enabled() -> bool
 static auto profession_age_bounds( const profession &prof ) -> std::pair<int, int>
 {
     if( profession_age_limits_enabled() ) {
-    if( const auto range = prof.starting_age_range() ) {
+        if( const auto range = prof.starting_age_range() ) {
             return { range->min, range->max };
         }
     }
@@ -1208,8 +1208,8 @@ trait_id Character::get_random_trait( const std::function<bool( const mutation_b
 
 auto newcharacter::add_default_mutation_type_traits( Character &ch ) -> void
 {
-for( const auto &default_mutation : get_default_mutations_for_types() ) {
-    const auto mutations = get_mutations_in_type( default_mutation.type_id );
+    for( const auto &default_mutation : get_default_mutations_for_types() ) {
+        const auto mutations = get_mutations_in_type( default_mutation.type_id );
         const auto has_mutation_type = std::ranges::any_of( mutations, [&]( const auto & trait ) {
             return ch.has_trait( trait );
         } );
@@ -1355,12 +1355,12 @@ void points_left::init_from_options()
 int points_left::stat_points_left() const
 {
     switch( limit ) {
-    case FREEFORM:
-    case ONE_POOL:
-        return stat_points + trait_points + skill_points;
-    case MULTI_POOL:
-        return std::min( trait_points_left(),
-                         stat_points + std::min( 0, trait_points + skill_points ) );
+        case FREEFORM:
+        case ONE_POOL:
+            return stat_points + trait_points + skill_points;
+        case MULTI_POOL:
+            return std::min( trait_points_left(),
+                             stat_points + std::min( 0, trait_points + skill_points ) );
         case TRANSFER:
             return 0;
     }
@@ -1371,11 +1371,11 @@ int points_left::stat_points_left() const
 int points_left::trait_points_left() const
 {
     switch( limit ) {
-    case FREEFORM:
-    case ONE_POOL:
-        return stat_points + trait_points + skill_points;
-    case MULTI_POOL:
-        return stat_points + trait_points + std::min( 0, skill_points );
+        case FREEFORM:
+        case ONE_POOL:
+            return stat_points + trait_points + skill_points;
+        case MULTI_POOL:
+            return stat_points + trait_points + std::min( 0, skill_points );
         case TRANSFER:
             return 0;
     }

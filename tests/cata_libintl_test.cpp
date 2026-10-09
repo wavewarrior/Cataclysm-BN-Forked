@@ -253,7 +253,7 @@ static std::vector<test_case_data> plf_calc_test_cases{{
      "1111111111"
      "1111111111"},
     {3, // Slovenian
-     // NOLINTNEXTLINE(cata-text-style): plf expression, not text
+        // NOLINTNEXTLINE(cata-text-style): plf expression, not text
      "(n%100==1 ? 0 : n%100==2 ? 1 : n%100==3 || n%100==4 ? 2 : 3)",
      "3012233333"
      "3333333333"
@@ -269,7 +269,7 @@ static std::vector<test_case_data> plf_calc_test_cases{{
      "3333333333"
      "3333333333"},
     {4, // Russian
-     // NOLINTNEXTLINE(cata-text-style): plf expression, not text
+        // NOLINTNEXTLINE(cata-text-style): plf expression, not text
      "n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2",
      "2011122222"
      "2222222222"
@@ -364,20 +364,20 @@ TEST_CASE("gnu_transifex_rules_equal", "[libintl][i18n][.]") {
 
     static std::vector<rules> rules_to_compare = {
         {{0, // Polish
-          // NOLINTNEXTLINE(cata-text-style): plf expression, not text
+             // NOLINTNEXTLINE(cata-text-style): plf expression, not text
           "(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2)",
           // NOLINTNEXTLINE(cata-text-style): plf expression, not text
           "(n==1 ? 0 : (n%10>=2 && n%10<=4) && (n%100<12 || n%100>14) ? 1 : n!=1"
           // NOLINTNEXTLINE(cata-text-style): plf expression, not text
           "&& (n%10>=0 && n%10<=1) || (n%10>=5 && n%10<=9) || (n%100>=12 && n%100<=14) ? 2 : 3)"},
          {1, // Russian
-          // NOLINTNEXTLINE(cata-text-style): plf expression, not text
+             // NOLINTNEXTLINE(cata-text-style): plf expression, not text
           "(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2)",
           // NOLINTNEXTLINE(cata-text-style): plf expression, not text
           "(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<12 || n%100>14) ? 1 :"
           " n%10==0 || (n%10>=5 && n%10<=9) || (n%100>=11 && n%100<=14)? 2 : 3)"},
          {2, // Ukrainian
-          // NOLINTNEXTLINE(cata-text-style): plf expression, not text
+             // NOLINTNEXTLINE(cata-text-style): plf expression, not text
           "(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2)",
           "(n % 1 == 0 && n % 10 == 1 && n % 100 != "
           // NOLINTNEXTLINE(cata-text-style): plf expression, not text

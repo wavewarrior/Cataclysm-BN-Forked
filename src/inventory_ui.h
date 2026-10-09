@@ -793,8 +793,8 @@ class inventory_iuse_selector : public inventory_multiselector
         std::map<const item *, std::vector<iuse_location>> to_use;
 };
 
-class inventory_drop_selector : public inventory_multiselector
-{
+class inventory_drop_selector :
+    public inventory_multiselector {
     public:
         inventory_drop_selector( player &p,
                                  const inventory_selector_preset &preset = default_preset );

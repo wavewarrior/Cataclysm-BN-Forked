@@ -255,11 +255,11 @@ void repair_item_actor::load( const JsonObject& obj )
 bool repair_item_actor::can_use_tool( const player& p, const item& tool, bool print_msg ) const
 {
     if( p.is_underwater() ) {
-    if( print_msg ) { p.add_msg_if_player( m_info, _( "You can't do that while underwater." ) ); }
+        if( print_msg ) { p.add_msg_if_player( m_info, _( "You can't do that while underwater." ) ); }
         return false;
     }
     if( p.is_mounted() ) {
-    if( print_msg ) {
+        if( print_msg ) {
             p.add_msg_player_or_npc(
                 m_bad, _( "You can't do that while mounted." ),
                 _( "<npcname> can't do that while mounted." ) );
@@ -267,11 +267,11 @@ bool repair_item_actor::can_use_tool( const player& p, const item& tool, bool pr
         return false;
     }
     if( !character_funcs::can_see_fine_details( p ) ) {
-    if( print_msg ) { p.add_msg_if_player( m_info, _( "You can't see to do that!" ) ); }
+        if( print_msg ) { p.add_msg_if_player( m_info, _( "You can't see to do that!" ) ); }
         return false;
     }
     if( !tool.units_sufficient( p ) ) {
-    if( print_msg ) {
+        if( print_msg ) {
             p.add_msg_if_player( m_info, _( "Your tool does not have enough charges to do that." ) );
         }
         return false;
@@ -284,8 +284,8 @@ int repair_item_actor::use( player& p, item& it, bool, const tripoint_bub_ms & )
 {
     if( !can_use_tool( p, it, true ) ) { return 0; }
 
-p.assign_activity( std::make_unique<player_activity>(
-                       std::make_unique<repair_item_activity_actor>( safe_reference<item>( it ), type ) ) );
+    p.assign_activity( std::make_unique<player_activity>(
+                           std::make_unique<repair_item_activity_actor>( safe_reference<item>( it ), type ) ) );
     return 0;
 }
 
@@ -440,20 +440,20 @@ bool repair_item_actor::can_repair_target( player& pl, const item& fix, bool pri
     // In some rare cases (indices getting scrambled after inventory overflow)
     //  our `fix` can be a different item.
     if( fix.is_null() ) {
-    if( print_msg ) { pl.add_msg_if_player( m_info, _( "You do not have that item!" ) ); }
+        if( print_msg ) { pl.add_msg_if_player( m_info, _( "You do not have that item!" ) ); }
         return false;
     }
     if( fix.is_firearm() ) {
-    if( print_msg ) { pl.add_msg_if_player( m_info, _( "That requires gunsmithing tools." ) ); }
+        if( print_msg ) { pl.add_msg_if_player( m_info, _( "That requires gunsmithing tools." ) ); }
         return false;
     }
     if( fix.count_by_charges() || fix.has_flag( flag_NO_REPAIR ) ) {
-    if( print_msg ) { pl.add_msg_if_player( m_info, _( "You cannot repair this type of item." ) ); }
+        if( print_msg ) { pl.add_msg_if_player( m_info, _( "You cannot repair this type of item." ) ); }
         return false;
     }
 
     if( any_of( materials.begin(), materials.end(), [&fix]( const material_id & mat ) {
-        return mat.obj().repaired_with() == fix.typeId();
+    return mat.obj().repaired_with() == fix.typeId();
     } ) ) {
         if( print_msg ) {
             pl.add_msg_if_player( m_info, _( "This can be used to repair other items, not itself." ) );
@@ -463,18 +463,18 @@ bool repair_item_actor::can_repair_target( player& pl, const item& fix, bool pri
 
     if( !handle_components( pl, fix, print_msg, true ) ) { return false; }
 
-const bool can_be_refitted = fix.has_flag( flag_VARSIZE );
-if( can_be_refitted && !fix.has_flag( flag_FIT ) ) { return true; }
+    const bool can_be_refitted = fix.has_flag( flag_VARSIZE );
+    if( can_be_refitted && !fix.has_flag( flag_FIT ) ) { return true; }
 
-const bool resizing_matters = fix.get_sizing( pl ) != item::sizing::ignore;
-const bool small = pl.get_size() == creature_size::tiny;
-const bool can_resize = small != fix.has_flag( flag_UNDERSIZE );
-if( can_be_refitted && resizing_matters && can_resize ) { return true; }
+    const bool resizing_matters = fix.get_sizing( pl ) != item::sizing::ignore;
+    const bool small = pl.get_size() == creature_size::tiny;
+    const bool can_resize = small != fix.has_flag( flag_UNDERSIZE );
+    if( can_be_refitted && resizing_matters && can_resize ) { return true; }
 
-if( fix.damage() > 0 ) { return true; }
+    if( fix.damage() > 0 ) { return true; }
 
-if( fix.damage() <= fix.min_damage() ) {
-    if( print_msg ) {
+    if( fix.damage() <= fix.min_damage() ) {
+        if( print_msg ) {
             pl.add_msg_if_player(
                 m_info, _( "Your %s is already enhanced to its maximum potential." ), fix.tname() );
         }
@@ -482,7 +482,7 @@ if( fix.damage() <= fix.min_damage() ) {
     }
 
     if( fix.has_flag( flag_PRIMITIVE_RANGED_WEAPON ) || !fix.reinforceable() ) {
-    if( print_msg ) {
+        if( print_msg ) {
             pl.add_msg_if_player(
                 m_info, _( "You cannot improve your %s any more this way." ), fix.tname() );
         }
@@ -537,28 +537,28 @@ repair_item_actor::repair_type repair_item_actor::default_action(
 {
     if( fix.damage() > 0 ) { return RT_REPAIR; }
 
-const bool can_be_refitted = fix.has_flag( flag_VARSIZE );
-const bool doesnt_fit = !fix.has_flag( flag_FIT );
-if( doesnt_fit && can_be_refitted ) { return RT_REFIT; }
+    const bool can_be_refitted = fix.has_flag( flag_VARSIZE );
+    const bool doesnt_fit = !fix.has_flag( flag_FIT );
+    if( doesnt_fit && can_be_refitted ) { return RT_REFIT; }
 
-Character& player_character = get_player_character();
-const bool smol = player_character.get_size() == creature_size::tiny;
+    Character& player_character = get_player_character();
+    const bool smol = player_character.get_size() == creature_size::tiny;
 
-const bool is_undersized = fix.has_flag( flag_UNDERSIZE );
-const bool is_oversized = fix.has_flag( flag_OVERSIZE );
-const bool resizing_matters = fix.get_sizing( player_character ) != item::sizing::ignore;
+    const bool is_undersized = fix.has_flag( flag_UNDERSIZE );
+    const bool is_oversized = fix.has_flag( flag_OVERSIZE );
+    const bool resizing_matters = fix.get_sizing( player_character ) != item::sizing::ignore;
 
-const bool too_big_while_smol = smol && !is_undersized && !is_oversized;
-if( too_big_while_smol && can_be_refitted && resizing_matters ) { return RT_DOWNSIZING; }
+    const bool too_big_while_smol = smol && !is_undersized && !is_oversized;
+    if( too_big_while_smol && can_be_refitted && resizing_matters ) { return RT_DOWNSIZING; }
 
-const bool too_small_while_big = !smol && is_undersized && !is_oversized;
-if( too_small_while_big && can_be_refitted && resizing_matters ) { return RT_UPSIZING; }
+    const bool too_small_while_big = !smol && is_undersized && !is_oversized;
+    if( too_small_while_big && can_be_refitted && resizing_matters ) { return RT_UPSIZING; }
 
-if( fix.damage() > fix.min_damage() ) { return RT_REINFORCE; }
+    if( fix.damage() > fix.min_damage() ) { return RT_REINFORCE; }
 
-if( current_skill_level <= trains_skill_to ) { return RT_PRACTICE; }
+    if( current_skill_level <= trains_skill_to ) { return RT_PRACTICE; }
 
-return RT_NOTHING;
+    return RT_NOTHING;
 }
 
 static bool damage_item( player& pl, item* fix )
@@ -601,38 +601,38 @@ repair_item_actor::attempt_hint repair_item_actor::repair( player& pl, item& too
         item& fix ) const
 {
     if( !can_use_tool( pl, tool, true ) ) { return AS_CANT_USE_TOOL; }
-if( !can_repair_target( pl, fix, true ) ) { return AS_CANT; }
+    if( !can_repair_target( pl, fix, true ) ) { return AS_CANT; }
 
-const int current_skill_level = pl.get_skill_level( used_skill );
-const auto action = default_action( fix, current_skill_level );
-const auto chance = repair_chance( pl, fix, action );
-int practice_amount = std::max( repair_recipe_difficulty( pl, fix, true ), 1 );
-float roll_value = rng_float( 0.0, 1.0 );
-enum roll_result { SUCCESS, FAILURE, NEUTRAL } roll;
+    const int current_skill_level = pl.get_skill_level( used_skill );
+    const auto action = default_action( fix, current_skill_level );
+    const auto chance = repair_chance( pl, fix, action );
+    int practice_amount = std::max( repair_recipe_difficulty( pl, fix, true ), 1 );
+    float roll_value = rng_float( 0.0, 1.0 );
+    enum roll_result { SUCCESS, FAILURE, NEUTRAL } roll;
 
-if( roll_value > 1.0f - chance.second ) {
-    roll = FAILURE;
-} else if( roll_value < chance.first ) {
-    roll = SUCCESS;
-} else {
-    roll = NEUTRAL;
-}
+    if( roll_value > 1.0f - chance.second ) {
+        roll = FAILURE;
+    } else if( roll_value < chance.first ) {
+        roll = SUCCESS;
+    } else {
+        roll = NEUTRAL;
+    }
 
-if( action == RT_NOTHING ) {
-    pl.add_msg_if_player( m_bad, _( "You won't learn anything more by doing that." ) );
+    if( action == RT_NOTHING ) {
+        pl.add_msg_if_player( m_bad, _( "You won't learn anything more by doing that." ) );
         return AS_CANT;
     }
 
     // If not for this if, it would spam a lot
     if( current_skill_level > trains_skill_to ) { practice_amount = 0; }
-pl.practice( used_skill, practice_amount, trains_skill_to );
+    pl.practice( used_skill, practice_amount, trains_skill_to );
 
-if( roll == FAILURE ) { return damage_item( pl, &fix ) ? AS_DESTROYED : AS_FAILURE; }
+    if( roll == FAILURE ) { return damage_item( pl, &fix ) ? AS_DESTROYED : AS_FAILURE; }
 
     if( action == RT_PRACTICE ) { return AS_RETRY; }
 
-if( action == RT_REPAIR ) {
-    if( roll == SUCCESS ) {
+    if( action == RT_REPAIR ) {
+        if( roll == SUCCESS ) {
             const std::string startdurability = fix.durability_indicator( true );
             const auto damage = fix.damage();
             handle_components( pl, fix, false, false );
@@ -658,7 +658,7 @@ if( action == RT_REPAIR ) {
     }
 
     if( action == RT_REFIT ) {
-    if( roll == SUCCESS ) {
+        if( roll == SUCCESS ) {
             if( !fix.has_flag( flag_FIT ) ) {
                 pl.add_msg_if_player(
                     m_good, _( "You take your %s in, improving the fit." ), fix.tname() );
@@ -676,9 +676,9 @@ if( action == RT_REPAIR ) {
     }
 
     if( action == RT_DOWNSIZING ) {
-    // We don't need to check for smallness or undersize because DOWNSIZING already guarantees
-    // that
-    if( roll == SUCCESS ) {
+        // We don't need to check for smallness or undersize because DOWNSIZING already guarantees
+        // that
+        if( roll == SUCCESS ) {
             pl.add_msg_if_player(
                 m_good, _( "You resize the %s to accommodate your tiny build." ),
                 fix.tname().c_str() );
@@ -694,9 +694,9 @@ if( action == RT_REPAIR ) {
     }
 
     if( action == RT_UPSIZING ) {
-    // We don't need to check for smallness or undersize because UPSIZING already guarantees
-    // that
-    if( roll == SUCCESS ) {
+        // We don't need to check for smallness or undersize because UPSIZING already guarantees
+        // that
+        if( roll == SUCCESS ) {
             pl.add_msg_if_player(
                 m_good, _( "You adjust the %s back to its normal size." ), fix.tname().c_str() );
             fix.unset_flag( flag_UNDERSIZE );
@@ -711,7 +711,7 @@ if( action == RT_REPAIR ) {
     }
 
     if( action == RT_REINFORCE ) {
-    if( fix.has_flag( flag_PRIMITIVE_RANGED_WEAPON ) || !fix.reinforceable() ) {
+        if( fix.has_flag( flag_PRIMITIVE_RANGED_WEAPON ) || !fix.reinforceable() ) {
             pl.add_msg_if_player(
                 m_info, _( "You cannot improve your %s any more this way." ), fix.tname() );
             return AS_CANT;
@@ -751,7 +751,7 @@ std::string repair_item_actor::action_description( repair_item_actor::repair_typ
 std::string repair_item_actor::get_name() const
 {
     const std::string mats =
-        enumerate_as_string( materials.begin(), materials.end(), []( const material_id & mid ) {
+    enumerate_as_string( materials.begin(), materials.end(), []( const material_id & mid ) {
         return _( mid->name() );
     } );
     return string_format( _( "Repair %s" ), mats );
@@ -818,11 +818,11 @@ static player &get_patient( player& healer, const tripoint_bub_ms& pos )
 int heal_actor::use( player& p, item& it, bool, const tripoint_bub_ms& pos ) const
 {
     if( p.is_underwater() ) {
-    p.add_msg_if_player( m_info, _( "You can't do that while underwater." ) );
+        p.add_msg_if_player( m_info, _( "You can't do that while underwater." ) );
         return 0;
     }
     if( p.is_mounted() ) {
-    p.add_msg_if_player( m_info, _( "You can't do that while mounted." ) );
+        p.add_msg_if_player( m_info, _( "You can't do that while mounted." ) );
         return 0;
     }
 
@@ -830,19 +830,19 @@ int heal_actor::use( player& p, item& it, bool, const tripoint_bub_ms& pos ) con
     const bodypart_str_id hpp = use_healing_item( p, patient, it, false );
     if( !hpp ) { return 0; }
 
-int cost = move_cost;
-if( long_action ) {
-    // A hack: long action healing on NPCs isn't done yet.
-    // So just heal at start and paralyze the player for 5 minutes.
-    cost /= std::min( 10, p.get_skill_level( skill_firstaid ) + 1 );
+    int cost = move_cost;
+    if( long_action ) {
+        // A hack: long action healing on NPCs isn't done yet.
+        // So just heal at start and paralyze the player for 5 minutes.
+        cost /= std::min( 10, p.get_skill_level( skill_firstaid ) + 1 );
     }
 
     // NPCs can use first aid now, but they can't perform long actions
     if( long_action && &patient == &p && !p.is_npc() ) {
-    // Assign first aid long action.
-    /** @EFFECT_FIRSTAID speeds up firstaid activity */
-    p.assign_activity( std::make_unique<player_activity>(
-                           std::make_unique<firstaid_activity_actor>( &it, hpp.str(), cost ) ) );
+        // Assign first aid long action.
+        /** @EFFECT_FIRSTAID speeds up firstaid activity */
+        p.assign_activity( std::make_unique<player_activity>(
+                               std::make_unique<firstaid_activity_actor>( &it, hpp.str(), cost ) ) );
         p.moves = 0;
         return 0;
     }
@@ -883,8 +883,8 @@ int heal_actor::get_heal_value( const Character& healer, const bodypart_str_id& 
 int heal_actor::get_bandaged_level( const Character& healer ) const
 {
     if( bandages_power > 0 ) {
-    /** @EFFECT_FIRSTAID increases healing item effects */
-    return bandages_power + bandages_scaling * healer.get_skill_level( skill_firstaid );
+        /** @EFFECT_FIRSTAID increases healing item effects */
+        return bandages_power + bandages_scaling * healer.get_skill_level( skill_firstaid );
     }
 
     return bandages_power;
@@ -893,8 +893,8 @@ int heal_actor::get_bandaged_level( const Character& healer ) const
 int heal_actor::get_disinfected_level( const Character& healer ) const
 {
     if( disinfectant_power > 0 ) {
-    /** @EFFECT_FIRSTAID increases healing item effects */
-    return disinfectant_power + disinfectant_scaling * healer.get_skill_level( skill_firstaid );
+        /** @EFFECT_FIRSTAID increases healing item effects */
+        return disinfectant_power + disinfectant_scaling * healer.get_skill_level( skill_firstaid );
     }
 
     return disinfectant_power;
@@ -1119,13 +1119,13 @@ bodypart_str_id heal_actor::use_healing_item(
 void heal_actor::info( const item &, std::vector<iteminfo> &dump ) const
 {
     if( head_power > 0 || torso_power > 0 || limb_power > 0 || bandages_power > 0
-    || disinfectant_power > 0 || bleed > 0.0f || bite > 0.0f || infect > 0.0f ) {
-    dump.emplace_back( "HEAL", _( "<bold>Healing effects</bold> " ) );
+        || disinfectant_power > 0 || bleed > 0.0f || bite > 0.0f || infect > 0.0f ) {
+        dump.emplace_back( "HEAL", _( "<bold>Healing effects</bold> " ) );
     }
 
     Character& player_character = get_player_character();
     if( head_power > 0 || torso_power > 0 || limb_power > 0 ) {
-    dump.emplace_back( "HEAL", _( "Base healing: " ) );
+        dump.emplace_back( "HEAL", _( "Base healing: " ) );
         dump.emplace_back( "HEAL_BASE", _( "Head: " ), "", iteminfo::no_newline, head_power );
         dump.emplace_back( "HEAL_BASE", _( "  Torso: " ), "", iteminfo::no_newline, torso_power );
         dump.emplace_back( "HEAL_BASE", _( "  Limbs: " ), limb_power );
@@ -1141,8 +1141,8 @@ void heal_actor::info( const item &, std::vector<iteminfo> &dump ) const
     }
 
     if( bandages_power > 0 ) {
-    dump.emplace_back( "HEAL", _( "Base bandaging quality: " ),
-                       texitify_base_healing_power( static_cast<int>( bandages_power ) ) );
+        dump.emplace_back( "HEAL", _( "Base bandaging quality: " ),
+                           texitify_base_healing_power( static_cast<int>( bandages_power ) ) );
         if( g != nullptr ) {
             dump.emplace_back( "HEAL", _( "Actual bandaging quality: " ),
                                texitify_healing_power( get_bandaged_level( player_character ) ) );
@@ -1150,8 +1150,8 @@ void heal_actor::info( const item &, std::vector<iteminfo> &dump ) const
     }
 
     if( disinfectant_power > 0 ) {
-    dump.emplace_back( "HEAL", _( "Base disinfecting quality: " ),
-                       texitify_base_healing_power( static_cast<int>( disinfectant_power ) ) );
+        dump.emplace_back( "HEAL", _( "Base disinfecting quality: " ),
+                           texitify_base_healing_power( static_cast<int>( disinfectant_power ) ) );
         if( g != nullptr ) {
             dump.emplace_back( "HEAL", _( "Actual disinfecting quality: " ),
                                texitify_healing_power( get_disinfected_level( player_character ) ) );
@@ -1159,7 +1159,7 @@ void heal_actor::info( const item &, std::vector<iteminfo> &dump ) const
     }
 
     if( bleed > 0.0f || bite > 0.0f || infect > 0.0f ) {
-    dump.emplace_back( "HEAL", _( "Chance to heal (percent): " ) );
+        dump.emplace_back( "HEAL", _( "Chance to heal (percent): " ) );
         if( bleed > 0.0f ) {
             dump.emplace_back( "HEAL", _( "* Bleeding: " ), static_cast<int>( bleed * 100 ) );
         }

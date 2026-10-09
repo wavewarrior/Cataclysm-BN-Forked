@@ -165,8 +165,7 @@ using ItemFn = std::function < detached_ptr<item> ( detached_ptr<item> &&it ) >;
  * This is basically a wrapper around @ref Single_item_creator
  * that adds item properties.
  */
-class Item_modifier
-{
+class Item_modifier {
     public:
         std::pair<int, int> damage;
         std::pair<int, int> count;
@@ -210,10 +209,10 @@ class Item_modifier
         Item_modifier( Item_modifier && ) = default;
 
         detached_ptr<item> modify( detached_ptr<item> &&new_item ) const;
-        void check_consistency( const std::string &context ) const;
-        bool remove_item( const itype_id &itemid );
-        bool replace_item( const itype_id &itemid, const itype_id &replacementid,
-                           const std::string &context );
+        void check_consistency( const std::string & context ) const;
+        bool remove_item( const itype_id & itemid );
+        bool replace_item( const itype_id & itemid, const itype_id & replacementid,
+                           const std::string & context );
         void replace_items( const std::unordered_map<itype_id, itype_id> &migration );
 
         // Currently these always have the same chance as the item group it's part of, but
@@ -237,8 +236,7 @@ class Item_modifier
  * @ref Item_spawn_data) never contain null items, that's why it
  * might be empty.
  */
-class Single_item_creator : public Item_spawn_data
-{
+class Single_item_creator : public Item_spawn_data {
     public:
         enum Type {
             S_ITEM_GROUP,
@@ -246,7 +244,7 @@ class Single_item_creator : public Item_spawn_data
             S_NONE,
         };
 
-        Single_item_creator( const std::string &id, Type type, int probability );
+        Single_item_creator( const std::string & id, Type type, int probability );
         ~Single_item_creator() override = default;
 
         /**
@@ -260,14 +258,14 @@ class Single_item_creator : public Item_spawn_data
 
         std::vector<detached_ptr<item>> create( const time_point &birthday,
                                                 RecursionList &rec ) const override;
-        detached_ptr<item>create_single( const time_point &birthday, RecursionList &rec ) const override;
-        void check_consistency( const std::string &context ) const override;
-        bool remove_item( const itype_id &itemid ) override;
-        bool replace_item( const itype_id &itemid, const itype_id &replacementid,
-                           const std::string &context ) override;
+        detached_ptr<item>create_single( const time_point & birthday, RecursionList & rec ) const override;
+        void check_consistency( const std::string & context ) const override;
+        bool remove_item( const itype_id & itemid ) override;
+        bool replace_item( const itype_id & itemid, const itype_id & replacementid,
+                           const std::string & context ) override;
         void replace_items( const std::unordered_map<itype_id, itype_id> &migration ) override;
 
-        bool has_item( const itype_id &itemid ) const override;
+        bool has_item( const itype_id & itemid ) const override;
         std::set<const itype *> every_item() const override;
         std::vector<detached_ptr<item>> every_item_modified( bool modify = true ) const override;
 };
@@ -276,8 +274,7 @@ class Single_item_creator : public Item_spawn_data
  * This is a list of item spawns. It can act as distribution
  * (one entry from the list) or as collection (all entries get a chance).
  */
-class Item_group : public Item_spawn_data
-{
+class Item_group : public Item_spawn_data {
     public:
         using ItemList = std::vector<item *>;
         enum Type {
@@ -299,8 +296,8 @@ class Item_group : public Item_spawn_data
          */
         using prop_list = std::vector<std::unique_ptr<Item_spawn_data> >;
 
-        void add_item_entry( const itype_id &itemid, int probability );
-        void add_group_entry( const item_group_id &groupid, int probability );
+        void add_item_entry( const itype_id & itemid, int probability );
+        void add_group_entry( const item_group_id & groupid, int probability );
         /**
          * Once the relevant data has been read from JSON, this function is always called (either from
          * @ref Item_factory::add_entry, @ref add_item_entry or @ref add_group_entry). Its purpose is to add
@@ -310,15 +307,15 @@ class Item_group : public Item_spawn_data
 
         std::vector<detached_ptr<item>> create( const time_point &birthday,
                                                 RecursionList &rec ) const override;
-        detached_ptr<item> create_single( const time_point &birthday, RecursionList &rec ) const override;
-        void check_consistency( const std::string &context ) const override;
-        bool remove_item( const itype_id &itemid ) override;
-        bool remove_specific_item( const std::string &itemid );
-        bool remove_specific_group( const std::string &itemid );
-        bool replace_item( const itype_id &itemid, const itype_id &replacementid,
-                           const std::string &context ) override;
+        detached_ptr<item> create_single( const time_point & birthday, RecursionList & rec ) const override;
+        void check_consistency( const std::string & context ) const override;
+        bool remove_item( const itype_id & itemid ) override;
+        bool remove_specific_item( const std::string & itemid );
+        bool remove_specific_group( const std::string & itemid );
+        bool replace_item( const itype_id & itemid, const itype_id & replacementid,
+                           const std::string & context ) override;
         void replace_items( const std::unordered_map<itype_id, itype_id> &migration ) override;
-        bool has_item( const itype_id &itemid ) const override;
+        bool has_item( const itype_id & itemid ) const override;
         std::set<const itype *> every_item() const override;
         std::vector<detached_ptr<item>> every_item_modified( bool modify = true ) const override;
         /**

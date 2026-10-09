@@ -324,8 +324,8 @@ input_context uilist::create_main_input_context() const
     ctxt.register_action( "MOUSE_MOVE" );
     ctxt.register_action( "ANY_INPUT" );
     ctxt.register_action( "HELP_KEYBINDINGS" );
-for( const auto& additional_action : additional_actions ) {
-    ctxt.register_action( additional_action.first, additional_action.second );
+    for( const auto& additional_action : additional_actions ) {
+        ctxt.register_action( additional_action.first, additional_action.second );
     }
     return ctxt;
 }

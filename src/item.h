@@ -842,11 +842,11 @@ class item: public location_visitable<item>, public game_object<item>
             int local_temperature = 0;
         };
 
-        static auto actualize_rot( detached_ptr<item> &&self, const tripoint_bub_ms &pnt,
+        static auto actualize_rot( detached_ptr < item > &&self, const tripoint_bub_ms &pnt,
                                    temperature_flag temperature,
-                                   const weather_manager &weather ) -> detached_ptr<item>;
-        static auto actualize_rot( detached_ptr<item> &&self,
-                                   const rot_context &context ) -> detached_ptr<item>;
+                                   const weather_manager &weather ) -> detached_ptr < item >;
+        static auto actualize_rot( detached_ptr < item > &&self,
+                                   const rot_context &context ) -> detached_ptr < item >;
 
         /**
          * Returns rot of the item since last rot calculation.
@@ -883,12 +883,12 @@ class item: public location_visitable<item>, public game_object<item>
          * @return true if the item is fully rotten and is ready to be removed
          */
         /*@{*/
-        static auto process_rot( detached_ptr<item> &&self, const tripoint_bub_ms &pos )
-        -> detached_ptr<item>;
-        static auto process_rot( detached_ptr<item> &&self, bool seals,
+        static auto process_rot( detached_ptr < item > &&self, const tripoint_bub_ms &pos )
+        -> detached_ptr < item >;
+        static auto process_rot( detached_ptr < item > &&self, bool seals,
                                  const tripoint_bub_ms &pos,
                                  player *carrier, temperature_flag flag,
-                                 const weather_manager &weather_generator ) -> detached_ptr<item>;
+                                 const weather_manager &weather_generator ) -> detached_ptr < item >;
         /*@}*/
 
         int get_comestible_fun() const;
@@ -948,7 +948,7 @@ class item: public location_visitable<item>, public game_object<item>
         bool has_rotten_away() const;
 
         time_duration get_rot() const {
-            const_cast<item *>( this )->update_rot_from_location( temperature_flag::TEMP_NORMAL );
+            const_cast < item * > ( this )->update_rot_from_location( temperature_flag::TEMP_NORMAL );
             return rot;
         }
         void mod_rot( const time_duration& val ) { rot += val; }
@@ -956,7 +956,7 @@ class item: public location_visitable<item>, public game_object<item>
         /** Time for this item to be fully fermented. */
         time_duration brewing_time() const;
         /** The results of fermenting this item. */
-        const std::vector<itype_id> &brewing_results() const;
+        const std::vector < itype_id > &brewing_results() const;
 
         /**
          * Detonates the item and adds remains (if any) to drops.
@@ -964,9 +964,9 @@ class item: public location_visitable<item>, public game_object<item>
          * potentially destroying other items and invalidating iterators.
          * Should NOT be called on an item on the map, but on a local copy.
          */
-        static detached_ptr<item> detonate(
-            detached_ptr<item>&& self, const tripoint_bub_ms& p,
-            std::vector<detached_ptr<item>> &drops );
+        static detached_ptr < item > detonate(
+            detached_ptr < item > && self, const tripoint_bub_ms& p,
+            std::vector < detached_ptr < item>> &drops );
 
         bool will_explode_in_fire() const;
 
@@ -996,27 +996,27 @@ class item: public location_visitable<item>, public game_object<item>
          * This may return an empty vector.
          * The returned vector does not contain the null id.
          */
-        const std::vector<material_id> &made_of() const;
+        const std::vector < material_id > &made_of() const;
         /**
          * The ids of all the qualities this contains.
          */
-        const std::map<quality_id, int> &quality_of() const;
+        const std::map < quality_id, int > &quality_of() const;
         /**
          * Same as @ref made_of(), but returns the @ref material_type directly.
          */
-        std::vector<const material_type *> made_of_types() const;
+        std::vector < const material_type * > made_of_types() const;
         /**
          * Check we are made of at least one of a set (e.g. true if at least
          * one item of the passed in set matches any material).
          * @param mat_idents Set of material ids.
          */
-        bool made_of_any( const std::set<material_id> &mat_idents ) const;
+        bool made_of_any( const std::set < material_id > &mat_idents ) const;
         /**
          * Check we are made of only the materials (e.g. false if we have
          * one material not in the set or no materials at all).
          * @param mat_idents Set of material ids.
          */
-        bool only_made_of( const std::set<material_id> &mat_idents ) const;
+        bool only_made_of( const std::set < material_id > &mat_idents ) const;
         /**
          * Check we are made of this material (e.g. matches at least one
          * in our set.)
@@ -1038,7 +1038,7 @@ class item: public location_visitable<item>, public game_object<item>
          * Returns a list of components used to craft this item or the default
          * components if it wasn't player-crafted.
          */
-        std::vector<item_comp> get_uncraft_components() const;
+        std::vector < item_comp > get_uncraft_components() const;
         /**
          * Whether the items is conductive.
          */
@@ -1092,7 +1092,7 @@ class item: public location_visitable<item>, public game_object<item>
         /**
          * @returns damage resistance override, if set.
          */
-        std::optional<resistances> damage_resistance_override() const;
+        std::optional < resistances > damage_resistance_override() const;
 
         /**
          * Returns resistance to being damaged by attack against the item itself.
@@ -1169,7 +1169,7 @@ class item: public location_visitable<item>, public game_object<item>
         std::string durability_indicator( bool include_intact = false ) const;
 
         /** If possible to repair this item what tools could potentially be used for this purpose? */
-        const std::set<itype_id> &repaired_with() const;
+        const std::set < itype_id > &repaired_with() const;
 
         /**
          * Check whether the item has been marked (by calling mark_as_used_by_player)
@@ -1197,12 +1197,12 @@ class item: public location_visitable<item>, public game_object<item>
          * Returns false if the item is not destroyed.
          */
         /*@{*/
-        static detached_ptr<item> process(
-            detached_ptr<item>&& self, player* carrier, const tripoint_bub_ms& pos, bool activate,
+        static detached_ptr < item > process(
+            detached_ptr < item > && self, player* carrier, const tripoint_bub_ms& pos, bool activate,
             const int ticks,
             temperature_flag flag = temperature_flag::TEMP_NORMAL );
-        static detached_ptr<item> process(
-            detached_ptr<item>&& self, player* carrier, const tripoint_bub_ms& pos, bool activate,
+        static detached_ptr < item > process(
+            detached_ptr < item > && self, player* carrier, const tripoint_bub_ms& pos, bool activate,
             temperature_flag flag, const weather_manager& weather_generator, const int ticks );
         /*@}*/
         /**
@@ -1281,7 +1281,7 @@ class item: public location_visitable<item>, public game_object<item>
         int wind_resist() const;
 
         /** What faults can potentially occur with this item? */
-        std::set<fault_id> faults_potential() const;
+        std::set < fault_id > faults_potential() const;
 
         /** Returns the total area of this wheel or 0 if it isn't one. */
         int wheel_area() const;
@@ -1452,7 +1452,7 @@ class item: public location_visitable<item>, public game_object<item>
          */
         void on_map_placement( const map& m, const tripoint_bub_ms& p );
 
-        std::vector<trait_id> mutations_from_wearing( const Character& guy ) const;
+        std::vector < trait_id > mutations_from_wearing( const Character& guy ) const;
 
         /**
          * Name of the item type (not the item), with proper plural.
@@ -1497,14 +1497,14 @@ class item: public location_visitable<item>, public game_object<item>
          */
         /*@{*/
 
-        template <typename T, typename Conv = data_vars::type_converter_t<T>>
+        template < typename T, typename Conv = data_vars::type_converter_t < T>>
         T get_var( const std::string& name, const T& default_value, const Conv& conv = {} ) const {
-            return item_vars_.get<T, Conv>( name, default_value, conv );
+            return item_vars_.get < T, Conv > ( name, default_value, conv );
         }
 
-        template <typename T, typename Conv = data_vars::type_converter_t<T>>
+        template < typename T, typename Conv = data_vars::type_converter_t < T>>
         void set_var( const std::string& name, const T& value, const Conv& conv = {} ) {
-            item_vars_.set<T>( name, value, conv );
+            item_vars_.set < T > ( name, value, conv );
         }
 
         std::string get_var( const std::string& name, const char* default_value ) const {
@@ -1580,16 +1580,16 @@ class item: public location_visitable<item>, public game_object<item>
         /**Does this item have the specified vitamin*/
         bool has_vitamin( const vitamin_id& vitamin ) const;
 
-        template <typename Container,
-                  typename T = std::decay_t<decltype( *std::declval<const Container &>().begin() )>>
+        template < typename Container,
+                   typename T = std::decay_t < decltype( *std::declval < const Container &>().begin() )>>
         bool has_any_flag( const Container& flags ) const {
             return std::any_of( flags.begin(), flags.end(), [&]( const T & flag ) {
                 return has_flag( flag );
             } );
         }
 
-        template <typename Container,
-                  typename T = std::decay_t<decltype( *std::declval<const Container &>().begin() )>>
+        template < typename Container,
+                   typename T = std::decay_t < decltype( *std::declval < const Container &>().begin() )>>
         bool has_any_vitamin( const Container& vitamins ) const {
             return std::any_of( vitamins.begin(), vitamins.end(), [&]( const T & vitamin ) {
                 return has_vitamin( vitamin );
@@ -1780,7 +1780,7 @@ class item: public location_visitable<item>, public game_object<item>
          * player.
          * Returns 0 if this is can not be worn at all.
          */
-        std::optional<armor_portion_data> portion_for_bodypart( const bodypart_id& bodypart ) const;
+        std::optional < armor_portion_data > portion_for_bodypart( const bodypart_id& bodypart ) const;
         /**
          * Returns the average encumbrance value that this item across all portions
          * Returns 0 if this is can not be worn at all.
@@ -1876,7 +1876,7 @@ class item: public location_visitable<item>, public game_object<item>
         /**
          * Enumerates recipes available from this book and the skill level required to use them.
          */
-        std::vector<std::pair<const recipe *, int>> get_available_recipes( const Character& u ) const;
+        std::vector < std::pair < const recipe *, int>> get_available_recipes( const Character& u ) const;
         /*@}*/
 
         /**
@@ -1893,7 +1893,7 @@ class item: public location_visitable<item>, public game_object<item>
         /**
          * Returns all the martial art techniques that this items supports.
          */
-        std::set<matec_id> get_techniques() const;
+        std::set < matec_id > get_techniques() const;
         /**
          * Add the given technique to the item specific @ref techniques. Note that other items of
          * the same type are not affected by this.
@@ -1907,8 +1907,8 @@ class item: public location_visitable<item>, public game_object<item>
         /*@}*/
 
         /** Returns all toolmods currently attached to this item (always empty if item not a tool) */
-        std::vector<item *> toolmods();
-        std::vector<const item *> toolmods() const;
+        std::vector < item * > toolmods();
+        std::vector < const item * > toolmods() const;
 
         /**
          * @name Gun and gunmod functions
@@ -1969,7 +1969,7 @@ class item: public location_visitable<item>, public game_object<item>
          *  @param conversion whether to include the effect of any flags or mods which convert the type
          *  @return empty set if item does not use a specific ammo type (and is consequently not
          * reloadable) */
-        const std::set<ammotype> &ammo_types( bool conversion = true ) const;
+        const std::set < ammotype > &ammo_types( bool conversion = true ) const;
 
         /** Ammo type of an ammo item
          *  @return ammotype of ammo item or a null id if the item is not ammo */
@@ -1989,7 +1989,7 @@ class item: public location_visitable<item>, public game_object<item>
         itype_id common_ammo_default( bool conversion = true ) const;
 
         /** Get ammo effects for item optionally inclusive of any resulting from the loaded ammo */
-        std::set<ammo_effect_str_id> ammo_effects( bool with_ammo = true ) const;
+        std::set < ammo_effect_str_id > ammo_effects( bool with_ammo = true ) const;
 
         /* Get the name to be used when sorting this item by ammo type */
         std::string ammo_sort_name() const;
@@ -1999,7 +1999,8 @@ class item: public location_visitable<item>, public game_object<item>
 
         /** Apply function to each contained spent casing. If the detached_ptr is not moved from the
          * casing will be replaced. */
-        void casings_handle( const std::function < detached_ptr<item>( detached_ptr<item> && ) > & func );
+        void casings_handle( const std::function < detached_ptr < item>( detached_ptr < item > &&
+                                                                       ) > & func );
 
         /** Does item have an integral magazine (as opposed to allowing detachable magazines) */
         bool magazine_integral() const;
@@ -2017,7 +2018,7 @@ class item: public location_visitable<item>, public game_object<item>
          *  @return magazine compatibility which is always empty if item has integral magazine
          *  @see item::magazine_integral
          */
-        std::set<itype_id> magazine_compatible( bool conversion = true ) const;
+        std::set < itype_id > magazine_compatible( bool conversion = true ) const;
 
         /** Currently loaded magazine (if any)
          *  @return current magazine or nullptr if either no magazine loaded or item has integral
@@ -2028,8 +2029,8 @@ class item: public location_visitable<item>, public game_object<item>
         const item *magazine_current() const;
 
         /** Returns all gunmods currently attached to this item (always empty if item not a gun) */
-        std::vector<item *> gunmods();
-        std::vector<const item *> gunmods() const;
+        std::vector < item * > gunmods();
+        std::vector < const item * > gunmods() const;
 
         /** Get first attached gunmod matching type or nullptr if no such mod or item is not a gun */
         item *gunmod_find( const itype_id& mod );
@@ -2039,10 +2040,10 @@ class item: public location_visitable<item>, public game_object<item>
          * Checks if mod can be applied to this item considering any current state (jammed, loaded etc.)
          * @param msg message describing reason for any incompatibility
          */
-        ret_val<bool> is_gunmod_compatible( const item& mod ) const;
+        ret_val < bool > is_gunmod_compatible( const item& mod ) const;
 
         /** Get all possible modes for this gun inclusive of any attached gunmods */
-        std::map<gun_mode_id, gun_mode> gun_all_modes() const;
+        std::map < gun_mode_id, gun_mode > gun_all_modes() const;
 
         /** Check if gun supports a specific mode returning an invalid/empty mode if not */
         gun_mode gun_get_mode( const gun_mode_id& mode ) const;
@@ -2134,7 +2135,7 @@ class item: public location_visitable<item>, public game_object<item>
         skill_id gun_skill() const;
 
         /** Get mod locations, including those added by other mods */
-        std::map<gunmod_location, int> get_mod_locations() const;
+        std::map < gunmod_location, int > get_mod_locations() const;
         /**
          * Number of mods that can still be installed into the given mod location,
          * for non-guns it always returns 0.
@@ -2262,7 +2263,7 @@ class item: public location_visitable<item>, public game_object<item>
         std::string get_owner_name() const;
         int get_min_str() const;
 
-        const cata::value_ptr<islot_comestible> &get_comestible() const;
+        const cata::value_ptr < islot_comestible > &get_comestible() const;
 
         /**
          * Get the stored recipe for in progress crafts.
@@ -2314,18 +2315,18 @@ class item: public location_visitable<item>, public game_object<item>
          *
          * @param parents Items to inherit from
          */
-        void inherit_flags( const std::vector<item*> &parents, const recipe& making );
+        void inherit_flags( const std::vector < item* > &parents, const recipe& making );
 
         void set_tools_to_continue( bool value );
         bool has_tools_to_continue() const;
-        void set_cached_tool_selections( const std::vector<comp_selection<tool_comp>> &selections );
-        const std::vector<comp_selection<tool_comp>> &get_cached_tool_selections() const;
+        void set_cached_tool_selections( const std::vector < comp_selection < tool_comp>> &selections );
+        const std::vector < comp_selection < tool_comp>> &get_cached_tool_selections() const;
 
-        std::optional<dimension_info> pocket_dim;
+        std::optional < dimension_info > pocket_dim;
 
         bool add_enchantment( const enchantment_id &ench );
 
-        const std::vector<enchantment> &get_enchantments( bool dynamic ) const;
+        const std::vector < enchantment > &get_enchantments( bool dynamic ) const;
 
         /**
          * Calculate bonus from enchantments that affect this item only.
@@ -2359,12 +2360,12 @@ class item: public location_visitable<item>, public game_object<item>
 
         /** returns the parent item, or a null pointer if it has no parent */
         item *parent_item() const;
-        const std::vector<relic_recharge> &get_relic_recharge_scheme() const;
+        const std::vector < relic_recharge > &get_relic_recharge_scheme() const;
 
     private:
         const use_function *get_use_internal( const std::string& use_name ) const;
-        static detached_ptr<item> process_internal(
-            detached_ptr<item>&& self, player* carrier, const tripoint_bub_ms& pos, bool activate,
+        static detached_ptr < item > process_internal(
+            detached_ptr < item > && self, player* carrier, const tripoint_bub_ms& pos, bool activate,
             bool seals, temperature_flag flag, const weather_manager& weather_generator, const int ticks );
         struct absolute_rot_process_options {
             bool seals = false;
@@ -2372,13 +2373,13 @@ class item: public location_visitable<item>, public game_object<item>
             const rot_context& context;
         };
 
-        static auto actualize_rot( detached_ptr<item> &&self, const tripoint_bub_ms &pnt,
+        static auto actualize_rot( detached_ptr < item > &&self, const tripoint_bub_ms &pnt,
                                    temperature_flag temperature,
-                                   const weather_manager &weather, bool seals ) -> detached_ptr<item>;
-        static auto actualize_rot( detached_ptr<item> &&self,
-                                   const rot_context &context, bool seals ) -> detached_ptr<item>;
-        static auto process_rot( detached_ptr<item>&& self,
-                                  const absolute_rot_process_options& options ) -> detached_ptr<item>;
+                                   const weather_manager &weather, bool seals ) -> detached_ptr < item >;
+        static auto actualize_rot( detached_ptr < item > &&self,
+                                   const rot_context &context, bool seals ) -> detached_ptr < item >;
+        static auto process_rot( detached_ptr < item > && self,
+                                 const absolute_rot_process_options& options ) -> detached_ptr < item >;
         auto is_in_preserving_container() const -> bool;
         auto is_in_sealing_container() const -> bool;
         auto mark_rot_checked_now() -> void;
@@ -2392,7 +2393,7 @@ class item: public location_visitable<item>, public game_object<item>
          * unsafe_rejoin to ensure that 0 charge items are cleaned up and safe references transfer
          * correctly. detached_ptr<item> new=old.unsafe_split(); new->unsafe_rejoin(old);
          */
-        detached_ptr<item> unsafe_split( int qty = 0 );
+        detached_ptr < item > unsafe_split( int qty = 0 );
 
         /**
          * Used with unsafe_split to handle the 0 charge items that can be created by it. It does
@@ -2423,28 +2424,30 @@ class item: public location_visitable<item>, public game_object<item>
         // Sub-functions of @ref process, they handle the processing for different
         // processing types, just to make the process function cleaner.
         // The interface is the same as for @ref process.
-        static detached_ptr<item> process_corpse( detached_ptr<item> &&self, player *carrier,
+        static detached_ptr < item > process_corpse( detached_ptr < item > &&self, player *carrier,
                 const tripoint_bub_ms &pos );
-        static detached_ptr<item> process_litcig( detached_ptr<item> &&self, player *carrier,
+        static detached_ptr < item > process_litcig( detached_ptr < item > &&self, player *carrier,
                 const tripoint_bub_ms &pos );
-        static detached_ptr<item> process_extinguish( detached_ptr<item> &&self, player *carrier,
+        static detached_ptr < item > process_extinguish( detached_ptr < item > &&self, player *carrier,
                 const tripoint_bub_ms &posi, const int ticks );
         // Place conditions that should remove fake smoke item in this sub-function
-        static detached_ptr<item> process_fake_smoke( detached_ptr<item> &&self, player *carrier,
+        static detached_ptr < item > process_fake_smoke( detached_ptr < item > &&self, player *carrier,
                 const tripoint_bub_ms &pos );
-        static detached_ptr<item> process_fake_cloning_vat( detached_ptr<item> &&self, player *carrier,
+        static detached_ptr < item > process_fake_cloning_vat( detached_ptr < item > &&
+                self, player *carrier,
                 const tripoint_bub_ms &pos );
-        static detached_ptr<item> process_fake_mill( detached_ptr<item> &&self, player *carrier,
+        static detached_ptr < item > process_fake_mill( detached_ptr < item > &&self, player *carrier,
                 const tripoint_bub_ms &pos );
-        static detached_ptr<item> process_cable( detached_ptr<item> &&self, player *carrier,
+        static detached_ptr < item > process_cable( detached_ptr < item > &&self, player *carrier,
                 const tripoint_bub_ms &pos );
-        static detached_ptr<item> process_UPS( detached_ptr<item> &&self, player *carrier,
-                                               const tripoint_bub_ms &pos );
-        static detached_ptr<item> process_blackpowder_fouling( detached_ptr<item> &&self, player *carrier,
+        static detached_ptr < item > process_UPS( detached_ptr < item > &&self, player *carrier,
+                const tripoint_bub_ms &pos );
+        static detached_ptr < item > process_blackpowder_fouling( detached_ptr < item > &&
+                self, player *carrier,
                 const int ticks );
         bool process_wet( player *carrier, const tripoint_bub_ms &pos );
-        static detached_ptr<item> process_tool( detached_ptr<item> &&self, player *carrier,
-                                                const tripoint_bub_ms &pos, const int ticks );
+        static detached_ptr < item > process_tool( detached_ptr < item > &&self, player *carrier,
+                const tripoint_bub_ms &pos, const int ticks );
 
     public:
         static const int INFINITE_CHARGES;
@@ -2452,14 +2455,14 @@ class item: public location_visitable<item>, public game_object<item>
         const itype *type;
         item_contents contents;
         /** What faults (if any) currently apply to this item */
-        std::set<fault_id> faults;
+        std::set < fault_id > faults;
 
 
-        std::vector<detached_ptr<item>> remove_components();
-        detached_ptr<item> remove_component( item& it );
-        void add_component( detached_ptr<item>&& comp );
-        const location_vector<item> &get_components() const;
-        location_vector<item> &get_components();
+        std::vector < detached_ptr < item>> remove_components();
+        detached_ptr < item > remove_component( item& it );
+        void add_component( detached_ptr < item > && comp );
+        const location_vector < item > &get_components() const;
+        location_vector < item > &get_components();
         const mtype *get_corpse_mon() const;
         auto get_melee_damage_bonus() const -> const damage_instance&;
         auto set_melee_damage_bonus( const damage_instance& bonus ) -> void;
@@ -2478,12 +2481,12 @@ class item: public location_visitable<item>, public game_object<item>
         void copy_fields_from( const item& source );
         // TODO: Move to private ASAP (DONE: moved to private in Phase 5)
         FlagsSetType item_tags; // generic item specific flags
-        location_vector<item> components;
+        location_vector < item > components;
         const itype *curammo = nullptr;
         data_vars::data_set item_vars_ = {};
         const mtype *corpse = nullptr;
         std::string corpse_name;       // Name of the late lamented
-        std::set<matec_id> techniques; // item specific techniques
+        std::set < matec_id > techniques; // item specific techniques
 
         damage_instance melee_damage_bonus;
         int melee_hit_bonus = 0;
@@ -2496,25 +2499,24 @@ class item: public location_visitable<item>, public game_object<item>
         /**
          * Data for items that represent in-progress crafts.
          */
-        class craft_data
-        {
+        class craft_data {
             public:
                 const recipe *making = nullptr;
                 int next_failure_point = -1;
-                std::vector<item_comp> comps_used;
+                std::vector < item_comp > comps_used;
                 // If the crafter has insufficient tools to continue to the next 5% progress step
                 bool tools_to_continue = false;
-                std::vector<comp_selection<tool_comp>> cached_tool_selections;
+                std::vector < comp_selection < tool_comp>> cached_tool_selections;
 
-                void serialize( JsonOut& jsout ) const;
-                void deserialize( JsonIn& jsin );
-                void deserialize( const JsonObject& obj );
+                void serialize( JsonOut & jsout ) const;
+                void deserialize( JsonIn & jsin );
+                void deserialize( const JsonObject & obj );
         };
 
-        cata::value_ptr<craft_data> craft_data_;
+        cata::value_ptr < craft_data > craft_data_;
 
         // any relic data specific to this item
-        cata::value_ptr<relic> relic_data;
+        cata::value_ptr < relic > relic_data;
 
     public:
         int charges;
@@ -2572,11 +2574,11 @@ class item: public location_visitable<item>, public game_object<item>
          * Two items are dropped in same "batch" if they have identical drop tokens
          * Ideally, this would be stored outside item class.
          */
-        pimpl<item_drop_token> drop_token;
+        pimpl < item_drop_token > drop_token;
 
     private:
         /** Kill tracker */
-        std::unique_ptr<kill_tracker> kills;
+        std::unique_ptr < kill_tracker > kills;
         /**
          * Check if there's a kill_tracker
          * Make one if there isn't and if ENABLE_EVENTS option is toggled on
@@ -2606,7 +2608,7 @@ inline bool is_crafting_component( const item& component )
 
 namespace charge_removal_blacklist
 {
-const std::set<itype_id> &get();
+const std::set < itype_id > &get();
 void load( const JsonObject& jo );
 void defer( item*, int );
 void split_deferred();

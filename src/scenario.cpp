@@ -170,8 +170,8 @@ static void check_spells( const std::set<spell_id> &spells, const string_id<scen
 
 void scenario::check_definition() const
 {
-for( auto &p : professions ) {
-    if( !p.is_valid() ) {
+    for( auto &p : professions ) {
+        if( !p.is_valid() ) {
             debugmsg( "profession %s for scenario %s does not exist", p.c_str(), id.c_str() );
         }
     }
@@ -181,14 +181,14 @@ for( auto &p : professions ) {
         debugmsg( "Duplicate entries in the professions array." );
     }
 
-for( auto &l : _allowed_locs ) {
-    if( !l.is_valid() ) {
+    for( auto &l : _allowed_locs ) {
+        if( !l.is_valid() ) {
             debugmsg( "starting location %s for scenario %s does not exist", l.c_str(), id.c_str() );
         }
     }
 
     if( blacklist ) {
-    if( professions.empty() ) {
+        if( professions.empty() ) {
             debugmsg( "Scenario %s: Use an empty whitelist to whitelist everything.", id.c_str() );
         } else {
             permitted_professions(); // Debug msg if every profession is blacklisted
@@ -232,7 +232,7 @@ const string_id<scenario> &scenario::ident() const
 std::string scenario::gender_appropriate_name( bool male ) const
 {
     if( male ) {
-    return _name_male.translated();
+        return _name_male.translated();
     } else {
         return _name_female.translated();
     }
@@ -241,7 +241,7 @@ std::string scenario::gender_appropriate_name( bool male ) const
 std::string scenario::description( bool male ) const
 {
     if( male ) {
-    return _description_male.translated();
+        return _description_male.translated();
     } else {
         return _description_female.translated();
     }
@@ -327,14 +327,14 @@ void reset_scenarios_blacklist()
 std::vector<profession_id> scenario::permitted_professions() const
 {
     if( !cached_permitted_professions.empty() ) {
-    return cached_permitted_professions;
-}
+        return cached_permitted_professions;
+    }
 
-const auto all = profession::get_all();
-std::vector<profession_id> &res = cached_permitted_professions;
-for( const profession &p : all ) {
-    const bool present = std::ranges::find( professions,
-                                            p.ident() ) != professions.end();
+    const auto all = profession::get_all();
+    std::vector<profession_id> &res = cached_permitted_professions;
+    for( const profession &p : all ) {
+        const bool present = std::ranges::find( professions,
+                                                p.ident() ) != professions.end();
 
         bool conflicting_traits = scenario_traits_conflict_with_profession_traits( p );
 
@@ -357,7 +357,7 @@ for( const profession &p : all ) {
     }
 
     if( res.empty() ) {
-    debugmsg( "Scenario %s blacklists all professions.", id );
+        debugmsg( "Scenario %s blacklists all professions.", id );
         res.push_back( profession::generic() );
     }
     return res;
@@ -365,14 +365,14 @@ for( const profession &p : all ) {
 
 bool scenario::scenario_traits_conflict_with_profession_traits( const profession &p ) const
 {
-for( auto &pt : p.get_forbidden_traits() ) {
-    if( is_locked_trait( pt ) ) {
+    for( auto &pt : p.get_forbidden_traits() ) {
+        if( is_locked_trait( pt ) ) {
             return true;
         }
     }
 
-for( auto &pt : p.get_locked_traits() ) {
-    if( is_forbidden_trait( pt ) ) {
+    for( auto &pt : p.get_locked_traits() ) {
+        if( is_forbidden_trait( pt ) ) {
             return true;
         }
     }
@@ -380,8 +380,8 @@ for( auto &pt : p.get_locked_traits() ) {
     //  check if:
     //  locked traits for scenario prevent taking locked traits for professions
     //  locked traits for professions prevent taking locked traits for scenario
-for( auto &st : get_locked_traits() ) {
-    for( auto &pt : p.get_locked_traits() ) {
+    for( auto &st : get_locked_traits() ) {
+        for( auto &pt : p.get_locked_traits() ) {
             if( are_conflicting_traits( st, pt ) || are_conflicting_traits( pt, st ) ) {
                 return true;
             }
@@ -411,7 +411,7 @@ const profession_id &scenario::weighted_random_profession() const
 std::string scenario::prof_count_str() const
 {
     if( professions.empty() ) {
-    return _( "All" );
+        return _( "All" );
     }
     return blacklist ? _( "Almost all" ) : _( "Limited" );
 }
@@ -444,13 +444,13 @@ vproto_id scenario::vehicle() const
 bool scenario::traitquery( const trait_id &trait ) const
 {
     return _allowed_traits.contains( trait ) || is_locked_trait( trait ) ||
-    ( !is_forbidden_trait( trait ) && trait->startingtrait );
+           ( !is_forbidden_trait( trait ) && trait->startingtrait );
 }
 
 bool scenario::bionicquery( const bionic_id &bionic ) const
 {
     return _allowed_bionics.contains( bionic ) || is_locked_bionic( bionic ) ||
-    ( !is_forbidden_bionic( bionic ) && bionic->starting_bionic );
+           ( !is_forbidden_bionic( bionic ) && bionic->starting_bionic );
 }
 
 bool scenario::spellquery( const spell_id &spell ) const
@@ -526,8 +526,7 @@ const std::vector<mission_type_id> &scenario::missions() const
 {
     return _missions;
 }
-const std::vector<std::pair<mongroup_id, float>> &scenario::surround_groups() const
-{
+const std::vector<std::pair<mongroup_id, float>> &scenario::surround_groups() const {
     return _surround_groups;
 }
 // vim:ts=4:sw=4:et:tw=0:fdm=marker:

@@ -144,9 +144,9 @@ time_duration weighted_averaged_rot( const item *a, const item *b )
 units::volume item::get_container_capacity() const
 {
     if( !is_container() ) {
-    return 0_ml;
-}
-return type->container->contains;
+        return 0_ml;
+    }
+    return type->container->contains;
 }
 
 units::volume item::get_total_capacity() const
@@ -293,19 +293,19 @@ detached_ptr<item> item::use_amount( detached_ptr<item> &&self, const itype_id &
 bool item::allow_crafting_component() const
 {
     if( is_toolmod() && is_irremovable() ) {
-    return false;
-}
+        return false;
+    }
 
-// vehicle batteries are implemented as magazines of charge
-if( is_magazine() && ammo_types().contains( ammo_battery ) ) {
-    return true;
-}
+    // vehicle batteries are implemented as magazines of charge
+    if( is_magazine() && ammo_types().contains( ammo_battery ) ) {
+        return true;
+    }
 
-// fixes #18886 - turret installation may require items with irremovable mods
-if( is_gun() ) {
-    bool valid = true;
-    visit_items( [&]( const item * it ) {
-        if( this == it ) {
+    // fixes #18886 - turret installation may require items with irremovable mods
+    if( is_gun() ) {
+        bool valid = true;
+        visit_items( [&]( const item * it ) {
+            if( this == it ) {
                 return VisitResponse::NEXT;
             }
             if( !( it->is_magazine() || ( it->is_gunmod() && it->is_irremovable() ) ) ) {

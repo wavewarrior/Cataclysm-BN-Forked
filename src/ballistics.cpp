@@ -259,13 +259,13 @@ void drop_or_embed_projectile( dealt_projectile_attack &attack )
 auto blood_trail_len( int damage ) -> size_t
 {
     if( damage > 50 ) {
-    return 3;
-} else if( damage > 20 ) {
-    return 2;
-} else if( damage > 0 ) {
-    return 1;
-}
-return 0;
+        return 3;
+    } else if( damage > 20 ) {
+        return 2;
+    } else if( damage > 0 ) {
+        return 1;
+    }
+    return 0;
 }
 
 static bool can_be_tangled_by_net( const monster &z )
@@ -541,16 +541,16 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
                              []( b2ShapeId shape, b2Vec2 point, b2Vec2 /*normal*/, float fraction,
             void *raw_ctx ) -> float {
                 if( !b2Shape_IsSensor( shape ) ) { return 1.0f; }
-            auto *rctx = static_cast<ray_ctx *>( raw_ctx );
-            const auto body = b2Shape_GetBody( shape );
-            auto *udata = static_cast<Creature *>( b2Body_GetUserData( body ) );
-            if( !udata || udata == rctx->shooter ) { return 1.0f; }
-            // Resolve geometry NOW while shape ID is guaranteed valid.
-            const auto center = b2Body_GetPosition( body );
-            const auto radius = b2Shape_GetCircle( shape ).radius;
-            rctx->hits.push_back( { udata, fraction, center, radius } );
-            return 1.0f;
-        }, &ctx );
+                auto *rctx = static_cast<ray_ctx *>( raw_ctx );
+                const auto body = b2Shape_GetBody( shape );
+                auto *udata = static_cast<Creature *>( b2Body_GetUserData( body ) );
+                if( !udata || udata == rctx->shooter ) { return 1.0f; }
+                // Resolve geometry NOW while shape ID is guaranteed valid.
+                const auto center = b2Body_GetPosition( body );
+                const auto radius = b2Shape_GetCircle( shape ).radius;
+                rctx->hits.push_back( { udata, fraction, center, radius } );
+                return 1.0f;
+            }, &ctx );
 
             creature_ray_hits = std::move( ctx.hits );
             std::ranges::sort( creature_ray_hits, {}, &ray_creature_hit::fraction );

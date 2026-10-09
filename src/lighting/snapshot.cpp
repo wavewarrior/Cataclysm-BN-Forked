@@ -626,8 +626,8 @@ std::vector<gpu_emitter> build_emitter_snapshot(
     return out;
 }
 
-auto partition_emitters_by_view(std::vector<gpu_emitter>& emitters,
-                                const emitter_view_rect& view) -> int {
+auto partition_emitters_by_view(std::vector<gpu_emitter>& emitters, const emitter_view_rect& view)
+    -> int {
     if (view.w <= 0 || view.h <= 0) { return static_cast<int>(emitters.size()); }
     const auto margin = static_cast<float>(EMITTER_VIEW_MARGIN_TILES);
     const auto rx0 = static_cast<float>(view.x0) - margin;

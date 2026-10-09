@@ -104,18 +104,20 @@ auto parse_lua_activity_options( const sol::table &opts ) -> lua_activity_option
     return result;
 }
 
-auto make_lua_activity( const lua_activity_options &opts ) -> std::unique_ptr<player_activity>
-{
+auto make_lua_activity( const lua_activity_options &opts ) -> std::unique_ptr<player_activity> {
     auto act = std::make_unique<player_activity>( opts.activity, to_moves<int>( opts.duration ), -1,
-               INT_MIN, opts.name );
+        INT_MIN, opts.name );
     act->interruptable_with_kb = opts.interruptable;
-    if( !opts.on_finish.empty() ) {
+    if( !opts.on_finish.empty() )
+    {
         act->str_values.push_back( std::string{ lua_activity_on_finish_prefix } + opts.on_finish );
     }
-    if( !opts.on_turn.empty() ) {
+    if( !opts.on_turn.empty() )
+    {
         act->str_values.push_back( std::string{ lua_activity_on_turn_prefix } + opts.on_turn );
     }
-    if( !opts.data.empty() ) {
+    if( !opts.data.empty() )
+    {
         act->str_values.push_back( std::string{ lua_activity_data_prefix } + opts.data );
     }
     auto append_pos = [&act]( const tripoint_bub_ms & pos ) -> tripoint_abs_ms {
@@ -123,7 +125,8 @@ auto make_lua_activity( const lua_activity_options &opts ) -> std::unique_ptr<pl
         act->coords.push_back( abs_pos );
         return abs_pos;
     };
-    if( opts.pos ) {
+    if( opts.pos )
+    {
         act->placement = append_pos( *opts.pos );
     }
     return act;
@@ -243,8 +246,7 @@ void cata::detail::reg_creature( sol::state &lua )
 
         luna::set_fx( ut, "has_effect", []( const Creature & cr, const efftype_id & eff,
         sol::optional<const bodypart_str_id &> bpid ) -> bool {
-            if( bpid.has_value() )
-            {
+            if( bpid.has_value() ) {
                 return cr.has_effect( eff, *bpid );
             }
             return cr.has_effect( eff );
@@ -252,11 +254,9 @@ void cata::detail::reg_creature( sol::state &lua )
 
         luna::set_fx( ut, "get_effect", []( Creature & cr, const efftype_id & eff,
         sol::optional<const bodypart_str_id &> bpid ) -> effect & {
-            if( bpid.has_value() )
-            {
+            if( bpid.has_value() ) {
                 return cr.get_effect( eff, *bpid );
-            } else
-            {
+            } else {
                 return cr.get_effect( eff );
             }
         } );
@@ -284,8 +284,7 @@ void cata::detail::reg_creature( sol::state &lua )
                                             const time_duration & dur,
                                             sol::optional<const bodypart_str_id &> bpid,
                                             sol::optional<int> intensity
-                                          )
-        {
+        ) {
             int eint = intensity ? *intensity : 0;
             const bodypart_str_id &bp = bpid ? *bpid : bodypart_str_id::NULL_ID();
             cr.add_effect( eff, dur, bp, eint );
@@ -359,21 +358,17 @@ void cata::detail::reg_creature( sol::state &lua )
         SET_FX_T( get_size, creature_size() const );
         luna::set_fx( ut, "get_hp", []( const Creature & cr,
         sol::optional<const bodypart_id &> bpid ) -> int {
-            if( bpid.has_value() )
-        {
-            return cr.get_hp( *bpid );
-            } else
-            {
+            if( bpid.has_value() ) {
+                return cr.get_hp( *bpid );
+            } else {
                 return cr.get_hp();
             }
         } );
         luna::set_fx( ut, "get_hp_max", []( const Creature & cr,
         sol::optional<const bodypart_id &> bpid ) -> int {
-            if( bpid.has_value() )
-        {
-            return cr.get_hp_max( *bpid );
-            } else
-            {
+            if( bpid.has_value() ) {
+                return cr.get_hp_max( *bpid );
+            } else {
                 return cr.get_hp_max();
             }
         } );
@@ -491,8 +486,7 @@ void cata::detail::reg_monster( sol::state &lua )
             mon.set_dest( tripoint_bub_ms( p ) );
         } ) );
         luna::set_fx( ut, "set_target", []( monster & mon, Creature * target ) -> void {
-            if( target == nullptr )
-            {
+            if( target == nullptr ) {
                 mon.unset_dest();
                 return;
             }
@@ -527,8 +521,7 @@ void cata::detail::reg_monster( sol::state &lua )
         luna::set_fx( ut, "set_attitude", []( monster & mon, monster_attitude att ) -> void {
             static const auto effect_docile = efftype_id( "docile" );
             static const auto effect_pacified = efftype_id( "pacified" );
-            switch( att )
-            {
+            switch( att ) {
                 case MATT_FLEE:
                     mon.anger = 0;
                     mon.morale = -100;
@@ -870,9 +863,8 @@ void cata::detail::reg_character( sol::state &lua )
         SET_FX_T( has_bionic, bool( const bionic_id & b ) const );
 
         luna::set_fx( ut, "activate_bionic", []( UT_CLASS & utObj, const bionic_id & bid, std::optional<bool> block_message ) -> bool {
-            if( utObj.has_bionic( bid ) )
-        {
-            bionic &bio = utObj.get_bionic_state( bid );
+            if( utObj.has_bionic( bid ) ) {
+                bionic &bio = utObj.get_bionic_state( bid );
                 bio.powered = bio.info().has_flag( STATIC( flag_id( "BIONIC_TOGGLED" ) ) ) ||
                                  bio.info().charge_time > 0;
                 if( bio.info().charge_time > 0 ) {
@@ -887,9 +879,8 @@ void cata::detail::reg_character( sol::state &lua )
         } );
 
         luna::set_fx( ut, "deactivate_bionic", []( UT_CLASS & utObj, const bionic_id & bid, std::optional<bool> block_message ) -> bool {
-            if( utObj.has_bionic( bid ) )
-        {
-            bionic &bio = utObj.get_bionic_state( bid );
+            if( utObj.has_bionic( bid ) ) {
+                bionic &bio = utObj.get_bionic_state( bid );
                 return utObj.deactivate_bionic( bio, block_message.value_or( true ) );
             }
             return false;
@@ -930,23 +921,20 @@ void cata::detail::reg_character( sol::state &lua )
             }
         } );
         luna::set_fx( ut, "get_auto_start_thresh", []( UT_CLASS & ch, const bionic_id & bid ) -> float {
-            if( ch.has_bionic( bid ) )
-        {
-            return ch.get_bionic_state( bid ).get_auto_start_thresh();
+            if( ch.has_bionic( bid ) ) {
+                return ch.get_bionic_state( bid ).get_auto_start_thresh();
             }
             return -1.0f;
         } );
         luna::set_fx( ut, "is_auto_start_on", []( UT_CLASS & ch, const bionic_id & bid ) -> bool {
-            if( ch.has_bionic( bid ) )
-        {
-            return ch.get_bionic_state( bid ).is_auto_start_on();
+            if( ch.has_bionic( bid ) ) {
+                return ch.get_bionic_state( bid ).is_auto_start_on();
             }
             return false;
         } );
         luna::set_fx( ut, "is_auto_start_keep_full", []( UT_CLASS & ch, const bionic_id & bid ) -> bool {
-            if( ch.has_bionic( bid ) )
-        {
-            return ch.get_bionic_state( bid ).is_auto_start_keep_full();
+            if( ch.has_bionic( bid ) ) {
+                return ch.get_bionic_state( bid ).is_auto_start_keep_full();
             }
             return false;
         } );
@@ -1288,8 +1276,7 @@ void cata::detail::reg_character( sol::state &lua )
         luna::set_fx( ut, "drop_all_items", []( Character & ch ) -> void {
             std::vector<detached_ptr<item>> tmp = ch.inv_dump_remove();
             map &here = get_map();
-            for( auto &itm : tmp )
-            {
+            for( auto &itm : tmp ) {
                 here.add_item_or_charges( ch.bub_pos(), std::move( itm ) );
             }
         } );
@@ -1297,8 +1284,7 @@ void cata::detail::reg_character( sol::state &lua )
         SET_FX( bodypart_exposure );
 
         luna::set_fx( ut, "drench", []( UT_CLASS & c, const int saturation,
-                                        const std::vector<bodypart_id> &parts, const bool ignore_waterproof )
-        {
+        const std::vector<bodypart_id> &parts, const bool ignore_waterproof ) {
             auto drenched_parts = body_part_set();
             drenched_parts.fill( parts );
             c.drench( saturation, drenched_parts, ignore_waterproof );
@@ -1309,7 +1295,7 @@ void cata::detail::reg_character( sol::state &lua )
             return c.use_charges( what, qty );
         },
         []( UT_CLASS & c, const itype_id & what, int qty,
-        const sol::function & filter ) -> std::vector<detached_ptr<item>> {
+            const sol::function & filter ) -> std::vector<detached_ptr<item>> {
             return c.use_charges( what, qty, [&filter]( const item & it ) { return filter( it ); } );
         } ) );
         SET_FX( use_charges_if_avail );

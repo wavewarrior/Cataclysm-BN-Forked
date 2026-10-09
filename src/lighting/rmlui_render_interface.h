@@ -1,11 +1,11 @@
 #pragma once
 #ifndef CATA_SRC_LIGHTING_RMLUI_RENDER_INTERFACE_H
-#define CATA_SRC_LIGHTING_RMLUI_RENDER_INTERFACE_H
+#    define CATA_SRC_LIGHTING_RMLUI_RENDER_INTERFACE_H
 
-#include <RmlUi/Core/RenderInterface.h>
-#include <cstdint>
-#include <functional>
-#include <memory>
+#    include <RmlUi/Core/RenderInterface.h>
+#    include <cstdint>
+#    include <functional>
+#    include <memory>
 
 // RmlUi RenderInterface over SDL_GPU. Sibling of imgui_layer's render path: its
 // own small pipeline (textured triangles + premultiplied-alpha blend), its own
@@ -65,8 +65,8 @@ public:
     //
     // A resolver rather than a raw pointer: the target may be reallocated, and
     // ReleaseTexture deliberately does NOT free textures reached this way.
-    void set_borrowed_texture_source( std::function<SDL_GPUTexture*()> resolver,
-                                      int width, int height );
+    void set_borrowed_texture_source(
+        std::function<SDL_GPUTexture*()> resolver, int width, int height);
 
     // --- Rml::RenderInterface (required) ---
     Rml::CompiledGeometryHandle CompileGeometry(

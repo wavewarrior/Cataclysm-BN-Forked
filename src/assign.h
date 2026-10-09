@@ -134,11 +134,10 @@ requires( std::is_class_v<T> && !is_optional<T>::value ) //*NOPAD*
     return true;
 }
 
-namespace details
-{
+namespace details {
 
 template <typename T, typename Set>
-bool assign_set( const JsonObject &jo, const std::string &name, Set &val )
+bool assign_set( const JsonObject & jo, const std::string & name, Set & val )
 {
     JsonObject add = jo.get_object( "extend" );
     add.allow_omitted_members();

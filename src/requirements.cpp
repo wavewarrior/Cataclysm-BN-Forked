@@ -132,16 +132,16 @@ std::string quality_requirement::to_string( const int, const int ) const
 {
     //~ %1$d: tool count, %2$s: quality requirement name, %3$d: quality level requirement
     return string_format( vgettext( "%1$d tool with %2$s of %3$d or more.",
-           "%1$d tools with %2$s of %3$d or more.", count ),
-    count, type.obj().name, level );
+                                    "%1$d tools with %2$s of %3$d or more.", count ),
+                          count, type.obj().name, level );
 }
 
 std::string quality_requirement::to_colored_string() const
 {
     //~ %1$d: tool count, %2$s: quality requirement name, %3$d: quality level requirement
     return string_format( vgettext( "%1$d tool with <info>%2$s of %3$d</info> or more",
-           "%1$d tools with <info>%2$s of %3$d</info> or more", count ),
-    count, type.obj().name, level );
+                                    "%1$d tools with <info>%2$s of %3$d</info> or more", count ),
+                          count, type.obj().name, level );
 }
 
 bool tool_comp::by_charges() const
@@ -152,10 +152,10 @@ bool tool_comp::by_charges() const
 std::string tool_comp::to_string( const int batch, const int ) const
 {
     if( by_charges() ) {
-    //~ %1$s: tool name, %2$d: charge requirement
-    return string_format( vpgettext( "requirement", "%1$s (%2$d charge)", "%1$s (%2$d charges)",
-                                     count * batch ),
-                          item::nname( type ), count * batch );
+        //~ %1$s: tool name, %2$d: charge requirement
+        return string_format( vpgettext( "requirement", "%1$s (%2$d charge)", "%1$s (%2$d charges)",
+                                         count * batch ),
+                              item::nname( type ), count * batch );
     } else {
         return item::nname( type, std::abs( count ) );
     }
@@ -216,10 +216,10 @@ void quality_requirement::dump( JsonOut &jsout ) const
     jsout.start_object();
     jsout.member( "id", type );
     if( level != 1 ) {
-    jsout.member( "level", level );
+        jsout.member( "level", level );
     }
     if( count != 1 ) {
-    jsout.member( "amount", count );
+        jsout.member( "amount", count );
     }
     jsout.end_object();
 }
@@ -248,7 +248,7 @@ void tool_comp::dump( JsonOut &jsout ) const
     jsout.write( type );
     jsout.write( count );
     if( requirement ) {
-    jsout.write( "LIST" );
+        jsout.write( "LIST" );
     }
     jsout.end_array();
 }
@@ -278,10 +278,10 @@ void item_comp::dump( JsonOut &jsout ) const
     jsout.write( type );
     jsout.write( count );
     if( !recoverable ) {
-    jsout.write( "NO_RECOVER" );
+        jsout.write( "NO_RECOVER" );
     }
     if( requirement ) {
-    jsout.write( "LIST" );
+        jsout.write( "LIST" );
     }
     jsout.end_array();
 }
@@ -453,14 +453,14 @@ std::string requirement_data::list_missing() const
 void quality_requirement::check_consistency( const std::string &display_name ) const
 {
     if( !type.is_valid() ) {
-    debugmsg( "Unknown quality %s in %s", type.c_str(), display_name );
+        debugmsg( "Unknown quality %s in %s", type.c_str(), display_name );
     }
 }
 
 void component::check_consistency( const std::string &display_name ) const
 {
     if( !type.is_valid() ) {
-    debugmsg( "%s in %s is not a valid item template", type, display_name );
+        debugmsg( "%s in %s is not a valid item template", type, display_name );
     }
 }
 
@@ -495,7 +495,7 @@ void requirement_data::check_consistency()
 
 template <typename T>
 void inline_requirements( std::vector<std::vector<T>> &list,
-                          const std::function<const std::vector<std::vector<T>> & ( const requirement_data & )> &getter )
+                          const std::function<const std::vector<std::vector<T>> &( const requirement_data & ) > &getter )
 {
     // add a single component to the vector. If component already exists, chooses min count
     const auto add_component = []( const T & comp, std::vector<T> &accum ) {
@@ -644,8 +644,8 @@ std::vector<std::string> requirement_data::get_folded_list( int width,
         static_cast<bool>( flags & requirement_display_flags::no_unavailable );
 
     std::vector<std::string> out_buffer;
-for( const auto &comp_list : objs ) {
-    const bool has_one = any_marked_available( comp_list );
+    for( const auto &comp_list : objs ) {
+        const bool has_one = any_marked_available( comp_list );
         std::vector<std::string> list_as_string;
         std::vector<std::string> buffer_has;
         for( const T &component : comp_list ) {
@@ -717,24 +717,24 @@ bool requirement_data::can_make_with_inventory( const inventory &crafting_inv,
         const std::function<bool( const item & )> &filter, int batch, cost_adjustment flags ) const
 {
     if( g->u.has_trait( trait_DEBUG_HS ) ) {
-    return true;
-}
+        return true;
+    }
 
-bool retval = true;
-// All functions must be called to update the available settings in the components.
-if( !has_comps( crafting_inv, qualities, return_true<item> ) ) {
-    retval = false;
-}
-if( !has_comps( crafting_inv, tools, return_true<item>, batch, flags ) ) {
-    retval = false;
-}
-if( !has_comps( crafting_inv, components, filter, batch ) ) {
-    retval = false;
-}
-if( !check_enough_materials( crafting_inv, filter, batch ) ) {
-    retval = false;
-}
-return retval;
+    bool retval = true;
+    // All functions must be called to update the available settings in the components.
+    if( !has_comps( crafting_inv, qualities, return_true<item> ) ) {
+        retval = false;
+    }
+    if( !has_comps( crafting_inv, tools, return_true<item>, batch, flags ) ) {
+        retval = false;
+    }
+    if( !has_comps( crafting_inv, components, filter, batch ) ) {
+        retval = false;
+    }
+    if( !check_enough_materials( crafting_inv, filter, batch ) ) {
+        retval = false;
+    }
+    return retval;
 }
 
 template<typename T>
@@ -779,9 +779,9 @@ bool quality_requirement::has(
     cost_adjustment, const std::function<void( int )> & ) const
 {
     if( g->u.has_trait( trait_DEBUG_HS ) ) {
-    return true;
-}
-return crafting_inv.has_quality( type, level, count );
+        return true;
+    }
+    return crafting_inv.has_quality( type, level, count );
 }
 
 nc_color quality_requirement::get_color( bool has_one, const inventory &,
@@ -798,10 +798,10 @@ bool tool_comp::has(
     cost_adjustment flags, std::function<void( int )> visitor ) const
 {
     if( g->u.has_trait( trait_DEBUG_HS ) ) {
-    return true;
-}
-if( !by_charges() ) {
-    return crafting_inv.has_tools( type, std::abs( count ), filter );
+        return true;
+    }
+    if( !by_charges() ) {
+        return crafting_inv.has_tools( type, std::abs( count ), filter );
     } else {
         int charges_required = count * batch;
 
@@ -832,11 +832,11 @@ bool item_comp::has(
     cost_adjustment, const std::function<void( int )> & ) const
 {
     if( g->u.has_trait( trait_DEBUG_HS ) ) {
-    return true;
-}
-const int cnt = std::abs( count ) * batch;
-if( item::count_by_charges( type ) ) {
-    return crafting_inv.has_charges( type, cnt, filter );
+        return true;
+    }
+    const int cnt = std::abs( count ) * batch;
+    if( item::count_by_charges( type ) ) {
+        return crafting_inv.has_charges( type, cnt, filter );
     } else {
         return crafting_inv.has_components( type, cnt, filter );
     }
@@ -854,7 +854,7 @@ nc_color item_comp::get_color( bool has_one, const inventory &crafting_inv,
 }
 
 template<typename T, typename ID>
-const T *requirement_data::find_by_type( const std::vector< std::vector<T> > &vec,
+const T * requirement_data::find_by_type( const std::vector< std::vector<T> > &vec,
         const ID &type )
 {
     for( const auto &list : vec ) {
@@ -1004,22 +1004,22 @@ void requirement_data::replace_item( const itype_id &id, const itype_id &replace
     apply_replacement( components, id, replacement );
 }
 
-const requirement_data::alter_tool_comp_vector &requirement_data::get_tools() const
+const requirement_data::alter_tool_comp_vector & requirement_data::get_tools() const
 {
     return tools;
 }
 
-const requirement_data::alter_quali_req_vector &requirement_data::get_qualities() const
+const requirement_data::alter_quali_req_vector & requirement_data::get_qualities() const
 {
     return qualities;
 }
 
-const requirement_data::alter_item_comp_vector &requirement_data::get_components() const
+const requirement_data::alter_item_comp_vector & requirement_data::get_components() const
 {
     return components;
 }
 
-requirement_data::alter_item_comp_vector &requirement_data::get_components()
+requirement_data::alter_item_comp_vector & requirement_data::get_components()
 {
     return components;
 }
@@ -1219,7 +1219,7 @@ requirement_data requirement_data::continue_requirements( const std::vector<item
 }
 
 template<typename T, typename Accum>
-static std::vector<std::vector<T>> consolidate( std::vector<std::vector<T>> old_vec,
+static std::vector<std::vector<T>> consolidate( std::vector<std::vector<T >> old_vec,
         const Accum &accum )
 {
     const auto type_lt = []( const T & lhs, const T & rhs ) -> bool {
@@ -1238,7 +1238,7 @@ static std::vector<std::vector<T>> consolidate( std::vector<std::vector<T>> old_
     std::sort( old_vec.begin(), old_vec.end(),
     [&type_lt]( const std::vector<T> &lhs, const std::vector<T> &rhs ) -> bool {
         return std::lexicographical_compare( lhs.begin(), lhs.end(), rhs.begin(), rhs.end(),
-        type_lt );
+                                             type_lt );
     } );
 
     std::vector<std::vector<T>> new_vec;
@@ -1323,7 +1323,7 @@ void requirement_data::consolidate()
 }
 
 template<typename T>
-static bool sorted_equal( std::vector<std::vector<T>> lhs, std::vector<std::vector<T>> rhs )
+static bool sorted_equal( std::vector<std::vector<T>> lhs, std::vector<std::vector<T >> rhs )
 {
     if( lhs.size() != rhs.size() ) {
         return false;
@@ -1342,7 +1342,7 @@ static bool sorted_equal( std::vector<std::vector<T>> lhs, std::vector<std::vect
 bool requirement_data::has_same_requirements_as( const requirement_data &that ) const
 {
     return sorted_equal( tools, that.tools ) && sorted_equal( qualities, that.qualities )
-    && sorted_equal( components, that.components );
+           && sorted_equal( components, that.components );
 }
 
 template<typename T>
@@ -1359,8 +1359,7 @@ static void dump_req_vec( const std::vector<std::vector<T>> &vec, JsonOut &jsout
     jsout.end_array();
 }
 
-void requirement_data::dump( JsonOut &jsout ) const
-{
+void requirement_data::dump( JsonOut &jsout ) const {
     jsout.start_object( /*wrap=*/true );
 
     jsout.member( "tools" );
@@ -1560,14 +1559,14 @@ std::vector<const requirement_data *> deduped_requirement_data::feasible_alterna
     return result;
 }
 
-const requirement_data *deduped_requirement_data::select_alternative(
+const requirement_data * deduped_requirement_data::select_alternative(
     Character &crafter, const std::function<bool( const item & )> &filter, int batch,
     cost_adjustment flags ) const
 {
     return select_alternative( crafter, crafter.crafting_inventory(), filter, batch, flags );
 }
 
-const requirement_data *deduped_requirement_data::select_alternative(
+const requirement_data * deduped_requirement_data::select_alternative(
     Character &crafter, const inventory &inv, const std::function<bool( const item & )> &filter,
     int batch, cost_adjustment flags ) const
 {

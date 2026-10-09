@@ -33,13 +33,11 @@ item_stack::iterator item_stack::end()
     return items->end();
 }
 
-item_stack::const_iterator item_stack::begin() const
-{
+item_stack::const_iterator item_stack::begin() const {
     return items->cbegin();
 }
 
-item_stack::const_iterator item_stack::end() const
-{
+item_stack::const_iterator item_stack::end() const {
     return items->cend();
 }
 
@@ -53,13 +51,11 @@ item_stack::reverse_iterator item_stack::rend()
     return items->rend();
 }
 
-item_stack::const_reverse_iterator item_stack::rbegin() const
-{
+item_stack::const_reverse_iterator item_stack::rbegin() const {
     return items->crbegin();
 }
 
-item_stack::const_reverse_iterator item_stack::rend() const
-{
+item_stack::const_reverse_iterator item_stack::rend() const {
     return items->crend();
 }
 
@@ -68,7 +64,8 @@ item &item_stack::only_item()
     if( empty() ) {
         debugmsg( "Missing item at target location" );
         return null_item_reference();
-    } else if( size() > 1 ) {
+    }
+    else if( size() > 1 ) {
         debugmsg( "More than one item at target location: %s", enumerate_as_string( begin(),
         end(), []( const item * const & it ) {
             return it->typeId();
@@ -101,7 +98,7 @@ int item_stack::amount_can_fit( const item &it ) const
     return it.count_by_charges() ? std::min( ret, it.charges ) : ret;
 }
 
-item *item_stack::stacks_with( const item &it )
+item * item_stack::stacks_with( const item &it )
 {
     for( item * &here : *items ) {
         if( here->stacks_with( it ) ) {
@@ -111,10 +108,10 @@ item *item_stack::stacks_with( const item &it )
     return nullptr;
 }
 
-const item *item_stack::stacks_with( const item &it ) const
+const item * item_stack::stacks_with( const item &it ) const
 {
-for( const item * const &here : *items ) {
-    if( here->stacks_with( it ) ) {
+    for( const item * const &here : *items ) {
+        if( here->stacks_with( it ) ) {
             return here;
         }
     }

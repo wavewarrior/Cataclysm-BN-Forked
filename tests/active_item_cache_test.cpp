@@ -44,7 +44,8 @@ TEST_CASE("nonperishable_food_does_not_enter_active_item_cache", "[item]") {
     const auto loc = tripoint_bub_ms{60, 60, 0};
     g->m.i_clear(loc);
     const auto abs_loc =
-        tripoint_abs_sm( g->m.get_abs_sub(), loc.z() ) + tripoint_rel_sm(loc.x() / SEEX, loc.y() / SEEY, 0);
+        tripoint_abs_sm(g->m.get_abs_sub(), loc.z())
+        + tripoint_rel_sm(loc.x() / SEEX, loc.y() / SEEY, 0);
     const auto baseline_active_submaps = g->m.get_submaps_with_active_items();
 
     auto sugar = item::spawn("sugar");
@@ -68,11 +69,11 @@ TEST_CASE("pointer_item_removal_updates_active_item_cache", "[item]") {
     g->m.i_clear(loc);
     const auto abs_loc = project_to<coords::sm>(map_local_to_abs(g->m, loc));
 
-    auto active = item::spawn("firecracker_act", calendar::start_of_cataclysm,
-                               item::default_charges_tag());
+    auto active =
+        item::spawn("firecracker_act", calendar::start_of_cataclysm, item::default_charges_tag());
     active->activate();
     REQUIRE(active->needs_processing());
-    auto *const active_ptr = &*active;
+    auto* const active_ptr = &*active;
 
     g->m.add_item(loc, std::move(active));
     REQUIRE(g->m.get_submaps_with_active_items().contains(abs_loc));
@@ -89,8 +90,8 @@ TEST_CASE("stack_iterator_item_removal_updates_active_item_cache", "[item]") {
     g->m.i_clear(loc);
     const auto abs_loc = project_to<coords::sm>(map_local_to_abs(g->m, loc));
 
-    auto active = item::spawn("firecracker_act", calendar::start_of_cataclysm,
-                               item::default_charges_tag());
+    auto active =
+        item::spawn("firecracker_act", calendar::start_of_cataclysm, item::default_charges_tag());
     active->activate();
     REQUIRE(active->needs_processing());
 
@@ -112,8 +113,8 @@ TEST_CASE("stack_clear_updates_active_item_cache", "[item]") {
     g->m.i_clear(loc);
     const auto abs_loc = project_to<coords::sm>(map_local_to_abs(g->m, loc));
 
-    auto active = item::spawn("firecracker_act", calendar::start_of_cataclysm,
-                               item::default_charges_tag());
+    auto active =
+        item::spawn("firecracker_act", calendar::start_of_cataclysm, item::default_charges_tag());
     active->activate();
     REQUIRE(active->needs_processing());
 
@@ -233,15 +234,15 @@ TEST_CASE("content_removal_helpers_invalidate_processing_cache", "[item]") {
         radio->set_flag(flag_RADIO_ACTIVATION);
         backpack->put_in(std::move(radio));
 
-        REQUIRE( backpack->needs_processing() );
-        backpack->contents.remove_top_items_with( []( detached_ptr<item> &&it ) {
+        REQUIRE(backpack->needs_processing());
+        backpack->contents.remove_top_items_with([](detached_ptr<item>&& it) {
             // item_tags is private in this fork; unset_flag self-invalidates, so this
             // section is weaker than upstream's raw erase (still catches a missing
             // invalidation in remove_top_items_with only if the flag change is missed).
-            it->unset_flag( flag_RADIO_ACTIVATION );
-            return std::move( it );
-        } );
-        CHECK_FALSE( backpack->needs_processing() );
+            it->unset_flag(flag_RADIO_ACTIVATION);
+            return std::move(it);
+        });
+        CHECK_FALSE(backpack->needs_processing());
     }
 
     SECTION("same-size nested content mutation") {
@@ -252,12 +253,12 @@ TEST_CASE("content_removal_helpers_invalidate_processing_cache", "[item]") {
         inner_bag->put_in(std::move(radio));
         backpack->put_in(std::move(inner_bag));
 
-        REQUIRE( backpack->needs_processing() );
-        backpack->contents.front().contents.remove_top_items_with( []( detached_ptr<item> &&it ) {
-            it->unset_flag( flag_RADIO_ACTIVATION );
-            return std::move( it );
-        } );
-        CHECK_FALSE( backpack->needs_processing() );
+        REQUIRE(backpack->needs_processing());
+        backpack->contents.front().contents.remove_top_items_with([](detached_ptr<item>&& it) {
+            it->unset_flag(flag_RADIO_ACTIVATION);
+            return std::move(it);
+        });
+        CHECK_FALSE(backpack->needs_processing());
     }
 }
 

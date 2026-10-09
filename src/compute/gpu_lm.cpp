@@ -12,9 +12,9 @@
 #    include "gpu_platform.h"
 #    include "item.h"
 #    include "itype.h"
+#    include "level_cache_freshness.h"
 #    include "lightmap.h"
 #    include "map.h"
-#    include "level_cache_freshness.h"
 #    include "math_defines.h"
 #    include "monster.h"
 #    include "npc.h"
@@ -1561,9 +1561,8 @@ auto add_static_emitter_sources(source_accumulator& acc) -> void {
 auto add_window_daylight_sources(source_accumulator& acc) -> void {
     ZoneScopedN("gpu_lm_collect_window_daylight");
     if (g == nullptr) { return; }
-    static constexpr std::array<point, 4> cardinals = {
-        point_north, point_west, point_east, point_south
-    };
+    static constexpr std::array<point, 4> cardinals =
+        {point_north, point_west, point_east, point_south};
     constexpr float WINDOW_FLOOD_BOOST = 3.0f;
     for (auto const z : acc.dirty_levels) {
         auto const natural_light = g->natural_light_level(z);
@@ -1921,8 +1920,7 @@ auto clear_colored_light_caches(map const& m, std::vector<int> const& levels) ->
         auto& lc = const_cast<level_cache&>(m.get_cache_ref(z));
         if (!lc.colored_light_cache_active) { continue; }
         std::ranges::fill(lc.colored_light_cache, 0u);
-        level_cache_freshness::stamp_gpu_download( lc,
-            { level_cache_part::colored_light_active } );
+        level_cache_freshness::stamp_gpu_download(lc, {level_cache_part::colored_light_active});
     }
 }
 
@@ -2256,11 +2254,12 @@ auto find_vehicle_for_optics_origin(map const& m, tripoint_bub_ms const& origin)
     if (vp) { return &vp->vehicle(); }
 
     auto const& origin_cache = m.get_cache_ref(origin.z());
-    auto const it = std::ranges::find_if(origin_cache.vehicle_list, [&](vehicle_handle const candidate) {
-        vehicle* const veh = resolve_vehicle(candidate);
-        if (veh == nullptr) { return false; }
-        return !veh->get_parts_at(origin, std::string{}, part_status_flag::any).empty();
-    });
+    auto const it =
+        std::ranges::find_if(origin_cache.vehicle_list, [&](vehicle_handle const candidate) {
+            vehicle* const veh = resolve_vehicle(candidate);
+            if (veh == nullptr) { return false; }
+            return !veh->get_parts_at(origin, std::string{}, part_status_flag::any).empty();
+        });
     return it != origin_cache.vehicle_list.end() ? resolve_vehicle(*it) : nullptr;
 }
 
@@ -2792,9 +2791,9 @@ auto shift_lighting_resident_inputs(shift_lighting_residency_params const& p) ->
 namespace {
 
 struct residency_apply_state {
-    std::array<std::uint64_t, OVERMAP_LAYERS> last_applied_generations {};
+    std::array<std::uint64_t, OVERMAP_LAYERS> last_applied_generations{};
     std::uint64_t last_applied_shift = 0;
-    point_abs_sm last_applied_origin {};
+    point_abs_sm last_applied_origin{};
     bool primed = false;
     std::uint64_t jump_count = 0;
 };
@@ -2803,19 +2802,15 @@ residency_apply_state s_residency_applied;
 
 } // namespace
 
-auto lighting_residency_jump_count() -> std::uint64_t {
-    return s_residency_applied.jump_count;
-}
+auto lighting_residency_jump_count() -> std::uint64_t { return s_residency_applied.jump_count; }
 
-auto apply_residency_events( apply_residency_events_params const &p ) -> void {
-    if( p.z_count <= 0 ) {
-        return;
-    }
-    auto &st = s_residency_applied;
+auto apply_residency_events(apply_residency_events_params const& p) -> void {
+    if (p.z_count <= 0) { return; }
+    auto& st = s_residency_applied;
     const int zmin = -OVERMAP_DEPTH;
     // First sight of a plan adopts the pushed stamps silently: adopting an
     // already-advanced generation is not an event this layer received.
-    if( !st.primed ) {
+    if (!st.primed) {
         st.last_applied_generations = p.residency.generation;
         st.last_applied_shift = p.residency.shift;
         st.last_applied_origin = p.bubble_origin;
@@ -2825,54 +2820,54 @@ auto apply_residency_events( apply_residency_events_params const &p ) -> void {
     // Count every generation delta the plan carries, whatever caused it: this is
     // the #20 guarantee expressed on the pushed carrier.
     bool any_jump = false;
-    for( int z = zmin; z <= zmin + p.z_count - 1; ++z ) {
-        const std::size_t idx = static_cast<std::size_t>( z_to_resident_index( z ) );
-        if( p.residency.generation[idx] != st.last_applied_generations[idx] ) {
+    for (int z = zmin; z <= zmin + p.z_count - 1; ++z) {
+        const std::size_t idx = static_cast<std::size_t>(z_to_resident_index(z));
+        if (p.residency.generation[idx] != st.last_applied_generations[idx]) {
             st.jump_count++;
             any_jump = true;
         }
     }
-    if( p.residency.shift != st.last_applied_shift ) {
+    if (p.residency.shift != st.last_applied_shift) {
         // The bubble moved: replay the in-place translate so the next lighting
         // build only uploads the newly loaded edge bands. A shift advances every
         // generation (#20), so the jump is expected and needs no per-level
         // invalidate beyond what the translate performs.
-        const int delta_x = static_cast<int>( p.bubble_origin.x() )
-                            - static_cast<int>( st.last_applied_origin.x() );
-        const int delta_y = static_cast<int>( p.bubble_origin.y() )
-                            - static_cast<int>( st.last_applied_origin.y() );
-        const bool shifted = shift_lighting_resident_inputs( {
+        const int delta_x =
+            static_cast<int>(p.bubble_origin.x()) - static_cast<int>(st.last_applied_origin.x());
+        const int delta_y =
+            static_cast<int>(p.bubble_origin.y()) - static_cast<int>(st.last_applied_origin.y());
+        const bool shifted = shift_lighting_resident_inputs({
             .device = p.device,
             .cache_x = p.cache_x,
             .cache_y = p.cache_y,
             .z_count = p.z_count,
             .shift_x_submaps = delta_x,
             .shift_y_submaps = delta_y,
-        } );
-        if( !shifted ) {
+        });
+        if (!shifted) {
             // D2: a null device means there is no resident input to shift, so the
             // invalidate-all fallback below is a no-op-shaped bookkeeping reset, not
             // an error; only a live device that failed to shift deserves a debugmsg.
-            if( p.device != nullptr ) {
-                debugmsg( "SDL_GPU resident lighting input shift failed; see debug.log for details" );
+            if (p.device != nullptr) {
+                debugmsg("SDL_GPU resident lighting input shift failed; see debug.log for details");
             }
-            auto all_levels = std::vector<int> {};
-            for( const auto gridz : std::views::iota( zmin, zmin + p.z_count ) ) {
-                all_levels.push_back( gridz );
+            auto all_levels = std::vector<int>{};
+            for (const auto gridz : std::views::iota(zmin, zmin + p.z_count)) {
+                all_levels.push_back(gridz);
             }
-            invalidate_lighting_transparency_levels( all_levels );
+            invalidate_lighting_transparency_levels(all_levels);
         }
-    } else if( any_jump ) {
+    } else if (any_jump) {
         // No move: invalidate exactly the levels whose generation jumped, the
         // same effect the deleted direct invalidate calls had.
-        auto jumped = std::vector<int> {};
-        for( int z = zmin; z <= zmin + p.z_count - 1; ++z ) {
-            const std::size_t idx = static_cast<std::size_t>( z_to_resident_index( z ) );
-            if( p.residency.generation[idx] != st.last_applied_generations[idx] ) {
-                jumped.push_back( z );
+        auto jumped = std::vector<int>{};
+        for (int z = zmin; z <= zmin + p.z_count - 1; ++z) {
+            const std::size_t idx = static_cast<std::size_t>(z_to_resident_index(z));
+            if (p.residency.generation[idx] != st.last_applied_generations[idx]) {
+                jumped.push_back(z);
             }
         }
-        invalidate_lighting_transparency_levels( jumped );
+        invalidate_lighting_transparency_levels(jumped);
     }
     // Adopt the pushed stamps last so the next plan only carries new events.
     st.last_applied_generations = p.residency.generation;
@@ -3176,8 +3171,9 @@ auto begin_gpu_lighting(SDL_GPUDevice* const device, run_gpu_lighting_params con
         std::max(colored_source_upload_bytes, static_cast<Uint32>(sizeof(GpuColoredLightSource)));
 
     auto const seen_was_valid = s_lighting_resources.seen_valid;
-    auto const rebuild_seen = p.rebuild_seen_cache || (p.download_seen_cache && !seen_was_valid)
-                              || g_seen_force_full_rebuild;
+    auto const rebuild_seen =
+        p.rebuild_seen_cache || (p.download_seen_cache && !seen_was_valid)
+        || g_seen_force_full_rebuild;
     auto seen_download_levels = std::vector<int>{};
     if (p.download_seen_cache) {
         seen_download_levels =
@@ -3904,7 +3900,7 @@ auto finish_gpu_lighting(SDL_GPUDevice* const device, gpu_lighting_work const& w
                 auto const sz = static_cast<std::size_t>(pending.cache_xy);
                 auto const* seen_src = seen_mapped + seen_level_index * pending.cache_xy;
                 std::ranges::copy(std::span{seen_src, sz}, lc.seen_cache.begin());
-                level_cache_freshness::stamp_gpu_download( lc, { level_cache_part::seen } );
+                level_cache_freshness::stamp_gpu_download(lc, {level_cache_part::seen});
                 ++seen_level_index;
             }
         }
@@ -3917,8 +3913,8 @@ auto finish_gpu_lighting(SDL_GPUDevice* const device, gpu_lighting_work const& w
                     colored_light_mapped + colored_level_index * pending.cache_xy;
                 auto const color_span = std::span{color_src, sz};
                 std::ranges::copy(color_span, lc.colored_light_cache.begin());
-                level_cache_freshness::stamp_gpu_download( lc,
-                    { level_cache_part::colored_light_active }, color_span );
+                level_cache_freshness::
+                    stamp_gpu_download(lc, {level_cache_part::colored_light_active}, color_span);
                 ++colored_level_index;
             }
         }
@@ -4375,7 +4371,7 @@ auto finish_gpu_visibility(SDL_GPUDevice* const device, gpu_visibility_work cons
             std::ranges::transform(
                 std::span{src, sz}, lc.visibility_cache.begin(),
                 [](uint32_t const value) { return static_cast<lit_level>(value); });
-            level_cache_freshness::stamp_gpu_download( lc, { level_cache_part::visibility } );
+            level_cache_freshness::stamp_gpu_download(lc, {level_cache_part::visibility});
             ++visibility_level_index;
         }
 

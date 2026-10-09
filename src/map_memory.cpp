@@ -23,8 +23,8 @@ mm_region::mm_region() : submaps {{ nullptr }} {}
 
 bool mm_region::is_empty() const
 {
-for( const auto &itt : submaps ) {
-    for( const shared_ptr_fast<mm_submap> &it : itt ) {
+    for( const auto &itt : submaps ) {
+        for( const shared_ptr_fast<mm_submap> &it : itt ) {
             if( !it->is_empty() ) {
                 return false;
             }
@@ -316,8 +316,7 @@ bool map_memory::save( const tripoint_abs_ms &pos )
         mm_region &reg = it.second;
         if( !reg.is_empty() ) {
             const auto writer = [&]( std::ostream & fout ) -> void {
-                fout << serialize_wrapper( [&]( JsonOut & jsout )
-                {
+                fout << serialize_wrapper( [&]( JsonOut & jsout ) {
                     reg.serialize( jsout );
                 } );
             };

@@ -1,10 +1,10 @@
 #pragma once
 #ifndef CATA_SRC_LIGHTING_RMLUI_PROC_TEXTURE_H
-#define CATA_SRC_LIGHTING_RMLUI_PROC_TEXTURE_H
+#    define CATA_SRC_LIGHTING_RMLUI_PROC_TEXTURE_H
 
-#include <cstdint>
-#include <string>
-#include <vector>
+#    include <cstdint>
+#    include <string>
+#    include <vector>
 
 namespace lighting {
 // Live, debug-tunable parameters for the runic frame generator. Every field that

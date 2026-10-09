@@ -89,8 +89,8 @@ struct pathfinder {
         min( _min ), max( _max ), origin( _origin ) {
     }
 
-    std::priority_queue<std::pair<int, tripoint_abs_ms>, std::vector< std::pair<int, tripoint_abs_ms>>, pair_greater_cmp_first>
-            open;
+    std::priority_queue<std::pair<int, tripoint_abs_ms>, std::vector< std::pair<int, tripoint_abs_ms >>, pair_greater_cmp_first>
+    open;
     std::array< std::unique_ptr<path_data_layer>, OVERMAP_LAYERS > path_data;
 
     path_data_layer &get_layer( const int z ) {

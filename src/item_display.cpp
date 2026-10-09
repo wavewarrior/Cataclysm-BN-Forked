@@ -609,13 +609,13 @@ std::string item::display_money( unsigned int quantity, unsigned int total,
                                  const std::optional<unsigned int> &selected ) const
 {
     if( selected ) {
-    //~ This is a string to display the selected and total amount of money in a stack of cash cards.
-    //~ %1$s is the display name of cash cards.
-    //~ %2$s is the total amount of money.
-    //~ %3$s is the selected amount of money.
-    //~ Example: "cash cards $15.35 of $20.48"
-    return string_format( pgettext( "cash card and money", "%1$s %3$s of %2$s" ), tname( quantity ),
-                          format_money( total ), format_money( *selected ) );
+        //~ This is a string to display the selected and total amount of money in a stack of cash cards.
+        //~ %1$s is the display name of cash cards.
+        //~ %2$s is the total amount of money.
+        //~ %3$s is the selected amount of money.
+        //~ Example: "cash cards $15.35 of $20.48"
+        return string_format( pgettext( "cash card and money", "%1$s %3$s of %2$s" ), tname( quantity ),
+                              format_money( total ), format_money( *selected ) );
     } else {
         //~ This is a string to display the total amount of money in a stack of cash cards.
         //~ %1$s is the display name of cash cards.
@@ -743,10 +743,10 @@ std::string item::debug_name() const
 nc_color item::color() const
 {
     if( is_null() ) {
-    return c_black;
-}
-if( is_corpse() ) {
-    return corpse->color;
-}
-return type->color;
+        return c_black;
+    }
+    if( is_corpse() ) {
+        return corpse->color;
+    }
+    return type->color;
 }

@@ -196,11 +196,11 @@ static constexpr uint64_t fnv1a_prime = 1099511628211ULL;
 
 static uint64_t fnv1a_64_accumulate( uint64_t hash, std::string_view sv ) noexcept
 {
-for( const unsigned char byte : sv ) {
-    hash ^= byte;
-    hash *= fnv1a_prime;
-}
-return hash;
+    for( const unsigned char byte : sv ) {
+        hash ^= byte;
+        hash *= fnv1a_prime;
+    }
+    return hash;
 }
 
 // Compute FNV-1a-64 hash of all .json files in path (for pack integrity check)
@@ -633,7 +633,7 @@ void DynamicDataLoader::sort_deferred( deferred_json& data, std::string_view id_
     // Kahn's algorithm with min-heap: independent entries are processed in
     // ascending original-index order, preserving mod override semantics for
     // duplicate-id entries.
-    auto pq = std::priority_queue<size_t, std::vector<size_t>, std::greater<size_t>> {};
+    auto pq = std::priority_queue<size_t, std::vector<size_t>, std::greater<size_t >> {};
     auto sorted_order = std::vector<size_t> {};
     sorted_order.reserve( data.size() );
     for( size_t i = 0; i < data.size(); ++i ) {
@@ -1516,11 +1516,11 @@ auto init::load_main_lua_scripts( cata::lua_state& state, const std::vector<mod_
         end
     )" );
     auto range =
-        packs | std::views::filter( []( const mod_id & mod ) {
+    packs | std::views::filter( []( const mod_id & mod ) {
         return mod.is_valid() && mod->lua_api_version;
     } );
-for( const auto& mod : range ) {
-    cata::set_mod_being_loaded( state, mod );
+    for( const auto& mod : range ) {
+        cata::set_mod_being_loaded( state, mod );
         cata::run_mod_main_script( state, mod );
     }
     const auto loaded = std::ranges::distance( range );

@@ -121,8 +121,10 @@ TEST_CASE("effective damage per second", "[effective][dps]") {
         reset_dps_rng();
         monster debug_unarmored(mtype_id("debug_mon"));
 
-        CHECK(clumsy_sword.effective_dps(dummy, debug_unarmored) == Catch::Approx(29.5f).epsilon(0.15f));
-        CHECK(good_sword.effective_dps(dummy, debug_unarmored) == Catch::Approx(45.0f).epsilon(0.15f));
+        CHECK(clumsy_sword.effective_dps(dummy, debug_unarmored)
+              == Catch::Approx(29.5f).epsilon(0.15f));
+        CHECK(good_sword.effective_dps(dummy, debug_unarmored)
+              == Catch::Approx(45.0f).epsilon(0.15f));
     }
 
     SECTION("against an debug agile target") {
@@ -130,7 +132,8 @@ TEST_CASE("effective damage per second", "[effective][dps]") {
         monster debug_agile(mtype_id("debug_mon_agile"));
         REQUIRE(debug_agile.get_dodge() >= 4);
 
-        CHECK(clumsy_sword.effective_dps(dummy, debug_agile) == Catch::Approx(10.5f).epsilon(0.15f));
+        CHECK(
+            clumsy_sword.effective_dps(dummy, debug_agile) == Catch::Approx(10.5f).epsilon(0.15f));
         CHECK(good_sword.effective_dps(dummy, debug_agile) == Catch::Approx(24.5f).epsilon(0.15f));
     }
 
@@ -138,8 +141,10 @@ TEST_CASE("effective damage per second", "[effective][dps]") {
         reset_dps_rng();
         monster debug_mon_armored(mtype_id("debug_mon_armored"));
 
-        CHECK(clumsy_sword.effective_dps(dummy, debug_mon_armored) == Catch::Approx(5.7f).epsilon(0.15f));
-        CHECK(good_sword.effective_dps(dummy, debug_mon_armored) == Catch::Approx(11.9f).epsilon(0.15f));
+        CHECK(clumsy_sword.effective_dps(dummy, debug_mon_armored)
+              == Catch::Approx(5.7f).epsilon(0.15f));
+        CHECK(good_sword.effective_dps(dummy, debug_mon_armored)
+              == Catch::Approx(11.9f).epsilon(0.15f));
     }
 
     SECTION("effect of STR and DEX on damage per second") {

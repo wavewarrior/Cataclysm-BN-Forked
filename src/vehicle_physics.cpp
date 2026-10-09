@@ -146,7 +146,7 @@ int vehicle::fuel_left( const int p, bool recurse ) const
 int vehicle::engine_fuel_left( const int e, bool recurse ) const
 {
     if( static_cast<size_t>( e ) < engines.size() ) {
-    return fuel_left( parts[ engines[ e ] ].fuel_current(), recurse );
+        return fuel_left( parts[ engines[ e ] ].fuel_current(), recurse );
     }
     return 0;
 }
@@ -331,13 +331,13 @@ bool vehicle::can_use_rails() const
 int vehicle::ground_acceleration( const bool fueled, int at_vel_in_vmi, const bool ideal ) const
 {
     if( !( engine_on || skidding ) ) {
-    return 0;
-}
-int target_cmps = std::max( at_vel_in_vmi, std::max( 447,
-                            max_velocity( fueled ) / 4 ) );
+        return 0;
+    }
+    int target_cmps = std::max( at_vel_in_vmi, std::max( 447,
+                                max_velocity( fueled ) / 4 ) );
     double weight = to_kilogram( total_mass() );
     if( is_towing() ) {
-    vehicle *other_veh = tow_data.get_towed();
+        vehicle *other_veh = tow_data.get_towed();
         if( other_veh ) {
             weight = weight + to_kilogram( other_veh->total_mass() );
         }
@@ -353,26 +353,26 @@ int vehicle::aircraft_acceleration( const bool fueled, int at_vel_in_vmi, const 
 {
     ( void )at_vel_in_vmi;
     if( !( engine_on || is_flying ) ) {
-    return 0;
-}
-const double thrust = total_thrust( fueled, ideal );
-if( thrust == 0 ) {
-    return 0;
-}
-const int accel_at_vel = 100 * total_thrust( fueled, ideal ) / to_kilogram( total_mass() );
-return accel_at_vel;
+        return 0;
+    }
+    const double thrust = total_thrust( fueled, ideal );
+    if( thrust == 0 ) {
+        return 0;
+    }
+    const int accel_at_vel = 100 * total_thrust( fueled, ideal ) / to_kilogram( total_mass() );
+    return accel_at_vel;
 }
 
 int vehicle::water_acceleration( const bool fueled, int at_vel_in_vmi, const bool ideal ) const
 {
     if( !( engine_on || skidding ) ) {
-    return 0;
-}
-int target_cmps = std::max( at_vel_in_vmi, std::max( 447,
-                            max_water_velocity( fueled ) / 4 ) );
+        return 0;
+    }
+    int target_cmps = std::max( at_vel_in_vmi, std::max( 447,
+                                max_water_velocity( fueled ) / 4 ) );
     double weight = to_kilogram( total_mass() );
     if( is_towing() ) {
-    vehicle *other_veh = tow_data.get_towed();
+        vehicle *other_veh = tow_data.get_towed();
         if( other_veh ) {
             weight = weight + to_kilogram( other_veh->total_mass() );
         }
@@ -421,9 +421,9 @@ static double simple_cubic_solution( double a, double b, double c, double d )
 int vehicle::acceleration( const bool fueled, int at_vel_in_vmi ) const
 {
     if( is_watercraft() ) {
-    return water_acceleration( fueled, at_vel_in_vmi );
+        return water_acceleration( fueled, at_vel_in_vmi );
     } else if( is_aircraft() && is_flying ) {
-    return aircraft_acceleration( fueled, at_vel_in_vmi );
+        return aircraft_acceleration( fueled, at_vel_in_vmi );
     }
     return ground_acceleration( fueled, at_vel_in_vmi );
 }
@@ -500,9 +500,9 @@ int vehicle::max_air_velocity( const bool fueled, const bool ideal ) const
 int vehicle::max_velocity( const bool fueled, const bool ideal ) const
 {
     if( is_flying && is_aircraft() ) {
-    return max_air_velocity( fueled, ideal );
+        return max_air_velocity( fueled, ideal );
     } else if( is_watercraft() ) {
-    return max_water_velocity( fueled, ideal );
+        return max_water_velocity( fueled, ideal );
     } else {
         return max_ground_velocity( fueled, ideal );
     }
@@ -572,9 +572,9 @@ int vehicle::safe_water_velocity( const bool fueled, const bool ideal ) const
 int vehicle::safe_velocity( const bool fueled ) const
 {
     if( is_flying && is_aircraft() ) {
-    return safe_aircraft_velocity( fueled );
+        return safe_aircraft_velocity( fueled );
     } else if( is_watercraft() ) {
-    return safe_water_velocity( fueled );
+        return safe_water_velocity( fueled );
     } else {
         return safe_ground_velocity( fueled );
     }
@@ -740,11 +740,11 @@ int vehicle::wheel_area() const
 float vehicle::average_or_rating() const
 {
     if( wheelcache.empty() ) {
-    return 0.0f;
-}
-float total_rating = 0;
-for( const int &wheel_index : wheelcache ) {
-    total_rating += part_info( wheel_index ).wheel_or_rating();
+        return 0.0f;
+    }
+    float total_rating = 0;
+    for( const int &wheel_index : wheelcache ) {
+        total_rating += part_info( wheel_index ).wheel_or_rating();
     }
     return total_rating / wheelcache.size();
 }
@@ -783,25 +783,25 @@ struct drag_column {
 double vehicle::coeff_air_drag() const
 {
     if( !coeff_air_dirty ) {
-    return coefficient_air_resistance;
-}
-constexpr double c_air_base = 0.25;
-constexpr double c_air_mod = 0.1;
-constexpr double base_height = 1.4;
-constexpr double aisle_height = 0.6;
-constexpr double fullboard_height = 0.5;
-constexpr double roof_height = 0.1;
-constexpr double windmill_height = 0.7;
-constexpr double sail_height = 0.8;
-constexpr double rotor_height = 0.6;
+        return coefficient_air_resistance;
+    }
+    constexpr double c_air_base = 0.25;
+    constexpr double c_air_mod = 0.1;
+    constexpr double base_height = 1.4;
+    constexpr double aisle_height = 0.6;
+    constexpr double fullboard_height = 0.5;
+    constexpr double roof_height = 0.1;
+    constexpr double windmill_height = 0.7;
+    constexpr double sail_height = 0.8;
+    constexpr double rotor_height = 0.6;
 
-std::vector<int> structure_indices = all_parts_at_location( part_location_structure );
-int width = mount_max.y() - mount_min.y() + 1;
+    std::vector<int> structure_indices = all_parts_at_location( part_location_structure );
+    int width = mount_max.y() - mount_min.y() + 1;
 
-// a mess of lambdas to make the next bit slightly easier to read
-const auto d_exposed = [&]( const vehicle_part & p ) {
-    // if it's not inside, it's a center location, and it doesn't need a roof, it's exposed
-    if( p.info().location != part_location_center ) {
+    // a mess of lambdas to make the next bit slightly easier to read
+    const auto d_exposed = [&]( const vehicle_part & p ) {
+        // if it's not inside, it's a center location, and it doesn't need a roof, it's exposed
+        if( p.info().location != part_location_center ) {
             return false;
         }
         return !( p.inside || p.info().has_flag( "EXTENDABLE" ) ||
@@ -828,8 +828,8 @@ const auto d_exposed = [&]( const vehicle_part & p ) {
     // windshield, halfboard and is twice as long as it is wide.
     // find the first instance of each item and compare against the ideal configuration.
     std::vector<drag_column> drag( width );
-for( int p : structure_indices ) {
-    if( parts[ p ].removed ) {
+    for( int p : structure_indices ) {
+        if( parts[ p ].removed ) {
             continue;
         }
         int col = parts[ p ].mount.y() - mount_min.y();
@@ -859,13 +859,13 @@ for( int p : structure_indices ) {
     double height = 0;
     double c_air_drag = 0;
     // tally the results of each row and prorate them relative to vehicle width
-for( drag_column &dc : drag ) {
-    // even as m_debug you rarely want to see this
-    // add_msg( m_debug, "veh %: pro %d, hboard %d, fboard %d, shield %d, seat %d, roof %d, aisle %d, turret %d, panel %d, exposed %d, last %d\n", name, dc.pro, dc.hboard, dc.fboard, dc.shield, dc.seat, dc.roof, dc.aisle, dc.turret, dc.panel, dc.exposed, dc.last );
+    for( drag_column &dc : drag ) {
+        // even as m_debug you rarely want to see this
+        // add_msg( m_debug, "veh %: pro %d, hboard %d, fboard %d, shield %d, seat %d, roof %d, aisle %d, turret %d, panel %d, exposed %d, last %d\n", name, dc.pro, dc.hboard, dc.fboard, dc.shield, dc.seat, dc.roof, dc.aisle, dc.turret, dc.panel, dc.exposed, dc.last );
 
-    double c_air_drag_c = c_air_base;
-    // rams in front of the vehicle mildly worsens air drag
-    c_air_drag_c += ( dc.pro > dc.hboard ) ? c_air_mod : 0;
+        double c_air_drag_c = c_air_base;
+        // rams in front of the vehicle mildly worsens air drag
+        c_air_drag_c += ( dc.pro > dc.hboard ) ? c_air_mod : 0;
         // not having halfboards in front of any windshields or fullboards moderately worsens
         // air drag
         c_air_drag_c += ( std::max( std::max( dc.hboard, dc.fboard ),
@@ -936,17 +936,17 @@ double vehicle::coeff_balloon_drag() const
 double vehicle::coeff_rolling_drag() const
 {
     if( !coeff_rolling_dirty ) {
-    return coefficient_rolling_resistance;
-}
-constexpr double wheel_ratio = 1.25;
-constexpr double base_wheels = 4.0;
-// SAE J2452 measurements are in F_rr = N * C_rr * 0.000225 * ( v + 33.33 )
-// Don't ask me why, but it's the numbers we have. We want N * C_rr * 0.000225 here,
-// and N is mass * accel from gravity (aka weight)
-constexpr double sae_ratio = 0.000225;
-constexpr double newton_ratio = GRAVITY_OF_EARTH * sae_ratio;
-double wheel_factor = 0;
-if( wheelcache.empty() ) {
+        return coefficient_rolling_resistance;
+    }
+    constexpr double wheel_ratio = 1.25;
+    constexpr double base_wheels = 4.0;
+    // SAE J2452 measurements are in F_rr = N * C_rr * 0.000225 * ( v + 33.33 )
+    // Don't ask me why, but it's the numbers we have. We want N * C_rr * 0.000225 here,
+    // and N is mass * accel from gravity (aka weight)
+    constexpr double sae_ratio = 0.000225;
+    constexpr double newton_ratio = GRAVITY_OF_EARTH * sae_ratio;
+    double wheel_factor = 0;
+    if( wheelcache.empty() ) {
         wheel_factor = 50;
     } else {
         // should really sum the each wheel's c_rolling_resistance * it's share of vehicle mass
@@ -968,7 +968,7 @@ if( wheelcache.empty() ) {
 double vehicle::water_hull_height() const
 {
     if( coeff_water_dirty ) {
-    coeff_water_drag();
+        coeff_water_drag();
     }
     return hull_height;
 }
@@ -976,7 +976,7 @@ double vehicle::water_hull_height() const
 double vehicle::water_draft() const
 {
     if( coeff_water_dirty ) {
-    coeff_water_drag();
+        coeff_water_drag();
     }
     return draft_m;
 }
@@ -984,7 +984,7 @@ double vehicle::water_draft() const
 bool vehicle::can_float() const
 {
     if( coeff_water_dirty ) {
-    coeff_water_drag();
+        coeff_water_drag();
     }
     int float_force = max_buoyancy() + total_balloon_lift();
     return to_newton( total_mass() ) <= float_force;
@@ -1085,7 +1085,7 @@ double vehicle::foward_thrust_of_propellers( const bool fuelled, const bool safe
 double vehicle::total_thrust( const bool fuelled, const bool safe, const bool ideal ) const
 {
     return thrust_of_rotorcraft( fuelled, safe, ideal ) + foward_thrust_of_propellers( fuelled, safe,
-    ideal );
+            ideal );
 }
 
 // get sum of lift from all lifting parts
@@ -1093,10 +1093,10 @@ double vehicle::total_lift( const bool fuelled, const bool safe, const bool idea
                             const bool unpowered, const bool idle ) const
 {
     if( idle ) {
-    return total_balloon_lift();
+        return total_balloon_lift();
     }
     if( unpowered ) {
-    return total_balloon_lift() + total_wing_lift();
+        return total_balloon_lift() + total_wing_lift();
     } else {
         return thrust_of_rotorcraft( fuelled, safe, ideal ) + total_balloon_lift() + total_wing_lift();
     }
@@ -1146,7 +1146,7 @@ bool vehicle::has_sufficient_lift( const bool unpowered, const bool idle ) const
 double vehicle::get_lift_percent( const bool unpowered ) const
 {
     return std::max( 0.0, 1 - ( total_lift( true, false, false,
-           unpowered ) / to_newton( total_mass() ) ) );
+                                            unpowered ) / to_newton( total_mass() ) ) );
 }
 
 bool vehicle::is_rotorcraft() const
@@ -1157,7 +1157,7 @@ bool vehicle::is_rotorcraft() const
 bool vehicle::is_aircraft() const
 {
     return ( has_part( VPFLAG_ROTOR ) || has_part( VPFLAG_WING ) || has_part( VPFLAG_BALLOON ) )
-    && has_sufficient_lift();
+           && has_sufficient_lift();
 }
 
 int vehicle::get_z_change() const
@@ -1190,11 +1190,11 @@ static constexpr double water_density = 1000.0; // kg/m^3
 double vehicle::coeff_water_drag() const
 {
     if( !coeff_water_dirty ) {
-    return coefficient_water_resistance;
-}
-std::vector<int> hull_indices = all_parts_at_location( part_location_under );
-double hull_coverage;
-if( hull_indices.empty() ) {
+        return coefficient_water_resistance;
+    }
+    std::vector<int> hull_indices = all_parts_at_location( part_location_under );
+    double hull_coverage;
+    if( hull_indices.empty() ) {
         hull_coverage = 0;
     } else {
         hull_coverage = std::clamp( static_cast<double>( floating.size() ) / hull_indices.size(), 0.0,
@@ -1202,25 +1202,25 @@ if( hull_indices.empty() ) {
     }
 
     std::set<int> occupied_y;
-for( int idx : hull_indices ) {
-    occupied_y.insert( parts[idx].mount.y() );
+    for( int idx : hull_indices ) {
+        occupied_y.insert( parts[idx].mount.y() );
     }
     // Tile == 1m width
     // I have a feeling this and actual_area_m cancle out somewhere in there...
     double width_m = occupied_y.size();
     if( width_m == 0 ) {
-    width_m = 1;
-}
+        width_m = 1;
+    }
 
-// Each piece of hull is 1m^2
-// Thus area is the number of hull pieces
-double actual_area_m = hull_indices.size();
+    // Each piece of hull is 1m^2
+    // Thus area is the number of hull pieces
+    double actual_area_m = hull_indices.size();
 
-// effective hull area is actual hull area * hull coverage
-if( hull_coverage == 0 ) {
-    hull_area = 0;
-} else {
-    hull_area = actual_area_m * std::max( 0.1, hull_coverage );
+    // effective hull area is actual hull area * hull coverage
+    if( hull_coverage == 0 ) {
+        hull_area = 0;
+    } else {
+        hull_area = actual_area_m * std::max( 0.1, hull_coverage );
     }
     // Treat the hullform as a simple cuboid to calculate displaced depth of
     // water.
@@ -1230,30 +1230,30 @@ if( hull_coverage == 0 ) {
     // area * depth = vehicle_mass / water_density
     // depth = vehicle_mass / water_density / area
     if( hull_area == 0 ) {
-    draft_m = 1;
-} else {
-    draft_m = to_kilogram( total_mass() ) / water_density / hull_area * get_lift_percent( true );
+        draft_m = 1;
+    } else {
+        draft_m = to_kilogram( total_mass() ) / water_density / hull_area * get_lift_percent( true );
         draft_m = std::max( draft_m, 0.0 );
     }
     // increase the streamlining as more of the boat is covered in boat boards
     double c_water_drag = 1.25 - hull_coverage;
     // hull height starts at 0.3m and goes up as you add more boat boards
     if( hull_coverage == 0 ) {
-    hull_height = 0;
-} else {
-    hull_height = 0.3 + 0.5 * hull_coverage;
-}
-// F_water_drag = c_water_drag * cross_area * 1/2 * water_density * v^2
-// coeff_water_resistance = c_water_drag * cross_area * 1/2 * water_density
-coefficient_water_resistance = c_water_drag * width_m * draft_m * 0.5 * water_density;
-coeff_water_dirty = false;
-return coefficient_water_resistance;
+        hull_height = 0;
+    } else {
+        hull_height = 0.3 + 0.5 * hull_coverage;
+    }
+    // F_water_drag = c_water_drag * cross_area * 1/2 * water_density * v^2
+    // coeff_water_resistance = c_water_drag * cross_area * 1/2 * water_density
+    coefficient_water_resistance = c_water_drag * width_m * draft_m * 0.5 * water_density;
+    coeff_water_dirty = false;
+    return coefficient_water_resistance;
 }
 
 double vehicle::max_buoyancy() const
 {
     if( coeff_water_dirty ) {
-    coeff_water_drag();
+        coeff_water_drag();
     }
     const double total_volume = hull_area * water_hull_height();
     return total_volume * water_density * GRAVITY_OF_EARTH;
@@ -1262,11 +1262,11 @@ double vehicle::max_buoyancy() const
 float vehicle::k_traction( float wheel_traction_area ) const
 {
     if( is_floating ) {
-    return can_float() ? 1.0f : -1.0f;
+        return can_float() ? 1.0f : -1.0f;
     }
     if( is_flying ) {
-    // Dont prematurely kill our flight, we'll fall soon enough
-    return ( has_lift() ) ? 1.0f : -1.0f;
+        // Dont prematurely kill our flight, we'll fall soon enough
+        return ( has_lift() ) ? 1.0f : -1.0f;
     }
     if( is_watercraft() && can_float() ) {
         return 1.0f;
@@ -1274,9 +1274,9 @@ float vehicle::k_traction( float wheel_traction_area ) const
 
     const float fraction_without_traction = 1.0f - wheel_traction_area / wheel_area();
     if( fraction_without_traction == 0 ) {
-    return 1.0f;
-}
-const float mass_penalty = fraction_without_traction * to_kilogram( total_mass() );
+        return 1.0f;
+    }
+    const float mass_penalty = fraction_without_traction * to_kilogram( total_mass() );
     float traction = std::min( 1.0f, wheel_traction_area / mass_penalty );
     add_msg( m_debug, "%s has traction %.2f", name, traction );
 

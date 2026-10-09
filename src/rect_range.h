@@ -20,8 +20,7 @@ class rect_range : public std::ranges::view_interface<rect_range<RectType>>
             count( c ) {
         }
 
-        class iterator
-        {
+        class iterator {
             private:
                 friend class rect_range;
                 int width = 0;
@@ -32,7 +31,7 @@ class rect_range : public std::ranges::view_interface<rect_range<RectType>>
 
                 auto same_range( const iterator &rhs ) const -> bool {
                     return width == rhs.width && height == rhs.height &&
-                           count_x == rhs.count_x && range_size == rhs.range_size;
+                    count_x == rhs.count_x && range_size == rhs.range_size;
                 }
 
             public:
@@ -54,31 +53,31 @@ class rect_range : public std::ranges::view_interface<rect_range<RectType>>
                     }
                 }
 
-                auto operator==( const iterator &rhs ) const -> bool = default;
+                auto operator == ( const iterator &rhs ) const -> bool = default;
                 auto operator<=>( const iterator &rhs ) const = default; // *NOPAD*
 
                 auto operator*() const -> reference {
                     return { ( index % count_x ) *width, ( index / count_x ) *height, width, height };
                 }
 
-                auto operator+( const int offset ) const -> iterator {
+                auto operator + ( const int offset ) const -> iterator {
                     auto tmp = *this;
                     tmp.index += offset;
                     return tmp;
                 }
 
-                auto operator-( const int offset ) const -> iterator {
+                auto operator - ( const int offset ) const -> iterator {
                     auto tmp = *this;
                     tmp.index -= offset;
                     return tmp;
                 }
 
-                friend auto operator+( const difference_type offset, iterator it ) -> iterator {
+                friend auto operator + ( const difference_type offset, iterator it ) -> iterator {
                     it += offset;
                     return it;
                 }
 
-                auto operator-( const iterator &rhs ) const -> difference_type {
+                auto operator - ( const iterator &rhs ) const -> difference_type {
                     assert( same_range( rhs ) );
                     return index - rhs.index;
                 }

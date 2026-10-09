@@ -477,13 +477,13 @@ void game::draw( ui_adaptor &ui )
         if( is_looking && ter_view_p.z() != u.bub_pos().z() ) {
             // Keep visibility calculations based on the player position while still building the viewed z-level cache.
             m.build_map_cache( level_cache_freshness::plan_for( m,
-                level_cache_freshness::pose_of_viewer( u, ter_view_p.z() ),
-                level_cache_freshness::lightmap_policy::normal ) );
+                               level_cache_freshness::pose_of_viewer( u, ter_view_p.z() ),
+                               level_cache_freshness::lightmap_policy::normal ) );
         }
         const auto cache_z = is_looking ? u.bub_pos().z() : ter_view_p.z();
         m.build_map_cache( level_cache_freshness::plan_for( m,
-            level_cache_freshness::pose_of_viewer( u, cache_z ),
-            level_cache_freshness::lightmap_policy::normal ) );
+                           level_cache_freshness::pose_of_viewer( u, cache_z ),
+                           level_cache_freshness::lightmap_policy::normal ) );
         if( m.get_cache_ref( cache_z ).visibility_cache_dirty ) {
             m.update_visibility_cache( cache_z );
         }
@@ -584,8 +584,8 @@ auto game::refresh_player_visibility_cache_if_needed( const bool player_map_cach
     // stale; under `skip` the law forbids even sampling it, so the disposition can
     // never license a rebuild this refresh could not clear.
     const auto plan = level_cache_freshness::plan_for( m,
-        level_cache_freshness::pose_of_viewer( u, zlev ),
-        skip_lightmap ? level_cache_freshness::lightmap_policy::skip
+                      level_cache_freshness::pose_of_viewer( u, zlev ),
+                      skip_lightmap ? level_cache_freshness::lightmap_policy::skip
                       : level_cache_freshness::lightmap_policy::normal );
 
     if( !needs_visibility_refresh() &&
@@ -647,10 +647,10 @@ float game::natural_light_level( const int zlev ) const
 {
     // ignore while underground or above limits
     if( zlev > OVERMAP_HEIGHT || zlev < 0 ) {
-    return LIGHT_AMBIENT_MINIMAL;
-}
+        return LIGHT_AMBIENT_MINIMAL;
+    }
 
-if( latest_lightlevels[zlev] > -std::numeric_limits<float>::max() ) {
+    if( latest_lightlevels[zlev] > -std::numeric_limits<float>::max() ) {
         // Already found the light level for now?
         return latest_lightlevels[zlev];
     }
@@ -660,7 +660,7 @@ if( latest_lightlevels[zlev] > -std::numeric_limits<float>::max() ) {
     // Sunlight/moonlight related stuff
     const weather_manager &weather = get_weather();
     if( !weather.lightning_active ) {
-    ret = sunlight( calendar::turn );
+        ret = sunlight( calendar::turn );
     } else {
         // Recent lightning strike has lit the area
         ret = default_daylight_level();
@@ -692,15 +692,15 @@ if( latest_lightlevels[zlev] > -std::numeric_limits<float>::max() ) {
     // If we had a changed light level due to an artifact event then it overwrites
     // the natural light level.
     if( mod_ret > -1 ) {
-    ret = mod_ret;
-}
+        ret = mod_ret;
+    }
 
-// Cap everything to our minimum light level
-ret = std::max<float>( LIGHT_AMBIENT_MINIMAL, ret );
+    // Cap everything to our minimum light level
+    ret = std::max<float>( LIGHT_AMBIENT_MINIMAL, ret );
 
-latest_lightlevels[zlev] = ret;
+    latest_lightlevels[zlev] = ret;
 
-return ret;
+    return ret;
 }
 
 unsigned char game::light_level( const int zlev ) const
@@ -812,8 +812,7 @@ void game::mon_info_update( )
             get_option<int>( "SAFEMODEIGNORETURNS" ) );
 
     const auto direction_index = []( const direction dir ) -> int {
-        switch( dir )
-    {
+        switch( dir ) {
             // *INDENT-OFF*
             case direction::ABOVENORTHWEST: case direction::NORTHWEST: case direction::BELOWNORTHWEST: return 7;
             case direction::ABOVENORTH:     case direction::NORTH:     case direction::BELOWNORTH:     return 0;
@@ -826,15 +825,14 @@ void game::mon_info_update( )
             case direction::ABOVECENTER:    case direction::CENTER:    case direction::BELOWCENTER:    return 8;
             case direction::last: break;
             // *INDENT-ON*
-    }
-    debugmsg( "invalid direction" );
-    abort();
-    return 8;
-};
+        }
+        debugmsg( "invalid direction" );
+        abort();
+        return 8;
+    };
 
-const auto compass_direction_index = []( const direction dir ) -> int {
-        switch( dir )
-    {
+    const auto compass_direction_index = []( const direction dir ) -> int {
+        switch( dir ) {
             // *INDENT-OFF*
             case direction::ABOVENORTHWEST: case direction::NORTHWEST: case direction::BELOWNORTHWEST: return 7;
             case direction::ABOVENORTH:     case direction::NORTH:     case direction::BELOWNORTH:     return 0;
@@ -846,30 +844,29 @@ const auto compass_direction_index = []( const direction dir ) -> int {
             case direction::ABOVESOUTHEAST: case direction::SOUTHEAST: case direction::BELOWSOUTHEAST: return 3;
             default: return 8;
             // *INDENT-ON*
-    }
-};
+        }
+    };
 
-const auto player_attitude_from = []( const monster_attitude matt ) -> Attitude {
-        switch( matt )
-    {
-        case MATT_FRIEND:
-        case MATT_FPASSIVE:
-        case MATT_ZLAVE:
-            return Attitude::A_FRIENDLY;
-        case MATT_ATTACK:
-            return Attitude::A_HOSTILE;
-        case MATT_FLEE:
-        case MATT_FOLLOW:
-        case MATT_IGNORE:
-        case MATT_NULL:
-        case MATT_UNKNOWN:
-        case NUM_MONSTER_ATTITUDES:
-            return Attitude::A_NEUTRAL;
-    }
-    return Attitude::A_NEUTRAL;
-};
+    const auto player_attitude_from = []( const monster_attitude matt ) -> Attitude {
+        switch( matt ) {
+            case MATT_FRIEND:
+            case MATT_FPASSIVE:
+            case MATT_ZLAVE:
+                return Attitude::A_FRIENDLY;
+            case MATT_ATTACK:
+                return Attitude::A_HOSTILE;
+            case MATT_FLEE:
+            case MATT_FOLLOW:
+            case MATT_IGNORE:
+            case MATT_NULL:
+            case MATT_UNKNOWN:
+            case NUM_MONSTER_ATTITUDES:
+                return Attitude::A_NEUTRAL;
+        }
+        return Attitude::A_NEUTRAL;
+    };
 
-const auto visible_info = [&]( const tripoint_bub_ms & pos ) {
+    const auto visible_info = [&]( const tripoint_bub_ms & pos ) {
         const auto dir_to_mon = direction_from( view.xy(), point_bub_ms( pos.x(), pos.y() ) );
         const auto mx = POSX + ( pos.x() - view.x() );
         const auto my = POSY + ( pos.y() - view.y() );
@@ -1223,11 +1220,9 @@ bool game::forced_door_closing( const tripoint_bub_ms &p, const ter_id &door_typ
         return g->is_empty( p );
     };
     const auto get_random_point = [&]() -> tripoint_bub_ms {
-        if( auto pos = random_point( m.points_in_radius( p, 2 ), valid_location ) )
-        {
+        if( auto pos = random_point( m.points_in_radius( p, 2 ), valid_location ) ) {
             return  tripoint_bub_ms( p.raw() * 2 - ( *pos ).raw() );
-        } else
-        {
+        } else {
             return p;
         }
     };
@@ -1656,7 +1651,7 @@ point_rel_sm game::update_map( int &x, int &y )
     const _shclk::time_point _sh_t0 = _shclk::now();
     _shclk::time_point _sh_tp = _sh_t0;
     double _sh_shift = 0, _sh_loader = 0, _sh_ent = 0, _sh_npc = 0,
-           _sh_cache = 0, _sh_spawn = 0, _sh_om = 0;
+                                                       _sh_cache = 0, _sh_spawn = 0, _sh_om = 0;
     auto _sh_lap = [&]( double &acc ) {
         const _shclk::time_point now = _shclk::now();
         acc = std::chrono::duration<double, std::milli>( now - _sh_tp ).count();
@@ -1743,8 +1738,8 @@ point_rel_sm game::update_map( int &x, int &y )
     _sh_lap( _sh_npc );
 
     m.build_map_cache( level_cache_freshness::plan_for( m,
-        level_cache_freshness::pose_of_viewer( u, get_levz() ),
-        level_cache_freshness::lightmap_policy::normal ) );
+                       level_cache_freshness::pose_of_viewer( u, get_levz() ),
+                       level_cache_freshness::lightmap_policy::normal ) );
     _sh_lap( _sh_cache );
 
     // Spawn monsters only in the strip of submaps that just entered the bubble

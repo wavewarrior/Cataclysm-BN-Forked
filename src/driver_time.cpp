@@ -79,14 +79,14 @@ auto time_of_day( const std::string &time ) -> std::expected<std::int64_t, std::
 auto pin( const request &asked ) -> std::expected<pinned, std::string>
 {
     if( !asked.date && !asked.time ) {
-    return std::unexpected( "set_time needs a date, a time, or both" );
+        return std::unexpected( "set_time needs a date, a time, or both" );
     }
     const auto span = spans{};
     const auto now = std::int64_t{ to_turns<int>( calendar::turn - calendar::turn_zero ) };
 
     auto day_start = now - now % span.day;
     if( asked.date ) {
-    const auto start = date_start( *asked.date, span );
+        const auto start = date_start( *asked.date, span );
         if( !start ) {
             return std::unexpected( start.error() );
         }
@@ -94,7 +94,7 @@ auto pin( const request &asked ) -> std::expected<pinned, std::string>
     }
     auto into_day = now % span.day;
     if( asked.time ) {
-    const auto seconds = time_of_day( *asked.time );
+        const auto seconds = time_of_day( *asked.time );
         if( !seconds ) {
             return std::unexpected( seconds.error() );
         }
@@ -103,8 +103,8 @@ auto pin( const request &asked ) -> std::expected<pinned, std::string>
 
     const auto target = day_start + into_day;
     if( target > latest_turn ) {
-    return std::unexpected( std::format( "that date is too far ahead: the clock stops at turn {}",
-                                         latest_turn ) );
+        return std::unexpected( std::format( "that date is too far ahead: the clock stops at turn {}",
+                                             latest_turn ) );
     }
     calendar::turn = calendar::turn_zero + time_duration::from_turns( static_cast<int>( target ) );
     return pinned{

@@ -100,14 +100,14 @@ struct state {
     /// about conflicts, space or budget, since removing it can only ever free all three.
     constexpr auto toggleable() const -> bool {
         if( taken ) {
-        return !has_dependents && !locked;
+            return !has_dependents && !locked;
+        }
+        // `granted` and `locked` are the same fact for a profession — `profession::is_locked_bionic`
+        // IS "in _starting_CBMs" — and both mean the same thing here: this step does not get to
+        // decide. A scenario's `_forced_bionics` reach `locked` the same way.
+        return !granted && !locked && !forbidden && !trait_conflicts && !over_budget && !no_space &&
+               !missing_prereq && !has_downgrade && !has_upgrade;
     }
-    // `granted` and `locked` are the same fact for a profession — `profession::is_locked_bionic`
-    // IS "in _starting_CBMs" — and both mean the same thing here: this step does not get to
-    // decide. A scenario's `_forced_bionics` reach `locked` the same way.
-    return !granted && !locked && !forbidden && !trait_conflicts && !over_budget && !no_space &&
-           !missing_prereq && !has_downgrade && !has_upgrade;
-}
 };
 
 constexpr auto evaluate( const inputs &in ) -> state

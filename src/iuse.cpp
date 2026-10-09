@@ -712,7 +712,7 @@ static void marloss_common( player& p, item& it, const trait_id& current_color )
         p.add_msg_if_player(
             m_good,
             _( "As you eat the %s, you have a near-religious experience, feeling at one with your "
-               "surroundings…" ),
+           "surroundings…" ),
             it.tname() );
         p.add_morale( MORALE_MARLOSS, 100, 1000 );
         for( const std::pair<const trait_id, add_type> &pr : mycus_colors ) {
@@ -801,7 +801,7 @@ static void marloss_common( player& p, item& it, const trait_id& current_color )
             m_good,
             //~ Beginning to hear the Mycus while conscious: that's it speaking
             _( "unity.  together we have reached the door.  we provide the final key.  now to pass "
-               "through…" ) );
+           "through…" ) );
     } else {
         p.add_msg_if_player( _( "You feel a strange warmth spreading throughout your body…" ) );
         p.set_mutation( current_color );
@@ -1212,7 +1212,7 @@ int iuse::good_fishing_spot( const tripoint_bub_ms& pos )
     int fishable_locations = g->get_fishable_locations( 60, pos ).size();
     const oter_id &cur_omt =
         get_overmapbuffer( get_map().get_bound_dimension() ).ter( tripoint_abs_omt( project_to<coords::omt>(
-                    bub_to_abs( pos ) ) ) );
+                bub_to_abs( pos ) ) ) );
     std::string om_id = cur_omt.id().c_str();
     if( fishable_locations < 100 && !g->m.has_flag( "CURRENT", pos )
         && om_id.find( "river_" ) == std::string::npos && !cur_omt->is_lake()

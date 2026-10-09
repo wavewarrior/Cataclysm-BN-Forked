@@ -87,83 +87,90 @@ using is_translation = std::conditional_t <
 // Test for string_id<T>
 template <typename, template <typename> class>
 struct is_instance_of : std::false_type {};
-template <typename T, template <typename> class TMPL>
-struct is_instance_of<TMPL<T>, TMPL> : std::true_type {};
-template<typename T>
+template < typename T, template < typename> class TMPL >
+struct is_instance_of < TMPL < T>, TMPL > : std::true_type {};
+template < typename T >
 using is_string_id = std::conditional_t <
-                     is_instance_of<std::decay_t<T>, string_id>::value, std::true_type,
+                     is_instance_of < std::decay_t < T>, string_id >::value, std::true_type,
                      std::false_type >;
 
-template<typename RT, typename T>
-inline typename std::enable_if < is_integer<RT>::value &&is_integer<T>::value,
+template < typename RT, typename T >
+inline typename std::enable_if < is_integer < RT>::value &&is_integer < T >::value,
        RT >::type convert( RT *, const string_formatter &, T &&value, int )
 {
     return value;
 }
-template<typename RT, typename T>
-inline typename std::enable_if < is_integer<RT>::value
-&&std::is_enum<typename std::decay<T>::type>::value,
+template < typename RT, typename T >
+inline typename std::enable_if < is_integer < RT >::value
+&&std::is_enum < typename std::decay < T>::type >::value,
 RT >::type convert( RT *, const string_formatter &, T &&value, int )
 {
-    return static_cast<RT>( value );
+    return static_cast < RT > ( value );
 }
-template<typename RT, typename T>
-inline typename std::enable_if < std::is_floating_point<RT>::value &&is_numeric<T>::value
-&&!is_integer<T>::value, RT >::type convert( RT *, const string_formatter &, T &&value, int )
+template < typename RT, typename T >
+inline typename std::enable_if < std::is_floating_point < RT>::value &&is_numeric < T >::value
+&&!is_integer < T >::value, RT >::type convert( RT *, const string_formatter &, T &&value, int )
 {
     return value;
 }
-template<typename RT, typename T>
-inline typename std::enable_if < std::is_same<RT, void *>::value
-&&std::is_pointer<typename std::decay<T>::type>::value, void * >::type convert( RT *,
+template < typename RT, typename T >
+inline typename std::enable_if < std::is_same < RT, void * >::value
+&&std::is_pointer < typename std::decay < T>::type>::value, void * >::type convert( RT *,
         const string_formatter &, T &&value, int )
 {
-    return const_cast<std::remove_const_t<std::remove_pointer_t<std::decay_t<T>>> *>
+    return const_cast < std::remove_const_t < std::remove_pointer_t<std::decay_t<T>>> * >
            ( value );
 }
-template<typename RT, typename T>
-inline typename std::enable_if < std::is_same<RT, std::string_view>::value &&is_string<T>::value,
+template < typename RT, typename T >
+inline typename std::enable_if < std::is_same < RT,
+       std::string_view >::value &&is_string < T >::value,
        std::string_view >::type convert( RT *, const string_formatter &, T &&value, int )
 {
     return value;
 }
-template<typename RT, typename T>
+template < typename RT, typename T >
 inline std::string_view
 convert( RT *, const string_formatter &, T &&value, int )
-requires( std::is_same_v<RT, std::string_view >
-          &&is_string_view<T>::value )
+requires( std::is_same_v < RT, std::string_view >
+          &&is_string_view < T >::value )
 {
     return value;
 }
-template<typename RT, typename T>
-inline typename std::enable_if < std::is_same<RT, std::string_view>::value &&is_cstring<T>::value,
+template < typename RT, typename T >
+inline typename std::enable_if < std::is_same < RT,
+       std::string_view >::value &&is_cstring < T >::value,
        std::string_view >::type convert( RT *, const string_formatter &, T &&value, int )
 {
     return value;
 }
-template<typename RT, typename T>
-requires( is_string_view<RT>::value &&is_translation<T>::value )
+template < typename RT, typename T >
+requires( is_string_view < RT >::value &&is_translation < T >::value )
 inline std::string_view convert( RT *, const string_formatter &sf, T &&value, int )
 {
     return string_formatter_set_temp_buffer( sf, value.translated() );
 }
-template<typename RT, typename T>
-inline typename std::enable_if < std::is_same<RT, std::string_view>::value &&is_string_id<T>::value,
+template < typename RT, typename T >
+inline typename std::enable_if < std::is_same < RT,
+       std::string_view >::value &&is_string_id < T >::value,
        std::string_view >::type convert( RT *, const string_formatter &sf, T &&value, int )
 {
     return string_formatter_set_temp_buffer( sf, value.str() );
 }
-template<typename RT, typename T>
-inline typename std::enable_if < std::is_same<RT, std::string_view>::value &&is_numeric<T>::value
-&&!is_char<T>::value, std::string_view >::type convert( RT *, const string_formatter &sf, T &&value,
-        int )
+template < typename RT, typename T >
+inline typename std::enable_if < std::is_same < RT,
+       std::string_view >::value &&is_numeric < T >::value
+       &&!is_char < T >::value, std::string_view >::type convert( RT *, const string_formatter &sf,
+               T &&value,
+               int )
 {
     return string_formatter_set_temp_buffer( sf, std::to_string( value ) );
 }
-template<typename RT, typename T>
-inline typename std::enable_if < std::is_same<RT, std::string_view>::value &&is_numeric<T>::value
-&&is_char<T>::value, std::string_view >::type convert( RT *, const string_formatter &sf, T &&value,
-        int )
+template < typename RT, typename T >
+inline typename std::enable_if < std::is_same < RT,
+       std::string_view >::value &&is_numeric < T >::value
+       &&is_char < T >::value, std::string_view >::type convert( RT *, const string_formatter &sf,
+               T &&value,
+               int )
 {
     return string_formatter_set_temp_buffer( sf, std::string( 1, value ) );
 }
@@ -171,19 +178,19 @@ inline typename std::enable_if < std::is_same<RT, std::string_view>::value &&is_
 // The static_assert is used to restrict the input type to those that can actually be printed,
 // calling `string_format` with an unknown type will trigger a compile error because no other
 // `convert` function will match, while this one will give a static_assert error.
-template<typename RT, typename T>
+template < typename RT, typename T >
 // NOLINTNEXTLINE(cert-dcl50-cpp)
 inline RT convert( RT *, const string_formatter &sf, T &&, ... )
 {
-    static_assert( std::is_pointer_v<std::decay_t<T>> ||
-                   is_numeric<T>::value ||
-                   is_string<T>::value ||
-                   is_string_view<T>::value ||
-                   is_char<T>::value ||
-                   std::is_enum_v<std::decay_t<T>> ||
-                   is_cstring<T>::value ||
-                   is_translation<T>::value ||
-                   is_string_id<T>::value,
+    static_assert( std::is_pointer_v < std::decay_t < T>> ||
+                   is_numeric < T >::value ||
+                   is_string < T >::value ||
+                   is_string_view < T >::value ||
+                   is_char < T >::value ||
+                   std::is_enum_v < std::decay_t < T>> ||
+                   is_cstring < T >::value ||
+                   is_translation < T >::value ||
+                   is_string_id < T >::value,
                    "Unsupported argument type" );
     throw_error( sf, "Tried to convert argument of type " +
                  std::string( demangle( typeid( T ).name() ) ) + " to " +
@@ -202,8 +209,7 @@ inline RT convert( RT *, const string_formatter &sf, T &&, ... )
  * class will just throw an exception.
  */
 // Note: argument index is always 0-based *in this code*, but `printf` has 1-based arguments.
-class string_formatter
-{
+class string_formatter {
     private:
         /// Complete format string, including all format specifiers (the string passed
         /// to @ref printf).
@@ -243,27 +249,28 @@ class string_formatter
         /// Read and forward to @ref current_format any width specifier from @ref format.
         /// Returns nothing if the width is not specified or if it is specified as fixed number,
         /// otherwise returns the index of the printf-argument to be used for the width.
-        std::optional<int> read_width();
+        std::optional < int > read_width();
         /// See @ref read_width. This does the same, but for the precision specifier.
-        std::optional<int> read_precision();
+        std::optional < int > read_precision();
         /// Read and return the index of the printf-argument that is to be formatted. Returns
         /// nothing if @ref format does not refer to a specific index (caller should use
         /// @ref current_argument_index).
-        std::optional<int> read_argument_index();
+        std::optional < int > read_argument_index();
         // Helper for common logic in @ref read_width and @ref read_precision.
-        std::optional<int> read_number_or_argument_index();
+        std::optional < int > read_number_or_argument_index();
         /// Throws an exception containing the given message and the @ref format.
         [[noreturn]]
-        void throw_error( const std::string &msg ) const;
-        friend void throw_error( const string_formatter &sf, const std::string &msg ) {
+        void throw_error( const std::string & msg ) const;
+        friend void throw_error( const string_formatter & sf, const std::string & msg ) {
             sf.throw_error( msg );
         }
         mutable std::string temp_buffer;
         /// Stores the given text in @ref temp_buffer and returns `c_str()` of it. This is used
         /// for printing non-strings through "%s". It *only* works because this prints each format
         /// specifier separately, so the content of @ref temp_buffer is only used once.
-        friend std::string_view string_formatter_set_temp_buffer( const string_formatter &sf,
-                std::string_view text ) {
+        friend std::string_view string_formatter_set_temp_buffer( const string_formatter & sf,
+                std::string_view text )
+        {
             sf.temp_buffer = text;
             return std::string_view( sf.temp_buffer );
         }
@@ -275,32 +282,35 @@ class string_formatter
          * converted to the requested type (via @ref convert).
          */
         /**@{*/
-        template<typename RT, unsigned int current_index>
+        template < typename RT, unsigned int current_index >
         RT get_nth_arg_as( const unsigned int requested ) const {
             throw_error( "Requested argument " + std::to_string( requested ) +
-            " but input has only " + std::to_string( current_index )
-                    );
+                         " but input has only " + std::to_string( current_index )
+                       );
         }
-        template<typename RT, unsigned int current_index, typename T, typename ...Args>
+        template < typename RT, unsigned int current_index, typename T, typename ...Args >
         RT get_nth_arg_as( const unsigned int requested, T &&head,
                            Args &&... args ) const requires(
-                               !reader_detail::handler<std::decay_t<T>>::is_indexable_container ) {
+                               !reader_detail::handler < std::decay_t < T>>::is_indexable_container )
+        {
             if( requested > current_index ) {
-            return get_nth_arg_as < RT, current_index + 1 > ( requested, std::forward<Args>( args )... );
+                return get_nth_arg_as < RT, current_index + 1 > ( requested, std::forward < Args > ( args )... );
             } else {
-                return convert( static_cast<RT *>( nullptr ), *this, std::forward<T>( head ), 0 );
+                return convert( static_cast < RT * > ( nullptr ), *this, std::forward < T > ( head ), 0 );
             }
         }
 
-        template<typename RT, unsigned int current_index, typename T, typename ...Args>
+        template < typename RT, unsigned int current_index, typename T, typename ...Args >
         RT get_nth_arg_as( const unsigned int requested, T &&head,
-        Args &&... args ) const requires reader_detail::handler<std::decay_t<T>>::is_indexable_container {
-            if( requested <= current_index + head.size() ) {
-                return convert<RT, decltype( head.at( 0 ) )>( static_cast<RT *>( nullptr ), *this,
+                           Args &&... args ) const requires reader_detail::handler < std::decay_t < T>>::is_indexable_container {
+            if( requested <= current_index + head.size() )
+            {
+                return convert < RT, decltype( head.at( 0 ) ) > ( static_cast < RT * > ( nullptr ), *this,
                         head.at( requested - current_index ), 0 );
-            } else {
+            } else
+            {
                 return get_nth_arg_as < RT, current_index + 1 > ( requested - head.size(),
-                        std::forward<Args>( args )... );
+                        std::forward < Args > ( args )... );
             }
         }
         /**@}*/
@@ -308,8 +318,9 @@ class string_formatter
         void add_long_long_length_modifier();
         void discard_oct_hex_sign_flag();
 
-        template<typename ...Args>
-        void read_conversion( const int format_arg_index, Args &&... args ) {
+        template < typename ...Args >
+        void read_conversion( const int format_arg_index, Args &&... args )
+        {
             // Removes the prefix "ll", "l", "h" and "hh", "z", and "t".
             // We later add "ll" again and that
             // would interfere with the existing prefix. We convert *all* input to (un)signed
@@ -328,12 +339,13 @@ class string_formatter
             current_format.push_back( c );
             switch( c ) {
                 case 'c':
-                    return do_formating( get_nth_arg_as<int, 0>( format_arg_index, std::forward<Args>( args )... ) );
+                    return do_formating( get_nth_arg_as < int, 0 > ( format_arg_index,
+                                         std::forward < Args > ( args )... ) );
                 case 'd':
                 case 'i':
                     add_long_long_length_modifier();
-                    return do_formating( get_nth_arg_as<signed long long int, 0>( format_arg_index,
-                                         std::forward<Args>( args )... ) );
+                    return do_formating( get_nth_arg_as < signed long long int, 0 > ( format_arg_index,
+                                         std::forward < Args > ( args )... ) );
                 case 'o':
                 case 'x':
                 case 'X':
@@ -343,8 +355,8 @@ class string_formatter
                 // intentional fall-through
                 case 'u':
                     add_long_long_length_modifier();
-                    return do_formating( get_nth_arg_as<unsigned long long int, 0>( format_arg_index,
-                                         std::forward<Args>( args )... ) );
+                    return do_formating( get_nth_arg_as < unsigned long long int, 0 > ( format_arg_index,
+                                         std::forward < Args > ( args )... ) );
                 case 'a':
                 case 'A':
                 case 'g':
@@ -353,13 +365,14 @@ class string_formatter
                 case 'F':
                 case 'e':
                 case 'E':
-                    return do_formating( get_nth_arg_as<double, 0>( format_arg_index, std::forward<Args>( args )... ) );
+                    return do_formating( get_nth_arg_as < double, 0 > ( format_arg_index,
+                                         std::forward < Args > ( args )... ) );
                 case 'p':
-                    return do_formating( get_nth_arg_as<void *, 0>( format_arg_index,
-                                         std::forward<Args>( args )... ) );
+                    return do_formating( get_nth_arg_as < void *, 0 > ( format_arg_index,
+                                         std::forward < Args > ( args )... ) );
                 case 's':
-                    return do_formating( get_nth_arg_as<std::string_view, 0>( format_arg_index,
-                                         std::forward<Args>( args )... ) );
+                    return do_formating( get_nth_arg_as < std::string_view, 0 > ( format_arg_index,
+                                         std::forward < Args > ( args )... ) );
                 default:
                     throw_error( "Unsupported format conversion: " + std::string( 1, c ) );
             }
@@ -382,8 +395,9 @@ class string_formatter
         /// @throws Exceptions when the arguments do not match the format specifiers,
         /// see @ref get_nth_arg_as, or when the format is invalid for whatever reason.
         /// Note: @ref string_format is a wrapper that handles those exceptions.
-        template<typename ...Args>
-        void parse( Args &&... args ) {
+        template < typename ...Args >
+        void parse( Args &&... args )
+        {
             output.reserve( format.size() );
             output.resize( 0 );
             current_index_in_format = 0;
@@ -398,18 +412,20 @@ class string_formatter
                     continue;
                 }
                 current_format = "%";
-                const std::optional<int> format_arg_index = read_argument_index();
+                const std::optional < int > format_arg_index = read_argument_index();
                 read_flags();
-                if( const std::optional<int> width_argument_index = read_width() ) {
-                    const int w = get_nth_arg_as<int, 0>( *width_argument_index, std::forward<Args>( args )... );
+                if( const std::optional < int > width_argument_index = read_width() ) {
+                    const int w = get_nth_arg_as < int, 0 > ( *width_argument_index,
+                                  std::forward < Args > ( args )... );
                     current_format += std::to_string( w );
                 }
-                if( const std::optional<int> precision_argument_index = read_precision() ) {
-                    const int p = get_nth_arg_as<int, 0>( *precision_argument_index, std::forward<Args>( args )... );
+                if( const std::optional < int > precision_argument_index = read_precision() ) {
+                    const int p = get_nth_arg_as < int, 0 > ( *precision_argument_index,
+                                  std::forward < Args > ( args )... );
                     current_format += std::to_string( p );
                 }
                 const int arg = format_arg_index.value_or( current_argument_index++ );
-                read_conversion( arg, std::forward<Args>( args )... );
+                read_conversion( arg, std::forward < Args > ( args )... );
             }
         }
         std::string get_output() const {
@@ -442,22 +458,22 @@ class string_formatter
  * to match the given format specifier (if possible) - see @ref string_formatter_convert.
  */
 /**@{*/
-template<typename ...Args>
+template < typename ...Args >
 inline std::string string_format( std::string_view format, Args &&...args )
 {
     try {
         cata::string_formatter formatter( format );
-        formatter.parse( std::forward<Args>( args )... );
+        formatter.parse( std::forward < Args > ( args )... );
         return formatter.get_output();
     } catch( ... ) {
         return cata::handle_string_format_error();
     }
 }
-template<typename T, typename ...Args>
+template < typename T, typename ...Args >
 inline std::string
 string_format( T &&format, Args &&...args )
-requires cata::is_translation<T>::value {
-    return string_format( format.translated(), std::forward<Args>( args )... );
+requires cata::is_translation < T >::value {
+    return string_format( format.translated(), std::forward < Args > ( args )... );
 }
 /**@}*/
 
@@ -468,10 +484,10 @@ void cata_print_stderr( const std::string &s );
 
 /** Same as @ref string_format, but prints its result to stdout. */
 /**@{*/
-template<typename ...Args>
+template < typename ...Args >
 inline void cata_printf( std::string_view format, Args &&...args )
 {
-    std::string s = string_format( format, std::forward<Args>( args )... );
+    std::string s = string_format( format, std::forward < Args > ( args )... );
     cata_print_stdout( s );
 }
 

@@ -437,7 +437,7 @@ bool effect_type::use_name_ints() const
 bool effect_type::use_desc_ints( bool reduced ) const
 {
     if( reduced ) {
-    return static_cast<size_t>( max_intensity ) <= reduced_desc.size();
+        return static_cast<size_t>( max_intensity ) <= reduced_desc.size();
     } else {
         return static_cast<size_t>( max_intensity ) <= desc.size();
     }
@@ -446,34 +446,34 @@ bool effect_type::use_desc_ints( bool reduced ) const
 game_message_type effect_type::gain_game_message_type() const
 {
     switch( rating ) {
-    case e_good:
-        return m_good;
-    case e_bad:
-        return m_bad;
-    case e_neutral:
-        return m_neutral;
-    case e_mixed:
-        return m_mixed;
-    default:
-        // Should never happen
-        return m_neutral;
-}
+        case e_good:
+            return m_good;
+        case e_bad:
+            return m_bad;
+        case e_neutral:
+            return m_neutral;
+        case e_mixed:
+            return m_mixed;
+        default:
+            // Should never happen
+            return m_neutral;
+    }
 }
 game_message_type effect_type::lose_game_message_type() const
 {
     switch( rating ) {
-    case e_good:
-        return m_bad;
-    case e_bad:
-        return m_good;
-    case e_neutral:
-        return m_neutral;
-    case e_mixed:
-        return m_mixed;
-    default:
-        // Should never happen
-        return m_neutral;
-}
+        case e_good:
+            return m_bad;
+        case e_bad:
+            return m_good;
+        case e_neutral:
+            return m_neutral;
+        case e_mixed:
+            return m_mixed;
+        default:
+            // Should never happen
+            return m_neutral;
+    }
 }
 std::string effect_type::get_looks_like() const
 {
@@ -591,15 +591,15 @@ bool effect::is_null() const
 std::string effect::disp_name() const
 {
     if( eff_type->name.empty() ) {
-    debugmsg( "No names for effect type, ID: %s", eff_type->id.c_str() );
+        debugmsg( "No names for effect type, ID: %s", eff_type->id.c_str() );
         return "";
     }
 
     // End result should look like "name (l. arm)" or "name [intensity] (l. arm)"
     std::string ret;
     if( eff_type->use_name_ints() ) {
-    const translation &d_name = eff_type->name[ std::min<size_t>( intensity,
-                                eff_type->name.size() ) - 1 ];
+        const translation &d_name = eff_type->name[ std::min<size_t>( intensity,
+                                    eff_type->name.size() ) - 1 ];
         if( d_name.empty() ) {
             return std::string();
         }
@@ -618,7 +618,7 @@ std::string effect::disp_name() const
         }
     }
     if( bp ) {
-    ret += string_format( " (%s)", body_part_name( bp ) );
+        ret += string_format( " (%s)", body_part_name( bp ) );
     }
 
     return ret;
@@ -789,7 +789,7 @@ std::string effect::disp_desc( bool reduced ) const
 std::string effect::disp_short_desc( bool reduced ) const
 {
     if( eff_type->use_desc_ints( reduced ) ) {
-    if( reduced ) {
+        if( reduced ) {
             return eff_type->reduced_desc[intensity - 1];
         } else {
             return eff_type->desc[intensity - 1];
@@ -1265,21 +1265,24 @@ int effect::get_int_add_val() const
     return eff_type->int_add_val;
 }
 
-std::vector<std::pair<std::string, int>> effect::get_miss_msgs() const
-{
+std::vector<std::pair<std::string, int>> effect::get_miss_msgs() const {
     return eff_type->miss_msgs;
 }
-std::string effect::get_speed_name() const
-{
+std::string effect::get_speed_name() const {
     // USes the speed_mod_name if one exists, else defaults to the first entry in "name".
     // But make sure the name for this intensity actually exists!
-    if( !eff_type->speed_mod_name.empty() ) {
-    return _( eff_type->speed_mod_name );
-    } else if( eff_type->use_name_ints() ) {
-    return eff_type->name[ std::min<size_t>( intensity, eff_type->name.size() ) - 1 ].translated();
-    } else if( !eff_type->name.empty() ) {
-    return eff_type->name[0].translated();
-    } else {
+    if( !eff_type->speed_mod_name.empty() )
+    {
+        return _( eff_type->speed_mod_name );
+    }
+    else if( eff_type->use_name_ints() )
+    {
+        return eff_type->name[ std::min<size_t>( intensity, eff_type->name.size() ) - 1 ].translated();
+    } else if( !eff_type->name.empty() )
+    {
+        return eff_type->name[0].translated();
+    } else
+    {
         return "";
     }
 }
@@ -1289,7 +1292,7 @@ bool effect::impairs_movement() const
     return eff_type->impairs_movement;
 }
 
-const effect_type *effect::get_effect_type() const
+const effect_type * effect::get_effect_type() const
 {
     return eff_type;
 }

@@ -1477,19 +1477,19 @@ static void butcher_submenu( const std::vector<item *> &corpses, int corpse = -1
                         enough_light ? cut_time( BUTCHER ) : cannot_see,
                         string_format( "%s  %s%s",
                                        _( "This technique is used when you are in a hurry, "
-                                          "but still want to harvest something from the corpse. "
-                                          " Yields are lower as you don't try to be precise, "
-                                          "but it's useful if you don't want to set up a workshop.  "
-                                          "Prevents zombies from raising." ),
+       "but still want to harvest something from the corpse. "
+       " Yields are lower as you don't try to be precise, "
+       "but it's useful if you don't want to set up a workshop.  "
+       "Prevents zombies from raising." ),
                                        msg_inv, info_on_action( BUTCHER ).c_str() ) );
     smenu.addentry_col( BUTCHER_FULL, enough_light, 'b', _( "Full butchery" ),
                         enough_light ? cut_time( BUTCHER_FULL ) : cannot_see,
                         string_format( "%s  %s%s",
                                        _( "This technique is used to properly butcher a corpse.  "
-                                          "For corpses larger than medium size, you will require "
-                                          "a rope & a tree, a butchering rack or a flat surface "
-                                          "(for ex. a table, a leather tarp, etc.).  "
-                                          "Yields are plentiful and varied, but it is time consuming." ),
+       "For corpses larger than medium size, you will require "
+       "a rope & a tree, a butchering rack or a flat surface "
+       "(for ex. a table, a leather tarp, etc.).  "
+       "Yields are plentiful and varied, but it is time consuming." ),
                                        msg_inv, info_on_action( BUTCHER_FULL ).c_str() ) );
     smenu.addentry_col( BLEED, enough_light &&
                         has_blood, 'l', _( "Bleed corpse" ),
@@ -1497,9 +1497,9 @@ static void butcher_submenu( const std::vector<item *> &corpses, int corpse = -1
                                          c_red ) ) : cannot_see,
                         string_format( "%s  %s%s",
                                        _( "Bleeding involves severing the carotid arteries and jugular "
-                                          "veins, or the blood vessels from which they arise.  "
-                                          "You need skill and an appropriately sharp and precise knife "
-                                          "to do a good job." ),
+       "veins, or the blood vessels from which they arise.  "
+       "You need skill and an appropriately sharp and precise knife "
+       "to do a good job." ),
                                        msg_inv, info_on_action( BLEED ).c_str() ) );
     smenu.addentry_col( F_DRESS, enough_light &&
                         has_organs, 'f', _( "Field dress corpse" ),
@@ -1507,43 +1507,43 @@ static void butcher_submenu( const std::vector<item *> &corpses, int corpse = -1
                                          c_red ) ) : cannot_see,
                         string_format( "%s  %s%s",
                                        _( "Technique that involves removing internal organs and "
-                                          "viscera to protect the corpse from rotting from inside.  "
-                                          "Yields internal organs.  Carcass will be lighter and will "
-                                          "stay fresh longer.  Can be combined with other methods for "
-                                          "better effects." ),
+       "viscera to protect the corpse from rotting from inside.  "
+       "Yields internal organs.  Carcass will be lighter and will "
+       "stay fresh longer.  Can be combined with other methods for "
+       "better effects." ),
                                        msg_inv, info_on_action( F_DRESS ).c_str() ) );
     smenu.addentry_col( SKIN, enough_light &&
                         has_skin, 's', _( "Skin corpse" ),
                         enough_light ? ( has_skin ? cut_time( SKIN ) : colorize( _( "has no skin" ), c_red ) ) : cannot_see,
                         string_format( "%s  %s%s",
                                        _( "Skinning a corpse is an involved and careful process that "
-                                          "usually takes some time.  You need skill and an appropriately "
-                                          "sharp and precise knife to do a good job.  Some corpses are "
-                                          "too small to yield a full-sized hide and will instead produce "
-                                          "scraps that can be used in other ways." ),
+       "usually takes some time.  You need skill and an appropriately "
+       "sharp and precise knife to do a good job.  Some corpses are "
+       "too small to yield a full-sized hide and will instead produce "
+       "scraps that can be used in other ways." ),
                                        msg_inv, info_on_action( SKIN ).c_str() ) );
     smenu.addentry_col( QUARTER, enough_light, 'k', _( "Quarter corpse" ),
                         enough_light ? cut_time( QUARTER ) : cannot_see,
                         string_format( "%s  %s%s",
                                        _( "By quartering a previously field dressed corpse you will "
-                                          "acquire four parts with reduced weight and volume.  It "
-                                          "may help in transporting large game.  This action destroys "
-                                          "skin, hide, pelt, etc., so don't use it if you want to "
-                                          "harvest them later." ),
+       "acquire four parts with reduced weight and volume.  It "
+       "may help in transporting large game.  This action destroys "
+       "skin, hide, pelt, etc., so don't use it if you want to "
+       "harvest them later." ),
                                        msg_inv, info_on_action( QUARTER ).c_str() ) );
     smenu.addentry_col( DISMEMBER, true, 'm', _( "Dismember corpse" ), cut_time( DISMEMBER ),
                         string_format( "%s  %s%s",
                                        _( "If you're aiming to just destroy a body outright and don't "
-                                          "care about harvesting it, dismembering it will hack it apart "
-                                          "in a very short amount of time but yields little to no usable flesh." ),
+       "care about harvesting it, dismembering it will hack it apart "
+       "in a very short amount of time but yields little to no usable flesh." ),
                                        msg_inv, info_on_action( DISMEMBER ).c_str() ) );
     smenu.addentry_col( DISSECT, enough_light, 'd', _( "Dissect corpse" ),
                         enough_light ? cut_time( DISSECT ) : cannot_see,
                         string_format( "%s  %s%s",
                                        _( "By careful dissection of the corpse, you will examine it for "
-                                          "possible bionic implants, or discrete organs and harvest them "
-                                          "if possible.  Requires scalpel-grade cutting tools, and ruins "
-                                          "the corpse.  Your medical knowledge is most useful here." ),
+       "possible bionic implants, or discrete organs and harvest them "
+       "if possible.  Requires scalpel-grade cutting tools, and ruins "
+       "the corpse.  Your medical knowledge is most useful here." ),
                                        msg_inv_diss, info_on_action( DISSECT ).c_str() ) );
     smenu.query();
     switch( smenu.ret ) {
@@ -1841,16 +1841,16 @@ auto game::post_action_world_step() -> void
     static int    _perf_n = 0;
     cleanup_arenas();
     if( try_activity_fixed_window_skip() ) {
-    return;
-}
-const bool asleep = u.in_sleep_state();
-const auto vehperf = asleep && !character_funcs::is_driving( u ) &&
-                     get_option<bool>( "SLEEP_SKIP_VEH" );
-const auto soundperf = asleep && get_option<bool>( "SLEEP_SKIP_SOUND" );
-const auto monperf = asleep && get_option<bool>( "SLEEP_SKIP_MON" );
-const auto npcperf = asleep && get_option<bool>( "SLEEP_SKIP_NPC" );
-{
-    TracyPlot( "Total Monsters", static_cast<int64_t>( critter_tracker->size() ) );
+        return;
+    }
+    const bool asleep = u.in_sleep_state();
+    const auto vehperf = asleep && !character_funcs::is_driving( u ) &&
+                         get_option<bool>( "SLEEP_SKIP_VEH" );
+    const auto soundperf = asleep && get_option<bool>( "SLEEP_SKIP_SOUND" );
+    const auto monperf = asleep && get_option<bool>( "SLEEP_SKIP_MON" );
+    const auto npcperf = asleep && get_option<bool>( "SLEEP_SKIP_NPC" );
+    {
+        TracyPlot( "Total Monsters", static_cast<int64_t>( critter_tracker->size() ) );
         auto total_npcs = int64_t{ 0 };
         auto simulated_npcs = int64_t{ 0 };
         for( const shared_ptr_fast<npc> &guy : active_npc ) {
@@ -1896,7 +1896,7 @@ const auto npcperf = asleep && get_option<bool>( "SLEEP_SKIP_NPC" );
     }
 
     if( npcs_dirty ) {
-    load_npcs();
+        load_npcs();
     }
 
     {
@@ -1907,22 +1907,22 @@ const auto npcperf = asleep && get_option<bool>( "SLEEP_SKIP_NPC" );
     }
     // If controlling a vehicle that is owned by someone else
     if( u.in_vehicle && u.controlling_vehicle ) {
-    vehicle *veh = veh_pointer_or_null( m.veh_at( u.bub_pos() ) );
+        vehicle *veh = veh_pointer_or_null( m.veh_at( u.bub_pos() ) );
         if( veh && !veh->handle_potential_theft( u, true ) ) {
             veh->handle_potential_theft( u, false, false );
         }
     }
     // If riding a horse - chance to spook
     if( u.is_mounted() ) {
-    u.check_mount_is_spooked();
+        u.check_mount_is_spooked();
     }
     if( action_time_scale::once_every_this_tick( 1_days ) ) {
-    get_overmapbuffer( current_dimension_id_ ).process_mongroups();
+        get_overmapbuffer( current_dimension_id_ ).process_mongroups();
     }
 
     // Move hordes every 2.5 min
     if( action_time_scale::once_every_this_tick( time_duration::from_minutes( 2.5 ) ) ) {
-    get_overmapbuffer( current_dimension_id_ ).move_hordes();
+        get_overmapbuffer( current_dimension_id_ ).move_hordes();
         if( u.has_trait( trait_HAS_NEMESIS ) ) {
             get_overmapbuffer( current_dimension_id_ ).move_nemesis();
         }
@@ -1941,7 +1941,7 @@ const auto npcperf = asleep && get_option<bool>( "SLEEP_SKIP_NPC" );
     if( get_option<bool>( "AUTOSAVE" ) &&
         action_time_scale::once_every_this_tick( 1_turns * get_option<int>( "AUTOSAVE_TURNS" ) ) &&
         !u.is_dead_state() ) {
-    autosave();
+        autosave();
     }
 
     {
@@ -1960,8 +1960,8 @@ const auto npcperf = asleep && get_option<bool>( "SLEEP_SKIP_NPC" );
     sounds::reset_markers();
 
     if( !soundperf ) {
-    // Process NPC sound events before they move or they hear themselves talking
-    for( npc &guy : all_npcs() ) {
+        // Process NPC sound events before they move or they hear themselves talking
+        for( npc &guy : all_npcs() ) {
             if( rl_dist( guy.bub_pos(), u.bub_pos() ) < g_max_view_distance ) {
                 sounds::process_sound_markers( &guy );
             }
@@ -1973,7 +1973,7 @@ const auto npcperf = asleep && get_option<bool>( "SLEEP_SKIP_NPC" );
         }
     }
     if( driving_view_offset.x != 0 || driving_view_offset.y != 0 ) {
-    vehicle *veh = veh_pointer_or_null( m.veh_at( u.bub_pos() ) );
+        vehicle *veh = veh_pointer_or_null( m.veh_at( u.bub_pos() ) );
         calc_driving_offset( veh );
     }
 
@@ -1997,7 +1997,7 @@ const auto npcperf = asleep && get_option<bool>( "SLEEP_SKIP_NPC" );
     }
 
     if( !vehperf ) {
-    m.process_falling();
+        m.process_falling();
         autopilot_vehicles();
         m.vehmove();
     }
@@ -2034,22 +2034,22 @@ const auto npcperf = asleep && get_option<bool>( "SLEEP_SKIP_NPC" );
     {
         const auto _t0 = _perf_clk::now();
         m.build_map_cache( level_cache_freshness::plan_for( m,
-            level_cache_freshness::pose_of_viewer( u, get_levz() ),
-            level_cache_freshness::lightmap_policy::skip ) );
+                           level_cache_freshness::pose_of_viewer( u, get_levz() ),
+                           level_cache_freshness::lightmap_policy::skip ) );
         _perf_cache += std::chrono::duration<double, std::milli>( _perf_clk::now() - _t0 ).count();
     }
     if( !monperf ) {
-    const auto _t0 = _perf_clk::now();
+        const auto _t0 = _perf_clk::now();
         monmove();
         _perf_mon += std::chrono::duration<double, std::milli>( _perf_clk::now() - _t0 ).count();
     }
     if( !npcperf ) {
-    npcmove();
+        npcmove();
     } else {
         sleep_skip_npc_process();
     }
     if( action_time_scale::once_every_this_tick( 5_minutes ) ) {
-    overmap_npc_move();
+        overmap_npc_move();
     }
 
     update_stair_monsters();
@@ -2072,12 +2072,12 @@ const auto npcperf = asleep && get_option<bool>( "SLEEP_SKIP_NPC" );
     }
 
     if( u.moves < 0 && get_option<bool>( "FORCE_REDRAW" ) ) {
-    ui_manager::redraw();
+        ui_manager::redraw();
         refresh_display();
     }
 
     if( get_levz() >= 0 && !u.is_underwater() ) {
-    handle_weather_effects( weather.weather_id );
+        handle_weather_effects( weather.weather_id );
     }
 
     handle_wait_activity_redraw();
@@ -2089,7 +2089,7 @@ const auto npcperf = asleep && get_option<bool>( "SLEEP_SKIP_NPC" );
     }
 
     if( !u.is_deaf() ) {
-    sfx::remove_hearing_loss();
+        sfx::remove_hearing_loss();
     }
     {
         sfx::do_danger_music();
@@ -2113,8 +2113,8 @@ const auto npcperf = asleep && get_option<bool>( "SLEEP_SKIP_NPC" );
     // the desired set and load/unload as needed.
     // Ensure trackers exist for all active dimensions before update() fires
     // on_submap_loaded events (mirrors the logic in load_map / update_map).
-for( const auto &dim_id : submap_loader.active_dimensions() ) {
-    ensure_distribution_grid_tracker_for( dim_id );
+    for( const auto &dim_id : submap_loader.active_dimensions() ) {
+        ensure_distribution_grid_tracker_for( dim_id );
     }
     submap_loader.update_lazy_border_focus( current_dimension_id_, u.abs_pos() );
     submap_loader.update();
@@ -2140,12 +2140,12 @@ for( const auto &dim_id : submap_loader.active_dimensions() ) {
     // input while activity or auto-move interruption checks are active, so
     // pause/menu keys can still stop long-running actions.
     if( !u.activity && !u.has_destination() ) {
-    inp_mngr.pump_events();
+        inp_mngr.pump_events();
     }
 
     _perf_sim += std::chrono::duration<double, std::milli>( _perf_clk::now() - _perf_sim_t0 ).count();
     if( ++_perf_n >= 20 ) {
-    DebugLog( DL::Info, DC::Game ) << "[sim][perf] " << _perf_n << " turns avg: sim_total="
+        DebugLog( DL::Info, DC::Game ) << "[sim][perf] " << _perf_n << " turns avg: sim_total="
                                        << ( _perf_sim / _perf_n ) << "ms (build_map_cache=" << ( _perf_cache / _perf_n )
                                        << " monmove=" << ( _perf_mon / _perf_n ) << " world_tick="
                                        << ( _perf_world / _perf_n ) << ")";
@@ -2173,14 +2173,14 @@ auto game::coop_client_turn_step() -> void
 
     // If controlling a vehicle that is owned by someone else
     if( u.in_vehicle && u.controlling_vehicle ) {
-    vehicle *veh = veh_pointer_or_null( m.veh_at( u.bub_pos() ) );
+        vehicle *veh = veh_pointer_or_null( m.veh_at( u.bub_pos() ) );
         if( veh && !veh->handle_potential_theft( u, true ) ) {
             veh->handle_potential_theft( u, false, false );
         }
     }
     // If riding a horse - chance to spook
     if( u.is_mounted() ) {
-    u.check_mount_is_spooked();
+        u.check_mount_is_spooked();
     }
 
     u.update_body();
@@ -2188,7 +2188,7 @@ auto game::coop_client_turn_step() -> void
     // Auto-save if autosave is enabled
     if( get_option<bool>( "AUTOSAVE" ) &&
         action_time_scale::once_every_this_tick( 1_turns * get_option<int>( "AUTOSAVE_TURNS" ) ) &&
-            !u.is_dead_state() ) {
+        !u.is_dead_state() ) {
         autosave();
     }
 
@@ -2205,7 +2205,7 @@ auto game::coop_client_turn_step() -> void
     sounds::reset_markers();
     sounds::process_sound_markers( &u );
     if( u.is_deaf() ) {
-    sfx::do_hearing_loss();
+        sfx::do_hearing_loss();
     }
     // process_sounds() is host-only (it signals hordes and drives monster AI), so drain the
     // monster-AI sound list by hand or it grows for the whole session.
@@ -2213,7 +2213,7 @@ auto game::coop_client_turn_step() -> void
 
     // No-scent debug mutation has to be processed here or else it takes time to start working
     if( !u.has_active_bionic( bionic_id( "bio_scent_mask" ) ) &&
-            !u.has_trait( trait_id( "DEBUG_NOSCENT" ) ) ) {
+        !u.has_trait( trait_id( "DEBUG_NOSCENT" ) ) ) {
         scent.set( u.bub_pos(), u.scent, u.get_type_of_scent() );
         get_overmapbuffer( current_dimension_id_ ).set_scent( u.abs_omt_pos(), u.scent );
     }
@@ -2229,7 +2229,7 @@ auto game::coop_client_turn_step() -> void
     cleanup_dead();
 
     if( get_levz() >= 0 && !u.is_underwater() ) {
-    handle_weather_effects( weather.weather_id );
+        handle_weather_effects( weather.weather_id );
     }
 
     u.update_bodytemp( m, weather );
@@ -2253,20 +2253,20 @@ auto game::coop_client_frame_step() -> void
     update_performance_bubble();
 
     if( driving_view_offset.x != 0 || driving_view_offset.y != 0 ) {
-    vehicle *veh = veh_pointer_or_null( m.veh_at( u.bub_pos() ) );
+        vehicle *veh = veh_pointer_or_null( m.veh_at( u.bub_pos() ) );
         calc_driving_offset( veh );
     }
 
     m.build_floor_caches();
     m.build_map_cache( level_cache_freshness::plan_for( m,
-        level_cache_freshness::pose_of_viewer( u, get_levz() ),
-        level_cache_freshness::lightmap_policy::skip ) );
+                       level_cache_freshness::pose_of_viewer( u, get_levz() ),
+                       level_cache_freshness::lightmap_policy::skip ) );
 
     mon_info_update();
     handle_wait_activity_redraw();
 
     if( !u.is_deaf() ) {
-    sfx::remove_hearing_loss();
+        sfx::remove_hearing_loss();
     }
     sfx::do_danger_music();
     sfx::do_vehicle_engine_sfx();

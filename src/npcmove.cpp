@@ -867,12 +867,12 @@ npc_action npc::long_term_goal_action()
 double npc::confidence_mult() const
 {
     if( !is_player_ally() || is_player() ) {
-    return 1.0f;
-}
+        return 1.0f;
+    }
 
-switch( rules.aim ) {
-    case aim_rule::WHEN_CONVENIENT:
-        return emergency() ? 1.5f : 1.0f;
+    switch( rules.aim ) {
+        case aim_rule::WHEN_CONVENIENT:
+            return emergency() ? 1.5f : 1.0f;
         case aim_rule::SPRAY:
             return 2.0f;
         case aim_rule::PRECISE:
@@ -887,15 +887,15 @@ switch( rules.aim ) {
 int npc::confident_shoot_range( const item &it, int recoil ) const
 {
     if( !it.is_gun() ) {
-    return 0;
-}
-const auto gun_mode_cmp = []( const std::pair<gun_mode_id, gun_mode> &lhs,
-const std::pair<gun_mode_id, gun_mode> &rhs ) {
-    return lhs.second.qty < rhs.second.qty;
-};
-std::map<gun_mode_id, gun_mode> modes = it.gun_all_modes();
-if( modes.empty() ) {
-    debugmsg( "%s has no gun modes", it.tname() );
+        return 0;
+    }
+    const auto gun_mode_cmp = []( const std::pair<gun_mode_id, gun_mode> &lhs,
+    const std::pair<gun_mode_id, gun_mode> &rhs ) {
+        return lhs.second.qty < rhs.second.qty;
+    };
+    std::map<gun_mode_id, gun_mode> modes = it.gun_all_modes();
+    if( modes.empty() ) {
+        debugmsg( "%s has no gun modes", it.tname() );
         return 0;
     }
     auto best = std::min_element( modes.begin(), modes.end(), gun_mode_cmp );
@@ -905,12 +905,12 @@ if( modes.empty() ) {
 int npc::confident_gun_mode_range( const gun_mode &gun, int at_recoil ) const
 {
     if( !gun || gun.melee() ) {
-    return 0;
-}
+        return 0;
+    }
 
-const std::optional<shape_factory> shaped = ranged::get_shape_factory( *gun.target );
-if( shaped ) {
-    return static_cast<int>( shaped->get_range() ) - 1;
+    const std::optional<shape_factory> shaped = ranged::get_shape_factory( *gun.target );
+    if( shaped ) {
+        return static_cast<int>( shaped->get_range() ) - 1;
     }
 
     // Doesn't use calculate_dispersion because that requires a map
@@ -921,7 +921,7 @@ if( shaped ) {
     mode_disp.add_range( eff_recoil );
     double max_dispersion = mode_disp.max();
     if( gun->ammo_current() ) {
-    max_dispersion += gun->ammo_current()->ammo->dispersion;
+        max_dispersion += gun->ammo_current()->ammo->dispersion;
     }
     double even_chance_range = range_with_even_chance_of_good_hit( max_dispersion );
     double confident_range = even_chance_range * confidence_mult();
@@ -943,26 +943,26 @@ int npc::confident_throw_range( const item& thrown, Creature* target ) const
 auto item::ideal_ranged_dps( const Character &who, std::optional<gun_mode> &mode ) const -> double
 {
     if( !is_gun() || is_gunmod() || !mode ) {
-    return 0;
-}
-damage_instance gun_damage = this->gun_damage();
-if( ammo_current() ) {
-    itype_id ammo = ammo_current();
+        return 0;
+    }
+    damage_instance gun_damage = this->gun_damage();
+    if( ammo_current() ) {
+        itype_id ammo = ammo_current();
         gun_damage.add( ammo->ammo->damage );
     } else if( ammo_default() ) {
-    itype_id ammo = ammo_default();
+        itype_id ammo = ammo_default();
         gun_damage.add( ammo->ammo->damage );
     }
     int burst_size = mode->qty;
     if( burst_size <= 0 ) {
-    debugmsg( "gun_mode for %s has burst size of 0", this->tname() );
+        debugmsg( "gun_mode for %s has burst size of 0", this->tname() );
         burst_size = 1;
     }
     float damage_factor = gun_damage.total_damage() * burst_size;
 
     int move_cost = ranged::time_to_attack( who, *this, nullptr );
     if( ammo_remaining() == 0 ) {
-    int reload_cost = get_reload_time() + who.encumb( body_part_hand_l ) + who.encumb(
+        int reload_cost = get_reload_time() + who.encumb( body_part_hand_l ) + who.encumb(
                               body_part_hand_r );
         // HACK: Doesn't check how much ammo they'll actually get from the reload. Because we don't know.
         // DPS is less impacted the larger the magazine being swapped.
@@ -975,7 +975,7 @@ if( ammo_current() ) {
         return at.action == std::string( "AIMED_SHOT" );
     } );
     if( regular == aim_types.end() ) {
-    debugmsg( "Could not find REGULAR aim type for gun %s", tname() );
+        debugmsg( "Could not find REGULAR aim type for gun %s", tname() );
         return 0;
     }
     move_cost += ranged::gun_engagement_moves( who, *this, ( *regular ).threshold );
@@ -991,24 +991,24 @@ bool npc::wont_hit_friend( const tripoint_bub_ms& tar, const item& it, bool thro
     // TODO: Get actual dispersion instead of extracting it (badly) from confident range
     int confident = throwing ?
                     confident_throw_range( it, nullptr ) :
-    confident_shoot_range( it, ranged::recoil_total( *this ) );
+                    confident_shoot_range( it, ranged::recoil_total( *this ) );
     // if there is no confidence at using weapon, it's not used at range
     // zero confidence leads to divide by zero otherwise
     if( confident < 1 ) {
-    return true;
-}
+        return true;
+    }
 
-if( rl_dist( bub_pos(), tar ) == 1 ) {
-    return true;    // If we're *really* sure that our aim is dead-on
-}
+    if( rl_dist( bub_pos(), tar ) == 1 ) {
+        return true;    // If we're *really* sure that our aim is dead-on
+    }
 
-units::angle target_angle = coord_to_angle( bub_pos(), tar );
+    units::angle target_angle = coord_to_angle( bub_pos(), tar );
 
-// TODO: Base on dispersion
-units::angle safe_angle = 30_degrees;
+    // TODO: Base on dispersion
+    units::angle safe_angle = 30_degrees;
 
-for( const auto &fr : ai_cache.friends ) {
-    const shared_ptr_fast<Creature> ally_p = fr.lock();
+    for( const auto &fr : ai_cache.friends ) {
+        const shared_ptr_fast<Creature> ally_p = fr.lock();
         if( !ally_p ) {
             continue;
         }
@@ -1041,15 +1041,15 @@ bool npc::enough_time_to_reload( const item& gun ) const
 
     const Creature* target = current_target();
     if( target == nullptr ) {
-    // No target, plenty of time to reload
-    return true;
-}
+        // No target, plenty of time to reload
+        return true;
+    }
 
-const auto distance = rl_dist( bub_pos(), target->bub_pos() );
-const float target_speed = target->speed_rating();
-const float turns_til_reached = distance / target_speed;
-if( target->is_player() || target->is_npc() ) {
-    auto& c = dynamic_cast<const Character &>( *target );
+    const auto distance = rl_dist( bub_pos(), target->bub_pos() );
+    const float target_speed = target->speed_rating();
+    const float turns_til_reached = distance / target_speed;
+    if( target->is_player() || target->is_npc() ) {
+        auto& c = dynamic_cast<const Character &>( *target );
         if( sees( c ) && c.primary_weapon().is_gun() && rltime > 200
             && c.primary_weapon().gun_range( true ) > distance + turns_til_reloaded / target_speed ) {
             // Don't take longer than 2 turns if player has a gun
@@ -2102,7 +2102,7 @@ void npc::look_for_player( const Character& sought )
 bool npc::saw_player_recently() const
 {
     return last_player_seen_pos && get_map().inbounds( *last_player_seen_pos ) &&
-    last_seen_player_turn > 0;
+           last_seen_player_turn > 0;
 }
 
 bool npc::has_omt_destination() const { return goal != no_goal_point; }
@@ -2125,7 +2125,7 @@ void npc::reach_omt_destination()
                          || has_enchantment_flag( enchantment_flag_id( "RADIO" ) ) ) ) {
                     add_msg( m_info,
                              _( "From your two-way radio you hear %s reporting in, "
-                                "'I've arrived, boss!'" ),
+                       "'I've arrived, boss!'" ),
                              disp_name() );
                 }
             }

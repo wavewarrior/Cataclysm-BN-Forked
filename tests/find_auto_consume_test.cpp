@@ -5,10 +5,10 @@
 #include "catch/catch_amalgamated.hpp"
 #include "character.h"
 #include "clzones.h"
-#include "map_helpers.h"
 #include "item.h"
 #include "itype.h"
 #include "map.h"
+#include "map_helpers.h"
 #include "pickup.h"
 #include "player.h"
 #include "player_helpers.h"
@@ -38,8 +38,7 @@ TEST_CASE("auto_consume_priority", "[auto_consume][food][zone]") {
     avatar& you = get_avatar();
     you.setpos(zone_origin);
 
-    auto create_zone =
-        [&, zone_origin_absolute, zone_size](const std::string& name) -> void {
+    auto create_zone = [&, zone_origin_absolute, zone_size](const std::string& name) -> void {
         zmgr.add(name, zone_type_id(name), faction_id("your_followers"), false, true,
                  zone_origin_absolute - zone_size, zone_origin_absolute + zone_size);
     };

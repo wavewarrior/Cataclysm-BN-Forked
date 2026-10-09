@@ -52,7 +52,7 @@ struct ranged_bash_info {
             return std::tie( reduction, reduction_laser, destroy_threshold, flammable, block_unaimed_chance );
         }
     public:
-        bool operator==( const ranged_bash_info &rhs ) const = default;
+        bool operator == ( const ranged_bash_info &rhs ) const = default;
 };
 
 struct map_bash_info {
@@ -106,10 +106,10 @@ struct map_bash_info {
     };
     map_bash_info();
 
-    void deserialize( JsonIn &jsin );
+    void deserialize( JsonIn & jsin );
     void finalize();
     // ID as string, because 3 type weirdness...
-    void check( const std::string &id, map_object_type type ) const;
+    void check( const std::string & id, map_object_type type ) const;
 };
 
 struct map_dig_info {

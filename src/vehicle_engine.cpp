@@ -281,7 +281,7 @@ void vehicle::backfire( const int e ) const
 const vpart_info &vehicle::part_info( int index, bool include_removed ) const
 {
     if( index < static_cast<int>( parts.size() ) ) {
-    if( !parts[index].removed || include_removed ) {
+        if( !parts[index].removed || include_removed ) {
             return parts[index].info();
         }
     }

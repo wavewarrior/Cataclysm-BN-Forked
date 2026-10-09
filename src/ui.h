@@ -192,8 +192,7 @@ class uilist;
 * event completely". This is unchanged before or after the PR.
 * @{
 */
-class uilist_callback
-{
+class uilist_callback {
     public:
 
         /**
@@ -201,7 +200,8 @@ class uilist_callback
         */
         virtual void select( uilist * ) {}
         virtual bool key( const input_context &, const input_event &/*key*/, int /*entnum*/,
-                          uilist * ) {
+                          uilist * )
+        {
             return false;
         }
         virtual void refresh( uilist * ) {}
@@ -210,7 +210,8 @@ class uilist_callback
         /// RmlUi path renders this menu, with the menu's live document so a
         /// callback can inject/update elements. Default no-op: plain lists need
         /// nothing, and select()/key() (paradigm-agnostic) keep working.
-        virtual void draw_rml( uilist *menu, Rml::ElementDocument *doc ) {
+        virtual void draw_rml( uilist *menu, Rml::ElementDocument *doc )
+        {
             ( void )menu;
             ( void )doc;
         }
@@ -222,8 +223,7 @@ class uilist_callback
  * uilist: scrolling vertical list menu
  */
 
-class uilist // NOLINT(cata-xy)
-{
+class uilist { // NOLINT(cata-xy)
     public:
         class size_scalar
         {
@@ -231,9 +231,9 @@ class uilist // NOLINT(cata-xy)
                 struct auto_assign {
                 };
 
-                size_scalar &operator=( auto_assign );
-                size_scalar &operator=( int val );
-                size_scalar &operator=( const std::function<int()> &fun );
+                size_scalar &operator = ( auto_assign );
+                size_scalar &operator = ( int val );
+                size_scalar &operator = ( const std::function<int()> &fun );
 
                 friend class uilist;
 
@@ -260,11 +260,11 @@ class uilist // NOLINT(cata-xy)
         };
 
         uilist();
-        uilist( const std::string &hotkeys_override );
+        uilist( const std::string & hotkeys_override );
         // query() will be called at the end of these convenience constructors
-        uilist( const std::string &msg, const std::vector<uilist_entry> &opts );
-        uilist( const std::string &msg, const std::vector<std::string> &opts );
-        uilist( const std::string &msg, std::initializer_list<const char *const> opts );
+        uilist( const std::string & msg, const std::vector<uilist_entry> &opts );
+        uilist( const std::string & msg, const std::vector<std::string> &opts );
+        uilist( const std::string & msg, std::initializer_list<const char *const> opts );
 
         ~uilist();
 
@@ -274,8 +274,8 @@ class uilist // NOLINT(cata-xy)
         void init();
         void setup();
         // initialize the window or reposition it after screen size change.
-        void reposition( ui_adaptor &ui );
-        void show( ui_adaptor &ui );
+        void reposition( ui_adaptor & ui );
+        void show( ui_adaptor & ui );
         bool scrollby( int scrollby );
         void query( bool loop = true, int timeout = -1 );
 
@@ -296,11 +296,11 @@ class uilist // NOLINT(cata-xy)
          * Note that uilist has inbuilt "query for filter string and apply it" functionality,
          * but this method can be used for creating uilists with some filter pre-applied.
          */
-        void set_filter( const std::string &fstr );
+        void set_filter( const std::string & fstr );
         /**
          * Get current filter string.
          */
-        const std::string &get_filter() const {
+        const std::string & get_filter() const {
             return filter;
         }
 
@@ -321,20 +321,21 @@ class uilist // NOLINT(cata-xy)
         /// Updates an entry's displayed hotkey and active dispatch mapping together.
         auto set_entry_hotkey( std::size_t entry_index, int hotkey ) -> bool;
 
-        void addentry( const std::string &str );
-        void addentry( int r, bool e, int k, const std::string &str );
+        void addentry( const std::string & str );
+        void addentry( int r, bool e, int k, const std::string & str );
         // K is templated so it matches a `char` literal and a `int` value.
         // Using a fixed type (either `char` or `int`) will lead to ambiguity with the
         // other overload when called with the wrong type.
         template<typename K, typename ...Args>
-        void addentry( const int r, const bool e, K k, const char *const format, Args &&... args ) {
+        void addentry( const int r, const bool e, K k, const char *const format, Args &&... args )
+        {
             return addentry( r, e, k, string_format( format, std::forward<Args>( args )... ) );
         }
-        void addentry_desc( const std::string &str, const std::string &desc );
-        void addentry_desc( int r, bool e, int k, const std::string &str, const std::string &desc );
-        void addentry_col( int r, bool e, int k, const std::string &str, const std::string &column,
+        void addentry_desc( const std::string & str, const std::string & desc );
+        void addentry_desc( int r, bool e, int k, const std::string & str, const std::string & desc );
+        void addentry_col( int r, bool e, int k, const std::string & str, const std::string & column,
                            const std::string &desc = "" );
-        void settext( const std::string &str );
+        void settext( const std::string & str );
 
         auto set_categories(
             std::vector<std::string> category_names,
@@ -360,7 +361,7 @@ class uilist // NOLINT(cata-xy)
         operator int() const;
 
     private:
-        int scroll_amount_from_action( const std::string &action );
+        int scroll_amount_from_action( const std::string & action );
         void apply_scrollbar();
         auto cycle_category( bool forward ) -> void;
         // This function assumes it's being called from `query` and should
@@ -508,13 +509,12 @@ class uilist // NOLINT(cata-xy)
  * Callback for uilist that pairs menu entries with points
  * When an entry is selected, view will be centered on the paired point
  */
-class pointmenu_cb : public uilist_callback
-{
+class pointmenu_cb : public uilist_callback {
     private:
         struct impl_t;
-        pimpl<impl_t> impl;
+        pimpl < impl_t > impl;
     public:
-        pointmenu_cb( const std::vector<tripoint_bub_ms> &pts );
+        pointmenu_cb( const std::vector < tripoint_bub_ms > &pts );
         ~pointmenu_cb() override;
-        void select( uilist *menu ) override;
+        void select( uilist * menu ) override;
 };

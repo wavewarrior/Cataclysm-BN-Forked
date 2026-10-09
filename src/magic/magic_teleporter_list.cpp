@@ -151,18 +151,18 @@ private:
 
 public:
     teleporter_callback(std::map<int, tripoint_abs_omt>& ip): index_pairs(ip) {}
-    void draw_rml( uilist* menu, Rml::ElementDocument* doc ) override {
-        Rml::Element* cb = doc->GetElementById( "callback" );
-        if( !cb ) { return; }
+    void draw_rml(uilist* menu, Rml::ElementDocument* doc) override {
+        Rml::Element* cb = doc->GetElementById("callback");
+        if (!cb) { return; }
         const int entnum = menu->selected;
-        if( entnum >= 0 && static_cast<size_t>( entnum ) < index_pairs.size() ) {
+        if (entnum >= 0 && static_cast<size_t>(entnum) < index_pairs.size()) {
             avatar& player_character = get_avatar();
-            int dist = rl_dist( player_character.abs_omt_pos(), index_pairs[entnum] );
+            int dist = rl_dist(player_character.abs_omt_pos(), index_pairs[entnum]);
             std::string text =
-                string_format( _( "Distance: %d %s" ), dist, index_pairs[entnum].to_string() );
-            cb->SetInnerRML( cata_text_to_rml( colorize( text, c_white ) ) );
+                string_format(_("Distance: %d %s"), dist, index_pairs[entnum].to_string());
+            cb->SetInnerRML(cata_text_to_rml(colorize(text, c_white)));
         } else {
-            cb->SetInnerRML( "" );
+            cb->SetInnerRML("");
         }
     }
 };

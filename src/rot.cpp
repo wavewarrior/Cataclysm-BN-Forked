@@ -28,8 +28,8 @@ auto for_tile( const tile_flags &flags ) -> temperature_flag
 auto for_location( const map &m, const item &loc ) -> temperature_flag
 {
     if( !loc.has_position() ) {
-    return temperature_flag::TEMP_NORMAL;
-}
+        return temperature_flag::TEMP_NORMAL;
+    }
 
     switch( loc.where() ) {
         case item_location_type::character:

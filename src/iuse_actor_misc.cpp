@@ -338,7 +338,7 @@ int place_trap_actor::use( player& p, item& it, bool, const tripoint_bub_ms & ) 
                 p.add_msg_if_player(
                     m_info,
                     _( "That trap needs a space in %d tiles radius to be clear, centered %d tiles "
-                       "from you." ),
+                   "from you." ),
                     outer_layer_trap.obj().get_trap_radius(), distance_to_trap_center );
                 return 0;
             }
@@ -407,10 +407,10 @@ int saw_barrel_actor::use( player& p, item& it, bool t, const tripoint_bub_ms & 
 {
     if( t ) { return 0; }
 
-auto loc = game_menus::inv::saw_barrel( p, it );
+    auto loc = game_menus::inv::saw_barrel( p, it );
 
-if( !loc ) {
-    p.add_msg_if_player( _( "Never mind." ) );
+    if( !loc ) {
+        p.add_msg_if_player( _( "Never mind." ) );
         return 0;
     }
 
@@ -427,11 +427,11 @@ ret_val<bool> saw_barrel_actor::can_use_on( const player &, const item &,
     if( !target.is_gun() ) { return ret_val<bool>::make_failure( _( "It's not a gun." ) ); }
 
     if( target.type->gun->barrel_volume <= 0_ml ) {
-    return ret_val<bool>::make_failure( _( "The barrel is too short." ) );
+        return ret_val<bool>::make_failure( _( "The barrel is too short." ) );
     }
 
     if( target.gunmod_find( itype_barrel_small ) ) {
-    return ret_val<bool>::make_failure( _( "The barrel is already sawn-off." ) );
+        return ret_val<bool>::make_failure( _( "The barrel is already sawn-off." ) );
     }
 
     const auto gunmods = target.gunmods();
@@ -440,7 +440,7 @@ ret_val<bool> saw_barrel_actor::can_use_on( const player &, const item &,
     } );
 
     if( modified_barrel ) {
-    return ret_val<bool>::make_failure( _( "Can't saw off modified barrels." ) );
+        return ret_val<bool>::make_failure( _( "Can't saw off modified barrels." ) );
     }
 
     return ret_val<bool>::make_success();
@@ -457,10 +457,10 @@ int saw_stock_actor::use( player& p, item& it, bool t, const tripoint_bub_ms & )
 {
     if( t ) { return 0; }
 
-auto loc = game_menus::inv::saw_stock( p, it );
+    auto loc = game_menus::inv::saw_stock( p, it );
 
-if( !loc ) {
-    p.add_msg_if_player( _( "Never mind." ) );
+    if( !loc ) {
+        p.add_msg_if_player( _( "Never mind." ) );
         return 0;
     }
 
@@ -476,7 +476,7 @@ ret_val<bool> saw_stock_actor::can_use_on( const player &, const item &, const i
     if( !target.is_gun() ) { return ret_val<bool>::make_failure( _( "It's not a gun." ) ); }
 
     if( target.gunmod_find( itype_stock_small ) ) {
-    return ret_val<bool>::make_failure( _( "The stock is already sawn-off." ) );
+        return ret_val<bool>::make_failure( _( "The stock is already sawn-off." ) );
     }
 
     // Exclude pistols and the like that have had a stock mount bubba'd onto them.
@@ -486,7 +486,7 @@ ret_val<bool> saw_stock_actor::can_use_on( const player &, const item &, const i
     } );
 
     if( external_stock ) {
-    return ret_val<bool>::make_failure( _( "You can't saw anything off this." ) );
+        return ret_val<bool>::make_failure( _( "You can't saw anything off this." ) );
     }
 
     // Don't allow trying to stack stock mods.
@@ -498,7 +498,7 @@ ret_val<bool> saw_stock_actor::can_use_on( const player &, const item &, const i
 
     // Also bail out if there's no unmodified stock to touch at all.
     if( target.get_free_mod_locations( gunmod_location( "stock" ) ) == 0
-            || target.type->gun->skill_used == skill_id( "pistol" ) ) {
+        || target.type->gun->skill_used == skill_id( "pistol" ) ) {
         return ret_val<bool>::make_failure( _( "This doesn't have a stock." ) );
     }
 
@@ -518,7 +518,7 @@ std::unique_ptr<iuse_actor> saw_stock_actor::clone() const
 int install_bionic_actor::use( player& p, item& it, bool, const tripoint_bub_ms & ) const
 {
     if( p.can_install_bionics( *it.type, p, false ) ) {
-    return p.install_bionics( *it.type, p, false ) ? it.type->charges_to_use() : 0;
+        return p.install_bionics( *it.type, p, false ) ? it.type->charges_to_use() : 0;
     } else {
         return 0;
     }
@@ -530,12 +530,12 @@ ret_val<bool> install_bionic_actor::can_use(
     if( !it.is_bionic() ) { return ret_val<bool>::make_failure(); }
     const bionic_id& bid = it.type->bionic->id;
     if( p.is_mounted() ) {
-    return ret_val<bool>::make_failure( _( "You can't install bionics while mounted." ) );
+        return ret_val<bool>::make_failure( _( "You can't install bionics while mounted." ) );
     }
     if( !get_option<bool>( "MANUAL_BIONIC_INSTALLATION" ) && !p.has_trait( trait_DEBUG_BIONICS ) ) {
-    return ret_val<bool>::make_failure( _( "You can't self-install bionics." ) );
+        return ret_val<bool>::make_failure( _( "You can't self-install bionics." ) );
     } else if( !p.has_trait( trait_DEBUG_BIONICS ) ) {
-    if( it.has_fault( fault_bionic_nonsterile ) && !p.has_trait( trait_INFRESIST ) ) {
+        if( it.has_fault( fault_bionic_nonsterile ) && !p.has_trait( trait_INFRESIST ) ) {
             return ret_val<bool>::make_failure( _( "This CBM is not sterile, you can't install it." ) );
         } else if( units::energy_max - p.get_max_power_level() < bid->capacity ) {
             return ret_val<bool>::make_failure( _( "Max power capacity already reached" ) );
@@ -543,11 +543,11 @@ ret_val<bool> install_bionic_actor::can_use(
     }
 
     if( !bid->has_flag( flag_MULTIINSTALL ) && p.has_bionic( bid ) ) {
-    return ret_val<bool>::make_failure( _( "You have already installed this bionic." ) );
+        return ret_val<bool>::make_failure( _( "You have already installed this bionic." ) );
     } else if( bid->upgraded_bionic && !p.has_bionic( bid->upgraded_bionic ) ) {
-    return ret_val<bool>::make_failure( _( "There is nothing to upgrade." ) );
+        return ret_val<bool>::make_failure( _( "There is nothing to upgrade." ) );
     } else if( character_funcs::has_upgraded_bionic( p, bid ) ) {
-    return ret_val<bool>::make_failure( _( "You have a superior version installed." ) );
+        return ret_val<bool>::make_failure( _( "You have a superior version installed." ) );
     }
 
     return ret_val<bool>::make_success();
@@ -644,21 +644,21 @@ int mutagen_actor::use( player& p, item& it, bool, const tripoint_bub_ms & ) con
 
     if( !checks.allowed ) { return checks.charges_used; }
 
-bool no_category = mutation_category == mutation_category_id( "ANY" );
-bool balanced = get_option<bool>( "BALANCED_MUTATIONS" );
-int accumulated_mutagen = p.get_effect_int( effect_accumulated_mutagen );
-if( balanced && !is_strong && is_weak && accumulated_mutagen < 2 && no_category
+    bool no_category = mutation_category == mutation_category_id( "ANY" );
+    bool balanced = get_option<bool>( "BALANCED_MUTATIONS" );
+    int accumulated_mutagen = p.get_effect_int( effect_accumulated_mutagen );
+    if( balanced && !is_strong && is_weak && accumulated_mutagen < 2 && no_category
         && !p.query_yn( _( "Looking at it just makes you tired.  It probably won't work.  Do you "
-                           "want to try anyway?" ) ) ) {
+                       "want to try anyway?" ) ) ) {
         return 0;
     }
     if( is_weak && !one_in( 3 ) && !balanced ) {
-    // Nothing! Mutagenic flesh often just fails to work.
-    return it.type->charges_to_use();
+        // Nothing! Mutagenic flesh often just fails to work.
+        return it.type->charges_to_use();
     }
 
     if( balanced && no_category ) {
-    for( int i = ( is_strong ? 1 : 0 ) + ( is_weak ? 0 : 1 ); i > 0; i-- ) {
+        for( int i = ( is_strong ? 1 : 0 ) + ( is_weak ? 0 : 1 ); i > 0; i-- ) {
             p.add_effect( effect_accumulated_mutagen, 2_days, bodypart_str_id::NULL_ID() );
         }
     }
@@ -666,23 +666,23 @@ if( balanced && !is_strong && is_weak && accumulated_mutagen < 2 && no_category
             mutation_category );
 
     if( p.has_trait( trait_MUT_JUNKIE ) ) {
-    p.add_msg_if_player( m_good, _( "You quiver with anticipation…" ) );
+        p.add_msg_if_player( m_good, _( "You quiver with anticipation…" ) );
         p.add_morale( MORALE_MUTAGEN, 5, 50 );
     }
 
     p.add_msg_if_player( m_category.mutagen_message() );
 
     if( one_in( 6 ) ) {
-    p.add_msg_player_or_npc(
-        m_bad, _( "You suddenly feel dizzy, and collapse to the ground." ),
-        _( "<npcname> suddenly collapses to the ground!" ) );
+        p.add_msg_player_or_npc(
+            m_bad, _( "You suddenly feel dizzy, and collapse to the ground." ),
+            _( "<npcname> suddenly collapses to the ground!" ) );
         p.add_effect( effect_downed, 20_turns, bodypart_str_id::NULL_ID(), 0 );
     }
 
     int mut_count = 1 + ( is_strong ? one_in( 3 ) : 0 );
 
     for( int i = 0; i < mut_count; i++ ) {
-    p.mutate_category( m_category.id );
+        p.mutate_category( m_category.id );
         p.mod_pain( m_category.mutagen_pain * rng( 1, 5 ) );
     }
     // burn calories directly
@@ -712,11 +712,11 @@ int mutagen_iv_actor::use( player& p, item& it, bool, const tripoint_bub_ms & ) 
 
     if( !checks.allowed ) { return checks.charges_used; }
 
-const mutation_category_trait& m_category = mutation_category_trait::get_category(
-        mutation_category );
+    const mutation_category_trait& m_category = mutation_category_trait::get_category(
+            mutation_category );
 
-if( p.has_trait( trait_MUT_JUNKIE ) ) {
-    p.add_msg_if_player( m_category.junkie_message() );
+    if( p.has_trait( trait_MUT_JUNKIE ) ) {
+        p.add_msg_if_player( m_category.junkie_message() );
     } else {
         p.add_msg_if_player( m_category.iv_message() );
     }
@@ -740,11 +740,11 @@ if( p.has_trait( trait_MUT_JUNKIE ) ) {
 
     int mut_count = m_category.iv_min_mutations;
     for( int i = 0; i < m_category.iv_additional_mutations; ++i ) {
-    if( !one_in( m_category.iv_additional_mutations_chance ) ) { ++mut_count; }
+        if( !one_in( m_category.iv_additional_mutations_chance ) ) { ++mut_count; }
     }
 
     for( int i = 0; i < mut_count; i++ ) {
-    p.mutate_category( m_category.id );
+        p.mutate_category( m_category.id );
         p.mod_pain( m_category.iv_pain * rng( 1, 5 ) );
     }
 
@@ -753,15 +753,15 @@ if( p.has_trait( trait_MUT_JUNKIE ) ) {
     p.mod_fatigue( m_category.iv_fatigue * mut_count );
 
     if( m_category.id == mutation_category_id( "CHIMERA" ) ) {
-    p.add_morale( MORALE_MUTAGEN_CHIMERA, m_category.iv_morale, m_category.iv_morale_max );
+        p.add_morale( MORALE_MUTAGEN_CHIMERA, m_category.iv_morale, m_category.iv_morale_max );
     } else if( m_category.id == mutation_category_id( "ELFA" ) ) {
-    p.add_morale( MORALE_MUTAGEN_ELF, m_category.iv_morale, m_category.iv_morale_max );
+        p.add_morale( MORALE_MUTAGEN_ELF, m_category.iv_morale, m_category.iv_morale_max );
     } else if( m_category.iv_morale > 0 ) {
-    p.add_morale( MORALE_MUTAGEN_MUTATION, m_category.iv_morale, m_category.iv_morale_max );
+        p.add_morale( MORALE_MUTAGEN_MUTATION, m_category.iv_morale, m_category.iv_morale_max );
     }
 
     if( m_category.iv_sleep && !one_in( 3 ) ) {
-    p.add_msg_if_player( m_bad, m_category.iv_sleep_message() );
+        p.add_msg_if_player( m_bad, m_category.iv_sleep_message() );
         /** @EFFECT_INT reduces sleep duration when using IV mutagen */
         p.fall_asleep( time_duration::from_turns( m_category.iv_sleep_dur - p.int_cur * 5 ) );
     }
@@ -868,14 +868,14 @@ void weigh_self_actor::info( const item &, std::vector<iteminfo> &dump ) const
 int weigh_self_actor::use( player& p, item &, bool, const tripoint_bub_ms & ) const
 {
     if( p.is_mounted() ) {
-    p.add_msg_if_player( m_info, _( "You cannot weigh yourself while mounted." ) );
+        p.add_msg_if_player( m_info, _( "You cannot weigh yourself while mounted." ) );
         return 0;
     }
     // this is a weight, either in kgs or in lbs.
     double weight = convert_weight( p.get_weight() );
     if( weight > convert_weight( max_weight ) ) {
-    popup( _( "ERROR: Max weight of %.0f %s exceeded" ), convert_weight( max_weight ),
-           weight_units() );
+        popup( _( "ERROR: Max weight of %.0f %s exceeded" ), convert_weight( max_weight ),
+               weight_units() );
     } else {
         popup( "%.0f %s", weight, weight_units() );
     }
@@ -892,9 +892,9 @@ std::unique_ptr<iuse_actor> weigh_self_actor::clone() const
 void gps_device_actor::info( const item &, std::vector<iteminfo> &dump ) const
 {
     dump.emplace_back(
-    "DESCRIPTION",
-    string_format( _( "This item uses up (%.2f) additional charges per tile revealed." ),
-    additional_charges_per_tile ) );
+        "DESCRIPTION",
+        string_format( _( "This item uses up (%.2f) additional charges per tile revealed." ),
+                       additional_charges_per_tile ) );
 }
 
 int gps_device_actor::use( player& p, item& it, bool, const tripoint_bub_ms & ) const
@@ -1067,17 +1067,17 @@ void sew_advanced_actor::load( const JsonObject& obj )
 int sew_advanced_actor::use( player& p, item& it, bool, const tripoint_bub_ms & ) const
 {
     if( p.is_npc() ) { return 0; }
-if( p.is_mounted() ) {
-    p.add_msg_if_player( m_info, _( "You cannot do that while mounted." ) );
+    if( p.is_mounted() ) {
+        p.add_msg_if_player( m_info, _( "You cannot do that while mounted." ) );
         return 0;
     }
     if( p.is_underwater() ) {
-    p.add_msg_if_player( m_info, _( "You can't do that while underwater." ) );
+        p.add_msg_if_player( m_info, _( "You can't do that while underwater." ) );
         return 0;
     }
 
     if( !character_funcs::can_see_fine_details( p ) ) {
-    add_msg( m_info, _( "You can't see to sew!" ) );
+        add_msg( m_info, _( "You can't see to sew!" ) );
         return 0;
     }
 
@@ -1088,13 +1088,13 @@ if( p.is_mounted() ) {
     item* loc = game_menus::inv::
                 titled_filter_menu( filter, *p.as_avatar(), _( "Enhance which clothing?" ), "", 1 );
     if( !loc ) {
-    p.add_msg_if_player( m_info, _( "You do not have that item!" ) );
+        p.add_msg_if_player( m_info, _( "You do not have that item!" ) );
         return 0;
     }
     item& mod = *loc;
     if( &mod == &it ) {
-    p.add_msg_if_player( m_info, _( "This can be used to repair or modify other items, not "
-                                    "itself." ) );
+        p.add_msg_if_player( m_info, _( "This can be used to repair or modify other items, not "
+                                        "itself." ) );
         return 0;
     }
 
@@ -1115,10 +1115,10 @@ if( p.is_mounted() ) {
     const int items_needed = mod.volume() / 750_ml + 1;
     const inventory& crafting_inv = p.crafting_inventory();
     // Go through all discovered repair items and see if we have any of them available
-for( auto cm : clothing_mods::get_all() ) {
-    auto item_string = cm.item_string;
+    for( auto cm : clothing_mods::get_all() ) {
+        auto item_string = cm.item_string;
 
-    if( cm.use_base_material ) {
+        if( cm.use_base_material ) {
             for( auto& mat : mod.made_of() ) {
                 if( materials.contains( mat ) && mat.obj().repaired_with() != itype_id::NULL_ID() ) {
                     item_string = mat.obj().repaired_with();
@@ -1134,7 +1134,7 @@ for( auto cm : clothing_mods::get_all() ) {
     }
 
     int mod_count = 0;
-for( auto& cm : clothing_mods::get_all() ) { mod_count += mod.has_own_flag( cm.flag ); }
+    for( auto& cm : clothing_mods::get_all() ) { mod_count += mod.has_own_flag( cm.flag ); }
 
     // We need extra thread to lose it on bad rolls
     const int thread_needed = mod.volume() / 125_ml + 10;
@@ -1143,10 +1143,10 @@ for( auto& cm : clothing_mods::get_all() ) { mod_count += mod.has_own_flag( cm.f
     if( mod.find_armor_data() ) { valid_mods = mod.find_armor_data()->valid_mods; }
 
     if( mod.has_flag( flag_VARSIZE ) && !mod.has_flag( flag_OVERSIZE ) ) {
-    valid_mods.push_back( "resized_large" );
+        valid_mods.push_back( "resized_large" );
     }
     if( !mod.has_flag( flag_UNDERSIZE ) && mod.has_flag( flag_OVERSIZE ) ) {
-    valid_mods.push_back( "resized_small" );
+        valid_mods.push_back( "resized_small" );
     }
 
     const auto get_compare_color =
@@ -1172,8 +1172,8 @@ for( auto& cm : clothing_mods::get_all() ) { mod_count += mod.has_own_flag( cm.f
     tmenu.text = _( "How do you want to modify it?" );
 
     int index = 0;
-for( auto cm : clothing_mods ) {
-    auto obj = cm.obj();
+    for( auto cm : clothing_mods ) {
+        auto obj = cm.obj();
         item& temp_item = *modded_copy( mod, obj.flag );
         temp_item.update_clothing_mod_val();
 
@@ -1281,7 +1281,7 @@ for( auto cm : clothing_mods ) {
 
     // If the picked mod already exists, player wants to destroy it
     if( mod.has_own_flag( the_mod ) ) {
-    if( query_yn( _( "Are you sure?  You will not gain any materials back." ) ) ) {
+        if( query_yn( _( "Are you sure?  You will not gain any materials back." ) ) ) {
             mod.unset_flag( the_mod );
         }
         mod.update_clothing_mod_val();
@@ -1294,7 +1294,7 @@ for( auto cm : clothing_mods ) {
     auto item_string = clothing_mods[choice].obj().item_string;
 
     if( clothing_mods[choice].obj().use_base_material ) {
-    for( auto& mat : mod.made_of() ) {
+        for( auto& mat : mod.made_of() ) {
             if( materials.contains( mat ) && mat.obj().repaired_with() != itype_id::NULL_ID() ) {
                 item_string = mat.obj().repaired_with();
                 break;
@@ -1316,7 +1316,7 @@ for( auto cm : clothing_mods ) {
     rn -= mod_count * 10;        // Other mods
 
     if( rn <= 8 ) {
-    const std::string startdurability = mod.durability_indicator( true );
+        const std::string startdurability = mod.durability_indicator( true );
         const auto destroyed = mod.inc_damage();
         const std::string resultdurability = mod.durability_indicator( true );
         p.add_msg_if_player(
@@ -1328,13 +1328,13 @@ for( auto cm : clothing_mods ) {
         }
         return thread_needed / 2;
     } else if( rn <= 10 ) {
-    p.add_msg_if_player( m_bad, _( "You fail to modify the clothing, and you waste charges and "
-                                   "materials." ) );
+        p.add_msg_if_player( m_bad, _( "You fail to modify the clothing, and you waste charges and "
+                                       "materials." ) );
         p.consume_items( comps, 1, is_crafting_component );
         return thread_needed;
     } else if( rn <= 14 ) {
-    p.add_msg_if_player(
-        m_mixed, _( "You modify your %s, but waste a lot of charges." ), mod.tname() );
+        p.add_msg_if_player(
+            m_mixed, _( "You modify your %s, but waste a lot of charges." ), mod.tname() );
         p.consume_items( comps, 1, is_crafting_component );
         mod.set_flag( the_mod );
         mod.update_clothing_mod_val();

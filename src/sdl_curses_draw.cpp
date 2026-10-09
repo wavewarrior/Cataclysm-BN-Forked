@@ -76,9 +76,9 @@ static inline auto suppress_cell_bg( const cata_cursesport::WINDOW *win,
                                      const SDL_Color &c ) noexcept -> bool
 {
     if( !win || !win->transparent_backdrop ) {
-    return false;
-}
-return c.r == 0 && c.g == 0 && c.b == 0;
+        return false;
+    }
+    return c.r == 0 && c.g == 0 && c.b == 0;
 }
 
 // ---------------------------------------------------------------------------

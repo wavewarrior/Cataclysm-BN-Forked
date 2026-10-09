@@ -627,12 +627,12 @@ bool options_manager::cOpt::hasPrerequisite() const
 bool options_manager::cOpt::checkPrerequisite() const
 {
     if( !hasPrerequisite() ) {
-    return true;
-}
-bool isPrerequisiteFulfilled = false;
-const std::string prerequisite_option_value = get_options().get_option( sPrerequisite ).getValue();
-for( const std::string &sAllowedPrerequisiteValue : sPrerequisiteAllowedValues ) {
-    if( prerequisite_option_value == sAllowedPrerequisiteValue ) {
+        return true;
+    }
+    bool isPrerequisiteFulfilled = false;
+    const std::string prerequisite_option_value = get_options().get_option( sPrerequisite ).getValue();
+    for( const std::string &sAllowedPrerequisiteValue : sPrerequisiteAllowedValues ) {
+        if( prerequisite_option_value == sAllowedPrerequisiteValue ) {
             isPrerequisiteFulfilled = true;
             break;
         }
@@ -644,31 +644,31 @@ for( const std::string &sAllowedPrerequisiteValue : sPrerequisiteAllowedValues )
 bool options_manager::cOpt::is_hidden() const
 {
     switch( hide ) {
-    case COPT_NO_HIDE:
-        return false;
+        case COPT_NO_HIDE:
+            return false;
 
-    case COPT_SDL_HIDE:
-        return true;
+        case COPT_SDL_HIDE:
+            return true;
 
-    case COPT_CURSES_HIDE:
-        return false;
+        case COPT_CURSES_HIDE:
+            return false;
 
-    case COPT_POSIX_CURSES_HIDE:
-        // Check if we on windows and using wincurses.
-        return false;
+        case COPT_POSIX_CURSES_HIDE:
+            // Check if we on windows and using wincurses.
+            return false;
 
-    case COPT_NO_SOUND_HIDE:
+        case COPT_NO_SOUND_HIDE:
 #if !defined(SDL_SOUND) // If not defined, we have no sound support.
-        return true;
+            return true;
 #else
-        return false;
+            return false;
 #endif
 
-    case COPT_ALWAYS_HIDE:
-        return true;
-}
-// Make compiler happy, this is unreachable.
-return false;
+        case COPT_ALWAYS_HIDE:
+            return true;
+    }
+    // Make compiler happy, this is unreachable.
+    return false;
 }
 
 std::string options_manager::cOpt::getName() const
@@ -1288,10 +1288,10 @@ options_manager::PageItem::fmt_tooltip( const Group &group,
                                         const options_manager::options_container &cont ) const
 {
     switch( type ) {
-    case ItemType::BlankLine:
-        return "";
-    case ItemType::GroupHeader: {
-        return group.tooltip_.translated();
+        case ItemType::BlankLine:
+            return "";
+        case ItemType::GroupHeader: {
+            return group.tooltip_.translated();
         }
         case ItemType::Option: {
             const std::string &opt_name = data;
@@ -1487,8 +1487,7 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
                                      options_container & cOPTIONS )
     -> std::pair<string_col, string_col> {
         const char *IN_GROUP_PREFIX = ": ";
-        switch( it.type )
-        {
+        switch( it.type ) {
             case ItemType::BlankLine: {
                 std::string name = it.group.empty() ? "" : IN_GROUP_PREFIX;
                 return { string_col( name, c_white ), string_col() };
@@ -1748,8 +1747,7 @@ std::string options_manager::show( bool ingame, const bool world_options_only,
 
         const auto is_selectable = [&]( int i ) -> bool {
             const PageItem &curr_item = page_items[i];
-            switch( curr_item.type )
-            {
+            switch( curr_item.type ) {
                 case ItemType::BlankLine:
                     return false;
                 case ItemType::GroupHeader:
@@ -1929,8 +1927,8 @@ void options_manager::serialize( JsonOut &json ) const
 {
     json.start_array();
 
-for( const Page &p : pages_ ) {
-    for( const PageItem &it : p.items_ ) {
+    for( const Page &p : pages_ ) {
+        for( const PageItem &it : p.items_ ) {
             if( it.type != ItemType::Option ) {
                 continue;
             }

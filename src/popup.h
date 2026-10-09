@@ -248,8 +248,8 @@ class query_popup
     protected:
         // RmlUi session (opaque — defined in popup.cpp)
         struct rml_session_t;
-        std::unique_ptr<rml_session_t> rml_session;
-        std::optional<result> rml_pending_result;
+        std::unique_ptr < rml_session_t > rml_session;
+        std::optional < result > rml_pending_result;
 
         bool rml_open();
         void rml_sync();
@@ -287,7 +287,7 @@ class static_popup: public query_popup
         ~static_popup();
 
     private:
-        std::shared_ptr<ui_adaptor> ui;
+        std::shared_ptr < ui_adaptor > ui;
 };
 
 /**
@@ -335,7 +335,7 @@ class throbber_popup: private query_popup
         void refresh();
 
     private:
-        std::shared_ptr<ui_adaptor> ui;
+        std::shared_ptr < ui_adaptor > ui;
         std::string msg;
         std::chrono::steady_clock::time_point last_update;
 };

@@ -87,7 +87,7 @@ auto direction_index_to_sound_source( const tripoint_bub_ms &source,
 // Return list of points that have sound events the player can hear.
 std::vector<tripoint_bub_ms> get_footstep_markers();
 // Return a vector of all sound events not from monsters, and all sound events from monsters.
-std::pair< std::vector<tripoint_bub_ms>, std::vector<tripoint_bub_ms>> get_monster_sounds();
+std::pair< std::vector<tripoint_bub_ms>, std::vector<tripoint_bub_ms >> get_monster_sounds();
 // retrieve the sound event(s?) at a location.
 std::string sound_at( const tripoint_bub_ms &location );
 /** Tells us if sound has been enabled in options */
@@ -474,7 +474,8 @@ void load_sound_effects( const JsonObject &jsobj );
 void load_sound_effect_preload( const JsonObject &jsobj );
 void load_playlist( const JsonObject &jsobj );
 void play_variant_sound( const std::string &id, const std::string &variant, int volume,
-                         units::angle angle, int distance = 0, double pitch_min = -1.0, double pitch_max = -1.0, const bool stacks = false );
+                         units::angle angle, int distance = 0, double pitch_min = -1.0, double pitch_max = -1.0,
+                         const bool stacks = false );
 void play_variant_sound( const std::string &id, const std::string &variant, int volume,
                          const bool stacks = true );
 void play_ambient_variant_sound( const std::string &id, const std::string &variant, int volume,

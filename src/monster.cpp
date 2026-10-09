@@ -846,7 +846,7 @@ std::string monster::get_name() const { return name( 1 ); }
 std::string monster::name( unsigned int quantity ) const
 {
     if( !type ) {
-    debugmsg( "monster::name empty type!" );
+        debugmsg( "monster::name empty type!" );
         return std::string();
     }
     if( !unique_name.empty() ) {
@@ -890,7 +890,7 @@ std::string monster::name_with_armor() const
 std::string monster::disp_name( bool possessive, bool capitalize_first ) const
 {
     if( !possessive ) {
-    return string_format( capitalize_first ? _( "The %s" ) : _( "the %s" ), name() );
+        return string_format( capitalize_first ? _( "The %s" ) : _( "the %s" ), name() );
     } else {
         return string_format( capitalize_first ? _( "The %s's" ) : _( "the %s's" ), name() );
     }
@@ -1204,12 +1204,10 @@ std::string monster::extended_description() const
 
     if( training_level > 0 && type->pet_training ) {
         const auto training_adj = []( float ratio ) -> const std::string {
-            if( ratio > 1.5f )
-        {
-            return _( "much" );
-            } else if( ratio > 1.25f )
-        {
-            return _( "noticeably" );
+            if( ratio > 1.5f ) {
+                return _( "much" );
+            } else if( ratio > 1.25f ) {
+                return _( "noticeably" );
             }
             return _( "slightly" );
         };
@@ -1277,7 +1275,7 @@ std::string monster::extended_description() const
     return replace_colors( ss );
 }
 
-const std::string &monster::symbol() const { return type->sym; }
+const std::string & monster::symbol() const { return type->sym; }
 
 nc_color monster::basic_symbol_color() const { return type->color; }
 
@@ -1304,7 +1302,7 @@ bool monster::avoid_trap( const tripoint_bub_ms & /* pos */, const trap& tr ) co
     // not even see them.
     // Traps are on the ground, digging monsters go below, fliers and climbers go above.
     if( digging() || flies() ) { return true; }
-return dice( 3, type->sk_dodge + 1 ) >= dice( 3, tr.get_avoidance() );
+    return dice( 3, type->sk_dodge + 1 ) >= dice( 3, tr.get_avoidance() );
 }
 
 bool monster::has_flag( const m_flag f ) const
@@ -1319,7 +1317,7 @@ bool monster::can_hear() const { return has_flag( MF_HEARS ) && !has_effect( eff
 bool monster::can_submerge() const
 {
     return ( has_flag( MF_NO_BREATHE ) || swims() || has_flag( MF_AQUATIC ) ) &&
-    !has_flag( MF_ELECTRONIC );
+           !has_flag( MF_ELECTRONIC );
 }
 
 bool monster::can_drown() const
@@ -1345,28 +1343,28 @@ bool monster::can_act() const
 {
     return moves > 0
            && ( effects->empty()
-    || ( !has_effect( effect_stunned ) && !has_effect( effect_downed )
-    && !has_effect( effect_webbed ) ) );
+                || ( !has_effect( effect_stunned ) && !has_effect( effect_downed )
+                     && !has_effect( effect_webbed ) ) );
 }
 
 int monster::sight_range( const int light_level ) const
 {
     // Non-aquatic monsters can't see much when submerged
     if( !can_see() || effect_cache[VISION_IMPAIRED]
-    || ( is_underwater() && !swims() && !has_flag( MF_AQUATIC ) && !digging() ) ) {
-    return 1;
-}
-static const int default_daylight = default_daylight_level();
-if( light_level == 0 ) {
-    return type->vision_night;
-} else if( light_level == default_daylight ) {
-    return type->vision_day;
-}
-int range =
-    light_level * type->vision_day + ( default_daylight - light_level ) * type->vision_night;
-range /= default_daylight;
+        || ( is_underwater() && !swims() && !has_flag( MF_AQUATIC ) && !digging() ) ) {
+        return 1;
+    }
+    static const int default_daylight = default_daylight_level();
+    if( light_level == 0 ) {
+        return type->vision_night;
+    } else if( light_level == default_daylight ) {
+        return type->vision_day;
+    }
+    int range =
+        light_level * type->vision_day + ( default_daylight - light_level ) * type->vision_night;
+    range /= default_daylight;
 
-return range;
+    return range;
 }
 
 bool monster::made_of( const material_id& m ) const { return type->made_of( m ); }
@@ -1429,10 +1427,10 @@ detached_ptr<item> monster::remove_tack_item()
     return set_tack_item( detached_ptr<item>() );
 }
 
-item *monster::get_tack_item() const
+item * monster::get_tack_item() const
 {
     if( tack_item ) { return &*tack_item; }
-return nullptr;
+    return nullptr;
 }
 
 detached_ptr<item> monster::set_tied_item( detached_ptr<item>&& to )
@@ -1443,10 +1441,10 @@ detached_ptr<item> monster::set_tied_item( detached_ptr<item>&& to )
 
 detached_ptr<item> monster::remove_tied_item() { return set_tied_item( detached_ptr<item>() ); }
 
-item *monster::get_tied_item() const
+item * monster::get_tied_item() const
 {
     if( tied_item ) { return &*tied_item; }
-return nullptr;
+    return nullptr;
 }
 
 detached_ptr<item> monster::set_armor_item( detached_ptr<item>&& to )
@@ -1467,10 +1465,10 @@ detached_ptr<item> monster::remove_armor_item()
     return set_armor_item( detached_ptr<item>() );
 }
 
-item *monster::get_armor_item() const
+item * monster::get_armor_item() const
 {
     if( armor_item ) { return &*armor_item; }
-return nullptr;
+    return nullptr;
 }
 
 detached_ptr<item> monster::set_storage_item( detached_ptr<item>&& to )
@@ -1488,10 +1486,10 @@ detached_ptr<item> monster::remove_storage_item()
     return set_storage_item( detached_ptr<item>() );
 }
 
-item *monster::get_storage_item() const
+item * monster::get_storage_item() const
 {
     if( storage_item ) { return &*storage_item; }
-return nullptr;
+    return nullptr;
 }
 
 detached_ptr<item> monster::set_battery_item( detached_ptr<item>&& to )
@@ -1502,15 +1500,15 @@ detached_ptr<item> monster::set_battery_item( detached_ptr<item>&& to )
 
 detached_ptr<item> monster::remove_battery_item() { return set_battery_item( detached_ptr<item>() ); }
 
-item *monster::get_battery_item() const
+item * monster::get_battery_item() const
 {
     if( battery_item ) { return &*battery_item; }
-return nullptr;
+    return nullptr;
 }
 
 tripoint_bub_ms monster::move_target() { return goal; }
 
-Creature *monster::attack_target()
+Creature * monster::attack_target()
 {
     if( is_wandering() ) { return nullptr; }
 
@@ -1527,8 +1525,8 @@ bool monster::is_fleeing( Character& who ) const
 {
     if( effect_cache[FLEEING] ) { return true; }
     if( anger >= 100 || morale >= 100 ) { return false; }
-monster_attitude att = attitude( &who );
-return att == MATT_FLEE || ( att == MATT_FOLLOW && rl_dist( bub_pos(), who.bub_pos() ) <= 4 );
+    monster_attitude att = attitude( &who );
+    return att == MATT_FLEE || ( att == MATT_FOLLOW && rl_dist( bub_pos(), who.bub_pos() ) <= 4 );
 }
 
 Attitude monster::attitude_to( const Creature& other ) const
@@ -2201,7 +2199,7 @@ std::string monster::get_effect_status() const
 int monster::get_worn_armor_val( damage_type dt ) const
 {
     if( !has_effect( effect_monster_armor ) ) { return 0; }
-if( armor_item ) { return armor_item->damage_resist( dt ); }
+    if( armor_item ) { return armor_item->damage_resist( dt ); }
     return 0;
 }
 
@@ -2216,7 +2214,7 @@ int monster::get_armor_bullet( bodypart_id bp ) const
 {
     ( void )bp;
     return static_cast<int>( type->armor_bullet ) + armor_bullet_bonus
-    + get_worn_armor_val( DT_BULLET );
+           + get_worn_armor_val( DT_BULLET );
 }
 
 int monster::get_armor_type( damage_type dt, bodypart_id bp ) const
@@ -2648,11 +2646,11 @@ int monster::mech_str_addition() const { return type->mech_str_bonus; }
 bool monster::check_mech_powered() const
 {
     if( is_hallucination() || !has_flag( MF_RIDEABLE_MECH ) || !battery_item ) { return false; }
-if( battery_item->ammo_remaining() <= 0 ) { return false; }
-const itype& type = *battery_item->type;
-if( battery_item->ammo_remaining() <= type.magazine->capacity / 10 && one_in( 10 ) ) {
-    add_msg( m_bad, _( "Your %s emits a beeping noise as its batteries start to get low." ),
-             get_name() );
+    if( battery_item->ammo_remaining() <= 0 ) { return false; }
+    const itype& type = *battery_item->type;
+    if( battery_item->ammo_remaining() <= type.magazine->capacity / 10 && one_in( 10 ) ) {
+        add_msg( m_bad, _( "Your %s emits a beeping noise as its batteries start to get low." ),
+                 get_name() );
     }
     return true;
 }
@@ -2938,12 +2936,12 @@ bool monster::is_hallucination() const
 field_type_id monster::bloodType() const
 {
     if( is_hallucination() ) { return fd_null; }
-return type->bloodType();
+    return type->bloodType();
 }
 field_type_id monster::gibType() const
 {
     if( is_hallucination() ) { return fd_null; }
-return type->gibType();
+    return type->gibType();
 }
 
 creature_size monster::get_size() const
@@ -2951,7 +2949,7 @@ creature_size monster::get_size() const
     // Don't allow size bonuses from effects to make the creature larger than huge or smaller than
     // tiny
     return std::max(
-           std::min( creature_size( type->size + size_bonus ), creature_size::huge ), creature_size::tiny );
+               std::min( creature_size( type->size + size_bonus ), creature_size::huge ), creature_size::tiny );
 }
 
 units::mass monster::get_weight() const
@@ -3209,7 +3207,7 @@ void monster::on_load()
     cata::run_hooks( "on_monster_loaded", [this]( sol::table & params ) { params["monster"] = this; } );
 }
 
-const pathfinding_settings &monster::get_legacy_pathfinding_settings() const
+const pathfinding_settings & monster::get_legacy_pathfinding_settings() const
 {
     return !effect_cache[PATHFINDING_OVERRIDE]
            ? type->legacy_path_settings
@@ -3220,7 +3218,7 @@ std::pair<PathfindingSettings, RouteSettings> monster::get_pathfinding_pair() co
 {
     return !effect_cache[PATHFINDING_OVERRIDE]
            ? std::make_pair( type->path_settings, type->route_settings )
-    : std::make_pair( type->path_settings_buffed, type->route_settings_buffed );
+           : std::make_pair( type->path_settings_buffed, type->route_settings_buffed );
 }
 
 std::set<tripoint_bub_ms> monster::get_legacy_path_avoid() const
@@ -3272,17 +3270,16 @@ void monster::add_faction_anger( mfaction_id target_faction, int amount )
     faction_anger[target_faction] += amount;
 }
 
-auto monster::get_faction_anger( mfaction_id target_faction ) const -> int
-{
+auto monster::get_faction_anger( mfaction_id target_faction ) const -> int {
     if( !has_flag( MF_FACTION_MEMORY ) ) { return anger; }
 
-auto it = faction_anger.find( target_faction );
-return ( it != faction_anger.end() ) ? it->second : 0;
+    auto it = faction_anger.find( target_faction );
+    return ( it != faction_anger.end() ) ? it->second : 0;
 }
 
-const lua_monster_callback_actor *monster::get_lua_callbacks() const
-{
-    if( type && type->lua_callbacks ) {
+const lua_monster_callback_actor *monster::get_lua_callbacks() const {
+    if( type && type->lua_callbacks )
+    {
         return type->lua_callbacks;
     }
     return nullptr;

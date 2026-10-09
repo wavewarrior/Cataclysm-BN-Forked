@@ -126,53 +126,54 @@
 
 using ammo_effect_str_id = string_id<ammo_effect>;
 
-static const ammo_effect_str_id ammo_effect_INCENDIARY("INCENDIARY");
-static const ammo_effect_str_id ammo_effect_LASER("LASER");
-static const ammo_effect_str_id ammo_effect_LIGHTNING("LIGHTNING");
-static const ammo_effect_str_id ammo_effect_NO_PENETRATE_OBSTACLES("NO_PENETRATE_OBSTACLES");
-static const ammo_effect_str_id ammo_effect_PLASMA("PLASMA");
+static const ammo_effect_str_id ammo_effect_INCENDIARY( "INCENDIARY" );
+static const ammo_effect_str_id ammo_effect_LASER( "LASER" );
+static const ammo_effect_str_id ammo_effect_LIGHTNING( "LIGHTNING" );
+static const ammo_effect_str_id ammo_effect_NO_PENETRATE_OBSTACLES( "NO_PENETRATE_OBSTACLES" );
+static const ammo_effect_str_id ammo_effect_PLASMA( "PLASMA" );
 
-static const fault_id fault_bionic_nonsterile("fault_bionic_nonsterile");
+static const fault_id fault_bionic_nonsterile( "fault_bionic_nonsterile" );
 
-static const itype_id itype_autoclave("autoclave");
-static const itype_id itype_battery("battery");
-static const itype_id itype_burnt_out_bionic("burnt_out_bionic");
-static const itype_id itype_chemistry_set("chemistry_set");
-static const itype_id itype_dehydrator("dehydrator");
-static const itype_id itype_electrolysis_kit("electrolysis_kit");
-static const itype_id itype_food_processor("food_processor");
-static const itype_id itype_forge("forge");
-static const itype_id itype_hotplate("hotplate");
-static const itype_id itype_kiln("kiln");
-static const itype_id itype_press("press");
-static const itype_id itype_soldering_iron("soldering_iron");
-static const itype_id itype_vac_sealer("vac_sealer");
-static const itype_id itype_welder("welder");
-static const itype_id itype_butchery("fake_adv_butchery");
+static const itype_id itype_autoclave( "autoclave" );
+static const itype_id itype_battery( "battery" );
+static const itype_id itype_burnt_out_bionic( "burnt_out_bionic" );
+static const itype_id itype_chemistry_set( "chemistry_set" );
+static const itype_id itype_dehydrator( "dehydrator" );
+static const itype_id itype_electrolysis_kit( "electrolysis_kit" );
+static const itype_id itype_food_processor( "food_processor" );
+static const itype_id itype_forge( "forge" );
+static const itype_id itype_hotplate( "hotplate" );
+static const itype_id itype_kiln( "kiln" );
+static const itype_id itype_press( "press" );
+static const itype_id itype_soldering_iron( "soldering_iron" );
+static const itype_id itype_vac_sealer( "vac_sealer" );
+static const itype_id itype_welder( "welder" );
+static const itype_id itype_butchery( "fake_adv_butchery" );
 
-static const mtype_id mon_zombie("mon_zombie");
+static const mtype_id mon_zombie( "mon_zombie" );
 
-static const skill_id skill_traps("traps");
+static const skill_id skill_traps( "traps" );
 
-static const efftype_id effect_boomered("boomered");
-static const efftype_id effect_crushed("crushed");
-static const efftype_id effect_onfire("onfire");
+static const efftype_id effect_boomered( "boomered" );
+static const efftype_id effect_crushed( "crushed" );
+static const efftype_id effect_onfire( "onfire" );
 
-static const ter_str_id t_rock_floor_no_roof("t_rock_floor_no_roof");
+static const ter_str_id t_rock_floor_no_roof( "t_rock_floor_no_roof" );
 
-static const std::string str_DOOR_LOCKING("DOOR_LOCKING");
-static const std::string str_OPENCLOSE_INSIDE("OPENCLOSE_INSIDE");
+static const std::string str_DOOR_LOCKING( "DOOR_LOCKING" );
+static const std::string str_OPENCLOSE_INSIDE( "OPENCLOSE_INSIDE" );
 
 
 #define dbg(x) DebugLog((x), DC::Map)
 
 
-VehicleList map::get_vehicles() {
-    if (last_full_vehicle_list_dirty) {
+VehicleList map::get_vehicles()
+{
+    if( last_full_vehicle_list_dirty ) {
         const auto sm_max = flat_bubble_submaps().max();
         last_full_vehicle_list = get_vehicles(
-            tripoint_bub_sm(point_bub_sm::zero(), -OVERMAP_DEPTH),
-            tripoint_bub_sm(sm_max, OVERMAP_HEIGHT));
+                                     tripoint_bub_sm( point_bub_sm::zero(), -OVERMAP_DEPTH ),
+                                     tripoint_bub_sm( sm_max, OVERMAP_HEIGHT ) );
 
         last_full_vehicle_list_dirty = false;
     }
@@ -180,15 +181,16 @@ VehicleList map::get_vehicles() {
     return last_full_vehicle_list;
 }
 
-void map::reset_vehicle_cache() {
+void map::reset_vehicle_cache()
+{
     last_full_vehicle_list_dirty = true;
     clear_vehicle_cache();
 
     // Cache all vehicles
     const int zmin = -OVERMAP_DEPTH;
     const int zmax = OVERMAP_HEIGHT;
-    for (int zlev = zmin; zlev <= zmax; zlev++) {
-        auto& ch = get_cache(zlev);
+    for( int zlev = zmin; zlev <= zmax; zlev++ ) {
+        auto& ch = get_cache( zlev );
         for( auto it = ch.vehicle_list.begin(); it != ch.vehicle_list.end(); ) {
             const vehicle_handle handle = *it;
             vehicle *const elem = resolve_vehicle( handle );
@@ -200,62 +202,64 @@ void map::reset_vehicle_cache() {
                 ch.zone_vehicles.erase( handle );
                 continue;
             }
-            elem->adjust_zlevel(0, tripoint_rel_ms::zero());
-            add_vehicle_to_cache(elem);
+            elem->adjust_zlevel( 0, tripoint_rel_ms::zero() );
+            add_vehicle_to_cache( elem );
             ++it;
         }
     }
 }
 
-void map::add_vehicle_to_cache(vehicle* veh) {
-    if (veh == nullptr) {
-        debugmsg("Tried to add null vehicle to cache");
+void map::add_vehicle_to_cache( vehicle* veh )
+{
+    if( veh == nullptr ) {
+        debugmsg( "Tried to add null vehicle to cache" );
         return;
     }
 
     const vehicle_handle handle = veh->handle();
     // Get parts
-    for (const vpart_reference& vpr : veh->get_all_parts()) {
-        if (vpr.part().removed) { continue; }
-        const auto p = abs_to_map_local(*this, veh->abs_part_location(vpr.part()));
-        int part = veh->part_with_feature(vpr.part_index(), VPFLAG_LADDER, true);
-        if (part != -1) {
+    for( const vpart_reference& vpr : veh->get_all_parts() ) {
+        if( vpr.part().removed ) { continue; }
+        const auto p = abs_to_map_local( *this, veh->abs_part_location( vpr.part() ) );
+        int part = veh->part_with_feature( vpr.part_index(), VPFLAG_LADDER, true );
+        if( part != -1 ) {
             // The rope hangs DOWN from the ladder part, so register the whole column from
             // the part down to ladder_length() below it: has_rope_at() and the climb-up /
             // rope-rendering paths look up the tile BELOW the part, not just the top tile
             // (issue #9590). The top tile is kept so climbing down while boarded resolves.
-            const auto len = veh->part(part).info().ladder_length();
-            const auto min_z = std::max(p.z() - len, -OVERMAP_DEPTH);
-            for (const auto z : std::views::iota(min_z, p.z() + 1)) {
-                cached_veh_rope[tripoint_bub_ms(p.xy(), z)] = std::make_pair(handle, static_cast<int>(part));
+            const auto len = veh->part( part ).info().ladder_length();
+            const auto min_z = std::max( p.z() - len, -OVERMAP_DEPTH );
+            for( const auto z : std::views::iota( min_z, p.z() + 1 ) ) {
+                cached_veh_rope[tripoint_bub_ms( p.xy(), z )] = std::make_pair( handle, static_cast<int>( part ) );
             }
         }
-        level_cache& ch = get_cache(p.z());
+        level_cache& ch = get_cache( p.z() );
         level_cache_freshness::stamp_veh_range( ch, true );
 
-        if (!ch.veh_cached_parts.contains(p)
-            || !veh->part_info(vpr.part_index()).has_flag(VPFLAG_NOCOLLIDE)
-            || ch.veh_cached_parts.at(p).first == handle) {
-            ch.veh_cached_parts[p] = std::make_pair(handle, static_cast<int>(vpr.part_index()));
+        if( !ch.veh_cached_parts.contains( p )
+            || !veh->part_info( vpr.part_index() ).has_flag( VPFLAG_NOCOLLIDE )
+            || ch.veh_cached_parts.at( p ).first == handle ) {
+            ch.veh_cached_parts[p] = std::make_pair( handle, static_cast<int>( vpr.part_index() ) );
         }
-        if (inbounds(p)) { ch.veh_exists_at[ch.idx(p.x(), p.y())] = true; }
+        if( inbounds( p ) ) { ch.veh_exists_at[ch.idx( p.x(), p.y() )] = true; }
     }
 
     last_full_vehicle_list_dirty = true;
 }
 
-void map::clear_vehicle_point_from_cache(vehicle* veh, const tripoint_bub_ms& pt) {
-    if (veh == nullptr) {
-        debugmsg("Tried to clear null vehicle from cache");
+void map::clear_vehicle_point_from_cache( vehicle* veh, const tripoint_bub_ms& pt )
+{
+    if( veh == nullptr ) {
+        debugmsg( "Tried to clear null vehicle from cache" );
         return;
     }
 
     const vehicle_handle handle = veh->handle();
-    level_cache& ch = get_cache(pt.z());
-    auto it = ch.veh_cached_parts.find(pt);
-    if (it != ch.veh_cached_parts.end() && it->second.first == handle) {
-        if (inbounds(pt)) { ch.veh_exists_at[ch.idx(pt.x(), pt.y())] = false; }
-        ch.veh_cached_parts.erase(it);
+    level_cache& ch = get_cache( pt.z() );
+    auto it = ch.veh_cached_parts.find( pt );
+    if( it != ch.veh_cached_parts.end() && it->second.first == handle ) {
+        if( inbounds( pt ) ) { ch.veh_exists_at[ch.idx( pt.x(), pt.y() )] = false; }
+        ch.veh_cached_parts.erase( it );
         // The rope-ladder cache stores the whole hanging column (see add_vehicle_to_cache),
         // so a bare erase( pt ) would leave the rope tiles below the part. When pt is one of
         // this vehicle's rope tiles (a column top), drop every tile this vehicle owns in that
@@ -263,36 +267,38 @@ void map::clear_vehicle_point_from_cache(vehicle* veh, const tripoint_bub_ms& pt
         // NOT break on gaps, so an interleaved column from another vehicle can't strand this
         // vehicle's lower tiles, and only this vehicle's entries are removed. Index-free on
         // purpose: part indices may be stale here (this can run mid-part_removal_cleanup).
-        if (const auto top = cached_veh_rope.find(pt);
-            top != cached_veh_rope.end() && top->second.first == handle) {
-            for (const auto z : std::views::iota(-OVERMAP_DEPTH, pt.z() + 1)) {
-                const auto col_it = cached_veh_rope.find(tripoint_bub_ms(pt.xy(), z));
-                if (col_it != cached_veh_rope.end() && col_it->second.first == handle) {
-                    cached_veh_rope.erase(col_it);
+        if( const auto top = cached_veh_rope.find( pt );
+            top != cached_veh_rope.end() && top->second.first == handle ) {
+            for( const auto z : std::views::iota( -OVERMAP_DEPTH, pt.z() + 1 ) ) {
+                const auto col_it = cached_veh_rope.find( tripoint_bub_ms( pt.xy(), z ) );
+                if( col_it != cached_veh_rope.end() && col_it->second.first == handle ) {
+                    cached_veh_rope.erase( col_it );
                 }
             }
         }
     }
 }
 
-void map::clear_vehicle_cache() {
+void map::clear_vehicle_cache()
+{
     const int zmin = -OVERMAP_DEPTH;
     const int zmax = OVERMAP_HEIGHT;
-    for (int zlev = zmin; zlev <= zmax; zlev++) {
-        level_cache& ch = get_cache(zlev);
-        while (!ch.veh_cached_parts.empty()) {
+    for( int zlev = zmin; zlev <= zmax; zlev++ ) {
+        level_cache& ch = get_cache( zlev );
+        while( !ch.veh_cached_parts.empty() ) {
             const auto part = ch.veh_cached_parts.begin();
             const auto& p = part->first;
-            if (inbounds(p)) { ch.veh_exists_at[ch.idx(p.x(), p.y())] = false; }
-            ch.veh_cached_parts.erase(part);
+            if( inbounds( p ) ) { ch.veh_exists_at[ch.idx( p.x(), p.y() )] = false; }
+            ch.veh_cached_parts.erase( part );
         }
         level_cache_freshness::stamp_veh_range( ch, false );
     }
     cached_veh_rope.clear();
 }
 
-void map::clear_vehicle_list(const int zlev) {
-    auto& ch = get_cache(zlev);
+void map::clear_vehicle_list( const int zlev )
+{
+    auto& ch = get_cache( zlev );
     ch.vehicle_list.clear();
     ch.zone_vehicles.clear();
     // Strengthened so the four vehicle indices (vehicle_list/zone_vehicles here,
@@ -301,18 +307,19 @@ void map::clear_vehicle_list(const int zlev) {
     ch.veh_cached_parts.clear();
     std::ranges::fill( ch.veh_exists_at, false );
     level_cache_freshness::stamp_veh_range( ch, false );
-    std::erase_if( cached_veh_rope, [zlev]( const auto &kv ) { return kv.first.z() == zlev; } );
+    std::erase_if( cached_veh_rope, [zlev]( const auto & kv ) { return kv.first.z() == zlev; } );
 
     last_full_vehicle_list_dirty = true;
 }
 
-void map::update_vehicle_list(const submap* const to, const int zlev) {
-    if (to == nullptr) { return; }
+void map::update_vehicle_list( const submap* const to, const int zlev )
+{
+    if( to == nullptr ) { return; }
     // Update vehicle data
-    level_cache& ch = get_cache(zlev);
-    for (const auto& elem : to->vehicles) {
-        ch.vehicle_list.insert(elem->handle());
-        if (!elem->loot_zones.empty()) { ch.zone_vehicles.insert(elem->handle()); }
+    level_cache& ch = get_cache( zlev );
+    for( const auto& elem : to->vehicles ) {
+        ch.vehicle_list.insert( elem->handle() );
+        if( !elem->loot_zones.empty() ) { ch.zone_vehicles.insert( elem->handle() ); }
     }
 
     last_full_vehicle_list_dirty = true;
@@ -368,7 +375,8 @@ void map::unregister_vehicle( vehicle &veh )
     // Erase at the vehicle's own anchor z unconditionally: a zero-part vehicle (the
     // loadn() "bugged no-part vehicle" purge) has no parts for the loop below to walk,
     // so without this it would never leave vehicle_list/zone_vehicles at all.
-    if( const int anchor_z = veh.abs_sm_pos.z(); anchor_z >= -OVERMAP_DEPTH && anchor_z <= OVERMAP_HEIGHT ) {
+    if( const int anchor_z = veh.abs_sm_pos.z(); anchor_z >= -OVERMAP_DEPTH &&
+        anchor_z <= OVERMAP_HEIGHT ) {
         level_cache &anchor_ch = get_cache( anchor_z );
         anchor_ch.vehicle_list.erase( handle );
         anchor_ch.zone_vehicles.erase( handle );
@@ -407,21 +415,22 @@ void map::unregister_vehicle( vehicle &veh )
     }
 }
 
-std::unique_ptr<vehicle> map::detach_vehicle(vehicle* veh) {
-    if (veh == nullptr) {
-        debugmsg("map::detach_vehicle was passed nullptr");
+std::unique_ptr<vehicle> map::detach_vehicle( vehicle* veh )
+{
+    if( veh == nullptr ) {
+        debugmsg( "map::detach_vehicle was passed nullptr" );
         return std::unique_ptr<vehicle>();
     }
 
     int z = veh->abs_sm_pos.z();
-    if (z < -OVERMAP_DEPTH || z > OVERMAP_HEIGHT) {
-        debugmsg("detach_vehicle got a vehicle outside allowed z-level range!  name=%s, "
-                 "submap:%d,%d,%d",
-                 veh->name, veh->abs_sm_pos.x(), veh->abs_sm_pos.y(), veh->abs_sm_pos.z());
+    if( z < -OVERMAP_DEPTH || z > OVERMAP_HEIGHT ) {
+        debugmsg( "detach_vehicle got a vehicle outside allowed z-level range!  name=%s, "
+                  "submap:%d,%d,%d",
+                  veh->name, veh->abs_sm_pos.x(), veh->abs_sm_pos.y(), veh->abs_sm_pos.z() );
         // Try to fix by moving the vehicle here
         z = veh->abs_sm_pos.z() = z > OVERMAP_HEIGHT ? OVERMAP_HEIGHT : -OVERMAP_DEPTH;
     }
-    (void)z;
+    ( void )z;
 
     // Full removal from every world index happens here, unconditionally, before we
     // even try to locate the owning submap — so both the "submap not found" and the
@@ -433,44 +442,45 @@ std::unique_ptr<vehicle> map::detach_vehicle(vehicle* veh) {
     // transferred to MAPBUFFER (that happens at the end of generate()).  Fall back to
     // the grid lookup so wreck-merging works correctly during generation.
     const tripoint_bub_sm bub_sm(
-        veh->abs_sm_pos.x() - abs_sub.x(), veh->abs_sm_pos.y() - abs_sub.y(), veh->abs_sm_pos.z());
+        veh->abs_sm_pos.x() - abs_sub.x(), veh->abs_sm_pos.y() - abs_sub.y(), veh->abs_sm_pos.z() );
     submap* current_submap =
-        MAPBUFFER_REGISTRY.get(bound_dimension_).lookup_submap_in_memory(veh->abs_sm_pos);
-    if (current_submap == nullptr) { current_submap = get_submap_at_grid(bub_sm); }
-    if (current_submap == nullptr) {
-        debugmsg("detach_vehicle can't find submap!  name=%s, submap:%d,%d,%d", veh->name,
-                 veh->abs_sm_pos.x(), veh->abs_sm_pos.y(), veh->abs_sm_pos.z());
+        MAPBUFFER_REGISTRY.get( bound_dimension_ ).lookup_submap_in_memory( veh->abs_sm_pos );
+    if( current_submap == nullptr ) { current_submap = get_submap_at_grid( bub_sm ); }
+    if( current_submap == nullptr ) {
+        debugmsg( "detach_vehicle can't find submap!  name=%s, submap:%d,%d,%d", veh->name,
+                  veh->abs_sm_pos.x(), veh->abs_sm_pos.y(), veh->abs_sm_pos.z() );
         return std::unique_ptr<vehicle>();
     }
-    for (size_t i = 0; i < current_submap->vehicles.size(); i++) {
-        if (current_submap->vehicles[i].get() == veh) {
-            std::unique_ptr<vehicle> result = std::move(current_submap->vehicles[i]);
-            current_submap->vehicles.erase(current_submap->vehicles.begin() + i);
+    for( size_t i = 0; i < current_submap->vehicles.size(); i++ ) {
+        if( current_submap->vehicles[i].get() == veh ) {
+            std::unique_ptr<vehicle> result = std::move( current_submap->vehicles[i] );
+            current_submap->vehicles.erase( current_submap->vehicles.begin() + i );
             veh->detach();
             veh->refresh_position();
             return result;
         }
     }
-    debugmsg("detach_vehicle can't find it!  name=%s, submap:%d,%d,%d", veh->name,
-             veh->abs_sm_pos.x(), veh->abs_sm_pos.y(), veh->abs_sm_pos.z());
+    debugmsg( "detach_vehicle can't find it!  name=%s, submap:%d,%d,%d", veh->name,
+              veh->abs_sm_pos.x(), veh->abs_sm_pos.y(), veh->abs_sm_pos.z() );
     return std::unique_ptr<vehicle>();
 }
 
-void map::destroy_vehicle(vehicle* veh) { detach_vehicle(veh); }
+void map::destroy_vehicle( vehicle* veh ) { detach_vehicle( veh ); }
 
 void map::on_vehicle_moved(
-    const tripoint_bub_sm& sm_min, const tripoint_bub_sm& sm_max, const int& smz) {
+    const tripoint_bub_sm& sm_min, const tripoint_bub_sm& sm_max, const int &smz )
+{
     ZoneScoped;
 
-    if (batching_vehicle_moves_) {
+    if( batching_vehicle_moves_ ) {
         const auto [it, inserted] =
-            pending_vehicle_move_bounds_.try_emplace(smz, sm_min.xy(), sm_max.xy());
-        if (!inserted) {
+            pending_vehicle_move_bounds_.try_emplace( smz, sm_min.xy(), sm_max.xy() );
+        if( !inserted ) {
             auto& bounds = it->second;
-            bounds.first = point_bub_sm(std::min(bounds.first.x(), sm_min.x()),
-                                        std::min(bounds.first.y(), sm_min.y()));
-            bounds.second = point_bub_sm(std::max(bounds.second.x(), sm_max.x()),
-                                         std::max(bounds.second.y(), sm_max.y()));
+            bounds.first = point_bub_sm( std::min( bounds.first.x(), sm_min.x() ),
+                                         std::min( bounds.first.y(), sm_min.y() ) );
+            bounds.second = point_bub_sm( std::max( bounds.second.x(), sm_max.x() ),
+                                          std::max( bounds.second.y(), sm_max.y() ) );
         }
         return;
     }
@@ -478,7 +488,7 @@ void map::on_vehicle_moved(
 
     // Out-of-range levels raise nothing: the kind's own bounds check gates its
     // marks, and the GPU residency layer picks the change up by polling (#21).
-    if (!inbounds_z(smz)) { return; }
+    if( !inbounds_z( smz ) ) { return; }
     level_cache_freshness::report( *this, level_cache_freshness::vehicle_moved {
         .sm_min = sm_min,
         .sm_max = sm_max,
@@ -504,15 +514,16 @@ void map::flush_vehicle_move_batch()
     // Clear the flag first: the replayed on_vehicle_moved() calls below must
     // take the normal (non-batching) path.
     batching_vehicle_moves_ = false;
-    auto pending = std::move(pending_vehicle_move_bounds_);
+    auto pending = std::move( pending_vehicle_move_bounds_ );
     pending_vehicle_move_bounds_.clear();
-    for (const auto& [smz, bounds] : pending) {
-        on_vehicle_moved(tripoint_bub_sm(bounds.first, smz), tripoint_bub_sm(bounds.second, smz),
-                          smz);
+    for( const auto& [smz, bounds] : pending ) {
+        on_vehicle_moved( tripoint_bub_sm( bounds.first, smz ), tripoint_bub_sm( bounds.second, smz ),
+                          smz );
     }
 }
 
-void map::vehmove() {
+void map::vehmove()
+{
     ZoneScoped;
     begin_vehicle_move_batch();
     // Advance the persistent physics world one full game turn (1 s).
@@ -543,41 +554,41 @@ void map::vehmove() {
     // Out-of-bubble vehicles are handled by batch_turns_vehicle().
     VehicleList vehicle_list;
     {
-        ZoneScopedN("veh_gain_moves");
+        ZoneScopedN( "veh_gain_moves" );
         const int zmin = -OVERMAP_DEPTH;
         const int zmax = OVERMAP_HEIGHT;
-        const bool outer_stride_hit = calendar::stride_due(vehicle_outer_stride);
-        for (int z = zmin; z <= zmax; ++z) {
-            for (const vehicle_handle veh_handle : get_cache(z).vehicle_list) {
-                vehicle *const veh = resolve_vehicle(veh_handle);
-                if (veh == nullptr) { continue; }
+        const bool outer_stride_hit = calendar::stride_due( vehicle_outer_stride );
+        for( int z = zmin; z <= zmax; ++z ) {
+            for( const vehicle_handle veh_handle : get_cache( z ).vehicle_list ) {
+                vehicle *const veh = resolve_vehicle( veh_handle );
+                if( veh == nullptr ) { continue; }
                 const bool on_player_z = z == get_avatar().abs_pos().z();
                 const bool parked_off_z =
                     !veh->is_moving() && !veh->engine_on && !veh->is_falling && !on_player_z;
                 const bool skip_outer = parked_off_z && !outer_stride_hit;
-                if (!skip_outer) {
+                if( !skip_outer ) {
                     veh->gain_moves();
                     veh->slow_leak();
                 } else {
                     veh->of_turn = 0.001f;
                 }
-                vehicle_list.push_back(wrapped_vehicle{.pos = abs_to_map_local(*this, veh->abs_ms_location()), .v = veh});
+                vehicle_list.push_back( wrapped_vehicle{.pos = abs_to_map_local( *this, veh->abs_ms_location() ), .v = veh} );
             }
         }
     }
-    TracyPlot("Vehicles Active", static_cast<int64_t>(vehicle_list.size()));
+    TracyPlot( "Vehicles Active", static_cast<int64_t>( vehicle_list.size() ) );
 
     // Priority queue keyed on of_turn (max-heap) for O(log V) scheduling
     // instead of the previous O(V) linear scan per iteration.
-    auto veh_cmp = [](const wrapped_vehicle* a, const wrapped_vehicle* b) {
+    auto veh_cmp = []( const wrapped_vehicle * a, const wrapped_vehicle * b ) {
         return a->v->of_turn < b->v->of_turn;
     };
     using VehPQ =
-        std::priority_queue<wrapped_vehicle*, std::vector<wrapped_vehicle*>, decltype(veh_cmp)>;
-    VehPQ pq(veh_cmp);
+        std::priority_queue<wrapped_vehicle *, std::vector<wrapped_vehicle *>, decltype( veh_cmp )>;
+    VehPQ pq( veh_cmp );
 
     // Separate list of falling / aircraft-z-change vehicles, built alongside the PQ.
-    std::vector<wrapped_vehicle*> falling_vehicles;
+    std::vector<wrapped_vehicle *> falling_vehicles;
 
     // (Re)build pq from vehicle_list, applying the stationary-vehicle filter.
     // Also rebuilds falling_vehicles.
@@ -588,17 +599,17 @@ void map::vehmove() {
         // (vehicle-destroyed path), those pointers are dangling; the comparator
         // dereference would be UB and can corrupt the heap allocator metadata.
         {
-            VehPQ tmp(veh_cmp);
-            std::swap(pq, tmp);
+            VehPQ tmp( veh_cmp );
+            std::swap( pq, tmp );
         }
         falling_vehicles.clear();
-        for (wrapped_vehicle& w : vehicle_list) {
+        for( wrapped_vehicle& w : vehicle_list ) {
             // gain_moves() sets of_turn=0.001 for velocity==0 non-falling
             // non-autopilot vehicles.  Moving and falling vehicles receive
             // of_turn = 1 + carry >= 1.0, so this threshold is unambiguous.
-            if (w.v->of_turn >= 1.0f) { pq.push(&w); }
-            if (w.v->is_falling || (w.v->is_aircraft() && w.v->get_z_change() != 0)) {
-                falling_vehicles.push_back(&w);
+            if( w.v->of_turn >= 1.0f ) { pq.push( &w ); }
+            if( w.v->is_falling || ( w.v->is_aircraft() && w.v->get_z_change() != 0 ) ) {
+                falling_vehicles.push_back( &w );
             }
         }
     };
@@ -613,11 +624,11 @@ void map::vehmove() {
     // 15 equals 3 >50mph vehicles, or up to 15 slow (1 square move) ones
     // But 15 is too low for V12 death-bikes, let's put 100 here
     auto moved_count = int64_t{0};
-    for (int count = 0; count < 100; ++count) {
+    for( int count = 0; count < 100; ++count ) {
         wrapped_vehicle* cur_veh = nullptr;
 
         // Horizontal movement — pop highest-of_turn vehicle from heap.
-        if (!pq.empty()) {
+        if( !pq.empty() ) {
             cur_veh = pq.top();
             pq.pop();
         }
@@ -628,25 +639,25 @@ void map::vehmove() {
         // may have landed or been destroyed since falling_vehicles was last built.
         // Vehicles that start falling mid-turn (not in falling_vehicles) are caught
         // on the next turn when rebuild_pq() sees their updated state.
-        if (cur_veh == nullptr) {
-            for (wrapped_vehicle* w : falling_vehicles) {
-                if (w->v != nullptr
-                    && (w->v->is_falling || (w->v->is_aircraft() && w->v->get_z_change() != 0))) {
+        if( cur_veh == nullptr ) {
+            for( wrapped_vehicle * w : falling_vehicles ) {
+                if( w->v != nullptr
+                    && ( w->v->is_falling || ( w->v->is_aircraft() && w->v->get_z_change() != 0 ) ) ) {
                     cur_veh = w;
                     break;
                 }
             }
         }
 
-        if (cur_veh == nullptr) { break; }
+        if( cur_veh == nullptr ) { break; }
 
         {
-            ZoneScopedN("veh_act_on_map");
+            ZoneScopedN( "veh_act_on_map" );
             ++moved_count;
             cur_veh->v = cur_veh->v->act_on_map();
         }
 
-        if (cur_veh->v == nullptr) {
+        if( cur_veh->v == nullptr ) {
             // act_on_map() returns nullptr in two cases:
             //   1. Vehicle destroyed (e.g., fell into void, sank).
             //   2. Vehicle-vehicle collision: move_vehicle() yields to the hit
@@ -656,19 +667,19 @@ void map::vehmove() {
             vehicle_list = get_vehicles();
             rebuild_pq();
         } else {
-            if (cur_veh->v->of_turn > 0.f) { pq.push(cur_veh); }
+            if( cur_veh->v->of_turn > 0.f ) { pq.push( cur_veh ); }
         }
     }
-    TracyPlot("Vehicles Moved", moved_count);
-    static_cast<void>(moved_count);
+    TracyPlot( "Vehicles Moved", moved_count );
+    static_cast<void>( moved_count );
 
     // A map shift can occur mid-loop when the player is a vehicle passenger:
-    if (last_full_vehicle_list_dirty) { vehicle_list = get_vehicles(); }
+    if( last_full_vehicle_list_dirty ) { vehicle_list = get_vehicles(); }
     // Box2D position readback: apply physics_pos to the tile grid for vehicles
     // under physics authority.  act_on_map() above ran all game logic (sinking,
     // falling, traction, skidding) but returned early before move_vehicle().
     // physics_pos was written by step() at line 784 before the tile-step loop.
-    if (phys_world) {
+    if( phys_world ) {
         // Step the world HERE, not at the top of vehmove().
         //
         // sync_bodies_from_game() pushes veh->velocity into the bodies, so stepping
@@ -680,7 +691,7 @@ void map::vehmove() {
         //
         // Measured on the road roller in vehicle_efficiency_test, which resets
         // velocity every 5 turns: one dead turn per reset, ~20 of 100 cycles.
-        phys_world->step_turn(1.0f);
+        phys_world->step_turn( 1.0f );
 
         // move_vehicle() below can destroy vehicles — it bashes terrain, damages
         // creatures, and reaches vehicle_vehicle_collision(), which can wreck the
@@ -693,38 +704,38 @@ void map::vehmove() {
         // touching it, refreshing that list only when a walk actually reported a
         // destruction or replacement.
         struct readback_target {
-            vehicle* veh = nullptr;
+            vehicle *veh = nullptr;
             int px = 0;
             int py = 0;
         };
         std::vector<readback_target> targets;
-        targets.reserve(vehicle_list.size());
-        for (wrapped_vehicle& wv : vehicle_list) {
+        targets.reserve( vehicle_list.size() );
+        for( wrapped_vehicle& wv : vehicle_list ) {
             vehicle& v = *wv.v;
-            if (!v.box2d_position_authority) { continue; }
-            if (v.is_falling || (v.is_aircraft() && v.get_z_change() != 0)) { continue; }
-            targets.push_back(
-                {&v, static_cast<int>(std::lround(v.physics_pos.x)),
-                 static_cast<int>(std::lround(v.physics_pos.y))});
+            if( !v.box2d_position_authority ) { continue; }
+            if( v.is_falling || ( v.is_aircraft() && v.get_z_change() != 0 ) ) { continue; }
+            targets.push_back( {
+                &v, static_cast<int>( std::lround( v.physics_pos.x ) ),
+                static_cast<int>( std::lround( v.physics_pos.y ) )} );
         }
 
         auto live = vehicle_list;
         bool live_dirty = false;
-        for (const readback_target& target : targets) {
-            if (live_dirty) {
+        for( const readback_target& target : targets ) {
+            if( live_dirty ) {
                 live = get_vehicles();
                 live_dirty = false;
             }
-            if (std::ranges::none_of(live, [&target](const wrapped_vehicle& w) {
-                    return w.v == target.veh;
-                })) {
+            if( std::ranges::none_of( live, [&target]( const wrapped_vehicle & w ) {
+            return w.v == target.veh;
+        } ) ) {
                 continue; // wrecked by an earlier walk this turn
             }
             vehicle& veh = *target.veh;
             const auto px = target.px;
             const auto py = target.py;
             const auto cur = veh.bub_ms_location();
-            if (px != cur.x() || py != cur.y()) {
+            if( px != cur.x() || py != cur.y() ) {
                 // Walk the tile anchor one tile at a time toward the
                 // physics-derived destination, rather than issuing one
                 // multi-tile displace_vehicle().
@@ -749,10 +760,10 @@ void map::vehmove() {
                 // walk dereferences `veh`, so it must be skipped entirely.
                 bool destroyed = false;
                 {
-                    const physics::PhysicsWorld::physics_move_scope readback(*phys_world);
-                    for (int walked = 0; walked < max_walk_tiles; ++walked) {
+                    const physics::PhysicsWorld::physics_move_scope readback( *phys_world );
+                    for( int walked = 0; walked < max_walk_tiles; ++walked ) {
                         const auto at = veh.bub_ms_location();
-                        if (at.x() == px && at.y() == py) { break; }
+                        if( at.x() == px && at.y() == py ) { break; }
                         // A collision on an earlier step can bring the vehicle to a
                         // stop, and move_vehicle() rejects a horizontal move with no
                         // velocity — emitting "tried to move horizontally with no
@@ -760,18 +771,18 @@ void map::vehmove() {
                         // remaining tiles, but the game has decided the vehicle is
                         // stopped, so end the walk and let the rewind below resync
                         // physics_pos to where it actually came to rest.
-                        if (veh.velocity == 0) {
+                        if( veh.velocity == 0 ) {
                             blocked = true;
                             break;
                         }
                         const auto step = tripoint_rel_ms{
-                            std::clamp(px - at.x(), -1, 1), std::clamp(py - at.y(), -1, 1), 0};
+                            std::clamp( px - at.x(), -1, 1 ), std::clamp( py - at.y(), -1, 1 ), 0};
                         // b2World_Step() has no notion of the reality bubble and
                         // can integrate a fast body past the loaded map edge
                         // within one turn.  Beyond that edge there is no terrain
                         // to collide with, so treat the boundary as a hard stop
                         // rather than stranding the vehicle in a null submap.
-                        if (!inbounds(at + step)) {
+                        if( !inbounds( at + step ) ) {
                             blocked = true;
                             break;
                         }
@@ -794,8 +805,8 @@ void map::vehmove() {
                         // impulses, would invent a balance model with nothing to
                         // validate it against.
                         const vehicle* before = &veh;
-                        vehicle* after = move_vehicle(veh, step, veh.face);
-                        if (after == nullptr) {
+                        vehicle* after = move_vehicle( veh, step, veh.face );
+                        if( after == nullptr ) {
                             // Wrecked by the collision.  `veh` is dead, so nothing
                             // below may touch it — and other entries in `targets`
                             // may have been wrecked with it, so mark the live list
@@ -806,7 +817,7 @@ void map::vehmove() {
                             live_dirty = true;
                             break;
                         }
-                        if (after != before) {
+                        if( after != before ) {
                             // Split or replaced: `veh` no longer names the vehicle
                             // that moved, so stop walking it.  A split creates a new
                             // vehicle, so the live list is stale too.
@@ -814,7 +825,7 @@ void map::vehmove() {
                             blocked = true;
                             break;
                         }
-                        if (veh.bub_ms_location() == at) {
+                        if( veh.bub_ms_location() == at ) {
                             // Did not actually advance — blocked by something
                             // move_vehicle declined to move through.
                             blocked = true;
@@ -822,7 +833,7 @@ void map::vehmove() {
                         }
                     }
                 }
-                if (destroyed) {
+                if( destroyed ) {
                     // `veh` is freed.  Everything below — the rewind, the pivot
                     // resync, the render offsets — dereferences it, so move on to
                     // the next target rather than guarding each one.
@@ -837,7 +848,7 @@ void map::vehmove() {
                 // grows without bound while the vehicle grinds against whatever
                 // stopped it.
                 const auto reached = veh.bub_ms_location();
-                if (reached.x() != px || reached.y() != py) {
+                if( reached.x() != px || reached.y() != py ) {
                     // Deliberately does NOT touch velocity.  move_vehicle() already
                     // applies whatever speed loss a real collision causes, inside
                     // part_collision(); zeroing it here double-penalised that, and
@@ -851,8 +862,8 @@ void map::vehmove() {
                     // back.  In gameplay it meant a single declined step brought the
                     // vehicle to a dead halt.
                     veh.physics_pos =
-                        rl_vec2d{static_cast<float>(reached.x()), static_cast<float>(reached.y())};
-                    phys_world->clamp_body_to_tile(veh);
+                        rl_vec2d{static_cast<float>( reached.x() ), static_cast<float>( reached.y() )};
+                    phys_world->clamp_body_to_tile( veh );
                 }
             }
             // Resync the legacy pivot_anchor[0]/pivot_rotation[0] fields with the
@@ -876,9 +887,9 @@ void map::vehmove() {
                                       false );
             veh.turn_dir = steer_target; // set_facing() overwrites turn_dir; keep the pre-steer
             veh.render_offset_x = static_cast<float>(
-                veh.physics_pos.x - std::lround(veh.physics_pos.x));
+                                      veh.physics_pos.x - std::lround( veh.physics_pos.x ) );
             veh.render_offset_y = static_cast<float>(
-                veh.physics_pos.y - std::lround(veh.physics_pos.y));
+                                      veh.physics_pos.y - std::lround( veh.physics_pos.y ) );
         }
     }
 
@@ -894,22 +905,22 @@ void map::vehmove() {
     // readback so occupants land on the tile the vehicle actually settled
     // at, and before veh_cleanup/build_map_cache/monmove() can see a stale
     // occupant position.
-    for (const wrapped_vehicle& w : get_vehicles()) {
-        if (w.v != nullptr) { w.v->commit_occupants(); }
+    for( const wrapped_vehicle& w : get_vehicles() ) {
+        if( w.v != nullptr ) { w.v->commit_occupants(); }
     }
 
 
     // Process item removal on the vehicles that were modified this turn.
     // Use a copy because part_removal_cleanup can modify the container.
     {
-        ZoneScopedN("veh_cleanup");
+        ZoneScopedN( "veh_cleanup" );
         auto temp = dirty_vehicle_list;
-        for (const vehicle_handle elem : temp) {
-            auto same_handle = [elem](const struct wrapped_vehicle& tgt) {
+        for( const vehicle_handle elem : temp ) {
+            auto same_handle = [elem]( const struct wrapped_vehicle & tgt ) {
                 return tgt.v != nullptr && elem == tgt.v->handle();
             };
-            if (std::ranges::find_if(vehicle_list, same_handle) != vehicle_list.end()) {
-                if (vehicle *const veh = resolve_vehicle(elem); veh != nullptr) {
+            if( std::ranges::find_if( vehicle_list, same_handle ) != vehicle_list.end() ) {
+                if( vehicle *const veh = resolve_vehicle( elem ); veh != nullptr ) {
                     veh->part_removal_cleanup();
                 }
             }
@@ -919,123 +930,126 @@ void map::vehmove() {
     // Build connected_vehicles from the full loaded-vehicle set.
     // All vehicles in vehicle_list are loaded (on_map=true); distribution-graph
     // neighbours reachable but not in the set get on_map=false as before.
-    std::set<vehicle*> all_veh_ptrs;
+    std::set<vehicle *> all_veh_ptrs;
     auto& vehicle_buffer = get_mapbuffer();
-    std::ranges::for_each(vehicle_list, [&](const wrapped_vehicle& w) {
-        if (vehicle_buffer.has_loaded_vehicle(w.v)) { all_veh_ptrs.insert(w.v); }
-    });
-    std::map<vehicle*, bool> connected_vehicles;
-    vehicle::enumerate_vehicles(connected_vehicles, all_veh_ptrs);
+    std::ranges::for_each( vehicle_list, [&]( const wrapped_vehicle & w ) {
+        if( vehicle_buffer.has_loaded_vehicle( w.v ) ) { all_veh_ptrs.insert( w.v ); }
+    } );
+    std::map<vehicle *, bool> connected_vehicles;
+    vehicle::enumerate_vehicles( connected_vehicles, all_veh_ptrs );
     {
-        const bool stride_hit = calendar::stride_due(vehicle_idle_stride);
-        std::ranges::for_each(connected_vehicles, [&](std::pair<vehicle* const, bool>& veh_pair) {
+        const bool stride_hit = calendar::stride_due( vehicle_idle_stride );
+        std::ranges::for_each( connected_vehicles, [&]( std::pair<vehicle* const, bool> &veh_pair ) {
             vehicle& veh = *veh_pair.first;
             const bool on_map = veh_pair.second;
             const bool full_rate =
-                veh.is_moving() || veh.is_falling || veh.engine_on || veh.player_in_control(g->u)
+                veh.is_moving() || veh.is_falling || veh.engine_on || veh.player_in_control( g->u )
                 || veh.is_following || veh.is_patrolling || !veh.reactors.empty()
-                || (veh.is_rotorcraft() && veh.is_flying_in_air());
-            if (full_rate || stride_hit) { veh.idle(on_map); }
-        });
+                || ( veh.is_rotorcraft() && veh.is_flying_in_air() );
+            if( full_rate || stride_hit ) { veh.idle( on_map ); }
+        } );
     }
 }
 
-bool map::vehproceed(VehicleList& vehicle_list) {
+bool map::vehproceed( VehicleList& vehicle_list )
+{
     wrapped_vehicle* cur_veh = nullptr;
     float max_of_turn = 0;
     // First horizontal movement
-    for (wrapped_vehicle& vehs_v : vehicle_list) {
-        if (vehs_v.v->of_turn > max_of_turn) {
+    for( wrapped_vehicle& vehs_v : vehicle_list ) {
+        if( vehs_v.v->of_turn > max_of_turn ) {
             cur_veh = &vehs_v;
             max_of_turn = cur_veh->v->of_turn;
         }
     }
 
     // Then vertical-only movement
-    if (cur_veh == nullptr) {
-        for (wrapped_vehicle& vehs_v : vehicle_list) {
-            if (vehs_v.v->is_falling
-                || (vehs_v.v->is_aircraft() && vehs_v.v->get_z_change() != 0)) {
+    if( cur_veh == nullptr ) {
+        for( wrapped_vehicle& vehs_v : vehicle_list ) {
+            if( vehs_v.v->is_falling
+                || ( vehs_v.v->is_aircraft() && vehs_v.v->get_z_change() != 0 ) ) {
                 cur_veh = &vehs_v;
                 break;
             }
         }
     }
 
-    if (cur_veh == nullptr) { return false; }
+    if( cur_veh == nullptr ) { return false; }
 
     cur_veh->v = cur_veh->v->act_on_map();
-    if (cur_veh->v == nullptr) { vehicle_list = get_vehicles(); }
+    if( cur_veh->v == nullptr ) { vehicle_list = get_vehicles(); }
 
     // confirm that veh_in_active_range is still correct for each z-level
     const int minz = -OVERMAP_DEPTH;
     const int maxz = OVERMAP_HEIGHT;
-    for (int zlev = minz; zlev <= maxz; ++zlev) {
-        level_cache& cache = get_cache(zlev);
+    for( int zlev = minz; zlev <= maxz; ++zlev ) {
+        level_cache& cache = get_cache( zlev );
 
         // Check if any vehicles exist in the active range for this z-level
         cache.veh_in_active_range =
             cache.veh_in_active_range
-            && std::ranges::any_of(cache.veh_exists_at, [](bool veh_exists) { return veh_exists; });
+        && std::ranges::any_of( cache.veh_exists_at, []( bool veh_exists ) { return veh_exists; } );
     }
 
     return true;
 }
 
-static bool sees_veh(const Creature& c, vehicle& veh, bool force_recalc) {
-    const auto& veh_points = veh.get_points(force_recalc);
-    return std::ranges::any_of(veh_points, [&c](const tripoint_abs_ms& pt) {
-        return c.sees(abs_to_bub(pt));
-    });
+static bool sees_veh( const Creature& c, vehicle& veh, bool force_recalc )
+{
+    const auto& veh_points = veh.get_points( force_recalc );
+    return std::ranges::any_of( veh_points, [&c]( const tripoint_abs_ms & pt ) {
+        return c.sees( abs_to_bub( pt ) );
+    } );
 }
 
-vehicle* map::move_vehicle(vehicle& veh, const tripoint_rel_ms& dp, const tileray& facing) {
-    if (dp == tripoint_rel_ms::zero()) {
-        debugmsg("Empty displacement vector");
+vehicle *map::move_vehicle( vehicle& veh, const tripoint_rel_ms& dp, const tileray& facing )
+{
+    if( dp == tripoint_rel_ms::zero() ) {
+        debugmsg( "Empty displacement vector" );
         return &veh;
-    } else if (std::abs(dp.x()) > 1 || std::abs(dp.y()) > 1 || std::abs(dp.z()) > 1) {
-        debugmsg("Invalid displacement vector: %d, %d, %d", dp.x(), dp.y(), dp.z());
+    } else if( std::abs( dp.x() ) > 1 || std::abs( dp.y() ) > 1 || std::abs( dp.z() ) > 1 ) {
+        debugmsg( "Invalid displacement vector: %d, %d, %d", dp.x(), dp.y(), dp.z() );
         return &veh;
     }
     // Split the movement into horizontal and vertical for easier processing
-    if (dp.xy() != point_rel_ms::zero() && dp.z() != 0) {
-        vehicle* const new_pointer = move_vehicle(veh, tripoint_rel_ms(dp.xy(), 0), facing);
-        if (!new_pointer) { return nullptr; }
+    if( dp.xy() != point_rel_ms::zero() && dp.z() != 0 ) {
+        vehicle* const new_pointer = move_vehicle( veh, tripoint_rel_ms( dp.xy(), 0 ), facing );
+        if( !new_pointer ) { return nullptr; }
 
-        vehicle* const result = move_vehicle(*new_pointer, tripoint_rel_ms(0, 0, dp.z()), facing);
-        if (!result) { return nullptr; }
+        vehicle* const result = move_vehicle( *new_pointer, tripoint_rel_ms( 0, 0, dp.z() ), facing );
+        if( !result ) { return nullptr; }
 
         result->is_falling = false;
         return result;
     }
     const bool vertical = dp.z() != 0;
     // Ensured by the splitting above
-    assert(vertical == (dp.xy() == point_rel_ms::zero()));
+    assert( vertical == ( dp.xy() == point_rel_ms::zero() ) );
 
     const int target_z = dp.z() + veh.abs_sm_pos.z();
-    if (target_z < -OVERMAP_DEPTH || target_z > OVERMAP_HEIGHT) { return &veh; }
+    if( target_z < -OVERMAP_DEPTH || target_z > OVERMAP_HEIGHT ) { return &veh; }
 
-    veh.precalc_mounts(1, veh.skidding ? veh.turn_dir : facing.dir(), veh.pivot_point());
+    veh.precalc_mounts( 1, veh.skidding ? veh.turn_dir : facing.dir(), veh.pivot_point() );
 
     // cancel out any movement of the vehicle due only to a change in pivot
     // Pivot displacement is a point_rel_veh... Dunno how to convert that
-    tripoint_rel_ms dp1 = tripoint_rel_ms(dp - veh.pivot_displacement());
+    tripoint_rel_ms dp1 = tripoint_rel_ms( dp - veh.pivot_displacement() );
 
-    if (!vertical) { veh.adjust_zlevel(1, dp1); }
+    if( !vertical ) { veh.adjust_zlevel( 1, dp1 ); }
 
     int impulse = 0;
 
     std::vector<veh_collision> collisions;
-    std::vector<vehicle*> passthrough;
+    std::vector<vehicle *> passthrough;
 
     // Find collisions
     // Velocity of car before collision
     // Split into vertical and horizontal movement
-    const int& coll_velocity = vertical ? veh.vertical_velocity : veh.velocity;
+    const int &coll_velocity = vertical ? veh.vertical_velocity : veh.velocity;
     const int velocity_before = coll_velocity;
-    if (velocity_before == 0 && !veh.is_aircraft() && !veh.is_flying_in_air()) {
-        debugmsg("%s tried to move %s with no velocity", veh.name,
-                 vertical ? "vertically" : "horizontally");
+    if( velocity_before == 0 && !veh.is_aircraft() && !veh.is_flying_in_air() ) {
+        debugmsg( "%s tried to move %s with no velocity", veh.name,
+                  vertical ? "vertically" : "horizontally" );
         return &veh;
     }
 
@@ -1051,228 +1065,229 @@ vehicle* map::move_vehicle(vehicle& veh, const tripoint_rel_ms& dp, const tilera
         } );
 
         // Vehicle collisions
-        std::map<vehicle*, std::vector<veh_collision>> veh_collisions;
-        for (auto& coll : collisions) {
-            if (coll.type != veh_coll_veh) { continue; }
+        std::map<vehicle *, std::vector<veh_collision>> veh_collisions;
+        for( auto& coll : collisions ) {
+            if( coll.type != veh_coll_veh ) { continue; }
 
             veh_veh_coll_flag = true;
             // Only collide with each vehicle once
-            veh_collisions[static_cast<vehicle*>(coll.target)].push_back(coll);
+            veh_collisions[static_cast<vehicle *>( coll.target )].push_back( coll );
         }
 
-        if (phys_world && !veh_collisions.empty()) {
-            const auto cluster = solve_vv_cluster(veh, veh_collisions);
+        if( phys_world && !veh_collisions.empty() ) {
+            const auto cluster = solve_vv_cluster( veh, veh_collisions );
             // bodies[0] is always &veh; bodies[1..N] are the targets in veh_collisions order.
-            for (const auto& body : cluster.bodies) {
+            for( const auto& body : cluster.bodies ) {
                 body.veh->angular_velocity_rads = body.ang_vel_rads;
                 const auto& fv = body.final_vel_cmps;
                 body.veh->velocity = static_cast<int>(
-                    fv.dot_product(body.veh->face_vec()) < 0.0f ? -fv.magnitude() : fv.magnitude());
-                body.veh->move.init(point_rel_ms(fv.as_point()));
+                                         fv.dot_product( body.veh->face_vec() ) < 0.0f ? -fv.magnitude() : fv.magnitude() );
+                body.veh->move.init( point_rel_ms( fv.as_point() ) );
             }
             const auto& veh1 = cluster.bodies[0];
             // Phase 4 limitation: veh1.impulse_ns is the *aggregate* Δp across all contacts.
             // In a 2-vehicle collision this is exact.  In a 3+ pileup it is passed unmodified
             // to each per-partner call, which over-counts damage.  Deferred to Phase 10.
-            for (auto& [partner, cols] : veh_collisions) {
-                const auto veh2_it = std::ranges::find_if(cluster.bodies, [partner](const auto& b) {
+            for( auto& [partner, cols] : veh_collisions ) {
+                const auto veh2_it = std::ranges::find_if( cluster.bodies, [partner]( const auto & b ) {
                     return b.veh == partner;
-                });
-                if (veh2_it == cluster.bodies.end()) {
-                    impulse += vehicle_vehicle_collision(veh, *partner, cols);
+                } );
+                if( veh2_it == cluster.bodies.end() ) {
+                    impulse += vehicle_vehicle_collision( veh, *partner, cols );
                     continue;
                 }
-                const auto m1 = to_kilogram(veh.total_mass());
-                const auto m2 = to_kilogram(partner->total_mass());
-                const auto dv = (m1 + m2 > 0.0f) ? veh1.impulse_ns * (1.0f / m1 + 1.0f / m2) : 0.0f;
+                const auto m1 = to_kilogram( veh.total_mass() );
+                const auto m2 = to_kilogram( partner->total_mass() );
+                const auto dv = ( m1 + m2 > 0.0f ) ? veh1.impulse_ns * ( 1.0f / m1 + 1.0f / m2 ) : 0.0f;
                 impulse += vehicle_vehicle_collision(
-                    veh, *partner, cols,
-                    {.veh1_impulse_ns = veh1.impulse_ns,
-                     .veh2_impulse_ns = veh2_it->impulse_ns,
-                     .delta_vel_mps = dv});
+                veh, *partner, cols, {
+                    .veh1_impulse_ns = veh1.impulse_ns,
+                    .veh2_impulse_ns = veh2_it->impulse_ns,
+                    .delta_vel_mps = dv
+                } );
             }
         } else {
-            for (auto& pair : veh_collisions) {
-                impulse += vehicle_vehicle_collision(veh, *pair.first, pair.second);
+            for( auto& pair : veh_collisions ) {
+                impulse += vehicle_vehicle_collision( veh, *pair.first, pair.second );
             }
         }
 
         // Non-vehicle collisions
-        for (const auto& coll : collisions) {
-            if (coll.type == veh_coll_veh) { continue; }
-            if (coll.type == veh_coll_veh_nocollide) {
-                passthrough.push_back(static_cast<vehicle*>(coll.target));
+        for( const auto& coll : collisions ) {
+            if( coll.type == veh_coll_veh ) { continue; }
+            if( coll.type == veh_coll_veh_nocollide ) {
+                passthrough.push_back( static_cast<vehicle*>( coll.target ) );
                 continue;
             }
-            if (coll.part > veh.part_count() || veh.part(coll.part).removed) { continue; }
+            if( coll.part > veh.part_count() || veh.part( coll.part ).removed ) { continue; }
 
-            tripoint_mnt_veh collision_point = veh.part(coll.part).mount;
+            tripoint_mnt_veh collision_point = veh.part( coll.part ).mount;
             const int coll_dmg = coll.imp;
             // Shock damage, if the target part is a rotor treat as an aimed hit.
-            if (veh.part_info(coll.part).rotor_diameter() > 0) {
-                veh.damage(coll.part, coll_dmg, DT_BASH, true);
+            if( veh.part_info( coll.part ).rotor_diameter() > 0 ) {
+                veh.damage( coll.part, coll_dmg, DT_BASH, true );
             } else {
                 impulse += coll_dmg;
-                veh.damage(coll.part, coll_dmg, DT_BASH);
+                veh.damage( coll.part, coll_dmg, DT_BASH );
                 // Upper bound of shock damage
                 int shock_max = coll_dmg;
                 // Lower bound of shock damage
                 int shock_min = coll_dmg / 2;
-                float coll_part_bash_resist = veh.part_info(coll.part).damage_reduction.type_resist(
-                    DT_BASH);
+                float coll_part_bash_resist = veh.part_info( coll.part ).damage_reduction.type_resist(
+                                                  DT_BASH );
                 // Reduce shock damage by collision part DR to prevent bushes from damaging car
                 // batteries
-                shock_min = std::max<int>(0, shock_min - coll_part_bash_resist);
-                shock_max = std::max<int>(0, shock_max - coll_part_bash_resist);
+                shock_min = std::max<int>( 0, shock_min - coll_part_bash_resist );
+                shock_max = std::max<int>( 0, shock_max - coll_part_bash_resist );
                 // Shock damage decays exponentially, we only want to track shock damage that would
                 // cause meaningful damage.
-                if (shock_min >= 20) {
-                    veh.damage_all(shock_min, shock_max, DT_BASH, collision_point);
+                if( shock_min >= 20 ) {
+                    veh.damage_all( shock_min, shock_max, DT_BASH, collision_point );
                 }
             }
         }
 
         // prevent vehicle bouncing after the first collision
-        if (vertical && velocity_before < 0 && coll_velocity > 0) {
+        if( vertical && velocity_before < 0 && coll_velocity > 0 ) {
             veh.vertical_velocity = 0; // also affects `coll_velocity` and thus exits the loop
         }
 
-    } while (
-        collision_attempts-- > 0 && coll_velocity != 0 && sgn(coll_velocity) == sgn(velocity_before)
-        && !collisions.empty() && !veh_veh_coll_flag);
+    } while(
+        collision_attempts-- > 0 && coll_velocity != 0 && sgn( coll_velocity ) == sgn( velocity_before )
+        && !collisions.empty() && !veh_veh_coll_flag );
 
     const int velocity_after = coll_velocity;
-    bool can_move = velocity_after != 0 && sgn(velocity_after) == sgn(velocity_before);
-    if (dp.z() != 0 && veh.is_aircraft()) { can_move = true; }
+    bool can_move = velocity_after != 0 && sgn( velocity_after ) == sgn( velocity_before );
+    if( dp.z() != 0 && veh.is_aircraft() ) { can_move = true; }
     units::angle coll_turn = 0_degrees;
-    if (impulse > 0) {
-        coll_turn = shake_vehicle(veh, velocity_before, facing.dir());
+    if( impulse > 0 ) {
+        coll_turn = shake_vehicle( veh, velocity_before, facing.dir() );
         veh.stop_autodriving();
-        const int volume = std::min<int>(120, std::sqrt(impulse));
+        const int volume = std::min<int>( 120, std::sqrt( impulse ) );
         // TODO: Center the sound at weighted (by impulse) average of collisions
         sound_event se;
         se.origin = veh.bub_ms_location();
         se.volume = volume;
         se.category = sounds::sound_t::combat;
-        se.description = _("crash!");
+        se.description = _( "crash!" );
         se.id = "smash_success";
         se.variant = "hit_vehicle";
-        sounds::sound(se);
+        sounds::sound( se );
     }
 
-    if (veh_veh_coll_flag) {
+    if( veh_veh_coll_flag ) {
         // Break here to let the hit vehicle move away
         return nullptr;
     }
 
     // If not enough wheels, mess up the ground a bit.
-    if (!vertical && !veh.valid_wheel_config() && !veh.is_in_water() && !veh.is_flying_in_air()
-        && !veh.has_sufficient_lift(true) && dp.z() == 0) {
+    if( !vertical && !veh.valid_wheel_config() && !veh.is_in_water() && !veh.is_flying_in_air()
+        && !veh.has_sufficient_lift( true ) && dp.z() == 0 ) {
         veh.velocity += veh.velocity < 0 ? 2000 : -2000;
-        for (const auto& p : veh.get_points()) {
-            const ter_id& pter = ter(abs_to_map_local(*this, p));
-            if (pter == t_dirt || pter == t_grass) { ter_set(abs_to_map_local(*this, p), t_dirtmound); }
+        for( const auto& p : veh.get_points() ) {
+            const ter_id& pter = ter( abs_to_map_local( *this, p ) );
+            if( pter == t_dirt || pter == t_grass ) { ter_set( abs_to_map_local( *this, p ), t_dirtmound ); }
         }
     }
 
     const units::angle last_turn_dec = 1_degrees;
-    if (veh.last_turn < 0_degrees) {
+    if( veh.last_turn < 0_degrees ) {
         veh.last_turn += last_turn_dec;
-        if (veh.last_turn > -last_turn_dec) { veh.last_turn = 0_degrees; }
-    } else if (veh.last_turn > 0_degrees) {
+        if( veh.last_turn > -last_turn_dec ) { veh.last_turn = 0_degrees; }
+    } else if( veh.last_turn > 0_degrees ) {
         veh.last_turn -= last_turn_dec;
-        if (veh.last_turn < last_turn_dec) { veh.last_turn = 0_degrees; }
+        if( veh.last_turn < last_turn_dec ) { veh.last_turn = 0_degrees; }
     }
 
     Character& player_character = get_player_character();
-    const bool seen = sees_veh(player_character, veh, false);
+    const bool seen = sees_veh( player_character, veh, false );
 
-    if (can_move || (vertical && veh.is_falling)) {
+    if( can_move || ( vertical && veh.is_falling ) ) {
         // Accept new direction
-        if (veh.skidding) {
-            veh.face.init(veh.turn_dir);
+        if( veh.skidding ) {
+            veh.face.init( veh.turn_dir );
         } else {
             veh.face = facing;
         }
 
         veh.move = facing;
-        if (coll_turn != 0_degrees) {
+        if( coll_turn != 0_degrees ) {
             veh.skidding = true;
-            veh.turn(coll_turn);
+            veh.turn( coll_turn );
         }
         veh.on_move();
         // Actually change position
-        displace_vehicle(veh, tripoint_rel_ms(dp1));
+        displace_vehicle( veh, tripoint_rel_ms( dp1 ) );
         veh.shift_zlevel();
-    } else if (!vertical) {
+    } else if( !vertical ) {
         veh.stop();
     }
     veh.check_falling_or_floating();
     // If the PC is in the currently moved vehicle, adjust the
     //  view offset.
-    if (g->u.controlling_vehicle && veh_pointer_or_null(veh_at(g->u.bub_pos())) == &veh) {
-        g->calc_driving_offset(&veh);
-        if (veh.skidding && can_move) {
+    if( g->u.controlling_vehicle && veh_pointer_or_null( veh_at( g->u.bub_pos() ) ) == &veh ) {
+        g->calc_driving_offset( &veh );
+        if( veh.skidding && can_move ) {
             // TODO: Make skid recovery in air hard
             veh.possibly_recover_from_skid();
         }
     }
     // Now we're gonna handle traps we're standing on (if we're still moving).
-    if (!vertical && can_move) {
+    if( !vertical && can_move ) {
         const auto wheel_indices = veh.wheelcache; // Don't use a reference here, it causes a crash.
 
         // Values to deal with crushing items.
         // The math needs to be floating-point to work, so the values might as well be.
         const float vehicle_grounded_wheel_area = static_cast<int>(
-            vehicle_wheel_traction(veh, true));
+                vehicle_wheel_traction( veh, true ) );
         const float weight_to_damage_factor = 0.05; // Nobody likes a magic number.
-        const float vehicle_mass_kg = to_kilogram(veh.total_mass());
+        const float vehicle_mass_kg = to_kilogram( veh.total_mass() );
 
-        for (auto& w : wheel_indices) {
-            const auto wheel_p = veh.bub_part_location(w);
-            if (one_in(2) && displace_water(wheel_p)) {
+        for( auto& w : wheel_indices ) {
+            const auto wheel_p = veh.bub_part_location( w );
+            if( one_in( 2 ) && displace_water( wheel_p ) ) {
                 sound_event se;
                 se.origin = wheel_p;
                 se.volume = 50;
                 se.category = sounds::sound_t::movement;
                 se.movement_noise = true;
-                se.description = _("splash!");
+                se.description = _( "splash!" );
                 se.id = "environment";
                 se.variant = "splash";
-                sounds::sound(se);
+                sounds::sound( se );
             }
 
-            veh.handle_trap(wheel_p, w);
-            if (!has_flag("SEALED", wheel_p)) {
-                const float wheel_area = veh.part(w).wheel_area();
+            veh.handle_trap( wheel_p, w );
+            if( !has_flag( "SEALED", wheel_p ) ) {
+                const float wheel_area = veh.part( w ).wheel_area();
 
                 // Damage is calculated based on the weight of the vehicle,
                 // The area of it's wheels, and the area of the wheel running over the items.
                 // This number is multiplied by weight_to_damage_factor to get reasonable results,
                 // damage-wise.
                 const int wheel_damage = static_cast<int>(
-                    ((wheel_area / vehicle_grounded_wheel_area) * vehicle_mass_kg)
-                    * weight_to_damage_factor);
+                                             ( ( wheel_area / vehicle_grounded_wheel_area ) * vehicle_mass_kg )
+                                             * weight_to_damage_factor );
 
                 //~ %1$s: vehicle name
-                smash_items(wheel_p, wheel_damage,
-                            string_format(_("weight of %1$s"), veh.disp_name()), false);
+                smash_items( wheel_p, wheel_damage,
+                             string_format( _( "weight of %1$s" ), veh.disp_name() ), false );
             }
         }
     }
-    if (veh.is_towing()) {
+    if( veh.is_towing() ) {
         veh.do_towing_move();
         // veh.do_towing_move() may cancel towing, so we need to recheck is_towing here
-        if (veh.is_towing() && veh.tow_data.get_towed()->tow_cable_too_far()) {
-            add_msg(m_info, _("A towing cable snaps off of %s."),
-                    veh.tow_data.get_towed()->disp_name());
-            veh.tow_data.get_towed()->invalidate_towing(true);
+        if( veh.is_towing() && veh.tow_data.get_towed()->tow_cable_too_far() ) {
+            add_msg( m_info, _( "A towing cable snaps off of %s." ),
+                     veh.tow_data.get_towed()->disp_name() );
+            veh.tow_data.get_towed()->invalidate_towing( true );
         }
     }
-    for (vehicle* colveh : passthrough) { g->m.add_vehicle_to_cache(colveh); }
+    for( vehicle * colveh : passthrough ) { g->m.add_vehicle_to_cache( colveh ); }
     // Redraw scene, but only if the player is not engaged in an activity and
     // the vehicle was seen before or after the move.
-    if (!player_character.activity && (seen || sees_veh(player_character, veh, true))) {
+    if( !player_character.activity && ( seen || sees_veh( player_character, veh, true ) ) ) {
         g->invalidate_main_ui_adaptor();
         inp_mngr.pump_events();
         ui_manager::redraw_invalidated();
@@ -1282,10 +1297,11 @@ vehicle* map::move_vehicle(vehicle& veh, const tripoint_rel_ms& dp, const tilera
 }
 
 auto map::vehicle_vehicle_collision(
-    vehicle& veh, vehicle& veh2, const std::vector<veh_collision>& collisions,
-    const veh_veh_coll_opts& opts) -> float {
-    if (&veh == &veh2) {
-        debugmsg("Vehicle %s collided with itself", veh.name);
+    vehicle& veh, vehicle& veh2, const std::vector<veh_collision> &collisions,
+    const veh_veh_coll_opts& opts ) -> float
+{
+    if( &veh == &veh2 ) {
+        debugmsg( "Vehicle %s collided with itself", veh.name );
         return 0.0f;
     }
 
@@ -1294,8 +1310,8 @@ auto map::vehicle_vehicle_collision(
     //  parts are damaged/broken on both sides,
     //  remaining times are normalized
     const veh_collision& c = collisions[0];
-    add_msg(m_bad, _("The %1$s's %2$s collides with %3$s's %4$s."), veh.name,
-            veh.part_info(c.part).name(), veh2.name, veh2.part_info(c.target_part).name());
+    add_msg( m_bad, _( "The %1$s's %2$s collides with %3$s's %4$s." ), veh.name,
+             veh.part_info( c.part ).name(), veh2.name, veh2.part_info( c.target_part ).name() );
 
     const bool vertical = veh.abs_sm_pos.z() != veh2.abs_sm_pos.z();
 
@@ -1308,20 +1324,20 @@ auto map::vehicle_vehicle_collision(
     float delta_vel = 0;
     // A constant to tune how many Ns of impulse are equivalent to 1 point of damage, look in
     // vehicle_move.cpp for the impulse to damage function.
-    const float dmg_adjust = impulse_to_damage(1);
+    const float dmg_adjust = impulse_to_damage( 1 );
     float dmg_veh1 = 0;
     float dmg_veh2 = 0;
     // Vertical collisions will be simpler for a while (1D)
-    if (!vertical) {
-        if (opts.veh1_impulse_ns != 0.0f) {
+    if( !vertical ) {
+        if( opts.veh1_impulse_ns != 0.0f ) {
             // Box2D dispatch already applied final velocities, move direction, and
             // angular_velocity_rads.  Populate impulse/delta_vel for the damage section.
             veh1_impulse = opts.veh1_impulse_ns;
             veh2_impulse = opts.veh2_impulse_ns;
             delta_vel = opts.delta_vel_mps;
-            const auto avg = std::max(0.1f, (veh2.of_turn + veh.of_turn) / 2.0f);
+            const auto avg = std::max( 0.1f, ( veh2.of_turn + veh.of_turn ) / 2.0f );
             veh.of_turn = avg * 0.9f;
-            veh2.of_turn = std::max(1.0f, avg * 1.1f);
+            veh2.of_turn = std::max( 1.0f, avg * 1.1f );
         } else {
             // For reference, a cargo truck weighs ~25300, a bicycle 690,
             //  and 38mph is 3800 'velocity'
@@ -1329,37 +1345,37 @@ auto map::vehicle_vehicle_collision(
             // 1 mph = 0.44704m/s = 100 "velocity". For velocity to m/s, *0.0044704
             rl_vec2d velo_veh1 = veh.velo_vec();
             rl_vec2d velo_veh2 = veh2.velo_vec();
-            const float m1 = to_kilogram(veh.total_mass());
-            const float m2 = to_kilogram(veh2.total_mass());
+            const float m1 = to_kilogram( veh.total_mass() );
+            const float m2 = to_kilogram( veh2.total_mass() );
 
             // Collision_axis
             tripoint_mnt_veh cof1 = veh.rotated_center_of_mass();
             tripoint_mnt_veh cof2 = veh2.rotated_center_of_mass();
-            int& x_cof1 = cof1.x();
-            int& y_cof1 = cof1.y();
-            int& x_cof2 = cof2.x();
-            int& y_cof2 = cof2.y();
+            int &x_cof1 = cof1.x();
+            int &y_cof1 = cof1.y();
+            int &x_cof2 = cof2.x();
+            int &y_cof2 = cof2.y();
             rl_vec2d collision_axis_y;
 
             collision_axis_y.x =
-                (veh.bub_ms_location().x() + x_cof1) - (veh2.bub_ms_location().x() + x_cof2);
+                ( veh.bub_ms_location().x() + x_cof1 ) - ( veh2.bub_ms_location().x() + x_cof2 );
             collision_axis_y.y =
-                (veh.bub_ms_location().y() + y_cof1) - (veh2.bub_ms_location().y() + y_cof2);
+                ( veh.bub_ms_location().y() + y_cof1 ) - ( veh2.bub_ms_location().y() + y_cof2 );
             collision_axis_y = collision_axis_y.normalized();
-            rl_vec2d collision_axis_x = collision_axis_y.rotated(M_PI / 2);
+            rl_vec2d collision_axis_x = collision_axis_y.rotated( M_PI / 2 );
             // imp? & delta? & final? reworked:
             // newvel1 =( vel1 * ( mass1 - mass2 ) + ( 2 * mass2 * vel2 ) ) / ( mass1 + mass2 )
             // as per http://en.wikipedia.org/wiki/Elastic_collision
-            float vel1_y = cmps_to_mps(collision_axis_y.dot_product(velo_veh1));
-            float vel1_x = cmps_to_mps(collision_axis_x.dot_product(velo_veh1));
-            float vel2_y = cmps_to_mps(collision_axis_y.dot_product(velo_veh2));
-            float vel2_x = cmps_to_mps(collision_axis_x.dot_product(velo_veh2));
-            delta_vel = std::abs(vel1_y - vel2_y);
+            float vel1_y = cmps_to_mps( collision_axis_y.dot_product( velo_veh1 ) );
+            float vel1_x = cmps_to_mps( collision_axis_x.dot_product( velo_veh1 ) );
+            float vel2_y = cmps_to_mps( collision_axis_y.dot_product( velo_veh2 ) );
+            float vel2_x = cmps_to_mps( collision_axis_x.dot_product( velo_veh2 ) );
+            delta_vel = std::abs( vel1_y - vel2_y );
             // Keep in mind get_collision_factor is looking for m/s, not m/h.
             // e = 0 -> inelastic collision
             // e = 1 -> elastic collision
-            float e = get_collision_factor(vel1_y - vel2_y);
-            add_msg(m_debug, "Requested collision factor, received %.2f", e);
+            float e = get_collision_factor( vel1_y - vel2_y );
+            add_msg( m_debug, "Requested collision factor, received %.2f", e );
 
             // Velocity after collision
             // vel1_x_a = vel1_x, because in x-direction we have no transmission of force
@@ -1367,22 +1383,22 @@ auto map::vehicle_vehicle_collision(
             float vel2_x_a = vel2_x;
             // Transmission of force only in direction of collision_axix_y
             // Equation: partially elastic collision
-            float vel1_y_a = ((m2 * vel2_y * (1 + e) + vel1_y * (m1 - m2 * e)) / (m1 + m2));
-            float vel2_y_a = ((m1 * vel1_y * (1 + e) + vel2_y * (m2 - m1 * e)) / (m1 + m2));
+            float vel1_y_a = ( ( m2 * vel2_y * ( 1 + e ) + vel1_y * ( m1 - m2 * e ) ) / ( m1 + m2 ) );
+            float vel2_y_a = ( ( m1 * vel1_y * ( 1 + e ) + vel2_y * ( m2 - m1 * e ) ) / ( m1 + m2 ) );
             // Add both components; Note: collision_axis is normalized
-            rl_vec2d final1 = (collision_axis_y * vel1_y_a + collision_axis_x * vel1_x_a) * 100.0;
-            rl_vec2d final2 = (collision_axis_y * vel2_y_a + collision_axis_x * vel2_x_a) * 100.0;
+            rl_vec2d final1 = ( collision_axis_y * vel1_y_a + collision_axis_x * vel1_x_a ) * 100.0;
+            rl_vec2d final2 = ( collision_axis_y * vel2_y_a + collision_axis_x * vel2_x_a ) * 100.0;
 
-            veh.move.init(point_rel_ms(final1.as_point()));
-            if (final1.dot_product(veh.face_vec()) < 0) {
+            veh.move.init( point_rel_ms( final1.as_point() ) );
+            if( final1.dot_product( veh.face_vec() ) < 0 ) {
                 // Car is being pushed backwards. Make it move backwards
                 veh.velocity = -final1.magnitude();
             } else {
                 veh.velocity = final1.magnitude();
             }
 
-            veh2.move.init(point_rel_ms(final2.as_point()));
-            if (final2.dot_product(veh2.face_vec()) < 0) {
+            veh2.move.init( point_rel_ms( final2.as_point() ) );
+            if( final2.dot_product( veh2.face_vec() ) < 0 ) {
                 // Car is being pushed backwards. Make it move backwards
                 veh2.velocity = -final2.magnitude();
             } else {
@@ -1390,8 +1406,8 @@ auto map::vehicle_vehicle_collision(
             }
 
             // give veh2 the initiative to proceed next before veh1
-            float avg_of_turn = (veh2.of_turn + veh.of_turn) / 2;
-            if (avg_of_turn < .1f) { avg_of_turn = .1f; }
+            float avg_of_turn = ( veh2.of_turn + veh.of_turn ) / 2;
+            if( avg_of_turn < .1f ) { avg_of_turn = .1f; }
 
             veh.of_turn = avg_of_turn * .9;
             // Clamp veh2's of_turn to at least 1.0 so the priority-queue scheduler
@@ -1399,17 +1415,17 @@ auto map::vehicle_vehicle_collision(
             // Without this the V-2 pq threshold (>= 1.0) would never be reached by
             // avg * 1.1 alone, leaving the hit vehicle stuck and causing veh1 to
             // repeatedly ram it every subsequent turn (BUG-1 follow-up).
-            veh2.of_turn = std::max(1.0f, avg_of_turn * 1.1f);
+            veh2.of_turn = std::max( 1.0f, avg_of_turn * 1.1f );
 
             // Remember that the impulse on vehicle 1 is techncally negative, slowing it
-            veh1_impulse = std::abs(m1 * (vel1_y_a - vel1_y));
-            veh2_impulse = std::abs(m2 * (vel2_y_a - vel2_y));
+            veh1_impulse = std::abs( m1 * ( vel1_y_a - vel1_y ) );
+            veh2_impulse = std::abs( m2 * ( vel2_y_a - vel2_y ) );
         } // end: analytic elastic formula (non-Box2D impulse path)
     } else {
-        const float m1 = to_kilogram(veh.total_mass());
+        const float m1 = to_kilogram( veh.total_mass() );
         // Collision is perfectly inelastic for simplicity
         // Assume veh2 is standing still
-        dmg_veh1 = (std::abs(cmps_to_mps(veh.vertical_velocity)) * (m1 / 10)) / 2;
+        dmg_veh1 = ( std::abs( cmps_to_mps( veh.vertical_velocity ) ) * ( m1 / 10 ) ) / 2;
         dmg_veh2 = dmg_veh1;
         veh.vertical_velocity = 0;
     }
@@ -1417,7 +1433,7 @@ auto map::vehicle_vehicle_collision(
     // To facilitate pushing vehicles, because the simulation pretends cars are ping pong balls that
     // get all their velocity in zero starting distance to slam into eachother while touching. Stay
     // under 6 m/s to push cars without damaging them
-    if (delta_vel >= 6.0f) {
+    if( delta_vel >= 6.0f ) {
         dmg_veh1 = veh1_impulse * dmg_adjust;
         dmg_veh2 = veh2_impulse * dmg_adjust;
     } else {
@@ -1427,88 +1443,92 @@ auto map::vehicle_vehicle_collision(
 
 
     int coll_parts_cnt = 0; // quantity of colliding parts between veh1 and veh2
-    for (const auto& veh_veh_coll : collisions) {
-        if (&veh2 == static_cast<vehicle*>(veh_veh_coll.target)) { coll_parts_cnt++; }
+    for( const auto& veh_veh_coll : collisions ) {
+        if( &veh2 == static_cast<vehicle * >( veh_veh_coll.target ) ) { coll_parts_cnt++; }
     }
 
     const float dmg1_part = dmg_veh1 / coll_parts_cnt;
     const float dmg2_part = dmg_veh2 / coll_parts_cnt;
 
     // damage colliding parts (only veh1 and veh2 parts)
-    for (const auto& veh_veh_coll : collisions) {
-        if (&veh2 != static_cast<vehicle*>(veh_veh_coll.target)) { continue; }
+    for( const auto& veh_veh_coll : collisions ) {
+        if( &veh2 != static_cast<vehicle * >( veh_veh_coll.target ) ) { continue; }
 
-        int parm1 = veh.part_with_feature(veh_veh_coll.part, VPFLAG_ARMOR, true);
-        if (parm1 < 0) { parm1 = veh_veh_coll.part; }
-        int parm2 = veh2.part_with_feature(veh_veh_coll.target_part, VPFLAG_ARMOR, true);
-        if (parm2 < 0) { parm2 = veh_veh_coll.target_part; }
+        int parm1 = veh.part_with_feature( veh_veh_coll.part, VPFLAG_ARMOR, true );
+        if( parm1 < 0 ) { parm1 = veh_veh_coll.part; }
+        int parm2 = veh2.part_with_feature( veh_veh_coll.target_part, VPFLAG_ARMOR, true );
+        if( parm2 < 0 ) { parm2 = veh_veh_coll.target_part; }
 
         // NOTE: This should just be add
         // But for some reason you cant add mnt_veh to rel_veh?
-        epicenter1 += veh.part(parm1).mount.raw();
-        veh.damage(parm1, dmg1_part, DT_BASH);
+        epicenter1 += veh.part( parm1 ).mount.raw();
+        veh.damage( parm1, dmg1_part, DT_BASH );
 
-        epicenter2 += veh2.part(parm2).mount.raw();
-        veh2.damage(parm2, dmg2_part, DT_BASH);
+        epicenter2 += veh2.part( parm2 ).mount.raw();
+        veh2.damage( parm2, dmg2_part, DT_BASH );
     }
 
     epicenter2.x() /= coll_parts_cnt;
     epicenter2.y() /= coll_parts_cnt;
 
-    if (dmg2_part > 100) {
+    if( dmg2_part > 100 ) {
         // Shake vehicle because of collision
         // FIXME: I dunno how else to do this, it comes out to a mount but is relative in the
         // meantime
-        veh2.damage_all(dmg2_part / 2, dmg2_part, DT_BASH, tripoint_mnt_veh(epicenter2.raw()));
+        veh2.damage_all( dmg2_part / 2, dmg2_part, DT_BASH, tripoint_mnt_veh( epicenter2.raw() ) );
     }
 
-    if (dmg_veh1 > 800) { veh.skidding = true; }
+    if( dmg_veh1 > 800 ) { veh.skidding = true; }
 
-    if (dmg_veh2 > 800) { veh2.skidding = true; }
+    if( dmg_veh2 > 800 ) { veh2.skidding = true; }
 
     // Return the impulse of the collision
     return dmg_veh1;
 }
 
-bool map::check_vehicle_zones(const int zlev) {
-    for (const vehicle_handle handle : get_cache(zlev).zone_vehicles) {
-        const vehicle *const veh = resolve_vehicle(handle);
-        if (veh != nullptr && veh->zones_dirty) { return true; }
+bool map::check_vehicle_zones( const int zlev )
+{
+    for( const vehicle_handle handle : get_cache( zlev ).zone_vehicles ) {
+        const vehicle *const veh = resolve_vehicle( handle );
+        if( veh != nullptr && veh->zones_dirty ) { return true; }
     }
     return false;
 }
 
-std::vector<zone_data*> map::get_vehicle_zones(const int zlev) {
-    std::vector<zone_data*> veh_zones;
+std::vector<zone_data *> map::get_vehicle_zones( const int zlev )
+{
+    std::vector<zone_data *> veh_zones;
     bool rebuild = false;
-    for (const vehicle_handle handle : get_cache(zlev).zone_vehicles) {
-        vehicle *const veh = resolve_vehicle(handle);
-        if (veh == nullptr) { continue; }
-        if (veh->refresh_zones()) { rebuild = true; }
-        for (auto& zone : veh->loot_zones) { veh_zones.emplace_back(&zone.second); }
+    for( const vehicle_handle handle : get_cache( zlev ).zone_vehicles ) {
+        vehicle *const veh = resolve_vehicle( handle );
+        if( veh == nullptr ) { continue; }
+        if( veh->refresh_zones() ) { rebuild = true; }
+        for( auto& zone : veh->loot_zones ) { veh_zones.emplace_back( &zone.second ); }
     }
-    if (rebuild) { zone_manager::get_manager().cache_vzones(); }
+    if( rebuild ) { zone_manager::get_manager().cache_vzones(); }
     return veh_zones;
 }
 
-void map::register_vehicle_zone(vehicle* veh, const int zlev) {
-    auto& ch = get_cache(zlev);
-    ch.zone_vehicles.insert(veh->handle());
+void map::register_vehicle_zone( vehicle* veh, const int zlev )
+{
+    auto& ch = get_cache( zlev );
+    ch.zone_vehicles.insert( veh->handle() );
 }
 
-bool map::deregister_vehicle_zone(zone_data& zone) {
-    if (const std::optional<vpart_reference> vp =
-            veh_at(abs_to_map_local(*this, tripoint_abs_ms(zone.get_start_point())))
-                .part_with_feature("CARGO", false)) {
-        const auto bounds = vp->vehicle().loot_zones.equal_range(vp->mount());
+bool map::deregister_vehicle_zone( zone_data& zone )
+{
+    if( const std::optional<vpart_reference> vp =
+            veh_at( abs_to_map_local( *this, tripoint_abs_ms( zone.get_start_point() ) ) )
+            .part_with_feature( "CARGO", false ) ) {
+        const auto bounds = vp->vehicle().loot_zones.equal_range( vp->mount() );
         const auto it = std::ranges::
-            find_if(std::ranges::subrange(bounds.first, bounds.second), [&zone](const auto& entry) {
-                return &zone == &entry.second;
-            });
-        if (it != bounds.second) {
-            vp->vehicle().loot_zones.erase(it);
-            if (vp->vehicle().loot_zones.empty()) {
-                get_cache(vp->vehicle().abs_sm_pos.z()).zone_vehicles.erase(vp->vehicle().handle());
+        find_if( std::ranges::subrange( bounds.first, bounds.second ), [&zone]( const auto & entry ) {
+            return &zone == &entry.second;
+        } );
+        if( it != bounds.second ) {
+            vp->vehicle().loot_zones.erase( it );
+            if( vp->vehicle().loot_zones.empty() ) {
+                get_cache( vp->vehicle().abs_sm_pos.z() ).zone_vehicles.erase( vp->vehicle().handle() );
             }
             return true;
         }
@@ -1518,58 +1538,62 @@ bool map::deregister_vehicle_zone(zone_data& zone) {
 
 // 3D vehicle functions
 
-VehicleList map::get_vehicles(const tripoint_bub_sm& start, const tripoint_bub_sm& end) {
+VehicleList map::get_vehicles( const tripoint_bub_sm& start, const tripoint_bub_sm& end )
+{
     auto chunk_start = start;
-    clip_to_bounds(chunk_start);
+    clip_to_bounds( chunk_start );
     auto chunk_end = end;
-    clip_to_bounds(chunk_end);
+    clip_to_bounds( chunk_end );
     auto vehs = VehicleList{};
 
-    if (chunk_start.x() > chunk_end.x() || chunk_start.y() > chunk_end.y()
-        || chunk_start.z() > chunk_end.z()) {
+    if( chunk_start.x() > chunk_end.x() || chunk_start.y() > chunk_end.y()
+        || chunk_start.z() > chunk_end.z() ) {
         return vehs;
     }
 
-    for (const auto sm_pos : tripoint_range<tripoint_bub_sm>(chunk_start, chunk_end)) {
-        auto* current_submap = get_submap_at_grid(sm_pos);
-        if (current_submap == nullptr) { continue; }
-        for (const auto& elem : current_submap->vehicles) {
+    for( const auto sm_pos : tripoint_range<tripoint_bub_sm>( chunk_start, chunk_end ) ) {
+        auto* current_submap = get_submap_at_grid( sm_pos );
+        if( current_submap == nullptr ) { continue; }
+        for( const auto& elem : current_submap->vehicles ) {
             auto w = wrapped_vehicle{};
             w.v = elem.get();
-            w.pos = abs_to_map_local(*this, w.v->abs_ms_location());
-            vehs.push_back(w);
+            w.pos = abs_to_map_local( *this, w.v->abs_ms_location() );
+            vehs.push_back( w );
         }
     }
 
     return vehs;
 }
 
-optional_vpart_position map::veh_at(const tripoint_abs_ms& p) const {
-    return veh_at(abs_to_map_local(*this, p));
+optional_vpart_position map::veh_at( const tripoint_abs_ms& p ) const
+{
+    return veh_at( abs_to_map_local( *this, p ) );
 }
 
-optional_vpart_position map::veh_at(const tripoint_bub_ms& p) const {
-    if (!inbounds(p) || !const_cast<map*>(this)->get_cache(p.z()).veh_in_active_range) {
-        return optional_vpart_position(std::nullopt);
+optional_vpart_position map::veh_at( const tripoint_bub_ms& p ) const
+{
+    if( !inbounds( p ) || !const_cast<map * >( this )->get_cache( p.z() ).veh_in_active_range ) {
+        return optional_vpart_position( std::nullopt );
     }
 
     auto part_num = 1;
-    auto* const veh = const_cast<map*>(this)->veh_at_internal(p, part_num);
-    if (!veh) { return optional_vpart_position(std::nullopt); }
-    return optional_vpart_position(vpart_position(*veh, part_num));
+    auto* const veh = const_cast<map *>( this )->veh_at_internal( p, part_num );
+    if( !veh ) { return optional_vpart_position( std::nullopt ); }
+    return optional_vpart_position( vpart_position( *veh, part_num ) );
 }
 
-const vehicle* map::veh_at_internal(const tripoint_bub_ms& p, int& part_num) const {
+const vehicle *map::veh_at_internal( const tripoint_bub_ms& p, int &part_num ) const
+{
     // This function is called A LOT. Move as much out of here as possible.
-    const level_cache& ch = get_cache(p.z());
-    if (!ch.veh_in_active_range || !ch.veh_exists_at[ch.idx(p.x(), p.y())]) {
+    const level_cache& ch = get_cache( p.z() );
+    if( !ch.veh_in_active_range || !ch.veh_exists_at[ch.idx( p.x(), p.y() )] ) {
         part_num = -1;
         return nullptr; // Clear cache indicates no vehicle. This should optimize a great deal.
     }
 
-    const auto it = ch.veh_cached_parts.find(p);
-    if (it != ch.veh_cached_parts.end()) {
-        if (vehicle *const veh = resolve_vehicle(it->second.first); veh != nullptr) {
+    const auto it = ch.veh_cached_parts.find( p );
+    if( it != ch.veh_cached_parts.end() ) {
+        if( vehicle *const veh = resolve_vehicle( it->second.first ); veh != nullptr ) {
             part_num = it->second.second;
             return veh;
         }
@@ -1577,93 +1601,97 @@ const vehicle* map::veh_at_internal(const tripoint_bub_ms& p, int& part_num) con
         // being cleared (e.g. a mapbuffer eviction outrunning cache cleanup).
         // Self-heal rather than dereference a freed pointer — an expected,
         // handled state now, not a bug to report.
-        level_cache& mutable_ch = const_cast<level_cache&>(ch);
-        mutable_ch.veh_exists_at[mutable_ch.idx(p.x(), p.y())] = false;
-        mutable_ch.veh_cached_parts.erase(p);
+        level_cache& mutable_ch = const_cast<level_cache &>( ch );
+        mutable_ch.veh_exists_at[mutable_ch.idx( p.x(), p.y() )] = false;
+        mutable_ch.veh_cached_parts.erase( p );
         part_num = -1;
         return nullptr;
     }
 
-    debugmsg("vehicle part cache indicated vehicle not found: %d %d %d", p.x(), p.y(), p.z());
+    debugmsg( "vehicle part cache indicated vehicle not found: %d %d %d", p.x(), p.y(), p.z() );
     part_num = -1;
     return nullptr;
 }
 
-vehicle* map::veh_at_internal(const tripoint_bub_ms& p, int& part_num) {
-    return const_cast<vehicle*>(const_cast<const map*>(this)->veh_at_internal(p, part_num));
+vehicle *map::veh_at_internal( const tripoint_bub_ms& p, int &part_num )
+{
+    return const_cast<vehicle *>( const_cast<const map*>( this )->veh_at_internal( p, part_num ) );
 }
 
-void map::board_vehicle(const tripoint_bub_ms& pos, Character* who) {
-    if (who == nullptr) {
-        debugmsg("map::board_vehicle: null player");
+void map::board_vehicle( const tripoint_bub_ms& pos, Character* who )
+{
+    if( who == nullptr ) {
+        debugmsg( "map::board_vehicle: null player" );
         return;
     }
 
-    auto vp = veh_at(pos).part_with_feature(VPFLAG_BOARDABLE, true);
-    if ( !vp ) {
+    auto vp = veh_at( pos ).part_with_feature( VPFLAG_BOARDABLE, true );
+    if( !vp ) {
         const auto abs_pos = map_local_to_abs( *this, pos );
         vp = get_mapbuffer().veh_at( abs_pos, {
             .mode = mapbuffer_lookup_mode::resident_only,
         } ).part_with_feature( VPFLAG_BOARDABLE, true );
     }
-    if (!vp) {
-        if (who->grab_point.x() == 0 && who->grab_point.y() == 0) {
-            debugmsg("map::board_vehicle: vehicle not found");
+    if( !vp ) {
+        if( who->grab_point.x() == 0 && who->grab_point.y() == 0 ) {
+            debugmsg( "map::board_vehicle: vehicle not found" );
         }
         return;
     }
-    if (vp->part().has_flag(vehicle_part::passenger_flag)) {
-        player* psg = vp->vehicle().get_passenger(vp->part_index());
-        debugmsg("map::board_vehicle: passenger (%s) is already there", psg ? psg->name : "<null>");
-        unboard_vehicle(pos);
+    if( vp->part().has_flag( vehicle_part::passenger_flag ) ) {
+        player* psg = vp->vehicle().get_passenger( vp->part_index() );
+        debugmsg( "map::board_vehicle: passenger (%s) is already there", psg ? psg->name : "<null>" );
+        unboard_vehicle( pos );
     }
-    vp->part().set_flag(vehicle_part::passenger_flag);
+    vp->part().set_flag( vehicle_part::passenger_flag );
     vp->part().passenger_id = who->getID();
     vp->vehicle().invalidate_mass();
 
-    who->setpos(pos);
+    who->setpos( pos );
     who->boarded_vehicle = vp->vehicle().handle();
-    who->boarded_part = static_cast<int>(vp->part_index());
+    who->boarded_part = static_cast<int>( vp->part_index() );
     who->in_vehicle = true;
-    if (who->is_avatar()) {
+    if( who->is_avatar() ) {
         // update_map() re-confirms bubble-relative coordinates via its own
         // setpos() call; that is bookkeeping, not a movement, so it must not
         // trip check_position_write_owner() now that who is boarded.
         vp->vehicle().committing_occupants = true;
-        g->update_map(g->u);
+        g->update_map( g->u );
         vp->vehicle().committing_occupants = false;
     }
 }
 
-void map::unboard_vehicle(const vpart_reference& vp, Character* passenger, bool dead_passenger) {
+void map::unboard_vehicle( const vpart_reference& vp, Character* passenger, bool dead_passenger )
+{
     // Mark the part as un-occupied regardless of whether there's a live passenger here.
-    vp.part().remove_flag(vehicle_part::passenger_flag);
+    vp.part().remove_flag( vehicle_part::passenger_flag );
     vp.vehicle().invalidate_mass();
 
-    if (!passenger) {
-        if (!dead_passenger) { debugmsg("map::unboard_vehicle: passenger not found"); }
+    if( !passenger ) {
+        if( !dead_passenger ) { debugmsg( "map::unboard_vehicle: passenger not found" ); }
         return;
     }
     passenger->in_vehicle = false;
     passenger->boarded_vehicle = vehicle_handle();
     passenger->boarded_part = -1;
     // Only make vehicle go out of control if the driver is the one unboarding.
-    if (passenger->controlling_vehicle) { vp.vehicle().skidding = true; }
+    if( passenger->controlling_vehicle ) { vp.vehicle().skidding = true; }
     passenger->controlling_vehicle = false;
 }
 
-void map::unboard_vehicle(const tripoint_bub_ms& p, bool dead_passenger) {
-    const std::optional<vpart_reference> vp = veh_at(p).part_with_feature(VPFLAG_BOARDABLE, false);
+void map::unboard_vehicle( const tripoint_bub_ms& p, bool dead_passenger )
+{
+    const std::optional<vpart_reference> vp = veh_at( p ).part_with_feature( VPFLAG_BOARDABLE, false );
     player* passenger = nullptr;
-    if (!vp) {
+    if( !vp ) {
         // A dead passenger unboarding a vehicle whose boardable part no longer
         // resolves (vehicle despawned, part removed) is expected teardown, not an
         // error: emitting a debugmsg here poisons the whole test run via
         // debug_has_error_been_observed().
-        if (!dead_passenger) { debugmsg("map::unboard_vehicle: vehicle not found"); }
+        if( !dead_passenger ) { debugmsg( "map::unboard_vehicle: vehicle not found" ); }
         // Try and force unboard the player anyway.
-        passenger = g->critter_at<player>(p);
-        if (passenger) {
+        passenger = g->critter_at<player>( p );
+        if( passenger ) {
             passenger->in_vehicle = false;
             passenger->boarded_vehicle = vehicle_handle();
             passenger->boarded_part = -1;
@@ -1672,32 +1700,33 @@ void map::unboard_vehicle(const tripoint_bub_ms& p, bool dead_passenger) {
         return;
     }
     passenger = vp->get_passenger();
-    unboard_vehicle(*vp, passenger, dead_passenger);
+    unboard_vehicle( *vp, passenger, dead_passenger );
 }
 
 
-bool map::displace_vehicle(vehicle& veh, const tripoint_rel_ms& dp) {
+bool map::displace_vehicle( vehicle& veh, const tripoint_rel_ms& dp )
+{
     const auto src = veh.abs_ms_location();
     const auto dest = src + dp;
-    const auto dest_proj = project_remain<coords::sm>(dest);
+    const auto dest_proj = project_remain<coords::sm>( dest );
     const bool sm_shift = veh.abs_sm_pos != dest_proj.quotient_tripoint;
 
     submap* const src_submap =
-        sm_shift ? MAPBUFFER_REGISTRY.get(bound_dimension_).lookup_submap_in_memory(veh.abs_sm_pos)
-                 : nullptr;
+        sm_shift ? MAPBUFFER_REGISTRY.get( bound_dimension_ ).lookup_submap_in_memory( veh.abs_sm_pos )
+        : nullptr;
     submap* const dst_submap =
         sm_shift
-            ? MAPBUFFER_REGISTRY.get(bound_dimension_)
-                  .lookup_submap_in_memory(dest_proj.quotient_tripoint)
-            : nullptr;
+        ? MAPBUFFER_REGISTRY.get( bound_dimension_ )
+        .lookup_submap_in_memory( dest_proj.quotient_tripoint )
+        : nullptr;
 
     std::set<int> smzs;
     size_t our_i = 0;
 
-    if (sm_shift) {
-        if (src_submap == nullptr) {
-            debugmsg("displace_vehicle: src submap null for '%s' at %d,%d,%d", veh.name, src.x(),
-                     src.y(), src.z());
+    if( sm_shift ) {
+        if( src_submap == nullptr ) {
+            debugmsg( "displace_vehicle: src submap null for '%s' at %d,%d,%d", veh.name, src.x(),
+                      src.y(), src.z() );
             return false;
         }
 
@@ -1705,31 +1734,31 @@ bool map::displace_vehicle(vehicle& veh, const tripoint_rel_ms& dp) {
         // get_submap_at() handles out-of-bubble positions via the mapbuffer fallback,
         // so this works for vehicles loaded outside the reality bubble.
         bool found = false;
-        for (size_t i = 0; i < src_submap->vehicles.size(); ++i) {
-            if (src_submap->vehicles[i].get() == &veh) {
+        for( size_t i = 0; i < src_submap->vehicles.size(); ++i ) {
+            if( src_submap->vehicles[i].get() == &veh ) {
                 our_i = i;
                 found = true;
                 break;
             }
         }
 
-        if (!found) {
-            add_msg(m_debug, "displace_vehicle [%s] failed", veh.name);
+        if( !found ) {
+            add_msg( m_debug, "displace_vehicle [%s] failed", veh.name );
             return false;
         }
 
         // Stop the vehicle if its destination submap is not loaded.
         // Safety net for cases where act_on_map consumed movement before collision fired.
-        if (dst_submap == nullptr) {
+        if( dst_submap == nullptr ) {
             veh.stop();
-            dbg(DL::Error) << "map::displace_vehicle: dst submap not loaded, stopping vehicle dp="
-                           << dp;
+            dbg( DL::Error ) << "map::displace_vehicle: dst submap not loaded, stopping vehicle dp="
+                             << dp;
             return true;
         }
     }
 
     // Need old coordinates to check for remote control
-    const bool remote = veh.remote_controlled(g->u);
+    const bool remote = veh.remote_controlled( g->u );
 
 
     // Occupant positions are no longer written here, once per crossed tile:
@@ -1739,22 +1768,22 @@ bool map::displace_vehicle(vehicle& veh, const tripoint_rel_ms& dp) {
     // Capture the old footprint in absolute submap coordinates BEFORE parts
     // are updated by advance_precalc_mounts.  The player may shift the map
     // origin below, so bubble coordinates would be stale by on_vehicle_moved().
-    auto veh_abs_sm_min = tripoint_abs_sm(INT_MAX, INT_MAX, INT_MAX);
-    auto veh_abs_sm_max = tripoint_abs_sm(INT_MIN, INT_MIN, INT_MIN);
+    auto veh_abs_sm_min = tripoint_abs_sm( INT_MAX, INT_MAX, INT_MAX );
+    auto veh_abs_sm_max = tripoint_abs_sm( INT_MIN, INT_MIN, INT_MIN );
 
-    auto expand_bounds = [&](const tripoint_abs_ms& base, const vehicle_part& prt) {
+    auto expand_bounds = [&]( const tripoint_abs_ms & base, const vehicle_part & prt ) {
         const auto p = project_to<coords::sm>(
-            base + tripoint_rel_ms(prt.precalc[0], prt.mount.z() + prt.z_terrain[0]));
-        veh_abs_sm_min.x() = std::min(veh_abs_sm_min.x(), p.x());
-        veh_abs_sm_min.y() = std::min(veh_abs_sm_min.y(), p.y());
-        veh_abs_sm_min.z() = std::min(veh_abs_sm_min.z(), p.z());
-        veh_abs_sm_max.x() = std::max(veh_abs_sm_max.x(), p.x());
-        veh_abs_sm_max.y() = std::max(veh_abs_sm_max.y(), p.y());
-        veh_abs_sm_max.z() = std::max(veh_abs_sm_max.z(), p.z());
+                           base + tripoint_rel_ms( prt.precalc[0], prt.mount.z() + prt.z_terrain[0] ) );
+        veh_abs_sm_min.x() = std::min( veh_abs_sm_min.x(), p.x() );
+        veh_abs_sm_min.y() = std::min( veh_abs_sm_min.y(), p.y() );
+        veh_abs_sm_min.z() = std::min( veh_abs_sm_min.z(), p.z() );
+        veh_abs_sm_max.x() = std::max( veh_abs_sm_max.x(), p.x() );
+        veh_abs_sm_max.y() = std::max( veh_abs_sm_max.y(), p.y() );
+        veh_abs_sm_max.z() = std::max( veh_abs_sm_max.z(), p.z() );
     };
 
-    for (const vpart_reference& vpr : veh.get_all_parts()) {
-        if (!vpr.part().removed) { expand_bounds(src, vpr.part()); }
+    for( const vpart_reference& vpr : veh.get_all_parts() ) {
+        if( !vpr.part().removed ) { expand_bounds( src, vpr.part() ); }
     }
 
     veh.shed_loose_parts();
@@ -1767,54 +1796,54 @@ bool map::displace_vehicle(vehicle& veh, const tripoint_rel_ms& dp) {
     {
         avatar& you = get_avatar();
         const auto clear_matching_overlay =
-            [&](const tripoint_abs_ms& pos, const std::string& tile_id) {
-                if (you.get_memorized_tile(pos).tile == tile_id) {
-                    you.clear_memorized_overlay(pos);
-                }
-            };
+        [&]( const tripoint_abs_ms & pos, const std::string & tile_id ) {
+            if( you.get_memorized_tile( pos ).tile == tile_id ) {
+                you.clear_memorized_overlay( pos );
+            }
+        };
 
-        for (const auto& vpr : veh.get_all_parts()) {
-            if (!vpr.part().removed) {
+        for( const auto& vpr : veh.get_all_parts() ) {
+            if( !vpr.part().removed ) {
                 const auto& part = vpr.part();
                 const auto part_offset =
-                    tripoint_rel_ms(part.precalc[0], part.mount.z() + part.z_terrain[0]);
-                you.clear_memorized_overlay(src + part_offset);
+                    tripoint_rel_ms( part.precalc[0], part.mount.z() + part.z_terrain[0] );
+                you.clear_memorized_overlay( src + part_offset );
 
                 const auto& part_info = part.info();
-                if (part_info.has_flag(VPFLAG_LADDER)) {
+                if( part_info.has_flag( VPFLAG_LADDER ) ) {
                     const auto ladder_pos = src + part_offset;
                     const auto rope_tile = "vp_" + part_info.get_id().str();
                     const auto min_rope_z =
-                        std::max(ladder_pos.z() - part_info.ladder_length(), -OVERMAP_DEPTH);
-                    for (const auto z : std::views::iota(min_rope_z, ladder_pos.z())) {
+                        std::max( ladder_pos.z() - part_info.ladder_length(), -OVERMAP_DEPTH );
+                    for( const auto z : std::views::iota( min_rope_z, ladder_pos.z() ) ) {
                         auto rope_pos = ladder_pos;
                         rope_pos.z() = z;
-                        clear_matching_overlay(rope_pos, rope_tile);
+                        clear_matching_overlay( rope_pos, rope_tile );
                     }
                 }
             }
         }
     }
 
-    smzs = veh.advance_precalc_mounts(src);
+    smzs = veh.advance_precalc_mounts( src );
     veh.sm_ms_pos = dest_proj.remainder;
 
     // Expand bounds with the new footprint (precalc[0] now holds new offsets).
-    for (const vpart_reference& vpr : veh.get_all_parts()) {
-        if (!vpr.part().removed) { expand_bounds(dest, vpr.part()); }
+    for( const vpart_reference& vpr : veh.get_all_parts() ) {
+        if( !vpr.part().removed ) { expand_bounds( dest, vpr.part() ); }
     }
 
-    if (sm_shift && src_submap != dst_submap) {
+    if( sm_shift && src_submap != dst_submap ) {
         auto src_submap_veh_it = src_submap->vehicles.begin() + our_i;
-        dst_submap->vehicles.push_back(std::move(*src_submap_veh_it));
-        src_submap->vehicles.erase(src_submap_veh_it);
+        dst_submap->vehicles.push_back( std::move( *src_submap_veh_it ) );
+        src_submap->vehicles.erase( src_submap_veh_it );
         dst_submap->is_uniform = false;
-        invalidate_max_populated_zlev(dest.z());
+        invalidate_max_populated_zlev( dest.z() );
 
         // Update abs_sm_pos for the submap boundary crossing.
         const auto prev = veh.abs_sm_pos;
         veh.abs_sm_pos = dest_proj.quotient_tripoint;
-        veh.update_overmap(prev);
+        veh.update_overmap( prev );
     }
 
     // global positions of vehicle loot zones have changed.
@@ -1822,43 +1851,44 @@ bool map::displace_vehicle(vehicle& veh, const tripoint_rel_ms& dp) {
 
     auto vehicle_moved_marked = false;
     const auto mark_vehicle_moved = [&]() {
-        if (vehicle_moved_marked) { return; }
-        std::ranges::for_each(smzs, [&](const int vsmz) {
+        if( vehicle_moved_marked ) { return; }
+        std::ranges::for_each( smzs, [&]( const int vsmz ) {
             const auto smz = dest.z() + vsmz;
-            const auto veh_sm_min = abs_to_bub(tripoint_abs_sm(veh_abs_sm_min.xy(), smz));
-            const auto veh_sm_max = abs_to_bub(tripoint_abs_sm(veh_abs_sm_max.xy(), smz));
-            on_vehicle_moved(veh_sm_min, veh_sm_max, smz);
-        });
+            const auto veh_sm_min = abs_to_bub( tripoint_abs_sm( veh_abs_sm_min.xy(), smz ) );
+            const auto veh_sm_max = abs_to_bub( tripoint_abs_sm( veh_abs_sm_max.xy(), smz ) );
+            on_vehicle_moved( veh_sm_min, veh_sm_max, smz );
+        } );
         vehicle_moved_marked = true;
     };
 
     // Membership stays per tile: add this vehicle's new footprint to the cache
     // immediately, same as before occupant commits were deferred.
-    add_vehicle_to_cache(&veh);
+    add_vehicle_to_cache( &veh );
 
-    if (src.z() != dest.z()) {
-        update_vehicle_list(dst_submap, dest.z());
+    if( src.z() != dest.z() ) {
+        update_vehicle_list( dst_submap, dest.z() );
         // delete the vehicle from the source z-level vehicle cache set if it is no longer on
         // that z-level
-        level_cache& ch2 = get_cache(src.z());
-        ch2.vehicle_list.erase(veh.handle());
-        ch2.zone_vehicles.erase(veh.handle());
+        level_cache& ch2 = get_cache( src.z() );
+        ch2.vehicle_list.erase( veh.handle() );
+        ch2.zone_vehicles.erase( veh.handle() );
         veh.check_is_heli_landed();
     }
-    if (veh.is_flying_in_air()) { veh.check_is_heli_landed(); }
-    if (remote) {
+    if( veh.is_flying_in_air() ) { veh.check_is_heli_landed(); }
+    if( remote ) {
         // Has to be after update_map or coordinates won't be valid
-        g->setremoteveh(&veh);
+        g->setremoteveh( &veh );
     }
     mark_vehicle_moved();
-    if (phys_world) { phys_world->on_vehicle_moved(veh); }
+    if( phys_world ) { phys_world->on_vehicle_moved( veh ); }
     return true;
 }
 auto map::resolve_vehicle_terrain_impulse(
-    vehicle& v, tripoint_bub_ms tile_pos, float tile_mass_kg, float restitution)
-    -> physics::terrain_impulse_result {
-    if (!phys_world) { return {}; }
-    return phys_world->resolve_terrain_impulse(v, tile_pos, tile_mass_kg, restitution);
+    vehicle& v, tripoint_bub_ms tile_pos, float tile_mass_kg, float restitution )
+-> physics::terrain_impulse_result
+{
+    if( !phys_world ) { return {}; }
+    return phys_world->resolve_terrain_impulse( v, tile_pos, tile_mass_kg, restitution );
 }
 
 auto map::get_physics_world() const -> physics::PhysicsWorld* { return phys_world.get(); }

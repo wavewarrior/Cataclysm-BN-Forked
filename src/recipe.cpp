@@ -411,18 +411,19 @@ detached_ptr<item> recipe::create_result() const
     return newit;
 }
 
-std::vector<detached_ptr<item>> recipe::create_results( int batch ) const
-{
+std::vector<detached_ptr<item>> recipe::create_results( int batch ) const {
     std::vector<detached_ptr<item>> items;
 
     const bool by_charges = item::count_by_charges( result_ );
-    if( contained || !by_charges ) {
+    if( contained || !by_charges )
+    {
         // by_charges items get their charges multiplied in create_result
         const int num_results = by_charges ? batch : batch * result_mult;
         for( int i = 0; i < num_results; i++ ) {
             items.push_back( create_result() );
         }
-    } else {
+    } else
+    {
         detached_ptr<item> newit = create_result();
         newit->charges *= batch;
         items.push_back( std::move( newit ) );
@@ -431,10 +432,10 @@ std::vector<detached_ptr<item>> recipe::create_results( int batch ) const
     return items;
 }
 
-std::vector<detached_ptr<item>> recipe::create_byproducts( int batch ) const
-{
+std::vector<detached_ptr<item>> recipe::create_byproducts( int batch ) const {
     std::vector<detached_ptr<item>> bps;
-    for( const auto &e : byproducts ) {
+    for( const auto &e : byproducts )
+    {
         detached_ptr<item> obj = item::spawn( e.first, calendar::turn, item::default_charges_tag{} );
         if( obj->has_flag( flag_VARSIZE ) ) {
             obj->set_flag( flag_FIT );
@@ -552,11 +553,11 @@ auto recipe::result_name( const bool decorated ) const -> std::string
 bool recipe::will_be_blacklisted() const
 {
     if( requirements_.is_blacklisted() ) {
-    return true;
-}
+        return true;
+    }
 
-auto any_is_blacklisted = []( const std::vector<std::pair<requirement_id, int>> &reqs ) {
-    auto req_is_blacklisted = []( const std::pair<requirement_id, int> &req ) {
+    auto any_is_blacklisted = []( const std::vector<std::pair<requirement_id, int>> &reqs ) {
+        auto req_is_blacklisted = []( const std::pair<requirement_id, int> &req ) {
             return req.first->is_blacklisted();
         };
 
@@ -654,7 +655,7 @@ bool recipe::hot_result() const
     //
     // TODO: Make this less of a hack
     if( create_result()->is_food() ) {
-    const requirement_data::alter_tool_comp_vector &tool_lists = simple_requirements().get_tools();
+        const requirement_data::alter_tool_comp_vector &tool_lists = simple_requirements().get_tools();
         for( const std::vector<tool_comp> &tools : tool_lists ) {
             for( const tool_comp &t : tools ) {
                 if( t.type == itype_hotplate ) {
@@ -669,7 +670,7 @@ bool recipe::hot_result() const
 bool recipe::dehydrate_result() const
 {
     if( create_result()->is_food() ) {
-    const requirement_data::alter_tool_comp_vector &tool_lists = simple_requirements().get_tools();
+        const requirement_data::alter_tool_comp_vector &tool_lists = simple_requirements().get_tools();
         for( const std::vector<tool_comp> &tools : tool_lists ) {
             for( const tool_comp &t : tools ) {
                 if( t.type == itype_dehydrator || t.type == itype_char_smoker ) {
@@ -696,11 +697,11 @@ int recipe::makes_amount() const
 int recipe::disassembly_batch_size() const
 {
     if( !result_->count_by_charges() ) {
-    return 1;
-} else if( charges.has_value() ) {
-    return *charges;
-} else {
-    return result_->charges_default();
+        return 1;
+    } else if( charges.has_value() ) {
+        return *charges;
+    } else {
+        return result_->charges_default();
     }
 }
 

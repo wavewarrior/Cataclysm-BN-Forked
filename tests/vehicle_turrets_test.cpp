@@ -46,7 +46,7 @@ static auto biggest_tank(const itype_id& ammo) -> const vpart_info* {
         // can_reload_with covers both tanks hard-wired to this ammo and plain
         // general-purpose watertight containers (whose fuel_type is unset), which
         // the old `fuel->ammo->type == ammo` check silently rejected.
-        if (item::spawn_temporary( vp.item )->can_reload_with( ammo ) ) { res.push_back( &vp ); }
+        if (item::spawn_temporary(vp.item)->can_reload_with(ammo)) { res.push_back(&vp); }
     }
 
     if (res.empty()) { return nullptr; }
@@ -65,8 +65,8 @@ TEST_CASE("vehicle_turret", "[vehicle][gun][magazine][.]") {
     avatar& player_character = get_avatar();
     for (auto e : turret_types()) {
         SECTION(e->name()) {
-            vehicle* veh = here.add_vehicle(vproto_id("none"), tripoint_bub_ms(65, 65, 0),
-                                             270_degrees, 0, 0);
+            vehicle* veh =
+                here.add_vehicle(vproto_id("none"), tripoint_bub_ms(65, 65, 0), 270_degrees, 0, 0);
             REQUIRE(veh);
 
             const int idx = veh->install_part(tripoint_mnt_veh::zero(), e->get_id(), true);
@@ -80,7 +80,7 @@ TEST_CASE("vehicle_turret", "[vehicle][gun][magazine][.]") {
             // rather than reinterpreting ammo_default()'s string as an ammotype — the
             // two are separate id namespaces, and the reinterpret produced invalid
             // ammotypes for guns whose default ammo id doesn't name a category.
-            auto& gun = veh->part( idx ).get_base();
+            auto& gun = veh->part(idx).get_base();
             const auto ammo = gun.ammo_default();
 
             if (veh->part_flag(idx, "USE_TANKS")) {

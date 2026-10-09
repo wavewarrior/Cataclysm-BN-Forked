@@ -105,10 +105,10 @@ auto reset_vehicle_motion( vehicle_motion_state &state, const vehicle_render_pos
 
 auto rebase_vehicle_motion( vehicle_motion_state &state, float dx, float dy ) -> void
 {
-for( vehicle_render_pose *p : { &state.shown, &state.seg_from, &state.seg_to } ) {
-    p->x += dx;
-    p->y += dy;
-}
+    for( vehicle_render_pose *p : { &state.shown, &state.seg_from, &state.seg_to } ) {
+        p->x += dx;
+        p->y += dy;
+    }
 }
 
 auto advance_vehicle_motion( vehicle_motion_state &state, const vehicle_motion_options &opts )

@@ -1,7 +1,7 @@
 #include "catch/catch_amalgamated.hpp"
+#include "enchantments/enchantment.h"
 #include "item.h"
 #include "magic/magic.h"
-#include "enchantments/enchantment.h"
 #include "map.h"
 #include "map_helpers.h"
 #include "options.h"
@@ -797,23 +797,18 @@ TEST_CASE("Armor enchantments", "[magic][enchantment][armor]") {
         }
     }
 
-    SECTION( "Armor item with no enchantments + socks of complete protection ( complete armor mod )" ) {
+    SECTION(
+        "Armor item with no enchantments + socks of complete protection ( complete armor mod )") {
         // This is pretty much parent enchantment testing here
-        wear_item( guy, "test_hazmat_suit" );
+        wear_item(guy, "test_hazmat_suit");
         // The socks provide character-wide protection regardless of what body parts they cover
-        wear_item( guy, "test_relic_char_all_armor_mod" );
+        wear_item(guy, "test_relic_char_all_armor_mod");
 
-        // 10 (incoming) + (10 * -0.5 - 2) (enchantment) - 4 (base item cut armor) = -1 (10 absorbed)
-        // This is the same for all of them hopefully
-        SECTION( "Cut" ) {
-            CHECK( calc_damage_absorb( guy, damage_type::DT_CUT, 10 ) == 10 );
-        }
-        SECTION( "Bash" ) {
-            CHECK( calc_damage_absorb( guy, damage_type::DT_BASH, 10 ) == 10 );
-        }
-        SECTION( "Stab" ) {
-            CHECK( calc_damage_absorb( guy, damage_type::DT_STAB, 10 ) == 10 );
-        }
+        // 10 (incoming) + (10 * -0.5 - 2) (enchantment) - 4 (base item cut armor) = -1 (10
+        // absorbed) This is the same for all of them hopefully
+        SECTION("Cut") { CHECK(calc_damage_absorb(guy, damage_type::DT_CUT, 10) == 10); }
+        SECTION("Bash") { CHECK(calc_damage_absorb(guy, damage_type::DT_BASH, 10) == 10); }
+        SECTION("Stab") { CHECK(calc_damage_absorb(guy, damage_type::DT_STAB, 10) == 10); }
     }
 }
 
@@ -869,34 +864,34 @@ TEST_CASE("Enchantment Cancels Flags", "[magic][enchantment][flags]") {
 
 TEST_CASE("Skill enchantments", "[magic][enchantment][skill]") {
     clear_all_state();
-    Character &guy = get_player_character();
-    clear_character( *guy.as_player(), true );
+    Character& guy = get_player_character();
+    clear_character(*guy.as_player(), true);
 
-    REQUIRE( guy.get_skill_level( skill_id( "barter" ) ) == 0 );
+    REQUIRE(guy.get_skill_level(skill_id("barter")) == 0);
 
-    SECTION( "One barter skill enchantment item" ) {
+    SECTION("One barter skill enchantment item") {
         // This is pretty much parent enchantment testing here
-        wear_item( guy, "test_relic_socks_of_speaking" );
+        wear_item(guy, "test_relic_socks_of_speaking");
 
-        REQUIRE( guy.get_skill_level( skill_id( "barter" ) ) == 2 );
+        REQUIRE(guy.get_skill_level(skill_id("barter")) == 2);
     }
 
-    SECTION( "Two barter skill enchantment item" ) {
+    SECTION("Two barter skill enchantment item") {
         // This is pretty much parent enchantment testing here
-        wear_item( guy, "test_relic_socks_of_speaking" );
-        wear_item( guy, "test_relic_socks_of_speaking" );
+        wear_item(guy, "test_relic_socks_of_speaking");
+        wear_item(guy, "test_relic_socks_of_speaking");
 
-        REQUIRE( guy.get_skill_level( skill_id( "barter" ) ) == 4 );
+        REQUIRE(guy.get_skill_level(skill_id("barter")) == 4);
     }
 
-    SECTION( "Two barter skill enchantment item and one global skill item" ) {
+    SECTION("Two barter skill enchantment item and one global skill item") {
         // This is pretty much parent enchantment testing here
-        wear_item( guy, "test_relic_socks_of_speaking" );
-        wear_item( guy, "test_relic_socks_of_speaking" );
-        wear_item( guy, "test_relic_socks_of_knowledge" );
+        wear_item(guy, "test_relic_socks_of_speaking");
+        wear_item(guy, "test_relic_socks_of_speaking");
+        wear_item(guy, "test_relic_socks_of_knowledge");
 
-        REQUIRE( guy.get_skill_level( skill_id( "barter" ) ) == 6 );
-        REQUIRE( guy.get_skill_level( skill_id( "speech" ) ) == 2 );
+        REQUIRE(guy.get_skill_level(skill_id("barter")) == 6);
+        REQUIRE(guy.get_skill_level(skill_id("speech")) == 2);
     }
 }
 

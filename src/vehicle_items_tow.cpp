@@ -668,7 +668,7 @@ void vehicle::refresh_position()
 tripoint_mnt_veh vehicle::pivot_point() const
 {
     if( pivot_dirty ) {
-    refresh_pivot();
+        refresh_pivot();
     }
 
     return pivot_cache;
@@ -883,8 +883,8 @@ void vehicle::do_towing_move()
 
 bool vehicle::is_external_part( const tripoint_bub_ms &part_pt ) const
 {
-for( const auto &elem : g->m.points_in_radius( part_pt, 1 ) ) {
-    const optional_vpart_position vp = g->m.veh_at( elem );
+    for( const auto &elem : g->m.points_in_radius( part_pt, 1 ) ) {
+        const optional_vpart_position vp = g->m.veh_at( elem );
         if( !vp ) {
             return true;
         }
@@ -927,8 +927,8 @@ bool vehicle::is_towed() const
 
 int vehicle::get_tow_part() const
 {
-for( const vpart_reference &vp : get_all_parts() ) {
-    const size_t p = vp.part_index();
+    for( const vpart_reference &vp : get_all_parts() ) {
+        const size_t p = vp.part_index();
         if( vp.part().removed ) {
             continue;
         }
@@ -1029,28 +1029,28 @@ void vehicle::invalidate_towing( bool first_vehicle )
 bool vehicle::tow_cable_too_far() const
 {
     if( !tow_data.get_towed_by() ) {
-    debugmsg( "checking tow cable length on a vehicle that has no towing vehicle" );
+        debugmsg( "checking tow cable length on a vehicle that has no towing vehicle" );
         return false;
     }
     int index = get_tow_part();
     if( index == -1 ) {
-    debugmsg( "towing data exists but no towing part" );
+        debugmsg( "towing data exists but no towing part" );
         return false;
     }
     auto towing_point = abs_part_location( index );
     if( !tow_data.get_towed_by()->tow_data.get_towed() ) {
-    debugmsg( "vehicle %s has data for a towing vehicle, but that towing vehicle does not have %s listed as towed",
-              disp_name(), disp_name() );
+        debugmsg( "vehicle %s has data for a towing vehicle, but that towing vehicle does not have %s listed as towed",
+                  disp_name(), disp_name() );
         return false;
     }
     int other_index = tow_data.get_towed_by()->get_tow_part();
     if( other_index == -1 ) {
-    debugmsg( "towing data exists but no towing part" );
+        debugmsg( "towing data exists but no towing part" );
         return false;
     }
     auto towed_point = tow_data.get_towed_by()->abs_part_location( other_index );
     if( towing_point == tripoint_abs_ms::zero() || towed_point == tripoint_abs_ms::zero() ) {
-    debugmsg( "towing data exists but no towing part" );
+        debugmsg( "towing data exists but no towing part" );
         return false;
     }
     return rl_dist( towing_point, towed_point ) >= 25;
@@ -1061,27 +1061,27 @@ bool vehicle::tow_cable_too_far() const
 bool vehicle::no_towing_slack() const
 {
     if( !tow_data.get_towed() ) {
-    return false;
-}
-int index = get_tow_part();
-if( index == -1 ) {
-    debugmsg( "towing data exists but no towing part" );
+        return false;
+    }
+    int index = get_tow_part();
+    if( index == -1 ) {
+        debugmsg( "towing data exists but no towing part" );
         return false;
     }
     auto towing_point = abs_part_location( index );
     if( !tow_data.get_towed()->tow_data.get_towed_by() ) {
-    debugmsg( "vehicle %s has data for a towed vehicle, but that towed vehicle does not have %s listed as tower",
-              disp_name(), disp_name() );
+        debugmsg( "vehicle %s has data for a towed vehicle, but that towed vehicle does not have %s listed as tower",
+                  disp_name(), disp_name() );
         return false;
     }
     int other_index = tow_data.get_towed()->get_tow_part();
     if( other_index == -1 ) {
-    debugmsg( "towing data exists but no towing part" );
+        debugmsg( "towing data exists but no towing part" );
         return false;
     }
     auto towed_point = tow_data.get_towed()->abs_part_location( other_index );
     if( towing_point == tripoint_abs_ms::zero() || towed_point == tripoint_abs_ms::zero() ) {
-    debugmsg( "towing data exists but no towing part" );
+        debugmsg( "towing data exists but no towing part" );
         return false;
     }
     return rl_dist( towing_point, towed_point ) >= 8;

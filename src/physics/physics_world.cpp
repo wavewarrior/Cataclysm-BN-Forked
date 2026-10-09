@@ -1,120 +1,110 @@
 #include "physics_world.h"
-#include "terrain_body.h"
+
+#include "creature.h" // Creature::get_size, bub_pos
+#include "debug.h"    // DebugLog, DL, DC
 #include "filter_bits.h"
-#include "vehicle_shape.h"  // vehicle_box2d_shape, TILE_M
-#include "vehicle_tile_bash.h" // bash_vehicle_tile
-#include "vehicle.h"        // vehicle, velo_vec, face_vec, bub_ms_location, total_mass
-#include "creature.h"        // Creature::get_size, bub_pos
-#include "map.h"            // map::abs_to_bub, impassable_ter_furn, is_bashable_ter_furn
 #include "game_constants.h" // SEEX, SEEY
-#include "units_mass.h"     // units::to_kilogram
-#include "debug.h"          // DebugLog, DL, DC
+#include "map.h"            // map::abs_to_bub, impassable_ter_furn, is_bashable_ter_furn
+#include "physics_debug_draw.h"
+#include "terrain_body.h"
+#include "units_mass.h"        // units::to_kilogram
+#include "vehicle.h"           // vehicle, velo_vec, face_vec, bub_ms_location, total_mass
+#include "vehicle_shape.h"     // vehicle_box2d_shape, TILE_M
+#include "vehicle_tile_bash.h" // bash_vehicle_tile
+
 #include <algorithm>
 #include <cmath>
-#include "physics_debug_draw.h"
 
 namespace physics {
 
 // ── Construction / destruction ────────────────────────────────────────────────
 
-PhysicsWorld::PhysicsWorld()
-{
-    auto wdef    = b2DefaultWorldDef();
-    wdef.gravity = { 0.0f, 0.0f };
-    world_       = b2CreateWorld( &wdef );
+PhysicsWorld::PhysicsWorld() {
+    auto wdef = b2DefaultWorldDef();
+    wdef.gravity = {0.0f, 0.0f};
+    world_ = b2CreateWorld(&wdef);
 }
 
-PhysicsWorld::~PhysicsWorld()
-{
+PhysicsWorld::~PhysicsWorld() {
     // Destroying the world frees all bodies and shapes atomically.
-    if( B2_IS_NON_NULL( world_ ) ) { b2DestroyWorld( world_ ); }
+    if (B2_IS_NON_NULL(world_)) { b2DestroyWorld(world_); }
 }
 
 // ── Private helpers ───────────────────────────────────────────────────────────
 
-auto PhysicsWorld::create_vehicle_shape( b2BodyId bid, const vehicle &v ) -> bool
-{
-    const auto poly = vehicle_box2d_shape( v );
-    if( !poly ) {
-        return false;
-    }
+auto PhysicsWorld::create_vehicle_shape(b2BodyId bid, const vehicle& v) -> bool {
+    const auto poly = vehicle_box2d_shape(v);
+    if (!poly) { return false; }
 
-    const auto mass_kg = units::to_kilogram( v.total_mass() );
+    const auto mass_kg = units::to_kilogram(v.total_mass());
 
     // Approximate body area for density (shape area in m²).
     // For a box poly vertices[0]=min-corner, vertices[2]=max-corner.
-    const auto half_w = std::max( ( poly->vertices[2].x - poly->vertices[0].x ) * 0.5f, 0.01f );
-    const auto half_h = std::max( ( poly->vertices[2].y - poly->vertices[0].y ) * 0.5f, 0.01f );
+    const auto half_w = std::max((poly->vertices[2].x - poly->vertices[0].x) * 0.5f, 0.01f);
+    const auto half_h = std::max((poly->vertices[2].y - poly->vertices[0].y) * 0.5f, 0.01f);
 
-    auto sdef                = b2DefaultShapeDef();
-    sdef.density             = mass_kg / ( 4.0f * half_w * half_h );
-    sdef.friction            = 0.3f;
-    sdef.restitution         = 0.5f;  // refined per-collision in transient worlds (Phase 2 / 5)
+    auto sdef = b2DefaultShapeDef();
+    sdef.density = mass_kg / (4.0f * half_w * half_h);
+    sdef.friction = 0.3f;
+    sdef.restitution = 0.5f; // refined per-collision in transient worlds (Phase 2 / 5)
     sdef.enableContactEvents = true;
-    sdef.enableHitEvents     = true;
+    sdef.enableHitEvents = true;
 
     // Single z-bit shared by all body types; groupIndex separates categories.
-    const auto z_bit = physics::z_category_bit( v.bub_ms_location().z() );
+    const auto z_bit = physics::z_category_bit(v.bub_ms_location().z());
     sdef.filter.categoryBits = z_bit;
-    sdef.filter.maskBits     = z_bit;
-    sdef.filter.groupIndex   = physics::vehicle_group;
+    sdef.filter.maskBits = z_bit;
+    sdef.filter.groupIndex = physics::vehicle_group;
 
-    b2CreatePolygonShape( bid, &sdef, &poly.value() );
+    b2CreatePolygonShape(bid, &sdef, &poly.value());
     return true;
 }
 
-auto PhysicsWorld::make_vehicle_body( vehicle &v ) -> b2BodyId
-{
+auto PhysicsWorld::make_vehicle_body(vehicle& v) -> b2BodyId {
     const auto bpos = v.bub_ms_location();
-    const auto fv   = v.face_vec();   // normalized (cos θ, sin θ) in face direction
+    const auto fv = v.face_vec(); // normalized (cos θ, sin θ) in face direction
 
-    auto bdef            = b2DefaultBodyDef();
+    auto bdef = b2DefaultBodyDef();
     // Dynamic body — gravity disabled for top-down game plane.  Tile-step still teleports
     // bodies via on_vehicle_moved() until Phase 10 Step 5 (tile-step retirement).  Dynamic
     // type is required so Box2D v3 fires contact events (kinematic and static pairs produce
     // zero hit events regardless of filter settings).
-    bdef.type            = b2_dynamicBody;
-    bdef.gravityScale    = 0.0f;
-    bdef.position        = { static_cast<float>( bpos.x() ) * TILE_M,
-                              static_cast<float>( bpos.y() ) * TILE_M };
-    bdef.rotation        = b2Rot{ static_cast<float>( fv.x ), static_cast<float>( fv.y ) };
+    bdef.type = b2_dynamicBody;
+    bdef.gravityScale = 0.0f;
+    bdef.position = {static_cast<float>(bpos.x()) * TILE_M, static_cast<float>(bpos.y()) * TILE_M};
+    bdef.rotation = b2Rot{static_cast<float>(fv.x), static_cast<float>(fv.y)};
 
-    const auto bid = b2CreateBody( world_, &bdef );
-    b2Body_SetUserData( bid, &v );
+    const auto bid = b2CreateBody(world_, &bdef);
+    b2Body_SetUserData(bid, &v);
 
     // A bare chassis (vproto "none") has no footprint yet, so it gets a body with no
     // shape rather than a zero-vertex polygon.  The body still has to exist: it carries
     // the transform that on_vehicle_moved() keeps in sync, and on_vehicle_parts_changed()
     // needs somewhere to attach the shape once the first part is installed.
-    if( !create_vehicle_shape( bid, v ) ) {
-        DebugLog( DL::Info, DC::Map )
-                << "physics: vehicle '" << v.type.str()
-                << "' registered with an empty part list; body created without collision "
-                   "geometry until a part is installed";
+    if (!create_vehicle_shape(bid, v)) {
+        DebugLog(DL::Info, DC::Map)
+            << "physics: vehicle '" << v.type.str()
+            << "' registered with an empty part list; body created without collision "
+               "geometry until a part is installed";
     }
     return bid;
 }
 
-void PhysicsWorld::rebuild_bashable_lookup()
-{
+void PhysicsWorld::rebuild_bashable_lookup() {
     bashable_tile_bodies_.clear();
-    for( const auto &[abs_sm, tile_list] : bashable_tiles_ ) {
-        for( const auto &[bub, bid] : tile_list ) {
-            bashable_tile_bodies_[bub] = bid;
-        }
+    for (const auto& [abs_sm, tile_list] : bashable_tiles_) {
+        for (const auto& [bub, bid] : tile_list) { bashable_tile_bodies_[bub] = bid; }
     }
 }
 
 // ── Vehicle lifecycle ─────────────────────────────────────────────────────────
 
-void PhysicsWorld::on_vehicle_added( vehicle &v )
-{
-    vehicle_bodies_[&v] = make_vehicle_body( v );
+void PhysicsWorld::on_vehicle_added(vehicle& v) {
+    vehicle_bodies_[&v] = make_vehicle_body(v);
     // Initialise physics_pos from the tile position so the first vehmove() readback
     // is a no-op rather than teleporting the vehicle to (0,0).
     const auto bpos = v.bub_ms_location();
-    v.physics_pos   = rl_vec2d{ static_cast<float>( bpos.x() ),
-                                 static_cast<float>( bpos.y() ) };
+    v.physics_pos = rl_vec2d{static_cast<float>(bpos.x()), static_cast<float>(bpos.y())};
     // Mark the vehicle as Box2D-controlled: act_on_map() will skip move_vehicle()
     // and map::vehmove() will apply physics_pos to the tile grid.
     //
@@ -131,10 +121,9 @@ void PhysicsWorld::on_vehicle_added( vehicle &v )
     v.box2d_position_authority = !v.can_use_rails();
 }
 
-void PhysicsWorld::on_vehicle_parts_changed( vehicle &v )
-{
-    const auto it = vehicle_bodies_.find( &v );
-    if( it == vehicle_bodies_.end() ) {
+void PhysicsWorld::on_vehicle_parts_changed(vehicle& v) {
+    const auto it = vehicle_bodies_.find(&v);
+    if (it == vehicle_bodies_.end()) {
         // Not registered here.  Normal during mapgen: map::add_vehicle_to_map() installs
         // every transferred part while merging wrecks, long before on_vehicle_added()
         // runs, so this is just a hash lookup and nothing else.
@@ -147,30 +136,27 @@ void PhysicsWorld::on_vehicle_parts_changed( vehicle &v )
     // box for a vehicle that ends up several tiles across.  We only ever attach one shape
     // per vehicle body, so this destroys at most one.
     auto old_shape = b2ShapeId{};
-    while( b2Body_GetShapes( it->second, &old_shape, 1 ) > 0 ) {
-        b2DestroyShape( old_shape );
-    }
+    while (b2Body_GetShapes(it->second, &old_shape, 1) > 0) { b2DestroyShape(old_shape); }
 
-    if( !create_vehicle_shape( it->second, v ) ) {
-        DebugLog( DL::Info, DC::Map )
-                << "physics: vehicle '" << v.type.str()
-                << "' has no occupied mount after a part change; body left without "
-                   "collision geometry";
+    if (!create_vehicle_shape(it->second, v)) {
+        DebugLog(DL::Info, DC::Map)
+            << "physics: vehicle '" << v.type.str()
+            << "' has no occupied mount after a part change; body left without "
+               "collision geometry";
     }
-    b2Body_ApplyMassFromShapes( it->second );
+    b2Body_ApplyMassFromShapes(it->second);
 }
 
-void PhysicsWorld::on_vehicle_moved( vehicle &v )
-{
-    const auto it = vehicle_bodies_.find( &v );
-    if( it == vehicle_bodies_.end() ) { return; }
+void PhysicsWorld::on_vehicle_moved(vehicle& v) {
+    const auto it = vehicle_bodies_.find(&v);
+    if (it == vehicle_bodies_.end()) { return; }
 
     // Physics-driven move (vehmove()'s readback): the body already holds the
     // authoritative sub-tile position and the tile anchor was just snapped to
     // match it.  Writing the body here would slam it to the new tile's centre
     // every turn, destroying sub-tile integration and creating a staircase
     // feedback loop.
-    if( applying_readback_ ) { return; }
+    if (applying_readback_) { return; }
 
     // Anything else moved the vehicle (debug teleport, tow, test reset, rail
     // shift, z-change).  The body MUST follow, and physics_pos must be reseated
@@ -180,7 +166,7 @@ void PhysicsWorld::on_vehicle_moved( vehicle &v )
     // start" measure a reset-vs-stale-physics_pos artifact instead of the real
     // per-turn distance, masking the movement-rate bug entirely.
     const auto bpos = v.bub_ms_location();
-    const auto fv   = v.face_vec();
+    const auto fv = v.face_vec();
 
     // Carry the sub-tile fraction across the move instead of snapping to the tile
     // centre.  An external move is a whole-tile displacement, so the vehicle's
@@ -192,138 +178,126 @@ void PhysicsWorld::on_vehicle_moved( vehicle &v )
     // asymmetry is measurable: vehicle_efficiency_test teleports the vehicle back to
     // its start every cycle, and under authority the road roller covered 1116 tiles
     // against the tile-step path's 1248 for identical fuel and cycle count.
-    const auto frac = rl_vec2d{ v.physics_pos.x - std::round( v.physics_pos.x ),
-                                v.physics_pos.y - std::round( v.physics_pos.y ) };
-    const auto nx = static_cast<float>( bpos.x() );
-    const auto ny = static_cast<float>( bpos.y() );
-    if( v.box2d_position_authority ) {
-        v.physics_pos = rl_vec2d{ nx + frac.x, ny + frac.y };
-    }
+    const auto frac =
+        rl_vec2d{v.physics_pos.x - std::round(v.physics_pos.x),
+                 v.physics_pos.y - std::round(v.physics_pos.y)};
+    const auto nx = static_cast<float>(bpos.x());
+    const auto ny = static_cast<float>(bpos.y());
+    if (v.box2d_position_authority) { v.physics_pos = rl_vec2d{nx + frac.x, ny + frac.y}; }
     b2Body_SetTransform(
-        it->second,
-        { ( nx + frac.x ) * TILE_M, ( ny + frac.y ) * TILE_M },
-        b2Rot{ static_cast<float>( fv.x ), static_cast<float>( fv.y ) } );
+        it->second, {(nx + frac.x) * TILE_M, (ny + frac.y) * TILE_M},
+        b2Rot{static_cast<float>(fv.x), static_cast<float>(fv.y)});
 }
 
-void PhysicsWorld::clamp_body_to_tile( vehicle &v )
-{
-    const auto it = vehicle_bodies_.find( &v );
-    if( it == vehicle_bodies_.end() ) { return; }
+void PhysicsWorld::clamp_body_to_tile(vehicle& v) {
+    const auto it = vehicle_bodies_.find(&v);
+    if (it == vehicle_bodies_.end()) { return; }
     // Deliberately ignores box2d_position_authority: the caller has determined
     // the body integrated somewhere the tile grid cannot follow (unloaded map),
     // so the tile anchor is authoritative for this one write.
     const auto bpos = v.bub_ms_location();
-    const auto fv   = v.face_vec();
+    const auto fv = v.face_vec();
     b2Body_SetTransform(
-        it->second,
-        { static_cast<float>( bpos.x() ) * TILE_M, static_cast<float>( bpos.y() ) * TILE_M },
-        b2Rot{ static_cast<float>( fv.x ), static_cast<float>( fv.y ) } );
-    b2Body_SetLinearVelocity( it->second, b2Vec2{ 0.0f, 0.0f } );
-    b2Body_SetAngularVelocity( it->second, 0.0f );
+        it->second, {static_cast<float>(bpos.x()) * TILE_M, static_cast<float>(bpos.y()) * TILE_M},
+        b2Rot{static_cast<float>(fv.x), static_cast<float>(fv.y)});
+    b2Body_SetLinearVelocity(it->second, b2Vec2{0.0f, 0.0f});
+    b2Body_SetAngularVelocity(it->second, 0.0f);
 }
 
-void PhysicsWorld::on_vehicle_removed( vehicle *v )
-{
-    authority_revoked_by_unload_.erase( v );
-    v->box2d_position_authority = false;  // always clear, even if body is missing
+void PhysicsWorld::on_vehicle_removed(vehicle* v) {
+    authority_revoked_by_unload_.erase(v);
+    v->box2d_position_authority = false; // always clear, even if body is missing
     v->render_offset_x = 0.f;
     v->render_offset_y = 0.f;
-    const auto it = vehicle_bodies_.find( v );
-    if( it == vehicle_bodies_.end() ) { return; }
-    b2DestroyBody( it->second );
-    vehicle_bodies_.erase( it );
+    const auto it = vehicle_bodies_.find(v);
+    if (it == vehicle_bodies_.end()) { return; }
+    b2DestroyBody(it->second);
+    vehicle_bodies_.erase(it);
 }
 
 // ── Creature lifecycle (Phase 11) ─────────────────────────────────────────────
 
-void PhysicsWorld::on_creature_added( const Creature &c )
-{
-    if( creature_bodies_.contains( &c ) ) { return; }
+void PhysicsWorld::on_creature_added(const Creature& c) {
+    if (creature_bodies_.contains(&c)) { return; }
 
     const auto bub = c.bub_pos();
-    const auto cx = static_cast<float>( bub.x() ) * TILE_M;
-    const auto cy = static_cast<float>( bub.y() ) * TILE_M;
+    const auto cx = static_cast<float>(bub.x()) * TILE_M;
+    const auto cy = static_cast<float>(bub.y()) * TILE_M;
 
-    auto bdef     = b2DefaultBodyDef();
-    bdef.type     = b2_kinematicBody;
-    bdef.position = { cx, cy };
-    const auto bid = b2CreateBody( world_, &bdef );
-    b2Body_SetUserData( bid, const_cast<Creature *>( &c ) );
+    auto bdef = b2DefaultBodyDef();
+    bdef.type = b2_kinematicBody;
+    bdef.position = {cx, cy};
+    const auto bid = b2CreateBody(world_, &bdef);
+    b2Body_SetUserData(bid, const_cast<Creature*>(&c));
 
-    const auto radius = static_cast<float>( c.effective_target_size() ) * TILE_M * 0.5f;
-    const auto circle = b2Circle{ { 0.f, 0.f }, radius };
+    const auto radius = static_cast<float>(c.effective_target_size()) * TILE_M * 0.5f;
+    const auto circle = b2Circle{{0.f, 0.f}, radius};
 
-    auto sdef                  = b2DefaultShapeDef();
-    sdef.isSensor              = true;
-    sdef.enableContactEvents   = false;
-    sdef.enableSensorEvents    = false;
-    sdef.filter.categoryBits = z_category_bit( bub.z() );
-    sdef.filter.maskBits     = z_category_bit( bub.z() );
-    sdef.filter.groupIndex   = creature_group;
-    const auto sid = b2CreateCircleShape( bid, &sdef, &circle );
+    auto sdef = b2DefaultShapeDef();
+    sdef.isSensor = true;
+    sdef.enableContactEvents = false;
+    sdef.enableSensorEvents = false;
+    sdef.filter.categoryBits = z_category_bit(bub.z());
+    sdef.filter.maskBits = z_category_bit(bub.z());
+    sdef.filter.groupIndex = creature_group;
+    const auto sid = b2CreateCircleShape(bid, &sdef, &circle);
 
-    creature_bodies_.emplace( &c, creature_body{ bid, sid, radius } );
+    creature_bodies_.emplace(&c, creature_body{bid, sid, radius});
 }
 
-void PhysicsWorld::on_creature_moved( const Creature &c )
-{
-    const auto it = creature_bodies_.find( &c );
-    if( it == creature_bodies_.end() ) {
-        on_creature_added( c );
+void PhysicsWorld::on_creature_moved(const Creature& c) {
+    const auto it = creature_bodies_.find(&c);
+    if (it == creature_bodies_.end()) {
+        on_creature_added(c);
         return;
     }
 
-    auto &cb = it->second;
+    auto& cb = it->second;
     const auto bub = c.bub_pos();
-    const auto cx = static_cast<float>( bub.x() ) * TILE_M;
-    const auto cy = static_cast<float>( bub.y() ) * TILE_M;
-    b2Body_SetTransform( cb.body, { cx, cy }, b2Rot_identity );
+    const auto cx = static_cast<float>(bub.x()) * TILE_M;
+    const auto cy = static_cast<float>(bub.y()) * TILE_M;
+    b2Body_SetTransform(cb.body, {cx, cy}, b2Rot_identity);
 
     // Recreate shape if the creature's target size changed (crouch, MF_HARDTOSHOOT).
-    const auto new_radius = static_cast<float>( c.effective_target_size() ) * TILE_M * 0.5f;
-    if( std::abs( new_radius - cb.radius ) > 0.001f ) {
-        b2DestroyShape( cb.shape );
-        const auto circle = b2Circle{ { 0.f, 0.f }, new_radius };
-        auto sdef                  = b2DefaultShapeDef();
-        sdef.isSensor              = true;
-        sdef.enableContactEvents   = false;
-        sdef.enableSensorEvents    = false;
-        sdef.filter.categoryBits = z_category_bit( bub.z() );
-        sdef.filter.maskBits     = z_category_bit( bub.z() );
-        sdef.filter.groupIndex   = creature_group;
-        cb.shape  = b2CreateCircleShape( cb.body, &sdef, &circle );
+    const auto new_radius = static_cast<float>(c.effective_target_size()) * TILE_M * 0.5f;
+    if (std::abs(new_radius - cb.radius) > 0.001f) {
+        b2DestroyShape(cb.shape);
+        const auto circle = b2Circle{{0.f, 0.f}, new_radius};
+        auto sdef = b2DefaultShapeDef();
+        sdef.isSensor = true;
+        sdef.enableContactEvents = false;
+        sdef.enableSensorEvents = false;
+        sdef.filter.categoryBits = z_category_bit(bub.z());
+        sdef.filter.maskBits = z_category_bit(bub.z());
+        sdef.filter.groupIndex = creature_group;
+        cb.shape = b2CreateCircleShape(cb.body, &sdef, &circle);
         cb.radius = new_radius;
     }
 
     // Update filter bits if z changed.
-    auto filter = b2Shape_GetFilter( cb.shape );
-    const auto z_bit = z_category_bit( bub.z() );
-    if( filter.categoryBits != z_bit ) {
+    auto filter = b2Shape_GetFilter(cb.shape);
+    const auto z_bit = z_category_bit(bub.z());
+    if (filter.categoryBits != z_bit) {
         filter.categoryBits = z_bit;
-        filter.maskBits     = z_bit;
-        b2Shape_SetFilter( cb.shape, filter );
+        filter.maskBits = z_bit;
+        b2Shape_SetFilter(cb.shape, filter);
     }
 }
 
-void PhysicsWorld::on_creature_removed( const Creature *c )
-{
-    const auto it = creature_bodies_.find( c );
-    if( it == creature_bodies_.end() ) { return; }
-    b2DestroyBody( it->second.body );
-    creature_bodies_.erase( it );
+void PhysicsWorld::on_creature_removed(const Creature* c) {
+    const auto it = creature_bodies_.find(c);
+    if (it == creature_bodies_.end()) { return; }
+    b2DestroyBody(it->second.body);
+    creature_bodies_.erase(it);
 }
 
-void PhysicsWorld::clear_creature_bodies()
-{
-    for( const auto &[c, cb] : creature_bodies_ ) {
-        b2DestroyBody( cb.body );
-    }
+void PhysicsWorld::clear_creature_bodies() {
+    for (const auto& [c, cb] : creature_bodies_) { b2DestroyBody(cb.body); }
     creature_bodies_.clear();
 }
 
-void PhysicsWorld::clear_world_bodies()
-{
-    if( !B2_IS_NON_NULL( world_ ) || !b2World_IsValid( world_ ) ) {
+void PhysicsWorld::clear_world_bodies() {
+    if (!B2_IS_NON_NULL(world_) || !b2World_IsValid(world_)) {
         terrain_bodies_.clear();
         bashable_tiles_.clear();
         bashable_tile_bodies_.clear();
@@ -336,13 +310,11 @@ void PhysicsWorld::clear_world_bodies()
     // some bodies may already be gone.  bashable_tiles_ and bashable_tile_bodies_
     // alias the same b2BodyIds held in terrain_bodies_, so they are cleared without
     // a second destroy pass.
-    const auto destroy = []( const b2BodyId bid ) {
-        if( B2_IS_NON_NULL( bid ) && b2Body_IsValid( bid ) ) { b2DestroyBody( bid ); }
+    const auto destroy = [](const b2BodyId bid) {
+        if (B2_IS_NON_NULL(bid) && b2Body_IsValid(bid)) { b2DestroyBody(bid); }
     };
 
-    for( auto &[abs_sm, bodies] : terrain_bodies_ ) {
-        std::ranges::for_each( bodies, destroy );
-    }
+    for (auto& [abs_sm, bodies] : terrain_bodies_) { std::ranges::for_each(bodies, destroy); }
     terrain_bodies_.clear();
     bashable_tiles_.clear();
     bashable_tile_bodies_.clear();
@@ -350,22 +322,17 @@ void PhysicsWorld::clear_world_bodies()
     // The vehicles themselves are owned by the submaps being dropped, so every
     // vehicle* key is about to dangle.  Destroy the bodies and forget the keys
     // rather than waiting for on_vehicle_removed, which will never come.
-    for( const auto &[veh, bid] : vehicle_bodies_ ) {
-        destroy( bid );
-    }
+    for (const auto& [veh, bid] : vehicle_bodies_) { destroy(bid); }
     vehicle_bodies_.clear();
     authority_revoked_by_unload_.clear();
 }
 
 // ── Terrain lifecycle ─────────────────────────────────────────────────────────
 
-void PhysicsWorld::on_submap_loaded( const map &m, const tripoint_abs_sm &abs_sm_pos )
-{
+void PhysicsWorld::on_submap_loaded(const map& m, const tripoint_abs_sm& abs_sm_pos) {
     // Compute bub_ms origin of this submap's (0,0) local tile.
-    const tripoint_abs_ms abs_corner{ abs_sm_pos.x() * SEEX,
-                                       abs_sm_pos.y() * SEEY,
-                                       abs_sm_pos.z() };
-    const auto bub_origin = abs_to_map_local( m, abs_corner );
+    const tripoint_abs_ms abs_corner{abs_sm_pos.x() * SEEX, abs_sm_pos.y() * SEEY, abs_sm_pos.z()};
+    const auto bub_origin = abs_to_map_local(m, abs_corner);
 
     // Idempotency guard.  terrain_bodies_[key] below is a plain assignment, so a
     // second call for a key that already holds bodies would drop those b2BodyIds
@@ -381,40 +348,36 @@ void PhysicsWorld::on_submap_loaded( const map &m, const tripoint_abs_sm &abs_sm
     // any shift decode_tile_pos() yields the pre-shift tile.  Erasing by that would
     // remove the wrong entry and leave the real one holding a destroyed b2BodyId,
     // which the next on_tile_bashed() at that tile would try to destroy again.
-    if( const auto prev = terrain_bodies_.find( abs_sm_pos ); prev != terrain_bodies_.end() ) {
-        if( const auto tl = bashable_tiles_.find( abs_sm_pos ); tl != bashable_tiles_.end() ) {
-            for( const auto &[bub, bid] : tl->second ) {
-                if( const auto e = bashable_tile_bodies_.find( bub );
-                    e != bashable_tile_bodies_.end() && B2_ID_EQUALS( e->second, bid ) ) {
-                    bashable_tile_bodies_.erase( e );
+    if (const auto prev = terrain_bodies_.find(abs_sm_pos); prev != terrain_bodies_.end()) {
+        if (const auto tl = bashable_tiles_.find(abs_sm_pos); tl != bashable_tiles_.end()) {
+            for (const auto& [bub, bid] : tl->second) {
+                if (const auto e = bashable_tile_bodies_.find(bub);
+                    e != bashable_tile_bodies_.end() && B2_ID_EQUALS(e->second, bid)) {
+                    bashable_tile_bodies_.erase(e);
                 }
             }
-            bashable_tiles_.erase( tl );
+            bashable_tiles_.erase(tl);
         }
-        for( const auto bid : prev->second ) {
-            b2DestroyBody( bid );
-        }
-        terrain_bodies_.erase( prev );
+        for (const auto bid : prev->second) { b2DestroyBody(bid); }
+        terrain_bodies_.erase(prev);
     }
 
 
-    auto bodies = build_submap_terrain_bodies( world_, m, bub_origin );
+    auto bodies = build_submap_terrain_bodies(world_, m, bub_origin);
 
     // Populate per-submap bashable tile list for shift-safe on_tile_bashed lookup.
     std::vector<std::pair<tripoint_bub_ms, b2BodyId>> tile_list;
-    for( const auto bid : bodies ) {
-        const auto ud = b2Body_GetUserData( bid );
-        if( ud != nullptr ) {
-            const auto bub = decode_tile_pos( reinterpret_cast<std::uintptr_t>( ud ) );
-            tile_list.emplace_back( bub, bid );
+    for (const auto bid : bodies) {
+        const auto ud = b2Body_GetUserData(bid);
+        if (ud != nullptr) {
+            const auto bub = decode_tile_pos(reinterpret_cast<std::uintptr_t>(ud));
+            tile_list.emplace_back(bub, bid);
             bashable_tile_bodies_[bub] = bid;
         }
     }
-    if( !tile_list.empty() ) {
-        bashable_tiles_[abs_sm_pos] = std::move( tile_list );
-    }
+    if (!tile_list.empty()) { bashable_tiles_[abs_sm_pos] = std::move(tile_list); }
 
-    terrain_bodies_[abs_sm_pos] = std::move( bodies );
+    terrain_bodies_[abs_sm_pos] = std::move(bodies);
 
     // Re-grant position authority to vehicles whose home submap just re-entered
     // the simulated set, undoing the revocation on on_submap_unloaded's
@@ -427,34 +390,30 @@ void PhysicsWorld::on_submap_loaded( const map &m, const tripoint_abs_sm &abs_sm
     // only resyncs it under authority), and handing authority back with a stale
     // value would make the very next readback walk the vehicle back to wherever
     // it was when authority was revoked.
-    for( auto &[veh, bid] : vehicle_bodies_ ) {
-        if( veh->abs_sm_pos != abs_sm_pos ) { continue; }
+    for (auto& [veh, bid] : vehicle_bodies_) {
+        if (veh->abs_sm_pos != abs_sm_pos) { continue; }
         // Only re-grant what this class revoked.  A vehicle that opted out itself
         // must stay opted out, and the flag alone cannot tell the two apart.
-        if( authority_revoked_by_unload_.erase( veh ) == 0 ) { continue; }
-        const auto bpos  = veh->bub_ms_location();
-        veh->physics_pos = rl_vec2d{ static_cast<float>( bpos.x() ),
-                                     static_cast<float>( bpos.y() ) };
+        if (authority_revoked_by_unload_.erase(veh) == 0) { continue; }
+        const auto bpos = veh->bub_ms_location();
+        veh->physics_pos = rl_vec2d{static_cast<float>(bpos.x()), static_cast<float>(bpos.y())};
         veh->box2d_position_authority = true;
     }
 }
 
-void PhysicsWorld::on_submap_unloaded( const tripoint_abs_sm &abs_sm_pos,
-                                       bool submap_still_resident )
-{
+void PhysicsWorld::on_submap_unloaded(
+    const tripoint_abs_sm& abs_sm_pos, bool submap_still_resident) {
     // Remove bashable tile entries before destroying the bodies.
-    const auto bash_it = bashable_tiles_.find( abs_sm_pos );
-    if( bash_it != bashable_tiles_.end() ) {
-        for( const auto &[bub, bid] : bash_it->second ) {
-            bashable_tile_bodies_.erase( bub );
-        }
-        bashable_tiles_.erase( bash_it );
+    const auto bash_it = bashable_tiles_.find(abs_sm_pos);
+    if (bash_it != bashable_tiles_.end()) {
+        for (const auto& [bub, bid] : bash_it->second) { bashable_tile_bodies_.erase(bub); }
+        bashable_tiles_.erase(bash_it);
     }
 
-    const auto it = terrain_bodies_.find( abs_sm_pos );
-    if( it != terrain_bodies_.end() ) {
-        for( const auto bid : it->second ) { b2DestroyBody( bid ); }
-        terrain_bodies_.erase( it );
+    const auto it = terrain_bodies_.find(abs_sm_pos);
+    if (it != terrain_bodies_.end()) {
+        for (const auto bid : it->second) { b2DestroyBody(bid); }
+        terrain_bodies_.erase(it);
     }
 
     // Vehicle bodies for the submap leaving the simulated set.
@@ -475,15 +434,15 @@ void PhysicsWorld::on_submap_unloaded( const tripoint_abs_sm &abs_sm_pos,
     // on_vehicle_moved() keeps the body tracking the anchor.  The body is kept
     // because nothing ever re-registers one (on_vehicle_added has exactly one
     // caller, map::add_vehicle), so destroying it here would be permanent.
-    if( submap_still_resident ) {
-        for( auto &[veh, bid] : vehicle_bodies_ ) {
-            if( veh->abs_sm_pos != abs_sm_pos ) { continue; }
+    if (submap_still_resident) {
+        for (auto& [veh, bid] : vehicle_bodies_) {
+            if (veh->abs_sm_pos != abs_sm_pos) { continue; }
             // Only record vehicles that actually held authority.  Recording an
             // already-opted-out vehicle would make the re-grant hand it authority
             // when the submap returns, which is precisely what the set exists to
             // prevent.
-            if( !veh->box2d_position_authority ) { continue; }
-            authority_revoked_by_unload_.insert( veh );
+            if (!veh->box2d_position_authority) { continue; }
+            authority_revoked_by_unload_.insert(veh);
             veh->box2d_position_authority = false;
             veh->render_offset_x = 0.f;
             veh->render_offset_y = 0.f;
@@ -495,33 +454,32 @@ void PhysicsWorld::on_submap_unloaded( const tripoint_abs_sm &abs_sm_pos,
     // on_vehicle_removed().  Leaving the flag set would strand the vehicle with
     // authority but no body, and the readback would keep driving it from a
     // physics_pos that can never be updated again.
-    std::erase_if( vehicle_bodies_, [&]( const auto &kv ) {
-        if( kv.first->abs_sm_pos == abs_sm_pos ) {
+    std::erase_if(vehicle_bodies_, [&](const auto& kv) {
+        if (kv.first->abs_sm_pos == abs_sm_pos) {
             // Drop any revocation record too — the vehicle is going away, and a
             // stale entry here would be a dangling pointer.
-            authority_revoked_by_unload_.erase( kv.first );
+            authority_revoked_by_unload_.erase(kv.first);
             kv.first->box2d_position_authority = false;
             kv.first->render_offset_x = 0.f;
             kv.first->render_offset_y = 0.f;
-            b2DestroyBody( kv.second );
+            b2DestroyBody(kv.second);
             return true;
         }
         return false;
-    } );
+    });
 }
 
 // ── Map shift ─────────────────────────────────────────────────────────────────
 
-void PhysicsWorld::on_map_shifted( point delta_tiles )
-{
-    const b2Vec2 delta{ static_cast<float>( delta_tiles.x ) * TILE_M,
-                         static_cast<float>( delta_tiles.y ) * TILE_M };
+void PhysicsWorld::on_map_shifted(point delta_tiles) {
+    const b2Vec2 delta{
+        static_cast<float>(delta_tiles.x) * TILE_M, static_cast<float>(delta_tiles.y) * TILE_M};
 
     // Translate vehicle bodies.
-    for( const auto &[v, bid] : vehicle_bodies_ ) {
-        const auto p   = b2Body_GetPosition( bid );
-        const auto rot = b2Body_GetRotation( bid );
-        b2Body_SetTransform( bid, { p.x + delta.x, p.y + delta.y }, rot );
+    for (const auto& [v, bid] : vehicle_bodies_) {
+        const auto p = b2Body_GetPosition(bid);
+        const auto rot = b2Body_GetRotation(bid);
+        b2Body_SetTransform(bid, {p.x + delta.x, p.y + delta.y}, rot);
     }
 
     // Translate terrain bodies, and re-encode their userData tile alongside.
@@ -532,135 +490,125 @@ void PhysicsWorld::on_map_shifted( point delta_tiles )
     // its pre-shift tile, which any consumer that identifies a tile by userData
     // would then get wrong — including the contact-event routing that still has to
     // be written, where it would bash the wrong tile once the bubble had moved.
-    for( const auto &[abs_sm, body_list] : terrain_bodies_ ) {
-        for( const auto bid : body_list ) {
-            const auto p   = b2Body_GetPosition( bid );
-            const auto rot = b2Body_GetRotation( bid );
-            b2Body_SetTransform( bid, { p.x + delta.x, p.y + delta.y }, rot );
-            if( auto *ud = b2Body_GetUserData( bid ); ud != nullptr ) {
-                const auto old_bub = decode_tile_pos( reinterpret_cast<std::uintptr_t>( ud ) );
-                const auto new_bub = tripoint_bub_ms{ old_bub.x() + delta_tiles.x,
-                                                      old_bub.y() + delta_tiles.y,
-                                                      old_bub.z() };
-                b2Body_SetUserData( bid, reinterpret_cast<void *>( encode_tile_pos( new_bub ) ) );
+    for (const auto& [abs_sm, body_list] : terrain_bodies_) {
+        for (const auto bid : body_list) {
+            const auto p = b2Body_GetPosition(bid);
+            const auto rot = b2Body_GetRotation(bid);
+            b2Body_SetTransform(bid, {p.x + delta.x, p.y + delta.y}, rot);
+            if (auto* ud = b2Body_GetUserData(bid); ud != nullptr) {
+                const auto old_bub = decode_tile_pos(reinterpret_cast<std::uintptr_t>(ud));
+                const auto new_bub = tripoint_bub_ms{
+                    old_bub.x() + delta_tiles.x, old_bub.y() + delta_tiles.y, old_bub.z()};
+                b2Body_SetUserData(bid, reinterpret_cast<void*>(encode_tile_pos(new_bub)));
             }
         }
     }
 
     // Translate creature bodies.
-    for( const auto &[c, cb] : creature_bodies_ ) {
-        const auto p   = b2Body_GetPosition( cb.body );
-        const auto rot = b2Body_GetRotation( cb.body );
-        b2Body_SetTransform( cb.body, { p.x + delta.x, p.y + delta.y }, rot );
+    for (const auto& [c, cb] : creature_bodies_) {
+        const auto p = b2Body_GetPosition(cb.body);
+        const auto rot = b2Body_GetRotation(cb.body);
+        b2Body_SetTransform(cb.body, {p.x + delta.x, p.y + delta.y}, rot);
     }
 
     // Update bashable tile bub_ms keys — they are bubble-relative and change on shift.
-    for( auto &[abs_sm, tile_list] : bashable_tiles_ ) {
-        for( auto &[bub, bid] : tile_list ) {
-            bub = tripoint_bub_ms{ bub.x() + delta_tiles.x, bub.y() + delta_tiles.y, bub.z() };
+    for (auto& [abs_sm, tile_list] : bashable_tiles_) {
+        for (auto& [bub, bid] : tile_list) {
+            bub = tripoint_bub_ms{bub.x() + delta_tiles.x, bub.y() + delta_tiles.y, bub.z()};
         }
     }
     rebuild_bashable_lookup();
 }
 
-auto PhysicsWorld::terrain_body_count() const -> size_t
-{
+auto PhysicsWorld::terrain_body_count() const -> size_t {
     size_t n = 0;
-    for( const auto &[abs_sm, body_list] : terrain_bodies_ ) {
-        n += body_list.size();
-    }
+    for (const auto& [abs_sm, body_list] : terrain_bodies_) { n += body_list.size(); }
     return n;
 }
 
-auto PhysicsWorld::world_body_count() const -> size_t
-{
+auto PhysicsWorld::world_body_count() const -> size_t {
     // Counts bodies as Box2D sees them, which is deliberately NOT the same as
     // terrain_body_count(): terrain_bodies_[key] is an assignment, so a body that
     // was dropped from the registry without b2DestroyBody is invisible to that
     // count while still colliding in the world.  Leak-style bugs only show up here.
-    return static_cast<size_t>( b2World_GetCounters( world_ ).bodyCount );
+    return static_cast<size_t>(b2World_GetCounters(world_).bodyCount);
 }
 
-void PhysicsWorld::on_zlevel_changed( const map &m, int old_z, int new_z )
-{
-    if( old_z == new_z ) { return; }
+void PhysicsWorld::on_zlevel_changed(const map& m, int old_z, int new_z) {
+    if (old_z == new_z) { return; }
 
     // Destroy terrain bodies from the old z-level.
     std::vector<tripoint_abs_sm> to_remove;
-    for( const auto &[abs_sm, body_list] : terrain_bodies_ ) {
-        if( abs_sm.z() == old_z ) {
-            to_remove.push_back( abs_sm );
-        }
+    for (const auto& [abs_sm, body_list] : terrain_bodies_) {
+        if (abs_sm.z() == old_z) { to_remove.push_back(abs_sm); }
     }
-    for( const auto &abs_sm : to_remove ) {
+    for (const auto& abs_sm : to_remove) {
         // Still resident: only the z-level focus changed, so these submaps and any
         // vehicles in them are alive.  Passing false would strip the body of every
         // vehicle on the old z-level, permanently, on each z change.
-        on_submap_unloaded( abs_sm, /*submap_still_resident=*/true );
+        on_submap_unloaded(abs_sm, /*submap_still_resident=*/true);
     }
 
     // Create terrain bodies for the new z-level (all in-bubble submaps).
-    const auto &origin = m.get_abs_sub();
-    for( int gx = 0; gx < m.getmapsize(); ++gx ) {
-        for( int gy = 0; gy < m.getmapsize(); ++gy ) {
-            const tripoint_abs_sm abs_sm{ origin.x() + gx, origin.y() + gy, new_z };
-            on_submap_loaded( m, abs_sm );
+    const auto& origin = m.get_abs_sub();
+    for (int gx = 0; gx < m.getmapsize(); ++gx) {
+        for (int gy = 0; gy < m.getmapsize(); ++gy) {
+            const tripoint_abs_sm abs_sm{origin.x() + gx, origin.y() + gy, new_z};
+            on_submap_loaded(m, abs_sm);
         }
     }
 }
 
 // ── Phase 5 hooks ─────────────────────────────────────────────────────────────
 
-void PhysicsWorld::on_tile_bashed( tripoint_bub_ms pos )
-{
-    const auto it = bashable_tile_bodies_.find( pos );
-    if( it == bashable_tile_bodies_.end() ) { return; }
+void PhysicsWorld::on_tile_bashed(tripoint_bub_ms pos) {
+    const auto it = bashable_tile_bodies_.find(pos);
+    if (it == bashable_tile_bodies_.end()) { return; }
     const auto bid = it->second;
-    bashable_tile_bodies_.erase( it );
+    bashable_tile_bodies_.erase(it);
 
     // Remove from per-submap list (linear scan, bashable list is small per submap).
-    for( auto &[abs_sm, tile_list] : bashable_tiles_ ) {
-        const auto erase_it = std::ranges::find_if(
-            tile_list, [bid]( const auto &p ) { return B2_ID_EQUALS( p.second, bid ); } );
-        if( erase_it != tile_list.end() ) {
-            tile_list.erase( erase_it );
+    for (auto& [abs_sm, tile_list] : bashable_tiles_) {
+        const auto erase_it = std::ranges::find_if(tile_list, [bid](const auto& p) {
+            return B2_ID_EQUALS(p.second, bid);
+        });
+        if (erase_it != tile_list.end()) {
+            tile_list.erase(erase_it);
             break;
         }
     }
 
-    b2DestroyBody( bid );
+    b2DestroyBody(bid);
 }
 
 // ── Game-loop interface ───────────────────────────────────────────────────────
 
-void PhysicsWorld::sync_bodies_from_game()
-{
+void PhysicsWorld::sync_bodies_from_game() {
     // Push the game's velocity model into the bodies.  Done once per turn, not
     // per sub-step: a per-sub-step re-sync would overwrite whatever the contact
     // solver produced, so collisions could never actually change velocity.
-    for( auto &[veh, bid] : vehicle_bodies_ ) {
-        const auto fv      = veh->face_vec();
-        const auto spd_mps = static_cast<float>( veh->velocity ) / 100.0f;
-        b2Body_SetLinearVelocity( bid, { static_cast<float>( fv.x ) * spd_mps,
-                                         static_cast<float>( fv.y ) * spd_mps } );
-        b2Body_SetAngularVelocity( bid, veh->angular_velocity_rads );
+    for (auto& [veh, bid] : vehicle_bodies_) {
+        const auto fv = veh->face_vec();
+        const auto spd_mps = static_cast<float>(veh->velocity) / 100.0f;
+        b2Body_SetLinearVelocity(
+            bid, {static_cast<float>(fv.x) * spd_mps, static_cast<float>(fv.y) * spd_mps});
+        b2Body_SetAngularVelocity(bid, veh->angular_velocity_rads);
         // Continuous collision for anything fast enough to cross a whole tile
         // within one turn; without this a fast body can still skip a 1-tile
         // static terrain body between sub-steps.
-        b2Body_SetBullet( bid, std::abs( veh->velocity ) > 2000 );
+        b2Body_SetBullet(bid, std::abs(veh->velocity) > 2000);
     }
 }
 
-void PhysicsWorld::sync_game_from_bodies()
-{
-    for( auto &[veh, bid] : vehicle_bodies_ ) {
+void PhysicsWorld::sync_game_from_bodies() {
+    for (auto& [veh, bid] : vehicle_bodies_) {
         // Angular velocity is a genuine round-trip for every registered vehicle:
         // sync_bodies_from_game() pushes veh->angular_velocity_rads into the body
         // each turn, and Box2D's damping is what decays it.  Reading it back
         // unconditionally keeps that loop closed — gating it would leave the
         // field write-only, so a legacy vehicle spun up by part_collision() or
         // solve_vv_cluster() would keep that spin forever.
-        veh->angular_velocity_rads = b2Body_GetAngularVelocity( bid );
+        veh->angular_velocity_rads = b2Body_GetAngularVelocity(bid);
 
         // Position, facing and the precalc[] layout derived from facing are only
         // taken from the body for vehicles under physics authority.  For the rest
@@ -674,12 +622,12 @@ void PhysicsWorld::sync_game_from_bodies()
         // position but had their facing overwritten from Box2D anyway, which is
         // why toggling authority globally changed that suite's results even
         // though it had already opted out.
-        if( !veh->box2d_position_authority ) { continue; }
-        const auto pos     = b2Body_GetPosition( bid );
-        veh->physics_pos   = rl_vec2d{ pos.x / TILE_M, pos.y / TILE_M };
-        const auto rot     = b2Body_GetRotation( bid );
-        veh->physics_angle = std::atan2( rot.s, rot.c );
-        veh->refresh_precalc( veh->physics_angle );
+        if (!veh->box2d_position_authority) { continue; }
+        const auto pos = b2Body_GetPosition(bid);
+        veh->physics_pos = rl_vec2d{pos.x / TILE_M, pos.y / TILE_M};
+        const auto rot = b2Body_GetRotation(bid);
+        veh->physics_angle = std::atan2(rot.s, rot.c);
+        veh->refresh_precalc(veh->physics_angle);
 
         // Keep `move` (the travel-direction tileray) in step with reality.
         //
@@ -700,56 +648,50 @@ void PhysicsWorld::sync_game_from_bodies()
         // as a skid.  Below a small speed the direction is numerical noise, so
         // fall back to `face` — otherwise a stationary or just-starting vehicle
         // would get a random heading and a random drag penalty.
-        const auto lv = b2Body_GetLinearVelocity( bid );
+        const auto lv = b2Body_GetLinearVelocity(bid);
         constexpr auto min_dir_mps = 0.05f;
-        if( std::hypot( lv.x, lv.y ) >= min_dir_mps ) {
-            veh->move.init( units::atan2( lv.y, lv.x ) );
+        if (std::hypot(lv.x, lv.y) >= min_dir_mps) {
+            veh->move.init(units::atan2(lv.y, lv.x));
         } else {
             veh->move = veh->face;
         }
     }
 }
 
-auto PhysicsWorld::substeps_for_turn( float turn_seconds ) const -> int
-{
+auto PhysicsWorld::substeps_for_turn(float turn_seconds) const -> int {
     // Keep per-step translation under half a tile so a body cannot pass through
     // a 1-tile-wide static terrain body between steps.
     constexpr auto max_tiles_per_step = 0.5f;
     auto max_mps = 0.0f;
-    for( const auto &[veh, bid] : vehicle_bodies_ ) {
-        max_mps = std::max( max_mps, std::abs( static_cast<float>( veh->velocity ) ) / 100.0f );
+    for (const auto& [veh, bid] : vehicle_bodies_) {
+        max_mps = std::max(max_mps, std::abs(static_cast<float>(veh->velocity)) / 100.0f);
     }
-    if( max_mps <= 0.0f ) { return 1; }
-    const auto travel_m   = max_mps * turn_seconds;
+    if (max_mps <= 0.0f) { return 1; }
+    const auto travel_m = max_mps * turn_seconds;
     const auto step_limit = max_tiles_per_step * TILE_M;
-    return std::clamp( static_cast<int>( std::ceil( travel_m / step_limit ) ), 1, 240 );
+    return std::clamp(static_cast<int>(std::ceil(travel_m / step_limit)), 1, 240);
 }
 
-void PhysicsWorld::step_turn( float turn_seconds )
-{
-    if( turn_seconds <= 0.0f ) {
-        return;
-    }
+void PhysicsWorld::step_turn(float turn_seconds) {
+    if (turn_seconds <= 0.0f) { return; }
     sync_bodies_from_game();
-    const auto steps = substeps_for_turn( turn_seconds );
-    const auto dt    = turn_seconds / static_cast<float>( steps );
-    for( int i = 0; i < steps; ++i ) {
-        b2World_Step( world_, dt, 4 );
+    const auto steps = substeps_for_turn(turn_seconds);
+    const auto dt = turn_seconds / static_cast<float>(steps);
+    for (int i = 0; i < steps; ++i) {
+        b2World_Step(world_, dt, 4);
         dispatch_contact_events();
     }
     sync_game_from_bodies();
 }
 
-void PhysicsWorld::step( float dt, int substeps )
-{
+void PhysicsWorld::step(float dt, int substeps) {
     sync_bodies_from_game();
-    b2World_Step( world_, dt, substeps );
+    b2World_Step(world_, dt, substeps);
     sync_game_from_bodies();
     dispatch_contact_events();
 }
 
-void PhysicsWorld::dispatch_contact_events()
-{
+void PhysicsWorld::dispatch_contact_events() {
     // Responsibility split:
     //   post-step loop (step() above) — writes angular_velocity_rads for ALL vehicles
     //     unconditionally after every b2World_Step(); this is the authoritative writer.
@@ -769,140 +711,124 @@ void PhysicsWorld::dispatch_contact_events()
     // bash_vehicle_tile() apply its momentum to the tile via the validated
     // part_collision impulse model. On success, drop the now-obsolete terrain body.
 
-    const auto events = b2World_GetContactEvents( world_ );
-    for( int i = 0; i < events.beginCount; ++i ) {
-        const auto &ev = events.beginEvents[i];
-        vehicle *veh = nullptr;
+    const auto events = b2World_GetContactEvents(world_);
+    for (int i = 0; i < events.beginCount; ++i) {
+        const auto& ev = events.beginEvents[i];
+        vehicle* veh = nullptr;
         tripoint_bub_ms tile{};
         bool have_tile = false;
-        for( const auto sid : { ev.shapeIdA, ev.shapeIdB } ) {
-            if( b2Shape_IsSensor( sid ) ) { continue; } // creature sensors — skip
-            const auto bid = b2Shape_GetBody( sid );
-            auto *ud = b2Body_GetUserData( bid );
-            if( ud == nullptr ) { continue; }
-            const auto enc = reinterpret_cast<std::uintptr_t>( ud );
-            if( ( enc & tile_pos_tag ) != 0 ) {
+        for (const auto sid : {ev.shapeIdA, ev.shapeIdB}) {
+            if (b2Shape_IsSensor(sid)) { continue; } // creature sensors — skip
+            const auto bid = b2Shape_GetBody(sid);
+            auto* ud = b2Body_GetUserData(bid);
+            if (ud == nullptr) { continue; }
+            const auto enc = reinterpret_cast<std::uintptr_t>(ud);
+            if ((enc & tile_pos_tag) != 0) {
                 // Tagged user-data: a bashable-tile body (see encode_tile_pos).
-                tile = decode_tile_pos( enc );
+                tile = decode_tile_pos(enc);
                 have_tile = true;
                 continue;
             }
-            auto *maybe_veh = static_cast<vehicle *>( ud );
-            if( vehicle_bodies_.count( maybe_veh ) != 0 ) {
-                veh = maybe_veh;
-            }
+            auto* maybe_veh = static_cast<vehicle*>(ud);
+            if (vehicle_bodies_.count(maybe_veh) != 0) { veh = maybe_veh; }
         }
-        if( veh == nullptr || !have_tile ) { continue; }
-        if( bash_vehicle_tile( *veh, tile ) ) {
-            on_tile_bashed( tile );
-        }
+        if (veh == nullptr || !have_tile) { continue; }
+        if (bash_vehicle_tile(*veh, tile)) { on_tile_bashed(tile); }
     }
 }
 
 // ── Query access ──────────────────────────────────────────────────────────────
 
-auto PhysicsWorld::world_id() const -> b2WorldId
-{
-    return world_;
-}
+auto PhysicsWorld::world_id() const -> b2WorldId { return world_; }
 
 // ── Phase 5: transient terrain-impulse solve ──────────────────────────────────
 
-auto PhysicsWorld::resolve_terrain_impulse( vehicle        &v,
-                                             tripoint_bub_ms tile_pos,
-                                             float           tile_mass_kg,
-                                             float           restitution ) -> terrain_impulse_result
-{
-    ( void )tile_mass_kg;  // terrain tile is b2_staticBody; mass not needed
+auto PhysicsWorld::resolve_terrain_impulse(
+    vehicle& v, tripoint_bub_ms tile_pos, float tile_mass_kg, float restitution)
+    -> terrain_impulse_result {
+    (void)tile_mass_kg; // terrain tile is b2_staticBody; mass not needed
 
     // A vehicle with no footprint has nothing that can touch the tile, so there is no
     // impulse to resolve and no polygon to build one from.  Answering with the incoming
     // state is the identity result the caller already handles.
-    const auto poly = vehicle_box2d_shape( v );
-    if( !poly ) {
-        return terrain_impulse_result{ v.velo_vec(), v.angular_velocity_rads };
-    }
+    const auto poly = vehicle_box2d_shape(v);
+    if (!poly) { return terrain_impulse_result{v.velo_vec(), v.angular_velocity_rads}; }
 
     // ── 1. Temporary world (zero gravity, isolated from persistent world_) ────
-    auto wdef    = b2DefaultWorldDef();
-    wdef.gravity = { 0.0f, 0.0f };
-    const auto tmp_world = b2CreateWorld( &wdef );
+    auto wdef = b2DefaultWorldDef();
+    wdef.gravity = {0.0f, 0.0f};
+    const auto tmp_world = b2CreateWorld(&wdef);
 
     // ── 2. Vehicle as b2_dynamicBody at origin ────────────────────────────────
-    const auto fv     = v.face_vec();   // (cos θ, sin θ)
-    const auto vel    = v.velo_vec();   // cm/s
+    const auto fv = v.face_vec();  // (cos θ, sin θ)
+    const auto vel = v.velo_vec(); // cm/s
 
-    auto vbdef             = b2DefaultBodyDef();
-    vbdef.type             = b2_dynamicBody;
-    vbdef.position         = { 0.0f, 0.0f };
-    vbdef.rotation         = b2Rot{ static_cast<float>( fv.x ), static_cast<float>( fv.y ) };
-    vbdef.linearVelocity   = { vel.x / 100.0f, vel.y / 100.0f };
-    vbdef.angularVelocity  = v.angular_velocity_rads;
+    auto vbdef = b2DefaultBodyDef();
+    vbdef.type = b2_dynamicBody;
+    vbdef.position = {0.0f, 0.0f};
+    vbdef.rotation = b2Rot{static_cast<float>(fv.x), static_cast<float>(fv.y)};
+    vbdef.linearVelocity = {vel.x / 100.0f, vel.y / 100.0f};
+    vbdef.angularVelocity = v.angular_velocity_rads;
 
-    const auto vbody = b2CreateBody( tmp_world, &vbdef );
-    b2Body_SetUserData( vbody, &v );
+    const auto vbody = b2CreateBody(tmp_world, &vbdef);
+    b2Body_SetUserData(vbody, &v);
 
-    const auto mass_kg = units::to_kilogram( v.total_mass() );
+    const auto mass_kg = units::to_kilogram(v.total_mass());
 
     // Approximate body area for density (same pattern as make_vehicle_body()).
-    const auto half_w = std::max( ( poly->vertices[2].x - poly->vertices[0].x ) * 0.5f, 0.01f );
-    const auto half_h = std::max( ( poly->vertices[2].y - poly->vertices[0].y ) * 0.5f, 0.01f );
+    const auto half_w = std::max((poly->vertices[2].x - poly->vertices[0].x) * 0.5f, 0.01f);
+    const auto half_h = std::max((poly->vertices[2].y - poly->vertices[0].y) * 0.5f, 0.01f);
 
-    auto vsdef       = b2DefaultShapeDef();
-    vsdef.density    = mass_kg / ( 4.0f * half_w * half_h );
+    auto vsdef = b2DefaultShapeDef();
+    vsdef.density = mass_kg / (4.0f * half_w * half_h);
     vsdef.restitution = restitution;
-    vsdef.friction   = 0.3f;
-    b2CreatePolygonShape( vbody, &vsdef, &poly.value() );
+    vsdef.friction = 0.3f;
+    b2CreatePolygonShape(vbody, &vsdef, &poly.value());
 
     // ── 3. Terrain tile as b2_staticBody relative to vehicle origin ───────────
     const auto vpos = v.bub_ms_location();
-    const auto tx   = static_cast<float>( tile_pos.x() - vpos.x() ) * TILE_M;
-    const auto ty   = static_cast<float>( tile_pos.y() - vpos.y() ) * TILE_M;
+    const auto tx = static_cast<float>(tile_pos.x() - vpos.x()) * TILE_M;
+    const auto ty = static_cast<float>(tile_pos.y() - vpos.y()) * TILE_M;
 
-    auto tbdef      = b2DefaultBodyDef();
-    tbdef.type      = b2_staticBody;
-    tbdef.position  = { tx, ty };
+    auto tbdef = b2DefaultBodyDef();
+    tbdef.type = b2_staticBody;
+    tbdef.position = {tx, ty};
 
-    const auto tbody = b2CreateBody( tmp_world, &tbdef );
+    const auto tbody = b2CreateBody(tmp_world, &tbdef);
 
-    const auto tile_poly = b2MakeBox( TILE_M * 0.5f, TILE_M * 0.5f );
-    auto tsdef           = b2DefaultShapeDef();
-    tsdef.density        = 0.0f;
-    tsdef.restitution    = restitution;
-    tsdef.friction       = 0.5f;
-    b2CreatePolygonShape( tbody, &tsdef, &tile_poly );
+    const auto tile_poly = b2MakeBox(TILE_M * 0.5f, TILE_M * 0.5f);
+    auto tsdef = b2DefaultShapeDef();
+    tsdef.density = 0.0f;
+    tsdef.restitution = restitution;
+    tsdef.friction = 0.5f;
+    b2CreatePolygonShape(tbody, &tsdef, &tile_poly);
 
     // ── 4. Single physics step ─────────────────────────────────────────────────
-    b2World_Step( tmp_world, 1.0f / 60.0f, 8 );
+    b2World_Step(tmp_world, 1.0f / 60.0f, 8);
 
     // ── 5. Read back resolved velocities ──────────────────────────────────────
-    const auto nv = b2Body_GetLinearVelocity( vbody );
-    const auto nw = b2Body_GetAngularVelocity( vbody );
+    const auto nv = b2Body_GetLinearVelocity(vbody);
+    const auto nw = b2Body_GetAngularVelocity(vbody);
 
     // ── 6. Destroy temporary world ────────────────────────────────────────────
-    b2DestroyWorld( tmp_world );
+    b2DestroyWorld(tmp_world);
 
     // ── 7. Return result (m/s → cm/s for linear velocity) ─────────────────────
-    return terrain_impulse_result{
-        rl_vec2d{ nv.x * 100.0f, nv.y * 100.0f },
-        nw
-    };
+    return terrain_impulse_result{rl_vec2d{nv.x * 100.0f, nv.y * 100.0f}, nw};
 }
 
 
 // ── Debug overlay ─────────────────────────────────────────────────────────────
 
-auto PhysicsWorld::toggle_debug_draw() -> bool
-{
+auto PhysicsWorld::toggle_debug_draw() -> bool {
     debug_draw_ = !debug_draw_;
     return debug_draw_;
 }
 
-auto PhysicsWorld::draw_debug( lighting::debug_line_pass &pass ) const -> void
-{
-    if( !debug_draw_ || B2_IS_NULL( world_ ) ) { return; }
-    auto ctx = DebugDrawContext{ &pass, 1.0f / TILE_M };
-    auto dd  = make_debug_draw( &ctx );
-    b2World_Draw( world_, &dd );
+auto PhysicsWorld::draw_debug(lighting::debug_line_pass& pass) const -> void {
+    if (!debug_draw_ || B2_IS_NULL(world_)) { return; }
+    auto ctx = DebugDrawContext{&pass, 1.0f / TILE_M};
+    auto dd = make_debug_draw(&ctx);
+    b2World_Draw(world_, &dd);
 }
 } // namespace physics

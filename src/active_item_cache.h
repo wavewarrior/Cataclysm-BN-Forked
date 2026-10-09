@@ -30,11 +30,10 @@ struct active_item_queue {
     std::vector<cache_reference<item>> items;
 };
 
-namespace std
-{
+namespace std {
 template <>
 struct hash<special_item_type> {
-    std::size_t operator()( const special_item_type &k ) const noexcept {
+    std::size_t operator()( const special_item_type & k ) const noexcept {
         return static_cast<size_t>( k );
     }
 };

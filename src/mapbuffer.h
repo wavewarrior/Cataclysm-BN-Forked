@@ -916,9 +916,9 @@ class mapbuffer
         std::unordered_map<tripoint_abs_ms, shared_ptr_fast<npc>> active_npcs_by_location_;
         std::set<vehicle_handle> loaded_vehicles_;
         std::unordered_map<tripoint_abs_ms, std::vector<vehicle_footprint_entry>>
-                vehicle_footprint_by_location_;
+        vehicle_footprint_by_location_;
         std::unordered_map<vehicle_handle, std::vector<tripoint_abs_ms>>
-                vehicle_footprint_locations_;
+        vehicle_footprint_locations_;
         std::set<tripoint_abs_sm> submaps_with_active_items_;
         std::set<tripoint_abs_sm> submaps_with_luminous_items_;
 

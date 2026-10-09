@@ -159,8 +159,7 @@ void cata::detail::reg_overmap( sol::state &lua )
     []( const tripoint_abs_omt & origin, omt_find_params params ) -> sol::optional<tripoint_abs_omt> {
         params.force_sync = true;
         auto result = get_active_overmapbuffer().find_closest( origin, params );
-        if( result == tripoint_abs_omt::min() )
-        {
+        if( result == tripoint_abs_omt::min() ) {
             return sol::nullopt;
         }
         return result;
@@ -171,8 +170,7 @@ void cata::detail::reg_overmap( sol::state &lua )
     []( const tripoint_abs_omt & origin, omt_find_params params ) -> sol::optional<tripoint_abs_omt> {
         params.force_sync = true;
         auto result = get_active_overmapbuffer().find_random( origin, params );
-        if( result == tripoint_abs_omt::min() )
-        {
+        if( result == tripoint_abs_omt::min() ) {
             return sol::nullopt;
         }
         return result;
@@ -207,9 +205,8 @@ void cata::detail::reg_overmap( sol::state &lua )
     luna::set_fx( lib, "reveal",
                   []( const tripoint_abs_omt & center, int radius,
     sol::optional<sol::protected_function> filter_fn ) -> bool {
-        if( filter_fn.has_value() )
-    {
-        auto filter = filter_fn.value();
+        if( filter_fn.has_value() ) {
+            auto filter = filter_fn.value();
             const auto wrapped_filter = [filter]( const oter_id & ter ) -> bool {
                 sol::protected_function_result res = filter( ter );
                 check_func_result( res );
@@ -230,8 +227,7 @@ void cata::detail::reg_overmap( sol::state &lua )
     luna::set_fx( lib, "get_note",
     []( const tripoint_abs_omt & p ) -> sol::optional<std::string> {
         const auto &note_text = get_active_overmapbuffer().note( p );
-        if( note_text.empty() )
-        {
+        if( note_text.empty() ) {
             return sol::nullopt;
         }
         return note_text;
@@ -240,9 +236,8 @@ void cata::detail::reg_overmap( sol::state &lua )
     DOC( "Set a player note at the given position. Pass nil or empty string to clear." );
     luna::set_fx( lib, "set_note",
     []( const tripoint_abs_omt & pos, const sol::optional<std::string> &note_text ) -> void {
-        if( note_text.has_value() && !note_text->empty() )
-    {
-        get_active_overmapbuffer().add_note( pos, *note_text );
+        if( note_text.has_value() && !note_text->empty() ) {
+            get_active_overmapbuffer().add_note( pos, *note_text );
             return;
         }
         get_active_overmapbuffer().delete_note( pos );
@@ -311,8 +306,7 @@ void cata::detail::reg_overmap( sol::state &lua )
     luna::set_fx( lib, "horde_count",
     []( const tripoint_abs_omt & p ) -> int {
         auto groups = get_active_overmapbuffer().monsters_at( p );
-        return static_cast<int>( std::ranges::count_if( groups, []( const mongroup * group )
-        {
+        return static_cast<int>( std::ranges::count_if( groups, []( const mongroup * group ) {
             return group != nullptr && group->horde;
         } ) );
     } );
@@ -346,14 +340,12 @@ void cata::detail::reg_overmap( sol::state &lua )
     []( const sol::table & opts ) -> mongroup * {
         const sol::object type_obj = opts.get<sol::object>( "type" );
         mongroup_id type_id = mongroup_id::NULL_ID();
-        if( type_obj.is<std::string>() )
-        {
+        if( type_obj.is<std::string>() ) {
             type_id = mongroup_id( type_obj.as<std::string>() );
-        } else if( type_obj.is<mongroup_id>() )
-        {
+        } else if( type_obj.is<mongroup_id>() ) {
             type_id = type_obj.as<mongroup_id>();
         }
-        const sol::optional<tripoint_abs_omt> pos_val = opts.get<sol::optional<tripoint_abs_omt>>( "pos" );
+        const sol::optional<tripoint_abs_omt> pos_val = opts.get<sol::optional<tripoint_abs_omt >> ( "pos" );
         if( type_id.is_null() || !pos_val.has_value() )
         {
             return nullptr;
@@ -363,7 +355,7 @@ void cata::detail::reg_overmap( sol::state &lua )
         const bool is_horde = opts.get_or( "horde", true );
         const std::string behaviour = opts.get_or( "behaviour", std::string( "roam" ) );
         const bool diffuse = opts.get_or( "diffuse", false );
-        const sol::optional<tripoint_abs_omt> target_omt = opts.get<sol::optional<tripoint_abs_omt>>( "target" );
+        const sol::optional<tripoint_abs_omt> target_omt = opts.get<sol::optional<tripoint_abs_omt >> ( "target" );
 
         const tripoint_abs_sm pos_abs_sm = project_to<coords::sm>( *pos_val );
         mongroup mg( type_id, pos_abs_sm, radius, population );
