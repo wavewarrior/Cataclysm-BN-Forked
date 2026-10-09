@@ -39,6 +39,9 @@ export function isRecentlyClaimed(
   return at !== undefined && now - at < CLAIM_LAG_MS
 }
 
+/// Thrown when every implementer lane is held by another driver. The watcher waits instead of backing off.
+export class LanesBusyError extends Error {}
+
 /// Returns the number of passes started.
 export async function watch(opts: WatchOptions): Promise<number> {
   let passes = 0
@@ -53,7 +56,6 @@ export async function watch(opts: WatchOptions): Promise<number> {
     let wait = opts.intervalSec
     try {
       if (await opts.hasWork()) {
-        report("running", "ticket ready: starting a driver pass")
         passes++
         await opts.runPass()
         failures = 0
@@ -63,9 +65,14 @@ export async function watch(opts: WatchOptions): Promise<number> {
         report("idle", `idle: no pickable factory:ready ticket, polling every ${opts.intervalSec}s`)
       }
     } catch (e) {
-      failures++
-      wait = nextDelaySec(opts.intervalSec, failures)
-      opts.log(`error (${failures} in a row): ${(e as Error).message}; retry in ${wait}s`)
+      if (e instanceof LanesBusyError) {
+        failures = 0
+        report("busy", `${e.message}; retrying every ${opts.intervalSec}s`)
+      } else {
+        failures++
+        wait = nextDelaySec(opts.intervalSec, failures)
+        opts.log(`error (${failures} in a row): ${(e as Error).message}; retry in ${wait}s`)
+      }
     }
     if (opts.once || opts.signal?.aborted) break
     await opts.sleep(wait * 1000)

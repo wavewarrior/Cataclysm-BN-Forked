@@ -29,7 +29,7 @@ import { agentList, ensureServer, workspaceClose } from "./herdr.ts"
 import { publishDrafts, type TicketDraft, validateDrafts } from "./publish.ts"
 import { acquireLane, lanePathFor, readLanes, releaseLane } from "./lanes.ts"
 import { git, mainRepoRoot } from "./util.ts"
-import { isRecentlyClaimed, watch } from "./watch.ts"
+import { isRecentlyClaimed, LanesBusyError, watch } from "./watch.ts"
 
 const repoRoot = () => git(".", "rev-parse", "--show-toplevel")
 
@@ -119,7 +119,7 @@ async function runLoop(
     const lane = await acquireLane(next.number)
     if (!lane) {
       if (running.size === 0) {
-        throw new Error("no lane free and none running: see `status`, `stop <issue>`")
+        throw new LanesBusyError("no lane free and none running: see `status`, `stop <issue>`")
       }
       await Promise.race(running)
       continue

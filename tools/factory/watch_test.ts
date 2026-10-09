@@ -2,6 +2,7 @@ import { assertEquals } from "@std/assert"
 import {
   CLAIM_LAG_MS,
   isRecentlyClaimed,
+  LanesBusyError,
   MAX_BACKOFF_SEC,
   nextDelaySec,
   watch,
@@ -129,4 +130,26 @@ Deno.test("isRecentlyClaimed ignores a ticket only inside the lag window", () =>
   assertEquals(isRecentlyClaimed(claims, 7, 1_000 + CLAIM_LAG_MS - 1), true)
   assertEquals(isRecentlyClaimed(claims, 7, 1_000 + CLAIM_LAG_MS), false)
   assertEquals(isRecentlyClaimed(claims, 8, 1_000), false)
+})
+
+Deno.test("watch treats busy lanes as idle, not as a failure", async () => {
+  let calls = 0
+  const controller = new AbortController()
+  const result = await run({
+    signal: controller.signal,
+    hasWork: () => Promise.resolve(true),
+    runPass: () => {
+      calls++
+      if (calls === 4) controller.abort()
+      if (calls <= 3) {
+        return Promise.reject(new LanesBusyError("implementer lanes are held by another driver"))
+      }
+      return Promise.resolve()
+    },
+  })
+  // Busy lanes never double the wait, and the busy state is logged once, not on every tick.
+  assertEquals(result.sleeps, [60, 60, 60])
+  assertEquals(result.logs.filter((l) => l.includes("retrying every 60s")).length, 1)
+  assertEquals(result.logs.filter((l) => l.startsWith("error")).length, 0)
+  assertEquals(calls, 4)
 })
