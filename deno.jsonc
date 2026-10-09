@@ -44,7 +44,7 @@
       "command": "deno run -A tools/factory/gate.ts",
     },
     "factory": {
-      "description": "agentic software factory driver: install, emit-config, release, run, status, stop (see tools/factory/main.ts)",
+      "description": "agentic software factory driver: install, emit-config, release, publish, map-status, run, watch, status, stop (see tools/factory/main.ts)",
       "command": "deno run -A tools/factory/main.ts",
     },
   },

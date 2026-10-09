@@ -6,6 +6,7 @@
 ///   run                work `factory:ready` tickets in up to maxLanes worktree lanes
 ///   status             tickets by label, lane locks and herdr agents
 ///   stop <issue>       close a ticket's panes and mark it blocked
+///   watch              poll for ready tickets; run a pass as soon as one is pickable
 import { Command } from "@cliffy/command"
 import { fromFileUrl } from "@std/path"
 import { config } from "./config.ts"
@@ -28,6 +29,7 @@ import { agentList, ensureServer, workspaceClose } from "./herdr.ts"
 import { publishDrafts, type TicketDraft, validateDrafts } from "./publish.ts"
 import { acquireLane, lanePathFor, readLanes, releaseLane } from "./lanes.ts"
 import { git, mainRepoRoot } from "./util.ts"
+import { isRecentlyClaimed, watch } from "./watch.ts"
 
 const repoRoot = () => git(".", "rev-parse", "--show-toplevel")
 
@@ -86,7 +88,9 @@ async function claim(issue: Issue): Promise<void> {
   await editLabels(issue.number, { add: ["factory:in-progress"], remove: ["factory:ready"] })
 }
 
-async function runLoop(opts: { max: number; issue?: number }): Promise<void> {
+async function runLoop(
+  opts: { max: number; issue?: number; claims?: Map<number, number> },
+): Promise<void> {
   if (config.requireCi && !(await actionsEnabled())) {
     throw new Error("GitHub Actions is disabled on the fork; refusing to open PRs without CI")
   }
@@ -95,8 +99,8 @@ async function runLoop(opts: { max: number; issue?: number }): Promise<void> {
   const running = new Set<Promise<void>>()
   let started = 0
   // `gh issue list` reads a search index that lags a label edit by seconds, so a ticket we just
-  // claimed can still be listed as ready. Remember what this process started.
-  const startedIssues = new Set<number>()
+  // claimed can still be listed as ready. Remember when this process claimed each one.
+  const claims = opts.claims ?? new Map<number, number>()
   while (started < opts.max) {
     // A named ticket is read directly: the label list is a search index that can lag an edit.
     const listed = opts.issue === undefined
@@ -104,7 +108,7 @@ async function runLoop(opts: { max: number; issue?: number }): Promise<void> {
       : [await getIssue(opts.issue)].filter((i) =>
         i.state === "OPEN" && i.labels.includes("factory:ready")
       )
-    const ready = listed.filter((i) => !startedIssues.has(i.number))
+    const ready = listed.filter((i) => !isRecentlyClaimed(claims, i.number, Date.now()))
     const next = await pickNext(ready, isClosed)
     if (!next) {
       if (started === 0) {
@@ -121,7 +125,7 @@ async function runLoop(opts: { max: number; issue?: number }): Promise<void> {
       continue
     }
     await claim(next)
-    startedIssues.add(next.number)
+    claims.set(next.number, Date.now())
     started++
     console.log(`lane ${lane.n}: #${next.number} ${next.title}`)
     const job: Promise<void> = runTicket(next, lane, { repo })
@@ -169,6 +173,39 @@ async function stop(issueNumber: number): Promise<void> {
   await comment(issue.number, "factory: stopped by a human.")
 }
 
+/// Poll `factory:ready` and run a pass whenever a ticket is pickable. Ctrl+C finishes the current
+/// pass and exits; a second Ctrl+C exits at once, leaving tickets already running in their panes.
+async function runWatch(opts: { intervalSec: number; once?: boolean }): Promise<void> {
+  const controller = new AbortController()
+  const claims = new Map<number, number>()
+  let interrupts = 0
+  const onInterrupt = () => {
+    interrupts++
+    if (interrupts > 1) Deno.exit(130)
+    console.log("stopping after the current pass; press Ctrl+C again to exit now")
+    controller.abort()
+  }
+  Deno.addSignalListener("SIGINT", onInterrupt)
+  try {
+    await watch({
+      intervalSec: opts.intervalSec,
+      once: opts.once,
+      signal: controller.signal,
+      hasWork: async () => {
+        const ready = (await listIssues(["factory:ready"])).filter((i) =>
+          !isRecentlyClaimed(claims, i.number, Date.now())
+        )
+        return (await pickNext(ready, isClosed)) !== undefined
+      },
+      runPass: () => runLoop({ max: 1000, claims }),
+      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      log: (line) => console.log(`${new Date().toISOString()} ${line}`),
+    })
+  } finally {
+    Deno.removeSignalListener("SIGINT", onInterrupt)
+  }
+}
+
 if (import.meta.main) {
   await new Command()
     .name("factory")
@@ -198,6 +235,10 @@ if (import.meta.main) {
     .option("--issue <n:number>", "only this issue")
     .action(({ max, issue }) => runLoop({ max, issue }))
     .command("status", "Show tickets, lanes and agents.").action(status)
+    .command("watch", "Poll for ready tickets; run a driver pass when one is pickable.")
+    .option("--interval <seconds:number>", "seconds between polls", { default: 60 })
+    .option("--once", "poll once, run a pass if there is work, then exit")
+    .action(({ interval, once }) => runWatch({ intervalSec: interval, once }))
     .command("stop <issue:number>", "Stop a ticket and mark it blocked.")
     .action((_, issue) => stop(issue))
     .parse(Deno.args)
