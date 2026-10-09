@@ -47,7 +47,7 @@ JSON
 | -------- | ------------------------------------- | --------------------------------------------------------------------- |
 | omp hook | `.omp/hooks/pre/factory-guard.ts`     | no push, `gh`, destructive git, `--no-verify`, protected-path writes  |
 | pre-push | `.githooks/pre-push`, `check_push.ts` | only `factory/*`, only a commit with a passing full stamp and verdict |
-| CI       | `factory-guard.yml`, `factory-ci.yml` | protected paths (from the base ref), fmt/lint, JSON, tidy, full tests |
+| CI       | `factory-ci.yml`                      | protected paths (from the base ref), fmt/lint, JSON, tidy, full tests |
 
 Both local layers are inert unless `FACTORY_LANE=1`, which the driver sets only in lane panes. A determined bash
 session can still forge local files; CI and the human merge are the independent backstop.

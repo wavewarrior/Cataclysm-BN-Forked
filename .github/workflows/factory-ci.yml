@@ -1,7 +1,7 @@
 name: Factory CI
 
 # Independent of the upstream-synced workflows (matrix.yml, clang-tidy.yml target `main`).
-# Required checks on feature/improvements: guard (factory-guard.yml), deno, json, tidy, linux-tests.
+# Required checks on feature/improvements: guard, deno, json, tidy, linux-tests.
 # A factory PR cannot edit this file: the guard job rejects changes under .github/workflows/.
 on:
   pull_request:
@@ -21,6 +21,33 @@ env:
   BASE_REF: ${{ github.base_ref || 'feature/improvements' }}
 
 jobs:
+  # The script and the protected-path list come from the BASE branch, so a PR cannot weaken the
+  # list it is judged by. A PR could still edit this workflow; branch protection and the human
+  # merge cover that, and the driver's own gate rejects workflow edits from a factory lane first.
+  guard:
+    name: guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout base (trusted)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BASE_REF }}
+          path: base
+      - name: checkout PR head (data only)
+        uses: actions/checkout@v4
+        with:
+          path: head
+          fetch-depth: 0
+      - uses: denoland/setup-deno@v2
+        with: { cache: true }
+      - name: protected paths untouched by a factory branch
+        if: ${{ startsWith(github.head_ref, 'factory/') }}
+        run: |
+          deno run -A --config base/deno.jsonc base/tools/factory/protected_paths.ts \
+            --config base/tools/factory/config.json \
+            --repo head \
+            --base "origin/$BASE_REF"
+
   deno:
     name: deno
     runs-on: ubuntu-latest
