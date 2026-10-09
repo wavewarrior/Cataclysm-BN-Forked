@@ -1,10 +1,10 @@
 # omp --config overlay for an unattended factory implementer lane (see tools/factory/config.ts).
 modelRoles:
-  default: anthropic/claude-sonnet-5-5
+  default: anthropic/claude-haiku-5-5
   task: anthropic/claude-haiku-5-5
   smol: anthropic/claude-haiku-5-5
   slow: anthropic/claude-haiku-5-5
-  advisor: anthropic/claude-opus-5-5
+  advisor: anthropic/claude-sonnet-5-5
 plan:
   defaultOnStartup: false
 autolearn:

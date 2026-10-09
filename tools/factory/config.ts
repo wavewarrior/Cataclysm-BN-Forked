@@ -9,8 +9,8 @@ export const config = {
   maxFixRetries: 2,
   ticketWallClockMin: 90,
   models: {
-    implementer: "anthropic/claude-sonnet-5-5",
-    reviewer: "anthropic/claude-opus-5-5",
+    implementer: "anthropic/claude-haiku-5-5",
+    reviewer: "anthropic/claude-sonnet-5-5",
     workhorse: "anthropic/claude-haiku-5-5",
   },
   /// Branch is `factory/<issue>-<slug>`.
