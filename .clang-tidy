@@ -120,3 +120,5 @@ CheckOptions:
   - key: readability-simplify-boolean-expr.SimplifyDeMorgan
     value: false
 # vim:tw=0
+
+# guard test
