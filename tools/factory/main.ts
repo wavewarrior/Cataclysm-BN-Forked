@@ -229,15 +229,21 @@ async function boot(): Promise<void> {
     return
   }
   const ws = await workspaceCreate({ cwd: await repoRoot(), label: FACTORY_WORKSPACE })
-  await paneRun(ws.rootPane, "call tools\\factory\\env.cmd")
-  await paneRun(
-    ws.rootPane,
-    "echo Operator: run omp here for the wayfinder and factory-launch skills.",
-  )
-  const watcher = await paneSplit(ws.rootPane, {}, "right")
-  await paneRun(watcher, "tools\\factory\\watch.cmd")
-  const status = await paneSplit(watcher, {}, "down")
-  await paneRun(status, "tools\\factory\\status.cmd")
+  try {
+    await paneRun(ws.rootPane, "call tools\\factory\\env.cmd")
+    await paneRun(
+      ws.rootPane,
+      "echo Operator: run omp here for the wayfinder and factory-launch skills.",
+    )
+    const watcher = await paneSplit(ws.rootPane, {}, "right")
+    await paneRun(watcher, "tools\\factory\\watch.cmd")
+    const status = await paneSplit(watcher, {}, "down")
+    await paneRun(status, "tools\\factory\\status.cmd")
+  } catch (err) {
+    // A half-built workspace would be focused by the next boot and never repaired.
+    await workspaceClose(ws.workspaceId).catch(() => {})
+    throw err
+  }
   console.log(`factory workspace ${ws.workspaceId} ready`)
 }
 
