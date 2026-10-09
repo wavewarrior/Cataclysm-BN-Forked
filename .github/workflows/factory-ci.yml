@@ -66,6 +66,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 1 }
+      - name: install build dependencies (json_formatter configures the whole project)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gettext mold autoconf autoconf-archive automake libtool libltdl-dev \
+            libasound2-dev libpulse-dev libaudio-dev libjack-dev libsndio-dev libx11-dev \
+            libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev libxkbcommon-dev \
+            libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev libegl1-mesa-dev libdbus-1-dev \
+            libibus-1.0-dev libudev-dev libpipewire-0.3-dev libwayland-dev libdecor-0-dev liburing-dev \
+            libfreetype-dev libharfbuzz-dev libtiff-dev libavif-dev libwebp-dev libjpeg-dev libjxl-dev \
+            libsqlite3-dev zlib1g-dev libvulkan-dev
       - name: run JSON syntax validation
         run: build-scripts/lint-json.sh
       - name: run JSON formatting check
