@@ -145,3 +145,37 @@ TEST_CASE("equal_ignoring_elements", "[utility]") {
         CHECK(equal_ignoring_elements(set1, set2, ignored_els) == equal);
     }
 }
+
+TEST_CASE("bound_mod_to_vals", "[utility]") {
+    SECTION("zero max and min mean unbounded") {
+        CHECK(bound_mod_to_vals(5, 100, 0, 0) == 100);
+        CHECK(bound_mod_to_vals(5, -100, 0, 0) == -100);
+        CHECK(bound_mod_to_vals(-5, 0, 0, 0) == 0);
+    }
+
+    SECTION("mod pushing above max is reduced to land on max") {
+        CHECK(bound_mod_to_vals(5, 10, 8, 0) == 3);
+        CHECK(bound_mod_to_vals(0, 20, 8, 0) == 8);
+    }
+
+    SECTION("mod landing exactly on max is unchanged") {
+        CHECK(bound_mod_to_vals(5, 3, 8, 0) == 3);
+    }
+
+    SECTION("val already above max yields zero for a mod pushing further above") {
+        CHECK(bound_mod_to_vals(10, 5, 8, 0) == 0);
+    }
+
+    SECTION("mod pushing below min is raised to land on min") {
+        CHECK(bound_mod_to_vals(5, -10, 0, 2) == -3);
+        CHECK(bound_mod_to_vals(10, -20, 0, 2) == -8);
+    }
+
+    SECTION("mod landing exactly on min is unchanged") {
+        CHECK(bound_mod_to_vals(5, -3, 0, 2) == -3);
+    }
+
+    SECTION("val already below min yields zero for a mod pushing further below") {
+        CHECK(bound_mod_to_vals(1, -5, 0, 3) == 0);
+    }
+}
