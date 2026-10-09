@@ -5,6 +5,7 @@
  * failure, and a timed-out driver is killed by process group so no game process lingers.
  */
 import { dirname, fromFileUrl, join } from "@std/path"
+import { IS_WINDOWS } from "./config.ts"
 import type { WindowSize } from "./trial.ts"
 
 export type DriverRequest = { cmd: string; [key: string]: unknown }
@@ -71,11 +72,11 @@ export type Driver = {
   sendRaw(line: string, expectedId: number | null, timeoutMs?: number): Promise<DriverResponse>
   /** Non-protocol lines that appeared on the protocol channel. Must stay empty. */
   readonly noise: string[]
-  /** Process group id of the shim and everything it started. */
+  /** Process group id of the shim and everything it started (Windows: the game's pid). */
   readonly pgid: number
   /** Resolves with the exit code of the game once it ends. */
   readonly exited: Promise<number>
-  /** Kills the whole process group now. Idempotent. */
+  /** Kills the whole process group (Windows: process tree) now. Idempotent. */
   kill(): void
   /** Closes stdin, waits briefly, then always kills leftovers. */
   close(): Promise<void>
@@ -86,22 +87,29 @@ const SHIM = join(dirname(fromFileUrl(import.meta.url)), "fd_shim.py")
 export function spawnDriver(opts: SpawnOptions): Driver {
   const firstTimeout = opts.firstTimeoutMs ?? 60_000
   const requestTimeout = opts.requestTimeoutMs ?? 10_000
-  const child = new Deno.Command("/usr/bin/python3", {
-    args: [
-      SHIM,
-      "--",
-      opts.binary,
-      "--userdir",
-      opts.userdir + "/",
-      "--world",
-      opts.world,
-      "--dont-debugmsg",
-      "--basepath",
-      opts.basepath,
-      ...(opts.denyList ? ["--driver-deny-list", opts.denyList] : []),
-      ...(opts.scenesDir ? ["--driver-scenes", opts.scenesDir] : []),
-      ...(opts.window ? ["--driver-windowed", `${opts.window.width}x${opts.window.height}`] : []),
-    ],
+  const gameArgs = [
+    "--userdir",
+    opts.userdir + "/",
+    "--world",
+    opts.world,
+    "--dont-debugmsg",
+    "--basepath",
+    opts.basepath,
+    ...(opts.denyList ? ["--driver-deny-list", opts.denyList] : []),
+    ...(opts.scenesDir ? ["--driver-scenes", opts.scenesDir] : []),
+    ...(opts.window ? ["--driver-windowed", `${opts.window.width}x${opts.window.height}`] : []),
+  ]
+  // Windows cannot hand a child an extra descriptor and has no process groups: the game serves
+  // the protocol on its own stdin/stdout (`--driver-fd 0`) and its process tree is killed from its
+  // pid. A Python binary (the mock driver) runs under `python`, since Windows has no shebang
+  // lines. Elsewhere the shim gives it a socketpair on fd 3 and leads a process group.
+  const [command, args] = !IS_WINDOWS
+    ? ["/usr/bin/python3", [SHIM, "--", opts.binary, ...gameArgs]]
+    : opts.binary.toLowerCase().endsWith(".py")
+    ? ["python", [opts.binary, ...gameArgs, "--driver-fd", "0"]]
+    : [opts.binary, [...gameArgs, "--driver-fd", "0"]]
+  const child = new Deno.Command(command, {
+    args,
     stdin: "piped",
     stdout: "piped",
     stderr: opts.stderr ?? "null",
@@ -113,6 +121,11 @@ export function spawnDriver(opts: SpawnOptions): Driver {
       : { SDL_VIDEODRIVER: "dummy", SDL_AUDIODRIVER: "dummy" },
   }).spawn()
   const pgid = child.pid
+  let reaped = false
+  const exited = child.status.then((s) => {
+    reaped = true
+    return s.code
+  })
 
   const noise: string[] = []
   const pending = new Map<
@@ -122,7 +135,23 @@ export function spawnDriver(opts: SpawnOptions): Driver {
   let closed = false
   let sentFirst = false
 
+  /** Windows: the `taskkill` that is ending the tree, once one started. */
+  let treeKill: Promise<void> | undefined
   const kill = () => {
+    if (IS_WINDOWS) {
+      // `/T` finds the descendants through the game's pid, so the game must outlive the walk.
+      if (reaped || treeKill) return
+      treeKill = new Deno.Command("taskkill", {
+        args: ["/T", "/F", "/PID", String(pgid)],
+        stdout: "null",
+        stderr: "null",
+      }).output().then(() => undefined, () => undefined).finally(() => {
+        try {
+          child.kill("SIGKILL")
+        } catch { /* already reaped */ }
+      })
+      return
+    }
     try {
       Deno.kill(-pgid, "SIGKILL")
     } catch { /* group already gone */ }
@@ -139,6 +168,7 @@ export function spawnDriver(opts: SpawnOptions): Driver {
     pending.clear()
   }
 
+  let streamEnded = false
   const reader = (async () => {
     const dec = new TextDecoder()
     let buf = ""
@@ -164,6 +194,7 @@ export function spawnDriver(opts: SpawnOptions): Driver {
         p.resolve(rec)
       }
     }
+    streamEnded = true
     rejectAll("driver stream ended")
   })()
 
@@ -177,6 +208,9 @@ export function spawnDriver(opts: SpawnOptions): Driver {
     what: string,
   ): Promise<DriverResponse> => {
     if (closed) return Promise.reject(new Error("driver closed"))
+    // A game that died between requests: writing would only feed a dead pipe and wait out the
+    // timer (on Windows the write does not fail), misreporting the death as a hang.
+    if (streamEnded) return Promise.reject(new Error("driver stream ended"))
     const limit = timeoutMs ?? (sentFirst ? requestTimeout : firstTimeout)
     sentFirst = true
     return new Promise<DriverResponse>((resolve, reject) => {
@@ -194,8 +228,6 @@ export function spawnDriver(opts: SpawnOptions): Driver {
       })
     })
   }
-
-  const exited = child.status.then((s) => s.code)
 
   return {
     async send(req, timeoutMs) {
@@ -224,6 +256,9 @@ export function spawnDriver(opts: SpawnOptions): Driver {
     exited,
     kill,
     async close() {
+      // Windows: closing stdin lets the game exit on its own, and a tree kill still under way
+      // would then no longer find its descendants through it.
+      await treeKill
       if (!closed) {
         closed = true
         try {
@@ -234,6 +269,7 @@ export function spawnDriver(opts: SpawnOptions): Driver {
       await exited
       clearTimeout(killTimer)
       kill() // reap any descendant that outlived the shim
+      await treeKill
       await reader
     },
   }

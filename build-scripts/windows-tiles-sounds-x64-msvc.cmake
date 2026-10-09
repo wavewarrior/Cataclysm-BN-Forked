@@ -12,9 +12,18 @@ Pre-load script for Windows builds with Ninja Multi-Config and MSVC.
 
 #]=======================================================================]
 
-# Ensure /bigobj is set — vcpkg toolchain can override CMAKE_CXX_FLAGS_INIT.
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /bigobj")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /bigobj")
+# /bigobj, plus /utf-8 as in build-scripts/MSVC.cmake (the CI toolchain, which this preset
+# does not load): the vendored fmt static_asserts "Unicode support requires compiling with
+# /utf-8". Added as compile options, NOT by setting CMAKE_<LANG>_FLAGS here: this file runs
+# before project() initialises those, so a normal variable would shadow CMake's MSVC
+# defaults (/DWIN32 /D_WINDOWS /EHsc) and every TU would build without C++ unwinding (C4530).
+add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:/bigobj;/utf-8>")
+# CMake's MSVC default links /debug configs /INCREMENTAL, which updates the PDB in place so it
+# fragments and grows on every relink (3.6 -> 5.4 GB in a day) until LNK1140 "limit exceeded
+# for program database". CI's MSVC.cmake passes /INCREMENTAL:NO for this; the larger PDB page
+# size is only headroom. Debug keeps incremental linking (set further down).
+add_link_options("$<$<CONFIG:RelWithDebInfo,Release>:/INCREMENTAL:NO>")
+add_link_options("$<$<LINK_LANGUAGE:C,CXX>:/PDBPAGESIZE:16384>")
 
 # --- Box2D physics: ON by default for this preset -------------------------
 # The root CMakeLists declares `option(BOX2D "..." OFF)`, a global default that

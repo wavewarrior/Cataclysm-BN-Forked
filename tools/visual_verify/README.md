@@ -82,3 +82,11 @@ never arrived". Use the 1 → 0 → 1 triplet: the restore must come back *ident
   game exits cleanly and looks exactly like a crash.
 - **`--dont-debugmsg` is mandatory unattended.** A mod-heavy world raises thousands of
   modal JSON prompts (2,124 in a 30 s run here) and blocks forever without it.
+- **`--world` needs a world with a character (`save/<W>/#*.sav`).** Without one the game
+  debugmsgs "contains no saves" and exits ~12 s in; `launch` now refuses it up front
+  (`NO_CHARACTER`). Any other load failure (`game_save.cpp:485 cannot load world ...`,
+  e.g. a mod that no longer parses) also ends in a clean exit code `-999`, not a crash;
+  `waitlog` aborts with `EXITED rc=...` and a log digest instead of timing out.
+- **`debug.log` appends unless it is ≥ 1 MiB** (rotation to `.prev` happens only then), so
+  `launch` starts log scans at the pre-launch size; reading from 0 would match the previous
+  run's readiness line.

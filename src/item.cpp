@@ -589,6 +589,20 @@ void item::set_damage( int qty )
     damage_ = std::max( std::min( qty, max_damage() ), min_damage() );
 }
 
+auto item::vehicle_storage_temperature() const -> std::optional<temperature_flag>
+{
+    const auto *outermost = this;
+    while( outermost->where() == item_location_type::container &&
+           outermost->parent_item() != nullptr ) {
+        outermost = outermost->parent_item();
+    }
+    const auto vehicle_loc = dynamic_cast<vehicle_item_location *>( outermost->loc );
+    if( vehicle_loc == nullptr ) {
+        return std::nullopt;
+    }
+    return vehicle_loc->storage_temperature();
+}
+
 auto item::prepare_for_location_removal() -> void
 {
     if( is_in_preserving_container() ) {
@@ -605,9 +619,8 @@ auto item::prepare_for_location_removal() -> void
     }
 
     auto storage_temperature = temperature_flag::TEMP_NORMAL;
-    const auto vehicle_loc = dynamic_cast<vehicle_item_location *>( loc );
-    if( vehicle_loc != nullptr ) {
-        storage_temperature = vehicle_loc->storage_temperature();
+    if( const auto in_vehicle = vehicle_storage_temperature() ) {
+        storage_temperature = *in_vehicle;
     } else if( where() == item_location_type::map ) {
         auto &buffer = MAPBUFFER_REGISTRY.get( loc->get_dimension( this ) );
         const auto tile = buffer.get_abs_tile( loc->abs_pos( this ), {
@@ -695,10 +708,9 @@ bool item::attempt_split(
     const bool split_needs_rot_actualization = goes_bad() && is_loaded() && has_position() &&
             !split_from_preserving_container;
     const auto split_pos = split_needs_rot_actualization ? bub_pos() : tripoint_bub_ms::zero();
-    const auto vehicle_loc = dynamic_cast<vehicle_item_location *>( loc );
-    const auto split_temperature = !split_needs_rot_actualization ? temperature_flag::TEMP_NORMAL :
-                                   vehicle_loc != nullptr ? vehicle_loc->storage_temperature() :
-                                   rot::temp::for_location( get_map(), *this );
+    const auto split_temperature = split_needs_rot_actualization
+                                   ? rot::temp::for_location( get_map(), *this )
+                                   : temperature_flag::TEMP_NORMAL;
     detached_ptr<item> det = unsafe_split( qty );
     if( det && split_from_preserving_container ) { det->mark_rot_checked_now(); }
     if( det && split_needs_rot_actualization ) {

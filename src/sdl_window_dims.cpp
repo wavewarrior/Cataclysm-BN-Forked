@@ -67,7 +67,9 @@ auto get_window_dimensions( const catacurses::window &win,
                             point pos, point size ) -> window_dimensions
 {
     window_dimensions dim;
-    if( g && win == g->w_terrain ) {
+    // An empty window (the position-and-size overload) is never the terrain window, even in a
+    // windowless game whose `w_terrain` is empty too and which has no tile context.
+    if( win && g && win == g->w_terrain ) {
         // tiles might have different dimensions than standard font
         dim.scaled_font_size.x = tilecontext->get_tile_width();
         dim.scaled_font_size.y = tilecontext->get_tile_height();
@@ -75,7 +77,7 @@ auto get_window_dimensions( const catacurses::window &win,
         // map font (if any) might differ from standard font
         dim.scaled_font_size.x = g_display.map_font->width;
         dim.scaled_font_size.y = g_display.map_font->height;
-    } else if( g_display.overmap_font && g && win == g->w_overmap ) {
+    } else if( win && g_display.overmap_font && g && win == g->w_overmap ) {
         // tiles-only fork: the overmap always renders via the tile path
         dim.scaled_font_size.x = overmap_tilecontext->get_tile_width();
         dim.scaled_font_size.y = overmap_tilecontext->get_tile_height();

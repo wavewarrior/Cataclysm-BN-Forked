@@ -7,15 +7,11 @@
  * BNPLAY_SAVE.
  */
 import { assert, assertEquals } from "@std/assert"
-import { fromFileUrl, join } from "@std/path"
-import { jsonOut, makeSandbox, pidsMatching, readTranscript } from "./testkit.ts"
+import { join } from "@std/path"
+import { loadConfig } from "./config.ts"
+import { jsonOut, makeSandbox, pidsMatching, readTranscript, realSave } from "./testkit.ts"
 
-const repo = fromFileUrl(new URL("../../", import.meta.url)).replace(/\/$/, "")
-const binary = Deno.env.get("BNPLAY_BINARY") ??
-  join(repo, "out/build/osx-arm-slim/src/cataclysm-bn-tiles")
-const basepath = Deno.env.get("BNPLAY_BASEPATH") ?? repo
-const sourceSave = Deno.env.get("BNPLAY_SAVE") ??
-  join(Deno.env.get("HOME") ?? "", "Library/Application Support/Cataclysm-BN/save/Bairdford")
+const { binary, basepath } = loadConfig()
 
 type Report = {
   verdict: string
@@ -41,7 +37,7 @@ Deno.test({
       },
     })
     try {
-      const added = await sandbox.cli(["fixture", "add", sourceSave])
+      const added = await sandbox.cli(["fixture", "add", realSave()])
       assertEquals(added.code, 0, added.stderr)
       const fixture = jsonOut<{ fixture: string }>(added).fixture
       const baseline = await sandbox.cli(["fixture", "baseline", fixture])
@@ -86,6 +82,7 @@ Deno.test({
       const results = Object.fromEntries(report.oracles.map((o) => [o.name, o.result]))
       assertEquals(results, {
         alive: "pass",
+        clean_exit: "pass",
         game_log: "pass",
         turn_counter: "pass",
         commands: "pass",

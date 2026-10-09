@@ -5,6 +5,8 @@
  */
 import { assert, assertEquals, assertExists } from "@std/assert"
 import type { Driver } from "./client.ts"
+import { IS_WINDOWS } from "./config.ts"
+import { windowsProcesses } from "./machine.ts"
 import type { WindowSize } from "./trial.ts"
 
 export type ContractTarget = {
@@ -27,8 +29,14 @@ export type ContractTarget = {
 /** Response ceiling: about 1.5K tokens of compact JSON, taken at 4 bytes a token. */
 export const RESPONSE_CEILING_BYTES = 6000
 
-/** Returns true when any process is still alive in the process group. */
+/**
+ * Returns true when any process is still alive in the process group. Windows has no process
+ * groups, and once a process is gone its pid no longer tells its children from the orphans of an
+ * earlier process that had the same pid, so there it is the process `pgid` itself; the tree kill
+ * is checked on a known grandchild (`spawn_child`) by the supervisor's mock tests.
+ */
 export async function groupAlive(pgid: number): Promise<boolean> {
+  if (IS_WINDOWS) return (await windowsProcesses()).some((p) => p.pid === pgid)
   const { code } = await new Deno.Command("pgrep", {
     args: ["-g", String(pgid)],
     stdout: "null",

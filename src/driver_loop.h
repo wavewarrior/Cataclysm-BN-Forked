@@ -18,12 +18,17 @@ struct driver_options {
     /// waits for each request, so a fresh frame exists whenever the driver is idle. The command
     /// surface, the deny list and the no-fiber guard are the same as without a window.
     bool windowed = false;
+    /// Where responses go; -1 answers on the descriptor requests arrive on. With `--driver-fd 0`
+    /// requests come on stdin and responses go to the original stdout (Windows cannot hand a
+    /// child any other inherited descriptor).
+    int reply_fd = -1;
 };
 
-/// Serves the driver protocol on an inherited, bidirectional file descriptor.
-/// Call after the world is loaded. Returns on `quit` or when the peer closes the descriptor.
+/// Serves the driver protocol on an inherited descriptor (bidirectional unless
+/// `options.reply_fd` names a separate one). Call after the world is loaded. Returns on `quit`
+/// or when the peer closes the descriptor.
 /// Returns false, having served nothing, when the deny list cannot be loaded.
-auto run_driver_loop( int fd, const driver_options &options ) -> bool;
+auto run_driver_loop( int in_fd, const driver_options &options ) -> bool;
 
 /// True while the driver serves requests. The input layer must not wait for a key then: nobody
 /// is typing, so a read with no modal fiber to answer it would hang the process.

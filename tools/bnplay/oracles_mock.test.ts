@@ -41,10 +41,11 @@ const IDLE_NOISE = "ERROR : data/json/mods/noisy.json: a known problem of this m
 async function withSandbox(
   body: (sandbox: Sandbox) => Promise<void>,
   env: Record<string, string> = {},
-  options: { baseline?: boolean } = {},
+  options: { baseline?: boolean; worldMarkers?: string[] } = {},
 ): Promise<void> {
   const world = await makeFakeWorld()
   await Deno.writeTextFile(join(world, "mock_log_idle.txt"), IDLE_NOISE + "\n")
+  for (const marker of options.worldMarkers ?? []) await Deno.writeTextFile(join(world, marker), "")
   const sandbox = await makeSandbox({
     fixtureSources: { bairdford: world },
     env: { BNPLAY_BASELINE_IDLE_MS: "500", ...env },
@@ -107,6 +108,7 @@ Deno.test("a clean run passes: exit 0, every oracle passes, numbers and paths in
       report.oracles.map((o) => [o.name, o.result]),
       [
         ["alive", "pass"],
+        ["clean_exit", "pass"],
         ["game_log", "pass"],
         ["turn_counter", "pass"],
         ["commands", "pass"],
@@ -124,6 +126,26 @@ Deno.test("a clean run passes: exit 0, every oracle passes, numbers and paths in
     assert(size < 2_500, `the report is ${size} characters`)
     assertEquals(await pidsMatching(join(sandbox.home, "episodes", session)), [])
   })
+})
+
+Deno.test("a game that crashes on its way out after stop fails the Episode", async () => {
+  await withSandbox(
+    async (sandbox) => {
+      const session = await start(sandbox)
+      await step(sandbox, session, { cmd: "wait", turns: 3 })
+      const { code, report } = await finish(sandbox, session)
+
+      assertEquals(code, 1)
+      assertEquals(report.verdict, "fail")
+      assertEquals(report.ended, "stop")
+      const exit = oracle(report, "clean_exit")
+      assertEquals(exit?.result, "fail")
+      assert(exit?.first_fail?.why.includes("after stop"), exit?.first_fail?.why)
+      assertEquals(oracle(report, "alive")?.result, "pass")
+    },
+    {},
+    { baseline: false, worldMarkers: ["mock_quit_crash"] },
+  )
 })
 
 Deno.test("a failing oracle exits 1 and the report names the first failing request", async () => {

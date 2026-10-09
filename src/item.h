@@ -284,6 +284,10 @@ class item: public location_visitable<item>, public game_object<item>
          * This must run while @ref loc or @ref saved_loc still identifies the old location.
          */
         auto prepare_for_location_removal() -> void;
+        /// Temperature of the vehicle cargo part this item (or its outermost container) sits in,
+        /// read from the vehicle itself; nullopt when it is not in vehicle cargo. No map lookup,
+        /// so it holds for vehicles the map cannot see (e.g. at the reality-bubble edge).
+        auto vehicle_storage_temperature() const -> std::optional<temperature_flag>;
 
         virtual bool attempt_detach( std::function < detached_ptr<item>( detached_ptr<item> && ) > )
         override;

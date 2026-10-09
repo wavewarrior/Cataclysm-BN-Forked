@@ -10,6 +10,11 @@ description: Use when asked to playtest, verify gameplay, drive or run the game,
 - The game stays resident between your calls; you pay the 7 to 10 s boot once per Episode.
 - **Trial** (TOML): defines the test. **Episode**: one run of it. **Scene**: a Lua setup script (see GLOSSARY.md).
 
+**Windows** (verified 2026-10-07): windowless Episodes work. The game serves the protocol on its stdin/stdout (`--driver-fd 0`; Windows cannot hand a child fd 3) and the daemon listens on loopback TCP, its port in `<BNPLAY_HOME>/daemon.port`. The default binary is `out/msvc/src/RelWithDebInfo/cataclysm-bn-tiles.exe` (see `cbn-windows-build-test-plumbing`). Clones are plain copies (no copy-on-write); `doctor` reads processes and memory through CIM, so "swap" is free commit; there is no load average. A hung, idle or stopped-by-force game is killed with its whole process tree (`taskkill /T`); with no process groups, a game that exits on its own leaves any process it started running. Make a fixture with Play Now in an EMPTY private user dir (`--userdir out/genfix/`), so the world gets only the in-repo default mods: Play Now otherwise reuses any existing empty world with its third-party mods, and a mod that fails to load drops you silently back on the main menu. Save with `S`, then a capital `Y` (`FORCE_CAPITAL_YN` is on by default), and judge success by a fresh `#*.sav` and `master.gsav` in the new world, not by the exit code. A windowed game that had drawn world text (the overmap) crashed on every exit, `0xC0000005` after a clean `Log shutdown.`, until `f3affcf7ae` (`g_world_geom` outlived `Rml::Shutdown()`); the built-in `clean_exit` oracle now fails such an Episode. `{"cmd":"action","name":"map"}` crashed the windowless game until `0a4b85701d` (a null tile context). Windowed mode and `capture` work; see the windowed section for the per-frame avatar cycle.
+
+**Tests on Windows** (`deno task test:bnplay`, verified 2026-10-07): `python` must be on PATH; the mock driver (`mock_driver.py`) runs under it, as does any `.py` `BNPLAY_BINARY`. The real-binary tests need `BNPLAY_SAVE=<save dir>` (there is no default save location). Their contracts assume Bairdford (avatar walled in, carrying a smartphone, room in its inventory, no monster in view): another save, such as the `out/genfix` Barnum, fails those steps. Windows has no Bairdford; build its stand-in from Barnum with the `bairdford_fixture` Scene, which walls the avatar in with concrete, re-equips it, keeps its moves and saves in place, then point `BNPLAY_SAVE` at `out/genfix/save/Bairdford`:
+`cp -r out/genfix/save/Barnum out/genfix/save/Bairdford && printf '{"id":1,"cmd":"run_scene","name":"bairdford_fixture"}\n{"id":2,"cmd":"quit"}\n' | out/msvc/src/RelWithDebInfo/cataclysm-bn-tiles.exe --userdir out/genfix/ --world Bairdford --dont-debugmsg --basepath ./ --driver-fd 0` (expect `"status":"passed"` and `saved=true`). A full run takes about 12 minutes.
+
 The same operations exist as a CLI and as MCP tools:
 
 - **CLI**: below, `bnplay <op>` means `deno task bnplay <op>` from the repo root. The result is JSON on stdout; a failure is one `bnplay: <reason>` line on stderr with exit 2 (deno adds its own banner on stderr).
@@ -61,7 +66,7 @@ Passing run (real output, trimmed): `{"session":"814f5a63","verdict":"pass","exi
   - `2` harness error: boot failure, game hung or died, idle reaper, daemon shutdown. Any bnplay refusal prints `bnplay: <reason>` and exits 2.
   - `3` inconclusive: no oracle has decided yet, or the wall clock ended the Episode with no oracle failed.
   - A wall-clock ending is never `0`: `1` if any oracle failed, else `3`, however many oracles were already satisfied.
-- `oracles[]`: built-ins `alive` (answers in time), `game_log` (no new ERROR lines after ready versus the fixture baseline), `turn_counter` (never backwards, agrees with `time_passed`), `commands` (no `unsupported`/`no_effect` on `expected_commands`), plus yours. `result` is `pass`, `fail`, `warn`, `inconclusive` or `skipped`.
+- `oracles[]`: built-ins `alive` (answers in time), `clean_exit` (a game asked to end by stop, turn limit or death exits 0 or 25; a crash on the way out, e.g. `-1073741819` = 0xC0000005, fails the Episode; skipped on harness endings), `game_log` (no new ERROR lines after ready versus the fixture baseline), `turn_counter` (never backwards, agrees with `time_passed`), `commands` (no `unsupported`/`no_effect` on `expected_commands`), plus yours. `result` is `pass`, `fail`, `warn`, `inconclusive` or `skipped`.
 - A failure carries `first_fail`: `{"index":3,"turn":1344365,"elapsed":0,"why":"stamina=10000, not stamina ge 10001"}`. `index` is the `id` of the request in the transcript: open `transcript` (JSONL, one `request` or `response` per line) and search `"id":3`. The transcript is the repro. The debug log at `log` holds the game's own errors.
 - Seed determinism is not guaranteed: same-seed Episodes sometimes diverge at the first world step. Assert invariants (outcome, `time_passed`, monotonic turn), never exact world state or RNG values. `bnplay doctor --self-check` runs an A/A pair and reports divergence next to load and swap.
 
@@ -108,7 +113,7 @@ Every response: `id`, `status` (`ok` or `error`), `boundary` (`turn_complete` or
 | `interrupted`    | `reason`: `turn_cap`, `monster_in_view`, `pain`, `noise`, `other`                                                                                                 |
 | `died`           | terminal; the Episode ends                                                                                                                                        |
 
-Time passes only when moves were spent: a cancelled menu or blocked move changes nothing. The first action after load may complete a partial turn (a `wait` of 2 can advance 1). The Bairdford avatar starts enclosed by vehicle walls, so every compass `move` is `blocked`; use `wait` for time-based checks or another fixture.
+Time passes only when moves were spent: a cancelled menu or blocked move changes nothing. The first action after load may complete a partial turn (a `wait` of 2 can advance 1). The Bairdford avatar starts enclosed by vehicle walls (concrete in the Windows stand-in, where `move up` is refused with "You can't climb here"), so every compass `move` is `blocked`; use `wait` for time-based checks or another fixture.
 
 ## Escalation ladder
 
@@ -133,8 +138,9 @@ Spend tokens only when the cheaper rung cannot answer: the lean `step` response;
 
 Add `mode = "windowed"` (and optionally `window_size = [1280, 720]`) to the Trial. A real, visible window opens in a screen corner on the user's desktop without taking focus: leave it alone, and run one windowed session at a time (a second is refused). It needs a graphical login session, so not over ssh.
 
-Windowed init fails without two shader sources, `data/shaders/lighting/src/emitter_glow.vert.hlsl` and `emitter_glow.frag.hlsl`. They were never committed (`/data/shaders/` is gitignored, `.gitignore` line 29; the 45 sibling shader files were force-added; no build step generates them). A fresh clone or worktree must copy them from the main checkout:
+Earlier notes (macOS) said windowed init fails without two shader sources, `data/shaders/lighting/src/emitter_glow.vert.hlsl` and `emitter_glow.frag.hlsl`; not re-verified, and `render_state.cpp` ignores the glow pass's init result. They were never committed (`/data/shaders/` is gitignored, `.gitignore` line 29; the 45 sibling shader files were force-added; no build step generates them). A fresh clone or worktree must copy them from the main checkout:
 `cp <main-checkout>/data/shaders/lighting/src/emitter_glow.*.hlsl <basepath>/data/shaders/lighting/src/`. `bnplay doctor --trial <windowed.toml>` checks them, a display session and stray game windows.
+On Windows (D3D12, verified 2026-10-07) the game boots windowed without them: `emitter_glow_pass` logs `failed to load shader source` and the glow pass stays off. `doctor --trial` still fails the check, so a capture there runs without the glow effect.
 
 `bnplay step <s> '{"cmd":"capture","tag":"original"}'` writes the final frame and a paired map snapshot under the Episode's `captures/` directory and reports `capture.frame`, `capture.map`, `width`, `height`. `mode:"state"` skips lighting and interface passes. A hidden, minimised or locked window answers `outcome: refused`, `reason: no_drawable`: never compare against a missing or stale frame. Capture oracles in the Trial compare tagged frames, all judged against a paired same-state null:
 
@@ -147,6 +153,10 @@ toggled = "toggled"
 restored = "restored"
 factor = 2             # effect must exceed factor x the null's noise
 ```
+
+Toggles that work: the `probe_light_on` / `probe_light_off` Scenes (`run_scene`) add and remove one `radiant_core` two tiles east of the avatar. Do not toggle with a mid-Episode `set_time`: this is an open bnplay bug. The built-in `turn_counter` oracle fails the jump (the turn moves without `time_passed`), and a jump past `turn_limit` ends the Episode, although `set_time` is a documented command.
+
+**Open limitation (Windows, verified 2026-10-07): same-state captures are not deterministic.** The avatar's tile changes shading on successive rendered frames (not with wall-clock time: a 20 s idle changes nothing; the next capture does), cycling through a few states while the rest of the frame stays byte-identical. Cause unknown: one probe each, disabling tile idle animations under the driver window and pinning shader `anim_time` to 0, left the cycle unchanged (both reverted). The paired null is a single pair, so it reads 0 or about 2e-5 depending on where in the cycle the two `original` captures land. The toggled check is reliable for an effect far above that (the light toggle is about 4e-4); the restored check is not: with a 0 null, a restore that lands on another phase of the cycle fails (seen: 1.5e-5 against 0), and with a nonzero null it passes. Until this is fixed, read a triplet's restore verdict from a crop that excludes the avatar's tile.
 
 ### Proving a renderer change changed nothing: `bnplay compare`
 

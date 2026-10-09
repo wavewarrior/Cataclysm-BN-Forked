@@ -2,8 +2,10 @@
 import { assert, assertEquals, assertNotEquals } from "@std/assert"
 import { join } from "@std/path"
 import { runCliLifecycle } from "./cli_lifecycle.ts"
+import { connectDaemon } from "./ipc.ts"
 import {
   eventually,
+  FAILING_BINARY,
   jsonOut,
   makeFakeWorld,
   makeSandbox,
@@ -12,6 +14,7 @@ import {
   pidsMatching,
   readTranscript,
   type Sandbox,
+  setSuspended,
   treeSnapshot,
 } from "./testkit.ts"
 
@@ -111,7 +114,7 @@ Deno.test("a hung game is killed by process group when the wall-clock limit expi
     )
     const child = (await step<{ child_pid: number }>(sandbox, session, "spawn_child")).json!
       .child_pid
-    assert(pidAlive(child))
+    assert(await pidAlive(child))
 
     const started = performance.now()
     const hung = await step(sandbox, session, "hang")
@@ -119,7 +122,7 @@ Deno.test("a hung game is killed by process group when the wall-clock limit expi
     assert(hung.stderr.includes("wall_clock"), hung.stderr)
     assert(performance.now() - started < 12_000, "the watchdog did not fire in time")
 
-    assert(await eventually(() => !pidAlive(child)), "grandchild survived the kill")
+    assert(await eventually(async () => !(await pidAlive(child))), "grandchild survived the kill")
     assertEquals(await pidsMatching(join(sandbox.home, "episodes", session)), [])
 
     const later = await step(sandbox, session, "state")
@@ -144,7 +147,7 @@ Deno.test("a request that gets no answer in time kills the game and ends the Epi
     const hung = await step(sandbox, session, "hang")
     assertEquals(hung.code, 2)
     assert(hung.stderr.includes("hang"), hung.stderr)
-    assert(await eventually(() => !pidAlive(child)), "grandchild survived the kill")
+    assert(await eventually(async () => !(await pidAlive(child))), "grandchild survived the kill")
     assertEquals(await pidsMatching(join(sandbox.home, "episodes", session)), [])
     assertEquals(jsonOut(await sandbox.cli(["stop", session])).ended, "hang")
     // The unanswered request is paired with the failure that ended it, not left dangling.
@@ -165,7 +168,7 @@ Deno.test("a game that dies at boot fails the start with exit 2 and starts no se
       assertEquals(await pidsMatching(sandbox.home), [])
     },
     undefined,
-    "/usr/bin/false",
+    FAILING_BINARY,
   )
 })
 
@@ -234,12 +237,8 @@ Deno.test("a windowed Trial with a bad window size is a usage error before any g
 Deno.test("clients that hang up before they are served do not take the daemon down", async () => {
   await withSandbox(async (sandbox) => {
     const { session } = await start(sandbox)
-    const socket = join(sandbox.home, "daemon.sock")
     await Promise.all(
-      Array.from(
-        { length: 100 },
-        () => Deno.connect({ transport: "unix", path: socket }).then((conn) => conn.close()),
-      ),
+      Array.from({ length: 100 }, () => connectDaemon(sandbox.home).then((conn) => conn.close())),
     )
     // The Episode, and the daemon holding it, are still there.
     assertEquals((await step(sandbox, session, "state")).json?.status, "ok")
@@ -252,13 +251,13 @@ Deno.test("a slow daemon is never replaced and keeps its sessions", async () => 
     const log = await Deno.readTextFile(join(sandbox.home, "daemon.log"))
     const pid = Number(/pid (\d+)/.exec(log)?.[1])
     assert(pid > 0, log)
-    Deno.kill(pid, "SIGSTOP") // accepts connections at the kernel level, answers nothing
+    await setSuspended(pid, true) // accepts connections at the kernel level, answers nothing
     try {
       const res = await step(sandbox, session, "state")
       assertEquals(res.code, 2)
       assert(res.stderr.includes("not answering"), res.stderr)
     } finally {
-      Deno.kill(pid, "SIGCONT")
+      await setSuspended(pid, false)
     }
     // The same daemon, with the same Episode, answers again; no second daemon took its socket.
     assertEquals((await step(sandbox, session, "state")).json?.status, "ok")

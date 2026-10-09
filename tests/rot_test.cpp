@@ -3,6 +3,7 @@
 #include "catch/catch_amalgamated.hpp"
 #include "coordinates.h"
 #include "crafting.h"
+#include "debug.h"
 #include "enums.h"
 #include "game.h" // Just for get_convection_temperature(), TODO: Remove
 #include "item.h"
@@ -766,6 +767,28 @@ TEST_CASE("Vehicle storage temperature controls food rot") {
         CHECK(remaining.only_item().get_relative_rot() > 0.0);
         CHECK(remaining.only_item().get_relative_rot() < 1.0);
     }
+}
+
+TEST_CASE("Nested vehicle cargo takes its temperature from the vehicle, not a map lookup",
+          "[item][rot]") {
+    auto fixture = make_storage(vpart_id("minifreezer"), true);
+    add_backpack_with_sashimi_to_vehicle_part(*fixture.veh, fixture.part_index);
+    auto cargo = fixture.veh->get_items(fixture.part_index);
+    REQUIRE(cargo.size() == 1);
+    const auto* sashimi = nested_sashimi_in(cargo.only_item());
+
+    // A map that has never seen the vehicle stands in for one at the bubble edge, where
+    // `veh_at` misses it: the old lookup raised "Expected vehicle at ..." and fell back to
+    // TEMP_NORMAL, so frozen food rotted as if unrefrigerated.
+    const auto elsewhere = map(2);
+    auto temperature = temperature_flag::TEMP_NORMAL;
+    const auto messages = capture_debugmsg_during([&]() {
+        temperature = rot::temp::for_location(elsewhere, *sashimi);
+    });
+
+    CHECK(messages.empty());
+    CHECK(temperature == temperature_flag::TEMP_FREEZER);
+    CHECK(rot::temp::for_location(get_map(), *sashimi) == temperature_flag::TEMP_FREEZER);
 }
 
 TEST_CASE("Contained item keeps parent location while temporarily detached") {

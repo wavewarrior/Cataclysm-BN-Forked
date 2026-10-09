@@ -12,7 +12,7 @@
 import type { Config } from "./config.ts"
 import type { EndReason } from "./episode.ts"
 import { fixtureStatus, readBaseline } from "./fixtures.ts"
-import { linesInWindow, stampTime, withoutStamp } from "./gamelog.ts"
+import { CLOCK_SLACK_MS, linesInWindow, stampTime, withoutStamp } from "./gamelog.ts"
 import type { FirstFail, OracleResult, OracleRun, Progress } from "./oracles.ts"
 import type { RendererRun } from "./renderer.ts"
 import type { Trial } from "./trial.ts"
@@ -42,6 +42,8 @@ export type ReportInput = {
   failure?: FirstFail
   /** The directory the Episode's captures were written to; absent when it captured nothing. */
   captures?: string
+  /** The game's own exit code after an ending it was asked to make: stop, turn limit, death. */
+  gameExit?: number
 }
 
 export type ReportOracle = Omit<OracleResult, "decisive">
@@ -105,9 +107,38 @@ function aliveCheck(input: ReportInput): OracleResult {
   return { name: "alive", result: "fail", first_fail, decisive: true }
 }
 
-/** The first request that was answered at or after `at`: the one the line was logged during. */
+/** Exit codes of a game that quit when asked: 0, and 25 (the ordinary quit path). */
+const CLEAN_EXITS = [0, 25]
+
+/**
+ * A game asked to end must exit cleanly. A crash on the way out (an access violation reads as
+ * -1073741819 on Windows, a signal as 128 + its number elsewhere) fails the Episode even though
+ * every request was answered: six windowed Episodes once passed while every exit crashed.
+ */
+function exitCheck(input: ReportInput): OracleResult {
+  const code = input.gameExit
+  if (code === undefined) {
+    const note = "judged only when the game was asked to end (stop, turn limit, death)"
+    return { name: "clean_exit", result: "skipped", note, decisive: false }
+  }
+  if (CLEAN_EXITS.includes(code)) return { name: "clean_exit", result: "pass", decisive: false }
+  const hex = `0x${(code >>> 0).toString(16).toUpperCase()}`
+  const first_fail = {
+    index: input.requests.at(-1)?.index ?? 0,
+    why: `the game exited with ${code} (${hex}) after ${input.ended}`,
+  }
+  return { name: "clean_exit", result: "fail", first_fail, decisive: true }
+}
+
+/**
+ * The first request that was answered at or after `at`: the one the line was logged during. The
+ * game logs before it answers, so a line stamped just after an answer, within the clocks'
+ * disagreement, still belongs to that request.
+ */
 function requestAt(requests: RequestTiming[], at: number): number {
-  const during = requests.find((r) => r.answeredAt !== undefined && r.answeredAt >= at)
+  const during = requests.find((r) =>
+    r.answeredAt !== undefined && r.answeredAt + CLOCK_SLACK_MS >= at
+  )
   return (during ?? requests.at(-1))?.index ?? 0
 }
 
@@ -178,6 +209,7 @@ export async function buildReport(config: Config, input: ReportInput): Promise<R
   const progress = progressOf(input.ended)
   const results = [
     aliveCheck(input),
+    exitCheck(input),
     await logCheck(config, input),
     ...input.oracles.results(progress),
     ...await input.renderer.results(progress),

@@ -44,19 +44,10 @@ auto for_location( const map &m, const item &loc ) -> temperature_flag
                 .freezer = m.has_flag_furn( TFLAG_FREEZER, pos ),
             } );
         }
-        case item_location_type::vehicle: {
-            auto pos = loc.bub_pos();
-            optional_vpart_position veh = m.veh_at( pos );
-            if( !veh ) {
-                debugmsg( "Expected vehicle at %d, %d, %d, but couldn't find any", pos.x(), pos.y(), pos.z() );
-                return temperature_flag::TEMP_NORMAL;
-            }
-            int cargo_index = veh->vehicle().part_with_feature( veh->part_index(), VPFLAG_CARGO, true );
-            if( cargo_index < 0 ) {
-                return temperature_flag::TEMP_NORMAL;
-            }
-            return for_part( veh->vehicle(), cargo_index );
-        }
+        case item_location_type::vehicle:
+            // From the vehicle itself: looking it up on the map by position missed vehicles the
+            // map cannot see (e.g. at the bubble edge) and raised "Expected vehicle at ...".
+            return loc.vehicle_storage_temperature().value_or( temperature_flag::TEMP_NORMAL );
         case item_location_type::container: {
             const auto parent = loc.parent_item();
             if( parent == nullptr ) {

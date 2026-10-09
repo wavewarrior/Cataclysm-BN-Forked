@@ -20,6 +20,8 @@
 #include <vector>
 #if defined(_WIN32)
 #include "platform_win.h"
+#include <io.h>
+#include <fcntl.h>
 #else
 #include <csignal>
 #include <unistd.h>
@@ -165,6 +167,7 @@ int main( int argc, char* argv[] )
     std::vector<std::string> opts;
     std::string world; /** if set try to load first save in this world on startup */
     int driver_fd = -1; /** if >= 0 serve the line-JSON agent driver on this inherited fd */
+    int driver_reply_fd = -1; /** with --driver-fd 0: the original stdout, where responses go */
     bool driver_windowed = false; /** the driver boots with a real window instead of test_mode */
     std::string driver_deny_list; /** the driver's deny-list file; empty selects the default */
     std::string driver_scenes; /** the driver's Scenes directory; empty selects the default */
@@ -423,16 +426,45 @@ int main( int argc, char* argv[] )
             },
             {
                 "--driver-fd", "<N>",
-                "Serve the line-JSON agent driver protocol on inherited file descriptor N. Without a window unless --driver-windowed is also given.",
+                "Serve the line-JSON agent driver protocol on inherited file descriptor N; 0 reads requests from stdin and answers on stdout (the only form Windows supports). Without a window unless --driver-windowed is also given.",
                 section_default,
-                [&driver_fd]( int num_args, const char **params ) -> int {
+                [&driver_fd, &driver_reply_fd]( int num_args, const char **params ) -> int {
                     if( num_args < 1 ) {
                         return -1;
                     }
                     driver_fd = atoi( params[0] );
                     // Stray stdout writes (cata_printf, SDL, RmlUi, Lua print) must never
-                    // reach the protocol channel: move stdout onto stderr.
+                    // reach the protocol channel: move stdout onto stderr. With N = 0 the
+                    // protocol keeps a private copy of the original stdout first.
+#if defined(_WIN32)
+                    if( driver_fd == 0 ) {
+                        driver_reply_fd = _dup( _fileno( stdout ) );
+                        if( driver_reply_fd < 0 ) {
+                            std::cerr << "driver: --driver-fd 0 needs a stdout pipe; none was inherited\n";
+                            return -1;
+                        }
+                        // Text mode would turn "\n" into "\r\n" and stop reading at ^Z.
+                        _setmode( 0, _O_BINARY );
+                        _setmode( driver_reply_fd, _O_BINARY );
+                    }
+                    // Stray stdout goes to stderr, or to NUL when no stderr was inherited
+                    // (_fileno == -2; passing that on would fast-fail in the CRT's
+                    // invalid-parameter handler). Either way it never reaches the protocol pipe.
+                    const auto sink = _fileno( stderr ) >= 0 ? _fileno( stderr ) : _open( "NUL", _O_WRONLY );
+                    if( sink >= 0 && _fileno( stdout ) >= 0 ) {
+                        _dup2( sink, _fileno( stdout ) );
+                    }
+                    if( sink >= 0 ) {
+                        // A GUI-subsystem exe's CRT does not update the OS handle; code that
+                        // writes through GetStdHandle( STD_OUTPUT_HANDLE ) must not reach it.
+                        SetStdHandle( STD_OUTPUT_HANDLE, reinterpret_cast<HANDLE>( _get_osfhandle( sink ) ) );
+                    }
+#else
+                    if( driver_fd == 0 ) {
+                        driver_reply_fd = dup( STDOUT_FILENO );
+                    }
                     dup2( STDERR_FILENO, STDOUT_FILENO );
+#endif
                     return 1;
                 }
             },
@@ -883,6 +915,7 @@ int main( int argc, char* argv[] )
                     .deny_list_path = driver_deny_list,
                     .scenes_dir = driver_scenes,
                     .windowed = driver_windowed,
+                    .reply_fd = driver_reply_fd,
                 };
                 if( !run_driver_loop( driver_fd, options ) ) {
                     return 1;

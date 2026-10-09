@@ -31,6 +31,10 @@
       "description": "bnplay tests: the driver contract against the mock and the real game binary, the Trial parser, and the CLI and MCP front ends end to end (the real binary needs a built cataclysm-bn-tiles and a Bairdford save)",
       "command": "deno test --allow-run --allow-env --allow-read --allow-write --allow-net tools/bnplay/",
     },
+    "test:progress": {
+      "description": "run cata_test-tiles with a live progress bar, ETA and failures as they happen; args go to Catch2 (see scripts/test_progress.ts)",
+      "command": "deno run --allow-run --allow-env --allow-read --allow-write scripts/test_progress.ts",
+    },
     "bnplay": {
       "description": "agent playtest supervisor: start, step and stop Episodes, manage the fixture library; `mcp` serves the same operations as MCP tools over stdio (see tools/bnplay/main.ts)",
       "command": "deno run --allow-run --allow-env --allow-read --allow-write --allow-net tools/bnplay/main.ts",

@@ -1,12 +1,33 @@
 /** Helpers shared by the bnplay tests: sandboxes, the CLI as a subprocess, process and tree checks. */
 import { delay } from "@std/async"
 import { dirname, fromFileUrl, join } from "@std/path"
+import { IS_WINDOWS } from "./config.ts"
+import { cloneTree } from "./episode.ts"
+import { windowsProcesses } from "./machine.ts"
 import type { TranscriptRecord } from "./transcript.ts"
 
 const here = dirname(fromFileUrl(import.meta.url))
 export const REPO = dirname(dirname(here))
 export const MOCK_DRIVER = join(here, "mock_driver.py")
+/**
+ * A game binary that exits at once with a failure, whatever its arguments (Windows: `where`,
+ * which rejects the game's flags).
+ */
+export const FAILING_BINARY = IS_WINDOWS
+  ? join(Deno.env.get("SystemRoot") ?? "C:\\Windows", "System32", "where.exe")
+  : "/usr/bin/false"
 const MAIN = join(here, "main.ts")
+
+/**
+ * The save the real-binary tests clone: BNPLAY_SAVE, else the macOS game's Bairdford save. Windows
+ * keeps saves wherever the game's user directory is, so there it must be named.
+ */
+export function realSave(): string {
+  const save = Deno.env.get("BNPLAY_SAVE")
+  if (save) return save
+  if (IS_WINDOWS) throw new Error("set BNPLAY_SAVE to the Bairdford save directory to clone")
+  return join(Deno.env.get("HOME") ?? "", "Library/Application Support/Cataclysm-BN/save/Bairdford")
+}
 
 /** Arguments of the `deno` process that runs `bnplay <args>`. */
 export function bnplayDenoArgs(args: string[]): string[] {
@@ -66,9 +87,7 @@ export async function makeSandbox(opts: SandboxOptions = {}): Promise<Sandbox> {
   const fixtures = join(dir, "fixtures")
   await Deno.mkdir(fixtures)
   for (const [name, source] of Object.entries(opts.fixtureSources ?? {})) {
-    const cp = await new Deno.Command("cp", { args: ["-cR", source, join(fixtures, name)] })
-      .output()
-    if (!cp.success) throw new Error(`cloning fixture ${name} failed`)
+    await cloneTree(source, join(fixtures, name))
   }
   const env: Record<string, string> = {
     BNPLAY_HOME: home,
@@ -117,8 +136,17 @@ export async function makeSandbox(opts: SandboxOptions = {}): Promise<Sandbox> {
   return sandbox
 }
 
-/** Pids of processes whose command line matches `pattern` (a regular expression for pgrep). */
+/**
+ * Pids of processes whose command line matches `pattern` (a regular expression for pgrep; on
+ * Windows, where CIM lists the command lines, a path contained in it, ignoring case).
+ */
 export async function pidsMatching(pattern: string): Promise<number[]> {
+  if (IS_WINDOWS) {
+    const needle = pattern.toLowerCase()
+    return (await windowsProcesses())
+      .filter((p) => p.command.toLowerCase().includes(needle))
+      .map((p) => p.pid)
+  }
   const out = await new Deno.Command("pgrep", {
     args: ["-f", pattern],
     stdout: "piped",
@@ -127,13 +155,63 @@ export async function pidsMatching(pattern: string): Promise<number[]> {
   return new TextDecoder().decode(out.stdout).split("\n").filter(Boolean).map(Number)
 }
 
-export function pidAlive(pid: number): boolean {
+export async function pidAlive(pid: number): Promise<boolean> {
+  if (IS_WINDOWS) {
+    // Windows has no signal 0 or SIGCONT to probe with; `tasklist` prints the pid as a CSV field.
+    const out = await new Deno.Command("tasklist", {
+      args: ["/FI", `PID eq ${pid}`, "/NH", "/FO", "CSV"],
+      stdout: "piped",
+      stderr: "null",
+    }).output()
+    return new TextDecoder().decode(out.stdout).includes(`"${pid}"`)
+  }
   try {
     Deno.kill(pid, "SIGCONT")
     return true
   } catch {
     return false
   }
+}
+
+/**
+ * Freezes (`true`) or thaws (`false`) a process: SIGSTOP and SIGCONT, on Windows
+ * `NtSuspendProcess` and `NtResumeProcess`. A frozen server still accepts connections in the
+ * kernel and answers nothing.
+ */
+export async function setSuspended(pid: number, suspended: boolean): Promise<void> {
+  if (!IS_WINDOWS) {
+    Deno.kill(pid, suspended ? "SIGSTOP" : "SIGCONT")
+    return
+  }
+  const call = suspended ? "NtSuspendProcess" : "NtResumeProcess"
+  const script = "Add-Type -Name Nt -Namespace Bnplay -MemberDefinition '" +
+    `[DllImport("ntdll.dll")] public static extern int ${call}(IntPtr process);'; ` +
+    `$status = [Bnplay.Nt]::${call}([System.Diagnostics.Process]::GetProcessById(${pid}).Handle); ` +
+    'if ($status -ne 0) { throw "NTSTATUS $status" }'
+  const out = await new Deno.Command("powershell", {
+    args: ["-NoProfile", "-Command", script],
+    stdout: "null",
+    stderr: "piped",
+  }).output()
+  if (!out.success) {
+    throw new Error(`${call}(${pid}) failed: ${new TextDecoder().decode(out.stderr)}`)
+  }
+}
+
+/**
+ * Starts a process that names `args` on its command line and waits on its stdin, the way a game
+ * started by hand shows up in the process table. Kill it when done.
+ */
+export function spawnIdle(args: string[]): Deno.ChildProcess {
+  const [command, prefix] = IS_WINDOWS
+    ? ["python", ["-c", "import sys; sys.stdin.readline()"]]
+    : ["/bin/sh", ["-c", "read line", "sh"]]
+  return new Deno.Command(command, {
+    args: [...prefix, ...args],
+    stdin: "piped",
+    stdout: "null",
+    stderr: "null",
+  }).spawn()
 }
 
 /** Waits until `predicate` holds or `timeoutMs` passes; returns the last value. */
@@ -149,20 +227,24 @@ export async function eventually(
   return await predicate()
 }
 
-/** Relative path -> content for every file under `dir`, to compare a tree before and after. */
+/**
+ * Relative path (`/`-separated, with a leading `/`) -> content for every file under `dir`, to
+ * compare a tree before and after.
+ */
 export async function treeSnapshot(dir: string): Promise<Record<string, string>> {
   const out: Record<string, string> = {}
-  const walk = async (current: string) => {
+  const walk = async (current: string, relative: string) => {
     for await (const entry of Deno.readDir(current)) {
       const path = join(current, entry.name)
+      const key = `${relative}/${entry.name}`
       if (entry.isDirectory) {
-        await walk(path)
+        await walk(path, key)
       } else {
-        out[path.slice(dir.length)] = new TextDecoder("latin1").decode(await Deno.readFile(path))
+        out[key] = new TextDecoder("latin1").decode(await Deno.readFile(path))
       }
     }
   }
-  await walk(dir)
+  await walk(dir, "")
   return out
 }
 

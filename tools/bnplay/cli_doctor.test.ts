@@ -5,7 +5,15 @@
  */
 import { assert, assertEquals } from "@std/assert"
 import { basename, dirname, join } from "@std/path"
-import { makeFakeWorld, makeSandbox, MOCK_DRIVER, pidsMatching, type Sandbox } from "./testkit.ts"
+import { IS_WINDOWS } from "./config.ts"
+import {
+  makeFakeWorld,
+  makeSandbox,
+  MOCK_DRIVER,
+  pidsMatching,
+  type Sandbox,
+  spawnIdle,
+} from "./testkit.ts"
 
 type Check = {
   name: string
@@ -78,15 +86,19 @@ type RigOptions = {
   env?: Record<string, string>
 }
 
+/** How doctor tells the agent to end stray processes. */
+const KILL_ADVICE = IS_WINDOWS ? "taskkill /F /PID" : "kill -KILL"
+
 async function withRig(opts: RigOptions, body: (rig: Rig) => Promise<void>): Promise<void> {
   const dir = await Deno.makeTempDir({ prefix: "bnplay-doctor-" })
-  const binary = join(dir, `game-${crypto.randomUUID().slice(0, 8)}`)
+  // Windows runs a `.py` binary under `python`: it has no shebang lines (client.ts).
+  const binary = join(dir, `game-${crypto.randomUUID().slice(0, 8)}${IS_WINDOWS ? ".py" : ""}`)
   if (opts.binaryText === undefined) {
     await Deno.copyFile(MOCK_DRIVER, binary)
   } else {
     await Deno.writeTextFile(binary, opts.binaryText)
   }
-  await Deno.chmod(binary, 0o755)
+  if (!IS_WINDOWS) await Deno.chmod(binary, 0o755)
   const source = join(dir, "checkout")
   await Deno.mkdir(join(source, "src", "lighting"), { recursive: true })
   await Deno.writeTextFile(join(source, "src", "main.cpp"), "int main() {}\n")
@@ -100,7 +112,11 @@ async function withRig(opts: RigOptions, body: (rig: Rig) => Promise<void>): Pro
   }
   const launchctl = join(dir, "launchctl")
   await Deno.writeTextFile(launchctl, `#!/bin/sh\necho ${opts.session ?? "Aqua"}\n`)
-  await Deno.chmod(launchctl, 0o755)
+  if (!IS_WINDOWS) await Deno.chmod(launchctl, 0o755)
+  // Windows reads the session from SESSIONNAME, which only an interactive logon sets.
+  const session: Record<string, string> = IS_WINDOWS
+    ? { SESSIONNAME: (opts.session ?? "Aqua") === "Aqua" ? "Console" : "" }
+    : {}
   // The binary was built after every source was last touched.
   const now = Date.now() / 1000
   await Deno.utime(join(source, "src", "main.cpp"), now - 120, now - 120)
@@ -109,7 +125,13 @@ async function withRig(opts: RigOptions, body: (rig: Rig) => Promise<void>): Pro
 
   const sandbox = await makeSandbox({
     binary,
-    env: { ...ROOMY, BNPLAY_BASEPATH: source, BNPLAY_LAUNCHCTL: launchctl, ...opts.env },
+    env: {
+      ...ROOMY,
+      BNPLAY_BASEPATH: source,
+      BNPLAY_LAUNCHCTL: launchctl,
+      ...session,
+      ...opts.env,
+    },
   })
   const world = await makeFakeWorld()
   try {
@@ -178,8 +200,8 @@ Deno.test("doctor passes on a healthy setup and starts no game", async () => {
     ) {
       assertEquals(check(report, name).status, "ok", JSON.stringify(check(report, name)))
     }
-    // Machine state is always reported, readable by the agent.
-    assertEquals(report.machine.load_average?.length, 3)
+    // Machine state is always reported, readable by the agent (Windows has no load average).
+    assertEquals(report.machine.load_average?.length, IS_WINDOWS ? undefined : 3)
     assert(typeof report.machine.swap_free_mb === "number")
     // The self-check is off by default, and nothing was started.
     assertEquals(report.self_check, undefined)
@@ -264,19 +286,14 @@ Deno.test("doctor reports stray driver processes but not the daemon's own Episod
     assertEquals((await rig.sandbox.cli(["stop", session])).code, 0)
 
     // A driver process nobody owns: the game's command line, run by hand.
-    const stray = new Deno.Command("/bin/sh", {
-      args: ["-c", "read line", "sh", rig.binary, "--userdir", "/tmp/nobody/", "--driver-fd", "3"],
-      stdin: "piped",
-      stdout: "null",
-      stderr: "null",
-    }).spawn()
+    const stray = spawnIdle([rig.binary, "--userdir", "/tmp/nobody/", "--driver-fd", "3"])
     try {
       const { code, report } = await rig.doctor()
       assertEquals(code, 1)
       const found = check(report, "stray_processes")
       assertEquals(found.status, "fail")
       assert(found.summary.includes(`pid ${stray.pid}`), found.summary)
-      assert(found.message?.includes("kill -KILL"), found.message)
+      assert(found.message?.includes(KILL_ADVICE), found.message)
     } finally {
       stray.kill("SIGKILL")
       await stray.status
@@ -377,7 +394,7 @@ Deno.test("the self-check plays an A/A pair with one seed and an idle gap, and r
 
     // Load and swap, before and after, beside the verdict.
     for (const machine of [self.machine.before, self.machine.after]) {
-      assertEquals(machine.load_average?.length, 3)
+      assertEquals(machine.load_average?.length, IS_WINDOWS ? undefined : 3)
       for (const load of machine.load_average ?? []) assert(load >= 0)
       assert(typeof machine.swap_free_mb === "number", JSON.stringify(machine))
       assert(typeof machine.swap_used_mb === "number", JSON.stringify(machine))
@@ -406,7 +423,7 @@ Deno.test("the self-check reports where same-seed Episodes diverged", async () =
     assertEquals(self.first_divergence?.differences.map((d) => d.field), ["pain"])
     assert(self.message.includes("diverged"), self.message)
     // Load and swap come with the divergence.
-    assertEquals(self.machine.before.load_average?.length, 3)
+    assertEquals(self.machine.before.load_average?.length, IS_WINDOWS ? undefined : 3)
     assert(typeof self.machine.after.swap_free_mb === "number")
   })
 })
@@ -424,12 +441,7 @@ Deno.test("the self-check does not run without a driver, on a stray game, or bey
   })
 
   await withRig({}, async (rig) => {
-    const stray = new Deno.Command("/bin/sh", {
-      args: ["-c", "read line", "sh", rig.binary, "--userdir", "/tmp/nobody/", "--driver-fd", "3"],
-      stdin: "piped",
-      stdout: "null",
-      stderr: "null",
-    }).spawn()
+    const stray = spawnIdle([rig.binary, "--userdir", "/tmp/nobody/", "--driver-fd", "3"])
     try {
       const episodesBefore = await episodeDirs(rig.sandbox)
       const { code, report } = await rig.doctor(["--self-check"])
@@ -508,12 +520,7 @@ Deno.test("doctor passes a windowed Trial on a graphical session with no stray w
 Deno.test("doctor makes the windowed checks for windowed Trials only", async () => {
   // Everything a windowed game needs is missing, and a windowless Trial does not care.
   await withRig({ noShaders: true, session: "Background" }, async (rig) => {
-    const stray = new Deno.Command("/bin/sh", {
-      args: ["-c", "read line", "sh", rig.binary, "--userdir", "/tmp/nobody/"],
-      stdin: "piped",
-      stdout: "null",
-      stderr: "null",
-    }).spawn()
+    const stray = spawnIdle([rig.binary, "--userdir", "/tmp/nobody/"])
     try {
       for (const args of [[], ["--trial", await windowlessTrial(rig)]]) {
         const { code, report } = await rig.doctor(args)
@@ -538,8 +545,12 @@ Deno.test("doctor reports a missing display session and what it means", async ()
     assertEquals(code, 1)
     const found = check(report, "display_session")
     assertEquals(found.status, "fail")
-    assert(found.summary.includes("Background"), found.summary)
-    assert(found.message?.includes("login session"), found.message)
+    // macOS names the session type launchctl reported; Windows has only SESSIONNAME to go on.
+    assert(found.summary.includes(IS_WINDOWS ? "SESSIONNAME" : "Background"), found.summary)
+    assert(
+      found.message?.includes(IS_WINDOWS ? "logged-in desktop" : "login session"),
+      found.message,
+    )
     assertEquals(check(report, "stray_windows").status, "ok")
   })
 })
@@ -547,12 +558,7 @@ Deno.test("doctor reports a missing display session and what it means", async ()
 Deno.test("doctor reports a stray game window, an interactive game or a windowed driver nobody owns", async () => {
   await withRig({}, async (rig) => {
     const spawn = (...flags: string[]) =>
-      new Deno.Command("/bin/sh", {
-        args: ["-c", "read line", "sh", rig.binary, "--userdir", "/tmp/nobody/", ...flags],
-        stdin: "piped",
-        stdout: "null",
-        stderr: "null",
-      }).spawn()
+      spawnIdle([rig.binary, "--userdir", "/tmp/nobody/", ...flags])
     const trial = await windowedTrial(rig)
     const interactive = spawn()
     try {
@@ -561,7 +567,7 @@ Deno.test("doctor reports a stray game window, an interactive game or a windowed
       const found = check(report, "stray_windows")
       assertEquals(found.status, "fail")
       assert(found.summary.includes(`pid ${interactive.pid}`), found.summary)
-      assert(found.message?.includes("kill -KILL"), found.message)
+      assert(found.message?.includes(KILL_ADVICE), found.message)
       // The checks that are not about windows are not touched.
       assertEquals(check(report, "stray_processes").status, "ok")
     } finally {

@@ -3,22 +3,16 @@
  * `fixture add` leaves the save untouched, `fixture baseline` boots the game and keeps only what
  * it logged after it reported ready, `fixture list` goes stale when the mod set changes.
  *
- * Environment (all optional), as in real_driver.test.ts:
- *   BNPLAY_BINARY   tiles binary (default out/build/osx-arm-slim/src/cataclysm-bn-tiles)
- *   BNPLAY_BASEPATH `--basepath` for the game, where its data lives (default this checkout)
- *   BNPLAY_SAVE     source save directory to clone (default the local Bairdford save)
+ * Environment (all optional), as in real_driver.test.ts: BNPLAY_BINARY, BNPLAY_BASEPATH,
+ * BNPLAY_SAVE.
  */
 import { assert, assertEquals } from "@std/assert"
-import { fromFileUrl, join } from "@std/path"
+import { join } from "@std/path"
+import { loadConfig } from "./config.ts"
 import { linesInWindow } from "./gamelog.ts"
-import { jsonOut, makeSandbox, pidsMatching, treeSnapshot } from "./testkit.ts"
+import { jsonOut, makeSandbox, pidsMatching, realSave, treeSnapshot } from "./testkit.ts"
 
-const repo = fromFileUrl(new URL("../../", import.meta.url)).replace(/\/$/, "")
-const binary = Deno.env.get("BNPLAY_BINARY") ??
-  join(repo, "out/build/osx-arm-slim/src/cataclysm-bn-tiles")
-const basepath = Deno.env.get("BNPLAY_BASEPATH") ?? repo
-const sourceSave = Deno.env.get("BNPLAY_SAVE") ??
-  join(Deno.env.get("HOME") ?? "", "Library/Application Support/Cataclysm-BN/save/Bairdford")
+const { binary, basepath } = loadConfig()
 
 type Entry = { fixture: string; baseline: string; lines?: number; stale?: string[] }
 
@@ -36,6 +30,7 @@ Deno.test({
       },
     })
     try {
+      const sourceSave = realSave()
       const saveBefore = await treeSnapshot(sourceSave)
       const added = await sandbox.cli(["fixture", "add", sourceSave])
       assertEquals(added.code, 0, added.stderr)

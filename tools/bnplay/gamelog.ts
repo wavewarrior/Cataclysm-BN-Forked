@@ -14,10 +14,11 @@ const DAY_MS = 86_400_000
 
 /**
  * The game stamps lines from its own clock, rounded to the millisecond, and the supervisor learns
- * of a boundary (readiness, the quit request) only after a pipe round trip. A line this close to a
- * boundary may be on either side of it, so it is counted as outside.
+ * of a boundary (readiness, the quit request) only after a pipe round trip; on Windows the two
+ * clocks also differ by about a millisecond. A line this close to a boundary may be on either
+ * side of it.
  */
-const CLOCK_SLACK_MS = 3
+export const CLOCK_SLACK_MS = 3
 
 const STAMP = /^(\d{2}):(\d{2}):(\d{2})\.(\d+) /
 

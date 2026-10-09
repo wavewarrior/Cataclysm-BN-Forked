@@ -17,7 +17,11 @@
 #include <utility>
 #include <vector>
 
+#if defined(_WIN32)
+#include <io.h>
+#else
 #include <unistd.h>
+#endif
 
 #include "action.h"
 #include "avatar.h"
@@ -45,6 +49,26 @@ namespace
 {
 
 using driver_items::outcome;
+
+/// `read(2)`/`write(2)` on a raw descriptor; MSVC spells them `_read`/`_write` with `int` counts.
+auto fd_read( int fd, char *buf, std::size_t len ) -> std::int64_t
+{
+#if defined(_WIN32)
+    return _read( fd, buf, static_cast<unsigned int>( len ) );
+#else
+    return ::read( fd, buf, len );
+#endif
+}
+
+auto fd_write( int fd, const char *buf, std::size_t len ) -> std::int64_t
+{
+#if defined(_WIN32)
+    return _write( fd, buf, static_cast<unsigned int>( len ) );
+#else
+    return ::write( fd, buf, len );
+#endif
+}
+
 /// Buffered line reader over a raw descriptor. `read_line` is false at EOF or on a read error.
 class line_reader
 {
@@ -55,7 +79,7 @@ class line_reader
             size_t nl = buf_.find( '\n' );
             while( nl == std::string::npos ) {
                 char chunk[4096];
-                const ssize_t n = ::read( fd_, chunk, sizeof( chunk ) );
+                const auto n = fd_read( fd_, chunk, sizeof( chunk ) );
                 if( n <= 0 ) {
                     return false;
                 }
@@ -80,7 +104,7 @@ auto write_all( int fd, const std::string &s ) -> void
     const char *ptr = s.data();
     auto left = s.size();
     while( left > 0 ) {
-        const ssize_t w = ::write( fd, ptr, left );
+        const auto w = fd_write( fd, ptr, left );
         if( w <= 0 ) {
             return;
         }
@@ -818,7 +842,7 @@ auto capture_line( int id, const JsonObject &jo, bool windowed ) -> std::string
 
 } // namespace
 
-auto run_driver_loop( int fd, const driver_options &options ) -> bool
+auto run_driver_loop( int in_fd, const driver_options &options ) -> bool
 {
     const std::string path = options.deny_list_path.empty() ?
                              PATH_INFO::datadir() + default_deny_list_name : options.deny_list_path;
@@ -829,7 +853,9 @@ auto run_driver_loop( int fd, const driver_options &options ) -> bool
     scenes_directory = options.scenes_dir;
     driver_serving = true;
     attached_view_radius = 0;
-    line_reader in( fd );
+    line_reader in( in_fd );
+    // Every response below goes to `fd`.
+    const auto fd = options.reply_fd >= 0 ? options.reply_fd : in_fd;
     std::string line;
     while( true ) {
         if( options.windowed ) {

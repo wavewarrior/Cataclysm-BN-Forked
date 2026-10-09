@@ -2,9 +2,10 @@
  * Runs the driver contract suite against the real game binary on a clone of a fixture save.
  *
  * Environment (all optional):
- *   BNPLAY_BINARY   tiles binary (default out/build/osx-arm-slim/src/cataclysm-bn-tiles)
+ *   BNPLAY_BINARY   tiles binary (default as the daemon picks it, see config.ts)
  *   BNPLAY_BASEPATH `--basepath` for the game, where its data lives (default this checkout)
- *   BNPLAY_SAVE     source save directory to clone (default the local Bairdford save)
+ *   BNPLAY_SAVE     source save directory to clone (default the local Bairdford save on macOS;
+ *                   required on Windows)
  *   BNPLAY_WINDOWED unset: windowless only. `1`: also run every suite with a real game window
  *                   (visible, in a corner, no focus taken); `only`: just the windowed run. A
  *                   windowed run needs a display session, and puts a window on the desktop for
@@ -24,26 +25,24 @@
  * window's minimise button through a desktop automation client: both capture modes answered
  * `outcome: refused`, reason `no_drawable`.
  */
-import { fromFileUrl, join } from "@std/path"
+import { join } from "@std/path"
 import { spawnDriver } from "./client.ts"
 import { runCaptureContract } from "./capture_contract.ts"
 import { runActivityContract } from "./activity_contract.ts"
 import { runCombatContract } from "./combat_contract.ts"
 import { runCliLifecycle } from "./cli_lifecycle.ts"
+import { loadConfig } from "./config.ts"
 import { type ContractTarget, runContract } from "./contract.ts"
+import { cloneTree } from "./episode.ts"
 import { runItemContract } from "./item_contract.ts"
 import { runMenuContract } from "./menu_contract.ts"
 import { runSceneContract } from "./scene_contract.ts"
+import { realSave, REPO } from "./testkit.ts"
 import { runTimeContract } from "./time_contract.ts"
 import type { WindowSize } from "./trial.ts"
 import { runViewContract } from "./view_contract.ts"
 
-const repo = fromFileUrl(new URL("../../", import.meta.url)).replace(/\/$/, "")
-const binary = Deno.env.get("BNPLAY_BINARY") ??
-  join(repo, "out/build/osx-arm-slim/src/cataclysm-bn-tiles")
-const basepath = Deno.env.get("BNPLAY_BASEPATH") ?? repo
-const sourceSave = Deno.env.get("BNPLAY_SAVE") ??
-  join(Deno.env.get("HOME") ?? "", "Library/Application Support/Cataclysm-BN/save/Bairdford")
+const { binary, basepath } = loadConfig()
 const world = "Bairdford"
 
 /**
@@ -57,11 +56,8 @@ function makeTarget(window?: WindowSize): ContractTarget {
     async spawn(opts) {
       const userdir = await Deno.makeTempDir({ prefix: "bnplay-" })
       await Deno.mkdir(join(userdir, "save"))
-      // Copy-on-write clone: the source save is never modified.
-      const cp = await new Deno.Command("cp", {
-        args: ["-cR", sourceSave, join(userdir, "save", world)],
-      }).output()
-      if (!cp.success) throw new Error("cloning the fixture save failed")
+      // Clone: the source save is never modified.
+      await cloneTree(realSave(), join(userdir, "save", world))
       const driver = spawnDriver({
         binary,
         userdir,
@@ -91,7 +87,7 @@ function runSuites(name: string, target: ContractTarget): void {
   runCombatContract(name, target)
   runMenuContract(name, target)
   runViewContract(name, target, { inventoryIds: true })
-  runSceneContract(name, target, { scenesLibrary: join(repo, "tools/visual_verify/scenes") })
+  runSceneContract(name, target, { scenesLibrary: join(REPO, "tools/visual_verify/scenes") })
   runCaptureContract(name, target)
 }
 
@@ -104,7 +100,7 @@ if (windowedRun) runSuites("real binary (windowed)", makeTarget({ width: 1024, h
 runCliLifecycle("real binary", {
   binary,
   fixture: world,
-  fixtureSource: () => Promise.resolve(sourceSave),
+  fixtureSource: () => Promise.resolve(realSave()),
   // A thousand turns take the real game about two seconds in the fixture's quiet world: past a
   // plain step timeout of 1.2 s, inside the time the turns are given.
   env: {

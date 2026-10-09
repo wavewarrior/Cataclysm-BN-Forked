@@ -765,10 +765,10 @@ bool vehicle::merge_rackable_vehicle( vehicle *carry_veh, const std::vector<int>
             .at = tripoint_bub_ms( 0, 0, abs_sm_pos.z() ),
             .transparency = true,
             .scope = level_cache_freshness::terrain_changed::transparency_scope::level,
-            // The old pair probed the bubble origin, not the vehicle tile.
-            .seen_probe = tripoint_bub_ms::zero(),
             .support_above = false,
             .memory_seen = false,
+            // The old pair probed the bubble origin, not the vehicle tile.
+            .seen_probe = tripoint_bub_ms::zero(),
         } );
         refresh();
     } else {
@@ -1327,10 +1327,10 @@ bool vehicle::split_vehicles( const std::vector<std::vector <int>> &new_vehs,
             .at = tripoint_bub_ms( 0, 0, abs_sm_pos.z() ),
             .transparency = true,
             .scope = level_cache_freshness::terrain_changed::transparency_scope::level,
-            // The old pair probed the bubble origin, not the vehicle tile.
-            .seen_probe = tripoint_bub_ms::zero(),
             .support_above = false,
             .memory_seen = false,
+            // The old pair probed the bubble origin, not the vehicle tile.
+            .seen_probe = tripoint_bub_ms::zero(),
         } );
         if( !new_labels.empty() ) {
             new_vehicle->labels = new_labels;

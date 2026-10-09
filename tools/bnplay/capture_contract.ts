@@ -20,6 +20,7 @@
  */
 import { assert, assertEquals, assertNotEquals } from "@std/assert"
 import { delay } from "@std/async"
+import { normalize, SEPARATOR } from "@std/path"
 import type { Driver, DriverResponse } from "./client.ts"
 import { type ContractTarget, groupAlive } from "./contract.ts"
 
@@ -137,7 +138,7 @@ export function runCaptureContract(name: string, target: ContractTarget): void {
         assertEquals(c.label, "final composite")
         // Both files are named by the turn, under the directory asked for.
         for (const path of [c.frame, c.map]) {
-          assertEquals(path.startsWith(dir + "/"), true, path)
+          assertEquals(normalize(path).startsWith(dir + SEPARATOR), true, path)
           assert(path.includes(`turn-${turn}-`), `named by turn ${turn}: ${path}`)
         }
         assertNotEquals(c.frame, c.map)
