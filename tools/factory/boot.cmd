@@ -8,4 +8,7 @@ where herdr >nul 2>&1
 if errorlevel 1 (echo herdr is not on PATH and not under %USERPROFILE%\.herdr & exit /b 2)
 cd /d "%~dp0..\.."
 deno run -A tools/factory/main.ts boot %*
-exit /b %errorlevel%
+if errorlevel 1 exit /b %errorlevel%
+rem The herdr server is headless: open a client window so the workspace is visible.
+start "" herdr
+exit /b 0
