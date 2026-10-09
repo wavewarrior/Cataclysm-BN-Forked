@@ -37,7 +37,7 @@ For a feature too big for one session:
 
 1. `/wayfinder <idea>` charts a map of decision tickets on the tracker and resolves them one at a time. Its destination should be a spec.
 2. When the map has no open tickets and no fog (`deno task factory map-status <map>` exits 0), run `/factory-launch <map or spec>`. It reads the plan, grounds it in the code, drafts tracer-bullet tickets with real `Touches` and `Test tags`, and asks you to approve the breakdown.
-3. On approval it runs `deno task factory publish <slug> <file> --parent <map>` (validated first with `--dry-run`), then `deno task factory release <slug>`, then starts `deno task factory run` in the background.
+3. On approval it runs `deno task factory publish <slug> <file> --parent <map>` (validated first with `--dry-run`), then `deno task factory release <slug>`. The watcher picks the released tickets up (see below).
 4. Each ticket becomes a draft PR; dependent tickets start only once their blockers' issues are closed, so you merge in order.
 
 `publish` rejects, before creating anything: non-conventional titles, missing tests or test tags, protected paths in `Touches`, gameplay/render tickets without episodes, unknown dependencies and cycles.
@@ -47,8 +47,8 @@ For a feature too big for one session:
 - Write tickets with `.github/ISSUE_TEMPLATE/factory-ticket.md` (the `to-tickets` skill emits it). They start as
   `factory:draft` + `spec:<slug>`.
 - `deno task factory release <slug>` flips the spec to `factory:ready`. That is the approval.
-- `deno task factory run [--max N] [--issue N]` works the queue in up to two lanes. `status` shows tickets, lane locks
-  and herdr agents; `stop <issue>` closes a ticket's panes and marks it blocked.
+- `tools\factory\watch.cmd` (or `deno task factory watch [--interval 60] [--once]`) is the poller to keep running in a herdr cmd pane. Every interval it lists `factory:ready` tickets; when one can be picked up it runs a driver pass, otherwise it prints one idle line and waits. Ctrl+C finishes the current pass and exits; a second Ctrl+C exits at once, and tickets already running keep their panes (check `status`).
+- `deno task factory run [--max N] [--issue N]` is the one-shot pass the watcher runs. `status` shows tickets, lane locks and herdr agents; `stop <issue>` closes a ticket's panes and marks it blocked.
 - A ticket ends as a draft PR (`factory:review`) or `factory:blocked` with the reason in an issue comment. Worktrees
   and panes are never deleted automatically.
 

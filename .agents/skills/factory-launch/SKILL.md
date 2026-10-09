@@ -78,7 +78,7 @@ The dry run reports every problem (unconventional title, missing tests, protecte
 Ask once more with `ask`: release `<slug>` and start the factory now? On yes:
 
 1. `deno task factory release <slug>` flips every draft of that spec to `factory:ready`.
-2. Start the driver as a **background** job with no timeout, and do not poll it: `deno task factory run`. Only one driver may run at a time (it holds lane locks); if one is already running, releasing is enough, because it will pick the new tickets up on its next pass or the next `run`.
+2. Make sure a watcher is polling: if none runs in a pane, start `tools\factory\watch.cmd` in a new herdr cmd pane. The watcher picks the released tickets up on its own; do not wait on it or poll it from here. If one already runs, releasing is enough.
 
 Tell the user how to follow it: `deno task factory status` for tickets, lanes and agents; draft PRs arrive on `feature/improvements` and the issues move to `factory:review`; a ticket that cannot finish is `factory:blocked` with the reason in a comment. Merging stays with the human.
 

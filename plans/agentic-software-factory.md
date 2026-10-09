@@ -135,6 +135,10 @@ Also `status` prints per-issue state from labels plus `herdr agent list` JSON.
 2. Issue template `.github/ISSUE_TEMPLATE/factory-ticket.md` and the driver parser share one section list: `## Goal`, `## Acceptance` (observable result), `## Touches` (paths), `## Test tags` (Catch2 tags, one per line), `## Episodes` (bnplay trial files, optional), `## Depends on` (issue numbers, optional), `## No test needed` (optional). Create labels once: `factory:draft`, `factory:ready`, `factory:in-progress`, `factory:review`, `factory:blocked`, `gameplay`, `render`, `spec:*` as needed (`gh label create`).
 3. Pilot ticket (labelled `factory:ready` after `release`): a trivial but gate-exercising change, issue text: "Add a Catch2 case in `tests/` asserting `<an existing small pure function>` boundary behavior; no src changes." Choose the function by reading `tests/` for an under-tested pure helper; record the issue number in the verification run.
 
+### H2. The watcher: `tools/factory/watch.ts` (`deno task factory watch`, `tools/factory/watch.cmd`)
+
+A long-running poller for a herdr cmd pane. Every `--interval` seconds (default 60) it lists `factory:ready` issues, drops any this process claimed in the last 10 minutes (the label search index lags an edit), and asks `pickNext` whether anything is pickable. Only then does it run one driver pass (`runLoop`, the same code as `run`, sharing the claim map). Idle polls print one line, and that line is printed only on a state change. A failing poll or pass backs off exponentially (capped at 600 s) and logs every failure. `--once` polls once and exits. Two passes never overlap, and lane locks stop a second watcher from sharing lanes. Ctrl+C finishes the current pass; a second Ctrl+C exits at once, leaving running tickets in their panes.
+
 ## Critical files & anchors
 
 - `tools/factory/gate.ts` (new): the single definition of "done"; everything else (hook, pre-push, CI) calls or mirrors it.
