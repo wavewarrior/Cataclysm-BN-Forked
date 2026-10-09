@@ -183,6 +183,7 @@ class game: public submap_load_listener
         friend Character &get_player_character();
         friend avatar &get_avatar();
         friend weather_manager &get_weather();
+        friend struct turn_step_bodies;
 
     public:
         game();
