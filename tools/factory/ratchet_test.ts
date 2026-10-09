@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert"
-import { describe, evaluateRun, grown } from "./ratchet.ts"
+import { describe, evaluateRun, grown, stopsRun } from "./ratchet.ts"
 
 const TOTALS = "Catch2: test cases: 3 | 1 passed | 2 failed\nexit 1; log out/x.log"
 
@@ -35,4 +35,14 @@ Deno.test("grown reports names added relative to the base list", () => {
   assertEquals(grown(["a"], ["a", "b"]), ["b"])
   assertEquals(grown(["a", "b"], ["a"]), [])
   assertEquals(describe(evaluateRun(`FAIL z\n${TOTALS}`, [])).includes("z"), true)
+})
+
+Deno.test("a green run with only the Catch2 'All tests passed' line is ok", () => {
+  assertEquals(evaluateRun("Catch2: All tests passed (7 assertions in 1 test case)", []).ok, true)
+})
+
+Deno.test("the stop predicate ends a run only at a failure outside the baseline", () => {
+  assertEquals(stopsRun("FAIL known case", ["known case"]), false)
+  assertEquals(stopsRun("FAIL brand new case", ["known case"]), true)
+  assertEquals(stopsRun("no failure here", []), false)
 })

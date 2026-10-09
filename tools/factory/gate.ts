@@ -10,7 +10,7 @@ import { exists } from "@std/fs"
 import { join } from "@std/path"
 import { config } from "./config.ts"
 import { changedFiles, violations } from "./protected_paths.ts"
-import { describe as describeRun, evaluateRun, grown } from "./ratchet.ts"
+import { describe as describeRun, evaluateRun, grown, stopsRun } from "./ratchet.ts"
 import { listItems, type Ticket } from "./ticket.ts"
 import {
   factoryDir,
@@ -267,7 +267,8 @@ const STEPS: Step[] = [
       if (!exe) return { ok: false, note: `no cata_test-tiles.exe under ${BUILD_DIR}` }
       for (const tag of tags) {
         await Deno.remove(join(ctx.cwd, "test_user_dir"), { recursive: true }).catch(() => {})
-        const { code } = await runToLogUntil(
+        const before = await Deno.readTextFile(ctx.logPath("catch2-tags")).catch(() => "")
+        await runToLogUntil(
           [
             "deno",
             "task",
@@ -281,15 +282,17 @@ const STEPS: Step[] = [
             "1",
           ],
           ctx.logPath("catch2-tags"),
-          (line) => line.startsWith("FAIL "),
+          (line) => stopsRun(line, config.baselineFailures),
           { cwd: ctx.cwd },
         )
-        const log = await Deno.readTextFile(ctx.logPath("catch2-tags")).catch(() => "")
+        const log = (await Deno.readTextFile(ctx.logPath("catch2-tags")).catch(() => ""))
+          .slice(before.length)
         const ran = [...log.matchAll(/^(\d+) test cases;/gm)].at(-1)?.[1]
         if (ran === undefined || Number(ran) === 0) {
           return { ok: false, note: `tag ${tag} matched no test cases (typo?)` }
         }
-        if (code !== 0) return { ok: false, note: `tag ${tag} failed` }
+        const result = evaluateRun(log, config.baselineFailures)
+        if (!result.ok) return { ok: false, note: `tag ${tag}:\n${describeRun(result)}` }
       }
       return { ok: true, note: `tags: ${tags.join(" ")}` }
     },
@@ -317,8 +320,7 @@ const STEPS: Step[] = [
         ctx.logPath("baseline-ratchet"),
         // Stop at the first failure that is not in the baseline: the rest of a 12-minute run
         // cannot change the verdict.
-        (line) =>
-          line.startsWith("FAIL ") && !config.baselineFailures.includes(line.slice(5).trim()),
+        (line) => stopsRun(line, config.baselineFailures),
         { cwd: ctx.cwd },
       )
       const log = await Deno.readTextFile(ctx.logPath("baseline-ratchet"))

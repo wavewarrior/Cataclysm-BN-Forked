@@ -99,7 +99,9 @@ const start = Date.now()
 const durations = new Map<string, number>()
 const failed = new Set<string>()
 const failedAsExpected = new Set<string>()
-let catchTotals = "" // Catch2's own "test cases: ..." line, the ground truth for the counts
+// Catch2's totals line ("test cases: ..." or, when every case passed, "All tests passed ..."): the
+// ground truth for the counts.
+let catchTotals = ""
 // Cases run one at a time and Catch2 prints a case's failures before its own duration line, so
 // a failure seen since the previous case finished belongs to the next listed case to finish.
 let pendingFail = false
@@ -152,7 +154,7 @@ const onLine = (line: string) => {
     return
   }
   if (/FAILED:|failed with exception|Fatal error condition/.test(line)) pendingFail = true
-  if (line.startsWith("test cases:")) catchTotals = line
+  if (line.startsWith("test cases:") || line.startsWith("All tests passed")) catchTotals = line
 }
 
 const pump = async (stream: ReadableStream<Uint8Array>, isStdout: boolean) => {

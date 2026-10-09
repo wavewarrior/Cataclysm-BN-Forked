@@ -45,6 +45,12 @@ export function evaluateRun(output: string, baseline: readonly string[]): Ratche
   }
 }
 
+/// True for a `FAIL` line the baseline does not allow. Stopping a run at the first such line is
+/// safe: the rest of the run cannot change the verdict.
+export function stopsRun(line: string, baseline: readonly string[]): boolean {
+  return line.startsWith("FAIL ") && !baseline.includes(line.slice("FAIL ".length).trim())
+}
+
 /// Names in `head` that `base` does not list.
 export function grown(base: readonly string[], head: readonly string[]): string[] {
   const had = new Set(base)
