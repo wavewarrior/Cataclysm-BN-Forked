@@ -199,3 +199,25 @@ _Avoid_: assertion, test
 **Transcript**:
 The JSONL record of every request and response of an Episode; the report points at a failing request in it, and it is the repro because same-seed Episodes are not guaranteed to replay.
 _Avoid_: log (that is the game's `debug.log`)
+
+## Dev loop
+
+**Leaf edit**:
+A change to one source file that no other translation unit depends on, so the rebuild is that unit plus the link.
+_Avoid_: small change, incremental build
+
+**Hub header**:
+A project header reached, directly or through other headers, by a large share of translation units, so touching it rebuilds much of the tree. Its cost is its reach weighted by how often it changes.
+_Avoid_: god header, core header
+
+**Fast preset**:
+A macOS build preset tuned for the edit loop, separate from the performance-representative `osx-arm-slim`.
+_Avoid_: debug build (collides with the Debug build type)
+
+**Authoritative binary**:
+The executable the most recent build of a preset produced, as opposed to older copies of the same program lying around.
+_Avoid_: repo-root binary, installed binary
+
+**Build queue**:
+The machine-wide ordering that admits builds so concurrent sessions do not starve each other.
+_Avoid_: build lock, job pool
