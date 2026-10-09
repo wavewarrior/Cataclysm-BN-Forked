@@ -31,6 +31,17 @@ gh api -X PUT repos/wavewarrior/Cataclysm-BN-Forked/branches/feature/improvement
 JSON
 ```
 
+## From an idea to merged PRs
+
+For a feature too big for one session:
+
+1. `/wayfinder <idea>` charts a map of decision tickets on the tracker and resolves them one at a time. Its destination should be a spec.
+2. When the map has no open tickets and no fog (`deno task factory map-status <map>` exits 0), run `/factory-launch <map or spec>`. It reads the plan, grounds it in the code, drafts tracer-bullet tickets with real `Touches` and `Test tags`, and asks you to approve the breakdown.
+3. On approval it runs `deno task factory publish <slug> <file> --parent <map>` (validated first with `--dry-run`), then `deno task factory release <slug>`, then starts `deno task factory run` in the background.
+4. Each ticket becomes a draft PR; dependent tickets start only once their blockers' issues are closed, so you merge in order.
+
+`publish` rejects, before creating anything: non-conventional titles, missing tests or test tags, protected paths in `Touches`, gameplay/render tickets without episodes, unknown dependencies and cycles.
+
 ## Day to day
 
 - Write tickets with `.github/ISSUE_TEMPLATE/factory-ticket.md` (the `to-tickets` skill emits it). They start as

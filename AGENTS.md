@@ -212,8 +212,10 @@ One skill owns each phase:
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | triage                 | `triage`                                                                                                              |
 | design                 | `grill-with-docs`                                                                                                     |
+| map (large features)   | `wayfinder`: charts decision tickets until the destination (a spec) is clear                                          |
 | spec                   | `to-spec`                                                                                                             |
-| tickets                | `to-tickets`: must emit `.github/ISSUE_TEMPLATE/factory-ticket.md` sections, labels `factory:draft` and `spec:<slug>` |
+| launch                 | `factory-launch`: finished map or spec -> approved factory tickets (`deno task factory publish`) -> release -> run    |
+| tickets (by hand)      | `to-tickets` output needs the factory-ticket sections plus `Touches` and `Test tags`; prefer `factory-launch`         |
 | implement              | `implement` with `tdd`                                                                                                |
 | bug diagnosis          | `diagnosing-bugs`                                                                                                     |
 | adversarial review     | `interrogate`, then `code-review`, then `blast-radius` for a `src/` change touching a header with more than 10 usages |

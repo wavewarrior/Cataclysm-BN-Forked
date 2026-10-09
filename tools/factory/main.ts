@@ -13,15 +13,19 @@ import { pickNext, runTicket } from "./driver.ts"
 import {
   actionsEnabled,
   comment,
+  createIssue,
   editLabels,
   ensureLabel,
+  ensureSpecLabel,
   getIssue,
   isClosed,
   type Issue,
   LABELS,
   listIssues,
+  mapStatus,
 } from "./gh.ts"
 import { agentList, ensureServer, workspaceClose } from "./herdr.ts"
+import { publishDrafts, type TicketDraft, validateDrafts } from "./publish.ts"
 import { acquireLane, lanePathFor, readLanes, releaseLane } from "./lanes.ts"
 import { git, mainRepoRoot } from "./util.ts"
 
@@ -49,6 +53,33 @@ async function release(slug: string): Promise<void> {
     console.log(`#${issue.number} ready: ${issue.title}`)
   }
   if (drafts.length === 0) console.log(`no open factory:draft issues labelled spec:${slug}`)
+}
+
+async function publish(
+  slug: string,
+  file: string,
+  opts: { parent?: number; dryRun?: boolean },
+): Promise<void> {
+  const drafts = JSON.parse(await Deno.readTextFile(file)) as TicketDraft[]
+  const problems = validateDrafts(drafts)
+  if (problems.length > 0) {
+    console.error(`cannot publish:\n- ${problems.join("\n- ")}`)
+    Deno.exit(1)
+  }
+  if (opts.dryRun) {
+    console.log(`ok: ${drafts.length} ticket(s) would be published as factory:draft + spec:${slug}`)
+    return
+  }
+  await ensureSpecLabel(`spec:${slug}`)
+  const made = await publishDrafts({ drafts, slug, parent: opts.parent, create: createIssue })
+  for (const p of made) console.log(`#${p.number} ${p.key}: ${p.url}`)
+}
+
+async function showMapStatus(number: number): Promise<void> {
+  const s = await mapStatus(number)
+  const done = s.openChildren.length === 0 && s.fog === ""
+  console.log(JSON.stringify({ ...s, destinationReached: done }, null, 2))
+  if (!done) Deno.exit(1)
 }
 
 async function claim(issue: Issue): Promise<void> {
@@ -150,6 +181,18 @@ if (import.meta.main) {
     })
     .command("release <spec-slug:string>", "Approve a spec: draft tickets become ready.")
     .action((_, slug) => release(slug))
+    .command(
+      "publish <spec-slug:string> <tickets-file:string>",
+      "Create factory:draft tickets from a JSON breakdown.",
+    )
+    .option("--parent <n:number>", "map or spec issue the tickets belong to")
+    .option("--dry-run", "validate only")
+    .action(({ parent, dryRun }, slug, file) => publish(slug, file, { parent, dryRun }))
+    .command(
+      "map-status <issue:number>",
+      "Exit 0 only when a wayfinder map has no open tickets and no fog.",
+    )
+    .action((_, issue) => showMapStatus(issue))
     .command("run", "Work ready tickets.")
     .option("--max <n:number>", "stop after starting this many tickets", { default: 1000 })
     .option("--issue <n:number>", "only this issue")

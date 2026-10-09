@@ -100,3 +100,9 @@ export function branchName(prefix: string, number: number, title: string): strin
     .replace(/-+$/, "")
   return `${prefix}${number}-${slug || "ticket"}`
 }
+
+/// A conventional-commit title: `type(scope)!: summary`.
+export function isConventionalTitle(title: string): boolean {
+  return /^(?:feat|fix|refactor|chore|build|ci|test|docs|perf|style|revert)(?:\([^)]+\))?!?: \S/
+    .test(title)
+}

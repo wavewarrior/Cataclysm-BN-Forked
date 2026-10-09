@@ -138,3 +138,47 @@ export async function ensureLabel(label: { name: string; color: string; descript
     "--force",
   ])
 }
+
+/// Create an issue; returns its number and URL.
+export async function createIssue(opts: {
+  title: string
+  body: string
+  labels: string[]
+}): Promise<{ number: number; url: string }> {
+  const args = ["issue", "create", "--repo", config.repo, "--title", opts.title, "--body-file", "-"]
+  for (const l of opts.labels) args.push("--label", l)
+  const url = (await gh(args, opts.body)).trim().split(/\s+/).at(-1) ?? ""
+  return { number: Number(url.split("/").at(-1)), url }
+}
+
+/// Create the label if it does not exist yet (spec:<slug> labels are made on demand).
+export async function ensureSpecLabel(name: string): Promise<void> {
+  await ensureLabel({ name, color: "ededed", description: "Factory spec group" })
+}
+
+export type MapStatus = {
+  title: string
+  labels: string[]
+  openChildren: { number: number; title: string }[]
+  /// The map body's `## Not yet specified` text, trimmed (fog still on the map).
+  fog: string
+}
+
+/// Whether a wayfinder map has reached its destination: no open child tickets and no fog.
+export async function mapStatus(number: number): Promise<MapStatus> {
+  const issue = await getIssue(number)
+  const children = JSON.parse(
+    await gh(["api", "--paginate", `repos/${config.repo}/issues/${number}/sub_issues`]),
+  ) as { number: number; title: string; state: string }[]
+  const fog = issue.body.match(/## Not yet specified\s*([\s\S]*?)(?=\n## |$)/)?.[1]
+    ?.replace(/<!--[\s\S]*?-->/g, "").trim() ?? ""
+  return {
+    title: issue.title,
+    labels: issue.labels,
+    openChildren: children.filter((c) => c.state === "open").map(({ number, title }) => ({
+      number,
+      title,
+    })),
+    fog,
+  }
+}

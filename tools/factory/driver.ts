@@ -14,7 +14,13 @@ import {
   worktreeCreate,
 } from "./herdr.ts"
 import { type Lane, updateLane } from "./lanes.ts"
-import { branchName, dependsOn, makeTicket, missingSections } from "./ticket.ts"
+import {
+  branchName,
+  dependsOn,
+  isConventionalTitle,
+  makeTicket,
+  missingSections,
+} from "./ticket.ts"
 import { factoryDir, git, run, runToLog, tailFile } from "./util.ts"
 
 // ---------- pure helpers (unit tested) ----------
@@ -42,10 +48,7 @@ export async function pickNext(
 
 /// A conventional-commit PR title; an issue title without a type gets `chore:`.
 export function prTitle(title: string): string {
-  return /^(?:feat|fix|refactor|chore|build|ci|test|docs|perf|style|revert)(?:\([^)]+\))?!?: \S/
-      .test(title)
-    ? title
-    : `chore: ${title}`
+  return isConventionalTitle(title) ? title : `chore: ${title}`
 }
 
 export function implementerPrompt(issue: Issue, ticketPath: string): string {
