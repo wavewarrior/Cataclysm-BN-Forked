@@ -15,8 +15,8 @@ namespace cata {
 /// a named struct (AGENTS.md "MUST NOT use std::pair/std::tuple for multiple return values").
 class NoPairTupleReturnCheck: public ClangTidyCheck {
 public:
-    NoPairTupleReturnCheck(StringRef Name, ClangTidyContext* Context): ClangTidyCheck(Name,
-                Context) {}
+    NoPairTupleReturnCheck(StringRef Name, ClangTidyContext* Context)
+        : ClangTidyCheck(Name, Context) {}
     void registerMatchers(ast_matchers::MatchFinder* Finder) override;
     void check(const ast_matchers::MatchFinder::MatchResult& Result) override;
 };

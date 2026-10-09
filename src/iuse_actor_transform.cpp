@@ -272,12 +272,12 @@ void iuse_transform::load( const JsonObject& obj )
 int iuse_transform::use( player& p, item& it, bool t, const tripoint_bub_ms& pos ) const
 {
     if( t ) {
-    return 0; // invoked from active item processing, do nothing.
-}
+        return 0; // invoked from active item processing, do nothing.
+    }
 
-const bool possess =
-    p.has_item( it )
-    || ( it.has_flag( flag_ALLOWS_REMOTE_USE ) && square_dist( p.bub_pos(), pos ) == 1 );
+    const bool possess =
+        p.has_item( it )
+        || ( it.has_flag( flag_ALLOWS_REMOTE_USE ) && square_dist( p.bub_pos(), pos ) == 1 );
 
     if( possess && need_worn && !p.is_worn( it ) ) {
         p.add_msg_if_player(
@@ -291,7 +291,7 @@ const bool possess =
     }
     // No charge consumption at this point, there are still points of failure later.
     if( need_charges || transform_charges ) {
-    if( it.has_flag( flag_POWERARMOR_MOD ) && character_funcs::can_interface_armor( p ) ) {
+        if( it.has_flag( flag_POWERARMOR_MOD ) && character_funcs::can_interface_armor( p ) ) {
             if( possess ) {
                 const int bio_power = units::to_kilojoule( p.get_power_level() );
                 if( bio_power < need_charges || bio_power < transform_charges ) {
@@ -312,7 +312,7 @@ const bool possess =
 
 
     if( need_fire && possess ) {
-    if( !p.use_charges_if_avail( itype_fire, need_fire ) ) {
+        if( !p.use_charges_if_avail( itype_fire, need_fire ) ) {
             p.add_msg_if_player( m_info, need_fire_msg, it.tname() );
             return 0;
         }
@@ -341,10 +341,10 @@ const bool possess =
 
     if( possess ) { p.moves -= moves; }
 
-// Update Luminosity as object is "removed"
-get_map().update_lum( it, false );
+    // Update Luminosity as object is "removed"
+    get_map().update_lum( it, false );
 
-if( p.is_worn( it ) ) { p.on_item_takeoff( it ); }
+    if( p.is_worn( it ) ) { p.on_item_takeoff( it ); }
     if( container.is_empty() ) {
         it.convert( target );
         if( ammo_qty >= 0 || !random_ammo_qty.empty() ) {
@@ -401,15 +401,15 @@ ret_val<bool> iuse_transform::can_use(
     const Character& p, const item &, bool, const tripoint_bub_ms & ) const
 {
     if( need_dry && p.is_underwater() ) {
-    return ret_val<bool>::make_failure( _( "This item cannot be used while underwater." ) );
+        return ret_val<bool>::make_failure( _( "This item cannot be used while underwater." ) );
     }
     if( qualities_needed.empty() ) { return ret_val<bool>::make_success(); }
 
     std::map<quality_id, int> unmet_reqs;
     inventory inv;
     inv.form_from_map( p.bub_pos(), 1, &p, true, true );
-for( const auto& quality : qualities_needed ) {
-    if( !p.has_quality( quality.first, quality.second )
+    for( const auto& quality : qualities_needed ) {
+        if( !p.has_quality( quality.first, quality.second )
             && !inv.has_quality( quality.first, quality.second ) ) {
             unmet_reqs.insert( quality );
         }
@@ -527,7 +527,7 @@ int countdown_actor::use( player& p, item& it, bool t, const tripoint_bub_ms& po
 {
     if( t ) { return 0; }
 
-if( it.is_active() ) { return 0; }
+    if( it.is_active() ) { return 0; }
 
     if( p.sees( pos ) && !message.empty() ) { p.add_msg_if_player( m_neutral, _( message ), it.tname() ); }
 
@@ -547,13 +547,13 @@ ret_val<bool> countdown_actor::can_use(
 std::string countdown_actor::get_name() const
 {
     if( !name.empty() ) { return name; }
-return iuse_actor::get_name();
+    return iuse_actor::get_name();
 }
 
 void countdown_actor::info( const item& it, std::vector<iteminfo> &dump ) const
 {
     dump.emplace_back(
-    "TOOL", _( "Countdown: " ), interval > 0 ? interval : it.type->countdown_interval );
+        "TOOL", _( "Countdown: " ), interval > 0 ? interval : it.type->countdown_interval );
     const auto countdown_actor = it.type->countdown_action.get_actor_ptr();
     if( countdown_actor != nullptr ) { countdown_actor->info( it, dump ); }
 }
@@ -568,7 +568,7 @@ void ammobelt_actor::load( const JsonObject& obj ) { belt = itype_id( obj.get_st
 void ammobelt_actor::info( const item &, std::vector<iteminfo> &dump ) const
 {
     dump.emplace_back( "AMMO", string_format( _( "Can be used to assemble: %s" ),
-    item::nname( belt ) ) );
+                       item::nname( belt ) ) );
 }
 
 int ammobelt_actor::use( player& p, item &, bool, const tripoint_bub_ms & ) const

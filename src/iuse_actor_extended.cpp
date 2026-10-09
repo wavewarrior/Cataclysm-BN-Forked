@@ -517,24 +517,24 @@ auto iuse_flowerpot_plant::full_pot_selector( const item& it ) -> bool
 {
     if( !it.type->can_use( IUSE_ACTOR ) ) { return false; }
 
-const auto actor = dynamic_cast<const iuse_flowerpot_plant *>(
-                       it.get_use( IUSE_ACTOR )->get_actor_ptr() );
-if( actor == nullptr ) { return false; }
+    const auto actor = dynamic_cast<const iuse_flowerpot_plant *>(
+                           it.get_use( IUSE_ACTOR )->get_actor_ptr() );
+    if( actor == nullptr ) { return false; }
 
-const auto info = actor->get_info( it );
-return info.stage() != empty;
+    const auto info = actor->get_info( it );
+    return info.stage() != empty;
 }
 
 auto iuse_flowerpot_plant::empty_pot_selector( const item& it ) -> bool
 {
     if( !it.type->can_use( IUSE_ACTOR ) ) { return false; }
 
-const auto actor = dynamic_cast<const iuse_flowerpot_plant *>(
-                       it.get_use( IUSE_ACTOR )->get_actor_ptr() );
-if( actor == nullptr ) { return false; }
+    const auto actor = dynamic_cast<const iuse_flowerpot_plant *>(
+                           it.get_use( IUSE_ACTOR )->get_actor_ptr() );
+    if( actor == nullptr ) { return false; }
 
-const auto info = actor->get_info( it );
-return info.stage() == empty;
+    const auto info = actor->get_info( it );
+    return info.stage() == empty;
 }
 
 void iuse_flowerpot_collect::load( const JsonObject & ) {}
@@ -716,7 +716,7 @@ ret_val<bool> iuse_dimension_travel::can_use(
     const Character &, const item& it, bool, const tripoint_bub_ms & ) const
 {
     if( it.ammo_remaining() < need_charges ) {
-    return ret_val<bool>::make_failure( _( "The %s doesn't have enough charges." ), it.tname() );
+        return ret_val<bool>::make_failure( _( "The %s doesn't have enough charges." ), it.tname() );
     }
     return ret_val<bool>::make_success();
 }
@@ -724,12 +724,12 @@ ret_val<bool> iuse_dimension_travel::can_use(
 void iuse_dimension_travel::dimension_travel( player& p, item &, const tripoint_bub_ms& pos ) const
 {
     if( destination.is_empty() ) {
-    p.add_msg_if_player( m_bad, _( "This item has no destination configured." ) );
+        p.add_msg_if_player( m_bad, _( "This item has no destination configured." ) );
         return;
     }
     if( !destination.is_valid() ) {
-    debugmsg( "iuse_dimension_travel: destination '%s' is not a valid world_type",
-              destination.str() );
+        debugmsg( "iuse_dimension_travel: destination '%s' is not a valid world_type",
+                  destination.str() );
         return;
     }
 
@@ -748,7 +748,7 @@ void iuse_dimension_travel::dimension_travel( player& p, item &, const tripoint_
 
     // Check if already in target dimension
     if( g->get_current_dimension_id() == target_dim_id ) {
-    p.add_msg_if_player( m_info, _( "You are already in that dimension." ) );
+        p.add_msg_if_player( m_info, _( "You are already in that dimension." ) );
         add_msg( m_debug, "[DIM_TRAVEL] Already in target dimension" );
         return;
     }
@@ -758,7 +758,7 @@ void iuse_dimension_travel::dimension_travel( player& p, item &, const tripoint_
     // Check if avatar is within travel radius
     const int dist_to_avatar = rl_dist( pos, u.bub_pos() );
     if( dist_to_avatar > travel_radius ) {
-    if( fail_message.empty() ) {
+        if( fail_message.empty() ) {
             p.add_msg_if_player( m_bad, _( "You are too far from the portal!" ) );
         } else {
             p.add_msg_if_player( m_bad, "%s", _( fail_message ) );
@@ -767,7 +767,7 @@ void iuse_dimension_travel::dimension_travel( player& p, item &, const tripoint_
     }
 
     if( success_message.empty() ) {
-    p.add_msg_if_player( m_good, _( "You travel to another dimension!" ) );
+        p.add_msg_if_player( m_good, _( "You travel to another dimension!" ) );
     } else {
         p.add_msg_if_player( m_good, "%s", _( success_message ) );
     }
@@ -780,9 +780,9 @@ void iuse_dimension_travel::dimension_travel( player& p, item &, const tripoint_
     std::optional<tripoint_abs_ms> abs_pos;
 
     if( const dimension_info * info = g->get_current_dimension_info();
-    info && info->pocket_info.has_value() ) {
-    // Bounded pocket: restore the saved overworld origin position.
-    load_pos = info->pocket_info.value().get_preload_point();
+        info && info->pocket_info.has_value() ) {
+        // Bounded pocket: restore the saved overworld origin position.
+        load_pos = info->pocket_info.value().get_preload_point();
     } else {
         // Scaled dimension: remap player coordinates through the overworld ("") as the
         // common reference frame.  scale_num:scale_den describes each dimension relative
@@ -840,8 +840,8 @@ int iuse_pocket_dimension::use( player& p, item& it, bool, const tripoint_bub_ms
 {
     // If pocket is not initialized, initialize it on first use
     if( !it.pocket_dim.has_value() || !it.pocket_dim->pocket_info.has_value()
-    || !it.pocket_dim->pocket_info->is_initialized ) {
-    initialize_pocket( it );
+        || !it.pocket_dim->pocket_info->is_initialized ) {
+        initialize_pocket( it );
         if( !it.pocket_dim.has_value() || !it.pocket_dim->pocket_info.has_value()
             || !it.pocket_dim->pocket_info->is_initialized ) {
             p.add_msg_if_player( m_bad, _( "Failed to initialize the pocket dimension." ) );
@@ -856,11 +856,11 @@ int iuse_pocket_dimension::use( player& p, item& it, bool, const tripoint_bub_ms
 
     // Check if we're inside THIS pocket dimension
     if( current_dim_id == dim_info.id ) {
-    // We're inside - exit to return point
-    exit_pocket( p, it );
+        // We're inside - exit to return point
+        exit_pocket( p, it );
     } else if( current_dim_id == pd.return_dimension_id ) {
-    // We're in the dimension we last entered from - re-enter (ignoring last position)
-    enter_pocket( p, it );
+        // We're in the dimension we last entered from - re-enter (ignoring last position)
+        enter_pocket( p, it );
     } else {
         p.add_msg_if_player( m_info, _( "You can only use this to return from or re-enter this "
                                         "pocket." ) );
@@ -874,12 +874,12 @@ ret_val<bool> iuse_pocket_dimension::can_use(
     const Character &, const item& it, bool, const tripoint_bub_ms & ) const
 {
     if( it.ammo_remaining() < need_charges ) {
-    return ret_val<bool>::make_failure( _( "The %s doesn't have enough charges." ), it.tname() );
+        return ret_val<bool>::make_failure( _( "The %s doesn't have enough charges." ), it.tname() );
     }
     // Temporary pocket: refuse entry if the pocket has expired.
     if( it.pocket_dim.has_value() && it.pocket_dim->pocket_info.has_value() ) {
-    const auto& pd = *it.pocket_dim->pocket_info;
-    if( pd.lifetime.has_value() && pd.last_player_exit.has_value() ) {
+        const auto& pd = *it.pocket_dim->pocket_info;
+        if( pd.lifetime.has_value() && pd.last_player_exit.has_value() ) {
             if( *pd.last_player_exit + *pd.lifetime < calendar::turn ) {
                 return ret_val<bool>::make_failure(
                            _( "The %s is cold and inert — the pocket dimension has collapsed." ),
@@ -893,7 +893,7 @@ ret_val<bool> iuse_pocket_dimension::can_use(
 void iuse_pocket_dimension::initialize_pocket( item& it ) const
 {
     if( !pocket_type.is_valid() ) {
-    debugmsg( "iuse_pocket_dimension: invalid pocket_type %s", pocket_type.str() );
+        debugmsg( "iuse_pocket_dimension: invalid pocket_type %s", pocket_type.str() );
         return;
     }
 
@@ -912,18 +912,18 @@ void iuse_pocket_dimension::initialize_pocket( item& it ) const
     // Record the dimension the pocket returns to when exiting.
     pocket_data.return_dimension_id = g->get_current_dimension_id();
     if( const auto * info = g->get_current_dimension_info() ) {
-    pocket_data.return_world_type = info->world_type;
-} else {
-    // Currently in the overworld; no explicit world_type needed.
-    pocket_data.return_world_type = world_type_id{};
-}
+        pocket_data.return_world_type = info->world_type;
+    } else {
+        // Currently in the overworld; no explicit world_type needed.
+        pocket_data.return_world_type = world_type_id{};
+    }
 
-// The return point will be set when entering
+    // The return point will be set when entering
 
-// Calculate bounds from entry_mapgen (overmap_special)
-overmap_special_id special_id( entry_mapgen );
-if( special_id.is_valid() ) {
-    const auto& special = special_id.obj();
+    // Calculate bounds from entry_mapgen (overmap_special)
+    overmap_special_id special_id( entry_mapgen );
+    if( special_id.is_valid() ) {
+        const auto& special = special_id.obj();
         auto locations = special.required_locations();
 
         if( !locations.empty() ) {
@@ -957,11 +957,11 @@ if( special_id.is_valid() ) {
     // Propagate lifetime from actor definition to the item's persistent data.
     if( lifetime.has_value() ) { pocket_data.lifetime = *lifetime; }
 
-// Priority: actor-level override > world_type > hardcoded default
-if( boundary_terrain && boundary_terrain->is_valid() ) {
-    pocket_data.bounds.boundary_terrain = *boundary_terrain;
-} else {
-    pocket_data.bounds.boundary_terrain = pocket_type.obj().boundary_terrain.value_or(
+    // Priority: actor-level override > world_type > hardcoded default
+    if( boundary_terrain && boundary_terrain->is_valid() ) {
+        pocket_data.bounds.boundary_terrain = *boundary_terrain;
+    } else {
+        pocket_data.bounds.boundary_terrain = pocket_type.obj().boundary_terrain.value_or(
                 ter_str_id( "t_pd_border" ) );
     }
     pocket_data.bounds.boundary_overmap_terrain = oter_str_id( "pd_border" );
@@ -991,38 +991,38 @@ static tripoint_bub_ms find_safe_spawn( const tripoint_bub_ms& target )
 void iuse_pocket_dimension::enter_pocket( player& p, item& it ) const
 {
     if( !it.pocket_dim.has_value() || !it.pocket_dim->pocket_info.has_value() ) { return; }
-auto& dim_info = *it.pocket_dim;
-auto& pd = *dim_info.pocket_info;
+    auto& dim_info = *it.pocket_dim;
+    auto& pd = *dim_info.pocket_info;
 
-// Store return information
-pd.return_dimension_id = g->get_current_dimension_id();
-if( const auto * info = g->get_current_dimension_info() ) {
-    pd.return_world_type = info->world_type;
-} else {
-    pd.return_world_type = world_type_id{};
-}
-pd.return_point = p.abs_pos();
+    // Store return information
+    pd.return_dimension_id = g->get_current_dimension_id();
+    if( const auto * info = g->get_current_dimension_info() ) {
+        pd.return_world_type = info->world_type;
+    } else {
+        pd.return_world_type = world_type_id{};
+    }
+    pd.return_point = p.abs_pos();
 
-// Player is now inside; clear the exit timestamp.
-pd.last_player_exit = std::nullopt;
+    // Player is now inside; clear the exit timestamp.
+    pd.last_player_exit = std::nullopt;
 
-p.add_msg_if_player( m_good, _( "You enter the pocket dimension." ) );
+    p.add_msg_if_player( m_good, _( "You enter the pocket dimension." ) );
 
-// Compute the map top-left corner so the entry point ends up near the grid center.
-// load_map() treats pos_sm as the top-left corner; the grid center is at
-// pos_sm + (g_half_mapsize, g_half_mapsize).  Placing the entry submap there
-// avoids a large multi-submap shift in update_map() which can trigger
-// use-after-free via stale grid[] pointers during submap_loader eviction.
-const auto entry_sm = project_to<coords::sm>( pd.entry_point );
-const auto dest_sm = entry_sm - tripoint_rel_sm( g_half_mapsize, g_half_mapsize, 0 );
-const auto new_pd = !pd.terrain_generated && !entry_mapgen.empty();
+    // Compute the map top-left corner so the entry point ends up near the grid center.
+    // load_map() treats pos_sm as the top-left corner; the grid center is at
+    // pos_sm + (g_half_mapsize, g_half_mapsize).  Placing the entry submap there
+    // avoids a large multi-submap shift in update_map() which can trigger
+    // use-after-free via stale grid[] pointers during submap_loader eviction.
+    const auto entry_sm = project_to<coords::sm>( pd.entry_point );
+    const auto dest_sm = entry_sm - tripoint_rel_sm( g_half_mapsize, g_half_mapsize, 0 );
+    const auto new_pd = !pd.terrain_generated && !entry_mapgen.empty();
 
-// Build a pre-load callback to place the overmap special BEFORE submaps are generated.
-// This ensures submap generation uses the correct overmap terrain types (e.g. "Cave")
-// instead of the default oter_id(0) which generates field/grass.
-std::function<void()> pre_load;
-if( new_pd ) {
-    pre_load = [&]() {
+    // Build a pre-load callback to place the overmap special BEFORE submaps are generated.
+    // This ensures submap generation uses the correct overmap terrain types (e.g. "Cave")
+    // instead of the default oter_id(0) which generates field/grass.
+    std::function<void()> pre_load;
+    if( new_pd ) {
+        pre_load = [&]() {
             overmap_special_id special_id( entry_mapgen );
             if( special_id.is_valid() ) {
                 auto& pd_omb = get_overmapbuffer( dim_info.id );
@@ -1071,7 +1071,7 @@ auto iuse_portal_link::can_use( const Character &, const item& it, bool,
 -> ret_val<bool>
 {
     if( charges_per_use > 0 && it.ammo_remaining() < charges_per_use ) {
-    return ret_val<bool>::make_failure( _( "The %s doesn't have enough charges." ), it.tname() );
+        return ret_val<bool>::make_failure( _( "The %s doesn't have enough charges." ), it.tname() );
     }
     return ret_val<bool>::make_success();
 }
@@ -1161,34 +1161,34 @@ auto iuse_portal_link::use( player& p, item& it, bool, const tripoint_bub_ms & )
 void iuse_pocket_dimension::exit_pocket( player& p, item& it ) const
 {
     if( !it.pocket_dim.has_value() || !it.pocket_dim->pocket_info.has_value() ) { return; }
-auto& pd = *it.pocket_dim->pocket_info;
+    auto& pd = *it.pocket_dim->pocket_info;
 
-p.add_msg_if_player( m_good, _( "You exit the pocket dimension." ) );
+    p.add_msg_if_player( m_good, _( "You exit the pocket dimension." ) );
 
-const auto return_dimension_id = pd.return_dimension_id;
-const auto return_world_type = pd.return_world_type;
-const auto return_point = pd.return_point;
-const auto return_preload_point = pd.get_preload_point();
+    const auto return_dimension_id = pd.return_dimension_id;
+    const auto return_world_type = pd.return_world_type;
+    const auto return_point = pd.return_point;
+    const auto return_preload_point = pd.get_preload_point();
 
-// Reset to fresh state: clears the entry-dimension lock so the key can be used
-// from whatever dimension the player is now in after returning.
-pd.return_dimension_id = dimension_id();
-pd.return_world_type = world_type_id{};
+    // Reset to fresh state: clears the entry-dimension lock so the key can be used
+    // from whatever dimension the player is now in after returning.
+    pd.return_dimension_id = dimension_id();
+    pd.return_world_type = world_type_id{};
 
-// Record when the player exited so the lifetime countdown can start.
-if( pd.lifetime.has_value() ) { pd.last_player_exit = calendar::turn; }
+    // Record when the player exited so the lifetime countdown can start.
+    if( pd.lifetime.has_value() ) { pd.last_player_exit = calendar::turn; }
 
-// Travel back to the return dimension (no bounds = infinite dimension).
-// travel_to_dimension clears stale bounds before loading the map.
-g->travel_to_dimension(
-    return_dimension_id, return_world_type, std::nullopt, return_preload_point );
+    // Travel back to the return dimension (no bounds = infinite dimension).
+    // travel_to_dimension clears stale bounds before loading the map.
+    g->travel_to_dimension(
+        return_dimension_id, return_world_type, std::nullopt, return_preload_point );
 
-const auto &here = get_map();
-const auto safe = find_safe_spawn( abs_to_map_local( here, return_point ) );
-p.setpos( map_local_to_abs( here, safe ) );
+    const auto &here = get_map();
+    const auto safe = find_safe_spawn( abs_to_map_local( here, return_point ) );
+    p.setpos( map_local_to_abs( here, safe ) );
 
-// Single update_map call at the final position
-g->update_map( p );
+    // Single update_map call at the final position
+    g->update_map( p );
 }
 
 // ---- iuse_paint_stuff -------------------------------------------------------
@@ -1236,8 +1236,7 @@ auto iuse_paint_stuff_do_paint(
 
     const auto col_selector = [&]( const RGBColorPair oldColor ) -> std::optional<RGBColorPair> {
         const auto [p_fg, p_bg] = oldColor;
-        switch( layer )
-        {
+        switch( layer ) {
             default:
             case iuse_paint_stuff_config::both:
                 if( p_fg != target_color || p_bg != target_color ) {
@@ -1402,8 +1401,8 @@ template <bool Roof> struct veh_part_painter {
 
     bool can_paint( const value_type& vp ) const {
         if( !vp.has_value() ) { return false; }
-    if( &vp->vehicle() != &target_veh ) { return false; }
-    if( !item_painter::can_paint( &vp->part().get_base() ) ) { return false; }
+        if( &vp->vehicle() != &target_veh ) { return false; }
+        if( !item_painter::can_paint( &vp->part().get_base() ) ) { return false; }
         return true;
     }
 
@@ -1701,7 +1700,8 @@ auto iuse_paint_stuff_config::use( player &, item& it, bool, const tripoint_bub_
     eMode mode = Abort;
     if( choices.size() == 1 ) {
         mode = choices.back().second;
-    } else if( choices.size() > 1 ) {
+    }
+    else if( choices.size() > 1 ) {
         uilist lst;
         lst.title = _( "Configure Painter" );
         for( const auto& [opt, res] : choices ) { lst.addentry( res, true, MENU_AUTOASSIGN, opt ); }
@@ -1886,7 +1886,7 @@ ret_val<bool> iuse_paint_stuff::can_use(
     const Character &, const item& it, bool, const tripoint_bub_ms & ) const
 {
     if( it.ammo_remaining() < 1 ) {
-    return ret_val<bool>::make_failure( _( "The %s doesn't have enough charges." ), it.tname() );
+        return ret_val<bool>::make_failure( _( "The %s doesn't have enough charges." ), it.tname() );
     }
 
     return ret_val<bool>::make_success();

@@ -53,8 +53,8 @@ auto coop_world_checksum( int radius ) -> uint64_t
                 for( int tx = 0; tx < SEEX; ++tx ) {
                     const tripoint_abs_ms abs_tile{
                         sm_pos.x() * SEEX + tx,
-                        sm_pos.y() * SEEY + ty,
-                        sm_pos.z()};
+                              sm_pos.y() * SEEY + ty,
+                              sm_pos.z()};
                     const tripoint_bub_ms bub = abs_to_map_local( g->m, abs_tile );
                     if( !g->m.inbounds( bub ) ) {
                         continue;

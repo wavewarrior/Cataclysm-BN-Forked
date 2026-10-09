@@ -28,7 +28,7 @@
 #include <utility>
 #include <vector>
 
-auto reset_scenario( avatar &u, const scenario *scen ) -> void;
+auto reset_scenario(avatar& u, const scenario* scen) -> void;
 
 static std::ostream& operator<<(std::ostream& s, const std::vector<trait_id>& v) {
     for (const auto& e : v) { s << e.c_str() << " "; }
@@ -38,20 +38,21 @@ static std::ostream& operator<<(std::ostream& s, const std::vector<trait_id>& v)
 using starting_item_trait_set = std::vector<trait_id>;
 using starting_item_trait_sets_t = std::vector<starting_item_trait_set>;
 
-static auto starting_item_trait_sets(const std::vector<trait_id>& traits) -> starting_item_trait_sets_t {
+static auto starting_item_trait_sets(const std::vector<trait_id>& traits)
+    -> starting_item_trait_sets_t {
     auto ret = starting_item_trait_sets_t{};
-    for (const auto& trait : traits) {
-        ret.push_back({trait});
-    }
-    ret.insert( ret.end(), {
-        { trait_id( "ANTIWHEAT" ), trait_id( "MEATARIAN" ) },
-        { trait_id( "ANTIWHEAT" ), trait_id( "VEGETARIAN" ) },
-        { trait_id( "ANTIFRUIT" ), trait_id( "MEATARIAN" ) },
-        { trait_id( "ANTIFRUIT" ), trait_id( "ANTIJUNK" ) },
-        { trait_id( "ANTIWHEAT" ), trait_id( "ANTIJUNK" ) },
-        { trait_id( "LACTOSE" ), trait_id( "VEGETARIAN" ) },
-        { trait_id( "ANTIWHEAT" ), trait_id( "ANTIJUNK" ), trait_id( "MEATARIAN" ) },
-    } );
+    for (const auto& trait : traits) { ret.push_back({trait}); }
+    ret.insert(
+        ret.end(),
+        {
+            {trait_id("ANTIWHEAT"), trait_id("MEATARIAN")},
+            {trait_id("ANTIWHEAT"), trait_id("VEGETARIAN")},
+            {trait_id("ANTIFRUIT"), trait_id("MEATARIAN")},
+            {trait_id("ANTIFRUIT"), trait_id("ANTIJUNK")},
+            {trait_id("ANTIWHEAT"), trait_id("ANTIJUNK")},
+            {trait_id("LACTOSE"), trait_id("VEGETARIAN")},
+            {trait_id("ANTIWHEAT"), trait_id("ANTIJUNK"), trait_id("MEATARIAN")},
+        });
     return ret;
 }
 

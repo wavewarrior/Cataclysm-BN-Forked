@@ -160,10 +160,9 @@ bool gpu_sdf_pass::upload_occluders(
     // The capture is sized to the runtime cache dims, the same dims the shaders index
     // with. A mismatch means cata_tiles has not drawn yet this frame (main menu, or a
     // partial UI redraw); seed nothing so occ_base falls back to TransBuf everywhere.
-    const bool mask_ok = tiles > 0 && tiles <= max_tiles_
-                         && static_cast<std::uint32_t>(occ.width()) == runtime_w
-                         && static_cast<std::uint32_t>(occ.height()) == runtime_h
-                         && mask.size() >= tiles;
+    const bool mask_ok =
+        tiles > 0 && tiles <= max_tiles_ && static_cast<std::uint32_t>(occ.width()) == runtime_w
+        && static_cast<std::uint32_t>(occ.height()) == runtime_h && mask.size() >= tiles;
 
     // occ_base reads CapturedBuf unconditionally, so it must hold defined bytes even
     // when there is nothing captured — otherwise stale marks would suppress the
@@ -206,8 +205,14 @@ bool gpu_sdf_pass::upload_occluders(
     if (n > quads_capacity_) {
         std::uint32_t cap = quads_capacity_ ? quads_capacity_ : 1024u;
         while (cap < n) { cap *= 2u; }
-        if (quads_buf_) { SDL_ReleaseGPUBuffer(d, quads_buf_); quads_buf_ = nullptr; }
-        if (xfer_quads_) { SDL_ReleaseGPUTransferBuffer(d, xfer_quads_); xfer_quads_ = nullptr; }
+        if (quads_buf_) {
+            SDL_ReleaseGPUBuffer(d, quads_buf_);
+            quads_buf_ = nullptr;
+        }
+        if (xfer_quads_) {
+            SDL_ReleaseGPUTransferBuffer(d, xfer_quads_);
+            xfer_quads_ = nullptr;
+        }
         const std::uint32_t bytes = cap * static_cast<std::uint32_t>(sizeof(occluder_quad));
         quads_buf_ = create_buffer(bytes, SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ);
         SDL_GPUTransferBufferCreateInfo tbci{};
@@ -226,11 +231,12 @@ bool gpu_sdf_pass::upload_occluders(
         dst[i] = quads[s];
         const occluder_page& pg = pages[s];
         if (page_runs_.empty() || page_runs_.back().tex != pg.tex) {
-            page_runs_.push_back({.tex = pg.tex,
-                                  .atlas_w = static_cast<std::uint32_t>(pg.atlas_w),
-                                  .atlas_h = static_cast<std::uint32_t>(pg.atlas_h),
-                                  .first = i,
-                                  .count = 0u});
+            page_runs_.push_back(
+                {.tex = pg.tex,
+                 .atlas_w = static_cast<std::uint32_t>(pg.atlas_w),
+                 .atlas_h = static_cast<std::uint32_t>(pg.atlas_h),
+                 .first = i,
+                 .count = 0u});
         }
         ++page_runs_.back().count;
     }

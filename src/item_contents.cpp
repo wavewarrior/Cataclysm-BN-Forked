@@ -26,19 +26,16 @@ item_contents::item_contents( item *container,
 
 item_contents::~item_contents() = default;
 
-bool item_contents::empty() const
-{
+bool item_contents::empty() const {
     return items.empty();
 }
 
-auto item_contents::has_processing_items() const -> bool
-{
+auto item_contents::has_processing_items() const -> bool {
     update_processing_cache();
     return !cached_processing_items.empty();
 }
 
-auto item_contents::processing_items() const -> const std::vector<item *> & // *NOPAD*
-{
+auto item_contents::processing_items() const -> const std::vector<item *> & { // *NOPAD*
     update_processing_cache();
     return cached_processing_items;
 }
@@ -155,7 +152,8 @@ std::vector<detached_ptr<item>> item_contents::clear_items()
     auto ret = items.clear();
     if( owner != nullptr ) {
         owner->invalidate_processing_cache_upwards();
-    } else {
+    }
+    else {
         invalidate_processing_cache();
     }
     return ret;
@@ -175,7 +173,8 @@ void item_contents::set_item_defaults()
             contained_item->ammo_set(
                 contained_item->ammo_default(), contained_item->ammo_capacity() / 2
             );
-        } else { //Contents are batteries or food
+        }
+        else { //Contents are batteries or food
             contained_item->charges = contained_item->typeId()->charges_default();
         }
     }
@@ -205,7 +204,7 @@ bool item_contents::stacks_with( const item_contents &rhs ) const
     } );
 }
 
-item *item_contents::get_item_with( const std::function<bool( const item &it )> &filter )
+item * item_contents::get_item_with( const std::function<bool( const item &it )> &filter )
 {
     auto bomb_it = std::ranges::find_if( items,
                                          [&filter]( const item * const & it ) -> bool{ return filter( *it );} );
@@ -294,22 +293,22 @@ std::vector<const item *> item_contents::gunmods() const
     return res;
 }
 
-item &item_contents::front()
+item & item_contents::front()
 {
     return *items.front();
 }
 
-const item &item_contents::front() const
+const item & item_contents::front() const
 {
     return *items.front();
 }
 
-item &item_contents::back()
+item & item_contents::back()
 {
     return *items.back();
 }
 
-const item &item_contents::back() const
+const item & item_contents::back() const
 {
     return *items.back();
 }

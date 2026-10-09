@@ -276,7 +276,7 @@ item::item( const item& source )
         if( actor != nullptr ) { actor->on_spawned( *this ); }
     }
 }
-item &item::operator=( const item& source )
+item & item::operator=( const item& source )
 {
     copy_fields_from( source );
 
@@ -706,7 +706,7 @@ bool item::attempt_split(
     const bool split_from_preserving_container = goes_bad() && is_in_preserving_container();
     prepare_for_location_removal();
     const bool split_needs_rot_actualization = goes_bad() && is_loaded() && has_position() &&
-            !split_from_preserving_container;
+        !split_from_preserving_container;
     const auto split_pos = split_needs_rot_actualization ? bub_pos() : tripoint_bub_ms::zero();
     const auto split_temperature = split_needs_rot_actualization
                                    ? rot::temp::for_location( get_map(), *this )
@@ -785,7 +785,7 @@ detached_ptr<item> item::in_container( const itype_id& cont, detached_ptr<item>&
 int item::charges_per_volume( const units::volume& vol ) const
 {
     if( count_by_charges() ) {
-    if( type->volume == 0_ml ) {
+        if( type->volume == 0_ml ) {
             debugmsg( "Item '%s' with zero volume", tname() );
             return INFINITE_CHARGES;
         }
@@ -806,18 +806,18 @@ int item::charges_per_volume( const units::volume& vol ) const
     }
 }
 
-namespace
-{
+namespace {
 
-auto bionic_component_type_ids( const item &corpse ) -> std::vector<itype_id>
+auto bionic_component_type_ids( const item & corpse ) -> std::vector<itype_id>
 {
     using namespace std::views;
     namespace ranges = std::ranges;
     auto result = corpse.get_components()
-                  | filter( &item::is_bionic )
-                  | transform( &item::typeId )
-                  | ranges::to<std::vector>();
-    ranges::sort( result, []( const itype_id & lhs, const itype_id & rhs ) {
+                        | filter( &item::is_bionic )
+                        | transform( &item::typeId )
+                        | ranges::to<std::vector>();
+    ranges::sort( result, []( const itype_id & lhs, const itype_id & rhs )
+    {
         return lhs < rhs;
     } );
     return result;
@@ -912,16 +912,15 @@ bool item::stacks_with( const item& rhs, bool check_components, bool skip_type_c
     return contents.stacks_with( rhs.contents );
 }
 
-namespace
-{
+namespace {
 
-time_duration weighted_averaged_rot( const item* a, const item* b )
+time_duration weighted_averaged_rot( const item * a, const item * b )
 {
     const int base_charges = a->charges + b->charges;
 
     return base_charges > 0
-           ? ( a->get_rot() * a->charges + b->get_rot() * b->charges ) / base_charges
-           : 0_seconds;
+    ? ( a->get_rot() * a->charges + b->get_rot() * b->charges ) / base_charges
+    : 0_seconds;
 }
 
 } // namespace
@@ -1026,16 +1025,16 @@ int item::get_hearing_protection( bool advanced ) const
 bool item::can_put_in_bandolier( const item& obj, bool ) const
 {
     if( !type->can_use( "bandolier" ) ) {
-    return false; // item is not a holster
-}
+        return false; // item is not a holster
+    }
 
-const auto* ptr = dynamic_cast<const bandolier_actor *>
-                  ( type->get_use( "bandolier" )->get_actor_ptr() );
-if( !ptr->can_store( *this, obj ) ) {
-    return false; // item is not a suitable holster for obj
-}
+    const auto* ptr = dynamic_cast<const bandolier_actor *>
+                      ( type->get_use( "bandolier" )->get_actor_ptr() );
+    if( !ptr->can_store( *this, obj ) ) {
+        return false; // item is not a suitable holster for obj
+    }
 
-return true;
+    return true;
 }
 
 auto item::actualize_rot( detached_ptr<item> &&self, const tripoint_bub_ms &pnt,

@@ -115,8 +115,8 @@ auto push_syntax_token(
 -> void
 {
     if( text.empty() ) { return; }
-if( !tokens.empty() && tokens.back().color == color ) {
-    tokens.back().text.append( text );
+    if( !tokens.empty() && tokens.back().color == color ) {
+        tokens.back().text.append( text );
         return;
     }
     tokens.push_back( lua_syntax_token{std::string( text ), color} );
@@ -286,27 +286,27 @@ const std::vector<folded_line> &folded_text::get_lines() const { return lines; }
 point folded_text::codepoint_coordinates( int cpt_idx, bool zero_x ) const
 {
     if( lines.empty() ) { return point_zero; }
-// find the line before the cursor position
-auto it = std::
-lower_bound( lines.begin(), lines.end(), cpt_idx, []( const folded_line & l, const int p ) {
-    return l.cpts_end < p;
-} );
-if( it == lines.end() ) {
-    // past the last codepoint, shouldn't happen
-    return point_zero;
-}
-int y = std::distance( lines.begin(), it );
-// if zero_x is true and the line is not the last line, cursor at the end of
-// the line is moved to the start of the next line
-if( zero_x && static_cast<size_t>( y + 1 ) < lines.size() && cpt_idx == it->cpts_end ) {
-    return point( 0, y + 1 );
+    // find the line before the cursor position
+    auto it = std::
+    lower_bound( lines.begin(), lines.end(), cpt_idx, []( const folded_line & l, const int p ) {
+        return l.cpts_end < p;
+    } );
+    if( it == lines.end() ) {
+        // past the last codepoint, shouldn't happen
+        return point_zero;
+    }
+    int y = std::distance( lines.begin(), it );
+    // if zero_x is true and the line is not the last line, cursor at the end of
+    // the line is moved to the start of the next line
+    if( zero_x && static_cast<size_t>( y + 1 ) < lines.size() && cpt_idx == it->cpts_end ) {
+        return point( 0, y + 1 );
     }
     // otherwise, calculate the width until cpt_idx
     int x = 0;
     const char *src = it->str.c_str();
     int bytes = it->str.length();
     for( int i = 0; bytes > 0 && i < cpt_idx - it->cpts_start; ++i ) {
-    const uint32_t uc = UTF8_getch( &src, &bytes );
+        const uint32_t uc = UTF8_getch( &src, &bytes );
         if( is_linebreak( uc ) ) {
             x = 0;
             ++y;
@@ -545,7 +545,8 @@ std::pair<bool, std::string> string_editor_window::query_string()
             if( !edit.empty() ) { text.insert( _position, edit ); }
             if( _show_line_numbers ) {
                 _line_number_width = get_line_number_width( text.str(), _line_number_min_width );
-            } else {
+            }
+            else {
                 _line_number_width = 0;
             }
             const auto gutter_width = _show_line_numbers ? _line_number_width + 1 : 0;

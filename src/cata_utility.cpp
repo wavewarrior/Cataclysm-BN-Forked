@@ -163,7 +163,8 @@ float multi_lerp( const std::vector<std::pair<float, float>> &points, float x )
 
     if( i == 0 ) {
         return points.front().second;
-    } else if( i >= points.size() ) {
+    }
+    else if( i >= points.size() ) {
         return points.back().second;
     }
 
@@ -217,7 +218,7 @@ static std::wstring cata_ios_mode_to_c( bool out, cata_ios_mode m )
     return ret;
 }
 
-cata_ofstream &cata_ofstream::operator=( cata_ofstream &&x )
+cata_ofstream & cata_ofstream::operator=( cata_ofstream &&x )
 noexcept
 {
     _stream = std::move( x._stream );
@@ -228,7 +229,7 @@ noexcept
     return *this;
 }
 
-cata_ofstream &cata_ofstream::open( const std::string &path )
+cata_ofstream & cata_ofstream::open( const std::string &path )
 {
     std::wstring mode = cata_ios_mode_to_c( true, _mode );
 
@@ -266,7 +267,7 @@ void cata_ofstream::close()
 
 #else // defined (_WIN32) && !defined (_MSC_VER)
 
-cata_ofstream &cata_ofstream::operator=( cata_ofstream &&x )
+cata_ofstream & cata_ofstream::operator=( cata_ofstream &&x )
 noexcept
 {
     _stream = std::move( x._stream );
@@ -274,7 +275,7 @@ noexcept
     return *this;
 }
 
-cata_ofstream &cata_ofstream::open( const std::string &path )
+cata_ofstream & cata_ofstream::open( const std::string &path )
 {
     std::ios_base::openmode mode = cata_ios_mode_to_std( std::ios_base::out, _mode );
 
@@ -329,19 +330,19 @@ void cata_ofstream::flush()
     _stream->flush();
 }
 
-std::ostream &cata_ofstream::operator*()
+std::ostream & cata_ofstream::operator*()
 {
     return *_stream;
 }
 
-std::ostream *cata_ofstream::operator->()
+std::ostream * cata_ofstream::operator->()
 {
     return &*_stream;
 }
 
 #if defined (_WIN32) && !defined (_MSC_VER)
 
-cata_ifstream &cata_ifstream::operator=( cata_ifstream &&x )
+cata_ifstream & cata_ifstream::operator=( cata_ifstream &&x )
 noexcept
 {
     _stream = std::move( x._stream );
@@ -352,7 +353,7 @@ noexcept
     return *this;
 }
 
-cata_ifstream &cata_ifstream::open( const std::string &path )
+cata_ifstream & cata_ifstream::open( const std::string &path )
 {
     std::wstring mode = cata_ios_mode_to_c( false, _mode );
 
@@ -389,7 +390,7 @@ void cata_ifstream::close()
 
 #else // defined (_WIN32) && !defined (_MSC_VER)
 
-cata_ifstream &cata_ifstream::operator=( cata_ifstream &&x )
+cata_ifstream & cata_ifstream::operator=( cata_ifstream &&x )
 noexcept
 {
     _stream = std::move( x._stream );
@@ -397,7 +398,7 @@ noexcept
     return *this;
 }
 
-cata_ifstream &cata_ifstream::open( const std::string &path )
+cata_ifstream & cata_ifstream::open( const std::string &path )
 {
     std::ios_base::openmode mode = cata_ios_mode_to_std( std::ios_base::in, _mode );
 
@@ -447,12 +448,12 @@ bool cata_ifstream::bad()
     return !_stream || _stream->bad();
 }
 
-std::istream &cata_ifstream::operator*()
+std::istream & cata_ifstream::operator*()
 {
     return *_stream;
 }
 
-std::istream *cata_ifstream::operator->()
+std::istream * cata_ifstream::operator->()
 {
     return &*_stream;
 }

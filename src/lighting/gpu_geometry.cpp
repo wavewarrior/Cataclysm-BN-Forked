@@ -120,7 +120,7 @@ void gpu_geometry::rect(
     s.tint_b = rgba[2];
     s.tint_a = rgba[3];
     // Flat-colour geometry on the 1x1 white texel.
-    s.light_mode = static_cast<float>( sprite_light_mode::unlit );
+    s.light_mode = static_cast<float>(sprite_light_mode::unlit);
     dst.draw(s);
 }
 

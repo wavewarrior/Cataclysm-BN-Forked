@@ -232,15 +232,15 @@ int map::bash_rating_internal(
 bool map::is_bashable( const tripoint_bub_ms &p, const bool allow_floor ) const
 {
     if( veh_at( p ).obstacle_at_part() ) {
-    return true;
-}
+        return true;
+    }
 
-if( has_furn( p ) && furn( p ).obj().bash.str_max != -1 ) {
-    return true;
-}
+    if( has_furn( p ) && furn( p ).obj().bash.str_max != -1 ) {
+        return true;
+    }
 
-const auto &ter_bash = ter( p ).obj().bash;
-return ter_bash.str_max != -1 && ( !ter_bash.bash_below || allow_floor );
+    const auto &ter_bash = ter( p ).obj().bash;
+    return ter_bash.str_max != -1 && ( !ter_bash.bash_below || allow_floor );
 }
 
 bool map::is_bashable_ter( const tripoint_bub_ms& p, const bool allow_floor ) const
@@ -373,7 +373,8 @@ float map::get_transparency( const tripoint_bub_ms& p ) const
 }
 
 bool map::is_last_ter_wall(
-    const bool no_furn, const tripoint_bub_ms& p, const tripoint_bub_ms& max, const direction dir ) const
+    const bool no_furn, const tripoint_bub_ms& p, const tripoint_bub_ms& max,
+    const direction dir ) const
 {
     tripoint_rel_ms mov;
     switch( dir ) {
@@ -898,8 +899,8 @@ ter_id map::get_roof( const tripoint_bub_ms& p, const bool allow_air ) const
     const auto &ter_there = ter( p ).obj();
     const auto &roof = ter_there.roof;
     if( !roof ) {
-    // No roof
-    if( !allow_air ) {
+        // No roof
+        if( !allow_air ) {
             // TODO: Biomes? By setting? Forbid and treat as bug?
             if( p.z() < 0 ) { return t_rock_floor_no_roof; }
 
@@ -911,8 +912,8 @@ ter_id map::get_roof( const tripoint_bub_ms& p, const bool allow_air ) const
 
     ter_id new_ter = roof.id();
     if( new_ter == t_null ) {
-    debugmsg( "map::get_new_floor: %d,%d,%d has invalid roof type %s",
-              p.x(), p.y(), p.z(), roof.c_str() );
+        debugmsg( "map::get_new_floor: %d,%d,%d has invalid roof type %s",
+                  p.x(), p.y(), p.z(), roof.c_str() );
         return t_dirt;
     }
 
@@ -1128,8 +1129,10 @@ bash_results map::bash_furn_success( const tripoint_bub_ms &p, const bash_params
         // First check if we're not currently bashing the center
         if( centers.contains( furn( p ) ) ) {
             tentp.emplace( p, furn( p ) );
-        } else {
-            for( const tripoint_bub_ms &pt : points_in_radius( p, bash.collapse_radius ) ) {
+        }
+        else {
+            for( const tripoint_bub_ms &pt : points_in_radius( p, bash.collapse_radius ) )
+            {
                 const furn_id &f_at = furn( pt );
                 // Check if we found the center of the current tent
                 if( centers.contains( f_at ) ) {
@@ -1142,10 +1145,12 @@ bash_results map::bash_furn_success( const tripoint_bub_ms &p, const bash_params
         if( !tentp ) {
             spawn_items( p, item_group::items_from( bash.drop_group, calendar::turn ) );
             furn_set( p, bash.furn_set );
-        } else {
+        }
+        else {
             // Take the tent down
             const int rad = tentp->second.obj().bash.collapse_radius;
-            for( const auto &pt : points_in_radius( tripoint_bub_ms( tentp->first ), rad ) ) {
+            for( const auto &pt : points_in_radius( tripoint_bub_ms( tentp->first ), rad ) )
+            {
                 const furn_id frn = furn( pt );
                 if( frn == f_null ) {
                     continue;
@@ -1169,12 +1174,15 @@ bash_results map::bash_furn_success( const tripoint_bub_ms &p, const bash_params
             }
         }
         soundfxvariant = "smash_cloth";
-    } else {
-        if( furnid.fluid_grid && furnid.fluid_grid->role == fluid_grid_role::tank ) {
+    }
+    else {
+        if( furnid.fluid_grid && furnid.fluid_grid->role == fluid_grid_role::tank )
+        {
             fluid_grid::on_tank_removed( tripoint_abs_ms( map_local_to_abs( *this, p ) ) );
         }
         furn_set( p, bash.furn_set );
-        for( item * const &it : i_at( p ) )  {
+        for( item * const &it : i_at( p ) )
+        {
             it->on_drop( p, *this );
         }
         // HACK: Hack alert.

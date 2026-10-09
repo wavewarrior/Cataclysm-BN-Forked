@@ -1963,35 +1963,35 @@ float map::vehicle_wheel_traction( const vehicle &veh,
                                    const bool ignore_movement_modifiers /*=false*/ ) const
 {
     if( veh.is_in_water( true ) ) {
-    return veh.can_float() ? 1.0f : -1.0f;
+        return veh.can_float() ? 1.0f : -1.0f;
     }
     if( veh.is_in_water() && veh.is_watercraft() && veh.can_float() ) {
-    return 1.0f;
-}
-if( veh.is_flying_in_air() ) {
-    return ( veh.has_lift() ) ? 1.0f : -1.0f;
+        return 1.0f;
+    }
+    if( veh.is_flying_in_air() ) {
+        return ( veh.has_lift() ) ? 1.0f : -1.0f;
     }
 
     const auto &wheel_indices = veh.wheelcache;
     int num_wheels = wheel_indices.size();
     if( num_wheels == 0 ) {
-    // TODO: Assume it is digging in dirt
-    // TODO: Return something that could be reused for dragging
-    return 0.0f;
-}
+        // TODO: Assume it is digging in dirt
+        // TODO: Return something that could be reused for dragging
+        return 0.0f;
+    }
 
-float traction_wheel_area = 0.0f;
+    float traction_wheel_area = 0.0f;
 
-if( vehicle_movement::is_on_rails( *this, veh ) ) {
-    // Vehicles on rails are considered to have all of their wheels on rails
-    for( int p : veh.rail_wheelcache ) {
+    if( vehicle_movement::is_on_rails( *this, veh ) ) {
+        // Vehicles on rails are considered to have all of their wheels on rails
+        for( int p : veh.rail_wheelcache ) {
             traction_wheel_area += veh.cpart( p ).wheel_area();
         }
         return traction_wheel_area;
     }
 
-for( int p : wheel_indices ) {
-    const auto &pp = veh.bub_part_location( p );
+    for( int p : wheel_indices ) {
+        const auto &pp = veh.bub_part_location( p );
         const int wheel_area = veh.cpart( p ).wheel_area();
 
         const auto &tr = ter( pp ).obj();
@@ -2091,7 +2091,7 @@ units::angle map::shake_vehicle( vehicle &veh, const int velocity_before,
                 psg->add_msg_player_or_npc( m_bad,
                                             _( "You take %d damage by the power of the impact!" ),
                                             _( "<npcname> takes %d damage by the power of the "
-                                               "impact!" ),  dmg );
+                   "impact!" ),  dmg );
             } else {
                 pet->apply_damage( nullptr, bodypart_id( "torso" ), dmg );
             }
@@ -2119,9 +2119,9 @@ units::angle map::shake_vehicle( vehicle &veh, const int velocity_before,
             if( psg ) {
                 psg->add_msg_player_or_npc( m_bad,
                                             _( "You are hurled from the %s's seat by "
-                                               "the power of the impact!" ),
+                   "the power of the impact!" ),
                                             _( "<npcname> is hurled from the %s's seat by "
-                                               "the power of the impact!" ), veh.name );
+                   "the power of the impact!" ), veh.name );
                 unboard_vehicle( part_pos );
             } else if( pet != nullptr ) {
                 veh.clear_pet_ref( ps );
@@ -2182,7 +2182,7 @@ auto vehicle::commit_occupants() -> void
                 blocker->setpos( end_pos );
             } else {
                 add_msg( m_debug, "commit_occupants: could not clear %s from %d,%d,%d",
-                          blocker->get_name(), target.x(), target.y(), target.z() );
+                         blocker->get_name(), target.x(), target.y(), target.z() );
             }
         }
 
@@ -2207,7 +2207,7 @@ auto vehicle::commit_occupants() -> void
             // rather than leave the occupant linked to a seat it cannot
             // physically reach.
             add_msg( m_debug, "commit_occupants: no free seat tile for %s, unboarding",
-                      occupant->get_name() );
+                     occupant->get_name() );
             get_map().unboard_vehicle( occupant->bub_pos() );
         }
     }
@@ -2219,18 +2219,18 @@ namespace vehicle_movement
 static auto has_rail_at_vehicle_z( const map &m, const tripoint_bub_ms &p ) -> bool
 {
     if( m.has_flag_ter_or_furn( TFLAG_RAIL, p ) ) {
-    return true;
-}
-if( !m.has_flag_ter_or_furn( TFLAG_NO_FLOOR, p ) ) {
-    return false;
-}
+        return true;
+    }
+    if( !m.has_flag_ter_or_furn( TFLAG_NO_FLOOR, p ) ) {
+        return false;
+    }
 
-const auto vertical_neighbors = std::array<tripoint_bub_ms, 2> {
-    p + tripoint_rel_ms( 0, 0, 1 ),
-    p + tripoint_rel_ms( 0, 0, -1 ),
-};
-return std::ranges::any_of( vertical_neighbors, [&]( const tripoint_bub_ms & candidate ) {
-    return m.has_flag_ter_or_furn( TFLAG_RAIL, candidate );
+    const auto vertical_neighbors = std::array<tripoint_bub_ms, 2> {
+        p + tripoint_rel_ms( 0, 0, 1 ),
+        p + tripoint_rel_ms( 0, 0, -1 ),
+    };
+    return std::ranges::any_of( vertical_neighbors, [&]( const tripoint_bub_ms & candidate ) {
+        return m.has_flag_ter_or_furn( TFLAG_RAIL, candidate );
     } );
 }
 

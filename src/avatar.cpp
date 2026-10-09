@@ -1175,12 +1175,12 @@ bool avatar::is_hallucination() const
 bool avatar::is_dead_state() const
 {
     if( cached_dead_state.has_value() ) {
-    return cached_dead_state.value();
+        return cached_dead_state.value();
     }
 
     if( Character::is_dead_state() ) {
-    cata::run_hooks( "on_character_death", [ &, this]( auto & params ) {
-        params["char"] = this;
+        cata::run_hooks( "on_character_death", [ &, this]( auto & params ) {
+            params["char"] = this;
         } );
         cached_dead_state.reset();
     }
@@ -1729,8 +1729,8 @@ auto avatar::count_throwable( int slot ) const -> int
 auto avatar::cycle_throw_slot() -> int
 {
     if( active_throw_slot_ < 0 ) {
-    // Find first non-empty slot.
-    for( int i = 0; i < MAX_THROW_SLOTS; ++i ) {
+        // Find first non-empty slot.
+        for( int i = 0; i < MAX_THROW_SLOTS; ++i ) {
             if( !throw_slots_[i].is_empty() ) {
                 active_throw_slot_ = i;
                 return i;
@@ -1740,7 +1740,7 @@ auto avatar::cycle_throw_slot() -> int
     }
     // Cycle forward, wrapping.
     for( int offset = 1; offset <= MAX_THROW_SLOTS; ++offset ) {
-    const int idx = ( active_throw_slot_ + offset ) % MAX_THROW_SLOTS;
+        const int idx = ( active_throw_slot_ + offset ) % MAX_THROW_SLOTS;
         if( !throw_slots_[idx].is_empty() ) {
             active_throw_slot_ = idx;
             return idx;

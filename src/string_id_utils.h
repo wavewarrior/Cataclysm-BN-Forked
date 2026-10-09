@@ -15,7 +15,7 @@
 template<typename Col,
          typename El = std::decay_t<decltype( *std::declval<const Col &>().begin() )>,
          typename K =  std::decay_t<typename El::first_type>,
-         typename V = std::decay_t<typename El::second_type>>
+         typename V = std::decay_t<typename El::second_type >>
 std::vector<std::pair<K, V>> sorted_lex( Col col )
 requires std::is_same_v<K, string_id<typename K::value_type>> {
     std::vector<std::pair<K, V>> ret;

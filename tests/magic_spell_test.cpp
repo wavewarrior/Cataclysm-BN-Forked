@@ -1,21 +1,19 @@
-#include <algorithm>
-
 #include "avatar.h"
-#include "catch/catch_amalgamated.hpp"
 #include "cata_utility.h"
+#include "catch/catch_amalgamated.hpp"
 #include "fstream_utils.h"
 #include "game.h"
-#include "magic/magic.h"
 #include "level_cache_freshness.h"
-#include "map.h"
-#include "ranged.h"
+#include "magic/magic.h"
 #include "magic/spell_targeting.h"
-
-#include "player_helpers.h"
+#include "map.h"
 #include "map_helpers.h"
 #include "monster.h"
 #include "player_helpers.h"
+#include "ranged.h"
 #include "state_helpers.h"
+
+#include <algorithm>
 
 // Magic Spell tests
 // -----------------
@@ -105,24 +103,24 @@ TEST_CASE("spell level", "[magic][spell][level]") {
     }
 }
 
-TEST_CASE("avatar sees own tile even with dirty visibility cache",
-    "[magic][spell][target][vision]") {
+TEST_CASE(
+    "avatar sees own tile even with dirty visibility cache", "[magic][spell][target][vision]") {
     clear_all_state();
     clear_avatar();
 
     avatar& you = get_avatar();
     map& here = get_map();
-    level_cache_freshness::invalidate_level( here, you.bub_pos().z() );
-    REQUIRE( level_cache_freshness::visibility_stale( here, you.bub_pos() ) );
+    level_cache_freshness::invalidate_level(here, you.bub_pos().z());
+    REQUIRE(level_cache_freshness::visibility_stale(here, you.bub_pos()));
 
     CHECK(you.sees(you.bub_pos()));
 }
 
-TEST_CASE( "hostile targeted spells accept targets selected by spell targeting",
-           "[magic][spell][target][vision]" )
-{
-    const auto restore_turn = restore_on_out_of_scope<time_point>( calendar::turn );
-    const auto cleanup_test_state = on_out_of_scope( []() { clear_all_state(); } );
+TEST_CASE(
+    "hostile targeted spells accept targets selected by spell targeting",
+    "[magic][spell][target][vision]") {
+    const auto restore_turn = restore_on_out_of_scope<time_point>(calendar::turn);
+    const auto cleanup_test_state = on_out_of_scope([]() { clear_all_state(); });
 
     clear_all_state();
     clear_avatar();
@@ -131,28 +129,28 @@ TEST_CASE( "hostile targeted spells accept targets selected by spell targeting",
     calendar::turn = calendar::turn_zero;
     g->reset_light_level();
 
-    avatar &you = get_avatar();
-    const auto caster_pos = tripoint_bub_ms( 60, 60, 0 );
-    const auto target_pos = caster_pos + point_rel_ms( 5, 0 );
-    you.setpos( caster_pos );
-    you.set_mutation( trait_id( "INFRARED" ) );
+    avatar& you = get_avatar();
+    const auto caster_pos = tripoint_bub_ms(60, 60, 0);
+    const auto target_pos = caster_pos + point_rel_ms(5, 0);
+    you.setpos(caster_pos);
+    you.set_mutation(trait_id("INFRARED"));
     you.recalc_sight_limits();
 
-    monster &target = spawn_test_monster( "mon_zombie", target_pos );
-    map &here = get_map();
-    level_cache_freshness::invalidate_level( here, you.bub_pos().z() );
+    monster& target = spawn_test_monster("mon_zombie", target_pos);
+    map& here = get_map();
+    level_cache_freshness::invalidate_level(here, you.bub_pos().z());
     g->refresh_player_visibility_cache_if_needed();
 
-    spell hostile_spell( spell_id( "test_spell_pew" ) );
-    hostile_spell.set_level( 5 );
-    REQUIRE( hostile_spell.is_valid_target( target_hostile ) );
-    REQUIRE_FALSE( hostile_spell.is_valid_target( target_ground ) );
-    REQUIRE( std::ranges::contains( ranged::targetable_creatures( you, hostile_spell.range() ),
-                                    &target ) );
-    REQUIRE( you.sees_with_infrared( target ) );
-    REQUIRE_FALSE( you.sees( target_pos ) );
+    spell hostile_spell(spell_id("test_spell_pew"));
+    hostile_spell.set_level(5);
+    REQUIRE(hostile_spell.is_valid_target(target_hostile));
+    REQUIRE_FALSE(hostile_spell.is_valid_target(target_ground));
+    REQUIRE(
+        std::ranges::contains(ranged::targetable_creatures(you, hostile_spell.range()), &target));
+    REQUIRE(you.sees_with_infrared(target));
+    REQUIRE_FALSE(you.sees(target_pos));
 
-    CHECK( spell_target_can_be_resolved( hostile_spell, you, target_pos ) );
+    CHECK(spell_target_can_be_resolved(hostile_spell, you, target_pos));
 }
 
 TEST_CASE("known magic remembers the last cast spell", "[magic][spell][save]") {

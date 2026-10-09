@@ -1,6 +1,6 @@
-#include "catch/catch_amalgamated.hpp"
 #include "avatar.h"
 #include "calendar.h"
+#include "catch/catch_amalgamated.hpp"
 #include "driver_items.h"
 #include "driver_view.h"
 #include "game.h"
@@ -70,8 +70,9 @@ auto read_list(const JsonObject& jo, const char* name) -> std::vector<listed> {
     std::vector<listed> out;
     for (JsonObject entry : jo.get_array(name)) {
         entry.allow_omitted_members();
-        out.push_back({entry.get_string("id"), entry.get_string("name"), entry.get_int("dx"),
-                       entry.get_int("dy"), entry.get_bool("hostile", false)});
+        out.push_back(
+            {entry.get_string("id"), entry.get_string("name"), entry.get_int("dx"),
+             entry.get_int("dy"), entry.get_bool("hostile", false)});
     }
     return out;
 }
@@ -149,7 +150,9 @@ TEST_CASE("driver_view_grid_is_a_window_centred_on_the_avatar_with_a_legend", "[
         const seen view = view_of(radius);
         CHECK(view.radius == radius);
         REQUIRE(view.grid.size() == static_cast<size_t>(2 * radius + 1));
-        for (const std::string& row : view.grid) { CHECK(row.size() == static_cast<size_t>(2 * radius + 1)); }
+        for (const std::string& row : view.grid) {
+            CHECK(row.size() == static_cast<size_t>(2 * radius + 1));
+        }
         CHECK(view.at(0, 0) == '@');
         for (const std::string& row : view.grid) {
             for (const char symbol : row) { CHECK(view.legend.contains(std::string(1, symbol))); }
@@ -274,7 +277,8 @@ TEST_CASE("driver_view_cuts_long_lists_nearest_kept_and_says_so", "[driver]") {
     for (int i = 0; i < 30; ++i) { put_item(1 + i % 6, i / 6 - 2, "tank_gun_auto"); }
     put_item(10, 10, "rock");
     for (int i = 0; i < 14; ++i) {
-        spawn_test_monster("mon_zombie", centre + tripoint_rel_ms(-1 - i % 7, -3 + i / 7 * 3 + i % 2, 0));
+        spawn_test_monster(
+            "mon_zombie", centre + tripoint_rel_ms(-1 - i % 7, -3 + i / 7 * 3 + i % 2, 0));
     }
     refresh();
 
@@ -297,7 +301,8 @@ TEST_CASE("driver_view_shrinks_the_window_to_fit_the_room_it_is_given", "[driver
     setup();
     for (int i = 0; i < 30; ++i) { put_item(1 + i % 6, i / 6 - 2, "tank_gun_auto"); }
     for (int i = 0; i < 14; ++i) {
-        spawn_test_monster("mon_zombie", centre + tripoint_rel_ms(-1 - i % 7, -3 + i / 7 * 3 + i % 2, 0));
+        spawn_test_monster(
+            "mon_zombie", centre + tripoint_rel_ms(-1 - i % 7, -3 + i / 7 * 3 + i % 2, 0));
     }
     refresh();
 

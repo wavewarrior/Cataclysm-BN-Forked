@@ -398,7 +398,7 @@ int Character::get_int_bonus() const { return int_bonus; }
 int Character::get_speed() const
 {
     if( is_mounted() ) {
-    return mounted_creature.get()->get_speed();
+        return mounted_creature.get()->get_speed();
     }
     return Creature::get_speed();
 }
@@ -470,11 +470,11 @@ void Character::mod_int_bonus( int nint )
 void Character::print_health() const
 {
     if( !is_player() ) {
-    return;
-}
-int current_health = get_healthy();
-if( get_option<std::string>( "HEALTH_STYLE" ) == "number" ) {
-    add_msg_if_player( _( "Your current health value is %d." ), current_health );
+        return;
+    }
+    int current_health = get_healthy();
+    if( get_option<std::string>( "HEALTH_STYLE" ) == "number" ) {
+        add_msg_if_player( _( "Your current health value is %d." ), current_health );
     }
 
     static const std::map<int, std::string> msg_categories = {
@@ -484,7 +484,7 @@ if( get_option<std::string>( "HEALTH_STYLE" ) == "number" ) {
 
     auto iter = msg_categories.lower_bound( current_health );
     if( iter != msg_categories.end() && !iter->second.empty() ) {
-    const translation msg = SNIPPET.random_from_category( iter->second ).value_or( translation() );
+        const translation msg = SNIPPET.random_from_category( iter->second ).value_or( translation() );
         add_msg_if_player( current_health > 0 ? m_good : m_bad, "%s", msg );
     }
 }
@@ -570,7 +570,7 @@ void Character::mod_rad( int mod )
 int Character::get_stamina() const
 {
     if( has_trait( trait_DEBUG_STAMINA ) ) {
-    return get_stamina_max();
+        return get_stamina_max();
     }
 
     return stamina;

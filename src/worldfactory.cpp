@@ -1056,8 +1056,7 @@ int worldfactory::show_modselection_window( const catacurses::window &win,
 
     // Helper function for determining the currently selected mod
     const auto get_selected_mod = [&]() -> const MOD_INFORMATION* {
-        if( active_header == 0 )
-        {
+        if( active_header == 0 ) {
             const std::vector<mod_id> &current_tab_mods = all_tabs[iCurrentTab].mods;
             if( current_tab_mods.empty() ) {
                 return nullptr;
@@ -1552,14 +1551,14 @@ int worldfactory::show_worldgen_tab_confirm( const catacurses::window &win, WORL
         hints += "\n\n";
         hints += string_format(
                      _( "Press [<color_yellow>%s</color>] to toggle save format.\n"
-                        "<color_light_blue>V2 format shrinks save files and reduces save corruption. "
-                        "V1 is the legacy format. You can convert existing V1 worlds to V2 from the main menu. "
-                        "V2 worlds cannot currently be converted back to V1.</color>" ),
+           "<color_light_blue>V2 format shrinks save files and reduces save corruption. "
+           "V1 is the legacy format. You can convert existing V1 worlds to V2 from the main menu. "
+           "V2 worlds cannot currently be converted back to V1.</color>" ),
                      ctxt.get_desc( "TOGGLE_V2_SAVE_FORMAT" ) );
         hints += "\n\n";
         hints += string_format(
                      _( "Press [<color_yellow>%s</color>] when you are satisfied with the world as it is and are ready "
-                        "to continue, or [<color_yellow>%s</color>] to go back and review your world." ),
+           "to continue, or [<color_yellow>%s</color>] to go back and review your world." ),
                      ctxt.get_desc( "NEXT_TAB" ), ctxt.get_desc( "PREV_TAB" ) );
         data->hints_rml = cata_text_to_rml( hints );
 

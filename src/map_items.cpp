@@ -233,7 +233,8 @@ map_stack::iterator map::i_rem(
     // remove from the active items cache (if it isn't there does nothing)
     current_submap->active_items.remove( *it );
     if( current_submap->active_items.empty() ) {
-        get_mapbuffer().forget_active_item_submap_index( project_to<coords::sm>( map_local_to_abs( *this, p ) ) );
+        get_mapbuffer().forget_active_item_submap_index( project_to<coords::sm>( map_local_to_abs( *this,
+                p ) ) );
     }
 
     const auto removed_emissive = ( *it )->is_emissive();
@@ -292,7 +293,8 @@ std::vector<detached_ptr<item>> map::i_clear( const tripoint_bub_ms& p )
         current_submap->active_items.remove( it );
     }
     if( current_submap->active_items.empty() ) {
-        get_mapbuffer().forget_active_item_submap_index( project_to<coords::sm>( map_local_to_abs( *this, p ) ) );
+        get_mapbuffer().forget_active_item_submap_index( project_to<coords::sm>( map_local_to_abs( *this,
+                p ) ) );
     }
 
     const auto had_luminance = current_submap->get_lum( l ) != 0;
@@ -511,7 +513,8 @@ void map::add_item( const tripoint_bub_ms& p, detached_ptr<item>&& new_item )
     }
 
     if( new_item->is_map() && !new_item->has_var( "reveal_map_center_omt" ) ) {
-        new_item->set_var( "reveal_map_center_omt", project_to<coords::omt>( map_local_to_abs( *this, p ) ) );
+        new_item->set_var( "reveal_map_center_omt", project_to<coords::omt>( map_local_to_abs( *this,
+                           p ) ) );
     }
 
     current_submap->is_uniform = false;
@@ -758,7 +761,8 @@ void map::process_items( int turns )
     {
         ZoneScopedN( "process_items_snapshot_active_submaps" );
         submaps_with_active_items_copy = std::vector <
-                                         tripoint_abs_sm > ( get_submaps_with_active_items().begin(), get_submaps_with_active_items().end() );
+                                         tripoint_abs_sm > ( get_submaps_with_active_items().begin(),
+                                             get_submaps_with_active_items().end() );
     }
     auto active_items = std::vector<item *> {};
     {
@@ -930,15 +934,15 @@ bool map::could_see_items( const tripoint_bub_ms &p, const tripoint_bub_ms &from
     const bool container = has_flag_ter_or_furn( container_string, p );
     const bool sealed = has_flag_ter_or_furn( TFLAG_SEALED, p );
     if( sealed && container ) {
-    // never see inside of sealed containers
-    return false;
-}
-if( container ) {
-    // can see inside of containers if adjacent or
-    // on top of the container
-    return ( std::abs( p.x() - from.x() ) <= 1 &&
-             std::abs( p.y() - from.y() ) <= 1 &&
-             std::abs( p.z() - from.z() ) <= 1 );
+        // never see inside of sealed containers
+        return false;
+    }
+    if( container ) {
+        // can see inside of containers if adjacent or
+        // on top of the container
+        return ( std::abs( p.x() - from.x() ) <= 1 &&
+                 std::abs( p.y() - from.y() ) <= 1 &&
+                 std::abs( p.z() - from.z() ) <= 1 );
     }
     return true;
 }
@@ -1149,8 +1153,7 @@ std::vector<detached_ptr<item>> map::use_charges( const tripoint_bub_ms &origin,
         const itype_id & drain_type ) -> bool {
             const auto drained = veh.drain( drain_type, quantity );
             quantity -= drained;
-            if( drained <= 0 )
-            {
+            if( drained <= 0 ) {
                 return quantity == 0;
             }
             auto tmp = item::spawn( type, calendar::turn );

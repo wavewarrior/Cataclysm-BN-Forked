@@ -26,7 +26,7 @@ void open();
 void close();
 void grab();
 void haul();
-void smash( const std::optional<tripoint_bub_ms>& target = std::nullopt );
+void smash( const std::optional<tripoint_bub_ms> &target = std::nullopt );
 int try_set_alarm();
 auto parse_custom_wait_duration( const std::string& value ) -> std::optional<time_duration>;
 void wait();

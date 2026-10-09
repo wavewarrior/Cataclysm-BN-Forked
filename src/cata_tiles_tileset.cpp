@@ -403,8 +403,7 @@ static void apply_surf_blend_effect(
     std::optional<SDL_Color> mask = std::nullopt ) -> SDL_Color {
         SDL_Color col;
 
-        switch( tint.blend_mode )
-        {
+        switch( tint.blend_mode ) {
             case tint_blend_mode::additive: {
                 col = RGBColor{
                     static_cast<uint8_t>( std::min<int>( base.r + target.r, 255 ) ),
@@ -464,13 +463,11 @@ static void apply_surf_blend_effect(
             }
             case tint_blend_mode::hardlight: {
                 auto hardlight_channel = []( const uint8_t base, const uint8_t blend ) -> uint8_t {
-                    if( blend > 127 )
-                {
-                    return static_cast<uint8_t>( std::clamp<int>(
-                                                     255 - ( 255 - blend ) * ( ( std::max( 255 - base, 1 ) ) * 255 / 127 ) / 255, 0,
-                                                     255 ) );
-                    } else
-                    {
+                    if( blend > 127 ) {
+                        return static_cast<uint8_t>( std::clamp<int>(
+                                                         255 - ( 255 - blend ) * ( ( std::max( 255 - base, 1 ) ) * 255 / 127 ) / 255, 0,
+                                                         255 ) );
+                    } else {
                         return static_cast<uint8_t>(
                             std::clamp<int>( blend * ( base * 255 / 127 ) / 255, 0, 255 ) );
                     }
@@ -482,13 +479,11 @@ static void apply_surf_blend_effect(
             }
             case tint_blend_mode::overlay: {
                 auto overlay_channel = []( const uint8_t base, const uint8_t blend ) -> uint8_t {
-                    if( base > 127 )
-                {
-                    return static_cast<uint8_t>( std::clamp<int>(
-                                                     255 - ( std::max( 255 - blend, 1 ) ) * ( ( 255 - base ) * 255 / 127 ) / 255, 0,
-                                                     255 ) );
-                    } else
-                    {
+                    if( base > 127 ) {
+                        return static_cast<uint8_t>( std::clamp<int>(
+                                                         255 - ( std::max( 255 - blend, 1 ) ) * ( ( 255 - base ) * 255 / 127 ) / 255, 0,
+                                                         255 ) );
+                    } else {
                         return static_cast<uint8_t>(
                             std::clamp<int>( blend * ( base * 255 / 127 ) / 255, 0, 255 ) );
                     }
@@ -504,13 +499,11 @@ static void apply_surf_blend_effect(
                 auto dest_hsv = rgb2hsv( target );
 
                 constexpr auto overlay = []( const uint8_t base, const uint8_t blend ) -> uint8_t {
-                    if( base > 127 )
-                {
-                    return static_cast<uint8_t>( std::clamp<int>(
-                                                     255 - ( std::max( 255 - blend, 1 ) ) * ( ( 255 - base ) * 255 / 127 ) / 255, 0,
-                                                     255 ) );
-                    } else
-                    {
+                    if( base > 127 ) {
+                        return static_cast<uint8_t>( std::clamp<int>(
+                                                         255 - ( std::max( 255 - blend, 1 ) ) * ( ( 255 - base ) * 255 / 127 ) / 255, 0,
+                                                         255 ) );
+                    } else {
                         return static_cast<uint8_t>(
                             std::clamp<int>( blend * ( base * 255 / 127 ) / 255, 0, 255 ) );
                     }
@@ -539,8 +532,7 @@ static void apply_surf_blend_effect(
 
     auto postprocess = [&tint]( SDL_Color c ) -> SDL_Color {
         auto [h, s, v, a] = rgb2hsv( c );
-        if( fabs( tint.contrast - 1.0f ) > 0.001f )
-        {
+        if( fabs( tint.contrast - 1.0f ) > 0.001f ) {
             const float adjusted = ( ( static_cast<float>( v ) - 128.0f ) * tint.contrast ) + 128.0f;
             v = static_cast<uint8_t>( std::clamp( adjusted, 0.0f, 255.0f ) );
         }
@@ -1603,9 +1595,9 @@ void tileset_loader::load_internal(
         };
         auto parse_color = [&colors]( const std::string & color_str ) -> color_parse_result {
             if( color_str.empty() ) { return {std::nullopt, std::nullopt}; }
-        if( color_str.starts_with( '#' ) )
-        {
-            const std::string hex_part = color_str.substr( 1 );
+            if( color_str.starts_with( '#' ) )
+            {
+                const std::string hex_part = color_str.substr( 1 );
                 for( const char c : hex_part ) {
                     if( !std::isxdigit( c ) ) { return {std::nullopt, std::nullopt}; }
                 }
@@ -1624,7 +1616,7 @@ void tileset_loader::load_internal(
             }
             const nc_color curse_color = colors.name_to_color( color_str );
             if( curse_color == c_unset ) { return {std::nullopt, std::nullopt}; }
-        return {static_cast<SDL_Color>( curses_color_to_RGB( curse_color ) ), std::nullopt};
+            return {static_cast<SDL_Color>( curses_color_to_RGB( curse_color ) ), std::nullopt};
         };
 
         auto parse_blend_mode = []( const std::string & str ) -> tint_blend_mode {
@@ -1907,7 +1899,7 @@ void tileset_loader::load_tilejson_from_file( const JsonObject& config )
                     << " Tile Definitions: " << ts.tile_ids.size();
 }
 
-tile_type &tileset_loader::load_tile( const JsonObject& entry, const std::string& id )
+tile_type & tileset_loader::load_tile( const JsonObject& entry, const std::string& id )
 {
     tile_type curr_subtile;
 

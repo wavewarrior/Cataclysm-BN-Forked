@@ -119,8 +119,8 @@ auto write_entries( JsonOut &jo, const entry_list &list ) -> bool
 {
     jo.member( list.name );
     jo.start_array();
-for( item *it : list.items.first( std::min( list.limit, list.items.size() ) ) ) {
-    jo.start_object();
+    for( item *it : list.items.first( std::min( list.limit, list.items.size() ) ) ) {
+        jo.start_object();
         jo.member( "id", issue_id( *it ) );
         jo.member( "name", shortened( it->display_name() ) );
         jo.end_object();
@@ -572,22 +572,22 @@ auto truncate_name( std::string text ) -> std::string
 auto outcome_name( const outcome o ) -> std::string_view
 {
     switch( o ) {
-    case outcome::completed:
-        return "completed";
-    case outcome::refused:
-        return "refused";
-    case outcome::no_effect:
-        return "no_effect";
-    case outcome::unsupported:
-        return "unsupported";
-    case outcome::blocked:
-        return "blocked";
-    case outcome::interrupted:
-        return "interrupted";
-    case outcome::awaiting_input:
-        return "awaiting_input";
-}
-return "completed";
+        case outcome::completed:
+            return "completed";
+        case outcome::refused:
+            return "refused";
+        case outcome::no_effect:
+            return "no_effect";
+        case outcome::unsupported:
+            return "unsupported";
+        case outcome::blocked:
+            return "blocked";
+        case outcome::interrupted:
+            return "interrupted";
+        case outcome::awaiting_input:
+            return "awaiting_input";
+    }
+    return "completed";
 }
 
 auto query_topic_name( const query_topic topic ) -> std::string_view

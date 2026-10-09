@@ -375,7 +375,7 @@ namespace
 
 auto grab_strength_from( const Creature& grabber ) -> int
 {
-    if( const monster* const mon = grabber.as_monster() ) { return mon->get_grab_strength(); }
+    if( const monster * const mon = grabber.as_monster() ) { return mon->get_grab_strength(); }
     return std::max( 1, grabber.get_effect_int( effect_grabbing ) );
 }
 
@@ -434,7 +434,7 @@ void static try_remove_bear_trap( Character& c )
             c.add_msg_if_player(
                 m_bad,
                 _( "You try to free yourself from the bear trap, but can't "
-                   "get loose!" ) );
+               "get loose!" ) );
         }
     }
 }
@@ -466,7 +466,7 @@ void static try_remove_lightsnare( Character& c )
             c.add_msg_if_player(
                 m_bad,
                 _( "You try to free yourself from the light snare, but can't "
-                   "get loose!" ) );
+               "get loose!" ) );
         }
     }
 }
@@ -500,7 +500,7 @@ void static try_remove_heavysnare( Character& c )
             c.add_msg_if_player(
                 m_bad,
                 _( "You try to free yourself from the heavy snare, but can't "
-                   "get loose!" ) );
+               "get loose!" ) );
         }
     }
 }
@@ -519,7 +519,7 @@ void static try_remove_crushed( Character& c )
         c.add_msg_if_player(
             m_bad,
             _( "You try to free yourself from the rubble, but can't get "
-               "loose!" ) );
+           "loose!" ) );
     }
 }
 
@@ -693,27 +693,27 @@ bool Character::move_effects( bool attacking )
 auto Character::move_effects( const bool attacking, const bool skip_pit_escape ) -> bool
 {
     if( has_effect( effect_downed ) ) {
-    try_remove_downed( *this );
+        try_remove_downed( *this );
         return false;
     }
     if( has_effect( effect_webbed ) ) {
-    try_remove_webs( *this );
+        try_remove_webs( *this );
         return false;
     }
     if( has_effect( effect_lightsnare ) ) {
-    try_remove_lightsnare( *this );
+        try_remove_lightsnare( *this );
         return false;
     }
     if( has_effect( effect_heavysnare ) ) {
-    try_remove_heavysnare( *this );
+        try_remove_heavysnare( *this );
         return false;
     }
     if( has_effect( effect_beartrap ) ) {
-    try_remove_bear_trap( *this );
+        try_remove_bear_trap( *this );
         return false;
     }
     if( has_effect( effect_crushed ) ) {
-    try_remove_crushed( *this );
+        try_remove_crushed( *this );
         return false;
     }
     // Below this point are things that allow for movement if they succeed
@@ -721,10 +721,10 @@ auto Character::move_effects( const bool attacking, const bool skip_pit_escape )
     // Currently we only have one thing that forces movement if you succeed, should we get more
     // than this will need to be reworked to only have success effects if /all/ checks succeed
     if( has_effect( effect_in_pit ) && !skip_pit_escape ) {
-    /** @EFFECT_STR increases chance to escape pit */
+        /** @EFFECT_STR increases chance to escape pit */
 
-    /** @EFFECT_DEX increases chance to escape pit, slightly */
-    if( rng( 0, 40 ) > get_str() + get_dex() / 2 ) {
+        /** @EFFECT_DEX increases chance to escape pit, slightly */
+        if( rng( 0, 40 ) > get_str() + get_dex() / 2 ) {
             add_msg_if_player( m_bad, _( "You try to escape the pit, but slip back in." ) );
             return false;
         } else {
@@ -733,10 +733,10 @@ auto Character::move_effects( const bool attacking, const bool skip_pit_escape )
         }
     }
     if( has_effect( effect_grabbed ) && !attacking && !try_remove_grab( *this ) ) {
-    // NOLINTNEXTLINE(readability-simplify-boolean-expr)
-    return false;
-}
-return true;
+        // NOLINTNEXTLINE(readability-simplify-boolean-expr)
+        return false;
+    }
+    return true;
 }
 
 void Character::wait_effects()
@@ -899,7 +899,7 @@ std::unique_ptr<player_activity> Character::clear_destination()
 bool Character::has_distant_destination() const
 {
     return has_destination() && !get_destination_activity().is_null() &&
-    get_destination_activity().id() == ACT_TRAVELLING && !omt_path.empty();
+           get_destination_activity().id() == ACT_TRAVELLING && !omt_path.empty();
 }
 
 bool Character::is_auto_moving() const { return destination_point.has_value(); }
@@ -912,7 +912,7 @@ bool Character::has_destination() const
 bool Character::has_destination_activity() const
 {
     return !get_destination_activity().is_null() && destination_point &&
-    abs_pos() == *destination_point;
+           abs_pos() == *destination_point;
 }
 
 void Character::start_destination_activity()
@@ -987,29 +987,29 @@ bool Character::uncanny_dodge() { return character_funcs::try_uncanny_dodge( *th
 float Character::fall_damage_mod() const
 {
     if( has_effect_with_flag( flag_EFFECT_FEATHER_FALL ) ) {
-    return 0.0f;
-}
-float ret = 1.0f;
+        return 0.0f;
+    }
+    float ret = 1.0f;
 
-// Ability to land properly is 2x as important as dexterity itself
-/** @EFFECT_DEX decreases damage from falling */
+    // Ability to land properly is 2x as important as dexterity itself
+    /** @EFFECT_DEX decreases damage from falling */
 
-/** @EFFECT_DODGE decreases damage from falling */
-float dex_dodge = dex_cur / 2.0 + get_skill_level( skill_dodge );
-// Penalize for wearing heavy stuff
-const float average_leg_encumb = ( encumb( body_part_leg_l ) + encumb( body_part_leg_r ) ) / 2.0;
-dex_dodge -= ( average_leg_encumb + encumb( body_part_torso ) ) / 10;
-// But prevent it from increasing damage
-dex_dodge = std::max( 0.0f, dex_dodge );
-// 100% damage at 0, 75% at 10, 50% at 20 and so on
-ret *= ( 100.0f - ( dex_dodge * 4.0f ) ) / 100.0f;
+    /** @EFFECT_DODGE decreases damage from falling */
+    float dex_dodge = dex_cur / 2.0 + get_skill_level( skill_dodge );
+    // Penalize for wearing heavy stuff
+    const float average_leg_encumb = ( encumb( body_part_leg_l ) + encumb( body_part_leg_r ) ) / 2.0;
+    dex_dodge -= ( average_leg_encumb + encumb( body_part_torso ) ) / 10;
+    // But prevent it from increasing damage
+    dex_dodge = std::max( 0.0f, dex_dodge );
+    // 100% damage at 0, 75% at 10, 50% at 20 and so on
+    ret *= ( 100.0f - ( dex_dodge * 4.0f ) ) / 100.0f;
 
-ret *= mutation_value( "falling_damage_multiplier" );
+    ret *= mutation_value( "falling_damage_multiplier" );
 
-ret += bonus_from_enchantments( ret, enchantment_value_id( "FALL_DAMAGE_MULT" ) );
+    ret += bonus_from_enchantments( ret, enchantment_value_id( "FALL_DAMAGE_MULT" ) );
 
-// TODO: Bonus for Judo, mutations. Penalty for heavy weight (including mutations)
-return std::max( 0.0f, ret );
+    // TODO: Bonus for Judo, mutations. Penalty for heavy weight (including mutations)
+    return std::max( 0.0f, ret );
 }
 
 int Character::impact( const int force, const tripoint_bub_ms& p )

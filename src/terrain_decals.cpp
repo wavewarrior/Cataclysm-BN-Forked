@@ -248,7 +248,7 @@ auto manager::init( gpu_device &dev ) -> bool
 auto manager::shutdown() noexcept -> void
 {
     if( atlas_ && dev_ ) {
-    SDL_ReleaseGPUTexture( dev_->raw(), atlas_ );
+        SDL_ReleaseGPUTexture( dev_->raw(), atlas_ );
     }
     atlas_ = nullptr;
     variants_.clear();

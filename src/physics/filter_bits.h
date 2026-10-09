@@ -1,9 +1,9 @@
 #pragma once
 #ifndef CATA_SRC_PHYSICS_FILTER_BITS_H
-#define CATA_SRC_PHYSICS_FILTER_BITS_H
+#    define CATA_SRC_PHYSICS_FILTER_BITS_H
 
-#include <algorithm>
-#include <cstdint>
+#    include <algorithm>
+#    include <cstdint>
 
 namespace physics {
 
@@ -19,13 +19,12 @@ namespace physics {
 ///
 /// This replaces the prior dual-range layout (terrain bits 0–20, vehicle bits 20–40)
 /// which overflowed uint32_t at vehicle z ≥ 2.
-inline auto z_category_bit( int z ) -> uint32_t
-{
-    return 1u << static_cast<uint32_t>( std::clamp( z + 10, 0, 20 ) );
+inline auto z_category_bit(int z) -> uint32_t {
+    return 1u << static_cast<uint32_t>(std::clamp(z + 10, 0, 20));
 }
 
-constexpr int32_t terrain_group  =  0;
-constexpr int32_t vehicle_group  = -1;
+constexpr int32_t terrain_group = 0;
+constexpr int32_t vehicle_group = -1;
 constexpr int32_t creature_group = -2;
 
 } // namespace physics

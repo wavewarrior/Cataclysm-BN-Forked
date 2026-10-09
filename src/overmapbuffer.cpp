@@ -1134,7 +1134,7 @@ bool overmapbuffer::reveal_route( const tripoint_abs_omt &source, const tripoint
     }
 
     const pf::two_node_scoring_fn<point_rel_omt> estimate =
-    [&]( pf::directed_node<point_rel_omt> cur, std::optional<pf::directed_node<point_rel_omt>> ) {
+    [&]( pf::directed_node<point_rel_omt> cur, std::optional<pf::directed_node<point_rel_omt >> ) {
         int cost = 0;
         const oter_id oter = get_ter_at( cur.pos );
         if( !connection->has( oter ) ) {
@@ -1293,7 +1293,8 @@ struct find_task_generator {
     std::pair<point_abs_om, point_om_omt> _current;
     bool _done;
 
-    auto get_om_loc() {
+    auto get_om_loc()
+    {
         auto &p = *_it;
         tripoint_abs_omt loc( p.x, p.y, 0 );
         point_abs_om om_pos;
@@ -1309,12 +1310,14 @@ struct find_task_generator {
         , _max_coords( chunk )
         , _n_steps( chunk / ( maxz - minz + 1 ) )
         , _it( _gen.begin() )
-        , _end( _gen.end() ) {
+        , _end( _gen.end() )
+    {
         _current = get_om_loc();
         _done = _end == _it;
     }
 
-    std::optional<find_task> operator()() {
+    std::optional<find_task> operator()()
+    {
         if( _done ) {
             return std::nullopt;
         }
@@ -1433,8 +1436,7 @@ std::vector<tripoint_abs_omt> overmapbuffer::find_all_async( const tripoint_abs_
     int free_tasks = std::max( 1u, std::thread::hardware_concurrency() - 1 );
     auto try_finish_task = []( std::future<std::vector<tripoint_abs_omt>> &task,
     std::vector<tripoint_abs_omt> &dst, omt_find_params params ) -> bool {
-        if( task.wait_for( std::chrono::milliseconds( 0 ) ) == std::future_status::ready )
-        {
+        if( task.wait_for( std::chrono::milliseconds( 0 ) ) == std::future_status::ready ) {
             auto task_result = task.get();
 
             if( !params.max_results.has_value() ||

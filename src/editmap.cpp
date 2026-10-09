@@ -355,7 +355,7 @@ std::optional<tripoint_bub_ms> editmap::edit()
         // \u00A0 is the non-breaking space
         info_txt_curr = string_format(
                             pgettext( "keybinding descriptions", "%s, %s, [%s,%s,%s,%s]\u00A0fast scroll, %s, %s, "
-                                      "%s, %s, %s, %s" ),
+                  "%s, %s, %s, %s" ),
                             ctxt.describe_key_and_name( "EDIT_TRAPS" ), ctxt.describe_key_and_name( "EDIT_FIELDS" ),
                             ctxt.get_desc( "LEFT_WIDE", 1 ), ctxt.get_desc( "RIGHT_WIDE", 1 ),
                             ctxt.get_desc( "UP_WIDE", 1 ), ctxt.get_desc( "DOWN_WIDE", 1 ),
@@ -1212,8 +1212,8 @@ void editmap::edit_itm()
             ilmenu.addentry(
                 items.size(), true, 'a',
                 pgettext( "item manipulation debug menu entry for adding an item on a tile", "Add "
-                          "ite"
-                          "m" ) );
+                      "ite"
+                      "m" ) );
             ilmenu.setup();
             ilmenu.filterlist();
         }
@@ -1538,8 +1538,8 @@ void editmap::mapgen_preview( const point_abs_ms& tc, uilist& gmenu )
         here.reset_vehicle_cache();
 
         here.build_map_cache( level_cache_freshness::plan_for( here,
-            level_cache_freshness::pose_of_viewer( g->u, target.z() ),
-            level_cache_freshness::lightmap_policy::normal ) );
+                              level_cache_freshness::pose_of_viewer( g->u, target.z() ),
+                              level_cache_freshness::lightmap_policy::normal ) );
     };
     regenerate_tmpmap( preview_buffer );
     swap_buffers();
@@ -1593,7 +1593,7 @@ void editmap::mapgen_preview( const point_abs_ms& tc, uilist& gmenu )
         // \u00A0 is the non-breaking space
         info_txt_curr = string_format(
                             pgettext( "keybinding descriptions", "[%s,%s]\u00A0prev/next oter type, "
-                                      "[%s,%s]\u00A0select, %s, %s" ),
+                  "[%s,%s]\u00A0select, %s, %s" ),
                             ctxt.get_desc( "LEFT", 1 ), ctxt.get_desc( "RIGHT", 1 ), ctxt.get_desc( "UP", 1 ),
                             ctxt.get_desc( "DOWN", 1 ), ctxt.describe_key_and_name( "CONFIRM" ),
                             ctxt.describe_key_and_name( "QUIT" ) );

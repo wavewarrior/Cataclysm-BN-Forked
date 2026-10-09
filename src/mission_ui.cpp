@@ -83,7 +83,8 @@ void game::list_missions()
 {
     catacurses::window w_missions;
 
-    enum class tab_mode : int {
+    enum class tab_mode :
+        int {
         TAB_ACTIVE = 0,
         TAB_COMPLETED,
         TAB_FAILED,
@@ -122,8 +123,7 @@ void game::list_missions()
     const auto build_detail_rml = [&]( mission * miss ) -> std::string {
         const nc_color col = u.get_active_mission() == miss ? c_light_green : c_white;
         std::string for_npc;
-        if( miss->get_npc_id().is_valid() )
-        {
+        if( miss->get_npc_id().is_valid() ) {
             npc *guy = g->find_npc( miss->get_npc_id() );
             if( guy ) {
                 for_npc = string_format( _( " for %s" ), guy->disp_name() );

@@ -271,7 +271,8 @@ void game::world_tick()
 
                 if( sm_ptr->field_count == 0 ) {
                     ++total_no_field_submaps;
-                } else {
+                }
+                else {
                     ++total_field_submaps;
                 }
                 total_field_count += sm_ptr->field_count;
@@ -411,10 +412,10 @@ auto game::monmove( const monster_activity_ai_mode mode, activity_monmove_cache 
     const auto activity_skip_ai = mode == monster_activity_ai_mode::activity_skip &&
                                   monster_lod_enabled;
     if( !activity_skip_ai ) {
-    cache = nullptr;
-}
-{
-    ZoneScopedN( "monmove_cleanup_initial" );
+        cache = nullptr;
+    }
+    {
+        ZoneScopedN( "monmove_cleanup_initial" );
         cleanup_dead();
     }
 
@@ -435,17 +436,17 @@ auto game::monmove( const monster_activity_ai_mode mode, activity_monmove_cache 
     auto use_activity_cache = cache != nullptr && cache->valid &&
                               cache->monster_count == static_cast<int>( critter_tracker->size() );
     if( cache != nullptr && cache->valid && !use_activity_cache ) {
-    cache->valid = false;
-}
+        cache->valid = false;
+    }
 
-// LOD-A: assign tier 0/1/2 to every monster based on distance from player.
-// Must run before the plannable collection so Tier-2 monsters are excluded
-// from the parallel planning pass (they use the macro step instead).
-int tier0_count = 0;
-if( use_activity_cache ) {
-    tier0_count = cache->tier0_count;
-} else {
-    ZoneScopedN( "monmove_assign_lod_tiers" );
+    // LOD-A: assign tier 0/1/2 to every monster based on distance from player.
+    // Must run before the plannable collection so Tier-2 monsters are excluded
+    // from the parallel planning pass (they use the macro step instead).
+    int tier0_count = 0;
+    if( use_activity_cache ) {
+        tier0_count = cache->tier0_count;
+    } else {
+        ZoneScopedN( "monmove_assign_lod_tiers" );
         tier0_count = tier_assign_all();
     }
 
@@ -490,10 +491,10 @@ if( use_activity_cache ) {
     auto npc_snap_local = std::vector<npc *> {};
     const std::vector<npc *> *npc_snap = &npc_snap_local;
     if( use_activity_cache ) {
-    mon_snap = &cache->mon_snap;
-    npc_snap = &cache->npc_snap;
-} else {
-    ZoneScopedN( "monmove_build_actor_snapshots" );
+        mon_snap = &cache->mon_snap;
+        npc_snap = &cache->npc_snap;
+    } else {
+        ZoneScopedN( "monmove_build_actor_snapshots" );
         auto monster_refs = critter_tracker->get_monsters_list();
         mon_snap_local.reserve( monster_refs.size() );
         for( const shared_ptr_fast<monster> &mon_ptr : monster_refs ) {
@@ -531,7 +532,7 @@ if( use_activity_cache ) {
     auto activity_ai_paused_local = std::unordered_set<monster *> {};
     const std::unordered_set<monster *> *activity_ai_paused = &activity_ai_paused_local;
     if( activity_skip_ai ) {
-    ZoneScopedN( "monmove_activity_demote_lod" );
+        ZoneScopedN( "monmove_activity_demote_lod" );
         if( use_activity_cache ) {
             activity_lod_restore = &cache->real_lod;
             activity_ai_paused = &cache->ai_paused;
@@ -683,7 +684,7 @@ if( use_activity_cache ) {
     }
     TracyPlot( "Monmove Sight Jobs", static_cast<int64_t>( sight_jobs.size() ) );
     if( !sight_jobs.empty() ) {
-    auto sight_results = std::vector<char>( sight_jobs.size(), 0 );
+        auto sight_results = std::vector<char>( sight_jobs.size(), 0 );
         {
             ZoneScopedN( "monmove_parallel_sight_prewarm" );
             if( parallel_enabled && parallel_monster_planning && sight_jobs.size() > 1 ) {
@@ -722,9 +723,9 @@ if( use_activity_cache ) {
     monster::faction_snap_t faction_snap;
     const monster::faction_snap_t *faction_snap_for_plan = nullptr;
     if( use_activity_cache ) {
-    faction_snap_for_plan = &cache->faction_snap;
-} else {
-    ZoneScopedN( "monmove_build_faction_snap" );
+        faction_snap_for_plan = &cache->faction_snap;
+    } else {
+        ZoneScopedN( "monmove_build_faction_snap" );
         std::ranges::for_each( *mon_snap, [&]( monster * mon_ptr ) {
             faction_snap[mon_ptr->faction].push_back( mon_ptr );
         } );
@@ -740,9 +741,9 @@ if( use_activity_cache ) {
     monster::hostile_fac_map_t hostile_fac_map;
     const monster::hostile_fac_map_t *hostile_fac_map_for_plan = nullptr;
     if( use_activity_cache ) {
-    hostile_fac_map_for_plan = &cache->hostile_fac_map;
-} else {
-    ZoneScopedN( "monmove_build_hostile_fac_map" );
+        hostile_fac_map_for_plan = &cache->hostile_fac_map;
+    } else {
+        ZoneScopedN( "monmove_build_hostile_fac_map" );
         for( const auto &[fac_id, _m] : *faction_snap_for_plan ) {
             for( const auto &[other_id, _o] : *faction_snap_for_plan ) {
                 if( fac_id == other_id ) {
@@ -776,7 +777,7 @@ if( use_activity_cache ) {
             const auto pos = mon_ptr->bub_pos();
             const auto key = monster::spatial_grid_t::key_t{
                 pos.x() / monster::spatial_grid_t::bucket_size,
-                pos.y() / monster::spatial_grid_t::bucket_size
+                   pos.y() / monster::spatial_grid_t::bucket_size
             };
             spatial_grid.buckets[key].push_back( mon_ptr );
         }
@@ -917,7 +918,7 @@ if( use_activity_cache ) {
     // the default comparator orders by distance first.
     std::vector<std::pair<int, monster *>> eligible;
     if( activity_skip_ai && cache != nullptr ) {
-    ZoneScopedN( "monmove_build_eligible" );
+        ZoneScopedN( "monmove_build_eligible" );
         if( !use_activity_cache ) {
             auto eligible_order = std::vector<std::pair<int, monster *>> {};
             eligible_order.reserve( mon_snap->size() );
@@ -1167,7 +1168,7 @@ if( use_activity_cache ) {
     TracyPlot( "Monmove Controlled Moves", monmove_controlled_moves );
 
     if( activity_skip_ai ) {
-    ZoneScopedN( "monmove_activity_restore_lod" );
+        ZoneScopedN( "monmove_activity_restore_lod" );
         for( const auto &[critter, real_lod_tier] : *activity_lod_restore ) {
             if( critter != nullptr ) {
                 critter->lod_tier = real_lod_tier;
@@ -1301,7 +1302,8 @@ void game::npcmove()
         }
         if( npc_is_always_full( guy ) || guy.npc_lod_tier == 0 ) {
             always_process.push_back( &guy );
-        } else {
+        }
+        else {
             budgeted.emplace_back( lod_dist( guy.bub_pos(), player_pos ), &guy );
         }
     }
@@ -1323,8 +1325,7 @@ void game::npcmove()
         npc &guy = *guy_ptr;
         const bool is_tier_2 = guy.npc_lod_tier == 2;
 
-        if( has_creature_do_turn_hooks || has_npc_do_turn_hooks )
-        {
+        if( has_creature_do_turn_hooks || has_npc_do_turn_hooks ) {
             ZoneScopedN( "npc_turn_hooks" );
             if( has_creature_do_turn_hooks ) {
                 cata::run_hooks( "on_creature_do_turn", [&guy]( sol::table & params ) {

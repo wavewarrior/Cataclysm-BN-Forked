@@ -342,7 +342,7 @@ static void debug_error_prompt(
 #endif
             hint_continue, hint_ignore, hint_copy,
             _( "Press <color_white>arrow keys</color> or <color_white>page up</color>/"
-               "<color_white>page down</color> to scroll the report." ) ) );
+       "<color_white>page down</color> to scroll the report." ) ) );
     rml_doc err_rml;
     ui.on_redraw( [&]( const ui_adaptor & ) {
         // Nothing to do on the RmlUi path: the document paints itself every frame
@@ -1160,8 +1160,7 @@ void debug_write_backtrace( std::ostream& out )
     const char *const function ) -> int {
         std::string file = filename ? filename : "[unknown src]";
         size_t src = file.find( "/src/" );
-        if( src != std::string::npos )
-        {
+        if( src != std::string::npos ) {
             file.erase( 0, src );
             file = "…" + file;
         }

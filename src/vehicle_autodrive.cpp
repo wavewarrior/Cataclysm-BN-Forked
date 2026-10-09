@@ -361,8 +361,7 @@ static const std::array<orientation, NUM_ORIENTATIONS> &all_orientations()
 {
     static const auto orientations_array = [] {
         std::array<orientation, NUM_ORIENTATIONS> ret;
-        for( int i = 0; i < NUM_ORIENTATIONS; i++ )
-        {
+        for( int i = 0; i < NUM_ORIENTATIONS; i++ ) {
             ret[i] = static_cast<orientation>( i );
         }
         return ret;
@@ -500,8 +499,7 @@ static orientation approx_orientation( int dx, int dy )
         static const auto atan_table = [] {
             constexpr int table_size = 101;
             std::array<orientation, table_size> table;
-            for( int i = 0; i <  table_size; i++ )
-            {
+            for( int i = 0; i <  table_size; i++ ) {
                 table[i] = to_orientation( units::from_radians( std::atan( 1.0 * i /
                                            ( table_size - 1 ) ) ) );
             }
@@ -591,7 +589,8 @@ vehicle_profile vehicle::autodrive_controller::compute_profile( orientation faci
         driven_veh.coord_translate( angle, pivot, part.mount, pos );
         if( !extent_map.contains( pos.y() ) ) {
             extent_map[pos.y()] = { pos.x(), pos.x() };
-        } else {
+        }
+        else {
             auto &extent = extent_map[pos.y()];
             extent.first = std::min( extent.first, pos.x() );
             extent.second = std::max( extent.second, pos.x() );
@@ -876,8 +875,7 @@ scored_address vehicle::autodrive_controller::compute_node_score( const node_add
 void vehicle::autodrive_controller::compute_next_nodes( const node_address &addr,
         const navigation_node &node, int target_speed_tps,
         std::vector<std::pair<node_address, navigation_node>> &next_nodes )
-const
-{
+const {
     constexpr int move_cost = 0;
     constexpr int steering_cost = 1;
     const int sign = target_speed_tps > 0 ? 1 : -1;
@@ -885,12 +883,14 @@ const
     const int cur_omt = addr.x / OMT_SIZE;
     int next_speed = target_speed;
     int num_tiles_to_move = std::abs( target_speed_tps );
-    if( target_speed_tps > 1 && node.speed < target_speed ) {
+    if( target_speed_tps > 1 && node.speed < target_speed )
+    {
         const int cur_tps = std::min( std::max( node.speed / CMPS_PER_TPS, 0 ), data.max_speed_tps - 1 );
         next_speed = std::min( std::max<int>( node.speed, 0 ) + data.acceleration[cur_tps], target_speed );
         num_tiles_to_move = next_speed / CMPS_PER_TPS;
     }
-    for( int steer = -data.max_steer; steer <= data.max_steer; steer++ ) {
+    for( int steer = -data.max_steer; steer <= data.max_steer; steer++ )
+    {
         node_address next_addr = addr;
         next_addr.facing_dir = addr.facing_dir + steer;
         tileray tdir = data.profile( next_addr.facing_dir ).tdir;
@@ -936,9 +936,9 @@ const
 }
 
 std::optional<std::vector<navigation_step>> vehicle::autodrive_controller::compute_path(
-    int speed_tps ) const
-{
-    if( speed_tps == 0 || speed_tps < -1 ) {
+    int speed_tps ) const {
+    if( speed_tps == 0 || speed_tps < -1 )
+    {
         return std::nullopt;
     }
     // TODO: tweak this
@@ -946,15 +946,16 @@ std::optional<std::vector<navigation_step>> vehicle::autodrive_controller::compu
     std::vector<navigation_step> ret;
     // TODO: check simple reachability first and bail out or set upper bound on node score
     std::unordered_map<node_address, navigation_node, node_address_hasher> known_nodes;
-    std::priority_queue<scored_address, std::vector<scored_address>, std::greater<>>
+    std::priority_queue<scored_address, std::vector<scored_address>, std::greater< >>
     open_set;
     const tripoint_abs_ms veh_pos = driven_veh.abs_ms_location();
     const node_address start = data.nav_to_map.inverse().transform(
-                                   veh_pos.raw().xy(), to_orientation( driven_veh.face.dir() ) );
+            veh_pos.raw().xy(), to_orientation( driven_veh.face.dir() ) );
     known_nodes.emplace( start, make_start_node( start, driven_veh ) );
     open_set.push( scored_address{ start, 0 } );
     std::vector<std::pair<node_address, navigation_node>> next_nodes;
-    while( !open_set.empty() ) {
+    while( !open_set.empty() )
+    {
         const node_address cur_addr = open_set.top().addr;
         open_set.pop();
         const navigation_node &cur_node = known_nodes[cur_addr];
@@ -968,7 +969,7 @@ std::optional<std::vector<navigation_step>> vehicle::autodrive_controller::compu
                 ret.emplace_back( navigation_step{
                     prev_loc,
                     data.nav_to_map.transform( addr.facing_dir ),
-                    node.target_speed_tps
+                                   node.target_speed_tps
                 } );
                 addr = prev;
             }
@@ -1109,39 +1110,44 @@ std::optional<navigation_step> vehicle::autodrive_controller::compute_next_step(
 }
 
 
-std::vector<std::tuple<point_rel_ms, int, std::string>> vehicle::get_debug_overlay_data() const
-{
+std::vector<std::tuple<point_rel_ms, int, std::string>> vehicle::get_debug_overlay_data() const {
     static const std::vector<std::string> debug_what = { "valid_position", "omt" };
     std::vector<std::tuple<point_rel_ms, int, std::string>> ret;
 
     const tripoint_abs_ms veh_pos = abs_ms_location();
-    if( autodrive_local_target != tripoint_abs_ms::zero() ) {
+    if( autodrive_local_target != tripoint_abs_ms::zero() )
+    {
         ret.emplace_back( ( autodrive_local_target - veh_pos ).xy(), catacurses::red, "T" );
     }
-    for( auto pt_elem : collision_check_points ) {
+    for( auto pt_elem : collision_check_points )
+    {
         ret.emplace_back( pt_elem - veh_pos.xy(), catacurses::yellow, "C" );
     }
 
-    if( !active_autodrive_controller ) {
+    if( !active_autodrive_controller )
+    {
         return ret;
     }
     const auto_navigation_data &data = active_autodrive_controller->get_data();
 
     const orientation dir = to_orientation( face.dir() );
-    for( const std::string &debug_str : debug_what ) {
+    for( const std::string &debug_str : debug_what )
+    {
         if( debug_str == "profiles" ) {
             const vehicle_profile &profile = data.profile( dir );
             for( point p : profile.occupied_zone ) {
                 if( p.x == 0 && p.y == 0 ) {
                     ret.emplace_back( p, catacurses::cyan, to_string( dir ) );
-                } else {
+                }
+                else {
                     ret.emplace_back( p, catacurses::green, "x" );
                 }
             }
             for( point p : profile.collision_points ) {
                 ret.emplace_back( p, catacurses::red, "o" );
             }
-        } else if( debug_str == "is_obstacle" ) {
+        }
+        else if( debug_str == "is_obstacle" ) {
             for( int dx = 0; dx < NAV_VIEW_SIZE_X; dx++ ) {
                 for( int dy = 0; dy < NAV_VIEW_SIZE_Y; dy++ ) {
                     const bool obstacle = data.is_obstacle[dx][dy];
@@ -1150,7 +1156,8 @@ std::vector<std::tuple<point_rel_ms, int, std::string>> vehicle::get_debug_overl
                     ret.emplace_back( pt, color, obstacle ? "o" : "x" );
                 }
             }
-        } else if( debug_str == "valid_position" ) {
+        }
+        else if( debug_str == "valid_position" ) {
             const orientation tdir = data.nav_to_map.inverse().transform( dir );
             for( int dx = 0; dx < NAV_MAP_SIZE_X; dx++ ) {
                 for( int dy = 0; dy < NAV_MAP_SIZE_Y; dy++ ) {
@@ -1161,7 +1168,8 @@ std::vector<std::tuple<point_rel_ms, int, std::string>> vehicle::get_debug_overl
                     ret.emplace_back( pt, color, to_string( dir ) );
                 }
             }
-        } else if( debug_str == "goal_zone" ) {
+        }
+        else if( debug_str == "goal_zone" ) {
             std::unordered_map<point, bool> goal_map;
             for( const node_address &addr : data.goal_zone ) {
                 goal_map[addr.get_point()] |= data.nav_to_map.transform( addr.facing_dir ) == dir;

@@ -660,8 +660,7 @@ void game::zones_manager()
     static const auto zone_construction_blueprint = zone_type_id( "CONSTRUCTION_BLUEPRINT" );
     auto zone_point_generator =
     [&]( const tripoint_abs_ms & start, const tripoint_abs_ms & end ) -> std::vector<tripoint_bub_ms> {
-        if( current_zone_type == zone_construction_blueprint )
-        {
+        if( current_zone_type == zone_construction_blueprint ) {
             if( current_bp_options ) {
                 const std::vector<tripoint_abs_ms> covered_points = current_bp_options->get_covered_points( start,
                     end );
@@ -686,8 +685,7 @@ void game::zones_manager()
 
     auto query_position =
     [&]() -> std::optional<std::pair<tripoint_abs_ms, tripoint_abs_ms>> {
-        on_out_of_scope invalidate_current_ui( [&]()
-        {
+        on_out_of_scope invalidate_current_ui( [&]() {
             ui.mark_resize();
         } );
         restore_on_out_of_scope<bool> show_prev( show );
@@ -709,22 +707,22 @@ void game::zones_manager()
         const look_around_result first = look_around( /*show_window=*/false, center, center, false, true,
             false );
         if( first.position )
-    {
-        popup.message( "%s", _( "Select second point." ) );
+        {
+            popup.message( "%s", _( "Select second point." ) );
 
             const look_around_result second = look_around( /*show_window=*/false, center, *first.position,
                 true, true, false );
             if( second.position ) {
                 auto first_abs = bub_to_abs( tripoint_bub_ms( std::min( first.position->x(),
-                                               second.position->x() ),
-                                               std::min( first.position->y(), second.position->y() ),
-                                               std::min( first.position->z(),
-                                                   second.position->z() ) ) );
+                                             second.position->x() ),
+                                             std::min( first.position->y(), second.position->y() ),
+                                             std::min( first.position->z(),
+                                                       second.position->z() ) ) );
                 auto second_abs = bub_to_abs( tripoint_bub_ms( std::max( first.position->x(),
-                                                second.position->x() ),
-                                                std::max( first.position->y(), second.position->y() ),
-                                                std::max( first.position->z(),
-                                                    second.position->z() ) ) );
+                                              second.position->x() ),
+                                              std::max( first.position->y(), second.position->y() ),
+                                              std::max( first.position->z(),
+                                                        second.position->z() ) ) );
                 return std::pair<tripoint_abs_ms, tripoint_abs_ms>( first_abs, second_abs );
             }
         }
@@ -892,16 +890,21 @@ void game::zones_manager()
                 active_index = zone_cnt - 1;
 
                 stuff_changed = true;
-            } while( false );
-        } else if( action == "SHOW_ALL_ZONES" ) {
+            }
+            while( false );
+        }
+        else if( action == "SHOW_ALL_ZONES" ) {
             show_all_zones = !show_all_zones;
             zones = get_zones();
             active_index = 0;
-        } else if( action == "TOGGLE_ZONE_OVERLAY" ) {
+        }
+        else if( action == "TOGGLE_ZONE_OVERLAY" ) {
             g->show_zone_overlay = !g->show_zone_overlay;
-        } else if( action == "debug_submap_grid" ) {
+        }
+        else if( action == "debug_submap_grid" ) {
             zone_submap_grid_overlay = !zone_submap_grid_overlay;
-        } else if( zone_cnt > 0 ) {
+        }
+        else if( zone_cnt > 0 ) {
             if( action == "UP" ) {
                 active_index--;
                 if( active_index < 0 ) {
@@ -1483,8 +1486,8 @@ look_around_result game::look_around( bool show_window, tripoint_bub_ms &center,
     if( center.z() != old_levz ) {
         level_cache_freshness::invalidate_level( m, old_levz );
         m.build_map_cache( level_cache_freshness::plan_for( m,
-            level_cache_freshness::pose_of_viewer( u, old_levz ),
-            level_cache_freshness::lightmap_policy::normal ) );
+                           level_cache_freshness::pose_of_viewer( u, old_levz ),
+                           level_cache_freshness::lightmap_policy::normal ) );
         u.view_offset.z() = 0;
     }
 
@@ -1902,8 +1905,7 @@ bool &list_vehicles_rmlui_enabled()
     return enabled;
 }
 
-static auto list_vehicles( const vehicle_list_t &vehicle_list ) -> vehicle_menu_ret
-{
+static auto list_vehicles( const vehicle_list_t &vehicle_list ) -> vehicle_menu_ret {
     avatar &viewer = get_avatar();
     int iInfoHeight = 0;
     const int width = 45;
@@ -1920,10 +1922,12 @@ static auto list_vehicles( const vehicle_list_t &vehicle_list ) -> vehicle_menu_
     bool hide_ui = false;
 
     ui_adaptor ui;
-    ui.on_screen_resize( [&]( ui_adaptor & ui ) {
+    ui.on_screen_resize( [&]( ui_adaptor & ui )
+    {
         if( hide_ui ) {
             ui.position( point_zero, point_zero );
-        } else {
+        }
+        else {
             constexpr int info_lines = 9;
             const int desired_info_height = info_lines + 2;
             offsetX = TERMX - width;
@@ -1935,9 +1939,10 @@ static auto list_vehicles( const vehicle_list_t &vehicle_list ) -> vehicle_menu_
             w_vehicle_info = catacurses::newwin( iInfoHeight - 2, width - 2,
                                                  point( offsetX + 1, TERMY - iInfoHeight + 1 ) );
             w_vehicle_info_border = catacurses::newwin( iInfoHeight, width, point( offsetX,
-                                    TERMY - iInfoHeight ) );
+                TERMY - iInfoHeight ) );
 
-            if( cur_vehicle ) {
+            if( cur_vehicle )
+            {
                 centerlistview( active_pos, width );
             }
 
@@ -1963,7 +1968,8 @@ static auto list_vehicles( const vehicle_list_t &vehicle_list ) -> vehicle_menu_
     rml_doc rml;
     const itype_id fuel_type_battery( "battery" );
 
-    const auto sync_rml = [&]() {
+    const auto sync_rml = [&]()
+    {
         if( !rml || !rml_data ) {
             return;
         }
@@ -2076,7 +2082,8 @@ static auto list_vehicles( const vehicle_list_t &vehicle_list ) -> vehicle_menu_
     };
 
     rml.open( list_vehicles_rmlui_enabled(), "list_vehicles", ctxt,
-    [&]( Rml::DataModelConstructor & c ) {
+              [&]( Rml::DataModelConstructor & c )
+    {
         rml_data = std::make_unique<lv_rml_data>();
         register_list_vehicles_rml_types( c );
         c.Bind( "header_rml", &rml_data->header_rml );
@@ -2088,7 +2095,8 @@ static auto list_vehicles( const vehicle_list_t &vehicle_list ) -> vehicle_menu_
         rml_data->handle = c.GetModelHandle();
     } );
 
-    ui.on_redraw( [&]( const ui_adaptor & ) {
+    ui.on_redraw( [&]( const ui_adaptor & )
+    {
         if( hide_ui ) {
             return;
         }
@@ -2105,7 +2113,8 @@ static auto list_vehicles( const vehicle_list_t &vehicle_list ) -> vehicle_menu_
         trail_end_x );
     g->add_draw_callback( trail_cb );
 
-    do {
+    do
+    {
         if( action == "UP" ) {
             iActive--;
             if( iActive < 0 ) {

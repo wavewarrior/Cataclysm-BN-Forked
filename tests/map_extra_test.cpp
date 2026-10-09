@@ -1,5 +1,5 @@
-﻿#include "catch/catch_amalgamated.hpp"
-#include "calendar.h"
+﻿#include "calendar.h"
+#include "catch/catch_amalgamated.hpp"
 #include "coordinates.h"
 #include "enums.h"
 #include "map.h"

@@ -42,7 +42,7 @@ auto make_temp_wav_path() -> std::string
     const uint64_t nonce = rng();
     return ( std::filesystem::temp_directory_path() /
              ( "cbn_tts_" + std::to_string( nonce ) + ".wav" ) )
-        .string();
+           .string();
 }
 
 } // namespace
@@ -129,7 +129,7 @@ void tts_piper_synthesizer::worker_loop()
             bin_found = std::filesystem::exists( piper_bin );
             if( !bin_found ) {
                 DebugLog( DL::Warn, DC::Main ) << "TTS(piper): binary not found at \""
-                                              << piper_bin << "\"; TTS disabled.";
+                                               << piper_bin << "\"; TTS disabled.";
             }
         }
         if( !bin_found ) {
@@ -146,7 +146,7 @@ void tts_piper_synthesizer::worker_loop()
         const std::string model = voice_model_path( cur.voice );
         if( model.empty() ) {
             DebugLog( DL::Warn, DC::Main ) << "TTS(piper): voice model missing for \"" << cur.voice
-                                          << "\"; skipping line.";
+                                           << "\"; skipping line.";
             continue;
         }
 
@@ -170,12 +170,13 @@ std::string tts_piper_synthesizer::voice_model_path( const std::string &voice ) 
 }
 
 bool tts_piper_synthesizer::synthesize_to_wav( const std::string &bin, const std::string &model,
-                                               const std::string &text,
-                                               const std::string &wav_path )
+        const std::string &text,
+        const std::string &wav_path )
 {
     // piper reads text from stdin and writes a WAV to --output_file.
     const char *args[] = { bin.c_str(), "-m", model.c_str(), "--output_file", wav_path.c_str(),
-                           nullptr };
+                           nullptr
+                         };
 
     SDL_PropertiesID props = SDL_CreateProperties();
     SDL_SetPointerProperty( props, SDL_PROP_PROCESS_CREATE_ARGS_POINTER,
@@ -213,13 +214,13 @@ bool tts_piper_synthesizer::synthesize_to_wav( const std::string &bin, const std
                     std::filesystem::file_size( wav_path ) > 44; // non-empty WAV
     if( !ok ) {
         DebugLog( DL::Warn, DC::Main ) << "TTS(piper): synthesis failed (exit " << exitcode
-                                      << ") for voice \"" << model << '"';
+                                       << ") for voice \"" << model << '"';
     }
     return ok;
 }
 
 std::string tts_piper_synthesizer::cache_key( const std::string &text,
-                                              const std::string &voice ) const
+        const std::string &voice ) const
 {
     return voice + "\n" + text;
 }

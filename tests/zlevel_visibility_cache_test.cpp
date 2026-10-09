@@ -5,8 +5,8 @@
 #include "catch/catch_amalgamated.hpp"
 #include "coordinates.h"
 #include "game.h"
-#include "lightmap.h"
 #include "level_cache_freshness.h"
+#include "lightmap.h"
 #include "map.h"
 #include "map_helpers.h"
 #include "options_helpers.h"
@@ -17,8 +17,8 @@ TEST_CASE("solar_cache_uses_date_sensitive_hour", "[vision][zlevel][sun]") {
     clear_all_state();
 
     const auto fov3d_occlusion = override_option("FOV_3D_OCCLUSION", "true");
-    const auto restore_angled_sunlight_shadows =
-        restore_on_out_of_scope<bool>(angled_sunlight_shadows);
+    const auto restore_angled_sunlight_shadows = restore_on_out_of_scope<bool>(
+        angled_sunlight_shadows);
     angled_sunlight_shadows = true;
 
     auto& here = get_map();
@@ -34,7 +34,7 @@ TEST_CASE("solar_cache_uses_date_sensitive_hour", "[vision][zlevel][sun]") {
 
     calendar::turn = summer_after_sunrise;
     g->reset_light_level();
-    level_cache_freshness::invalidate_level( here, sample.z() );
+    level_cache_freshness::invalidate_level(here, sample.z());
     build_map_cache_from_plan(here, sample.z());
 
     const auto& summer_cache = here.access_cache(sample.z());

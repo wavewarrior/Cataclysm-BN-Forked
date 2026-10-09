@@ -124,7 +124,7 @@ window_dimensions get_window_dimensions( point pos, point size )
 auto get_sdl_window_size() -> point
 {
     return point( std::max( 1, g_display.WindowWidth / g_display.scaling_factor ),
-    std::max( 1, g_display.WindowHeight / g_display.scaling_factor ) );
+                  std::max( 1, g_display.WindowHeight / g_display.scaling_factor ) );
 }
 
 auto get_sdl_font_size() -> point
@@ -185,9 +185,9 @@ auto aim_angle_from_pixel( point pixel, const tripoint_bub_ms &src )
 -> std::optional<units::angle>
 {
     if( !tilecontext ) { return std::nullopt; }
-const auto o  = tilecontext->get_tile_map_origin().raw();
-const auto op = tilecontext->get_drawing_pixel_offset();
-const auto tw = std::max( 1, tilecontext->get_tile_width() );
+    const auto o  = tilecontext->get_tile_map_origin().raw();
+    const auto op = tilecontext->get_drawing_pixel_offset();
+    const auto tw = std::max( 1, tilecontext->get_tile_width() );
     const auto th = std::max( 1, tilecontext->get_tile_height() );
     // Same formula as sdl_render_frame.cpp (cursor_light_emitter pixel→world conversion)
     const auto wx = ( pixel.x - static_cast<double>( op.x ) ) / tw + o.x;
@@ -202,7 +202,7 @@ auto input_context::get_aim_angle_to_src( const tripoint_bub_ms &src ) const
 -> std::optional<units::angle>
 {
     if( !coordinate_input_received ) { return std::nullopt; }
-return aim_angle_from_pixel( coordinate, src );
+    return aim_angle_from_pixel( coordinate, src );
 }
 
 // These four were wrapped in `#ifdef TILES` and so compiled to their stub branches:

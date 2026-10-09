@@ -1179,8 +1179,8 @@ class Character: public Creature, public location_visitable<Character>
 
         struct has_mission_item_filter {
             int mission_id;
-            VisitResponse operator()( detached_ptr<item>&& it ) {
-                if( it->mission_id == mission_id ) { detached_ptr<item> destroyed = std::move( it ); }
+            VisitResponse operator()( detached_ptr < item > && it ) {
+                if( it->mission_id == mission_id ) { detached_ptr < item > destroyed = std::move( it ); }
                 return VisitResponse::NEXT;
             }
         };
@@ -1190,8 +1190,8 @@ class Character: public Creature, public location_visitable<Character>
 
         // checks to see if an item is worn
         bool is_worn( const item& thing ) const {
-for( const auto& elem : worn ) {
-            if( &thing == elem ) { return true; }
+            for( const auto& elem : worn ) {
+                if( &thing == elem ) { return true; }
             }
             return false;
         }
@@ -1218,8 +1218,8 @@ for( const auto& elem : worn ) {
 
         /** dispose_item for detached items. The item will be treated as if it's in the inventory and
          * returned if not handled. */
-        detached_ptr<item> dispose_item(
-            detached_ptr<item>&& obj, const std::string& prompt = std::string() );
+        detached_ptr < item > dispose_item(
+            detached_ptr < item > && obj, const std::string& prompt = std::string() );
 
         /**
          * Has the item enough charges to invoke its use function?
@@ -1266,7 +1266,7 @@ for( const auto& elem : worn ) {
         int amount_worn( const itype_id& id ) const;
 
         /** Returns nearby items which match the provided predicate */
-        std::vector<item *> nearby( const std::function<bool( item*, item* )> &func, int radius = 1 );
+        std::vector < item * > nearby( const std::function < bool( item*, item* ) > &func, int radius = 1 );
 
         /**
          * Similar to @ref remove_items_with, but considers only worn items and not their
@@ -1274,7 +1274,7 @@ for( const auto& elem : worn ) {
          * If the filter function returns a nullptr, the item is removed.
          */
         void remove_worn_items_with(
-            const std::function < detached_ptr<item>( detached_ptr<item> && ) > & filter );
+            const std::function < detached_ptr < item>( detached_ptr<item > && ) > & filter );
 
         /** Return the item pointer of the item with given invlet, return nullptr if
          * the player does not have such an item with that invlet. Don't use this on npcs.
@@ -1293,7 +1293,7 @@ for( const auto& elem : worn ) {
          */
         int get_item_position( const item* it ) const;
 
-        const std::vector<item *> &inv_const_stack( int position ) const;
+        const std::vector < item * > &inv_const_stack( int position ) const;
 
         const_invslice inv_const_slice() const;
 
@@ -1303,14 +1303,14 @@ for( const auto& elem : worn ) {
 
         void inv_restack();
 
-        detached_ptr<item> inv_remove_item( item* );
+        detached_ptr < item > inv_remove_item( item* );
 
         void inv_unsort();
 
         void inv_clear();
-        void dump_inv( std::vector<item*> &to );
+        void dump_inv( std::vector < item* > &to );
 
-        std::map<char, itype_id> &inv_assigned_invlet();
+        std::map < char, itype_id > &inv_assigned_invlet();
 
         void inv_reassign_item( item& it, char invlet, bool remove_old = true );
 
@@ -1335,7 +1335,7 @@ for( const auto& elem : worn ) {
          * Returns all equipped items that require a limb to be held.
          */
         /*@{*/
-        std::vector<item *> wielded_items() const;
+        std::vector < item * > wielded_items() const;
         /*@}*/
 
         /**
@@ -1360,7 +1360,7 @@ for( const auto& elem : worn ) {
          * Use this when primary weapon might not exist yet.
          * Returns the old primary weapon, if any.
          */
-        detached_ptr<item> set_primary_weapon( detached_ptr<item>&& new_weapon );
+        detached_ptr < item > set_primary_weapon( detached_ptr < item > && new_weapon );
 
         /**
          * Try to find a container/s on character containing ammo of type it.typeId() and
@@ -1368,8 +1368,8 @@ for( const auto& elem : worn ) {
          * @param unloading Do not try to add to a container when the item was intentionally unloaded.
          * @return Remaining charges which could not be stored in a container.
          */
-        detached_ptr<item> i_add_to_container( detached_ptr<item>&& it, bool unloading );
-        item &i_add( detached_ptr<item>&& it, bool should_stack = true );
+        detached_ptr < item > i_add_to_container( detached_ptr < item > && it, bool unloading );
+        item &i_add( detached_ptr < item > && it, bool should_stack = true );
 
         /**
          * Try to pour the given liquid into the given container/vehicle. The transferred charges are
@@ -1378,8 +1378,8 @@ for( const auto& elem : worn ) {
          * @return The remaining liquid, if any.
          */
         /**@{*/
-        detached_ptr<item> pour_into( item& container, detached_ptr<item>&& liquid, int limit = -1 );
-        detached_ptr<item> pour_into( vehicle& veh, detached_ptr<item>&& liquid, int limit = -1 );
+        detached_ptr < item > pour_into( item& container, detached_ptr < item > && liquid, int limit = -1 );
+        detached_ptr < item > pour_into( vehicle& veh, detached_ptr < item > && liquid, int limit = -1 );
         /**@}*/
 
         /**
@@ -1389,7 +1389,7 @@ for( const auto& elem : worn ) {
          * exists, use @ref has_item to check this.
          * @return A copy of the removed item.
          */
-        detached_ptr<item> i_rem( int pos );
+        detached_ptr < item > i_rem( int pos );
         /**
          * Remove a specific item from player possession. The item is compared
          * by pointer. Contents of the item are removed as well.
@@ -1397,20 +1397,20 @@ for( const auto& elem : worn ) {
          * in the players possession (one can use @ref has_item to check for this).
          * @return A copy of the removed item.
          */
-        detached_ptr<item> i_rem_keep_contents( int idx );
+        detached_ptr < item > i_rem_keep_contents( int idx );
         /** Sets invlet and adds to inventory if possible, drops otherwise.*/
-        detached_ptr<item> i_add_or_drop( detached_ptr<item>&& it );
+        detached_ptr < item > i_add_or_drop( detached_ptr < item > && it );
 
         /** Only use for UI things. Returns all invlets that are currently used in
          * the player inventory, the weapon slot and the worn items. */
-        std::bitset<std::numeric_limits<char>::max()> allocated_invlets() const;
+        std::bitset < std::numeric_limits < char>::max() > allocated_invlets() const;
 
         /**
          * Whether the player carries an active item of the given item type.
          */
         bool has_active_item( const itype_id& id ) const;
         bool has_active_item_with_action( const std::string& use ) const;
-        detached_ptr<item> remove_primary_weapon();
+        detached_ptr < item > remove_primary_weapon();
         bool has_mission_item( int mission_id ) const;
         void remove_mission_items( int mission_id );
         /** Maximum thrown range with a given item, taking all active effects into account. */
@@ -1427,9 +1427,9 @@ for( const auto& elem : worn ) {
         int best_nearby_lifting_assist( const tripoint_bub_ms& world_pos ) const;
 
         // Inventory + weapon + worn (for death, etc)
-        std::vector<item *> inv_dump();
+        std::vector < item * > inv_dump();
 
-        std::vector<detached_ptr<item>> inv_dump_remove();
+        std::vector < detached_ptr < item>> inv_dump_remove();
 
         units::mass weight_carried() const;
         units::volume volume_carried() const;
@@ -1457,7 +1457,7 @@ for( const auto& elem : worn ) {
          * @param it Thing to be worn
          * @param with_equip_change If true returns if it could be worn if things were taken off
          */
-        ret_val<bool> can_wear( const item& it, bool with_equip_change = false ) const;
+        ret_val < bool > can_wear( const item& it, bool with_equip_change = false ) const;
         /**
          * Wear specified item.  Item must be in characters possession (wielded or stored).
          * @param to_wear Item to wear
@@ -1466,35 +1466,35 @@ for( const auto& elem : worn ) {
          */
         bool wear_possessed(
             item& to_wear, bool interactive = true,
-            std::optional<location_vector<item>::iterator> position = std::nullopt );
+            std::optional < location_vector < item>::iterator > position = std::nullopt );
         /**
          * Wear a copy of specified item.
          * @param to_wear Item to wear. Will be moved from if actually worn.
          * @param interactive If set, won't alert the player or drain moves on completion
          * @return the item if it was not worn
          */
-        detached_ptr<item> wear_item(
-            detached_ptr<item>&& to_wear, bool interactive = true,
-            std::optional<location_vector<item>::iterator> position = std::nullopt );
+        detached_ptr < item > wear_item(
+            detached_ptr < item > && to_wear, bool interactive = true,
+            std::optional < location_vector < item>::iterator > position = std::nullopt );
 
         /**
          * Wears an item in its default location with no checks.
          */
-        void add_worn( detached_ptr<item>&& to_wear );
+        void add_worn( detached_ptr < item > && to_wear );
 
         /**
          * Check if character is capable of taking off given item.
          * @param it Item to be taken off
          * @param res If set, will expect to move item into the list.
          */
-        ret_val<bool> can_takeoff( const item& it, bool dropping = true ) const;
+        ret_val < bool > can_takeoff( const item& it, bool dropping = true ) const;
         /**
          * Take off an item. May start an activity.
          * @param it Item to take off
          * @param[out] res If set, moves resulting item into the list.
          * @return true on success
          */
-        bool takeoff( item& it, std::vector<detached_ptr<item>> *res = nullptr );
+        bool takeoff( item& it, std::vector < detached_ptr < item>> *res = nullptr );
 
         /**
          * Returns true if the character is wielding something.
@@ -1503,7 +1503,7 @@ for( const auto& elem : worn ) {
         bool is_armed() const;
 
         /** Check whether character is capable of wielding given item. */
-        ret_val<bool> can_wield( const item& it ) const;
+        ret_val < bool > can_wield( const item& it ) const;
         /**
          * Removes currently wielded item (if any) and replaces it with the target item.
          * @param target replacement item to wield or null item to remove existing weapon without
@@ -1518,10 +1518,10 @@ for( const auto& elem : worn ) {
          * replacing it If the item was wielded target will be moved from, otherwise it will be left as
          * is.
          */
-        virtual detached_ptr<item> wield( detached_ptr<item>&& target ) = 0;
+        virtual detached_ptr < item > wield( detached_ptr < item > && target ) = 0;
 
         /** Check whether character is capable of unwielding given item. */
-        ret_val<bool> can_unwield( const item& it ) const;
+        ret_val < bool > can_unwield( const item& it ) const;
         /** Removes currently wielded item (if any) */
         bool unwield();
 
@@ -1529,11 +1529,11 @@ for( const auto& elem : worn ) {
          * Check player capable of swapping the side of a worn item.
          * @param it Thing to be swapped
          */
-        ret_val<bool> can_swap( const item& it ) const;
+        ret_val < bool > can_swap( const item& it ) const;
 
         void drop_invalid_inventory();
         /** Returns all items that must be taken off before taking off this item */
-        std::list<item *> get_dependent_worn_items( const item& it ) const;
+        std::list < item * > get_dependent_worn_items( const item& it ) const;
         /** Drops an item to the specified location */
         void drop( item& loc, const tripoint_bub_ms& where );
         virtual void drop(
@@ -1594,7 +1594,7 @@ for( const auto& elem : worn ) {
 
         struct overlay_entry {
             std::string id;
-            std::variant<std::monostate, const effect *, const item *, const mutation *, const bionic *>
+            std::variant < std::monostate, const effect *, const item *, const mutation *, const bionic * >
             entry;
         };
         // drawing related stuff
@@ -1604,7 +1604,7 @@ for( const auto& elem : worn ) {
          *
          * Only required for rendering.
          */
-        std::vector<overlay_entry> get_overlay_ids() const;
+        std::vector < overlay_entry > get_overlay_ids() const;
 
         // --------------- Skill Stuff ---------------
         // These are calling the following with no_enchant = false -> for catalua bindings
@@ -1622,7 +1622,7 @@ for( const auto& elem : worn ) {
         void mod_skill_level( const skill_id& ident, int delta );
         /** Checks whether the character's skills meet the required */
         bool meets_skill_requirements(
-            const std::map<skill_id, int> &req, const item* context = nullptr ) const;
+            const std::map < skill_id, int > &req, const item* context = nullptr ) const;
         /** Checks whether the character's skills meet the required */
         bool meets_skill_requirements( const construction& con ) const;
         /** Checks whether the character's stats meets the stats required by the item */
@@ -1651,19 +1651,19 @@ for( const auto& elem : worn ) {
             if( time_died != calendar::before_time_starts ) { time_died = time; }
         }
         // magic mod
-        pimpl<known_magic> magic;
+        pimpl < known_magic > magic;
 
         void die( Creature* nkiller ) override;
 
         std::string get_name() const override;
 
-        std::vector<std::string> get_grammatical_genders() const override;
+        std::vector < std::string > get_grammatical_genders() const override;
 
         /**
          * It is supposed to hide the query_yn to simplify player vs. npc code.
          */
-        template <typename... Args> bool query_yn( const char* const msg, Args&&... args ) const {
-            return query_yn( string_format( msg, std::forward<Args>( args )... ) );
+        template < typename... Args > bool query_yn( const char* const msg, Args&&... args ) const {
+            return query_yn( string_format( msg, std::forward < Args > ( args )... ) );
         }
         virtual bool query_yn( const std::string& msg ) const = 0;
 
@@ -1707,14 +1707,14 @@ for( const auto& elem : worn ) {
         nc_color symbol_color() const override;
 
         std::string extended_description() const override;
-        std::vector<std::string> get_apperance_description() const;
+        std::vector < std::string > get_apperance_description() const;
         /** Returns a random name from NAMES_* */
         void pick_name( bool bUseDefault = false );
         /** Get the idents of all base traits. */
-        std::vector<trait_id> get_base_traits() const;
+        std::vector < trait_id > get_base_traits() const;
         /** Get the idents of all traits/mutations. */
-        std::vector<trait_id> get_mutations( bool include_hidden = true ) const;
-        const std::bitset<NUM_VISION_MODES> &get_vision_modes() const { return vision_mode_cache; }
+        std::vector < trait_id > get_mutations( bool include_hidden = true ) const;
+        const std::bitset < NUM_VISION_MODES > &get_vision_modes() const { return vision_mode_cache; }
         /** Clear the skills map, setting all levels to 0 */
         void clear_skills();
         /** Empties the trait and mutations lists */
@@ -1733,7 +1733,7 @@ for( const auto& elem : worn ) {
         // Threshold tier reached
         unsigned short thresh_tier = 0;
 
-        location_vector<item> worn;
+        location_vector < item > worn;
         // Means player sit inside vehicle on the tile he is now
         bool in_vehicle = false;
         bool hauling = false;
@@ -1741,8 +1741,8 @@ for( const auto& elem : worn ) {
         activity_ptr stashed_outbounds_activity;
         activity_ptr stashed_outbounds_backlog;
         activity_ptr activity;
-        std::list<activity_ptr> backlog;
-        std::optional<tripoint_abs_ms> destination_point;
+        std::list < activity_ptr > backlog;
+        std::optional < tripoint_abs_ms > destination_point;
         itype_id last_item;
         efftype_id last_emote;
 
@@ -1753,11 +1753,11 @@ for( const auto& elem : worn ) {
 
     public:
         int scent = 0;
-        pimpl<bionic_collection> my_bionics;
-        pimpl<character_martial_arts> martial_arts_data;
+        pimpl < bionic_collection > my_bionics;
+        pimpl < character_martial_arts > martial_arts_data;
 
         stomach_contents stomach;
-        pimpl<consumption_history_t> consumption_history;
+        pimpl < consumption_history_t > consumption_history;
 
         int oxygen = 0;
         int tank_plut = 0;
@@ -1765,15 +1765,15 @@ for( const auto& elem : worn ) {
         int slow_rad = 0;
 
         int focus_pool = 0;
-        std::set<mtype_id> known_monsters;
+        std::set < mtype_id > known_monsters;
         int cash = 0;
-        std::set<character_id> follower_ids;
-        weak_ptr_fast<Creature> last_target;
-        std::optional<tripoint_abs_ms> last_target_pos;
+        std::set < character_id > follower_ids;
+        weak_ptr_fast < Creature > last_target;
+        std::optional < tripoint_abs_ms > last_target_pos;
         /* crafting inventory cached time */
         time_point cached_time;
 
-        std::vector<addiction> addictions;
+        std::vector < addiction > addictions;
         /** Adds an addiction to the player */
         void add_addiction( add_type type, int strength );
         /** Removes an addition from the player */
@@ -1786,9 +1786,9 @@ for( const auto& elem : worn ) {
         /** This character becomes familiar with creatures of the given type **/
         void set_knows_creature_type( const mtype_id& c );
         /** Returns a list of all monster types known by this character **/
-        const std::set<mtype_id> &get_known_monsters() const { return known_monsters; }
+        const std::set < mtype_id > &get_known_monsters() const { return known_monsters; }
 
-        shared_ptr_fast<monster> mounted_creature;
+        shared_ptr_fast < monster > mounted_creature;
         // for loading NPC mounts
         int mounted_creature_id = 0;
         // for vehicle work
@@ -1813,33 +1813,34 @@ for( const auto& elem : worn ) {
         /**
          * All items that have the given flag (@ref item::has_flag).
          */
-        std::vector<item *> all_items_with_flag( const flag_id& flag, bool need_charges = false ) const;
+        std::vector < item * > all_items_with_flag( const flag_id& flag, bool need_charges = false ) const;
 
         // All items that have the given id
-        std::vector<item *> all_items_with_id( const itype_id& item_id, bool need_charges = false ) const;
+        std::vector < item * > all_items_with_id( const itype_id& item_id,
+                bool need_charges = false ) const;
 
         /**
          * All items in the character's inventory.
          */
-        std::vector<item *> all_items( bool need_charges = false ) const;
+        std::vector < item * > all_items( bool need_charges = false ) const;
 
 
         bool has_charges(
             const itype_id& it, int quantity,
-            const std::function<bool( const item & )> &filter = return_true<item> ) const;
+            const std::function < bool( const item & ) > &filter = return_true < item > ) const;
 
         // has_amount works ONLY for quantity.
         // has_charges works ONLY for charges.
-        std::vector<detached_ptr<item>> use_amount(
+        std::vector < detached_ptr < item>> use_amount(
             itype_id it, int quantity,
-            const std::function<bool( const item & )> &filter = return_true<item> );
+            const std::function < bool( const item & ) > &filter = return_true < item > );
         // Uses up charges
         bool use_charges_if_avail( const itype_id& it, int quantity );
 
         // Uses up charges
-        std::vector<detached_ptr<item>> use_charges(
+        std::vector < detached_ptr < item>> use_charges(
             const itype_id& what, int qty,
-            const std::function<bool( const item & )> &filter = return_true<item> );
+            const std::function < bool( const item & ) > &filter = return_true < item > );
 
         bool has_fire( int quantity ) const;
         void use_fire( int quantity );
@@ -1847,20 +1848,20 @@ for( const auto& elem : worn ) {
         bool check_outbounds_activity( player_activity& act );
         bool restore_outbounds_activity();
         /** Assigns activity to player, possibly resuming old activity if it's similar enough. */
-        void assign_activity( std::unique_ptr<player_activity> act, bool allow_resume = true );
+        void assign_activity( std::unique_ptr < player_activity > act, bool allow_resume = true );
         /** Check if player currently has a given activity */
         bool has_activity( const activity_id& type ) const;
         /** Check if player currently has any of the given activities */
-        bool has_activity( const std::vector<activity_id> &types ) const;
-        std::unique_ptr<player_activity> remove_activity();
+        bool has_activity( const std::vector < activity_id > &types ) const;
+        std::unique_ptr < player_activity > remove_activity();
         void resume_backlog_activity();
         void cancel_activity();
         void cancel_stashed_activity();
         player_activity &get_stashed_activity() const;
-        std::unique_ptr<player_activity> remove_stashed_activity();
-        void set_stashed_activity( std::unique_ptr<player_activity>&& act );
+        std::unique_ptr < player_activity > remove_stashed_activity();
+        void set_stashed_activity( std::unique_ptr < player_activity > && act );
         void set_stashed_activity(
-            std::unique_ptr<player_activity>&& act, std::unique_ptr<player_activity>&& act_back );
+            std::unique_ptr < player_activity > && act, std::unique_ptr < player_activity > && act_back );
         bool has_stashed_activity() const;
         void initialize_stomach_contents();
 
@@ -1915,8 +1916,8 @@ for( const auto& elem : worn ) {
         int get_armor_acid( bodypart_id bp ) const;
         /** Returns overall resistance to given type on the bod part */
         int get_armor_type( damage_type dt, bodypart_id bp ) const override;
-        std::map<bodypart_id, int> get_all_armor_type(
-            damage_type dt, const std::map<bodypart_id, std::vector<const item *>> &clothing_map ) const;
+        std::map < bodypart_id, int > get_all_armor_type(
+            damage_type dt, const std::map < bodypart_id, std::vector < const item *>> &clothing_map ) const;
         /**
         * Returns the total normal hearing protection of a characters worn items, in dB spl.
         * If bool advanced is true, gets the advanced hearing protection.
@@ -1972,7 +1973,7 @@ for( const auto& elem : worn ) {
         /** Handles Character vomiting effects */
         void vomit();
 
-        std::map<mutation_category_id, int> mutation_category_level;
+        std::map < mutation_category_id, int > mutation_category_level;
 
         int adjust_for_focus( int amount ) const;
         void update_type_of_scent( bool init = false );
@@ -2033,16 +2034,16 @@ for( const auto& elem : worn ) {
         int run_cost( int base_cost, bool diag = false ) const;
 
         const pathfinding_settings &get_legacy_pathfinding_settings() const override;
-        std::set<tripoint_bub_ms> get_legacy_path_avoid() const override;
+        std::set < tripoint_bub_ms > get_legacy_path_avoid() const override;
 
-        std::pair<PathfindingSettings, RouteSettings> get_pathfinding_pair() const override;
+        std::pair < PathfindingSettings, RouteSettings > get_pathfinding_pair() const override;
 
         /** Route for overmap scale traveling */
-        std::vector<tripoint_abs_omt> omt_path;
+        std::vector < tripoint_abs_omt > omt_path;
         /**
          * Get all hostile creatures currently visible to this player.
          */
-        std::vector<Creature *> get_hostile_creatures( int range ) const;
+        std::vector < Creature * > get_hostile_creatures( int range ) const;
 
         /**
          * Returns all creatures that this player can see and that are in the given
@@ -2051,15 +2052,15 @@ for( const auto& elem : worn ) {
          * @param range The maximal distance (@ref rl_dist), creatures at this distance or less
          * are included.
          */
-        std::vector<Creature *> get_visible_creatures( int range ) const;
+        std::vector < Creature * > get_visible_creatures( int range ) const;
         /** Returns an enumeration of visible mutations with colors */
         std::string visible_mutations( int visibility_cap ) const;
         player_activity &get_destination_activity() const;
-        void set_destination_activity( std::unique_ptr<player_activity>&& new_destination_activity );
-        std::unique_ptr<player_activity> clear_destination_activity();
+        void set_destination_activity( std::unique_ptr < player_activity > && new_destination_activity );
+        std::unique_ptr < player_activity > clear_destination_activity();
         /** Returns warmth provided by armor, etc. */
-        std::map<bodypart_id, int> warmth(
-            const std::map<bodypart_id, std::vector<const item *>> &clothing_map ) const;
+        std::map < bodypart_id, int > warmth(
+            const std::map < bodypart_id, std::vector < const item *>> &clothing_map ) const;
         /** Can the player lie down and cover self with blankets etc. **/
         bool can_use_floor_warmth() const;
         /**
@@ -2112,7 +2113,7 @@ for( const auto& elem : worn ) {
          * @return adjusted level for the vitamin or zero if vitamin does not exist
          */
         int vitamin_mod( const vitamin_id& vit, int qty, bool capped = true );
-        void vitamins_mod( const std::map<vitamin_id, int> &, bool capped = true );
+        void vitamins_mod( const std::map < vitamin_id, int > &, bool capped = true );
         /** Get vitamin usage rate (minutes per unit) accounting for bionics, mutations and effects */
         time_duration vitamin_rate( const vitamin_id& vit ) const;
 
@@ -2120,12 +2121,12 @@ for( const auto& elem : worn ) {
         int nutrition_for( const item& comest ) const;
         /** Can the food be [theoretically] eaten no matter the consequen
         ces? */
-        ret_val<edible_rating> can_eat( const item& food ) const;
+        ret_val < edible_rating > can_eat( const item& food ) const;
         /**
          * Same as @ref can_eat, but takes consequences into account.
          * Asks about them if @param interactive is true, refuses otherwise.
          */
-        ret_val<edible_rating> will_eat( const item& food, bool interactive = false ) const;
+        ret_val < edible_rating > will_eat( const item& food, bool interactive = false ) const;
         /** Determine character's capability of recharging their CBMs. */
         bool can_feed_furnace_with( const item& it ) const;
         rechargeable_cbm get_cbm_rechargeable_with( const item& it ) const;
@@ -2173,7 +2174,7 @@ for( const auto& elem : worn ) {
          * Consume given item (food, fuel, medicine, ...).
          * @returns the remaining charges if any
          */
-        detached_ptr<item> consume_item( detached_ptr<item>&& target );
+        detached_ptr < item > consume_item( detached_ptr < item > && target );
 
         /**
          * Consume an item as medication.
@@ -2189,11 +2190,11 @@ for( const auto& elem : worn ) {
          * account character traits */
         /** Get range of possible nutrient content, for a particular recipe,
          * depending on choice of ingredients */
-        std::pair<nutrients, nutrients> compute_nutrient_range(
-            const item &, const recipe_id &, const cata::flat_set<flag_id> &extra_flags = {} ) const;
+        std::pair < nutrients, nutrients > compute_nutrient_range(
+            const item &, const recipe_id &, const cata::flat_set < flag_id > &extra_flags = {} ) const;
         /** Same, but across arbitrary recipes */
-        std::pair<nutrients, nutrients> compute_nutrient_range(
-            const itype_id &, const cata::flat_set<flag_id> &extra_flags = {} ) const;
+        std::pair < nutrients, nutrients > compute_nutrient_range(
+            const itype_id &, const cata::flat_set < flag_id > &extra_flags = {} ) const;
         /** Returns allergy type or MORALE_NULL if not allergic for this character */
         morale_type allergy_type( const item& food ) const;
         nutrients compute_effective_nutrients( const item & ) const;
@@ -2258,7 +2259,7 @@ for( const auto& elem : worn ) {
 
         /** Handles the enjoyability value for a comestible. First value is enjoyability, second is cap.
          * **/
-        std::pair<int, int> fun_for( const item& comest ) const;
+        std::pair < int, int > fun_for( const item& comest ) const;
 
         /** Handles a large number of timers decrementing and other randomized effects */
         void suffer();
@@ -2273,14 +2274,14 @@ for( const auto& elem : worn ) {
         /** Recalculates morale penalty/bonus from wetness based on mutations, equipment and temperature
          */
         void apply_wetness_morale( const units::temperature& temperature );
-        std::vector<std::string> short_description_parts() const;
+        std::vector < std::string > short_description_parts() const;
         std::string short_description() const;
         // Checks whether a player can hear a sound at a given volume and location.
         bool can_hear( const tripoint_bub_ms& source, int volume ) const;
         // Returns a multiplier indicating the keenness of a player's hearing.
         float hearing_ability() const;
 
-        using trap_map = std::map<tripoint_abs_ms, std::string>;
+        using trap_map = std::map < tripoint_abs_ms, std::string >;
         bool knows_trap( const tripoint_bub_ms& pos ) const;
         void add_known_trap( const tripoint_bub_ms& pos, const trap& t );
 
@@ -2298,11 +2299,11 @@ for( const auto& elem : worn ) {
         bool has_weapon() const override;
         void shift_destination( point_rel_ms shift );
         // Auto move methods
-        void set_destination( const std::vector<tripoint_bub_ms> &route );
+        void set_destination( const std::vector < tripoint_bub_ms > &route );
         void set_destination(
-            const std::vector<tripoint_bub_ms> &route,
-            std::unique_ptr<player_activity> new_destination_activity );
-        std::unique_ptr<player_activity> clear_destination();
+            const std::vector < tripoint_bub_ms > &route,
+            std::unique_ptr < player_activity > new_destination_activity );
+        std::unique_ptr < player_activity > clear_destination();
         bool has_distant_destination() const;
 
         // true if the player is auto moving, or if the player is going to finish
@@ -2314,7 +2315,7 @@ for( const auto& elem : worn ) {
         bool has_destination_activity() const;
         // starts destination activity and cleans up to ensure it is called only once
         void start_destination_activity();
-        std::vector<tripoint_bub_ms> &get_auto_move_route();
+        std::vector < tripoint_bub_ms > &get_auto_move_route();
         action_id get_next_auto_move_direction();
         bool defer_move( const tripoint_bub_ms& next );
 
@@ -2342,7 +2343,7 @@ for( const auto& elem : worn ) {
         creature_size size_class = creature_size::medium;
 
         trap_map known_traps;
-        pimpl<char_encumbrance_data> encumbrance_cache;
+        pimpl < char_encumbrance_data > encumbrance_cache;
 
     public:
         /**
@@ -2359,25 +2360,25 @@ for( const auto& elem : worn ) {
         /**
          * Contains mutation ids of the base traits.
          */
-        std::unordered_set<trait_id> my_traits;
+        std::unordered_set < trait_id > my_traits;
         /**
          * Pointers to mutation branches in @ref my_mutations.
          */
-        std::vector<const mutation_branch *> cached_mutations;
+        std::vector < const mutation_branch * > cached_mutations;
 
         void store( JsonOut& json ) const;
         void load( const JsonObject& data );
 
         // --------------- Values ---------------
         /** Character skills. */
-        pimpl<SkillLevelMap> _skills;
+        pimpl < SkillLevelMap > _skills;
         /** Stamp of character skills. @ref learned_recipes are valid only with this set of skills. */
-        mutable pimpl<SkillLevelMap> autolearn_skills_stamp;
+        mutable pimpl < SkillLevelMap > autolearn_skills_stamp;
         /** Subset of learned recipes. Needs to be mutable for lazy initialization. */
-        mutable pimpl<recipe_subset> learned_recipes;
+        mutable pimpl < recipe_subset > learned_recipes;
 
         // Cached vision values.
-        std::bitset<NUM_VISION_MODES> vision_mode_cache;
+        std::bitset < NUM_VISION_MODES > vision_mode_cache;
         // "Raw" night vision range - just stats+mutations+items
         float nv_range = 0;
         int sight_max = 0;
@@ -2390,7 +2391,7 @@ for( const auto& elem : worn ) {
          * Cache for pathfinding settings.
          * Most of it isn't changed too often, hence mutable.
          */
-        mutable pimpl<pathfinding_settings> path_settings;
+        mutable pimpl < pathfinding_settings > path_settings;
 
         // faction API versions
         // 2 - allies are in your_followers faction; NPCATT_FOLLOW is follower but not an ally
@@ -2403,9 +2404,9 @@ for( const auto& elem : worn ) {
 
         character_movemode move_mode = CMM_WALK;
         /** Current deficiency/excess quantity for each vitamin */
-        std::map<vitamin_id, int> vitamin_levels;
+        std::map < vitamin_id, int > vitamin_levels;
 
-        pimpl<player_morale> morale;
+        pimpl < player_morale > morale;
 
     public:
         /**
@@ -2413,7 +2414,7 @@ for( const auto& elem : worn ) {
          * Clothing layers are multiplied, ex. two layers of 50% coverage will leave only 25% exposed.
          * Used to determine suffering effects of albinism and solar sensitivity.
          */
-        std::map<bodypart_id, float> bodypart_exposure();
+        std::map < bodypart_id, float > bodypart_exposure();
 
     private:
         /** suffer() subcalls */
@@ -2465,30 +2466,30 @@ for( const auto& elem : worn ) {
 
         int radiation = 0;
 
-        std::vector<tripoint_bub_ms> auto_move_route;
+        std::vector < tripoint_bub_ms > auto_move_route;
         // Used to make sure auto move is canceled if we stumble off course
-        std::optional<tripoint_bub_ms> next_expected_position;
+        std::optional < tripoint_bub_ms > next_expected_position;
         scenttype_id type_of_scent;
 
-        struct weighted_int_list<std::string> melee_miss_reasons;
+        struct weighted_int_list < std::string > melee_miss_reasons;
 
         int cached_moves = 0;
         tripoint_bub_ms cached_position;
         inventory cached_crafting_inventory;
 
-        mutable std::array<double, npc_ai_info::num_npc_ai_info> npc_ai_info_cache;
+        mutable std::array < double, npc_ai_info::num_npc_ai_info > npc_ai_info_cache;
 
         // safe_reference_anchor anchor;
 
     protected:
         // a cache of all active enchantment values.
         // is recalculated every turn in Character::recalculate_enchantment_cache
-        pimpl<enchantment> enchantment_cache;
+        pimpl < enchantment > enchantment_cache;
         // for enchantment mutations sprite display, recalculated alongside the cache
-        std::vector<std::pair<const enchantment *, enchantment_source>> enchantment_sources;
+        std::vector < std::pair < const enchantment *, enchantment_source>> enchantment_sources;
 
         /** Amount of time the player has spent in each overmap tile. */
-        std::unordered_map<point_abs_omt, time_duration> overmap_time;
+        std::unordered_map < point_abs_omt, time_duration > overmap_time;
 
     public:
         time_point next_climate_control_check;
@@ -2498,7 +2499,7 @@ for( const auto& elem : worn ) {
 
         void clear_npc_ai_info_cache( npc_ai_info key ) const;
         void set_npc_ai_info_cache( npc_ai_info key, double val ) const;
-        std::optional<double> get_npc_ai_info_cache( npc_ai_info key ) const;
+        std::optional < double > get_npc_ai_info_cache( npc_ai_info key ) const;
 
         // Crafting funcs
     public:
@@ -2506,7 +2507,7 @@ for( const auto& elem : worn ) {
         // Then checks nearby NPCs who could provide it too.
         // Returns -1 to indicate recipe not found, otherwise difficulty to learn.
         int has_recipe(
-            const recipe* r, const inventory& crafting_inv, const std::vector<npc *> &helpers ) const;
+            const recipe* r, const inventory& crafting_inv, const std::vector < npc * > &helpers ) const;
         bool has_recipe_requirements( const recipe& rec ) const;
 
         bool studied_all_recipes( const itype& book ) const;
@@ -2521,7 +2522,7 @@ for( const auto& elem : worn ) {
          * @param filter If set, will return only recipes that match the filter (should be much faster).
          */
         recipe_subset get_available_recipes(
-            const inventory& crafting_inv, const std::vector<npc *> *helpers = nullptr,
+            const inventory& crafting_inv, const std::vector < npc * > *helpers = nullptr,
             recipe_filter filter = nullptr ) const;
 
         /** For use with in progress crafts */
@@ -2535,7 +2536,7 @@ for( const auto& elem : worn ) {
          */
         int expected_time_to_craft(
             const recipe& rec, int batch_size = 1, bool in_progress = false ) const;
-        std::vector<const item *> get_eligible_containers_for_crafting() const;
+        std::vector < const item * > get_eligible_containers_for_crafting() const;
         bool check_eligible_containers_for_crafting( const recipe& rec, int batch_size = 1 ) const;
         bool can_make( const recipe* r, int batch_size = 1 ); // have components?
         /**
@@ -2584,34 +2585,35 @@ for( const auto& elem : worn ) {
         void craft_skill_gain( const item& craft, const int &multiplier );
 
         const requirement_data *select_requirements(
-            const std::vector<const requirement_data *> &, int batch, const inventory &,
-            const std::function<bool( const item & )> &filter ) const;
-        comp_selection<item_comp> select_item_component(
-            const std::vector<item_comp> &components, int batch, inventory& map_inv,
-            bool can_cancel = false, const std::function<bool( const item & )> &filter = return_true<item>,
+            const std::vector < const requirement_data * > &, int batch, const inventory &,
+            const std::function < bool( const item & ) > &filter ) const;
+        comp_selection < item_comp > select_item_component(
+            const std::vector < item_comp > &components, int batch, inventory& map_inv,
+            bool can_cancel = false, const std::function < bool( const item & ) > &filter = return_true < item
+                >,
             bool player_inv = true );
-        std::vector<detached_ptr<item>> consume_items(
-            const comp_selection<item_comp> &is, int batch,
-            const std::function<bool( const item & )> &filter = return_true<item> );
-        std::vector<detached_ptr<item>> consume_items(
-            map& m, const comp_selection<item_comp> &is, int batch, const tripoint_bub_ms& origin,
-            int radius, const std::function<bool( const item & )> &filter = return_true<item> );
-        std::vector<detached_ptr<item>> consume_items(
-            const std::vector<item_comp> &components, int batch = 1,
-            const std::function<bool( const item & )> &filter = return_true<item> );
+        std::vector < detached_ptr < item>> consume_items(
+            const comp_selection < item_comp > &is, int batch,
+            const std::function < bool( const item & ) > &filter = return_true < item > );
+        std::vector < detached_ptr < item>> consume_items(
+            map& m, const comp_selection < item_comp > &is, int batch, const tripoint_bub_ms& origin,
+            int radius, const std::function < bool( const item & ) > &filter = return_true < item > );
+        std::vector < detached_ptr < item>> consume_items(
+            const std::vector < item_comp > &components, int batch = 1,
+            const std::function < bool( const item & ) > &filter = return_true < item > );
         /** Consume tools for the next multiplier * 5% progress of the craft */
         bool craft_consume_tools( item& craft, int mulitplier, bool start_craft );
-        void consume_tools( const comp_selection<tool_comp> &tool, int batch );
+        void consume_tools( const comp_selection < tool_comp > &tool, int batch );
         void consume_tools(
-            map& m, const comp_selection<tool_comp> &tool, int batch,
+            map& m, const comp_selection < tool_comp > &tool, int batch,
             const tripoint_bub_ms& origin = tripoint_bub_ms::zero(), int radius = PICKUP_RANGE );
         void consume_tools(
-            const std::vector<tool_comp> &tools, int batch = 1,
+            const std::vector < tool_comp > &tools, int batch = 1,
             const std::string& hotkeys = DEFAULT_HOTKEYS );
         void make_craft_with_command(
             const recipe_id& id_to_make, int batch_size, bool is_long = false,
             const tripoint_bub_ms& loc = tripoint_bub_ms::zero() );
-        pimpl<craft_command> last_craft;
+        pimpl < craft_command > last_craft;
 
         recipe_id lastrecipe;
         int last_batch = 0;
@@ -2627,7 +2629,7 @@ for( const auto& elem : worn ) {
          * @return An item that contains the removed charges, it's effectively a
          * copy of the item with the proper charges.
          */
-        detached_ptr<item> reduce_charges( int position, int quantity );
+        detached_ptr < item > reduce_charges( int position, int quantity );
         /**
          * Remove charges from a specific item (given by a pointer to it).
          * Otherwise identical to @ref reduce_charges(int,int)
@@ -2636,7 +2638,7 @@ for( const auto& elem : worn ) {
          * @return An item that contains the removed charges, it's effectively a
          * copy of the item with the proper charges.
          */
-        detached_ptr<item> reduce_charges( item* it, int quantity );
+        detached_ptr < item > reduce_charges( item* it, int quantity );
 
         // sound
         int volume = 0;
@@ -2662,15 +2664,15 @@ float nv_range_from_eye_encumbrance( int enc );
 namespace warmth
 {
 
-std::map<bodypart_id, int> from_clothing(
-    const std::map<bodypart_id, std::vector<const item *>> &clothing_map );
-std::map<bodypart_id, int> bonus_from_clothing(
-    const std::map<bodypart_id, std::vector<const item *>> &clothing_map );
-std::map<bodypart_id, int> from_effects( const Character& c );
+std::map < bodypart_id, int > from_clothing(
+    const std::map < bodypart_id, std::vector < const item *>> &clothing_map );
+std::map < bodypart_id, int > bonus_from_clothing(
+    const std::map < bodypart_id, std::vector < const item *>> &clothing_map );
+std::map < bodypart_id, int > from_effects( const Character& c );
 
 /** Returns wind resistance provided by armor, etc **/
-std::map<bodypart_id, int> wind_resistance_from_clothing(
-    const std::map<bodypart_id, std::vector<const item *>> &clothing_map );
+std::map < bodypart_id, int > wind_resistance_from_clothing(
+    const std::map < bodypart_id, std::vector < const item *>> &clothing_map );
 
 /** Define color for displaying the body temperature */
 nc_color bodytemp_color( const Character& c, const bodypart_str_id& bp );

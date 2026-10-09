@@ -107,8 +107,7 @@ public:
 
     auto shutdown() noexcept -> void;
 
-    auto ready() const noexcept -> bool
-    {
+    auto ready() const noexcept -> bool {
         return dev_ != nullptr && pipeline_ != nullptr && xfer_ != nullptr && storage_ != nullptr;
     }
 
@@ -124,7 +123,8 @@ public:
 
 private:
     auto update_and_spawn(
-        const dust_mote_params& params, const std::vector<dust_mote_shaft_source>* active_shafts) -> void;
+        const dust_mote_params& params, const std::vector<dust_mote_shaft_source>* active_shafts)
+        -> void;
     auto upload_instances(SDL_GPUCommandBuffer* cb, const dust_mote_params& params) -> bool;
 
     gpu_device* dev_ = nullptr;

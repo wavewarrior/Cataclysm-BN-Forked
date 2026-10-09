@@ -18,10 +18,10 @@
 // (which owns the ImGui mouse state). This split keeps ImGui out of the render
 // frame and game coords out of the UI layer.
 
+#include "coordinates.h"
+
 #include <chrono>
 #include <vector>
-
-#include "coordinates.h"
 
 namespace dev_test_lights {
 
@@ -39,17 +39,16 @@ extern std::vector<light> lights;          // placed lights; cleared via UI butt
 // Debug sound pulse — an animated expanding sound wave for the sound spawner.
 // source + volume + spawn_s is all the render loop needs: radius = elapsed * speed.
 struct sound_pulse {
-    int z = 0;                // z-level the pulse lives on
-    float volume = 0.f;       // drives the maximum radius (clamped to [6, 24] tiles)
-    double spawn_s = 0.0;     // steady-clock seconds at spawn
-    tripoint_bub_ms source;   // world position of the sound source
+    int z = 0;              // z-level the pulse lives on
+    float volume = 0.f;     // drives the maximum radius (clamped to [6, 24] tiles)
+    double spawn_s = 0.0;   // steady-clock seconds at spawn
+    tripoint_bub_ms source; // world position of the sound source
 };
 
 /// Seconds since a steady epoch; shared spawn/draw clock for sound pulses.
-inline double pulse_now_s()
-{
-    return std::chrono::duration<double>(
-               std::chrono::steady_clock::now().time_since_epoch() ).count();
+inline double pulse_now_s() {
+    return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch())
+        .count();
 }
 
 extern std::vector<sound_pulse> sound_pulses; // active debug sound pulses

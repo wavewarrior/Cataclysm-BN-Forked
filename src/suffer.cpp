@@ -1314,7 +1314,7 @@ void Character::suffer_from_radiation()
         has_bionic( bio_geiger ) ) {
         add_msg_if_player( m_warning,
                            _( "You feel an anomalous sensation coming from "
-                              "your radiation sensors." ) );
+           "your radiation sensors." ) );
     }
 
     if( action_time_scale::once_every_this_tick( 15_minutes ) ) {
@@ -2066,7 +2066,7 @@ void Character::add_addiction( add_type type, int strength )
 bool Character::has_addiction( add_type type ) const
 {
     return std::ranges::any_of( addictions,
-           [type]( const addiction & ad ) {
+    [type]( const addiction & ad ) {
         return ad.type == type && ad.intensity >= MIN_ADDICTION_LEVEL;
     } );
 }

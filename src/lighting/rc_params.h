@@ -56,47 +56,40 @@ struct rc_cascade_geom {
 
 /// Per-cascade geometry for a `map_w` x `map_h` (cascade-0, i.e. tile-res)
 /// grid, laid out back-to-back in one flat atlas buffer.
-inline auto rc_compute_geometry( std::uint32_t map_w, std::uint32_t map_h )
-    -> std::array<rc_cascade_geom, RC_CASCADES>
-{
+inline auto rc_compute_geometry(std::uint32_t map_w, std::uint32_t map_h)
+    -> std::array<rc_cascade_geom, RC_CASCADES> {
     std::array<rc_cascade_geom, RC_CASCADES> out{};
     std::uint32_t offset = 0;
-    for( std::uint32_t i = 0; i < RC_CASCADES; ++i ) {
+    for (std::uint32_t i = 0; i < RC_CASCADES; ++i) {
         const std::uint32_t div = 1u << i;
-        const std::uint32_t px = std::max( 1u, ( map_w + div - 1u ) / div );
-        const std::uint32_t py = std::max( 1u, ( map_h + div - 1u ) / div );
+        const std::uint32_t px = std::max(1u, (map_w + div - 1u) / div);
+        const std::uint32_t py = std::max(1u, (map_h + div - 1u) / div);
         std::uint32_t dirs = RC_C0_DIRS;
-        for( std::uint32_t b = 0; b < i; ++b ) {
-            dirs *= RC_BRANCH;
-        }
-        out[i] = rc_cascade_geom{ .probes_x = px, .probes_y = py, .dirs = dirs,
-                                   .offset_floats = offset };
+        for (std::uint32_t b = 0; b < i; ++b) { dirs *= RC_BRANCH; }
+        out[i] =
+            rc_cascade_geom{.probes_x = px, .probes_y = py, .dirs = dirs, .offset_floats = offset};
         offset += px * py * dirs * 4u; // 4 floats/texel: rgb + beta
     }
     return out;
 }
 
 /// Total atlas size, in floats, for a `map_w` x `map_h` grid.
-inline auto rc_total_floats( std::uint32_t map_w, std::uint32_t map_h ) -> std::uint32_t
-{
-    const auto g = rc_compute_geometry( map_w, map_h );
-    const auto &last = g[RC_CASCADES - 1];
+inline auto rc_total_floats(std::uint32_t map_w, std::uint32_t map_h) -> std::uint32_t {
+    const auto g = rc_compute_geometry(map_w, map_h);
+    const auto& last = g[RC_CASCADES - 1];
     return last.offset_floats + last.probes_x * last.probes_y * last.dirs * 4u;
 }
 
 /// Cascade-i world-tile march interval [near, far).
-inline auto rc_cascade_interval( std::uint32_t cascade ) -> std::pair<float, float>
-{
-    auto pow4 = []( std::uint32_t e ) {
+inline auto rc_cascade_interval(std::uint32_t cascade) -> std::pair<float, float> {
+    auto pow4 = [](std::uint32_t e) {
         float v = 1.0f;
-        for( std::uint32_t k = 0; k < e; ++k ) {
-            v *= 4.0f;
-        }
+        for (std::uint32_t k = 0; k < e; ++k) { v *= 4.0f; }
         return v;
     };
-    const float near_t = RC_C0_INTERVAL * ( pow4( cascade ) - 1.0f ) / 3.0f;
-    const float far_t = RC_C0_INTERVAL * ( pow4( cascade + 1u ) - 1.0f ) / 3.0f;
-    return { near_t, far_t };
+    const float near_t = RC_C0_INTERVAL * (pow4(cascade) - 1.0f) / 3.0f;
+    const float far_t = RC_C0_INTERVAL * (pow4(cascade + 1u) - 1.0f) / 3.0f;
+    return {near_t, far_t};
 }
 
 } // namespace lighting

@@ -30,7 +30,7 @@ tab_direction set_profession( avatar &u, points_left &points, tab_direction dire
 tab_direction set_skills( avatar &u, points_left &points );
 tab_direction set_description( avatar &you, bool allow_reroll, points_left &points );
 
-auto query_for_template_name() -> std::optional<std::string>;
+auto query_for_template_name() -> std::optional < std::string >;
 void reset_scenario( avatar &u, const scenario *scen );
 
 auto has_conflicting_trait( const avatar &u, const trait_id &tid ) -> bool;

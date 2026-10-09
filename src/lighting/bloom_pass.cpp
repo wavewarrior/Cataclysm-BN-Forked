@@ -161,8 +161,8 @@ bool bloom_pass::create_textures(std::uint32_t full_w, std::uint32_t full_h) {
 
     if (mip_count_ < 2) {
         DebugLogFL(DL::Warn, DC::Main)
-            << "bloom_pass: resolution too small for multi-scale bloom (mip_count="
-            << mip_count_ << ")";
+            << "bloom_pass: resolution too small for multi-scale bloom (mip_count=" << mip_count_
+            << ")";
     }
 
     return mip_count_ > 0;
@@ -185,9 +185,7 @@ bool bloom_pass::resize(std::uint32_t full_w, std::uint32_t full_h) {
         }
         mip_count_ = 0;
     }
-    if( !dev_ || !dev_->ready() ) {
-        return false;
-    }
+    if (!dev_ || !dev_->ready()) { return false; }
     return create_textures(full_w, full_h);
 }
 
@@ -260,8 +258,8 @@ void bloom_pass::record(
             float pad0, pad1, pad2;
         } u{threshold, 0, 0, 0};
         SDL_PushGPUFragmentUniformData(cb, 0, &u, sizeof(u));
-        run_subpass(
-            cb, extract_pipeline_, hdr_tex, sampler_, mip_chain_[0], mip_w_[0], mip_h_[0], false);
+        run_subpass(cb, extract_pipeline_, hdr_tex, sampler_, mip_chain_[0], mip_w_[0], mip_h_[0],
+                    false);
     }
 
     // 2. DOWN chain: mip_chain_[i-1] → mip_chain_[i] using kawase downfilter.
@@ -269,12 +267,11 @@ void bloom_pass::record(
     for (int i = 1; i < mip_count_; ++i) {
         struct {
             float tx, ty, pad0, pad1;
-        } u{1.0f / static_cast<float>(mip_w_[i - 1]),
-            1.0f / static_cast<float>(mip_h_[i - 1]), 0, 0};
+        } u{1.0f / static_cast<float>(mip_w_[i - 1]), 1.0f / static_cast<float>(mip_h_[i - 1]), 0,
+            0};
         SDL_PushGPUFragmentUniformData(cb, 0, &u, sizeof(u));
-        run_subpass(
-            cb, down_pipeline_, mip_chain_[i - 1], sampler_, mip_chain_[i],
-            mip_w_[i], mip_h_[i], false);
+        run_subpass(cb, down_pipeline_, mip_chain_[i - 1], sampler_, mip_chain_[i], mip_w_[i],
+                    mip_h_[i], false);
     }
 
     // 3. UP chain: mip_chain_[i+1] → mip_chain_[i] with additive blend (load_op=LOAD).
@@ -282,12 +279,11 @@ void bloom_pass::record(
     for (int i = mip_count_ - 2; i >= 0; --i) {
         struct {
             float tx, ty, pad0, pad1;
-        } u{1.0f / static_cast<float>(mip_w_[i + 1]),
-            1.0f / static_cast<float>(mip_h_[i + 1]), 0, 0};
+        } u{1.0f / static_cast<float>(mip_w_[i + 1]), 1.0f / static_cast<float>(mip_h_[i + 1]), 0,
+            0};
         SDL_PushGPUFragmentUniformData(cb, 0, &u, sizeof(u));
-        run_subpass(
-            cb, up_pipeline_, mip_chain_[i + 1], sampler_, mip_chain_[i],
-            mip_w_[i], mip_h_[i], true);
+        run_subpass(cb, up_pipeline_, mip_chain_[i + 1], sampler_, mip_chain_[i], mip_w_[i],
+                    mip_h_[i], true);
     }
 
     // 4. COMPOSITE: mip_chain_[0] (half) → hdr_tex (full), additive × intensity.

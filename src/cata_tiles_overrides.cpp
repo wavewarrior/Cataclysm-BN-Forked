@@ -66,8 +66,8 @@ void cata_tiles::void_monster_override() { monster_override.clear(); }
 bool cata_tiles::has_draw_override( const tripoint_bub_ms& p ) const
 {
     return radiation_override.contains( p ) || terrain_override.contains( p )
-    || furniture_override.contains( p ) || graffiti_override.contains( p )
-    || trap_override.contains( p ) || field_override.contains( p ) || item_override.contains( p )
-    || vpart_override.contains( p ) || draw_below_override.contains( p )
-    || monster_override.contains( p );
+           || furniture_override.contains( p ) || graffiti_override.contains( p )
+           || trap_override.contains( p ) || field_override.contains( p ) || item_override.contains( p )
+           || vpart_override.contains( p ) || draw_below_override.contains( p )
+           || monster_override.contains( p );
 }

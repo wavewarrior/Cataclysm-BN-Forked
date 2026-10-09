@@ -180,15 +180,13 @@ void scent_map::update( const tripoint_bub_ms &center, map &m )
     const auto *blocked_data = _scent_lc.vehicle_obstructed_cache.data();
     const int scent_cache_x = _scent_lc.cache_x;
     const auto safe_st = [&]( int ax, int ay ) -> char {
-        if( ax < 0 || ax >= scent_cache_x || ay < 0 || ay >= st_sy )
-        {
+        if( ax < 0 || ax >= scent_cache_x || ay < 0 || ay >= st_sy ) {
             return char( 0 );
         }
         return scent_transfer[ax * st_sy + ay];
     };
     const auto safe_bd = [&]( int ax, int ay ) -> diagonal_blocks {
-        if( ax < 0 || ax >= scent_cache_x || ay < 0 || ay >= st_sy )
-        {
+        if( ax < 0 || ax >= scent_cache_x || ay < 0 || ay >= st_sy ) {
             return {};
         }
         return blocked_data[ax * st_sy + ay];
@@ -421,7 +419,7 @@ std::string scent_map::serialize( bool is_type ) const
     // Scent values now live on per-submap arrays and are not serialized.
     // Only typescent is retained for backward compatibility.
     if( is_type ) {
-    return typescent.str();
+        return typescent.str();
     }
     return {};
 }

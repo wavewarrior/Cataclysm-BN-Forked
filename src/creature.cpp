@@ -514,8 +514,8 @@ bool Creature::digging() const
 bool Creature::is_dangerous_fields( const field &fld ) const
 {
     // Else check each field to see if it's dangerous to us
-for( auto &dfield : fld ) {
-    if( is_dangerous_field( dfield.second ) ) {
+    for( auto &dfield : fld ) {
+        if( is_dangerous_field( dfield.second ) ) {
             return true;
         }
     }
@@ -827,22 +827,22 @@ Creature *Creature::auto_find_hostile_target( int range, int &boo_hoo, int area 
 int Creature::size_melee_penalty() const
 {
     switch( get_size() ) {
-    case creature_size::tiny:
-        return 30;
-    case creature_size::small:
-        return 15;
-    case creature_size::medium:
-        return 0;
-    case creature_size::large:
-        return -10;
-    case creature_size::huge:
-        return -20;
-    default:
-        break;
-}
+        case creature_size::tiny:
+            return 30;
+        case creature_size::small:
+            return 15;
+        case creature_size::medium:
+            return 0;
+        case creature_size::large:
+            return -10;
+        case creature_size::huge:
+            return -20;
+        default:
+            break;
+    }
 
-debugmsg( "Invalid target size %d", get_size() );
-return 0;
+    debugmsg( "Invalid target size %d", get_size() );
+    return 0;
 }
 
 int Creature::deal_melee_attack( Creature *source, int hitroll )
@@ -1836,7 +1836,7 @@ bool Creature::has_effect( const efftype_id &eff_id, const bodypart_str_id &bp )
 {
     // null bp means anything, non-null means only that bp
     if( !bp ) {
-    auto got = effects->find( eff_id );
+        auto got = effects->find( eff_id );
         return got != effects->end() && !got->second.begin()->second.is_removed();
     } else {
         auto got_outer = effects->find( eff_id );
@@ -1857,8 +1857,8 @@ bool Creature::has_effect_with_flag( const flag_id &flag ) const
 
 bool Creature::has_effect_with_flag( const flag_id &flag, const bodypart_str_id &bp ) const
 {
-for( const auto &elem : *effects ) {
-    for( const auto &_it : elem.second ) {
+    for( const auto &elem : *effects ) {
+        for( const auto &_it : elem.second ) {
             if( bp == _it.first && !_it.second.is_removed() && _it.second.has_flag( flag ) ) {
                 return true;
             }
@@ -2043,13 +2043,13 @@ void Creature::process_effects()
 
 bool Creature::resists_effect( const effect &e ) const
 {
-for( auto &i : e.get_resist_effects() ) {
-    if( has_effect( i ) ) {
+    for( auto &i : e.get_resist_effects() ) {
+        if( has_effect( i ) ) {
             return true;
         }
     }
-for( auto &i : e.get_resist_traits() ) {
-    if( has_trait( i ) ) {
+    for( auto &i : e.get_resist_traits() ) {
+        if( has_trait( i ) ) {
             return true;
         }
     }
@@ -2162,7 +2162,7 @@ void Creature::set_moves( int nmoves )
 bool Creature::in_sleep_state() const
 {
     return has_effect( effect_sleep ) || has_effect( effect_lying_down ) ||
-    has_effect( effect_npc_suspend );
+           has_effect( effect_npc_suspend );
 }
 
 /*
@@ -2431,10 +2431,10 @@ std::vector<bodypart_id> Creature::get_all_body_parts( bool only_main ) const
 int Creature::get_hp( const bodypart_id &bp ) const
 {
     if( bp ) {
-    return get_part_hp_cur( bp );
+        return get_part_hp_cur( bp );
     }
     int hp_total = 0;
-for( const std::pair<const bodypart_str_id, bodypart> &elem : get_body() ) {
+    for( const std::pair<const bodypart_str_id, bodypart> &elem : get_body() ) {
         hp_total += elem.second.get_hp_cur();
     }
     return hp_total;
@@ -2448,10 +2448,10 @@ int Creature::get_hp() const
 int Creature::get_hp_max( const bodypart_id &bp ) const
 {
     if( bp ) {
-    return get_part_hp_max( bp );
+        return get_part_hp_max( bp );
     }
     int hp_total = 0;
-for( const std::pair<const bodypart_str_id, bodypart> &elem : get_body() ) {
+    for( const std::pair<const bodypart_str_id, bodypart> &elem : get_body() ) {
         hp_total += elem.second.get_hp_max();
     }
     return hp_total;

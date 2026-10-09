@@ -174,7 +174,7 @@ class FontFallbackList : public Font
                          unsigned char color, float opacity = 1.0f ) override;
     protected:
         std::vector<std::unique_ptr<Font>> fonts;
-        std::map<std::string, std::vector<std::unique_ptr<Font>>::iterator> glyph_font;
+        std::map<std::string, std::vector<std::unique_ptr<Font>>::iterator > glyph_font;
 };
 
 

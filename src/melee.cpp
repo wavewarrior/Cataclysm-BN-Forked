@@ -1218,7 +1218,7 @@ item &Character::used_weapon() const
 item &Character::primary_weapon() const
 {
     if( !get_body().contains( body_part_arm_r ) ) {
-    return null_item_reference();
+        return null_item_reference();
     }
     return *get_part( body_part_arm_r ).wielding.wielded;
 }
@@ -1226,14 +1226,14 @@ item &Character::primary_weapon() const
 std::vector<item *> Character::wielded_items() const
 {
     if( !get_body().contains( body_part_arm_r ) ) {
-    return {};
-}
+        return {};
+    }
 
-if( !get_part( body_part_arm_r ).wielding.wielded ) {
-    return {};
-}
+    if( !get_part( body_part_arm_r ).wielding.wielded ) {
+        return {};
+    }
 
-return {& *get_part( body_part_arm_r ).wielding.wielded};
+    return {& *get_part( body_part_arm_r ).wielding.wielded};
 }
 
 detached_ptr<item> Character::set_primary_weapon( detached_ptr<item> &&new_weapon )
@@ -2106,7 +2106,7 @@ float Character::bonus_damage( bool random ) const
 {
     /** @EFFECT_STR increases bashing damage */
     if( random ) {
-    return rng_float( get_str() / 2.0f, get_str() );
+        return rng_float( get_str() / 2.0f, get_str() );
     }
 
     return get_str() * 0.75f;
@@ -2549,7 +2549,7 @@ bool character_martial_arts::has_technique( const Character &guy, const matec_id
         const item &weap ) const
 {
     return weap.has_technique( id ) ||
-    style_selected->has_technique( guy, id );
+           style_selected->has_technique( guy, id );
 }
 
 static damage_unit &get_damage_unit( std::vector<damage_unit> &di, const damage_type dt )

@@ -134,8 +134,8 @@ struct grids_draw_data {
             if( it != list_active.end() ) { return it->second; }
 
             auto ch = pick_char( [this]( char c ) -> bool {
-            for( const auto& it : list_active ) {
-                if( it.second == c ) { return false; }
+                for( const auto& it : list_active ) {
+                    if( it.second == c ) { return false; }
                 }
                 return true;
             } );
@@ -188,19 +188,20 @@ struct grids_draw_data {
         }
 
         std::unordered_map<std::uintptr_t, char> list_active;
-        std::unordered_map<std::size_t, std::pair<std::vector<tripoint_abs_omt>, char>> list_inactive;
+        std::unordered_map<std::size_t, std::pair<std::vector<tripoint_abs_omt>, char >> list_inactive;
 };
 
-auto fmt_omt_coords( const tripoint_abs_omt& coord ) -> std::string
-{
-    if( get_option<std::string>( "OVERMAP_COORDINATE_FORMAT" ) == "subdivided" ) {
+auto fmt_omt_coords( const tripoint_abs_omt& coord ) -> std::string {
+    if( get_option<std::string>( "OVERMAP_COORDINATE_FORMAT" ) == "subdivided" )
+    {
         point_abs_om abs_coord;
         tripoint_om_omt rel_coord;
         std::tie( abs_coord, rel_coord ) = project_remain<coords::om>( coord );
 
         return string_format(
-                   "%d'%d, %d'%d", abs_coord.x(), rel_coord.x(), abs_coord.y(), rel_coord.y() );
-    } else {
+            "%d'%d, %d'%d", abs_coord.x(), rel_coord.x(), abs_coord.y(), rel_coord.y() );
+    } else
+    {
         return string_format( "%d, %d", coord.x(), coord.y() );
     }
 }
@@ -636,7 +637,7 @@ static tripoint_abs_omt show_notes_manager( const tripoint_abs_omt& origin )
         const input_context ctxt( nmenu.input_category );
         nmenu.text = string_format(
                          _( "<%s> - center on note, <%s> - edit note, <%s> - mark as dangerous, <%s> - delete "
-                            "note, <%s> - close window" ),
+           "note, <%s> - close window" ),
                          colorize( "RETURN", c_yellow ), colorize( ctxt.key_bound_to( "EDIT_NOTE" ), c_yellow ),
                          colorize( ctxt.key_bound_to( "MARK_DANGER" ), c_red ),
                          colorize( ctxt.key_bound_to( "DELETE_NOTE" ), c_yellow ), colorize( "ESCAPE", c_yellow ) );
@@ -722,7 +723,7 @@ static tripoint_abs_omt show_notes_manager( const tripoint_abs_omt& origin )
                 string_format( "[%s] %s", colorize( note.symbol, note.col ), note.text ),
                 string_format(
                     _( "<color_red>LEVEL %i, %s</color>: %s (Distance: <color_white>%d %s</color>) "
-                       "<color_red>%s</color>" ),
+               "<color_red>%s</color>" ),
                     note.p.z(), fmt_omt_coords( note.p ), location_desc, note.dist_from_pl,
                     trim_whitespaces( direction_str ), is_dangerous ? _( "DANGEROUS AREA!" ) : "" ) );
             nmenu.entries[i].ctxt = string_format(
@@ -1024,7 +1025,7 @@ static void create_note( const tripoint_abs_omt& curs )
                                  _( "Use <color_white>;</color> as a separator to combine elements." ),
                                  // NOLINTNEXTLINE(cata-text-style): literal exclaimation mark
                                  _( "Examples: <color_white>$:Bank</color> | <color_white>R;Red</color> | "
-                                    "<color_white>SPRITE:toolbox</color> | <color_white>LABEL:Survivor City</color>" ) );
+       "<color_white>SPRITE:toolbox</color> | <color_white>LABEL:Survivor City</color>" ) );
     color_notes = color_notes.replace( color_notes.end() - 2, color_notes.end(), helper_text );
     std::string title = _( "Note:" );
 
@@ -1210,7 +1211,7 @@ static bool search( const ui_adaptor& om_ui, tripoint_abs_omt& curs, const tripo
             hints +=
                 string_format(
                     _( "Press [<color_yellow>%s</color>] or [<color_yellow>%s</color>] to "
-                       "cycle through search results." ),
+               "cycle through search results." ),
                     ctxt.get_desc( "NEXT_TAB" ), ctxt.get_desc( "PREV_TAB" ) )
                 + "\n";
         }
@@ -1218,7 +1219,7 @@ static bool search( const ui_adaptor& om_ui, tripoint_abs_omt& curs, const tripo
             string_format(
                 _( "Press [<color_yellow>%s</color>] to confirm." ),
                 ctxt.get_desc( "CONFIR"
-                               "M" ) )
+                       "M" ) )
             + "\n";
         hints += string_format(
                      _( "Press [<color_yellow>%s</color>] to quit." ),
@@ -1365,8 +1366,7 @@ static void place_ter_or_special(
                               "Their overmap id will change, but not their contents." ),
                            c_red )
             + "\n\n";
-            if( can_rotate )
-            {
+            if( can_rotate ) {
                 s += colorize( string_format( _( "[%s] Rotate" ), ctxt.get_desc( "ROTATE" ) ), c_white )
                 + "\n";
             }
@@ -1408,7 +1408,8 @@ static void place_ter_or_special(
                     }
                 }
                 break;
-            } else if( action == "ROTATE" && can_rotate ) {
+            }
+            else if( action == "ROTATE" && can_rotate ) {
                 uistate.omedit_rotation = om_direction::turn_right( uistate.omedit_rotation );
                 if( terrain ) {
                     uistate.place_terrain =
@@ -1418,7 +1419,8 @@ static void place_ter_or_special(
             if( uistate.overmap_blinking ) {
                 uistate.overmap_show_overlays = !uistate.overmap_show_overlays;
             }
-        } while( action != "QUIT" );
+        }
+        while( action != "QUIT" );
 
         uistate.place_terrain = nullptr;
         uistate.place_special = nullptr;

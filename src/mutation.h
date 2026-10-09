@@ -550,7 +550,7 @@ enum class mutagen_technique : int {
 };
 
 template<>
-struct enum_traits<mutagen_technique> {
+struct enum_traits < mutagen_technique > {
     static constexpr mutagen_technique last = mutagen_technique::num_mutagen_techniques;
 };
 

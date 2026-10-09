@@ -96,8 +96,7 @@ struct weather_sum {
     int wind_amount = 0;
 };
 
-namespace weather
-{
+namespace weather {
 bool is_sheltered( const map &m, const tripoint_bub_ms &p );
 bool is_in_sunlight( const map &m, const tripoint_bub_ms &p, const weather_type_id &weather );
 } // namespace weather
@@ -180,8 +179,7 @@ void glare( const weather_type_id &w );
 int incident_sunlight( const weather_type_id &wtype,
                        const time_point &t = calendar::turn );
 
-class weather_manager
-{
+class weather_manager {
     public:
         weather_manager();
         ~weather_manager();
@@ -212,20 +210,21 @@ class weather_manager
         /** temperature cache, cleared every turn, sparse map of map tripoints to temperatures */
         mutable std::unordered_map< tripoint_abs_ms, units::temperature > temperature_cache;
         // Returns outdoor or indoor temperature of given location (in local coords).
-        auto get_temperature( const tripoint_abs_ms &location ) const -> units::temperature;
+        auto get_temperature( const tripoint_abs_ms & location ) const -> units::temperature;
         // Returns outdoor or indoor temperature of given location
-        auto get_temperature( const tripoint_abs_omt &location ) const -> units::temperature;
+        auto get_temperature( const tripoint_abs_omt & location ) const -> units::temperature;
         // Returns water temperature of given location (in local coords).
-        auto get_water_temperature( const tripoint_abs_ms &location ) const -> units::temperature;
+        auto get_water_temperature( const tripoint_abs_ms & location ) const -> units::temperature;
         void clear_temp_cache();
 
         // Get precise weather data
-        const w_point &get_precise() const {
+        const w_point & get_precise() const {
             return weather_precise;
         }
 
         // For use in tests
-        void override_humidity( int h ) {
+        void override_humidity( int h )
+        {
             weather_precise.humidity = h;
         }
 

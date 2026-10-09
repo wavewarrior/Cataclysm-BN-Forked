@@ -330,8 +330,7 @@ std::string advanced_inventory::aim_area_grid_html(
         area == AIM_ALL && ( data_location >= AIM_SOUTHWEST && data_location <= AIM_NORTHEAST );
         nc_color bcolor = c_red;
         nc_color kcolor = c_red;
-        if( squares[data_location].canputitems( pane.get_cur_item_ptr() ) )
-        {
+        if( squares[data_location].canputitems( pane.get_cur_item_ptr() ) ) {
             bcolor =
             in_vehicle ? c_light_blue
             : ( area == data_location || all_brackets ? c_light_gray : c_dark_gray );
@@ -1250,8 +1249,7 @@ void advanced_inventory::display()
             std::string s = string_format(
                 _( "< [%s] Sort: %s >" ), ctxt.get_desc( "SORT" ), get_sortname( p.sortby ) );
             const advanced_inv_area &sq = squares[p.get_area()];
-            if( sq.max_size > 0 )
-            {
+            if( sq.max_size > 0 ) {
                 s += string_format( "  < %d/%d >", sq.get_item_count(), sq.max_size );
             }
             return cata_text_to_rml( colorize( s, c_light_gray ) );
@@ -1264,8 +1262,7 @@ void advanced_inventory::display()
                 ctxt.get_desc(
                     "FILTE"
                     "R" ) );
-            if( filter_edit && act && spopup )
-            {
+            if( filter_edit && act && spopup ) {
                 return cata_text_to_rml(
                     colorize( "< " + fprefix + ": ", c_light_gray )
                     + colorize( spopup->text() + "_", c_white ) );

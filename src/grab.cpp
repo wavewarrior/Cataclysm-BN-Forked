@@ -87,9 +87,9 @@ auto get_vehicle_str_requirement( vehicle *veh ) -> int
     // If one can do 2000 in a wheelbarrow
     // 400kg blimp at 20 str should be easy
     if( veh->has_sufficient_lift( true ) ) {
-    return base_str_req( veh ) / 50;
+        return base_str_req( veh ) / 50;
     } else if( !veh->valid_wheel_config() ) {
-    return base_str_req( veh ) * 10;
+        return base_str_req( veh ) * 10;
     }
 
     //if vehicle is rollable we modify str_req based on a function of movecost per wheel.

@@ -859,9 +859,9 @@ void ExplosionProcess::blast_tile( const tripoint_bub_ms position, const int rl_
                     true,
                     false,
                     here.passable( position + tripoint_below ),
-                    terrain_factor,
-                    center.z() > position.z(),
-                    true
+                        terrain_factor,
+                        center.z() > position.z(),
+                        true
                 };
                 // Despite what you might expect, this is NOT the same as smash_items
                 here.bash_items( position, bash );
@@ -1448,7 +1448,7 @@ static std::map<const Creature *, int> legacy_blast( const tripoint_bub_ms &p, c
 
     here.bash( p, fire ? power : ( 2 * power ), true, false, false );
 
-    std::priority_queue< std::pair<float, tripoint_bub_ms>, std::vector<std::pair<float, tripoint_bub_ms>>, pair_greater_cmp_first >
+    std::priority_queue< std::pair<float, tripoint_bub_ms>, std::vector<std::pair<float, tripoint_bub_ms >>, pair_greater_cmp_first >
     open;
     std::set<tripoint_bub_ms> closed;
     std::map<tripoint_bub_ms, float> dist_map;

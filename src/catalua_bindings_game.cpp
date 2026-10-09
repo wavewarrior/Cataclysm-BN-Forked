@@ -115,23 +115,22 @@ void cata::detail::reg_game_api( sol::state &lua )
         const auto take = std::min( static_cast<size_t>( clamped ), entries.size() );
         auto indices = std::views::iota( size_t{ 0 }, take );
         const auto level_name = []( const cata::LuaLogLevel level ) -> std::string {
-            switch( level )
-        {
-            case cata::LuaLogLevel::Input:
-                return "input";
-            case cata::LuaLogLevel::Info:
-                return "info";
-            case cata::LuaLogLevel::Warn:
-                return "warn";
-            case cata::LuaLogLevel::Error:
-                return "error";
-            case cata::LuaLogLevel::DebugMsg:
-                return "debug";
-        }
-        return "unknown";
-    };
-    std::ranges::for_each( indices, [&]( const size_t idx ) {
-        const auto &entry = entries[idx];
+            switch( level ) {
+                case cata::LuaLogLevel::Input:
+                    return "input";
+                case cata::LuaLogLevel::Info:
+                    return "info";
+                case cata::LuaLogLevel::Warn:
+                    return "warn";
+                case cata::LuaLogLevel::Error:
+                    return "error";
+                case cata::LuaLogLevel::DebugMsg:
+                    return "debug";
+            }
+            return "unknown";
+        };
+        std::ranges::for_each( indices, [&]( const size_t idx ) {
+            const auto &entry = entries[idx];
             auto row = lua.create_table_with(
                            "level", level_name( entry.level ),
                            "text", entry.text,

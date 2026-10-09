@@ -45,7 +45,7 @@ class location_ptr
 
         T &operator*() const;
 
-        T *operator->() const;
+        T * operator->() const;
 
         bool operator==( const T &against ) const;
 

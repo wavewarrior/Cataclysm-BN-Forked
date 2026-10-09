@@ -1244,11 +1244,12 @@ static void smoker_finalize( player &, const tripoint_bub_ms &examp, const time_
             if( it->get_comestible()->smoking_result.is_empty() ) {
                 it->unset_flag( flag_PROCESSING );
                 iter++;
-            } else {
+            }
+            else {
                 it->mod_last_rot_check( 6_hours );
 
                 detached_ptr<item> result = item::spawn( it->get_comestible()->smoking_result, start_time + 6_hours,
-                                            it->charges );
+                    it->charges );
 
                 // Set flag to tell set_relative_rot() to calc from bday not now
                 result->set_flag( flag_PROCESSING_RESULT );
@@ -1261,7 +1262,8 @@ static void smoker_finalize( player &, const tripoint_bub_ms &examp, const time_
                 detached_ptr<item> det;
                 iter = items.erase( iter, &det );
 
-                if( !result->has_flag( flag_NUTRIENT_OVERRIDE ) ) {
+                if( !result->has_flag( flag_NUTRIENT_OVERRIDE ) )
+                {
                     // If the item has "cooks_like" it will be replaced by that item as a component.
                     if( !it->get_comestible()->cooks_like.is_empty() ) {
                         // Set charges to 1 for stacking purposes.

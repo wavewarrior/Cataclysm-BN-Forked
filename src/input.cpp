@@ -98,10 +98,10 @@ std::string get_input_string_from_file( const std::string& fname )
 int input_event::get_first_input() const
 {
     if( sequence.empty() ) {
-    return UNKNOWN_UNICODE;
-}
+        return UNKNOWN_UNICODE;
+    }
 
-return sequence[0];
+    return sequence[0];
 }
 
 input_manager inp_mngr;
@@ -626,7 +626,7 @@ bool input_context::action_uses_input(
 std::string input_context::get_conflicts( const input_event& event ) const
 {
     return enumerate_as_string(
-           registered_actions.begin(), registered_actions.end(),
+               registered_actions.begin(), registered_actions.end(),
     [this, &event]( const std::string & action ) {
         return action_uses_input( action, event ) ? get_action_name( action ) : std::string();
     } );
@@ -665,9 +665,9 @@ const std::string TIMEOUT = "TIMEOUT";
 
 const std::string &input_context::input_to_action( const input_event& inp ) const
 {
-for( auto &elem : registered_actions ) {
-    const std::string &action = elem;
-    const std::vector<input_event> &check_inp = inp_mngr.get_input_for_action( action, category );
+    for( auto &elem : registered_actions ) {
+        const std::string &action = elem;
+        const std::vector<input_event> &check_inp = inp_mngr.get_input_for_action( action, category );
 
         // Does this action have our queried input event in its keybindings?
         for( auto& check_inp_i : check_inp ) {
@@ -847,16 +847,16 @@ std::string input_context::get_desc(
     const input_event_filter& evt_filter ) const
 {
     return get_desc( action_descriptor, text, evt_filter,
-           to_translation(
-           //~ %1$s: action description text before key,
-           //~ %2$s: key description,
-           //~ %3$s: action description text after key.
-           "keybinding", "%1$s(%2$s)%3$s" ),
-    to_translation(
-    // \u00A0 is the non-breaking space
-    //~ %1$s: key description,
-    //~ %2$s: action description.
-    "keybinding", "[%1$s]\u00A0%2$s" ) );
+                     to_translation(
+                         //~ %1$s: action description text before key,
+                         //~ %2$s: key description,
+                         //~ %3$s: action description text after key.
+                         "keybinding", "%1$s(%2$s)%3$s" ),
+                     to_translation(
+                         // \u00A0 is the non-breaking space
+                         //~ %1$s: key description,
+                         //~ %2$s: action description.
+                         "keybinding", "[%1$s]\u00A0%2$s" ) );
 }
 
 std::string input_context::describe_key_and_name(
@@ -1160,7 +1160,7 @@ action_id input_context::display_menu( const bool permit_execute_action )
     legend += colorize( _( "Keybinding active globally" ), global_key ) + "\n";
     legend += string_format(
                   _( "Press %c to remove keybinding\nPress %c to add local keybinding\nPress %c to add "
-                     "global keybinding\n" ),
+       "global keybinding\n" ),
                   fallback_keys.at( fallback_action::remove ), fallback_keys.at( fallback_action::add_local ),
                   fallback_keys.at( fallback_action::add_global ) );
     if( permit_execute_action ) {
@@ -1377,7 +1377,7 @@ action_id input_context::display_menu( const bool permit_execute_action )
                 if( has_conflicts ) {
                     resolve_conflicts = query_yn(
                                             _( "This key conflicts with %s. Remove this key from the "
-                                               "conflicting command(s), and continue?" ),
+                       "conflicting command(s), and continue?" ),
                                             conflicts.c_str() );
                 }
 

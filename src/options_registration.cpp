@@ -137,9 +137,9 @@ void options_manager::add_options_general()
 
         add( "MERGE_COMESTIBLES_THRESHOLD", general, translate_marker( "Freshness similarity threshold" ),
              translate_marker( "Limit maximum allowed staleness difference when merging comestibles."
-                               "  The lower the value, the more similar the items must be to merge."
-                               "  0.0: Only merge identical items."
-                               "  1.0: Merge comestibles regardless of its freshness."
+                          "  The lower the value, the more similar the items must be to merge."
+                          "  0.0: Only merge identical items."
+                          "  1.0: Merge comestibles regardless of its freshness."
                              ),
              0.0, 1.0, 0.25, 0.05 );
 
@@ -529,7 +529,7 @@ void options_manager::add_options_interface()
 
     add( "USE_PINYIN_SEARCH", interface, translate_marker( "Use pinyin in search" ),
          translate_marker( "If true, pinyin can be used in searching and filtering Chinese text.  "
-                           "May slow down searches with many entries." ),
+                      "May slow down searches with many entries." ),
          false
        );
 
@@ -588,7 +588,7 @@ void options_manager::add_options_interface()
     add( "AUTOSELECT_SINGLE_VALID_TARGET", interface,
          translate_marker( "Autoselect if exactly one valid target" ),
          translate_marker( "If true, directional actions ( like \"Examine\", \"Open\", \"Pickup\" ) "
-                           "will autoselect an adjacent tile if there is exactly one valid target." ),
+                      "will autoselect an adjacent tile if there is exactly one valid target." ),
          true
        );
 
@@ -1138,8 +1138,8 @@ void options_manager::add_options_graphics()
 
     add( "USE_CHARACTER_PREVIEW", graphics, translate_marker( "Enable character preview window" ),
          translate_marker( "If true, shows character preview window in traits tab on character creation.  "
-                           "While having a window press 'z'/'Z' to perform zoom-in/zoom-out.  "
-                           "Press 'C' to toggle clothes preview" ),
+                      "While having a window press 'z'/'Z' to perform zoom-in/zoom-out.  "
+                      "Press 'C' to toggle clothes preview" ),
          true, COPT_CURSES_HIDE
        );
 
@@ -1367,9 +1367,9 @@ void options_manager::add_options_performance()
              is_android ? true : false );
         add( "SLEEP_SKIP_NPC", page_id, translate_marker( "Skip NPC Movement" ),
              translate_marker( "NPCs are forced to sleep alongside the player, skipping movement "
-                               "but still processing rest recovery (fatigue reduction, healing, etc.).  "
-                               "NPCs with non-interruptible activities (e.g. surgery) are frozen "
-                               "for the turn instead." ),
+                          "but still processing rest recovery (fatigue reduction, healing, etc.).  "
+                          "NPCs with non-interruptible activities (e.g. surgery) are frozen "
+                          "for the turn instead." ),
              is_android ? true : false );
     } );
 
@@ -1381,74 +1381,74 @@ void options_manager::add_options_performance()
         add( "MONSTER_LOD_ENABLED", page_id,
              translate_marker( "Enable Monster LOD" ),
              translate_marker( "Enable level-of-detail processing for monsters.  "
-                               "When enabled, distant or wandering monsters are assigned "
-                               "AI tiers. Higher tiers are processed less often and skip certain functions.  "
-                               "When disabled, every monster runs full AI every turn regardless of distance." ),
+                          "When enabled, distant or wandering monsters are assigned "
+                          "AI tiers. Higher tiers are processed less often and skip certain functions.  "
+                          "When disabled, every monster runs full AI every turn regardless of distance." ),
              true );
         add( "LOD_ACTION_BUDGET", page_id,
              translate_marker( "Action Budget" ),
              translate_marker( "Minimum number of monsters that enter the move loop per turn.  "
-                               "The actual budget is the larger of this value and the current Tier-0 "
-                               "(full-AI) monster count, so full-AI monsters are never skipped.  "
-                               "Higher values process more distant monsters each turn.  "
-                               "0 means only Tier-0 monsters run (no extra Tier-1 budget)." ),
+                          "The actual budget is the larger of this value and the current Tier-0 "
+                          "(full-AI) monster count, so full-AI monsters are never skipped.  "
+                          "Higher values process more distant monsters each turn.  "
+                          "0 means only Tier-0 monsters run (no extra Tier-1 budget)." ),
              32, 2048, is_android ? 96 : 128 );
         add( "LOD_MACRO_INTERVAL", page_id,
              translate_marker( "Macro Step Interval" ),
              translate_marker( "How many turns elapse between movement steps for Tier-2 (distant wandering) "
-                               "monsters.  At 1 they step every turn; at 3 (default) they step once every "
-                               "3 turns.  Higher values reduce CPU cost for distant hordes." ),
+                          "monsters.  At 1 they step every turn; at 3 (default) they step once every "
+                          "3 turns.  Higher values reduce CPU cost for distant hordes." ),
              1, 8, is_android ? 3 : 4 );
         add( "LOD_TIER_FULL_DIST", page_id,
              translate_marker( "Full AI Radius" ),
              translate_marker( "Monsters within this radius run the complete AI every turn.  "
-                               "Must be less than the Coarse AI Radius." ),
+                          "Must be less than the Coarse AI Radius." ),
              5, 208, is_android ? 20 : 30 );
         add( "LOD_TIER_COARSE_DIST", page_id,
              translate_marker( "Coarse AI Radius" ),
              translate_marker( "Monsters between the Full AI Radius and this distance use cached "
-                               "paths and skip expensive faction queries.  Monsters beyond this "
-                               "distance are Tier-2 (macro step only)." ),
+                          "paths and skip expensive faction queries.  Monsters beyond this "
+                          "distance are Tier-2 (macro step only)." ),
              10, 208, is_android ? 40 : 75 );
         add( "LOD_DEMOTION_COOLDOWN", page_id,
              translate_marker( "Demotion Cooldown" ),
              translate_marker( "Turns a monster must wait after being promoted to a higher-fidelity "
-                               "tier before it can be demoted again.  Prevents rapid tier oscillation "
-                               "at distance boundaries.  0 disables the cooldown." ),
+                          "tier before it can be demoted again.  Prevents rapid tier oscillation "
+                          "at distance boundaries.  0 disables the cooldown." ),
              0, 10, 3 );
         add( "LOD_COARSE_SCENT_INTERVAL", page_id,
              translate_marker( "Coarse Scent Check Interval" ),
              translate_marker( "How many turns elapse between scent-tracking checks for Tier-1 (coarse) "
-                               "monsters.  At 1 they check scent every turn (full fidelity); at 3 (default) "
-                               "only once every 3 turns. " ),
+                          "monsters.  At 1 they check scent every turn (full fidelity); at 3 (default) "
+                          "only once every 3 turns. " ),
              1, 5, is_android ? 3 : 4 );
         add( "LOD_GROUP_MORALE_MAX_TIER", page_id,
              translate_marker( "Group Morale Max Tier" ),
              translate_marker( "Highest LOD tier that participates in group-morale and swarming calculations.  "
-                               "0 = Tier-0 only (default, cheapest).  1 = Tier-0 and Tier-1 monsters also "
-                               "run group-morale/swarm checks. " ),
+                          "0 = Tier-0 only (default, cheapest).  1 = Tier-0 and Tier-1 monsters also "
+                          "run group-morale/swarm checks. " ),
              0, 1, 0 );
         add( "ACTIVITY_SKIP_MONSTER_LOD_GATE", page_id,
              translate_marker( "Activity Skip Monster Gate" ),
              translate_marker( "Highest real monster LOD tier allowed to run activity-skip AI.  "
-                               "Allowed monsters act one LOD tier less detailed than normal.  "
-                               "0 lets only Tier-0 monsters act as Tier-1.  "
-                               "1 lets Tier-0 and Tier-1 monsters act as Tier-1 and Tier-2, "
-                               "which is the default.  2 also lets Tier-2 monsters run macro AI." ),
+                          "Allowed monsters act one LOD tier less detailed than normal.  "
+                          "0 lets only Tier-0 monsters act as Tier-1.  "
+                          "1 lets Tier-0 and Tier-1 monsters act as Tier-1 and Tier-2, "
+                          "which is the default.  2 also lets Tier-2 monsters run macro AI." ),
              0, 2, 1 );
         add( "LOD_Z_PENALTY", page_id,
              translate_marker( "Z-Level Distance Penalty" ),
              translate_marker( "Extra distance added per z-level when assigning monster AI tiers.  "
-                               "Higher values push off-z monsters into coarser tiers faster.  "
-                               "Monsters one floor away always keep full AI regardless of this value." ),
+                          "Higher values push off-z monsters into coarser tiers faster.  "
+                          "Monsters one floor away always keep full AI regardless of this value." ),
              0, 100, 16 );
         add( "LOD_LIFECYCLE_STRIDE", page_id,
              translate_marker( "Lifecycle Stride" ),
              translate_marker( "How many turns between lifecycle processing (item processing, effects, "
-                               "field damage) for distant off-z Tier-2 monsters.  At 1 they process every "
-                               "turn (disabled).  Higher values reduce CPU cost for off-z hordes on "
-                               "field-free submaps.  Off-z monsters on field-containing submaps always "
-                               "process every turn regardless of this setting." ),
+                          "field damage) for distant off-z Tier-2 monsters.  At 1 they process every "
+                          "turn (disabled).  Higher values reduce CPU cost for off-z hordes on "
+                          "field-free submaps.  Off-z monsters on field-containing submaps always "
+                          "process every turn regardless of this setting." ),
              1, 10, is_android ? 6 : 4 );
     } );
 
@@ -1469,48 +1469,48 @@ void options_manager::add_options_performance()
         add( "NPC_LOD_ENABLED", page_id,
              translate_marker( "NPC LOD Enabled" ),
              translate_marker( "If true, NPC AI fidelity decreases with distance from the player.  "
-                               "Close NPCs run full AI; distant NPCs run progressively coarser AI.  "
-                               "Companions and visible NPCs always run full AI regardless." ),
+                          "Close NPCs run full AI; distant NPCs run progressively coarser AI.  "
+                          "Companions and visible NPCs always run full AI regardless." ),
              true
            );
         add( "NPC_TIER0_DIST", page_id,
              translate_marker( "Full AI Radius" ),
              translate_marker( "NPCs within this radius run the complete AI every turn.  "
-                               "Must be less than the Coarse AI Radius.  "
-                               "Companions always run full AI regardless of distance." ),
+                          "Must be less than the Coarse AI Radius.  "
+                          "Companions always run full AI regardless of distance." ),
              5, 208, is_android ? 20 : 30 );
         add( "NPC_TIER1_DIST", page_id,
              translate_marker( "Coarse AI Radius" ),
              translate_marker( "NPCs between the Full AI Radius and this distance run coarse AI: "
-                               "process_turn and move loop every turn, but monster-danger scanning "
-                               "runs less frequently (see NPC Coarse Danger Interval).  "
-                               "NPCs beyond this distance are Tier-2 (process_turn only, no move loop)." ),
+                          "process_turn and move loop every turn, but monster-danger scanning "
+                          "runs less frequently (see NPC Coarse Danger Interval).  "
+                          "NPCs beyond this distance are Tier-2 (process_turn only, no move loop)." ),
              10, 208, is_android ? 40 : 75 );
         add( "NPC_DEMOTION_COOLDOWN", page_id,
              translate_marker( "Demotion Cooldown" ),
              translate_marker( "Turns an NPC must wait after being promoted to a higher-fidelity "
-                               "tier before it can be demoted again.  Prevents rapid tier oscillation "
-                               "at distance boundaries.  0 disables the cooldown." ),
+                          "tier before it can be demoted again.  Prevents rapid tier oscillation "
+                          "at distance boundaries.  0 disables the cooldown." ),
              0, 10, 3 );
         add( "NPC_ACTION_BUDGET", page_id,
              translate_marker( "Action Budget" ),
              translate_marker( "Maximum number of non-follower NPCs that can enter the full move loop "
-                               "each turn.  When the budget is exceeded, the farthest NPCs are deferred "
-                               "to the next turn.  Followers and visible NPCs are always processed "
-                               "regardless of budget.  0 disables the budget cap." ),
+                          "each turn.  When the budget is exceeded, the farthest NPCs are deferred "
+                          "to the next turn.  Followers and visible NPCs are always processed "
+                          "regardless of budget.  0 disables the budget cap." ),
              0, 128, is_android ? 8 : 16 );
         add( "NPC_COARSE_DANGER_INTERVAL", page_id,
              translate_marker( "Coarse Danger Scan Interval" ),
              translate_marker( "How many turns between full monster-danger scans for Tier-1 (coarse) "
-                               "NPCs.  At 1 they scan every turn (full fidelity); at 5 (default) they "
-                               "scan only once every 5 turns, reusing cached danger between scans." ),
+                          "NPCs.  At 1 they scan every turn (full fidelity); at 5 (default) they "
+                          "scan only once every 5 turns, reusing cached danger between scans." ),
              1, 20, is_android ? 8 : 5 );
         add( "NPC_MACRO_INTERVAL", page_id,
              translate_marker( "Macro Step Interval" ),
              translate_marker( "How many turns between macro-steps for Tier-2 NPCs.  "
-                               "At 1 they step every turn (disabled macro AI); at 3 (default) they "
-                               "take a single reposition step once every 3 turns.  "
-                               "Higher values reduce CPU cost for distant NPCs." ),
+                          "At 1 they step every turn (disabled macro AI); at 3 (default) they "
+                          "take a single reposition step once every 3 turns.  "
+                          "Higher values reduce CPU cost for distant NPCs." ),
              1, 10, is_android ? 4 : 3 );
     } );
 
@@ -1525,23 +1525,23 @@ void options_manager::add_options_performance()
 
     add_option_group( performance, Group( "vehicle", to_translation( "Vehicle Throttling" ),
                                           to_translation( "Configure vehicle processing stride to reduce CPU cost "
-                                                  "for parked and off-z vehicles." ) ),
+                    "for parked and off-z vehicles." ) ),
     [&]( auto & page_id ) {
         add( "VEHICLE_IDLE_STRIDE", page_id,
              translate_marker( "Idle Stride" ),
              translate_marker( "How many turns between idle() calls for parked vehicles "
-                               "(engine off, not moving, no reactor, not player-controlled).  "
-                               "At 1 they process every turn (disabled).  Higher values reduce "
-                               "CPU cost for many parked vehicles at the cost of battery-level "
-                               "precision, which lags by up to K-1 turns." ),
+        "(engine off, not moving, no reactor, not player-controlled).  "
+        "At 1 they process every turn (disabled).  Higher values reduce "
+        "CPU cost for many parked vehicles at the cost of battery-level "
+        "precision, which lags by up to K-1 turns." ),
              1, 20, 5 );
         add( "VEHICLE_OUTER_STRIDE", page_id,
              translate_marker( "Outer Loop Stride" ),
              translate_marker( "How many turns between gain_moves/slow_leak processing for "
-                               "off-z parked vehicles (engine off, not moving, on a different "
-                               "z-level than the player).  At 1 they process every turn "
-                               "(disabled).  Higher values reduce CPU cost for many off-z "
-                               "parked vehicles." ),
+                          "off-z parked vehicles (engine off, not moving, on a different "
+                          "z-level than the player).  At 1 they process every turn "
+                          "(disabled).  Higher values reduce CPU cost for many off-z "
+                          "parked vehicles." ),
              1, 10, 2 );
     } );
 
@@ -1552,16 +1552,16 @@ void options_manager::add_options_performance()
 
     add_option_group( performance, Group( "item_processing", to_translation( "Item Processing" ),
                                           to_translation( "Configure item processing stride to reduce CPU cost "
-                                                  "for off-z-level items." ) ),
+                    "for off-z-level items." ) ),
     [&]( auto & page_id ) {
         add( "ITEM_PROCESS_STRIDE", page_id,
              translate_marker( "Item Process Stride" ),
              translate_marker( "How many turns between processing off-z submap active items.  "
-                               "At 1 they process every turn (disabled).  Higher values reduce "
-                               "CPU cost for off-z items at the cost of delayed per-turn side "
-                               "effects (emissions, tool drain, LITCIG).  "
-                               "Time-critical items (explosives, countdown items) always process "
-                               "every turn regardless of stride." ),
+        "At 1 they process every turn (disabled).  Higher values reduce "
+        "CPU cost for off-z items at the cost of delayed per-turn side "
+        "effects (emissions, tool drain, LITCIG).  "
+        "Time-critical items (explosives, countdown items) always process "
+        "every turn regardless of stride." ),
              1, 10, 1 );
     } );
 
@@ -1609,9 +1609,9 @@ void options_manager::add_options_performance()
     add( "SKEW_VISION_CACHE_SIZE", performance,
          translate_marker( "LOS Cache Size" ),
          translate_marker( "Maximum number of line-of-sight results kept in the skew-vision LRU cache.  "
-                           "Higher values reduce redundant ray traces at the cost of more RAM.  "
-                           "Reduce if memory is tight; increase on machines with spare RAM and many "
-                           "on-screen creatures." ),
+                      "Higher values reduce redundant ray traces at the cost of more RAM.  "
+                      "Reduce if memory is tight; increase on machines with spare RAM and many "
+                      "on-screen creatures." ),
          1024, 4194304, is_android ? 65536 : 262144 );
 
     add_empty_line();
@@ -1622,45 +1622,45 @@ void options_manager::add_options_performance()
         add( "MULTITHREADING_ENABLED", page_id,
              translate_marker( "Enable Multithreading" ),
              translate_marker( "Enable worker-thread parallelism for expensive per-turn computations "
-                               "(monster planning, map-cache building, scent map updates, etc).  "
-                               "Disable to run everything on the main thread — useful for debugging, "
-                               "reproducibility testing, or machines where thread overhead exceeds gain.  "
-                               "Requires restart." ),
+                          "(monster planning, map-cache building, scent map updates, etc).  "
+                          "Disable to run everything on the main thread — useful for debugging, "
+                          "reproducibility testing, or machines where thread overhead exceeds gain.  "
+                          "Requires restart." ),
              !is_android );
         add( "THREAD_POOL_WORKERS", page_id,
              translate_marker( "Thread Pool Worker Count" ),
              translate_marker( "Number of worker threads in the persistent thread pool.  "
-                               "0 means automatic (hardware concurrency minus 1, leaving one core for "
-                               "the main/SDL thread).  Set to a lower value to cap CPU usage, e.g. when "
-                               "streaming or running other CPU-heavy applications alongside the game.  "
-                               "Requires restart." ),
+                          "0 means automatic (hardware concurrency minus 1, leaving one core for "
+                          "the main/SDL thread).  Set to a lower value to cap CPU usage, e.g. when "
+                          "streaming or running other CPU-heavy applications alongside the game.  "
+                          "Requires restart." ),
              0, 64, 0 );
         add( "PARALLEL_MONSTER_PLANNING", page_id,
              translate_marker( "Parallel Monster Planning" ),
              translate_marker( "Compute monster AI plans (pathfinding target selection, LOS queries) in "
-                               "parallel across worker threads each turn.  Disable if monsters behave "
-                               "unexpectedly or for reproducible save-file testing.  Requires restart." ),
+                          "parallel across worker threads each turn.  Disable if monsters behave "
+                          "unexpectedly or for reproducible save-file testing.  Requires restart." ),
              true );
         add( "MONSTER_PLAN_CHUNK_SIZE", page_id,
              translate_marker( "Monster Plan Chunk Size" ),
              translate_marker( "Number of monsters batched into a single worker-thread task during the "
-                               "parallel planning pass.  Smaller values improve load balancing when "
-                               "planning cost varies widely (large hordes with mixed sight ranges); "
-                               "larger values reduce task-dispatch overhead.  Requires restart." ),
+                          "parallel planning pass.  Smaller values improve load balancing when "
+                          "planning cost varies widely (large hordes with mixed sight ranges); "
+                          "larger values reduce task-dispatch overhead.  Requires restart." ),
              1, 64, 8 );
         add( "PARALLEL_MAP_CACHE", page_id,
              translate_marker( "Parallel Map Cache Build" ),
              translate_marker( "Build per-z-level map caches (transparency, outside, floor, "
-                               "vehicle-obscured) in parallel across worker threads.  Disable on "
-                               "machines where the thread-dispatch overhead exceeds the benefit "
-                               "(typically dual-core systems or when z-levels are disabled).  "
-                               "Requires restart." ),
+                          "vehicle-obscured) in parallel across worker threads.  Disable on "
+                          "machines where the thread-dispatch overhead exceeds the benefit "
+                          "(typically dual-core systems or when z-levels are disabled).  "
+                          "Requires restart." ),
              true );
         add( "PARALLEL_SCENT_UPDATE", page_id,
              translate_marker( "Parallel Scent Update" ),
              translate_marker( "Compute the scent-diffusion Y-pass and X-pass across worker threads.  "
-                               "Disable on machines where the ~70 k-cell work unit is too small to "
-                               "amortize dispatch latency.  Requires restart." ),
+                          "Disable on machines where the ~70 k-cell work unit is too small to "
+                          "amortize dispatch latency.  Requires restart." ),
              true );
     } );
 
@@ -1678,17 +1678,17 @@ void options_manager::add_options_performance()
         add( "REALITY_BUBBLE_SIZE", page_id,
              translate_marker( "Reality Bubble Size" ),
              translate_marker( "Submap radius of the reality bubble (submaps visible beyond your position). "
-                               "Grid size = 2 × size + 3 submaps per side (size 4 → 11×11, legacy default). "
-                               "Maximum player sight range = 12 × (size + 1) tiles.  "
-                               "Larger values increase the loaded area and memory usage; "
-                               "smaller values reduce both. " ),
+                          "Grid size = 2 × size + 3 submaps per side (size 4 → 11×11, legacy default). "
+                          "Maximum player sight range = 12 × (size + 1) tiles.  "
+                          "Larger values increase the loaded area and memory usage; "
+                          "smaller values reduce both. " ),
              0, REALITY_BUBBLE_SIZE_MAX, is_android ? 4 : 6 );
         add( "VISIBILITY_SCALING", page_id,
              translate_marker( "Visibility Scaling" ),
              translate_marker( "Controls how clear-air visibility attenuation scales with the reality bubble.  "
-                               "Perfect scales directly with the current bubble size.  Smart keeps visibility "
-                               "near the size 6 baseline while still giving small bubbles less range and large "
-                               "bubbles more range.  None keeps visibility at the size 6 baseline and only uses "
+                          "Perfect scales directly with the current bubble size.  Smart keeps visibility "
+                          "near the size 6 baseline while still giving small bubbles less range and large "
+                          "bubbles more range.  None keeps visibility at the size 6 baseline and only uses "
         "bubble size as a hard view cap." ), {
             { "perfect", translate_marker( "Perfect Scale" ) },
             { "smart", translate_marker( "Smart Scale" ) },
@@ -1697,51 +1697,51 @@ void options_manager::add_options_performance()
         add( "LAZY_BORDER", page_id,
              translate_marker( "Pre-load Border" ),
              translate_marker( "Preload a one-overmap-tile border around the reality bubble over several turns.  "
-                               "This reduces map-shift hitches at the cost of extra per-turn loading work and    "
-                               "some additional memory usage." ),
+                          "This reduces map-shift hitches at the cost of extra per-turn loading work and    "
+                          "some additional memory usage." ),
              !is_android );
         add( "ACTIVITY_MOBILE_BUBBLE_SIZE", page_id,
              translate_marker( "Mobile Activity Bubble Size" ),
              translate_marker( "Shrink the reality bubble to this radius while the player is performing a "
-                               "mobile activity (crafting, construction, etc.).  "
-                               "0 disables the feature.  Must be smaller than Reality Bubble Size to take effect." ),
+                          "mobile activity (crafting, construction, etc.).  "
+                          "0 disables the feature.  Must be smaller than Reality Bubble Size to take effect." ),
              0, REALITY_BUBBLE_SIZE_MAX, is_android ? 3 : 4 );
         add( "ACTIVITY_IDLE_BUBBLE_SIZE", page_id,
              translate_marker( "Idle Activity Bubble Size" ),
              translate_marker( "Shrink the reality bubble to this radius while the player is performing an "
-                               "idle activity (sleeping, reading, waiting, etc.).  "
-                               "0 disables the feature.  Must be smaller than Reality Bubble Size to take effect." ),
+                          "idle activity (sleeping, reading, waiting, etc.).  "
+                          "0 disables the feature.  Must be smaller than Reality Bubble Size to take effect." ),
              0, REALITY_BUBBLE_SIZE_MAX, is_android ? 2 : 3 );
         add( "UNDERGROUND_BUBBLE_SIZE", page_id,
              translate_marker( "Underground Reality Bubble Size" ),
              translate_marker( "Shrink the reality bubble to this radius while the player is underground "
-                               "and indoors (no sky visible).  "
-                               "0 disables the feature.  Must be smaller than Reality Bubble Size to take effect." ),
+                          "and indoors (no sky visible).  "
+                          "0 disables the feature.  Must be smaller than Reality Bubble Size to take effect." ),
              0, REALITY_BUBBLE_SIZE_MAX, is_android ? 2 : 4 );
         add( "VEHICLE_BUBBLE_SIZE", page_id,
              translate_marker( "Vehicle Reality Bubble Size" ),
              translate_marker( "Shrink the reality bubble to this radius while the player is actively driving a vehicle  "
-                               "or mounted on a creature. Useful with a high render distance to reduce lag at speed.  "
-                               "0 disables the feature.  Must be smaller than Reality Bubble Size to take effect." ),
+                          "or mounted on a creature. Useful with a high render distance to reduce lag at speed.  "
+                          "0 disables the feature.  Must be smaller than Reality Bubble Size to take effect." ),
              0, REALITY_BUBBLE_SIZE_MAX, is_android ? 3 : 0 );
         add( "COMBAT_BUBBLE_SIZE", page_id,
              translate_marker( "Combat Reality Bubble Size" ),
              translate_marker( "Shrink the reality bubble to this radius while hostile creatures are visible nearby.  "
-                               "Uses the same detection range as safe mode.  "
-                               "0 disables the feature.  Must be smaller than Reality Bubble Size to take effect." ),
+                          "Uses the same detection range as safe mode.  "
+                          "0 disables the feature.  Must be smaller than Reality Bubble Size to take effect." ),
              0, REALITY_BUBBLE_SIZE_MAX, 0 );
         add( "ACTIVITY_BUBBLE_GRACE", page_id,
              translate_marker( "Activity Bubble Grace Period" ),
              translate_marker( "Minimum length of activity in minutes before the reality bubble shrinks.  "
-                               "Acts as a safety net to avoid unnecessary resizes for short tasks.  "
-                               "Default is 5 minutes." ),
+                          "Acts as a safety net to avoid unnecessary resizes for short tasks.  "
+                          "Default is 5 minutes." ),
              1, 60, 5 );
         add( "DYNAMIC_BUBBLE_GRACE", page_id,
              translate_marker( "Dynamic Bubble Grace Period" ),
              translate_marker( "Consecutive turns a condition must be met before the reality bubble shrinks "
-                               "for underground, vehicle, and combat modes.  "
-                               "Prevents rapid resizing when briefly entering or leaving a trigger zone.  "
-                               "Default is 5 turns." ),
+                          "for underground, vehicle, and combat modes.  "
+                          "Prevents rapid resizing when briefly entering or leaving a trigger zone.  "
+                          "Default is 5 turns." ),
              1, 30, 5 );
     } );
 
@@ -1749,7 +1749,7 @@ void options_manager::add_options_performance()
 
     add_option_group( performance, Group( "submap_loading", to_translation( "Submap Loading" ),
                                           to_translation( "Configure how submaps are loaded and "
-                                                  "processed outside of the reality bubble." ) ),
+                    "processed outside of the reality bubble." ) ),
     [&]( auto & page_id ) {
         // Temporary fix for #8726: disable out-of-bubble fire spread until
         // fire-loaded submaps can safely handle vehicle state.
@@ -1774,13 +1774,13 @@ void options_manager::add_options_performance()
         add( "RETAINED_OMT_CACHE_LENGTH", page_id,
              translate_marker( "Retained Map Cache" ),
              translate_marker( "Side length of the extra overmap-terrain MRU cache. "
-                               "The retained cache budget is this value squared; lazy border "
-                               "loading is budgeted separately." ),
+        "The retained cache budget is this value squared; lazy border "
+        "loading is budgeted separately." ),
              4, 50, is_android ? 10 : 24 );
         add( "POWER_PORTAL_LOAD_RADIUS", page_id,
              translate_marker( "Power portal load radius (submaps)" ),
              translate_marker( "Radius in submaps around each end of a power-portal link that is "
-                               "force-loaded while the link is active." ),
+                          "force-loaded while the link is active." ),
              0, static_cast<int>( REALITY_BUBBLE_SIZE_MAX ) + 1, is_android ? 2 : 3
            );
     } );
@@ -1940,10 +1940,10 @@ void options_manager::add_options_debug()
     add( "PATHFINDING_MAX_DIST", debug,
          translate_marker( "Legacy Pathfinder Distance Cap" ),
          translate_marker( "Hard cap on straight-line pathfinding distance (in tiles) for the legacy pathfinder.  "
-                           "Monsters and NPCs whose configured range exceeds this value are limited to it.  "
-                           "The old fixed map allowed at most 120 tiles end-to-end; "
-                           "the default of 96 is 50%% larger than the old per-side maximum of 60.  "
-                           "Raise this if mods require longer paths; lower it to reduce pathfinding cost at large bubble sizes." ),
+                      "Monsters and NPCs whose configured range exceeds this value are limited to it.  "
+                      "The old fixed map allowed at most 120 tiles end-to-end; "
+                      "the default of 96 is 50%% larger than the old per-side maximum of 60.  "
+                      "Raise this if mods require longer paths; lower it to reduce pathfinding cost at large bubble sizes." ),
          16, 1000, 96 );
     get_option( "PATHFINDING_MAX_DIST" ).setPrerequisite( "USE_LEGACY_PATHFINDING" );
 }
@@ -2409,8 +2409,8 @@ void options_manager::add_options_world_default()
     add( "ANIMAL_LIFE_CYCLE_SCALING", world_default,
          translate_marker( "Animal life cycle scaling" ),
          translate_marker( "Sets the time of animal reproduction and growth in percents.  "
-                           "'50' is two times faster than default, '200' is two times longer.  "
-                           "'0' automatically scales animal life cycle time to match the world's season length." ),
+                      "'50' is two times faster than default, '200' is two times longer.  "
+                      "'0' automatically scales animal life cycle time to match the world's season length." ),
          0, 1000, 0, COPT_NO_HIDE, "%i%%"
        );
 
@@ -2462,9 +2462,9 @@ void options_manager::add_options_world_default()
 
     add( "POCKET_SIMULATION_LEVEL", world_default, translate_marker( "Pocket Dimension Simulation" ),
          translate_marker( "How to handle the last visited pocket dimension. "
-                           "'Off' unloads normally. 'None' keeps loaded but frozen for fast travel. "
-                           "'Minimal' simulates fields only (fire, gas). "
-                           "'Moderate' adds vehicle systems (solar charging). "
+                      "'Off' unloads normally. 'None' keeps loaded but frozen for fast travel. "
+                      "'Minimal' simulates fields only (fire, gas). "
+                      "'Moderate' adds vehicle systems (solar charging). "
     "'Full' simulates everything including off-screen combat." ), {
         { "off", translate_marker( "Off" ) },
         { "none", translate_marker( "None (Fast Travel)" ) },

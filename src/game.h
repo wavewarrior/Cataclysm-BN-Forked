@@ -454,8 +454,7 @@ class game: public submap_load_listener
         friend class Creature_range;
 
         template <typename T>
-        class non_dead_range: public std::ranges::view_interface<non_dead_range<T>>
-        {
+        class non_dead_range: public std::ranges::view_interface<non_dead_range<T>> {
             public:
                 std::shared_ptr<std::vector<weak_ptr_fast<T>>> items;
                 non_dead_range(): items( std::make_shared<std::vector<weak_ptr_fast<T>>>() ) {}
@@ -490,9 +489,9 @@ class game: public submap_load_listener
                         }
 
                         iterator( const iterator & ) = default;
-                        iterator &operator=( const iterator & ) = default;
+                        iterator &operator = ( const iterator & ) = default;
 
-                        auto operator==( const iterator& rhs ) const -> bool { return iter == rhs.iter; }
+                        auto operator == ( const iterator& rhs ) const -> bool { return iter == rhs.iter; }
 
                         auto operator++() -> iterator& { // *NOPAD*
                             if( !data_ref ) { return *this; }
@@ -522,25 +521,22 @@ class game: public submap_load_listener
                 }
         };
 
-        class monster_range: public non_dead_range<monster>
-        {
+        class monster_range: public non_dead_range<monster> {
             public:
-                monster_range( game& game_ref );
+                monster_range( game & game_ref );
         };
 
-        class npc_range: public non_dead_range<npc>
-        {
+        class npc_range: public non_dead_range<npc> {
             public:
-                npc_range( game& game_ref );
+                npc_range( game & game_ref );
         };
 
-        class Creature_range: public non_dead_range<Creature>
-        {
+        class Creature_range: public non_dead_range<Creature> {
             private:
                 shared_ptr_fast<player> u;
 
             public:
-                Creature_range( game& game_ref );
+                Creature_range( game & game_ref );
         };
 
     public:
@@ -567,7 +563,7 @@ class game: public submap_load_listener
         std::vector<Creature *> get_creatures_if( const std::function<bool( const Creature & )> &pred );
         std::vector<npc *> get_npcs_if( const std::function<bool( const npc & )> &pred );
         std::vector<weak_ptr_fast<npc>> get_npcs_pointers_if( const std::function<bool( const npc & )>
-                                     &pred );
+                &pred );
         /**
          * Returns a creature matching a predicate. Only living (not dead) creatures
          * are checked. Returns `nullptr` if no creature matches the predicate.
@@ -870,7 +866,7 @@ class game: public submap_load_listener
         // Animation related functions
         void draw_bullet(
             const tripoint_bub_ms& t, int i, const std::vector<tripoint_bub_ms> &trajectory,
-            char bullet, const std::string& custom_sprite = {} );
+        char bullet, const std::string& custom_sprite = {} );
         void draw_hit_mon( const tripoint_bub_ms& p, const monster& m, bool dead = false );
         void draw_hit_player( const Character& p, int dam );
         void draw_line(
@@ -1143,11 +1139,10 @@ class game: public submap_load_listener
         void display_tiles_no_vfx(); // Disables tileset visual effects
 
         // prints the IRL time in ms of the last full in-game hour
-        class debug_hour_timer
-        {
+        class debug_hour_timer {
             public:
                 using IRLTimeMs =
-                    std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds>;
+                std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds>;
                 void toggle();
                 void print_time();
 
@@ -1281,19 +1276,19 @@ class game: public submap_load_listener
 
     private:
         struct TurnLosBlockerPairHash {
-            auto operator()( const std::pair<tripoint_bub_ms, tripoint_bub_ms> &p ) const noexcept
+            auto operator()( const std::pair < tripoint_bub_ms, tripoint_bub_ms > &p ) const noexcept
             -> std::size_t {
-                const auto first_hash = std::hash<tripoint_bub_ms> {}( p.first );
-                const auto second_hash = std::hash<tripoint_bub_ms> {}( p.second );
+                const auto first_hash = std::hash < tripoint_bub_ms > {}( p.first );
+                const auto second_hash = std::hash < tripoint_bub_ms > {}( p.second );
                 return first_hash ^ ( second_hash * 2654435761ULL );
             }
         };
         using turn_los_blocker_cache_t =
-            std::unordered_map<std::pair<tripoint_bub_ms, tripoint_bub_ms>, bool,
-            TurnLosBlockerPairHash>;
+            std::unordered_map < std::pair < tripoint_bub_ms, tripoint_bub_ms >, bool,
+            TurnLosBlockerPairHash >;
         turn_los_blocker_cache_t turn_los_blocker_cache_;
         std::shared_mutex turn_los_blocker_cache_mutex_;
-        shared_ptr_fast<player> u_shared_ptr;
+        shared_ptr_fast < player > u_shared_ptr;
 
         catacurses::window w_terrain_ptr;
         catacurses::window w_minimap_ptr;
@@ -1305,14 +1300,14 @@ class game: public submap_load_listener
         bool safe_mode_warning_logged = false;
         bool bVMonsterLookFire = false;
         character_id next_npc_id;
-        std::list<shared_ptr_fast<npc>> active_npc;
+        std::list < shared_ptr_fast < npc>> active_npc;
         int next_mission_id = 0;
-        std::set<character_id> follower_ids; // Keep track of follower NPC IDs
+        std::set < character_id > follower_ids; // Keep track of follower NPC IDs
         int moves_since_last_save = 0;
         int time_action_scale_turn_remainder = 0;
         bool saving_blocked_by_failed_load = false;
         time_t last_save_timestamp;
-        mutable std::array<float, OVERMAP_LAYERS> latest_lightlevels;
+        mutable std::array < float, OVERMAP_LAYERS > latest_lightlevels;
         // remoteveh() cache
         time_point remoteveh_cache_time;
         vehicle *remoteveh_cache;
@@ -1329,7 +1324,7 @@ class game: public submap_load_listener
         /** Zone manager toggle for submap grid overlay (only active while the UI is open) */
         bool zone_submap_grid_overlay = false;
 
-        std::unique_ptr<special_game> gamemode;
+        std::unique_ptr < special_game > gamemode;
 
         int user_action_counter = 0; // Times the user has input an action
 
@@ -1342,19 +1337,19 @@ class game: public submap_load_listener
         unsigned int seed = 0;
 
         // Preview for auto move route
-        std::vector<tripoint_bub_ms> destination_preview;
+        std::vector < tripoint_bub_ms > destination_preview;
 
-        std::chrono::time_point<std::chrono::steady_clock> last_mouse_edge_scroll;
+        std::chrono::time_point < std::chrono::steady_clock > last_mouse_edge_scroll;
         tripoint_rel_ms last_mouse_edge_scroll_vector_terrain;
         tripoint_rel_omt last_mouse_edge_scroll_vector_overmap;
-        std::pair<tripoint_rel_ms, tripoint_rel_ms> mouse_edge_scrolling(
+        std::pair < tripoint_rel_ms, tripoint_rel_ms > mouse_edge_scrolling(
             input_context& ctxt, int speed, const tripoint_rel_ms& last, bool iso );
-        std::pair<tripoint_rel_omt, tripoint_rel_omt> mouse_edge_scrolling(
+        std::pair < tripoint_rel_omt, tripoint_rel_omt > mouse_edge_scrolling(
             input_context& ctxt, int speed, const tripoint_rel_omt& last, bool iso );
 
-        weak_ptr_fast<ui_adaptor> main_ui_adaptor;
+        weak_ptr_fast < ui_adaptor > main_ui_adaptor;
 
-        std::unique_ptr<static_popup> wait_popup;
+        std::unique_ptr < static_popup > wait_popup;
 
     public:
         /** Used to implement mouse "edge scrolling". Returns a
@@ -1406,7 +1401,7 @@ class game: public submap_load_listener
 
         /// Metadata for all dimensions that currently have at least one submap loaded.
         /// Keyed by dimension_id.  The overworld ("") may be absent on fresh games.
-        std::unordered_map<dimension_id, dimension_info> loaded_dimensions_;
+        std::unordered_map < dimension_id, dimension_info > loaded_dimensions_;
 
         /// The dimension ID of the single "kept alive" pocket dimension.
         /// Empty = no pocket is kept.  When the player enters a new bounded pocket this
@@ -1448,9 +1443,9 @@ class game: public submap_load_listener
         int reality_bubble_radius_ = 5;
 
     private:
-        location_vector<item> fake_items;
+        location_vector < item > fake_items;
     public:
-        item *add_fake_item( detached_ptr<item>&& fake );
+        item *add_fake_item( detached_ptr < item > && fake );
         void remove_fake_item( item* it );
 };
 

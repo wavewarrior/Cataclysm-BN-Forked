@@ -235,7 +235,7 @@ auto game::unserialize( std::istream &fin ) -> bool
         data.read( "om_y", com.y );
         auto saved_reality_bubble_size = g_reality_bubble_size;
         const auto has_saved_reality_bubble_size = data.read( "reality_bubble_size",
-                saved_reality_bubble_size );
+            saved_reality_bubble_size );
         auto saved_player_abs = tripoint_abs_ms::zero();
         auto has_saved_player_abs = false;
         if( data.has_object( "player" ) ) {
@@ -948,16 +948,16 @@ void overmap::serialize_view( std::ostream &fout ) const
 struct mongroup_bin_eq {
     bool operator()( const mongroup &a, const mongroup &b ) const {
         return a.monsters.empty() &&
-        b.monsters.empty() &&
-        a.type == b.type &&
-        a.radius == b.radius &&
-        a.population == b.population &&
-        a.target == b.target &&
-        a.interest == b.interest &&
-        a.dying == b.dying &&
-        a.horde == b.horde &&
-        a.horde_behaviour == b.horde_behaviour &&
-        a.diffuse == b.diffuse;
+               b.monsters.empty() &&
+               a.type == b.type &&
+               a.radius == b.radius &&
+               a.population == b.population &&
+               a.target == b.target &&
+               a.interest == b.interest &&
+               a.dying == b.dying &&
+               a.horde == b.horde &&
+               a.horde_behaviour == b.horde_behaviour &&
+               a.diffuse == b.diffuse;
     }
 };
 
@@ -985,15 +985,15 @@ void overmap::save_monster_groups( JsonOut &jout ) const
     std::unordered_map<mongroup, std::list<tripoint_abs_sm>, mongroup_hash, mongroup_bin_eq>
     binned_groups;
     binned_groups.reserve( zg.size() );
-for( const auto &pos_group : zg ) {
-    // Each group in bin adds only position
-    // so that 100 identical groups are 1 group data and 100 tripoints
-    auto &positions = binned_groups[pos_group.second];
+    for( const auto &pos_group : zg ) {
+        // Each group in bin adds only position
+        // so that 100 identical groups are 1 group data and 100 tripoints
+        auto &positions = binned_groups[pos_group.second];
         positions.emplace_back( pos_group.second.abs_pos );
     }
 
-for( auto &group_bin : binned_groups ) {
-    jout.start_array();
+    for( auto &group_bin : binned_groups ) {
+        jout.start_array();
         // Zero the bin position so that it isn't serialized
         // The position is stored separately, in the list
         // TODO: Do it without the copy
@@ -1526,8 +1526,8 @@ void Creature_tracker::deserialize( JsonIn &jsin )
 void Creature_tracker::serialize( JsonOut &jsout ) const
 {
     jsout.start_array();
-for( const auto &monster_ptr : monsters_list ) {
-    jsout.write( *monster_ptr );
+    for( const auto &monster_ptr : monsters_list ) {
+        jsout.write( *monster_ptr );
     }
     jsout.end_array();
 }

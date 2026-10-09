@@ -31,8 +31,7 @@ struct shockwave_data {
 };
 
 // handles explosion related functions
-namespace explosion_handler
-{
+namespace explosion_handler {
 /**
  * Legacy explosion function.
  * Updated values are calculated from distance factor.

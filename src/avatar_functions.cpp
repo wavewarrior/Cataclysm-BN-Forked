@@ -286,14 +286,12 @@ void mend_item( avatar &you, item &obj, bool interactive )
                 descr += string_format( _( "Skills: %s\n" ),
                                         enumerate_as_string( method.skills.begin(), method.skills.end(),
                 [&]( const std::pair<skill_id, int> &sk ) -> std::string {
-                    if( you.get_skill_level( sk.first ) >= sk.second )
-                    {
+                    if( you.get_skill_level( sk.first ) >= sk.second ) {
                         return string_format( pgettext( "skill requirement",
                                                         //~ %1$s: skill name, %2$s: current skill level, %3$s: required skill level
                                                         "<color_cyan>%1$s</color> <color_green>(%2$d/%3$d)</color>" ),
                                               sk.first->name(), you.get_skill_level( sk.first ), sk.second );
-                    } else
-                    {
+                    } else {
                         return string_format( pgettext( "skill requirement",
                                                         //~ %1$s: skill name, %2$s: current skill level, %3$s: required skill level
                                                         "<color_cyan>%1$s</color> <color_yellow>(%2$d/%3$d)</color>" ),
@@ -433,7 +431,8 @@ void gunmod_add( avatar &you, item &gun, item &mod )
             roll *= 3; // gunsmith repair kit improves success markedly...
             risk = 0;  // ...and entirely prevents damage upon failure
         } );
-    } else {
+    }
+    else {
         prompt.addentry( -1, true, 'w', _( "Install without tools" ) );
         actions.emplace_back( [&] {} );
     }
@@ -447,7 +446,8 @@ void gunmod_add( avatar &you, item &gun, item &mod )
     do {
         requery = false;
         prompt.query();
-        if( prompt.ret < 0 ) {
+        if( prompt.ret < 0 )
+        {
             you.add_msg_if_player( _( "Never mind." ) );
             return; // player canceled installation
         }

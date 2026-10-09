@@ -433,9 +433,8 @@ detached_ptr<item> Character::dispose_item( detached_ptr<item>&& obj, const std:
         bucket ? _( "Spill contents and store in inventory" ) : _( "Store in inventory" ),
         volume_carried() + obj->volume() <= volume_capacity(), '1', item_handling_cost( *obj ),
         [this, bucket, &obj] {
-            if( bucket && !obj->spill_contents( *this ) )
-        {
-            return std::move( obj );
+            if( bucket && !obj->spill_contents( *this ) ) {
+                return std::move( obj );
             }
 
             moves -= item_handling_cost( *obj );
@@ -454,9 +453,8 @@ detached_ptr<item> Character::dispose_item( detached_ptr<item>&& obj, const std:
         bucket ? _( "Spill contents and wear item" ) : _( "Wear item" ),
         can_wear( *obj ).success(), '3', item_wear_cost( *obj ),
         [this, bucket, &obj] {
-            if( bucket && !obj->spill_contents( *this ) )
-        {
-            return std::move( obj );
+            if( bucket && !obj->spill_contents( *this ) ) {
+                return std::move( obj );
             }
 
             return wear_item( std::move( obj ) );
@@ -503,10 +501,10 @@ bool Character::dispose_item( item& obj, const std::string& prompt )
 bool Character::has_enough_charges( const item &it, bool show_msg ) const
 {
     if( !it.is_tool() || !it.ammo_required() ) {
-    return true;
-}
-if( it.is_power_armor() ) {
-    if( ( character_funcs::can_interface_armor( *this ) &&
+        return true;
+    }
+    if( it.is_power_armor() ) {
+        if( ( character_funcs::can_interface_armor( *this ) &&
               has_charges( itype_bio_armor, it.ammo_required() ) ) ||
             ( it.has_flag( flag_USE_UPS ) && has_charges( itype_UPS, it.ammo_required() ) ) ||
             it.ammo_sufficient() ) {
@@ -533,7 +531,7 @@ if( it.is_power_armor() ) {
         return false;
     }
     if( it.has_flag( flag_USE_UPS ) ) {
-    if( has_charges( itype_UPS, it.ammo_required() ) || it.ammo_sufficient() ) {
+        if( has_charges( itype_UPS, it.ammo_required() ) || it.ammo_sufficient() ) {
             return true;
         }
         if( show_msg ) {
@@ -545,7 +543,7 @@ if( it.is_power_armor() ) {
         }
         return false;
     } else if( !it.ammo_sufficient() ) {
-    if( show_msg ) {
+        if( show_msg ) {
             add_msg_if_player( m_info,
                                vgettext( "Your %s has %d charge but needs %d.",
                                          "Your %s has %d charges but needs %d.",
@@ -809,19 +807,23 @@ std::vector<detached_ptr<item>> Character::use_charges( const itype_id &what, in
     if( qty <= 0 ) {
         return res;
 
-    } else if( what == itype_voltmeter_bionic ) {
+    }
+    else if( what == itype_voltmeter_bionic ) {
         mod_power_level( units::from_kilojoule( -qty ) );
         return res;
 
-    } else if( what == itype_toolset ) {
+    }
+    else if( what == itype_toolset ) {
         mod_power_level( units::from_kilojoule( -qty ) );
         return res;
 
-    } else if( what == itype_fire ) {
+    }
+    else if( what == itype_fire ) {
         use_fire( qty );
         return res;
 
-    } else if( what == itype_bio_armor ) {
+    }
+    else if( what == itype_bio_armor ) {
         float mod_qty = 0;
         float efficiency = 1;
         for( const bionic& bio : get_bionic_collection() ) {
@@ -836,7 +838,8 @@ std::vector<detached_ptr<item>> Character::use_charges( const itype_id &what, in
         mod_power_level( units::from_kilojoule( -mod_qty ) );
         return res;
 
-    } else if( what == itype_UPS ) {
+    }
+    else if( what == itype_UPS ) {
         if( is_mounted() && mounted_creature.get()->has_flag( MF_RIDEABLE_MECH )
             && mounted_creature.get()->get_battery_item() ) {
             auto mons = mounted_creature.get();
@@ -927,16 +930,20 @@ std::vector<detached_ptr<item>> Character::use_charges( const itype_id &what, in
     return res;
 }
 
-bool Character::has_fire( const int quantity ) const
-{
+bool Character::has_fire( const int quantity ) const {
     // TODO: Replace this with a "tool produces fire" flag.
 
-    if( get_map().has_nearby_fire( bub_pos() ) ) {
-    return true;
-} else if( has_item_with_flag( flag_FIRE ) ) {
-    return true;
-} else if( has_item_with_flag( flag_FIRESTARTER ) ) {
-    auto firestarters = all_items_with_flag( flag_FIRESTARTER );
+    if( get_map().has_nearby_fire( bub_pos() ) )
+    {
+        return true;
+    }
+    else if( has_item_with_flag( flag_FIRE ) )
+    {
+        return true;
+    }
+    else if( has_item_with_flag( flag_FIRESTARTER ) )
+    {
+        auto firestarters = all_items_with_flag( flag_FIRESTARTER );
         for( auto &i : firestarters ) {
             if( !i->type->can_have_charges() ) {
                 const use_function *usef = i->type->get_use( "firestarter" );
@@ -954,19 +961,23 @@ bool Character::has_fire( const int quantity ) const
                 return true;
             }
         }
-    } else if( has_active_bionic( bio_tools ) && get_power_level() >= quantity * 5_kJ ) {
-    return true;
-} else if( has_bionic( bio_lighter ) &&
-               get_power_level() >= quantity * bio_lighter->power_activate ) {
-    return true;
-} else if( has_bionic( bio_laser ) &&
-               get_power_level() >= quantity * bio_laser->power_activate ) {
-    return true;
-} else if( is_npc() ) {
-    // HACK: A hack to make NPCs use their Molotovs
-    return true;
-}
-return false;
+    } else if( has_active_bionic( bio_tools ) && get_power_level() >= quantity * 5_kJ )
+    {
+        return true;
+    } else if( has_bionic( bio_lighter ) &&
+               get_power_level() >= quantity * bio_lighter->power_activate )
+    {
+        return true;
+    } else if( has_bionic( bio_laser ) &&
+               get_power_level() >= quantity * bio_laser->power_activate )
+    {
+        return true;
+    } else if( is_npc() )
+    {
+        // HACK: A hack to make NPCs use their Molotovs
+        return true;
+    }
+    return false;
 }
 
 void Character::mod_painkiller( int npkill ) { set_painkiller( pkill + npkill ); }

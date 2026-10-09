@@ -30,8 +30,9 @@ struct sound_wave_instance {
     float radius_px; // current wavefront radius in pixels
     float life;      // 0..1 fade curve
 };
-static_assert(sizeof(sound_wave_instance) == 16,
-              "sound_wave_instance must be 16 bytes (wire-stable with vert shader)");
+static_assert(
+    sizeof(sound_wave_instance) == 16,
+    "sound_wave_instance must be 16 bytes (wire-stable with vert shader)");
 // Fragment cbuffer for SDF diffraction modulation (b0/space3).
 // Pushed with SDL_PushGPUFragmentUniformData each record().
 struct alignas(16) snd_frag_params {
@@ -44,8 +45,9 @@ struct alignas(16) snd_frag_params {
     std::uint32_t sdf_map_w;
     std::uint32_t sdf_map_h;
 };
-static_assert(sizeof(snd_frag_params) == 32,
-              "snd_frag_params must be 32 bytes (wire-stable with snd_frag.frag.hlsl)");
+static_assert(
+    sizeof(snd_frag_params) == 32,
+    "snd_frag_params must be 32 bytes (wire-stable with snd_frag.frag.hlsl)");
 
 // Per-record parameters for sound wave rendering.
 struct sound_wave_record_options {
@@ -72,8 +74,7 @@ public:
 
     auto shutdown() noexcept -> void;
 
-    auto ready() const noexcept -> bool
-    {
+    auto ready() const noexcept -> bool {
         return dev_ != nullptr && pipeline_ != nullptr && storage_ != nullptr && xfer_ != nullptr;
     }
 
@@ -82,8 +83,8 @@ public:
 
 private:
     // Upload instance array to GPU storage buffer via transfer buffer.
-    auto upload_instances(
-        SDL_GPUCommandBuffer* cb, const std::vector<sound_wave_instance>& insts) -> bool;
+    auto upload_instances(SDL_GPUCommandBuffer* cb, const std::vector<sound_wave_instance>& insts)
+        -> bool;
 
     gpu_device* dev_ = nullptr;
     SDL_GPUTextureFormat target_format_ = SDL_GPU_TEXTUREFORMAT_INVALID;

@@ -672,11 +672,11 @@ auto has_hooks( std::string_view hook_name, const hook_opts &opts ) -> bool
 }
 
 
-auto get_hook_results( const sol::table &hook_results ) -> std::vector<sol::object>
-{
+auto get_hook_results( const sol::table &hook_results ) -> std::vector<sol::object> {
     std::vector<sol::object> results_vec;
     const int n = hook_results.size();
-    for( int i = 1; i <= n; ++i ) {
+    for( int i = 1; i <= n; ++i )
+    {
         sol::optional<sol::table> wrapper = hook_results[i];
         if( !wrapper ) { continue; }
 
@@ -720,17 +720,20 @@ auto run_hooks( std::string_view hook_name,
         const hook_entry &e = entries[i];
         try {
             const sol::object obj = hooks.get_or<sol::object>( e.index, sol::lua_nil );
-            if( obj == sol::lua_nil ) {
+            if( obj == sol::lua_nil )
+            {
                 ++i;
                 continue;
             }
 
             sol::protected_function func;
-            if( e.is_table ) {
+            if( e.is_table )
+            {
                 const sol::table tbl = obj.as<sol::table>();
                 const sol::object hook_obj = tbl.get_or<sol::object>( "fn", sol::lua_nil );
                 func = hook_obj.as<sol::protected_function>();
-            } else {
+            } else
+            {
                 func = obj.as<sol::protected_function>();
             }
 
@@ -738,7 +741,8 @@ auto run_hooks( std::string_view hook_name,
             check_func_result( res );
 
             sol::object result = sol::make_object( lua, sol::lua_nil );
-            if( res.valid() ) {
+            if( res.valid() )
+            {
                 result = res.get<sol::object>();
             }
 
@@ -747,12 +751,14 @@ auto run_hooks( std::string_view hook_name,
             sol::table one = lua.create_table();
             one["mod_id"] = e.mod_id;
             one["priority"] = e.priority;
-            if( result != sol::lua_nil ) {
+            if( result != sol::lua_nil )
+            {
                 one["result"] = result;
             }
             results[out_idx++] = one;
 
-            if( result.is<bool>() && !result.as<bool>() ) {
+            if( result.is<bool>() && !result.as<bool>() )
+            {
                 results["allowed"] = false;
                 if( opts.exit_early ) {
                     break;
@@ -1269,18 +1275,21 @@ void run_on_mapgen_postprocess_hooks_batch( lua_state &state, mapgen_constructor
                 }
 
                 sol::protected_function func;
-                if( e.is_table ) {
+                if( e.is_table )
+                {
                     func = obj.as<sol::table>()
-                           .get_or<sol::object>( "fn", sol::lua_nil )
-                           .as<sol::protected_function>();
-                } else {
+                    .get_or<sol::object>( "fn", sol::lua_nil )
+                    .as<sol::protected_function>();
+                } else
+                {
                     func = obj.as<sol::protected_function>();
                 }
 
                 sol::protected_function_result res = func( params );
                 check_func_result( res );
 
-                if( res.valid() ) {
+                if( res.valid() )
+                {
                     params["prev"] = res.get<sol::object>();
                 }
             } catch( const std::runtime_error &err ) {

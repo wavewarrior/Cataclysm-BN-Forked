@@ -72,8 +72,8 @@
 #        endif
 #    endif
 #    include "compute/gpu_platform.h"
-#    include "preload_config.h"
 #    include "platform/sdl_video.h"
+#    include "preload_config.h"
 
 #    include <SDL3/SDL.h>
 #endif
@@ -419,8 +419,8 @@ int main(int argc, const char* argv[]) {
         return result;
     }
 
-    if( session.configData().listTags || session.configData().listTests ||
-        session.configData().listReporters ) {
+    if (session.configData().listTags || session.configData().listTests
+        || session.configData().listReporters) {
         return session.run();
     }
 

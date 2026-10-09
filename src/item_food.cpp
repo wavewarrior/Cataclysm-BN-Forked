@@ -163,14 +163,14 @@ struct scoped_goes_bad_cache {
 bool item::goes_bad() const
 {
     if( item_internal::goes_bad_cache_is_for( this ) ) {
-    return item_internal::goes_bad_cache_fetch();
+        return item_internal::goes_bad_cache_fetch();
     }
     if( has_flag( flag_PROCESSING ) ) {
-    return false;
-}
-if( is_corpse() ) {
-    // Corpses rot only if they are made of rotting materials
-    return made_of_any( materials::get_rotting() );
+        return false;
+    }
+    if( is_corpse() ) {
+        // Corpses rot only if they are made of rotting materials
+        return made_of_any( materials::get_rotting() );
     }
     return is_food() && get_comestible()->spoils != 0_turns;
 }
@@ -179,7 +179,7 @@ bool item::goes_bad_after_opening( bool strict ) const
 {
     // check if this item is explicitly a canning-type item: eg, it preserves contents
     if( strict ) {
-    if( type->container && type->container->preserves &&
+        if( type->container && type->container->preserves &&
             !contents.empty() && contents.front().goes_bad() ) {
             return true;
         } else {
@@ -219,7 +219,7 @@ auto item::mark_rot_checked_now() -> void
 time_duration item::get_shelf_life() const
 {
     if( goes_bad() ) {
-    if( is_food() ) {
+        if( is_food() ) {
             return get_comestible()->spoils;
         } else if( is_corpse() ) {
             return 24_hours;
@@ -322,14 +322,14 @@ auto get_hourly_rotpoints_at_temp( const units::temperature temp ) -> int
      * Precomputed rot lookup table.
      */
     if( temp < temperatures::freezing ) {
-    return 0;
-}
-if( temp > 40_c ) {
-    return 21240;
-}
-// HACK: due to frequent fahrenheit <-> celsius conversion, 18C is actually 17.777C
-// remove rounding after most of temperatures passed around are in `units::temperature`
-const float temp_c = static_cast<float>( units::to_millidegree_celsius( temp ) ) / 1000;
+        return 0;
+    }
+    if( temp > 40_c ) {
+        return 21240;
+    }
+    // HACK: due to frequent fahrenheit <-> celsius conversion, 18C is actually 17.777C
+    // remove rounding after most of temperatures passed around are in `units::temperature`
+    const float temp_c = static_cast<float>( units::to_millidegree_celsius( temp ) ) / 1000;
     return rot_chart[std::round( temp_c )];
 }
 
@@ -369,18 +369,18 @@ namespace
 auto temperature_flag_to_highest_temperature( temperature_flag temperature ) -> units::temperature
 {
     switch( temperature ) {
-    case temperature_flag::TEMP_NORMAL:
-    case temperature_flag::TEMP_HEATER:
-        return units::temperature_max;
-    case temperature_flag::TEMP_FRIDGE:
-        return temperatures::fridge;
-    case temperature_flag::TEMP_FREEZER:
-        return temperatures::freezer;
-    case temperature_flag::TEMP_ROOT_CELLAR:
-        return temperatures::root_cellar;
-}
+        case temperature_flag::TEMP_NORMAL:
+        case temperature_flag::TEMP_HEATER:
+            return units::temperature_max;
+        case temperature_flag::TEMP_FRIDGE:
+            return temperatures::fridge;
+        case temperature_flag::TEMP_FREEZER:
+            return temperatures::freezer;
+        case temperature_flag::TEMP_ROOT_CELLAR:
+            return temperatures::root_cellar;
+    }
 
-return units::temperature_max;
+    return units::temperature_max;
 }
 
 } // namespace
@@ -389,25 +389,25 @@ return units::temperature_max;
 time_duration item::minimum_freshness_duration( temperature_flag temperature ) const
 {
     if( is_in_preserving_container() ) {
-    return calendar::INDEFINITELY_LONG_DURATION;
-}
-const units::temperature temp = temperature_flag_to_highest_temperature( temperature );
-unsigned long long rot_per_hour = get_hourly_rotpoints_at_temp( temp );
+        return calendar::INDEFINITELY_LONG_DURATION;
+    }
+    const units::temperature temp = temperature_flag_to_highest_temperature( temperature );
+    unsigned long long rot_per_hour = get_hourly_rotpoints_at_temp( temp );
 
-if( rot_per_hour <= 0 || !type->comestible ) {
-    return calendar::INDEFINITELY_LONG_DURATION;
-}
+    if( rot_per_hour <= 0 || !type->comestible ) {
+        return calendar::INDEFINITELY_LONG_DURATION;
+    }
 
-time_duration remaining_rot = type->comestible->spoils - rot;
-// Has to be in int64 or it will overflow for long lasting food
-unsigned long long duration = to_turns<unsigned long long>( remaining_rot )
-                              * to_turns<unsigned long long>( 1_hours )
-                              / rot_per_hour;
-if( duration > to_turns<unsigned long long>( calendar::INDEFINITELY_LONG_DURATION ) ) {
-    return calendar::INDEFINITELY_LONG_DURATION;
-}
+    time_duration remaining_rot = type->comestible->spoils - rot;
+    // Has to be in int64 or it will overflow for long lasting food
+    unsigned long long duration = to_turns<unsigned long long>( remaining_rot )
+                                  * to_turns<unsigned long long>( 1_hours )
+                                  / rot_per_hour;
+    if( duration > to_turns<unsigned long long>( calendar::INDEFINITELY_LONG_DURATION ) ) {
+        return calendar::INDEFINITELY_LONG_DURATION;
+    }
 
-return time_duration::from_turns( static_cast<int>( duration ) );
+    return time_duration::from_turns( static_cast<int>( duration ) );
 }
 
 void item::mod_last_rot_check( time_duration processing_duration )

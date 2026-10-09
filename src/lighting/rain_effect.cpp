@@ -34,8 +34,10 @@ struct quad_instance {
     float pad1;      // unused
     float pad2;      // unused
 };
-static_assert(sizeof(quad_instance) == 64, "quad_instance must be 64 bytes (wire-stable with vert "
-                                           "shader)");
+static_assert(
+    sizeof(quad_instance) == 64,
+    "quad_instance must be 64 bytes (wire-stable with vert "
+    "shader)");
 
 // ---- Constructor / Destructor --------------------------------------------
 

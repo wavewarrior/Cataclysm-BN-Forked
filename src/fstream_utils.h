@@ -66,35 +66,36 @@ struct cata_ofstream {
  * Wrapper around std::ifstream that provides cross-platform support for UTF-8 paths.
  */
 struct cata_ifstream {
-    public:
-        cata_ifstream();
-        cata_ifstream( const cata_ifstream & ) = delete;
-        cata_ifstream( cata_ifstream &&x ) noexcept;
-        ~cata_ifstream();
-        cata_ifstream &operator=( const cata_ifstream & ) = delete;
-        cata_ifstream &operator=( cata_ifstream && ) noexcept;
+public:
+    cata_ifstream();
+    cata_ifstream( const cata_ifstream & ) = delete;
+    cata_ifstream( cata_ifstream &&x ) noexcept;
+    ~cata_ifstream();
+    cata_ifstream &operator = ( const cata_ifstream & ) = delete;
+    cata_ifstream &operator = ( cata_ifstream && ) noexcept;
 
-        cata_ifstream &mode( cata_ios_mode m ) {
-            _mode = m;
-            return *this;
-        }
-        cata_ifstream &open( const std::string &path );
-        bool is_open();
-        bool fail();
-        bool bad();
-        void close();
+    cata_ifstream &mode( cata_ios_mode m )
+    {
+        _mode = m;
+        return *this;
+    }
+    cata_ifstream &open( const std::string &path );
+    bool is_open();
+    bool fail();
+    bool bad();
+    void close();
 
-        std::istream &operator*();
-        std::istream *operator->();
+    std::istream &operator*();
+    std::istream *operator->();
 
-    private:
-        cata_ios_mode _mode = cata_ios_mode::none;
+private:
+    cata_ios_mode _mode = cata_ios_mode::none;
 #if defined (_WIN32) && !defined (_MSC_VER)
-        std::unique_ptr<std::istream> _stream;
-        std::unique_ptr<__gnu_cxx::stdio_filebuf<char, std::char_traits<char>>> _buffer;
-        FILE *_file = nullptr;
+    std::unique_ptr<std::istream> _stream;
+    std::unique_ptr<__gnu_cxx::stdio_filebuf<char, std::char_traits<char>>> _buffer;
+    FILE *_file = nullptr;
 #else
-        std::unique_ptr<std::ifstream> _stream;
+    std::unique_ptr<std::ifstream> _stream;
 #endif
 };
 
@@ -160,8 +161,7 @@ bool read_from_file_json( const std::string &path, file_read_json_fn reader,
  *
  * @note: This uses exclusive I/O.
  */
-class ofstream_wrapper
-{
+class ofstream_wrapper {
     private:
         cata_ofstream file_stream;
         std::string path;
@@ -170,13 +170,15 @@ class ofstream_wrapper
         void open( cata_ios_mode mode );
 
     public:
-        ofstream_wrapper( const std::string &path, cata_ios_mode mode );
+        ofstream_wrapper( const std::string & path, cata_ios_mode mode );
         ~ofstream_wrapper();
 
-        std::ostream &stream() {
+        std::ostream & stream()
+        {
             return *file_stream;
         }
-        operator std::ostream &() {
+        operator std::ostream & ()
+        {
             return *file_stream;
         }
 

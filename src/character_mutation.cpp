@@ -377,25 +377,24 @@ static auto get_enchantment_mut_visible(
 )
 {
     auto visitor = []<typename T>( const T & v ) -> bool {
-        if constexpr( std::is_same_v<T, const item *> )
-    {
-        const item *it = v;
-        return !it->has_flag( flag_id( "HIDDEN" ) );
+        if constexpr( std::is_same_v<T, const item *> ) {
+            const item *it = v;
+            return !it->has_flag( flag_id( "HIDDEN" ) );
         }
         if constexpr( std::is_same_v<T, const mutation *> )
-    {
-        const mutation *it = v;
-        return it->second.show_sprite;
-    }
-    if constexpr( std::is_same_v<T, const bionic *> )
-    {
-        const bionic *it = v;
-        return it->show_sprite;
-    }
-    return true;
-};
+        {
+            const mutation *it = v;
+            return it->second.show_sprite;
+        }
+        if constexpr( std::is_same_v<T, const bionic *> )
+        {
+            const bionic *it = v;
+            return it->show_sprite;
+        }
+        return true;
+    };
 
-return std::visit( visitor, src );
+    return std::visit( visitor, src );
 }
 
 static auto get_enchantment_mut_active(
@@ -463,7 +462,7 @@ float calc_mutation_value_multiplicative( const std::vector<const mutation_branc
     return ret;
 }
 
-static const std::map<std::string, std::function<float( std::vector<const mutation_branch*> )>>
+static const std::map<std::string, std::function<float( std::vector<const mutation_branch*> ) >>
 mutation_value_map = {
     {"pain_recovery", calc_mutation_value<&mutation_branch::pain_recovery>},
     {"healing_awake", calc_mutation_value<&mutation_branch::healing_awake>},
@@ -848,7 +847,8 @@ void Character::rebuild_mutation_cache()
     }
 }
 
-double Character::bonus_from_enchantments( double base, enchantment_value_id value, bool round ) const
+double Character::bonus_from_enchantments( double base, enchantment_value_id value,
+        bool round ) const
 {
     return enchantment_cache->calc_bonus( value, base, round );
 }
@@ -863,9 +863,9 @@ bool Character::crossed_threshold() const
     // If the thresh category is set, we have to have crossed the threshold
     // This implicitly also checks thresh_tier >= 1 because they get changed at the same time
     if( thresh_category ) {
-    return true;
-}
-for( const trait_id &mut : get_mutations() ) {
+        return true;
+    }
+    for( const trait_id &mut : get_mutations() ) {
         if( mut->threshold ) {
             return true;
         }
@@ -1011,13 +1011,13 @@ void Character::rooted()
 
 bool Character::has_opposite_trait( const trait_id &flag ) const
 {
-for( const trait_id &i : flag->cancels ) {
-    if( has_trait( i ) ) {
+    for( const trait_id &i : flag->cancels ) {
+        if( has_trait( i ) ) {
             return true;
         }
     }
-for( const std::pair<const trait_id, char_trait_data> &mut : my_mutations ) {
-    for( const trait_id &canceled_trait : mut.first->cancels ) {
+    for( const std::pair<const trait_id, char_trait_data> &mut : my_mutations ) {
+        for( const trait_id &canceled_trait : mut.first->cancels ) {
             if( canceled_trait == flag ) {
                 return true;
             }

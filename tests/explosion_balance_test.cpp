@@ -62,7 +62,8 @@ void check_lethality(
             if (rl_dist(monster_position, origin) != range) { continue; }
             num_subjects++;
             num_subjects_this_time++;
-            monster& new_monster = spawn_test_monster("mon_test_explosion_target", monster_position);
+            monster& new_monster =
+                spawn_test_monster("mon_test_explosion_target", monster_position);
             new_monster.no_extra_death_drops = true;
         }
         item& explosive = *item::spawn_temporary(explosive_id);
@@ -169,7 +170,8 @@ TEST_CASE("shrapnel behind wall", "[grenade][explosion][balance]") {
     }
 
     // Not on the bomb because shrapnel always hits that square
-    const monster& m_in_range = spawn_test_monster("mon_test_explosion_target", origin + point_east);
+    const monster& m_in_range =
+        spawn_test_monster("mon_test_explosion_target", origin + point_east);
     const monster& m_behind_wall =
         spawn_test_monster("mon_test_explosion_target", origin + point(3, 0));
 
@@ -182,7 +184,7 @@ TEST_CASE("shrapnel behind wall", "[grenade][explosion][balance]") {
 TEST_CASE("shrapnel at huge range", "[grenade][explosion]") {
     clear_all_state();
     move_player_out_of_the_way();
-    const auto origin = tripoint_bub_ms( 0, 0, 0 );
+    const auto origin = tripoint_bub_ms(0, 0, 0);
 
     item& grenade = *item::spawn_temporary("test_long_shrapnel_blast");
     REQUIRE(grenade.get_use("explosion") != nullptr);
@@ -193,8 +195,8 @@ TEST_CASE("shrapnel at huge range", "[grenade][explosion]") {
     REQUIRE(actor->explosion.radius <= 0);
     REQUIRE(actor->explosion.fragment->range > g_mapsize_x + g_mapsize_y);
 
-    const monster& m = spawn_test_monster("mon_test_explosion_target",
-                                          tripoint_bub_ms(g_mapsize_x - 1, g_mapsize_y - 1, 0));
+    const monster& m = spawn_test_monster(
+        "mon_test_explosion_target", tripoint_bub_ms(g_mapsize_x - 1, g_mapsize_y - 1, 0));
 
     set_off_explosion(grenade, origin);
 

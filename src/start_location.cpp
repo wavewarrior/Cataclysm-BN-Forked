@@ -64,9 +64,9 @@ auto start_location::first_target() const
 -> std::optional<std::pair<std::string, ot_match_type>>
 {
     if( _omt_types.empty() ) {
-    return std::nullopt;
-}
-return _omt_types.front();
+        return std::nullopt;
+    }
+    return _omt_types.front();
 }
 
 const std::set<std::string> &start_location::flags() const
@@ -337,8 +337,8 @@ void start_location::place_player( player &u, const int &z ) const
     u.setpos( tripoint_bub_ms( g_half_mapsize_x, g_half_mapsize_y, z ) );
     level_cache_freshness::invalidate_level( m, z );
     m.build_map_cache( level_cache_freshness::plan_for( m,
-        level_cache_freshness::pose_of_viewer( get_avatar(), z ),
-        level_cache_freshness::lightmap_policy::normal ) );
+                       level_cache_freshness::pose_of_viewer( get_avatar(), z ),
+                       level_cache_freshness::lightmap_policy::normal ) );
     const bool must_be_inside = !flags().contains( "ALLOW_OUTSIDE" );
     ///\EFFECT_STR allows player to start behind less-bashable furniture and terrain
     // TODO: Allow using items here
@@ -482,8 +482,8 @@ static void add_monsters( const tripoint_abs_omt &omtstart, const mongroup_id &t
 void start_location::surround_with_monsters(
     const tripoint_abs_omt &omtstart, const mongroup_id &type, float expected_points ) const
 {
-for( const tripoint_abs_omt &p : points_in_radius( omtstart, 1 ) ) {
-    if( p != omtstart ) {
+    for( const tripoint_abs_omt &p : points_in_radius( omtstart, 1 ) ) {
+        if( p != omtstart ) {
             add_monsters( p, type, roll_remainder( expected_points / 8.0f ) );
         }
     }

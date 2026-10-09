@@ -37,15 +37,15 @@ auto coop_reconcile_pos(
 -> tripoint_bub_ms
 {
     if( last_seq < 0 ) {
-    // Pre-A2 host: snap-only.  Do not replay — pending may hold up to 32
-    // stale, untrimmed entries that would fling the avatar away.
-    return server_pos;
-}
+        // Pre-A2 host: snap-only.  Do not replay — pending may hold up to 32
+        // stale, untrimmed entries that would fling the avatar away.
+        return server_pos;
+    }
 
-const auto confirmed = static_cast<uint32_t>( last_seq );
-auto pos = server_pos;
-for( const auto& act : pending ) {
-    if( act.seq <= confirmed ) { continue; } // already confirmed by server
+    const auto confirmed = static_cast<uint32_t>( last_seq );
+    auto pos = server_pos;
+    for( const auto& act : pending ) {
+        if( act.seq <= confirmed ) { continue; } // already confirmed by server
         pos = pos + key_to_delta( act.key );
     }
     return pos;

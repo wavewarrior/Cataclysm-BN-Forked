@@ -183,8 +183,8 @@ auto parse_join_info_packet( const std::string& buf ) -> std::optional<join_info
 auto parse_vertical_move_ctx( const std::string& buf ) -> std::optional<vertical_move_ctx>
 {
     if( buf.empty() ) { return std::nullopt; }
-try {
-    std::istringstream iss( buf );
+    try {
+        std::istringstream iss( buf );
         JsonIn jin( iss );
         JsonObject ctx = jin.get_object();
         ctx.allow_omitted_members();
@@ -203,8 +203,8 @@ auto build_skill_sync_fields( JsonOut& jout,
 {
     jout.member( "skills" );
     jout.start_array();
-for( const auto& [id, lvl] : skills ) {
-    jout.start_array();
+    for( const auto& [id, lvl] : skills ) {
+        jout.start_array();
         jout.write( id );
         jout.write( lvl );
         jout.end_array();

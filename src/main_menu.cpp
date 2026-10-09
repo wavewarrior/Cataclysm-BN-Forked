@@ -257,12 +257,12 @@ class sound_on_move_uilist_callback: public uilist_callback
 
         void select( uilist* ) override {
             if( first ) {
-            // Don't emit sound when menu is opened
-            first = false;
-            return;
+                // Don't emit sound when menu is opened
+                first = false;
+                return;
+            }
+            mmenu->on_move();
         }
-        mmenu->on_move();
-    }
 };
 
 std::vector<std::string> main_menu::load_file(
@@ -926,10 +926,9 @@ bool main_menu::opening_screen()
         }
 
         const auto submenu_count = [&]( main_menu_opts o ) -> int {
-            switch( o )
-        {
-            case main_menu_opts::LOADCHAR:
-                return static_cast<int>( world_generator->all_worldnames().size() );
+            switch( o ) {
+                case main_menu_opts::LOADCHAR:
+                    return static_cast<int>( world_generator->all_worldnames().size() );
                 case main_menu_opts::WORLD:
                     return static_cast<int>( world_generator->all_worldnames().size() ) + 1;
                 case main_menu_opts::NEWCHAR:

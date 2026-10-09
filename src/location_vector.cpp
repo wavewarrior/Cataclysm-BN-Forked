@@ -23,8 +23,8 @@ template<typename T>
 location_vector<T> &location_vector<T>::operator=( location_vector<T> &&source )
 noexcept
 {
-for( item * const &it : source.contents ) {
-    it->remove_location();
+    for( item * const &it : source.contents ) {
+        it->remove_location();
         it->set_location( &*loc );
     }
 
@@ -64,7 +64,7 @@ noexcept
 };
 
 template<typename T>
-typename location_vector<T>::iterator &location_vector<T>::iterator::operator=( const
+typename location_vector<T>::iterator & location_vector<T>::iterator::operator=( const
     location_vector<T>::iterator &source )
 {
     this->it = source.it;
@@ -73,7 +73,7 @@ typename location_vector<T>::iterator &location_vector<T>::iterator::operator=( 
 };
 
 template<typename T>
-typename location_vector<T>::iterator &location_vector<T>::iterator::operator=
+typename location_vector<T>::iterator & location_vector<T>::iterator::operator=
 ( location_vector<T>::iterator &&source )
 noexcept
 {
@@ -128,7 +128,7 @@ noexcept
 };
 
 template<typename T>
-typename location_vector<T>::const_iterator &location_vector<T>::const_iterator::operator=
+typename location_vector<T>::const_iterator & location_vector<T>::const_iterator::operator=
 ( const location_vector<T>::const_iterator &source )
 {
     this->it = source.it;
@@ -137,7 +137,7 @@ typename location_vector<T>::const_iterator &location_vector<T>::const_iterator:
 };
 
 template<typename T>
-typename location_vector<T>::const_iterator &location_vector<T>::const_iterator::operator=
+typename location_vector<T>::const_iterator & location_vector<T>::const_iterator::operator=
 ( location_vector<T>::const_iterator &&source )
 noexcept
 {
@@ -186,10 +186,10 @@ bool location_vector<T>::empty() const
 }
 
 template<typename T>
-T *location_vector<T>::back() const
+T * location_vector<T>::back() const
 {
     if( contents.empty() ) {
-    debugmsg( "Attempted to call back on an empty location vector" );
+        debugmsg( "Attempted to call back on an empty location vector" );
         return &null_item_reference();
     }
     return contents.back();
@@ -320,14 +320,14 @@ template<typename T>
 typename location_vector<T>::const_reverse_iterator location_vector<T>::rbegin() const
 {
     return location_vector<T>::const_reverse_iterator( location_vector<T>::const_iterator(
-           contents.end(), *this ) );
+                contents.end(), *this ) );
 }
 
 template<typename T>
 typename location_vector<T>::const_reverse_iterator location_vector<T>::rend() const
 {
     return location_vector<T>::const_reverse_iterator( location_vector<T>::const_iterator(
-           contents.begin(), *this ) );
+                contents.begin(), *this ) );
 }
 
 template<typename T>
@@ -360,21 +360,21 @@ template<typename T>
 typename location_vector<T>::const_reverse_iterator location_vector<T>::crbegin() const
 {
     return location_vector<T>::const_reverse_iterator( location_vector<T>::const_iterator(
-           contents.cend(), *this ) );
+                contents.cend(), *this ) );
 }
 
 template<typename T>
 typename location_vector<T>::const_reverse_iterator location_vector<T>::crend() const
 {
     return location_vector<T>::const_reverse_iterator( location_vector<T>::const_iterator(
-           contents.cbegin(), *this ) );
+                contents.cbegin(), *this ) );
 }
 
 template<typename T>
-T *location_vector<T>::front() const
+T * location_vector<T>::front() const
 {
     if( contents.empty() ) {
-    debugmsg( "Attempted to call front on an empty location vector" );
+        debugmsg( "Attempted to call front on an empty location vector" );
         return &null_item_reference();
     }
     return contents.front();
@@ -497,12 +497,12 @@ template<>
 void std::swap<item>( location_vector<item> &lhs, location_vector<item> &rhs )
 noexcept
 {
-for( item * &it : lhs.contents ) {
-    it->remove_location();
+    for( item * &it : lhs.contents ) {
+        it->remove_location();
         it->set_location( &*rhs.loc );
     }
-for( item * &it : rhs.contents ) {
-    it->remove_location();
+    for( item * &it : rhs.contents ) {
+        it->remove_location();
         it->set_location( &*lhs.loc );
     }
     std::swap( lhs.contents, rhs.contents );

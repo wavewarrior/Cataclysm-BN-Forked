@@ -25,8 +25,7 @@ auto reg_game_api_creature_queries( luna::userlib &lib ) -> void
         auto mon_rng = g->all_monsters();
         auto idx = 1;
         out[idx++] = static_cast<Creature *>( &g->u );
-        if( npc_rng.items )
-        {
+        if( npc_rng.items ) {
             for( const auto &wp : *npc_rng.items ) {
                 const auto sp = wp.lock();
                 if( sp && !sp->is_dead() ) {
@@ -52,8 +51,7 @@ auto reg_game_api_creature_queries( luna::userlib &lib ) -> void
         auto out = lua.create_table();
         auto rng = g->all_npcs();
         auto idx = 1;
-        if( rng.items )
-        {
+        if( rng.items ) {
             for( const auto &wp : *rng.items ) {
                 const auto sp = wp.lock();
                 if( sp && !sp->is_dead() ) {
@@ -70,8 +68,7 @@ auto reg_game_api_creature_queries( luna::userlib &lib ) -> void
         auto out = lua.create_table();
         auto rng = g->all_monsters();
         auto idx = 1;
-        if( rng.items )
-        {
+        if( rng.items ) {
             for( const auto &wp : *rng.items ) {
                 const auto sp = wp.lock();
                 if( sp && !sp->is_dead() ) {
@@ -87,8 +84,7 @@ auto reg_game_api_creature_queries( luna::userlib &lib ) -> void
         sol::state_view lua( s );
         auto out = lua.create_table();
         const auto monsters = filter_monsters_from_lua( filters );
-        if( !monsters.empty() )
-        {
+        if( !monsters.empty() ) {
             for( std::size_t i = 0; i < monsters.size(); ++i ) {
                 out[i + 1] = monsters[i];
             }
@@ -106,8 +102,7 @@ auto reg_game_api_creature_queries( luna::userlib &lib ) -> void
         const auto all_z = params["ignore_z"].get_or( false );
         auto idx = 1;
         auto npcs = g->all_npcs();
-        if( npcs.items )
-        {
+        if( npcs.items ) {
             for( const auto &wp : *npcs.items ) {
                 const auto sp = wp.lock();
                 if( !sp || sp->is_dead() || sp->marked_for_death ) {
@@ -132,8 +127,7 @@ auto reg_game_api_creature_queries( luna::userlib &lib ) -> void
         const auto radius = params["radius"].get_or( 0 );
         const auto all_z = params["ignore_z"].get_or( false );
         auto idx = 1;
-        for( const auto &sp : g->critter_tracker->get_monsters_list() )
-        {
+        for( const auto &sp : g->critter_tracker->get_monsters_list() ) {
             if( !sp || sp->is_dead() ) {
                 continue;
             }
@@ -151,8 +145,7 @@ auto reg_game_api_creature_queries( luna::userlib &lib ) -> void
         auto out = lua.create_table();
         auto rng = g->all_npcs();
         auto idx = 1;
-        if( rng.items )
-        {
+        if( rng.items ) {
             for( const auto &wp : *rng.items ) {
                 const auto sp = wp.lock();
                 if( sp && !sp->is_dead() && sp->is_simulated() ) {
@@ -169,8 +162,7 @@ auto reg_game_api_creature_queries( luna::userlib &lib ) -> void
         auto out = lua.create_table();
         auto rng = g->all_monsters();
         auto idx = 1;
-        if( rng.items )
-        {
+        if( rng.items ) {
             for( const auto &wp : *rng.items ) {
                 const auto sp = wp.lock();
                 if( sp && !sp->is_dead() && sp->is_pet() ) {

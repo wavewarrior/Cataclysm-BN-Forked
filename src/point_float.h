@@ -24,12 +24,12 @@ struct rl_vec2d {
 
     // scale.
     rl_vec2d operator* ( float rhs ) const;
-    rl_vec2d operator/ ( float rhs ) const;
+    rl_vec2d operator / ( float rhs ) const;
     // subtract
-    rl_vec2d operator- ( const rl_vec2d &rhs ) const;
+    rl_vec2d operator - ( const rl_vec2d &rhs ) const;
     // unary negation
-    rl_vec2d operator- () const;
-    rl_vec2d operator+ ( const rl_vec2d &rhs ) const;
+    rl_vec2d operator - () const;
+    rl_vec2d operator + ( const rl_vec2d &rhs ) const;
 };
 
 struct rl_vec3d {
@@ -40,14 +40,14 @@ struct rl_vec3d {
 
     constexpr explicit rl_vec3d( float x = 0, float y = 0, float z = 0 ) : x( x ), y( y ), z( z ) {}
     template<typename Point, typename Traits = point_traits<Point>>
-    constexpr explicit rl_vec3d( const Point &p ) : x( Traits::x( p ) ), y( Traits::y( p ) ),
+    constexpr explicit rl_vec3d( const Point & p ) : x( Traits::x( p ) ), y( Traits::y( p ) ),
         z( Traits::z( p ) ) {}
 
     float magnitude() const;
     rl_vec3d normalized() const;
     rl_vec3d rotated( float angle ) const;
-    float dot_product( const rl_vec3d &v ) const;
-    rl_vec3d cross_product( const rl_vec3d &v ) const;
+    float dot_product( const rl_vec3d & v ) const;
+    rl_vec3d cross_product( const rl_vec3d & v ) const;
     bool is_null() const;
 
     tripoint as_point() const;
@@ -68,7 +68,7 @@ struct rl_vec3d {
         return ret;
     }
     // subtract
-    constexpr rl_vec3d operator- ( const rl_vec3d &rhs ) const {
+    constexpr rl_vec3d operator- ( const rl_vec3d & rhs ) const {
         rl_vec3d ret;
         ret.x = x - rhs.x;
         ret.y = y - rhs.y;
@@ -83,20 +83,23 @@ struct rl_vec3d {
         ret.z = -z;
         return ret;
     }
-    constexpr rl_vec3d operator+ ( const rl_vec3d &rhs ) const {
+    constexpr rl_vec3d operator+ ( const rl_vec3d & rhs ) const {
         rl_vec3d ret;
         ret.x = x + rhs.x;
         ret.y = y + rhs.y;
         ret.z = z + rhs.z;
         return ret;
     }
-    friend constexpr bool operator==( const rl_vec3d &a, const rl_vec3d &b ) {
+    friend constexpr bool operator==( const rl_vec3d & a, const rl_vec3d & b )
+    {
         return a.x == b.x && a.y == b.y && a.z == b.z;
     }
-    friend constexpr bool operator!=( const rl_vec3d &a, const rl_vec3d &b ) {
+    friend constexpr bool operator!=( const rl_vec3d & a, const rl_vec3d & b )
+    {
         return !( a == b );
     }
-    friend constexpr bool operator<( const rl_vec3d &a, const rl_vec3d &b ) {
+    friend constexpr bool operator<( const rl_vec3d & a, const rl_vec3d & b )
+    {
         if( a.x != b.x ) {
             return a.x < b.x;
         }

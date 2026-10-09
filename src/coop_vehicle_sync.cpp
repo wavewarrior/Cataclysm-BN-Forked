@@ -38,8 +38,8 @@ auto write_coop_vehicle_poses( JsonOut &jout, const std::vector<coop_vehicle_pos
 -> void
 {
     jout.start_array();
-for( const coop_vehicle_pose &p : poses ) {
-    jout.start_object();
+    for( const coop_vehicle_pose &p : poses ) {
+        jout.start_object();
         jout.member( "vid", p.vid );
         jout.member( "ax", p.anchor.x() );
         jout.member( "ay", p.anchor.y() );

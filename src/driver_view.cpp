@@ -117,9 +117,9 @@ auto terrain_glyph( const map &here, const tripoint_bub_ms &pos ) -> glyph
 auto tile_glyph( const map &here, const tripoint_bub_ms &pos, bool has_items ) -> glyph
 {
     if( has_items ) {
-    return items_glyph;
-}
-if( here.veh_at( pos ) ) {
+        return items_glyph;
+    }
+    if( here.veh_at( pos ) ) {
         return vehicle_glyph;
     }
     if( here.has_furn( pos ) ) {

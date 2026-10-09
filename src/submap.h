@@ -147,7 +147,7 @@ class submap: maptile_soa<SEEX, SEEY>
 
         uint8_t get_lum( const point_sm_ms& p ) const { return lum[p.x()][p.y()]; }
 
-        auto static_emitter_tiles() const -> const std::vector<point_sm_ms>&;
+        auto static_emitter_tiles() const -> const std::vector<point_sm_ms> &;
 
         void set_lum( const point_sm_ms& p, uint8_t luminance ) {
             is_uniform = false;

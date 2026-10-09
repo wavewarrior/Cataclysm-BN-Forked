@@ -1,11 +1,10 @@
 #pragma once
 #ifndef CATA_SRC_LIGHTING_MENU_PLEXUS_H
-#define CATA_SRC_LIGHTING_MENU_PLEXUS_H
-#include <cstdint>
-#include <vector>
+#    define CATA_SRC_LIGHTING_MENU_PLEXUS_H
+#    include <cstdint>
+#    include <vector>
 
-namespace lighting
-{
+namespace lighting {
 
 struct plexus_particle {
     float x, y;
@@ -28,13 +27,13 @@ struct plexus_config {
 
 void plexus_init();
 void plexus_finish();
-void plexus_resize( int width, int height );
+void plexus_resize(int width, int height);
 void plexus_step();
-auto plexus_pixels() -> const std::vector<std::uint8_t> &;
+auto plexus_pixels() -> const std::vector<std::uint8_t>&;
 auto plexus_width() -> int;
 auto plexus_height() -> int;
 auto plexus_generation() -> unsigned;
-auto plexus_get_config() -> plexus_config &;
+auto plexus_get_config() -> plexus_config&;
 
 extern bool g_plexus_visible;
 

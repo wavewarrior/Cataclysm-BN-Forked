@@ -921,22 +921,22 @@ class Creature
         void add_msg_player_or_npc(
             const char *const player_msg, const char *const npc_msg, Args&&... args ) const {
             return add_msg_player_or_npc(
-                   string_format( player_msg, std::forward<Args>( args )... ),
-            string_format( npc_msg, std::forward<Args>( args )... ) );
+                       string_format( player_msg, std::forward<Args>( args )... ),
+                       string_format( npc_msg, std::forward<Args>( args )... ) );
         }
         template <typename... Args>
         void add_msg_player_or_npc(
             const std::string& player_msg, const std::string& npc_msg, Args&&... args ) const {
             return add_msg_player_or_npc(
-                   string_format( player_msg, std::forward<Args>( args )... ),
-            string_format( npc_msg, std::forward<Args>( args )... ) );
+                       string_format( player_msg, std::forward<Args>( args )... ),
+                       string_format( npc_msg, std::forward<Args>( args )... ) );
         }
         template <typename... Args>
         void add_msg_player_or_npc(
             const translation& player_msg, const translation& npc_msg, Args&&... args ) const {
             return add_msg_player_or_npc(
-                   string_format( player_msg, std::forward<Args>( args )... ),
-            string_format( npc_msg, std::forward<Args>( args )... ) );
+                       string_format( player_msg, std::forward<Args>( args )... ),
+                       string_format( npc_msg, std::forward<Args>( args )... ) );
         }
         template <typename... Args>
         void add_msg_player_or_npc(
@@ -980,22 +980,22 @@ class Creature
         void add_msg_player_or_say(
             const char *const player_msg, const char *const npc_speech, Args&&... args ) const {
             return add_msg_player_or_say(
-                   string_format( player_msg, std::forward<Args>( args )... ),
-            string_format( npc_speech, std::forward<Args>( args )... ) );
+                       string_format( player_msg, std::forward<Args>( args )... ),
+                       string_format( npc_speech, std::forward<Args>( args )... ) );
         }
         template <typename... Args>
         void add_msg_player_or_say(
             const std::string& player_msg, const std::string& npc_speech, Args&&... args ) const {
             return add_msg_player_or_say(
-                   string_format( player_msg, std::forward<Args>( args )... ),
-            string_format( npc_speech, std::forward<Args>( args )... ) );
+                       string_format( player_msg, std::forward<Args>( args )... ),
+                       string_format( npc_speech, std::forward<Args>( args )... ) );
         }
         template <typename... Args>
         void add_msg_player_or_say(
             const translation& player_msg, const translation& npc_speech, Args&&... args ) const {
             return add_msg_player_or_say(
-                   string_format( player_msg, std::forward<Args>( args )... ),
-            string_format( npc_speech, std::forward<Args>( args )... ) );
+                       string_format( player_msg, std::forward<Args>( args )... ),
+                       string_format( npc_speech, std::forward<Args>( args )... ) );
         }
         template <typename... Args>
         void add_msg_player_or_say(

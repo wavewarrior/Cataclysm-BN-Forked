@@ -466,15 +466,21 @@ TEST_CASE("inproc: all five replicated world events survive the wire", "[coop][i
             {coop_event_type::furniture_changed, abs_of(FURN_TILE), furn_id("f_locker").to_i()});
         // Fields: map_field.cpp pushes intensity in `.creature_id`.
         guard.log().push(
-            {.type = coop_event_type::field_created, .pos = abs_of(FIELD_TILE),
-             .value = field_type_id("fd_fire").to_i(), .creature_id = 2});
+            {.type = coop_event_type::field_created,
+             .pos = abs_of(FIELD_TILE),
+             .value = field_type_id("fd_fire").to_i(),
+             .creature_id = 2});
         guard.log().push(
-            {.type = coop_event_type::field_changed, .pos = abs_of(FIELD_TILE),
-             .value = field_type_id("fd_fire").to_i(), .creature_id = 3});
+            {.type = coop_event_type::field_changed,
+             .pos = abs_of(FIELD_TILE),
+             .value = field_type_id("fd_fire").to_i(),
+             .creature_id = 3});
         // The expiry carries the pre-expiry intensity.
         guard.log().push(
-            {.type = coop_event_type::field_expired, .pos = abs_of(EXPIRE_TILE),
-             .value = field_type_id("fd_fire").to_i(), .creature_id = 1});
+            {.type = coop_event_type::field_expired,
+             .pos = abs_of(EXPIRE_TILE),
+             .value = field_type_id("fd_fire").to_i(),
+             .creature_id = 1});
 
         // Delta path: force_full=false, origin unchanged since the initial sync,
         // and the 30-tick periodic resync cannot fire this early.
@@ -542,8 +548,7 @@ auto sync_host_to_client(inproc_harness& h) -> void {
 
 // F2: the giver removes the item when offering, so a declined offer must come back.
 // Host and client share one g->u in-process, so the knife count is the observable.
-TEST_CASE("inproc: a declined trade offer returns the item exactly once",
-          "[coop][inproc][trade]") {
+TEST_CASE("inproc: a declined trade offer returns the item exactly once", "[coop][inproc][trade]") {
     const itype_id knife_id("knife_combat");
     inproc_harness h;
     h.setup();
@@ -561,8 +566,8 @@ TEST_CASE("inproc: a declined trade offer returns the item exactly once",
     CHECK(g->u.amount_of(knife_id) == before + 1);
 }
 
-TEST_CASE("inproc: an accepted trade offer is kept and never echoed back",
-          "[coop][inproc][trade]") {
+TEST_CASE(
+    "inproc: an accepted trade offer is kept and never echoed back", "[coop][inproc][trade]") {
     const itype_id knife_id("knife_combat");
     inproc_harness h;
     h.setup();

@@ -58,10 +58,10 @@ struct gi_params {
     std::uint32_t map_w; // runtime tile dims (thread/tile grid extent)
     std::uint32_t map_h;
     float current_z;            // probe z-plane (skip off-plane emitters)
-    float shadow_k;              // sphere-trace cone hardness (reuse sprite knob)
+    float shadow_k;             // sphere-trace cone hardness (reuse sprite knob)
     std::uint32_t shadow_steps; // per-emitter march cap
-    float gi_feedback = 0.f; // multi-bounce feedback strength (0=off); was rc_pad0/gi_temporal
-    float rc_pad1 = 0.f; // reserved: was gi_bounce2 (2nd-bounce mix), retired Stage 7
+    float gi_feedback = 0.f;    // multi-bounce feedback strength (0=off); was rc_pad0/gi_temporal
+    float rc_pad1 = 0.f;        // reserved: was gi_bounce2 (2nd-bounce mix), retired Stage 7
     // P2 sun/sky surface-radiance injection into the field (gi_field.comp reads
     // SkyBuf). Colour/intensity mirror the sprite's direct sun/sky terms so the
     // bounced daylight matches.
@@ -110,8 +110,8 @@ public:
 
     bool ready() const noexcept {
         return field_pipeline_ != nullptr && rc_build_pipeline_ != nullptr
-               && rc_merge_pipeline_ != nullptr && rc_resolve_pipeline_ != nullptr
-               && field_buf_ != nullptr && rc_atlas_ != nullptr && gi_out_buf_ != nullptr;
+            && rc_merge_pipeline_ != nullptr && rc_resolve_pipeline_ != nullptr
+            && field_buf_ != nullptr && rc_atlas_ != nullptr && gi_out_buf_ != nullptr;
     }
 
     // The GI radiance buffer (Radiance Cascades cascade-0 resolve). Bound by
@@ -131,13 +131,13 @@ public:
     // and the compute-write→graphics-read barrier on gi_out_buf_ before the
     // sprite pass. No-op if not ready or any input invalid. `it.bufs.sky` must
     // be recorded BEFORE this call so SDL_GPU inserts the write→read barrier.
-    auto record( const gi_iteration& it ) -> void;
+    auto record(const gi_iteration& it) -> void;
 
     // Runs one queued feedback iteration (if any) on `cb` with the geometry and
     // params of the last record(), except `emitter_count`, which tracks the
     // current emitter buffer. Call on frames where record() did not run.
-    auto record_pending( SDL_GPUCommandBuffer* cb, const gi_buffers& bufs,
-                         std::uint32_t emitter_count ) -> void;
+    auto record_pending(
+        SDL_GPUCommandBuffer* cb, const gi_buffers& bufs, std::uint32_t emitter_count) -> void;
 
     // Dev oracle: synchronous GPU→CPU readback of gi_out_buf_ over the runtime
     // tile region; logs sum/max/nonzero/centroid to DC::Main. Stalls the GPU
@@ -145,10 +145,10 @@ public:
     void debug_log_stats(std::uint32_t runtime_w, std::uint32_t runtime_h);
 
 private:
-    SDL_GPUBuffer* create_buffer( std::uint32_t floats, SDL_GPUBufferUsageFlags usage );
-    void zero_buffer( SDL_GPUBuffer* buf, std::uint32_t floats );
+    SDL_GPUBuffer* create_buffer(std::uint32_t floats, SDL_GPUBufferUsageFlags usage);
+    void zero_buffer(SDL_GPUBuffer* buf, std::uint32_t floats);
     /// One field→build→merge→resolve iteration; false where a pass failed to begin.
-    auto record_iteration( const gi_iteration& it ) -> bool;
+    auto record_iteration(const gi_iteration& it) -> bool;
 
     gpu_device* dev_ = nullptr;
     SDL_GPUComputePipeline* field_pipeline_ = nullptr;

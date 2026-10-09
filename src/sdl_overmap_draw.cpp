@@ -301,8 +301,7 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
     };
     const auto has_map_label = [&]( const tripoint_abs_omt & pos ) -> bool {
         if( const auto player_label = overmap_label_note::extract_label( ACTIVE_OVERMAP_BUFFER.note( pos ) );
-            player_label.has_value() && !player_label->empty() )
-        {
+            player_label.has_value() && !player_label->empty() ) {
             return true;
         }
 
@@ -413,8 +412,7 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
                 }
                 const auto fallback_horde_id = [&]( const tripoint_abs_omt & pos ) -> std::string {
                     const auto groups = ACTIVE_OVERMAP_BUFFER.monsters_at( pos );
-                    const auto horde_it = std::ranges::find_if( groups, []( const mongroup * mgp )
-                    {
+                    const auto horde_it = std::ranges::find_if( groups, []( const mongroup * mgp ) {
                         return mgp != nullptr && mgp->horde && mgp->type.is_valid();
                     } );
                     if( horde_it == groups.end() )
@@ -433,8 +431,7 @@ void cata_tiles::draw_om( point dest, const tripoint_abs_omt &center_abs_omt, bo
                     }
 
                     const auto best_entry = std::ranges::max_element( group.monsters, []( const auto & lhs,
-                        const auto & rhs )
-                    {
+                    const auto & rhs ) {
                         return lhs.frequency < rhs.frequency;
                     } );
                     if( best_entry == group.monsters.end() )

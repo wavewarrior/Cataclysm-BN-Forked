@@ -151,8 +151,8 @@ std::vector<std::vector<std::string>> query_popup::fold_query(
 void query_popup::invalidate_ui() const
 {
     if( win ) {
-    win = {};
-    folded_msg.clear();
+        win = {};
+        folded_msg.clear();
         buttons.clear();
     }
     std::shared_ptr<ui_adaptor> ui = adaptor.lock();

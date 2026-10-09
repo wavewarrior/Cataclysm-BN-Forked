@@ -498,7 +498,7 @@ int npc::follower_interaction_flag() const
                                has_enchantment_flag( enchantment_flag_id( "RADIO" ) );
     const tripoint_abs_omt player_abspos = get_player_character().abs_omt_pos();
     if( rl_dist( player_abspos, abs_omt_pos() ) > 3 ||
-            ( rl_dist( g->u.bub_pos(), bub_pos() ) > SEEX * 2 || !g->u.sees( bub_pos() ) ) ) {
+        ( rl_dist( g->u.bub_pos(), bub_pos() ) > SEEX * 2 || !g->u.sees( bub_pos() ) ) ) {
         if( u_has_radio && guy_has_radio ) {
             // TODO: better range calculation than just elevation.
             int max_range = 200;
@@ -677,13 +677,13 @@ bool &faction_rmlui_enabled()
     return enabled;
 }
 
-void faction_manager::display() const
-{
+void faction_manager::display() const {
     catacurses::window w_missions;
     int entries_per_page = 0;
 
     ui_adaptor ui;
-    ui.on_screen_resize( [&]( ui_adaptor & ui ) {
+    ui.on_screen_resize( [&]( ui_adaptor & ui )
+    {
         const point term( TERMY > FULL_SCREEN_HEIGHT ? ( TERMY - FULL_SCREEN_HEIGHT ) / 2 : 0,
                           TERMX > FULL_SCREEN_WIDTH ? ( TERMX - FULL_SCREEN_WIDTH ) / 2 : 0 );
 
@@ -741,7 +741,8 @@ void faction_manager::display() const
     // the bound buffers are alive.
     faction_rml_session rml_data;
     rml_doc rml;
-    const auto sync_rml = [&]() {
+    const auto sync_rml = [&]()
+    {
         if( !rml ) {
             return;
         }
@@ -809,7 +810,8 @@ void faction_manager::display() const
         rml_data.handle.DirtyVariable( "detail_rml" );
     };
     rml.open( faction_rmlui_enabled(), "faction", ctxt,
-    [&]( Rml::DataModelConstructor & c ) {
+              [&]( Rml::DataModelConstructor & c )
+    {
         register_faction_rml_types( c );
         c.Bind( "tabs", &rml_data.tabs );
         c.Bind( "rows", &rml_data.rows );
@@ -817,7 +819,8 @@ void faction_manager::display() const
         rml_data.handle = c.GetModelHandle();
     } );
 
-    ui.on_redraw( [&]( const ui_adaptor & ) {
+    ui.on_redraw( [&]( const ui_adaptor & )
+    {
         // RmlUi path owns the screen — sync the model and skip the curses draw.
         if( rml ) {
             sync_rml();
@@ -825,7 +828,8 @@ void faction_manager::display() const
         }
     } );
 
-    for( const auto &elem : get_avatar().get_snippets() ) {
+    for( const auto &elem : get_avatar().get_snippets() )
+    {
         std::optional<translation> name = SNIPPET.get_name_by_id( elem );
         if( name && !name->empty() ) {
             lore.push_back( std::pair<snippet_id, std::string>( elem, name->translated() ) );
@@ -844,12 +848,14 @@ void faction_manager::display() const
     creatures.assign( get_avatar().get_known_monsters().begin(),
                       get_avatar().get_known_monsters().end() );
 
-    std::sort( creatures.begin(), creatures.end(), []( const mtype_id & a, const mtype_id & b ) {
+    std::sort( creatures.begin(), creatures.end(), []( const mtype_id & a, const mtype_id & b )
+    {
         return localized_compare( a->nname(), b->nname() );
     } );
 
 
-    while( true ) {
+    while( true )
+    {
         // create a list of NPCs, visible and the ones on overmapbuffer
         followers.clear();
         for( auto &elem : g->get_follower_list() ) {

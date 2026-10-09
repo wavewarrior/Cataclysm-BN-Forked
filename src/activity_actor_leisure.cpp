@@ -168,8 +168,8 @@ static const std::string has_thievery_witness( "has_thievery_witness" );
 activity_id game_activity_actor::get_type() const
 {
     switch( gtype ) {
-    case game_type::GAME:
-        return activity_id( "ACT_GAME" );
+        case game_type::GAME:
+            return activity_id( "ACT_GAME" );
         case game_type::GENERIC_GAME:
             return activity_id( "ACT_GENERIC_GAME" );
     }
@@ -289,8 +289,8 @@ std::unique_ptr<activity_actor> vibe_activity_actor::deserialize( JsonIn& jsin )
 activity_id morale_activity_actor::get_type() const
 {
     switch( mtype ) {
-    case morale_act_type::MEDITATE:
-        return activity_id( "ACT_MEDITATE" );
+        case morale_act_type::MEDITATE:
+            return activity_id( "ACT_MEDITATE" );
         case morale_act_type::SHAVE:
             return activity_id( "ACT_SHAVE" );
         case morale_act_type::HAIRCUT:
@@ -341,8 +341,8 @@ std::unique_ptr<activity_actor> morale_activity_actor::deserialize( JsonIn& jsin
 activity_id wait_activity_actor::get_type() const
 {
     switch( wtype ) {
-    case wait_type::WAIT:
-        return activity_id( "ACT_WAIT" );
+        case wait_type::WAIT:
+            return activity_id( "ACT_WAIT" );
         case wait_type::WAIT_WEATHER:
             return activity_id( "ACT_WAIT_WEATHER" );
         case wait_type::WAIT_NPC:
@@ -881,7 +881,7 @@ void start_fire_activity_actor::do_turn( player_activity& act, Character& who )
         p.add_msg_if_player(
             m_bad,
             _( "There is not enough sunlight to start a fire now.  You stop "
-               "trying." ) );
+           "trying." ) );
         p.cancel_activity();
     }
 }
@@ -956,7 +956,7 @@ void fish_activity_actor::do_turn( player_activity& act, Character& who )
         p.add_msg_if_player(
             m_info,
             _( "You realize fishing here at the moment is pointless, and "
-               "stop." ) );
+           "stop." ) );
         if( !p.backlog.empty() && p.backlog.front()->id() == ACT_MULTIPLE_FISH ) {
             p.backlog.clear();
             p.assign_activity( std::make_unique<player_activity>(
@@ -1119,8 +1119,8 @@ void make_zlave_activity_actor::finish( player_activity& act, Character& who )
         p.add_msg_if_player(
             m_good,
             _( "You slice muscles and tendons, and remove body parts until "
-               "you're confident the zombie won't be able to attack you "
-               "when it reanimates." ) );
+           "you're confident the zombie won't be able to attack you "
+           "when it reanimates." ) );
 
         body->set_var( "zlave", "zlave" );
         if( one_in( 10 ) ) { body->set_var( "zlave", "mutilated" ); }
@@ -1131,8 +1131,8 @@ void make_zlave_activity_actor::finish( player_activity& act, Character& who )
         p.add_msg_if_player(
             m_warning,
             _( "You hack into the corpse and chop off some body parts.  "
-               "You think the zombie won't be able to attack when it "
-               "reanimates." ) );
+           "You think the zombie won't be able to attack when it "
+           "reanimates." ) );
 
         body->set_var( "zlave", "zlave" );
     } else {

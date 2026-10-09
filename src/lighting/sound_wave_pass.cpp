@@ -14,9 +14,7 @@ namespace lighting {
 // ---- Pipeline helper ------------------------------------------------------
 
 static SDL_GPUGraphicsPipeline* make_sound_wave_pipeline(
-    SDL_GPUDevice* dev, SDL_GPUShader* vert, SDL_GPUShader* frag,
-    SDL_GPUTextureFormat fmt)
-{
+    SDL_GPUDevice* dev, SDL_GPUShader* vert, SDL_GPUShader* frag, SDL_GPUTextureFormat fmt) {
     // Premultiplied alpha blend (same as rain_effect).
     SDL_GPUColorTargetBlendState blend{};
     blend.enable_blend = true;
@@ -54,8 +52,7 @@ sound_wave_pass::~sound_wave_pass() { shutdown(); }
 
 // ---- Init -----------------------------------------------------------------
 
-auto sound_wave_pass::init(gpu_device& dev, SDL_GPUTextureFormat target_format) -> bool
-{
+auto sound_wave_pass::init(gpu_device& dev, SDL_GPUTextureFormat target_format) -> bool {
     shutdown();
     dev_ = &dev;
     target_format_ = target_format;
@@ -107,20 +104,24 @@ auto sound_wave_pass::init(gpu_device& dev, SDL_GPUTextureFormat target_format) 
 
     if (!storage_ || !xfer_) {
         dbg(DL::Error) << "sound_wave_pass: instance buffer create failed";
-        if (storage_) { SDL_ReleaseGPUBuffer(dev_->raw(), storage_); storage_ = nullptr; }
-        if (xfer_) { SDL_ReleaseGPUTransferBuffer(dev_->raw(), xfer_); xfer_ = nullptr; }
+        if (storage_) {
+            SDL_ReleaseGPUBuffer(dev_->raw(), storage_);
+            storage_ = nullptr;
+        }
+        if (xfer_) {
+            SDL_ReleaseGPUTransferBuffer(dev_->raw(), xfer_);
+            xfer_ = nullptr;
+        }
         return false;
     }
 
-    DebugLogFL(DL::Info, DC::Main)
-        << "sound_wave_pass: initialised (cap=" << MAX_INSTANCES << ")";
+    DebugLogFL(DL::Info, DC::Main) << "sound_wave_pass: initialised (cap=" << MAX_INSTANCES << ")";
     return true;
 }
 
 // ---- Shutdown -------------------------------------------------------------
 
-auto sound_wave_pass::shutdown() noexcept -> void
-{
+auto sound_wave_pass::shutdown() noexcept -> void {
     if (dev_ && dev_->ready()) {
         SDL_ReleaseGPUGraphicsPipeline(dev_->raw(), pipeline_);
         SDL_ReleaseGPUShader(dev_->raw(), vert_);
@@ -140,8 +141,7 @@ auto sound_wave_pass::shutdown() noexcept -> void
 // ---- Upload ---------------------------------------------------------------
 
 auto sound_wave_pass::upload_instances(
-    SDL_GPUCommandBuffer* cb, const std::vector<sound_wave_instance>& insts) -> bool
-{
+    SDL_GPUCommandBuffer* cb, const std::vector<sound_wave_instance>& insts) -> bool {
     if (insts.empty()) { return false; }
 
     const Uint32 count = static_cast<Uint32>(
@@ -175,8 +175,7 @@ auto sound_wave_pass::upload_instances(
 
 // ---- Per-frame record -----------------------------------------------------
 
-auto sound_wave_pass::record(const sound_wave_record_options& opts) -> void
-{
+auto sound_wave_pass::record(const sound_wave_record_options& opts) -> void {
     if (!ready() || !opts.cb || !opts.target || opts.proj_w == 0 || opts.proj_h == 0) { return; }
     if (!opts.instances || opts.instances->empty()) { return; }
 
@@ -216,13 +215,12 @@ auto sound_wave_pass::record(const sound_wave_record_options& opts) -> void
     SDL_PushGPUFragmentUniformData(opts.cb, 0, &opts.snd_frag_params, sizeof(opts.snd_frag_params));
 
     // SDF storage buffer (t0/space2) — only bind when available.
-    if (opts.sdf_buffer) {
-        SDL_BindGPUFragmentStorageBuffers(rp, 0, &opts.sdf_buffer, 1);
-    }
+    if (opts.sdf_buffer) { SDL_BindGPUFragmentStorageBuffers(rp, 0, &opts.sdf_buffer, 1); }
 
     // Draw 6 vertices (unit quad) × N instances.
-    SDL_DrawGPUPrimitives(rp, /*vertex_count=*/6, /*instance_count=*/count,
-                          /*first_vertex=*/0, /*first_instance=*/0);
+    SDL_DrawGPUPrimitives(
+        rp, /*vertex_count=*/6, /*instance_count=*/count,
+        /*first_vertex=*/0, /*first_instance=*/0);
 
     SDL_EndGPURenderPass(rp);
 }

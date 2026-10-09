@@ -1,19 +1,19 @@
 #include "gpu_device.h"
 
-#include "driver_capture.h"
 #include "debug.h"
+#include "driver_capture.h"
 #include "options.h"
 
-#include <optional>
-#include <system_error>
-#include <utility>
-#include <cstdlib>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <stdexcept>
 #include <string>
+#include <system_error>
+#include <utility>
 #include <vector>
 
 #define dbg(x) DebugLogFL((x), DC::SDL)
@@ -82,31 +82,37 @@ void gpu_device::init(SDL_Window* window, bool debug, bool vsync) {
     // Production never takes this branch.
     const char* measure_env = std::getenv("CATA_MEASURE_IMMEDIATE");
     if (!present_ok && !vsync && measure_env != nullptr && std::strcmp(measure_env, "1") == 0) {
-        DebugLogFL( DL::Info, DC::Main ) << "present mode mailbox rejected (" << SDL_GetError()
-                      << "); CATA_MEASURE_IMMEDIATE retrying immediate";
+        DebugLogFL(DL::Info, DC::Main)
+            << "present mode mailbox rejected (" << SDL_GetError()
+            << "); CATA_MEASURE_IMMEDIATE retrying immediate";
         present_mode = SDL_GPU_PRESENTMODE_IMMEDIATE;
         present_ok = SDL_SetGPUSwapchainParameters(
             device.get(), window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, present_mode);
     }
     // present= is the mode the last request selected; on ret=0 the swapchain
     // keeps SDL_ClaimWindowForGPUDevice's default (VSYNC).
-    const char* present_name = !present_ok ? "vsync"
-                               : present_mode == SDL_GPU_PRESENTMODE_MAILBOX ? "mailbox"
-                               : present_mode == SDL_GPU_PRESENTMODE_IMMEDIATE ? "immediate"
-                               : "vsync";
+    const char* present_name =
+        !present_ok                                   ? "vsync"
+        : present_mode == SDL_GPU_PRESENTMODE_MAILBOX ? "mailbox"
+        : present_mode == SDL_GPU_PRESENTMODE_IMMEDIATE
+            ? "immediate"
+            : "vsync";
 
     const char* driver = SDL_GetGPUDeviceDriver(device.get());
-    DebugLogFL( DL::Info, DC::Main ) << "SDL_GPU device created. driver=" << (driver ? driver : "?")
-                  << " swapchain_format=" << static_cast<int>(swap_format)
-                  << " vsync=" << (vsync ? "on" : "off")
-                  << " present=" << present_name << " ret=" << (present_ok ? 1 : 0);
+    DebugLogFL(DL::Info, DC::Main)
+        << "SDL_GPU device created. driver=" << (driver ? driver : "?") << " swapchain_format="
+        << static_cast<int>(swap_format) << " vsync=" << (vsync ? "on" : "off")
+        << " present=" << present_name << " ret=" << (present_ok ? 1 : 0);
 }
 
 void gpu_device::shutdown() noexcept {
     if (device && claimed_window) { SDL_ReleaseWindowFromGPUDevice(device.get(), claimed_window); }
     claimed_window = nullptr;
     swap_format = SDL_GPU_TEXTUREFORMAT_INVALID;
-    if (dump_xfer_ != nullptr) { SDL_ReleaseGPUTransferBuffer( device.get(), dump_xfer_ ); dump_xfer_ = nullptr; }
+    if (dump_xfer_ != nullptr) {
+        SDL_ReleaseGPUTransferBuffer(device.get(), dump_xfer_);
+        dump_xfer_ = nullptr;
+    }
     device.reset();
 }
 
@@ -141,25 +147,17 @@ frame_context gpu_device::begin_frame() noexcept {
     return ctx;
 }
 
-namespace
-{
+namespace {
 // F13 on-demand dump: the input handler bumps the request; the next frame
 // consumes it and dumps to /tmp/cata_frame_<n>.bmp (+ cata_map_<n>.json).
 std::uint64_t g_frame_dump_request = 0;
-}
+} // namespace
 
-void request_frame_dump()
-{
-    ++g_frame_dump_request;
-}
+void request_frame_dump() { ++g_frame_dump_request; }
 
-std::uint64_t frame_dump_request()
-{
-    return g_frame_dump_request;
-}
+std::uint64_t frame_dump_request() { return g_frame_dump_request; }
 
-namespace
-{
+namespace {
 // The driver's `capture`: one frame, dumped to a path of the caller's (see driver_capture.h).
 struct armed_capture {
     bool armed = false;
@@ -167,53 +165,51 @@ struct armed_capture {
     std::optional<frame_capture_report> report;
 };
 armed_capture g_capture;
+} // namespace
+
+void arm_frame_capture(std::string path) {
+    g_capture = {.armed = true, .path = std::move(path), .report = std::nullopt};
 }
 
-void arm_frame_capture( std::string path )
-{
-    g_capture = { .armed = true, .path = std::move( path ), .report = std::nullopt };
-}
-
-std::optional<frame_capture_report> take_frame_capture()
-{
+std::optional<frame_capture_report> take_frame_capture() {
     g_capture.armed = false;
-    return std::exchange( g_capture.report, std::nullopt );
+    return std::exchange(g_capture.report, std::nullopt);
 }
 
 bool gpu_device::maybe_dump_frame(frame_context& ctx) noexcept {
     if (!ctx.swapchain_tex) { return false; }
     ++frame_count_;
     if (frame_count_ % 100 == 0) {
-        DebugLogFL( DL::Info, DC::Main ) << "frame heartbeat: " << frame_count_;
+        DebugLogFL(DL::Info, DC::Main) << "frame heartbeat: " << frame_count_;
     }
     std::string path;
     // The driver's capture is one-shot: the frame that takes it disarms it, so no later frame
     // can be taken for the request.
     const bool capturing = g_capture.armed;
     g_capture.armed = false;
-    const bool file_trigger = !capturing && std::filesystem::exists( "/tmp/cata_dump_trigger" );
+    const bool file_trigger = !capturing && std::filesystem::exists("/tmp/cata_dump_trigger");
     if (capturing) {
         path = g_capture.path + ".part";
     } else if (g_frame_dump_request > 0 || file_trigger) {
         g_frame_dump_request = 0;
-        if (file_trigger) { std::filesystem::remove( "/tmp/cata_dump_trigger" ); }
-        path = "/tmp/cata_frame_" + std::to_string( frame_count_ ) + ".bmp";
+        if (file_trigger) { std::filesystem::remove("/tmp/cata_dump_trigger"); }
+        path = "/tmp/cata_frame_" + std::to_string(frame_count_) + ".bmp";
     } else {
-        static const char* spec = std::getenv( "CATA_FRAME_DUMP" );
+        static const char* spec = std::getenv("CATA_FRAME_DUMP");
         if (spec == nullptr) { return false; }
-        const char* colon = std::strchr( spec, ':' );
+        const char* colon = std::strchr(spec, ':');
         if (colon == nullptr) { return false; }
-        if (std::strtoull( spec, nullptr, 10 ) != frame_count_) { return false; }
-        path.assign( colon + 1 );
+        if (std::strtoull(spec, nullptr, 10) != frame_count_) { return false; }
+        path.assign(colon + 1);
     }
     // Once the command buffer is submitted it is gone, so a failure after that must not have
     // submit_frame submit it again.
     bool submitted = false;
-    const auto fail = [&]( const std::string& why ) {
+    const auto fail = [&](const std::string& why) {
         if (capturing) {
             std::error_code ec;
-            std::filesystem::remove( path, ec );
-            g_capture.report = frame_capture_report{ .error = why };
+            std::filesystem::remove(path, ec);
+            g_capture.report = frame_capture_report{.error = why};
         }
         return submitted;
     };
@@ -221,21 +217,22 @@ bool gpu_device::maybe_dump_frame(frame_context& ctx) noexcept {
     const Uint32 h = ctx.swapchain_h;
     const Uint32 bytes = w * h * 4;
     if (dump_xfer_ == nullptr || dump_xfer_bytes_ < bytes) {
-        if (dump_xfer_ != nullptr) { SDL_ReleaseGPUTransferBuffer( device.get(), dump_xfer_ ); }
+        if (dump_xfer_ != nullptr) { SDL_ReleaseGPUTransferBuffer(device.get(), dump_xfer_); }
         SDL_GPUTransferBufferCreateInfo tbi{};
         tbi.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
         tbi.size = bytes;
-        dump_xfer_ = SDL_CreateGPUTransferBuffer( device.get(), &tbi );
+        dump_xfer_ = SDL_CreateGPUTransferBuffer(device.get(), &tbi);
         dump_xfer_bytes_ = dump_xfer_ ? bytes : 0u;
     }
     if (dump_xfer_ == nullptr) {
-        DebugLogFL( DL::Warn, DC::Main ) << "frame dump: transfer buffer create failed: " << SDL_GetError();
-        return fail( "transfer buffer create failed" );
+        DebugLogFL(DL::Warn, DC::Main)
+            << "frame dump: transfer buffer create failed: " << SDL_GetError();
+        return fail("transfer buffer create failed");
     }
-    SDL_GPUCopyPass* cp = SDL_BeginGPUCopyPass( ctx.cmd_buffer );
+    SDL_GPUCopyPass* cp = SDL_BeginGPUCopyPass(ctx.cmd_buffer);
     if (!cp) {
-        DebugLogFL( DL::Warn, DC::Main ) << "frame dump: copy pass failed: " << SDL_GetError();
-        return fail( "copy pass failed" );
+        DebugLogFL(DL::Warn, DC::Main) << "frame dump: copy pass failed: " << SDL_GetError();
+        return fail("copy pass failed");
     }
     SDL_GPUTextureRegion src{};
     src.texture = ctx.swapchain_tex;
@@ -251,90 +248,91 @@ bool gpu_device::maybe_dump_frame(frame_context& ctx) noexcept {
     dst.offset = 0;
     dst.pixels_per_row = w;
     dst.rows_per_layer = h;
-    SDL_DownloadFromGPUTexture( cp, &src, &dst );
-    SDL_EndGPUCopyPass( cp );
+    SDL_DownloadFromGPUTexture(cp, &src, &dst);
+    SDL_EndGPUCopyPass(cp);
     submitted = true;
-    SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence( ctx.cmd_buffer );
+    SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(ctx.cmd_buffer);
     if (fence == nullptr) {
-        DebugLogFL( DL::Warn, DC::Main ) << "frame dump: fence acquire failed: " << SDL_GetError();
-        return fail( "fence acquire failed" );
+        DebugLogFL(DL::Warn, DC::Main) << "frame dump: fence acquire failed: " << SDL_GetError();
+        return fail("fence acquire failed");
     }
-    if (!SDL_WaitForGPUFences( device.get(), true, &fence, 1 )) {
-        DebugLogFL( DL::Warn, DC::Main ) << "frame dump: fence wait failed: " << SDL_GetError();
-        SDL_ReleaseGPUFence( device.get(), fence );
-        return fail( "fence wait failed" );
+    if (!SDL_WaitForGPUFences(device.get(), true, &fence, 1)) {
+        DebugLogFL(DL::Warn, DC::Main) << "frame dump: fence wait failed: " << SDL_GetError();
+        SDL_ReleaseGPUFence(device.get(), fence);
+        return fail("fence wait failed");
     }
-    SDL_ReleaseGPUFence( device.get(), fence );
-    void* mapped = SDL_MapGPUTransferBuffer( device.get(), dump_xfer_, false );
+    SDL_ReleaseGPUFence(device.get(), fence);
+    void* mapped = SDL_MapGPUTransferBuffer(device.get(), dump_xfer_, false);
     if (mapped == nullptr) {
-        DebugLogFL( DL::Warn, DC::Main ) << "frame dump: map failed: " << SDL_GetError();
-        return fail( "map failed" );
+        DebugLogFL(DL::Warn, DC::Main) << "frame dump: map failed: " << SDL_GetError();
+        return fail("map failed");
     }
-    const auto* px = static_cast<const unsigned char*>( mapped );
-    std::ofstream f( path, std::ios::binary );
+    const auto* px = static_cast<const unsigned char*>(mapped);
+    std::ofstream f(path, std::ios::binary);
     if (!f) {
-        DebugLogFL( DL::Warn, DC::Main ) << "frame dump: cannot open " << path;
-        SDL_UnmapGPUTransferBuffer( device.get(), dump_xfer_ );
-        return fail( "cannot open " + path );
+        DebugLogFL(DL::Warn, DC::Main) << "frame dump: cannot open " << path;
+        SDL_UnmapGPUTransferBuffer(device.get(), dump_xfer_);
+        return fail("cannot open " + path);
     }
     const unsigned int row_bytes = w * 3;
-    const unsigned int row_pitch = ( row_bytes + 3u ) & ~3u;
+    const unsigned int row_pitch = (row_bytes + 3u) & ~3u;
     const unsigned int img_size = row_pitch * h;
     unsigned char hdr[54] = {};
     hdr[0] = 'B';
     hdr[1] = 'M';
-    const auto put32 = [&]( int off, unsigned int v ) {
-        hdr[off] = static_cast<unsigned char>( v & 0xFF );
-        hdr[off + 1] = static_cast<unsigned char>( ( v >> 8 ) & 0xFF );
-        hdr[off + 2] = static_cast<unsigned char>( ( v >> 16 ) & 0xFF );
-        hdr[off + 3] = static_cast<unsigned char>( ( v >> 24 ) & 0xFF );
+    const auto put32 = [&](int off, unsigned int v) {
+        hdr[off] = static_cast<unsigned char>(v & 0xFF);
+        hdr[off + 1] = static_cast<unsigned char>((v >> 8) & 0xFF);
+        hdr[off + 2] = static_cast<unsigned char>((v >> 16) & 0xFF);
+        hdr[off + 3] = static_cast<unsigned char>((v >> 24) & 0xFF);
     };
-    const auto put16 = [&]( int off, unsigned int v ) {
-        hdr[off] = static_cast<unsigned char>( v & 0xFF );
-        hdr[off + 1] = static_cast<unsigned char>( ( v >> 8 ) & 0xFF );
+    const auto put16 = [&](int off, unsigned int v) {
+        hdr[off] = static_cast<unsigned char>(v & 0xFF);
+        hdr[off + 1] = static_cast<unsigned char>((v >> 8) & 0xFF);
     };
-    put32( 2, 54u + img_size );
-    put32( 10, 54u );
-    put32( 14, 40u );
-    put32( 18, w );
-    put32( 22, h );
-    put16( 26, 1u );
-    put16( 28, 24u );
-    put32( 34, img_size );
-    f.write( reinterpret_cast<const char*>( hdr ), 54 );
-    std::vector<unsigned char> row( row_pitch, 0 );
-    for ( Uint32 y = 0; y < h; ++y ) {
-        const Uint32 src_row = ( h - 1 - y ) * w; // BMP is bottom-up
-        for ( Uint32 x = 0; x < w; ++x ) {
-            const unsigned char* s = &px[ ( src_row + x ) * 4 ];
-            row[ x * 3 + 0 ] = s[0];
-            row[ x * 3 + 1 ] = s[1];
-            row[ x * 3 + 2 ] = s[2];
+    put32(2, 54u + img_size);
+    put32(10, 54u);
+    put32(14, 40u);
+    put32(18, w);
+    put32(22, h);
+    put16(26, 1u);
+    put16(28, 24u);
+    put32(34, img_size);
+    f.write(reinterpret_cast<const char*>(hdr), 54);
+    std::vector<unsigned char> row(row_pitch, 0);
+    for (Uint32 y = 0; y < h; ++y) {
+        const Uint32 src_row = (h - 1 - y) * w; // BMP is bottom-up
+        for (Uint32 x = 0; x < w; ++x) {
+            const unsigned char* s = &px[(src_row + x) * 4];
+            row[x * 3 + 0] = s[0];
+            row[x * 3 + 1] = s[1];
+            row[x * 3 + 2] = s[2];
         }
-        f.write( reinterpret_cast<const char*>( row.data()), static_cast<std::streamsize>( row_pitch ) );
+        f.write(reinterpret_cast<const char*>(row.data()), static_cast<std::streamsize>(row_pitch));
     }
-    SDL_UnmapGPUTransferBuffer( device.get(), dump_xfer_ );
+    SDL_UnmapGPUTransferBuffer(device.get(), dump_xfer_);
     if (capturing) {
         f.close();
         std::error_code ec;
-        if (!f) { return fail( "cannot write " + path ); }
-        std::filesystem::rename( path, g_capture.path, ec );
-        if (ec) { return fail( "cannot publish " + g_capture.path + ": " + ec.message() ); }
-        g_capture.report = frame_capture_report{ .written = true, .width = w, .height = h,
-                                                 .frame = frame_count_ };
-        DebugLogFL( DL::Info, DC::Main ) << "frame capture: wrote " << g_capture.path << " (" << w
-                                         << "x" << h << ")";
+        if (!f) { return fail("cannot write " + path); }
+        std::filesystem::rename(path, g_capture.path, ec);
+        if (ec) { return fail("cannot publish " + g_capture.path + ": " + ec.message()); }
+        g_capture.report =
+            frame_capture_report{.written = true, .width = w, .height = h, .frame = frame_count_};
+        DebugLogFL(DL::Info, DC::Main)
+            << "frame capture: wrote " << g_capture.path << " (" << w << "x" << h << ")";
         return true;
     }
     last_dump_frame_ = frame_count_;
-    DebugLogFL( DL::Info, DC::Main ) << "frame dump: wrote " << path << " (" << w << "x" << h
-                                     << ", fmt=" << static_cast<int>( swap_format ) << ")";
+    DebugLogFL(DL::Info, DC::Main)
+        << "frame dump: wrote " << path << " (" << w << "x" << h
+        << ", fmt=" << static_cast<int>(swap_format) << ")";
     return true;
 }
 
 void gpu_device::submit_frame(frame_context& ctx) noexcept {
     if (!ctx.cmd_buffer) { return; }
-    if (maybe_dump_frame( ctx )) {
+    if (maybe_dump_frame(ctx)) {
         // Dump path already submitted the buffer (with fence) and waited.
         ctx.cmd_buffer = nullptr;
         ctx.swapchain_tex = nullptr;

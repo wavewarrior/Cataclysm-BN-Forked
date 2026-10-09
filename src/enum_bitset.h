@@ -87,10 +87,10 @@ class enum_bitset
 
     private:
         static constexpr size_t get_pos( E e ) noexcept {
-            return static_cast<size_t>( static_cast<std::underlying_type_t<E>>( e ) );
+            return static_cast<size_t>( static_cast<std::underlying_type_t<E >> ( e ) );
         }
 
-        std::bitset<enum_bitset<E>::size()> bits;
+        std::bitset<enum_bitset<E>::size() > bits;
 };
 
 

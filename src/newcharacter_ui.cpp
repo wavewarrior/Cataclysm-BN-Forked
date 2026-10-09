@@ -136,7 +136,7 @@ struct {
     bool cities_enabled = false;
     auto operator()( const scenario *a, const scenario *b ) -> bool {
         if( cities_enabled ) {
-        const scenario *gen = scenario::generic();
+            const scenario *gen = scenario::generic();
             if( b == gen ) {
                 return false;
             } else if( a == gen ) {
@@ -146,7 +146,7 @@ struct {
         if( !cities_enabled && a->has_flag( "CITY_START" ) != b->has_flag( "CITY_START" ) ) {
             return a->has_flag( "CITY_START" ) < b->has_flag( "CITY_START" );
         } else if( sort_by_points ) {
-        return a->point_cost() < b->point_cost();
+            return a->point_cost() < b->point_cost();
         } else {
             return localized_compare( a->gender_appropriate_name( male ),
                                       b->gender_appropriate_name( male ) );
@@ -190,7 +190,7 @@ enum description_selector {
 static auto profession_age_limits_enabled() -> bool
 {
     if( world_generator && world_generator->active_world ) {
-    return world_generator->active_world->info->WORLD_OPTIONS["ENFORCE_PROFESSION_AGE_RANGE"]
+        return world_generator->active_world->info->WORLD_OPTIONS["ENFORCE_PROFESSION_AGE_RANGE"]
                .value_as<bool>();
     }
     return false;
@@ -199,7 +199,7 @@ static auto profession_age_limits_enabled() -> bool
 static auto profession_age_bounds( const profession &prof ) -> std::pair<int, int>
 {
     if( profession_age_limits_enabled() ) {
-    if( const auto range = prof.starting_age_range() ) {
+        if( const auto range = prof.starting_age_range() ) {
             return { range->min, range->max };
         }
     }
@@ -250,7 +250,7 @@ auto nc_label( const std::string &label, const nc_color &col ) -> std::string
 auto nc_icon_dec( unsigned seed, int size, bool active ) -> std::string
 {
     return string_format( "image( ?proc:runic-icon:%d:%u:%s none contain ) border-box",
-           size, seed, active ? "c4a832" : "a1885f" );
+                          size, seed, active ? "c4a832" : "a1885f" );
 }
 
 /// Same generator, but the glyph takes an arbitrary game colour.
@@ -451,7 +451,7 @@ tab_direction set_profession( avatar &u, points_left &points, tab_direction dire
 tab_direction set_skills( avatar &u, points_left &points );
 tab_direction set_description( avatar &you, bool allow_reroll, points_left &points );
 
-static std::optional<std::string> query_for_template_name();
+static std::optional < std::string > query_for_template_name();
 void reset_scenario( avatar &u, const scenario *scen );
 
 static auto scenario_is_selectable( const scenario &scen, const bool cities_enabled ) -> bool
@@ -459,7 +459,7 @@ static auto scenario_is_selectable( const scenario &scen, const bool cities_enab
     return !scen.scen_is_blacklisted() && ( !scen.has_flag( "CITY_START" ) || cities_enabled );
 }
 
-static auto first_selectable_scenario( const std::vector<const scenario *> &scenarios,
+static auto first_selectable_scenario( const std::vector < const scenario * > &scenarios,
                                        const bool cities_enabled ) -> const scenario * // *NOPAD*
 {
     const auto iter = std::ranges::find_if( scenarios, [cities_enabled]( const scenario * scen ) {
@@ -507,10 +507,10 @@ struct nc_points_opt {
     bool chosen = false;    //< this is the pool actually in force
 };
 struct nc_points_session {
-    Rml::Vector<nc_rml_tab> tabs;
+    Rml::Vector < nc_rml_tab > tabs;
     nc_shell shell;
     Rml::String points_rml;
-    Rml::Vector<nc_points_opt> opts;
+    Rml::Vector < nc_points_opt > opts;
     Rml::DataModelHandle handle;
 };
 
@@ -521,26 +521,26 @@ void register_nc_points_rml_types( Rml::DataModelConstructor &c )
     if( g_nc_points_types_registered ) {
         return;
     }
-    Rml::StructHandle<nc_rml_tab> th = c.RegisterStruct<nc_rml_tab>();
+    Rml::StructHandle < nc_rml_tab > th = c.RegisterStruct < nc_rml_tab > ();
     th.RegisterMember( "name_rml", &nc_rml_tab::name_rml );
     th.RegisterMember( "icon_dec", &nc_rml_tab::icon_dec );
     th.RegisterMember( "selected", &nc_rml_tab::selected );
     th.RegisterMember( "done", &nc_rml_tab::done );
-    c.RegisterArray<Rml::Vector<nc_rml_tab>>();
-    Rml::StructHandle<nc_points_opt> oh = c.RegisterStruct<nc_points_opt>();
+    c.RegisterArray < Rml::Vector < nc_rml_tab>>();
+    Rml::StructHandle < nc_points_opt > oh = c.RegisterStruct < nc_points_opt > ();
     oh.RegisterMember( "name_rml", &nc_points_opt::name_rml );
     oh.RegisterMember( "info_rml", &nc_points_opt::info_rml );
     oh.RegisterMember( "rune_dec", &nc_points_opt::rune_dec );
     oh.RegisterMember( "selected", &nc_points_opt::selected );
     oh.RegisterMember( "chosen", &nc_points_opt::chosen );
-    c.RegisterArray<Rml::Vector<nc_points_opt>>();
+    c.RegisterArray < Rml::Vector < nc_points_opt>>();
     g_nc_points_types_registered = true;
 }
 
 /// The eight creation steps, in order. Index 0 is POINTS.
-inline auto nc_step_captions() -> const std::vector<std::string> &
+inline auto nc_step_captions() -> const std::vector < std::string > &
 {
-    static const std::vector<std::string> caps = {
+    static const std::vector < std::string > caps = {
         _( "POINTS" ), _( "SCENARIO" ), _( "PROFESSION" ), _( "STATS" ),
         _( "TRAITS" ), _( "BIONICS" ), _( "SKILLS" ), _( "OVERVIEW" ),
     };
@@ -556,12 +556,12 @@ inline auto nc_step_captions() -> const std::vector<std::string> &
 // type (RegisterStruct is context-global — distinct types avoid re-registering one
 // type on two models; the worldfactory precedent). Every step struct has
 // {name_rml, icon_dec, selected, done}.
-template<typename TabT>
-Rml::Vector<TabT> build_nc_char_tabs( int active )
+template < typename TabT >
+Rml::Vector < TabT > build_nc_char_tabs( int active )
 {
-    const std::vector<std::string> &caps = nc_step_captions();
-    Rml::Vector<TabT> tabs;
-    for( int i = 0; i < static_cast<int>( caps.size() ); i++ ) {
+    const std::vector < std::string > &caps = nc_step_captions();
+    Rml::Vector < TabT > tabs;
+    for( int i = 0; i < static_cast < int > ( caps.size() ); i++ ) {
         TabT t;
         t.name_rml = cata_text_to_rml( caps[i] );
         t.selected = ( i == active );
@@ -578,8 +578,8 @@ Rml::Vector<TabT> build_nc_char_tabs( int active )
 /// translated. Printing an invented key would be a lie the moment anyone rebinds.
 auto fill_nc_shell( int active, const input_context &ctxt ) -> nc_shell
 {
-    const std::vector<std::string> &caps = nc_step_captions();
-    const int last = static_cast<int>( caps.size() ) - 1;
+    const std::vector < std::string > &caps = nc_step_captions();
+    const int last = static_cast < int > ( caps.size() ) - 1;
     nc_shell s;
     s.has_prev = active > 0;
     s.has_next = active < last;
@@ -698,16 +698,16 @@ tab_direction set_points( avatar &, points_left &points )
     ctxt.register_action( "SELECT" );
     ctxt.register_action( "CONFIRM" );
 
-    const std::string point_pool = get_option<std::string>( "CHARACTER_POINT_POOLS" );
+    const std::string point_pool = get_option < std::string > ( "CHARACTER_POINT_POOLS" );
 
-    using point_limit_tuple = std::tuple<points_left::point_limit, std::string, std::string>;
-    std::vector<point_limit_tuple> opts;
+    using point_limit_tuple = std::tuple < points_left::point_limit, std::string, std::string >;
+    std::vector < point_limit_tuple > opts;
 
     const point_limit_tuple multi_pool = std::make_tuple( points_left::MULTI_POOL,
                                          _( "Multiple pools" ),
                                          _( "Stats, traits and skills have separate point pools.\n"
-                                            "Putting stat points into traits and skills is allowed and putting trait points into skills is allowed.\n"
-                                            "Scenarios and professions affect skill point pool." ) );
+       "Putting stat points into traits and skills is allowed and putting trait points into skills is allowed.\n"
+       "Scenarios and professions affect skill point pool." ) );
 
     const point_limit_tuple one_pool = std::make_tuple( points_left::ONE_POOL, _( "Single pool" ),
                                        _( "Stats, traits and skills share a single point pool." ) );
@@ -726,7 +726,7 @@ tab_direction set_points( avatar &, points_left &points )
     int highlighted = 0;
 
     // RmlUi render path (render-only; keyboard still owns nav/confirm below).
-    auto data = std::make_unique<nc_points_session>();
+    auto data = std::make_unique < nc_points_session > ();
     rml_doc rml;
     // Set by the arrow click callbacks, consumed by the input loop below. Not a
     // tab_direction: it is translated into an action string so the existing
@@ -737,8 +737,8 @@ tab_direction set_points( avatar &, points_left &points )
             return;
         }
         const int sel = std::max( 0, std::min( highlighted,
-                                               static_cast<int>( opts.size() ) - 1 ) );
-        data->tabs = build_nc_char_tabs<nc_rml_tab>( 0 );  // POINTS tab active
+                                               static_cast < int > ( opts.size() ) - 1 ) );
+        data->tabs = build_nc_char_tabs < nc_rml_tab > ( 0 ); // POINTS tab active
         data->shell = fill_nc_shell( 0, ctxt );
         data->points_rml = cata_text_to_rml( nc_points_line( points ) );
         data->opts.clear();
@@ -746,15 +746,15 @@ tab_direction set_points( avatar &, points_left &points )
         // the shape becomes recognisable. Replace rune_dec with image(...) when art
         // lands — see plans/charcreation-wizard-flow.md.
         static constexpr unsigned POOL_RUNE_SEEDS[3] = { 0x504F, 0x4F4C, 0x4650 };
-        for( int i = 0; i < static_cast<int>( opts.size() ); i++ ) {
+        for( int i = 0; i < static_cast < int > ( opts.size() ); i++ ) {
             nc_points_opt o;
-            o.chosen = ( points.limit == std::get<0>( opts[i] ) );
+            o.chosen = ( points.limit == std::get < 0 > ( opts[i] ) );
             // c_light_green, not COL_SKILL_USED (c_green): on the card's dark fill a
             // dark green measured only 2.55:1, under the 3:1 large-text floor. Same
             // meaning ("this pool is the one in force"), one luminance step up.
-            o.name_rml = cata_text_to_rml( colorize( std::get<1>( opts[i] ),
+            o.name_rml = cata_text_to_rml( colorize( std::get < 1 > ( opts[i] ),
                                            o.chosen ? c_light_green : c_light_gray ) );
-            o.info_rml = cata_text_to_rml( colorize( std::get<2>( opts[i] ), c_light_gray ) );
+            o.info_rml = cata_text_to_rml( colorize( std::get < 2 > ( opts[i] ), c_light_gray ) );
             o.selected = ( sel == i );
             // Art brightens for the focused card as well as the chosen one — at card
             // scale the rune is the largest thing on it, so it has to carry the cursor.
@@ -797,9 +797,9 @@ tab_direction set_points( avatar &, points_left &points )
             if( !args.empty() ) {
                 args[0].GetInto( idx );
             }
-            if( idx >= 0 && idx < static_cast<int>( opts.size() ) ) {
+            if( idx >= 0 && idx < static_cast < int > ( opts.size() ) ) {
                 highlighted = idx;
-                points.limit = std::get<0>( opts[idx] );
+                points.limit = std::get < 0 > ( opts[idx] );
             }
         } );
         data->handle = c.GetModelHandle();
@@ -811,7 +811,7 @@ tab_direction set_points( avatar &, points_left &points )
     do {
         if( highlighted < 0 ) {
             highlighted = opts.size() - 1;
-        } else if( highlighted >= static_cast<int>( opts.size() ) ) {
+        } else if( highlighted >= static_cast < int > ( opts.size() ) ) {
             highlighted = 0;
         }
         ui_manager::redraw();
@@ -832,7 +832,7 @@ tab_direction set_points( avatar &, points_left &points )
             retval = tab_direction::QUIT;
         } else if( action == "CONFIRM" ) {
             const auto &cur_opt = opts[highlighted];
-            points.limit = std::get<0>( cur_opt );
+            points.limit = std::get < 0 > ( cur_opt );
         }
     } while( retval == tab_direction::NONE );
 
@@ -871,23 +871,23 @@ struct nc_stat_card {
     Rml::String icon_dec;
     Rml::String name_rml;
     Rml::String val_rml;
-    Rml::Vector<nc_stat_pip> pips;
+    Rml::Vector < nc_stat_pip > pips;
     bool selected = false;   //< cursor is on this card
     bool can_dec = false;    //< not at the granted floor
     bool can_inc = false;    //< not at the cap
 };
 
 struct nc_stats_session {
-    Rml::Vector<nc_stats_tab> tabs;
+    Rml::Vector < nc_stats_tab > tabs;
     nc_shell shell;
     Rml::String points_rml;
     Rml::String hint_rml;    //< one status line in place of the old seven-line hints block
-    Rml::Vector<nc_stat_card> cards;
+    Rml::Vector < nc_stat_card > cards;
     /// The selected stat's own sigil, at panel size. Never empty: `data-style-decorator` is
     /// evaluated on the document's FIRST layout, before sync_rml has run, and an empty string
     /// became `decorator: ;` and an RmlUi parse warning per frame.
     Rml::String art_dec = "none";
-    Rml::Vector<nc_stat_fact> facts;
+    Rml::Vector < nc_stat_fact > facts;
     Rml::String desc_rml;    //< the stat's own voice, prose column
     Rml::String leg_base_rml;
     Rml::String leg_cheap_rml;
@@ -902,24 +902,24 @@ void register_nc_stats_rml_types( Rml::DataModelConstructor &c )
     if( g_nc_stats_types_registered ) {
         return;
     }
-    Rml::StructHandle<nc_stats_tab> th = c.RegisterStruct<nc_stats_tab>();
+    Rml::StructHandle < nc_stats_tab > th = c.RegisterStruct < nc_stats_tab > ();
     th.RegisterMember( "name_rml", &nc_stats_tab::name_rml );
     th.RegisterMember( "icon_dec", &nc_stats_tab::icon_dec );
     th.RegisterMember( "selected", &nc_stats_tab::selected );
     th.RegisterMember( "done", &nc_stats_tab::done );
-    c.RegisterArray<Rml::Vector<nc_stats_tab>>();
+    c.RegisterArray < Rml::Vector < nc_stats_tab>>();
     // Pips before cards: a card member cannot be registered before its element type is.
-    Rml::StructHandle<nc_stat_pip> ph = c.RegisterStruct<nc_stat_pip>();
+    Rml::StructHandle < nc_stat_pip > ph = c.RegisterStruct < nc_stat_pip > ();
     ph.RegisterMember( "on", &nc_stat_pip::on );
     ph.RegisterMember( "base", &nc_stat_pip::base );
     ph.RegisterMember( "steep", &nc_stat_pip::steep );
-    c.RegisterArray<Rml::Vector<nc_stat_pip>>();
-    Rml::StructHandle<nc_stat_fact> fh = c.RegisterStruct<nc_stat_fact>();
+    c.RegisterArray < Rml::Vector < nc_stat_pip>>();
+    Rml::StructHandle < nc_stat_fact > fh = c.RegisterStruct < nc_stat_fact > ();
     fh.RegisterMember( "label_rml", &nc_stat_fact::label_rml );
     fh.RegisterMember( "value_rml", &nc_stat_fact::value_rml );
     fh.RegisterMember( "sub_rml", &nc_stat_fact::sub_rml );
-    c.RegisterArray<Rml::Vector<nc_stat_fact>>();
-    Rml::StructHandle<nc_stat_card> ch = c.RegisterStruct<nc_stat_card>();
+    c.RegisterArray < Rml::Vector < nc_stat_fact>>();
+    Rml::StructHandle < nc_stat_card > ch = c.RegisterStruct < nc_stat_card > ();
     ch.RegisterMember( "icon_dec", &nc_stat_card::icon_dec );
     ch.RegisterMember( "name_rml", &nc_stat_card::name_rml );
     ch.RegisterMember( "val_rml", &nc_stat_card::val_rml );
@@ -927,7 +927,7 @@ void register_nc_stats_rml_types( Rml::DataModelConstructor &c )
     ch.RegisterMember( "selected", &nc_stat_card::selected );
     ch.RegisterMember( "can_dec", &nc_stat_card::can_dec );
     ch.RegisterMember( "can_inc", &nc_stat_card::can_inc );
-    c.RegisterArray<Rml::Vector<nc_stat_card>>();
+    c.RegisterArray < Rml::Vector < nc_stat_card>>();
     g_nc_stats_types_registered = true;
 }
 
@@ -950,8 +950,8 @@ auto nc_stat_ref( avatar &u, int sel ) -> int & // *NOPAD*
 auto nc_stat_name( int sel ) -> std::string
 {
     switch( sel ) {
-    case 1:
-        return _( "Strength" );
+        case 1:
+            return _( "Strength" );
         case 2:
             return _( "Dexterity" );
         case 3:
@@ -963,15 +963,15 @@ auto nc_stat_name( int sel ) -> std::string
 
 /// Stable per-stat sigil seeds, so each stat keeps one recognisable glyph across runs. The
 /// values are arbitrary but must all DIFFER — the generator keys the shape on the seed.
-constexpr std::array<unsigned, 4> nc_stat_seeds = { 0x5354, 0x4458, 0x494E, 0x5052 };
+constexpr std::array < unsigned, 4 > nc_stat_seeds = { 0x5354, 0x4458, 0x494E, 0x5052 };
 
 /// The stat's own voice. The prose column, kept separate from the numbers above it.
 auto nc_stat_blurb( int sel ) -> std::string
 {
     switch( sel ) {
-    case 1:
-        return
-            _( "Strength also makes you more resistant to many diseases and poisons, and makes actions which require brute force more effective." );
+        case 1:
+            return
+                _( "Strength also makes you more resistant to many diseases and poisons, and makes actions which require brute force more effective." );
         case 2:
             return _( "Dexterity also enhances many actions which require finesse." );
         case 3:
@@ -987,9 +987,9 @@ auto nc_stat_blurb( int sel ) -> std::string
 /// which cannot fit a fixed-height panel.
 ///
 /// `u` is mutated exactly as the curses path did: Strength's HP readout needs recalc_hp().
-auto nc_stat_facts( avatar &u, int sel, int max_stat_points ) -> Rml::Vector<nc_stat_fact>
+auto nc_stat_facts( avatar &u, int sel, int max_stat_points ) -> Rml::Vector < nc_stat_fact >
 {
-    Rml::Vector<nc_stat_fact> out;
+    Rml::Vector < nc_stat_fact > out;
     const auto add = [&out]( const std::string & label, const std::string & value,
     const nc_color & col, const std::string & sub = std::string() ) {
         out.push_back( {
@@ -1104,7 +1104,7 @@ tab_direction set_stats( avatar &u, points_left &points )
     old_pos.x() = 0;
     u.Character::setpos( old_pos );
 
-    auto data = std::make_unique<nc_stats_session>();
+    auto data = std::make_unique < nc_stats_session > ();
     rml_doc rml;
     // Set by the arrow click callbacks, consumed by the input loop below. Not a
     // tab_direction: it is translated into an action string so the existing
@@ -1144,7 +1144,7 @@ tab_direction set_stats( avatar &u, points_left &points )
         if( !data->handle ) {
             return;
         }
-        data->tabs = build_nc_char_tabs<nc_stats_tab>( 3 );  // STATS tab active
+        data->tabs = build_nc_char_tabs < nc_stats_tab > ( 3 ); // STATS tab active
         data->shell = fill_nc_shell( 3, ctxt );
         data->points_rml = cata_text_to_rml( nc_points_line( points ) );
         // The cards are a horizontal row, so LEFT/RIGHT walk them and UP/DOWN adjust the
@@ -1160,8 +1160,7 @@ tab_direction set_stats( avatar &u, points_left &points )
         // but a letter must still see it, and get_desc answers "Disabled" for a filter that
         // rejects every binding.
         const auto key = [&ctxt]( const std::string & act ) -> std::string {
-            const std::string named = ctxt.get_desc( act, 1, []( const input_event & ev )
-            {
+            const std::string named = ctxt.get_desc( act, 1, []( const input_event & ev ) {
                 return ev.type == input_event_t::keyboard && ev.get_first_input() > 0x7F;
             } );
             return named == pgettext( "keybinding", "Disabled" ) ? ctxt.get_desc( act, 1 ) : named;
@@ -1352,7 +1351,7 @@ struct nc_trait_row {
 struct nc_trait_col {
     Rml::String name_rml;
     Rml::String count_rml;
-    Rml::Vector<nc_trait_row> rows;
+    Rml::Vector < nc_trait_row > rows;
 };
 
 /// A label / value / sub-line triple in the detail panel.
@@ -1379,7 +1378,7 @@ struct nc_dna_rung {
 };
 
 struct nc_traits_session {
-    Rml::Vector<nc_traits_tab> tabs;
+    Rml::Vector < nc_traits_tab > tabs;
     nc_shell shell;
     Rml::String points_rml;
     Rml::String budget_rml;   //< "Points remaining: N", the reference's meta-bar readout
@@ -1390,12 +1389,12 @@ struct nc_traits_session {
     nc_trait_col col1;
     nc_trait_col col2;
     Rml::String sel_name_rml;   //< ":: TRAIT NAME" over the detail panel
-    Rml::Vector<nc_trait_fact> facts;
+    Rml::Vector < nc_trait_fact > facts;
     Rml::String desc_rml;
     Rml::String hint_rml;
     /// The spinning strand. Rebuilt every animation tick; everything else only when the model
     /// actually changed.
-    Rml::Vector<nc_dna_rung> dna;
+    Rml::Vector < nc_dna_rung > dna;
     Rml::String dna_count_rml;
     Rml::DataModelHandle handle;
 };
@@ -1407,13 +1406,13 @@ void register_nc_traits_rml_types( Rml::DataModelConstructor &c )
     if( g_nc_traits_types_registered ) {
         return;
     }
-    Rml::StructHandle<nc_traits_tab> th = c.RegisterStruct<nc_traits_tab>();
+    Rml::StructHandle < nc_traits_tab > th = c.RegisterStruct < nc_traits_tab > ();
     th.RegisterMember( "name_rml", &nc_traits_tab::name_rml );
     th.RegisterMember( "icon_dec", &nc_traits_tab::icon_dec );
     th.RegisterMember( "selected", &nc_traits_tab::selected );
     th.RegisterMember( "done", &nc_traits_tab::done );
-    c.RegisterArray<Rml::Vector<nc_traits_tab>>();
-    Rml::StructHandle<nc_balance> bh = c.RegisterStruct<nc_balance>();
+    c.RegisterArray < Rml::Vector < nc_traits_tab>>();
+    Rml::StructHandle < nc_balance > bh = c.RegisterStruct < nc_balance > ();
     bh.RegisterMember( "show", &nc_balance::show );
     bh.RegisterMember( "rotate", &nc_balance::rotate );
     bh.RegisterMember( "good_top", &nc_balance::good_top );
@@ -1424,31 +1423,31 @@ void register_nc_traits_rml_types( Rml::DataModelConstructor &c )
     bh.RegisterMember( "bad_icon", &nc_balance::bad_icon );
     bh.RegisterMember( "fulcrum_icon", &nc_balance::fulcrum_icon );
     // Rows before the column that holds them: a member cannot be registered before its type is.
-    Rml::StructHandle<nc_trait_row> rh = c.RegisterStruct<nc_trait_row>();
+    Rml::StructHandle < nc_trait_row > rh = c.RegisterStruct < nc_trait_row > ();
     rh.RegisterMember( "cursor_rml", &nc_trait_row::cursor_rml );
     rh.RegisterMember( "check_rml", &nc_trait_row::check_rml );
     rh.RegisterMember( "cost_rml", &nc_trait_row::cost_rml );
     rh.RegisterMember( "name_rml", &nc_trait_row::name_rml );
     rh.RegisterMember( "header", &nc_trait_row::header );
     rh.RegisterMember( "selected", &nc_trait_row::selected );
-    c.RegisterArray<Rml::Vector<nc_trait_row>>();
-    Rml::StructHandle<nc_trait_col> ch = c.RegisterStruct<nc_trait_col>();
+    c.RegisterArray < Rml::Vector < nc_trait_row>>();
+    Rml::StructHandle < nc_trait_col > ch = c.RegisterStruct < nc_trait_col > ();
     ch.RegisterMember( "name_rml", &nc_trait_col::name_rml );
     ch.RegisterMember( "count_rml", &nc_trait_col::count_rml );
     ch.RegisterMember( "rows", &nc_trait_col::rows );
-    Rml::StructHandle<nc_trait_fact> fh = c.RegisterStruct<nc_trait_fact>();
+    Rml::StructHandle < nc_trait_fact > fh = c.RegisterStruct < nc_trait_fact > ();
     fh.RegisterMember( "label_rml", &nc_trait_fact::label_rml );
     fh.RegisterMember( "value_rml", &nc_trait_fact::value_rml );
     fh.RegisterMember( "sub_rml", &nc_trait_fact::sub_rml );
-    c.RegisterArray<Rml::Vector<nc_trait_fact>>();
-    Rml::StructHandle<nc_dna_rung> dh = c.RegisterStruct<nc_dna_rung>();
+    c.RegisterArray < Rml::Vector < nc_trait_fact>>();
+    Rml::StructHandle < nc_dna_rung > dh = c.RegisterStruct < nc_dna_rung > ();
     dh.RegisterMember( "gap", &nc_dna_rung::gap );
     dh.RegisterMember( "bond", &nc_dna_rung::bond );
     dh.RegisterMember( "left_front", &nc_dna_rung::left_front );
     dh.RegisterMember( "mark_good", &nc_dna_rung::mark_good );
     dh.RegisterMember( "mark_bad", &nc_dna_rung::mark_bad );
     dh.RegisterMember( "mark_cosm", &nc_dna_rung::mark_cosm );
-    c.RegisterArray<Rml::Vector<nc_dna_rung>>();
+    c.RegisterArray < Rml::Vector < nc_dna_rung>>();
     g_nc_traits_types_registered = true;
 }
 
@@ -1467,15 +1466,15 @@ struct nc_trait_group {
 
 auto nc_classify_trait( const mutation_branch &m ) -> nc_trait_group
 {
-for( const std::string &t : m.types ) {
-    if( mutation_type_is_appearance( t ) ) {
+    for( const std::string &t : m.types ) {
+        if( mutation_type_is_appearance( t ) ) {
             return { .col = 2, .appearance_type = t };
         }
     }
     if( m.points > 0 ) {
-    return { .col = 0 };
-}
-return m.points < 0 ? nc_trait_group{ .col = 1 } : nc_trait_group{ .col = 2 };
+        return { .col = 0 };
+    }
+    return m.points < 0 ? nc_trait_group{ .col = 1 } : nc_trait_group{ .col = 2 };
 }
 
 /// The label a row shows. Under an appearance sub-heading the group is already named by the
@@ -1490,7 +1489,7 @@ return m.points < 0 ? nc_trait_group{ .col = 1 } : nc_trait_group{ .col = 2 };
 auto nc_trait_row_label( const mutation_branch &m, bool in_appearance ) -> std::string
 {
     if( !in_appearance ) {
-    return m.name();
+        return m.name();
     }
     const std::string bare = m.apperance_desc();
     if( !bare.empty() ) {
@@ -1504,12 +1503,12 @@ auto nc_trait_row_label( const mutation_branch &m, bool in_appearance ) -> std::
 auto nc_trait_group_name( const nc_trait_group &g ) -> std::string
 {
     if( !g.appearance_type.empty() ) {
-    // Already translated, and now covers facial_hair too.
-    return mutation_type_display_name( g.appearance_type );
+        // Already translated, and now covers facial_hair too.
+        return mutation_type_display_name( g.appearance_type );
     }
     switch( g.col ) {
-    case 0:
-        return _( "Advantages" );
+        case 0:
+            return _( "Advantages" );
         case 1:
             return _( "Disadvantages" );
         default:
@@ -1520,7 +1519,7 @@ auto nc_trait_group_name( const nc_trait_group &g ) -> std::string
 
 tab_direction set_traits( avatar &u, points_left &points )
 {
-    const int max_trait_points = get_option<int>( "MAX_TRAIT_POINTS" );
+    const int max_trait_points = get_option < int > ( "MAX_TRAIT_POINTS" );
 
     // Track how many good / bad POINTS we have; cap both at MAX_TRAIT_POINTS
     int num_good = 0;
@@ -1535,7 +1534,7 @@ tab_direction set_traits( avatar &u, points_left &points )
     };
     // ONE flat list; the columns are a VIEW over it. That keeps sorting and every id-based lookup
     // independent of how the screen happens to be grouped.
-    std::vector<trait_entry> starting_traits;
+    std::vector < trait_entry > starting_traits;
 
     for( auto &bio_iter : bionic_data::get_all() ) {
         if( bio_iter.points > 0 ) {
@@ -1567,7 +1566,7 @@ tab_direction set_traits( avatar &u, points_left &points )
         }
 
         // Always show profession locked traits, regardless of if they are forbidden
-        const std::vector<trait_id> proftraits = u.prof->get_locked_traits();
+        const std::vector < trait_id > proftraits = u.prof->get_locked_traits();
         const bool is_proftrait = std::find( proftraits.begin(), proftraits.end(),
                                              traits_iter.id ) != proftraits.end();
         // We show all starting traits, even if we can't pick them, to keep the interface consistent.
@@ -1597,7 +1596,7 @@ tab_direction set_traits( avatar &u, points_left &points )
     // Sub-headings for column 2, in get_all_mutation_type_ids() order (the mutation_types map, so
     // alphabetical by id: arbitrary but deterministic and stable however mods load). Neutral leads,
     // because it is gameplay and the pickers are not. Empty groups are dropped.
-    std::vector<nc_trait_group> col2_groups;
+    std::vector < nc_trait_group > col2_groups;
     {
         const auto group_has = [&]( const nc_trait_group & g ) {
             return std::ranges::any_of( starting_traits,
@@ -1627,12 +1626,12 @@ tab_direction set_traits( avatar &u, points_left &points )
 
     // Each column's rows, as indices into starting_traits. -1 marks a sub-heading, which occupies
     // a row so that every row is the same height — see nc_trait_row.
-    std::array<std::vector<int>, 3> col_rows;
+    std::array < std::vector < int>, 3 > col_rows;
     const auto rebuild_col_rows = [&]() {
-        for( std::vector<int> &v : col_rows ) {
+        for( std::vector < int > &v : col_rows ) {
             v.clear();
         }
-        for( int i = 0; i < static_cast<int>( starting_traits.size() ); i++ ) {
+        for( int i = 0; i < static_cast < int > ( starting_traits.size() ); i++ ) {
             const int c = starting_traits[i].grp.col;
             if( c != 2 ) {
                 col_rows[c].push_back( i );
@@ -1641,7 +1640,7 @@ tab_direction set_traits( avatar &u, points_left &points )
         // Column 2 is grouped, so it is assembled heading by heading rather than in flat order.
         for( const nc_trait_group &g : col2_groups ) {
             col_rows[2].push_back( -1 );
-            for( int i = 0; i < static_cast<int>( starting_traits.size() ); i++ ) {
+            for( int i = 0; i < static_cast < int > ( starting_traits.size() ); i++ ) {
                 if( starting_traits[i].grp == g ) {
                     col_rows[2].push_back( i );
                 }
@@ -1652,7 +1651,7 @@ tab_direction set_traits( avatar &u, points_left &points )
 
     // Which sub-heading each column-2 row sits under, parallel to col_rows[2], so a heading row can
     // name itself without re-deriving the grouping.
-    std::vector<int> col2_head_of( col_rows[2].size(), 0 );
+    std::vector < int > col2_head_of( col_rows[2].size(), 0 );
     {
         int cur = -1;
         for( size_t r = 0; r < col_rows[2].size(); r++ ) {
@@ -1664,10 +1663,10 @@ tab_direction set_traits( avatar &u, points_left &points )
     }
 
     int cur_col = 0;
-    std::array<int, 3> cur_row = { 0, 0, 0 };
+    std::array < int, 3 > cur_row = { 0, 0, 0 };
 
     const auto col_len = [&]( int c ) {
-        return static_cast<int>( col_rows[c].size() );
+        return static_cast < int > ( col_rows[c].size() );
     };
     /// The trait on a given row, or -1 for a heading or an out-of-range row.
     const auto trait_at = [&]( int c, int r ) {
@@ -1692,7 +1691,7 @@ tab_direction set_traits( avatar &u, points_left &points )
 
     character_preview_window character_preview;
     character_preview.init( &u );
-    const bool use_character_preview = get_option<bool>( "USE_CHARACTER_PREVIEW" );
+    const bool use_character_preview = get_option < bool > ( "USE_CHARACTER_PREVIEW" );
 
     const auto init_windows = [&]( ui_adaptor & ui ) {
         w = catacurses::newwin( TERMY, TERMX, point_zero );
@@ -1739,7 +1738,7 @@ tab_direction set_traits( avatar &u, points_left &points )
     ctxt.register_action( "ANY_INPUT" );
 
     // RmlUi render path (render-only; keyboard owns nav/confirm/reroll below).
-    auto data = std::make_unique<nc_traits_session>();
+    auto data = std::make_unique < nc_traits_session > ();
     rml_doc rml;
     // Set by the arrow click callbacks, consumed by the input loop below. Not a
     // tab_direction: it is translated into an action string so the existing
@@ -1798,7 +1797,7 @@ tab_direction set_traits( avatar &u, points_left &points )
     /// The bionics in the way, for the popup that names them. Only asked once a refusal is certain,
     /// because building the list on every row of every frame would be wasteful.
     const auto blocking_bionics_of = [&]( const trait_id & tid ) {
-        std::vector<bionic_id> out = bionics_cancelling_trait( u.prof->CBMs(), tid );
+        std::vector < bionic_id > out = bionics_cancelling_trait( u.prof->CBMs(), tid );
         for( const bionic_id &b : bionics_cancelling_trait( u.get_bionics(), tid ) ) {
             out.push_back( b );
         }
@@ -1808,7 +1807,7 @@ tab_direction set_traits( avatar &u, points_left &points )
     // both come here, so the two cannot drift — the STATS steppers set the same precedent.
     // Every popup below fires for exactly the case it fired for before this rework.
     const auto toggle_trait_at = [&]( int flat_idx ) {
-        if( flat_idx < 0 || flat_idx >= static_cast<int>( starting_traits.size() ) ) {
+        if( flat_idx < 0 || flat_idx >= static_cast < int > ( starting_traits.size() ) ) {
             return;
         }
         const trait_id cur_trait = starting_traits[flat_idx].id;
@@ -1856,8 +1855,8 @@ tab_direction set_traits( avatar &u, points_left &points )
                    u.prof->gender_appropriate_name( u.male ) );
         } else if( gt.bionic_blocks ) {
             // Name them, so the player can see what is in the way rather than just that something is.
-            const std::vector<bionic_id> blockers = blocking_bionics_of( cur_trait );
-            std::vector<std::string> conflict_names;
+            const std::vector < bionic_id > blockers = blocking_bionics_of( cur_trait );
+            std::vector < std::string > conflict_names;
             conflict_names.reserve( blockers.size() );
             for( const bionic_id &conflict : blockers ) {
                 conflict_names.emplace_back( conflict->name.translated() );
@@ -1909,13 +1908,13 @@ tab_direction set_traits( avatar &u, points_left &points )
         }
         // Wall clock, not a frame counter: the spin must not speed up because the player is
         // holding a key down, and must not stall while they are not.
-        const float secs = std::chrono::duration<float>(
+        const float secs = std::chrono::duration < float > (
                                std::chrono::steady_clock::now() - anim_start ).count();
         const float phase = nc_dna::phase_at( secs );
 
         // Which rungs are lit. The i-th taken trait lights rung i, in the flat sorted order, so a
         // given character always lights the same rungs rather than reshuffling as points change.
-        std::array<int, nc_dna::rungs> mark = {};
+        std::array < int, nc_dna::rungs > mark = {};
         mark.fill( 0 );
         int taken = 0;
         for( const trait_entry &e : starting_traits ) {
@@ -1953,7 +1952,7 @@ tab_direction set_traits( avatar &u, points_left &points )
         if( !data->handle ) {
             return;
         }
-        data->tabs = build_nc_char_tabs<nc_traits_tab>( 4 );  // TRAITS tab active
+        data->tabs = build_nc_char_tabs < nc_traits_tab > ( 4 ); // TRAITS tab active
         data->shell = fill_nc_shell( 4, ctxt );
         set_nc_portrait( data->shell, use_character_preview );
         data->points_rml = cata_text_to_rml( nc_points_line( points ) );
@@ -1971,28 +1970,27 @@ tab_direction set_traits( avatar &u, points_left &points )
         // In words, why this trait cannot be toggled — the same conditions CONFIRM's popups use,
         // stated where the decision is made instead of after it. Empty when it can be.
         const auto refusal_of = []( const nc_trait_gate::state & gt ) -> std::string {
-            if( gt.taken )
-        {
-            if( gt.locked ) {
+            if( gt.taken ) {
+                if( gt.locked ) {
                     return _( "Your profession or scenario will not let you drop this." );
                 }
                 return gt.mandatory ? _( "You must keep one of these." ) : std::string();
             }
             if( gt.conflicts && !gt.can_swap )
-        {
-            return _( "Conflicts with a trait you already have." );
+            {
+                return _( "Conflicts with a trait you already have." );
             }
             if( gt.scen_forbids )
-        {
-            return _( "Your scenario forbids this trait." );
+            {
+                return _( "Your scenario forbids this trait." );
             }
             if( gt.prof_forbids )
-        {
-            return _( "Your profession forbids this trait." );
+            {
+                return _( "Your profession forbids this trait." );
             }
             if( gt.bionic_blocks )
-        {
-            return _( "A bionic you start with blocks this trait." );
+            {
+                return _( "A bionic you start with blocks this trait." );
             }
             return gt.over_budget ? _( "No points left on that side of the budget." ) : std::string();
         };
@@ -2222,7 +2220,7 @@ tab_direction set_traits( avatar &u, points_left &points )
         const int flat = hover_flat >= 0 ? hover_flat : trait_at( cur_col, cur_row[cur_col] );
         trait_id want = trait_id::NULL_ID();
         trait_id displaced = trait_id::NULL_ID();
-        if( flat >= 0 && flat < static_cast<int>( starting_traits.size() ) ) {
+        if( flat >= 0 && flat < static_cast < int > ( starting_traits.size() ) ) {
             const trait_entry &e = starting_traits[flat];
             // Already worn needs no preview, and previewing it would toggle it OFF.
             if( !e.grp.appearance_type.empty() && !u.has_trait( e.id ) ) {
@@ -2297,8 +2295,8 @@ tab_direction set_traits( avatar &u, points_left &points )
         }
         const float page = e->GetClientHeight();
         const float total = e->GetScrollHeight();
-        const float row_h = total / static_cast<float>( rows );
-        const float want = row_h * static_cast<float>( cur_row[cur_col] ) - page * 0.5f;
+        const float row_h = total / static_cast < float > ( rows );
+        const float want = row_h * static_cast < float > ( cur_row[cur_col] ) - page * 0.5f;
         e->SetScrollTop( std::clamp( want, 0.0f, std::max( 0.0f, total - page ) ) );
     };
 
@@ -2485,7 +2483,7 @@ enum class nc_bio_region : int {
 /// Head-to-feet order, which is also the tie-break when an implant claims two parts equally.
 /// These twelve are exactly the parts that declare `bionic_slots`, i.e. every site a bionic can
 /// occupy, and they are the same twelve the chassis grid draws.
-constexpr std::array<std::pair<body_part, nc_bio_region>, 12> nc_bio_part_regions = {{
+constexpr std::array < std::pair < body_part, nc_bio_region>, 12 > nc_bio_part_regions = {{
         { bp_head, nc_bio_region::head },
         { bp_eyes, nc_bio_region::head },
         { bp_mouth, nc_bio_region::head },
@@ -2522,8 +2520,8 @@ auto nc_bio_classify( const bionic_data &bio ) -> nc_bio_region
 auto nc_bio_region_name( nc_bio_region r ) -> std::string
 {
     switch( r ) {
-    case nc_bio_region::head:
-        return _( "Head and face" );
+        case nc_bio_region::head:
+            return _( "Head and face" );
         case nc_bio_region::torso:
             return _( "Torso" );
         case nc_bio_region::arms:
@@ -2539,7 +2537,7 @@ auto nc_bio_region_name( nc_bio_region r ) -> std::string
 struct nc_bio_col {
     Rml::String name_rml;
     Rml::String count_rml;
-    Rml::Vector<nc_bio_row> rows;
+    Rml::Vector < nc_bio_row > rows;
 };
 
 /// A label / value / sub-line triple in the detail panel.
@@ -2578,12 +2576,12 @@ struct nc_bio_cell {
 /// colour for this row and is consumed TWICE — by the bus-rail node beside the row and by the
 /// scanline inside each of its boxes — so the rail and the body cannot fall out of step.
 struct nc_bio_dollrow {
-    Rml::Vector<nc_bio_cell> cells;
+    Rml::Vector < nc_bio_cell > cells;
     Rml::String scan_col;
 };
 
 struct nc_bionics_session {
-    Rml::Vector<nc_bionics_tab> tabs;
+    Rml::Vector < nc_bionics_tab > tabs;
     nc_shell shell;
     Rml::String points_rml;
     Rml::String budget_rml;   //< "Bionic points left: N", the reference's meta-bar readout
@@ -2603,14 +2601,14 @@ struct nc_bionics_session {
     /// "none", NOT empty, for the same reason nc_bio_cell::dec is: `data-style-decorator` is
     /// applied on the first frame, BEFORE sync_rml has run, and an empty value logs `decorator: ;`.
     Rml::String art_dec = "none";
-    Rml::Vector<nc_bio_fact> facts;
+    Rml::Vector < nc_bio_fact > facts;
     Rml::String desc_rml;
     Rml::String hint_rml;
     /// The chassis, rebuilt every redraw because it carries the scan sweep. That costs nothing
     /// extra: DataViewStyle skips an unchanged property value (RmlUi DataViewDefault.cpp:168), so
     /// the sprite decorators are not re-parsed while only the scan colour moves, and DataViewFor
     /// only creates elements when the array's SIZE changes — this one is always six by three.
-    Rml::Vector<nc_bio_dollrow> doll;
+    Rml::Vector < nc_bio_dollrow > doll;
     Rml::String chassis_name_rml;  //< the diagram's heading
     Rml::String chassis_rml;       //< implant count
     Rml::String chassis_cap_rml;   //< total used / total slots, when slots are enforced
@@ -2624,13 +2622,13 @@ void register_nc_bionics_rml_types( Rml::DataModelConstructor &c )
     if( g_nc_bionics_types_registered ) {
         return;
     }
-    Rml::StructHandle<nc_bionics_tab> th = c.RegisterStruct<nc_bionics_tab>();
+    Rml::StructHandle < nc_bionics_tab > th = c.RegisterStruct < nc_bionics_tab > ();
     th.RegisterMember( "name_rml", &nc_bionics_tab::name_rml );
     th.RegisterMember( "icon_dec", &nc_bionics_tab::icon_dec );
     th.RegisterMember( "selected", &nc_bionics_tab::selected );
     th.RegisterMember( "done", &nc_bionics_tab::done );
-    c.RegisterArray<Rml::Vector<nc_bionics_tab>>();
-    Rml::StructHandle<nc_balance> bh = c.RegisterStruct<nc_balance>();
+    c.RegisterArray < Rml::Vector < nc_bionics_tab>>();
+    Rml::StructHandle < nc_balance > bh = c.RegisterStruct < nc_balance > ();
     bh.RegisterMember( "show", &nc_balance::show );
     bh.RegisterMember( "rotate", &nc_balance::rotate );
     bh.RegisterMember( "good_top", &nc_balance::good_top );
@@ -2641,24 +2639,24 @@ void register_nc_bionics_rml_types( Rml::DataModelConstructor &c )
     bh.RegisterMember( "bad_icon", &nc_balance::bad_icon );
     bh.RegisterMember( "fulcrum_icon", &nc_balance::fulcrum_icon );
     // Rows before the column that holds them: a member cannot be registered before its type is.
-    Rml::StructHandle<nc_bio_row> rh = c.RegisterStruct<nc_bio_row>();
+    Rml::StructHandle < nc_bio_row > rh = c.RegisterStruct < nc_bio_row > ();
     rh.RegisterMember( "cursor_rml", &nc_bio_row::cursor_rml );
     rh.RegisterMember( "check_rml", &nc_bio_row::check_rml );
     rh.RegisterMember( "cost_rml", &nc_bio_row::cost_rml );
     rh.RegisterMember( "name_rml", &nc_bio_row::name_rml );
     rh.RegisterMember( "header", &nc_bio_row::header );
     rh.RegisterMember( "selected", &nc_bio_row::selected );
-    c.RegisterArray<Rml::Vector<nc_bio_row>>();
-    Rml::StructHandle<nc_bio_col> ch = c.RegisterStruct<nc_bio_col>();
+    c.RegisterArray < Rml::Vector < nc_bio_row>>();
+    Rml::StructHandle < nc_bio_col > ch = c.RegisterStruct < nc_bio_col > ();
     ch.RegisterMember( "name_rml", &nc_bio_col::name_rml );
     ch.RegisterMember( "count_rml", &nc_bio_col::count_rml );
     ch.RegisterMember( "rows", &nc_bio_col::rows );
-    Rml::StructHandle<nc_bio_fact> fh = c.RegisterStruct<nc_bio_fact>();
+    Rml::StructHandle < nc_bio_fact > fh = c.RegisterStruct < nc_bio_fact > ();
     fh.RegisterMember( "label_rml", &nc_bio_fact::label_rml );
     fh.RegisterMember( "value_rml", &nc_bio_fact::value_rml );
     fh.RegisterMember( "sub_rml", &nc_bio_fact::sub_rml );
-    c.RegisterArray<Rml::Vector<nc_bio_fact>>();
-    Rml::StructHandle<nc_bio_cell> sh = c.RegisterStruct<nc_bio_cell>();
+    c.RegisterArray < Rml::Vector < nc_bio_fact>>();
+    Rml::StructHandle < nc_bio_cell > sh = c.RegisterStruct < nc_bio_cell > ();
     sh.RegisterMember( "name_rml", &nc_bio_cell::name_rml );
     sh.RegisterMember( "impl_rml", &nc_bio_cell::impl_rml );
     sh.RegisterMember( "dec", &nc_bio_cell::dec );
@@ -2671,11 +2669,11 @@ void register_nc_bionics_rml_types( Rml::DataModelConstructor &c )
     sh.RegisterMember( "over", &nc_bio_cell::over );
     sh.RegisterMember( "junction", &nc_bio_cell::junction );
     sh.RegisterMember( "blank", &nc_bio_cell::blank );
-    c.RegisterArray<Rml::Vector<nc_bio_cell>>();
-    Rml::StructHandle<nc_bio_dollrow> dh = c.RegisterStruct<nc_bio_dollrow>();
+    c.RegisterArray < Rml::Vector < nc_bio_cell>>();
+    Rml::StructHandle < nc_bio_dollrow > dh = c.RegisterStruct < nc_bio_dollrow > ();
     dh.RegisterMember( "cells", &nc_bio_dollrow::cells );
     dh.RegisterMember( "scan_col", &nc_bio_dollrow::scan_col );
-    c.RegisterArray<Rml::Vector<nc_bio_dollrow>>();
+    c.RegisterArray < Rml::Vector < nc_bio_dollrow>>();
     g_nc_bionics_types_registered = true;
 }
 
@@ -2683,12 +2681,12 @@ void register_nc_bionics_rml_types( Rml::DataModelConstructor &c )
 
 tab_direction set_bionics( avatar &u, points_left &points )
 {
-    const int max_trait_points = get_option<int>( "MAX_TRAIT_POINTS" );
+    const int max_trait_points = get_option < int > ( "MAX_TRAIT_POINTS" );
     // CBM slots are an EXTERNAL_OPTION defaulting to FALSE (data/json/game_balance.json; the
     // bundled cbm_slots mod turns them on), and bionic_installation_issues returns early when they
     // are off. So the chassis shows capacity only when the mechanic is actually in force — what is
     // always true is which body parts an implant occupies, and that is what the diagram is for.
-    const bool slots_enforced = get_option<bool>( "CBM_SLOTS_ENABLED" );
+    const bool slots_enforced = get_option < bool > ( "CBM_SLOTS_ENABLED" );
 
     // Track how many good / bad POINTS we have; cap both at MAX_TRAIT_POINTS
     int num_good = 0;
@@ -2706,7 +2704,7 @@ tab_direction set_bionics( avatar &u, points_left &points )
     };
     // ONE flat list; the columns are a VIEW over it, so sorting and every id-based lookup stays
     // independent of how the screen happens to be grouped. Same shape as the TRAITS step.
-    std::vector<bionic_entry> starting_bionics;
+    std::vector < bionic_entry > starting_bionics;
 
     for( auto &traits_iter : mutation_branch::get_all() ) {
         if( traits_iter.points > 0 ) {
@@ -2720,7 +2718,7 @@ tab_direction set_bionics( avatar &u, points_left &points )
         }
     }
 
-    const std::vector<bionic_id> prof_cbms = u.prof->CBMs();
+    const std::vector < bionic_id > prof_cbms = u.prof->CBMs();
     for( auto &bio_iter : bionic_data::get_all() ) {
         const bool is_profbionic = std::ranges::find( prof_cbms, bio_iter.id ) != prof_cbms.end();
         // We show all starting bionics, even ones we cannot pick, to keep the interface consistent —
@@ -2753,15 +2751,15 @@ tab_direction set_bionics( avatar &u, points_left &points )
     // Regions run head to feet, so a column reads top-to-bottom in the same order the diagram
     // beside it does. This is also what the reference art does with its bracketed group headers,
     // and it is why 19 rows in a tall column no longer read as one undifferentiated slab.
-    std::array<std::vector<int>, 3> col_rows;
+    std::array < std::vector < int>, 3 > col_rows;
     /// Which region each row belongs to, parallel to col_rows, so a heading row can name itself
     /// without re-deriving the grouping.
-    std::array<std::vector<nc_bio_region>, 3> row_region;
+    std::array < std::vector < nc_bio_region>, 3 > row_region;
     for( int c = 0; c < 3; c++ ) {
-        for( int reg = 0; reg < static_cast<int>( nc_bio_region::count ); reg++ ) {
-            const nc_bio_region region = static_cast<nc_bio_region>( reg );
-            std::vector<int> members;
-            for( int i = 0; i < static_cast<int>( starting_bionics.size() ); i++ ) {
+        for( int reg = 0; reg < static_cast < int > ( nc_bio_region::count ); reg++ ) {
+            const nc_bio_region region = static_cast < nc_bio_region > ( reg );
+            std::vector < int > members;
+            for( int i = 0; i < static_cast < int > ( starting_bionics.size() ); i++ ) {
                 if( starting_bionics[i].col == c && starting_bionics[i].region == region ) {
                     members.push_back( i );
                 }
@@ -2779,10 +2777,10 @@ tab_direction set_bionics( avatar &u, points_left &points )
     }
 
     int cur_col = 0;
-    std::array<int, 3> cur_row = { 0, 0, 0 };
+    std::array < int, 3 > cur_row = { 0, 0, 0 };
 
     const auto col_len = [&]( int c ) {
-        return static_cast<int>( col_rows[c].size() );
+        return static_cast < int > ( col_rows[c].size() );
     };
     /// The bionic on a given row, or -1 for a heading or an out-of-range row.
     const auto bionic_at = [&]( int c, int r ) {
@@ -2854,7 +2852,7 @@ tab_direction set_bionics( avatar &u, points_left &points )
     ctxt.register_action( "ANY_INPUT" );
 
     // RmlUi render path (render-only; keyboard owns nav/confirm/reroll below).
-    auto data = std::make_unique<nc_bionics_session>();
+    auto data = std::make_unique < nc_bionics_session > ();
     rml_doc rml;
     // Set by the arrow click callbacks, consumed by the input loop below. Not a
     // tab_direction: it is translated into an action string so the existing
@@ -2879,7 +2877,7 @@ tab_direction set_bionics( avatar &u, points_left &points )
     // These lambdas only ASK the game the questions; the precedence between the answers lives in
     // newchar_bionic_gate.h, where it is tested without needing an avatar.
     const auto conflicting_traits_of = [&]( const bionic_id & bid ) {
-        std::vector<trait_id> out;
+        std::vector < trait_id > out;
         for( const trait_id &tid : bid->canceled_mutations ) {
             if( u.has_trait( tid ) ) {
                 out.push_back( tid );
@@ -2888,7 +2886,7 @@ tab_direction set_bionics( avatar &u, points_left &points )
         return out;
     };
     const auto missing_prereqs_of = [&]( const bionic_id & bid ) {
-        std::vector<bionic_id> out;
+        std::vector < bionic_id > out;
         for( const bionic_id &req : bid->required_bionics ) {
             if( !u.has_bionic( req ) ) {
                 out.push_back( req );
@@ -2899,7 +2897,7 @@ tab_direction set_bionics( avatar &u, points_left &points )
     /// Installed bionics that name this one in their `required_bionics`, so removing it would leave
     /// them dangling.
     const auto dependents_of = [&]( const bionic_id & bid ) {
-        std::vector<std::string> out;
+        std::vector < std::string > out;
         for( const bionic &i : u.get_bionic_collection() ) {
             for( const bionic_id &req : i.id->required_bionics ) {
                 if( req == bid ) {
@@ -2916,8 +2914,7 @@ tab_direction set_bionics( avatar &u, points_left &points )
     /// answer rather than a hang.
     const auto held_downgrade_of = [&]( const bionic_id & bid ) -> bionic_id {
         bionic_id step = bid->upgraded_bionic;
-        for( int guard = 0; guard < 64 && step != bionic_id::NULL_ID(); guard++ )
-        {
+        for( int guard = 0; guard < 64 && step != bionic_id::NULL_ID(); guard++ ) {
             if( u.has_bionic( step ) ) {
                 return step;
             }
@@ -2926,9 +2923,8 @@ tab_direction set_bionics( avatar &u, points_left &points )
         return bionic_id::NULL_ID();
     };
     const auto held_upgrade_of = [&]( const bionic_id & bid ) -> bionic_id {
-for( const bionic_id &up : bid->available_upgrades )
-    {
-        if( u.has_bionic( up ) ) {
+        for( const bionic_id &up : bid->available_upgrades ) {
+            if( u.has_bionic( up ) ) {
                 return up;
             }
         }
@@ -2971,7 +2967,7 @@ for( const bionic_id &up : bid->available_upgrades )
     // the taken branch returned before them; TRAITS already refuses the same case with the same
     // wording, and a scenario's forced bionic being droppable defeats the point of forcing it.
     const auto toggle_bionic_at = [&]( int flat_idx ) {
-        if( flat_idx < 0 || flat_idx >= static_cast<int>( starting_bionics.size() ) ) {
+        if( flat_idx < 0 || flat_idx >= static_cast < int > ( starting_bionics.size() ) ) {
             return;
         }
         const bionic_id cur_bionic = starting_bionics[flat_idx].id;
@@ -3010,8 +3006,8 @@ for( const bionic_id &up : bid->available_upgrades )
         } else if( gt.trait_conflicts ) {
             // Name the traits, so the player can see what is in the way rather than just that
             // something is.
-            const std::vector<trait_id> conflicts = conflicting_traits_of( cur_bionic );
-            std::vector<std::string> conflict_names;
+            const std::vector < trait_id > conflicts = conflicting_traits_of( cur_bionic );
+            std::vector < std::string > conflict_names;
             conflict_names.reserve( conflicts.size() );
             for( const trait_id &conflict : conflicts ) {
                 conflict_names.emplace_back( conflict.obj().name() );
@@ -3027,9 +3023,9 @@ for( const bionic_id &up : bid->available_upgrades )
                              "Sorry, but you can only take %d points of disadvantages.", max_trait_points ),
                    max_trait_points );
         } else if( gt.no_space ) {
-            const std::map<bodypart_id, int> issues = u.bionic_installation_issues( cur_bionic );
+            const std::map < bodypart_id, int > issues = u.bionic_installation_issues( cur_bionic );
             std::string detailed_info;
-            for( const std::pair<const bodypart_id, int> &elem : issues ) {
+            for( const std::pair < const bodypart_id, int > &elem : issues ) {
                 //~ <Body part name>: <number of slots> more slot(s) needed.
                 detailed_info += string_format( _( "\n%s: %i more slot(s) needed." ),
                                                 body_part_name_as_heading( elem.first->token, 1 ),
@@ -3037,8 +3033,8 @@ for( const bionic_id &up : bid->available_upgrades )
             }
             popup( _( "Not enough space for bionic installation!%s" ), detailed_info );
         } else if( gt.missing_prereq ) {
-            const std::vector<bionic_id> missing = missing_prereqs_of( cur_bionic );
-            std::vector<std::string> conflict_names;
+            const std::vector < bionic_id > missing = missing_prereqs_of( cur_bionic );
+            std::vector < std::string > conflict_names;
             conflict_names.reserve( missing.size() );
             for( const bionic_id &conflict : missing ) {
                 conflict_names.emplace_back( conflict->name.translated() );
@@ -3089,7 +3085,7 @@ for( const bionic_id &up : bid->available_upgrades )
         // though they are not installed yet (add_profession_items does that after the wizard),
         // because the diagram describes the character being built rather than the half-built
         // object in memory — and it is what the list's own [x] has always meant.
-        std::vector<bionic_id> held = u.get_bionics();
+        std::vector < bionic_id > held = u.get_bionics();
         for( const bionic_id &bid : prof_cbms ) {
             if( std::ranges::find( held, bid ) == held.end() ) {
                 held.push_back( bid );
@@ -3100,8 +3096,8 @@ for( const bionic_id &up : bid->available_upgrades )
         const int sel_flat = bionic_at( cur_col, cur_row[cur_col] );
         const bionic_id want_bio = sel_flat >= 0 ? starting_bionics[sel_flat].id
                                    : bionic_id::NULL_ID();
-        const std::map<bodypart_id, int> want_issues = want_bio == bionic_id::NULL_ID()
-            ? std::map<bodypart_id, int> {}
+        const std::map < bodypart_id, int > want_issues = want_bio == bionic_id::NULL_ID()
+            ? std::map < bodypart_id, int > {}
             : u.bionic_installation_issues( want_bio );
 
         const auto site_cell = [&]( body_part bp ) -> nc_bio_cell {
@@ -3112,8 +3108,7 @@ for( const bionic_id &up : bid->available_upgrades )
             int count = 0;
             const bionic_data *best = nullptr;
             int best_space = 0;
-            for( const bionic_id &bid : held )
-            {
+            for( const bionic_id &bid : held ) {
                 const auto it = bid->occupied_bodyparts.find( bpid );
                 if( it == bid->occupied_bodyparts.end() || it->second <= 0 ) {
                     continue;
@@ -3173,7 +3168,7 @@ for( const bionic_id &up : bid->available_upgrades )
         // The sweep. Wall clock, not a frame counter: it must not accelerate because a key is held
         // down, nor stall while the player is reading. Geometry — and the reason the glow trails
         // rather than surrounds the head — is in newchar_bio_scan.h.
-        const float secs = std::chrono::duration<float>(
+        const float secs = std::chrono::duration < float > (
                                std::chrono::steady_clock::now() - anim_start ).count();
         const float head = nc_bio_scan::head_at( secs );
         const auto scan_col = [&]( int row ) {
@@ -3227,7 +3222,7 @@ for( const bionic_id &up : bid->available_upgrades )
         if( !data->handle ) {
             return;
         }
-        data->tabs = build_nc_char_tabs<nc_bionics_tab>( 5 );  // BIONICS tab active
+        data->tabs = build_nc_char_tabs < nc_bionics_tab > ( 5 ); // BIONICS tab active
         data->shell = fill_nc_shell( 5, ctxt );
         data->points_rml = cata_text_to_rml( nc_points_line( points ) );
         data->balance = nc_make_balance( num_good, num_bad, max_trait_points,
@@ -3247,45 +3242,44 @@ for( const bionic_id &up : bid->available_upgrades )
         // In words, why this bionic cannot be toggled — the same conditions CONFIRM's popups use,
         // stated where the decision is made instead of after it. Empty when it can be.
         const auto refusal_of = []( const nc_bionic_gate::state & gt ) -> std::string {
-            if( gt.taken )
-        {
-            if( gt.has_dependents ) {
+            if( gt.taken ) {
+                if( gt.has_dependents ) {
                     return _( "Another implant you have depends on this one." );
                 }
                 return gt.locked ? _( "Your profession or scenario will not let you remove this." )
                        : std::string();
             }
             if( gt.granted )
-        {
-            return _( "Your profession installs this one for you." );
+            {
+                return _( "Your profession installs this one for you." );
             }
             if( gt.locked )
-        {
-            return _( "Your profession or scenario decides this one." );
+            {
+                return _( "Your profession or scenario decides this one." );
             }
             if( gt.forbidden )
-        {
-            return _( "Your profession or scenario forbids this implant." );
+            {
+                return _( "Your profession or scenario forbids this implant." );
             }
             if( gt.trait_conflicts )
-        {
-            return _( "Conflicts with a trait you already have." );
+            {
+                return _( "Conflicts with a trait you already have." );
             }
             if( gt.no_space )
-        {
-            return _( "Not enough room left in your body for it." );
+            {
+                return _( "Not enough room left in your body for it." );
             }
             if( gt.missing_prereq )
-        {
-            return _( "Needs another implant you do not have." );
+            {
+                return _( "Needs another implant you do not have." );
             }
             if( gt.has_downgrade )
-        {
-            return _( "You already have a lesser version of it." );
+            {
+                return _( "You already have a lesser version of it." );
             }
             if( gt.has_upgrade )
-        {
-            return _( "You already have a better version of it." );
+            {
+                return _( "You already have a better version of it." );
             }
             return gt.over_budget ? _( "No points left on that side of the budget." ) : std::string();
         };
@@ -3377,8 +3371,8 @@ for( const bionic_id &up : bid->available_upgrades )
             }
             // WHERE it goes — the fact the chassis draws, in words for the same bionic. Terse
             // "part n" pairs rather than a sentence, because this column is scanned, not read.
-            std::vector<std::string> site_parts;
-            for( const std::pair<const bodypart_str_id, int> &occ : bio.occupied_bodyparts ) {
+            std::vector < std::string > site_parts;
+            for( const std::pair < const bodypart_str_id, int > &occ : bio.occupied_bodyparts ) {
                 if( occ.second > 0 ) {
                     site_parts.push_back( string_format( "%s %d", body_part_name( occ.first.id() ),
                                                          occ.second ) );
@@ -3386,8 +3380,8 @@ for( const bionic_id &up : bid->available_upgrades )
             }
             std::string site_sub;
             if( slots_enforced ) {
-                const std::map<bodypart_id, int> issues = u.bionic_installation_issues( sel_id );
-                for( const std::pair<const bodypart_id, int> &elem : issues ) {
+                const std::map < bodypart_id, int > issues = u.bionic_installation_issues( sel_id );
+                for( const std::pair < const bodypart_id, int > &elem : issues ) {
                     site_sub += string_format( _( "%s: %d more slot(s) needed.  " ),
                                                body_part_name( elem.first ), elem.second );
                 }
@@ -3397,7 +3391,7 @@ for( const bionic_id &up : bid->available_upgrades )
                       site_parts.empty() ? c_dark_gray : c_light_gray, site_sub );
             // Whether it costs the player anything to run, which is the other half of choosing an
             // implant. `units::display` is the same formatter the in-game bionics menu uses.
-            std::vector<std::string> power_bits;
+            std::vector < std::string > power_bits;
             if( bio.power_activate > 0_kJ ) {
                 power_bits.push_back( string_format( _( "%s to switch on" ),
                                                      units::display( bio.power_activate ) ) );
@@ -3544,8 +3538,8 @@ for( const bionic_id &up : bid->available_upgrades )
         }
         const float page = e->GetClientHeight();
         const float total = e->GetScrollHeight();
-        const float row_h = total / static_cast<float>( rows );
-        const float want = row_h * static_cast<float>( cur_row[cur_col] ) - page * 0.5f;
+        const float row_h = total / static_cast < float > ( rows );
+        const float want = row_h * static_cast < float > ( cur_row[cur_col] ) - page * 0.5f;
         e->SetScrollTop( std::clamp( want, 0.0f, std::max( 0.0f, total - page ) ) );
     };
 
@@ -3681,7 +3675,7 @@ auto nc_classify_prof( const profession &p ) -> skill_displayType_id
         return skill_displayType_id::NULL_ID();
     }
     const auto top = std::ranges::max_element( sk,
-    []( const std::pair<skill_id, int> &a, const std::pair<skill_id, int> &b ) {
+    []( const std::pair < skill_id, int > &a, const std::pair < skill_id, int > &b ) {
         if( a.second != b.second ) {
             return a.second < b.second;
         }
@@ -3705,9 +3699,9 @@ struct nc_prof_sigil {
     bool ( *present )( const profession & );  //< does this profession carry it
 };
 
-const std::vector<nc_prof_sigil> &nc_prof_sigils()
+const std::vector < nc_prof_sigil > &nc_prof_sigils()
 {
-    static const std::vector<nc_prof_sigil> sigils = {
+    static const std::vector < nc_prof_sigil > sigils = {
         {
             0x5452, c_light_gray, translate_marker( "Locked traits" ),
             translate_marker( "Comes with locked traits" ),
@@ -3773,7 +3767,7 @@ struct nc_prof_glyph {
 struct nc_prof_row {
     Rml::String text_rml;
     Rml::String cost_rml;                  //< point cost, coloured by direction
-    Rml::Vector<nc_prof_glyph> icons;      //< what this profession hands you
+    Rml::Vector < nc_prof_glyph > icons;   //< what this profession hands you
     bool selected = false;                 //< cursor is on this card
     bool chosen = false;                   //< this is the profession in force
 };
@@ -3787,7 +3781,7 @@ struct nc_prof_band {
     bool has_info = false;       //< this band owns the floaty info panel
     bool has_prev_page = false;
     bool has_next_page = false;
-    Rml::Vector<nc_prof_row> rows;
+    Rml::Vector < nc_prof_row > rows;
 };
 
 // ── STARTING-EQUIPMENT SHEET ───────────────────────────────────────────────────
@@ -3815,7 +3809,7 @@ struct nc_eqp_slot {
 };
 /// One row of the doll: left, centre, right. Always three cells.
 struct nc_eqp_dollrow {
-    Rml::Vector<nc_eqp_slot> cells;
+    Rml::Vector < nc_eqp_slot > cells;
 };
 /// One line of the category tree. FLAT with level flags rather than a nested `data-for`:
 /// collapsing is then a filter over one list, and — because every row is the same height —
@@ -3844,7 +3838,7 @@ struct nc_eqp_row {
 auto nc_eqp_stat( const item &it ) -> std::string
 {
     if( it.is_gun() ) {
-    const int dmg = it.gun_damage( false ).total_damage();
+        const int dmg = it.gun_damage( false ).total_damage();
         if( dmg > 0 ) {
             return colorize( string_format( _( "DMG %d" ), dmg ), c_light_red );
         }
@@ -3853,7 +3847,7 @@ auto nc_eqp_stat( const item &it ) -> std::string
     // kicking or headbutting weapon, and "hard hat DMG 6" tells the reader nothing they want to
     // know about a hard hat. A weapon is not armor, so it still reaches the melee branch.
     if( it.is_armor() ) {
-    const int bash = it.bash_resist();
+        const int bash = it.bash_resist();
         const int cut = it.cut_resist();
         if( bash > 0 || cut > 0 ) {
             return colorize( string_format( _( "ARM %d/%d" ), bash, cut ), c_light_blue );
@@ -3862,7 +3856,7 @@ auto nc_eqp_stat( const item &it ) -> std::string
     const int melee = std::max( { it.damage_melee( DT_BASH ), it.damage_melee( DT_CUT ),
                                   it.damage_melee( DT_STAB ) } );
     if( melee >= 4 ) {
-    return colorize( string_format( _( "DMG %d" ), melee ), c_light_red );
+        return colorize( string_format( _( "DMG %d" ), melee ), c_light_red );
     }
     return {};
 }
@@ -3874,19 +3868,19 @@ enum class nc_eqp_mode : int { wielded = 0, worn, carried, num_modes };
 auto nc_eqp_mode_of( const item &it ) -> nc_eqp_mode
 {
     if( it.has_flag( json_flag_no_auto_equip ) ) {
-    return nc_eqp_mode::carried;
-}
-if( it.has_flag( json_flag_auto_wield ) ) {
-    return nc_eqp_mode::wielded;
-}
-return it.is_armor() ? nc_eqp_mode::worn : nc_eqp_mode::carried;
+        return nc_eqp_mode::carried;
+    }
+    if( it.has_flag( json_flag_auto_wield ) ) {
+        return nc_eqp_mode::wielded;
+    }
+    return it.is_armor() ? nc_eqp_mode::worn : nc_eqp_mode::carried;
 }
 
 auto nc_eqp_mode_name( nc_eqp_mode m ) -> std::string
 {
     switch( m ) {
-    case nc_eqp_mode::wielded:
-        return _( "Wielded" );
+        case nc_eqp_mode::wielded:
+            return _( "Wielded" );
         case nc_eqp_mode::worn:
             return _( "Worn" );
         case nc_eqp_mode::carried:
@@ -3912,29 +3906,29 @@ auto nc_eqp_weight_str( const units::mass &m ) -> std::string
 }
 
 struct nc_eqp_build {
-    const std::vector<detached_ptr<item>> &items;
+    const std::vector < detached_ptr < item>> &items;
     const profession &prof;
     const avatar &u;
     /// Collapse state keyed by STRING ("wielded", "worn|clothing"), never by index:
     /// switching profession changes which categories exist, and index-keyed state would
     /// silently reassign to a different category.
-    const std::map<std::string, bool> &collapsed;
+    const std::map < std::string, bool > &collapsed;
     int focus = 0;                 //< cursor position in the emitted row list
     const input_context *ctxt = nullptr;
 };
 
 struct nc_prof_session {
-    Rml::Vector<nc_prof_tab> tabs;
+    Rml::Vector < nc_prof_tab > tabs;
     nc_shell shell;
     Rml::String points_rml;
     Rml::String cost_rml;
-    Rml::Vector<nc_prof_band> bands;
+    Rml::Vector < nc_prof_band > bands;
     /// The expand/collapse-all control above the tree. The marker mirrors the band headers'
     /// +/- vocabulary so it reads as the same family, and the label carries the real shortcut
     /// from input_context::get_desc so it stays correct after a rebind.
     Rml::String all_marker_rml;
     Rml::String all_label_rml;
-    Rml::Vector<nc_prof_glyph> legend;
+    Rml::Vector < nc_prof_glyph > legend;
     /// Facts about the selected profession, one binding per field — the old single
     /// pre-wrapped buffer could not be given hierarchy and could not fit a fixed panel.
     Rml::String skills_rml;
@@ -3942,7 +3936,7 @@ struct nc_prof_session {
     Rml::String traits_rml;
     Rml::String gear_rml;
     Rml::String gear_sub_rml;
-    Rml::Vector<nc_prof_glyph> chips;
+    Rml::Vector < nc_prof_glyph > chips;
     Rml::String desc_rml;
     Rml::String info_rml;      //< exhaustive detail, prose column
     Rml::String sort_rml;
@@ -3964,8 +3958,8 @@ struct nc_prof_session {
     Rml::String eqp_wt_rml;
     Rml::String eqp_vol_rml;
     Rml::String eqp_val_rml;
-    Rml::Vector<nc_eqp_dollrow> eqp_doll;
-    Rml::Vector<nc_eqp_row> eqp_rows;
+    Rml::Vector < nc_eqp_dollrow > eqp_doll;
+    Rml::Vector < nc_eqp_row > eqp_rows;
     Rml::String eqp_used_rml;
     Rml::String eqp_cap_rml;
     /// A dp LENGTH fed to `data-style-width`, never empty. `data-if` sets `display: none`
@@ -3990,20 +3984,20 @@ auto build_nc_eqp_sheet( nc_prof_session &d, const nc_eqp_build &o ) -> int
     // same row as far as the reader is concerned.
     struct cat_bucket {
         const item_category *cat = nullptr;
-        std::map<std::string, nc_eqp_stack> stacks;
+        std::map < std::string, nc_eqp_stack > stacks;
     };
-    std::array<std::map<std::string, cat_bucket>, 3> by_mode;
+    std::array < std::map < std::string, cat_bucket>, 3 > by_mode;
     units::mass total_wt = 0_gram;
     units::volume total_vol = 0_ml;
     double total_val = 0.0;
     int total_count = 0;
 
-    for( const detached_ptr<item> &ptr : o.items ) {
+    for( const detached_ptr < item > &ptr : o.items ) {
         if( !ptr ) {
             continue;
         }
         const item &it = *ptr;
-        const int mode = static_cast<int>( nc_eqp_mode_of( it ) );
+        const int mode = static_cast < int > ( nc_eqp_mode_of( it ) );
         const item_category &cat = it.get_category();
         cat_bucket &bucket = by_mode[mode][cat.get_id().str()];
         bucket.cat = &cat;
@@ -4035,8 +4029,8 @@ auto build_nc_eqp_sheet( nc_prof_session &d, const nc_eqp_build &o ) -> int
         int best_cov = -1;
         int count = 0;
     };
-    std::map<bodypart_str_id, slot_pick> picks;
-    for( const detached_ptr<item> &ptr : o.items ) {
+    std::map < bodypart_str_id, slot_pick > picks;
+    for( const detached_ptr < item > &ptr : o.items ) {
         // WORN, not merely `is_armor()`: a profession that packs a spare pair of boots gives
         // an armor item flagged `no_auto_equip`, which the equip pass leaves in the pack. Drawing
         // it on the feet slot would claim the character is wearing something they are not.
@@ -4061,7 +4055,7 @@ auto build_nc_eqp_sheet( nc_prof_session &d, const nc_eqp_build &o ) -> int
         }
     }
     const item *wielded = nullptr;
-    for( const detached_ptr<item> &ptr : o.items ) {
+    for( const detached_ptr < item > &ptr : o.items ) {
         if( ptr && nc_eqp_mode_of( *ptr ) == nc_eqp_mode::wielded ) {
             wielded = &*ptr;
             break;
@@ -4073,8 +4067,7 @@ auto build_nc_eqp_sheet( nc_prof_session &d, const nc_eqp_build &o ) -> int
         nc_eqp_slot cell;
         cell.name_rml = cata_text_to_rml( colorize( body_part_name( bpid.id() ), c_dark_gray ) );
         const auto it = picks.find( bpid );
-        if( it == picks.end() || it->second.best == nullptr )
-        {
+        if( it == picks.end() || it->second.best == nullptr ) {
             cell.item_rml = cata_text_to_rml( colorize( "—", c_dark_gray ) );
             return cell;
         }
@@ -4127,7 +4120,7 @@ auto build_nc_eqp_sheet( nc_prof_session &d, const nc_eqp_build &o ) -> int
 
         // Categories in the order the item factory declares for display, so this tree agrees
         // with every other item list in the game.
-        std::vector<const cat_bucket *> cats;
+        std::vector < const cat_bucket * > cats;
         for( const auto &[key, bucket] : by_mode[m] ) {
             cats.push_back( &bucket );
         }
@@ -4145,7 +4138,7 @@ auto build_nc_eqp_sheet( nc_prof_session &d, const nc_eqp_build &o ) -> int
         head.group = true;
         head.marker_rml = cata_text_to_rml( colorize( mode_shut ? "+" : "-", c_yellow ) );
         head.name_rml = cata_text_to_rml( colorize(
-                                              to_upper_case( nc_eqp_mode_name( static_cast<nc_eqp_mode>( m ) ) ), c_white ) );
+                                              to_upper_case( nc_eqp_mode_name( static_cast < nc_eqp_mode > ( m ) ) ), c_white ) );
         head.wt_rml = cata_text_to_rml( colorize( nc_eqp_weight_str( mode_wt ), c_light_gray ) );
         head.key = mode_key;
         d.eqp_rows.push_back( head );
@@ -4181,12 +4174,12 @@ auto build_nc_eqp_sheet( nc_prof_session &d, const nc_eqp_build &o ) -> int
                 row.vol_rml = cata_text_to_rml( colorize( string_format( "%s %s",
                                                 format_volume( st.vol ), volume_units_abbr() ), c_dark_gray ) );
                 row.val_rml = cata_text_to_rml( colorize(
-                                                    format_money( static_cast<int>( st.val ) ), c_dark_gray ) );
+                                                    format_money( static_cast < int > ( st.val ) ), c_dark_gray ) );
                 d.eqp_rows.push_back( row );
             }
         }
     }
-    const int nrows = static_cast<int>( d.eqp_rows.size() );
+    const int nrows = static_cast < int > ( d.eqp_rows.size() );
     if( nrows > 0 ) {
         d.eqp_rows[std::clamp( o.focus, 0, nrows - 1 )].focused = true;
     }
@@ -4206,13 +4199,13 @@ auto build_nc_eqp_sheet( nc_prof_session &d, const nc_eqp_build &o ) -> int
     d.eqp_vol_rml = cata_text_to_rml( colorize( string_format( "%s %s",
                                       format_volume( total_vol ), volume_units_abbr() ), c_light_gray ) );
     d.eqp_val_rml = cata_text_to_rml( colorize(
-                                          format_money( static_cast<int>( total_val ) ), c_green ) );
+                                          format_money( static_cast < int > ( total_val ) ), c_green ) );
 
     // weight_capacity() is STR-derived and the creator avatar's STR is live, so this readout
     // tracks the STATS step: a kit that fits a strong character and not a weak one says so.
     const units::mass cap = o.u.weight_capacity();
     const double frac = cap > 0_gram
-                        ? static_cast<double>( to_gram( total_wt ) ) / to_gram( cap )
+                        ? static_cast < double > ( to_gram( total_wt ) ) / to_gram( cap )
                         : 0.0;
     d.eqp_over = frac > 1.0;
     // dp, not "%%": the fill is a plain block inside a fixed-width track, and a percentage
@@ -4220,7 +4213,7 @@ auto build_nc_eqp_sheet( nc_prof_session &d, const nc_eqp_build &o ) -> int
     // must match .nc-eqp-bar's width in newcharprofession.rcss minus its 1dp borders.
     constexpr int NC_EQP_BAR_DP = 318;
     d.eqp_bar_w = string_format( "%ddp",
-                                 static_cast<int>( std::lround( std::clamp( frac, 0.0, 1.0 ) *
+                                 static_cast < int > ( std::lround( std::clamp( frac, 0.0, 1.0 ) *
                                      NC_EQP_BAR_DP ) ) );
     // Same reason as the totals: the "/" and its spacing live in the markup.
     d.eqp_used_rml = cata_text_to_rml( colorize( string_format( "%.1f",
@@ -4241,25 +4234,25 @@ void register_nc_prof_rml_types( Rml::DataModelConstructor &c )
     if( g_nc_prof_types_registered ) {
         return;
     }
-    Rml::StructHandle<nc_prof_tab> th = c.RegisterStruct<nc_prof_tab>();
+    Rml::StructHandle < nc_prof_tab > th = c.RegisterStruct < nc_prof_tab > ();
     th.RegisterMember( "name_rml", &nc_prof_tab::name_rml );
     th.RegisterMember( "icon_dec", &nc_prof_tab::icon_dec );
     th.RegisterMember( "selected", &nc_prof_tab::selected );
     th.RegisterMember( "done", &nc_prof_tab::done );
-    c.RegisterArray<Rml::Vector<nc_prof_tab>>();
-    Rml::StructHandle<nc_prof_glyph> gh = c.RegisterStruct<nc_prof_glyph>();
+    c.RegisterArray < Rml::Vector < nc_prof_tab>>();
+    Rml::StructHandle < nc_prof_glyph > gh = c.RegisterStruct < nc_prof_glyph > ();
     gh.RegisterMember( "dec", &nc_prof_glyph::dec );
     gh.RegisterMember( "label_rml", &nc_prof_glyph::label_rml );
     // One array registration covers the strip, the chips and the legend — same element type.
-    c.RegisterArray<Rml::Vector<nc_prof_glyph>>();
-    Rml::StructHandle<nc_prof_row> rh = c.RegisterStruct<nc_prof_row>();
+    c.RegisterArray < Rml::Vector < nc_prof_glyph>>();
+    Rml::StructHandle < nc_prof_row > rh = c.RegisterStruct < nc_prof_row > ();
     rh.RegisterMember( "text_rml", &nc_prof_row::text_rml );
     rh.RegisterMember( "cost_rml", &nc_prof_row::cost_rml );
     rh.RegisterMember( "icons", &nc_prof_row::icons );
     rh.RegisterMember( "selected", &nc_prof_row::selected );
     rh.RegisterMember( "chosen", &nc_prof_row::chosen );
-    c.RegisterArray<Rml::Vector<nc_prof_row>>();
-    Rml::StructHandle<nc_prof_band> bh = c.RegisterStruct<nc_prof_band>();
+    c.RegisterArray < Rml::Vector < nc_prof_row>>();
+    Rml::StructHandle < nc_prof_band > bh = c.RegisterStruct < nc_prof_band > ();
     bh.RegisterMember( "name_rml", &nc_prof_band::name_rml );
     bh.RegisterMember( "count_rml", &nc_prof_band::count_rml );
     bh.RegisterMember( "marker_rml", &nc_prof_band::marker_rml );
@@ -4269,8 +4262,8 @@ void register_nc_prof_rml_types( Rml::DataModelConstructor &c )
     bh.RegisterMember( "has_prev_page", &nc_prof_band::has_prev_page );
     bh.RegisterMember( "has_next_page", &nc_prof_band::has_next_page );
     bh.RegisterMember( "rows", &nc_prof_band::rows );
-    c.RegisterArray<Rml::Vector<nc_prof_band>>();
-    Rml::StructHandle<nc_eqp_slot> sh = c.RegisterStruct<nc_eqp_slot>();
+    c.RegisterArray < Rml::Vector < nc_prof_band>>();
+    Rml::StructHandle < nc_eqp_slot > sh = c.RegisterStruct < nc_eqp_slot > ();
     sh.RegisterMember( "name_rml", &nc_eqp_slot::name_rml );
     sh.RegisterMember( "item_rml", &nc_eqp_slot::item_rml );
     sh.RegisterMember( "more_rml", &nc_eqp_slot::more_rml );
@@ -4278,11 +4271,11 @@ void register_nc_prof_rml_types( Rml::DataModelConstructor &c )
     sh.RegisterMember( "filled", &nc_eqp_slot::filled );
     sh.RegisterMember( "junction", &nc_eqp_slot::junction );
     sh.RegisterMember( "blank", &nc_eqp_slot::blank );
-    c.RegisterArray<Rml::Vector<nc_eqp_slot>>();
-    Rml::StructHandle<nc_eqp_dollrow> dh = c.RegisterStruct<nc_eqp_dollrow>();
+    c.RegisterArray < Rml::Vector < nc_eqp_slot>>();
+    Rml::StructHandle < nc_eqp_dollrow > dh = c.RegisterStruct < nc_eqp_dollrow > ();
     dh.RegisterMember( "cells", &nc_eqp_dollrow::cells );
-    c.RegisterArray<Rml::Vector<nc_eqp_dollrow>>();
-    Rml::StructHandle<nc_eqp_row> eh = c.RegisterStruct<nc_eqp_row>();
+    c.RegisterArray < Rml::Vector < nc_eqp_dollrow>>();
+    Rml::StructHandle < nc_eqp_row > eh = c.RegisterStruct < nc_eqp_row > ();
     eh.RegisterMember( "marker_rml", &nc_eqp_row::marker_rml );
     eh.RegisterMember( "name_rml", &nc_eqp_row::name_rml );
     eh.RegisterMember( "stat_rml", &nc_eqp_row::stat_rml );
@@ -4292,7 +4285,7 @@ void register_nc_prof_rml_types( Rml::DataModelConstructor &c )
     eh.RegisterMember( "group", &nc_eqp_row::group );
     eh.RegisterMember( "sub", &nc_eqp_row::sub );
     eh.RegisterMember( "focused", &nc_eqp_row::focused );
-    c.RegisterArray<Rml::Vector<nc_eqp_row>>();
+    c.RegisterArray < Rml::Vector < nc_eqp_row>>();
     g_nc_prof_types_registered = true;
 }
 } // namespace
@@ -4317,10 +4310,10 @@ tab_direction set_profession( avatar &u, points_left &points,
     // Bands are DISCOVERED from the data, not fixed: one per skill display category that some
     // profession actually leads with, plus "unskilled" last. A mod adding a skill category
     // therefore adds a band without touching this file.
-    std::vector<skill_displayType_id> band_cats;
-    std::vector<std::vector<int>> band_items;      //< indices into sorted_profs, per band
-    std::vector<bool> band_collapsed;
-    std::vector<int> band_page;
+    std::vector < skill_displayType_id > band_cats;
+    std::vector < std::vector < int>> band_items;  //< indices into sorted_profs, per band
+    std::vector < bool > band_collapsed;
+    std::vector < int > band_page;
     bool first_group_build = true;
     int focus_band = 0;
     bool focus_header = true;
@@ -4343,7 +4336,7 @@ tab_direction set_profession( avatar &u, points_left &points,
     int eqp_rows = 0;
     // Keyed by string ("m1", "m1|clothing"), never by index: switching profession changes
     // which categories exist, so an index-keyed map would reassign state to a stranger.
-    std::map<std::string, bool> eqp_collapsed;
+    std::map < std::string, bool > eqp_collapsed;
     bool pending_eqp_open = false;
     int pending_eqp_row = -1;
 
@@ -4355,7 +4348,7 @@ tab_direction set_profession( avatar &u, points_left &points,
     catacurses::window w_items;
     character_preview_window character_preview;
     character_preview.init( &u );
-    const bool use_character_preview = get_option<bool>( "USE_CHARACTER_PREVIEW" );
+    const bool use_character_preview = get_option < bool > ( "USE_CHARACTER_PREVIEW" );
     const auto init_windows = [&]( ui_adaptor & ui ) {
         iContentHeight = TERMY - 10;
         w = catacurses::newwin( TERMY, TERMX, point_zero );
@@ -4400,7 +4393,7 @@ tab_direction set_profession( avatar &u, points_left &points,
     bool recalc_profs = true;
     int profs_length = 0;
     std::string filterstring;
-    std::vector<string_id<profession>> sorted_profs;
+    std::vector < string_id < profession>> sorted_profs;
 
     if( direction == tab_direction::FORWARD ) {
         points.skill_points -= u.prof->point_cost();
@@ -4410,7 +4403,7 @@ tab_direction set_profession( avatar &u, points_left &points,
 
     // RmlUi render path (render-only; keyboard owns nav/scroll/confirm/sort/gender/
     // filter below). Tile character_preview not drawn in rml mode this slice.
-    auto data = std::make_unique<nc_prof_session>();
+    auto data = std::make_unique < nc_prof_session > ();
     rml_doc rml;
     // Set by the arrow click callbacks, consumed by the input loop below. Not a
     // tab_direction: it is translated into an action string so the existing
@@ -4420,10 +4413,10 @@ tab_direction set_profession( avatar &u, points_left &points,
         if( !data->handle ) {
             return;
         }
-        data->tabs = build_nc_char_tabs<nc_prof_tab>( 2 );  // PROFESSION tab active
+        data->tabs = build_nc_char_tabs < nc_prof_tab > ( 2 ); // PROFESSION tab active
         data->shell = fill_nc_shell( 2, ctxt );
         set_nc_portrait( data->shell, use_character_preview );
-        const bool valid = cur_id >= 0 && static_cast<size_t>( cur_id ) < sorted_profs.size();
+        const bool valid = cur_id >= 0 && static_cast < size_t > ( cur_id ) < sorted_profs.size();
 
         std::string pmsg = nc_points_line( points );
         if( valid ) {
@@ -4437,7 +4430,7 @@ tab_direction set_profession( avatar &u, points_left &points,
         data->points_rml = cata_text_to_rml( pmsg );
 
         if( valid ) {
-            const string_id<profession> &pid = sorted_profs[cur_id];
+            const string_id < profession > &pid = sorted_profs[cur_id];
             const bool can_pick = can_pick_prof( *pid, u, points.skill_points_left() );
             int pts = pid->point_cost();
             const bool neg = pts < 0;
@@ -4467,9 +4460,9 @@ tab_direction set_profession( avatar &u, points_left &points,
             // Traits and skills are NOT repeated here: the fact fields beside this buffer own
             // them now, and stating them twice in one panel is noise. What stays is the
             // itemised detail no summary can carry.
-            std::vector<std::pair<skill_id, int>> prof_skills = pid->skills();
+            std::vector < std::pair < skill_id, int>> prof_skills = pid->skills();
             std::stable_sort( prof_skills.begin(), prof_skills.end(),
-            []( const std::pair<skill_id, int> &a, const std::pair<skill_id, int> &b ) {
+            []( const std::pair < skill_id, int > &a, const std::pair < skill_id, int > &b ) {
                 return localized_compare( std::make_pair( a.first->display_category(), a.first->name() ),
                                           std::make_pair( b.first->display_category(), b.first->name() ) );
             } );
@@ -4530,17 +4523,17 @@ tab_direction set_profession( avatar &u, points_left &points,
             }
             if( !pid->spells().empty() ) {
                 buf += colorize( _( "Spells:" ), c_light_blue ) + "\n";
-                for( const std::pair<spell_id, int> spell_pair : pid->spells() ) {
+                for( const std::pair < spell_id, int > spell_pair : pid->spells() ) {
                     buf += string_format( _( "%s level %d" ), spell_pair.first->name,
                                           spell_pair.second ) + "\n";
                 }
             }
-            std::optional<int> cash = pid->starting_cash();
+            std::optional < int > cash = pid->starting_cash();
             if( cash.has_value() ) {
                 buf += colorize( _( "Money:" ), c_light_blue ) + "\n";
                 buf += format_money( cash.value() ) + "\n";
             }
-            std::vector<npc_class_id> npcs = pid->npcs();
+            std::vector < npc_class_id > npcs = pid->npcs();
             if( !npcs.empty() ) {
                 buf += "\n" + colorize( _( "Companions:" ), c_light_blue ) + "\n";
                 for( const npc_class_id &id : npcs ) {
@@ -4554,7 +4547,7 @@ tab_direction set_profession( avatar &u, points_left &points,
             // Facts: the handful that decide the choice, as label/value fields. The prose
             // buffer above keeps the exhaustive detail — it is scrollable and nobody reads it
             // to compare two professions.
-            std::vector<std::pair<skill_id, int>> fact_skills = pid->skills();
+            std::vector < std::pair < skill_id, int>> fact_skills = pid->skills();
             std::ranges::sort( fact_skills, []( const auto & a, const auto & b ) {
                 return a.second > b.second;
             } );
@@ -4576,12 +4569,12 @@ tab_direction set_profession( avatar &u, points_left &points,
                 data->skills_sub_rml = fact_skills.size() > 3
                                        ? cata_text_to_rml( colorize( string_format(
                                                vgettext( "and %d more skill", "and %d more skills",
-                                                   static_cast<int>( fact_skills.size() ) - 3 ),
-                                               static_cast<int>( fact_skills.size() ) - 3 ), c_dark_gray ) )
+                                                   static_cast < int > ( fact_skills.size() ) - 3 ),
+                                               static_cast < int > ( fact_skills.size() ) - 3 ), c_dark_gray ) )
                                        : Rml::String();
             }
 
-            const std::vector<trait_id> fact_traits = pid->get_locked_traits();
+            const std::vector < trait_id > fact_traits = pid->get_locked_traits();
             if( fact_traits.empty() ) {
                 data->traits_rml = cata_text_to_rml( colorize( _( "None" ), c_dark_gray ) );
             } else {
@@ -4597,16 +4590,16 @@ tab_direction set_profession( avatar &u, points_left &points,
 
             // GEAR keeps summarising with the sheet shut — count, total weight and cash — so
             // the reader never has to open anything to compare two kits at a glance.
-            const int gear_count = static_cast<int>( prof_items.size() );
+            const int gear_count = static_cast < int > ( prof_items.size() );
             units::mass gear_wt = 0_gram;
-            for( const detached_ptr<item> &gi : prof_items ) {
+            for( const detached_ptr < item > &gi : prof_items ) {
                 if( gi ) {
                     gear_wt += gi->weight();
                 }
             }
             data->gear_rml = cata_text_to_rml( string_format(
                                                    vgettext( "%d item", "%d items", gear_count ), gear_count ) );
-            const std::optional<int> fact_cash = pid->starting_cash();
+            const std::optional < int > fact_cash = pid->starting_cash();
             std::string gear_sub = colorize( nc_eqp_weight_str( gear_wt ), c_dark_gray );
             if( fact_cash.value_or( 0 ) != 0 ) {
                 gear_sub += "  " + colorize( format_money( *fact_cash ), c_green );
@@ -4712,7 +4705,7 @@ tab_direction set_profession( avatar &u, points_left &points,
         data->bands.clear();
         for( std::size_t b = 0; b < band_cats.size(); ++b ) {
             nc_prof_band band;
-            const int total = static_cast<int>( band_items[b].size() );
+            const int total = static_cast < int > ( band_items[b].size() );
             band.name_rml = cata_text_to_rml( colorize(
                                                   band_cats[b].is_null()
                                                   ? _( "Unskilled" )
@@ -4724,8 +4717,8 @@ tab_direction set_profession( avatar &u, points_left &points,
                                                   : SkillDisplayType::get_skill_type( band_cats[b] ).display_string(),
                                                   c_white ) );
             band.collapsed = band_collapsed[b];
-            band.focused = ( static_cast<int>( b ) == focus_band && focus_header );
-            band.has_info = !band_collapsed[b] && static_cast<int>( b ) == focus_band &&
+            band.focused = ( static_cast < int > ( b ) == focus_band && focus_header );
+            band.has_info = !band_collapsed[b] && static_cast < int > ( b ) == focus_band &&
                             !focus_header;
             const int page_start = band_collapsed[b] ? 0 : band_page[b];
             const int page_end = std::min( total, page_start + NC_PROF_PAGE );
@@ -4741,7 +4734,7 @@ tab_direction set_profession( avatar &u, points_left &points,
             if( !band_collapsed[b] ) {
                 for( int k = page_start; k < page_end; ++k ) {
                     const int idx = band_items[b][k];
-                    const string_id<profession> &pr = sorted_profs[idx];
+                    const string_id < profession > &pr = sorted_profs[idx];
                     nc_prof_row r;
                     r.chosen = ( u.prof == pr );
                     // Name stays UNCOLOURED: the card's own border and fill carry cursor and
@@ -4757,7 +4750,7 @@ tab_direction set_profession( avatar &u, points_left &points,
                             r.icons.push_back( { .dec = nc_icon_dec_col( s.seed, 14, s.col ) } );
                         }
                     }
-                    r.selected = ( static_cast<int>( b ) == focus_band && !focus_header &&
+                    r.selected = ( static_cast < int > ( b ) == focus_band && !focus_header &&
                                    k == focus_card );
                     band.rows.push_back( r );
                 }
@@ -4834,8 +4827,8 @@ tab_direction set_profession( avatar &u, points_left &points,
         }
         const float page = e->GetClientHeight();
         const float total = e->GetScrollHeight();
-        const float row_h = total / static_cast<float>( eqp_rows );
-        const float want = row_h * static_cast<float>( eqp_focus ) - page * 0.5f;
+        const float row_h = total / static_cast < float > ( eqp_rows );
+        const float want = row_h * static_cast < float > ( eqp_focus ) - page * 0.5f;
         e->SetScrollTop( std::clamp( want, 0.0f, std::max( 0.0f, total - page ) ) );
     };
 
@@ -4881,7 +4874,7 @@ tab_direction set_profession( avatar &u, points_left &points,
             if( !args.empty() ) {
                 args[0].GetInto( b );
             }
-            if( b >= 0 && b < static_cast<int>( band_cats.size() ) ) {
+            if( b >= 0 && b < static_cast < int > ( band_cats.size() ) ) {
                 pending_band = b;
             }
         } );
@@ -4893,7 +4886,7 @@ tab_direction set_profession( avatar &u, points_left &points,
                 args[0].GetInto( b );
                 args[1].GetInto( k );
             }
-            if( b >= 0 && b < static_cast<int>( band_cats.size() ) && k >= 0 ) {
+            if( b >= 0 && b < static_cast < int>( band_cats.size() ) && k >= 0 ) {
                 pending_card_band = b;
                 pending_card_slot = k;
             }
@@ -4906,7 +4899,7 @@ tab_direction set_profession( avatar &u, points_left &points,
                 args[0].GetInto( b );
                 args[1].GetInto( d );
             }
-            if( b >= 0 && b < static_cast<int>( band_cats.size() ) && d != 0 ) {
+            if( b >= 0 && b < static_cast < int > ( band_cats.size() ) && d != 0 ) {
                 pending_page_band = b;
                 pending_page_dir = d;
             }
@@ -4963,7 +4956,7 @@ tab_direction set_profession( avatar &u, points_left &points,
         if( recalc_profs ) {
             sorted_profs = g->scen->permitted_professions();
             const auto new_end = std::remove_if( sorted_profs.begin(),
-            sorted_profs.end(), [&]( const string_id<profession> &arg ) {
+            sorted_profs.end(), [&]( const string_id < profession > &arg ) {
                 return !lcmatch( arg->gender_appropriate_name( u.male ), filterstring );
             } );
             sorted_profs.erase( new_end, sorted_profs.end() );
@@ -4997,13 +4990,13 @@ tab_direction set_profession( avatar &u, points_left &points,
             // is stable and data-driven rather than dependent on which profession happened to
             // be first. Unskilled goes last: it is a fallback, not a discipline.
             {
-                std::vector<skill_displayType_id> discovered;
+                std::vector < skill_displayType_id > discovered;
                 for( const SkillDisplayType &dt : SkillDisplayType::skillTypes ) {
                     discovered.push_back( dt.ident() );
                 }
                 discovered.push_back( skill_displayType_id::NULL_ID() );
 
-                std::vector<std::vector<int>> items( discovered.size() );
+                std::vector < std::vector < int>> items( discovered.size() );
                 for( int k = 0; k < profs_length; ++k ) {
                     const skill_displayType_id cat = nc_classify_prof( *sorted_profs[k] );
                     const auto it = std::ranges::find( discovered, cat );
@@ -5016,8 +5009,8 @@ tab_direction set_profession( avatar &u, points_left &points,
 
                 // Drop empty bands: a header with nothing under it is noise, and which
                 // categories are populated depends on the loaded mods.
-                std::vector<skill_displayType_id> kept_cats;
-                std::vector<std::vector<int>> kept_items;
+                std::vector < skill_displayType_id > kept_cats;
+                std::vector < std::vector < int>> kept_items;
                 for( std::size_t b = 0; b < discovered.size(); ++b ) {
                     if( !items[b].empty() ) {
                         kept_cats.push_back( discovered[b] );
@@ -5026,8 +5019,8 @@ tab_direction set_profession( avatar &u, points_left &points,
                 }
                 // Preserve collapse state across a re-sort by category, not by index: FILTER
                 // can remove a whole band and shift every later one.
-                std::vector<bool> kept_collapsed( kept_cats.size(), true );
-                std::vector<int> kept_page( kept_cats.size(), 0 );
+                std::vector < bool > kept_collapsed( kept_cats.size(), true );
+                std::vector < int > kept_page( kept_cats.size(), 0 );
                 for( std::size_t b = 0; b < kept_cats.size(); ++b ) {
                     const auto old_it = std::ranges::find( band_cats, kept_cats[b] );
                     if( old_it != band_cats.end() ) {
@@ -5050,8 +5043,8 @@ tab_direction set_profession( avatar &u, points_left &points,
             for( std::size_t b = 0; b < band_items.size(); ++b ) {
                 const auto it = std::ranges::find( band_items[b], cur_id );
                 if( it != band_items[b].end() ) {
-                    focus_band = static_cast<int>( b );
-                    focus_card = static_cast<int>( std::distance( band_items[b].begin(), it ) );
+                    focus_band = static_cast < int > ( b );
+                    focus_card = static_cast < int > ( std::distance( band_items[b].begin(), it ) );
                     if( first_group_build ) {
                         band_collapsed[b] = false;
                         first_group_build = false;
@@ -5098,11 +5091,11 @@ tab_direction set_profession( avatar &u, points_left &points,
         if( eqp_open ) {
             // Collapse key of the focused row, empty on item rows (which toggle nothing).
             const auto focus_key = [&]() -> std::string {
-                const int n = static_cast<int>( data->eqp_rows.size() );
+                const int n = static_cast < int > ( data->eqp_rows.size() );
                 return eqp_focus >= 0 && eqp_focus < n ? data->eqp_rows[eqp_focus].key : std::string();
             };
             if( pending_eqp_row >= 0 &&
-                pending_eqp_row < static_cast<int>( data->eqp_rows.size() ) ) {
+                pending_eqp_row < static_cast < int>( data->eqp_rows.size() ) ) {
                 eqp_focus = pending_eqp_row;
                 const std::string &key = data->eqp_rows[pending_eqp_row].key;
                 if( !key.empty() ) {
@@ -5177,10 +5170,10 @@ tab_direction set_profession( avatar &u, points_left &points,
         // movement walks the focused band's cards and advances the carousel page at either
         // end, which is why paging needs no key of its own.
         const auto band_size = [&]( int b ) {
-            return static_cast<int>( band_items[b].size() );
+            return static_cast < int > ( band_items[b].size() );
         };
         const auto nbands = [&]() {
-            return static_cast<int>( band_cats.size() );
+            return static_cast < int > ( band_cats.size() );
         };
         // Keeps cur_id (and therefore the panel, the portrait and CONFIRM) on the focused card.
         const auto sync_cur_from_focus = [&]() {
@@ -5203,7 +5196,7 @@ tab_direction set_profession( avatar &u, points_left &points,
         // click, so "picking" cannot come to mean two different things on one screen — and so
         // this tab behaves like the SCENARIO tab, where a card click also selects.
         const auto pick_prof = [&]() {
-            if( !( cur_id >= 0 && static_cast<std::size_t>( cur_id ) < sorted_profs.size() ) ) {
+            if( !( cur_id >= 0 && static_cast < std::size_t > ( cur_id ) < sorted_profs.size() ) ) {
                 return;
             }
             if( sorted_profs[cur_id] == u.prof ) {
@@ -5320,7 +5313,7 @@ tab_direction set_profession( avatar &u, points_left &points,
                 const auto it = std::ranges::find( band_items[b], cur_id );
                 if( it != band_items[b].end() ) {
                     focus_band = b;
-                    focus_card = static_cast<int>( std::distance( band_items[b].begin(), it ) );
+                    focus_card = static_cast < int > ( std::distance( band_items[b].begin(), it ) );
                     band_collapsed[b] = false;
                     focus_header = false;
                     band_page[b] = focus_card - focus_card % NC_PROF_PAGE;
@@ -5401,7 +5394,7 @@ struct nc_skill_row {
     Rml::String lvl_rml;      //< "4", plus " +1" when the profession adds more
     Rml::String cost_rml;     //< price of the NEXT level, "[max]" at the cap
     Rml::String name_rml;
-    Rml::Vector<nc_skill_pip> pips;
+    Rml::Vector < nc_skill_pip > pips;
     bool can_dec = false;
     bool can_inc = false;
     bool header = false;
@@ -5415,7 +5408,7 @@ struct nc_skill_col {
     /// "none", NOT empty: `data-style-decorator` is applied on the first frame, before sync_rml has
     /// run, and an empty value becomes `decorator: ;`, which RmlUi logs every frame.
     Rml::String sigil_dec = "none";
-    Rml::Vector<nc_skill_row> rows;
+    Rml::Vector < nc_skill_row > rows;
 };
 
 /// A label / value / sub-line triple in the detail panel.
@@ -5433,7 +5426,7 @@ struct nc_apt_dot {
     Rml::String col = "#00000000";
 };
 struct nc_apt_row {
-    Rml::Vector<nc_apt_dot> cells;
+    Rml::Vector < nc_apt_dot > cells;
 };
 /// A sector's line in the legend under the disc. An unlabelled radar is decoration.
 struct nc_apt_sector {
@@ -5443,7 +5436,7 @@ struct nc_apt_sector {
 };
 
 struct nc_skills_session {
-    Rml::Vector<nc_skills_tab> tabs;
+    Rml::Vector < nc_skills_tab > tabs;
     nc_shell shell;
     Rml::String points_rml;
     Rml::String budget_rml;   //< "Skill points left: N", the reference's meta-bar readout
@@ -5457,7 +5450,7 @@ struct nc_skills_session {
     /// heading it sits under.
     bool has_art = false;
     Rml::String art_dec = "none";
-    Rml::Vector<nc_skill_fact> facts;
+    Rml::Vector < nc_skill_fact > facts;
     Rml::String desc_rml;     //< the skill's own description
     Rml::String detail_rml;   //< the recipes it unlocks; scrolls on its own
     Rml::String hint_rml;
@@ -5465,10 +5458,10 @@ struct nc_skills_session {
     /// unchanged property value (RmlUi DataViewDefault.cpp:168) and DataViewFor only creates
     /// elements when an array's SIZE changes — this one is always 13 by 13 — so a quiet tick costs
     /// the dots the beam is actually moving over and nothing else.
-    Rml::Vector<nc_apt_row> apt;
+    Rml::Vector < nc_apt_row > apt;
     Rml::String apt_name_rml;
     Rml::String apt_count_rml;
-    Rml::Vector<nc_apt_sector> apt_legend;
+    Rml::Vector < nc_apt_sector > apt_legend;
     Rml::DataModelHandle handle;
 };
 
@@ -5479,20 +5472,20 @@ void register_nc_skills_rml_types( Rml::DataModelConstructor &c )
     if( g_nc_skills_types_registered ) {
         return;
     }
-    Rml::StructHandle<nc_skills_tab> th = c.RegisterStruct<nc_skills_tab>();
+    Rml::StructHandle < nc_skills_tab > th = c.RegisterStruct < nc_skills_tab > ();
     th.RegisterMember( "name_rml", &nc_skills_tab::name_rml );
     th.RegisterMember( "icon_dec", &nc_skills_tab::icon_dec );
     th.RegisterMember( "selected", &nc_skills_tab::selected );
     th.RegisterMember( "done", &nc_skills_tab::done );
-    c.RegisterArray<Rml::Vector<nc_skills_tab>>();
+    c.RegisterArray < Rml::Vector < nc_skills_tab>>();
     // Pips before rows and rows before the column that holds them: a member cannot be registered
     // before its own type is.
-    Rml::StructHandle<nc_skill_pip> ph = c.RegisterStruct<nc_skill_pip>();
+    Rml::StructHandle < nc_skill_pip > ph = c.RegisterStruct < nc_skill_pip > ();
     ph.RegisterMember( "on", &nc_skill_pip::on );
     ph.RegisterMember( "bonus", &nc_skill_pip::bonus );
     ph.RegisterMember( "steep", &nc_skill_pip::steep );
-    c.RegisterArray<Rml::Vector<nc_skill_pip>>();
-    Rml::StructHandle<nc_skill_row> rh = c.RegisterStruct<nc_skill_row>();
+    c.RegisterArray < Rml::Vector < nc_skill_pip>>();
+    Rml::StructHandle < nc_skill_row > rh = c.RegisterStruct < nc_skill_row > ();
     rh.RegisterMember( "cursor_rml", &nc_skill_row::cursor_rml );
     rh.RegisterMember( "lvl_rml", &nc_skill_row::lvl_rml );
     rh.RegisterMember( "cost_rml", &nc_skill_row::cost_rml );
@@ -5502,28 +5495,28 @@ void register_nc_skills_rml_types( Rml::DataModelConstructor &c )
     rh.RegisterMember( "can_inc", &nc_skill_row::can_inc );
     rh.RegisterMember( "header", &nc_skill_row::header );
     rh.RegisterMember( "selected", &nc_skill_row::selected );
-    c.RegisterArray<Rml::Vector<nc_skill_row>>();
-    Rml::StructHandle<nc_skill_col> ch = c.RegisterStruct<nc_skill_col>();
+    c.RegisterArray < Rml::Vector < nc_skill_row>>();
+    Rml::StructHandle < nc_skill_col > ch = c.RegisterStruct < nc_skill_col > ();
     ch.RegisterMember( "name_rml", &nc_skill_col::name_rml );
     ch.RegisterMember( "count_rml", &nc_skill_col::count_rml );
     ch.RegisterMember( "sigil_dec", &nc_skill_col::sigil_dec );
     ch.RegisterMember( "rows", &nc_skill_col::rows );
-    Rml::StructHandle<nc_skill_fact> fh = c.RegisterStruct<nc_skill_fact>();
+    Rml::StructHandle < nc_skill_fact > fh = c.RegisterStruct < nc_skill_fact > ();
     fh.RegisterMember( "label_rml", &nc_skill_fact::label_rml );
     fh.RegisterMember( "value_rml", &nc_skill_fact::value_rml );
     fh.RegisterMember( "sub_rml", &nc_skill_fact::sub_rml );
-    c.RegisterArray<Rml::Vector<nc_skill_fact>>();
-    Rml::StructHandle<nc_apt_dot> dh = c.RegisterStruct<nc_apt_dot>();
+    c.RegisterArray < Rml::Vector < nc_skill_fact>>();
+    Rml::StructHandle < nc_apt_dot > dh = c.RegisterStruct < nc_apt_dot > ();
     dh.RegisterMember( "col", &nc_apt_dot::col );
-    c.RegisterArray<Rml::Vector<nc_apt_dot>>();
-    Rml::StructHandle<nc_apt_row> arh = c.RegisterStruct<nc_apt_row>();
+    c.RegisterArray < Rml::Vector < nc_apt_dot>>();
+    Rml::StructHandle < nc_apt_row > arh = c.RegisterStruct < nc_apt_row > ();
     arh.RegisterMember( "cells", &nc_apt_row::cells );
-    c.RegisterArray<Rml::Vector<nc_apt_row>>();
-    Rml::StructHandle<nc_apt_sector> sh = c.RegisterStruct<nc_apt_sector>();
+    c.RegisterArray < Rml::Vector < nc_apt_row>>();
+    Rml::StructHandle < nc_apt_sector > sh = c.RegisterStruct < nc_apt_sector > ();
     sh.RegisterMember( "dec", &nc_apt_sector::dec );
     sh.RegisterMember( "name_rml", &nc_apt_sector::name_rml );
     sh.RegisterMember( "val_rml", &nc_apt_sector::val_rml );
-    c.RegisterArray<Rml::Vector<nc_apt_sector>>();
+    c.RegisterArray < Rml::Vector < nc_apt_sector>>();
     g_nc_skills_types_registered = true;
 }
 
@@ -5545,7 +5538,7 @@ auto nc_skill_cat_seed( const std::string &id ) -> unsigned
 {
     unsigned h = 2166136261U;
     for( const char ch : id ) {
-        h ^= static_cast<unsigned char>( ch );
+        h ^= static_cast < unsigned char > ( ch );
         h *= 16777619U;
     }
     return h;
@@ -5553,11 +5546,11 @@ auto nc_skill_cat_seed( const std::string &id ) -> unsigned
 
 auto nc_skill_cat_art_of( const skill_displayType_id &id, int order ) -> nc_skill_cat_art
 {
-    static const std::array<nc_color, 6> palette = {
+    static const std::array < nc_color, 6 > palette = {
         c_yellow, c_light_blue, c_light_green, c_light_cyan, c_pink, c_light_gray
     };
     return { .seed = nc_skill_cat_seed( id.str() ),
-             .col = palette[static_cast<size_t>( std::max( 0, order ) ) % palette.size()] };
+             .col = palette[static_cast < size_t > ( std::max( 0, order ) ) % palette.size()] };
 }
 
 /// A category's heading. `display_string()` is already translated, so it is used verbatim; the
@@ -5593,13 +5586,13 @@ struct nc_skill_recipes {
 };
 
 auto nc_skill_recipe_list( avatar &u, const Skill *currentSkill,
-                           const std::map<skill_id, int> &prof_skills ) -> nc_skill_recipes
+                           const std::map < skill_id, int > &prof_skills ) -> nc_skill_recipes
 {
     SkillLevelMap with_prof_skills = u.get_all_skills();
     for( const auto &sk : prof_skills ) {
         with_prof_skills.mod_skill_level( sk.first, sk.second );
     }
-    std::map<std::string, std::vector<std::pair<std::string, int>>> recipes;
+    std::map < std::string, std::vector < std::pair<std::string, int>>> recipes;
     for( const auto &e : recipe_dict ) {
         const auto &r = e.second;
         if( r.has_flag( "SECRET" ) ) {
@@ -5620,15 +5613,15 @@ auto nc_skill_recipe_list( avatar &u, const Skill *currentSkill,
     }
     nc_skill_recipes out;
     for( auto &elem : recipes ) {
-        out.count += static_cast<int>( elem.second.size() );
+        out.count += static_cast < int > ( elem.second.size() );
         std::sort( elem.second.begin(), elem.second.end(),
-                   []( const std::pair<std::string, int> &lhs,
-        const std::pair<std::string, int> &rhs ) {
+                   []( const std::pair < std::string, int > &lhs,
+        const std::pair < std::string, int > &rhs ) {
             return localized_compare( std::make_pair( lhs.second, lhs.first ),
                                       std::make_pair( rhs.second, rhs.first ) );
         } );
         const std::string rec_temp = enumerate_as_string( elem.second.begin(), elem.second.end(),
-        []( const std::pair<std::string, int> &rec ) {
+        []( const std::pair < std::string, int > &rec ) {
             return string_format( "%s (%d)", rec.first, rec.second );
         } );
         if( elem.first == currentSkill->name() ) {
@@ -5655,7 +5648,7 @@ tab_direction set_skills( avatar &u, points_left &points )
 
     // ONE flat list in display order; the columns are a VIEW over it, so every index-based lookup
     // stays independent of how the screen happens to be grouped.
-    const std::vector<const Skill *> skills =
+    const std::vector < const Skill * > skills =
     Skill::get_skills_sorted_by( []( const Skill & a, const Skill & b ) {
         return localized_compare( std::make_pair( a.display_category(), a.name() ),
                                   std::make_pair( b.display_category(), b.name() ) );
@@ -5666,13 +5659,13 @@ tab_direction set_skills( avatar &u, points_left &points )
         skill_displayType_id id;
         std::string name;
         nc_skill_cat_art art;
-        std::vector<int> skills;   //< indices into `skills`
+        std::vector < int > skills; //< indices into `skills`
     };
-    std::vector<cat_group> groups;
-    for( int i = 0; i < static_cast<int>( skills.size() ); i++ ) {
+    std::vector < cat_group > groups;
+    for( int i = 0; i < static_cast < int > ( skills.size() ); i++ ) {
         const skill_displayType_id &dt = skills[i]->display_category();
         if( groups.empty() || groups.back().id != dt ) {
-            const int order = static_cast<int>( groups.size() );
+            const int order = static_cast < int > ( groups.size() );
             groups.push_back( { .id = dt,
                                 .name = nc_skill_cat_name( dt ),
                                 .art = nc_skill_cat_art_of( dt, order ),
@@ -5681,7 +5674,7 @@ tab_direction set_skills( avatar &u, points_left &points )
         groups.back().skills.push_back( i );
     }
 
-    const int num_skills = static_cast<int>( skills.size() );
+    const int num_skills = static_cast < int > ( skills.size() );
     if( num_skills == 0 ) {
         return tab_direction::FORWARD;
     }
@@ -5695,19 +5688,19 @@ tab_direction set_skills( avatar &u, points_left &points )
     // changing column. UP/DOWN walk the concatenated row sequence, which is the order the eye reads
     // the two columns in anyway.
     static constexpr int ncols = 2;
-    std::array<std::vector<int>, ncols> col_rows;    //< skill index, or -1 for a heading row
-    std::array<std::vector<int>, ncols> col_head_of; //< the group each row belongs to
+    std::array < std::vector < int>, ncols > col_rows; //< skill index, or -1 for a heading row
+    std::array < std::vector < int>, ncols > col_head_of; //< the group each row belongs to
     {
         // Linear partition preserving the sorted order: keep filling column 0 while adding the next
         // category leaves it closer to half the rows than stopping would. Derived from the counts,
         // so a mod adding skills or a whole category redistributes with no edit here, and the split
         // is identical on every run.
-        const int total_rows = num_skills + static_cast<int>( groups.size() );
+        const int total_rows = num_skills + static_cast < int > ( groups.size() );
         const int want = ( total_rows + ncols - 1 ) / ncols;
         int c = 0;
         int placed = 0;
-        for( int gi = 0; gi < static_cast<int>( groups.size() ); gi++ ) {
-            const int rows_here = 1 + static_cast<int>( groups[gi].skills.size() );
+        for( int gi = 0; gi < static_cast < int > ( groups.size() ); gi++ ) {
+            const int rows_here = 1 + static_cast < int > ( groups[gi].skills.size() );
             if( c + 1 < ncols && placed > 0 &&
                 placed + rows_here - want >= want - placed ) {
                 c++;
@@ -5724,10 +5717,10 @@ tab_direction set_skills( avatar &u, points_left &points )
     }
 
     int cur_col = 0;
-    std::array<int, ncols> cur_row = {};
+    std::array < int, ncols > cur_row = {};
 
     const auto col_len = [&]( int c ) {
-        return static_cast<int>( col_rows[c].size() );
+        return static_cast < int > ( col_rows[c].size() );
     };
     /// The skill on a given row, or -1 for a heading or an out-of-range row.
     const auto skill_at = [&]( int c, int r ) {
@@ -5789,7 +5782,7 @@ tab_direction set_skills( avatar &u, points_left &points )
     ctxt.register_action( "COORDINATE" );
     ctxt.register_action( "ANY_INPUT" );
 
-    std::map<skill_id, int> prof_skills;
+    std::map < skill_id, int > prof_skills;
     const auto &pskills = u.prof->skills();
     std::copy( pskills.begin(), pskills.end(),
                std::inserter( prof_skills, prof_skills.begin() ) );
@@ -5801,7 +5794,7 @@ tab_direction set_skills( avatar &u, points_left &points )
         return it == prof_skills.end() ? 0 : it->second;
     };
 
-    auto data = std::make_unique<nc_skills_session>();
+    auto data = std::make_unique < nc_skills_session > ();
     rml_doc rml;
     // Set by the arrow click callbacks, consumed by the input loop below. Not a tab_direction: it is
     // translated into an action string so the existing keyboard handling stays the single place
@@ -5857,17 +5850,17 @@ tab_direction set_skills( avatar &u, points_left &points )
         }
         // Wall clock, not a frame counter: the sweep must not speed up because the player is holding
         // a key down, and must not stall while they are not.
-        const float secs = std::chrono::duration<float>(
+        const float secs = std::chrono::duration < float > (
                                std::chrono::steady_clock::now() - anim_start ).count();
         const float beam = nc_apt::beam_at( secs );
 
-        const int nsectors = static_cast<int>( groups.size() );
+        const int nsectors = static_cast < int > ( groups.size() );
         struct sector {
             float reach = 0.0F;
             nc_color col = c_light_gray;
             int levels = 0;
         };
-        std::vector<sector> sectors;
+        std::vector < sector > sectors;
         sectors.reserve( groups.size() );
         int invested = 0;
         int strongest = 0;
@@ -5893,9 +5886,9 @@ tab_direction set_skills( avatar &u, points_left &points )
         // The floor stops that relative scale from over-claiming: with it, a category needs half of
         // one skill's range invested before its wedge reaches the rim, so a single level fills a
         // fifth of the radius rather than the whole disc.
-        const float denom = static_cast<float>( std::max( strongest, MAX_SKILL / 2 ) );
+        const float denom = static_cast < float > ( std::max( strongest, MAX_SKILL / 2 ) );
         for( sector &s : sectors ) {
-            s.reach = static_cast<float>( s.levels ) / denom * nc_apt::disc_radius();
+            s.reach = static_cast < float > ( s.levels ) / denom * nc_apt::disc_radius();
         }
         const int sel_flat = skill_at( cur_col, cur_row[cur_col] );
         const int sel_group = sel_flat >= 0 ? col_head_of[cur_col][cur_row[cur_col]] : -1;
@@ -5935,7 +5928,7 @@ tab_direction set_skills( avatar &u, points_left &points )
                 // fade cannot be wrong in a way a retheme would hide.
                 const float g = nc_apt::glow( beam, nc_apt::angle_of( off ) );
                 const int alpha = base +
-                                  static_cast<int>( std::lround( g * static_cast<float>( 255 - base ) ) );
+                                  static_cast < int > ( std::lround( g * static_cast < float > ( 255 - base ) ) );
                 ar.cells.push_back( { .col = nc_dot_col( col_of, alpha ) } );
             }
             data->apt.push_back( ar );
@@ -5966,7 +5959,7 @@ tab_direction set_skills( avatar &u, points_left &points )
         if( !data->handle ) {
             return;
         }
-        data->tabs = build_nc_char_tabs<nc_skills_tab>( 6 );  // SKILLS tab active
+        data->tabs = build_nc_char_tabs < nc_skills_tab > ( 6 ); // SKILLS tab active
         data->shell = fill_nc_shell( 6, ctxt );
         data->points_rml = cata_text_to_rml( nc_points_line( points ) );
         data->budget_rml = cata_text_to_rml( string_format(
@@ -6096,7 +6089,7 @@ tab_direction set_skills( avatar &u, points_left &points )
                       // legend prints, so the panel and the disc cannot disagree.
                       string_format( vgettext( "%d level across %d skills",
                                                "%d levels across %d skills", gtotal ),
-                                     gtotal, static_cast<int>( g.skills.size() ) ) );
+                                     gtotal, static_cast < int > ( g.skills.size() ) ) );
             const nc_skill_recipes rec = nc_skill_recipe_list( u, sk, prof_skills );
             add_fact( _( "Unlocks" ),
                       string_format( vgettext( "%d recipe", "%d recipes", rec.count ), rec.count ),
@@ -6240,8 +6233,8 @@ tab_direction set_skills( avatar &u, points_left &points )
         }
         const float page = e->GetClientHeight();
         const float total = e->GetScrollHeight();
-        const float row_h = total / static_cast<float>( rows );
-        const float want = row_h * static_cast<float>( cur_row[cur_col] ) - page * 0.5f;
+        const float row_h = total / static_cast < float > ( rows );
+        const float want = row_h * static_cast < float > ( cur_row[cur_col] ) - page * 0.5f;
         e->SetScrollTop( std::clamp( want, 0.0f, std::max( 0.0f, total - page ) ) );
     };
     // SCROLL_UP/DOWN scroll the recipe pane, which is the one thing on this screen that can be
@@ -6354,11 +6347,11 @@ enum class nc_scen_group : int {
 auto nc_classify_scen( const scenario &s ) -> nc_scen_group
 {
     if( s.has_flag( "CHALLENGE" ) ) {
-    return nc_scen_group::challenge;
-}
-// A negative cost GRANTS points, which the game only does to compensate for a harder
-// start — so "grants points" is the honest signal for "advanced".
-return s.point_cost() < 0 ? nc_scen_group::advanced : nc_scen_group::basic;
+        return nc_scen_group::challenge;
+    }
+    // A negative cost GRANTS points, which the game only does to compensate for a harder
+    // start — so "grants points" is the honest signal for "advanced".
+    return s.point_cost() < 0 ? nc_scen_group::advanced : nc_scen_group::basic;
 }
 
 /// One flag worth showing as a glyph, with the colour carrying its valence so the strip
@@ -6369,13 +6362,13 @@ return s.point_cost() < 0 ? nc_scen_group::advanced : nc_scen_group::basic;
 /// from here while the info text came from a separate, narrower if-chain, so a card could
 /// show a sigil (CITY_START) that nothing on the screen explained.
 struct nc_scen_flag_icon {
-const char *flag;
-unsigned seed;
-nc_color col;
-/// Terse form for the legend. Thirteen of these share one row.
-const char *label;
-/// Full form for the selected scenario's chip, where there is room to be explicit.
-const char *desc;
+    const char *flag;
+    unsigned seed;
+    nc_color col;
+    /// Terse form for the legend. Thirteen of these share one row.
+    const char *label;
+    /// Full form for the selected scenario's chip, where there is room to be explicit.
+    const char *desc;
 };
 
 /// Danger in red, bodily state in green, circumstance in grey/blue, season in yellow.
@@ -6383,9 +6376,9 @@ const char *desc;
 /// Seeds must all differ — the generator keys the glyph on the seed, so two flags sharing
 /// one would draw the same shape and the strip would stop distinguishing them. They are
 /// otherwise arbitrary.
-const std::vector<nc_scen_flag_icon> &nc_scen_flag_icons()
+const std::vector < nc_scen_flag_icon > &nc_scen_flag_icons()
 {
-    static const std::vector<nc_scen_flag_icon> icons = {
+    static const std::vector < nc_scen_flag_icon > icons = {
         { "FIRE_START", 0x4649, c_red, translate_marker( "Starts on fire" ), translate_marker( "Fire nearby" ) },
         { "SUR_START", 0x5352, c_red, translate_marker( "Surrounded" ), translate_marker( "Zombies nearby" ) },
         { "HELI_CRASH", 0x4843, c_red, translate_marker( "Crash injuries" ), translate_marker( "Various limb wounds" ) },
@@ -6439,7 +6432,7 @@ struct nc_scen_glyph {
 struct nc_scen_row {
     Rml::String text_rml;
     Rml::String cost_rml;             //< point cost, coloured by direction
-    Rml::Vector<nc_scen_icon> icons;  //< flag glyph strip
+    Rml::Vector < nc_scen_icon > icons; //< flag glyph strip
     bool selected = false;            //< cursor is on this card
     bool chosen = false;              //< this is the scenario in force
     bool unavailable = false;         //< CITY_START while cities are disabled
@@ -6457,11 +6450,11 @@ struct nc_scen_band {
     bool has_info = false;
     bool has_prev_page = false;
     bool has_next_page = false;
-    Rml::Vector<nc_scen_row> rows;   //< only the visible page
+    Rml::Vector < nc_scen_row > rows; //< only the visible page
 };
 
 struct nc_scen_session {
-    Rml::Vector<nc_scen_glyph> legend;
+    Rml::Vector < nc_scen_glyph > legend;
     /// Facts about the selected scenario, one binding per field. Previously a single
     /// pre-wrapped string with embedded headers and blank-line separators, which no
     /// stylesheet could give hierarchy to and which spent a third of its height on
@@ -6472,12 +6465,12 @@ struct nc_scen_session {
     Rml::String prof_sub_rml;
     Rml::String veh_rml;
     Rml::String art_dec;
-    Rml::Vector<nc_scen_glyph> chips;
-    Rml::Vector<nc_scen_tab> tabs;
+    Rml::Vector < nc_scen_glyph > chips;
+    Rml::Vector < nc_scen_tab > tabs;
     nc_shell shell;
     Rml::String points_rml;
     Rml::String cost_rml;
-    Rml::Vector<nc_scen_band> bands;
+    Rml::Vector < nc_scen_band > bands;
     /// The expand/collapse-all control above the tree. The marker mirrors the band headers'
     /// +/- vocabulary so it reads as the same family, and the label carries the real shortcut
     /// from input_context::get_desc so it stays correct after a rebind.
@@ -6496,29 +6489,29 @@ void register_nc_scen_rml_types( Rml::DataModelConstructor &c )
     if( g_nc_scen_types_registered ) {
         return;
     }
-    Rml::StructHandle<nc_scen_tab> th = c.RegisterStruct<nc_scen_tab>();
+    Rml::StructHandle < nc_scen_tab > th = c.RegisterStruct < nc_scen_tab > ();
     th.RegisterMember( "name_rml", &nc_scen_tab::name_rml );
     th.RegisterMember( "icon_dec", &nc_scen_tab::icon_dec );
     th.RegisterMember( "selected", &nc_scen_tab::selected );
     th.RegisterMember( "done", &nc_scen_tab::done );
-    c.RegisterArray<Rml::Vector<nc_scen_tab>>();
-    Rml::StructHandle<nc_scen_icon> ih = c.RegisterStruct<nc_scen_icon>();
+    c.RegisterArray < Rml::Vector < nc_scen_tab>>();
+    Rml::StructHandle < nc_scen_icon > ih = c.RegisterStruct < nc_scen_icon > ();
     ih.RegisterMember( "dec", &nc_scen_icon::dec );
-    c.RegisterArray<Rml::Vector<nc_scen_icon>>();
-    Rml::StructHandle<nc_scen_row> rh = c.RegisterStruct<nc_scen_row>();
+    c.RegisterArray < Rml::Vector < nc_scen_icon>>();
+    Rml::StructHandle < nc_scen_row > rh = c.RegisterStruct < nc_scen_row > ();
     rh.RegisterMember( "text_rml", &nc_scen_row::text_rml );
     rh.RegisterMember( "cost_rml", &nc_scen_row::cost_rml );
     rh.RegisterMember( "icons", &nc_scen_row::icons );
     rh.RegisterMember( "selected", &nc_scen_row::selected );
     rh.RegisterMember( "chosen", &nc_scen_row::chosen );
     rh.RegisterMember( "unavailable", &nc_scen_row::unavailable );
-    c.RegisterArray<Rml::Vector<nc_scen_row>>();
-    Rml::StructHandle<nc_scen_glyph> lh = c.RegisterStruct<nc_scen_glyph>();
+    c.RegisterArray < Rml::Vector < nc_scen_row>>();
+    Rml::StructHandle < nc_scen_glyph > lh = c.RegisterStruct < nc_scen_glyph > ();
     lh.RegisterMember( "dec", &nc_scen_glyph::dec );
     lh.RegisterMember( "label_rml", &nc_scen_glyph::label_rml );
     // One array registration covers both the legend and the chips — same element type.
-    c.RegisterArray<Rml::Vector<nc_scen_glyph>>();
-    Rml::StructHandle<nc_scen_band> bh = c.RegisterStruct<nc_scen_band>();
+    c.RegisterArray < Rml::Vector < nc_scen_glyph>>();
+    Rml::StructHandle < nc_scen_band > bh = c.RegisterStruct < nc_scen_band > ();
     bh.RegisterMember( "name_rml", &nc_scen_band::name_rml );
     bh.RegisterMember( "count_rml", &nc_scen_band::count_rml );
     bh.RegisterMember( "marker_rml", &nc_scen_band::marker_rml );
@@ -6528,7 +6521,7 @@ void register_nc_scen_rml_types( Rml::DataModelConstructor &c )
     bh.RegisterMember( "has_prev_page", &nc_scen_band::has_prev_page );
     bh.RegisterMember( "has_next_page", &nc_scen_band::has_next_page );
     bh.RegisterMember( "rows", &nc_scen_band::rows );
-    c.RegisterArray<Rml::Vector<nc_scen_band>>();
+    c.RegisterArray < Rml::Vector < nc_scen_band>>();
     g_nc_scen_types_registered = true;
 }
 } // namespace
@@ -6549,17 +6542,17 @@ tab_direction set_scenario( avatar &u, points_left &points,
     // roughly 60dp each and every name longer than "Ambush" was clipped. Six gives a card
     // wide enough for a wrapped two-line name — see .nc-scen-card in newcharscenario.rcss.
     constexpr int NC_SCEN_PAGE = 6;             //< cards visible per group at once
-    constexpr int NC_BANDS = static_cast<int>( nc_scen_group::count );
+    constexpr int NC_BANDS = static_cast < int > ( nc_scen_group::count );
     // Indices into sorted_scens, per group, in list order.
-    std::array<std::vector<int>, NC_BANDS> band_items;
+    std::array < std::vector < int>, NC_BANDS > band_items;
     // Declared collapsed, but the group holding the already-selected scenario is opened on
     // the first build (see recalc_scens) — the alternative was an entry screen of three
     // headers over an empty stage. Every OTHER group stays shut so the first thing the
     // screen says is still "what KIND of run".
-    std::array<bool, NC_BANDS> band_collapsed = { true, true, true };
+    std::array < bool, NC_BANDS > band_collapsed = { true, true, true };
     // Cleared once the entry group has been opened; see the parking loop in recalc_scens.
     bool first_group_build = true;
-    std::array<int, NC_BANDS> band_page = { 0, 0, 0 };
+    std::array < int, NC_BANDS > band_page = { 0, 0, 0 };
     // Cursor: which group, and whether it sits on that group's HEADER or on a card. The
     // header being a focus stop is what makes this a tree without needing a new
     // keybinding — CONFIRM on a header toggles it, CONFIRM on a card selects.
@@ -6624,14 +6617,14 @@ tab_direction set_scenario( avatar &u, points_left &points,
     bool recalc_scens = true;
     int scens_length = 0;
     std::string filterstring;
-    std::vector<const scenario *> sorted_scens;
+    std::vector < const scenario * > sorted_scens;
 
     if( direction == tab_direction::BACKWARD ) {
         points.skill_points += u.prof->point_cost();
     }
 
     // RmlUi render path (render-only; keyboard owns nav/confirm/sort/filter below).
-    auto data = std::make_unique<nc_scen_session>();
+    auto data = std::make_unique < nc_scen_session > ();
     rml_doc rml;
     // Set by the arrow click callbacks, consumed by the input loop below. Not a
     // tab_direction: it is translated into an action string so the existing
@@ -6641,9 +6634,9 @@ tab_direction set_scenario( avatar &u, points_left &points,
         if( !data->handle ) {
             return;
         }
-        data->tabs = build_nc_char_tabs<nc_scen_tab>( 1 );  // SCENARIO tab active
+        data->tabs = build_nc_char_tabs < nc_scen_tab > ( 1 ); // SCENARIO tab active
         data->shell = fill_nc_shell( 1, ctxt );
-        const bool valid = cur_id >= 0 && static_cast<size_t>( cur_id ) < sorted_scens.size();
+        const bool valid = cur_id >= 0 && static_cast < size_t > ( cur_id ) < sorted_scens.size();
 
         std::string pmsg = nc_points_line( points );
         if( valid ) {
@@ -6723,7 +6716,7 @@ tab_direction set_scenario( avatar &u, points_left &points,
                 // The starting-NPC flag only means anything when the option defers to the
                 // scenario; otherwise the option decides and the chip would be a lie.
                 if( std::string_view( fi.flag ) == "LONE_START" &&
-                    get_option<std::string>( "STARTING_NPC" ) != "scenario" ) {
+                    get_option < std::string > ( "STARTING_NPC" ) != "scenario" ) {
                     continue;
                 }
                 data->chips.push_back( {
@@ -6769,12 +6762,12 @@ tab_direction set_scenario( avatar &u, points_left &points,
         // the document holds ~24 cards at most rather than every scenario in the game.
         data->bands.clear();
         {
-            const std::array<std::string, 3> band_names = {
+            const std::array < std::string, 3 > band_names = {
                 _( "Basic" ), _( "Advanced" ), _( "Challenge" )
             };
             for( int b = 0; b < NC_BANDS; ++b ) {
                 nc_scen_band band;
-                const int total = static_cast<int>( band_items[b].size() );
+                const int total = static_cast < int > ( band_items[b].size() );
                 band.name_rml = cata_text_to_rml( colorize( band_names[b], c_white ) );
                 band.collapsed = band_collapsed[b];
                 band.focused = ( b == focus_band && focus_header );
@@ -7002,11 +6995,11 @@ tab_direction set_scenario( avatar &u, points_left &points,
 
             // Re-derive the grouped view. Order within a group follows sorted_scens, so
             // SORT still governs card order; only the partition is new.
-            for( std::vector<int> &v : band_items ) {
+            for( std::vector < int > &v : band_items ) {
                 v.clear();
             }
             for( int i = 0; i < scens_length; ++i ) {
-                band_items[static_cast<int>( nc_classify_scen( *sorted_scens[i] ) )].push_back( i );
+                band_items[static_cast < int > ( nc_classify_scen( *sorted_scens[i] ) )].push_back( i );
             }
             // Park the cursor on the group holding the active scenario, so re-entering the
             // step (or changing the filter) does not silently move the selection.
@@ -7014,7 +7007,7 @@ tab_direction set_scenario( avatar &u, points_left &points,
                 const auto it = std::ranges::find( band_items[b], cur_id );
                 if( it != band_items[b].end() ) {
                     focus_band = b;
-                    focus_card = static_cast<int>( std::distance( band_items[b].begin(), it ) );
+                    focus_card = static_cast < int > ( std::distance( band_items[b].begin(), it ) );
                     // On ENTRY, open that group. A scenario is already selected — it is a
                     // child of this group — so opening it puts the cursor, the notch and the
                     // info panel on something real instead of greeting the player with three
@@ -7052,7 +7045,7 @@ tab_direction set_scenario( avatar &u, points_left &points,
         // Horizontal movement walks the focused group's cards and advances the carousel
         // page at either end — which is why paging needs no key of its own.
         const auto band_size = [&]( int b ) {
-            return static_cast<int>( band_items[b].size() );
+            return static_cast < int > ( band_items[b].size() );
         };
         // Keeps cur_id (and therefore the info pane and CONFIRM) on the focused card.
         const auto sync_cur_from_focus = [&]() {
@@ -7168,7 +7161,7 @@ tab_direction set_scenario( avatar &u, points_left &points,
                 const auto it = std::ranges::find( band_items[b], cur_id );
                 if( it != band_items[b].end() ) {
                     focus_band = b;
-                    focus_card = static_cast<int>( std::distance( band_items[b].begin(), it ) );
+                    focus_card = static_cast < int > ( std::distance( band_items[b].begin(), it ) );
                     focus_header = false;
                     band_collapsed[b] = false;
                     break;
@@ -7261,7 +7254,7 @@ struct nc_desc_col {
     /// "none", NOT empty: `data-style-decorator` is evaluated on the first frame, before sync_rml has
     /// run, and an empty value becomes `decorator: ;` — a parse error RmlUi logs every frame.
     Rml::String sigil_dec = "none";
-    Rml::Vector<nc_desc_row> rows;
+    Rml::Vector < nc_desc_row > rows;
 };
 
 /// A label / value / sub-line triple in the detail panel.
@@ -7283,7 +7276,7 @@ struct nc_seal_cell {
     bool node = false;
 };
 struct nc_seal_row {
-    Rml::Vector<nc_seal_cell> cells;
+    Rml::Vector < nc_seal_cell > cells;
 };
 
 /// One line of the legend under the seal: a step's glyph, its name and its one-line summary. An
@@ -7295,25 +7288,25 @@ struct nc_seal_tally {
 };
 
 struct nc_desc_session {
-    Rml::Vector<nc_desc_tab> tabs;
+    Rml::Vector < nc_desc_tab > tabs;
     nc_shell shell;
     Rml::String points_rml;
     Rml::String ready_rml;      //< the finish gate's readiness word, in the meta bar
     Rml::String ident_name_rml;
     Rml::String ident_count_rml;
     Rml::String ident_sigil_dec = "none";
-    Rml::Vector<nc_ident_row> ident;
+    Rml::Vector < nc_ident_row > ident;
     /// Scenario and profession: part of the record, not editable here, and not cursorable — which is
     /// what keeps the cursor list exactly the five fields above.
-    Rml::Vector<nc_desc_row> background;
+    Rml::Vector < nc_desc_row > background;
     nc_desc_col col0;
     nc_desc_col col1;
     nc_desc_col col2;
     Rml::String seal_name_rml;
-    Rml::Vector<nc_seal_row> seal;
-    Rml::Vector<nc_seal_tally> tally;
+    Rml::Vector < nc_seal_row > seal;
+    Rml::Vector < nc_seal_tally > tally;
     Rml::String sel_name_rml;
-    Rml::Vector<nc_desc_fact> facts;
+    Rml::Vector < nc_desc_fact > facts;
     Rml::String desc_rml;
     Rml::String hint_rml;
     Rml::DataModelHandle handle;
@@ -7326,14 +7319,14 @@ void register_nc_desc_rml_types( Rml::DataModelConstructor &c )
     if( g_nc_desc_types_registered ) {
         return;
     }
-    Rml::StructHandle<nc_desc_tab> th = c.RegisterStruct<nc_desc_tab>();
+    Rml::StructHandle < nc_desc_tab > th = c.RegisterStruct < nc_desc_tab > ();
     th.RegisterMember( "name_rml", &nc_desc_tab::name_rml );
     th.RegisterMember( "icon_dec", &nc_desc_tab::icon_dec );
     th.RegisterMember( "selected", &nc_desc_tab::selected );
     th.RegisterMember( "done", &nc_desc_tab::done );
-    c.RegisterArray<Rml::Vector<nc_desc_tab>>();
+    c.RegisterArray < Rml::Vector < nc_desc_tab>>();
 
-    Rml::StructHandle<nc_ident_row> ih = c.RegisterStruct<nc_ident_row>();
+    Rml::StructHandle < nc_ident_row > ih = c.RegisterStruct < nc_ident_row > ();
     ih.RegisterMember( "cursor_rml", &nc_ident_row::cursor_rml );
     ih.RegisterMember( "label_rml", &nc_ident_row::label_rml );
     ih.RegisterMember( "value_rml", &nc_ident_row::value_rml );
@@ -7341,41 +7334,41 @@ void register_nc_desc_rml_types( Rml::DataModelConstructor &c )
     ih.RegisterMember( "has_step", &nc_ident_row::has_step );
     ih.RegisterMember( "can_dec", &nc_ident_row::can_dec );
     ih.RegisterMember( "can_inc", &nc_ident_row::can_inc );
-    c.RegisterArray<Rml::Vector<nc_ident_row>>();
+    c.RegisterArray < Rml::Vector < nc_ident_row>>();
 
     // Rows before the column that holds them: a member cannot be registered before its own type is.
-    Rml::StructHandle<nc_desc_row> rh = c.RegisterStruct<nc_desc_row>();
+    Rml::StructHandle < nc_desc_row > rh = c.RegisterStruct < nc_desc_row > ();
     rh.RegisterMember( "name_rml", &nc_desc_row::name_rml );
     rh.RegisterMember( "value_rml", &nc_desc_row::value_rml );
     rh.RegisterMember( "header", &nc_desc_row::header );
-    c.RegisterArray<Rml::Vector<nc_desc_row>>();
+    c.RegisterArray < Rml::Vector < nc_desc_row>>();
 
-    Rml::StructHandle<nc_desc_col> ch = c.RegisterStruct<nc_desc_col>();
+    Rml::StructHandle < nc_desc_col > ch = c.RegisterStruct < nc_desc_col > ();
     ch.RegisterMember( "name_rml", &nc_desc_col::name_rml );
     ch.RegisterMember( "count_rml", &nc_desc_col::count_rml );
     ch.RegisterMember( "sigil_dec", &nc_desc_col::sigil_dec );
     ch.RegisterMember( "rows", &nc_desc_col::rows );
 
-    Rml::StructHandle<nc_desc_fact> fh = c.RegisterStruct<nc_desc_fact>();
+    Rml::StructHandle < nc_desc_fact > fh = c.RegisterStruct < nc_desc_fact > ();
     fh.RegisterMember( "label_rml", &nc_desc_fact::label_rml );
     fh.RegisterMember( "value_rml", &nc_desc_fact::value_rml );
     fh.RegisterMember( "sub_rml", &nc_desc_fact::sub_rml );
-    c.RegisterArray<Rml::Vector<nc_desc_fact>>();
+    c.RegisterArray < Rml::Vector < nc_desc_fact>>();
 
-    Rml::StructHandle<nc_seal_cell> sch = c.RegisterStruct<nc_seal_cell>();
+    Rml::StructHandle < nc_seal_cell > sch = c.RegisterStruct < nc_seal_cell > ();
     sch.RegisterMember( "col", &nc_seal_cell::col );
     sch.RegisterMember( "dec", &nc_seal_cell::dec );
     sch.RegisterMember( "node", &nc_seal_cell::node );
-    c.RegisterArray<Rml::Vector<nc_seal_cell>>();
-    Rml::StructHandle<nc_seal_row> srh = c.RegisterStruct<nc_seal_row>();
+    c.RegisterArray < Rml::Vector < nc_seal_cell>>();
+    Rml::StructHandle < nc_seal_row > srh = c.RegisterStruct < nc_seal_row > ();
     srh.RegisterMember( "cells", &nc_seal_row::cells );
-    c.RegisterArray<Rml::Vector<nc_seal_row>>();
+    c.RegisterArray < Rml::Vector < nc_seal_row>>();
 
-    Rml::StructHandle<nc_seal_tally> tyh = c.RegisterStruct<nc_seal_tally>();
+    Rml::StructHandle < nc_seal_tally > tyh = c.RegisterStruct < nc_seal_tally > ();
     tyh.RegisterMember( "dec", &nc_seal_tally::dec );
     tyh.RegisterMember( "name_rml", &nc_seal_tally::name_rml );
     tyh.RegisterMember( "val_rml", &nc_seal_tally::val_rml );
-    c.RegisterArray<Rml::Vector<nc_seal_tally>>();
+    c.RegisterArray < Rml::Vector < nc_seal_tally>>();
 
     g_nc_desc_types_registered = true;
 }
@@ -7450,7 +7443,7 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
 
     character_preview_window character_preview;
     character_preview.init( &you );
-    const bool use_character_preview = get_option<bool>( "USE_CHARACTER_PREVIEW" );
+    const bool use_character_preview = get_option < bool > ( "USE_CHARACTER_PREVIEW" );
 
     const auto init_windows = [&]( ui_adaptor & ui ) {
         // The fifteen curses windows this step used to lay out went with the rework: the document
@@ -7502,7 +7495,7 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
     /// The scenario's allowed locations, in the same order the CHOOSE_LOCATION list shows them.
     /// LEFT/RIGHT step through this ring with "* Random *" at position 0, so the field answers the
     /// same keys as the other four instead of needing a modal to change at all.
-    std::vector<start_location_id> allowed_locs;
+    std::vector < start_location_id > allowed_locs;
     for( const auto &loc : start_locations::get_all() ) {
         if( g->scen->allowed_start( loc.id ) ) {
             uilist_entry entry( loc.id.id().to_i(), true, -1,
@@ -7524,8 +7517,8 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
     select_location.setup();
     if( MAP_SHARING::isSharing() ) {
         you.name = MAP_SHARING::getUsername();  // set the current username as default character name
-    } else if( !get_option<std::string>( "DEF_CHAR_NAME" ).empty() ) {
-        you.name = get_option<std::string>( "DEF_CHAR_NAME" );
+    } else if( !get_option < std::string > ( "DEF_CHAR_NAME" ).empty() ) {
+        you.name = get_option < std::string > ( "DEF_CHAR_NAME" );
     }
 
     char_creation::description_selector current_selector = char_creation::NAME;
@@ -7545,9 +7538,8 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
     /// reformats this file on every build. Same reason the two lambdas below are shaped this way.
     const auto loc_pos = [&]() -> int {
         int p = 0;
-        if( !you.random_start_location )
-        {
-            for( int i = 0; i < static_cast<int>( allowed_locs.size() ); i++ ) {
+        if( !you.random_start_location ) {
+            for( int i = 0; i < static_cast < int > ( allowed_locs.size() ); i++ ) {
                 if( allowed_locs[i] == you.start_location ) {
                     p = i + 1;
                     break;
@@ -7563,7 +7555,7 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
         : you.start_location.obj().targets_count();
     };
     const auto loc_step = [&]( int dir ) {
-        const int n = static_cast<int>( allowed_locs.size() ) + 1;
+        const int n = static_cast < int > ( allowed_locs.size() ) + 1;
         if( n <= 1 ) {
             return;
         }
@@ -7679,18 +7671,16 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
     /// overspent SKILL pool has always shown the generic one.
     const auto refusal_text = []( nc_finish_gate::verdict v ) -> std::string {
         std::string msg = _( "Too many points allocated, change some features and try again." );
-        if( v == nc_finish_gate::verdict::over_trait )
-        {
+        if( v == nc_finish_gate::verdict::over_trait ) {
             msg = _( "Too many trait points allocated, change some traits or lower some stats and try again." );
-        } else if( v == nc_finish_gate::verdict::over_stat )
-        {
+        } else if( v == nc_finish_gate::verdict::over_stat ) {
             msg = _( "Too many stat points allocated, lower some stats and try again." );
         }
         return msg;
     };
 
     // RmlUi render path (render-only; keyboard still owns nav/edit/confirm below).
-    auto data = std::make_unique<nc_desc_session>();
+    auto data = std::make_unique < nc_desc_session > ();
     rml_doc rml;
     // Set by the arrow click callbacks, consumed by the input loop below. Not a
     // tab_direction: it is translated into an action string so the existing
@@ -7708,7 +7698,7 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
     /// The seven steps the seal welds together, POINTS .. SKILLS. A node's colour is its step's
     /// STATE, so it belongs with the model rather than with the animation tick — only the socket glow
     /// behind the glyph moves, and sync_seal reads these.
-    std::array<nc_color, nc_seal::nodes> step_col;
+    std::array < nc_color, nc_seal::nodes > step_col;
     step_col.fill( c_dark_gray );
     bool finish_ready = false;
 
@@ -7716,7 +7706,7 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
         if( !data->handle ) {
             return;
         }
-        data->tabs = build_nc_char_tabs<nc_desc_tab>( 7 );  // OVERVIEW tab active
+        data->tabs = build_nc_char_tabs < nc_desc_tab > ( 7 ); // OVERVIEW tab active
         data->shell = fill_nc_shell( 7, ctxt );
         set_nc_portrait( data->shell, use_character_preview );
         data->points_rml = cata_text_to_rml( nc_points_line( points ) );
@@ -7769,15 +7759,15 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
         /// ONE place naming the five fields: the row labels, the ":: HEADER" over the detail panel
         /// and the first fact's label all read it, so they cannot drift apart.
         const auto field_name = []( char_creation::description_selector f ) -> std::string {
-            const std::array<std::string, char_creation::NUM_FIELDS> names = {
+            const std::array < std::string, char_creation::NUM_FIELDS > names = {
                 _( "Name" ), _( "Gender" ), _( "Height" ), _( "Age" ), _( "Starting location" )
             };
-            const int i = static_cast<int>( f );
-            return i >= 0 && i < static_cast<int>( names.size() ) ? names[i] : std::string();
+            const int i = static_cast < int > ( f );
+            return i >= 0 && i < static_cast < int > ( names.size() ) ? names[i] : std::string();
         };
         data->ident_name_rml = cata_text_to_rml( colorize( _( "Identity" ), c_white ) );
         data->ident_count_rml = cata_text_to_rml( colorize(
-                                    string_format( "%d", static_cast<int>( char_creation::NUM_FIELDS ) ), c_dark_gray ) );
+                                    string_format( "%d", static_cast < int > ( char_creation::NUM_FIELDS ) ), c_dark_gray ) );
         data->ident_sigil_dec = nc_icon_dec( NC_DESC_COL_SEEDS[0], 14, true );
         data->ident.clear();
         /// One field's row. `value` arrives already COLOURED: gender paints its two halves
@@ -7878,11 +7868,11 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
         // ── The record: everything the earlier steps committed ─────────────────
         // Gathered ONCE, then read by both a column and the seal's legend, so the digest and the
         // list cannot disagree about what was bought.
-        std::vector<trait_id> current_traits = points.limit == points_left::TRANSFER ?
-                                               you.get_mutations() : you.get_base_traits();
+        std::vector < trait_id > current_traits = points.limit == points_left::TRANSFER ?
+            you.get_mutations() : you.get_base_traits();
         std::sort( current_traits.begin(), current_traits.end(), trait_display_sort );
 
-        std::vector<bionic_id> current_bionics;
+        std::vector < bionic_id > current_bionics;
         for( const bionic_id &id : you.prof->CBMs() ) {
             current_bionics.push_back( id );
         }
@@ -7916,7 +7906,7 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
                     // it itself — the same compensation the SKILLS meters make.
                     for( const auto &prof_skill : you.prof->skills() ) {
                         if( prof_skill.first == elem->ident() ) {
-                            level += static_cast<int>( prof_skill.second );
+                            level += static_cast < int > ( prof_skill.second );
                             break;
                         }
                     }
@@ -7947,7 +7937,7 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
             body.row( bio->name.translated(), c_white );
         }
         body.head( _( "Spells:" ), you.prof->spells().empty() ? _( "None!" ) : std::string() );
-        for( const std::pair<spell_id, int> &sp : you.prof->spells() ) {
+        for( const std::pair < spell_id, int > &sp : you.prof->spells() ) {
             body.row( string_format( _( "%s level %d" ), sp.first->name, sp.second ), c_white );
         }
         body.head( _( "Addictions:" ),
@@ -7960,9 +7950,9 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
         record_column gear( _( "Equipment" ), NC_DESC_COL_SEEDS[3] );
         {
             const auto prof_items = you.prof->items( you.male, you.get_mutations() );
-            std::vector<std::string> wielded;
-            std::vector<std::string> worn;
-            std::vector<std::string> inventory;
+            std::vector < std::string > wielded;
+            std::vector < std::string > worn;
+            std::vector < std::string > inventory;
             for( const auto &it : prof_items ) {
                 if( it->has_flag( json_flag_no_auto_equip ) ) {
                     inventory.push_back( it->display_name() );
@@ -7975,7 +7965,7 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
                 }
             }
             const auto add_group = [&]( const std::string & head,
-            const std::vector<std::string> &names ) {
+            const std::vector < std::string > &names ) {
                 gear.head( head, names.empty() ? _( "None!" ) : std::string() );
                 for( const std::string &name : names ) {
                     gear.row( name, c_white );
@@ -7996,7 +7986,7 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
             if( prof_veh ) {
                 gear.row( prof_veh->name, c_white );
             }
-            const std::vector<npc_class_id> npcs = you.prof->npcs();
+            const std::vector < npc_class_id > npcs = you.prof->npcs();
             gear.head( _( "Companions:" ), npcs.empty() ? _( "None!" ) : std::string() );
             for( const npc_class_id &id : npcs ) {
                 if( id.is_valid() ) {
@@ -8032,9 +8022,9 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
         const auto tally_col = []( bool overspent, bool empty ) -> nc_color {
             return overspent ? c_red : ( empty ? c_dark_gray : c_white );
         };
-        const int trait_count = static_cast<int>( current_traits.size() );
-        const int bionic_count = static_cast<int>( current_bionics.size() );
-        const std::array<std::string, nc_seal::nodes> tally_val = {
+        const int trait_count = static_cast < int > ( current_traits.size() );
+        const int bionic_count = static_cast < int > ( current_bionics.size() );
+        const std::array < std::string, nc_seal::nodes > tally_val = {
             string_format( "%d", points.stat_points + points.trait_points + points.skill_points ),
             string_format( "%+d", -g->scen->point_cost() ),
             string_format( "%+d", -you.prof->point_cost() ),
@@ -8043,7 +8033,7 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
             string_format( "%d", bionic_count ),
             string_format( "%d", skill_levels ),
         };
-        const std::array<nc_color, nc_seal::nodes> tally_colour = {
+        const std::array < nc_color, nc_seal::nodes > tally_colour = {
             points.is_valid() ? c_white : c_red,
             c_white,
             c_white,
@@ -8052,7 +8042,7 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
             tally_col( false, bionic_count == 0 ),
             tally_col( points.skill_points_left() < 0, skill_levels == 0 ),
         };
-        const std::vector<std::string> &caps = nc_step_captions();
+        const std::vector < std::string > &caps = nc_step_captions();
         data->seal_name_rml = cata_text_to_rml( colorize( _( "Record" ), c_light_gray ) );
         data->tally.clear();
         for( int i = 0; i < nc_seal::nodes; i++ ) {
@@ -8163,7 +8153,7 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
         if( !data->handle ) {
             return;
         }
-        const float secs = std::chrono::duration<float>(
+        const float secs = std::chrono::duration < float > (
                                std::chrono::steady_clock::now() - anim_start ).count();
         const nc_seal::phase ph = nc_seal::at( secs );
         data->seal.clear();
@@ -8297,7 +8287,7 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
     ime_sentry sentry( ime_sentry::keep );
 
     const auto in_range = []( int row ) {
-        return row >= 0 && row < static_cast<int>( char_creation::NUM_FIELDS );
+        return row >= 0 && row < static_cast < int > ( char_creation::NUM_FIELDS );
     };
 
     do {
@@ -8327,16 +8317,16 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
         }
         // Apply click intent exactly once, however many times the callback ran.
         if( in_range( pending_row ) ) {
-            current_selector = static_cast<char_creation::description_selector>( pending_row );
+            current_selector = static_cast < char_creation::description_selector > ( pending_row );
         }
         if( in_range( pending_step_row ) && pending_step_dir != 0 ) {
             // The stepper moves the cursor as well as acting, so the panel describes the field the
             // player just changed rather than one they left behind.
-            current_selector = static_cast<char_creation::description_selector>( pending_step_row );
+            current_selector = static_cast < char_creation::description_selector > ( pending_step_row );
             adjust_field( current_selector, pending_step_dir );
         }
         if( in_range( pending_edit ) ) {
-            current_selector = static_cast<char_creation::description_selector>( pending_edit );
+            current_selector = static_cast < char_creation::description_selector > ( pending_edit );
             edit_field( current_selector );
         }
         if( action == "zoom_in" && use_character_preview ) {
@@ -8393,10 +8383,10 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
             character_preview.clear();
             return tab_direction::BACKWARD;
         } else if( action == "DOWN" ) {
-            current_selector = static_cast<char_creation::description_selector>(
+            current_selector = static_cast < char_creation::description_selector > (
                                    ( current_selector + 1 ) % char_creation::NUM_FIELDS );
         } else if( action == "UP" ) {
-            current_selector = static_cast<char_creation::description_selector>(
+            current_selector = static_cast < char_creation::description_selector > (
                                    ( current_selector + char_creation::NUM_FIELDS - 1 ) % char_creation::NUM_FIELDS );
         } else if( action == "RIGHT" ) {
             adjust_field( current_selector, 1 );
@@ -8437,9 +8427,9 @@ tab_direction set_description( avatar &you, const bool allow_reroll,
     } while( true );
 }
 
-std::optional<std::string> query_for_template_name()
+std::optional < std::string > query_for_template_name()
 {
-    static const std::set<int> fname_char_blacklist = {
+    static const std::set < int > fname_char_blacklist = {
 #if defined(_WIN32)
         '\"', '*', '/', ':', '<', '>', '?', '\\', '|',
         '\x01', '\x02', '\x03', '\x04', '\x05', '\x06', '\x07',         '\x09',
@@ -8475,7 +8465,7 @@ void reset_scenario( avatar &u, const scenario *scen )
 {
     auto psorter = profession_sorter;
     psorter.sort_by_points = true;
-    const std::vector<profession_id> permitted = scen->permitted_professions();
+    const std::vector < profession_id > permitted = scen->permitted_professions();
     const profession_id &default_prof = *std::min_element( permitted.begin(), permitted.end(),
                                         psorter );
 

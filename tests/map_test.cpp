@@ -34,8 +34,7 @@
 #include <ranges>
 #include <vector>
 
-namespace
-{
+namespace {
 
 static const auto effect_in_pit = efftype_id("in_pit");
 static const auto effect_bleed = efftype_id("bleed");
@@ -72,8 +71,8 @@ struct adjacent_pit_move {
     tripoint_bub_ms destination;
 };
 
-auto setup_adjacent_pit_move(const ter_id& origin_terrain,
-                             const ter_id& destination_terrain) -> adjacent_pit_move {
+auto setup_adjacent_pit_move(const ter_id& origin_terrain, const ter_id& destination_terrain)
+    -> adjacent_pit_move {
     clear_all_state();
     auto& here = get_map();
     const auto origin = tripoint_bub_ms(60, 60, 0);

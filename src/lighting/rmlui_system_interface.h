@@ -1,8 +1,8 @@
 #pragma once
 #ifndef CATA_SRC_LIGHTING_RMLUI_SYSTEM_INTERFACE_H
-#define CATA_SRC_LIGHTING_RMLUI_SYSTEM_INTERFACE_H
+#    define CATA_SRC_LIGHTING_RMLUI_SYSTEM_INTERFACE_H
 
-#include <RmlUi/Core/SystemInterface.h>
+#    include <RmlUi/Core/SystemInterface.h>
 
 // RmlUi SystemInterface for Cataclysm: provides RmlUi with a clock and routes
 // its log messages into the game's debug log (DC::SDL). Intentionally minimal —

@@ -147,24 +147,21 @@ void cata::detail::reg_ui_elements( sol::state &lua )
         luna::set_fx( lib, "register_widget", []( const sol::table & opts ) {
             auto get_opt_int = [&]( const char *key, const int fallback ) -> int {
                 auto obj = opts.get<sol::object>( key );
-                if( !obj.valid() || obj == sol::lua_nil )
-                {
+                if( !obj.valid() || obj == sol::lua_nil ) {
                     return fallback;
                 }
                 return obj.as<int>();
             };
             auto get_opt_bool = [&]( const char *key, const bool fallback ) -> bool {
                 auto obj = opts.get<sol::object>( key );
-                if( !obj.valid() || obj == sol::lua_nil )
-                {
+                if( !obj.valid() || obj == sol::lua_nil ) {
                     return fallback;
                 }
                 return obj.as<bool>();
             };
             auto get_opt_optional_int = [&]( const char *key ) -> std::optional<int> {
                 auto obj = opts.get<sol::object>( key );
-                if( !obj.valid() || obj == sol::lua_nil )
-                {
+                if( !obj.valid() || obj == sol::lua_nil ) {
                     return std::nullopt;
                 }
                 return obj.as<int>();

@@ -184,33 +184,36 @@ float multi_lerp( const std::vector<std::pair<float, float>> &points, float x );
  * separately, but that also means any changes to the list get propagated (both ways).
  */
 template<typename T>
-class list_circularizer
-{
+class list_circularizer {
     private:
         unsigned int _index = 0;
         std::vector<T> *_list;
     public:
         /** Construct list_circularizer from an existing std::vector. */
-        list_circularizer( std::vector<T> &_list ) : _list( &_list ) {
+        list_circularizer( std::vector<T> &_list ) : _list( &_list )
+        {
         }
 
         /** Advance list to next item, wrapping back to 0 at end of list */
-        void next() {
+        void next()
+        {
             _index = ( _index == _list->size() - 1 ? 0 : _index + 1 );
         }
 
         /** Advance list to previous item, wrapping back to end at zero */
-        void prev() {
+        void prev()
+        {
             _index = ( _index == 0 ? _list->size() - 1 : _index - 1 );
         }
 
         /** Return list element at the current location */
-        T &cur() const {
+        T & cur() const {
             // list could be null, but it would be a design time mistake and really, the callers fault.
             return ( *_list )[_index];
         }
 
-        void set_index( const size_t new_index ) {
+        void set_index( const size_t new_index )
+        {
             if( new_index < _list->size() ) {
                 _index = new_index;
             }
@@ -264,7 +267,7 @@ bool erase_if( Col &set, Pred predicate )
  * @param ignored_elements elements from both sets to ignore
  * @return true, if sets without ignored elements are equal, false otherwise
  */
-template<typename Set, typename T = std::decay_t<decltype( *std::declval<const Set &>().begin() )>>
+template<typename Set, typename T = std::decay_t<decltype( *std::declval<const Set &>().begin() ) >>
 bool equal_ignoring_elements( const Set &set, const Set &set2, const Set &ignored_elements )
 {
     // general idea: splits both sets into the ranges bounded by elements from `ignored_elements`
@@ -304,28 +307,29 @@ bool equal_ignoring_elements( const Set &set, const Set &set2, const Set &ignore
 
 int modulo( int v, int m );
 
-class on_out_of_scope
-{
+class on_out_of_scope {
     private:
         std::function<void()> func;
     public:
-        on_out_of_scope( const std::function<void()> &func ) : func( func ) {
+        on_out_of_scope( const std::function<void()> &func ) : func( func )
+        {
         }
 
-        ~on_out_of_scope() {
+        ~on_out_of_scope()
+        {
             if( func ) {
                 func();
             }
         }
 
-        void cancel() {
+        void cancel()
+        {
             func = nullptr;
         }
 };
 
 template<typename T>
-class restore_on_out_of_scope
-{
+class restore_on_out_of_scope {
     private:
         T &t;
         T orig_t;
@@ -375,50 +379,52 @@ template < typename T, int E, std::size_t N = ( E < 0 ? -E : E ) >
                : _pow10p<T>( std::make_index_sequence<N> {} );
 }
 
-namespace detail
-{
+namespace detail {
 template <bool Static, typename T>
 struct variant_cast_impl;
 
-template <bool Static, typename ...Ts>
-struct variant_cast_impl<Static, std::variant<Ts...>> {
-    using target_type = std::variant<Ts...>;
+template < bool Static, typename ...Ts >
+struct variant_cast_impl < Static, std::variant < Ts...>> {
+    using target_type = std::variant < Ts... >;
 
     // DO NOT make this into a lambda, due to an issue with MSVC
     // where it'll fail the constexpr requires check, and fall into the throw branch,
     // even with a valid target_type constructor
     struct visitor {
-        template<typename U>
+        template < typename U >
         auto operator()( U &&v ) -> target_type {
-            if constexpr( requires { target_type{v}; } ) {
-            return v;
-        } else if constexpr( Static ) {
-            static_assert( !Static, "bad variant cast" );
-            } else {
+            if constexpr( requires { target_type{v}; } )
+            {
+                return v;
+            } else if constexpr( Static )
+            {
+                static_assert( !Static, "bad variant cast" );
+            } else
+            {
                 throw std::bad_variant_access();
             }
         }
     };
 
-    template<typename ... Us>
-    auto operator()( const std::variant<Us...> &var ) -> target_type {
+    template < typename ... Us >
+    auto operator()( const std::variant < Us... > &var ) -> target_type {
         return std::visit( visitor{}, var );
     }
 };
 } // namespace detail
 
 /// If the value on source variant does have a valid destination type on destination, throws std::bad_variant_access
-template<typename T, typename U>
+template < typename T, typename U >
 auto dynamic_variant_cast( const U &from ) -> T
 {
-    auto caster = detail::variant_cast_impl<false, T> {};
+    auto caster = detail::variant_cast_impl < false, T > {};
     return caster( from );
 }
 
 /// All types on source variant must have a valid destination type on destination, checked at compile time
-template<typename T, typename U>
+template < typename T, typename U >
 auto static_variant_cast( const U &from ) -> T
 {
-    auto caster = detail::variant_cast_impl<true, T> {};
+    auto caster = detail::variant_cast_impl < true, T > {};
     return caster( from );
 }

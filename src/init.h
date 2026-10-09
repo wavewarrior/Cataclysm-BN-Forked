@@ -77,13 +77,13 @@ class DynamicDataLoader
         bool finalized = false;
 
         struct cached_streams;
-        std::unique_ptr<cached_streams> stream_cache;
+        std::unique_ptr < cached_streams > stream_cache;
 
         // Pre-loaded file content keyed by absolute path.
         // Populated during load_data_from_path; cleared at end of finalize_loaded_data.
         // Used by get_cached_stream (deferred finalization) and get_preloaded_content
         // (parallel mapgen setup) to eliminate repeated Defender-scanned file opens.
-        std::unordered_map<std::string, std::string> preloaded_content_;
+        std::unordered_map < std::string, std::string > preloaded_content_;
         /// Entry from a data.jsonpack archive.
         struct PackEntry {
             std::string path;           ///< relative path within mod (e.g. "items/ammo.json")
@@ -91,7 +91,7 @@ class DynamicDataLoader
         };
 
         /// Parsed pack entries; populated by try_load_pack().
-        std::vector<PackEntry> m_pack_entries;
+        std::vector < PackEntry > m_pack_entries;
         /// Owned pack file buffer; kept alive for string_view validity.
         std::string m_pack_buffer;
 
@@ -103,9 +103,9 @@ class DynamicDataLoader
          * functor that loads that kind of object from json.
          */
         t_type_function_map type_function_map;
-        void add( const std::string& type, const std::function<void( const JsonObject & )> &f );
+        void add( const std::string& type, const std::function < void( const JsonObject & ) > &f );
         void add( const std::string& type,
-                  const std::function<void( const JsonObject &, const std::string & )> &f );
+                  const std::function < void( const JsonObject &, const std::string & ) > &f );
         void add(
             const std::string& type,
             std::function <
@@ -217,7 +217,7 @@ class DynamicDataLoader
          * avoid conflict of stream cursor. The stream cursor is not reset if a
          * cached stream is returned.
          */
-        shared_ptr_fast<std::istream> get_cached_stream( const std::string& path );
+        shared_ptr_fast < std::istream > get_cached_stream( const std::string& path );
 
         /// Returns a pointer to the pre-loaded file content for `path`, or nullptr
         /// if the file was not pre-loaded (e.g., a mod added a mapgen file after
@@ -233,7 +233,7 @@ namespace init
 
 /// Load (or reload) mods' main Lua scripts.
 /// @returns the number of loaded scripts.
-auto load_main_lua_scripts( cata::lua_state& state, const std::vector<mod_id> &packs ) -> int;
+auto load_main_lua_scripts( cata::lua_state& state, const std::vector < mod_id > &packs ) -> int;
 
 /** Returns whether the game data is currently loaded. */
 bool is_data_loaded();
@@ -273,13 +273,13 @@ enum class check_mods_mode {
  * @param mode which mods to check when opts is empty
  * @return whether all mods were successfully loaded and had no errors
  */
-auto check_mods_for_errors( loading_ui &ui, const std::vector<mod_id> &opts,
+auto check_mods_for_errors( loading_ui &ui, const std::vector < mod_id > &opts,
                             check_mods_mode mode ) -> bool;
 
 /// Result from a background pre-warm load.
 struct prewarm_result {
     std::string world_name;              ///< World that was prewarmed.
-    std::vector<mod_id> mod_ids;         ///< Mod IDs loaded (for Lua scripts).
+    std::vector < mod_id > mod_ids;      ///< Mod IDs loaded (for Lua scripts).
     std::string error;                   ///< Empty on success.
     std::chrono::milliseconds wall_ms{}; ///< Total wall time spent.
 };

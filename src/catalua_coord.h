@@ -162,7 +162,7 @@ using lua_coord_value_t = std::remove_cvref_t<Coord>;
 template<typename Coord>
 inline constexpr bool lua_coord_can_read_v =
     is_lua_coord_point<lua_coord_value_t<Coord>>::value &&
-    ( !std::is_lvalue_reference_v<Coord> || std::is_const_v<std::remove_reference_t<Coord>> );
+    ( !std::is_lvalue_reference_v<Coord> || std::is_const_v<std::remove_reference_t<Coord >> );
 
 template<typename Coord>
 using enable_lua_coord_point_t = std::enable_if_t<lua_coord_can_read_v<Coord>, int>;

@@ -292,8 +292,7 @@ auto cata_tiles::get_mutation_color(
 
     auto get_tint = [&]( const std::string & ref ) -> bool {
         auto controller = tileset_ptr->get_tint_controller( ref );
-        if( controller.first.empty() )
-        {
+        if( controller.first.empty() ) {
             return false;
         }
         for( const trait_id &other_mut : c.get_mutations() )

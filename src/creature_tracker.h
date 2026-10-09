@@ -29,7 +29,7 @@ class Creature_tracker
                 }
         };
 
-        std::unordered_map<mfaction_id, std::set<weak_ptr_fast<monster>, weak_ptr_comparator>>
+        std::unordered_map<mfaction_id, std::set<weak_ptr_fast<monster>, weak_ptr_comparator >>
         monster_faction_map_;
 
         /**

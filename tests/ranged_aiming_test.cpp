@@ -98,42 +98,43 @@ TEST_CASE("Aiming at a clearly visible target", "[ranged][aiming]") {
     }
 }
 
-TEST_CASE("Projectile damage message visibility survives dirty target-ui cache",
-          "[ranged][aiming][issue-9669]") {
-#if defined( CATA_SDL )
+TEST_CASE(
+    "Projectile damage message visibility survives dirty target-ui cache",
+    "[ranged][aiming][issue-9669]") {
+#if defined(CATA_SDL)
     clear_all_state();
     set_up_player_vision();
-    const auto no_projectile_animation = override_option( "ANIMATION_PROJECTILES", "false" );
-    auto &shooter = g->u;
-    arm_character( shooter, "glock_19" );
+    const auto no_projectile_animation = override_option("ANIMATION_PROJECTILES", "false");
+    auto& shooter = g->u;
+    arm_character(shooter, "glock_19");
 
-    auto &here = get_map();
-    const auto target_pos = shooter_pos + point( 5, 0 );
-    for( const auto x : std::views::iota( 0, 6 ) ) {
-        const auto pos = shooter_pos + point( x, 0 );
-        here.ter_set( pos, ter_id( "t_dirt" ) );
-        here.furn_set( pos, furn_id( "f_null" ) );
+    auto& here = get_map();
+    const auto target_pos = shooter_pos + point(5, 0);
+    for (const auto x : std::views::iota(0, 6)) {
+        const auto pos = shooter_pos + point(x, 0);
+        here.ter_set(pos, ter_id("t_dirt"));
+        here.furn_set(pos, furn_id("f_null"));
     }
 
-    auto &z = spawn_test_monster( "debug_mon", target_pos );
+    auto& z = spawn_test_monster("debug_mon", target_pos);
     update_player_visibility_cache();
     const auto starting_hp = z.get_hp();
-    REQUIRE( shooter.sees( z ) );
+    REQUIRE(shooter.sees(z));
 
-    level_cache_freshness::invalidate_level( here, shooter_pos.z() );
-    REQUIRE( level_cache_freshness::visibility_stale( here, shooter_pos ) );
+    level_cache_freshness::invalidate_level(here, shooter_pos.z());
+    REQUIRE(level_cache_freshness::visibility_stale(here, shooter_pos));
 
-    auto test_proj = projectile {};
-    auto &gun = shooter.primary_weapon();
+    auto test_proj = projectile{};
+    auto& gun = shooter.primary_weapon();
     test_proj.speed = gun.gun_speed();
     test_proj.range = gun.gun_range();
     test_proj.impact = gun.gun_damage();
-    const auto attack = projectile_attack( test_proj, shooter_pos, target_pos, dispersion_sources {},
-                                           &shooter, &gun );
+    const auto attack =
+        projectile_attack(test_proj, shooter_pos, target_pos, dispersion_sources{}, &shooter, &gun);
 
-    REQUIRE( attack.hit_critter == &z );
-    REQUIRE( z.get_hp() < starting_hp );
-    CHECK( shooter.sees( z ) );
+    REQUIRE(attack.hit_critter == &z);
+    REQUIRE(z.get_hp() < starting_hp);
+    CHECK(shooter.sees(z));
 #endif // CATA_SDL
 }
 
@@ -189,7 +190,7 @@ TEST_CASE("Aiming at a target behind wall", "[ranged][aiming]") {
     // is_transparent()/sees() below see the new wall instead of stale,
     // pre-wall data left over from set_up_player_vision()'s cache build.
     g->m.update_visibility_cache(shooter_bpos.z());
-    level_cache_freshness::invalidate_level( g->m, shooter_bpos.z() );
+    level_cache_freshness::invalidate_level(g->m, shooter_bpos.z());
     build_map_cache_from_plan(g->m, shooter_bpos.z());
     monster& z = spawn_test_monster("debug_mon", shooter_bpos + point(2, 0));
     WHEN("There is no direct, passable line to target") {
@@ -238,7 +239,7 @@ TEST_CASE("Aiming at a target behind bars", "[ranged][aiming]") {
     // is_transparent()/sees() below see the new bars instead of stale,
     // pre-bars data left over from set_up_player_vision()'s cache build.
     g->m.update_visibility_cache(shooter_bpos.z());
-    level_cache_freshness::invalidate_level( g->m, shooter_bpos.z() );
+    level_cache_freshness::invalidate_level(g->m, shooter_bpos.z());
     build_map_cache_from_plan(g->m, shooter_bpos.z());
     monster& z = spawn_test_monster("debug_mon", shooter_bpos + point(2, 0));
     WHEN("There is no direct, passable line to target") {

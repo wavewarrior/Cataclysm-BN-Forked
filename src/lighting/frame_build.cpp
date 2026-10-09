@@ -47,7 +47,7 @@ frame_lighting_result build_and_submit_lighting(
     // upload a populated transparency buffer and cause the fragment shadow march to
     // shadow=0 every emitter beyond ~1 tile.
     std::vector<uint8_t> transparency;
-    std::vector<float> occ; // Stage 2b: unified coverage occluder (height,roof) /tile
+    std::vector<float> occ;    // Stage 2b: unified coverage occluder (height,roof) /tile
     std::vector<float> albedo; // GI albedo bleed: terrain colour (rgb,pad) /tile
     std::vector<uint8_t> sky_vis;
     int sdf_runtime_w = 0;
@@ -178,35 +178,34 @@ frame_lighting_result build_and_submit_lighting(
                         const auto vpart = m.veh_at(tp);
                         const lighting::tile_occlusion_query occ_q{
                             .transparency =
-                                ( static_cast<int>( mc.transparency_cache.size() ) > idx )
+                                (static_cast<int>(mc.transparency_cache.size()) > idx)
                                     ? mc.transparency_cache[idx]
                                     : LIGHT_TRANSPARENCY_SOLID,
-                            .coverage = ter_ok ? m.coverage( tp ) : 0,
-                            .is_tree = ter_ok && m.has_flag_ter( TFLAG_TREE, tp ),
+                            .coverage = ter_ok ? m.coverage(tp) : 0,
+                            .is_tree = ter_ok && m.has_flag_ter(TFLAG_TREE, tp),
                             .is_vehicle_obstacle =
-                                static_cast<bool>( vpart ) && vpart->obstacle_at_part(),
+                                static_cast<bool>(vpart) && vpart->obstacle_at_part(),
                             .floor_above = have_above && above->floor_cache[idx],
                             .outside = false,
                             .terrain_valid = ter_ok,
                         };
-                        const lighting::tile_occlusion occl =
-                            lighting::classify_tile_occlusion( occ_q );
+                        const lighting::tile_occlusion occl = lighting::classify_tile_occlusion(
+                            occ_q);
                         occ[static_cast<size_t>(idx) * 2 + 0] = occl.height;
                         occ[static_cast<size_t>(idx) * 2 + 1] = occl.roofed ? 1.0f : 0.0f;
                     }
                 }
-                if( std::getenv( "CBN_DIAG_SEG_LIGHTING" ) ) {
+                if (std::getenv("CBN_DIAG_SEG_LIGHTING")) {
                     static int rf_n = 0;
                     ++rf_n;
-                    if( rf_n <= 2 || rf_n % 60 == 0 ) {
+                    if (rf_n <= 2 || rf_n % 60 == 0) {
                         int roofed = 0;
-                        for( int i = 0; i < total; ++i ) {
-                            if( occ[static_cast<size_t>( i ) * 2 + 1] > 0.5f ) { ++roofed; }
+                        for (int i = 0; i < total; ++i) {
+                            if (occ[static_cast<size_t>(i) * 2 + 1] > 0.5f) { ++roofed; }
                         }
-                        DebugLogFL( DL::Info, DC::Main )
-                                << "[roofdiag] n=" << rf_n << " zlev=" << zlev
-                                << " have_above=" << have_above << " total=" << total
-                                << " roofed=" << roofed;
+                        DebugLogFL(DL::Info, DC::Main)
+                            << "[roofdiag] n=" << rf_n << " zlev=" << zlev << " have_above="
+                            << have_above << " total=" << total << " roofed=" << roofed;
                     }
                 }
             }
@@ -218,26 +217,25 @@ frame_lighting_result build_and_submit_lighting(
             // is the visible surface). Off-region tiles stay neutral 1.0 so a
             // bounce ray landing outside the camera rect neither darkens nor
             // tints. Same x-major layout as occ: albedo[(x*H+y)*4 + c].
-            albedo.assign( static_cast<size_t>( total ) * 4, 1.0f );
+            albedo.assign(static_cast<size_t>(total) * 4, 1.0f);
             {
-                for( int x = rx0; x < rx1; ++x ) {
-                    for( int y = ry0; y < ry1; ++y ) {
+                for (int x = rx0; x < rx1; ++x) {
+                    for (int y = ry0; y < ry1; ++y) {
                         const int idx = x * H + y;
-                        const tripoint_bub_ms tp( point_bub_ms( x, y ), zlev );
-                        const ter_id tid = m.ter( tp );
-                        const furn_id fid = m.furn( tp );
+                        const tripoint_bub_ms tp(point_bub_ms(x, y), zlev);
+                        const ter_id tid = m.ter(tp);
+                        const furn_id fid = m.furn(tp);
                         // int_id: 0 = null. Furniture wins (visible surface).
                         const nc_color col =
-                            fid ? fid.obj().color()
-                                 : ( tid ? tid.obj().color() : c_light_gray );
-                        const RGBColor rgb = curses_color_to_RGB( col );
-                        albedo[ static_cast<size_t>( idx ) * 4 + 0 ] =
-                            static_cast<float>( rgb.r ) / 255.0f;
-                        albedo[ static_cast<size_t>( idx ) * 4 + 1 ] =
-                            static_cast<float>( rgb.g ) / 255.0f;
-                        albedo[ static_cast<size_t>( idx ) * 4 + 2 ] =
-                            static_cast<float>( rgb.b ) / 255.0f;
-                        albedo[ static_cast<size_t>( idx ) * 4 + 3 ] = 1.0f;
+                            fid ? fid.obj().color() : (tid ? tid.obj().color() : c_light_gray);
+                        const RGBColor rgb = curses_color_to_RGB(col);
+                        albedo[static_cast<size_t>(idx) * 4 + 0] =
+                            static_cast<float>(rgb.r) / 255.0f;
+                        albedo[static_cast<size_t>(idx) * 4 + 1] =
+                            static_cast<float>(rgb.g) / 255.0f;
+                        albedo[static_cast<size_t>(idx) * 4 + 2] =
+                            static_cast<float>(rgb.b) / 255.0f;
+                        albedo[static_cast<size_t>(idx) * 4 + 3] = 1.0f;
                     }
                 }
             }
@@ -256,28 +254,27 @@ frame_lighting_result build_and_submit_lighting(
             // NOT what an unbuilt/short outside_cache produces -- the assign above would
             // leave all-255 -- so log whether this block runs at all, plus the two sizes
             // whose mismatch would make the copy dead code.
-            if( std::getenv( "CBN_DIAG_SEG_LIGHTING" ) ) {
+            if (std::getenv("CBN_DIAG_SEG_LIGHTING")) {
                 static int fb_n = 0;
                 static int fb_last_nz = -1;
                 ++fb_n;
                 {
                     int trues = 0;
-                    const int have = static_cast<int>( mc.outside_cache.size() );
-                    for( int i = 0; i < have && i < total; ++i ) {
+                    const int have = static_cast<int>(mc.outside_cache.size());
+                    for (int i = 0; i < have && i < total; ++i) {
                         trues += mc.outside_cache[i] ? 1 : 0;
                     }
                     int nz = 0;
-                    for( int i = 0; i < total; ++i ) { nz += sky_vis[i] != 0u ? 1 : 0; }
+                    for (int i = 0; i < total; ++i) { nz += sky_vis[i] != 0u ? 1 : 0; }
                     const bool changed = nz != fb_last_nz;
                     fb_last_nz = nz;
-                    if( changed || fb_n <= 2 )
+                    if (changed || fb_n <= 2) {
                         DebugLogFL(DL::Info, DC::Main)
-                                    << "[fbdiag] n=" << fb_n << " total=" << total
-                                    << " outside_cache.size=" << have
-                                    << " copy_ran=" << ( have >= total ? "yes" : "NO (dead)" )
-                                    << " outside_true=" << trues
-                                    << " sky_vis_nonzero=" << nz
-                                    << " W=" << W << " H=" << H << " z=" << zlev;
+                            << "[fbdiag] n=" << fb_n << " total=" << total << " outside_cache.size="
+                            << have << " copy_ran=" << (have >= total ? "yes" : "NO (dead)")
+                            << " outside_true=" << trues << " sky_vis_nonzero=" << nz << " W=" << W
+                            << " H=" << H << " z=" << zlev;
+                    }
                 }
             }
 
@@ -321,10 +318,11 @@ frame_lighting_result build_and_submit_lighting(
     // After the HUD copy (glow/shafts/dust want the full list): put emitters that can
     // reach the camera rect first so sprite shading loops only over those. GI keeps
     // the full count (it probes off-view tiles).
-    const auto view_count = have_world
-        ? partition_emitters_by_view(
-              snapshot, {.x0 = cam_x0, .y0 = cam_y0, .w = cam_w, .h = cam_h})
-        : static_cast<int>(snapshot.size());
+    const auto view_count =
+        have_world
+            ? partition_emitters_by_view(
+                  snapshot, {.x0 = cam_x0, .y0 = cam_y0, .w = cam_w, .h = cam_h})
+            : static_cast<int>(snapshot.size());
     rs.collector()->submit(
         std::move(snapshot), std::move(transparency), {}, // P3.3: SDF is GPU-only (JFA), no CPU
                                                           // upload needed

@@ -77,33 +77,33 @@ auto frame_lap_count() -> std::size_t
 auto frame_lap_of( frame_step_kind kind ) -> std::size_t
 {
     switch( kind ) {
-    case frame_step_kind::build_lighting:
-        return 1;
-    case frame_step_kind::collector_flush:
-    case frame_step_kind::gpu_sdf:
-    case frame_step_kind::sky_sun:
-    case frame_step_kind::gi:
-    case frame_step_kind::gi_feedback:
-    case frame_step_kind::rc_readback:
-        return 2;
-    case frame_step_kind::assemble:
-        return 3;
-    case frame_step_kind::menu_background:
-        return 4;
-    case frame_step_kind::overlays:
-        return 5;
-    case frame_step_kind::ui_composite:
-    case frame_step_kind::avatar_composite:
-    case frame_step_kind::vehicle_composite:
-        return 6;
-    case frame_step_kind::world_pass:
-        return 7;
-    case frame_step_kind::tonemap:
-        return 8;
-    case frame_step_kind::swapchain_composite:
-        return 9;
-}
-return 0;
+        case frame_step_kind::build_lighting:
+            return 1;
+        case frame_step_kind::collector_flush:
+        case frame_step_kind::gpu_sdf:
+        case frame_step_kind::sky_sun:
+        case frame_step_kind::gi:
+        case frame_step_kind::gi_feedback:
+        case frame_step_kind::rc_readback:
+            return 2;
+        case frame_step_kind::assemble:
+            return 3;
+        case frame_step_kind::menu_background:
+            return 4;
+        case frame_step_kind::overlays:
+            return 5;
+        case frame_step_kind::ui_composite:
+        case frame_step_kind::avatar_composite:
+        case frame_step_kind::vehicle_composite:
+            return 6;
+        case frame_step_kind::world_pass:
+            return 7;
+        case frame_step_kind::tonemap:
+            return 8;
+        case frame_step_kind::swapchain_composite:
+            return 9;
+    }
+    return 0;
 }
 
 auto frame_lap_name( std::size_t lap ) -> std::string_view

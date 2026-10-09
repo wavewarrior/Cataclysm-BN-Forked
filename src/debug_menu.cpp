@@ -130,8 +130,7 @@ nested_mapgen;
 #include "dynamic_atlas.h"
 #include "sdltiles.h"
 
-namespace debug_menu
-{
+namespace debug_menu {
 
 enum debug_menu_index {
     DEBUG_WISH,
@@ -551,7 +550,7 @@ void spawn_nested_mapgen()
     }
 }
 
-static Character &pick_character( Character &preselected )
+static Character & pick_character( Character & preselected )
 {
     std::vector<tripoint_bub_ms> locations;
     uilist charmenu;
@@ -606,7 +605,7 @@ static void control_npc_menu()
     get_avatar().control_npc( *followers.at( charmenu.ret ) );
 }
 
-void character_edit_menu( Character &c )
+void character_edit_menu( Character & c )
 {
     npc *np = c.is_npc() ? static_cast<npc *>( &c ) : nullptr;
     player &p = static_cast<player &>( c );
@@ -1264,7 +1263,7 @@ static std::string mission_status_string( mission::mission_status status )
     return _( "Bugged" );
 }
 
-std::string mission_debug::describe( const mission &m )
+std::string mission_debug::describe( const mission & m )
 {
     std::stringstream data;
     data << _( "Type:" ) << m.type->id.str();
@@ -1277,7 +1276,7 @@ std::string mission_debug::describe( const mission &m )
     return data.str();
 }
 
-static void add_header( uilist &mmenu, const std::string &str )
+static void add_header( uilist & mmenu, const std::string & str )
 {
     if( !mmenu.entries.empty() ) {
         mmenu.addentry( -1, false, -1, "" );
@@ -1287,7 +1286,7 @@ static void add_header( uilist &mmenu, const std::string &str )
     mmenu.entries.push_back( header );
 }
 
-void mission_debug::edit( Character &who )
+void mission_debug::edit( Character & who )
 {
     if( who.is_player() ) {
         edit_player();
@@ -1296,7 +1295,7 @@ void mission_debug::edit( Character &who )
     }
 }
 
-void mission_debug::edit_npc( npc &who )
+void mission_debug::edit_npc( npc & who )
 {
     npc_chatbin &bin = who.chatbin;
     std::vector<mission *> all_missions;
@@ -1357,7 +1356,7 @@ void mission_debug::edit_player()
     edit_mission( *all_missions[mmenu.ret] );
 }
 
-static bool remove_from_vec( std::vector<mission *> &vec, mission *m )
+static bool remove_from_vec( std::vector<mission *> &vec, mission * m )
 {
     auto iter = std::remove( vec.begin(), vec.end(), m );
     bool ret = iter != vec.end();
@@ -1365,7 +1364,7 @@ static bool remove_from_vec( std::vector<mission *> &vec, mission *m )
     return ret;
 }
 
-void mission_debug::remove_mission( mission &m )
+void mission_debug::remove_mission( mission & m )
 {
     if( remove_from_vec( g->u.active_missions, &m ) ) {
         add_msg( _( "Removing from active_missions" ) );
@@ -1393,7 +1392,7 @@ void mission_debug::remove_mission( mission &m )
     }
 }
 
-void mission_debug::edit_mission( mission &m )
+void mission_debug::edit_mission( mission & m )
 {
     uilist mmenu;
     mmenu.text = describe( m );
@@ -1890,7 +1889,7 @@ void debug()
         }
         break;
 
-        // Damage Self
+            // Damage Self
         case DEBUG_DAMAGE_SELF: {
             const int torso_hp = u.get_part_hp_cur( bodypart_id( "torso" ) );
             const int head_hp = u.get_part_hp_cur( bodypart_id( "head" ) );

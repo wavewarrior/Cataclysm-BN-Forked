@@ -53,10 +53,10 @@ enum struct verdict {
 constexpr auto evaluate( const inputs &in ) -> verdict
 {
     if( !in.valid ) {
-    // Deficits are reported in the order the player is most likely to be able to fix: skills
-    // first, then traits, then stats. Preserved from the old chain rather than re-derived — a
-    // character can be over on two pools at once, and which one the popup names is behaviour.
-    if( in.skill_left < 0 ) {
+        // Deficits are reported in the order the player is most likely to be able to fix: skills
+        // first, then traits, then stats. Preserved from the old chain rather than re-derived — a
+        // character can be over on two pools at once, and which one the popup names is behaviour.
+        if( in.skill_left < 0 ) {
             return verdict::over_skill;
         }
         if( in.trait_left < 0 ) {
@@ -68,12 +68,12 @@ constexpr auto evaluate( const inputs &in ) -> verdict
         return verdict::over_pool;
     }
     if( in.spare ) {
-    return verdict::spare_points;
-}
-if( in.name_empty ) {
-    return verdict::needs_name;
-}
-return verdict::ready;
+        return verdict::spare_points;
+    }
+    if( in.name_empty ) {
+        return verdict::needs_name;
+    }
+    return verdict::ready;
 }
 
 /// Whether the verdict REFUSES rather than asks. A refusal shows a popup and returns to the screen;
@@ -86,17 +86,17 @@ return verdict::ready;
 constexpr auto is_refusal( verdict v ) -> bool
 {
     switch( v ) {
-    case verdict::over_skill:
-    case verdict::over_trait:
-    case verdict::over_stat:
-    case verdict::over_pool:
-        return true;
-    case verdict::ready:
-    case verdict::spare_points:
-    case verdict::needs_name:
-        return false;
-}
-return false;
+        case verdict::over_skill:
+        case verdict::over_trait:
+        case verdict::over_stat:
+        case verdict::over_pool:
+            return true;
+        case verdict::ready:
+        case verdict::spare_points:
+        case verdict::needs_name:
+            return false;
+    }
+    return false;
 }
 
 } // namespace nc_finish_gate

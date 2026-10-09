@@ -1280,17 +1280,17 @@ void map::batch_flood_fill_sounds()
 auto submap::rebuild_absorption_cache( const map &m, const tripoint_bub_sm &grid_pos ) -> void
 {
     if( !absorption_dirty ) {
-    return;
-}
-// outside_cache must be current before building the absorption cache.
-// We still want the level cache above us to grab our floor checks with.
-const level_cache *above = ( grid_pos.z() < OVERMAP_HEIGHT )
+        return;
+    }
+    // outside_cache must be current before building the absorption cache.
+    // We still want the level cache above us to grab our floor checks with.
+    const level_cache *above = ( grid_pos.z() < OVERMAP_HEIGHT )
                                ? &m.get_cache_ref( grid_pos.z() + 1 )
                                : nullptr;
 
     if( outside_dirty ) {
-    // Fortunatly there is a nullptr catch in rebuild_outside_cache.
-    rebuild_outside_cache( above, grid_pos );
+        // Fortunatly there is a nullptr catch in rebuild_outside_cache.
+        rebuild_outside_cache( above, grid_pos );
     }
     const auto &lev_cache = m.get_cache_ref( grid_pos.z() );
 
@@ -1348,7 +1348,7 @@ const level_cache *above = ( grid_pos.z() < OVERMAP_HEIGHT )
     const tripoint_bub_ms cv_abs_trip = abs_trip + cv_to_sm_ms_rel_adj;
 
     for( uint8_t x = 0; x < checkvars_envelope_max_x; x++ ) {
-    for( uint8_t y = 0; y < checkvars_envelope_max_y; y++ ) {
+        for( uint8_t y = 0; y < checkvars_envelope_max_y; y++ ) {
             auto &cv = checkvars[x][y];
             if( outside_submap( x, y ) ) {
                 // We are not in our submap, so we have to check tripoints and queary map.
@@ -1497,7 +1497,7 @@ const level_cache *above = ( grid_pos.z() < OVERMAP_HEIGHT )
     };
 
     // We have our checkvars, so lets assign the right absorption and sound wall values to each tile.
-for( const auto &sp : submap_tiles() ) {
+    for( const auto &sp : submap_tiles() ) {
         const tripoint_bub_ms &btri = abs_trip + sp.raw();
         // See if there is a vehicle in our given tripoint.
         // If there is, if there is a full board, a closed door, or a window, return thick barrier sound absorption.
@@ -1785,7 +1785,7 @@ bool map::build_absorption_cache( const int zlev )
         }
     }
     level_cache_freshness::stamp_built( map_cache,
-                                        { level_cache_part::absorption } );
+    { level_cache_part::absorption } );
     return true;
 }
 
@@ -1917,8 +1917,7 @@ static float derive_transmission_loss( const tripoint_bub_ms &pos )
     // Helper lambda: use explicit acoustics if available, otherwise fall back to bash heuristic
     auto compute_loss = []( const map_data_common_t &obj ) -> float {
         // Check explicit acoustics first
-        if( obj.acoustics.transmission_loss_db >= 0.0f )
-        {
+        if( obj.acoustics.transmission_loss_db >= 0.0f ) {
             float loss = obj.acoustics.transmission_loss_db;
             loss *= static_cast<float>( obj.coverage ) / 100.0f;
             if( obj.transparent ) {
@@ -3190,7 +3189,7 @@ std::vector<tripoint_bub_ms> sounds::get_footstep_markers()
     return footsteps;
 }
 
-std::pair< std::vector<tripoint_bub_ms>, std::vector<tripoint_bub_ms>> sounds::get_monster_sounds()
+std::pair< std::vector<tripoint_bub_ms>, std::vector<tripoint_bub_ms >> sounds::get_monster_sounds()
 {
     std::vector<tripoint_bub_ms> allsounds;
     std::vector<tripoint_bub_ms> monster_sounds;
@@ -3770,25 +3769,25 @@ void sfx::generate_melee_sound( const tripoint_bub_ms &source, const tripoint_bu
     static const skill_id skill_stabbing( "stabbing" );
 
     if( weapon_skill == skill_bashing && weapon_volume <= 8 ) {
-    variant_used = "small_bash";
-    play_variant_sound( "melee_swing", "small_bash", vol_src, ang_src, dist_src, 0.8, 1.2 );
+        variant_used = "small_bash";
+        play_variant_sound( "melee_swing", "small_bash", vol_src, ang_src, dist_src, 0.8, 1.2 );
     } else if( weapon_skill == skill_bashing && weapon_volume >= 9 ) {
-    variant_used = "big_bash";
-    play_variant_sound( "melee_swing", "big_bash", vol_src, ang_src, dist_src, 0.8, 1.2 );
+        variant_used = "big_bash";
+        play_variant_sound( "melee_swing", "big_bash", vol_src, ang_src, dist_src, 0.8, 1.2 );
     } else if( ( weapon_skill == skill_cutting || weapon_skill == skill_stabbing ) &&
                weapon_volume <= 6 ) {
-    variant_used = "small_cutting";
-    play_variant_sound( "melee_swing", "small_cutting", vol_src, ang_src, dist_src, 0.8, 1.2 );
+        variant_used = "small_cutting";
+        play_variant_sound( "melee_swing", "small_cutting", vol_src, ang_src, dist_src, 0.8, 1.2 );
     } else if( ( weapon_skill == skill_cutting || weapon_skill == skill_stabbing ) &&
                weapon_volume >= 7 ) {
-    variant_used = "big_cutting";
-    play_variant_sound( "melee_swing", "big_cutting", vol_src, ang_src, dist_src, 0.8, 1.2 );
+        variant_used = "big_cutting";
+        play_variant_sound( "melee_swing", "big_cutting", vol_src, ang_src, dist_src, 0.8, 1.2 );
     } else {
         variant_used = "default";
         play_variant_sound( "melee_swing", "default", vol_src, ang_src, dist_src, 0.8, 1.2 );
     }
     if( hit ) {
-    if( targ_mon ) {
+        if( targ_mon ) {
             if( material == "steel" ) {
                 play_variant_sound( "melee_hit_metal", variant_used, vol_targ, ang_targ, dist_targ,
                                     0.8, 1.2 );

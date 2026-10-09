@@ -297,7 +297,7 @@ class submap_load_manager
 
         using key_set = std::unordered_set<desired_key, coord_pair_hash<point_abs_sm>>;
         using horizontal_omt_set = std::unordered_set<omt_column_key,
-              coord_pair_hash<point_abs_omt>>;
+              coord_pair_hash<point_abs_omt >>;
         using retained_omt_list = std::list<omt_column_key>;
         using lazy_omt_job_list = std::list<omt_key>;
         struct lazy_omt_focus {
@@ -320,11 +320,11 @@ class submap_load_manager
             bool defer_postprocess_hooks = false;
             bool worker_safe = false;
             bool use_selected_mapgen = false;
-            std::shared_ptr<mapgen_function> selected_mapgen;
+            std::shared_ptr < mapgen_function > selected_mapgen;
         };
 
         load_request_handle next_handle_ = 1;
-        std::map<load_request_handle, submap_load_request> requests_;
+        std::map < load_request_handle, submap_load_request > requests_;
 
         /** Full desired set (simulated + border) from the previous update(). */
         key_set prev_desired_;
@@ -333,18 +333,18 @@ class submap_load_manager
          *  Used for listener notification diffs. */
         key_set prev_simulated_;
 
-        std::vector<submap_load_listener *> listeners_;
+        std::vector < submap_load_listener * > listeners_;
 
         /** Non-simulated OMT columns kept resident for short-term backtracking. */
         retained_omt_list retained_omts_;
-        std::unordered_map<omt_column_key, retained_omt_list::iterator,
-            coord_pair_hash<point_abs_omt>> retained_omt_index_;
+        std::unordered_map < omt_column_key, retained_omt_list::iterator,
+            coord_pair_hash < point_abs_omt >> retained_omt_index_;
 
         /** OMT z-levels waiting for amortized lazy-border preload. */
         lazy_omt_job_list lazy_omt_jobs_;
-        std::unordered_map<omt_key, lazy_omt_job_list::iterator,
-            coord_pair_hash<tripoint_abs_omt>> lazy_omt_job_index_;
-        std::map<omt_key, std::future<lazy_omt_load_result>> lazy_omt_futures_;
+        std::unordered_map < omt_key, lazy_omt_job_list::iterator,
+            coord_pair_hash < tripoint_abs_omt >> lazy_omt_job_index_;
+        std::map < omt_key, std::future < lazy_omt_load_result>> lazy_omt_futures_;
 
         /** Compute the simulated desired set (excludes lazy_border). */
         key_set compute_desired_set() const;
@@ -397,16 +397,16 @@ class submap_load_manager
          * omts generated from scratch or restored from pending writes are marked
          * dirty so eviction preserves that data.
          */
-        std::unordered_set<omt_column_key, coord_pair_hash<point_abs_omt>> dirty_omts_;
+        std::unordered_set < omt_column_key, coord_pair_hash < point_abs_omt>> dirty_omts_;
 
         /** Snapshot of all request bounds from the previous update().
          *  Used to detect steady-state and skip expensive recomputation. */
-        std::vector<std::pair<load_request_handle, submap_load_request>> prev_requests_;
+        std::vector < std::pair < load_request_handle, submap_load_request>> prev_requests_;
 
-        std::map<dimension_id, std::vector<point_abs_sm>> simulated_submaps_by_dimension_;
+        std::map < dimension_id, std::vector < point_abs_sm>> simulated_submaps_by_dimension_;
 
         point lazy_omt_preload_direction_ = point_zero;
-        std::optional<lazy_omt_focus> lazy_omt_focus_;
+        std::optional < lazy_omt_focus > lazy_omt_focus_;
         double lazy_omt_budget_credit_ = 0.0;
         int lazy_omt_last_credit_turn_ = -1;
         bool lazy_border_work_deferred_ = false;

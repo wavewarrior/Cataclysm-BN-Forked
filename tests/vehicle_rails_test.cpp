@@ -92,8 +92,7 @@ static void clear_game(const ter_id& terrain) {
     avatar& u = get_avatar();
     // Move player somewhere safe
     REQUIRE_FALSE(u.in_vehicle);
-    u.setpos(tripoint_bub_ms(g_half_mapsize_x + SEEX - 1,
-                              g_half_mapsize_y + SEEY - 1, -2));
+    u.setpos(tripoint_bub_ms(g_half_mapsize_x + SEEX - 1, g_half_mapsize_y + SEEY - 1, -2));
     // Blind the player to avoid needless drawing-related overhead
     u.add_effect(effect_blind, 365_days, bodypart_str_id::NULL_ID());
 
@@ -271,12 +270,12 @@ static void run_test_case_at_rotation(const test_case& t, int i_rot) {
     auto end_pos_r = tripoint_bub_ms(canvas_pos) + t.end_pos_right.raw().rotate_2d(i_rot, sz);
 
     units::angle rot = i_rot * 90_degrees;
-    units::angle start_dir = normalize( t.start_dir + rot );
-    units::angle end_dir_s = normalize( t.end_dir_straight + rot );
-    units::angle end_dir_l = normalize( t.end_dir_left + rot );
-    units::angle end_dir_r = normalize( t.end_dir_right + rot );
-    clear_game( t_floor );
-    build_map_from_canvas( canvas, canvas_pos );
+    units::angle start_dir = normalize(t.start_dir + rot);
+    units::angle end_dir_s = normalize(t.end_dir_straight + rot);
+    units::angle end_dir_l = normalize(t.end_dir_left + rot);
+    units::angle end_dir_r = normalize(t.end_dir_right + rot);
+    clear_game(t_floor);
+    build_map_from_canvas(canvas, canvas_pos);
     // This tripoint_bub_ms cast is making me cry
     // I don't want to fix the cascading issues from proper declaration
     const auto run_case =

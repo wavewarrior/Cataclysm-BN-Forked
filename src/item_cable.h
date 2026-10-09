@@ -78,7 +78,7 @@ struct cable_connection_data {
 
     void set_vars( item* const cable ) const {
         if( !cable ) { return; }
-    if( !con1.empty() ) {
+        if( !con1.empty() ) {
             cable->set_var( p1_name, con1.state );
             if( con1.point != tripoint_abs_ms_min ) {
                 cable->set_var( source_p1_name, con1.point.raw() );

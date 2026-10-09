@@ -71,9 +71,9 @@ using hud_runic::ink;
 auto stat_rung( int base, int value ) -> ink
 {
     if( value < base ) {
-    return ink::peak;
-}
-return value > base ? ink::datum : ink::label;
+        return ink::peak;
+    }
+    return value > base ? ink::datum : ink::label;
 }
 
 /// Speed, from `value_color`'s 75/50/25 bands.
@@ -198,13 +198,13 @@ auto approx_time_of_day() -> std::string
 auto move_mode_word( const avatar &u ) -> std::string
 {
     if( u.movement_mode_is( CMM_RUN ) ) {
-    return _( "RUNNING" );
+        return _( "RUNNING" );
     } else if( u.movement_mode_is( CMM_STEALTH ) ) {
-    return _( "STEALTH" );
+        return _( "STEALTH" );
     } else if( u.movement_mode_is( CMM_CROUCH ) ) {
-    return _( "CROUCHING" );
+        return _( "CROUCHING" );
     } else if( u.movement_mode_is( CMM_PRONE ) ) {
-    return _( "PRONE" );
+        return _( "PRONE" );
     }
     return _( "WALKING" );
 }
@@ -312,18 +312,18 @@ auto need_field( std::string label, const std::pair<std::string, nc_color> &desc
 -> hud_runic::legend_options
 {
     if( desc.first.empty() ) {
-    return { .label = std::move( label ), .value = _( "NORMAL" ), .value_ink = ink::label };
-}
-return { .label = std::move( label ), .value = desc.first, .value_ink = ink::datum };
+        return { .label = std::move( label ), .value = _( "NORMAL" ), .value_ink = ink::label };
+    }
+    return { .label = std::move( label ), .value = desc.first, .value_ink = ink::datum };
 }
 
 /// The avatar's profession, preferring one they wrote for themselves.
 auto profession_text( const avatar &u ) -> std::string
 {
     if( !u.custom_profession.empty() ) {
-    return u.custom_profession;
-}
-return u.prof ? u.prof->gender_appropriate_name( u.male ) : std::string();
+        return u.custom_profession;
+    }
+    return u.prof ? u.prof->gender_appropriate_name( u.male ) : std::string();
 }
 
 /// Partner state for the co-op field; empty when there is no session.
@@ -531,12 +531,12 @@ auto heading_word( int dir8 ) -> std::string
 auto gauge_row( const std::string &name, int cur, int max, int pct ) -> std::string
 {
     return hud_runic::row( "hud-row", {},
-           std::format( R"(<span class="hud-cell-name {}">{}</span>)",
-                        hud_runic::ink_class( ink::label ), rml_escape( name ) ) +
-           std::format( R"(<div class="hud-cell-meter">{}</div>)",
-                        hud_runic::pips( { .cur = cur, .max = max } ) ) +
-           std::format( R"(<span class="hud-cell-val {}">{}%</span>)",
-                        hud_runic::ink_class( reserve_rung( pct ) ), pct ) );
+                           std::format( R"(<span class="hud-cell-name {}">{}</span>)",
+                                        hud_runic::ink_class( ink::label ), rml_escape( name ) ) +
+                           std::format( R"(<div class="hud-cell-meter">{}</div>)",
+                                        hud_runic::pips( { .cur = cur, .max = max } ) ) +
+                           std::format( R"(<span class="hud-cell-val {}">{}%</span>)",
+                                        hud_runic::ink_class( reserve_rung( pct ) ), pct ) );
 }
 
 } // namespace
@@ -773,11 +773,11 @@ auto hud_keys( avatar &u, const hud_runic::layout & ) -> std::string
 auto hud_veh_panel( avatar &u, const hud_runic::layout & ) -> std::string
 {
     if( !u.controlling_vehicle ) {
-    return std::string();
+        return std::string();
     }
     const vehicle *veh = veh_pointer_or_null( get_map().veh_at( u.bub_pos() ) );
     if( veh == nullptr ) {
-    return std::string();
+        return std::string();
     }
 
     // Name over heading: the heading changes every turn you steer and the name
@@ -815,19 +815,19 @@ auto hud_veh_panel( avatar &u, const hud_runic::layout & ) -> std::string
                                   veh->engine_on ? _( "ON" ) : _( "OFF" ) ),
                                   veh->engine_on ? ink::datum : ink::rule );
     if( abs_vel > safe_vel ) {
-    chips += hud_runic::chip( _( "UNSAFE" ), ink::peak );
+        chips += hud_runic::chip( _( "UNSAFE" ), ink::peak );
     }
     if( veh->is_alarm_on ) {
-    chips += hud_runic::chip( _( "ALARM" ), ink::peak );
+        chips += hud_runic::chip( _( "ALARM" ), ink::peak );
     }
     if( veh->cruise_on ) {
-    chips += hud_runic::chip( _( "CRUISE" ), ink::datum );
+        chips += hud_runic::chip( _( "CRUISE" ), ink::datum );
     }
     if( veh->autopilot_on ) {
-    chips += hud_runic::chip( _( "AUTO" ), ink::datum );
+        chips += hud_runic::chip( _( "AUTO" ), ink::datum );
     }
     if( veh->camera_on ) {
-    chips += hud_runic::chip( _( "CAM" ), ink::datum );
+        chips += hud_runic::chip( _( "CAM" ), ink::datum );
     }
     out += hud_runic::row( "hud-row hud-chiprow", {}, chips );
     out += hud_runic::rule_div();
@@ -835,7 +835,7 @@ auto hud_veh_panel( avatar &u, const hud_runic::layout & ) -> std::string
     // Fuel gauges. `reserve_rung` is exactly right for a tank: a full one recedes
     // to chrome and a draining one advances, which is the same severity rule the
     // body-part meters use, applied to the same shape of quantity.
-for( const auto &[fuel_id, amount] : veh->fuels_left() ) {
+    for( const auto &[fuel_id, amount] : veh->fuels_left() ) {
         const auto capacity = veh->fuel_capacity( fuel_id );
         if( capacity <= 0 ) {
             continue;

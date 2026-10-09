@@ -81,8 +81,7 @@ bool &examine_item_rmlui_enabled()
     return enabled;
 }
 
-namespace examine_item_menu
-{
+namespace examine_item_menu {
 
 bool run( item& loc, const std::function<int()> &func_pos_x, const std::function<int()> &func_width,
           menu_pos_t menu_pos )
@@ -348,11 +347,10 @@ bool run( item& loc, const std::function<int()> &func_pos_x, const std::function
     } );
     action_list.w_y_setup = 0;
     action_list.w_x_setup = [&]( const int popup_width ) -> int {
-        switch( menu_pos )
-    {
-        default:
-        case menu_pos_t::left:
-            return func_pos_x() - popup_width;
+        switch( menu_pos ) {
+            default:
+            case menu_pos_t::left:
+                return func_pos_x() - popup_width;
             case menu_pos_t::right:
                 return func_pos_x() + func_width();
         }
@@ -467,7 +465,7 @@ bool run( item& loc, const std::function<int()> &func_pos_x, const std::function
     return ret_val;
 }
 
-hint_rating rate_action_use( const avatar& you, const item& it )
+hint_rating rate_action_use( const avatar & you, const item & it )
 {
     if( it.is_tool() ) {
         return it.ammo_sufficient() ? hint_rating::good : hint_rating::iffy;
@@ -491,7 +489,7 @@ hint_rating rate_action_use( const avatar& you, const item& it )
     return hint_rating::cant;
 }
 
-hint_rating rate_action_read( const avatar& you, const item& it )
+hint_rating rate_action_read( const avatar & you, const item & it )
 {
     if( !it.is_book() ) { return hint_rating::cant; }
 
@@ -501,7 +499,7 @@ hint_rating rate_action_read( const avatar& you, const item& it )
     return you.get_book_reader( it, dummy ) == nullptr ? hint_rating::iffy : hint_rating::good;
 }
 
-hint_rating rate_action_eat( const avatar& you, const item& it )
+hint_rating rate_action_eat( const avatar & you, const item & it )
 {
     if( !you.can_consume( it ) ) { return hint_rating::cant; }
 
@@ -517,7 +515,7 @@ hint_rating rate_action_eat( const avatar& you, const item& it )
     return hint_rating::iffy;
 }
 
-hint_rating rate_action_wear( const avatar& you, const item& it )
+hint_rating rate_action_wear( const avatar & you, const item & it )
 {
     if( !it.is_armor() ) { return hint_rating::cant; }
 
@@ -526,7 +524,7 @@ hint_rating rate_action_wear( const avatar& you, const item& it )
     return you.can_wear( it ).success() ? hint_rating::good : hint_rating::iffy;
 }
 
-hint_rating rate_action_change_side( const avatar& you, const item& it )
+hint_rating rate_action_change_side( const avatar & you, const item & it )
 {
     if( !you.is_worn( it ) ) { return hint_rating::iffy; }
 
@@ -535,7 +533,7 @@ hint_rating rate_action_change_side( const avatar& you, const item& it )
     return hint_rating::good;
 }
 
-hint_rating rate_action_takeoff( const avatar& you, const item& it )
+hint_rating rate_action_takeoff( const avatar & you, const item & it )
 {
     if( !it.is_armor() ) { return hint_rating::cant; }
 
@@ -544,7 +542,7 @@ hint_rating rate_action_takeoff( const avatar& you, const item& it )
     return hint_rating::iffy;
 }
 
-hint_rating rate_action_reload( const avatar& you, const item& it )
+hint_rating rate_action_reload( const avatar & you, const item & it )
 {
     hint_rating res = hint_rating::cant;
 
@@ -571,19 +569,19 @@ hint_rating rate_action_reload( const avatar& you, const item& it )
     return you.can_reload( it ) ? hint_rating::good : hint_rating::iffy;
 }
 
-hint_rating rate_action_unload( const avatar & /*you*/, const item& it )
+hint_rating rate_action_unload( const avatar & /*you*/, const item & it )
 {
     return item_funcs::can_be_unloaded( it ) ? hint_rating::good : hint_rating::cant;
 }
 
-hint_rating rate_action_mend( const avatar & /*you*/, const item& it )
+hint_rating rate_action_mend( const avatar & /*you*/, const item & it )
 {
     // TODO: check also if item damage could be repaired via a tool
     if( !it.faults.empty() ) { return hint_rating::good; }
     return it.faults_potential().empty() ? hint_rating::cant : hint_rating::iffy;
 }
 
-hint_rating rate_action_disassemble( avatar& you, const item& it )
+hint_rating rate_action_disassemble( avatar & you, const item & it )
 {
     if( crafting::can_disassemble( you, it, you.crafting_inventory() ).success() ) {
         return hint_rating::good; // possible
@@ -594,7 +592,7 @@ hint_rating rate_action_disassemble( avatar& you, const item& it )
     }
 }
 
-hint_rating rate_action_salvage( avatar& you, const item& it )
+hint_rating rate_action_salvage( avatar & you, const item & it )
 {
     // is_salvageable is much cheaper so we do it first
     if( !it.is_salvageable() ) {

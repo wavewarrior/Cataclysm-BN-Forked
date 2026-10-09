@@ -133,7 +133,7 @@ static const skill_id skill_weapon( "weapon" );
 bool item::has_rotten_away() const
 {
     if( is_corpse() && !can_revive() ) {
-    return get_rot() > 10_days;
+        return get_rot() > 10_days;
     } else {
         return is_food() && get_relative_rot() > 2.0;
     }
@@ -164,16 +164,16 @@ void item::mark_as_used_by_player( const player& p )
 bool item::can_holster( const item& obj, bool ignore ) const
 {
     if( !type->can_use( "holster" ) ) {
-    return false; // item is not a holster
-}
+        return false; // item is not a holster
+    }
 
-const holster_actor* ptr = dynamic_cast<const holster_actor *>(
-                               type->get_use( "holster" )->get_actor_ptr() );
-if( !ptr->can_holster( obj ) ) {
-    return false; // item is not a suitable holster for obj
-}
+    const holster_actor* ptr = dynamic_cast<const holster_actor *>(
+                                   type->get_use( "holster" )->get_actor_ptr() );
+    if( !ptr->can_holster( obj ) ) {
+        return false; // item is not a suitable holster for obj
+    }
 
-if( !ignore && static_cast<int>( contents.num_item_stacks() ) >= ptr->multi ) {
+    if( !ignore && static_cast<int>( contents.num_item_stacks() ) >= ptr->multi ) {
         return false; // item is already full
     }
 
@@ -193,12 +193,10 @@ std::string item::components_to_string() const
     return enumerate_as_string(
                counts.begin(), counts.end(),
     []( const std::pair<std::string, int> &entry ) -> std::string {
-        if( entry.second != 1 )
-        {
+        if( entry.second != 1 ) {
             return string_format(
                 pgettext( "components count", "%d x %s" ), entry.second, entry.first );
-        } else
-        {
+        } else {
             return entry.first;
         }
     },
@@ -240,23 +238,23 @@ void item::mod_charges( int mod )
 bool item::has_effect_when_wielded( art_effect_passive effect ) const
 {
     if( !type->artifact ) { return false; }
-const std::vector<art_effect_passive> &ew = type->artifact->effects_wielded;
-return std::ranges::contains( ew, effect );
+    const std::vector<art_effect_passive> &ew = type->artifact->effects_wielded;
+    return std::ranges::contains( ew, effect );
 }
 
 bool item::has_effect_when_worn( art_effect_passive effect ) const
 {
     if( !type->artifact ) { return false; }
-const std::vector<art_effect_passive> &ew = type->artifact->effects_worn;
-return std::ranges::contains( ew, effect );
+    const std::vector<art_effect_passive> &ew = type->artifact->effects_worn;
+    return std::ranges::contains( ew, effect );
 }
 
 bool item::has_effect_when_carried( art_effect_passive effect ) const
 {
     if( !type->artifact ) { return false; }
-const std::vector<art_effect_passive> &ec = type->artifact->effects_carried;
-if( std::ranges::contains( ec, effect ) ) { return true; }
-for( const item * i : contents.all_items_top() ) {
+    const std::vector<art_effect_passive> &ec = type->artifact->effects_carried;
+    if( std::ranges::contains( ec, effect ) ) { return true; }
+    for( const item * i : contents.all_items_top() ) {
         if( i->has_effect_when_carried( effect ) ) { return true; }
     }
     return false;
@@ -267,23 +265,23 @@ bool item::is_seed() const { return type->is_seed(); }
 time_duration item::get_plant_epoch() const
 {
     if( !type->seed ) { return 0_turns; }
-return type->seed->get_plant_epoch();
+    return type->seed->get_plant_epoch();
 }
 
 std::string item::get_plant_name() const
 {
     if( !type->seed ) { return std::string{}; }
-return type->seed->plant_name.translated();
+    return type->seed->plant_name.translated();
 }
 
 bool item::is_dangerous() const
 {
     if( has_flag( flag_DANGEROUS ) ) { return true; }
 
-// Note: Item should be dangerous regardless of what type of a container is it
-// Visitable interface would skip some options
-for( const item * it : contents.all_items_top() ) {
-    if( it->is_dangerous() ) { return true; }
+    // Note: Item should be dangerous regardless of what type of a container is it
+    // Visitable interface would skip some options
+    for( const item * it : contents.all_items_top() ) {
+        if( it->is_dangerous() ) { return true; }
     }
     return false;
 }
@@ -299,25 +297,25 @@ bool item::is_soft() const
 bool item::is_reloadable() const
 {
     if( has_flag( flag_NO_RELOAD ) && !has_flag( flag_VEHICLE ) ) {
-    return false; // turrets ignore NO_RELOAD flag
+        return false; // turrets ignore NO_RELOAD flag
 
-} else if( is_bandolier() || is_holster() ) {
+    } else if( is_bandolier() || is_holster() ) {
+        return true;
+
+    } else if( is_container() ) {
+        // TODO: Make buckets actually reloadable using reload menu
+        // This would be done via locking this off by weather or not it was wielded or on dirt most
+        // likely
+        return type->container->seals;
+
+    } else if( !is_gun() && !is_tool() && !is_magazine() ) {
+        return false;
+
+    } else if( ammo_types().empty() ) {
+        return false;
+    }
+
     return true;
-
-} else if( is_container() ) {
-    // TODO: Make buckets actually reloadable using reload menu
-    // This would be done via locking this off by weather or not it was wielded or on dirt most
-    // likely
-    return type->container->seals;
-
-} else if( !is_gun() && !is_tool() && !is_magazine() ) {
-    return false;
-
-} else if( ammo_types().empty() ) {
-    return false;
-}
-
-return true;
 }
 
 std::string item::type_name( unsigned int quantity ) const
@@ -409,7 +407,7 @@ bool item::has_infinite_charges() const { return charges == INFINITE_CHARGES; }
 skill_id item::contextualize_skill( const skill_id& id ) const
 {
     if( id->is_contextual_skill() ) {
-    if( id == skill_weapon ) {
+        if( id == skill_weapon ) {
             if( is_gun() ) {
                 return gun_skill();
             } else if( is_melee() ) {
@@ -450,14 +448,14 @@ void item::set_birthday( const time_point& bday )
 bool item::is_upgrade() const
 {
     if( !type->bionic ) { return false; }
-return type->bionic->is_upgrade;
+    return type->bionic->is_upgrade;
 }
 
 int item::get_min_str() const
 {
     if( type->gun ) {
-    int min_str = type->min_str;
-    for( const item * mod : gunmods() ) { min_str += mod->type->gunmod->min_str_required_mod; }
+        int min_str = type->min_str;
+        for( const item * mod : gunmods() ) { min_str += mod->type->gunmod->min_str_required_mod; }
         return min_str > 0 ? min_str : 0;
     } else {
         return type->min_str;
@@ -494,7 +492,7 @@ void item::set_favorite( const bool favorite ) { is_favorite = favorite; }
 const recipe &item::get_making() const
 {
     if( !craft_data_ ) {
-    debugmsg( "'%s' is not a craft or has a null recipe", tname() );
+        debugmsg( "'%s' is not a craft or has a null recipe", tname() );
         static const recipe dummy{};
         return dummy;
     }
@@ -529,7 +527,7 @@ const std::vector<comp_selection<tool_comp>> &item::get_cached_tool_selections()
 const cata::value_ptr<islot_comestible> &item::get_comestible() const
 {
     if( is_craft() ) {
-    return craft_data_->making->result()->comestible;
+        return craft_data_->making->result()->comestible;
     } else {
         return type->comestible;
     }
@@ -539,7 +537,7 @@ const cata::value_ptr<islot_comestible> &item::get_comestible() const
 item_location_type item::where() const
 {
     if( !loc ) {
-    if( !saved_loc ) {
+        if( !saved_loc ) {
             debugmsg( "Tried to find where of an item without a location" );
             return item_location_type::invalid;
         }
@@ -548,7 +546,7 @@ item_location_type item::where() const
     return static_cast<item_location *>( &*loc )->where();
 }
 
-item &item::obtain( Character& ch, int qty, bool costs_moves )
+item & item::obtain( Character& ch, int qty, bool costs_moves )
 {
     if( costs_moves ) { ch.moves -= obtain_cost( ch, qty ); }
     if( ch.is_worn( *this ) || ch.is_wielding( *this ) ) { return *this; }
@@ -558,7 +556,7 @@ item &item::obtain( Character& ch, int qty, bool costs_moves )
 int item::obtain_cost( const Character& ch, int qty ) const
 {
     if( !loc ) {
-    debugmsg( "Tried to find obtain cost of an item without a location" );
+        debugmsg( "Tried to find obtain cost of an item without a location" );
         return 0;
     }
     return static_cast<item_location *>( &*loc )->obtain_cost( ch, qty, this );
@@ -567,7 +565,7 @@ int item::obtain_cost( const Character& ch, int qty ) const
 std::string item::describe_location( const Character* ch ) const
 {
     if( !loc ) {
-    if( !saved_loc ) {
+        if( !saved_loc ) {
             debugmsg( "Tried to describe the location of an item without a location" );
             return "nowhere";
         }
@@ -576,7 +574,7 @@ std::string item::describe_location( const Character* ch ) const
     return loc->describe( ch, this );
 }
 
-item *item::parent_item() const
+item * item::parent_item() const
 {
     const auto location = loc ? loc : saved_loc;
     auto* cont = dynamic_cast<contents_item_location *>( location );
@@ -663,7 +661,7 @@ std::optional<cable_connection_data> cable_connection_data::make_data( const ite
 int item::get_chapters() const
 {
     if( !type->book ) { return 0; }
-return type->book->chapters;
+    return type->book->chapters;
 }
 
 int item::get_remaining_chapters( const Character& ch ) const
@@ -685,16 +683,17 @@ void item::mark_chapter_as_read( const Character& ch )
     set_var( var, remain );
 }
 
-std::vector<std::pair<const recipe *, int>> item::get_available_recipes( const Character& u ) const
-{
+std::vector<std::pair<const recipe *, int>> item::get_available_recipes( const Character& u ) const {
     std::vector<std::pair<const recipe *, int>> recipe_entries;
-    if( is_book() ) {
+    if( is_book() )
+    {
         for( const book_recipe& elem : type->book->recipes ) {
             if( u.get_skill_level( elem.recipe->skill_used ) >= elem.skill_level ) {
                 recipe_entries.emplace_back( elem.recipe, elem.skill_level );
             }
         }
-    } else if( has_var( "EIPC_RECIPES" ) ) {
+    } else if( has_var( "EIPC_RECIPES" ) )
+    {
         // See einkpc_download_memory_card() in iuse.cpp where this is set.
         const std::string recipes = get_var( "EIPC_RECIPES" );
         // Capture the index one past the delimiter, i.e. start of target string.

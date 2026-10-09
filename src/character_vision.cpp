@@ -459,7 +459,7 @@ int Character::overmap_sight_range( int light_level ) const
     // Binoculars double your sight range.
     const bool has_optic =
         ( has_item_with_flag( flag_ZOOM ) || ( is_mounted() &&
-                                              mounted_creature->has_flag( MF_MECH_RECON_VISION ) ) );
+            mounted_creature->has_flag( MF_MECH_RECON_VISION ) ) );
     if( has_optic ) { multiplier += 1; }
 
     sight += bonus_from_enchantments( sight, enchantment_value_id( "OVERMAP_SIGHT" ) );
@@ -603,37 +603,37 @@ bool Character::is_blind() const
 bool Character::is_invisible() const
 {
     return (
-           has_effect_with_flag( flag_EFFECT_INVISIBLE ) ||
-    is_wearing_active_optcloak() ||
-    has_trait( trait_DEBUG_CLOAK ) ||
-    has_artifact_with( AEP_INVISIBLE )
-    );
+               has_effect_with_flag( flag_EFFECT_INVISIBLE ) ||
+               is_wearing_active_optcloak() ||
+               has_trait( trait_DEBUG_CLOAK ) ||
+               has_artifact_with( AEP_INVISIBLE )
+           );
 }
 
 int Character::visibility( bool, int ) const
 {
     // 0-100 %
     if( is_invisible() ) {
-    return 0;
-}
-// TODO:
-// if ( dark_clothing() && light check ...
-int stealth_modifier = std::floor( mutation_value( "stealth_modifier" ) );
-int const crouching_bonus = 30;
-if( g->u.is_crouching() ) {
-    stealth_modifier += crouching_bonus;
-};
-int const prone_bonus = 50;
-if( g->u.movement_mode_is( CMM_PRONE ) ) {
-    stealth_modifier += prone_bonus;
-}
-map &here = get_map();
-int const camo_modifier = 50;
-if( worn_with_flag( flag_NATURE_CAMO )
+        return 0;
+    }
+    // TODO:
+    // if ( dark_clothing() && light check ...
+    int stealth_modifier = std::floor( mutation_value( "stealth_modifier" ) );
+    int const crouching_bonus = 30;
+    if( g->u.is_crouching() ) {
+        stealth_modifier += crouching_bonus;
+    };
+    int const prone_bonus = 50;
+    if( g->u.movement_mode_is( CMM_PRONE ) ) {
+        stealth_modifier += prone_bonus;
+    }
+    map &here = get_map();
+    int const camo_modifier = 50;
+    if( worn_with_flag( flag_NATURE_CAMO )
         && ( here.has_flag( "PLOWABLE", bub_pos() ) || here.has_flag( "SHRUB", bub_pos() ) ) ) {
         stealth_modifier += camo_modifier;
     } else if( worn_with_flag( flag_URBAN_CAMO ) && ( here.has_flag( "ROAD", bub_pos() ) ||
-                   here.has_flag( "MINEABLE", bub_pos() ) ) ) {
+               here.has_flag( "MINEABLE", bub_pos() ) ) ) {
         stealth_modifier += camo_modifier;
     }
     stealth_modifier += bonus_from_enchantments( stealth_modifier, enchantment_value_id( "STEALTH" ) );
@@ -731,10 +731,10 @@ bool Character::sees_with_infrared( const Creature& critter ) const
 
     map &here = get_map();
     if( is_player() || critter.is_player() ) {
-    // Players should not use map::sees
-    // Likewise, players should not be "looked at" with map::sees, not to break symmetry
-    return here.pl_line_of_sight( critter.bub_pos(),
-                                  sight_range( current_daylight_level( calendar::turn ) ) );
+        // Players should not use map::sees
+        // Likewise, players should not be "looked at" with map::sees, not to break symmetry
+        return here.pl_line_of_sight( critter.bub_pos(),
+                                      sight_range( current_daylight_level( calendar::turn ) ) );
     }
 
     return here
@@ -802,15 +802,15 @@ bool Character::can_hear( const tripoint_bub_ms& source, const int volume ) cons
 {
     if( is_deaf() ) { return false; }
 
-// source is in-ear and at our square, we can hear it
-if( source == bub_pos() ) { return true; }
+    // source is in-ear and at our square, we can hear it
+    if( source == bub_pos() ) { return true; }
 
-const map& here = get_map();
-const level_cache& cache = here.get_cache_ref( bub_pos().z() );
-const int dist = rl_dist( source, bub_pos() );
-const float volume_multiplier = hearing_ability();
-const short tabsp = here.inbounds( bub_pos() )
-                    ? cache.absorption_cache[cache.idx( bub_pos().x(), bub_pos().y() )]
+    const map& here = get_map();
+    const level_cache& cache = here.get_cache_ref( bub_pos().z() );
+    const int dist = rl_dist( source, bub_pos() );
+    const float volume_multiplier = hearing_ability();
+    const short tabsp = here.inbounds( bub_pos() )
+                        ? cache.absorption_cache[cache.idx( bub_pos().x(), bub_pos().y() )]
                         : 0;
     // Both sides of this comparison are in mdB: volume is dB, so scale it by 100.
     return ( ( dBspl_to_mdBspl( volume ) ) - get_cumulative_vol_dist_loss( 3, dist, tabsp ) )

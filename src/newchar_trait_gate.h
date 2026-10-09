@@ -81,11 +81,11 @@ struct state {
     /// conflicts or budget, since dropping it can only ever free points.
     constexpr auto toggleable() const -> bool {
         if( taken ) {
-        return !locked && !mandatory;
+            return !locked && !mandatory;
+        }
+        return !bionic_blocks && !scen_forbids && !prof_forbids && !over_budget &&
+               ( !conflicts || can_swap );
     }
-    return !bionic_blocks && !scen_forbids && !prof_forbids && !over_budget &&
-           ( !conflicts || can_swap );
-}
 };
 
 constexpr auto evaluate( const inputs &in ) -> state

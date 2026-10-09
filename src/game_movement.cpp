@@ -1098,14 +1098,14 @@ static auto furniture_vertical_direction_for( const tripoint_bub_ms &from,
         const tripoint_bub_ms &to ) -> furniture_vertical_direction
 {
     if( to.z() > from.z() ) {
-    return furniture_vertical_direction::up;
-}
+        return furniture_vertical_direction::up;
+    }
 
-if( to.z() < from.z() ) {
-    return furniture_vertical_direction::down;
-}
+    if( to.z() < from.z() ) {
+        return furniture_vertical_direction::down;
+    }
 
-return furniture_vertical_direction::none;
+    return furniture_vertical_direction::none;
 }
 
 static auto ramp_adjusted_furniture_destination( map &here, const tripoint_bub_ms &from,
@@ -1135,14 +1135,14 @@ static auto ramp_adjusted_furniture_destination( map &here, const tripoint_bub_m
 static auto is_ramp_tile_or_mate( const map &here, const tripoint_bub_ms &pos ) -> bool
 {
     if( here.has_flag( TFLAG_RAMP, pos ) || here.has_flag( TFLAG_RAMP_UP, pos ) ||
-    here.has_flag( TFLAG_RAMP_DOWN, pos ) ) {
-    return true;
-}
+        here.has_flag( TFLAG_RAMP_DOWN, pos ) ) {
+        return true;
+    }
 
-const auto above = pos + tripoint_above;
-const auto below = pos + tripoint_below;
-return ( here.inbounds_z( above.z() ) && here.has_flag( TFLAG_RAMP_DOWN, above ) ) ||
-       ( here.inbounds_z( below.z() ) && here.has_flag( TFLAG_RAMP_UP, below ) );
+    const auto above = pos + tripoint_above;
+    const auto below = pos + tripoint_below;
+    return ( here.inbounds_z( above.z() ) && here.has_flag( TFLAG_RAMP_DOWN, above ) ) ||
+           ( here.inbounds_z( below.z() ) && here.has_flag( TFLAG_RAMP_UP, below ) );
 }
 
 static auto furniture_drag_strength( const avatar &you ) -> int
@@ -2331,13 +2331,13 @@ std::optional<tripoint_bub_ms> game::find_or_make_stairs( map &mp, const int z_a
 auto game::vertical_shift( const int z_after, const bool keep_grab ) -> void
 {
     if( z_after < -OVERMAP_DEPTH || z_after > OVERMAP_HEIGHT ) {
-    debugmsg( "Tried to get z-level %d outside allowed range of %d-%d",
-              z_after, -OVERMAP_DEPTH, OVERMAP_HEIGHT );
+        debugmsg( "Tried to get z-level %d outside allowed range of %d-%d",
+                  z_after, -OVERMAP_DEPTH, OVERMAP_HEIGHT );
         return;
     }
 
     if( !keep_grab ) {
-    u.grab( OBJECT_NONE );
+        u.grab( OBJECT_NONE );
     }
 
     scent.reset();
@@ -2454,7 +2454,8 @@ void game::update_overmap_seen()
         pre_seen.reserve( side * side );
         for( const tripoint_abs_omt &p : points_in_radius( ompos, dist ) ) {
             // Check all z-levels down to 0 for each column, matching the loop below.
-            for( int z = p.z(); z >= 0; --z ) {
+            for( int z = p.z(); z >= 0;
+                 --z ) {
                 const tripoint_abs_omt tp{ p.xy(), z };
                 pre_seen.emplace_back( tp, omb.seen( tp ) );
             }

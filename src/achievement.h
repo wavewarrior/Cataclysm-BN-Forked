@@ -87,8 +87,7 @@ class achievement
             return hidden_by_;
         }
 
-        class time_bound
-        {
+        class time_bound {
             public:
                 friend class achievement;
                 enum class epoch {
@@ -206,7 +205,7 @@ class achievement_tracker
         // whether they watch a satisfied or unsatisfied requirement.  This
         // allows us to check whether the achievment is met on each new stat
         // value in O(1) time.
-        std::array<std::unordered_set<requirement_watcher *>, 2> sorted_watchers_;
+        std::array<std::unordered_set<requirement_watcher *>, 2 > sorted_watchers_;
 };
 
 class achievements_tracker : public event_subscriber

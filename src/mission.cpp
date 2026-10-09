@@ -636,13 +636,11 @@ character_id mission::get_npc_id() const
     return npc_id;
 }
 
-const std::vector<std::pair<int, itype_id>> &mission::get_likely_rewards() const
-{
+const std::vector<std::pair<int, itype_id>> &mission::get_likely_rewards() const {
     return type->likely_rewards;
 }
 
-bool mission::has_generic_rewards() const
-{
+bool mission::has_generic_rewards() const {
     return type->has_generic_rewards;
 }
 
@@ -656,13 +654,11 @@ void mission::set_target_npc_id( const character_id &npc_id )
     target_npc_id = npc_id;
 }
 
-bool mission::is_assigned() const
-{
+bool mission::is_assigned() const {
     return player_id.is_valid() || legacy_no_player_id;
 }
 
-character_id mission::get_assigned_player_id() const
-{
+character_id mission::get_assigned_player_id() const {
     return player_id;
 }
 
@@ -670,7 +666,8 @@ void mission::set_player_id_legacy_0c( character_id id )
 {
     if( !legacy_no_player_id || player_id.is_valid() ) {
         debugmsg( "Not a legacy mission, tried to set id %d", id.get_value() );
-    } else {
+    }
+    else {
         player_id = id;
         legacy_no_player_id = false;
     }
@@ -692,8 +689,7 @@ mission_type_id mission::mission_id()
     return type->id;
 }
 
-std::string mission::dialogue_for_topic( const std::string &in_topic ) const
-{
+std::string mission::dialogue_for_topic( const std::string &in_topic ) const {
     // The internal keys are pretty ugly, it's better to translate them here than globally
     static const std::map<std::string, std::string> topic_translation = {{
             { "TALK_MISSION_DESCRIBE", "describe" },
@@ -713,7 +709,8 @@ std::string mission::dialogue_for_topic( const std::string &in_topic ) const
     const std::string &topic = replacement != topic_translation.end() ? replacement->second : in_topic;
 
     const auto &response = type->dialogue.find( topic );
-    if( response != type->dialogue.end() ) {
+    if( response != type->dialogue.end() )
+    {
         return response->second.translated();
     }
 
@@ -747,8 +744,7 @@ void mission::register_kill_needed()
     monster_kill_goal++;
 }
 
-namespace io
-{
+namespace io {
 template<>
 std::string enum_to_string<mission::mission_status>( mission::mission_status data )
 {

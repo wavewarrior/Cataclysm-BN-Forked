@@ -656,7 +656,7 @@ private:
 
 public:
     void add_spell(const spell_id& sp);
-    void draw_rml( uilist* menu, Rml::ElementDocument* doc ) override;
+    void draw_rml(uilist* menu, Rml::ElementDocument* doc) override;
 };
 
 // Utility structure to run area queries over weight map. It uses shortest-path-expanding-tree,

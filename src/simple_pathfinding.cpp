@@ -250,7 +250,7 @@ simple_path<tripoint_abs_omt> find_overmap_path( const tripoint_abs_omt &source,
 
     auto do_astar = [&]( const tripoint_abs_omt & start,
                          std::unordered_map<tripoint_abs_omt, navigation_node> &known_nodes,
-                         std::priority_queue<scored_address, std::vector<scored_address>, std::greater<>> &open_set,
+                         std::priority_queue<scored_address, std::vector<scored_address>, std::greater< >> &open_set,
     std::unordered_map<tripoint_abs_omt, navigation_node> &other_known_nodes ) {
         const tripoint_abs_omt cur_addr = open_set.top().addr;
         open_set.pop();
@@ -317,12 +317,12 @@ simple_path<tripoint_abs_omt> find_overmap_path( const tripoint_abs_omt &source,
         return ret;
     }
     std::unordered_map<tripoint_abs_omt, navigation_node> known_nodes_src;
-    std::priority_queue<scored_address, std::vector<scored_address>, std::greater<>> open_set_src;
+    std::priority_queue<scored_address, std::vector<scored_address>, std::greater< >> open_set_src;
     known_nodes_src.emplace( source, navigation_node{0, 0, -1, start_score.allow_z_change} );
     open_set_src.push( scored_address{ source, 0 } );
 
     std::unordered_map<tripoint_abs_omt, navigation_node> known_nodes_dest;
-    std::priority_queue<scored_address, std::vector<scored_address>, std::greater<>> open_set_dest;
+    std::priority_queue<scored_address, std::vector<scored_address>, std::greater< >> open_set_dest;
     known_nodes_dest.emplace( dest, navigation_node{0, 0, -1, end_score.allow_z_change} );
     open_set_dest.push( scored_address{ dest, 0 } );
 

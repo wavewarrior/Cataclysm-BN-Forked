@@ -22,11 +22,11 @@ class gpu_device;
 /// GPU-side per-line-segment instance (matches debug_line.vert.hlsl LineSegment).
 /// All scalar floats to avoid HLSL alignment pitfalls.
 struct debug_line_vertex {
-    float ax, ay;         ///< start point (world tile coords)
-    float bx, by;         ///< end point (world tile coords)
-    float r, g, b, a;     ///< RGBA colour
+    float ax, ay;     ///< start point (world tile coords)
+    float bx, by;     ///< end point (world tile coords)
+    float r, g, b, a; ///< RGBA colour
 };
-static_assert( sizeof( debug_line_vertex ) == 32 );
+static_assert(sizeof(debug_line_vertex) == 32);
 
 /// Options for record(): the NDC transform comes from the proj_* fields, the
 /// render-pass viewport from the target_* fields.
@@ -46,33 +46,33 @@ struct debug_line_record_options {
 class debug_line_pass {
 public:
     debug_line_pass() = default;
-    debug_line_pass( const debug_line_pass & ) = delete;
-    debug_line_pass &operator=( const debug_line_pass & ) = delete;
+    debug_line_pass(const debug_line_pass&) = delete;
+    debug_line_pass& operator=(const debug_line_pass&) = delete;
     ~debug_line_pass();
 
     /// Build GPU pipeline + instance buffers.
-    auto init( gpu_device &dev, SDL_GPUTextureFormat target_format ) -> bool;
+    auto init(gpu_device& dev, SDL_GPUTextureFormat target_format) -> bool;
 
     auto shutdown() noexcept -> void;
 
     /// True when initialized and GPU resources are live.
     auto ready() const noexcept -> bool {
-        return dev_ != nullptr && pipeline_ != nullptr
-            && xfer_ != nullptr && storage_ != nullptr;
+        return dev_ != nullptr && pipeline_ != nullptr && xfer_ != nullptr && storage_ != nullptr;
     }
 
     /// Buffer a line segment (world-tile coords, RGBA colour).
-    auto add_line( float x0, float y0, float x1, float y1,
-                   float r, float g, float b, float a ) -> void;
+    auto add_line(float x0, float y0, float x1, float y1, float r, float g, float b, float a)
+        -> void;
 
     /// Buffer a point as a small cross (world-tile coords).
-    auto add_point( float x, float y, float r, float g, float b, float a ) -> void;
+    auto add_point(float x, float y, float r, float g, float b, float a) -> void;
 
     /// Buffer an arrow from (cx,cy) along the (dx,dy) direction (need not be
     /// unit — it is normalised) for @p length tiles, with a two-barb head.
     /// Reusable for any vector-field visualisation (sun direction, wind, flow).
-    auto add_arrow( float cx, float cy, float dx, float dy, float length,
-                    float r, float g, float b, float a ) -> void;
+    auto add_arrow(
+        float cx, float cy, float dx, float dy, float length, float r, float g, float b, float a)
+        -> void;
 
     /// Upload buffered lines and draw them onto @p opts.target.
     /// Camera params convert world-tile to NDC:
@@ -88,16 +88,16 @@ public:
     auto count() const noexcept -> std::size_t { return lines_.size(); }
 
 private:
-    auto upload( SDL_GPUCommandBuffer *cb ) -> bool;
+    auto upload(SDL_GPUCommandBuffer* cb) -> bool;
 
-    gpu_device *dev_ = nullptr;
+    gpu_device* dev_ = nullptr;
 
-    SDL_GPUShader *vert_ = nullptr;
-    SDL_GPUShader *frag_ = nullptr;
-    SDL_GPUGraphicsPipeline *pipeline_ = nullptr;
+    SDL_GPUShader* vert_ = nullptr;
+    SDL_GPUShader* frag_ = nullptr;
+    SDL_GPUGraphicsPipeline* pipeline_ = nullptr;
 
-    SDL_GPUTransferBuffer *xfer_ = nullptr;
-    SDL_GPUBuffer *storage_ = nullptr;
+    SDL_GPUTransferBuffer* xfer_ = nullptr;
+    SDL_GPUBuffer* storage_ = nullptr;
 
     static constexpr int MAX_LINES = 8192;
     std::vector<debug_line_vertex> lines_;

@@ -246,7 +246,7 @@ void help::display_help()
                     // (shortcut_text), then converted to RML spans.
                     rml->intro_rml = cata_text_to_rml(
                                          _( "Please press one of the following for help on that topic:\n"
-                                            "Press ESC to return to the game." ) );
+                       "Press ESC to return to the game." ) );
                     rml->topics.clear();
                     for( size_t i = 0; i < help_texts.size(); i++ ) {
                         help_rml_topic t;

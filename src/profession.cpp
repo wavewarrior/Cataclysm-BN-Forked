@@ -64,7 +64,7 @@ static class json_item_substitution
         std::vector<std::pair<item_group_id, trait_requirements>> itemgroup_bonuses;
     public:
         std::vector<detached_ptr<item>> get_bonus_items( const std::vector<trait_id> &traits,
-                                     const std::set<itype_id> &no_bonus ) const;
+                const std::set<itype_id> &no_bonus ) const;
         std::vector<detached_ptr<item>> get_substitution( const item &it,
                 const std::vector<trait_id> &traits ) const;
 } item_substitutions;
@@ -122,7 +122,7 @@ class item_reader : public generic_typed_reader<item_reader>
             // either a plain item type id string, or an array with item type id
             // and as second entry the item description.
             if( jin.test_string() ) {
-            return profession::itypedec( jin.get_string() );
+                return profession::itypedec( jin.get_string() );
             }
             JsonArray jarr = jin.get_array();
             const auto id = jarr.get_string( 0 );
@@ -297,8 +297,8 @@ void profession::check_definitions()
 
 void profession::check_item_definitions( const itypedecvec &items ) const
 {
-for( auto &itd : items ) {
-    if( !itd.type_id.is_valid() ) {
+    for( auto &itd : items ) {
+        if( !itd.type_id.is_valid() ) {
             debugmsg( "profession %s: item %s does not exist", id.str(), itd.type_id.str() );
         } else if( !itd.snip_id.is_null() ) {
             const itype *type = &*itd.type_id;
@@ -327,38 +327,38 @@ void profession::check_definition() const
     }
 
     if( !item_group::group_is_defined( _starting_items ) ) {
-    debugmsg( "_starting_items group is undefined" );
+        debugmsg( "_starting_items group is undefined" );
     }
     if( !item_group::group_is_defined( _starting_items_male ) ) {
-    debugmsg( "_starting_items_male group is undefined" );
+        debugmsg( "_starting_items_male group is undefined" );
     }
     if( !item_group::group_is_defined( _starting_items_female ) ) {
-    debugmsg( "_starting_items_female group is undefined" );
+        debugmsg( "_starting_items_female group is undefined" );
     }
     if( _starting_vehicle && !_starting_vehicle.is_valid() ) {
-    debugmsg( "vehicle prototype %s for profession %s does not exist", _starting_vehicle.c_str(),
-              id.c_str() );
+        debugmsg( "vehicle prototype %s for profession %s does not exist", _starting_vehicle.c_str(),
+                  id.c_str() );
     }
-for( const auto &a : _starting_CBMs ) {
-    if( !a.is_valid() ) {
+    for( const auto &a : _starting_CBMs ) {
+        if( !a.is_valid() ) {
             debugmsg( "bionic %s for profession %s does not exist", a.c_str(), id.c_str() );
         }
     }
 
-for( auto &t : _starting_traits ) {
-    if( !t.is_valid() ) {
+    for( auto &t : _starting_traits ) {
+        if( !t.is_valid() ) {
             debugmsg( "trait %s for profession %s does not exist", t.c_str(), id.c_str() );
         }
     }
 
-for( auto &t : _forbidden_bionics ) {
-    if( !t.is_valid() ) {
+    for( auto &t : _forbidden_bionics ) {
+        if( !t.is_valid() ) {
             debugmsg( "bionic %s for profession %s does not exist", t.c_str(), id.c_str() );
         }
     }
 
-for( auto &t : _allowed_bionics ) {
-    if( !t.is_valid() ) {
+    for( auto &t : _allowed_bionics ) {
+        if( !t.is_valid() ) {
             debugmsg( "bionic %s for profession %s does not exist", t.c_str(), id.c_str() );
         }
     }
@@ -379,14 +379,14 @@ for( auto &t : _allowed_bionics ) {
             debugmsg( "startng pet %s for profession %s does not exist", elem.c_str(), id.c_str() );
         }
     }
-for( const auto &elem : _starting_skills ) {
-    if( !elem.first.is_valid() ) {
+    for( const auto &elem : _starting_skills ) {
+        if( !elem.first.is_valid() ) {
             debugmsg( "skill %s for profession %s does not exist", elem.first.c_str(), id.c_str() );
         }
     }
 
-for( const auto &m : _missions ) {
-    if( !m.is_valid() ) {
+    for( const auto &m : _missions ) {
+        if( !m.is_valid() ) {
             debugmsg( "starting mission %s for profession %s does not exist", m.c_str(), id.c_str() );
         }
 
@@ -395,8 +395,8 @@ for( const auto &m : _missions ) {
                       m.c_str(), id.c_str() );
         }
     }
-for( const auto &elem : _starting_npcs ) {
-    if( !elem.is_valid() ) {
+    for( const auto &elem : _starting_npcs ) {
+        if( !elem.is_valid() ) {
             debugmsg( "npc class %s for profession %s does not exist", elem.c_str(), id.c_str() );
         }
     }
@@ -415,7 +415,7 @@ const profession_id &profession::ident() const
 std::string profession::gender_appropriate_name( bool male ) const
 {
     if( male ) {
-    return _name_male.translated();
+        return _name_male.translated();
     } else {
         return _name_female.translated();
     }
@@ -424,7 +424,7 @@ std::string profession::gender_appropriate_name( bool male ) const
 std::string profession::description( bool male ) const
 {
     if( male ) {
-    return _description_male.translated();
+        return _description_male.translated();
     } else {
         return _description_female.translated();
     }
@@ -504,7 +504,8 @@ std::vector<detached_ptr<item>> profession::items( bool male,
                            std::make_move_iterator( sub.end() ) );
             iter = result.begin();
             std::advance( iter, offset );
-        } else {
+        }
+        else {
             ++iter;
         }
     }
@@ -850,7 +851,7 @@ std::vector<detached_ptr<item>> json_item_substitution::get_substitution( const 
 }
 
 std::vector<detached_ptr<item>> json_item_substitution::get_bonus_items( const std::vector<trait_id>
-                             &traits, const std::set<itype_id> &no_bonus ) const
+        &traits, const std::set<itype_id> &no_bonus ) const
 {
     std::vector<detached_ptr<item>> ret;
     for( const auto &pair : bonuses ) {

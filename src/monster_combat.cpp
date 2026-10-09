@@ -170,12 +170,12 @@ auto get_item_category_spawn_rate( const item& itm ) -> float; // *NOPAD*
 bool monster::is_immune_damage( const damage_type dt ) const
 {
     switch( dt ) {
-    case DT_NULL:
-        return true;
-    case DT_TRUE:
-        return false;
-    case DT_BIOLOGICAL:
-        return has_flag( MF_BIOPROOF );
+        case DT_NULL:
+            return true;
+        case DT_TRUE:
+            return false;
+        case DT_BIOLOGICAL:
+            return has_flag( MF_BIOPROOF );
         case DT_BASH:
             return false;
         case DT_CUT:
@@ -520,15 +520,15 @@ float monster::get_dodge() const
 {
     if( has_effect( effect_downed ) ) { return 0.0f; }
 
-float ret = Creature::get_dodge();
-if( has_effect( effect_lightsnare ) || has_effect( effect_heavysnare )
+    float ret = Creature::get_dodge();
+    if( has_effect( effect_lightsnare ) || has_effect( effect_heavysnare )
         || has_effect( effect_beartrap ) || has_effect( effect_tied ) ) {
-    ret /= 2;
-}
+        ret /= 2;
+    }
 
-if( has_effect( effect_bouldering ) ) { ret /= 4; }
+    if( has_effect( effect_bouldering ) ) { ret /= 4; }
 
-return ret;
+    return ret;
 }
 
 float monster::get_melee() const
@@ -546,22 +546,22 @@ float monster::fall_damage_mod() const
 {
     if( flies() ) { return 0.0f; }
 
-switch( type->size ) {
-    case creature_size::tiny:
-        return 0.2f;
-    case creature_size::small:
-        return 0.6f;
-    case creature_size::medium:
-        return 1.0f;
-    case creature_size::large:
-        return 1.4f;
-    case creature_size::huge:
-        return 2.0f;
-    default:
-        return 1.0f;
-}
+    switch( type->size ) {
+        case creature_size::tiny:
+            return 0.2f;
+        case creature_size::small:
+            return 0.6f;
+        case creature_size::medium:
+            return 1.0f;
+        case creature_size::large:
+            return 1.4f;
+        case creature_size::huge:
+            return 2.0f;
+        default:
+            return 1.0f;
+    }
 
-return 0.0f;
+    return 0.0f;
 }
 
 void monster::die( Creature* nkiller )

@@ -16,13 +16,13 @@ void tts_voice_registry::register_voice( const npc_class_id &npc_type,
 std::optional<std::string> tts_voice_registry::get_voice( const npc_class_id &npc_type ) const
 {
     if( npc_type.is_null() ) {
-    return std::nullopt;
-}
-const auto it = voices_.find( npc_type.str() );
-if( it == voices_.end() ) {
-    return std::nullopt;
-}
-return it->second;
+        return std::nullopt;
+    }
+    const auto it = voices_.find( npc_type.str() );
+    if( it == voices_.end() ) {
+        return std::nullopt;
+    }
+    return it->second;
 }
 
 std::optional<std::string> tts_voice_registry::resolve_voice( const npc &npc_instance ) const

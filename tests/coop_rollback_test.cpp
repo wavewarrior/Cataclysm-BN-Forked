@@ -39,8 +39,8 @@ constexpr int SYNC_TURN = 7;
 /// Production forward-apply: build the wire event the way the producers do, let
 /// the interpreter mutate the map and record the pre-mutation state, and hand that
 /// record to the rollback engine — the same three steps as apply_sync.
-auto apply_sync_event(coop_rollback_engine& engine, coop_event_type type, int ev_val,
-                      int ev_cid) -> coop_recorded_event {
+auto apply_sync_event(coop_rollback_engine& engine, coop_event_type type, int ev_val, int ev_cid)
+    -> coop_recorded_event {
     // map_local_to_abs is the exact inverse of the abs_to_map_local used by both
     // apply_sync and the interpreter, so the round-trip does not depend on the
     // player's reality-bubble origin matching the map origin.
@@ -78,8 +78,8 @@ TEST_CASE("world event rollback round-trip: terrain_changed", "[coop][rollback]"
     const int orig_ter = g->m.ter(TILE).to_i();
     REQUIRE(g->m.ter(TILE) == ter_str_id("t_grass"));
 
-    const coop_recorded_event rec = apply_sync_event(
-        engine, coop_event_type::terrain_changed, ter_id("t_floor").to_i(), 0);
+    const coop_recorded_event rec =
+        apply_sync_event(engine, coop_event_type::terrain_changed, ter_id("t_floor").to_i(), 0);
 
     REQUIRE(g->m.ter(TILE) == ter_str_id("t_floor"));
     CHECK(rec.old_terrain_or_furniture == orig_ter);
@@ -96,8 +96,8 @@ TEST_CASE("world event rollback round-trip: furniture_changed", "[coop][rollback
 
     REQUIRE(g->m.furn(TILE) == furn_str_id("f_null"));
 
-    const coop_recorded_event rec = apply_sync_event(
-        engine, coop_event_type::furniture_changed, furn_id("f_locker").to_i(), 0);
+    const coop_recorded_event rec =
+        apply_sync_event(engine, coop_event_type::furniture_changed, furn_id("f_locker").to_i(), 0);
 
     REQUIRE(g->m.furn(TILE) == furn_str_id("f_locker"));
     CHECK(rec.old_terrain_or_furniture == furn_id("f_null").to_i());
@@ -108,9 +108,7 @@ TEST_CASE("world event rollback round-trip: furniture_changed", "[coop][rollback
 
 // ── Field creation and expiry ────────────────────────────────────────────────
 
-TEST_CASE(
-    "world event rollback round-trip: field_created and field_expired",
-    "[coop][rollback]") {
+TEST_CASE("world event rollback round-trip: field_created and field_expired", "[coop][rollback]") {
     SECTION("field_created: rollback must remove the created field") {
         setup_world();
         coop_rollback_engine engine;
@@ -183,8 +181,7 @@ TEST_CASE("world event rollback round-trip: field_changed", "[coop][rollback]") 
 
 // ── The interpreter's own contract ───────────────────────────────────────────
 
-TEST_CASE("world event interpreter replicates exactly five event types",
-          "[coop][rollback]") {
+TEST_CASE("world event interpreter replicates exactly five event types", "[coop][rollback]") {
     using evt = coop_event_type;
     CHECK(coop_world_event_interpreter::is_replicated(evt::terrain_changed));
     CHECK(coop_world_event_interpreter::is_replicated(evt::furniture_changed));
@@ -217,8 +214,7 @@ TEST_CASE("world event interpreter replicates exactly five event types",
     CHECK(collected.sent[1].type == evt::field_expired);
 }
 
-TEST_CASE("world event interpreter leaves non-replicated events alone",
-          "[coop][rollback]") {
+TEST_CASE("world event interpreter leaves non-replicated events alone", "[coop][rollback]") {
     setup_world();
     coop_rollback_engine engine;
     const ter_id before = g->m.ter(TILE);
@@ -232,7 +228,6 @@ TEST_CASE("world event interpreter leaves non-replicated events alone",
     CHECK(g->m.ter(TILE) == before);
     CHECK(rec.type == coop_event_type::creature_moved);
     // Nothing was mutated, so nothing can be undone.
-    coop_world_event_interpreter::apply_inverse(
-        g->m, coop_world_event_interpreter::invert(rec));
+    coop_world_event_interpreter::apply_inverse(g->m, coop_world_event_interpreter::invert(rec));
     CHECK(g->m.ter(TILE) == before);
 }

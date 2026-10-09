@@ -365,7 +365,8 @@ void MonsterGroupManager::FinalizeMonsterGroups()
         for( FreqDef::iterator c = mg.monsters.begin(); c != mg.monsters.end(); ) {
             if( MonsterGroupManager::monster_is_blacklisted( c->name ) ) {
                 c = mg.monsters.erase( c );
-            } else {
+            }
+            else {
                 ++c;
             }
         }

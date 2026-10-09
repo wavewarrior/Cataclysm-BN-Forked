@@ -1,7 +1,7 @@
-#include "catch/catch_amalgamated.hpp"
 #include "activity_type.h"
 #include "avatar.h"
 #include "calendar.h"
+#include "catch/catch_amalgamated.hpp"
 #include "driver_items.h"
 #include "game.h"
 #include "item.h"
@@ -127,8 +127,8 @@ TEST_CASE("driver_items_commands_map_game_results_to_outcomes", "[driver]") {
     }
 
     SECTION("an item that is not carried cannot be worn, wielded, dropped or taken off") {
-        for (const command kind : {command::wear, command::wield, command::drop,
-                                   command::take_off}) {
+        for (const command kind :
+             {command::wear, command::wield, command::drop, command::take_off}) {
             const ran took = run(kind, jeans_id);
             CHECK(took.result.outcome == outcome::refused);
             CHECK_FALSE(took.result.detail.empty());
@@ -313,7 +313,9 @@ TEST_CASE("driver_items_eat_consumes_food_and_refuses_what_the_game_would_ask_ab
         CAPTURE(ate.result.detail);
         CHECK(ate.result.outcome == outcome::completed);
         CHECK(ate.spent > 0);
-        CHECK_FALSE(u.has_item_with([](const item& it) { return it.typeId() == itype_id("apple"); }));
+        CHECK_FALSE(u.has_item_with([](const item& it) {
+            return it.typeId() == itype_id("apple");
+        }));
     }
 
     SECTION("a full avatar is refused with the game's words, and the food is kept") {
@@ -328,7 +330,9 @@ TEST_CASE("driver_items_eat_consumes_food_and_refuses_what_the_game_would_ask_ab
         const ran anyway = run_with(command::eat, apple, {.anyway = true});
         CHECK(anyway.result.outcome == outcome::completed);
         CHECK(anyway.spent > 0);
-        CHECK_FALSE(u.has_item_with([](const item& it) { return it.typeId() == itype_id("apple"); }));
+        CHECK_FALSE(u.has_item_with([](const item& it) {
+            return it.typeId() == itype_id("apple");
+        }));
     }
 
     SECTION("something that is not food is refused") {
@@ -356,7 +360,9 @@ TEST_CASE("driver_items_use_runs_the_item_s_use_and_says_when_it_has_none", "[dr
         CAPTURE(used.result.detail);
         // The use costs no charge, so the game returns false; the item changing is the proof.
         CHECK(used.result.outcome == outcome::completed);
-        CHECK(u.has_item_with([](const item& it) { return it.typeId() == itype_id("glowstick_lit"); }));
+        CHECK(u.has_item_with([](const item& it) {
+            return it.typeId() == itype_id("glowstick_lit");
+        }));
     }
 
     SECTION("a use the item does not have is refused and the ones it has are named") {
@@ -468,8 +474,12 @@ TEST_CASE("driver_items_craft_by_recipe_id_makes_the_item", "[driver]") {
         REQUIRE(u.activity);
         CHECK(u.activity->id() == activity_id("ACT_CRAFT"));
         finish_activity(u);
-        CHECK(u.has_item_with([](const item& it) { return it.typeId() == itype_id("pointy_stick"); }));
-        CHECK_FALSE(u.has_item_with([](const item& it) { return it.typeId() == itype_id("stick"); }));
+        CHECK(u.has_item_with([](const item& it) {
+            return it.typeId() == itype_id("pointy_stick");
+        }));
+        CHECK_FALSE(u.has_item_with([](const item& it) {
+            return it.typeId() == itype_id("stick");
+        }));
     }
 }
 

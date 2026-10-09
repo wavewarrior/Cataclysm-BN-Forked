@@ -4,7 +4,7 @@
 #include <vector>
 
 #if defined(CATA_SDL)
-#include "compute/gpu_lm.h"
+#    include "compute/gpu_lm.h"
 #endif
 #include "avatar.h"
 #include "calendar.h"
@@ -364,9 +364,11 @@ TEST_CASE(
     }
 
     SECTION("a light-level report makes the view stale") {
-        level_cache_freshness::report( here, level_cache_freshness::light_changed {
-            .scope = level_cache_freshness::light_changed::lightmap_scope::none,
-            .visibility = true } );
+        level_cache_freshness::report(
+            here,
+            level_cache_freshness::light_changed{
+                .scope = level_cache_freshness::light_changed::lightmap_scope::none,
+                .visibility = true});
         CHECK(level_cache_freshness::visibility_stale(here, you.bub_pos()));
     }
 }
@@ -376,16 +378,13 @@ TEST_CASE(
 // same entry point. With the aggregate they all rebuilt; with view stale only the
 // first pays.
 TEST_CASE(
-    "repeated within-turn refreshes cost no extra recomputation",
-    "[level_cache_freshness][perf]") {
+    "repeated within-turn refreshes cost no extra recomputation", "[level_cache_freshness][perf]") {
     set_up_open_daylight_map();
     map& here = get_map();
 
     refresh_view();
     here.take_visibility_cache_updates();
-    for (int i = 0; i < 4; i++) {
-        refresh_view();
-    }
+    for (int i = 0; i < 4; i++) { refresh_view(); }
     CHECK(here.take_visibility_cache_updates() == 0);
 
     SECTION("but a viewer move pays again") {
@@ -396,9 +395,7 @@ TEST_CASE(
 }
 
 // Geometry-only visibility is the documented answer while the view is stale.
-TEST_CASE(
-    "a stale view answers visibility from geometry alone",
-    "[level_cache_freshness]") {
+TEST_CASE("a stale view answers visibility from geometry alone", "[level_cache_freshness]") {
     set_up_open_daylight_map();
     map& here = get_map();
     auto& you = get_avatar();
@@ -409,9 +406,11 @@ TEST_CASE(
 
     // Stale the view without rebuilding, then drop a wall in the corridor. The
     // cached answer is unchanged: readers that need exactness refresh first.
-    level_cache_freshness::report( here, level_cache_freshness::light_changed {
-        .scope = level_cache_freshness::light_changed::lightmap_scope::none,
-        .visibility = true } );
+    level_cache_freshness::report(
+        here,
+        level_cache_freshness::light_changed{
+            .scope = level_cache_freshness::light_changed::lightmap_scope::none,
+            .visibility = true});
     build_wall_block(tripoint_bub_ms(62, 60, 0));
     CHECK(you.sees(z));
 
@@ -428,9 +427,8 @@ namespace {
 
 // Residency generations of the z-window the pins examine.
 std::array<std::uint64_t, 3> residency_base(map& here) {
-    return { here.access_cache(-1).residency_generation,
-             here.access_cache(0).residency_generation,
-             here.access_cache(1).residency_generation };
+    return {here.access_cache(-1).residency_generation, here.access_cache(0).residency_generation,
+            here.access_cache(1).residency_generation};
 }
 
 } // namespace
@@ -445,16 +443,18 @@ TEST_CASE(
 
     SECTION("terrain changed advances the tile's level") {
         const auto base = residency_base(here);
-        K::report(here, K::terrain_changed{ .at = player_home });
+        K::report(here, K::terrain_changed{.at = player_home});
         CHECK(here.access_cache(0).residency_generation > base[1]);
     }
 
     SECTION("terrain changed with the weather scope advances every loaded level") {
         const auto base = residency_base(here);
-        K::report(here, K::terrain_changed{
-            .at = player_home,
-            .transparency = true,
-            .scope = K::terrain_changed::transparency_scope::all_levels });
+        K::report(
+            here,
+            K::terrain_changed{
+                .at = player_home,
+                .transparency = true,
+                .scope = K::terrain_changed::transparency_scope::all_levels});
         CHECK(here.access_cache(-1).residency_generation > base[0]);
         CHECK(here.access_cache(0).residency_generation > base[1]);
         CHECK(here.access_cache(1).residency_generation > base[2]);
@@ -468,10 +468,10 @@ TEST_CASE(
 
     SECTION("vehicle moved advances its level and the level above") {
         const auto base = residency_base(here);
-        K::report(here, K::vehicle_moved{
-            .sm_min = tripoint_bub_sm(2, 2, 0),
-            .sm_max = tripoint_bub_sm(3, 3, 0),
-            .z = 0 });
+        K::report(
+            here,
+            K::vehicle_moved{
+                .sm_min = tripoint_bub_sm(2, 2, 0), .sm_max = tripoint_bub_sm(3, 3, 0), .z = 0});
         CHECK(here.access_cache(0).residency_generation > base[1]);
         CHECK(here.access_cache(1).residency_generation > base[2]);
     }
@@ -490,7 +490,7 @@ TEST_CASE(
 
     SECTION("map shifted advances every loaded level") {
         const auto base = residency_base(here);
-        K::report(here, K::map_shifted{ .shift = point_rel_sm(1, 0), .player_z = 0 });
+        K::report(here, K::map_shifted{.shift = point_rel_sm(1, 0), .player_z = 0});
         CHECK(here.access_cache(-1).residency_generation > base[0]);
         CHECK(here.access_cache(0).residency_generation > base[1]);
         CHECK(here.access_cache(1).residency_generation > base[2]);
@@ -499,9 +499,8 @@ TEST_CASE(
     SECTION("world replaced advances every loaded level") {
         const auto base = residency_base(here);
         const int ms = here.getmapsize();
-        K::report(here, K::world_replaced{
-            .first = tripoint_bub_sm(0, 0, 0),
-            .last = tripoint_bub_sm(ms - 1, ms - 1, 0) });
+        K::report(here, K::world_replaced{.first = tripoint_bub_sm(0, 0, 0),
+                                          .last = tripoint_bub_sm(ms - 1, ms - 1, 0)});
         CHECK(here.access_cache(-1).residency_generation > base[0]);
         CHECK(here.access_cache(0).residency_generation > base[1]);
         CHECK(here.access_cache(1).residency_generation > base[2]);
@@ -527,10 +526,10 @@ TEST_CASE(
     // residency generation must still advance (user story 19). This is exactly
     // what separates it from the content-gated outside generation below.
     const std::uint64_t before = here.access_cache(0).residency_generation;
-    level_cache_freshness::report(here, level_cache_freshness::terrain_changed{
-        .at = player_home,
-        .support_above = false,
-        .memory_seen = false });
+    level_cache_freshness::report(
+        here,
+        level_cache_freshness::
+            terrain_changed{.at = player_home, .support_above = false, .memory_seen = false});
     CHECK(here.access_cache(0).residency_generation > before);
 }
 
@@ -557,24 +556,23 @@ TEST_CASE(
 // layer applied: a change kind that advances a generation must eventually advance
 // the counter through a plan, and applying a quiet plan must not.
 TEST_CASE(
-    "pushed residency events reach the lighting layer exactly once",
-    "[level_cache_freshness]") {
+    "pushed residency events reach the lighting layer exactly once", "[level_cache_freshness]") {
 #if defined(CATA_SDL)
     set_up_open_daylight_map();
     map& here = get_map();
     // The consumer door as map_cache.cpp calls it: derive the plan, push it.
     const auto push = [&here]() {
         const auto plan = level_cache_freshness::plan_for(
-            here, level_cache_freshness::pose_of_viewer( get_avatar(), 0 ),
-            level_cache_freshness::lightmap_policy::skip );
-        cata_gpu::apply_residency_events( {
+            here, level_cache_freshness::pose_of_viewer(get_avatar(), 0),
+            level_cache_freshness::lightmap_policy::skip);
+        cata_gpu::apply_residency_events({
             .device = nullptr,
-            .cache_x = here.access_cache( 0 ).cache_x,
-            .cache_y = here.access_cache( 0 ).cache_y,
+            .cache_x = here.access_cache(0).cache_x,
+            .cache_y = here.access_cache(0).cache_y,
             .z_count = OVERMAP_LAYERS,
             .residency = plan.residency,
             .bubble_origin = plan.pose.bubble_origin,
-        } );
+        });
     };
     using K = level_cache_freshness;
 
@@ -583,23 +581,22 @@ TEST_CASE(
     // change observes nothing — the event reached the layer exactly once.
     push();
     const std::uint64_t before = cata_gpu::lighting_residency_jump_count();
-    K::report( here, K::terrain_changed { .at = player_home } );
+    K::report(here, K::terrain_changed{.at = player_home});
     push();
     const std::uint64_t after_edit = cata_gpu::lighting_residency_jump_count();
-    CHECK( after_edit > before );
+    CHECK(after_edit > before);
     push();
-    CHECK( cata_gpu::lighting_residency_jump_count() == after_edit );
+    CHECK(cata_gpu::lighting_residency_jump_count() == after_edit);
 
     // A committed vehicle move advances its level and the level above; the
     // pushed plan carries the jumps.
     push();
     const std::uint64_t veh_before = cata_gpu::lighting_residency_jump_count();
-    K::report( here, K::vehicle_moved {
-        .sm_min = tripoint_bub_sm( 1, 1, 0 ),
-        .sm_max = tripoint_bub_sm( 2, 2, 0 ),
-        .z = 0 } );
+    K::report(here,
+              K::vehicle_moved{
+                  .sm_min = tripoint_bub_sm(1, 1, 0), .sm_max = tripoint_bub_sm(2, 2, 0), .z = 0});
     push();
-    CHECK( cata_gpu::lighting_residency_jump_count() > veh_before );
+    CHECK(cata_gpu::lighting_residency_jump_count() > veh_before);
 #endif // CATA_SDL
 }
 
@@ -612,45 +609,45 @@ TEST_CASE(
     "the rebuild plan defers the lightmap under the skip policy without escalating",
     "[level_cache_freshness]") {
     clear_all_state();
-    build_test_map( ter_id( "t_dirt" ) );
-    map &here = get_map();
-    g->place_player( player_home );
-    set_time( calendar::turn_zero );
+    build_test_map(ter_id("t_dirt"));
+    map& here = get_map();
+    g->place_player(player_home);
+    set_time(calendar::turn_zero);
     get_avatar().recalc_sight_limits();
     refresh_level_cache();
 
     using K = level_cache_freshness;
-    const auto pose = K::pose_of_viewer( get_avatar(), 0 );
+    const auto pose = K::pose_of_viewer(get_avatar(), 0);
 
-    SECTION( "a clean lightmap defers under both policies" ) {
-        CHECK( K::plan_for( here, pose, K::lightmap_policy::normal ).lightmap ==
-               K::lightmap_disposition::defer_without_escalation );
-        CHECK( K::plan_for( here, pose, K::lightmap_policy::skip ).lightmap ==
-               K::lightmap_disposition::defer_without_escalation );
+    SECTION("a clean lightmap defers under both policies") {
+        CHECK(K::plan_for(here, pose, K::lightmap_policy::normal).lightmap
+              == K::lightmap_disposition::defer_without_escalation);
+        CHECK(K::plan_for(here, pose, K::lightmap_policy::skip).lightmap
+              == K::lightmap_disposition::defer_without_escalation);
     }
 
-    SECTION( "a raised lightmap bit processes under normal and defers under skip" ) {
-        K::report( here, K::light_changed {} );
-        CHECK( K::plan_for( here, pose, K::lightmap_policy::normal ).lightmap ==
-               K::lightmap_disposition::process );
-        CHECK( K::plan_for( here, pose, K::lightmap_policy::skip ).lightmap ==
-               K::lightmap_disposition::defer_without_escalation );
+    SECTION("a raised lightmap bit processes under normal and defers under skip") {
+        K::report(here, K::light_changed{});
+        CHECK(K::plan_for(here, pose, K::lightmap_policy::normal).lightmap
+              == K::lightmap_disposition::process);
+        CHECK(K::plan_for(here, pose, K::lightmap_policy::skip).lightmap
+              == K::lightmap_disposition::defer_without_escalation);
     }
 
-    SECTION( "skip may not consume the signature an entity light changed" ) {
+    SECTION("skip may not consume the signature an entity light changed") {
         // A burning monster changes the light-source signature and raises no bit
         // of its own (issue #19 shape). A skip plan must not sample the signature:
         // it cannot clear the bit a changed signature raises, so it must not raise
         // one either.
-        monster &z = spawn_test_monster( "mon_zombie", tripoint_bub_ms( 62, 60, 0 ) );
-        z.add_effect( efftype_id( "onfire" ), 100_turns );
-        const auto skipped = K::plan_for( here, pose, K::lightmap_policy::skip );
-        CHECK( skipped.lightmap == K::lightmap_disposition::defer_without_escalation );
-        CHECK_FALSE( K::stale( here.access_cache( 0 ), level_cache_part::lightmap ) );
+        monster& z = spawn_test_monster("mon_zombie", tripoint_bub_ms(62, 60, 0));
+        z.add_effect(efftype_id("onfire"), 100_turns);
+        const auto skipped = K::plan_for(here, pose, K::lightmap_policy::skip);
+        CHECK(skipped.lightmap == K::lightmap_disposition::defer_without_escalation);
+        CHECK_FALSE(K::stale(here.access_cache(0), level_cache_part::lightmap));
         // The signature stayed unconsumed: the next normal plan escalates.
-        CHECK( K::plan_for( here, pose, K::lightmap_policy::normal ).lightmap ==
-               K::lightmap_disposition::process );
-        CHECK( K::stale( here.access_cache( 0 ), level_cache_part::lightmap ) );
+        CHECK(K::plan_for(here, pose, K::lightmap_policy::normal).lightmap
+              == K::lightmap_disposition::process);
+        CHECK(K::stale(here.access_cache(0), level_cache_part::lightmap));
     }
 }
 
@@ -658,67 +655,65 @@ TEST_CASE(
     "the rebuild plan lists the levels the dirty state licenses for rebuild",
     "[level_cache_freshness]") {
     set_up_open_daylight_map();
-    map &here = get_map();
+    map& here = get_map();
     using K = level_cache_freshness;
-    const auto pose = K::pose_of_viewer( get_avatar(), 0 );
-        // Builder-owned vehicle flags survive `clear_all_state` and can carry over
-        // from a passing vehicle test; silence them so the plan measures the fixture.
-        for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z ) {
-            level_cache &ch = here.access_cache( z );
-            K::stamp_veh_range( ch, false );
-            K::stamp_vehicle_floor( ch, false );
-        }
-
-    SECTION( "a fresh world yields an empty plan" ) {
-        const auto plan = K::plan_for( here, pose, K::lightmap_policy::normal );
-        CHECK_FALSE( plan.structure );
-        CHECK( plan.structure_levels.empty() );
-        CHECK( plan.floor_levels.empty() );
-        CHECK( plan.transparency_levels.empty() );
-        CHECK_FALSE( plan.visibility );
+    const auto pose = K::pose_of_viewer(get_avatar(), 0);
+    // Builder-owned vehicle flags survive `clear_all_state` and can carry over
+    // from a passing vehicle test; silence them so the plan measures the fixture.
+    for (int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z) {
+        level_cache& ch = here.access_cache(z);
+        K::stamp_veh_range(ch, false);
+        K::stamp_vehicle_floor(ch, false);
     }
 
-    SECTION( "a terrain edit lists its level for every affected part" ) {
+    SECTION("a fresh world yields an empty plan") {
+        const auto plan = K::plan_for(here, pose, K::lightmap_policy::normal);
+        CHECK_FALSE(plan.structure);
+        CHECK(plan.structure_levels.empty());
+        CHECK(plan.floor_levels.empty());
+        CHECK(plan.transparency_levels.empty());
+        CHECK_FALSE(plan.visibility);
+    }
+
+    SECTION("a terrain edit lists its level for every affected part") {
         // An opaque wall: the property diff raises transparency and seen; the
         // floor cache does not distinguish dirt from wall, so no floor raise.
-        here.ter_set( player_home, ter_id( "t_wall" ) );
-        const auto plan = K::plan_for( here, pose, K::lightmap_policy::normal );
-        CHECK( plan.structure );
-        CHECK( std::ranges::find( plan.transparency_levels, 0 ) !=
-               plan.transparency_levels.end() );
+        here.ter_set(player_home, ter_id("t_wall"));
+        const auto plan = K::plan_for(here, pose, K::lightmap_policy::normal);
+        CHECK(plan.structure);
+        CHECK(std::ranges::find(plan.transparency_levels, 0) != plan.transparency_levels.end());
         // The structure set is the union: every listed level appears in it.
-        for( const auto *levels : { &plan.transparency_levels } ) {
-            for( const int z : *levels ) {
-                CHECK( std::ranges::find( plan.structure_levels, z ) !=
-                       plan.structure_levels.end() );
+        for (const auto* levels : {&plan.transparency_levels}) {
+            for (const int z : *levels) {
+                CHECK(std::ranges::find(plan.structure_levels, z) != plan.structure_levels.end());
             }
         }
         // Seen dirt from the edit rides through as the visibility decision.
-        CHECK( plan.visibility );
+        CHECK(plan.visibility);
     }
 
-    SECTION( "a viewer move sets visibility without licensing any rebuild" ) {
-        g->place_player( tripoint_bub_ms( 61, 60, 0 ) );
-        const auto moved = K::pose_of_viewer( get_avatar(), 0 );
-        const auto plan = K::plan_for( here, moved, K::lightmap_policy::normal );
-        CHECK( plan.visibility );
-        CHECK_FALSE( plan.structure );
-        CHECK( plan.structure_levels.empty() );
+    SECTION("a viewer move sets visibility without licensing any rebuild") {
+        g->place_player(tripoint_bub_ms(61, 60, 0));
+        const auto moved = K::pose_of_viewer(get_avatar(), 0);
+        const auto plan = K::plan_for(here, moved, K::lightmap_policy::normal);
+        CHECK(plan.visibility);
+        CHECK_FALSE(plan.structure);
+        CHECK(plan.structure_levels.empty());
     }
 
-    SECTION( "the plan carries the current residency stamps and pose" ) {
-        const auto plan = K::plan_for( here, pose, K::lightmap_policy::normal );
-        for( int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z ) {
-            CHECK( plan.residency.generation[static_cast<size_t>( z + OVERMAP_DEPTH )] ==
-                   K::residency_generation( here.access_cache( z ) ) );
+    SECTION("the plan carries the current residency stamps and pose") {
+        const auto plan = K::plan_for(here, pose, K::lightmap_policy::normal);
+        for (int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; ++z) {
+            CHECK(plan.residency.generation[static_cast<size_t>(z + OVERMAP_DEPTH)]
+                  == K::residency_generation(here.access_cache(z)));
         }
-        CHECK( plan.pose.viewer == pose.viewer );
-        CHECK( plan.pose.camera == pose.camera );
-        CHECK( plan.pose.bubble_origin == here.get_abs_sub() );
+        CHECK(plan.pose.viewer == pose.viewer);
+        CHECK(plan.pose.camera == pose.camera);
+        CHECK(plan.pose.bubble_origin == here.get_abs_sub());
         // Two plans for the same pose compare equal; a camera drift does not.
-        CHECK( K::plan_for( here, pose, K::lightmap_policy::normal ).pose == plan.pose );
+        CHECK(K::plan_for(here, pose, K::lightmap_policy::normal).pose == plan.pose);
         auto drifted = pose;
-        drifted.camera = point_rel_ms( 1, 0 );
-        CHECK( K::plan_for( here, drifted, K::lightmap_policy::normal ).pose != plan.pose );
+        drifted.camera = point_rel_ms(1, 0);
+        CHECK(K::plan_for(here, drifted, K::lightmap_policy::normal).pose != plan.pose);
     }
 }

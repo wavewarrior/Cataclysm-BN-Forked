@@ -71,7 +71,7 @@ void clear_fields(const int zlevel) {
         for (int y = 0; y < mapsize; ++y) {
             const tripoint_bub_sm grid_pos(x, y, zlevel);
             submap* const sm = here.get_mapbuffer().lookup_submap_in_memory(
-                                   map_local_to_abs(here, grid_pos));
+                map_local_to_abs(here, grid_pos));
             if (sm == nullptr || sm->field_count == 0) { continue; }
 
             const auto clear_field_at = [&](const point_sm_ms& local) {
@@ -129,9 +129,7 @@ void clear_map() {
     // load() rather than set_abs_sub() when the anchor actually moved: set_abs_sub
     // alone would leave grid[] pointing at the previous anchor's submaps.
     static const point_abs_sm canonical_xy = g->m.get_abs_sub();
-    if (g->m.get_abs_sub() != canonical_xy) {
-        g->m.load(canonical_xy, true);
-    }
+    if (g->m.get_abs_sub() != canonical_xy) { g->m.load(canonical_xy, true); }
 
     // Clearing all z-levels is rather slow, so just clear the ones I know the
     // tests use for now.
@@ -220,9 +218,9 @@ void set_time(const time_point& time) {
 
 void refresh_level_cache(std::initializer_list<int> invalidate_zlevels, bool skip_lightmap) {
     if (invalidate_zlevels.size() == 0) {
-        level_cache_freshness::invalidate_level( g->m, g->u.bub_pos().z() );
+        level_cache_freshness::invalidate_level(g->m, g->u.bub_pos().z());
     } else {
-        for (const int z : invalidate_zlevels) { level_cache_freshness::invalidate_level( g->m, z ); }
+        for (const int z : invalidate_zlevels) { level_cache_freshness::invalidate_level(g->m, z); }
     }
     // The same public entry point game::do_turn and the targeting loops call.
     g->refresh_player_visibility_cache_if_needed(/*player_map_cache_current=*/false, skip_lightmap);
@@ -235,14 +233,15 @@ void refresh_view(const bool skip_lightmap) {
 }
 
 void rebuild_level_cache(int zlev, bool skip_lightmap) {
-    level_cache_freshness::invalidate_level( g->m, zlev );
-    build_map_cache_from_plan( get_map(), zlev, skip_lightmap );
+    level_cache_freshness::invalidate_level(g->m, zlev);
+    build_map_cache_from_plan(get_map(), zlev, skip_lightmap);
 }
 
-void build_map_cache_from_plan(map &here, const int zlev, const bool skip_lightmap) {
+void build_map_cache_from_plan(map& here, const int zlev, const bool skip_lightmap) {
     // The plan is the only way in (ADR-0002); tests take the same door as the game.
-    here.build_map_cache( level_cache_freshness::plan_for( here,
-        level_cache_freshness::pose_of_viewer( get_avatar(), zlev ),
-        skip_lightmap ? level_cache_freshness::lightmap_policy::skip
-                      : level_cache_freshness::lightmap_policy::normal ) );
+    here.build_map_cache(level_cache_freshness::plan_for(
+        here, level_cache_freshness::pose_of_viewer(get_avatar(), zlev),
+        skip_lightmap
+            ? level_cache_freshness::lightmap_policy::skip
+            : level_cache_freshness::lightmap_policy::normal));
 }

@@ -25,8 +25,7 @@ generic_factory<clothing_mod> all_clothing_mods( "clothing mods" );
 IMPLEMENT_STRING_AND_INT_IDS( clothing_mod, all_clothing_mods );
 static std::map<clothing_mod_type, std::vector<clothing_mod>> clothing_mods_by_type;
 
-namespace io
-{
+namespace io {
 
 template<>
 std::string enum_to_string<clothing_mod_type>( clothing_mod_type data )
@@ -114,8 +113,8 @@ float clothing_mod::get_mod_val( const clothing_mod_type &type, const item &it )
 
 bool clothing_mod::has_mod_type( const clothing_mod_type &type ) const
 {
-for( auto &mv : mod_values ) {
-    if( mv.type == type ) {
+    for( auto &mv : mod_values ) {
+        if( mv.type == type ) {
             return true;
         }
     }

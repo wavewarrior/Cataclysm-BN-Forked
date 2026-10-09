@@ -51,32 +51,32 @@ coop_client::~coop_client() { shutdown(); }
 auto coop_client::connect( const std::string& ip, uint16_t port ) -> bool
 {
     if( !NET_Init() ) {
-    DebugLog( DL::Error, DC::Main ) << "[coop] NET_Init failed: " << SDL_GetError();
+        DebugLog( DL::Error, DC::Main ) << "[coop] NET_Init failed: " << SDL_GetError();
         return false;
     }
     net_initialized_ = true;
     NET_Address* addr = NET_ResolveHostname( ip.c_str() );
     if( !addr ) {
-    DebugLog( DL::Error, DC::Main ) << "[coop] resolve failed: " << SDL_GetError();
+        DebugLog( DL::Error, DC::Main ) << "[coop] resolve failed: " << SDL_GetError();
         return false;
     }
     // Wait up to 5 seconds for DNS resolution.
     while( NET_GetAddressStatus( addr ) == 0 ) { SDL_Delay( 10 ); }
     if( NET_GetAddressStatus( addr ) < 0 ) {
-    NET_UnrefAddress( addr );
+        NET_UnrefAddress( addr );
         DebugLog( DL::Error, DC::Main ) << "[coop] DNS failed: " << SDL_GetError();
         return false;
     }
     auto* socket = NET_CreateClient( addr, port, 0 );
     NET_UnrefAddress( addr );
     if( !socket ) {
-    DebugLog( DL::Error, DC::Main ) << "[coop] connect failed: " << SDL_GetError();
+        DebugLog( DL::Error, DC::Main ) << "[coop] connect failed: " << SDL_GetError();
         return false;
     }
     // Wait for non-blocking connect to complete.
     while( NET_GetConnectionStatus( socket ) == 0 ) { SDL_Delay( 10 ); }
     if( NET_GetConnectionStatus( socket ) < 0 ) {
-    NET_DestroyStreamSocket( socket );
+        NET_DestroyStreamSocket( socket );
         DebugLog( DL::Error, DC::Main ) << "[coop] connection refused: " << SDL_GetError();
         return false;
     }
@@ -180,7 +180,7 @@ auto coop_client::receive_world_seed() -> bool
         } else {
             DebugLog( DL::Error, DC::Main )
                     << "[coop] receive_world_seed: failed to bootstrap a local world; "
-                       "game::setup() will likely crash";
+               "game::setup() will likely crash";
         }
     }
 
@@ -209,7 +209,7 @@ auto coop_client::apply_world_seed_to_avatar() -> void
     // default human body Character's own reset installs (character.cpp:455-456).
     // Guarded on emptiness so a rejoining client with a loaded save keeps its real body.
     if( g->u.get_body().empty() ) {
-    g->u.set_anatomy( anatomy_id( "human_anatomy" ) );
+        g->u.set_anatomy( anatomy_id( "human_anatomy" ) );
         character_funcs::normalize( g->u );
         DebugLog( DL::Info, DC::Main )
                 << "[coop] client avatar had no body — installed default human anatomy";
@@ -225,12 +225,12 @@ auto coop_client::apply_world_seed_to_avatar() -> void
     // On rejoin:     keep the saved position; send_join_info() already told the host.
     const bool has_saved_position = ( g->u.abs_pos() != tripoint_abs_ms{0, 0, 0} );
     if( !has_saved_position ) {
-    // g->setup() centered the map on the client's own character (or origin), NOT on
-    // world_seed_spawn_.  abs_to_bub(world_seed_spawn_) returns nonsense bubble coords
-    // until the reality bubble is repositioned — causing the massive drift and
-    // movement crash on unloaded submaps.  Replicate start_game (game.cpp:924-936):
-    // compute the top-left submap corner and call load_map() to reposition abs_sub.
-    const int levz = g->get_levz();
+        // g->setup() centered the map on the client's own character (or origin), NOT on
+        // world_seed_spawn_.  abs_to_bub(world_seed_spawn_) returns nonsense bubble coords
+        // until the reality bubble is repositioned — causing the massive drift and
+        // movement crash on unloaded submaps.  Replicate start_game (game.cpp:924-936):
+        // compute the top-left submap corner and call load_map() to reposition abs_sub.
+        const int levz = g->get_levz();
         auto lev = project_to<coords::sm>( world_seed_spawn_ );
         const point_abs_sm abs_sub_before = g->m.get_abs_sub();
         lev.x() -= g_half_mapsize;
@@ -252,8 +252,8 @@ auto coop_client::apply_world_seed_to_avatar() -> void
             .last = tripoint_bub_sm( g->m.getmapsize() - 1, g->m.getmapsize() - 1, levz ),
         } );
         g->m.build_map_cache( level_cache_freshness::plan_for( g->m,
-            level_cache_freshness::pose_of_viewer( g->u, levz ),
-            level_cache_freshness::lightmap_policy::normal ) );
+                              level_cache_freshness::pose_of_viewer( g->u, levz ),
+                              level_cache_freshness::lightmap_policy::normal ) );
         const tripoint_bub_ms bpos = abs_to_map_local( g->m, world_seed_spawn_ );
         g->u.setpos( bpos );
         DebugLog( DL::Info, DC::Main )
@@ -267,8 +267,8 @@ auto coop_client::apply_world_seed_to_avatar() -> void
             .last = tripoint_bub_sm( g->m.getmapsize() - 1, g->m.getmapsize() - 1, levz ),
         } );
         g->m.build_map_cache( level_cache_freshness::plan_for( g->m,
-            level_cache_freshness::pose_of_viewer( g->u, levz ),
-            level_cache_freshness::lightmap_policy::normal ) );
+                              level_cache_freshness::pose_of_viewer( g->u, levz ),
+                              level_cache_freshness::lightmap_policy::normal ) );
     }
     g->u.process_turn(); // initialise avatar stats at spawn
     DebugLog( DL::Info, DC::Main )
@@ -312,10 +312,10 @@ auto coop_client::coop_world_tick() -> void
 {
     if( !coop_session::get().is_client() ) { return; }
 
-// Non-blocking reconnection: one attempt per tick.
-if( reconnect_attempts_remaining_ > 0 && !transport_ ) {
-    --reconnect_attempts_remaining_;
-    if( attempt_reconnect( last_host_ip_, last_host_port_ ) ) {
+    // Non-blocking reconnection: one attempt per tick.
+    if( reconnect_attempts_remaining_ > 0 && !transport_ ) {
+        --reconnect_attempts_remaining_;
+        if( attempt_reconnect( last_host_ip_, last_host_port_ ) ) {
             add_msg( m_good, _( "Reconnected!" ) );
             reconnect_attempts_remaining_ = 0;
         } else if( reconnect_attempts_remaining_ <= 0 ) {
@@ -328,21 +328,21 @@ if( reconnect_attempts_remaining_ > 0 && !transport_ ) {
 
     if( !transport_ ) { return; }
 
-// D1: relay a driving-state change once (edge-triggered).  apply_sync() re-baselines
-// last_control_state_ against the host-applied state, so a local revert for one tick
-// is corrected by the host echo rather than ping-ponging.
-const auto cur = current_control_state();
-if( last_control_state_ && cur != *last_control_state_ ) {
-    queue_action( "VEH_CONTROL", string_format( R"({"on":%s,"engine":%s})",
-                  cur.controlling ? "true" : "false", cur.engine_on ? "true" : "false" ) );
+    // D1: relay a driving-state change once (edge-triggered).  apply_sync() re-baselines
+    // last_control_state_ against the host-applied state, so a local revert for one tick
+    // is corrected by the host echo rather than ping-ponging.
+    const auto cur = current_control_state();
+    if( last_control_state_ && cur != *last_control_state_ ) {
+        queue_action( "VEH_CONTROL", string_format( R"({"on":%s,"engine":%s})",
+                      cur.controlling ? "true" : "false", cur.engine_on ? "true" : "false" ) );
     }
     last_control_state_ = cur;
 
     // 1. Send the oldest unsent pending action.  Actions remain in pending_actions_
     //    until the server echoes last_seq ≥ action.seq in a sync packet; they are
     //    discarded in apply_sync().  One per tick matches the server's drain rate.
-for( auto& act : pending_actions_ ) {
-    if( act.sent ) { continue; }
+    for( auto& act : pending_actions_ ) {
+        if( act.sent ) { continue; }
         if( !transport_->send( build_action_packet( {act.seq, act.key, act.ctx_json} ) ) ) {
             DebugLog( DL::Error, DC::Main ) << "[coop] coop_world_tick: action send failed";
             handle_disconnect();
@@ -354,7 +354,7 @@ for( auto& act : pending_actions_ ) {
 
     // F5: team speed-up — reduce moves_left when both doing the same activity.
     if( g->u.activity && !host_activity_str_.empty() ) {
-    if( to_lower_case( host_activity_str_ ) ==
+        if( to_lower_case( host_activity_str_ ) ==
             to_lower_case( g->u.activity->get_verb().translated() ) ) {
             g->u.activity->moves_left =
                 std::max( 0, g->u.activity->moves_left - g->u.get_speed() / 2 );
@@ -441,8 +441,8 @@ for( auto& act : pending_actions_ ) {
 
     // 2. Drain all buffered inbound packets from the host (H6).
     while( transport_->poll() ) {
-    std::string buf;
-    if( !transport_->recv( buf, 0 ) ) {
+        std::string buf;
+        if( !transport_->recv( buf, 0 ) ) {
             handle_disconnect();
             return;
         }
@@ -527,8 +527,8 @@ for( auto& act : pending_actions_ ) {
                 } else {
                     sess.shared_mark = tripoint_abs_omt{
                         d.get_int( "omx", 0 ),
-                        d.get_int( "omy", 0 ),
-                        d.get_int( "omz", 0 ) };
+                         d.get_int( "omy", 0 ),
+                         d.get_int( "omz", 0 ) };
                     sess.shared_mark_label = d.get_string( "label", "" );
                 }
             } else if( t == coop_pkt::overmap_sync ) {
@@ -555,7 +555,7 @@ auto coop_client::queue_action( const std::string& key, const std::string& ctx_j
 
     // Predict outcome for combat actions so we can verify against server on sync.
     if( key == "SMASH" || key == "FIRE" || key == "MELEE" ) {
-    predict_action_locally( act );
+        predict_action_locally( act );
     }
 
     // Ring buffer cap: 32 entries (~500 ms at 60 fps input rate).
@@ -567,8 +567,8 @@ auto coop_client::predict_action_locally( pending_action &act ) -> void
 {
     if( !g || act.ctx_json.empty() ) { return; }
 
-try {
-    std::istringstream iss( act.ctx_json );
+    try {
+        std::istringstream iss( act.ctx_json );
         JsonIn jin( iss );
         JsonObject d = jin.get_object();
         d.allow_omitted_members();
@@ -650,7 +650,7 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
     // The outer sync object has: "t", "turn", "tiles", "monsters", "proxy_*", "host_*".
     jin.start_object();
     while( !jin.end_object() ) {
-    const std::string key = jin.get_member_name();
+        const std::string key = jin.get_member_name();
 
         if( key == "last_seq" ) {
             last_seq_from_sync = jin.get_int();
@@ -680,8 +680,8 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
                     skip_one_hash_event_for_test_ = false; // consume — only skip once
                 } else {
                     local_hash = coop_hash_event_fields( local_hash,
-                                    static_cast<int>( ev.type ), ev.pos.x(), ev.pos.y(), ev.pos.z(),
-                                    ev.value, ev.creature_id );
+                                                         static_cast<int>( ev.type ), ev.pos.x(), ev.pos.y(), ev.pos.z(),
+                                                         ev.value, ev.creature_id );
                 }
                 ++ev_count;
                 if( coop_world_event_interpreter::is_replicated( ev.type ) ) {
@@ -947,7 +947,7 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
     // On mismatch: log and send resync_request.  Server handles it in receiver_loop by
     // setting force_resync_ = true, which triggers build_and_send_sync(force_full=true).
     if( ev_count > 0 && !got_tiles && local_hash != server_hash ) {
-    DebugLog( DL::Info, DC::Main )
+        DebugLog( DL::Info, DC::Main )
                 << "[coop] apply_sync: hash mismatch ev=" << ev_count << " local=0x" << std::hex
                 << local_hash << " server=0x" << server_hash << std::dec << " — requesting resync";
         // Attempt to roll back locally-applied deltas before requesting a full resync.
@@ -964,7 +964,7 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
     // A2: deferred seq-based reconciliation.
     // 0. Verify predictions for confirmed combat actions BEFORE discarding them.
     if( last_seq_from_sync >= 0 ) {
-    const auto confirmed = static_cast<uint32_t>( last_seq_from_sync );
+        const auto confirmed = static_cast<uint32_t>( last_seq_from_sync );
         for( const auto &act : pending_actions_ ) {
             if( act.seq <= confirmed && act.outcome.has_value() ) {
                 const auto &pred = act.outcome.value();
@@ -984,14 +984,14 @@ auto coop_client::apply_sync( const std::string& json_buf ) -> void
     }
     // 1. Discard actions the server has already processed.
     if( last_seq_from_sync >= 0 ) {
-    const auto confirmed = static_cast<uint32_t>( last_seq_from_sync );
+        const auto confirmed = static_cast<uint32_t>( last_seq_from_sync );
         std::erase_if( pending_actions_, [confirmed]( const auto & a ) { return a.seq <= confirmed; } );
     }
     // 2. Compute new position via pure reconcile function; apply it.
     //    coop_reconcile_pos handles both the seq-replay path and the fallback
     //    snap-only path (last_seq < 0) in one call.
     if( got_proxy_pos ) {
-    const auto client_apos = g->u.abs_pos();
+        const auto client_apos = g->u.abs_pos();
         const int dx = client_apos.x() - sync_proxy_apos_.x();
         const int dy = client_apos.y() - sync_proxy_apos_.y();
         const int dz = client_apos.z() - sync_proxy_apos_.z();
@@ -1043,7 +1043,7 @@ auto coop_client::handle_disconnect() -> void
     // If we have a session token, enter non-blocking reconnection mode.
     // coop_world_tick() will attempt one reconnect per tick.
     if( !session_token_.empty() && !last_host_ip_.empty() ) {
-    add_msg( m_warning, _( "Connection lost — attempting to reconnect..." ) );
+        add_msg( m_warning, _( "Connection lost — attempting to reconnect..." ) );
         reconnect_attempts_remaining_ = 30;
         return; // non-blocking; retry in coop_world_tick each tick
     }
@@ -1135,8 +1135,8 @@ auto coop_client::attempt_reconnect( const std::string& ip, uint16_t port ) -> b
 auto coop_client::shutdown() -> void
 {
     if( transport_ ) {
-    std::ostringstream oss;
-    JsonOut jout( oss );
+        std::ostringstream oss;
+        JsonOut jout( oss );
         jout.start_object();
         jout.member( "t", static_cast<int>( coop_pkt::disconnect ) );
         jout.end_object();
@@ -1144,23 +1144,23 @@ auto coop_client::shutdown() -> void
         transport_.reset();
     }
     if( net_initialized_ ) {
-    NET_Quit();
+        NET_Quit();
         net_initialized_ = false;
     }
     coop_session::get().mode = coop_mode::none;
     if( g ) { g->coop_client_ = nullptr; }
-DebugLog( DL::Info, DC::Main ) << "[coop] client shutdown";
+    DebugLog( DL::Info, DC::Main ) << "[coop] client shutdown";
 }
 
 auto coop_client::send_join_info() -> bool
 {
     if( !transport_ || !g ) { return false; }
-const auto ap = g->u.abs_pos();
-// G1: serialize worn items so the host proxy NPC spawns with correct armor.
-std::string worn_json;
-{
-    std::ostringstream worn_oss;
-    JsonOut worn_jout( worn_oss );
+    const auto ap = g->u.abs_pos();
+    // G1: serialize worn items so the host proxy NPC spawns with correct armor.
+    std::string worn_json;
+    {
+        std::ostringstream worn_oss;
+        JsonOut worn_jout( worn_oss );
         worn_jout.start_array();
         for( const item * w : g->u.worn ) {
             w->serialize( worn_jout );
@@ -1178,10 +1178,10 @@ std::string worn_json;
 auto coop_client::send_chat( const std::string& text ) -> void
 {
     if( !transport_ ) { return; }
-std::ostringstream oss;
-JsonOut jout( oss );
-jout.start_object();
-jout.member( "t", static_cast<int>( coop_pkt::chat ) );
+    std::ostringstream oss;
+    JsonOut jout( oss );
+    jout.start_object();
+    jout.member( "t", static_cast<int>( coop_pkt::chat ) );
     jout.member( "d" );
     jout.start_object();
     jout.member( "from", "client" );
@@ -1195,14 +1195,14 @@ jout.member( "t", static_cast<int>( coop_pkt::chat ) );
 auto coop_client::notify_death() -> void
 {
     if( !transport_ || !g || death_notified_ ) { return; }
-death_notified_ = true;
+    death_notified_ = true;
 
-// 1. Send client_status dead=true immediately — this packet is normally sent
-//    BEFORE apply_sync/process_turn on each tick, so the killing tick never sees
-//    dead=true in the per-tick status.  Sending it here fixes C3b host message.
-{
-    std::ostringstream oss;
-    JsonOut jout( oss );
+    // 1. Send client_status dead=true immediately — this packet is normally sent
+    //    BEFORE apply_sync/process_turn on each tick, so the killing tick never sees
+    //    dead=true in the per-tick status.  Sending it here fixes C3b host message.
+    {
+        std::ostringstream oss;
+        JsonOut jout( oss );
         jout.start_object();
         jout.member( "t", static_cast<int>( coop_pkt::client_status ) );
         jout.member( "d" );
@@ -1232,8 +1232,8 @@ death_notified_ = true;
     mfst.member( "items" );
     mfst.start_array();
     int serialized = 0;
-for( const item * it : items ) {
-    if( !it || it->is_null() ) { continue; }
+    for( const item * it : items ) {
+        if( !it || it->is_null() ) { continue; }
         mfst.start_object();
         mfst.member( "tx", drop_abs.x() );
         mfst.member( "ty", drop_abs.y() );
@@ -1262,16 +1262,16 @@ auto coop_client::send_death_drop() -> void { notify_death(); }
 auto coop_client::send_tap_shoulder() -> void
 {
     if( !transport_ ) { return; }
-transport_->send( R"({"t":46})" );
+    transport_->send( R"({"t":46})" );
 }
 
 auto coop_client::send_emote( const std::string& emote_type ) -> void
 {
     if( !transport_ ) { return; }
-// F6: cooldown check — 600 turns (≈10 game-minutes)
-auto& sess = coop_session::get();
-if( calendar::turn - sess.last_high_five_turn < 600_turns ) {
-    add_msg( m_info, _( "Too soon for another high five!" ) );
+    // F6: cooldown check — 600 turns (≈10 game-minutes)
+    auto& sess = coop_session::get();
+    if( calendar::turn - sess.last_high_five_turn < 600_turns ) {
+        add_msg( m_info, _( "Too soon for another high five!" ) );
         return;
     }
     transport_->send( string_format( R"({"t":48,"d":{"type":"%s"}})", emote_type ) );
@@ -1280,7 +1280,7 @@ if( calendar::turn - sess.last_high_five_turn < 600_turns ) {
 auto coop_client::send_raw( const std::string& json ) -> void
 {
     if( !transport_ ) { return; }
-transport_->send( json );
+    transport_->send( json );
 }
 
 auto coop_client::interpolate_host_pos() -> tripoint_abs_ms

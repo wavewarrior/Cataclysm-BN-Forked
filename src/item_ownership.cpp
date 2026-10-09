@@ -132,8 +132,8 @@ bool item::is_owned_by( const Character& c, bool available_to_take ) const
     // all. either way, certain situations this means the thing is available to take. in other
     // scenarios we actually really want to check for id == id, even for no_faction
     if( get_owner().is_null() ) { return available_to_take; }
-if( !c.get_faction() ) {
-    debugmsg( "Character %s has no faction", c.disp_name() );
+    if( !c.get_faction() ) {
+        debugmsg( "Character %s has no faction", c.disp_name() );
         return false;
     }
     return c.get_faction()->id() == get_owner();
@@ -142,8 +142,8 @@ if( !c.get_faction() ) {
 bool item::is_old_owner( const Character& c, bool available_to_take ) const
 {
     if( get_old_owner().is_null() ) { return available_to_take; }
-if( !c.get_faction() ) {
-    debugmsg( "Character %s has no faction.", c.disp_name() );
+    if( !c.get_faction() ) {
+        debugmsg( "Character %s has no faction.", c.disp_name() );
         return false;
     }
     return c.get_faction()->id() == get_old_owner();
@@ -152,7 +152,7 @@ if( !c.get_faction() ) {
 std::string item::get_owner_name() const
 {
     if( !g->faction_manager_ptr->get( get_owner() ) ) {
-    debugmsg( "item::get_owner_name() item %s has no valid nor null faction id ", tname() );
+        debugmsg( "item::get_owner_name() item %s has no valid nor null faction id ", tname() );
         return "no owner";
     }
     return g->faction_manager_ptr->get( get_owner() )->name();
@@ -182,7 +182,7 @@ faction_id item::get_old_owner() const
 void item::validate_ownership() const
 {
     if( !old_owner.is_null() && !g->faction_manager_ptr->get( old_owner, false ) ) {
-    remove_old_owner();
+        remove_old_owner();
     }
     if( !owner.is_null() && !g->faction_manager_ptr->get( owner, false ) ) { remove_owner(); }
 }
@@ -269,14 +269,14 @@ bool item::can_contain( const item& it ) const
 bool item::can_contain( const itype& tp ) const
 {
     if( !type->container ) {
-    // TODO: Tools etc.
-    return false;
-}
+        // TODO: Tools etc.
+        return false;
+    }
 
-if( tp.phase == LIQUID && !type->container->watertight ) { return false; }
+    if( tp.phase == LIQUID && !type->container->watertight ) { return false; }
 
-// TODO: Acid in waterskins
-return true;
+    // TODO: Acid in waterskins
+    return true;
 }
 
 const item &item::get_contained() const

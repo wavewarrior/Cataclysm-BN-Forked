@@ -253,7 +253,7 @@ auto spring_state::step( float dt_seconds ) -> void
 auto spring_state::settled( float threshold ) const -> bool
 {
     return std::abs( position - target ) < threshold
-    && std::abs( velocity ) < threshold;
+           && std::abs( velocity ) < threshold;
 }
 
 } // namespace ui_tween

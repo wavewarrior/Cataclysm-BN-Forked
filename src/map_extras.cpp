@@ -1154,7 +1154,7 @@ static bool mx_minefield( mapgen_constructor &m_orig, const tripoint_abs_omt &ab
 
         //33% chance to spawn empty magazines used by soldiers
         std::vector<point_omt_ms> empty_magazines_locations = line_to( point_omt_ms( 15, 5 ),
-                point_omt_ms( 20, 5 ) );
+            point_omt_ms( 20, 5 ) );
         for( auto &i : empty_magazines_locations ) {
             if( one_in( 3 ) ) {
                 m.spawn_item( { i }, itype_stanag30 );
@@ -1265,7 +1265,7 @@ static bool mx_minefield( mapgen_constructor &m_orig, const tripoint_abs_omt &ab
 
         //33% chance to spawn empty magazines used by soldiers
         std::vector<point_omt_ms> empty_magazines_locations = line_to( point_omt_ms( 5, 16 ),
-                point_omt_ms( 18, 16 ) );
+            point_omt_ms( 18, 16 ) );
         for( auto &i : empty_magazines_locations ) {
             if( one_in( 3 ) ) {
                 m.spawn_item( { i }, itype_stanag30 );
@@ -1379,7 +1379,7 @@ static bool mx_minefield( mapgen_constructor &m_orig, const tripoint_abs_omt &ab
 
             //33% chance to spawn empty magazines used by soldiers
             std::vector<point_omt_ms> empty_magazines_locations = line_to( point_omt_ms( 9, 3 ),
-                    point_omt_ms( 9, 13 ) );
+                point_omt_ms( 9, 13 ) );
             for( auto &i : empty_magazines_locations ) {
                 if( one_in( 3 ) ) {
                     m.spawn_item( { i }, itype_stanag30 );
@@ -1412,7 +1412,7 @@ static bool mx_minefield( mapgen_constructor &m_orig, const tripoint_abs_omt &ab
 
         //33% chance to spawn empty magazines used by soldiers
         std::vector<point_omt_ms> empty_magazines_locations = line_to( point_omt_ms( 9, 16 ),
-                point_omt_ms( 9, 20 ) );
+            point_omt_ms( 9, 20 ) );
         for( auto &i : empty_magazines_locations ) {
             if( one_in( 3 ) ) {
                 m.spawn_item( { i }, itype_stanag30 );
@@ -1494,7 +1494,7 @@ static bool mx_minefield( mapgen_constructor &m_orig, const tripoint_abs_omt &ab
 
         //33% chance to spawn empty magazines used by soldiers
         std::vector<point_omt_ms> empty_magazines_locations = line_to( point_omt_ms( 15, 2 ),
-                point_omt_ms( 15, 8 ) );
+            point_omt_ms( 15, 8 ) );
         for( auto &i : empty_magazines_locations ) {
             if( one_in( 3 ) ) {
                 m.spawn_item( { i }, itype_stanag30 );
@@ -1974,7 +1974,8 @@ static bool mx_pond( mapgen_constructor &m, const tripoint_abs_omt &abs_offset )
                                               point( width, height ), point( i, j ) );
                         if( neighbors == 8 ) {
                             m.ter_set( location, t_water_dp );
-                        } else {
+                        }
+                        else {
                             m.ter_set( location, t_water_sh );
                         }
                         break;
@@ -3160,14 +3161,15 @@ void map_extra::load( const JsonObject &jo, const std::string & )
 extern std::map<std::string, std::vector<std::unique_ptr<update_mapgen_function_json>> >
 update_mapgen;
 
-void map_extra::check() const
-{
-    if( looks_like && looks_like->empty() ) {
-    debugmsg( "map extra (%s) defines empty looks_like id", id.str() );
+void map_extra::check() const {
+    if( looks_like && looks_like->empty() )
+    {
+        debugmsg( "map extra (%s) defines empty looks_like id", id.str() );
     }
-    switch( generator_method ) {
-    case map_extra_method::map_extra_function: {
-        const map_extra_pointer mx_func = MapExtras::get_function( generator_id );
+    switch( generator_method )
+    {
+        case map_extra_method::map_extra_function: {
+            const map_extra_pointer mx_func = MapExtras::get_function( generator_id );
             if( mx_func == nullptr ) {
                 debugmsg( "invalid map extra function (%s) defined for map extra (%s)", generator_id, id.str() );
                 break;

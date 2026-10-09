@@ -74,8 +74,7 @@ bool &auto_note_rmlui_enabled()
     return enabled;
 }
 
-namespace auto_notes
-{
+namespace auto_notes {
 void auto_note_settings::clear()
 {
     autoNoteEnabled.clear();

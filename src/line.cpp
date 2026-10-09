@@ -28,7 +28,7 @@ auto rl_dist_from_deltas( const int dx, const int dy, const int dz,
                           const bool use_trigdist ) -> int
 {
     if( !use_trigdist ) {
-    return std::max( { dx, dy, dz } );
+        return std::max( { dx, dy, dz } );
     }
     const auto squared = dx * dx + dy * dy + dz * dz;
     const auto distance = static_cast<float>( std::sqrt( static_cast<double>( squared ) ) );
@@ -96,7 +96,7 @@ auto rl_dist_lookup_table::row_3d( const int dy, const int dz ) const -> std::sp
 auto rl_dist_lookup_table::index_2d( const int dx, const int dy ) const -> size_t
 {
     return static_cast<size_t>( dy ) * static_cast<size_t>( dimensions_.max_dx + 1 ) +
-    static_cast<size_t>( dx );
+           static_cast<size_t>( dx );
 }
 
 auto rl_dist_lookup_table::index_3d( const int dx, const int dy, const int dz ) const -> size_t
@@ -112,22 +112,22 @@ auto get_rl_dist_lookup_table( const rl_dist_lookup_table_dimensions &dimensions
 std::shared_ptr<const rl_dist_lookup_table>
 {
     if( !dimensions.is_buildable() ) {
-    return nullptr;
-}
+        return nullptr;
+    }
 
-static std::mutex distance_table_mutex;
-static std::shared_ptr<const rl_dist_lookup_table> published;
+    static std::mutex distance_table_mutex;
+    static std::shared_ptr<const rl_dist_lookup_table> published;
 
-const std::lock_guard<std::mutex> lock( distance_table_mutex );
-if( !published || !published->matches( dimensions ) ) {
-    // Grow monotonically: matches() already accepts a larger table, so never
-    // shrink an axis on rebuild.  A caller whose extents move in opposite
-    // directions on different axes (a smaller bubble but a taller z range)
-    // would otherwise rebuild a multi-megabyte table on every call.  A
-    // different distance mode invalidates the contents, so that case builds
-    // exactly what was asked for.
-    auto grown = dimensions;
-    if( published && published->dimensions().trigdist == dimensions.trigdist ) {
+    const std::lock_guard<std::mutex> lock( distance_table_mutex );
+    if( !published || !published->matches( dimensions ) ) {
+        // Grow monotonically: matches() already accepts a larger table, so never
+        // shrink an axis on rebuild.  A caller whose extents move in opposite
+        // directions on different axes (a smaller bubble but a taller z range)
+        // would otherwise rebuild a multi-megabyte table on every call.  A
+        // different distance mode invalidates the contents, so that case builds
+        // exactly what was asked for.
+        auto grown = dimensions;
+        if( published && published->dimensions().trigdist == dimensions.trigdist ) {
             const auto& current = published->dimensions();
             grown.max_dx = std::max( grown.max_dx, current.max_dx );
             grown.max_dy = std::max( grown.max_dy, current.max_dy );
@@ -888,18 +888,18 @@ rl_vec3d rl_vec3d::normalized() const
 rl_vec2d rl_vec2d::rotated( float angle ) const
 {
     return rl_vec2d(
-           x * std::cos( angle ) - y * std::sin( angle ),
-    x * std::sin( angle ) + y * std::cos( angle )
-    );
+               x * std::cos( angle ) - y * std::sin( angle ),
+               x * std::sin( angle ) + y * std::cos( angle )
+           );
 }
 
 rl_vec3d rl_vec3d::rotated( float angle ) const
 {
     return rl_vec3d(
-           x * std::cos( angle ) - y * std::sin( angle ),
-    x * std::sin( angle ) + y * std::cos( angle ),
-    z
-    );
+               x * std::cos( angle ) - y * std::sin( angle ),
+               x * std::sin( angle ) + y * std::cos( angle ),
+               z
+           );
 }
 
 float rl_vec2d::dot_product( const rl_vec2d &v ) const
@@ -915,8 +915,8 @@ float rl_vec3d::dot_product( const rl_vec3d &v ) const
 rl_vec3d rl_vec3d::cross_product( const rl_vec3d &v ) const
 {
     return rl_vec3d( y * v.z - v.y * z,
-           z * v.x - v.z * x,
-           x * v.y - v.x * y );
+                     z * v.x - v.z * x,
+                     x * v.y - v.x * y );
 }
 
 bool rl_vec2d::is_null() const
@@ -927,9 +927,9 @@ bool rl_vec2d::is_null() const
 point rl_vec2d::as_point() const
 {
     return point(
-           std::round( x ),
-    std::round( y )
-    );
+               std::round( x ),
+               std::round( y )
+           );
 }
 
 bool rl_vec3d::is_null() const
@@ -940,10 +940,10 @@ bool rl_vec3d::is_null() const
 tripoint rl_vec3d::as_point() const
 {
     return tripoint(
-           std::round( x ),
-    std::round( y ),
-    std::round( z )
-    );
+               std::round( x ),
+               std::round( y ),
+               std::round( z )
+           );
 }
 
 // scale.

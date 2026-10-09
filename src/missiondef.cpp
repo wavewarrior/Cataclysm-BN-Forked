@@ -142,8 +142,7 @@ tripoint_function_map = {{
     }
 };
 
-namespace io
-{
+namespace io {
 template<>
 std::string enum_to_string<mission_origin>( mission_origin data )
 {
@@ -317,7 +316,7 @@ void mission_type::load( const JsonObject &jo, const std::string &src )
 bool mission_type::test_goal_condition( const mission_goal_condition_context &d ) const
 {
     if( goal_condition ) {
-    return goal_condition( d );
+        return goal_condition( d );
     }
     return true;
 }
@@ -437,7 +436,7 @@ mission_type_id mission_type::from_legacy( int old_id )
     return mission_type_id( "MISSION_NULL" );
 }
 
-const mission_type *mission_type::get( const mission_type_id &id )
+const mission_type * mission_type::get( const mission_type_id &id )
 {
     if( id.is_null() ) {
         return nullptr;

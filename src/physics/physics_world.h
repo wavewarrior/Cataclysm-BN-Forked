@@ -1,12 +1,15 @@
 #pragma once
-#include <box2d/box2d.h>
 #include "coordinates.h"
-#include "point_float.h"  // rl_vec2d
+#include "point_float.h" // rl_vec2d
+
+#include <box2d/box2d.h>
 #include <map>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-namespace lighting { class debug_line_pass; } // forward-declare GPU line buffer
+namespace lighting {
+class debug_line_pass;
+} // namespace lighting
 
 class Creature;
 // MUST be `class`, matching vehicle.h:375 and every other forward declaration in
@@ -23,8 +26,8 @@ namespace physics {
 
 /// Result of a one-shot transient terrain-impulse solve (Phase 5).
 struct terrain_impulse_result {
-    rl_vec2d linear_vel_cmps{ 0.0f, 0.0f }; ///< Post-collision velocity in cm/s.
-    float    angular_vel_rads = 0.0f;        ///< Post-collision angular velocity in rad/s.
+    rl_vec2d linear_vel_cmps{0.0f, 0.0f}; ///< Post-collision velocity in cm/s.
+    float angular_vel_rads = 0.0f;        ///< Post-collision angular velocity in rad/s.
 };
 
 /// Persistent Box2D world owned by `map`.
@@ -42,11 +45,11 @@ public:
     PhysicsWorld();
     ~PhysicsWorld();
 
-    PhysicsWorld( const PhysicsWorld & )                         = delete;
-    auto operator=( const PhysicsWorld & ) -> PhysicsWorld &     = delete; // *NOPAD*
+    PhysicsWorld(const PhysicsWorld&) = delete;
+    auto operator=(const PhysicsWorld&) -> PhysicsWorld& = delete; // *NOPAD*
 
     // ── Vehicle lifecycle ──────────────────────────────────────────────────
-    void on_vehicle_added( vehicle &v );
+    void on_vehicle_added(vehicle& v);
     /// Refit a registered vehicle's collision polygon to its current part footprint.
     ///
     /// `on_vehicle_added()` runs while a vproto-"none" chassis still has zero parts, so
@@ -64,19 +67,19 @@ public:
     /// choke point `vehicle::part_removal_cleanup()` is reached from the per-map-update
     /// `dirty_vehicle_list` flush, and a shrinking footprint was never tracked before, so
     /// keeping it out avoids putting shape churn on that path.
-    void on_vehicle_parts_changed( vehicle &v );
-    void on_vehicle_moved( vehicle &v );
+    void on_vehicle_parts_changed(vehicle& v);
+    void on_vehicle_moved(vehicle& v);
     /// Force the b2Body transform back to the vehicle's current tile anchor,
     /// bypassing the `box2d_position_authority` guard in `on_vehicle_moved`.
     /// Used when continuous integration carried the body past the loaded map
     /// edge and the tile grid must win instead.
-    void clamp_body_to_tile( vehicle &v );
-    void on_vehicle_removed( vehicle *v );
+    void clamp_body_to_tile(vehicle& v);
+    void on_vehicle_removed(vehicle* v);
 
     // ── Creature lifecycle (Phase 11) ─────────────────────────────────────
-    void on_creature_added( const Creature &c );
-    void on_creature_moved( const Creature &c );
-    void on_creature_removed( const Creature *c );
+    void on_creature_added(const Creature& c);
+    void on_creature_moved(const Creature& c);
+    void on_creature_removed(const Creature* c);
     void clear_creature_bodies();
 
     /// Drop every body belonging to the *world* — terrain colliders and vehicle
@@ -93,21 +96,21 @@ public:
 
     // ── Terrain lifecycle ──────────────────────────────────────────────────
     /// Called after `grid[idx] = sm` in `map::on_submap_loaded`.
-    void on_submap_loaded( const map &m, const tripoint_abs_sm &abs_sm_pos );
+    void on_submap_loaded(const map& m, const tripoint_abs_sm& abs_sm_pos);
     /// Called when `abs_sm_pos` leaves the *simulated* set.  `submap_still_resident`
     /// must say whether the submap is still in memory: this callback also fires on
     /// simulated -> lazy_border, where the submap and its vehicles are still alive.
-    void on_submap_unloaded( const tripoint_abs_sm &abs_sm_pos, bool submap_still_resident );
+    void on_submap_unloaded(const tripoint_abs_sm& abs_sm_pos, bool submap_still_resident);
 
     // ── Coordinate shift ───────────────────────────────────────────────────
     /// Translate all Box2D bodies by `delta_tiles × TILE_M` metres.
     /// `delta_tiles` = `shift_offset_pt` from `map::shift` (tile units, signed).
-    void on_map_shifted( point delta_tiles );
+    void on_map_shifted(point delta_tiles);
 
     // ── Z-level transition ────────────────────────────────────────────────
     /// Destroy terrain bodies for old_z and create them for new_z.
     /// Called when the player changes z-level (stairs, ramps, etc.).
-    void on_zlevel_changed( const map &m, int old_z, int new_z );
+    void on_zlevel_changed(const map& m, int old_z, int new_z);
 
     /// Total number of terrain collider bodies currently registered, across all
     /// submaps and z-levels.  Exists so tests can assert that colliders were
@@ -122,7 +125,7 @@ public:
 
     // ── Phase 5 hooks (wired in Phase 5) ─────────────────────────────────
     /// Remove the Box2D body for the bashable tile at `pos` after it is bashed.
-    void on_tile_bashed( tripoint_bub_ms pos );
+    void on_tile_bashed(tripoint_bub_ms pos);
 
     // ── Game-loop interface (wired from Phase 8 / Phase 10) ───────────────
     /// Integrate exactly one game turn.  Syncs game velocity into the bodies
@@ -136,11 +139,11 @@ public:
     ///  - contact response: syncing velocity in once and out once (instead of
     ///    per step) is what lets a collision actually change the vehicle's
     ///    velocity — a per-step re-sync would overwrite the solver's result.
-    void step_turn( float turn_seconds );
+    void step_turn(float turn_seconds);
 
     /// Raw single step.  Prefer `step_turn()` from the game loop; this exists
     /// for tests and for callers that need an explicit dt.
-    void step( float dt, int substeps );
+    void step(float dt, int substeps);
     void dispatch_contact_events();
 
     /// RAII guard marking the *physics readback* as the active mover.
@@ -151,15 +154,14 @@ public:
     /// tile anchor diverge permanently).  The readback is the only caller that
     /// means "physics-driven", so it states that intent explicitly here rather
     /// than having the hook guess.
-    class physics_move_scope
-    {
-        public:
-            explicit physics_move_scope( PhysicsWorld &w ) : w_( w ) { w_.applying_readback_ = true; }
-            ~physics_move_scope() { w_.applying_readback_ = false; }
-            physics_move_scope( const physics_move_scope & ) = delete;
-            auto operator=( const physics_move_scope & ) -> physics_move_scope & = delete; // *NOPAD*
-        private:
-            PhysicsWorld &w_;
+    class physics_move_scope {
+    public:
+        explicit physics_move_scope(PhysicsWorld& w): w_(w) { w_.applying_readback_ = true; }
+        ~physics_move_scope() { w_.applying_readback_ = false; }
+        physics_move_scope(const physics_move_scope&) = delete;
+        auto operator=(const physics_move_scope&) -> physics_move_scope& = delete; // *NOPAD*
+    private:
+        PhysicsWorld& w_;
     };
 
 
@@ -171,21 +173,20 @@ public:
     /// Populate the GPU debug_line_pass with collision shapes, contact manifolds,
     /// and body transforms.  Called from cata_tiles::draw() after tiles are
     /// flushed; the actual GPU draw happens later in render_world_pass_w.
-    auto draw_debug( lighting::debug_line_pass &pass ) const -> void;
+    auto draw_debug(lighting::debug_line_pass& pass) const -> void;
     // ── Query access ──────────────────────────────────────────────────────
     auto world_id() const -> b2WorldId; // *NOPAD*
 
     // ── Phase 5: transient terrain-impulse solve ──────────────────────────
-    auto resolve_terrain_impulse( vehicle        &v,
-                                  tripoint_bub_ms tile_pos,
-                                  float           tile_mass_kg,
-                                  float           restitution ) -> terrain_impulse_result;
+    auto resolve_terrain_impulse(
+        vehicle& v, tripoint_bub_ms tile_pos, float tile_mass_kg, float restitution)
+        -> terrain_impulse_result;
 
 private:
     b2WorldId world_;
 
     /// vehicle* → body in the persistent world.
-    std::unordered_map<vehicle *, b2BodyId> vehicle_bodies_;
+    std::unordered_map<vehicle*, b2BodyId> vehicle_bodies_;
 
     /// Vehicles whose position authority *this class* revoked because their home
     /// submap left the simulated set while staying resident.  Only these are
@@ -193,7 +194,7 @@ private:
     /// box2d_position_authority itself (e.g. tests/vehicle_ramp_test.cpp does, for
     /// every vehicle it builds) must stay opted out, and is indistinguishable from
     /// an unload revocation by the flag alone.
-    std::unordered_set<vehicle *> authority_revoked_by_unload_;
+    std::unordered_set<vehicle*> authority_revoked_by_unload_;
 
     /// abs_sm_pos → flat list of all terrain bodies for that submap.
     std::map<tripoint_abs_sm, std::vector<b2BodyId>> terrain_bodies_;
@@ -201,8 +202,7 @@ private:
     /// abs_sm_pos → list of (bub_ms, b2BodyId) for bashable tiles only.
     /// Maintained separately from terrain_bodies_ so on_tile_bashed / on_map_shifted
     /// can update bub_ms keys cheaply without decoding user-data after each shift.
-    std::map<tripoint_abs_sm, std::vector<std::pair<tripoint_bub_ms, b2BodyId>>>
-        bashable_tiles_;
+    std::map<tripoint_abs_sm, std::vector<std::pair<tripoint_bub_ms, b2BodyId>>> bashable_tiles_;
 
     /// bub_ms → b2BodyId fast-lookup for on_tile_bashed.  Rebuilt after each map shift.
     std::map<tripoint_bub_ms, b2BodyId> bashable_tile_bodies_;
@@ -213,23 +213,22 @@ private:
         b2ShapeId shape;
         float radius; // last-used circle radius (physics meters)
     };
-    std::unordered_map<const Creature *, creature_body> creature_bodies_;
+    std::unordered_map<const Creature*, creature_body> creature_bodies_;
 
-    auto make_vehicle_body( vehicle &v ) -> b2BodyId;
+    auto make_vehicle_body(vehicle& v) -> b2BodyId;
     /// Attach the vehicle footprint polygon to `bid`.  False when the vehicle has no
     /// footprint yet, in which case no shape is created and `bid` keeps zero shapes.
-    auto create_vehicle_shape( b2BodyId bid, const vehicle &v ) -> bool; // *NOPAD*
+    auto create_vehicle_shape(b2BodyId bid, const vehicle& v) -> bool; // *NOPAD*
     void rebuild_bashable_lookup();
     /// Push game-side velocity into the bodies (once per turn, before stepping).
     void sync_bodies_from_game();
     /// Read integrated position/angle/spin back out (once per turn, after stepping).
     void sync_game_from_bodies();
     /// Sub-step count that keeps per-step translation below half a tile.
-    auto substeps_for_turn( float turn_seconds ) const -> int; // *NOPAD*
+    auto substeps_for_turn(float turn_seconds) const -> int; // *NOPAD*
     bool debug_draw_ = false;
     /// Set only while a `physics_move_scope` is alive; see that class.
     bool applying_readback_ = false;
-
 };
 
 } // namespace physics

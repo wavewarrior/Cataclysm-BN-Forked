@@ -1,7 +1,6 @@
-#include "catch/catch_amalgamated.hpp"
-
 #include "avatar.h"
 #include "calendar.h"
+#include "catch/catch_amalgamated.hpp"
 #include "coordinates.h"
 #include "flag.h"
 #include "item.h"

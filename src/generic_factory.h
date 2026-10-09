@@ -141,7 +141,7 @@ class generic_factory
         }
 
         std::vector<T> list;
-        std::unordered_map<string_id<T>, int_id<T>> map;
+        std::unordered_map<string_id<T>, int_id<T >> map;
         std::unordered_map<std::string, T> abstracts;
 
         std::string type_name;
@@ -393,8 +393,8 @@ class generic_factory
          * Checks loaded/inserted objects for consistency
          */
         void check() const {
-for( const T &obj : list ) {
-            obj.check();
+            for( const T &obj : list ) {
+                obj.check();
             }
         }
         /**
@@ -444,8 +444,8 @@ for( const T &obj : list ) {
          */
         const T &obj( const int_id<T> &id ) const {
             if( !is_valid( id ) ) {
-            debugmsg( "invalid %s id \"%d\" (max: %d)", type_name, id.to_i(),
-                      static_cast<int>( list.size() ) - 1 );
+                debugmsg( "invalid %s id \"%d\" (max: %d)", type_name, id.to_i(),
+                          static_cast<int>( list.size() ) - 1 );
                 return dummy_obj;
             }
             return list[id.to_i()];
@@ -504,8 +504,7 @@ for( const T &obj : list ) {
          * Allows to have local caches that invalidate when corresponding generic factory invalidates.
          * Note: when created using it's default constructor, Version is guaranteed to be invalid.
         */
-        class Version
-        {
+        class Version {
                 friend generic_factory<T>;
             public:
                 Version() = default;
@@ -513,10 +512,10 @@ for( const T &obj : list ) {
                 Version( int64_t version ) : version( version ) {}
                 int64_t  version = -1;
             public:
-                bool operator==( const Version &rhs ) const {
+                bool operator==( const Version & rhs ) const {
                     return version == rhs.version;
                 }
-                bool operator!=( const Version &rhs ) const {
+                bool operator!=( const Version & rhs ) const {
                     return !( rhs == *this );
                 }
         };
@@ -649,53 +648,54 @@ template<typename T, typename = std::void_t<>>
 struct supports_proportional : std::false_type { };
 
 template<typename T>
-struct supports_proportional<T, std::void_t<decltype( std::declval<T &>() *= std::declval<float>() )>> :
+struct supports_proportional<T, std::void_t<decltype( std::declval<T &>() *= std::declval<float>() ) >> :
 std::true_type {};
 
 // Explicitly specialize these templates for a couple types
 // So the compiler does not attempt to use a template that it should not
 template<>
-struct supports_proportional<bool> : std::false_type {};
+struct supports_proportional < bool > : std::false_type {};
 
-template<typename T>
-concept SupportsProportional = supports_proportional<T>::value;
+template < typename T >
+concept SupportsProportional = supports_proportional < T >::value;
 
 // This checks that all units:: types will support relative and proportional
-static_assert( SupportsRelative<units::energy>, "units should support relative" );
-static_assert( SupportsProportional<units::energy>, "units should support proportional" );
+static_assert( SupportsRelative < units::energy >, "units should support relative" );
+static_assert( SupportsProportional < units::energy >, "units should support proportional" );
 
-static_assert( SupportsRelative<int>, "ints should support relative" );
-static_assert( SupportsProportional<int>, "ints should support proportional" );
+static_assert( SupportsRelative < int >, "ints should support relative" );
+static_assert( SupportsProportional < int >, "ints should support proportional" );
 
-static_assert( !SupportsRelative<bool>, "bools should not support relative" );
-static_assert( !SupportsProportional<bool>, "bools should not support proportional" );
+static_assert( !SupportsRelative < bool >, "bools should not support relative" );
+static_assert( !SupportsProportional < bool >, "bools should not support proportional" );
 
 // Using string ids with ints doesn't make sense in practice, but it doesn't matter here
 // The type that it is templated with does not change it's behavior
-static_assert( !SupportsRelative<string_id<int>>, "string ids should not support relative" );
-static_assert( !SupportsProportional<string_id<int>>,
+static_assert( !SupportsRelative < string_id < int>>, "string ids should not support relative" );
+static_assert( !SupportsProportional < string_id < int>>,
                "string ids should not support proportional" );
 
 // Using int ids with ints doesn't make sense in practice, but it doesn't matter here
 // The type that it is templated with does not change it's behavior
-static_assert( !SupportsRelative<int_id<int>>, "int ids should not support relative" );
-static_assert( !SupportsProportional<int_id<int>>, "int ids should not support proportional" );
+static_assert( !SupportsRelative < int_id < int>>, "int ids should not support relative" );
+static_assert( !SupportsProportional < int_id < int>>, "int ids should not support proportional" );
 
-static_assert( !SupportsRelative<std::string>, "strings should not support relative" );
-static_assert( !SupportsProportional<std::string>, "strings should not support proportional" );
+static_assert( !SupportsRelative < std::string >, "strings should not support relative" );
+static_assert( !SupportsProportional < std::string >, "strings should not support proportional" );
 
 // Grab an enum class from debug.h
-static_assert( !SupportsRelative<DebugOutput>, "enum classes should not support relative" );
-static_assert( !SupportsProportional<DebugOutput>, "enum classes should not support proportional" );
+static_assert( !SupportsRelative < DebugOutput >, "enum classes should not support relative" );
+static_assert( !SupportsProportional < DebugOutput >,
+               "enum classes should not support proportional" );
 
 // Grab a normal enum from there too
-static_assert( !SupportsRelative<DL>, "enums should not support relative" );
-static_assert( !SupportsProportional<DL>, "enums should not support relative" );
+static_assert( !SupportsRelative < DL >, "enums should not support relative" );
+static_assert( !SupportsProportional < DL >, "enums should not support relative" );
 
 // Dummy template:
 // Warn if it's trying to use proportional where it cannot, but otherwise just
 // return.
-template<typename MemberType> requires( !SupportsProportional<MemberType> )
+template < typename MemberType > requires( !SupportsProportional < MemberType > )
 inline bool handle_proportional( const JsonObject &jo, const std::string &name, MemberType & )
 {
     if( jo.has_object( "proportional" ) ) {
@@ -714,7 +714,7 @@ inline bool handle_proportional( const JsonObject &jo, const std::string &name, 
 // this, so member will contain the value of the thing we inherit from
 // So, check if there is a proportional entry, check if it's got a valid value
 // and if it does, multiply the member by it.
-template<SupportsProportional MemberType>
+template < SupportsProportional MemberType >
 inline bool handle_proportional( const JsonObject &jo, const std::string &name, MemberType &member )
 {
     if( jo.has_object( "proportional" ) ) {
@@ -742,7 +742,7 @@ inline bool handle_proportional( const JsonObject &jo, const std::string &name, 
 // Dummy template:
 // Warn when trying to use relative when it's not supported, but otherwise,
 // return
-template<typename MemberType> requires( !SupportsRelative<MemberType> )
+template < typename MemberType > requires( !SupportsRelative < MemberType > )
 inline bool handle_relative( const JsonObject &jo, const std::string &name, MemberType & )
 {
     if( jo.has_object( "relative" ) ) {
@@ -761,7 +761,7 @@ inline bool handle_relative( const JsonObject &jo, const std::string &name, Memb
 // Copy-from makes it so the thing we're inheriting from is used to construct
 // this, so member will contain the value of the thing we inherit from
 // So, check if there is a relative entry, then add it to our member
-template<SupportsRelative MemberType>
+template < SupportsRelative MemberType >
 inline bool handle_relative( const JsonObject &jo, const std::string &name, MemberType &member )
 {
     if( jo.has_object( "relative" ) ) {
@@ -783,7 +783,7 @@ inline bool handle_relative( const JsonObject &jo, const std::string &name, Memb
 }
 
 // No template magic here, yay!
-template<typename MemberType>
+template < typename MemberType >
 inline void optional( const JsonObject &jo, const bool was_loaded, const std::string &name,
                       MemberType &member )
 {
@@ -804,8 +804,8 @@ words: `MemberType foo( ReaderType(...) );` does not work. This is what `is_cons
 If the 5. parameter can be used to construct a `MemberType`, it is assumed to be the default value,
 otherwise it is assumed to be the reader.
 */
-template<typename MemberType, typename DefaultType = MemberType>
-requires( std::is_constructible_v<MemberType, const DefaultType &> )
+template < typename MemberType, typename DefaultType = MemberType >
+requires( std::is_constructible_v < MemberType, const DefaultType & > )
 inline void optional( const JsonObject &jo, const bool was_loaded, const std::string &name,
                       MemberType &member, const DefaultType &default_value )
 {
@@ -817,8 +817,8 @@ inline void optional( const JsonObject &jo, const bool was_loaded, const std::st
     }
 }
 
-template<typename MemberType, typename ReaderType, typename DefaultType = MemberType>
-requires( !std::is_constructible_v<MemberType, const ReaderType &> )
+template < typename MemberType, typename ReaderType, typename DefaultType = MemberType >
+requires( !std::is_constructible_v < MemberType, const ReaderType & > )
 inline void optional( const JsonObject &jo, const bool was_loaded, const std::string &name,
                       MemberType &member, const ReaderType &reader )
 {
@@ -829,7 +829,7 @@ inline void optional( const JsonObject &jo, const bool was_loaded, const std::st
     }
 }
 
-template<typename MemberType, typename ReaderType, typename DefaultType = MemberType>
+template < typename MemberType, typename ReaderType, typename DefaultType = MemberType >
 inline void optional( const JsonObject &jo, const bool was_loaded, const std::string &name,
                       MemberType &member, const ReaderType &reader, const DefaultType &default_value )
 {

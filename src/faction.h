@@ -191,25 +191,24 @@ class faction : public faction_template
         std::map<character_id, std::pair<std::string, bool>> members;
 };
 
-class faction_manager
-{
+class faction_manager {
     private:
         std::map<faction_id, faction> factions;
 
     public:
-        void deserialize( JsonIn &jsin );
-        void serialize( JsonOut &jsout ) const;
+        void deserialize( JsonIn & jsin );
+        void serialize( JsonOut & jsout ) const;
 
         void clear();
         void create_if_needed();
         void display() const;
-        faction *add_new_faction( const std::string &name_new, const faction_id &id_new,
-                                  const faction_id &template_id );
-        void remove_faction( const faction_id &id );
+        faction * add_new_faction( const std::string & name_new, const faction_id & id_new,
+                                   const faction_id & template_id );
+        void remove_faction( const faction_id & id );
         const std::map<faction_id, faction> &all() const {
             return factions;
         }
 
-        faction *get( const faction_id &id, bool complain = true );
+        faction * get( const faction_id & id, bool complain = true );
 };
 

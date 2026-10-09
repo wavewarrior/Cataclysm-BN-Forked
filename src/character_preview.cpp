@@ -194,7 +194,7 @@ class char_preview_adapter : public cata_tiles
                 }
                 result.overlays.emplace_back( overlay_entry{
                     "effect_" + eff_type.str(),
-                    &eff
+                                        &eff
                 } );
             }
 
@@ -361,7 +361,7 @@ void character_preview_window::display() const
     // When the creator is an RmlUi document, .nc-portrait is the box; when it is curses,
     // there is no document to hold a portrait and this frame is still wanted.
     if( !newcharacter_rmlui_enabled() ) {
-    werase( w_preview );
+        werase( w_preview );
         draw_border( w_preview, BORDER_COLOR, _( "CHARACTER PREVIEW" ), BORDER_COLOR );
         wnoutrefresh( w_preview );
     }

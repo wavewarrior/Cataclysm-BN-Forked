@@ -1,4 +1,5 @@
 #include "action_time_scale.h"
+#include "activity_actor_definitions.h"
 #include "activity_handlers.h"
 #include "activity_speed.h"
 #include "avatar.h"
@@ -10,7 +11,6 @@
 #include "map_helpers.h"
 #include "npc.h"
 #include "options_helpers.h"
-#include "activity_actor_definitions.h"
 #include "player_activity.h"
 #include "player_helpers.h"
 #include "state_helpers.h"
@@ -91,10 +91,10 @@ TEST_CASE("Activity progress scale modifies non-complex activity progress", "[sp
     const auto global_scale = override_option("TIME_ACTION_SCALE", "50");
     const auto activity_scale = override_option("ACTIVITY_PROGRESS_SCALE", "50");
 
-    auto &guy = *get_player_character().as_player();
-    clear_character( guy, true );
-    guy.set_moves( 100 );
-    guy.assign_activity( std::make_unique<player_activity>( act_socialize, 1000 ) );
+    auto& guy = *get_player_character().as_player();
+    clear_character(guy, true);
+    guy.set_moves(100);
+    guy.assign_activity(std::make_unique<player_activity>(act_socialize, 1000));
 
     REQUIRE(guy.activity);
     REQUIRE(guy.activity->get_moves_left() == 1000);
@@ -122,11 +122,11 @@ TEST_CASE("Activity progress scale modifies complex activity base progress", "[s
 TEST_CASE("Calendar wait progress consumes elapsed tick duration", "[speed][activity][wait]") {
     clear_all_state();
 
-    auto &guy = *get_player_character().as_player();
-    clear_character( guy, true );
-    guy.set_moves( 100 );
-    guy.assign_activity( std::make_unique<player_activity>( act_wait, to_moves<int>( 1_minutes ) ) );
-    const auto tick_scope = action_time_scale::scoped_calendar_turns_this_tick( 10 );
+    auto& guy = *get_player_character().as_player();
+    clear_character(guy, true);
+    guy.set_moves(100);
+    guy.assign_activity(std::make_unique<player_activity>(act_wait, to_moves<int>(1_minutes)));
+    const auto tick_scope = action_time_scale::scoped_calendar_turns_this_tick(10);
 
     REQUIRE(guy.activity);
     REQUIRE(guy.activity->get_moves_left() == to_moves<int>(1_minutes));
@@ -140,12 +140,12 @@ TEST_CASE("Calendar wait progress consumes elapsed tick duration", "[speed][acti
 TEST_CASE("Trying to sleep progress consumes elapsed tick duration", "[speed][activity][sleep]") {
     clear_all_state();
 
-    auto &guy = *get_player_character().as_player();
-    clear_character( guy, true );
-    guy.add_effect( effect_sleep, 1_minutes );
-    guy.set_moves( 100 );
-    guy.assign_activity( std::make_unique<player_activity>( act_try_sleep, to_moves<int>( 1_minutes ) ) );
-    const auto tick_scope = action_time_scale::scoped_calendar_turns_this_tick( 10 );
+    auto& guy = *get_player_character().as_player();
+    clear_character(guy, true);
+    guy.add_effect(effect_sleep, 1_minutes);
+    guy.set_moves(100);
+    guy.assign_activity(std::make_unique<player_activity>(act_try_sleep, to_moves<int>(1_minutes)));
+    const auto tick_scope = action_time_scale::scoped_calendar_turns_this_tick(10);
 
     REQUIRE(guy.activity);
     REQUIRE(guy.activity->get_moves_left() == to_moves<int>(1_minutes));
@@ -180,9 +180,9 @@ TEST_CASE("Activity progress conversion uses realized actor move budget", "[spee
     REQUIRE(action_time_scale::activity_progress_per_tick() == 100);
     REQUIRE(action_time_scale::activity_progress_per_calendar_turn() == 33);
 
-    CHECK( action_time_scale::activity_progress_from_actor_moves( actor_moves,
-            actor_factor ) == Catch::Approx( 100.0 ) );
-    CHECK( action_time_scale::actor_moves_for_activity_progress( 50.0, actor_factor ) == 51 );
+    CHECK(action_time_scale::activity_progress_from_actor_moves(actor_moves, actor_factor)
+          == Catch::Approx(100.0));
+    CHECK(action_time_scale::actor_moves_for_activity_progress(50.0, actor_factor) == 51);
 }
 
 TEST_CASE("Global action scale below 100 advances calendar by larger ticks", "[speed]") {
@@ -267,25 +267,25 @@ TEST_CASE("Repair item progress uses activity scale", "[speed][activity][repair]
     const auto player_scale = override_option("PLAYER_ACTION_SCALE", "50");
     const auto activity_scale = override_option("ACTIVITY_PROGRESS_SCALE", "100");
 
-    auto &guy = *get_player_character().as_player();
-    clear_character( guy, true );
-    guy.add_effect( effect_debug_clairvoyance, 1_minutes );
-    REQUIRE( character_funcs::fine_detail_vision_mod( guy ) == Catch::Approx( 1.0f ) );
+    auto& guy = *get_player_character().as_player();
+    clear_character(guy, true);
+    guy.add_effect(effect_debug_clairvoyance, 1_minutes);
+    REQUIRE(character_funcs::fine_detail_vision_mod(guy) == Catch::Approx(1.0f));
 
     // The fork drives repair through repair_item_activity_actor's progress_counter rather than
     // the legacy activity_handlers free function. Call the actor directly so the assertion
     // measures the progress arithmetic, not player_activity's auto-needs wrapper.
-    guy.set_moves( 25 );
+    guy.set_moves(25);
     auto repair_actor = repair_item_activity_actor();
-    repair_actor.progress.emplace( "repair", 100 );
+    repair_actor.progress.emplace("repair", 100);
     auto repair_activity = player_activity();
 
-    REQUIRE( repair_actor.progress.get_moves_left() == 100 );
+    REQUIRE(repair_actor.progress.get_moves_left() == 100);
 
-    repair_actor.do_turn( repair_activity, guy );
+    repair_actor.do_turn(repair_activity, guy);
 
-    CHECK( repair_actor.progress.get_moves_left() == 50 );
-    CHECK( guy.get_moves() == 0 );
+    CHECK(repair_actor.progress.get_moves_left() == 50);
+    CHECK(guy.get_moves() == 0);
 }
 
 TEST_CASE(
@@ -297,28 +297,28 @@ TEST_CASE(
     const auto player_scale = override_option("PLAYER_ACTION_SCALE", "50");
     const auto activity_scale = override_option("ACTIVITY_PROGRESS_SCALE", "100");
 
-    auto &guy = *get_player_character().as_player();
-    clear_character( guy, true );
-    guy.add_effect( effect_debug_clairvoyance, 1_minutes );
-    REQUIRE( character_funcs::fine_detail_vision_mod( guy ) == Catch::Approx( 1.0f ) );
+    auto& guy = *get_player_character().as_player();
+    clear_character(guy, true);
+    guy.add_effect(effect_debug_clairvoyance, 1_minutes);
+    REQUIRE(character_funcs::fine_detail_vision_mod(guy) == Catch::Approx(1.0f));
 
     // Drive the actor directly, as upstream drove activity_handlers::repair_item_do_turn
     // directly. Going through player_activity::do_turn would also run the auto-needs block
     // (fuel-fire, auto-consume), which can itself spend moves and would make this assertion
     // measure the wrapper rather than the progress arithmetic under test.
-    guy.set_moves( 25 );
+    guy.set_moves(25);
     auto partial_actor = repair_item_activity_actor();
-    partial_actor.progress.emplace( "repair", 25 );
+    partial_actor.progress.emplace("repair", 25);
     auto partial_activity = player_activity();
 
-    REQUIRE( partial_actor.progress.get_moves_left() == 25 );
+    REQUIRE(partial_actor.progress.get_moves_left() == 25);
 
-    partial_actor.do_turn( partial_activity, guy );
+    partial_actor.do_turn(partial_activity, guy);
 
     // Fewer moves of work remained than the character could deliver, so the surplus is
     // refunded instead of being zeroed.
-    CHECK( partial_actor.progress.get_moves_left() == 0 );
-    CHECK( guy.get_moves() == 12 );
+    CHECK(partial_actor.progress.get_moves_left() == 0);
+    CHECK(guy.get_moves() == 12);
 }
 
 TEST_CASE("Overmap horde scale modifies horde speed", "[speed][monster][horde]") {
@@ -327,7 +327,7 @@ TEST_CASE("Overmap horde scale modifies horde speed", "[speed][monster][horde]")
     const auto monster_scale = override_option("MONSTER_SPEED", "50");
     const auto horde_scale = override_option("OVERMAP_HORDE_SCALE", "50");
 
-    CHECK( action_time_scale::scaled_overmap_horde_speed( 100.0 ) == Catch::Approx( 12.5 ) );
+    CHECK(action_time_scale::scaled_overmap_horde_speed(100.0) == Catch::Approx(12.5));
 }
 
 TEST_CASE("NPC activity catch-up uses activity progress scale", "[speed][activity][npc]") {
@@ -335,8 +335,8 @@ TEST_CASE("NPC activity catch-up uses activity progress scale", "[speed][activit
     const auto global_scale = override_option("TIME_ACTION_SCALE", "50");
     const auto activity_scale = override_option("ACTIVITY_PROGRESS_SCALE", "50");
 
-    auto guy = standard_npc( "activity catch-up npc" );
-    guy.assign_activity( std::make_unique<player_activity>( act_socialize, 1000 ) );
+    auto guy = standard_npc("activity catch-up npc");
+    guy.assign_activity(std::make_unique<player_activity>(act_socialize, 1000));
 
     REQUIRE(guy.activity);
     REQUIRE(guy.activity->get_moves_left() == 1000);
@@ -351,8 +351,8 @@ TEST_CASE("NPC calendar wait catch-up uses elapsed turns", "[speed][activity][np
     const auto global_scale = override_option("TIME_ACTION_SCALE", "50");
     const auto activity_scale = override_option("ACTIVITY_PROGRESS_SCALE", "50");
 
-    auto guy = standard_npc( "calendar wait catch-up npc" );
-    guy.assign_activity( std::make_unique<player_activity>( act_wait, to_moves<int>( 10_seconds ) ) );
+    auto guy = standard_npc("calendar wait catch-up npc");
+    guy.assign_activity(std::make_unique<player_activity>(act_wait, to_moves<int>(10_seconds)));
 
     REQUIRE(guy.activity);
     REQUIRE(guy.activity->get_moves_left() == to_moves<int>(10_seconds));

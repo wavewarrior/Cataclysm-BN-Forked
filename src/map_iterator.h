@@ -101,13 +101,13 @@ class tripoint_range : public std::ranges::view_interface<tripoint_range<Tripoin
 
         auto size() const -> size_t {
             Tripoint range( traits::x( maxp ) - traits::x( minp ), traits::y( maxp ) - traits::y( minp ),
-            traits::z( maxp ) - traits::z( minp ) );
+                            traits::z( maxp ) - traits::z( minp ) );
             return std::max( ++traits::x( range ) * ++traits::y( range ) * ++traits::z( range ), 0 );
         }
 
         bool is_point_inside( const Tripoint &point ) const {
-for( const Tripoint &current : *this ) {
-            if( current == point ) {
+            for( const Tripoint &current : *this ) {
+                if( current == point ) {
                     return true;
                 }
             }
@@ -139,8 +139,7 @@ static_assert( std::ranges::view<tripoint_range<tripoint>> );
 // 2D analog of tripoint_range for any Point type with dimension == 2.
 // Iterates all points in [minp, maxp] (inclusive both ends), x-major order.
 template<typename Point>
-class point_range : public std::ranges::view_interface<point_range<Point>>
-{
+class point_range : public std::ranges::view_interface<point_range<Point>> {
         static_assert( Point::dimension == 2, "Requires 2D point type" );
     private:
         using traits = point_traits<Point>;
@@ -167,8 +166,9 @@ class point_range : public std::ranges::view_interface<point_range<Point>>
 
                 point_generator() = default;
 
-                point_generator( const Point &_p, const point_range *_range )
-                    : p( _p ) {
+                point_generator( const Point & _p, const point_range * _range )
+                    : p( _p )
+                {
                     if( _range ) {
                         range_min = _range->minp;
                         range_max = _range->maxp;
@@ -178,7 +178,8 @@ class point_range : public std::ranges::view_interface<point_range<Point>>
                 // Increment x first; when x exceeds range_max wrap to range_min and increment y.
                 auto operator++() -> point_generator & { // *NOPAD*
                     traits::x( p )++;
-                    if( traits::x( p ) <= traits::x( range_max ) ) {
+                    if( traits::x( p ) <= traits::x( range_max ) )
+                    {
                         return *this;
                     }
                     traits::y( p )++;
@@ -194,7 +195,7 @@ class point_range : public std::ranges::view_interface<point_range<Point>>
 
                 auto operator*() const -> reference { return p; }
 
-                auto operator==( const point_generator &other ) const -> bool {
+                auto operator==( const point_generator & other ) const -> bool {
                     return p == other.p;
                 }
         };
@@ -206,7 +207,7 @@ class point_range : public std::ranges::view_interface<point_range<Point>>
         using reference = typename point_generator::reference;
         using iterator_category = typename point_generator::iterator_category;
 
-        point_range( const Point &_minp, const Point &_maxp ) :
+        point_range( const Point & _minp, const Point & _maxp ) :
             minp( _minp ), maxp( _maxp ) {}
 
         auto begin() const -> point_generator {
@@ -227,8 +228,8 @@ class point_range : public std::ranges::view_interface<point_range<Point>>
             return static_cast<size_t>( std::max( w * h, 0 ) );
         }
 
-        const Point &min() const { return minp; }
-        const Point &max() const { return maxp; }
+        const Point & min() const { return minp; }
+        const Point & max() const { return maxp; }
 };
 
 // C++20 ranges compatibility verification for point_range

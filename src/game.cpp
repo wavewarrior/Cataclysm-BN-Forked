@@ -1155,8 +1155,8 @@ bool game::do_turn()
         ZoneScopedN( "do_turn_monster_visibility_cache" );
         const auto _t0 = _perf_clk::now();
         m.build_map_cache( level_cache_freshness::plan_for( m,
-            level_cache_freshness::pose_of_viewer( u, get_levz() ),
-            level_cache_freshness::lightmap_policy::skip ) );
+                           level_cache_freshness::pose_of_viewer( u, get_levz() ),
+                           level_cache_freshness::lightmap_policy::skip ) );
         _perf_cache += std::chrono::duration<double, std::milli>( _perf_clk::now() - _t0 ).count();
     }
     // This has to be done after updating our map caches, as sound propagation relies on terrain.
@@ -2049,8 +2049,7 @@ auto game::show_tile_context_menu( action_id &act, const tripoint_bub_ms &target
     const input_context hint_ctxt = get_default_mode_input_context();
     const auto hint_for = [&]( action_id a ) -> std::string {
         const std::string ident = action_ident( a );
-        if( hint_ctxt.keys_bound_to( ident ).empty() )
-        {
+        if( hint_ctxt.keys_bound_to( ident ).empty() ) {
             return std::string();
         }
         return hint_ctxt.get_desc( ident, true );
@@ -2537,7 +2536,7 @@ shared_ptr_fast<T> game::shared_from( const T &critter )
     }
     if( critter.is_monster() ) {
         if( const shared_ptr_fast<monster> mon_ptr = critter.get_mapbuffer().creature_tracker().find(
-                    critter.abs_pos() ) ) {
+                critter.abs_pos() ) ) {
             if( static_cast<const Creature *>( mon_ptr.get() ) == static_cast<const Creature *>( &critter ) ) {
                 return std::dynamic_pointer_cast<T>( mon_ptr );
             }
@@ -3020,8 +3019,8 @@ void game::resize_reality_bubble_to( int new_size )
     u.recalc_sight_limits();
     level_cache_freshness::invalidate_level( m, get_levz() );
     m.build_map_cache( level_cache_freshness::plan_for( m,
-        level_cache_freshness::pose_of_viewer( u, get_levz() ),
-        level_cache_freshness::lightmap_policy::normal ) );
+                       level_cache_freshness::pose_of_viewer( u, get_levz() ),
+                       level_cache_freshness::lightmap_policy::normal ) );
 
     // Discard pathfinding objects sized for the old bubble.
     Pathfinding::clear_pool();
@@ -3060,16 +3059,15 @@ void game::update_performance_bubble()
         : activity_bubble_effect::none;
 
     const auto activity_target_size = [&]() -> int {
-        switch( bubble_effect )
-    {
-        case activity_bubble_effect::mobile:
-            return mobile_size;
-        case activity_bubble_effect::idle:
-            return idle_size;
-        default:
-            return 0;
-    }
-}();
+        switch( bubble_effect ) {
+            case activity_bubble_effect::mobile:
+                return mobile_size;
+            case activity_bubble_effect::idle:
+                return idle_size;
+            default:
+                return 0;
+        }
+    }();
 
     // Once entered, we stay shrunk until the activity ends regardless of remaining time.
     if( in_activity_bubble_ ) {
@@ -3279,7 +3277,7 @@ std::vector<npc *> game::get_npcs_if( const std::function<bool( const npc & )> &
 }
 
 std::vector<weak_ptr_fast<npc>> game::get_npcs_pointers_if( const std::function<bool( const npc & )>
-                             &pred )
+        &pred )
 {
     std::vector<weak_ptr_fast<npc>> result;
     for( weak_ptr_fast<npc> guy : *all_npcs().items ) {
@@ -3359,7 +3357,7 @@ game::npc_range game::all_npcs()
     return npc_range( *this );
 }
 
-Creature *game::get_creature_if( const std::function<bool( const Creature & )> &pred )
+Creature * game::get_creature_if( const std::function<bool( const Creature & )> &pred )
 {
     for( Creature &critter : all_creatures() ) {
         if( pred( critter ) ) {
@@ -3369,7 +3367,7 @@ Creature *game::get_creature_if( const std::function<bool( const Creature & )> &
     return nullptr;
 }
 
-world *game::get_active_world() const
+world * game::get_active_world() const
 {
     return world_generator->active_world.get();
 }
@@ -3381,16 +3379,15 @@ void game::shift_destination_preview( const point_rel_ms &delta )
     }
 }
 
-item *game::add_fake_item( detached_ptr<item> &&it )
+item * game::add_fake_item( detached_ptr<item> &&it )
 {
     it->set_flag( flag_TEMPORARY_ITEM );
     fake_items.push_back( std::move( it ) );
     return fake_items.back();
 }
 
-namespace cata_event_dispatch
-{
-void avatar_moves( const avatar &u, const map &m, const tripoint_abs_ms &pos )
+namespace cata_event_dispatch {
+void avatar_moves( const avatar & u, const map & m, const tripoint_abs_ms & pos )
 {
     mtype_id mount_type;
     if( u.is_mounted() ) {
@@ -3486,14 +3483,14 @@ auto game::poll_event() -> input_event
 auto game::coop_game_tick() -> void
 {
     if( coop_server_ ) {
-    // Host: server drives the world sim + sync
-    coop_server_->coop_world_tick();
+        // Host: server drives the world sim + sync
+        coop_server_->coop_world_tick();
     } else if( coop_client_ ) {
-    // Client thin path: send queued actions + apply incoming SYNC.
-    // World state (tiles, monsters) is host-authoritative — no local sim.
-    // process_turn() is called inside apply_sync() once per turn advanced;
-    // that fires it correctly during both normal play and fast-forward bursts.
-    coop_client_->coop_world_tick();
+        // Client thin path: send queued actions + apply incoming SYNC.
+        // World state (tiles, monsters) is host-authoritative — no local sim.
+        // process_turn() is called inside apply_sync() once per turn advanced;
+        // that fires it correctly during both normal play and fast-forward bursts.
+        coop_client_->coop_world_tick();
     } else {
         // Single-player: direct world sim
         post_action_world_step();

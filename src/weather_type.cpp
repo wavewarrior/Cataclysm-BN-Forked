@@ -102,8 +102,8 @@ std::string enum_to_string<weather_sound_category>( weather_sound_category data 
 
 void weather_type::check() const
 {
-for( const weather_type_id &required : requirements.required_weathers ) {
-    if( !required.is_valid() ) {
+    for( const weather_type_id &required : requirements.required_weathers ) {
+        if( !required.is_valid() ) {
             // This may be important, throw error and abort loading.
             throw string_format( R"(Weather type "%s" required for weather type "%s" does not exist.)",
                                  required, id );

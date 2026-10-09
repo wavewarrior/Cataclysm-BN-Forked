@@ -103,14 +103,13 @@ auto pick_mapgen_func( const std::string &mapgen_id ) -> std::shared_ptr<mapgen_
 auto mapgen_function_needs_main_thread( const std::shared_ptr<mapgen_function> &func ) -> bool;
 auto mapgen_has_any_direct_lua_generator() -> bool;
 auto mapgen_id_has_direct_lua_generator( const std::string &mapgen_id ) -> bool;
-std::pair<std::map<ter_id, int>, std::map<furn_id, int>> get_changed_ids_from_update(
+std::pair<std::map<ter_id, int>, std::map<furn_id, int >> get_changed_ids_from_update(
     const std::string &update_mapgen_id );
 mapgen_parameters get_map_special_params( const std::string &mapgen_id );
 
 void resolve_regional_terrain_and_furniture( const mapgendata &dat );
 
-namespace mapgen
-{
+namespace mapgen {
 
 bool has_update_id( const mapgen_id &id );
 

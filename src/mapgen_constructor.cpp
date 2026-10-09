@@ -55,13 +55,11 @@ static const itype_id itype_gasoline( "gasoline" );
 namespace
 {
 
-static constexpr auto resident_lookup = mapbuffer_lookup_options
-{
+static constexpr auto resident_lookup = mapbuffer_lookup_options {
     .mode = mapbuffer_lookup_mode::resident_only
 };
 
-static constexpr auto load_or_generate_lookup = mapbuffer_lookup_options
-{
+static constexpr auto load_or_generate_lookup = mapbuffer_lookup_options {
     .mode = mapbuffer_lookup_mode::load_or_generate
 };
 
@@ -91,8 +89,7 @@ auto has_owned_submaps( const std::vector<std::unique_ptr<submap>> &submaps ) ->
     } );
 }
 
-auto null_items() -> location_vector<item> &
-{
+auto null_items() -> location_vector<item> & {
     static location_vector<item> nulitems( new fake_item_location() );
     return nulitems;
 }
@@ -681,18 +678,20 @@ auto mapgen_constructor::i_clear( const point_omt_ms &p ) -> std::vector<detache
     return sm->get_items( local ).clear();
 }
 
-auto mapgen_constructor::add_item( const point_omt_ms &p, detached_ptr<item> &&new_item ) -> void
-{
-    if( !new_item || new_item->is_null() ) {
+auto mapgen_constructor::add_item( const point_omt_ms &p, detached_ptr<item> &&new_item ) -> void {
+    if( !new_item || new_item->is_null() )
+    {
         return;
     }
     const auto [sm, local] = tile_at( p );
-    if( sm == nullptr ) {
+    if( sm == nullptr )
+    {
         return;
     }
     sm->is_uniform = false;
     sm->update_lum_add( local, *new_item );
-    if( new_item->needs_processing() ) {
+    if( new_item->needs_processing() )
+    {
         sm->active_items.add( *new_item );
     }
     sm->get_items( local ).push_back( std::move( new_item ) );
@@ -707,8 +706,7 @@ auto mapgen_constructor::add_item_or_charges( const point_omt_ms &pos,
     const auto try_place = [&]( const point_omt_ms & p, const bool reject_noitem ) -> bool {
         const auto [sm, local] = tile_at( p );
         if( sm == nullptr || has_flag( "DESTROY_ITEM", p ) ||
-            ( obj->made_of( LIQUID ) && has_flag( "SWIMMABLE", p ) ) )
-        {
+            ( obj->made_of( LIQUID ) && has_flag( "SWIMMABLE", p ) ) ) {
             return false;
         }
         if( reject_noitem && ( has_flag( "NOITEM", p ) || has_flag( "SEALED", p ) ) )
@@ -773,7 +771,7 @@ auto mapgen_constructor::spawn_an_item( const point_omt_ms &p, detached_ptr<item
 }
 
 auto mapgen_constructor::spawn_items( const point_omt_ms &p,
-                                      std::vector<detached_ptr<item>> new_items ) -> std::vector<detached_ptr<item>>
+                                      std::vector<detached_ptr<item>> new_items ) -> std::vector<detached_ptr<item >>
 {
     auto rejected = std::vector<detached_ptr<item>> {};
     std::ranges::for_each( new_items, [&]( detached_ptr<item> &it ) {
@@ -1269,11 +1267,9 @@ auto mapgen_constructor::add_vehicle( const std::variant<vgroup_id, vproto_id> &
 {
     const auto type = std::visit( []( const auto & v ) -> vproto_id {
         using T = std::decay_t<decltype( v )>;
-        if constexpr( std::is_same_v<T, vgroup_id> )
-        {
+        if constexpr( std::is_same_v<T, vgroup_id> ) {
             return v.obj().pick();
-        } else
-        {
+        } else {
             return v;
         }
     }, type_ );

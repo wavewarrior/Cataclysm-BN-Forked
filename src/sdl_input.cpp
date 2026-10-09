@@ -75,16 +75,16 @@ auto key_step_knob( std::string_view name, float delta ) -> void
 auto sdl_keycode_opposite_arrow( SDL_Keycode key ) -> SDL_Keycode
 {
     switch( key ) {
-    case SDLK_UP:
-        return SDLK_DOWN;
-    case SDLK_DOWN:
-        return SDLK_UP;
-    case SDLK_LEFT:
-        return SDLK_RIGHT;
-    case SDLK_RIGHT:
-        return SDLK_LEFT;
-}
-return 0;
+        case SDLK_UP:
+            return SDLK_DOWN;
+        case SDLK_DOWN:
+            return SDLK_UP;
+        case SDLK_LEFT:
+            return SDLK_RIGHT;
+        case SDLK_RIGHT:
+            return SDLK_LEFT;
+    }
+    return 0;
 }
 
 auto sdl_keycode_is_arrow( SDL_Keycode key ) -> bool
@@ -142,7 +142,7 @@ void begin_alt_code()
 auto add_alt_code( char c ) -> bool
 {
     if( alt_down ) {
-    if( c >= '0' && c <= '9' ) {
+        if( c >= '0' && c <= '9' ) {
             alt_buffer = alt_buffer * 10 + ( c - '0' );
         }
 
@@ -381,10 +381,10 @@ auto keysym_to_curses( SDL_Keycode sym, SDL_Keymod mod ) -> int
 auto handle_arrow_combo( SDL_Keycode key ) -> int
 {
     if( !arrow_combo_modifier ) {
-    arrow_combo_modifier = key;
-    return 0;
-}
-return arrow_combo_to_numpad( arrow_combo_modifier, key );
+        arrow_combo_modifier = key;
+        return 0;
+    }
+    return arrow_combo_to_numpad( arrow_combo_modifier, key );
 }
 
 void end_arrow_combo()
@@ -455,19 +455,19 @@ int s_non_mod_keys_held = 0;
 auto is_modifier_scancode( uint32_t sc ) -> bool
 {
     switch( sc ) {
-    case SDL_SCANCODE_LCTRL:
-    case SDL_SCANCODE_RCTRL:
-    case SDL_SCANCODE_LSHIFT:
-    case SDL_SCANCODE_RSHIFT:
-    case SDL_SCANCODE_LALT:
-    case SDL_SCANCODE_RALT:
-    case SDL_SCANCODE_LGUI:
-    case SDL_SCANCODE_RGUI:
-    case SDL_SCANCODE_MODE:
-        return true;
-    default:
-        return false;
-}
+        case SDL_SCANCODE_LCTRL:
+        case SDL_SCANCODE_RCTRL:
+        case SDL_SCANCODE_LSHIFT:
+        case SDL_SCANCODE_RSHIFT:
+        case SDL_SCANCODE_LALT:
+        case SDL_SCANCODE_RALT:
+        case SDL_SCANCODE_LGUI:
+        case SDL_SCANCODE_RGUI:
+        case SDL_SCANCODE_MODE:
+            return true;
+        default:
+            return false;
+    }
 }
 
 // Edge-triggered, so SDL key repeat cannot inflate the count.

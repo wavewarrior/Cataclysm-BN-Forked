@@ -114,20 +114,22 @@ struct category_range {
 
 auto build_page_starts(
     const std::vector<item_pricing> &list, const std::vector<size_t> &filtered,
-    size_t rows_per_page ) -> std::vector<size_t>
-{
+    size_t rows_per_page ) -> std::vector<size_t> {
     auto starts = std::vector<size_t> {};
-    if( rows_per_page <= 1 ) {
+    if( rows_per_page <= 1 )
+    {
         starts = std::views::iota( size_t{0}, filtered.size() ) | std::ranges::to<std::vector>();
         if( starts.empty() ) { starts.push_back( 0 ); }
         return starts;
     }
-    if( filtered.empty() ) {
+    if( filtered.empty() )
+    {
         starts.push_back( 0 );
         return starts;
     }
     auto index = size_t{0};
-    while( index < filtered.size() ) {
+    while( index < filtered.size() )
+    {
         starts.push_back( index );
         auto row = size_t{0};
         auto last_category = std::optional<item_category_id> {};
@@ -151,9 +153,9 @@ auto build_page_starts(
 auto page_index_for_offset( const std::vector<size_t> &page_starts, size_t offset ) -> size_t
 {
     if( page_starts.empty() ) { return 0; }
-const auto it = std::ranges::upper_bound( page_starts, offset );
-if( it == page_starts.begin() ) { return 0; }
-return static_cast<size_t>( std::distance( page_starts.begin(), it ) - 1 );
+    const auto it = std::ranges::upper_bound( page_starts, offset );
+    if( it == page_starts.begin() ) { return 0; }
+    return static_cast<size_t>( std::distance( page_starts.begin(), it ) - 1 );
 }
 
 auto build_category_ranges(
@@ -319,7 +321,7 @@ auto trading_window::build_filtered_indices(
     const std::vector<item_pricing> &list, const std::string& filter ) const -> std::vector<size_t>
 {
     if( filter.empty() ) {
-    return std::views::iota( size_t{0}, list.size() ) | std::ranges::to<std::vector>();
+        return std::views::iota( size_t{0}, list.size() ) | std::ranges::to<std::vector>();
     }
     const auto filter_fn = item_filter_from_string( filter );
     return std::views::iota( size_t{0}, list.size() )
@@ -415,11 +417,11 @@ auto trading_window::perform_trade( npc& np, const std::string& deal ) -> bool
         // Player free capacity (mirrors update_win) for the YOU pane stats.
         const auto sel_amount = []( const item_pricing & ip, bool is_theirs ) -> int {
             if( ip.charges > 0 ) { return is_theirs ? ip.u_charges : ip.npc_charges; }
-        return is_theirs ? ip.u_has : ip.npc_has;
-    };
-    units::volume your_sel_vol = 0_ml, their_sel_vol = 0_ml;
-    units::mass your_sel_wt = 0_gram, their_sel_wt = 0_gram;
-    for( const item_pricing& ip : state.yours ) {
+            return is_theirs ? ip.u_has : ip.npc_has;
+        };
+        units::volume your_sel_vol = 0_ml, their_sel_vol = 0_ml;
+        units::mass your_sel_wt = 0_gram, their_sel_wt = 0_gram;
+        for( const item_pricing& ip : state.yours ) {
             const int a = sel_amount( ip, false );
             your_sel_vol += ip.vol * a;
             your_sel_wt += ip.weight * a;
@@ -693,24 +695,23 @@ auto trading_window::perform_trade( npc& np, const std::string& deal ) -> bool
         size_t &offset;
     };
     const auto clamp_cursor_to_list = [&]( const clamp_cursor_options & opts ) -> void {
-        if( opts.filtered.empty() )
-    {
-        opts.cursor = 0;
-        opts.offset = 0;
-        return;
-    }
-    opts.cursor = std::min( opts.cursor, opts.filtered.size() - 1 );
-    if( entries_per_page == 0 )
-    {
-        opts.offset = 0;
-        return;
-    }
-    const auto page_starts = build_page_starts( opts.list, opts.filtered, entries_per_page );
-    const auto page_index = page_index_for_offset( page_starts, opts.cursor );
-    opts.offset = page_starts[page_index];
-};
+        if( opts.filtered.empty() ) {
+            opts.cursor = 0;
+            opts.offset = 0;
+            return;
+        }
+        opts.cursor = std::min( opts.cursor, opts.filtered.size() - 1 );
+        if( entries_per_page == 0 )
+        {
+            opts.offset = 0;
+            return;
+        }
+        const auto page_starts = build_page_starts( opts.list, opts.filtered, entries_per_page );
+        const auto page_index = page_index_for_offset( page_starts, opts.cursor );
+        opts.offset = page_starts[page_index];
+    };
 
-const auto affects_npc_capacity = [&]( const item & it ) -> bool {
+    const auto affects_npc_capacity = [&]( const item & it ) -> bool {
         return it.where() == item_location_type::character && &it != &np.primary_weapon();
     };
     const auto apply_trade_change = [&]( item_pricing & ip, int new_amount ) -> void {
@@ -739,22 +740,22 @@ const auto affects_npc_capacity = [&]( const item & it ) -> bool {
              const std::vector<category_range> &category_ranges, size_t &category_cursor,
     size_t cursor ) -> void {
         if( category_ranges.empty() || filtered_indices.empty() ) { return; }
-    const auto cursor_category =
-    list[filtered_indices[cursor]].locs.front()->get_category().get_id();
-    const auto match = std::ranges::find_if( category_ranges, [&]( const category_range & entry )
-    {
-        return entry.id == cursor_category;
-    } );
-    if( match != category_ranges.end() )
-    {
-        category_cursor = static_cast<size_t>( std::distance( category_ranges.begin(), match ) );
+        const auto cursor_category =
+        list[filtered_indices[cursor]].locs.front()->get_category().get_id();
+        const auto match = std::ranges::find_if( category_ranges, [&]( const category_range & entry )
+        {
+            return entry.id == cursor_category;
+        } );
+        if( match != category_ranges.end() )
+        {
+            category_cursor = static_cast<size_t>( std::distance( category_ranges.begin(), match ) );
         }
     };
     const auto get_current_amount = [&]( const item_pricing & ip ) -> int {
         if( ip.charges > 0 ) { return focus_them ? ip.u_charges : ip.npc_charges; }
-    return focus_them ? ip.u_has : ip.npc_has;
-};
-const auto get_max_amount = [&]( const item_pricing & ip ) -> int {
+        return focus_them ? ip.u_has : ip.npc_has;
+    };
+    const auto get_max_amount = [&]( const item_pricing & ip ) -> int {
         return ip.charges > 0 ? ip.charges : std::max( ip.count, 1 );
     };
     struct balance_item_entry {
@@ -984,13 +985,11 @@ const auto get_max_amount = [&]( const item_pricing & ip ) -> int {
                 if( !category_ranges.empty() ) {
                     const auto& range = category_ranges[category_cursor];
                     const auto apply_amount = [&]( item_pricing & ip ) -> void {
-                        if( action == "RIGHT" )
-                        {
+                        if( action == "RIGHT" ) {
                             const auto max_amount =
                             ip.charges > 0 ? ip.charges : std::max( ip.count, 1 );
                             apply_trade_change( ip, max_amount );
-                        } else
-                        {
+                        } else {
                             apply_trade_change( ip, 0 );
                         }
                     };
@@ -1200,9 +1199,8 @@ const auto get_max_amount = [&]( const item_pricing & ip ) -> int {
                 auto& owner_sells_charge = focus_them ? ip.u_charges : ip.npc_charges;
 
                 const auto calc_amount_hint = [&]() -> int {
-                    if( ip.price > 0 )
-                {
-                    if( focus_them && state.your_balance > 0 ) {
+                    if( ip.price > 0 ) {
+                        if( focus_them && state.your_balance > 0 ) {
                             return state.your_balance / ip.price;
                         } else if( !focus_them && state.your_balance < 0 ) {
                             const auto amt = state.your_balance / ip.price;

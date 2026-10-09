@@ -577,7 +577,7 @@ void Character::store( JsonOut &json ) const
     json.member( "base_height", init_height );
 
     if( prof.is_valid() ) {
-    json.member( "profession", prof );
+        json.member( "profession", prof );
     }
     json.member( "custom_profession", custom_profession );
 
@@ -609,13 +609,13 @@ void Character::store( JsonOut &json ) const
     if( !backlog.empty() && !backlog.front()->str_values.empty() && ( ( activity &&
             activity->id() == activity_id( "ACT_FETCH_REQUIRED" ) ) || ( destination_activity &&
                     destination_activity->id() == activity_id( "ACT_FETCH_REQUIRED" ) ) ) ) {
-    requirement_data things_to_fetch = requirement_id( backlog.front()->str_values.back() ).obj();
+        requirement_data things_to_fetch = requirement_id( backlog.front()->str_values.back() ).obj();
         json.member( "fetch_data", things_to_fetch );
     }
 
     const item &weapon = primary_weapon();
     if( !weapon.is_null() ) {
-    json.member( "weapon", weapon ); // also saves contents
+        json.member( "weapon", weapon ); // also saves contents
     }
 
     json.member( "stim", stim );
@@ -636,7 +636,7 @@ void Character::store( JsonOut &json ) const
 
     // storing the mount
     if( is_mounted() ) {
-    json.member( "mounted_creature", g->critter_tracker->temporary_id( *mounted_creature ) );
+        json.member( "mounted_creature", g->critter_tracker->temporary_id( *mounted_creature ) );
     }
 
     morale->store( json );
@@ -644,8 +644,8 @@ void Character::store( JsonOut &json ) const
     // skills
     json.member( "skills" );
     json.start_object();
-for( const auto &pair : *_skills ) {
-    json.member( pair.first.str(), pair.second );
+    for( const auto &pair : *_skills ) {
+        json.member( pair.first.str(), pair.second );
     }
     json.end_object();
 
@@ -655,14 +655,14 @@ for( const auto &pair : *_skills ) {
 
     // npc; unimplemented
     if( power_level < 1_kJ ) {
-    json.member( "power_level", std::to_string( units::to_joule( power_level ) ) + " J" );
+        json.member( "power_level", std::to_string( units::to_joule( power_level ) ) + " J" );
     } else {
         json.member( "power_level", std::to_string( units::to_kilojoule( power_level ) ) + " kJ" );
     }
     json.member( "max_power_level", std::to_string( units::to_kilojoule( max_power_level ) ) + " kJ" );
 
     if( !overmap_time.empty() ) {
-    json.member( "overmap_time" );
+        json.member( "overmap_time" );
         json.start_array();
         for( const std::pair<const point_abs_omt, time_duration> &pr : overmap_time ) {
             json.write( pr.first );
@@ -674,8 +674,8 @@ for( const auto &pair : *_skills ) {
     json.member( "automoveroute", auto_move_route );
     json.member( "known_traps" );
     json.start_array();
-for( const auto &elem : known_traps ) {
-    json.start_object();
+    for( const auto &elem : known_traps ) {
+        json.start_object();
         json.member( "x", elem.first.x() );
         json.member( "y", elem.first.y() );
         json.member( "z", elem.first.z() );
@@ -721,7 +721,7 @@ void player::store( JsonOut &json ) const
 
 
     if( const auto lt_ptr = last_target.lock() ) {
-    if( const npc *const guy = dynamic_cast<const npc *>( lt_ptr.get() ) ) {
+        if( const npc *const guy = dynamic_cast<const npc *>( lt_ptr.get() ) ) {
             json.member( "last_target", guy->getID() );
             json.member( "last_target_type", +1 );
         } else if( const monster *const mon = dynamic_cast<const monster *>( lt_ptr.get() ) ) {
@@ -822,7 +822,7 @@ void avatar::store( JsonOut &json ) const
     player::store( json );
 
     if( g->scen != nullptr ) {
-    json.member( "scenario", g->scen->ident() );
+        json.member( "scenario", g->scen->ident() );
     }
     // someday, npcs may drive
     json.member( "controlling_vehicle", controlling_vehicle );
@@ -836,13 +836,13 @@ void avatar::store( JsonOut &json ) const
 
     // bio_portal_tap persistent link
     if( bio_portal_tap_linked ) {
-    json.member( "bio_portal_tap_linked", bio_portal_tap_linked );
+        json.member( "bio_portal_tap_linked", bio_portal_tap_linked );
         json.member( "bio_portal_tap_dim_id", bio_portal_tap_dim_id.str() );
         json.member( "bio_portal_tap_pos", bio_portal_tap_pos.raw() );
     }
 
     if( shadow_npc ) {
-    json.member( "shadow_npc", *shadow_npc );
+        json.member( "shadow_npc", *shadow_npc );
     }
 
     // stats through kills
@@ -868,7 +868,7 @@ void avatar::store( JsonOut &json ) const
     json.member( "assigned_invlet" );
     json.start_array();
     for( auto iter : inv.assigned_invlet ) {
-    json.start_array();
+        json.start_array();
         json.write( iter.first );
         json.write( iter.second );
         json.end_array();
@@ -886,8 +886,8 @@ void avatar::store( JsonOut &json ) const
 
     json.member( "faction_warnings" );
     json.start_array();
-for( const auto &elem : warning_record ) {
-    json.start_object();
+    for( const auto &elem : warning_record ) {
+        json.start_object();
         json.member( "fac_warning_id", elem.first );
         json.member( "fac_warning_num", elem.second.first );
         json.member( "fac_warning_time", elem.second.second );
@@ -898,8 +898,8 @@ for( const auto &elem : warning_record ) {
     // Throw quick-slots
     json.member( "throw_slots" );
     json.start_array();
-for( const auto &slot : throw_slots_ ) {
-    json.write( slot.str() );
+    for( const auto &slot : throw_slots_ ) {
+        json.write( slot.str() );
     }
     json.end_array();
     json.member( "active_throw_slot", active_throw_slot_ );
@@ -1099,14 +1099,14 @@ void npc_follower_rules::serialize( JsonOut &json ) const
     json.member( "cbm_recharge", static_cast<int>( cbm_recharge ) );
 
     // serialize the flags so they can be changed between save games
-for( const auto &rule : ally_rule_strs ) {
-    json.member( "rule_" + rule.first, has_flag( rule.second.rule, false ) );
+    for( const auto &rule : ally_rule_strs ) {
+        json.member( "rule_" + rule.first, has_flag( rule.second.rule, false ) );
     }
-for( const auto &rule : ally_rule_strs ) {
-    json.member( "override_enable_" + rule.first, has_override_enable( rule.second.rule ) );
+    for( const auto &rule : ally_rule_strs ) {
+        json.member( "override_enable_" + rule.first, has_override_enable( rule.second.rule ) );
     }
-for( const auto &rule : ally_rule_strs ) {
-    json.member( "override_" + rule.first, has_override( rule.second.rule ) );
+    for( const auto &rule : ally_rule_strs ) {
+        json.member( "override_" + rule.first, has_override( rule.second.rule ) );
     }
 
     json.member( "pickup_whitelist", *pickup_whitelist );
@@ -1196,7 +1196,7 @@ void npc_chatbin::serialize( JsonOut &json ) const
     json.start_object();
     json.member( "first_topic", first_topic );
     if( mission_selected != nullptr ) {
-    json.member( "mission_selected", mission_selected->get_id() );
+        json.member( "mission_selected", mission_selected->get_id() );
     }
     json.member( "skill", skill );
     json.member( "style", style );
@@ -1606,7 +1606,7 @@ void npc::store( JsonOut &json ) const
     json.member( "previous_mission", previous_mission );
     json.member( "faction_api_ver", faction_api_version );
     if( !fac_id.str().empty() ) { // set in constructor
-    json.member( "my_fac", fac_id.c_str() );
+        json.member( "my_fac", fac_id.c_str() );
     }
     json.member( "attitude", static_cast<int>( attitude ) );
     json.member( "previous_attitude", static_cast<int>( previous_attitude ) );
@@ -1616,11 +1616,11 @@ void npc::store( JsonOut &json ) const
 
     json.member( "cbm_toggled", cbm_toggled );
     if( cbm_fake_toggled ) {
-    json.member( "cbm_fake_toggled", cbm_fake_toggled );
+        json.member( "cbm_fake_toggled", cbm_fake_toggled );
     }
     json.member( "cbm_active", cbm_active );
     if( cbm_fake_active ) {
-    json.member( "cbm_fake_active", cbm_fake_active );
+        json.member( "cbm_fake_active", cbm_fake_active );
     }
 
     json.member( "comp_mission_id", comp_mission.mission_id );

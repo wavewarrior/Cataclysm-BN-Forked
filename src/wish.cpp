@@ -76,7 +76,8 @@ class wish_mutate_callback: public uilist_callback
                     p->toggle_trait( vTraits[ entnum ] );
                     p->unset_mutation( vTraits[ entnum ] );
 
-                } else {
+                }
+                else {
                     p->set_mutation( vTraits[ entnum ] );
                     p->toggle_trait( vTraits[ entnum ] );
                 }
@@ -84,7 +85,8 @@ class wish_mutate_callback: public uilist_callback
                 if( p->has_trait( vTraits[ entnum ] ) ) {
                     entry.text_color = c_green;
                     entry.override_hilite_color = true;
-                } else {
+                }
+                else {
                     entry.text_color = menu->text_color;
                     entry.override_hilite_color = false;
                 }
@@ -95,7 +97,7 @@ class wish_mutate_callback: public uilist_callback
                 // Building menu with mutation category entries (first entry - 'ALL' for cancell purposes)
                 uilist category_menu;
                 // We'll keep vector of values to map it later from user input
-                std::vector<std::pair<const string_id<mutation_category_trait>, std::set<mutation_branch>>*>
+                std::vector<std::pair<const string_id<mutation_category_trait>, std::set<mutation_branch >> * >
                 entries;
                 int c = 0;
                 auto ch = '0';
@@ -637,13 +639,13 @@ class wish_item_callback: public uilist_callback
 
         void select( uilist *menu ) override {
             if( menu->selected < 0 ) {
-            return;
+                return;
+            }
+            incontainer = standard_itype_ids[menu->selected]->phase == phase_id::LIQUID;
         }
-        incontainer = standard_itype_ids[menu->selected]->phase == phase_id::LIQUID;
-    }
 
-    bool key( const input_context &, const input_event &event, int /*entnum*/,
-              uilist * /*menu*/ ) override {
+        bool key( const input_context &, const input_event &event, int /*entnum*/,
+                  uilist * /*menu*/ ) override {
             if( event.get_first_input() == 'f' ) {
                 incontainer = !incontainer;
                 return true;

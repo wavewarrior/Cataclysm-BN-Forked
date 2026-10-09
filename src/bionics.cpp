@@ -366,7 +366,7 @@ void bionic_data::load( const JsonObject &jsobj, const std::string &src )
 void bionic_data::finalize()
 {
     if( has_flag( STATIC( flag_id( "BIONIC_FAULTY" ) ) ) ) {
-    faulty_bionics.push_back( id );
+        faulty_bionics.push_back( id );
     }
     for( enchantment &ench : bio_enchantments ) {
         ench.finalize();
@@ -966,7 +966,7 @@ bool Character::activate_bionic( bionic &bio, bool eff_only, bool *close_bionics
         { material_id( "iron" ), material_id( "steel" ) };
         // Remember all items that will be affected, then affect them
         // Don't "snowball" by affecting some items multiple times
-        std::vector<std::pair<detached_ptr<item>, const tripoint_bub_ms>> affected;
+        std::vector<std::pair<detached_ptr<item>, const tripoint_bub_ms >> affected;
         const units::mass weight_cap = weight_capacity();
         for( const auto &p : here.points_in_radius( bub_pos(), 10 ) ) {
             if( p == bub_pos() || !here.has_items( p ) || here.has_flag( flag_SEALED, p ) ) {

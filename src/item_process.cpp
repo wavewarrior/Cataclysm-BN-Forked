@@ -146,9 +146,9 @@ static const trait_id trait_TOLERANCE( "TOLERANCE" );
 bool item::needs_processing() const
 {
     return is_active() || has_flag( flag_RADIO_ACTIVATION ) || has_flag( flag_ETHEREAL_ITEM ) ||
-    ( !contents.empty() && contents.has_processing_items() ) ||
-    ( magazine_current() && magazine_current()->needs_processing() ) ||
-    is_artifact() || is_relic() || goes_bad();
+           ( !contents.empty() && contents.has_processing_items() ) ||
+           ( magazine_current() && magazine_current()->needs_processing() ) ||
+           is_artifact() || is_relic() || goes_bad();
 }
 
 int item::processing_speed() const
@@ -184,29 +184,29 @@ void item::process_artifact( player *carrier )
 std::vector<trait_id> item::mutations_from_wearing( const Character &guy ) const
 {
     if( !is_relic() ) {
-    return std::vector<trait_id> {};
-}
-std::vector<trait_id> muts;
+        return std::vector<trait_id> {};
+    }
+    std::vector<trait_id> muts;
 
-for( const enchantment &ench : get_enchantments( true ) ) {
-    if( ench.is_active( guy, *this ) ) {
-        for( const trait_id &mut : ench.get_mutations() ) {
-            // this may not be perfectly accurate due to conditions
-            muts.push_back( trait_id( mut.str() ) );
+    for( const enchantment &ench : get_enchantments( true ) ) {
+        if( ench.is_active( guy, *this ) ) {
+            for( const trait_id &mut : ench.get_mutations() ) {
+                // this may not be perfectly accurate due to conditions
+                muts.push_back( trait_id( mut.str() ) );
+            }
         }
     }
-}
-for( const enchantment &ench : get_enchantments( false ) ) {
-    if( ench.is_active( guy, *this ) ) {
-        for( const trait_id &mut : ench.get_mutations() ) {
-            // this may not be perfectly accurate due to conditions
-            muts.push_back( trait_id( mut.str() ) );
+    for( const enchantment &ench : get_enchantments( false ) ) {
+        if( ench.is_active( guy, *this ) ) {
+            for( const trait_id &mut : ench.get_mutations() ) {
+                // this may not be perfectly accurate due to conditions
+                muts.push_back( trait_id( mut.str() ) );
+            }
         }
     }
-}
 
-for( const trait_id &char_mut : guy.get_mutations() ) {
-    for( auto iter = muts.begin(); iter != muts.end(); ) {
+    for( const trait_id &char_mut : guy.get_mutations() ) {
+        for( auto iter = muts.begin(); iter != muts.end(); ) {
             if( char_mut == *iter ) {
                 iter = muts.erase( iter );
             } else {
@@ -886,8 +886,7 @@ detached_ptr<item> item::process( detached_ptr<item> &&self, player *carrier,
 
     auto process_content = [&]( auto &&process_content, detached_ptr<item> &&it,
     const content_processing_options & opts ) -> detached_ptr<item> {
-        if( !it )
-        {
+        if( !it ) {
             return std::move( it );
         }
 
@@ -1127,17 +1126,17 @@ detached_ptr<item> item::process_internal( detached_ptr<item> &&self, player *ca
 bool item::can_revive() const
 {
     return is_corpse() && corpse->has_flag( MF_REVIVES ) && damage() < max_damage()
-    && !( has_flag( flag_FIELD_DRESS ) || has_flag( flag_FIELD_DRESS_FAILED )
-    || has_flag( flag_QUARTERED ) || has_flag( flag_SKINNED ) || has_flag( flag_PULPED ) );
+           && !( has_flag( flag_FIELD_DRESS ) || has_flag( flag_FIELD_DRESS_FAILED )
+                 || has_flag( flag_QUARTERED ) || has_flag( flag_SKINNED ) || has_flag( flag_PULPED ) );
 }
 
 bool item::ready_to_revive( const tripoint_bub_ms& pos ) const
 {
     if( !can_revive() ) { return false; }
-if( get_map().veh_at( pos ) ) { return false; }
-if( !action_time_scale::once_every_this_tick( 1_seconds ) ) { return false; }
-int age_in_hours = to_hours<int>( age() );
-age_in_hours -= static_cast<int>( static_cast<float>( burnt ) / ( volume() / 250_ml ) );
+    if( get_map().veh_at( pos ) ) { return false; }
+    if( !action_time_scale::once_every_this_tick( 1_seconds ) ) { return false; }
+    int age_in_hours = to_hours<int>( age() );
+    age_in_hours -= static_cast<int>( static_cast<float>( burnt ) / ( volume() / 250_ml ) );
     if( damage_level( 4 ) > 0 ) { age_in_hours /= ( damage_level( 4 ) + 1 ); }
     int rez_factor = 48 - age_in_hours;
     if( age_in_hours > 6 && ( rez_factor <= 0 || one_in( rez_factor ) ) ) {

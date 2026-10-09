@@ -267,7 +267,7 @@ void explosion_iuse::load( const JsonObject& obj )
 int explosion_iuse::use( player& p, item& it, bool t, const tripoint_bub_ms& pos ) const
 {
     if( t ) {
-    if( sound_volume >= 0_dB ) {
+        if( sound_volume >= 0_dB ) {
             sound_event se;
             se.origin = pos;
             se.volume = units::to_decibel( sound_volume );
@@ -279,7 +279,7 @@ int explosion_iuse::use( player& p, item& it, bool t, const tripoint_bub_ms& pos
             sounds::sound( se );
         }
     } else if( it.charges > 0 ) {
-    if( p.has_item( it ) ) {
+        if( p.has_item( it ) ) {
             if( no_deactivate_msg.empty() ) {
                 p.add_msg_if_player(
                     m_warning,
@@ -300,8 +300,8 @@ void explosion_iuse::trigger_explosion( const tripoint_bub_ms& pos, Creature* so
     if( explosion ) { explosion_handler::explosion( pos, explosion, source ); }
 
     if( draw_explosion_radius >= 0 ) {
-    explosion_handler::
-    draw_explosion( pos, draw_explosion_radius, draw_explosion_color, "explosion" );
+        explosion_handler::
+        draw_explosion( pos, draw_explosion_radius, draw_explosion_color, "explosion" );
     }
     if( do_flashbang ) { explosion_handler::flashbang( pos, flashbang_player_immune, "explosion" ); }
     map& here = get_map();
@@ -321,12 +321,12 @@ void explosion_iuse::trigger_explosion( const tripoint_bub_ms& pos, Creature* so
         }
     }
     if( scrambler_blast_radius >= 0 ) {
-    for( const tripoint_bub_ms& dest : here.points_in_radius( pos, scrambler_blast_radius ) ) {
+        for( const tripoint_bub_ms& dest : here.points_in_radius( pos, scrambler_blast_radius ) ) {
             explosion_handler::scrambler_blast( dest );
         }
     }
     if( emp_blast_radius >= 0 ) {
-    for( const tripoint_bub_ms& dest : here.points_in_radius( pos, emp_blast_radius ) ) {
+        for( const tripoint_bub_ms& dest : here.points_in_radius( pos, emp_blast_radius ) ) {
             explosion_handler::emp_blast( dest );
         }
     }
@@ -335,13 +335,13 @@ void explosion_iuse::trigger_explosion( const tripoint_bub_ms& pos, Creature* so
 void explosion_iuse::info( const item &, std::vector<iteminfo> &dump ) const
 {
     if( explosion.damage > 0 ) {
-    dump.emplace_back( "TOOL", _( "Blast damage at epicenter: " ), explosion.damage );
+        dump.emplace_back( "TOOL", _( "Blast damage at epicenter: " ), explosion.damage );
         dump.emplace_back( "TOOL", _( "Blast radius: " ), static_cast<int>( explosion.radius ) );
     }
     const auto& sd = explosion.fragment;
     if( sd ) {
-    dump.emplace_back(
-        "TOOL", _( "Shrapnel damage: " ), static_cast<int>( sd->impact.total_damage() ) );
+        dump.emplace_back(
+            "TOOL", _( "Shrapnel damage: " ), static_cast<int>( sd->impact.total_damage() ) );
         dump.emplace_back( "TOOL", _( "Shrapnel range: " ), sd->range );
     }
 
@@ -364,16 +364,16 @@ void unfold_vehicle_iuse::load( const JsonObject& obj )
 int unfold_vehicle_iuse::use( player& p, item& it, bool, const tripoint_bub_ms & ) const
 {
     if( p.is_underwater() ) {
-    p.add_msg_if_player( m_info, _( "You can't do that while underwater." ) );
+        p.add_msg_if_player( m_info, _( "You can't do that while underwater." ) );
         return 0;
     }
     if( p.is_mounted() ) {
-    p.add_msg_if_player( m_info, _( "You cannot do that while mounted." ) );
+        p.add_msg_if_player( m_info, _( "You cannot do that while mounted." ) );
         return 0;
     }
-for( const auto& tool : tools_needed ) {
-    // Amount == -1 means need one, but don't consume it.
-    if( !p.has_amount( tool.first, 1 ) ) {
+    for( const auto& tool : tools_needed ) {
+        // Amount == -1 means need one, but don't consume it.
+        if( !p.has_amount( tool.first, 1 ) ) {
             p.add_msg_if_player( _( "You need %s to do it!" ), item::nname( tool.first ) );
             return 0;
         }
@@ -382,14 +382,14 @@ for( const auto& tool : tools_needed ) {
     vehicle* veh =
         get_map().add_vehicle( vehicle_id, p.bub_pos(), 0_degrees, 0, 0, false, false, true );
     if( veh == nullptr ) {
-    p.add_msg_if_player( m_info, _( "There's no room to unfold the %s." ), it.tname() );
+        p.add_msg_if_player( m_info, _( "There's no room to unfold the %s." ), it.tname() );
         return 0;
     }
     veh->set_owner( p );
 
     if( !veh->is_foldable() ) {
-    // Mark the vehicle as foldable.
-    veh->tags.insert( "convertible" );
+        // Mark the vehicle as foldable.
+        veh->tags.insert( "convertible" );
         // Store the id of the item the vehicle is made of.
         veh->tags.insert( std::string( "convertible:" ) + it.typeId().str() );
     }
@@ -397,15 +397,15 @@ for( const auto& tool : tools_needed ) {
     p.moves -= moves;
     // Restore HP of parts if we stashed them previously.
     if( it.has_var( "folding_bicycle_parts" ) ) {
-    // Brand new, no HP stored
-    return 1;
-}
-std::istringstream veh_data;
-const auto data = it.get_var( "folding_bicycle_parts" );
-veh_data.str( data );
-if( !data.empty() && data[0] >= '0' && data[0] <= '9' ) {
-    // starts with a digit -> old format
-    for( const vpart_reference& vpr : veh->get_all_parts() ) {
+        // Brand new, no HP stored
+        return 1;
+    }
+    std::istringstream veh_data;
+    const auto data = it.get_var( "folding_bicycle_parts" );
+    veh_data.str( data );
+    if( !data.empty() && data[0] >= '0' && data[0] <= '9' ) {
+        // starts with a digit -> old format
+        for( const vpart_reference& vpr : veh->get_all_parts() ) {
             int tmp;
             veh_data >> tmp;
             veh->set_hp( vpr.part(), tmp );
@@ -700,7 +700,7 @@ int delayed_transform_iuse::time_to_do( const item& it ) const
 int delayed_transform_iuse::use( player& p, item& it, bool t, const tripoint_bub_ms& pos ) const
 {
     if( time_to_do( it ) > 0 ) {
-    p.add_msg_if_player( m_info, _( not_ready_msg ) );
+        p.add_msg_if_player( m_info, _( not_ready_msg ) );
         return 0;
     }
     return iuse_transform::use( p, it, t, pos );
@@ -727,15 +727,15 @@ void set_transform_iuse::load( const JsonObject& obj )
 int set_transform_iuse::use( player& p, item& it, bool t, const tripoint_bub_ms& pos ) const
 {
     if( t ) {
-    return 0; // invoked from active item processing, do nothing.
-}
+        return 0; // invoked from active item processing, do nothing.
+    }
 
-const bool possess =
-    p.has_item( it )
-    || ( it.has_flag( flag_ALLOWS_REMOTE_USE ) && square_dist( p.bub_pos(), pos ) == 1 );
+    const bool possess =
+        p.has_item( it )
+        || ( it.has_flag( flag_ALLOWS_REMOTE_USE ) && square_dist( p.bub_pos(), pos ) == 1 );
 
     if( set_charges ) {
-    if( it.is_power_armor() && character_funcs::can_interface_armor( p ) ) {
+        if( it.is_power_armor() && character_funcs::can_interface_armor( p ) ) {
             if( !p.has_power() ) {
                 if( possess ) { p.add_msg_if_player( m_info, set_charges_msg, it.tname() ); }
                 return 0;
@@ -749,8 +749,8 @@ const bool possess =
     iuse_transform::use( p, it, t, pos );
 
     const flag_id f( flag );
-for( auto& elem : p.worn ) {
-    if( elem->has_flag( f ) && elem->is_active() == turn_off ) {
+    for( auto& elem : p.worn ) {
+        if( elem->has_flag( f ) && elem->is_active() == turn_off ) {
             if( elem->type->can_use( "set_transformed" ) ) {
                 const set_transformed_iuse* actor = dynamic_cast<const set_transformed_iuse *>(
                                                         elem->get_use( "set_transformed" )->get_actor_ptr() );
@@ -782,12 +782,12 @@ void set_transformed_iuse::load( const JsonObject& obj )
 int set_transformed_iuse::use( player& p, item& it, bool t, const tripoint_bub_ms& pos ) const
 {
     if( t ) {
-    return 0; // invoked from active item processing, do nothing.
-}
+        return 0; // invoked from active item processing, do nothing.
+    }
 
-iuse_transform::use( p, it, t, pos );
+    iuse_transform::use( p, it, t, pos );
 
-return 0;
+    return 0;
 }
 
 int set_transformed_iuse::bypass( player& p, item& it, bool t, const tripoint_bub_ms& pos ) const
@@ -1016,8 +1016,8 @@ int change_scent_iuse::use( player& p, item& it, bool, const tripoint_bub_ms & )
     add_msg( m_info, _( "You use the %s to mask your scent" ), it.tname() );
 
     // Apply the various effects.
-for( const auto& eff : effects ) {
-    p.add_effect( eff.id, eff.duration, convert_bp( eff.bp ) );
+    for( const auto& eff : effects ) {
+        p.add_effect( eff.id, eff.duration, convert_bp( eff.bp ) );
         if( eff.permanent ) { p.get_effect( eff.id, convert_bp( eff.bp ) ).set_permanent(); }
     }
     return charges_to_use;
@@ -1393,7 +1393,7 @@ static bool multicooker_hallu( player& p )
 int multicooker_iuse::use( player& p, item& it, bool t, const tripoint_bub_ms& pos ) const
 {
     if( t ) {
-    if( !it.units_sufficient( p, charges_per_minute ) ) {
+        if( !it.units_sufficient( p, charges_per_minute ) ) {
             it.deactivate();
             return 0;
         }
@@ -1612,8 +1612,8 @@ auto read_time_duration(
 -> time_duration
 {
     if( !obj.has_member( member ) ) { return default_value; }
-if( obj.has_string( member ) ) {
-    return read_from_json_string<time_duration>( *obj.get_raw( member ), time_duration::units );
+    if( obj.has_string( member ) ) {
+        return read_from_json_string<time_duration>( *obj.get_raw( member ), time_duration::units );
     }
     if( obj.has_int( member ) ) { return time_duration::from_turns( obj.get_int( member ) ); }
     obj.throw_error( "member must be a duration string or integer turns", member );
@@ -1642,11 +1642,11 @@ auto hand_crank_actor::can_use(
     if( who.is_npc() ) { return ret_val<bool>::make_failure(); }
     if( who.is_underwater() ) { return ret_val<bool>::make_failure( _( underwater_message ) ); }
     if( who.get_fatigue() >= fatigue_levels::dead_tired ) {
-    return ret_val<bool>::make_failure( _( exhausted_message ) );
+        return ret_val<bool>::make_failure( _( exhausted_message ) );
     }
     const auto* magazine = it.magazine_current();
     if( !magazine || !magazine->has_flag( flag_RECHARGE ) ) {
-    return ret_val<bool>::make_failure( _( need_battery_message ) );
+        return ret_val<bool>::make_failure( _( need_battery_message ) );
     }
     return ret_val<bool>::make_success();
 }
@@ -1654,21 +1654,21 @@ auto hand_crank_actor::can_use(
 auto hand_crank_actor::use( player& p, item& it, bool, const tripoint_bub_ms & ) const -> int
 {
     if( p.is_npc() ) { return 0; }
-if( p.is_underwater() ) {
-    p.add_msg_if_player( m_info, _( underwater_message ) );
+    if( p.is_underwater() ) {
+        p.add_msg_if_player( m_info, _( underwater_message ) );
         return 0;
     }
     if( p.get_fatigue() >= fatigue_levels::dead_tired ) {
-    p.add_msg_if_player( m_info, _( exhausted_message ) );
+        p.add_msg_if_player( m_info, _( exhausted_message ) );
         return 0;
     }
     auto* magazine = it.magazine_current();
     if( !magazine || !magazine->has_flag( flag_RECHARGE ) ) {
-    p.add_msg_if_player( m_info, _( need_battery_message ) );
+        p.add_msg_if_player( m_info, _( need_battery_message ) );
         return 0;
     }
     if( it.ammo_capacity() > it.ammo_remaining() ) {
-    p.add_msg_if_player( _( start_message ), it.tname(), magazine->tname() );
+        p.add_msg_if_player( _( start_message ), it.tname(), magazine->tname() );
         auto resolved_charge_interval = charge_interval;
         if( resolved_charge_interval <= 0_turns ) { resolved_charge_interval = 144_seconds; }
         const auto safe_charge_amount = std::max( 1, charge_amount );
@@ -1698,23 +1698,23 @@ ret_val<bool> sex_toy_actor::can_use(
     const Character& c, const item& i, bool, const tripoint_bub_ms & ) const
 {
     if( c.is_npc() ) {
-    return ret_val<bool>::make_failure(); // Creepy, status quo
+        return ret_val<bool>::make_failure(); // Creepy, status quo
     }
     if( c.is_mounted() ) {
-    return ret_val<bool>::make_failure( _( "You can't do *that* while mounted" ) );
+        return ret_val<bool>::make_failure( _( "You can't do *that* while mounted" ) );
     }
     if( ( c.is_underwater() )
-            && ( !( ( c.has_trait( trait_id( "GILLS" ) ) ) || ( c.has_trait( trait_id( "GILLS_CEPH" ) ) )
-                    || ( c.is_wearing( itype_id( "rebreather_on" ) ) )
-                    || ( c.is_wearing( itype_id( "rebreather_xl_on" ) ) )
-                    || ( c.is_wearing( itype_id( "mask_h20survivor_on" ) ) ) ) ) ) {
+        && ( !( ( c.has_trait( trait_id( "GILLS" ) ) ) || ( c.has_trait( trait_id( "GILLS_CEPH" ) ) )
+                || ( c.is_wearing( itype_id( "rebreather_on" ) ) )
+                || ( c.is_wearing( itype_id( "rebreather_xl_on" ) ) )
+                || ( c.is_wearing( itype_id( "mask_h20survivor_on" ) ) ) ) ) ) {
         return ret_val<bool>::make_failure( _( "Are you trying to drown yourself?" ) );
     }
     if( !i.units_sufficient( c ) ) {
-    return ret_val<bool>::make_failure( _( "The %s's batteries are dead." ), i.tname() );
+        return ret_val<bool>::make_failure( _( "The %s's batteries are dead." ), i.tname() );
     }
     if( c.get_fatigue() >= fatigue_levels::dead_tired ) {
-    return ret_val<bool>::make_failure( _( "*Your* batteries are dead." ) );
+        return ret_val<bool>::make_failure( _( "*Your* batteries are dead." ) );
     }
     return ret_val<bool>::make_success();
 }
@@ -1739,19 +1739,19 @@ void train_skill_actor::load( JsonObject const& obj )
 int train_skill_actor::use( player& p, item& i, bool, const tripoint_bub_ms & ) const
 {
     if( i.ammo_remaining() < i.ammo_required() ) {
-    p.add_msg_if_player( _( "This tool doesn't have enough charges." ) );
+        p.add_msg_if_player( _( "This tool doesn't have enough charges." ) );
         return 0;
     }
     if( p.get_skill_level( skill_id( training_skill ) ) < training_skill_min_level ) {
-    p.add_msg_if_player(
-        _( "Your skill isn't high enough yet to train using that (requires %s %s)." ),
-        training_skill_min_level, skill_id( training_skill )->name() );
+        p.add_msg_if_player(
+            _( "Your skill isn't high enough yet to train using that (requires %s %s)." ),
+            training_skill_min_level, skill_id( training_skill )->name() );
         return 0;
     }
     if( p.get_skill_level( skill_id( training_skill ) ) >= training_skill_max_level ) {
-    p.add_msg_if_player(
-        _( "You can't train your %s beyond %s using that." ), skill_id( training_skill )->name(),
-        training_skill_max_level );
+        p.add_msg_if_player(
+            _( "You can't train your %s beyond %s using that." ), skill_id( training_skill )->name(),
+            training_skill_max_level );
         return 0;
     }
 
@@ -1766,20 +1766,20 @@ int train_skill_actor::use( player& p, item& i, bool, const tripoint_bub_ms & ) 
 
     if( hours <= 0 ) { return 0; }
 
-p.add_msg_if_player( training_msg );
-// using metadata is the easiest way to transfer this over to the activity handler and also
-// allow it to function as furniture
-p.set_value( "training_iuse_skill", training_skill );
-p.set_value( "training_iuse_skill_xp", std::to_string( training_skill_xp ) );
-p.set_value( "training_iuse_skill_xp_max_level", std::to_string( training_skill_max_level ) );
-p.set_value( "training_iuse_skill_fatigue", std::to_string( training_skill_fatigue ) );
-p.set_value( "training_iuse_skill_interval", std::to_string( training_skill_interval ) );
-p.set_value( "training_iuse_skill_xp_chance", std::to_string( training_skill_xp_chance ) );
-p.assign_activity(
-    std::make_unique<player_activity>( std::make_unique<train_activity_actor>( "training", -1 ) ),
-    hours * 360000 );
+    p.add_msg_if_player( training_msg );
+    // using metadata is the easiest way to transfer this over to the activity handler and also
+    // allow it to function as furniture
+    p.set_value( "training_iuse_skill", training_skill );
+    p.set_value( "training_iuse_skill_xp", std::to_string( training_skill_xp ) );
+    p.set_value( "training_iuse_skill_xp_max_level", std::to_string( training_skill_max_level ) );
+    p.set_value( "training_iuse_skill_fatigue", std::to_string( training_skill_fatigue ) );
+    p.set_value( "training_iuse_skill_interval", std::to_string( training_skill_interval ) );
+    p.set_value( "training_iuse_skill_xp_chance", std::to_string( training_skill_xp_chance ) );
+    p.assign_activity(
+        std::make_unique<player_activity>( std::make_unique<train_activity_actor>( "training", -1 ) ),
+        hours * 360000 );
 
-return 0;
+    return 0;
 }
 
 std::unique_ptr<iuse_actor> train_skill_actor::clone() const
@@ -1790,7 +1790,7 @@ std::unique_ptr<iuse_actor> train_skill_actor::clone() const
 int sex_toy_actor::use( player& p, item& i, bool, const tripoint_bub_ms & ) const
 {
     if( i.ammo_remaining() > 0 ) {
-    p.add_msg_if_player( _( "You fire up your %s and start getting the tension out." ), i.tname() );
+        p.add_msg_if_player( _( "You fire up your %s and start getting the tension out." ), i.tname() );
     } else {
         p.add_msg_if_player( _( "You whip out your %s and start getting the tension out." ), i.tname() );
     }
@@ -1825,12 +1825,12 @@ void iuse_music_player::load( const JsonObject& obj )
 int iuse_music_player::use( player& p, item& it, bool t, const tripoint_bub_ms& pos ) const
 {
     if( t ) {
-    return 0; // invoked from active item processing, do nothing.
-}
+        return 0; // invoked from active item processing, do nothing.
+    }
 
-const bool possess =
-    p.has_item( it )
-    || ( it.has_flag( flag_ALLOWS_REMOTE_USE ) && square_dist( p.bub_pos(), pos ) == 1 );
+    const bool possess =
+        p.has_item( it )
+        || ( it.has_flag( flag_ALLOWS_REMOTE_USE ) && square_dist( p.bub_pos(), pos ) == 1 );
 
     if( possess && need_worn && !p.is_worn( it ) ) {
         p.add_msg_if_player(
@@ -1844,7 +1844,7 @@ const bool possess =
     }
     // No charge consumption at this point, there are still points of failure later.
     if( need_charges || transform_charges ) {
-    if( it.has_flag( flag_POWERARMOR_MOD ) && character_funcs::can_interface_armor( p ) ) {
+        if( it.has_flag( flag_POWERARMOR_MOD ) && character_funcs::can_interface_armor( p ) ) {
             if( possess ) {
                 const int bio_power = units::to_kilojoule( p.get_power_level() );
                 if( bio_power < need_charges || bio_power < transform_charges ) {
@@ -1884,10 +1884,10 @@ const bool possess =
 
     if( possess ) { p.moves -= moves; }
 
-// Update Luminosity as object is "removed"
-get_map().update_lum( it, false );
+    // Update Luminosity as object is "removed"
+    get_map().update_lum( it, false );
 
-if( p.is_worn( it ) ) { p.on_item_takeoff( it ); }
+    if( p.is_worn( it ) ) { p.on_item_takeoff( it ); }
     it.convert( target );
     if( p.is_worn( it ) ) {
         p.reset_encumbrance();
@@ -1907,8 +1907,8 @@ ret_val<bool> iuse_music_player::can_use(
     const Character& p, const item &, bool, const tripoint_bub_ms & ) const
 {
     if( p.has_effect( efftype_id( "music" ) ) ) {
-    return ret_val<bool>::make_failure( _( "You can't listen to multiple music players at "
-                                           "once!" ) );
+        return ret_val<bool>::make_failure( _( "You can't listen to multiple music players at "
+                                               "once!" ) );
     } else {
         return ret_val<bool>::make_success();
     }
@@ -1919,15 +1919,15 @@ ret_val<bool> iuse_prospect_pick::can_use(
     const Character& p, const item &, bool, const tripoint_bub_ms & ) const
 {
     if( p.is_npc() ) {
-    // Long action
-    return ret_val<bool>::make_failure( _( "Actually how. You're an NPC. You can't do long "
-                                           "actions. No." ) );
+        // Long action
+        return ret_val<bool>::make_failure( _( "Actually how. You're an NPC. You can't do long "
+                                               "actions. No." ) );
     }
     if( p.is_mounted() ) {
-    return ret_val<bool>::make_failure( _( "You can't prospect from a vehicle!" ) );
+        return ret_val<bool>::make_failure( _( "You can't prospect from a vehicle!" ) );
     }
     if( p.is_underwater() ) {
-    return ret_val<bool>::make_failure( _( "You can't prospect underwater!" ) );
+        return ret_val<bool>::make_failure( _( "You can't prospect underwater!" ) );
     }
     return ret_val<bool>::make_success();
 }
@@ -1938,15 +1938,15 @@ void iuse_prospect_pick::load( const JsonObject& obj ) { range = obj.get_int( "r
 int iuse_prospect_pick::use( player& p, item& it, bool t, const tripoint_bub_ms & ) const
 {
     if( t ) {
-    // we're doing it still hold on.
-    return 0;
-}
-//* begin edited map code*/
-omt_find_params params{};
-params.search_range = {0, range};
-params.search_layers = omt_find_all_layers; // TODO: Find all levels -> find BELOW levels.
+        // we're doing it still hold on.
+        return 0;
+    }
+    //* begin edited map code*/
+    omt_find_params params{};
+    params.search_range = {0, range};
+    params.search_layers = omt_find_all_layers; // TODO: Find all levels -> find BELOW levels.
 
-params.types = {std::make_pair( "empty_rock", ot_match_type::type )};
+    params.types = {std::make_pair( "empty_rock", ot_match_type::type )};
     params.existing_only = false;
     params.popup = make_shared_fast<throbber_popup>( _( "Please wait…" ) );
     params.seen = false;
@@ -1973,12 +1973,12 @@ params.types = {std::make_pair( "empty_rock", ot_match_type::type )};
         }
     }
 
-for( const auto& [_, to_gen] : om_to_generate ) {
+    for( const auto& [_, to_gen] : om_to_generate ) {
         get_overmapbuffer( p.get_dimension() ).generate( to_gen );
     }
 
     const auto places = get_overmapbuffer( p.get_dimension() ).find_all( p.abs_omt_pos(), params );
-for( auto& place : places ) { get_overmapbuffer( p.get_dimension() ).reveal( place, 0 ); }
+    for( auto& place : places ) { get_overmapbuffer( p.get_dimension() ).reveal( place, 0 ); }
     //* end edited map code */
     p.add_msg_if_player(
         m_info,

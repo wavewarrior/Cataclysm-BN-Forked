@@ -39,8 +39,8 @@ struct rc_params_gpu {
     std::array<rc_cascade_geom, RC_CASCADES> geom{};
 };
 static_assert(
-    sizeof( rc_params_gpu ) == 32 + RC_CASCADES * 16,
-    "rc_params_gpu wire-stable with the RcParams cbuffer in rc_*.comp.hlsl" );
+    sizeof(rc_params_gpu) == 32 + RC_CASCADES * 16,
+    "rc_params_gpu wire-stable with the RcParams cbuffer in rc_*.comp.hlsl");
 
 gi_compute_pass::~gi_compute_pass() { shutdown(); }
 
@@ -54,19 +54,19 @@ bool gi_compute_pass::init(gpu_device& dev, std::uint32_t max_w, std::uint32_t m
 
     init_shader_compiler();
 
-    const std::string field_src = load_lighting_shader_source( "gi_field.comp.hlsl" );
-    const std::string build_src = load_lighting_shader_source( "rc_build.comp.hlsl" );
-    const std::string merge_src = load_lighting_shader_source( "rc_merge.comp.hlsl" );
-    const std::string resolve_src = load_lighting_shader_source( "rc_resolve.comp.hlsl" );
+    const std::string field_src = load_lighting_shader_source("gi_field.comp.hlsl");
+    const std::string build_src = load_lighting_shader_source("rc_build.comp.hlsl");
+    const std::string merge_src = load_lighting_shader_source("rc_merge.comp.hlsl");
+    const std::string resolve_src = load_lighting_shader_source("rc_resolve.comp.hlsl");
     // SDL_GetError() is GLOBAL: capture each pipeline's error at compile time,
     // or a later pipeline's failure overwrites the earlier one's message.
-    auto fp = compile_compute_pipeline( dev, field_src, "main", "gi_field.comp" );
+    auto fp = compile_compute_pipeline(dev, field_src, "main", "gi_field.comp");
     const std::string field_err = fp ? "" : SDL_GetError();
-    auto bp = compile_compute_pipeline( dev, build_src, "main", "rc_build.comp" );
+    auto bp = compile_compute_pipeline(dev, build_src, "main", "rc_build.comp");
     const std::string build_err = bp ? "" : SDL_GetError();
-    auto mp = compile_compute_pipeline( dev, merge_src, "main", "rc_merge.comp" );
+    auto mp = compile_compute_pipeline(dev, merge_src, "main", "rc_merge.comp");
     const std::string merge_err = mp ? "" : SDL_GetError();
-    auto rp = compile_compute_pipeline( dev, resolve_src, "main", "rc_resolve.comp" );
+    auto rp = compile_compute_pipeline(dev, resolve_src, "main", "rc_resolve.comp");
     const std::string resolve_err = rp ? "" : SDL_GetError();
 
     // Structural gate (DC::Main — DC::SDL is filtered). Field: 5 readonly
@@ -78,25 +78,25 @@ bool gi_compute_pass::init(gpu_device& dev, std::uint32_t max_w, std::uint32_t m
     // root-sig that killed rc.frag on D3D12). A mismatch here means a
     // buffer was stripped or mis-declared — fail loudly at startup rather
     // than ship a silently degraded GI.
-    DebugLogFL( DL::Info, DC::Main )
+    DebugLogFL(DL::Info, DC::Main)
         << "gi_field.comp reflection: ro_sb=" << fp.resources.num_readonly_storage_buffers
         << " rw_sb=" << fp.resources.num_readwrite_storage_buffers
         << " uniforms=" << fp.resources.num_uniform_buffers << " threads=("
         << fp.resources.threadcount_x << "," << fp.resources.threadcount_y << ","
         << fp.resources.threadcount_z << ") (expects ro_sb=5 rw_sb=1)";
-    DebugLogFL( DL::Info, DC::Main )
+    DebugLogFL(DL::Info, DC::Main)
         << "rc_build.comp reflection: ro_sb=" << bp.resources.num_readonly_storage_buffers
         << " rw_sb=" << bp.resources.num_readwrite_storage_buffers
         << " uniforms=" << bp.resources.num_uniform_buffers << " threads=("
         << bp.resources.threadcount_x << "," << bp.resources.threadcount_y << ","
         << bp.resources.threadcount_z << ") (expects ro_sb=2 rw_sb=1)";
-    DebugLogFL( DL::Info, DC::Main )
+    DebugLogFL(DL::Info, DC::Main)
         << "rc_merge.comp reflection: ro_sb=" << mp.resources.num_readonly_storage_buffers
         << " rw_sb=" << mp.resources.num_readwrite_storage_buffers
         << " uniforms=" << mp.resources.num_uniform_buffers << " threads=("
         << mp.resources.threadcount_x << "," << mp.resources.threadcount_y << ","
         << mp.resources.threadcount_z << ") (expects ro_sb=0 rw_sb=1)";
-    DebugLogFL( DL::Info, DC::Main )
+    DebugLogFL(DL::Info, DC::Main)
         << "rc_resolve.comp reflection: ro_sb=" << rp.resources.num_readonly_storage_buffers
         << " rw_sb=" << rp.resources.num_readwrite_storage_buffers
         << " uniforms=" << rp.resources.num_uniform_buffers << " threads=("
@@ -109,59 +109,57 @@ bool gi_compute_pass::init(gpu_device& dev, std::uint32_t max_w, std::uint32_t m
     // this backend; ready() gates record(), so a failed pipeline just leaves GI
     // reading as zero.
     const std::uint32_t floats = max_w * max_h * FLOATS_PER_TILE;
-    const std::uint32_t rc_floats = rc_total_floats( max_w, max_h );
+    const std::uint32_t rc_floats = rc_total_floats(max_w, max_h);
     field_buf_ = create_buffer(
         floats,
-        SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ | SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE );
+        SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ | SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE);
     rc_atlas_ = create_buffer(
         rc_floats,
-        SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ | SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE );
+        SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ | SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE);
     gi_out_buf_ = create_buffer(
         floats,
-        SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE | SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ );
-    if( !field_buf_ || !rc_atlas_ || !gi_out_buf_ ) {
-        return false;
-    }
+        SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE | SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ);
+    if (!field_buf_ || !rc_atlas_ || !gi_out_buf_) { return false; }
     max_w_ = max_w;
     max_h_ = max_h;
     rc_atlas_floats_ = rc_floats;
-    zero_buffer( gi_out_buf_, floats );
-    zero_buffer( rc_atlas_, rc_floats );
+    zero_buffer(gi_out_buf_, floats);
+    zero_buffer(rc_atlas_, rc_floats);
 
-    if( !fp ) {
-        DebugLogFL( DL::Error, DC::Main )
+    if (!fp) {
+        DebugLogFL(DL::Error, DC::Main)
             << "gi_compute_pass FIELD pipeline create failed: " << field_err
             << " — GI disabled, gi_buf bound as zero.";
-        if( bp ) { SDL_ReleaseGPUComputePipeline( dev_->raw(), bp.pipeline ); }
-        if( mp ) { SDL_ReleaseGPUComputePipeline( dev_->raw(), mp.pipeline ); }
-        if( rp ) { SDL_ReleaseGPUComputePipeline( dev_->raw(), rp.pipeline ); }
+        if (bp) { SDL_ReleaseGPUComputePipeline(dev_->raw(), bp.pipeline); }
+        if (mp) { SDL_ReleaseGPUComputePipeline(dev_->raw(), mp.pipeline); }
+        if (rp) { SDL_ReleaseGPUComputePipeline(dev_->raw(), rp.pipeline); }
         return false;
     }
-    if( !bp ) {
-        DebugLogFL( DL::Error, DC::Main )
+    if (!bp) {
+        DebugLogFL(DL::Error, DC::Main)
             << "gi_compute_pass RC BUILD pipeline create failed: " << build_err
             << " — GI disabled, gi_buf bound as zero.";
-        SDL_ReleaseGPUComputePipeline( dev_->raw(), fp.pipeline );
-        if( mp ) { SDL_ReleaseGPUComputePipeline( dev_->raw(), mp.pipeline ); }
-        if( rp ) { SDL_ReleaseGPUComputePipeline( dev_->raw(), rp.pipeline ); }
+        SDL_ReleaseGPUComputePipeline(dev_->raw(), fp.pipeline);
+        if (mp) { SDL_ReleaseGPUComputePipeline(dev_->raw(), mp.pipeline); }
+        if (rp) { SDL_ReleaseGPUComputePipeline(dev_->raw(), rp.pipeline); }
         return false;
     }
-    if( !mp ) {
-        DebugLogFL( DL::Error, DC::Main )
+    if (!mp) {
+        DebugLogFL(DL::Error, DC::Main)
             << "gi_compute_pass RC MERGE pipeline create failed: " << merge_err
             << " — GI disabled, gi_buf bound as zero.";
-        SDL_ReleaseGPUComputePipeline( dev_->raw(), fp.pipeline );
-        SDL_ReleaseGPUComputePipeline( dev_->raw(), bp.pipeline );
-        if( rp ) { SDL_ReleaseGPUComputePipeline( dev_->raw(), rp.pipeline ); }
+        SDL_ReleaseGPUComputePipeline(dev_->raw(), fp.pipeline);
+        SDL_ReleaseGPUComputePipeline(dev_->raw(), bp.pipeline);
+        if (rp) { SDL_ReleaseGPUComputePipeline(dev_->raw(), rp.pipeline); }
         return false;
     }
-    if( !rp ) {
-        DebugLogFL( DL::Error, DC::Main )
+    if (!rp) {
+        DebugLogFL(DL::Error, DC::Main)
             << "gi_compute_pass RC RESOLVE pipeline create failed: " << resolve_err
             << " — GI disabled, gi_buf bound as zero.";
-        SDL_ReleaseGPUComputePipeline( dev_->raw(), fp.pipeline );
-        SDL_ReleaseGPUComputePipeline( dev_->raw(), bp.pipeline );
-        SDL_ReleaseGPUComputePipeline( dev_->raw(), mp.pipeline );
+        SDL_ReleaseGPUComputePipeline(dev_->raw(), fp.pipeline);
+        SDL_ReleaseGPUComputePipeline(dev_->raw(), bp.pipeline);
+        SDL_ReleaseGPUComputePipeline(dev_->raw(), mp.pipeline);
         return false;
     }
     field_pipeline_ = fp.pipeline;
@@ -182,27 +180,27 @@ SDL_GPUBuffer* gi_compute_pass::create_buffer(std::uint32_t floats, SDL_GPUBuffe
     return b;
 }
 
-void gi_compute_pass::zero_buffer( SDL_GPUBuffer* buf, std::uint32_t floats ) {
-    if( !buf || floats == 0 ) { return; }
-    const std::uint32_t bytes = floats * static_cast<std::uint32_t>( sizeof( float ) );
+void gi_compute_pass::zero_buffer(SDL_GPUBuffer* buf, std::uint32_t floats) {
+    if (!buf || floats == 0) { return; }
+    const std::uint32_t bytes = floats * static_cast<std::uint32_t>(sizeof(float));
     SDL_GPUTransferBufferCreateInfo tbci{};
     tbci.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
     tbci.size = bytes;
-    SDL_GPUTransferBuffer* tb = SDL_CreateGPUTransferBuffer( dev_->raw(), &tbci );
-    if( !tb ) { return; }
-    void* map = SDL_MapGPUTransferBuffer( dev_->raw(), tb, false );
-    if( !map ) {
-        SDL_ReleaseGPUTransferBuffer( dev_->raw(), tb );
+    SDL_GPUTransferBuffer* tb = SDL_CreateGPUTransferBuffer(dev_->raw(), &tbci);
+    if (!tb) { return; }
+    void* map = SDL_MapGPUTransferBuffer(dev_->raw(), tb, false);
+    if (!map) {
+        SDL_ReleaseGPUTransferBuffer(dev_->raw(), tb);
         return;
     }
-    std::memset( map, 0, bytes );
-    SDL_UnmapGPUTransferBuffer( dev_->raw(), tb );
-    SDL_GPUCommandBuffer* cb = SDL_AcquireGPUCommandBuffer( dev_->raw() );
-    if( !cb ) {
-        SDL_ReleaseGPUTransferBuffer( dev_->raw(), tb );
+    std::memset(map, 0, bytes);
+    SDL_UnmapGPUTransferBuffer(dev_->raw(), tb);
+    SDL_GPUCommandBuffer* cb = SDL_AcquireGPUCommandBuffer(dev_->raw());
+    if (!cb) {
+        SDL_ReleaseGPUTransferBuffer(dev_->raw(), tb);
         return;
     }
-    SDL_GPUCopyPass* cp = SDL_BeginGPUCopyPass( cb );
+    SDL_GPUCopyPass* cp = SDL_BeginGPUCopyPass(cb);
     SDL_GPUTransferBufferLocation src{};
     src.transfer_buffer = tb;
     src.offset = 0;
@@ -210,52 +208,61 @@ void gi_compute_pass::zero_buffer( SDL_GPUBuffer* buf, std::uint32_t floats ) {
     dst.buffer = buf;
     dst.offset = 0;
     dst.size = bytes;
-    SDL_UploadToGPUBuffer( cp, &src, &dst, /*cycle=*/false );
-    SDL_EndGPUCopyPass( cp );
-    SDL_SubmitGPUCommandBuffer( cb );
-    SDL_ReleaseGPUTransferBuffer( dev_->raw(), tb );
+    SDL_UploadToGPUBuffer(cp, &src, &dst, /*cycle=*/false);
+    SDL_EndGPUCopyPass(cp);
+    SDL_SubmitGPUCommandBuffer(cb);
+    SDL_ReleaseGPUTransferBuffer(dev_->raw(), tb);
 }
 
-bool gi_compute_pass::resize( std::uint32_t max_w, std::uint32_t max_h ) {
-    if( field_buf_ && rc_atlas_ && gi_out_buf_ && max_w == max_w_ && max_h == max_h_ ) {
+bool gi_compute_pass::resize(std::uint32_t max_w, std::uint32_t max_h) {
+    if (field_buf_ && rc_atlas_ && gi_out_buf_ && max_w == max_w_ && max_h == max_h_) {
         return true;
     }
-    if( !dev_ || !dev_->ready() ) { return false; }
+    if (!dev_ || !dev_->ready()) { return false; }
     pending_iters_ = 0; // the queued series targets buffers being reallocated
-    if( field_buf_ ) { SDL_ReleaseGPUBuffer( dev_->raw(), field_buf_ ); field_buf_ = nullptr; }
-    if( rc_atlas_ ) { SDL_ReleaseGPUBuffer( dev_->raw(), rc_atlas_ ); rc_atlas_ = nullptr; }
-    if( gi_out_buf_ ) { SDL_ReleaseGPUBuffer( dev_->raw(), gi_out_buf_ ); gi_out_buf_ = nullptr; }
+    if (field_buf_) {
+        SDL_ReleaseGPUBuffer(dev_->raw(), field_buf_);
+        field_buf_ = nullptr;
+    }
+    if (rc_atlas_) {
+        SDL_ReleaseGPUBuffer(dev_->raw(), rc_atlas_);
+        rc_atlas_ = nullptr;
+    }
+    if (gi_out_buf_) {
+        SDL_ReleaseGPUBuffer(dev_->raw(), gi_out_buf_);
+        gi_out_buf_ = nullptr;
+    }
     const std::uint32_t floats = max_w * max_h * FLOATS_PER_TILE;
-    const std::uint32_t rc_floats = rc_total_floats( max_w, max_h );
+    const std::uint32_t rc_floats = rc_total_floats(max_w, max_h);
     field_buf_ = create_buffer(
         floats,
-        SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ | SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE );
+        SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ | SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE);
     rc_atlas_ = create_buffer(
         rc_floats,
-        SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ | SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE );
+        SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ | SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE);
     gi_out_buf_ = create_buffer(
         floats,
-        SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE | SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ );
-    if( !field_buf_ || !rc_atlas_ || !gi_out_buf_ ) { return false; }
+        SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE | SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ);
+    if (!field_buf_ || !rc_atlas_ || !gi_out_buf_) { return false; }
     max_w_ = max_w;
     max_h_ = max_h;
     rc_atlas_floats_ = rc_floats;
-    zero_buffer( gi_out_buf_, floats );
-    zero_buffer( rc_atlas_, rc_floats );
+    zero_buffer(gi_out_buf_, floats);
+    zero_buffer(rc_atlas_, rc_floats);
     return true;
 }
 
 void gi_compute_pass::shutdown() noexcept {
-    if( dev_ && dev_->ready() ) {
-        if( field_pipeline_ ) { SDL_ReleaseGPUComputePipeline( dev_->raw(), field_pipeline_ ); }
-        if( rc_build_pipeline_ ) { SDL_ReleaseGPUComputePipeline( dev_->raw(), rc_build_pipeline_ ); }
-        if( rc_merge_pipeline_ ) { SDL_ReleaseGPUComputePipeline( dev_->raw(), rc_merge_pipeline_ ); }
-        if( rc_resolve_pipeline_ ) {
-            SDL_ReleaseGPUComputePipeline( dev_->raw(), rc_resolve_pipeline_ );
+    if (dev_ && dev_->ready()) {
+        if (field_pipeline_) { SDL_ReleaseGPUComputePipeline(dev_->raw(), field_pipeline_); }
+        if (rc_build_pipeline_) { SDL_ReleaseGPUComputePipeline(dev_->raw(), rc_build_pipeline_); }
+        if (rc_merge_pipeline_) { SDL_ReleaseGPUComputePipeline(dev_->raw(), rc_merge_pipeline_); }
+        if (rc_resolve_pipeline_) {
+            SDL_ReleaseGPUComputePipeline(dev_->raw(), rc_resolve_pipeline_);
         }
-        if( field_buf_ ) { SDL_ReleaseGPUBuffer( dev_->raw(), field_buf_ ); }
-        if( rc_atlas_ ) { SDL_ReleaseGPUBuffer( dev_->raw(), rc_atlas_ ); }
-        if( gi_out_buf_ ) { SDL_ReleaseGPUBuffer( dev_->raw(), gi_out_buf_ ); }
+        if (field_buf_) { SDL_ReleaseGPUBuffer(dev_->raw(), field_buf_); }
+        if (rc_atlas_) { SDL_ReleaseGPUBuffer(dev_->raw(), rc_atlas_); }
+        if (gi_out_buf_) { SDL_ReleaseGPUBuffer(dev_->raw(), gi_out_buf_); }
     }
     field_pipeline_ = rc_build_pipeline_ = rc_merge_pipeline_ = rc_resolve_pipeline_ = nullptr;
     field_buf_ = rc_atlas_ = gi_out_buf_ = nullptr;
@@ -263,7 +270,7 @@ void gi_compute_pass::shutdown() noexcept {
     pending_iters_ = 0;
 }
 
-auto gi_compute_pass::record( const gi_iteration& it ) -> void {
+auto gi_compute_pass::record(const gi_iteration& it) -> void {
     // Multi-bounce convergence: GI only re-records on a structure rebuild
     // (terrain change / z / origin / >=4-tile camera drift), which for a
     // stationary player can be ONE event, ever. A single field->RC pass only
@@ -276,10 +283,8 @@ auto gi_compute_pass::record( const gi_iteration& it ) -> void {
     // via record_pending(), converging over 3 consecutive frames. Off
     // (gi_feedback<=0): exactly 1 pass, byte-identical to pre-feedback behaviour.
     pending_iters_ = 0;
-    if( !record_iteration( it ) ) {
-        return;
-    }
-    if( it.params.gi_feedback > 0.001f ) {
+    if (!record_iteration(it)) { return; }
+    if (it.params.gi_feedback > 0.001f) {
         pending_iters_ = 2u;
         pending_w_ = it.w;
         pending_h_ = it.h;
@@ -287,60 +292,58 @@ auto gi_compute_pass::record( const gi_iteration& it ) -> void {
     }
 }
 
-auto gi_compute_pass::record_pending( SDL_GPUCommandBuffer* cb, const gi_buffers& bufs,
-                                      std::uint32_t emitter_count ) -> void {
-    if( pending_iters_ == 0 ) {
-        return;
-    }
+auto gi_compute_pass::record_pending(
+    SDL_GPUCommandBuffer* cb, const gi_buffers& bufs, std::uint32_t emitter_count) -> void {
+    if (pending_iters_ == 0) { return; }
     --pending_iters_;
     pending_params_.emitter_count = emitter_count;
-    if( !record_iteration( { .cmd = cb, .bufs = bufs, .w = pending_w_, .h = pending_h_,
-                             .params = pending_params_ } ) ) {
+    if (!record_iteration(
+            {.cmd = cb, .bufs = bufs, .w = pending_w_, .h = pending_h_, .params = pending_params_})) {
         pending_iters_ = 0;
     }
 }
 
-auto gi_compute_pass::record_iteration( const gi_iteration& it ) -> bool {
+auto gi_compute_pass::record_iteration(const gi_iteration& it) -> bool {
     SDL_GPUCommandBuffer* const cb = it.cmd;
     const auto& b = it.bufs;
     const std::uint32_t runtime_w = it.w;
     const std::uint32_t runtime_h = it.h;
     const gi_params& params = it.params;
-    if( !ready() || !cb || !b.emitter || !b.sdf || !b.sky || !b.albedo
-        || runtime_w == 0 || runtime_h == 0 ) {
+    if (!ready() || !cb || !b.emitter || !b.sdf || !b.sky || !b.albedo || runtime_w == 0
+        || runtime_h == 0) {
         return false;
     }
-    const std::uint32_t gx = ( runtime_w + 7u ) / 8u; // ceil(W/8) — numthreads(8,8,1)
-    const std::uint32_t gy = ( runtime_h + 7u ) / 8u;
+    const std::uint32_t gx = (runtime_w + 7u) / 8u; // ceil(W/8) — numthreads(8,8,1)
+    const std::uint32_t gy = (runtime_h + 7u) / 8u;
     SDL_GPUBuffer* const sdf_buf = b.sdf;
 
     // ---- Pass 1: FIELD — per-tile direct radiance gather. Unchanged by
     // Stage 7; Radiance Cascades reads this exactly like the old bounce did.
-    SDL_PushGPUComputeUniformData( cb, /*slot=*/0, &params, sizeof( params ) );
+    SDL_PushGPUComputeUniformData(cb, /*slot=*/0, &params, sizeof(params));
     {
         SDL_GPUStorageBufferReadWriteBinding rw{};
         rw.buffer = field_buf_;
         rw.cycle = false; // retained intermediate; fully rewritten each gather
-        SDL_GPUComputePass* p = SDL_BeginGPUComputePass( cb, nullptr, 0, &rw, 1 );
-        if( !p ) {
-            dbg( DL::Error ) << "gi field pass: BeginGPUComputePass failed: " << SDL_GetError();
+        SDL_GPUComputePass* p = SDL_BeginGPUComputePass(cb, nullptr, 0, &rw, 1);
+        if (!p) {
+            dbg(DL::Error) << "gi field pass: BeginGPUComputePass failed: " << SDL_GetError();
             return false;
         }
-        SDL_BindGPUComputePipeline( p, field_pipeline_ );
-        SDL_GPUBuffer* ro[5] = { b.emitter, sdf_buf, b.sky, b.albedo, gi_out_buf_ }; // t0..t4
-        SDL_BindGPUComputeStorageBuffers( p, /*first_slot=*/0, ro, 5 );
-        SDL_DispatchGPUCompute( p, gx, gy, 1 );
-        SDL_EndGPUComputePass( p );
+        SDL_BindGPUComputePipeline(p, field_pipeline_);
+        SDL_GPUBuffer* ro[5] = {b.emitter, sdf_buf, b.sky, b.albedo, gi_out_buf_}; // t0..t4
+        SDL_BindGPUComputeStorageBuffers(p, /*first_slot=*/0, ro, 5);
+        SDL_DispatchGPUCompute(p, gx, gy, 1);
+        SDL_EndGPUComputePass(p);
     }
 
     // Per-cascade geometry for THIS frame's runtime map size (<= the max_w_/
     // max_h_ the atlas was allocated for).
-    const auto geom = rc_compute_geometry( runtime_w, runtime_h );
-    const std::uint32_t needed = rc_total_floats( runtime_w, runtime_h );
-    if( needed > rc_atlas_floats_ ) {
-        DebugLogFL( DL::Error, DC::Main )
-                << "gi_compute_pass: rc atlas too small for runtime size (" << needed << " > "
-                << rc_atlas_floats_ << ") — skipping RC this frame";
+    const auto geom = rc_compute_geometry(runtime_w, runtime_h);
+    const std::uint32_t needed = rc_total_floats(runtime_w, runtime_h);
+    if (needed > rc_atlas_floats_) {
+        DebugLogFL(DL::Error, DC::Main)
+            << "gi_compute_pass: rc atlas too small for runtime size (" << needed << " > "
+            << rc_atlas_floats_ << ") — skipping RC this frame";
         return false;
     }
 
@@ -349,32 +352,30 @@ auto gi_compute_pass::record_iteration( const gi_iteration& it ) -> bool {
     rp.map_h = runtime_h;
     rp.sdf_map_w = runtime_w;
     rp.sdf_map_h = runtime_h;
-    rp.sdf_ss = static_cast<std::uint32_t>( SDF_SUPERSAMPLE );
+    rp.sdf_ss = static_cast<std::uint32_t>(SDF_SUPERSAMPLE);
     rp.c0_interval = RC_C0_INTERVAL;
-    for( std::uint32_t i = 0; i < RC_CASCADES; ++i ) {
-        rp.geom[i] = geom[i];
-    }
+    for (std::uint32_t i = 0; i < RC_CASCADES; ++i) { rp.geom[i] = geom[i]; }
 
     // ---- Pass 2: RC BUILD, one dispatch per cascade — mutually independent
     // at build time, so dispatch order among them does not matter.
-    for( std::uint32_t i = 0; i < RC_CASCADES; ++i ) {
+    for (std::uint32_t i = 0; i < RC_CASCADES; ++i) {
         rp.cascade = i;
-        SDL_PushGPUComputeUniformData( cb, /*slot=*/0, &rp, sizeof( rp ) );
+        SDL_PushGPUComputeUniformData(cb, /*slot=*/0, &rp, sizeof(rp));
         SDL_GPUStorageBufferReadWriteBinding rw{};
         rw.buffer = rc_atlas_;
         rw.cycle = false;
-        SDL_GPUComputePass* p = SDL_BeginGPUComputePass( cb, nullptr, 0, &rw, 1 );
-        if( !p ) {
-            dbg( DL::Error ) << "rc build pass: BeginGPUComputePass failed: " << SDL_GetError();
+        SDL_GPUComputePass* p = SDL_BeginGPUComputePass(cb, nullptr, 0, &rw, 1);
+        if (!p) {
+            dbg(DL::Error) << "rc build pass: BeginGPUComputePass failed: " << SDL_GetError();
             return false;
         }
-        SDL_BindGPUComputePipeline( p, rc_build_pipeline_ );
-        SDL_GPUBuffer* ro[2] = { field_buf_, sdf_buf }; // t0 (field), t1 (sdf)
-        SDL_BindGPUComputeStorageBuffers( p, /*first_slot=*/0, ro, 2 );
-        const std::uint32_t cgx = ( geom[i].probes_x + 7u ) / 8u;
-        const std::uint32_t cgy = ( geom[i].probes_y + 7u ) / 8u;
-        SDL_DispatchGPUCompute( p, cgx, cgy, 1 );
-        SDL_EndGPUComputePass( p );
+        SDL_BindGPUComputePipeline(p, rc_build_pipeline_);
+        SDL_GPUBuffer* ro[2] = {field_buf_, sdf_buf}; // t0 (field), t1 (sdf)
+        SDL_BindGPUComputeStorageBuffers(p, /*first_slot=*/0, ro, 2);
+        const std::uint32_t cgx = (geom[i].probes_x + 7u) / 8u;
+        const std::uint32_t cgy = (geom[i].probes_y + 7u) / 8u;
+        SDL_DispatchGPUCompute(p, cgx, cgy, 1);
+        SDL_EndGPUComputePass(p);
     }
 
     // ---- Pass 3: RC MERGE, DESCENDING (RC_CASCADES-2 .. 0). Each dispatch
@@ -383,53 +384,51 @@ auto gi_compute_pass::record_iteration( const gi_iteration& it ) -> bool {
     // merged (nothing above it) and so still holds its raw BUILD output.
     // Order matters here, unlike BUILD: reversing it would merge against
     // stale (un-merged) data.
-    for( std::uint32_t step = 0; step + 1 < RC_CASCADES; ++step ) {
+    for (std::uint32_t step = 0; step + 1 < RC_CASCADES; ++step) {
         const std::uint32_t i = RC_CASCADES - 2 - step; // RC_CASCADES-2, ..., 0
         rp.cascade = i;
-        SDL_PushGPUComputeUniformData( cb, /*slot=*/0, &rp, sizeof( rp ) );
+        SDL_PushGPUComputeUniformData(cb, /*slot=*/0, &rp, sizeof(rp));
         SDL_GPUStorageBufferReadWriteBinding rw{};
         rw.buffer = rc_atlas_;
         rw.cycle = false;
-        SDL_GPUComputePass* p = SDL_BeginGPUComputePass( cb, nullptr, 0, &rw, 1 );
-        if( !p ) {
-            dbg( DL::Error ) << "rc merge pass: BeginGPUComputePass failed: " << SDL_GetError();
+        SDL_GPUComputePass* p = SDL_BeginGPUComputePass(cb, nullptr, 0, &rw, 1);
+        if (!p) {
+            dbg(DL::Error) << "rc merge pass: BeginGPUComputePass failed: " << SDL_GetError();
             return false;
         }
-        SDL_BindGPUComputePipeline( p, rc_merge_pipeline_ );
+        SDL_BindGPUComputePipeline(p, rc_merge_pipeline_);
         // No readonly storage buffers: rc_merge.comp reads AND writes rc_atlas_
         // through the single RW binding above (ro_sb=0).
-        const std::uint32_t cgx = ( geom[i].probes_x + 7u ) / 8u;
-        const std::uint32_t cgy = ( geom[i].probes_y + 7u ) / 8u;
-        SDL_DispatchGPUCompute( p, cgx, cgy, 1 );
-        SDL_EndGPUComputePass( p );
+        const std::uint32_t cgx = (geom[i].probes_x + 7u) / 8u;
+        const std::uint32_t cgy = (geom[i].probes_y + 7u) / 8u;
+        SDL_DispatchGPUCompute(p, cgx, cgy, 1);
+        SDL_EndGPUComputePass(p);
     }
 
     // ---- Pass 4: RC RESOLVE — cascade 0 (now fully merged) → gi_out_buf_,
     // the sprite's GI input, in the same layout gi_bounce2.comp used to write.
     rp.cascade = 0;
-    SDL_PushGPUComputeUniformData( cb, /*slot=*/0, &rp, sizeof( rp ) );
+    SDL_PushGPUComputeUniformData(cb, /*slot=*/0, &rp, sizeof(rp));
     {
         SDL_GPUStorageBufferReadWriteBinding rw{};
         rw.buffer = gi_out_buf_;
         rw.cycle = false;
-        SDL_GPUComputePass* p = SDL_BeginGPUComputePass( cb, nullptr, 0, &rw, 1 );
-        if( !p ) {
-            dbg( DL::Error ) << "rc resolve pass: BeginGPUComputePass failed: " << SDL_GetError();
+        SDL_GPUComputePass* p = SDL_BeginGPUComputePass(cb, nullptr, 0, &rw, 1);
+        if (!p) {
+            dbg(DL::Error) << "rc resolve pass: BeginGPUComputePass failed: " << SDL_GetError();
             return false;
         }
-        SDL_BindGPUComputePipeline( p, rc_resolve_pipeline_ );
-        SDL_GPUBuffer* ro[2] = { rc_atlas_, sdf_buf }; // t0 atlas, t1 sdf (tile-centre SDF → GiBuf.a)
-        SDL_BindGPUComputeStorageBuffers( p, /*first_slot=*/0, ro, 2 );
-        SDL_DispatchGPUCompute( p, gx, gy, 1 );
-        SDL_EndGPUComputePass( p );
+        SDL_BindGPUComputePipeline(p, rc_resolve_pipeline_);
+        SDL_GPUBuffer* ro[2] = {rc_atlas_, sdf_buf}; // t0 atlas, t1 sdf (tile-centre SDF → GiBuf.a)
+        SDL_BindGPUComputeStorageBuffers(p, /*first_slot=*/0, ro, 2);
+        SDL_DispatchGPUCompute(p, gx, gy, 1);
+        SDL_EndGPUComputePass(p);
     }
     return true;
 }
 
-void gi_compute_pass::debug_log_stats( std::uint32_t runtime_w, std::uint32_t runtime_h ) {
-    if( !gi_out_buf_ || !dev_ || !dev_->ready() || runtime_w == 0 || runtime_h == 0 ) {
-        return;
-    }
+void gi_compute_pass::debug_log_stats(std::uint32_t runtime_w, std::uint32_t runtime_h) {
+    if (!gi_out_buf_ || !dev_ || !dev_->ready() || runtime_w == 0 || runtime_h == 0) { return; }
     SDL_GPUDevice* d = dev_->raw();
     const std::uint32_t floats = max_w_ * max_h_ * FLOATS_PER_TILE;
     const std::uint32_t bytes = floats * static_cast<std::uint32_t>(sizeof(float));

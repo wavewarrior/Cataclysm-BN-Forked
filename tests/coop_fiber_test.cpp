@@ -1,5 +1,4 @@
 #include "catch/catch_amalgamated.hpp"
-
 #include "coop_fiber.h"
 #include "driver_loop.h"
 
@@ -9,8 +8,7 @@
 // Outside the driver a fiber runs, yields the host's events to its body and finishes exactly as
 // it did before the driver existed.
 
-TEST_CASE("a_fiber_outside_the_driver_yields_and_finishes_as_before", "[coop][fiber][driver]")
-{
+TEST_CASE("a_fiber_outside_the_driver_yields_and_finishes_as_before", "[coop][fiber][driver]") {
     REQUIRE_FALSE(driver_mode_active());
 
     auto steps = std::vector<int>();

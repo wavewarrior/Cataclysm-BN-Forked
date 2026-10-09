@@ -100,8 +100,7 @@ bool &distraction_rmlui_enabled()
     return enabled;
 }
 
-namespace distraction_manager
-{
+namespace distraction_manager {
 
 static const std::map< distraction_type, std::pair< std::string, std::string> >
 distraction_desc = {
@@ -264,7 +263,7 @@ void distraction_manager_gui::show()
     }
 }
 
-bool distraction_manager_gui::is_ignored( distraction_type &distract )
+bool distraction_manager_gui::is_ignored( distraction_type & distract )
 {
     // If it doesn't exist it'll create one with a null/false value which works fine for us.
     return distractions[distract];
@@ -305,12 +304,13 @@ void distraction_manager_gui::load()
     distr.close();
 }
 
-void distraction_manager_gui::serialize( JsonOut &json ) const
+void distraction_manager_gui::serialize( JsonOut & json ) const
 {
     json.start_array();
 
-for( auto &elem : distractions ) {
-    json.start_object();
+    for( auto &elem : distractions )
+    {
+        json.start_object();
 
         json.member( "Distraction Type", io::enum_to_string<distraction_type>( elem.first ) );
         json.member( "Bool", elem.second );
@@ -321,7 +321,7 @@ for( auto &elem : distractions ) {
     json.end_array();
 }
 
-void distraction_manager_gui::deserialize( JsonIn &jsin )
+void distraction_manager_gui::deserialize( JsonIn & jsin )
 {
     jsin.start_array();
     while( !jsin.end_array() ) {

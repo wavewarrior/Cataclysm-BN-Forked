@@ -323,7 +323,7 @@ auto reload_monster_weapons( avatar &you, monster &z ) -> void
 
     const auto selected_ammo = select_ammo_variant(
                                    string_format( _( "Reload the %s with what?" ),
-                                           ammo_slot_name( z, selected_slot ) ),
+                                       ammo_slot_name( z, selected_slot ) ),
                                    reload_option_iter->compatible_ammo );
     if( selected_ammo.is_empty() ) {
         return;
@@ -369,7 +369,7 @@ auto unload_monster_weapons( avatar &you, monster &z ) -> void
     const auto loaded_ammo = loaded_slot_ammo( z, selected_slot );
     const auto selected_ammo = select_ammo_variant(
                                    string_format( _( "Unload which ammo from the %s?" ),
-                                           ammo_slot_name( z, selected_slot ) ),
+                                       ammo_slot_name( z, selected_slot ) ),
                                    loaded_ammo );
     if( selected_ammo.is_empty() ) {
         return;
@@ -958,7 +958,7 @@ bool monexamine::pay_bot( monster &z )
     uilist bot_menu;
     bot_menu.text = string_format(
                         _( "Welcome to the %s Friendship Interface.  What would you like to do?\n"
-                           "Your current friendship will last: %s" ), z.get_name(), to_string( friend_time ) );
+       "Your current friendship will last: %s" ), z.get_name(), to_string( friend_time ) );
     if( charge_count > 0 ) {
         bot_menu.addentry( 1, true, 'b', _( "Get more friendship.  10 cents/min" ) );
     } else {

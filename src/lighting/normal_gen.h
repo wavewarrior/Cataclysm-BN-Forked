@@ -56,16 +56,14 @@
 // light direction needs the orthogonal per-sprite facing term (`sprite_instance::
 // face_amt` plus the `quad_v` varying). The two compose; neither is redundant.
 
+#include <SDL3/SDL_rect.h>
 #include <cstdint>
 #include <span>
 #include <vector>
 
-#include <SDL3/SDL_rect.h>
-
 struct SDL_Surface;
 
-namespace lighting
-{
+namespace lighting {
 
 /// Generator tuning. Every default was measured against MSX++UnDeadPeopleEdition; see
 /// the per-field notes and the rejected-alternatives block above before changing one.
@@ -75,23 +73,23 @@ struct normal_gen_params {
     /// on its own, th=0.22 keeps brick (0.53 edge density) but kills plank seams (0.00).
     float edge_threshold = 0.14f;
     /// Gaussian sigma on the merged height map.
-    float blur_sigma     = 1.1f;
+    float blur_sigma = 1.1f;
     /// Height-to-normal gain. This is the "how blue is the atlas" control.
-    float slope          = 2.6f;
+    float slope = 2.6f;
     /// Gap run at/below which a sprite reads as noise and gets no relief at all.
-    float coh_lo         = 2.9f;
+    float coh_lo = 2.9f;
     /// Gap run at/above which a sprite reads as fully structured.
-    float coh_hi         = 4.0f;
+    float coh_hi = 4.0f;
     /// Edge density below which the mask is too sparse to be structure. Closes the one
     /// hole in the gap-run statistic -- see `coherence_gap_run`.
-    float min_density    = 0.05f;
+    float min_density = 0.05f;
     /// Max colour gradient inside the silhouette below which the sprite is genuinely
     /// flat and anything extracted would be quantisation noise promoted to geometry.
-    float flat_eps       = 0.04f;
+    float flat_eps = 0.04f;
     /// Blend weight of the external (silhouette) EDT against the internal one. Also
     /// the floor on `slope` for a non-full tile: a cut-out sprite keeps its bevel even
     /// when the coherence gate zeroes its internal relief.
-    float ext_weight     = 0.5f;
+    float ext_weight = 0.5f;
 };
 
 /// Diagnostics for one generated sprite. Not consumed by the renderer; this is what
@@ -103,22 +101,22 @@ struct normal_gen_stats {
     /// texel. 0 means "deliberately left flat", which is a correct outcome.
     float amplitude = 0.0f;
     /// Fraction of the rect classified as an internal contour.
-    float density   = 0.0f;
+    float density = 0.0f;
     /// Opaque region touches all four borders AND mean alpha > 0.97.
-    bool  full_tile = false;
+    bool full_tile = false;
     /// Whole silhouette varies by less than `flat_eps`.
-    bool  flat      = false;
+    bool flat = false;
 };
 
 /// One sprite rect to generate. All five fields are required; there are no defaults
 /// because a partially initialised request has no useful meaning.
 struct normal_gen_request {
     /// Source sheet. Any pixel format; read through SDL_GetPixelFormatDetails.
-    const SDL_Surface *src;
+    const SDL_Surface* src;
     /// The sprite's rect within `src`. Must lie entirely inside it.
     SDL_Rect rect;
     /// Destination. MUST be SDL_PIXELFORMAT_RGBA32 (byte order R,G,B,A).
-    SDL_Surface *dst;
+    SDL_Surface* dst;
     /// Top-left of the `rect.w` x `rect.h` region written in `dst`.
     SDL_Point dst_at;
     normal_gen_params params;
@@ -145,7 +143,7 @@ struct normal_gen_request {
 ///
 /// A no-op (default stats, nothing written) if `src`/`dst` are null, the rect is empty
 /// or out of bounds, or `dst` is not RGBA32.
-auto generate_sprite_normal( const normal_gen_request &req ) -> normal_gen_stats;
+auto generate_sprite_normal(const normal_gen_request& req) -> normal_gen_stats;
 
 /// Exact euclidean distance transform: for each SET pixel of `mask`, the distance in
 /// pixels to the nearest UNSET pixel; UNSET pixels get 0. `mask` is row-major with
@@ -162,7 +160,7 @@ auto generate_sprite_normal( const normal_gen_request &req ) -> normal_gen_stats
 /// normalise by the maximum, which turns the mathematically-correct "infinity
 /// everywhere" into a constant field whose Sobel is zero, so zeros is behaviour
 /// identical and cannot leak a sentinel into anyone's arithmetic.
-auto exact_edt( std::span<const std::uint8_t> mask, int w, int h ) -> std::vector<float>;
+auto exact_edt(std::span<const std::uint8_t> mask, int w, int h) -> std::vector<float>;
 
 /// Mean NON-edge ("gap") run length of the edge mask `mask` (nonzero = edge), pooled
 /// over a row scan and a column scan and averaged. Separates structure from dither.
@@ -188,6 +186,6 @@ auto exact_edt( std::span<const std::uint8_t> mask, int w, int h ) -> std::vecto
 /// isolated speckles scores high and would pass the gate -- the sparse-seed to
 /// invented-blob failure the gate exists to stop. That is closed separately by
 /// `normal_gen_params::min_density`, not by this statistic.
-auto coherence_gap_run( std::span<const std::uint8_t> mask, int w, int h ) -> float;
+auto coherence_gap_run(std::span<const std::uint8_t> mask, int w, int h) -> float;
 
 } // namespace lighting

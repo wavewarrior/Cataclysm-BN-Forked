@@ -1251,13 +1251,13 @@ void bionic::serialize( JsonOut &json ) const
     json.member( "ammo_count", ammo_count );
     json.member( "bionic_tags", bionic_tags );
     if( incapacitated_time > 0_turns ) {
-    json.member( "incapacitated_time", incapacitated_time );
+        json.member( "incapacitated_time", incapacitated_time );
     }
     if( is_auto_start_on() ) {
-    json.member( "auto_start_threshold", auto_start_threshold );
+        json.member( "auto_start_threshold", auto_start_threshold );
     }
     if( energy_stored > 0_kJ ) {
-    json.member( "energy_stored", energy_stored );
+        json.member( "energy_stored", energy_stored );
     }
     json.member( "show_sprite", show_sprite );
 

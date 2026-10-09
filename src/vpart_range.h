@@ -30,11 +30,11 @@ class vehicle_part_iterator
 
         auto skip_to_next_valid( size_t i ) -> void {
             while( i < range_.part_count() &&
-            !range_.matches( i ) ) {
-            ++i;
-        }
-        if( i < range_.part_count() ) {
-            vp_.emplace( range_.vehicle(), i );
+                   !range_.matches( i ) ) {
+                ++i;
+            }
+            if( i < range_.part_count() ) {
+                vp_.emplace( range_.vehicle(), i );
             } else {
                 vp_.reset();
             }
@@ -170,8 +170,7 @@ class vehicle_part_with_feature_range : public
 
 // Enable borrowed_range to allow std::ranges algorithms to work with temporary range objects.
 // This is safe because our iterators store the range state by value (not by pointer).
-namespace std::ranges
-{
+namespace std::ranges {
 template<>
 inline constexpr bool enable_borrowed_range<vehicle_part_range> = true;
 

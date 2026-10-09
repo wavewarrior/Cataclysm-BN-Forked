@@ -129,8 +129,7 @@ struct weather_type {
             return utf32_to_utf8( symbol );
         }
 };
-namespace weather_types
-{
+namespace weather_types {
 /** Get all currently loaded weather types */
 const std::vector<weather_type> &get_all();
 /** Finalize all loaded weather types */
@@ -138,7 +137,7 @@ void finalize_all();
 /** Clear all loaded weather types (invalidating any pointers) */
 void reset();
 /** Load weather type from JSON definition */
-void load( const JsonObject &jo, const std::string &src );
+void load( const JsonObject & jo, const std::string & src );
 /** Checks all loaded from JSON are valid */
 void check_consistency();
 } // namespace weather_types

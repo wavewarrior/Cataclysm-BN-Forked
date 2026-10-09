@@ -19,7 +19,7 @@ struct construction;
 class recipe;
 
 // Activity target types that can provide context to calculation functions
-using activity_target = std::variant<std::monostate, const recipe *, const construction *>;
+using activity_target = std::variant < std::monostate, const recipe *, const construction * >;
 
 enum class bench_type : int {
     ground = 0,
@@ -39,18 +39,19 @@ struct workbench_info_wrapper {
 
     workbench_info_wrapper( furn_workbench_info f_info );
     workbench_info_wrapper( vpslot_workbench v_info );
-    workbench_info_wrapper( float multiplier, const units::mass &allowed_mass,
-                            const units::volume &allowed_volume, const bench_type &type );
+    workbench_info_wrapper( float multiplier, const units::mass & allowed_mass,
+                            const units::volume & allowed_volume, const bench_type & type );
 
-    void adjust_multiplier( const metric &metrics );
+    void adjust_multiplier( const metric & metrics );
 };
 
 struct bench_loc {
     workbench_info_wrapper wb_info;
     tripoint_bub_ms position;
 
-    explicit bench_loc( workbench_info_wrapper info, const tripoint_bub_ms &position )
-        : wb_info( info ), position( position ) {
+    explicit bench_loc( workbench_info_wrapper info, const tripoint_bub_ms & position )
+        : wb_info( info ), position( position )
+    {
     }
 };
 
@@ -60,9 +61,10 @@ struct activity_reqs_adapter {
     metric metrics = std::make_pair( 0_milligram, 0_ml );
     activity_target target;  // Target context for flag/property checks
 
-    activity_reqs_adapter( const construction &con );
-    activity_reqs_adapter( const recipe &rec, const metric &metrics );
-    activity_reqs_adapter( const skill_reqs &skills, const metric &metrics )
-        : skills( skills ), metrics( metrics ) {
+    activity_reqs_adapter( const construction & con );
+    activity_reqs_adapter( const recipe & rec, const metric & metrics );
+    activity_reqs_adapter( const skill_reqs & skills, const metric & metrics )
+        : skills( skills ), metrics( metrics )
+    {
     }
 };

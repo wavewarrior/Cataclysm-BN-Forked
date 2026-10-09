@@ -172,7 +172,7 @@ auto coop_world_event_interpreter::apply_inverse( map& target, const coop_invert
 }
 
 auto coop_world_event_interpreter::write_events(
-    JsonOut& out, const std::vector<coop_world_event>& events ) -> void
+    JsonOut& out, const std::vector<coop_world_event> &events ) -> void
 {
     out.member( "events" );
     out.start_array();

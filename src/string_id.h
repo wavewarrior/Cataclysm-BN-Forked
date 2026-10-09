@@ -368,8 +368,7 @@ class string_id
 };
 
 // Support hashing of string based ids by forwarding the hash of the string.
-namespace std
-{
+namespace std {
 template<typename T>
 struct hash<string_id<T>> {
     std::size_t operator()( const string_id<T> &v ) const noexcept {
@@ -382,7 +381,7 @@ struct hash<string_id<T>> {
 /** Lexicographic order comparator for string_ids */
 template<typename T>
 struct lexicographic {
-    bool operator()( const string_id<T> &x, const string_id<T> &y ) const {
+    bool operator()( const string_id < T > &x, const string_id < T > &y ) const {
         //TODO change to use localized sorting
         // NOLINTNEXTLINE cata-use-localized-sorting
         return x.str() < y.str();

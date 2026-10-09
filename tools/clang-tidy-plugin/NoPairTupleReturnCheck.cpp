@@ -18,13 +18,15 @@ void NoPairTupleReturnCheck::registerMatchers(MatchFinder* Finder) {
     // A dependent `std::pair<T, T>` is not a record type yet, so match its template name too.
     const auto IsPairOrTuple = hasAnyName("::std::pair", "::std::tuple");
     const auto PairOrTuple = anyOf(
-                                 hasUnqualifiedDesugaredType(recordType(hasDeclaration(
-                                         classTemplateSpecializationDecl(IsPairOrTuple)))),
-                                 hasUnqualifiedDesugaredType(templateSpecializationType(
-                                         hasDeclaration(namedDecl(IsPairOrTuple)))));
-    Finder->addMatcher(functionDecl(returns(PairOrTuple), unless(isImplicit()),
-                                    unless(ast_matchers::isTemplateInstantiation()), unless(isDeleted()))
-                       .bind("fn"), this);
+        hasUnqualifiedDesugaredType(
+            recordType(hasDeclaration(classTemplateSpecializationDecl(IsPairOrTuple)))),
+        hasUnqualifiedDesugaredType(
+            templateSpecializationType(hasDeclaration(namedDecl(IsPairOrTuple)))));
+    Finder->addMatcher(
+        functionDecl(returns(PairOrTuple), unless(isImplicit()),
+                     unless(ast_matchers::isTemplateInstantiation()), unless(isDeleted()))
+            .bind("fn"),
+        this);
 }
 
 void NoPairTupleReturnCheck::check(const MatchFinder::MatchResult& Result) {

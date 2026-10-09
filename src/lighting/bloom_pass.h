@@ -69,7 +69,7 @@ private:
     SDL_GPUGraphicsPipeline* composite_pipeline_ = nullptr; // → hdr_format, additive
     SDL_GPUSampler* sampler_ = nullptr;                     // linear/clamp
 
-    SDL_GPUTexture* mip_chain_[MAX_MIP_LEVELS] = {};  // progressively halved
+    SDL_GPUTexture* mip_chain_[MAX_MIP_LEVELS] = {}; // progressively halved
     std::uint32_t mip_w_[MAX_MIP_LEVELS] = {};
     std::uint32_t mip_h_[MAX_MIP_LEVELS] = {};
     int mip_count_ = 0;

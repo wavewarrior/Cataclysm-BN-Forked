@@ -178,17 +178,17 @@ auto item::price( bool practical ) const -> float
 units::mass item::weight( bool include_contents, bool integral ) const
 {
     if( is_null() ) {
-    return 0_gram;
-}
+        return 0_gram;
+    }
 
-// Items that don't drop aren't really there, they're items just for ease of implementation
-if( has_flag( flag_NO_DROP ) ) {
-    return 0_gram;
-}
+    // Items that don't drop aren't really there, they're items just for ease of implementation
+    if( has_flag( flag_NO_DROP ) ) {
+        return 0_gram;
+    }
 
-if( is_craft() ) {
-    units::mass ret = 0_gram;
-    for( const item * const &it : components ) {
+    if( is_craft() ) {
+        units::mass ret = 0_gram;
+        for( const item * const &it : components ) {
             ret += it->weight();
         }
         return ret;
@@ -197,27 +197,27 @@ if( is_craft() ) {
     units::mass ret;
     std::string local_str_mass = integral ? get_var( "integral_weight" ) : get_var( "weight" );
     if( local_str_mass.empty() ) {
-    ret = integral ? type->integral_weight : type->weight;
-} else {
-    ret = units::from_milligram( std::stoll( local_str_mass ) );
+        ret = integral ? type->integral_weight : type->weight;
+    } else {
+        ret = units::from_milligram( std::stoll( local_str_mass ) );
     }
 
     if( has_flag( flag_REDUCED_WEIGHT ) ) {
-    ret *= 0.75;
-}
+        ret *= 0.75;
+    }
 
-// if this is a gun apply all of its gunmods' weight multipliers
-if( is_gun() ) {
-    for( const item *mod : gunmods() ) {
+    // if this is a gun apply all of its gunmods' weight multipliers
+    if( is_gun() ) {
+        for( const item *mod : gunmods() ) {
             ret *= mod->type->gunmod->weight_multiplier;
         }
     }
 
     if( count_by_charges() ) {
-    ret *= charges;
+        ret *= charges;
 
-} else if( is_corpse() ) {
-    assert( corpse ); // To appease static analysis
+    } else if( is_corpse() ) {
+        assert( corpse ); // To appease static analysis
         ret = corpse->weight;
         if( has_flag( flag_FIELD_DRESS ) || has_flag( flag_FIELD_DRESS_FAILED ) ) {
             ret *= 0.75;
@@ -233,7 +233,7 @@ if( is_gun() ) {
         }
 
     } else if( magazine_integral() && !is_magazine() ) {
-    if( ammo_current() == itype_plut_cell ) {
+        if( ammo_current() == itype_plut_cell ) {
             units::mass w = ( *ammo_types().begin() )->default_ammotype()->weight;
             ret += ammo_remaining() * w / PLUTONIUM_CHARGES;
         } else if( ammo_data() ) {
@@ -243,8 +243,8 @@ if( is_gun() ) {
 
     // if this is an ammo belt add the weight of any implicitly contained linkages
     if( is_magazine() ) {
-    const auto &linkage = type->magazine->linkage;
-    if( linkage ) {
+        const auto &linkage = type->magazine->linkage;
+        if( linkage ) {
             item links( *linkage );
             links.charges = ammo_remaining();
             ret += links.weight();
@@ -253,8 +253,8 @@ if( is_gun() ) {
 
     // reduce weight for sawn-off weapons capped to the apportioned weight of the barrel
     if( gunmod_find( itype_barrel_small ) ) {
-    const units::volume b = type->gun->barrel_volume;
-    const units::mass max_barrel_weight = units::from_gram( to_milliliter( b ) );
+        const units::volume b = type->gun->barrel_volume;
+        const units::mass max_barrel_weight = units::from_gram( to_milliliter( b ) );
         const units::mass barrel_weight = units::from_gram( b.value() * type->weight.value() /
                                           type->volume.value() );
         ret -= std::min( max_barrel_weight, barrel_weight );
@@ -302,22 +302,22 @@ units::volume item::corpse_volume( const mtype *corpse ) const
 units::volume item::base_volume() const
 {
     if( is_null() ) {
-    return 0_ml;
-}
-if( is_corpse() ) {
-    return corpse_volume( corpse );
+        return 0_ml;
+    }
+    if( is_corpse() ) {
+        return corpse_volume( corpse );
     }
 
     if( is_craft() ) {
-    units::volume ret = 0_ml;
-    for( const item * const &it : components ) {
+        units::volume ret = 0_ml;
+        for( const item * const &it : components ) {
             ret += it->base_volume();
         }
         return ret;
     }
 
     if( count_by_charges() ) {
-    if( type->volume % type->stack_size == 0_ml ) {
+        if( type->volume % type->stack_size == 0_ml ) {
             return type->volume / type->stack_size;
         } else {
             return type->volume / type->stack_size + 1_ml;
@@ -330,16 +330,16 @@ if( is_corpse() ) {
 units::volume item::volume( bool integral ) const
 {
     if( is_null() ) {
-    return 0_ml;
-}
+        return 0_ml;
+    }
 
-if( is_corpse() ) {
-    return corpse_volume( corpse );
+    if( is_corpse() ) {
+        return corpse_volume( corpse );
     }
 
     if( is_craft() ) {
-    units::volume ret = 0_ml;
-    for( const item * const &it : components ) {
+        units::volume ret = 0_ml;
+        for( const item * const &it : components ) {
             ret += it->volume();
         }
         return ret;
@@ -348,16 +348,16 @@ if( is_corpse() ) {
     const int local_volume = get_var( "volume", -1 );
     units::volume ret;
     if( local_volume >= 0 ) {
-    ret = local_volume * units::legacy_volume_factor;
-} else if( integral ) {
-    ret = type->integral_volume;
-} else {
-    ret = type->volume;
-}
+        ret = local_volume * units::legacy_volume_factor;
+    } else if( integral ) {
+        ret = type->integral_volume;
+    } else {
+        ret = type->volume;
+    }
 
-if( count_by_charges() || made_of( LIQUID ) ) {
-    units::quantity<int64_t, units::volume_in_milliliter_tag> num = ret * static_cast<int64_t>
-        ( charges );
+    if( count_by_charges() || made_of( LIQUID ) ) {
+        units::quantity<int64_t, units::volume_in_milliliter_tag> num = ret * static_cast<int64_t>
+            ( charges );
         if( type->stack_size <= 0 ) {
             debugmsg( "Item type %s has invalid stack_size %d", typeId().str(), type->stack_size );
             ret = num;
@@ -371,8 +371,8 @@ if( count_by_charges() || made_of( LIQUID ) ) {
 
     // Non-rigid items add the volume of the content
     if( !type->rigid ) {
-    // Disintegrating belts should exactly match contents volume, don't enforce the 1_ml minimum
-    if( type->has_flag( flag_MAG_BELT ) && type->has_flag( flag_MAG_DESTROY ) ) {
+        // Disintegrating belts should exactly match contents volume, don't enforce the 1_ml minimum
+        if( type->has_flag( flag_MAG_BELT ) && type->has_flag( flag_MAG_DESTROY ) ) {
             ret = 0_ml;
         }
         ret += contents.item_size_modifier();
@@ -380,7 +380,7 @@ if( count_by_charges() || made_of( LIQUID ) ) {
 
     // Some magazines sit (partly) flush with the item so add less extra volume
     if( magazine_current() != nullptr ) {
-    ret += std::max( magazine_current()->volume() - type->magazine_well, 0_ml );
+        ret += std::max( magazine_current()->volume() - type->magazine_well, 0_ml );
     }
 
     if( is_gun() ) {

@@ -25,7 +25,7 @@ IMPLEMENT_STRING_AND_INT_IDS( overmap_location, locations );
 bool overmap_location::test( const oter_id &oter ) const
 {
     return std::ranges::any_of( terrains,
-           [ &oter ]( const oter_type_str_id & type ) {
+    [ &oter ]( const oter_type_str_id & type ) {
         return oter->type_is( type );
     } );
 }
@@ -56,8 +56,8 @@ std::vector<oter_type_id> overmap_location::get_all_terrains() const
 
 void overmap_location::check() const
 {
-for( const auto &element : terrains ) {
-    if( !element.is_valid() ) {
+    for( const auto &element : terrains ) {
+        if( !element.is_valid() ) {
             debugmsg( "In overmap location \"%s\", terrain \"%s\" is invalid.", id.c_str(), element.c_str() );
         }
     }

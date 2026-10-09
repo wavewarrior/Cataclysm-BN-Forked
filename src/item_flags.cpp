@@ -174,14 +174,14 @@ bool item::has_flag( const flag_id &f ) const
 bool item::has_vitamin( const vitamin_id &v ) const
 {
     if( !this->is_comestible() ) {
-    return false;
-}
-// We need this function to get all vitamins including from inheritance.
-// But we don't care about calories, so we can just pass a dummy.
-npc dummy;
-const nutrients food_item = dummy.compute_effective_nutrients( *this );
-for( auto const& [vit_id, amount] : food_item.vitamins ) {
-    if( vit_id == v ) {
+        return false;
+    }
+    // We need this function to get all vitamins including from inheritance.
+    // But we don't care about calories, so we can just pass a dummy.
+    npc dummy;
+    const nutrients food_item = dummy.compute_effective_nutrients( *this );
+    for( auto const& [vit_id, amount] : food_item.vitamins ) {
+        if( vit_id == v ) {
             if( amount > 0 ) {
                 return true;
             } else {
@@ -361,14 +361,14 @@ std::set<matec_id> item::get_techniques() const
 int item::get_comestible_fun() const
 {
     if( !is_comestible() ) {
-    return 0;
-}
-auto fun = get_comestible()->fun;
-for( const flag_id &flag : item_tags ) {
-    fun += flag->taste_mod();
+        return 0;
     }
-for( const flag_id &flag : type->get_flags() ) {
-    fun += flag->taste_mod();
+    auto fun = get_comestible()->fun;
+    for( const flag_id &flag : item_tags ) {
+        fun += flag->taste_mod();
+    }
+    for( const flag_id &flag : type->get_flags() ) {
+        fun += flag->taste_mod();
     }
 
     return static_cast<int>( get_var( "comestible_fun", static_cast<double>( fun ) ) );

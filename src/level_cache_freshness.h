@@ -48,7 +48,7 @@ enum class level_cache_part : int {
 
 template<>
 struct enum_traits<level_cache_part> {
-        static constexpr level_cache_part last = level_cache_part::NUM;
+    static constexpr level_cache_part last = level_cache_part::NUM;
 };
 
 /** The parts that are per-submap bitsets rather than per-level flags. */
@@ -100,55 +100,55 @@ enum_bitset<level_cache_part> level_cache_bitset_parts();
 class level_cache_freshness
 {
     public:
-/** What a caller wants the lightmap phase of a rebuild to do. */
-enum class lightmap_policy { normal, skip };
-/** What the derived plan decided about the lightmap phase. */
-enum class lightmap_disposition { process, defer_without_escalation };
-/** Where the rebuild is looked at from: the viewer tile and the camera offset. */
-struct viewer_pose {
-    tripoint_bub_ms viewer;
-    point_rel_ms camera;
-};
-/**
- * The per-level residency generations as observed when the plan was derived, plus
- * the bubble origin then. These are ABSOLUTE stamps, not deltas: the consumer
- * (T7's pushed residency events) diffs them against what it last applied, so a
- * plan stays meaningful even when two plans are derived before one applies.
- */
-struct residency_snapshot {
-    std::array<std::uint64_t, OVERMAP_LAYERS> generation;
-    std::uint64_t shift;
-};
-/** The pose a build was derived for; compared opaquely, never interpreted. */
-struct pose_stamps {
-    point_abs_sm bubble_origin;
-    tripoint_bub_ms viewer;
-    point_rel_ms camera;
-    auto operator==( const pose_stamps & ) const -> bool = default;
-};
-/**
- * One rebuild plan: everything a Level-cache rebuild needs to know, derived once
- * per consumption point by `plan_for` so that no consumer re-reads freshness state
- * to answer the same question twice. See ADR-0002 (retire the GPU pull seam): the
- * plan is the single carrier of both the dirty-level sets and the residency stamps.
- */
-struct rebuild_plan {
-    bool structure;
-    std::vector<int> structure_levels;
-    std::vector<int> transparency_levels, floor_levels, vehicle_floor_levels,
-                     vehicle_obscured_levels;
-    lightmap_disposition lightmap;
-    bool visibility;
-    residency_snapshot residency;
-    /**
-     * Per-level occluder-set stamp for the render-frame gate: the fold of the
-     * transparency and outside-cache generations the SDF/sky-vis snapshot is keyed
-     * by. An absolute stamp like the residency ones: compared opaquely, never
-     * interpreted by the gate.
-     */
-    std::array<std::uint64_t, OVERMAP_LAYERS> occluder;
-    pose_stamps pose;
-};
+        /** What a caller wants the lightmap phase of a rebuild to do. */
+        enum class lightmap_policy { normal, skip };
+        /** What the derived plan decided about the lightmap phase. */
+        enum class lightmap_disposition { process, defer_without_escalation };
+        /** Where the rebuild is looked at from: the viewer tile and the camera offset. */
+        struct viewer_pose {
+            tripoint_bub_ms viewer;
+            point_rel_ms camera;
+        };
+        /**
+         * The per-level residency generations as observed when the plan was derived, plus
+         * the bubble origin then. These are ABSOLUTE stamps, not deltas: the consumer
+         * (T7's pushed residency events) diffs them against what it last applied, so a
+         * plan stays meaningful even when two plans are derived before one applies.
+         */
+        struct residency_snapshot {
+            std::array<std::uint64_t, OVERMAP_LAYERS> generation;
+            std::uint64_t shift;
+        };
+        /** The pose a build was derived for; compared opaquely, never interpreted. */
+        struct pose_stamps {
+            point_abs_sm bubble_origin;
+            tripoint_bub_ms viewer;
+            point_rel_ms camera;
+            auto operator==( const pose_stamps & ) const -> bool = default;
+        };
+        /**
+         * One rebuild plan: everything a Level-cache rebuild needs to know, derived once
+         * per consumption point by `plan_for` so that no consumer re-reads freshness state
+         * to answer the same question twice. See ADR-0002 (retire the GPU pull seam): the
+         * plan is the single carrier of both the dirty-level sets and the residency stamps.
+         */
+        struct rebuild_plan {
+            bool structure;
+            std::vector<int> structure_levels;
+            std::vector<int> transparency_levels, floor_levels, vehicle_floor_levels,
+                vehicle_obscured_levels;
+            lightmap_disposition lightmap;
+            bool visibility;
+            residency_snapshot residency;
+            /**
+             * Per-level occluder-set stamp for the render-frame gate: the fold of the
+             * transparency and outside-cache generations the SDF/sky-vis snapshot is keyed
+             * by. An absolute stamp like the residency ones: compared opaquely, never
+             * interpreted by the gate.
+             */
+            std::array<std::uint64_t, OVERMAP_LAYERS> occluder;
+            pose_stamps pose;
+        };
         /**
          * Move the dirty bits of a level along with the caches they describe when the
          * reality bubble shifts, so retained submaps stay fresh and only the shifted-in
@@ -588,7 +588,7 @@ struct rebuild_plan {
         static void clear( level_cache &cache, const enum_bitset<level_cache_part> &parts );
         /** Set named per-level flags to an explicit value. Workers allowed, own level only. */
         static void assign( level_cache &cache, const enum_bitset<level_cache_part> &parts,
-                           bool value );
+                            bool value );
         // ---- Per-cache staleness verbs ----------------------------------
         //
         // Successors of the `map::set_*_cache_dirty` helpers. Each carries the
@@ -663,7 +663,7 @@ struct rebuild_plan {
          * a submap boundary, and the corners when it sits on two.
          */
         static void mark_boundary_neighbours( map &who, level_cache &ch, level_cache_part part,
-                const tripoint_bub_ms &p, bool submap::*flag );
+                                              const tripoint_bub_ms &p, bool submap::*flag );
 };
 
 #endif // CATA_SRC_LEVEL_CACHE_FRESHNESS_H

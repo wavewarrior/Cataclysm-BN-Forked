@@ -38,31 +38,31 @@ struct hud_particle {
     // ── Motion character. Now that every emitter shares one appearance, THIS is
     // what tells snow from embers from leaves. All optional: zeroed fields fall
     // back to the plain straight-line drift.
-    float sway_amp = 0.f;    // lateral velocity swing, px/sec (0 = no sway)
-    float sway_freq = 0.f;   // sway cycles per second
-    float sway_phase = 0.f;  // sway phase offset, radians — keeps a batch from marching in step
-    float swirl = 0.f;       // leaf tumble: lateral velocity coupled to `rotation`
-    float accel_y = 0.f;     // px/sec^2, e.g. an ember's rise decaying as it cools
-    float flicker = 0.f;     // alpha modulation depth 0..1 (embers guttering)
-    float r = 1.0f;          // color components
+    float sway_amp = 0.f;   // lateral velocity swing, px/sec (0 = no sway)
+    float sway_freq = 0.f;  // sway cycles per second
+    float sway_phase = 0.f; // sway phase offset, radians — keeps a batch from marching in step
+    float swirl = 0.f;      // leaf tumble: lateral velocity coupled to `rotation`
+    float accel_y = 0.f;    // px/sec^2, e.g. an ember's rise decaying as it cools
+    float flicker = 0.f;    // alpha modulation depth 0..1 (embers guttering)
+    float r = 1.0f;         // color components
     float g = 1.0f;
     float b = 1.0f;
 };
 
 // Emitter type configuration.
 enum class hud_emitter_type {
-    ember,    // orange-red, upward drift, sway
-    dust,     // gray-brown, slow horizontal drift
-    pollen,   // yellow-green, lazy sine-wave float
-    snow,     // white, downward + sway
-    leaf      // autumn brown/red/orange, tumbling drift
+    ember,  // orange-red, upward drift, sway
+    dust,   // gray-brown, slow horizontal drift
+    pollen, // yellow-green, lazy sine-wave float
+    snow,   // white, downward + sway
+    leaf    // autumn brown/red/orange, tumbling drift
 };
 
 // Per-frame particle parameters.
 struct hud_particle_params {
     hud_emitter_type type = hud_emitter_type::dust;
-    float spawn_rate = 5.0f;       // particles per second
-    float intensity = 1.0f;        // 0..1 scale (drives alpha)
+    float spawn_rate = 5.0f; // particles per second
+    float intensity = 1.0f;  // 0..1 scale (drives alpha)
     std::uint32_t screen_w = 1920;
     std::uint32_t screen_h = 1080;
     // Dev-panel multipliers (F4 → Effects → HUD particles). 1.0 = authored look.
@@ -79,9 +79,8 @@ struct hud_particle_params {
 // extra so it dies just past the far edge instead of popping out mid-screen.
 // Emitters spawn just OUTSIDE an edge, so a lifetime picked independently of
 // speed is what stranded every particle in a band hugging its spawn edge.
-constexpr auto hud_particle_travel_lifetime( float distance, float speed,
-        float slack = 1.15f ) -> float
-{
+constexpr auto hud_particle_travel_lifetime(float distance, float speed, float slack = 1.15f)
+    -> float {
     return speed > 0.f ? distance * slack / speed : 1.f;
 }
 
@@ -89,27 +88,21 @@ constexpr auto hud_particle_travel_lifetime( float distance, float speed,
 // integral of a sine is a sine, so the path is a smooth serpentine and a particle
 // never teleports when its amplitude or the frame delta changes. Zero amplitude
 // or frequency = straight-line drift.
-inline auto hud_particle_sway( float amp, float freq, float phase, float age ) -> float
-{
-    if( amp == 0.f || freq == 0.f ) {
-        return 0.f;
-    }
+inline auto hud_particle_sway(float amp, float freq, float phase, float age) -> float {
+    if (amp == 0.f || freq == 0.f) { return 0.f; }
     constexpr float TAU = 6.283185307f;
-    return amp * std::sin( TAU * freq * age + phase );
+    return amp * std::sin(TAU * freq * age + phase);
 }
 
 // Alpha multiplier for a guttering ember: 1 at depth 0, dipping to (1 - depth)
 // at the bottom of each cycle. Never inverts or exceeds 1, so it can only ever
 // darken the envelope.
-inline auto hud_particle_flicker( float depth, float phase, float age ) -> float
-{
-    if( depth <= 0.f ) {
-        return 1.f;
-    }
+inline auto hud_particle_flicker(float depth, float phase, float age) -> float {
+    if (depth <= 0.f) { return 1.f; }
     constexpr float TAU = 6.283185307f;
     constexpr float FLICKER_HZ = 7.0f; // fast enough to read as a flame, not a pulse
-    const float wave = 0.5f + 0.5f * std::sin( TAU * FLICKER_HZ * age + phase );
-    return 1.f - std::clamp( depth, 0.f, 1.f ) * ( 1.f - wave );
+    const float wave = 0.5f + 0.5f * std::sin(TAU * FLICKER_HZ * age + phase);
+    return 1.f - std::clamp(depth, 0.f, 1.f) * (1.f - wave);
 }
 
 // Velocity a particle actually travels at this step: its stored drift plus the
@@ -125,17 +118,16 @@ struct hud_particle_velocity {
     float vy = 0.f;
 };
 
-inline auto hud_particle_step_velocity( const hud_particle &p ) -> hud_particle_velocity
-{
+inline auto hud_particle_step_velocity(const hud_particle& p) -> hud_particle_velocity {
     constexpr float DEG2RAD = 0.01745329f;
     auto v = hud_particle_velocity{
-        .vx = p.vx + hud_particle_sway( p.sway_amp, p.sway_freq, p.sway_phase, p.age ),
+        .vx = p.vx + hud_particle_sway(p.sway_amp, p.sway_freq, p.sway_phase, p.age),
         .vy = p.vy,
     };
-    if( p.swirl != 0.f ) {
+    if (p.swirl != 0.f) {
         const auto rot = p.rotation * DEG2RAD;
-        v.vx += p.swirl * std::cos( rot );
-        v.vy *= 1.0f + 0.35f * std::abs( std::sin( rot ) );
+        v.vx += p.swirl * std::cos(rot);
+        v.vy *= 1.0f + 0.35f * std::abs(std::sin(rot));
     }
     return v;
 }
@@ -148,24 +140,20 @@ inline auto hud_particle_step_velocity( const hud_particle &p ) -> hud_particle_
 // every frame past the fade start, so alpha collapsed geometrically within a
 // few frames and the reap threshold then deleted the particle at ~70% of its
 // nominal lifetime, far from where it was supposed to travel.
-constexpr auto hud_particle_alpha( float base_alpha, float age, float lifetime,
-                                   float fade_in ) -> float
-{
-    if( lifetime <= 0.f || age >= lifetime ) {
-        return 0.f;
-    }
-    const float in = fade_in > 0.f ? std::min( 1.f, age / fade_in ) : 1.f;
+constexpr auto hud_particle_alpha(float base_alpha, float age, float lifetime, float fade_in)
+    -> float {
+    if (lifetime <= 0.f || age >= lifetime) { return 0.f; }
+    const float in = fade_in > 0.f ? std::min(1.f, age / fade_in) : 1.f;
     const float fade_start = lifetime * 0.7f;
-    const float out = age > fade_start
-                      ? std::max( 0.f, 1.f - ( age - fade_start ) / ( lifetime - fade_start ) )
-                      : 1.f;
+    const float out =
+        age > fade_start ? std::max(0.f, 1.f - (age - fade_start) / (lifetime - fade_start)) : 1.f;
     return base_alpha * in * out;
 }
 
 // Arguments for one in-pass particle draw.
 struct hud_particle_draw {
-    SDL_GPURenderPass *rp = nullptr;
-    SDL_GPUCommandBuffer *cb = nullptr;
+    SDL_GPURenderPass* rp = nullptr;
+    SDL_GPUCommandBuffer* cb = nullptr;
     /// Instance count returned by prepare(). 0 = nothing to draw.
     std::uint32_t count = 0;
     /// Render target size in PHYSICAL pixels — the viewport this draw sets, and
@@ -185,20 +173,21 @@ struct hud_particle_draw {
 class hud_particle_effect {
 public:
     hud_particle_effect() = default;
-    hud_particle_effect( const hud_particle_effect & ) = delete;
-    hud_particle_effect &operator=( const hud_particle_effect & ) = delete;
+    hud_particle_effect(const hud_particle_effect&) = delete;
+    hud_particle_effect& operator=(const hud_particle_effect&) = delete;
     ~hud_particle_effect();
 
     // Build pipelines + instance buffers.
-    auto init( gpu_device &dev, SDL_GPUTextureFormat ui_format,
-               std::uint32_t screen_w, std::uint32_t screen_h ) -> bool;
+    auto init(
+        gpu_device& dev, SDL_GPUTextureFormat ui_format, std::uint32_t screen_w,
+        std::uint32_t screen_h) -> bool;
 
     auto shutdown() noexcept -> void;
 
     // True when initialized (GPU pipeline creation is deferred; draw is stubbed).
     auto ready() const noexcept -> bool {
-        return dev_ != nullptr && particle_pipeline_ != nullptr
-            && particle_xfer_ != nullptr && particle_storage_ != nullptr;
+        return dev_ != nullptr && particle_pipeline_ != nullptr && particle_xfer_ != nullptr
+            && particle_storage_ != nullptr;
     }
 
     // Drop every live particle. Switching the effect off has to remove what is
@@ -210,7 +199,7 @@ public:
     // instances. MUST be called BEFORE the render pass opens (it records a copy
     // pass, which cannot nest inside one). Returns the instance count to draw,
     // 0 when there is nothing to draw.
-    auto prepare( SDL_GPUCommandBuffer *cb, const hud_particle_params &params ) -> std::uint32_t;
+    auto prepare(SDL_GPUCommandBuffer* cb, const hud_particle_params& params) -> std::uint32_t;
 
     // Issue the draw INSIDE an already-open render pass, so the particles land
     // over everything that pass has drawn — including the RmlUi HUD, which is
@@ -220,29 +209,29 @@ public:
     // ui_composite_target instead (the old behaviour) put the particles UNDER the
     // HUD and smeared trails into a texture that is only re-cleared when the UI
     // goes dirty.
-    auto draw_in_pass( const hud_particle_draw &d ) -> void;
+    auto draw_in_pass(const hud_particle_draw& d) -> void;
 
 private:
     // Spawn a new particle based on emitter type.
-    auto spawn_particle( const hud_particle_params &params ) -> hud_particle;
+    auto spawn_particle(const hud_particle_params& params) -> hud_particle;
 
     // Age particles; remove expired ones.
-    auto update_particles( float dt ) -> void;
+    auto update_particles(float dt) -> void;
 
     // Upload instances to GPU.
-    auto upload_instances( SDL_GPUCommandBuffer *cb,
-                           const std::vector<hud_particle> &particles ) -> bool;
+    auto upload_instances(SDL_GPUCommandBuffer* cb, const std::vector<hud_particle>& particles)
+        -> bool;
 
     // GPU state
-    gpu_device *dev_ = nullptr;
+    gpu_device* dev_ = nullptr;
     SDL_GPUTextureFormat ui_format_ = SDL_GPU_TEXTUREFORMAT_INVALID;
 
-    SDL_GPUShader *particle_vert_ = nullptr;
-    SDL_GPUShader *particle_frag_ = nullptr;
-    SDL_GPUGraphicsPipeline *particle_pipeline_ = nullptr;
+    SDL_GPUShader* particle_vert_ = nullptr;
+    SDL_GPUShader* particle_frag_ = nullptr;
+    SDL_GPUGraphicsPipeline* particle_pipeline_ = nullptr;
 
-    SDL_GPUTransferBuffer *particle_xfer_ = nullptr;
-    SDL_GPUBuffer *particle_storage_ = nullptr;
+    SDL_GPUTransferBuffer* particle_xfer_ = nullptr;
+    SDL_GPUBuffer* particle_storage_ = nullptr;
 
     // Particle pool
     static constexpr int MAX_PARTICLES = 256;

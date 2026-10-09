@@ -291,9 +291,9 @@ TEST_CASE(
     shooter.wield(std::move(gun));
 
     auto probe = make_direct_gun_projectile(shooter.primary_weapon());
-    const auto probe_attack = projectile_attack(probe, shooter_pos, target_pos,
-                                                dispersion_sources{}, &shooter,
-                                                &shooter.primary_weapon(), nullptr, true);
+    const auto probe_attack = projectile_attack(
+        probe, shooter_pos, target_pos, dispersion_sources{}, &shooter, &shooter.primary_weapon(),
+        nullptr, true);
 
     CHECK(probe_attack.hit_critter != nullptr);
     CHECK(probe_attack.dealt_dam.total_damage() > 0);

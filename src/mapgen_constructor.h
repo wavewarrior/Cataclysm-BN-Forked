@@ -118,7 +118,7 @@ class mapgen_constructor
         auto spawn_an_item( const point_omt_ms &p, detached_ptr<item> &&new_item,
                             int charges, int damlevel ) -> detached_ptr<item>;
         auto spawn_items( const point_omt_ms &p,
-                          std::vector<detached_ptr<item>> new_items ) -> std::vector<detached_ptr<item>>;
+                          std::vector<detached_ptr<item>> new_items ) -> std::vector<detached_ptr<item >>;
         auto spawn_item( const point_omt_ms &p, const itype_id &type_id,
                          unsigned quantity = 1, int charges = 0,
                          const time_point &birthday = calendar::start_of_cataclysm,

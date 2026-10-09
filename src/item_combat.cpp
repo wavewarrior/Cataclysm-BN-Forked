@@ -342,12 +342,12 @@ std::map<std::string, attack_statblock> item::get_attacks() const
 {
     if( is_null() ) { return {{"DEFAULT", attack_statblock{}}}; }
 
-std::map<std::string, attack_statblock> result;
+    std::map<std::string, attack_statblock> result;
 
-// TODO: Cache
-for( const auto& attack : type->attacks ) {
-    attack_statblock modified_attack = attack.second;
-    const auto& bonus = get_melee_damage_bonus();
+    // TODO: Cache
+    for( const auto& attack : type->attacks ) {
+        attack_statblock modified_attack = attack.second;
+        const auto& bonus = get_melee_damage_bonus();
         for( damage_unit& du : modified_attack.damage.damage_units ) {
             // effectiveness is reduced by 10% per damage level
             du.amount -= du.amount * std::max( damage_level( 4 ), 0 ) * 0.1;
@@ -362,7 +362,7 @@ for( const auto& attack : type->attacks ) {
             }
 
             du.amount += bonus_from_enchantments( du.amount,
-                         enchantment_value_id( "ITEM_DAMAGE_" + du.get_internal_name() ), true );
+                                                  enchantment_value_id( "ITEM_DAMAGE_" + du.get_internal_name() ), true );
             // Apply melee damage bonus
             du.amount += bonus.type_damage( du.type );
         }
@@ -371,7 +371,7 @@ for( const auto& attack : type->attacks ) {
 
     // consider any melee gunmods
     if( is_gun() ) {
-    if( get_option<bool>( "LIMITED_BAYONETS" ) ) {
+        if( get_option<bool>( "LIMITED_BAYONETS" ) ) {
             // TODO: Multiple bayonets with multiple attacks each - add all attacks, resolve id
             // conflicts
             const std::vector<const item *> &mods = gunmods();

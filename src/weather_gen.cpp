@@ -112,7 +112,7 @@ units::temperature weather_generator::get_weather_temperature( const tripoint_ab
         const time_point &t, const calendar_config &calendar_config, unsigned seed ) const
 {
     return weather_temperature_from_common_data( *this, get_common_data( location.xy(), t,
-    calendar_config, seed ), t );
+            calendar_config, seed ), t );
 }
 
 w_point weather_generator::get_weather( const tripoint_abs_ms &location, const time_point &t,

@@ -497,7 +497,7 @@ int Character::best_nearby_lifting_assist( const tripoint_bub_ms& world_pos ) co
     const quality_id LIFT( "LIFT" );
     int mech_lift = 0;
     if( is_mounted() ) {
-    auto mons = mounted_creature.get();
+        auto mons = mounted_creature.get();
         if( mons->has_flag( MF_RIDEABLE_MECH ) ) {
             mech_lift = mons->mech_str_addition() + 10;
         }
@@ -566,7 +566,7 @@ units::mass Character::weight_carried_reduced_by( const excluded_stacks& without
 units::volume Character::volume_carried_reduced_by( const excluded_stacks &without ) const
 {
     if( without.empty() ) {
-    return inv.volume();
+        return inv.volume();
     } else {
         return inv.volume_without( without );
     }
@@ -575,41 +575,41 @@ units::volume Character::volume_carried_reduced_by( const excluded_stacks &witho
 units::mass Character::weight_capacity() const
 {
     if( has_trait( trait_DEBUG_STORAGE ) ) {
-    // Infinite enough
-    return units::mass_max;
-}
-// Get base capacity from creature,
-// then apply player-only mutation and trait effects.
-units::mass ret = Creature::weight_capacity();
-/** @EFFECT_STR increases carrying capacity */
-ret += get_str() * 4_kilogram;
-ret *= mutation_value( "weight_capacity_modifier" );
-ret += bonus_from_enchantments( ret / 1_gram, enchantment_value_id( "CARRY_WEIGHT" ) ) * 1_gram;
+        // Infinite enough
+        return units::mass_max;
+    }
+    // Get base capacity from creature,
+    // then apply player-only mutation and trait effects.
+    units::mass ret = Creature::weight_capacity();
+    /** @EFFECT_STR increases carrying capacity */
+    ret += get_str() * 4_kilogram;
+    ret *= mutation_value( "weight_capacity_modifier" );
+    ret += bonus_from_enchantments( ret / 1_gram, enchantment_value_id( "CARRY_WEIGHT" ) ) * 1_gram;
 
-units::mass worn_weight_bonus = 0_gram;
-for( const item * const &it : worn ) {
-    ret *= it->get_weight_capacity_modifier();
+    units::mass worn_weight_bonus = 0_gram;
+    for( const item * const &it : worn ) {
+        ret *= it->get_weight_capacity_modifier();
         worn_weight_bonus += it->get_weight_capacity_bonus();
     }
 
     units::mass bio_weight_bonus = 0_gram;
-for( const bionic &i : get_bionic_collection() ) {
-    const bionic_id &bid = i.id;
-    ret *= bid->weight_capacity_modifier;
-    bio_weight_bonus +=  bid->weight_capacity_bonus;
-}
+    for( const bionic &i : get_bionic_collection() ) {
+        const bionic_id &bid = i.id;
+        ret *= bid->weight_capacity_modifier;
+        bio_weight_bonus +=  bid->weight_capacity_bonus;
+    }
 
-ret += bio_weight_bonus + worn_weight_bonus;
+    ret += bio_weight_bonus + worn_weight_bonus;
 
-if( has_artifact_with( AEP_CARRY_MORE ) ) {
-    ret += 22500_gram;
-}
+    if( has_artifact_with( AEP_CARRY_MORE ) ) {
+        ret += 22500_gram;
+    }
 
-if( ret < 0_gram ) {
-    ret = 0_gram;
-}
-if( is_mounted() ) {
-    auto *mons = mounted_creature.get();
+    if( ret < 0_gram ) {
+        ret = 0_gram;
+    }
+    if( is_mounted() ) {
+        auto *mons = mounted_creature.get();
         // the mech has an effective strength for other purposes, like hitting.
         // but for lifting, its effective strength is even higher, due to its sturdy construction,
         // leverage, and being built entirely for that purpose with hydraulics etc.
@@ -624,21 +624,21 @@ units::volume Character::volume_capacity_reduced_by(
     const units::volume &mod, const excluded_stacks &without ) const
 {
     if( has_trait( trait_DEBUG_STORAGE ) ) {
-    return units::volume_max;
-}
+        return units::volume_max;
+    }
 
-units::volume ret = -mod;
-for( const auto &i : worn ) {
-    if( !without.contains( i ) ) {
+    units::volume ret = -mod;
+    for( const auto &i : worn ) {
+        if( !without.contains( i ) ) {
             ret += i->get_storage();
         }
     }
 
 
-ret *= mutation_value( "packmule_modifier" );
-ret += bonus_from_enchantments( ret / 1_ml, enchantment_value_id( "CARRY_STORAGE" ) ) * 1_ml;
+    ret *= mutation_value( "packmule_modifier" );
+    ret += bonus_from_enchantments( ret / 1_ml, enchantment_value_id( "CARRY_STORAGE" ) ) * 1_ml;
 
-return std::max( ret, 0_ml );
+    return std::max( ret, 0_ml );
 }
 
 bool Character::can_pick_volume( const item& it ) const
@@ -661,9 +661,9 @@ bool Character::can_pick_weight( const item& it, bool safe ) const
 bool Character::can_pick_weight( units::mass weight, bool safe ) const
 {
     if( !safe ) {
-    // Character can carry up to four times their maximum weight
-    return ( weight_carried() + weight <= ( has_trait( trait_DEBUG_STORAGE ) ?
-                                            units::mass_max : weight_capacity() * 4 ) );
+        // Character can carry up to four times their maximum weight
+        return ( weight_carried() + weight <= ( has_trait( trait_DEBUG_STORAGE ) ?
+                                                units::mass_max : weight_capacity() * 4 ) );
     } else {
         return ( weight_carried() + weight <= weight_capacity() );
     }
@@ -698,17 +698,17 @@ bool Character::can_use( const item& it, const item* context ) const
 ret_val<bool> Character::can_wear( const item &it, bool with_equip_change ) const
 {
     if( !it.is_armor() ) {
-    return ret_val<bool>::make_failure( _( "Putting on a %s would be tricky." ), it.tname() );
+        return ret_val<bool>::make_failure( _( "Putting on a %s would be tricky." ), it.tname() );
     }
 
     if( has_trait( trait_WOOLALLERGY ) && ( it.made_of( material_id( "wool" ) ) ||
-                                                it.has_own_flag( flag_wooled ) ) ) {
+                                            it.has_own_flag( flag_wooled ) ) ) {
         return ret_val<bool>::make_failure( _( "Can't wear that, it's made of wool!" ) );
     }
 
 
     if( !it.has_flag( flag_SEMITANGIBLE ) ) {
-    for( const trait_id &mut : get_mutations() ) {
+        for( const trait_id &mut : get_mutations() ) {
             const auto &branch = mut.obj();
             if( branch.conflicts_with_item( it ) ) {
                 return ret_val<bool>::make_failure( is_player() ?
@@ -731,8 +731,8 @@ ret_val<bool> Character::can_wear( const item &it, bool with_equip_change ) cons
     }
 
     if( it.has_flag( flag_SPLINT ) ) {
-    bool need_splint = false;
-    for( const bodypart_id &bp : get_all_body_parts() ) {
+        bool need_splint = false;
+        for( const bodypart_id &bp : get_all_body_parts() ) {
             if( !it.covers( bp ) ) {
                 continue;
             }
@@ -750,8 +750,8 @@ ret_val<bool> Character::can_wear( const item &it, bool with_equip_change ) cons
     }
 
     if( it.has_flag( flag_RESTRICT_HANDS ) && !has_two_arms() ) {
-    return ret_val<bool>::make_failure( ( is_player() ? _( "You don't have enough arms to wear that." )
-                                          : string_format( _( "%s doesn't have enough arms to wear that." ), name ) ) );
+        return ret_val<bool>::make_failure( ( is_player() ? _( "You don't have enough arms to wear that." )
+                                              : string_format( _( "%s doesn't have enough arms to wear that." ), name ) ) );
     }
 
     if( it.has_flag( flag_FLOTATION ) && get_map().has_flag( TFLAG_WATER_CUBE, bub_pos() ) ) {
@@ -763,11 +763,11 @@ ret_val<bool> Character::can_wear( const item &it, bool with_equip_change ) cons
 
     //Everything checked after here should be something that could be solved by changing equipment
     if( with_equip_change ) {
-    return ret_val<bool>::make_success();
+        return ret_val<bool>::make_success();
     }
 
     if( it.is_power_armor() ) {
-    for( auto &elem : worn ) {
+        for( auto &elem : worn ) {
             if( elem->get_covered_body_parts().make_intersection( it.get_covered_body_parts() ).any() &&
                 !elem->has_flag( flag_POWERARMOR_COMPATIBLE ) && !elem->is_power_armor() ) {
                 return ret_val<bool>::make_failure( _( "Can't wear power armor over other gear!" ) );
@@ -780,7 +780,7 @@ ret_val<bool> Character::can_wear( const item &it, bool with_equip_change ) cons
                                                     "You can only wear power armor components with "
                                                     "power armor!" ) );
         }
-    if( it.has_flag( flag_POWERARMOR_EXTERNAL ) && !it.has_flag( flag_POWERARMOR_PLATING ) ) {
+        if( it.has_flag( flag_POWERARMOR_EXTERNAL ) && !it.has_flag( flag_POWERARMOR_PLATING ) ) {
             for( auto& elem : worn ) {
                 if( elem->has_flag( flag_POWERARMOR_EXO )
                     && elem->get_covered_body_parts()
@@ -894,14 +894,14 @@ ret_val<bool> Character::can_wear( const item &it, bool with_equip_change ) cons
                                                 : string_format( _( "%s doesn't have a hand free to wear that." ), name ) ) );
     }
 
-for( auto &i : worn ) {
-    if( i->has_flag( flag_ONLY_ONE ) && i->typeId() == it.typeId() ) {
+    for( auto &i : worn ) {
+        if( i->has_flag( flag_ONLY_ONE ) && i->typeId() == it.typeId() ) {
             return ret_val<bool>::make_failure( _( "Can't wear more than one %s!" ), it.tname() );
         }
     }
 
-for( auto &i : worn ) {
-    if( i->has_flag( flag_EXOSUIT ) && it.has_flag( flag_EXOSUIT ) ) {
+    for( auto &i : worn ) {
+        if( i->has_flag( flag_EXOSUIT ) && it.has_flag( flag_EXOSUIT ) ) {
             return ret_val<bool>::make_failure( _( "Can't wear more than one exosuit!" ) );
         }
     }
@@ -913,10 +913,10 @@ for( auto &i : worn ) {
     }
 
     if( ( ( it.covers( bodypart_id( "foot_l" ) ) && is_wearing_shoes( side::LEFT ) ) ||
-              ( it.covers( bodypart_id( "foot_r" ) ) && is_wearing_shoes( side::RIGHT ) ) ) &&
-            ( !it.has_flag( flag_OVERSIZE ) || !it.has_flag( flag_OUTER ) ) && !it.has_flag( flag_SKINTIGHT ) &&
-            !it.has_flag( flag_BELTED ) && !it.has_flag( flag_PERSONAL ) && !it.has_flag( flag_AURA ) &&
-            !it.has_flag( flag_SEMITANGIBLE ) && !it.has_flag( flag_POWERARMOR_PLATING ) ) {
+          ( it.covers( bodypart_id( "foot_r" ) ) && is_wearing_shoes( side::RIGHT ) ) ) &&
+        ( !it.has_flag( flag_OVERSIZE ) || !it.has_flag( flag_OUTER ) ) && !it.has_flag( flag_SKINTIGHT ) &&
+        !it.has_flag( flag_BELTED ) && !it.has_flag( flag_PERSONAL ) && !it.has_flag( flag_AURA ) &&
+        !it.has_flag( flag_SEMITANGIBLE ) && !it.has_flag( flag_POWERARMOR_PLATING ) ) {
         // Checks to see if the player is wearing shoes
         return ret_val<bool>::make_failure( (
                                                 is_player() ? _( "You're already wearing footwear!" )
@@ -924,18 +924,18 @@ for( auto &i : worn ) {
     }
 
     if( it.covers( bodypart_id( "head" ) ) &&
-            !it.has_flag( flag_HELMET_COMPAT ) && !it.has_flag( flag_SKINTIGHT ) &&
-            !it.has_flag( flag_PERSONAL ) && !it.is_power_armor() &&
-            !it.has_flag( flag_AURA ) && !it.has_flag( flag_SEMITANGIBLE ) && !it.has_flag( flag_OVERSIZE ) &&
-            is_wearing_helmet() ) {
+        !it.has_flag( flag_HELMET_COMPAT ) && !it.has_flag( flag_SKINTIGHT ) &&
+        !it.has_flag( flag_PERSONAL ) && !it.is_power_armor() &&
+        !it.has_flag( flag_AURA ) && !it.has_flag( flag_SEMITANGIBLE ) && !it.has_flag( flag_OVERSIZE ) &&
+        is_wearing_helmet() ) {
         return ret_val<bool>::make_failure( wearing_something_on( bodypart_id( "head" ) ),
                                             ( is_player() ? _( "You can't wear that with other headgear!" )
                                               : string_format( _( "%s can't wear that with other headgear!" ), name ) ) );
     }
 
     if( it.covers( bodypart_id( "head" ) ) && !it.has_flag( flag_SEMITANGIBLE ) &&
-            ( it.has_flag( flag_SKINTIGHT ) || it.has_flag( flag_HELMET_COMPAT ) ) &&
-            ( head_cloth_encumbrance() + it.get_encumber( *this, bodypart_id( "head" ) ) > 40 ) ) {
+        ( it.has_flag( flag_SKINTIGHT ) || it.has_flag( flag_HELMET_COMPAT ) ) &&
+        ( head_cloth_encumbrance() + it.get_encumber( *this, bodypart_id( "head" ) ) > 40 ) ) {
         return ret_val<bool>::make_failure( ( is_player() ? _( "You can't wear that much on your head!" )
                                               : string_format( _( "%s can't wear that much on their head!" ), name ) ) );
     }
@@ -1000,9 +1000,9 @@ ret_val<bool> Character::can_takeoff( const item& it, bool dropping ) const
         return ret_val<bool>::make_failure(
                    !is_npc()
                    ? _( "You can't take off power armor while wearing other power armor "
-                        "components." )
+             "components." )
                    : _( "<npcname> can't take off power armor while wearing other power armor "
-                        "components." ) );
+             "components." ) );
     }
     if( it.has_flag( flag_NO_TAKEOFF ) ) {
         return ret_val<bool>::make_failure(
@@ -1069,23 +1069,23 @@ bool Character::takeoff( item& it, std::vector<detached_ptr<item>> *res )
 ret_val<bool> Character::can_wield( const item &it ) const
 {
     if( it.made_of( LIQUID ) ) {
-    return ret_val<bool>::make_failure( _( "Can't wield spilt liquids." ) );
+        return ret_val<bool>::make_failure( _( "Can't wield spilt liquids." ) );
     }
 
     if( get_working_arm_count() <= 0 ) {
-    return ret_val<bool>::make_failure(
-               _( "You need at least one arm to even consider wielding something." ) );
+        return ret_val<bool>::make_failure(
+                   _( "You need at least one arm to even consider wielding something." ) );
     }
 
     if( is_armed() && primary_weapon().has_flag( flag_NO_UNWIELD ) ) {
-    return ret_val<bool>::make_failure( _( "The %s is preventing you from wielding the %s." ),
-                                        character_funcs::fmt_wielded_weapon( *this ), it.tname() );
+        return ret_val<bool>::make_failure( _( "The %s is preventing you from wielding the %s." ),
+                                            character_funcs::fmt_wielded_weapon( *this ), it.tname() );
     }
 
     monster *mount = mounted_creature.get();
     if( it.is_two_handed( *this ) && ( !has_two_arms() || worn_with_flag( flag_RESTRICT_HANDS ) ) &&
-            !( is_mounted() && mount->has_flag( MF_RIDEABLE_MECH ) &&
-               mount->type->mech_weapon && it.typeId() == mount->type->mech_weapon ) ) {
+        !( is_mounted() && mount->has_flag( MF_RIDEABLE_MECH ) &&
+           mount->type->mech_weapon && it.typeId() == mount->type->mech_weapon ) ) {
         if( worn_with_flag( flag_RESTRICT_HANDS ) ) {
             return ret_val<bool>::make_failure(
                        _( "Something you are wearing hinders the use of both hands." ) );
@@ -1104,7 +1104,7 @@ ret_val<bool> Character::can_wield( const item &it ) const
 ret_val<bool> Character::can_unwield( const item &it ) const
 {
     if( it.has_flag( flag_NO_UNWIELD ) ) {
-    return ret_val<bool>::make_failure( _( "You cannot unwield your %s." ), it.tname() );
+        return ret_val<bool>::make_failure( _( "You cannot unwield your %s." ), it.tname() );
     }
 
     return ret_val<bool>::make_success();
@@ -1135,9 +1135,9 @@ bool Character::unwield()
 ret_val<bool> Character::can_swap( const item &it ) const
 {
     if( it.has_flag( flag_POWERARMOR_MOD ) ) {
-    int max_layer = 2;
-    std::vector< std::pair< bodypart_str_id, int > > mod_parts;
-    const auto &all_bps = get_all_body_parts();
+        int max_layer = 2;
+        std::vector< std::pair< bodypart_str_id, int > > mod_parts;
+        const auto &all_bps = get_all_body_parts();
         for( const bodypart_id &bp : all_bps ) {
             if( it.get_covered_body_parts().test( bp.id() ) && bp->part_side != side::BOTH ) {
                 mod_parts.emplace_back( bp, 0 );
@@ -1222,13 +1222,13 @@ void Character::drop_invalid_inventory()
 
 bool Character::has_artifact_with( const art_effect_passive effect ) const
 {
-for( const item *weapon : wielded_items() ) {
-    if( weapon->has_effect_when_wielded( effect ) ) {
+    for( const item *weapon : wielded_items() ) {
+        if( weapon->has_effect_when_wielded( effect ) ) {
             return true;
         }
     }
-for( auto &i : worn ) {
-    if( i->has_effect_when_worn( effect ) ) {
+    for( auto &i : worn ) {
+        if( i->has_effect_when_worn( effect ) ) {
             return true;
         }
     }
@@ -1239,8 +1239,8 @@ bool Character::is_wielding( const item& target ) const { return &primary_weapon
 
 bool Character::is_wearing( const item &itm ) const
 {
-for( auto &i : worn ) {
-    if( i == &itm ) {
+    for( auto &i : worn ) {
+        if( i == &itm ) {
             return true;
         }
     }
@@ -1249,8 +1249,8 @@ for( auto &i : worn ) {
 
 bool Character::is_wearing( const itype_id &it ) const
 {
-for( auto &i : worn ) {
-    if( i->typeId() == it ) {
+    for( auto &i : worn ) {
+        if( i->typeId() == it ) {
             return true;
         }
     }
@@ -1259,8 +1259,8 @@ for( auto &i : worn ) {
 
 bool Character::is_wearing_on_bp( const itype_id &it, const bodypart_id &bp ) const
 {
-for( auto &i : worn ) {
-    if( i->typeId() == it && i->covers( bp ) ) {
+    for( auto &i : worn ) {
+        if( i->typeId() == it && i->covers( bp ) ) {
             return true;
         }
     }
@@ -1274,10 +1274,10 @@ bool Character::worn_with_flag( const flag_id& flag, const bodypart_id& bp ) con
     } );
 }
 
-const item *Character::item_worn_with_flag( const flag_id &flag, const bodypart_id &bp ) const
+const item * Character::item_worn_with_flag( const flag_id &flag, const bodypart_id &bp ) const
 {
-for( const item * const &it : worn ) {
-    if( it->has_flag( flag ) && ( bp == bodypart_str_id::NULL_ID() ||
+    for( const item * const &it : worn ) {
+        if( it->has_flag( flag ) && ( bp == bodypart_str_id::NULL_ID() ||
                                       it->covers( bp ) ) ) {
             return it;
         }
@@ -1292,10 +1292,10 @@ bool Character::worn_with_id( const itype_id& item_id, const bodypart_id& bp ) c
     } );
 }
 
-const item *Character::item_worn_with_id( const itype_id &item_id, const bodypart_id &bp ) const
+const item * Character::item_worn_with_id( const itype_id &item_id, const bodypart_id &bp ) const
 {
-for( const item * const &it : worn ) {
-    if( it->typeId() == item_id && ( bp == bodypart_str_id::NULL_ID() ||
+    for( const item * const &it : worn ) {
+        if( it->typeId() == item_id && ( bp == bodypart_str_id::NULL_ID() ||
                                          it->covers( bp ) ) ) {
             return it;
         }
@@ -1310,10 +1310,11 @@ bool Character::worn_with_quality( const quality_id& qual, const bodypart_id& bp
     } );
 }
 
-const item *Character::item_worn_with_quality( const quality_id &qual, const bodypart_id &bp ) const
+const item * Character::item_worn_with_quality( const quality_id &qual,
+        const bodypart_id &bp ) const
 {
-for( const item * const &it : worn ) {
-    if( it->get_quality( qual ) > 0 &&
+    for( const item * const &it : worn ) {
+        if( it->get_quality( qual ) > 0 &&
             ( bp == bodypart_str_id::NULL_ID() || it->covers( bp ) ) ) {
             return it;
         }

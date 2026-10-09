@@ -16,6 +16,6 @@ namespace physics {
 /// rebuild for every change to this bash-dispatch helper.
 ///
 /// Returns true iff the bash succeeded (tile changed).
-auto bash_vehicle_tile( vehicle &veh, const tripoint_bub_ms &p ) -> bool;
+auto bash_vehicle_tile(vehicle& veh, const tripoint_bub_ms& p) -> bool;
 
 } // namespace physics

@@ -51,8 +51,7 @@ static stats_factor_fn default_stats_factor = []( const Character &, const stat_
 /*
  * Struct to track activity speed by factors
 */
-class activity_speed
-{
+class activity_speed {
     public:
         activity_id type = activity_id::NULL_ID();
         std::optional<bench_loc> bench;
@@ -74,7 +73,8 @@ class activity_speed
         //Returns total product of all stats
         inline float stats_total() const {
             float acc = 1.0f;
-            for( auto &stat : stats ) {
+            for( auto &stat : stats )
+            {
                 acc *= stat.second;
             }
             return acc;
@@ -91,34 +91,34 @@ class activity_speed
         auto calendar_moves_per_turn() const -> int;
 
         //Calculates all factors
-        void calc_all_moves( Character &who );
-        void calc_all_moves( Character &who, activity_reqs_adapter &reqs );
+        void calc_all_moves( Character & who );
+        void calc_all_moves( Character & who, activity_reqs_adapter & reqs );
 
 
-        void calc_moves( const Character &who );
+        void calc_moves( const Character & who );
 
-        void calc_assistants_factor( const Character &who );
-        void calc_assistants_factor( const Character &who, const activity_target &target );
-        void calc_bench_factor( const Character &who );
-        void calc_bench_factor( const Character &who, const activity_target &target );
-        void find_best_bench( const tripoint_bub_ms &pos, metric metrics = std::make_pair( 0_milligram,
+        void calc_assistants_factor( const Character & who );
+        void calc_assistants_factor( const Character & who, const activity_target & target );
+        void calc_bench_factor( const Character & who );
+        void calc_bench_factor( const Character & who, const activity_target & target );
+        void find_best_bench( const tripoint_bub_ms & pos, metric metrics = std::make_pair( 0_milligram,
                               0_ml ) );
-        void calc_light_factor( const Character &who );
-        void calc_light_factor( const Character &who, const activity_target &target );
-        void calc_morale_factor( const Character &who );
-        void calc_morale_factor( const Character &who, const activity_target &target );
-        void calc_skill_factor( const Character &who, const skill_reqs &skill_req );
-        void calc_skill_factor( const Character &who, const skill_reqs &skill_req,
-                                const activity_target &target );
+        void calc_light_factor( const Character & who );
+        void calc_light_factor( const Character & who, const activity_target & target );
+        void calc_morale_factor( const Character & who );
+        void calc_morale_factor( const Character & who, const activity_target & target );
+        void calc_skill_factor( const Character & who, const skill_reqs & skill_req );
+        void calc_skill_factor( const Character & who, const skill_reqs & skill_req,
+                                const activity_target & target );
 
-        void calc_stats_factors( const Character &who );
-        void calc_stats_factors( const Character &who, const activity_target &target );
-        static std::pair<character_stat, float> calc_single_stat( const Character &who,
+        void calc_stats_factors( const Character & who );
+        void calc_stats_factors( const Character & who, const activity_target & target );
+        static std::pair<character_stat, float> calc_single_stat( const Character & who,
                 const activity_req<character_stat> &stat );
 
-        void calc_tools_factor( Character &who, const q_reqs &quality_reqs );
-        void calc_tools_factor( Character &who, const q_reqs &quality_reqs,
-                                const activity_target &target );
+        void calc_tools_factor( Character & who, const q_reqs & quality_reqs );
+        void calc_tools_factor( Character & who, const q_reqs & quality_reqs,
+                                const activity_target & target );
         static float get_best_qual_mod( const activity_req<quality_id> &q,
-                                        const inventory &inv );
+                                        const inventory & inv );
 };

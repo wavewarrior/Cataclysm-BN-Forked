@@ -191,7 +191,7 @@ std::vector<weak_ptr_fast<npc>> &player_activity::assistants()
 }
 
 std::vector<weak_ptr_fast<npc>> player_activity::get_assistants( const Character &who,
-                             unsigned short max )
+        unsigned short max )
 {
     if( max < 1 ) {
         return {};
@@ -327,7 +327,7 @@ static std::string format_spd( float level, std::string name, int indent = 0,
 std::optional<std::string> player_activity::get_progress_message( const avatar &u ) const
 {
     if( !type || get_verb().empty() ) {
-    return std::optional<std::string>();
+        return std::optional<std::string>();
     }
     if( !type->special() && type->verbose_tooltip() ) {
 
@@ -338,12 +338,12 @@ std::optional<std::string> player_activity::get_progress_message( const avatar &
         std::string progress_desc = "Progress: ";
         const auto progress_per_calendar_turn = progress_per_calendar_turn_for( *this );
 
-    /*
-     * TODO progress for targets
-     * proper use of activity_actor::targets for all activities
-     * must be implementated for proper work of multiple targets
-     */
-    if( actor ) {
+        /*
+         * TODO progress for targets
+         * proper use of activity_actor::targets for all activities
+         * must be implementated for proper work of multiple targets
+         */
+        if( actor ) {
             if( actor->progress.empty() ) {
                 target = "";
                 progress_desc = "";
@@ -361,7 +361,7 @@ std::optional<std::string> player_activity::get_progress_message( const avatar &
                     progress_desc += string_format( _( "  - Estimated time: %s\n" ),
                                                     to_string( time_duration::from_turns(
                                                             action_time_scale::turns_for_progress( actor->progress.get_moves_left(),
-                                                                    progress_per_calendar_turn ) ) ) );
+                                                                progress_per_calendar_turn ) ) ) );
                     progress_desc += " - Current: ";
                 }
                 progress_desc += string_format( "%.1f%%\n",
@@ -373,7 +373,7 @@ std::optional<std::string> player_activity::get_progress_message( const avatar &
                 progress_desc += string_format( _( "Time left: %s\n" ),
                                                 to_string( time_duration::from_turns(
                                                         action_time_scale::turns_for_progress( actor->progress.front().moves_left,
-                                                                progress_per_calendar_turn ) ) ) );
+                                                            progress_per_calendar_turn ) ) ) );
             }
         } else {
             if( !targets.empty() && targets.front().is_accessible() && !targets.front().is_destroyed() ) {
@@ -387,7 +387,7 @@ std::optional<std::string> player_activity::get_progress_message( const avatar &
                 progress_desc += string_format( _( "Time left: %s\n" ),
                                                 to_string( time_duration::from_turns(
                                                         action_time_scale::turns_for_progress( moves_left,
-                                                                progress_per_calendar_turn ) ) ) );
+                                                            progress_per_calendar_turn ) ) ) );
             }
             if( moves_total <= 0 && moves_left <= 0 ) {
                 progress_desc = "";
@@ -421,7 +421,7 @@ std::optional<std::string> player_activity::get_progress_message( const avatar &
     }
 
     if( actor ) {
-    act_progress_message msg = actor->get_progress_message( *this, u );
+        act_progress_message msg = actor->get_progress_message( *this, u );
         if( msg.implemented ) {
             if( msg.msg_full ) {
                 return *msg.msg_full;
@@ -441,14 +441,14 @@ std::optional<std::string> player_activity::get_progress_message( const avatar &
         type == ACT_CONSUME_FOOD_MENU ||
         type == ACT_CONSUME_MEDS_MENU ||
         type == ACT_EAT_MENU ) {
-    return std::nullopt;
-}
+        return std::nullopt;
+    }
 
-std::string extra_info;
-if( type == ACT_CRAFT ) {
-    return craft_progress_message( u, *this );
+    std::string extra_info;
+    if( type == ACT_CRAFT ) {
+        return craft_progress_message( u, *this );
     } else if( type == ACT_READ ) {
-    if( const item *book = &*targets.front() ) {
+        if( const item *book = &*targets.front() ) {
             if( const auto &reading = book->type->book ) {
                 const skill_id &skill = reading->skill;
                 if( skill && u.get_skill_level( skill ) < reading->level &&
@@ -464,7 +464,7 @@ if( type == ACT_CRAFT ) {
             }
         }
     } else if( moves_total > 0 ) {
-    if( type == ACT_BURROW ||
+        if( type == ACT_BURROW ||
             type == ACT_HACKSAW ||
             type == ACT_JACKHAMMER ||
             type == ACT_PICKAXE ||
@@ -691,27 +691,27 @@ bool player_activity::can_resume_with( const player_activity &other, const Chara
     // And to forbid resuming now-invalid crafting
 
     if( !*this || !other || type->no_resume() ) {
-    return false;
-}
+        return false;
+    }
 
-if( id() != other.id() ) {
-    return false;
-}
+    if( id() != other.id() ) {
+        return false;
+    }
 
-// if actor XOR other.actor then id() != other.id() so
-// we will correctly return false based on final return statement
-if( actor && other.actor ) {
-    return actor->can_resume_with( *other.actor, who );
+    // if actor XOR other.actor then id() != other.id() so
+    // we will correctly return false based on final return statement
+    if( actor && other.actor ) {
+        return actor->can_resume_with( *other.actor, who );
     }
 
     if( id() == ACT_CLEAR_RUBBLE ) {
-    if( other.coords.empty() || other.coords[0] != coords[0] ) {
+        if( other.coords.empty() || other.coords[0] != coords[0] ) {
             return false;
         }
     } else if( id() == ACT_READ ) {
-    // Return false if any NPCs joined or left the study session
-    // the vector {1, 2} != {2, 1}, so we'll have to check manually
-    if( values.size() != other.values.size() ) {
+        // Return false if any NPCs joined or left the study session
+        // the vector {1, 2} != {2, 1}, so we'll have to check manually
+        if( values.size() != other.values.size() ) {
             return false;
         }
         for( int foo : other.values ) {
@@ -723,7 +723,7 @@ if( actor && other.actor ) {
             return false;
         }
     } else if( id() == ACT_VEHICLE ) {
-    if( values != other.values || str_values != other.str_values ) {
+        if( values != other.values || str_values != other.str_values ) {
             return false;
         }
     }
@@ -735,7 +735,7 @@ if( actor && other.actor ) {
 bool player_activity::is_distraction_ignored( distraction_type type ) const
 {
     return ( get_distraction_manager().is_ignored( type ) ||
-    ignored_distractions.contains( type ) );
+             ignored_distractions.contains( type ) );
 }
 
 void player_activity::ignore_distraction( distraction_type type )
@@ -764,8 +764,8 @@ activity_ptr::activity_ptr( std::unique_ptr<player_activity> &&source )
     check_active();
     act = std::move( source );
 }
-activity_ptr &activity_ptr::operator=( activity_ptr && )  noexcept = default;
-activity_ptr &activity_ptr::operator=( std::unique_ptr<player_activity> &&source )
+activity_ptr & activity_ptr::operator=( activity_ptr && )  noexcept = default;
+activity_ptr & activity_ptr::operator=( std::unique_ptr<player_activity> &&source )
 {
     check_active();
     act = std::move( source );
@@ -813,6 +813,6 @@ void activity_ptr::deserialize( JsonIn &jsin )
 auto player_activity::add_tool( item *it ) -> void
 {
     if( it && !it->has_flag( flag_PSEUDO ) ) {
-    tools_.emplace_back( it );
+        tools_.emplace_back( it );
     }
 }

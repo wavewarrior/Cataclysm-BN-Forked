@@ -183,52 +183,53 @@ struct bionic_data {
 };
 
 struct bionic {
-        bionic_id id;
-        int         charge_timer  = 0;
-        char        invlet  = 'a';
-        bool        powered = false;
-        bool        show_sprite = true;
-        /* Ammunition actually loaded in this bionic gun in deactivated state */
-        itype_id    ammo_loaded = itype_id::NULL_ID();
-        /* Ammount of ammo actually held inside by this bionic gun in deactivated state */
-        unsigned int         ammo_count = 0;
-        /* An amount of time during which this bionic has been rendered inoperative. */
-        time_duration        incapacitated_time;
-        /* The amount of energy the Bionic has stored for it's function. [Currently only used for ADS]*/
-        units::energy        energy_stored = 0_kJ;
-        bionic()
-            : id( "bio_batteries" ), incapacitated_time( 0_turns ) {
-        }
-        bionic( bionic_id pid, char pinvlet )
-            : id( pid ), invlet( pinvlet ), incapacitated_time( 0_turns ) { }
+    bionic_id id;
+    int         charge_timer  = 0;
+    char        invlet  = 'a';
+    bool        powered = false;
+    bool        show_sprite = true;
+    /* Ammunition actually loaded in this bionic gun in deactivated state */
+    itype_id    ammo_loaded = itype_id::NULL_ID();
+    /* Ammount of ammo actually held inside by this bionic gun in deactivated state */
+    unsigned int         ammo_count = 0;
+    /* An amount of time during which this bionic has been rendered inoperative. */
+    time_duration        incapacitated_time;
+    /* The amount of energy the Bionic has stored for it's function. [Currently only used for ADS]*/
+    units::energy        energy_stored = 0_kJ;
+    bionic()
+        : id( "bio_batteries" ), incapacitated_time( 0_turns )
+    {
+    }
+    bionic( bionic_id pid, char pinvlet )
+        : id( pid ), invlet( pinvlet ), incapacitated_time( 0_turns ) { }
 
-        const bionic_data &info() const {
-            return *id;
-        }
+    const bionic_data &info() const {
+        return *id;
+    }
 
-        void set_flag( const std::string &flag );
-        void remove_flag( const std::string &flag );
-        bool has_flag( const std::string &flag ) const;
+    void set_flag( const std::string &flag );
+    void remove_flag( const std::string &flag );
+    bool has_flag( const std::string &flag ) const;
 
-        int get_quality( const quality_id &quality ) const;
+    int get_quality( const quality_id &quality ) const;
 
-        bool is_this_fuel_powered( const itype_id &this_fuel ) const;
-        void toggle_safe_fuel_mod();
-        void toggle_auto_start_mod();
+    bool is_this_fuel_powered( const itype_id &this_fuel ) const;
+    void toggle_safe_fuel_mod();
+    void toggle_auto_start_mod();
 
-        void set_auto_start_thresh( float val );
-        float get_auto_start_thresh() const;
-        bool is_auto_start_on() const;
-        bool is_auto_start_keep_full() const;
+    void set_auto_start_thresh( float val );
+    float get_auto_start_thresh() const;
+    bool is_auto_start_on() const;
+    bool is_auto_start_keep_full() const;
 
-        void serialize( JsonOut &json ) const;
-        void deserialize( JsonIn &jsin );
+    void serialize( JsonOut &json ) const;
+    void deserialize( JsonIn &jsin );
 
-        LUA_TYPE_OPS( bionic, id );
-    private:
-        // generic bionic specific flags
-        cata::flat_set<std::string> bionic_tags;
-        float auto_start_threshold = -1.0;
+    LUA_TYPE_OPS( bionic, id );
+private:
+    // generic bionic specific flags
+    cata::flat_set<std::string> bionic_tags;
+    float auto_start_threshold = -1.0;
 };
 
 nc_color get_bionic_text_color( const bionic &bio, const bool isHighlightedBionic );

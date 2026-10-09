@@ -134,8 +134,7 @@ void cata::detail::reg_spell_fake( sol::state &lua )
                       []( UT_CLASS & sp,
                           Creature & source,
                           const tripoint_bub_ms & target,
-                          sol::optional<int> min_lvl_override )
-        {
+        sol::optional<int> min_lvl_override ) {
             int mlo = min_lvl_override.has_value() ? *min_lvl_override : 0;
             sp.get_spell( mlo ).cast_all_effects( source, target );
         }
@@ -159,8 +158,7 @@ void cata::detail::reg_spell_fake( sol::state &lua )
             sp = fake_spell( spid, hit_self );
 
             // If a level is given, forcefully clamp to that level.
-            if( level.has_value() )
-            {
+            if( level.has_value() ) {
                 sp.level = *level;
                 sp.max_level = *level;
             }

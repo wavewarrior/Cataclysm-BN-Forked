@@ -36,22 +36,22 @@ void item::bionic_info( std::vector<iteminfo> &info, const iteminfo_query *parts
                         bool /*debug*/ ) const
 {
     if( !is_bionic() ) {
-    return;
-}
+        return;
+    }
 
-// TODO: Unhide when enforcing limits
-if( get_option < bool >( "CBM_SLOTS_ENABLED" )
+    // TODO: Unhide when enforcing limits
+    if( get_option < bool >( "CBM_SLOTS_ENABLED" )
         && parts->test( iteminfo_parts::DESCRIPTION_CBM_SLOTS ) ) {
-    info.emplace_back( "DESCRIPTION", list_occupied_bps( type->bionic->id,
-                       _( "This bionic is installed in the following body "
-                          "part(s):" ) ) );
+        info.emplace_back( "DESCRIPTION", list_occupied_bps( type->bionic->id,
+                           _( "This bionic is installed in the following body "
+           "part(s):" ) ) );
     }
     insert_separation_line( info );
 
     const bionic_id bid = type->bionic->id;
     const std::vector<itype_id> &fuels = bid->fuel_opts;
     if( !fuels.empty() ) {
-    const int &fuel_numb = fuels.size();
+        const int &fuel_numb = fuels.size();
 
         info.emplace_back( "DESCRIPTION",
                            vgettext( "* This bionic can produce power from the following fuel: ",
@@ -63,15 +63,15 @@ if( get_option < bool >( "CBM_SLOTS_ENABLED" )
     insert_separation_line( info );
 
     if( bid->capacity > 0_J ) {
-    info.emplace_back( "CBM", _( "<bold>Power Capacity</bold>:" ), _( " <num> J" ),
-                       iteminfo::no_newline,
-                       units::to_joule( bid->capacity ) );
+        info.emplace_back( "CBM", _( "<bold>Power Capacity</bold>:" ), _( " <num> J" ),
+                           iteminfo::no_newline,
+                           units::to_joule( bid->capacity ) );
     }
 
     insert_separation_line( info );
 
     if( !bid->required_bionics.empty() ) {
-    for( const bionic_id &req_bid : bid->required_bionics ) {
+        for( const bionic_id &req_bid : bid->required_bionics ) {
             info.emplace_back( "CBM", string_format( "* This CBM requires another CBM to also be installed: %s",
                                req_bid->name ) );
         }
@@ -80,8 +80,8 @@ if( get_option < bool >( "CBM_SLOTS_ENABLED" )
     insert_separation_line( info );
 
     if( !bid->encumbrance.empty() ) {
-    info.emplace_back( "DESCRIPTION", _( "<bold>Encumbrance</bold>: " ),
-                       iteminfo::no_newline );
+        info.emplace_back( "DESCRIPTION", _( "<bold>Encumbrance</bold>: " ),
+                           iteminfo::no_newline );
         for( const std::pair< const bodypart_str_id, int > element : sorted_lex( bid->encumbrance ) ) {
             info.emplace_back( "CBM", body_part_name_as_heading( element.first->token, 1 ),
                                " <num> ", iteminfo::no_newline, element.second );
@@ -89,10 +89,10 @@ if( get_option < bool >( "CBM_SLOTS_ENABLED" )
     }
 
     if( !bid->env_protec.empty() ) {
-    info.emplace_back( "DESCRIPTION",
-                       bid->activated ? _( "<bold>Environmental Protection (activated)</bold>: " ) :
-                       _( "<bold>Environmental Protection</bold>: " ),
-                       iteminfo::no_newline );
+        info.emplace_back( "DESCRIPTION",
+                           bid->activated ? _( "<bold>Environmental Protection (activated)</bold>: " ) :
+                           _( "<bold>Environmental Protection</bold>: " ),
+                           iteminfo::no_newline );
         for( const std::pair< const bodypart_str_id, int > element : sorted_lex( bid->env_protec ) ) {
             info.emplace_back( "CBM", body_part_name_as_heading( element.first->token, 1 ),
                                " <num> ", iteminfo::no_newline, element.second );
@@ -100,9 +100,9 @@ if( get_option < bool >( "CBM_SLOTS_ENABLED" )
     }
 
     if( !bid->bash_protec.empty() ) {
-    info.emplace_back( "DESCRIPTION",
-                       _( "<bold>Bash Protection</bold>: " ),
-                       iteminfo::no_newline );
+        info.emplace_back( "DESCRIPTION",
+                           _( "<bold>Bash Protection</bold>: " ),
+                           iteminfo::no_newline );
         for( const std::pair< const bodypart_str_id, int > element : sorted_lex( bid->bash_protec ) ) {
             info.emplace_back( "CBM", body_part_name_as_heading( element.first->token, 1 ),
                                " <num> ", iteminfo::no_newline, element.second );
@@ -110,9 +110,9 @@ if( get_option < bool >( "CBM_SLOTS_ENABLED" )
     }
 
     if( !bid->cut_protec.empty() ) {
-    info.emplace_back( "DESCRIPTION",
-                       _( "<bold>Cut Protection</bold>: " ),
-                       iteminfo::no_newline );
+        info.emplace_back( "DESCRIPTION",
+                           _( "<bold>Cut Protection</bold>: " ),
+                           iteminfo::no_newline );
         for( const std::pair< const bodypart_str_id, int > element : sorted_lex( bid->cut_protec ) ) {
             info.emplace_back( "CBM", body_part_name_as_heading( element.first->token, 1 ),
                                " <num> ", iteminfo::no_newline, element.second );
@@ -120,8 +120,8 @@ if( get_option < bool >( "CBM_SLOTS_ENABLED" )
     }
 
     if( !bid->bullet_protec.empty() ) {
-    info.emplace_back( "DESCRIPTION", _( "<bold>Ballistic Protection</bold>: " ),
-                       iteminfo::no_newline );
+        info.emplace_back( "DESCRIPTION", _( "<bold>Ballistic Protection</bold>: " ),
+                           iteminfo::no_newline );
         for( const auto &element : bid->bullet_protec ) {
             info.emplace_back( "CBM", body_part_name_as_heading( element.first->token, 1 ),
                                " <num> ", iteminfo::no_newline, element.second );
@@ -129,8 +129,8 @@ if( get_option < bool >( "CBM_SLOTS_ENABLED" )
     }
 
     if( !bid->stat_bonus.empty() ) {
-    info.emplace_back( "DESCRIPTION", _( "<bold>Stat Bonus</bold>: " ),
-                       iteminfo::no_newline );
+        info.emplace_back( "DESCRIPTION", _( "<bold>Stat Bonus</bold>: " ),
+                           iteminfo::no_newline );
         for( const auto &element : bid->stat_bonus ) {
             info.emplace_back( "CBM", get_stat_name( element.first ), " <num> ",
                                iteminfo::no_newline, element.second );
@@ -140,8 +140,8 @@ if( get_option < bool >( "CBM_SLOTS_ENABLED" )
     const units::mass weight_bonus = bid->weight_capacity_bonus;
     const float weight_modif = bid->weight_capacity_modifier;
     if( weight_modif != 1 ) {
-    std::string modifier;
-    if( weight_modif < 1 ) {
+        std::string modifier;
+        if( weight_modif < 1 ) {
             modifier = "<num><bad>x</bad>";
         } else {
             modifier = "<num><color_light_green>x</color>";
@@ -152,8 +152,8 @@ if( get_option < bool >( "CBM_SLOTS_ENABLED" )
                            weight_modif );
     }
     if( weight_bonus != 0_gram ) {
-    std::string bonus;
-    if( weight_bonus < 0_gram ) {
+        std::string bonus;
+        if( weight_bonus < 0_gram ) {
             bonus = string_format( "<num> <bad>%s</bad>", weight_units() );
         } else {
             bonus = string_format( "<num> <color_light_green>%s</color>", weight_units() );

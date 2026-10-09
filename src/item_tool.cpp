@@ -187,12 +187,12 @@ item *item::get_usable_item( const std::string &use_name )
 int item::units_remaining( const Character &ch, int limit ) const
 {
     if( count_by_charges() ) {
-    return std::min( static_cast<int>( charges ), limit );
+        return std::min( static_cast<int>( charges ), limit );
     }
 
     int res = ammo_remaining();
     if( res < limit && is_power_armor() ) {
-    if( character_funcs::can_interface_armor( ch ) && has_flag( flag_USE_UPS ) ) {
+        if( character_funcs::can_interface_armor( ch ) && has_flag( flag_USE_UPS ) ) {
             res += std::max( ch.charges_of( itype_UPS, limit - res ), ch.charges_of( itype_bio_armor,
                              limit - res ) );
         } else if( character_funcs::can_interface_armor( ch ) ) {
@@ -201,7 +201,7 @@ int item::units_remaining( const Character &ch, int limit ) const
             res += ch.charges_of( itype_UPS, limit - res );
         }
     } else if( res < limit && has_flag( flag_USE_UPS ) ) {
-    res += ch.charges_of( itype_UPS, limit - res );
+        res += ch.charges_of( itype_UPS, limit - res );
     }
 
     return std::min( res, limit );
@@ -210,7 +210,7 @@ int item::units_remaining( const Character &ch, int limit ) const
 bool item::units_sufficient( const Character &ch, int qty ) const
 {
     if( qty < 0 ) {
-    qty = count_by_charges() ? 1 : ammo_required();
+        qty = count_by_charges() ? 1 : ammo_required();
     }
 
     return units_remaining( ch, qty ) == qty;

@@ -430,14 +430,14 @@ butchery_setup consider_butchery( const item& corpse_item, player& u, butcher_ty
             if( has_rope && !has_tree_nearby && !b_rack_present ) {
                 not_this_one(
                     _( "You need to suspend this corpse to butcher it.  While you have a "
-                       "rope to lift the corpse, there is no tree nearby to hang it from." ),
+                   "rope to lift the corpse, there is no tree nearby to hang it from." ),
                     butcherable_rating::no_tree_rope_rack );
             }
             if( !has_rope && !b_rack_present ) {
                 not_this_one(
                     _( "To perform a full butchery on a corpse this big, you need either a "
-                       "butchering rack, a nearby hanging meathook, or both a long rope in "
-                       "your inventory and a nearby tree to hang the corpse from." ),
+                   "butchering rack, a nearby hanging meathook, or both a long rope in "
+                   "your inventory and a nearby tree to hang the corpse from." ),
                     butcherable_rating::no_tree_rope_rack );
             }
             if( !( here.has_nearby_table( u.bub_pos(), PICKUP_RANGE )
@@ -446,8 +446,8 @@ butchery_setup consider_butchery( const item& corpse_item, player& u, butcher_ty
             } ) ) ) {
                 not_this_one(
                     _( "To perform a full butchery on a corpse this big, you need a table "
-                       "nearby or something else with a flat surface.  A leather tarp "
-                       "spread out on the ground could suffice." ),
+                   "nearby or something else with a flat surface.  A leather tarp "
+                   "spread out on the ground could suffice." ),
                     butcherable_rating::no_table );
             }
         }
@@ -458,7 +458,7 @@ butchery_setup consider_butchery( const item& corpse_item, player& u, butcher_ty
              || corpse_item.has_flag( flag_FIELD_DRESS_FAILED ) ) ) {
         not_this_one(
             _( "It would be futile to search for implants inside this badly damaged "
-               "corpse." ),
+           "corpse." ),
             butcherable_rating::too_damaged );
     }
 
@@ -629,7 +629,7 @@ void butchery_drops_harvest(
             p.add_msg_if_player(
                 m_bad,
                 _( "You salvage what you can from the corpse, but it is "
-                   "badly damaged." ) );
+               "badly damaged." ) );
         }
     }
     if( corpse_item->has_flag( flag_SKINNED ) ) { monster_weight = std::round( 0.85 * monster_weight ); }
@@ -669,15 +669,15 @@ void butchery_drops_harvest(
                         p.add_msg_if_player(
                             m_bad,
                             _( "You notice something embedded in the corpse, "
-                               "perhaps harvestable via careful "
-                               "dissection." ) );
+                           "perhaps harvestable via careful "
+                           "dissection." ) );
                     }
                     continue;
                 }
                 p.add_msg_if_player(
                     m_bad,
                     _( "You notice there are implants in this corpse, that "
-                       "careful dissection might preserve." ) );
+                   "careful dissection might preserve." ) );
                 continue;
             }
             if( action == BUTCHER || action == BUTCHER_FULL || action == DISMEMBER ) {
@@ -686,8 +686,8 @@ void butchery_drops_harvest(
                         p.add_msg_if_player(
                             m_bad,
                             _( "Your butchering tool destroys something.  "
-                               "Perhaps a more surgical approach would allow "
-                               "harvesting it." ) );
+                           "Perhaps a more surgical approach would allow "
+                           "harvesting it." ) );
                     }
                     continue;
                 }
@@ -696,21 +696,21 @@ void butchery_drops_harvest(
                         p.add_msg_if_player(
                             m_bad,
                             _( "Your butchering tool encounters something "
-                               "implanted in this corpse, but your rough "
-                               "cuts destroy it." ) );
+                           "implanted in this corpse, but your rough "
+                           "cuts destroy it." ) );
                         break;
                     case 2:
                         p.add_msg_if_player(
                             m_bad,
                             _( "You find traces of implants in the body, but "
-                               "you care only for the flesh." ) );
+                           "you care only for the flesh." ) );
                         break;
                     case 3:
                         p.add_msg_if_player(
                             m_bad,
                             _( "You found some implants in the body, but "
-                               "harvesting them would require more surgical "
-                               "approach." ) );
+                           "harvesting them would require more surgical "
+                           "approach." ) );
                         break;
                 }
                 continue;

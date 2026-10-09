@@ -852,8 +852,8 @@ void draw_item_filter_rules(
     starty += fold_and_print(
                   win, point( 1, starty ), len, c_white,
                   _( "Search [<color_yellow>c</color>]ategory, [<color_yellow>m</color>]aterial, "
-                     "[<color_yellow>q</color>]uality, [<color_yellow>n</color>]otes or "
-                     "[<color_yellow>d</color>]isassembled components." ) );
+       "[<color_yellow>q</color>]uality, [<color_yellow>n</color>]otes or "
+       "[<color_yellow>d</color>]isassembled components." ) );
     fold_and_print(
         win, point( 1, starty ), len, c_white,
         //~ An example of how to filter items based on category or material.
@@ -1724,7 +1724,7 @@ void scrollingcombattext::add(
 std::string scrollingcombattext::cSCT::getText( const std::string& type ) const
 {
     if( !sText2.empty() ) {
-    if( oDir == oUpLeft || oDir == oDownLeft || oDir == oLeft ) {
+        if( oDir == oUpLeft || oDir == oDownLeft || oDir == oLeft ) {
             if( type == "first" ) {
                 return sText2 + " ";
 
@@ -1739,16 +1739,16 @@ std::string scrollingcombattext::cSCT::getText( const std::string& type ) const
             }
         }
     } else if( type == "second" ) {
-    return {};
-}
+        return {};
+    }
 
-return sText;
+    return sText;
 }
 
 game_message_type scrollingcombattext::cSCT::getMsgType( const std::string& type ) const
 {
     if( !sText2.empty() ) {
-    if( oDir == oUpLeft || oDir == oDownLeft || oDir == oLeft ) {
+        if( oDir == oUpLeft || oDir == oDownLeft || oDir == oLeft ) {
             if( type == "first" ) { return gmt2; }
         } else {
             if( type == "second" ) { return gmt2; }
@@ -1761,7 +1761,7 @@ game_message_type scrollingcombattext::cSCT::getMsgType( const std::string& type
 int scrollingcombattext::cSCT::getPosX() const
 {
     if( getStep() > 0 ) {
-    int iDirOffset = ( oDir == oRight ) ? 1 : ( ( oDir == oLeft ) ? -1 : 0 );
+        int iDirOffset = ( oDir == oRight ) ? 1 : ( ( oDir == oLeft ) ? -1 : 0 );
 
         if( oDir == oUp || oDir == oDown ) {
 
@@ -1787,7 +1787,7 @@ int scrollingcombattext::cSCT::getPosX() const
 int scrollingcombattext::cSCT::getPosY() const
 {
     if( getStep() > 0 ) {
-    int iDirOffset = ( oDir == oDown ) ? 1 : ( ( oDir == oUp ) ? -1 : 0 );
+        int iDirOffset = ( oDir == oDown ) ? 1 : ( ( oDir == oUp ) ? -1 : 0 );
 
         if( iso_mode ) {
             if( oDir == oLeft || oDir == oRight ) { iDirOffset = ( oDir == oRight ) ? 1 : -1; }
@@ -1995,7 +1995,8 @@ std::string format_volume(
     if( width < 0 ) {
         // left-justify the specified width
         return string_format( "%-*.*f", std::abs( width ), scale, value );
-    } else if( width > 0 ) {
+    }
+    else if( width > 0 ) {
         // right-justify the specified width
         return string_format( "%*.*f", width, scale, value );
     } else {

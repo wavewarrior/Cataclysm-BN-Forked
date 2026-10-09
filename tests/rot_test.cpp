@@ -62,8 +62,8 @@ static auto make_storage(const vpart_id& storage_part, const bool enabled)
     return {.veh = veh, .part_index = part_index, .pos = vehicle_pos};
 }
 
-static auto add_food_to_vehicle_part(vehicle& veh, const int part_index,
-                                      const itype_id& food_type) -> void {
+static auto add_food_to_vehicle_part(vehicle& veh, const int part_index, const itype_id& food_type)
+    -> void {
     auto food = item::spawn(food_type);
     REQUIRE(food->goes_bad());
     REQUIRE_FALSE(veh.add_item(part_index, std::move(food)));
@@ -155,10 +155,11 @@ static auto add_canned_red_sauce_to_vehicle_part(vehicle& veh, const int part_in
     REQUIRE_FALSE(veh.add_item(part_index, std::move(sauce)));
 }
 
-static auto complete_recipe_from_components(Character& crafter, const recipe_id& recipe_to_make,
-                                             std::vector<detached_ptr<item>> components) -> void {
-    auto craft = item::spawn(&recipe_to_make.obj(), 1, std::move(components),
-                              std::vector<item_comp>{});
+static auto complete_recipe_from_components(
+    Character& crafter, const recipe_id& recipe_to_make, std::vector<detached_ptr<item>> components)
+    -> void {
+    auto craft =
+        item::spawn(&recipe_to_make.obj(), 1, std::move(components), std::vector<item_comp>{});
     complete_craft(crafter, *craft);
 }
 
@@ -581,9 +582,9 @@ TEST_CASE("Vehicle storage temperature controls food rot") {
         REQUIRE(freezer_items.size() == 1);
 
         calendar::turn += 21_days;
-        auto *carried = move_to_inventory_with_attempt_detach(freezer_items.only_item());
+        auto* carried = move_to_inventory_with_attempt_detach(freezer_items.only_item());
         REQUIRE(carried != nullptr);
-        auto *food = nested_sashimi_in(*carried);
+        auto* food = nested_sashimi_in(*carried);
 
         CHECK(food->get_rot() == 0_turns);
         CHECK(!food->rotten());
@@ -769,8 +770,9 @@ TEST_CASE("Vehicle storage temperature controls food rot") {
     }
 }
 
-TEST_CASE("Nested vehicle cargo takes its temperature from the vehicle, not a map lookup",
-          "[item][rot]") {
+TEST_CASE(
+    "Nested vehicle cargo takes its temperature from the vehicle, not a map lookup",
+    "[item][rot]") {
     auto fixture = make_storage(vpart_id("minifreezer"), true);
     add_backpack_with_sashimi_to_vehicle_part(*fixture.veh, fixture.part_index);
     auto cargo = fixture.veh->get_items(fixture.part_index);
@@ -885,9 +887,9 @@ TEST_CASE("Map powered fridge and freezer furniture controls food rot") {
 
         auto items = get_map().i_at(pos);
         REQUIRE(items.size() == 1);
-        auto *carried = move_to_inventory_with_attempt_detach(items.only_item());
+        auto* carried = move_to_inventory_with_attempt_detach(items.only_item());
         REQUIRE(carried != nullptr);
-        auto *food = nested_sashimi_in(*carried);
+        auto* food = nested_sashimi_in(*carried);
 
         CHECK(food->get_rot() == 0_turns);
         CHECK(!food->rotten());
@@ -903,8 +905,8 @@ TEST_CASE("Map powered fridge and freezer furniture controls food rot") {
         calendar::turn += 21_days;
 
         auto quantity = 1;
-        auto components = get_map().use_amount(pos, PICKUP_RANGE, itype_id("sashimi"), quantity,
-                                                return_true<item>);
+        auto components = get_map().use_amount(
+            pos, PICKUP_RANGE, itype_id("sashimi"), quantity, return_true<item>);
 
         REQUIRE(quantity == 0);
         REQUIRE(components.size() == 1);
@@ -922,8 +924,8 @@ TEST_CASE("Map powered fridge and freezer furniture controls food rot") {
         calendar::turn += 24_hours;
 
         auto quantity = 1;
-        auto components = get_map().use_amount(pos, PICKUP_RANGE, itype_id("sashimi"), quantity,
-                                                return_true<item>);
+        auto components = get_map().use_amount(
+            pos, PICKUP_RANGE, itype_id("sashimi"), quantity, return_true<item>);
 
         REQUIRE(quantity == 0);
         REQUIRE(components.size() == 1);
@@ -941,8 +943,8 @@ TEST_CASE("Map powered fridge and freezer furniture controls food rot") {
         calendar::turn += 20_days;
 
         auto quantity = 1;
-        auto components = get_map().use_charges(pos, 0, itype_id("bread"), quantity,
-                                                 return_true<item>);
+        auto components =
+            get_map().use_charges(pos, 0, itype_id("bread"), quantity, return_true<item>);
 
         REQUIRE(quantity == 0);
         REQUIRE(components.size() == 1);
@@ -966,8 +968,8 @@ TEST_CASE("Map powered fridge and freezer furniture controls food rot") {
         calendar::turn += 24_hours;
 
         auto quantity = 1;
-        auto components = get_map().use_charges(pos, 0, itype_id("bread"), quantity,
-                                                 return_true<item>);
+        auto components =
+            get_map().use_charges(pos, 0, itype_id("bread"), quantity, return_true<item>);
 
         REQUIRE(quantity == 0);
         REQUIRE(components.size() == 1);

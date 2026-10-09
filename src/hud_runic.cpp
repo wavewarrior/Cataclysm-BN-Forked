@@ -331,7 +331,7 @@ auto hud_runic::row( std::string_view classes, std::string_view id, std::string_
 -> std::string
 {
     if( id.empty() ) {
-    return std::format( R"(<div class="{}">{}</div>)", classes, inner );
+        return std::format( R"(<div class="{}">{}</div>)", classes, inner );
     }
     return std::format( R"(<div class="{}" id="{}">{}</div>)", classes, id, inner );
 }
@@ -344,8 +344,8 @@ auto hud_runic::rule_div() -> std::string
 auto hud_runic::subhead( std::string_view title ) -> std::string
 {
     return rule_div() +
-    row( "hud-row hud-subhead", {},
-    std::format( R"(<span class="hud-text">{}</span>)", esc( title ) ) );
+           row( "hud-row hud-subhead", {},
+                std::format( R"(<span class="hud-text">{}</span>)", esc( title ) ) );
 }
 
 auto hud_runic::pips( const pip_options &o ) -> std::string
@@ -433,17 +433,17 @@ auto hud_runic::is_critical( const crit_options &o ) -> bool
     // health, including a broken one, because those are the states that tick
     // damage between turns.
     if( o.bleeding || o.bitten ) {
-    return true;
-}
-// A broken limb is NOT critical on its own. This has to be an explicit early
-// return rather than a comment saying `o.broken` is "deliberately not
-// consulted": `is_limb_broken` means hp == 0, so a broken limb ALWAYS trips
-// the ratio test below, and leaving it to fall through made every broken
-// limb permanently shout — which spends the register's loudest signal on a
-// long-term condition the player cannot act on this turn, and makes the
-// ordinary "BROKE / SPLINT" row in hud_soma unreachable.
-if( o.broken ) {
-    return false;
-}
-return o.max > 0 && static_cast<float>( o.cur ) / static_cast<float>( o.max ) < 1.0f / 3.0f;
+        return true;
+    }
+    // A broken limb is NOT critical on its own. This has to be an explicit early
+    // return rather than a comment saying `o.broken` is "deliberately not
+    // consulted": `is_limb_broken` means hp == 0, so a broken limb ALWAYS trips
+    // the ratio test below, and leaving it to fall through made every broken
+    // limb permanently shout — which spends the register's loudest signal on a
+    // long-term condition the player cannot act on this turn, and makes the
+    // ordinary "BROKE / SPLINT" row in hud_soma unreachable.
+    if( o.broken ) {
+        return false;
+    }
+    return o.max > 0 && static_cast<float>( o.cur ) / static_cast<float>( o.max ) < 1.0f / 3.0f;
 }

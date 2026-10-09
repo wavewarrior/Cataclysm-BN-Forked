@@ -58,6 +58,6 @@ void rebuild_level_cache(int zlev, bool skip_lightmap = true);
  * Build the map cache through the rebuild plan (ADR-0002): the plan is the only
  * sanctioned entry into map::build_map_cache, tests included. Does not invalidate.
  */
-void build_map_cache_from_plan(map &here, int zlev, bool skip_lightmap = false);
+void build_map_cache_from_plan(map& here, int zlev, bool skip_lightmap = false);
 
 #endif // CATA_TESTS_MAP_HELPERS_H

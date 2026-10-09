@@ -78,7 +78,7 @@ class MonsterGenerator
         friend struct mtype;
         friend struct species_type;
         friend class mattack_actor;
-        std::array<int, m_flag::MF_MAX> m_flag_usage_stats;
+        std::array < int, m_flag::MF_MAX > m_flag_usage_stats;
 
     private:
         MonsterGenerator();
@@ -90,7 +90,7 @@ class MonsterGenerator
         void init_defense();
 
         void add_hardcoded_attack( const std::string &type, mon_action_attack f );
-        void add_attack( std::unique_ptr<mattack_actor> );
+        void add_attack( std::unique_ptr < mattack_actor > );
         void add_attack( const mtype_special_attack &wrapper );
 
         /** Gets an actor object without saving it anywhere */
@@ -101,19 +101,19 @@ class MonsterGenerator
         void set_species_ids( mtype &mon );
         void finalize_pathfinding_settings( mtype &mon );
 
-        friend class string_id<mtype>;
-        friend class string_id<species_type>;
-        friend class string_id<mattack_actor>;
+        friend class string_id < mtype >;
+        friend class string_id < species_type >;
+        friend class string_id < mattack_actor >;
 
-        pimpl<generic_factory<mtype>> mon_templates;
-        pimpl<generic_factory<species_type>> mon_species;
-        std::vector<mtype_id> hallucination_monsters;
+        pimpl < generic_factory < mtype>> mon_templates;
+        pimpl < generic_factory < species_type>> mon_species;
+        std::vector < mtype_id > hallucination_monsters;
 
-        std::map<std::string, phase_id> phase_map;
-        std::map<std::string, mon_action_death> death_map;
-        std::map<std::string, mon_action_defend> defense_map;
-        std::map<std::string, mtype_special_attack> attack_map;
-        std::map<mtype_id, std::unique_ptr<lua_monster_callback_actor>> lua_monster_actors;
+        std::map < std::string, phase_id > phase_map;
+        std::map < std::string, mon_action_death > death_map;
+        std::map < std::string, mon_action_defend > defense_map;
+        std::map < std::string, mtype_special_attack > attack_map;
+        std::map < mtype_id, std::unique_ptr < lua_monster_callback_actor>> lua_monster_actors;
 };
 
 void load_monster_adjustment( const JsonObject &jsobj );

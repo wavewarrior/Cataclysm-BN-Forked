@@ -659,11 +659,11 @@ nc_color Character::limb_color( const bodypart_str_id &bp, bool bleed, bool bite
                                 bool infect ) const
 {
     if( !bp ) {
-    return c_light_gray;
-}
-int color_bit = 0;
-nc_color i_color = c_light_gray;
-if( bleed && has_effect( effect_bleed, bp ) ) {
+        return c_light_gray;
+    }
+    int color_bit = 0;
+    nc_color i_color = c_light_gray;
+    if( bleed && has_effect( effect_bleed, bp ) ) {
         color_bit += 1;
     }
     if( bite && has_effect( effect_bite, bp ) ) {
@@ -673,24 +673,24 @@ if( bleed && has_effect( effect_bleed, bp ) ) {
         color_bit += 100;
     }
     switch( color_bit ) {
-    case 1:
-        i_color = c_red;
-        break;
-    case 10:
-        i_color = c_blue;
-        break;
-    case 100:
-        i_color = c_green;
-        break;
-    case 11:
-        i_color = c_magenta;
-        break;
-    case 101:
-        i_color = c_yellow;
-        break;
-}
+        case 1:
+            i_color = c_red;
+            break;
+        case 10:
+            i_color = c_blue;
+            break;
+        case 100:
+            i_color = c_green;
+            break;
+        case 11:
+            i_color = c_magenta;
+            break;
+        case 101:
+            i_color = c_yellow;
+            break;
+    }
 
-return i_color;
+    return i_color;
 }
 
 std::string Character::get_name() const { return name; }
@@ -698,40 +698,40 @@ std::string Character::get_name() const { return name; }
 std::vector<std::string> Character::get_grammatical_genders() const
 {
     if( male ) {
-    return { "m" };
-} else {
-    return { "f" };
-}
+        return { "m" };
+    } else {
+        return { "f" };
+    }
 }
 
 nc_color Character::basic_symbol_color() const
 {
     if( has_effect( effect_onfire ) ) {
-    return c_red;
-}
-if( has_effect( effect_stunned ) ) {
-    return c_light_blue;
-}
-if( has_effect( effect_boomered ) ) {
-    return c_pink;
-}
-if( has_active_mutation( trait_id( "SHELL2" ) ) ) {
+        return c_red;
+    }
+    if( has_effect( effect_stunned ) ) {
+        return c_light_blue;
+    }
+    if( has_effect( effect_boomered ) ) {
+        return c_pink;
+    }
+    if( has_active_mutation( trait_id( "SHELL2" ) ) ) {
         return c_magenta;
     }
     if( is_underwater() ) {
-    return c_blue;
-}
-if( has_active_bionic( bio_cloak ) || has_artifact_with( AEP_INVISIBLE ) ||
+        return c_blue;
+    }
+    if( has_active_bionic( bio_cloak ) || has_artifact_with( AEP_INVISIBLE ) ||
         is_wearing_active_optcloak() || has_trait( trait_DEBUG_CLOAK ) ) {
-    return c_dark_gray;
-}
-if( move_mode == CMM_RUN ) {
-    return c_yellow;
-}
-if( is_crouching() ) {
-    return c_light_gray;
-}
-return c_white;
+        return c_dark_gray;
+    }
+    if( move_mode == CMM_RUN ) {
+        return c_yellow;
+    }
+    if( is_crouching() ) {
+        return c_light_gray;
+    }
+    return c_white;
 }
 
 nc_color Character::symbol_color() const

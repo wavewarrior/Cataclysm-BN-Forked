@@ -619,23 +619,23 @@ class comestible_inventory_preset: public inventory_selector_preset
             // If an item was inserted into a non-container, we can't eat it.
             // For example, we couldn't eat an item mod made of meat
             return p.can_consume( *loc )
-            && ( loc->where() != item_location_type::container
-                 || loc->parent_item()->is_container() );
+                   && ( loc->where() != item_location_type::container
+                        || loc->parent_item()->is_container() );
         }
 
         std::string get_denial( const item* loc ) const override {
             const item& med =
                 !( *loc ).is_container_empty() && ( *loc ).get_contained().is_medication()
-            && ( *loc ).get_contained().type->has_use()
-            ? ( *loc ).get_contained()
-            : *loc;
+                && ( *loc ).get_contained().type->has_use()
+                ? ( *loc ).get_contained()
+                : *loc;
 
             if( loc->made_of( LIQUID ) && !g->m.has_flag( flag_LIQUIDCONT, loc->bub_pos() ) ) {
-            return _( "Can't drink spilt liquids" );
+                return _( "Can't drink spilt liquids" );
             }
 
             if( med.is_medication() && !p.can_use_heal_item( med ) ) {
-            return _( "Your biology is not compatible with that item." );
+                return _( "Your biology is not compatible with that item." );
             }
 
             const auto& it = get_consumable_item( loc );
@@ -643,9 +643,9 @@ class comestible_inventory_preset: public inventory_selector_preset
             const auto cbm = p.get_cbm_rechargeable_with( it );
 
             if( !res.success() && cbm == rechargeable_cbm::none ) {
-            return res.str();
+                return res.str();
             } else if( cbm == rechargeable_cbm::other && ( p.get_fuel_capacity( it.typeId() ) <= 0 ) ) {
-            return string_format( _( "No space to store more %s" ), it.tname() );
+                return string_format( _( "No space to store more %s" ), it.tname() );
             }
 
             return inventory_selector_preset::get_denial( loc );
@@ -665,23 +665,23 @@ class comestible_inventory_preset: public inventory_selector_preset
     protected:
         int get_order( const item* loc, const time_duration& time ) const {
             if( time > 0_turns && !( loc->type->container && loc->type->container->preserves ) ) {
-            return 0;
-        } else if( get_consumable_item( loc ).rotten() ) {
-            if( p.has_trait( trait_SAPROPHAGE ) || p.has_trait( trait_SAPROVORE ) ) {
+                return 0;
+            } else if( get_consumable_item( loc ).rotten() ) {
+                if( p.has_trait( trait_SAPROPHAGE ) || p.has_trait( trait_SAPROVORE ) ) {
                     return 1;
                 } else {
                     return 4;
                 }
             } else if( time == 0_turns ) {
-            return 3;
-        } else {
-            return 2;
+                return 3;
+            } else {
+                return 2;
+            }
         }
-    }
 
-    // WARNING: this can return consumables which are not necessarily possessing
-    // the comestible type. please dereference responsibly.
-    const item &get_consumable_item( const item* loc ) const {
+        // WARNING: this can return consumables which are not necessarily possessing
+        // the comestible type. please dereference responsibly.
+        const item &get_consumable_item( const item* loc ) const {
             return p.get_consumable_from( const_cast<item &>( *loc ) );
         }
 
@@ -691,14 +691,14 @@ class comestible_inventory_preset: public inventory_selector_preset
 
         const islot_comestible &get_edible_comestible( const item& it ) const {
             if( it.is_comestible() && p.can_eat( it ).success() ) {
-            // Ok since can_eat() returns false if is_craft() is true
-            return *it.type->comestible;
+                // Ok since can_eat() returns false if is_craft() is true
+                return *it.type->comestible;
+            }
+            static const islot_comestible dummy{};
+            return dummy;
         }
-        static const islot_comestible dummy{};
-        return dummy;
-    }
 
-    time_duration get_time_left( const item* loc ) const {
+        time_duration get_time_left( const item* loc ) const {
             time_duration time_left = 0_turns;
             const time_duration shelf_life = get_edible_comestible( loc ).spoils;
             if( shelf_life > 0_turns ) {
@@ -859,38 +859,38 @@ class activatable_inventory_preset: public pickup_inventory_preset
 
         bool is_shown( const item* loc ) const override {
             if( !( *loc ).is_container_empty() && ( *loc ).get_contained().is_medication()
-            && ( *loc ).get_contained().type->has_use() ) {
-            return true;
+                && ( *loc ).get_contained().type->has_use() ) {
+                return true;
+            }
+            return loc->type->has_use();
         }
-        return loc->type->has_use();
-    }
 
-    std::string get_denial( const item* loc ) const override {
+        std::string get_denial( const item* loc ) const override {
             const item& it =
                 !( *loc ).is_container_empty() && ( *loc ).get_contained().is_medication()
-            && ( *loc ).get_contained().type->has_use()
-            ? ( *loc ).get_contained()
-            : *loc;
+                && ( *loc ).get_contained().type->has_use()
+                ? ( *loc ).get_contained()
+                : *loc;
             const auto& uses = it.type->use_methods;
 
             if( uses.size() == 1 ) {
-            const auto ret = uses.begin()->second.can_call( p, it, false, p.bub_pos() );
+                const auto ret = uses.begin()->second.can_call( p, it, false, p.bub_pos() );
                 if( !ret.success() ) { return trim_punctuation_marks( ret.str() ); }
             }
 
             if( it.is_medication() && !p.can_use_heal_item( it ) && !it.is_craft() ) {
-            return _( "Your biology is not compatible with that item." );
+                return _( "Your biology is not compatible with that item." );
             }
 
             if( !p.has_enough_charges( it, false ) && !uses.contains( iuse_TOGGLE_UPS_CHARGING ) ) {
-            return string_format(
-                       vgettext( "Needs at least %d charge", "Needs at least %d charges",
-                                 loc->ammo_required() ),
-                       loc->ammo_required() );
+                return string_format(
+                           vgettext( "Needs at least %d charge", "Needs at least %d charges",
+                                     loc->ammo_required() ),
+                           loc->ammo_required() );
             }
 
             if( !it.has_flag( flag_ALLOWS_REMOTE_USE ) && !it.has_flag( flag_TEMPORARY_ITEM ) ) {
-            return pickup_inventory_preset::get_denial( loc );
+                return pickup_inventory_preset::get_denial( loc );
             }
 
             return std::string();
@@ -998,11 +998,11 @@ class read_inventory_preset final: public inventory_selector_preset
 
                 const SkillLevel& skill = p.get_skill_level_object( book.skill );
                 if( skill.level() < book.req ) {
-                //~ %1$s: book skill name, %3$d: book required skill level, %3$d: book skill
-                //level, %4$d: player skill level
-                return string_format(
-                    pgettext( "skill", "%1$s from %2$d to %3$d (%4$d)" ), book.skill->name(),
-                    book.req, book.level, skill.level() );
+                    //~ %1$s: book skill name, %3$d: book required skill level, %3$d: book skill
+                    //level, %4$d: player skill level
+                    return string_format(
+                        pgettext( "skill", "%1$s from %2$d to %3$d (%4$d)" ), book.skill->name(),
+                        book.req, book.level, skill.level() );
                 }
 
                 //~ %1$s: book skill name, %2$d: book skill level, %3$d: player skill level
@@ -1149,14 +1149,14 @@ class read_inventory_preset final: public inventory_selector_preset
                         assert( can_teach );
 
                         if( book.martial_art ) { return {_( "martial arts" )}; }
-                    return {book.skill->name()};
-                }
+                        return {book.skill->name()};
+                    }
 
-            private:
-                const islot_book &book;
-        };
+                private:
+                    const islot_book &book;
+            };
 
-        const islot_book& book_a = get_book( lhs.any_item() );
+            const islot_book& book_a = get_book( lhs.any_item() );
             const islot_book& book_b = get_book( rhs.any_item() );
 
             const book_info info_a( book_a, p );
@@ -1323,7 +1323,7 @@ class weapon_inventory_preset: public inventory_selector_preset
         std::string get_damage_string( float damage, bool display_zeroes = false ) const {
             return damage || display_zeroes
                    ? string_format( "<color_yellow>%g</color>", damage )
-            : std::string();
+                   : std::string();
         }
 
         const player &p;
@@ -1537,9 +1537,9 @@ class repair_inventory_preset: public inventory_selector_preset
 
         bool is_shown( const item* loc ) const override {
             return loc->made_of_any( actor->materials ) && ( !loc->count_by_charges() ||
-            loc->is_stackable() ) && ( loc->damage() > -1 ||
-            ( loc->has_flag( flag_VARSIZE ) && !loc->has_flag( flag_FIT ) ) ) && !loc->count_by_charges() &&
-            !loc->is_firearm() && !loc->has_flag( flag_NO_REPAIR ) && &*loc != main_tool;
+                    loc->is_stackable() ) && ( loc->damage() > -1 ||
+                                               ( loc->has_flag( flag_VARSIZE ) && !loc->has_flag( flag_FIT ) ) ) && !loc->count_by_charges() &&
+                   !loc->is_firearm() && !loc->has_flag( flag_NO_REPAIR ) && &*loc != main_tool;
         }
 
     private:
