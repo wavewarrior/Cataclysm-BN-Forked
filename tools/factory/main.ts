@@ -230,11 +230,7 @@ async function boot(): Promise<void> {
   }
   const ws = await workspaceCreate({ cwd: await repoRoot(), label: FACTORY_WORKSPACE })
   try {
-    await paneRun(ws.rootPane, "call tools\\factory\\env.cmd")
-    await paneRun(
-      ws.rootPane,
-      "omp",
-    )
+    await paneRun(ws.rootPane, "call tools\\factory\\env.cmd && omp")
     const watcher = await paneSplit(ws.rootPane, {}, "right")
     await paneRun(watcher, "tools\\factory\\watch.cmd")
     const status = await paneSplit(watcher, {}, "down")
@@ -277,7 +273,7 @@ if (import.meta.main) {
     .action(({ max, issue }) => runLoop({ max, issue }))
     .command("status", "Show tickets, lanes and agents.").action(status)
     .command("watch", "Poll for ready tickets; run a driver pass when one is pickable.")
-    .option("--interval <seconds:number>", "seconds between polls", { default: 60 })
+    .option("--interval <seconds:number>", "seconds between polls", { default: 10 })
     .option("--once", "poll once, run a pass if there is work, then exit")
     .action(({ interval, once }) => runWatch({ intervalSec: interval, once }))
     .command("boot", "Open the factory herdr workspace: operator, watcher and status panes.")
