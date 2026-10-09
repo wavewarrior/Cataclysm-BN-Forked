@@ -144,6 +144,10 @@ _Avoid_: moving (ambiguous with grab/drag), in motion
 A rolling vehicle that no one is driving.
 _Avoid_: freewheeling, drifting
 
+**Hover load**:
+The engine load a rotorcraft needs to stay airborne or climb, set from its rotor capacity: about 5% to hover, 20% to ascend.
+_Avoid_: hover cost, idle rate
+
 ## Co-op
 
 **World event**:
