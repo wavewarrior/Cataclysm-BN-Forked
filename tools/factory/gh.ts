@@ -3,6 +3,8 @@ import { config } from "./config.ts"
 import { run } from "./util.ts"
 
 const GH_WINDOWS = "C:\\Program Files\\GitHub CLI\\gh.exe"
+/// A stalled gh call must not stall the watcher; it fails and the watcher backs off.
+const GH_TIMEOUT_MS = 120_000
 
 function ghBinary(): string {
   if (Deno.build.os !== "windows") return "gh"
@@ -15,7 +17,7 @@ function ghBinary(): string {
 }
 
 export async function gh(args: string[], stdin?: string): Promise<string> {
-  const r = await run([ghBinary(), ...args], { stdin })
+  const r = await run([ghBinary(), ...args], { stdin, timeoutMs: GH_TIMEOUT_MS })
   if (r.code !== 0) throw new Error(`gh ${args.join(" ")} failed (${r.code}): ${r.stderr.trim()}`)
   return r.stdout
 }
