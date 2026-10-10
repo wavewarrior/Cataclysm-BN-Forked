@@ -110,6 +110,9 @@ void clear_character(player& dummy, bool debug_storage) {
     // Make sure we don't carry around weird effects.
     dummy.clear_effects();   // mark effects for removal
     dummy.process_effects(); // actually remove them
+    // sight_max is cached and only recomputed by recalc_sight_limits(). Without it, a
+    // blindness set by an earlier test keeps sight_max at 0 after the effect is removed.
+    dummy.recalc_sight_limits();
     dummy.set_underwater(false);
 
     // Make stats nominal.
