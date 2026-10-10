@@ -9,6 +9,7 @@ export const SECTIONS = [
   "Episodes",
   "Depends on",
   "No test needed",
+  "Follow-up of",
 ] as const
 export type SectionName = (typeof SECTIONS)[number]
 

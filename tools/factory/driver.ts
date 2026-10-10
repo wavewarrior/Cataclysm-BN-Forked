@@ -4,7 +4,15 @@ import { delay } from "@std/async"
 import { join } from "@std/path"
 import { config } from "./config.ts"
 import { type Stamp } from "./gate.ts"
-import { comment, createDraftPr, editLabels, type Issue } from "./gh.ts"
+import {
+  comment,
+  createDraftPr,
+  createIssue,
+  editIssueBody,
+  editLabels,
+  type Issue,
+  listIssues,
+} from "./gh.ts"
 import {
   agentPrompt,
   agentRead,
@@ -20,8 +28,10 @@ import {
   branchName,
   dependsOn,
   isConventionalTitle,
+  listItems,
   makeTicket,
   missingSections,
+  type Ticket,
 } from "./ticket.ts"
 import { factoryDir, git, run, runToLog, tailFile } from "./util.ts"
 
@@ -46,6 +56,42 @@ export async function pickNext(
     if (!open.some(Boolean)) return issue
   }
   return undefined
+}
+
+/// The blocked ticket a follow-up unblocks (its `## Follow-up of` section), or undefined.
+export function followUpOf(sections: Ticket["sections"]): number | undefined {
+  const m = listItems(sections["Follow-up of"])[0]?.match(/#?(\d+)/)
+  return m ? Number(m[1]) : undefined
+}
+
+/// `body` with the `## Depends on` (or `## Blocked by`) item for `from` pointing at `to`. Other
+/// sections and items stay as written.
+export function rewireDependsOn(body: string, from: number, to: number): string {
+  let inDependsOn = false
+  return body.split("\n").map((line) => {
+    if (/^## /.test(line)) inDependsOn = /^##\s+(depends on|blocked by)\s*$/i.test(line)
+    const item = line.match(/^(\s*(?:[-*+]|\d+\.)\s+)(.*)$/)
+    if (!inDependsOn || !item) return line
+    const m = item[2].match(/#?(\d+)/)
+    if (!m || Number(m[1]) !== from) return line
+    return item[1] + item[2].replace(m[0], m[0].startsWith("#") ? `#${to}` : `${to}`)
+  }).join("\n")
+}
+
+/// The body of the follow-up that unblocks `issue`: the blocked ticket's acceptance, touches and
+/// test tags, with the failure to fix last (its text may contain `#` lines).
+export function followUpBody(opts: { issue: Issue; ticket: Ticket; reason: string }): string {
+  const { issue, ticket, reason } = opts
+  return [
+    `## Goal\n\nFix the failures that blocked #${issue.number} (${issue.title}). Keep its behaviour.\n`,
+    `## Acceptance\n\nThe acceptance of #${issue.number} holds:\n\n${
+      ticket.sections.Acceptance ?? ""
+    }\n`,
+    `## Touches\n\n${ticket.sections.Touches ?? ""}\n`,
+    `## Test tags\n\n${ticket.sections["Test tags"] ?? ""}\n`,
+    `## Follow-up of\n\n- #${issue.number}\n`,
+    `## Gate output\n\n${reason}\n`,
+  ].join("\n")
 }
 
 /// A conventional-commit PR title; an issue title without a type gets `chore:`.
@@ -174,6 +220,60 @@ function laneEnv(ticket: number, role: "implementer" | "reviewer"): Record<strin
 }
 
 export type DriverOptions = { repo: string }
+
+/// Block a ticket with a follow-up that carries the failure, so its dependents move to the follow-up
+/// instead of waiting on a blocked ticket. A follow-up never spawns another follow-up.
+async function blockWithFollowUp(opts: {
+  issue: Issue
+  ticket: Ticket
+  reason: string
+  needsHuman?: boolean
+  block: (reason: string, opts?: { needsHuman?: boolean }) => Promise<TicketResult>
+}): Promise<TicketResult> {
+  const { issue, ticket, reason, needsHuman = false, block } = opts
+  if (followUpOf(ticket.sections) !== undefined) return await block(reason, { needsHuman })
+  let followUp: { number: number; url: string }
+  try {
+    followUp = await createIssue({
+      title: `fix: unblock #${issue.number}`,
+      body: followUpBody({ issue, ticket, reason }),
+      labels: ["factory:ready"],
+    })
+  } catch (error) {
+    const why = error instanceof Error ? error.message : String(error)
+    return await block(`${reason}\n\nno follow-up ticket was created: ${why}`, { needsHuman })
+  }
+  const open = await listIssues([]).catch(() => undefined)
+  const moved: number[] = []
+  const stuck: number[] = []
+  for (const dependent of open ?? []) {
+    if (!dependsOn(makeTicket(dependent).sections).includes(issue.number)) continue
+    try {
+      await editIssueBody(
+        dependent.number,
+        rewireDependsOn(dependent.body, issue.number, followUp.number),
+      )
+      moved.push(dependent.number)
+    } catch {
+      stuck.push(dependent.number)
+    }
+  }
+  const notes = [`Follow-up: #${followUp.number} ${followUp.url}`]
+  if (open === undefined) notes.push("Could not list open issues, so no dependent was moved.")
+  if (moved.length) {
+    notes.push(
+      `Dependents now wait on #${followUp.number}: ${moved.map((n) => `#${n}`).join(", ")}.`,
+    )
+  }
+  if (stuck.length) {
+    notes.push(
+      `Could not move these dependents; move them by hand: ${
+        stuck.map((n) => `#${n}`).join(", ")
+      }.`,
+    )
+  }
+  return await block(`${reason}\n\n${notes.join("\n")}`)
+}
 
 /// Run one already-claimed ticket to completion. Never throws: failures become `blocked`.
 export async function runTicket(
@@ -317,12 +417,15 @@ export async function runTicket(
           })),
         )
         if (retries >= config.maxFixRetries) {
-          return await block(
-            `the gate failed ${retries + 1} times. Last failure:\n\n${
+          return await blockWithFollowUp({
+            issue,
+            ticket,
+            block,
+            needsHuman: true,
+            reason: `the gate failed ${retries + 1} times. Last failure:\n\n${
               steps.map((s) => `### ${s.name}\n${s.tail}`).join("\n\n")
             }`,
-            { needsHuman: true },
-          )
+          })
         }
         feedback = gateFailurePrompt(steps)
       } else {
@@ -333,10 +436,13 @@ export async function runTicket(
         findings = review.text
         if (verdict === "PASS") break
         if (retries >= config.maxFixRetries) {
-          return await block(
-            `the reviewer said FAIL ${retries + 1} times. Last review:\n\n${findings}`,
-            { needsHuman: true },
-          )
+          return await blockWithFollowUp({
+            issue,
+            ticket,
+            block,
+            needsHuman: true,
+            reason: `the reviewer said FAIL ${retries + 1} times. Last review:\n\n${findings}`,
+          })
         }
         feedback = reviewFailurePrompt(findings)
       }
@@ -350,10 +456,14 @@ export async function runTicket(
       }
       // No new commit means the same tree would fail the same gate: stop rather than re-run it.
       if ((await git(path, "rev-parse", "HEAD")) === headBefore) {
-        return await block(
-          `the implementer made no commit after feedback; the gate would fail the same way.\n\n${feedback}`,
-          { needsHuman: true },
-        )
+        return await blockWithFollowUp({
+          issue,
+          ticket,
+          block,
+          needsHuman: true,
+          reason:
+            `the implementer made no commit after feedback; the gate would fail the same way.\n\n${feedback}`,
+        })
       }
     }
 

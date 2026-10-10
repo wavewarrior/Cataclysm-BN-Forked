@@ -123,7 +123,6 @@ export async function editIssueBody(number: number, body: string): Promise<void>
 export async function closeIssue(number: number, note: string): Promise<void> {
   await gh(["issue", "close", String(number), "--repo", config.repo, "--comment", note])
 }
-
 export type PrOptions = { head: string; title: string; body: string }
 
 /// Open a draft PR into the integration branch; returns its URL.

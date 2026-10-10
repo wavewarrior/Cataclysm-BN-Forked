@@ -2,14 +2,18 @@ import { assertEquals, assertStringIncludes } from "@std/assert"
 import {
   blockComment,
   blockLabels,
+  followUpBody,
+  followUpOf,
   freshStartCommands,
   parseVerdict,
   pickNext,
   prTitle,
   renderPrBody,
+  rewireDependsOn,
   workspaceLabel,
   workspacePrefix,
 } from "./driver.ts"
+import { makeTicket, missingSections } from "./ticket.ts"
 import type { Issue } from "./gh.ts"
 import type { Stamp } from "./gate.ts"
 
@@ -110,4 +114,46 @@ Deno.test("workspaceLabel carries the ticket prefix that re-pick matches on", ()
   assertEquals(label.startsWith(workspacePrefix(7)), true)
   assertEquals(label.startsWith(workspacePrefix(70)), false)
   assertEquals(workspaceLabel(7, "x".repeat(200)).length, 60)
+})
+
+const BLOCKED =
+  "## Goal\n\nBuild it.\n\n## Acceptance\n\nIt works.\n\n## Touches\n\n- src/vehicle.cpp\n\n## Test tags\n\n- [vehicle]\n"
+
+Deno.test("rewireDependsOn moves only the Depends on item for the blocked ticket", () => {
+  const body =
+    "## Goal\n\nSee #166 in prose.\n\n## Depends on\n\n- #166\n- #1660\n1. #166\n\n## Touches\n\n- #166\n"
+  assertEquals(
+    rewireDependsOn(body, 166, 170),
+    "## Goal\n\nSee #166 in prose.\n\n## Depends on\n\n- #170\n- #1660\n1. #170\n\n## Touches\n\n- #166\n",
+  )
+})
+
+Deno.test("a follow-up names the blocked ticket it unblocks; an ordinary ticket names none", () => {
+  const blocked = issue(166, BLOCKED)
+  assertEquals(followUpOf(makeTicket(blocked).sections), undefined)
+  const body = followUpBody({ issue: blocked, ticket: makeTicket(blocked), reason: "gate failed" })
+  assertEquals(followUpOf(makeTicket(issue(170, body)).sections), 166)
+})
+
+Deno.test("a follow-up is a runnable ticket that inherits the blocked ticket's touches and tags", () => {
+  const blocked = issue(166, BLOCKED)
+  const body = followUpBody({
+    issue: blocked,
+    ticket: makeTicket(blocked),
+    reason: "FAIL vehicle_x",
+  })
+  const ticket = makeTicket(issue(170, body))
+  assertEquals(missingSections(ticket.sections), [])
+  assertEquals(ticket.sections.Touches, "- src/vehicle.cpp")
+  assertEquals(ticket.sections["Test tags"], "- [vehicle]")
+  assertStringIncludes(body, "FAIL vehicle_x")
+})
+
+Deno.test("a dependent moved to a follow-up waits for the follow-up, not the blocked ticket", async () => {
+  const before = issue(7, "## Depends on\n\n- #166\n")
+  const after = issue(7, rewireDependsOn(before.body, 166, 170))
+  const closed = new Set([170])
+  const isClosed = (n: number) => Promise.resolve(closed.has(n))
+  assertEquals(await pickNext([before], isClosed), undefined)
+  assertEquals((await pickNext([after], isClosed))?.number, 7)
 })
