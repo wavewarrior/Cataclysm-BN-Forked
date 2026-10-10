@@ -121,6 +121,11 @@ async function runLoop(
     const ready = listed.filter((i) => !isRecentlyClaimed(claims, i.number, Date.now()))
     const next = await pickNext(ready, isClosed)
     if (!next) {
+      // A running ticket may hand off a follow-up that unblocks a dependent: wait, then rescan.
+      if (running.size > 0) {
+        await Promise.race(running)
+        continue
+      }
       if (started === 0) {
         console.log("no factory:ready ticket to run (or its dependencies are still open)")
       }
