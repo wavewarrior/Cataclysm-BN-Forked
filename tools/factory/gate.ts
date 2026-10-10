@@ -268,7 +268,8 @@ const STEPS: Step[] = [
       for (const tag of tags) {
         await Deno.remove(join(ctx.cwd, "test_user_dir"), { recursive: true }).catch(() => {})
         const before = await Deno.readTextFile(ctx.logPath("catch2-tags")).catch(() => "")
-        await runToLogUntil(
+        // Run the whole tag: every unexpected failure lands in one note, so the implementer fixes them together.
+        await runToLog(
           [
             "deno",
             "task",
@@ -282,7 +283,6 @@ const STEPS: Step[] = [
             "1",
           ],
           ctx.logPath("catch2-tags"),
-          (line) => stopsRun(line, config.baselineFailures),
           { cwd: ctx.cwd },
         )
         const log = (await Deno.readTextFile(ctx.logPath("catch2-tags")).catch(() => ""))
@@ -292,7 +292,9 @@ const STEPS: Step[] = [
           return { ok: false, note: `tag ${tag} matched no test cases (typo?)` }
         }
         const result = evaluateRun(log, config.baselineFailures)
-        if (!result.ok) return { ok: false, note: `tag ${tag}:\n${describeRun(result)}` }
+        if (!result.ok) {
+          return { ok: false, note: `tag ${tag}:\n${describeRun({ ...result, fixed: [] })}` }
+        }
       }
       return { ok: true, note: `tags: ${tags.join(" ")}` }
     },
