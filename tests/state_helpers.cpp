@@ -42,8 +42,6 @@ auto clear_states(const enum_bitset<test_state>& states) -> void {
         weather.clear_temp_cache();
     }
 
-    if (normalized_states.test(state::avatar)) { clear_avatar(); }
-
     if (normalized_states.test(state::map)) {
         clear_map();
     } else {
@@ -51,6 +49,11 @@ auto clear_states(const enum_bitset<test_state>& states) -> void {
         if (normalized_states.test(state::creature)) { clear_creatures(); }
         if (normalized_states.test(state::vehicle)) { clear_vehicles(); }
     }
+
+    // Place the avatar after clear_map(). clear_map() can re-anchor the reality bubble, and an
+    // avatar placed before that keeps the old origin, so bub_to_abs() (avatar-derived) and
+    // map_local_to_abs() (map-derived) disagree on every bub position.
+    if (normalized_states.test(state::avatar)) { clear_avatar(); }
 
     if (normalized_states.test(state::time)) {
         set_time(calendar::turn_zero);
