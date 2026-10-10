@@ -5,6 +5,8 @@ export type RunOptions = {
   cwd?: string
   env?: Record<string, string>
   stdin?: string
+  /// Kill the child after this many milliseconds; the result then has code 124.
+  timeoutMs?: number
 }
 
 export type RunResult = { code: number; stdout: string; stderr: string }
@@ -24,8 +26,21 @@ export async function run(cmd: string[], opts: RunOptions = {}): Promise<RunResu
     await w.write(new TextEncoder().encode(opts.stdin))
     await w.close()
   }
-  const out = await child.output()
+  let timedOut = false
+  const timer = opts.timeoutMs === undefined ? undefined : setTimeout(() => {
+    timedOut = true
+    try {
+      child.kill()
+    } catch {
+      // Already exited; the real status is reported below.
+    }
+  }, opts.timeoutMs)
+  const out = await child.output().finally(() => clearTimeout(timer))
   const dec = new TextDecoder()
+  if (timedOut) {
+    const stderr = `${dec.decode(out.stderr)}\ntimed out after ${opts.timeoutMs} ms`
+    return { code: 124, stdout: dec.decode(out.stdout), stderr }
+  }
   return { code: out.code, stdout: dec.decode(out.stdout), stderr: dec.decode(out.stderr) }
 }
 

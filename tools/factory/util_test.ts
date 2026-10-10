@@ -1,6 +1,6 @@
 import { assert, assertEquals } from "@std/assert"
 import { join } from "@std/path"
-import { runToLogUntil } from "./util.ts"
+import { run, runToLogUntil } from "./util.ts"
 
 Deno.test("runToLogUntil kills a long run at the first matching line", async () => {
   const dir = await Deno.makeTempDir()
@@ -35,4 +35,25 @@ Deno.test("runToLogUntil lets a clean run finish and reports its exit code", asy
   } finally {
     await Deno.remove(dir, { recursive: true })
   }
+})
+
+Deno.test("run kills a child that outlives timeoutMs and reports code 124", async () => {
+  const t0 = Date.now()
+  const r = await run(
+    ["deno", "eval", "await new Promise((r) => setTimeout(r, 60000))"],
+    { timeoutMs: 500 },
+  )
+  assertEquals(r.code, 124)
+  assert(r.stderr.includes("timed out after 500 ms"), r.stderr)
+  assert(Date.now() - t0 < 30_000, "should not wait for the 60 s sleep")
+})
+
+Deno.test("run without timeoutMs leaves a slow child alone", async () => {
+  const r = await run([
+    "deno",
+    "eval",
+    "await new Promise((r) => setTimeout(r, 300)); console.log('done')",
+  ])
+  assertEquals(r.code, 0)
+  assertEquals(r.stdout.trim(), "done")
 })
