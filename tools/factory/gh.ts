@@ -82,6 +82,11 @@ export async function comment(number: number, body: string): Promise<void> {
   await gh(["issue", "comment", String(number), "--repo", config.repo, "--body-file", "-"], body)
 }
 
+/// Replace an issue's body.
+export async function editBody(number: number, body: string): Promise<void> {
+  await gh(["issue", "edit", String(number), "--repo", config.repo, "--body-file", "-"], body)
+}
+
 export type PrOptions = { head: string; title: string; body: string }
 
 /// Open a draft PR into the integration branch; returns its URL.
