@@ -1,78 +1,74 @@
 # Vehicle baseline triage (issue #166)
 
-Status: **static triage only.** This lane has no compiler and must not run `cata_test`. Every run
-column below is **not observed**. Nothing here is a pass/fail measurement.
-
-Branch `factory/166-triage-flaky-vehicle-baseline-failures`, base HEAD `cd5ff54dd6`.
+Branch `factory/166-triage-flaky-vehicle-baseline-failures`. Observed on MSVC RelWithDebInfo,
+seed 1, absolute test-exe paths. Earlier relative-path runs are void (they may have executed
+bootstrap's binary).
 
 ## Acceptance status
 
-| Step                                                                                                    | Status                               |
-| ------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| Rebuild `cataclysm-bn-tiles` and `cata_test-tiles` from HEAD                                            | not observed (no build in this lane) |
-| `[vehicle]` run x5, isolated, per case                                                                  | not observed                         |
-| Full suite run x1, `rolling_steering_turns_vehicle` and `pulling_away_with_cruise_accelerates` recorded | not observed                         |
+| Step                                      | Status                                  |
+| ----------------------------------------- | --------------------------------------- |
+| Build `cata_test-tiles` from working tree | observed, ok (`build_fix2.log`)         |
+| `[vehicle]` seed 1                        | observed (`vehicle_fix2.log`)           |
+| `[vehicle]` declaration order             | observed (`vehicle_decl2.log`)          |
+| Full suite `~[.]` seed 1                  | observed (`full_fix2.log`), see Results |
+| Isolated runs x5 per case                 | not done                                |
 
-## Baseline cases
+## Results: full suite, seed 1
 
-| Case                                   | Location                           | Isolated runs 1-5 | Full suite   | Classification           |
-| -------------------------------------- | ---------------------------------- | ----------------- | ------------ | ------------------------ |
-| `rolling_steering_turns_vehicle`       | `tests/vehicle_test.cpp:1260-1275` | not observed      | not observed | unclassified (needs run) |
-| `pulling_away_with_cruise_accelerates` | `tests/vehicle_test.cpp:1352-1366` | not observed      | not observed | unclassified (needs run) |
+1430 cases: 1421 passed, 5 failed, 1 skipped (not identified), 3 failed as expected.
 
-No case is classified as a test defect, a product bug, or flaky, because each needs run output to
-decide. The static reading below narrows the candidates.
+Unexpected failures, all in the baseline:
 
-### `rolling_steering_turns_vehicle`
+| Case                                                       | Location                                      | Note                        |
+| ---------------------------------------------------------- | --------------------------------------------- | --------------------------- |
+| `rolling_steering_turns_vehicle`                           | `tests/vehicle_test.cpp:1274` (`0 == 15`)     | Box2D steering, see below   |
+| `driver_items_craft_by_recipe_id_makes_the_item`           | `tests/driver_items_test.cpp:450`             | not investigated            |
+| `place_player_can_safely_move_multiple_submaps`            | `tests/map_test.cpp:586`                      | not investigated            |
+| MSX++UnDeadPeopleEdition cross-sheet sprite audit          | `tests/tileset_config_audit_test.cpp:215-232` | not investigated (5 checks) |
+| the rebuild plan lists the levels the dirty state licenses | `tests/level_cache_freshness_test.cpp:675`    | not investigated            |
 
-- Uses `make_presteer_fixture()` (`:1177-1187`), which does not board the avatar. Control comes from
-  the debug tag `IN_CONTROL_OVERRIDE` (`src/vehicle.cpp:484`, consumed in `player_in_control`).
-- Steers with `pldrive({1,0,0})` (`src/vehicle_move.cpp:1393`) and runs one `vehmove()`, then
-  expects `face.dir() == 15` at `:1274`.
-- The assertion depends on the presteer snap at `src/vehicle_move.cpp:1461-1467` and on
-  `presteer_steps` clamping. Neither is exercised by this run, so the failing value is unknown.
+Expected failures, not in the baseline: `avatar diving` (`[!mayfail]`),
+`all_nutrition_starve_test` (`[!mayfail]`), and `box2d_map_load_does_not_accumulate_colliders`
+(`[!shouldfail]`, `tests/vehicle_test.cpp:1120`).
 
-### `pulling_away_with_cruise_accelerates`
+Removed from `baselineFailures` (pass in this run):
+`box2d_terrain_colliders_build_and_rebuild`, `pulling_away_with_cruise_accelerates`.
 
-- Uses `make_driving_fixture()` (`:1283-1303`): avatar boarded on CONTROLS, `player_in_control`
-  true without the override.
-- Throttle: `pldrive({0,-1,0})` with cruise on calls `cruise_thrust(179)`
-  (`src/vehicle_move.cpp:1474-1477`). `cruise_thrust` clamps to `max_velocity()` at
-  `src/vehicle_move.cpp:379-382`. A non-positive `max_velocity()` would fail `:1362`.
-- Motion: three `vehmove()` calls. The cruise branch calls `thrust(±1)`
-  (`src/vehicle.cpp:3255-3256`). `thrust()` returns early when `accel == 0` while thrusting
-  (`src/vehicle_move.cpp:210-220`), which would leave `velocity` at 0 and fail `:1365`.
-- The two checks are `:1362` (`cruise_velocity > 0`) and `:1365` (`velocity > 0`). Which one fails
-  is unknown.
-- Sibling `pulling_away_with_cruise_after_presteer_accelerates` (`:1370-1391`) uses the same
-  fixture and passes. The only difference is a preceding `pldrive({1,0,0})`. That is a clue, not a
-  diagnosis.
-- [INFERENCE] Both fixtures call `add_vehicle(..., 100, 0)` (`:1182`, `:1288`). The meaning of the
-  trailing `0` was not verified. If it leaves the car unfuelled, `current_acceleration()` and
-  `max_velocity()` could be zero, but that would also hit the sibling, so it does not explain the
-  split by itself.
+## Fixed in test setup
 
-### Discriminating run (to do on a machine with a build)
+### `can autodrive` is order-dependent (leak, fixed)
 
-Add temporary output, then remove it before any commit:
+- Under `[vehicle]` seed 1 it failed (`1 == 0` at `tests/vehicle_test.cpp:531`). Solo and in
+  declaration order it passed.
+- Probe output: `Character::sight_max` stuck at 0 (`unimpaired_range() == 0`), so only the
+  avatar's own tile was visible. Light was ruled out (`cached=100`, `light_mod=0`).
+- Cause: three `[vehicle]` tests apply a 365-day blindness to the avatar and never remove it
+  (`tests/vehicle_drag_test.cpp:38`, `tests/vehicle_efficiency_test.cpp:52`,
+  `tests/vehicle_rails_test.cpp:97`). `clear_character()` cleared effects but did not refresh the
+  cached sight limits. Fix: `recalc_sight_limits()` after the effect is cleared
+  (`tests/player_helpers.cpp`). No `src/` change.
 
-1. Before and after each `vehmove()` in `pulling_away_with_cruise_accelerates` and
-   `rolling_steering_turns_vehicle`, print `velocity`, `cruise_velocity`, `current_acceleration()`,
-   `max_velocity()`, `face.dir()` and `turn_dir`.
-2. Run each case alone, then with the sibling first, and compare the printed values.
-3. Whichever value differs between the failing and passing variants is the cause. Classify it as a
-   product bug (file:line and the one-line cause) or a test defect (fix in `tests/`).
+### Avatar placed before map clear (leak, fixed)
 
-## Fixture and leak checks (static, verified)
+- `clear_states()` (`tests/state_helpers.cpp`) placed the avatar before `clear_map()`.
+  `clear_map()` re-anchors the reality bubble, so `bub_to_abs()` (avatar-derived) and
+  `map_local_to_abs()` (map-derived) disagreed and `critter_at` returned nullptr.
+- Fix: the avatar is placed after the map is cleared. This fixed `vehicle_occupant_commit`,
+  `vehicle_collision_with_hallucination`, `vehicle_rails` and `pulling_away_with_cruise_accelerates`
+  in the seed-1 `[vehicle]` run.
 
-- `make_presteer_fixture()` and `make_driving_fixture()` both call `clear_all_state()`
-  (`tests/vehicle_test.cpp:1178`, `:1284`). The fixtures do not inherit state.
-- The cross-test anchor leak is fixed. `clear_map()` re-anchors the bubble to a canonical xy
-  (`tests/map_helpers.cpp:117-132`).
-- Vehicles are cleared with the map. `clear_map()` calls `wipe_map_terrain()`
-  (`tests/map_helpers.cpp:137`), which calls `clear_vehicles()` (`:40-51`). A vehicle left over
-  from a previous test does not survive into these fixtures.
-- No test defect was confirmed in the fixtures, so no `tests/` edits are made in this lane.
+## Open: `rolling_steering_turns_vehicle` (product path, not fixed)
+
+- The fixture (`make_presteer_fixture`) requires `box2d_position_authority`. Under authority,
+  `vehicle::act_on_map()` returns early (`src/vehicle_move.cpp:1737`), and facing is read back from
+  Box2D body rotation (`src/physics/physics_world.cpp:628-629`).
+- Fails solo as well (`rolling_steering_turns_vehicle` alone, seed 1: `0 == 15` at
+  `tests/vehicle_test.cpp:1274`), so it is not order-dependent and not a test-setup leak.
+- The test assumes the legacy tile-step steering path, but its fixture runs under Box2D position
+  authority. Not traced: why one `vehmove()` tick does not turn the body.
+- Decision (user): keep the entry in `baselineFailures` and record this as an open product defect.
+  No code or test change in #166.
 
 ## Ticket corrections
 
@@ -84,14 +80,11 @@ The ticket's line references do not match the current file (1453 lines):
 | `in_vehicle` check at `:1298`    | `:1295` (`:1298` is `you.controlling_vehicle = true`)                                                                  |
 | seat-move checks at `:1454-1455` | `:1441-1443` (`avatar_cannot_walk_inside_rolling_vehicle`) and `:1451-1452` (`avatar_can_walk_inside_stopped_vehicle`) |
 
-`box2d_map_load_does_not_accumulate_colliders` (`:1086-1124`) is tagged `[!shouldfail]`. Its
-`REQUIRE(count_home > 0)` failing is an expected failure. It is reported as a failure only if the
-spec passes, so it is not a baseline failure.
-
 ## Not touched
 
-- `tests/npc_vehicle_muscle_test.cpp` `npc_muscle_engine_energy_consumption` (`:242-289`) is not in
-  the baseline. Its `CHECK(initial_fuel >= 10)` at `:285` is weak. It is not changed here, because
-  the failure is not observed.
-- `baselineFailures` in `tools/factory/config.json` and `config.ts` is a protected path and is not
-  edited in this lane.
+- `tests/npc_vehicle_muscle_test.cpp` `npc_muscle_engine_energy_consumption` (`:242-289`) has a weak
+  `CHECK(initial_fuel >= 10)` at `:285`. Not changed; its failure was not observed.
+- The four non-vehicle baseline entries (`driver_items`, `place_player`, MSX, rebuild plan) are
+  unchanged and remain in the baseline.
+- `baselineFailures` (`tools/factory/config.ts`) is shrunk by two entries and nothing is added. It is
+  a protected path in a factory lane.
