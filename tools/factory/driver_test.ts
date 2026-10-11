@@ -1,5 +1,12 @@
 import { assertEquals, assertStringIncludes } from "@std/assert"
-import { parseVerdict, pickNext, prTitle, renderPrBody } from "./driver.ts"
+import {
+  blockComment,
+  blockLabels,
+  parseVerdict,
+  pickNext,
+  prTitle,
+  renderPrBody,
+} from "./driver.ts"
 import type { Issue } from "./gh.ts"
 import type { Stamp } from "./gate.ts"
 
@@ -9,6 +16,8 @@ const issue = (number: number, body = "", title = `t${number}`): Issue => ({
   body,
   labels: ["factory:ready"],
   state: "OPEN",
+  createdAt: "2026-01-01T00:00:00Z",
+  updatedAt: "2026-01-01T00:00:00Z",
 })
 
 Deno.test("only an exact first-line verdict counts; a verdict buried later is ignored", () => {
@@ -73,4 +82,14 @@ Deno.test("the PR body links the issue, reports the gate and reviewer, and keeps
   assertStringIncludes(body, "- [x] This PR used AI assistance.")
   // The Why section comes before Testing, as in the template.
   assertEquals(body.indexOf("Closes #12") < body.indexOf("Reviewer: PASS"), true)
+})
+
+Deno.test("a needs-human block adds factory:needs-human and says so in its comment; others do not", () => {
+  assertEquals(blockLabels(false), ["factory:blocked"])
+  assertEquals(blockLabels(true), ["factory:blocked", "factory:needs-human"])
+  assertEquals(blockComment("gate broke", false), "factory: blocked.\n\ngate broke")
+  assertEquals(
+    blockComment("gate broke", true),
+    "factory: blocked (needs human).\n\ngate broke",
+  )
 })

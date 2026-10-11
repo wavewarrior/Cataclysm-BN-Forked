@@ -204,7 +204,7 @@ deno task docs:gen
 
 ## Factory (unattended lanes)
 
-GitHub issues on the fork are the queue. `deno task factory run` gives each `factory:ready` ticket its own herdr worktree (`wt-factory-<issue>`), runs an implementer, then `deno task gate --tier full`, then a read-only reviewer, and only then pushes a `factory/*` branch and opens a draft PR into `feature/improvements`. The human approves a spec once (`deno task factory release <slug>`) and merges PRs. Design: `plans/agentic-software-factory.md`; numbers and the protected-path list: `tools/factory/config.ts`.
+GitHub issues on the fork are the queue. `deno task factory run` gives each `factory:ready` ticket its own herdr worktree (`wt-factory-<issue>`), runs an implementer, then `deno task gate --tier full`, then a read-only reviewer, and only then pushes a `factory/*` branch and opens a draft PR into `feature/improvements`. The human approves a spec once (`deno task factory release <slug>`) and merges PRs. A `factory:needs-human` ticket is blocked on a person; its comment says what is needed. Nightly triage feeds are `deno task factory triage needs-human|stale --json`; `deno task factory unblock <issue>` re-queues a blocked ticket. Design: `plans/agentic-software-factory.md`; numbers and the protected-path list: `tools/factory/config.ts`.
 
 One skill owns each phase:
 

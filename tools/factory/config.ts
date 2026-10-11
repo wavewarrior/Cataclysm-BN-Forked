@@ -8,6 +8,8 @@ export const config = {
   /// Gate failures AND reviewer FAILs share this budget.
   maxFixRetries: 2,
   ticketWallClockMin: 90,
+  /// `triage stale` default: a ticket idle for more than this many days is stale.
+  staleTicketDays: 7,
   models: {
     implementer: "anthropic/claude-haiku-5-5",
     reviewer: "anthropic/claude-sonnet-5-5",

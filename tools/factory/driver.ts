@@ -51,6 +51,17 @@ export function prTitle(title: string): string {
   return isConventionalTitle(title) ? title : `chore: ${title}`
 }
 
+/// Labels a blocked ticket gets. `needsHuman` adds `factory:needs-human`: a retry cannot fix it.
+export function blockLabels(needsHuman: boolean): string[] {
+  return needsHuman ? ["factory:blocked", "factory:needs-human"] : ["factory:blocked"]
+}
+
+/// The comment a blocked ticket receives; a needs-human stop says so on its first line.
+export function blockComment(reason: string, needsHuman: boolean): string {
+  const head = needsHuman ? "factory: blocked (needs human)." : "factory: blocked."
+  return `${head}\n\n${reason}`
+}
+
 export function implementerPrompt(issue: Issue, ticketPath: string): string {
   return `/skill:implement Implement GitHub issue #${issue.number} (${issue.title}). The full ticket is in ${ticketPath}: read it first and follow it exactly. Add or update the tests it names, commit your work to the current branch with conventional-commit messages, and stop. Do not push, open PRs or use gh. Do not build and do not run cata_test: this shell has no compiler environment, and the gate builds and runs the ticket's test tags for you.`
 }
@@ -156,12 +167,16 @@ export async function runTicket(
   const say = (msg: string) =>
     console.log(`#${n} +${((Date.now() - started) / 60000).toFixed(1)}m ${msg}`)
 
-  const block = async (reason: string): Promise<TicketResult> => {
+  const block = async (
+    reason: string,
+    opts: { needsHuman?: boolean } = {},
+  ): Promise<TicketResult> => {
+    const needsHuman = opts.needsHuman ?? false
     console.log(`#${n} blocked: ${reason}`)
-    await editLabels(n, { add: ["factory:blocked"], remove: ["factory:in-progress"] }).catch(
+    await editLabels(n, { add: blockLabels(needsHuman), remove: ["factory:in-progress"] }).catch(
       () => {},
     )
-    await comment(n, `factory: blocked.\n\n${reason}`).catch(() => {})
+    await comment(n, blockComment(reason, needsHuman)).catch(() => {})
     return { outcome: "blocked", reason }
   }
 
@@ -169,7 +184,10 @@ export async function runTicket(
     const ticket = makeTicket(issue)
     const missing = missingSections(ticket.sections)
     if (missing.length > 0) {
-      return await block(`ticket is missing required section(s): ${missing.join(", ")}`)
+      return await block(
+        `ticket is missing required section(s): ${missing.join(", ")}`,
+        { needsHuman: true },
+      )
     }
 
     const branch = branchName(config.branchPrefix, n, issue.title)
@@ -226,6 +244,7 @@ export async function runTicket(
     if (outcome.state !== "idle" && outcome.state !== "done") {
       return await block(
         `implementer ended ${outcome.state}: ${outcome.detail}\n${await agentRead(implName)}`,
+        { needsHuman: true },
       )
     }
 
@@ -260,6 +279,7 @@ export async function runTicket(
           `the gate broke in its own tooling (not the change): ${stamp.infraSteps.join(", ")}.\n\n${
             steps.map((s) => `### ${s.name}\n${s.tail}`).join("\n\n")
           }`,
+          { needsHuman: true },
         )
       }
       if (gateRun !== 0 || !stamp?.ok) {
@@ -295,12 +315,16 @@ export async function runTicket(
       const headBefore = await git(path, "rev-parse", "HEAD")
       outcome = await agentPrompt(implName, feedback, remaining())
       if (outcome.state !== "idle" && outcome.state !== "done") {
-        return await block(`implementer ended ${outcome.state} while fixing: ${outcome.detail}`)
+        return await block(
+          `implementer ended ${outcome.state} while fixing: ${outcome.detail}`,
+          { needsHuman: true },
+        )
       }
       // No new commit means the same tree would fail the same gate: stop rather than re-run it.
       if ((await git(path, "rev-parse", "HEAD")) === headBefore) {
         return await block(
           `the implementer made no commit after feedback; the gate would fail the same way.\n\n${feedback}`,
+          { needsHuman: true },
         )
       }
     }
@@ -323,7 +347,9 @@ export async function runTicket(
     console.log(`#${n} -> ${url}`)
     return { outcome: "pr", url }
   } catch (error) {
-    return await block(`driver error: ${error instanceof Error ? error.message : error}`)
+    return await block(`driver error: ${error instanceof Error ? error.message : error}`, {
+      needsHuman: true,
+    })
   }
 }
 
