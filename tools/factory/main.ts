@@ -7,7 +7,8 @@
 ///   status             tickets by label, lane locks and herdr agents
 ///   stop <issue>       close a ticket's panes and mark it blocked
 ///   triage <kind>      nightly triage feeds: `needs-human` or `stale` (JSON; `--pretty` for text)
-///   unblock <issue>    re-queue a blocked ticket as ready (`--draft` for draft)
+///   triage apply <file> validate and run triager proposals from a JSON file (rejections are rows, exit 0)
+///   unblock <issue>    re-queue a blocked ticket as ready (`--draft` for draft; `--note`/`--note-file` for guidance)
 ///   watch              poll for ready tickets; run a pass as soon as one is pickable
 ///   boot               open the factory herdr workspace: operator, watcher and status panes
 import { Command } from "@cliffy/command"
@@ -42,7 +43,7 @@ import { publishDrafts, type TicketDraft, validateDrafts } from "./publish.ts"
 import { acquireLane, lanePathFor, readLanes, releaseLane } from "./lanes.ts"
 import { git, mainRepoRoot } from "./util.ts"
 import { isRecentlyClaimed, LanesBusyError, watch } from "./watch.ts"
-import { triageCommand, unblockCommand } from "./triage.ts"
+import { applyCommand, triageCommand, unblockCommand } from "./triage.ts"
 
 const repoRoot = () => git(".", "rev-parse", "--show-toplevel")
 
@@ -287,15 +288,29 @@ if (import.meta.main) {
     .action(boot)
     .command("stop <issue:number>", "Stop a ticket and mark it blocked.")
     .action((_, issue) => stop(issue))
-    .command("triage <kind:string>", "Nightly triage feeds: needs-human or stale.")
+    .command(
+      "triage <kind:string> [file:string]",
+      "Nightly triage feeds: needs-human or stale; or `apply <file>`.",
+    )
     .option("--days <n:number>", "stale: idle for more than this many days", {
       default: config.staleTicketDays,
     })
     .option("--json", "print JSON (the default)")
     .option("--pretty", "print text instead of JSON")
-    .action((opts, kind) => triageCommand(kind, { pretty: opts.pretty ?? false, days: opts.days }))
+    .action((opts, kind, file) =>
+      kind === "apply"
+        ? applyCommand(file)
+        : triageCommand(kind, { pretty: opts.pretty ?? false, days: opts.days })
+    )
     .command("unblock <issue:number>", "Re-queue a blocked ticket as factory:ready.")
     .option("--draft", "re-enter as factory:draft instead")
-    .action((opts, issue) => unblockCommand(issue, opts.draft ? "draft" : "ready"))
+    .option("--note <text:string>", "guidance for the implementer, appended to the ticket body")
+    .option("--note-file <path:string>", "read the guidance from a file")
+    .action((opts, issue) =>
+      unblockCommand(issue, opts.draft ? "draft" : "ready", {
+        note: opts.note,
+        noteFile: opts.noteFile,
+      })
+    )
     .parse(Deno.args)
 }

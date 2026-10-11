@@ -1,9 +1,11 @@
-/// Triage of tickets that need a person: deterministic collectors (no LLM) for a nightly triager,
-/// and `unblock`, the one verb here that writes. Effects arrive as deps so tests can stub gh.
+/// Triage of tickets that need a person: deterministic collectors (no LLM), `unblock`, and
+/// `apply`, the only writer for the nightly triager. Effects arrive as deps so tests can stub gh.
 import { config } from "./config.ts"
 import {
+  closeIssue,
   comment,
   type CommentInfo,
+  editIssueBody,
   editLabels,
   getIssue,
   gh,
@@ -14,8 +16,9 @@ import {
 
 const DAY_MS = 86_400_000
 const HOUR_MS = 3_600_000
-/// Comment authors whose words count as a human reply. NONE, BOT and MANNEQUIN do not.
-const HUMAN_ASSOCIATIONS = ["OWNER", "MEMBER", "COLLABORATOR", "CONTRIBUTOR"]
+/// Comment authors whose words count as a human reply. Fork carries upstream committers, so
+/// CONTRIBUTOR does not count: anyone must not steer the agent.
+const HUMAN_ASSOCIATIONS = ["OWNER", "MEMBER", "COLLABORATOR"]
 /// The driver's block comment, or a human's `stop`: both mark when a ticket was blocked.
 const BLOCK_PREFIXES = ["factory: blocked", "factory: stopped"]
 /// Every state a ticket can sit in without moving on by itself.
@@ -26,6 +29,9 @@ const STALE_LABELS = [
   "factory:review",
   "factory:blocked",
 ]
+/// Triage actions `apply` accepts; anything else is rejected as data.
+const APPLY_ACTIONS = ["unblock-ready", "unblock-draft", "close", "comment", "needs-human"]
+const NOTE_MAX = 4000
 
 export type TriageDeps = {
   listIssues: (labels: string[]) => Promise<Issue[]>
@@ -34,9 +40,24 @@ export type TriageDeps = {
 
 export type UnblockDeps = {
   getIssue: (number: number) => Promise<Issue>
+  listComments: (number: number) => Promise<CommentInfo[]>
+  editIssue: (number: number, body: string) => Promise<void>
   editLabels: (number: number, change: { add?: string[]; remove?: string[] }) => Promise<void>
   comment: (number: number, body: string) => Promise<void>
   login: () => Promise<string>
+}
+
+export type ApplyDeps = Omit<UnblockDeps, "login"> & {
+  closeIssue: (number: number, note: string) => Promise<void>
+}
+
+export type ApplyInput = { number: number; action: string; note?: string }
+
+export type ApplyRow = {
+  number: number | null
+  action: string | null
+  ok: boolean
+  problem?: string
 }
 
 export type NeedsHumanRow = {
@@ -60,6 +81,18 @@ export type StaleRow = {
   url: string
 }
 
+/// A human reply: a human association, and not the factory's own comments (the driver posts
+/// through the owner's token, so they read as OWNER).
+export function isHumanReply(c: CommentInfo): boolean {
+  return HUMAN_ASSOCIATIONS.includes(c.association) && !c.body.trimStart().startsWith("factory:")
+}
+
+function newestHumanReply(comments: CommentInfo[]): CommentInfo | undefined {
+  return comments.filter(isHumanReply).sort((a, b) =>
+    Date.parse(b.publishedAt) - Date.parse(a.publishedAt)
+  )[0]
+}
+
 /// One blocked ticket's row. `blockedAt` is the newest block marker (else the last update); a human
 /// reply is a human comment posted after it.
 export function needsHumanRow(
@@ -71,12 +104,9 @@ export function needsHumanRow(
     .filter((c) => BLOCK_PREFIXES.some((p) => c.body.startsWith(p)))
     .map((c) => Date.parse(c.publishedAt))
   const blockedMs = markers.length > 0 ? Math.max(...markers) : Date.parse(issue.updatedAt)
-  const replies = comments
-    .filter((c) =>
-      HUMAN_ASSOCIATIONS.includes(c.association) && Date.parse(c.publishedAt) > blockedMs
-    )
-    .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))
-  const reply = replies[0]
+  const reply = newestHumanReply(
+    comments.filter((c) => Date.parse(c.publishedAt) > blockedMs),
+  )
   return {
     number: issue.number,
     title: issue.title,
@@ -131,14 +161,29 @@ export async function staleSweep(
 
 /// Clear a block so the ticket re-enters the queue (`ready`) or drafting (`draft`). Refuses a
 /// ticket that is not blocked, so a stale command cannot quietly re-queue live work.
+///
+/// Guidance reaches the implementer through the issue body: the note (or, for `ready` without a
+/// note, the newest human reply) is appended under `## Human guidance`. The ticket parser ignores
+/// unknown sections, but `ticket.md` is the issue body verbatim, so the agent reads the section.
 export async function unblock(
   deps: UnblockDeps,
   number: number,
   target: "ready" | "draft",
+  opts: { note?: string } = {},
 ): Promise<void> {
+  if (opts.note !== undefined && opts.note.trim() === "") {
+    throw new Error("the note is empty; give words for the implementer or omit the note")
+  }
   const issue = await deps.getIssue(number)
   if (!issue.labels.includes("factory:blocked")) {
     throw new Error(`#${number} is not blocked (no factory:blocked label); nothing to unblock`)
+  }
+  let note = opts.note
+  if (note === undefined && target === "ready") {
+    note = newestHumanReply(await deps.listComments(number))?.body
+  }
+  if (note !== undefined) {
+    await deps.editIssue(number, `${issue.body}\n\n## Human guidance\n\n${note}\n`)
   }
   const by = await deps.login()
   await deps.editLabels(number, {
@@ -148,12 +193,97 @@ export async function unblock(
   await deps.comment(number, `factory: unblocked by ${by} (${target}).`)
 }
 
-const liveDeps: TriageDeps & UnblockDeps = {
+function parseApplyInput(raw: unknown): ApplyInput | string {
+  if (typeof raw !== "object" || raw === null) return "entry must be an object"
+  const number = "number" in raw ? raw.number : undefined
+  const action = "action" in raw ? raw.action : undefined
+  const note = "note" in raw ? raw.note : undefined
+  if (typeof number !== "number" || !Number.isInteger(number)) return "number must be an integer"
+  if (typeof action !== "string") return "action must be a string"
+  if (note !== undefined && typeof note !== "string") return "note must be text"
+  return { number, action, note }
+}
+
+/// Validate one proposed action against the live issue, then run it. Every rejection is a row.
+async function applyOne(deps: ApplyDeps, raw: unknown, login: string): Promise<ApplyRow> {
+  const parsed = parseApplyInput(raw)
+  if (typeof parsed === "string") return { number: null, action: null, ok: false, problem: parsed }
+  const { number, action, note } = parsed
+  const reject = (problem: string): ApplyRow => ({ number, action, ok: false, problem })
+  if (!APPLY_ACTIONS.includes(action)) return reject(`unknown action ${JSON.stringify(action)}`)
+  if (note !== undefined && (typeof note !== "string" || note.length > NOTE_MAX)) {
+    return reject(`note must be text of at most ${NOTE_MAX} characters`)
+  }
+  if (
+    (action === "close" || action === "comment") && (note === undefined || note.trim() === "")
+  ) {
+    return reject(`${action} needs a non-empty note`)
+  }
+  let issue: Issue
+  try {
+    issue = await deps.getIssue(number)
+  } catch {
+    // Any lookup failure is reported as missing: the spec fixes this wording, and a transient gh
+    // error reads the same way. The row says what was refused; the operator re-runs to tell apart.
+    return reject("issue does not exist")
+  }
+  if (issue.state.toUpperCase() !== "OPEN") return reject("issue is not open")
+  if (!issue.labels.some((l) => l.startsWith("factory:"))) {
+    return reject("issue carries no factory: label")
+  }
+  try {
+    switch (action) {
+      case "unblock-ready":
+      case "unblock-draft":
+        await unblock(
+          { ...deps, login: () => Promise.resolve(login) },
+          number,
+          action === "unblock-ready" ? "ready" : "draft",
+          { note },
+        )
+        break
+      case "close":
+        await deps.closeIssue(number, note!)
+        break
+      case "comment":
+        await deps.comment(number, `factory: triage — ${note}`)
+        break
+      case "needs-human":
+        await deps.editLabels(number, {
+          add: ["factory:blocked", "factory:needs-human"],
+          remove: ["factory:ready", "factory:in-progress"],
+        })
+        await deps.comment(
+          number,
+          `factory: triage — ${note ?? "this ticket needs a human decision."}`,
+        )
+        break
+    }
+  } catch (error) {
+    return reject(error instanceof Error ? error.message : String(error))
+  }
+  return { number, action, ok: true }
+}
+
+/// Apply triager proposals in order; each row says whether it ran or why it was refused.
+export async function applyActions(
+  deps: ApplyDeps,
+  actions: unknown[],
+  viewerLogin: string,
+): Promise<ApplyRow[]> {
+  const rows: ApplyRow[] = []
+  for (const input of actions) rows.push(await applyOne(deps, input, viewerLogin))
+  return rows
+}
+
+const liveDeps: TriageDeps & UnblockDeps & ApplyDeps = {
   listIssues,
   listComments,
   getIssue,
+  editIssue: editIssueBody,
   editLabels,
   comment,
+  closeIssue,
   login: async () => (await gh(["api", "user", "--jq", ".login"])).trim(),
 }
 
@@ -188,17 +318,46 @@ export async function triageCommand(
     const rows = await staleSweep(liveDeps, now, opts.days)
     console.log(opts.pretty ? prettyStale(rows) : JSON.stringify(rows, null, 2))
   } else {
-    console.error(`unknown triage kind "${kind}": use needs-human or stale`)
+    console.error(`unknown triage kind "${kind}": use needs-human, stale or apply`)
     Deno.exit(2)
   }
 }
 
-export async function unblockCommand(number: number, target: "ready" | "draft"): Promise<void> {
+export async function unblockCommand(
+  number: number,
+  target: "ready" | "draft",
+  opts: { note?: string; noteFile?: string } = {},
+): Promise<void> {
   try {
-    await unblock(liveDeps, number, target)
+    if (opts.note !== undefined && opts.noteFile !== undefined) {
+      throw new Error("give --note or --note-file, not both")
+    }
+    const note = opts.noteFile !== undefined ? await Deno.readTextFile(opts.noteFile) : opts.note
+    await unblock(liveDeps, number, target, { note })
     console.log(`#${number} unblocked -> factory:${target}`)
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error))
     Deno.exit(1)
   }
+}
+
+/// `triage apply <file>`: the only writer for the nightly triager. Reads a JSON array of proposed
+/// actions, validates each against the live issue, runs the valid ones, and prints one row per
+/// action. Rejections are data (exit 0); an unreadable or malformed file exits 1.
+export async function applyCommand(file: string | undefined): Promise<void> {
+  if (file === undefined) {
+    console.error("usage: triage apply <file.json>")
+    Deno.exit(2)
+  }
+  let actions: unknown[]
+  try {
+    const parsed: unknown = JSON.parse(await Deno.readTextFile(file))
+    if (!Array.isArray(parsed)) throw new Error("expected a JSON array of actions")
+    actions = parsed
+  } catch (error) {
+    console.error(`cannot read ${file}: ${error instanceof Error ? error.message : error}`)
+    Deno.exit(1)
+  }
+  const login = await liveDeps.login()
+  console.log(JSON.stringify(await applyActions(liveDeps, actions, login), null, 2))
 }

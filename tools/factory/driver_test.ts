@@ -2,10 +2,13 @@ import { assertEquals, assertStringIncludes } from "@std/assert"
 import {
   blockComment,
   blockLabels,
+  freshStartCommands,
   parseVerdict,
   pickNext,
   prTitle,
   renderPrBody,
+  workspaceLabel,
+  workspacePrefix,
 } from "./driver.ts"
 import type { Issue } from "./gh.ts"
 import type { Stamp } from "./gate.ts"
@@ -92,4 +95,19 @@ Deno.test("a needs-human block adds factory:needs-human and says so in its comme
     blockComment("gate broke", true),
     "factory: blocked (needs human).\n\ngate broke",
   )
+})
+
+Deno.test("freshStartCommands removes the worktree then its branch", () => {
+  assertEquals(freshStartCommands("/repo", "/wt/wt-factory-3", "factory/3"), [
+    ["git", "-C", "/repo", "worktree", "remove", "--force", "/wt/wt-factory-3"],
+    ["git", "-C", "/repo", "branch", "-D", "factory/3"],
+  ])
+})
+
+Deno.test("workspaceLabel carries the ticket prefix that re-pick matches on", () => {
+  const label = workspaceLabel(7, "Fix the thing")
+  assertEquals(label, "#7 Fix the thing")
+  assertEquals(label.startsWith(workspacePrefix(7)), true)
+  assertEquals(label.startsWith(workspacePrefix(70)), false)
+  assertEquals(workspaceLabel(7, "x".repeat(200)).length, 60)
 })

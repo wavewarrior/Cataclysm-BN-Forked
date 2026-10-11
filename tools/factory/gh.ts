@@ -114,6 +114,16 @@ export async function comment(number: number, body: string): Promise<void> {
   await gh(["issue", "comment", String(number), "--repo", config.repo, "--body-file", "-"], body)
 }
 
+/// Replace an issue's body (the ticket the implementer reads).
+export async function editIssueBody(number: number, body: string): Promise<void> {
+  await gh(["issue", "edit", String(number), "--repo", config.repo, "--body-file", "-"], body)
+}
+
+/// Close an issue with a closing comment.
+export async function closeIssue(number: number, note: string): Promise<void> {
+  await gh(["issue", "close", String(number), "--repo", config.repo, "--comment", note])
+}
+
 export type PrOptions = { head: string; title: string; body: string }
 
 /// Open a draft PR into the integration branch; returns its URL.

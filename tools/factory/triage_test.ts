@@ -1,6 +1,15 @@
 import { assertEquals, assertRejects } from "@std/assert"
 import type { CommentInfo, Issue } from "./gh.ts"
-import { needsHumanFeed, staleSweep, type TriageDeps, unblock, type UnblockDeps } from "./triage.ts"
+import {
+  applyActions,
+  type ApplyDeps,
+  isHumanReply,
+  needsHumanFeed,
+  staleSweep,
+  type TriageDeps,
+  unblock,
+  type UnblockDeps,
+} from "./triage.ts"
 
 const DAY = 86_400_000
 const NOW = Date.parse("2026-10-11T12:00:00Z")
@@ -122,6 +131,8 @@ Deno.test("unblock swaps labels to ready by default, draft on request, and comme
   const calls: { edit?: unknown; comment?: unknown } = {}
   const deps = (labels: string[]): UnblockDeps => ({
     getIssue: (n) => Promise.resolve(issue(n, labels)),
+    listComments: () => Promise.resolve([]),
+    editIssue: () => Promise.resolve(),
     editLabels: (n, change) => {
       calls.edit = { n, change }
       return Promise.resolve()
@@ -153,6 +164,11 @@ Deno.test("unblock refuses an issue that is not blocked and changes nothing", as
       unblock(
         {
           getIssue: (n) => Promise.resolve(issue(n, ["factory:ready"])),
+          listComments: () => Promise.resolve([]),
+          editIssue: () => {
+            touched = true
+            return Promise.resolve()
+          },
           editLabels: () => {
             touched = true
             return Promise.resolve()
@@ -170,4 +186,168 @@ Deno.test("unblock refuses an issue that is not blocked and changes nothing", as
     "not blocked",
   )
   assertEquals(touched, false)
+})
+
+Deno.test("unblock with a note appends it to the body under Human guidance", async () => {
+  let body: string | undefined
+  await unblock(
+    {
+      getIssue: (n) =>
+        Promise.resolve({ ...issue(n, ["factory:blocked"]), body: "## Purpose\n\nx" }),
+      listComments: () => Promise.resolve([]),
+      editIssue: (_n, text) => {
+        body = text
+        return Promise.resolve()
+      },
+      editLabels: () => Promise.resolve(),
+      comment: () => Promise.resolve(),
+      login: () => Promise.resolve("nigel"),
+    },
+    3,
+    "ready",
+    { note: "Use the existing helper." },
+  )
+  assertEquals(body, "## Purpose\n\nx\n\n## Human guidance\n\nUse the existing helper.\n")
+})
+
+Deno.test("unblock to ready without a note takes the newest human reply, never a factory comment", async () => {
+  let body: string | undefined
+  await unblock(
+    {
+      getIssue: (n) => Promise.resolve({ ...issue(n, ["factory:blocked"]), body: "b" }),
+      listComments: () =>
+        Promise.resolve([
+          comment("older", iso(NOW - DAY), "MEMBER"),
+          comment("newer guidance", iso(NOW), "OWNER", "nigel"),
+          comment("factory: unblocked by nigel (ready).", iso(NOW + 1), "OWNER"),
+        ]),
+      editIssue: (_n, text) => {
+        body = text
+        return Promise.resolve()
+      },
+      editLabels: () => Promise.resolve(),
+      comment: () => Promise.resolve(),
+      login: () => Promise.resolve("nigel"),
+    },
+    4,
+    "ready",
+  )
+  assertEquals(body, "b\n\n## Human guidance\n\nnewer guidance\n")
+})
+
+Deno.test("unblock without a note or a human reply leaves the body untouched", async () => {
+  let edited = false
+  const deps = (): UnblockDeps => ({
+    getIssue: (n) => Promise.resolve(issue(n, ["factory:blocked"])),
+    listComments: () =>
+      Promise.resolve([
+        comment("factory: unblocked by nigel (ready).", iso(NOW), "OWNER"),
+        comment("looks fine", iso(NOW), "CONTRIBUTOR"),
+      ]),
+    editIssue: () => {
+      edited = true
+      return Promise.resolve()
+    },
+    editLabels: () => Promise.resolve(),
+    comment: () => Promise.resolve(),
+    login: () => Promise.resolve("nigel"),
+  })
+  await unblock(deps(), 5, "ready")
+  await unblock(deps(), 5, "draft")
+  assertEquals(edited, false)
+})
+
+Deno.test("factory's own comments and non-member comments are not human replies", () => {
+  assertEquals(
+    isHumanReply(comment("factory: unblocked by nigel (ready).", iso(NOW), "OWNER")),
+    false,
+  )
+  assertEquals(isHumanReply(comment("looks good", iso(NOW), "CONTRIBUTOR")), false)
+  assertEquals(isHumanReply(comment("looks good", iso(NOW), "MEMBER")), true)
+})
+
+const applyDeps = (issues: Issue[], calls: string[]): ApplyDeps => ({
+  getIssue: (n) => {
+    const found = issues.find((i) => i.number === n)
+    return found ? Promise.resolve(found) : Promise.reject(new Error("not found"))
+  },
+  listComments: () => Promise.resolve([]),
+  editIssue: (n) => {
+    calls.push(`edit ${n}`)
+    return Promise.resolve()
+  },
+  editLabels: (n, change) => {
+    calls.push(`labels ${n} ${JSON.stringify(change)}`)
+    return Promise.resolve()
+  },
+  comment: (n, body) => {
+    calls.push(`comment ${n} ${body}`)
+    return Promise.resolve()
+  },
+  closeIssue: (n, note) => {
+    calls.push(`close ${n} ${note}`)
+    return Promise.resolve()
+  },
+})
+
+Deno.test("apply runs each valid action, in order, and reports one row per action", async () => {
+  const calls: string[] = []
+  const deps = applyDeps([
+    issue(1, ["factory:blocked", "factory:needs-human"]),
+    issue(2, ["factory:ready"]),
+    issue(3, ["factory:draft"]),
+    issue(4, ["factory:draft"]),
+  ], calls)
+  const rows = await applyActions(deps, [
+    { number: 1, action: "unblock-draft", note: "use the helper" },
+    { number: 2, action: "close", note: "superseded" },
+    { number: 3, action: "comment", note: "see spec" },
+    { number: 4, action: "needs-human", note: "decide" },
+  ], "nigel")
+  assertEquals(rows.map((r) => r.ok), [true, true, true, true])
+  assertEquals(calls, [
+    "edit 1",
+    `labels 1 {"add":["factory:draft"],"remove":["factory:blocked","factory:needs-human"]}`,
+    "comment 1 factory: unblocked by nigel (draft).",
+    "close 2 superseded",
+    "comment 3 factory: triage — see spec",
+    `labels 4 {"add":["factory:blocked","factory:needs-human"],"remove":["factory:ready","factory:in-progress"]}`,
+    "comment 4 factory: triage — decide",
+  ])
+})
+
+Deno.test("apply rejects closed, non-factory, missing-issue, unnoted and unknown actions", async () => {
+  const calls: string[] = []
+  const deps = applyDeps([
+    { ...issue(6, ["factory:ready"]), state: "CLOSED" },
+    issue(7, ["bug"]),
+    issue(8, ["factory:ready"]),
+  ], calls)
+  const rows = await applyActions(deps, [
+    { number: 6, action: "comment", note: "hi" },
+    { number: 7, action: "comment", note: "hi" },
+    { number: 8, action: "close" },
+    { number: 9, action: "comment", note: "hi" },
+    { number: 8, action: "bogus" },
+  ], "nigel")
+  assertEquals(rows.map((r) => [r.number, r.ok, r.problem]), [
+    [6, false, "issue is not open"],
+    [7, false, "issue carries no factory: label"],
+    [8, false, "close needs a non-empty note"],
+    [9, false, "issue does not exist"],
+    [8, false, `unknown action "bogus"`],
+  ])
+  assertEquals(calls, [])
+})
+
+Deno.test("apply on a malformed file exits 1", async () => {
+  const file = await Deno.makeTempFile({ suffix: ".json" })
+  await Deno.writeTextFile(file, "{not json")
+  const out = await new Deno.Command(Deno.execPath(), {
+    args: ["run", "-A", new URL("./main.ts", import.meta.url).pathname, "triage", "apply", file],
+    stdout: "null",
+    stderr: "null",
+  }).output()
+  await Deno.remove(file)
+  assertEquals(out.code, 1)
 })
