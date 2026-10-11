@@ -38,8 +38,9 @@ import {
 } from "./herdr.ts"
 import { publishDrafts, type TicketDraft, validateDrafts } from "./publish.ts"
 import { acquireLane, lanePathFor, readLanes, releaseLane } from "./lanes.ts"
+import { runLoopWith } from "./loop.ts"
 import { git, mainRepoRoot } from "./util.ts"
-import { isRecentlyClaimed, LanesBusyError, watch } from "./watch.ts"
+import { isRecentlyClaimed, watch } from "./watch.ts"
 
 const repoRoot = () => git(".", "rev-parse", "--show-toplevel")
 
@@ -106,50 +107,23 @@ async function runLoop(
   }
   await ensureServer()
   const repo = await mainRepoRoot(".")
-  const running = new Set<Promise<void>>()
-  let started = 0
-  // `gh issue list` reads a search index that lags a label edit by seconds, so a ticket we just
-  // claimed can still be listed as ready. Remember when this process claimed each one.
-  const claims = opts.claims ?? new Map<number, number>()
-  while (started < opts.max) {
-    // A named ticket is read directly: the label list is a search index that can lag an edit.
-    const listed = opts.issue === undefined
-      ? await listIssues(["factory:ready"])
-      : [await getIssue(opts.issue)].filter((i) =>
-        i.state === "OPEN" && i.labels.includes("factory:ready")
-      )
-    const ready = listed.filter((i) => !isRecentlyClaimed(claims, i.number, Date.now()))
-    const next = await pickNext(ready, isClosed)
-    if (!next) {
-      // A running ticket may hand off a follow-up that unblocks a dependent: wait, then rescan.
-      if (running.size > 0) {
-        await Promise.race(running)
-        continue
-      }
-      if (started === 0) {
-        console.log("no factory:ready ticket to run (or its dependencies are still open)")
-      }
-      break
-    }
-    const lane = await acquireLane(next.number)
-    if (!lane) {
-      if (running.size === 0) {
-        throw new LanesBusyError("no lane free and none running: see `status`, `stop <issue>`")
-      }
-      await Promise.race(running)
-      continue
-    }
-    await claim(next)
-    claims.set(next.number, Date.now())
-    started++
-    console.log(`lane ${lane.n}: #${next.number} ${next.title}`)
-    const job: Promise<void> = runTicket(next, lane, { repo })
-      .then((r) => console.log(`lane ${lane.n}: #${next.number} ${r.outcome}`))
-      .finally(() => releaseLane(lane))
-      .finally(() => running.delete(job))
-    running.add(job)
-  }
-  await Promise.all(running)
+  await runLoopWith({
+    listReady: async () =>
+      // A named ticket is read directly: the label list is a search index that can lag an edit.
+      opts.issue === undefined
+        ? await listIssues(["factory:ready"])
+        : [await getIssue(opts.issue)].filter((i) =>
+          i.state === "OPEN" && i.labels.includes("factory:ready")
+        ),
+    pick: (ready) => pickNext(ready, isClosed),
+    explainHolds: () => Promise.resolve(""),
+    acquireLane,
+    releaseLane,
+    claim,
+    runTicket: (issue, lane) => runTicket(issue, lane, { repo }),
+    now: Date.now,
+    log: console.log,
+  }, { max: opts.max, claims: opts.claims })
 }
 
 async function status(): Promise<void> {
