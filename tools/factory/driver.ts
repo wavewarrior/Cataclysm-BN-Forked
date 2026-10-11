@@ -20,8 +20,10 @@ import {
   paneClose,
   paneSplit,
   workspaceClose,
-  workspacesWithPrefix,
   worktreeCreate,
+  type WorktreeEntry,
+  worktreeList,
+  worktreeOpen,
 } from "./herdr.ts"
 import { type Lane, updateLane } from "./lanes.ts"
 import {
@@ -275,6 +277,43 @@ async function blockWithFollowUp(opts: {
   return await block(`${reason}\n\n${notes.join("\n")}`)
 }
 
+/// Lower-case, forward-slash form of a worktree path, so herdr's `\\?\` paths compare equal to plain ones.
+export function normalizeWorktreePath(path: string): string {
+  return path.replaceAll("\\", "/").replace(/^\/\/\?\//, "").replace(/\/+$/, "").toLowerCase()
+}
+
+export type WorktreePlan =
+  | { action: "create" }
+  | { action: "reuse"; closeWorkspace?: string }
+  | { action: "conflict"; reason: string }
+
+/// Reuse the checkout of `want.branch` at `want.path` if it exists; refuse a path or branch held by something else; else create. Never deletes.
+export function planWorktree(
+  entries: WorktreeEntry[],
+  want: { path: string; branch: string },
+): WorktreePlan {
+  const wantPath = normalizeWorktreePath(want.path)
+  const atPath = entries.find((e) => normalizeWorktreePath(e.path) === wantPath)
+  if (atPath) {
+    if (atPath.branch === want.branch) {
+      return { action: "reuse", closeWorkspace: atPath.openWorkspaceId }
+    }
+    const on = atPath.branch ?? "detached HEAD"
+    return {
+      action: "conflict",
+      reason: `worktree ${want.path} is on branch ${on}, not ${want.branch}; remove it by hand`,
+    }
+  }
+  const onBranch = entries.find((e) => e.branch === want.branch)
+  if (onBranch) {
+    return {
+      action: "conflict",
+      reason: `branch ${want.branch} is already checked out at ${onBranch.path}`,
+    }
+  }
+  return { action: "create" }
+}
+
 /// Run one already-claimed ticket to completion. Never throws: failures become `blocked`.
 export async function runTicket(
   issue: Issue,
@@ -316,21 +355,15 @@ export async function runTicket(
     const path = `${config.worktreeRoot}/wt-factory-${n}`
     await git(opts.repo, "fetch", "origin", config.integrationBranch)
 
-    // A re-picked ticket starts fresh: any worktree and branch from an earlier attempt are removed.
-    if (await Deno.stat(path).then(() => true, () => false)) {
-      for (const stale of await workspacesWithPrefix(workspacePrefix(n))) {
-        await workspaceClose(stale)
-      }
-      for (const argv of freshStartCommands(opts.repo, path, branch)) await run(argv)
-    }
-    // Worktree + panes.
-    const wt = await worktreeCreate({
-      cwd: opts.repo,
-      branch,
-      base,
-      path,
-      label: workspaceLabel(n, issue.title),
-    })
+    // Worktree + panes. A blocked ticket's checkout may still exist: resume it, do not die on `already exists`.
+    const plan = planWorktree(await worktreeList(opts.repo), { path, branch })
+    if (plan.action === "conflict") return await block(plan.reason)
+    if (plan.action === "reuse" && plan.closeWorkspace) await workspaceClose(plan.closeWorkspace)
+    const label = workspaceLabel(n, issue.title)
+    const wt = plan.action === "reuse"
+      ? await worktreeOpen({ cwd: opts.repo, path, label })
+      : await worktreeCreate({ cwd: opts.repo, branch, base, path, label })
+    if (plan.action === "reuse") console.log(`#${n} resuming the existing worktree ${path}`)
     await updateLane(lane, {
       branch,
       worktree: path,

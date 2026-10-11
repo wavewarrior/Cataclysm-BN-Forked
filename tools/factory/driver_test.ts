@@ -7,6 +7,7 @@ import {
   freshStartCommands,
   parseVerdict,
   pickNext,
+  planWorktree,
   prTitle,
   renderPrBody,
   rewireDependsOn,
@@ -15,6 +16,7 @@ import {
 } from "./driver.ts"
 import { makeTicket, missingSections } from "./ticket.ts"
 import type { Issue } from "./gh.ts"
+import type { WorktreeEntry } from "./herdr.ts"
 import type { Stamp } from "./gate.ts"
 
 const issue = (number: number, body = "", title = `t${number}`): Issue => ({
@@ -156,4 +158,64 @@ Deno.test("a dependent moved to a follow-up waits for the follow-up, not the blo
   const isClosed = (n: number) => Promise.resolve(closed.has(n))
   assertEquals(await pickNext([before], isClosed), undefined)
   assertEquals((await pickNext([after], isClosed))?.number, 7)
+})
+
+const wtBranch = "factory/170-characterize-the-three-turn-cycle-copies"
+const wtPath = "C:/WORK/GIT_REPOS/wt-factory-170"
+const held = (over: Partial<WorktreeEntry>): WorktreeEntry => ({
+  path: wtPath,
+  branch: wtBranch,
+  openWorkspaceId: undefined,
+  ...over,
+})
+
+Deno.test("planWorktree reuses the existing checkout and closes the workspace holding it", () => {
+  assertEquals(
+    planWorktree([held({ openWorkspaceId: "wG" })], { path: wtPath, branch: wtBranch }),
+    { action: "reuse", closeWorkspace: "wG" },
+  )
+})
+
+Deno.test("planWorktree reuses a checkout that has no open workspace", () => {
+  assertEquals(
+    planWorktree([held({})], { path: wtPath, branch: wtBranch }),
+    { action: "reuse", closeWorkspace: undefined },
+  )
+})
+
+Deno.test("planWorktree creates a worktree when nothing holds the path or the branch", () => {
+  assertEquals(
+    planWorktree([held({ path: "C:/WORK/GIT_REPOS/wt-factory-166", branch: "factory/166-x" })], {
+      path: wtPath,
+      branch: wtBranch,
+    }),
+    { action: "create" },
+  )
+})
+
+Deno.test("planWorktree refuses a path that is checked out on another branch", () => {
+  const plan = planWorktree([held({ branch: "factory/other" })], { path: wtPath, branch: wtBranch })
+  assertEquals(plan.action, "conflict")
+  assertStringIncludes(plan.action === "conflict" ? plan.reason : "", "factory/other")
+})
+
+Deno.test("planWorktree refuses a branch that is checked out at another path", () => {
+  const plan = planWorktree([held({ path: "C:/WORK/GIT_REPOS/wt-elsewhere" })], {
+    path: wtPath,
+    branch: wtBranch,
+  })
+  assertEquals(plan.action, "conflict")
+  assertStringIncludes(plan.action === "conflict" ? plan.reason : "", "wt-elsewhere")
+})
+
+Deno.test("planWorktree matches a path across slash style, case, trailing slash and the \\\\?\\ prefix", () => {
+  assertEquals(
+    planWorktree([
+      held({ path: "\\\\?\\C:\\WORK\\GIT_REPOS\\WT-factory-170\\", openWorkspaceId: "wH" }),
+    ], {
+      path: "c:/work/git_repos/wt-factory-170",
+      branch: wtBranch,
+    }),
+    { action: "reuse", closeWorkspace: "wH" },
+  )
 })
