@@ -11,7 +11,7 @@
 import { Command } from "@cliffy/command"
 import { fromFileUrl } from "@std/path"
 import { config } from "./config.ts"
-import { pickNext, runTicket } from "./driver.ts"
+import { type DepState, depStateOf, describeHolds, holdsOf, pickNext, runTicket } from "./driver.ts"
 import {
   actionsEnabled,
   comment,
@@ -116,7 +116,7 @@ async function runLoop(
           i.state === "OPEN" && i.labels.includes("factory:ready")
         ),
     pick: (ready) => pickNext(ready, isClosed),
-    explainHolds: () => Promise.resolve(""),
+    explainHolds,
     acquireLane,
     releaseLane,
     claim,
@@ -126,6 +126,20 @@ async function runLoop(
   }, { max: opts.max, claims: opts.claims })
 }
 
+/// The state of one dependency, for `explainHolds`. A failed lookup reads as missing.
+async function depState(n: number): Promise<DepState> {
+  try {
+    return depStateOf(await getIssue(n))
+  } catch {
+    return "missing"
+  }
+}
+
+/// Why `ready` tickets are held, or "" when none is: for `status`, the loop's nothing-pickable line and the watcher's idle line.
+async function explainHolds(ready: Issue[]): Promise<string> {
+  return describeHolds(await holdsOf(ready, depState))
+}
+
 async function status(): Promise<void> {
   for (
     const label of ["factory:ready", "factory:in-progress", "factory:review", "factory:blocked"]
@@ -133,6 +147,10 @@ async function status(): Promise<void> {
     const issues = await listIssues([label])
     console.log(`${label} (${issues.length})`)
     for (const i of issues) console.log(`  #${i.number} ${i.title}`)
+    if (label === "factory:ready") {
+      const held = await explainHolds(issues)
+      if (held) console.log(`  held: ${held}`)
+    }
   }
   console.log("lanes:")
   for (const lane of await readLanes()) {
@@ -187,6 +205,7 @@ async function runWatch(opts: { intervalSec: number; once?: boolean }): Promise<
         return (await pickNext(ready, isClosed)) !== undefined
       },
       runPass: () => runLoop({ max: 1000, claims }),
+      explainIdle: async () => explainHolds(await listIssues(["factory:ready"])),
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       log: (line) => console.log(`${new Date().toISOString()} ${line}`),
     })

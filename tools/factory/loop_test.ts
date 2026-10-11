@@ -1,6 +1,6 @@
 import { assertEquals, assertRejects } from "@std/assert"
 import type { TicketResult } from "./driver.ts"
-import { pickNext } from "./driver.ts"
+import { depStateOf, describeHolds, holdsOf, pickNext } from "./driver.ts"
 import type { Issue } from "./gh.ts"
 import type { Lane } from "./lanes.ts"
 import { type LoopDeps, runLoopWith } from "./loop.ts"
@@ -41,7 +41,8 @@ function harness(issues: Issue[], opts: {
         ),
       ),
     pick: (ready) => pickNext(ready, (n) => Promise.resolve(tracker.get(n)?.state === "CLOSED")),
-    explainHolds: () => Promise.resolve(""),
+    explainHolds: async (ready) =>
+      describeHolds(await holdsOf(ready, (n) => Promise.resolve(depStateOf(tracker.get(n))))),
     acquireLane: (n) => {
       if (free === 0) return Promise.resolve(undefined)
       free--
@@ -142,4 +143,10 @@ Deno.test("a blocked ticket does not stop an independent ready ticket from runni
   })
   await runLoopWith(h.deps, { max: 1000 })
   assertEquals(h.ran, [1, 2])
+})
+
+Deno.test("a pass with nothing pickable names the dependency holding each ready ticket", async () => {
+  const h = harness([{ ...ticket(1), labels: ["factory:blocked"] }, ticket(2, [1])])
+  await runLoopWith(h.deps, { max: 1000 })
+  assertEquals(h.logs, ["nothing pickable: #2 waits on #1 (blocked)"])
 })

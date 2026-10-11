@@ -11,7 +11,9 @@ import {
 
 /// Runs `watch` with instant, recorded sleeps and logs so its timing is observable.
 async function run(
-  opts: Pick<WatchOptions, "hasWork" | "runPass"> & Partial<Pick<WatchOptions, "once" | "signal">>,
+  opts:
+    & Pick<WatchOptions, "hasWork" | "runPass">
+    & Partial<Pick<WatchOptions, "once" | "signal" | "explainIdle">>,
 ) {
   const sleeps: number[] = []
   const logs: string[] = []
@@ -152,4 +154,51 @@ Deno.test("watch treats busy lanes as idle, not as a failure", async () => {
   assertEquals(result.logs.filter((l) => l.includes("retrying every 60s")).length, 1)
   assertEquals(result.logs.filter((l) => l.startsWith("error")).length, 0)
   assertEquals(calls, 4)
+})
+
+Deno.test("watch names why nothing is pickable on the idle line", async () => {
+  const result = await run({
+    once: true,
+    hasWork: () => Promise.resolve(false),
+    runPass: () => Promise.resolve(),
+    explainIdle: () => Promise.resolve("#2 waits on #1 (blocked)"),
+  })
+  assertEquals(result.logs, [
+    "idle: no pickable factory:ready ticket (#2 waits on #1 (blocked)), polling every 60s",
+  ])
+})
+
+Deno.test("watch re-logs the idle line only when its reason changes", async () => {
+  const controller = new AbortController()
+  const reasons = [
+    "#2 waits on #1 (blocked)",
+    "#2 waits on #1 (blocked)",
+    "#2 waits on #1 (in progress)",
+  ]
+  let tick = 0
+  const result = await run({
+    signal: controller.signal,
+    hasWork: () => Promise.resolve(false),
+    runPass: () => Promise.resolve(),
+    explainIdle: () => {
+      const why = reasons[tick]
+      tick++
+      if (tick === reasons.length) controller.abort()
+      return Promise.resolve(why)
+    },
+  })
+  assertEquals(result.logs, [
+    "idle: no pickable factory:ready ticket (#2 waits on #1 (blocked)), polling every 60s",
+    "idle: no pickable factory:ready ticket (#2 waits on #1 (in progress)), polling every 60s",
+  ])
+})
+
+Deno.test("watch keeps the plain idle line when explaining the idle fails, without counting a failure", async () => {
+  const result = await run({
+    once: true,
+    hasWork: () => Promise.resolve(false),
+    runPass: () => Promise.resolve(),
+    explainIdle: () => Promise.reject(new Error("gh unreachable")),
+  })
+  assertEquals(result.logs, ["idle: no pickable factory:ready ticket, polling every 60s"])
 })

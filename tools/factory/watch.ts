@@ -14,6 +14,8 @@ export type WatchOptions = {
   log: (line: string) => void
   /// Aborting stops the loop before the next pass. A pass already running is not interrupted.
   signal?: AbortSignal
+  /// Why no ticket is pickable, for the idle line. A failure here is ignored: the plain idle line stands.
+  explainIdle?: () => Promise<string>
 }
 
 /// Longest wait after repeated failures, in seconds.
@@ -62,7 +64,13 @@ export async function watch(opts: WatchOptions): Promise<number> {
         report("done", "driver pass finished")
       } else {
         failures = 0
-        report("idle", `idle: no pickable factory:ready ticket, polling every ${opts.intervalSec}s`)
+        const why = (await opts.explainIdle?.().catch(() => "")) ?? ""
+        report(
+          `idle:${why}`,
+          `idle: no pickable factory:ready ticket${
+            why ? ` (${why})` : ""
+          }, polling every ${opts.intervalSec}s`,
+        )
       }
     } catch (e) {
       if (e instanceof LanesBusyError) {
