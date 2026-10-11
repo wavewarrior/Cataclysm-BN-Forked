@@ -87,6 +87,45 @@ export async function worktreeCreate(opts: {
   }
 }
 
+export type WorktreeEntry = { path: string; branch?: string; openWorkspaceId?: string }
+
+/// Pure: the `result` object of `herdr worktree list` -> entries.
+export function worktreeEntries(result: Record<string, unknown>): WorktreeEntry[] {
+  return field<Record<string, unknown>[]>(result, "worktrees").map((w) => ({
+    path: field<string>(w, "path"),
+    branch: typeof w.branch === "string" ? w.branch : undefined,
+    openWorkspaceId: typeof w.open_workspace_id === "string" ? w.open_workspace_id : undefined,
+  }))
+}
+
+export async function worktreeList(cwd: string): Promise<WorktreeEntry[]> {
+  return worktreeEntries(await ok(["worktree", "list", "--cwd", cwd, "--trust-repository"]))
+}
+
+/// Open the existing checkout at `path` in a new workspace. `--branch` is not passed: herdr rejects it with `--path`.
+export async function worktreeOpen(opts: {
+  cwd: string
+  path: string
+  label: string
+}): Promise<Workspace> {
+  const result = await ok([
+    "worktree",
+    "open",
+    "--cwd",
+    opts.cwd,
+    "--path",
+    opts.path,
+    "--label",
+    opts.label,
+    "--no-focus",
+    "--trust-repository",
+  ])
+  return {
+    workspaceId: field<string>(result, "workspace", "workspace_id"),
+    rootPane: field<string>(result, "root_pane", "pane_id"),
+  }
+}
+
 /// Split `pane`; the new pane's shell gets `env`. Returns the new pane id.
 export async function paneSplit(
   pane: string,
