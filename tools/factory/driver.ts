@@ -287,6 +287,72 @@ export type WorktreePlan =
   | { action: "reuse"; closeWorkspace?: string }
   | { action: "conflict"; reason: string }
 
+/// What a dependency is doing, for explaining a hold: closed, else the factory label it carries, else open.
+export type DepState =
+  | "closed"
+  | "ready"
+  | "review"
+  | "blocked"
+  | "in-progress"
+  | "open"
+  | "missing"
+
+/// The state of one dependency. `undefined` (no such issue) -> missing.
+export function depStateOf(issue: Issue | undefined): DepState {
+  if (!issue) return "missing"
+  if (issue.state.toUpperCase() === "CLOSED") return "closed"
+  if (issue.labels.includes("factory:ready")) return "ready"
+  if (issue.labels.includes("factory:blocked")) return "blocked"
+  if (issue.labels.includes("factory:review")) return "review"
+  if (issue.labels.includes("factory:in-progress")) return "in-progress"
+  return "open"
+}
+
+export type Hold = { issue: number; waitingOn: { number: number; state: DepState }[] }
+
+/// Each ready ticket (ascending number) with at least one dependency that is not closed. Calls `state` once per distinct dependency.
+export async function holdsOf(
+  ready: Issue[],
+  state: (n: number) => Promise<DepState>,
+): Promise<Hold[]> {
+  const ordered = [...ready].sort((a, b) => a.number - b.number)
+  const deps = ordered.map((issue) => ({
+    issue: issue.number,
+    on: dependsOn(makeTicket(issue).sections),
+  }))
+  const distinct = [...new Set(deps.flatMap((d) => d.on))]
+  const states = new Map(
+    await Promise.all(distinct.map(async (n) => [n, await state(n)] as const)),
+  )
+  return deps.flatMap(({ issue, on }) => {
+    const waitingOn = on
+      .filter((n) => states.get(n) !== "closed")
+      .map((n) => ({ number: n, state: states.get(n) ?? "missing" }))
+    return waitingOn.length > 0 ? [{ issue, waitingOn }] : []
+  })
+}
+
+const HOLD_WORDS: Record<DepState, string> = {
+  closed: "closed",
+  ready: "queued",
+  review: "in review, PR awaiting merge",
+  blocked: "blocked",
+  "in-progress": "in progress",
+  open: "open",
+  missing: "not found",
+}
+
+/// "#172 waits on #170 (blocked), #171 (blocked); #173 waits on #172 (queued)". "" for no holds.
+export function describeHolds(holds: Hold[]): string {
+  return holds
+    .map((h) =>
+      `#${h.issue} waits on ${
+        h.waitingOn.map((w) => `#${w.number} (${HOLD_WORDS[w.state]})`).join(", ")
+      }`
+    )
+    .join("; ")
+}
+
 /// Reuse the checkout of `want.branch` at `want.path` if it exists; refuse a path or branch held by something else; else create. Never deletes.
 export function planWorktree(
   entries: WorktreeEntry[],

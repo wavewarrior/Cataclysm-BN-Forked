@@ -2,9 +2,13 @@ import { assertEquals, assertStringIncludes } from "@std/assert"
 import {
   blockComment,
   blockLabels,
+  type DepState,
+  depStateOf,
+  describeHolds,
   followUpBody,
   followUpOf,
   freshStartCommands,
+  holdsOf,
   parseVerdict,
   pickNext,
   planWorktree,
@@ -218,4 +222,68 @@ Deno.test("planWorktree matches a path across slash style, case, trailing slash 
     }),
     { action: "reuse", closeWorkspace: "wH" },
   )
+})
+
+const issueOf = (
+  number: number,
+  labels: string[] = [],
+  state = "OPEN",
+  deps: number[] = [],
+): Issue => ({
+  number,
+  title: `t${number}`,
+  body: deps.length > 0 ? `## Depends on\n${deps.map((d) => `- #${d}`).join("\n")}\n` : "",
+  labels,
+  state,
+  createdAt: "2026-01-01T00:00:00Z",
+  updatedAt: "2026-01-01T00:00:00Z",
+})
+
+Deno.test("depStateOf reads closed first, then the factory label, else open", () => {
+  assertEquals(depStateOf(undefined), "missing")
+  assertEquals(depStateOf(issueOf(1, ["factory:blocked"], "CLOSED")), "closed")
+  assertEquals(depStateOf(issueOf(1, ["factory:ready"])), "ready")
+  assertEquals(depStateOf(issueOf(1, ["factory:blocked"])), "blocked")
+  assertEquals(depStateOf(issueOf(1, ["factory:review"])), "review")
+  assertEquals(depStateOf(issueOf(1, ["factory:in-progress"])), "in-progress")
+  assertEquals(depStateOf(issueOf(1)), "open")
+})
+
+Deno.test("holdsOf lists only tickets with an unclosed dependency and asks for each dependency once", async () => {
+  const states = new Map<number, DepState>([[170, "blocked"], [171, "closed"], [172, "ready"]])
+  const asked: number[] = []
+  const holds = await holdsOf(
+    [
+      issueOf(175, [], "OPEN", [170]),
+      issueOf(172, [], "OPEN", [170, 171]),
+      issueOf(173, [], "OPEN", [172]),
+      issueOf(174),
+      issueOf(176, [], "OPEN", [999]),
+    ],
+    (n) => {
+      asked.push(n)
+      return Promise.resolve(states.get(n) ?? "missing")
+    },
+  )
+  assertEquals(holds, [
+    { issue: 172, waitingOn: [{ number: 170, state: "blocked" }] },
+    { issue: 173, waitingOn: [{ number: 172, state: "ready" }] },
+    { issue: 175, waitingOn: [{ number: 170, state: "blocked" }] },
+    { issue: 176, waitingOn: [{ number: 999, state: "missing" }] },
+  ])
+  assertEquals(asked, [170, 171, 172, 999])
+})
+
+Deno.test("describeHolds names each held ticket's blockers with their states", () => {
+  assertEquals(
+    describeHolds([
+      {
+        issue: 172,
+        waitingOn: [{ number: 170, state: "blocked" }, { number: 171, state: "blocked" }],
+      },
+      { issue: 173, waitingOn: [{ number: 172, state: "ready" }] },
+    ]),
+    "#172 waits on #170 (blocked), #171 (blocked); #173 waits on #172 (queued)",
+  )
+  assertEquals(describeHolds([]), "")
 })
