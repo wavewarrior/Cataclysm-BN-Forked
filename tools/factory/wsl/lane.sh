@@ -22,6 +22,18 @@ flock 9
 
 # shellcheck disable=SC1091
 source "$LANE_HOME/env.sh"
+
+# A drifted formatter would fail honest code, so a wrong version is a tooling fault (exit 2 = infra in gate.ts), not a code failure.
+astyle_got="$(astyle --version 2>&1 || true)"
+if [ "$astyle_got" != "Artistic Style Version 3.6.16" ]; then
+    echo "lane.sh: astyle is $astyle_got, need Artistic Style Version 3.6.16 (see setup.sh)" >&2
+    exit 2
+fi
+clang_format_got="$(clang-format --version 2>&1 || true)"
+if [[ "$clang_format_got" != *"version 22."* ]]; then
+    echo "lane.sh: clang-format is $clang_format_got, need version 22 (see setup.sh)" >&2
+    exit 2
+fi
 cd "$LANE_HOME/src"
 
 git fetch --quiet "$COMMON_DIR" "refs/heads/$BRANCH"

@@ -28,7 +28,7 @@ fi
 $SUDO apt-get install -y \
     "clang-$LLVM_VERSION" "clang-tidy-$LLVM_VERSION" "clang-format-$LLVM_VERSION" \
     "llvm-$LLVM_VERSION-dev" "libclang-$LLVM_VERSION-dev" "libclang-rt-$LLVM_VERSION-dev" \
-    gettext mold jq ccache ninja-build cmake astyle git curl zip unzip tar \
+    gettext mold jq ccache ninja-build cmake make g++ git curl zip unzip tar \
     sqlite3 libsqlite3-dev zlib1g-dev libvulkan-dev mesa-vulkan-drivers xvfb \
     autoconf autoconf-archive automake libtool libltdl-dev pkg-config python3-pip \
     libasound2-dev libpulse-dev libaudio-dev libjack-dev libsndio-dev libx11-dev \
@@ -44,6 +44,17 @@ for tool in clang clang++ clang-tidy clang-format llvm-config; do
     $SUDO update-alternatives --install "/usr/bin/$tool" "$tool" "/usr/bin/$tool-$LLVM_VERSION" 100
     $SUDO update-alternatives --set "$tool" "/usr/bin/$tool-$LLVM_VERSION"
 done
+
+# Pin astyle to the version CI runs (.github/workflows/autofix.yml), not apt's 3.1.
+ASTYLE_VERSION=3.6.16
+if [ "$(astyle --version 2>/dev/null)" != "Artistic Style Version $ASTYLE_VERSION" ]; then
+    astyle_src="$(mktemp -d)"
+    curl -sSfL -o "$astyle_src/astyle.tar.bz2" "https://downloads.sourceforge.net/project/astyle/astyle/astyle%203.6/astyle-$ASTYLE_VERSION.tar.bz2"
+    tar -xjf "$astyle_src/astyle.tar.bz2" -C "$astyle_src"
+    make -C "$astyle_src/astyle-$ASTYLE_VERSION/build/gcc" -j"$(nproc)"
+    $SUDO install -m 0755 "$astyle_src/astyle-$ASTYLE_VERSION/build/gcc/bin/astyle" /usr/local/bin/astyle
+    rm -rf "$astyle_src"
+fi
 
 mkdir -p "$LANE_HOME"
 git config --global --add safe.directory '*'
@@ -67,7 +78,8 @@ $SUDO ln -sf "/usr/lib/llvm-$LLVM_VERSION/bin/FileCheck" /usr/local/bin/FileChec
 echo "--- versions ---"
 clang-tidy --version | head -n 2
 clang-format --version
-astyle --version || true
+astyle --version
+[ "$(astyle --version)" = "Artistic Style Version $ASTYLE_VERSION" ] || { echo "setup.sh: astyle is not $ASTYLE_VERSION" >&2; exit 1; }
 llvm-config --version
 tidy_major="$(clang-tidy --version | sed -n 's/.*version \([0-9]*\)\..*/\1/p' | head -n1)"
 format_major="$(clang-format --version | sed -n 's/.*version \([0-9]*\)\..*/\1/p' | head -n1)"
