@@ -18,6 +18,7 @@
 #include "cata_arena.h"
 #include "catalua.h"
 #include "character_functions.h"
+#include "character_turn.h"
 #include "distribution_grid.h"
 #include "explosion_queue.h"
 #include "fluid_grid.h"
@@ -33,6 +34,7 @@
 #include "mutation.h"
 #include "npc.h"
 #include "output.h"
+#include "overmapbuffer.h"
 #include "overmapbuffer_registry.h"
 #include "pathfinding.h"
 #include "profile.h"
@@ -231,8 +233,9 @@ auto accumulate( perf_sample &perf, const perf_group group, const double ms ) ->
 
 auto derive_turn_plan( const turn_inputs &in ) -> turn_plan
 {
-    auto steps = kRegistry
-    | std::views::transform( [&in]( const registry_entry & entry ) -> turn_step {
+    auto steps = std::vector<turn_step> {};
+    std::ranges::transform( kRegistry, std::back_inserter( steps ),
+    [&in]( const registry_entry & entry ) -> turn_step {
         const auto reason = skip_reason( entry, in );
         return turn_step{
             .kind = entry.kind,
@@ -243,16 +246,16 @@ auto derive_turn_plan( const turn_inputs &in ) -> turn_plan
             .reads_turn = entry.reads_turn,
             .advances_calendar = entry.advances_calendar,
         };
-    } )
-    | std::ranges::to<std::vector>();
+    } );
     return turn_plan{ .steps = std::move( steps ) };
 }
 
 auto turn_plan::view( const turn_mode mode ) const -> std::vector<turn_step>
 {
-    return steps
-    | std::views::filter( [mode]( const turn_step & step ) { return admits( mode, step.scope ); } )
-    | std::ranges::to<std::vector>();
+    auto out = std::vector<turn_step> {};
+    std::ranges::copy_if( steps, std::back_inserter( out ),
+    [mode]( const turn_step & step ) { return admits( mode, step.scope ); } );
+    return out;
 }
 
 auto check_plan_laws( const turn_plan &plan ) -> std::vector<std::string>
@@ -376,12 +379,14 @@ auto turn_executor::run_step( game &g, const turn_step_kind kind ) -> void
             break;
         case turn_step_kind::mark_visibility_dirty:
             level_cache_freshness::report( m, level_cache_freshness::light_changed{
+                .at = tripoint_bub_ms{},
                 .scope = level_cache_freshness::light_changed::lightmap_scope::none,
                 .visibility = true,
             } );
             break;
         case turn_step_kind::frame_caches:
             level_cache_freshness::report( m, level_cache_freshness::light_changed{
+                .at = tripoint_bub_ms{},
                 .scope = level_cache_freshness::light_changed::lightmap_scope::none,
                 .visibility = true,
             } );
