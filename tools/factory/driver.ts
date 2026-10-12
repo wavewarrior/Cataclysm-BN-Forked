@@ -141,6 +141,11 @@ export function restartCommands(
   return keep ? [removeWorktree] : [removeWorktree, ["git", "-C", repo, "branch", "-D", branch]]
 }
 
+/// Path form used to compare checkouts: slash-normalised, no trailing slash, case-insensitive.
+function pathKey(p: string): string {
+  return p.replaceAll("\\", "/").replace(/\/+$/, "").toLowerCase()
+}
+
 /// Why a re-pick must stop instead of clearing a checkout it does not own: the branch is checked
 /// out at another path, or the path holds a different branch. Undefined when the restart is safe.
 export function restartConflict(
@@ -148,14 +153,24 @@ export function restartConflict(
   path: string,
   branch: string,
 ): string | undefined {
-  const key = (p: string): string => p.replaceAll("\\", "/").replace(/\/+$/, "").toLowerCase()
-  const elsewhere = held.find((w) => w.branch === branch && key(w.path) !== key(path))
+  const elsewhere = held.find((w) => w.branch === branch && pathKey(w.path) !== pathKey(path))
   if (elsewhere) return `${branch} is checked out at ${elsewhere.path}`
-  const here = held.find((w) => key(w.path) === key(path))
+  const here = held.find((w) => pathKey(w.path) === pathKey(path))
   if (here && here.branch !== branch) {
     return `${path} holds ${here.branch ?? "a detached checkout"}, not ${branch}`
   }
   return undefined
+}
+
+/// The ticket's own branch already checked out at `path` from an earlier attempt. Branch names
+/// come from titles, so a retitled ticket must keep the branch its old checkout holds.
+export function ownedBranchAt(
+  held: readonly { path: string; branch?: string }[],
+  path: string,
+  prefix: string,
+): string | undefined {
+  const here = held.find((w) => pathKey(w.path) === pathKey(path))
+  return here?.branch?.startsWith(prefix) ? here.branch : undefined
 }
 
 /// The herdr workspace label for ticket `n`. Lookups match on `workspacePrefix`, so a retitled
@@ -411,18 +426,23 @@ export async function runTicket(
       )
     }
 
-    const branch = branchName(config.branchPrefix, n, issue.title)
     const base = `origin/${config.integrationBranch}`
     const path = `${config.worktreeRoot}/wt-factory-${n}`
     await git(opts.repo, "fetch", "origin", config.integrationBranch)
+    // Prune first so a checkout deleted by hand cannot block the branch delete or the re-add.
+    await git(opts.repo, "worktree", "prune")
+    const held = await worktreeList(opts.repo)
+    // A retitled ticket keeps the branch its earlier checkout holds; the title only names new ones.
+    const branch = ownedBranchAt(held, path, `${config.branchPrefix}${n}-`) ??
+      branchName(config.branchPrefix, n, issue.title)
 
     // Worktree + panes. A re-picked ticket is rebuilt from a clean checkout. Its branch is kept
     // when it has commits past base, so earlier work survives; uncommitted work in the old checkout does not.
     const keep = keepsBranch(await commitsAheadOfBase(opts.repo, base, branch))
-    // Prune first so a checkout deleted by hand cannot block the branch delete or the re-add.
-    await git(opts.repo, "worktree", "prune")
-    const conflict = restartConflict(await worktreeList(opts.repo), path, branch)
-    if (conflict) return await block(`cannot re-pick: ${conflict}. Move that checkout aside, then unblock.`)
+    const conflict = restartConflict(held, path, branch)
+    if (conflict) {
+      return await block(`cannot re-pick: ${conflict}. Move that checkout aside, then unblock.`)
+    }
     for (const stale of await workspacesWithPrefix(workspacePrefix(n))) {
       await workspaceClose(stale)
     }

@@ -10,6 +10,7 @@ import {
   gateFailurePrompt,
   holdsOf,
   keepsBranch,
+  ownedBranchAt,
   parseVerdict,
   pickNext,
   prTitle,
@@ -257,7 +258,11 @@ Deno.test("restartConflict stops a re-pick on a checkout it does not own", () =>
   assertEquals(restartConflict([{ path, branch: "factory/7-x" }], path, "factory/7-x"), undefined)
   assertEquals(restartConflict([], path, "factory/7-x"), undefined)
   assertEquals(
-    restartConflict([{ path: "C:\\wt\\wt-factory-7\\", branch: "factory/7-x" }], path, "factory/7-x"),
+    restartConflict(
+      [{ path: "C:\\wt\\wt-factory-7\\", branch: "factory/7-x" }],
+      path,
+      "factory/7-x",
+    ),
     undefined,
   )
   assertEquals(
@@ -271,5 +276,21 @@ Deno.test("restartConflict stops a re-pick on a checkout it does not own", () =>
   assertEquals(
     restartConflict([{ path: "C:/wt/other", branch: "factory/7-x" }], path, "factory/7-x"),
     "factory/7-x is checked out at C:/wt/other",
+  )
+})
+
+Deno.test("ownedBranchAt keeps a retitled ticket on the branch its own checkout holds", () => {
+  const path = "C:/wt/wt-factory-7"
+  const held = [{ path, branch: "factory/7-old-title" }]
+  assertEquals(ownedBranchAt(held, path, "factory/7-"), "factory/7-old-title")
+  assertEquals(ownedBranchAt([{ path, branch: "feature/human" }], path, "factory/7-"), undefined)
+  assertEquals(ownedBranchAt([{ path, branch: "factory/77-x" }], path, "factory/7-"), undefined)
+  assertEquals(
+    ownedBranchAt([{ path: "C:/wt/other", branch: "factory/7-x" }], path, "factory/7-"),
+    undefined,
+  )
+  assertEquals(
+    restartConflict(held, path, ownedBranchAt(held, path, "factory/7-") ?? "factory/7-new"),
+    undefined,
   )
 })
