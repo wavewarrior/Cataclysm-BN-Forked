@@ -174,6 +174,7 @@ class game: public submap_load_listener
         friend class editmap;
         friend class advanced_inventory;
         friend class main_menu;
+        friend class turn_executor;
         friend distribution_grid_tracker &get_distribution_grid_tracker();
         friend auto get_distribution_grid_tracker_for(
             const dimension_id & ) -> distribution_grid_tracker *;
