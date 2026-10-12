@@ -120,35 +120,10 @@ Deno.test("a follow-up names the blocked ticket it unblocks; an ordinary ticket 
   assertEquals(followUpOf(makeTicket(issue(170, body)).sections), 166)
 })
 
-Deno.test("a follow-up is never made for an infra failure or a parent that already has one", () => {
-  assertEquals(
-    shouldCreateFollowUp({
-      reason: "herdr worktree create failed: wt-factory-170 already exists",
-      issue: 170,
-      existingFollowUps: [],
-    }),
-    false,
-  )
-  assertEquals(
-    shouldCreateFollowUp({
-      reason: "local changes to src/turn_plan.cpp would be overwritten by checkout",
-      issue: 171,
-      existingFollowUps: [],
-    }),
-    false,
-  )
-  assertEquals(
-    shouldCreateFollowUp({ reason: "FAIL vehicle_x", issue: 170, existingFollowUps: [170] }),
-    false,
-  )
-  assertEquals(
-    shouldCreateFollowUp({ reason: "FAIL vehicle_x", issue: 170, existingFollowUps: [171] }),
-    true,
-  )
-  assertEquals(
-    shouldCreateFollowUp({ reason: "gate failed", issue: 166, existingFollowUps: [] }),
-    true,
-  )
+Deno.test("a parent with an open follow-up gets no second one; any other blocked ticket gets one", () => {
+  assertEquals(shouldCreateFollowUp({ issue: 170, existingFollowUps: [170] }), false)
+  assertEquals(shouldCreateFollowUp({ issue: 170, existingFollowUps: [171] }), true)
+  assertEquals(shouldCreateFollowUp({ issue: 166, existingFollowUps: [] }), true)
 })
 
 Deno.test("a follow-up is a runnable ticket that inherits the blocked ticket's touches and tags", () => {
