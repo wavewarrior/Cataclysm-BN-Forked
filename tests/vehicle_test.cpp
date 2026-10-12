@@ -1125,6 +1125,7 @@ TEST_CASE("box2d_map_load_does_not_accumulate_colliders", "[!shouldfail][vehicle
 
 TEST_CASE("vehicle_move_notifications_per_turn", "[vehicle][perf]") {
     clear_all_state();
+    move_player_out_of_the_way();
     build_test_map(ter_id("t_pavement"));
     map& here = get_map();
 

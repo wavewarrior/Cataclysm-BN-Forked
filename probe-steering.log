@@ -1,0 +1,146 @@
+Randomness seeded to: 1
+13:37:16.029 INFO : Randomness seeded to: 1
+13:37:16.033 INFO : C locale on startup: 'English_Belgium.1252'
+13:37:16.033 INFO : C++ locale on startup: ''
+13:37:16.034 INFO : Detected system UI language as 'en_US'
+13:37:16.057 INFO : Number of render drivers on your system: 8
+13:37:16.057 INFO : Render driver: 0/direct3d11
+13:37:16.057 INFO : Render driver: 1/direct3d12
+13:37:16.057 INFO : Render driver: 2/direct3d
+13:37:16.057 INFO : Render driver: 3/opengl
+13:37:16.057 INFO : Render driver: 4/opengles2
+13:37:16.057 INFO : Render driver: 5/vulkan
+13:37:16.057 INFO : Render driver: 6/gpu
+13:37:16.057 INFO : Render driver: 7/software
+13:37:16.057 INFO : Set debug classes to: [DEBUGMSG MAIN LUA]
+13:37:16.074 INFO : SDL_GPU: software mode pinned Vulkan ICD manifest: C:\WORK\GIT_REPOS\wt-factory-166\build-data\mesa\x64\lvp_icd.x86_64.json
+13:37:16.074 INFO : SDL_GPU: compiled drivers=direct3d12 vulkan
+13:37:16.337 WARNING : SDL_GPU: rejected device for software-required policy: direct3d12 software-required
+13:37:16.337 INFO : SDL_GPU: device=NVIDIA GeForce RTX 4090  driver_name=unknown  driver_version=32.0.15.9186
+13:37:16.428 INFO : SDL_GPU: selected device policy: vulkan software-required
+13:37:16.428 INFO : SDL_GPU: driver=vulkan  formats=SPIRV
+13:37:16.428 INFO : SDL_GPU: device=llvmpipe (LLVM 22.1.6, 256 bits)  driver_name=llvmpipe  driver_version=26.1.1
+13:37:16.428 INFO : SDL_GPU: driver_info=Mesa 26.1.1 (git-07517c1b8e) (LLVM 22.1.6)
+13:37:16.428 INFO : Compute backend selected: sdl_gpu_software
+13:37:16.428 INFO : SDL_GPU: shader probe OK (data/shaders/test_compute.spv)
+13:37:16.455 INFO : Performance tip: add 'data/' to Windows Defender exclusions to reduce load time (Settings → Windows Security → Virus & threat protection → Exclusions).
+13:37:16.455 INFO : Setting active world to NULL
+13:37:16.464 INFO : Setting active world to test_user_dir/save/Tom
+13:37:16.496 INFO LUA : bn: preloaded.
+
+Starting the actual test at Fri Oct  9 13:37:26 2026
+Filters: [steering]
+Randomness seeded to: 1
+13:37:26.588 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=9 dirty_submaps=1225/1225 rebuild_all=1
+13:37:26.589 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=8 dirty_submaps=1225/1225 rebuild_all=1
+13:37:26.590 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=7 dirty_submaps=1225/1225 rebuild_all=1
+13:37:26.590 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=6 dirty_submaps=1225/1225 rebuild_all=1
+13:37:26.590 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=5 dirty_submaps=1225/1225 rebuild_all=1
+13:37:26.592 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=4 dirty_submaps=1225/1225 rebuild_all=1
+13:37:26.592 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=3 dirty_submaps=1225/1225 rebuild_all=1
+13:37:26.593 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=2 dirty_submaps=1225/1225 rebuild_all=1
+13:37:26.593 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=1 dirty_submaps=1225/1225 rebuild_all=1
+13:37:26.594 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:26.595 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=-1 dirty_submaps=1225/1225 rebuild_all=1
+13:37:26.596 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=-2 dirty_submaps=1225/1225 rebuild_all=1
+13:37:26.596 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=-3 dirty_submaps=1225/1225 rebuild_all=1
+13:37:26.597 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=-4 dirty_submaps=1225/1225 rebuild_all=1
+13:37:26.598 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=-5 dirty_submaps=1225/1225 rebuild_all=1
+13:37:26.598 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=-6 dirty_submaps=1225/1225 rebuild_all=1
+13:37:26.600 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=-7 dirty_submaps=1225/1225 rebuild_all=1
+13:37:26.600 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=-8 dirty_submaps=1225/1225 rebuild_all=1
+13:37:26.602 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=-9 dirty_submaps=1225/1225 rebuild_all=1
+13:37:26.602 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=-10 dirty_submaps=1225/1225 rebuild_all=1
+13:37:27.122 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=560.297ms (z -10..10) floor=26.9964 outside=13.9359 trans=186.954 parclear=0.543 susp=38.1425 veh=0.0131 seen=293.712 lightmap=0.0001 | z-split: player=1.8666 other=39.0527
+13:37:27.156 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:27.161 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:967: [shift-probe][lightmap] regen 21 levels: -10,-9,-8,-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10,
+13:37:27.582 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=426.479ms (z -10..10) floor=0.3577 outside=0.357 trans=4.4347 parclear=0.7452 susp=0.0016 veh=0.0007 seen=114.046 lightmap=306.536 | z-split: player=0.7066 other=0.0042
+13:37:27.885 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:27.927 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=43.1831ms (z -10..10) floor=1.1608 outside=0.5511 trans=4.1828 parclear=0.3813 susp=0.0009 veh=0.0002 seen=36.9058 lightmap=0.0002 | z-split: player=1.703 other=0.0043
+1.499 s: starting_engines_from_the_controls_lets_the_car_roll
+13:37:28.151 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:28.181 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=30.6433ms (z -10..10) floor=0.3527 outside=0.5026 trans=7.0909 parclear=0.4267 susp=0.0009 veh=0.0007 seen=22.2686 lightmap=0.0001 | z-split: player=0.8408 other=0.0109
+13:37:28.208 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:28.224 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:967: [shift-probe][lightmap] regen 21 levels: -10,-9,-8,-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10,
+13:37:28.333 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=125.15ms (z -10..10) floor=0.3144 outside=0.6678 trans=14.062 parclear=0.8602 susp=0.0012 veh=0.0009 seen=101.453 lightmap=7.7904 | z-split: player=0.9739 other=0.0052
+13:37:28.484 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:28.540 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=56.3197ms (z -10..10) floor=0.35 outside=0.5706 trans=19.7485 parclear=0.4104 susp=0.0013 veh=0.0009 seen=35.2378 lightmap=0.0002 | z-split: player=0.9121 other=0.0054
+0.609 s: stationary_steering_queues_heading_without_rotating
+13:37:28.756 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:28.798 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=44.4354ms (z -10..10) floor=1.1737 outside=0.505 trans=18.4178 parclear=0.4907 susp=0.0009 veh=0.0008 seen=23.8464 lightmap=0.0001 | z-split: player=1.6554 other=0.0186
+13:37:28.827 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:28.843 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:967: [shift-probe][lightmap] regen 21 levels: -10,-9,-8,-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10,
+13:37:28.955 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=127.463ms (z -10..10) floor=0.3185 outside=0.493 trans=15.3107 parclear=0.4123 susp=0.0014 veh=0.0005 seen=107.579 lightmap=3.3474 | z-split: player=0.8036 other=0.0051
+13:37:29.131 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:29.177 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=45.1615ms (z -10..10) floor=0.951 outside=0.5952 trans=5.9394 parclear=0.3987 susp=0.0014 veh=0.001 seen=37.2746 lightmap=0.0001 | z-split: player=1.5363 other=0.0042
+0.641 s: pulling_away_with_cruise_after_presteer_accelerates
+13:37:29.411 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:29.453 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=41.8353ms (z -10..10) floor=0.3404 outside=0.6395 trans=9.5642 parclear=0.5068 susp=0.0013 veh=0.0012 seen=30.7817 lightmap=0.0002 | z-split: player=0.9666 other=0.0097
+13:37:29.498 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:29.511 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:967: [shift-probe][lightmap] regen 21 levels: -10,-9,-8,-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10,
+13:37:29.639 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=142.253ms (z -10..10) floor=1.1103 outside=0.5381 trans=13.677 parclear=0.4448 susp=0.0017 veh=0.0007 seen=122.91 lightmap=3.5702 | z-split: player=1.6401 other=0.0049
+13:37:29.779 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:29.813 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=33.9963ms (z -10..10) floor=0.3332 outside=1.1903 trans=5.4748 parclear=0.4394 susp=0.001 veh=0.001 seen=26.5565 lightmap=0.0001 | z-split: player=1.5125 other=0.0064
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cata_test-tiles.exe is a Catch2 v3.15.2 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+rolling_steering_turns_vehicle
+-------------------------------------------------------------------------------
+..\..\tests\vehicle_test.cpp(1260)
+...............................................................................
+
+..\..\tests\vehicle_test.cpp(1274): FAILED:
+  CHECK( deg_of(veh.face.dir()) == 15 )
+with expansion:
+  0 == 15
+
+0.639 s: rolling_steering_turns_vehicle
+13:37:30.072 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:30.132 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=61.0274ms (z -10..10) floor=1.1732 outside=0.4906 trans=20.2252 parclear=0.3446 susp=0.0015 veh=0.0009 seen=38.7911 lightmap=0.0002 | z-split: player=1.6415 other=0.0185
+13:37:30.177 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:30.189 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:967: [shift-probe][lightmap] regen 21 levels: -10,-9,-8,-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10,
+13:37:30.281 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=105.758ms (z -10..10) floor=0.3218 outside=0.6752 trans=11.3722 parclear=0.4686 susp=0.0008 veh=0.0008 seen=89.4183 lightmap=3.5 | z-split: player=0.9882 other=0.006
+13:37:30.448 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:30.494 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=46.2042ms (z -10..10) floor=0.3268 outside=0.4934 trans=15.0825 parclear=0.4324 susp=0.001 veh=0.001 seen=29.8669 lightmap=0.0002 | z-split: player=0.8131 other=0.0042
+0.673 s: pulling_away_in_reverse_mirrors_presteer
+13:37:30.683 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:30.742 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=59.7086ms (z -10..10) floor=1.1597 outside=0.5473 trans=16.0074 parclear=0.3756 susp=0.0014 veh=0.0009 seen=41.6162 lightmap=0.0001 | z-split: player=1.6824 other=0.0193
+13:37:30.779 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:30.792 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:967: [shift-probe][lightmap] regen 21 levels: -10,-9,-8,-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10,
+13:37:30.902 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=123.248ms (z -10..10) floor=0.7365 outside=0.4831 trans=11.9381 parclear=0.3014 susp=0.0013 veh=0.0009 seen=106.884 lightmap=2.9027 | z-split: player=1.2107 other=0.0044
+13:37:31.074 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:31.134 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=60.1288ms (z -10..10) floor=1.1669 outside=0.5109 trans=17.1545 parclear=0.3483 susp=0.0008 veh=0.0008 seen=40.9464 lightmap=0.0002 | z-split: player=1.6705 other=0.0027
+0.643 s: pulling_away_with_cruise_accelerates
+13:37:31.352 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:31.409 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=57.9823ms (z -10..10) floor=1.1705 outside=0.6676 trans=16.5135 parclear=0.4395 susp=0.0013 veh=0.0007 seen=39.1889 lightmap=0.0003 | z-split: player=1.8186 other=0.0142
+13:37:31.441 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:31.448 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:967: [shift-probe][lightmap] regen 21 levels: -10,-9,-8,-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10,
+13:37:31.543 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=101.567ms (z -10..10) floor=0.3429 outside=0.4629 trans=5.181 parclear=0.4613 susp=0.0012 veh=0.0005 seen=92.2141 lightmap=2.903 | z-split: player=0.7982 other=0.0038
+13:37:31.725 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:31.771 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=46.7669ms (z -10..10) floor=1.1914 outside=0.6417 trans=9.08 parclear=0.4948 susp=0.0016 veh=0.001 seen=35.3562 lightmap=0.0001 | z-split: player=1.825 other=0.0038
+0.634 s: pulling_away_forward_keeps_presteer
+13:37:32.032 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:32.096 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=64.4876ms (z -10..10) floor=0.3436 outside=0.4986 trans=21.6395 parclear=0.4212 susp=0.0013 veh=0.0009 seen=41.5823 lightmap=0.0002 | z-split: player=0.8273 other=0.0108
+13:37:32.153 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:32.174 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:967: [shift-probe][lightmap] regen 21 levels: -10,-9,-8,-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10,
+13:37:32.310 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=158.634ms (z -10..10) floor=1.1516 outside=0.9215 trans=19.7815 parclear=0.5681 susp=0.0023 veh=0.001 seen=132.969 lightmap=3.2386 | z-split: player=2.0584 other=0.009
+13:37:32.505 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:32.561 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=58.1889ms (z -10..10) floor=1.1526 outside=0.5085 trans=20.276 parclear=0.4486 susp=0.0011 veh=0.0011 seen=35.8008 lightmap=0.0001 | z-split: player=1.6534 other=0.0035
+0.790 s: stationary_presteer_stops_at_three_steps
+===============================================================================
+test cases:  8 |  7 passed | 1 failed
+assertions: 48 | 47 passed | 1 failed
+
+13:37:32.810 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:32.858 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=50.0103ms (z -10..10) floor=1.1439 outside=0.5338 trans=6.9771 parclear=0.3787 susp=0.0013 veh=0.001 seen=40.9743 lightmap=0.0002 | z-split: player=1.6469 other=0.0246
+13:37:32.909 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:415: [shift-probe][outside] z=0 dirty_submaps=1225/1225 rebuild_all=1
+13:37:32.928 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:967: [shift-probe][lightmap] regen 21 levels: -10,-9,-8,-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10,
+13:37:33.057 INFO : C:\WORK\GIT_REPOS\wt-factory-166\src\map_cache.cpp:1214: [build_cache][perf] total=148.136ms (z -10..10) floor=1.1597 outside=0.609 trans=16.8348 parclear=0.4156 susp=0.0014 veh=0.0008 seen=126.235 lightmap=2.8794 | z-split: player=1.7564 other=0.0072
+Test world "Tom" left for inspection.
+Ended test at Fri Oct  9 13:37:32 2026
+The test took 6.130 seconds
+13:37:33.062 INFO : Randomness seeded to: 1
+

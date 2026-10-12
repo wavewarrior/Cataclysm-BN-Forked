@@ -127,6 +127,7 @@ TEST_CASE(
     "commit_occupants_spares_pet_from_collision_with_its_own_vehicle",
     "[vehicle][occupant][collision]") {
     clear_all_state();
+    move_player_out_of_the_way();
     build_test_map(ter_id("t_pavement"));
     map& here = get_map();
 

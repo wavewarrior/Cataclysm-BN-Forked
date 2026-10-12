@@ -183,6 +183,7 @@ TEST_CASE("vehicle_collision_hits_occupant_with_stale_in_vehicle_flag", "[vehicl
 // through move_vehicle(), which calls vehicle_vehicle_collision().
 TEST_CASE("box2d_authority_vehicle_hits_vehicle", "[vehicle][collision][box2d]") {
     clear_all_state();
+    move_player_out_of_the_way();
     clear_vehicles();
     auto& here = get_map();
     build_test_map(ter_id("t_pavement"));
