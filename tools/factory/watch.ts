@@ -64,7 +64,7 @@ export async function watch(opts: WatchOptions): Promise<number> {
         report("done", "driver pass finished")
       } else {
         failures = 0
-        const why = (await opts.explainIdle?.().catch(() => "")) ?? ""
+        const why = (await Promise.resolve().then(() => opts.explainIdle?.()).catch(() => "")) ?? ""
         report(
           `idle:${why}`,
           `idle: no pickable factory:ready ticket${
