@@ -101,8 +101,8 @@ export function prTitle(title: string): string {
   return isConventionalTitle(title) ? title : `chore: ${title}`
 }
 
-export function implementerPrompt(issue: Issue, ticketPath: string): string {
-  return `/skill:implement Implement GitHub issue #${issue.number} (${issue.title}). The full ticket is in ${ticketPath}: read it first and follow it exactly. Add or update the tests it names, commit your work to the current branch with conventional-commit messages, and stop. Do not push, open PRs or use gh. Do not build and do not run cata_test: this shell has no compiler environment, and the gate builds and runs the ticket's test tags for you.`
+export function implementerPrompt(issue: Issue, ticketPath: string, base: string): string {
+  return `/skill:implement Implement GitHub issue #${issue.number} (${issue.title}). The full ticket is in ${ticketPath}: read it first and follow it exactly. Add or update the tests it names. Before you commit, format every C++ file you changed by running \`deno run -A tools/factory/format.ts --base ${base}\` from the worktree root; it rewrites whole files with the gate's pinned clang-format and astyle, so do not hand-format. Then commit your work to the current branch with conventional-commit messages, and stop. Do not push, open PRs or use gh. Do not build and do not run cata_test: this shell has no compiler environment, and the gate builds and runs the ticket's test tags for you.`
 }
 
 export function reviewerPrompt(opts: {
@@ -429,7 +429,11 @@ export async function runTicket(
         config.models.implementer,
       ],
     })
-    let outcome = await agentPrompt(implName, implementerPrompt(issue, ticketPath), remaining())
+    let outcome = await agentPrompt(
+      implName,
+      implementerPrompt(issue, ticketPath, base),
+      remaining(),
+    )
     if (outcome.state !== "idle" && outcome.state !== "done") {
       return await block(
         `implementer ended ${outcome.state}: ${outcome.detail}\n${await agentRead(implName)}`,
