@@ -80,7 +80,7 @@ public:
         unsigned int EndCol = SM.getSpellingColumnNumber(EndLoc);
 
         if (File != SM.getFileID(BegLoc)) {
-            Check.diag(BegLoc, "Mysterious multi-file comment", DiagnosticIDs::Error);
+            Check.diag(BegLoc, "Mysterious multi-file comment", DiagnosticIDs::Warning);
             return false;
         }
 
@@ -156,7 +156,7 @@ public:
         if (RawStringInd >= Args->getNumMacroArguments()) {
             Check.diag(
                 Range.getBegin(), "Translation marker doesn't have expected number of arguments",
-                DiagnosticIDs::Error);
+                DiagnosticIDs::Warning);
         }
 
         // First ensure that translation markers have only string literal arguments
