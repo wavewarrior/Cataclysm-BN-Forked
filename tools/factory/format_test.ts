@@ -1,5 +1,11 @@
 import { assertEquals } from "@std/assert"
-import { checkToolVersions, formatCommitFiles, formatScript, formatTargets } from "./format.ts"
+import {
+  checkToolVersions,
+  formatCommitFiles,
+  formatScript,
+  formatTargets,
+  uncommittedTargets,
+} from "./format.ts"
 
 Deno.test("formatTargets gives src subdirectories and tests to clang-format, and src root files to astyle", () => {
   assertEquals(
@@ -73,4 +79,10 @@ Deno.test("formatCommitFiles keeps only modified files the formatter targets", (
     ["src/a/b.cpp", "src/turn_plan.cpp"],
   )
   assertEquals(formatCommitFiles(["docs/x.md"], targets), [])
+})
+
+Deno.test("uncommittedTargets flags only format targets with uncommitted edits", () => {
+  const targets = formatTargets(["src/x/a.cpp", "src/b.cpp", "docs/other.txt"])
+  assertEquals(uncommittedTargets(["src/x/a.cpp", "docs/other.txt"], targets), ["src/x/a.cpp"])
+  assertEquals(uncommittedTargets([], targets), [])
 })

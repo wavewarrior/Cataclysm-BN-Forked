@@ -69,6 +69,12 @@ export function formatCommitFiles(modified: readonly string[], targets: FormatTa
   return modified.filter((f) => formattable.has(f))
 }
 
+/// Pure: the format targets that have uncommitted edits. Formatting those would commit ticket work under `style:`.
+export function uncommittedTargets(dirty: readonly string[], targets: FormatTargets): string[] {
+  const changed = new Set(dirty)
+  return [...targets.clang, ...targets.astyle].filter((f) => changed.has(f))
+}
+
 /// Single-quote one shell word.
 function shellQuote(word: string): string {
   return `'${word.replaceAll("'", `'\\''`)}'`
@@ -92,6 +98,16 @@ export async function checkFormatTools(): Promise<string | undefined> {
     astyle: astyle.stdout || astyle.stderr,
     clangFormat: clangFormat.stdout || clangFormat.stderr,
   })
+}
+
+/// Every path the worktree has uncommitted: unstaged, staged or untracked.
+async function dirtyPaths(cwd: string): Promise<string[]> {
+  const outputs = await Promise.all([
+    git(cwd, "diff", "--name-only"),
+    git(cwd, "diff", "--cached", "--name-only"),
+    git(cwd, "ls-files", "--others", "--exclude-standard"),
+  ])
+  return outputs.flatMap((out) => out.split("\n")).filter(Boolean)
 }
 
 /// Format the changed C++ files of the worktree at `cwd`. Returns the exit code (2 on a pin mismatch).
@@ -125,6 +141,13 @@ export async function formatAndCommit(opts: {
   ticket: number
 }): Promise<string | undefined> {
   try {
+    const pending = uncommittedTargets(
+      await dirtyPaths(opts.cwd),
+      formatTargets(await changedFiles(opts.cwd, opts.base)),
+    )
+    if (pending.length > 0) {
+      return `uncommitted edits in C++ files the formatter would touch: ${pending.join(", ")}. Commit them before formatting.`
+    }
     const code = await runFormat(opts)
     if (code !== 0) return `format failed (exit ${code})`
     const targets = formatTargets(await changedFiles(opts.cwd, opts.base))
