@@ -28,7 +28,7 @@ fi
 $SUDO apt-get install -y \
     "clang-$LLVM_VERSION" "clang-tidy-$LLVM_VERSION" "clang-format-$LLVM_VERSION" \
     "llvm-$LLVM_VERSION-dev" "libclang-$LLVM_VERSION-dev" "libclang-rt-$LLVM_VERSION-dev" \
-    gettext mold jq ccache ninja-build cmake make g++ git curl zip unzip tar \
+    gettext mold jq ccache ninja-build cmake make g++ git curl zip unzip tar bzip2 \
     sqlite3 libsqlite3-dev zlib1g-dev libvulkan-dev mesa-vulkan-drivers xvfb \
     autoconf autoconf-archive automake libtool libltdl-dev pkg-config python3-pip \
     libasound2-dev libpulse-dev libaudio-dev libjack-dev libsndio-dev libx11-dev \
@@ -45,7 +45,7 @@ for tool in clang clang++ clang-tidy clang-format llvm-config; do
     $SUDO update-alternatives --set "$tool" "/usr/bin/$tool-$LLVM_VERSION"
 done
 
-# Pin astyle to the version CI runs (.github/workflows/autofix.yml), not apt's 3.1.
+# Pin astyle to the version CI runs (.github/workflows/autofix.yml), so the gate and CI format alike.
 ASTYLE_VERSION=3.6.16
 if [ "$(astyle --version 2>/dev/null)" != "Artistic Style Version $ASTYLE_VERSION" ]; then
     astyle_src="$(mktemp -d)"
