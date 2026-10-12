@@ -39,7 +39,8 @@
     "place_player_can_safely_move_multiple_submaps",
     "pulling_away_with_cruise_accelerates",
     "MSX++UnDeadPeopleEdition cross-sheet tile sprites are anchored to their sheet",
-    "the rebuild plan lists the levels the dirty state licenses for rebuild"
+    "the rebuild plan lists the levels the dirty state licenses for rebuild",
+    "grabbed_shopping_cart_can_be_pulled_on_flat_ground"
   ],
   "baselineFailuresLinux": [
     

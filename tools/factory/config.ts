@@ -51,6 +51,9 @@ export const config = {
     "pulling_away_with_cruise_accelerates",
     "MSX++UnDeadPeopleEdition cross-sheet tile sprites are anchored to their sheet",
     "the rebuild plan lists the levels the dirty state licenses for rebuild",
+    // Quarantined 2026-10-12: passes alone, fails only in the full run (order-dependent state leak),
+    // predates #170 (added in 7c74b639b0). Remove once the test order dependency is fixed.
+    "grabbed_shopping_cart_can_be_pulled_on_flat_ground",
   ] as readonly string[],
   /// The same list for the Linux CI build (clang, software GPU), which fails a different set than
   /// MSVC. Empty until one `workflow_dispatch` run of factory-ci records it; make `linux-tests`
