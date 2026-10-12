@@ -135,7 +135,9 @@ constexpr registry_entry kRegistry[] = {
 static_assert( std::size( kRegistry ) == static_cast<std::size_t>( turn_step_kind::frame_audio ) +
                1 );
 static_assert( std::ranges::all_of( std::views::iota( std::size_t{ 0 }, std::size( kRegistry ) ),
-                                    []( const std::size_t i ) -> bool { return static_cast<std::size_t>( kRegistry[i].kind ) == i; } ) );
+[]( const std::size_t i ) -> bool {
+    return static_cast<std::size_t>( kRegistry[i].kind ) == i;
+} ) );
 
 /// The reason a step is skipped, or empty when its gate is open.
 auto gate( const bool open, const std::string_view reason ) -> std::string_view
@@ -259,7 +261,9 @@ auto turn_plan::view( const turn_mode mode ) const -> std::vector<turn_step>
 {
     auto out = std::vector<turn_step> {};
     std::ranges::copy_if( steps, std::back_inserter( out ),
-                          [mode]( const turn_step & step ) -> bool { return admits( mode, step.scope ); } );
+    [mode]( const turn_step & step ) -> bool {
+        return admits( mode, step.scope );
+    } );
     return out;
 }
 
