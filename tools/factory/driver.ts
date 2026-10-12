@@ -271,22 +271,17 @@ function laneEnv(ticket: number, role: "implementer" | "reviewer"): Record<strin
 
 export type DriverOptions = { repo: string }
 
-/// Block a ticket with a follow-up that carries the failure, so its dependents move to the follow-up
-/// Failures a follow-up cannot fix: they come from the lane or herdr, not from the ticket's code.
-const INFRA_FAILURE =
-  /herdr worktree create|already exists|would be overwritten by checkout|waiting for the lint lane lock/
-
-/// Whether a blocked ticket gets a follow-up. Infra failures get none, and neither does a parent that
-/// already has an open follow-up (`existingFollowUps` lists those parents), so retries do not stack duplicates.
+/// Whether a blocked ticket gets a follow-up: not when its parent already has an open one
+/// (`existingFollowUps` lists those parents), so retries do not stack duplicates. Infra failures
+/// never get here: lane.sh exits 2 for them and gate.ts blocks them as needs-human.
 export function shouldCreateFollowUp(opts: {
-  reason: string
   issue: number
   existingFollowUps: number[]
 }): boolean {
-  if (INFRA_FAILURE.test(opts.reason)) return false
   return !opts.existingFollowUps.includes(opts.issue)
 }
 
+/// Block a ticket with a follow-up that carries the failure, so its dependents move to the follow-up
 /// instead of waiting on a blocked ticket. A follow-up never spawns another follow-up.
 async function blockWithFollowUp(opts: {
   issue: Issue
@@ -302,7 +297,7 @@ async function blockWithFollowUp(opts: {
     const parent = followUpOf(makeTicket(i).sections)
     return parent === undefined ? [] : [parent]
   })
-  if (!shouldCreateFollowUp({ reason, issue: issue.number, existingFollowUps })) {
+  if (!shouldCreateFollowUp({ issue: issue.number, existingFollowUps })) {
     return await block(reason)
   }
   try {
