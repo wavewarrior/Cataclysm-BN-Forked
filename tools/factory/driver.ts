@@ -272,6 +272,21 @@ function laneEnv(ticket: number, role: "implementer" | "reviewer"): Record<strin
 export type DriverOptions = { repo: string }
 
 /// Block a ticket with a follow-up that carries the failure, so its dependents move to the follow-up
+/// Failures a follow-up cannot fix: they come from the lane or herdr, not from the ticket's code.
+const INFRA_FAILURE =
+  /herdr worktree create|already exists|would be overwritten by checkout|waiting for the lint lane lock/
+
+/// Whether a blocked ticket gets a follow-up. Infra failures get none, and neither does a parent that
+/// already has an open follow-up (`existingFollowUps` lists those parents), so retries do not stack duplicates.
+export function shouldCreateFollowUp(opts: {
+  reason: string
+  issue: number
+  existingFollowUps: number[]
+}): boolean {
+  if (INFRA_FAILURE.test(opts.reason)) return false
+  return !opts.existingFollowUps.includes(opts.issue)
+}
+
 /// instead of waiting on a blocked ticket. A follow-up never spawns another follow-up.
 async function blockWithFollowUp(opts: {
   issue: Issue
@@ -282,6 +297,14 @@ async function blockWithFollowUp(opts: {
   const { issue, ticket, reason, block } = opts
   if (followUpOf(ticket.sections) !== undefined) return await block(reason)
   let followUp: { number: number; url: string }
+  const open = await listIssues([]).catch(() => undefined)
+  const existingFollowUps = (open ?? []).flatMap((i) => {
+    const parent = followUpOf(makeTicket(i).sections)
+    return parent === undefined ? [] : [parent]
+  })
+  if (!shouldCreateFollowUp({ reason, issue: issue.number, existingFollowUps })) {
+    return await block(reason)
+  }
   try {
     followUp = await createIssue({
       title: `fix: unblock #${issue.number}`,
@@ -292,7 +315,6 @@ async function blockWithFollowUp(opts: {
     const why = error instanceof Error ? error.message : String(error)
     return await block(`${reason}\n\nno follow-up ticket was created: ${why}`)
   }
-  const open = await listIssues([]).catch(() => undefined)
   const moved: number[] = []
   const stuck: number[] = []
   for (const dependent of open ?? []) {
