@@ -553,9 +553,6 @@ export async function runTicket(
       if (remaining() <= 0) {
         return await block(`wall clock of ${config.ticketWallClockMin} min exceeded`)
       }
-      say(`gate attempt ${retries + 1}`)
-      const gateRun = await runToLog(
-        ["deno", "task", "gate", "--tier", "full", "--base", base],
       const pending = await pendingFormatFiles({ cwd: path, base })
       if (pending.length > 0) {
         if (retries >= config.maxFixRetries) {
@@ -574,6 +571,9 @@ export async function runTicket(
       }
       const formatError = await formatAndCommit({ cwd: path, base, ticket: n })
       if (formatError !== undefined) return await block(formatError)
+      say(`gate attempt ${retries + 1}`)
+      const gateRun = await runToLog(
+        ["deno", "task", "gate", "--tier", "full", "--base", base],
         join(fdir, "gate-run.log"),
         { cwd: path, env: { FACTORY_TICKET: String(n) } },
       )
