@@ -202,3 +202,15 @@ Deno.test("watch keeps the plain idle line when explaining the idle fails, witho
   })
   assertEquals(result.logs, ["idle: no pickable factory:ready ticket, polling every 60s"])
 })
+
+Deno.test("watch keeps the plain idle line when explaining the idle throws synchronously", async () => {
+  const result = await run({
+    once: true,
+    hasWork: () => Promise.resolve(false),
+    runPass: () => Promise.resolve(),
+    explainIdle: () => {
+      throw new Error("gh unreachable")
+    },
+  })
+  assertEquals(result.logs, ["idle: no pickable factory:ready ticket, polling every 60s"])
+})
