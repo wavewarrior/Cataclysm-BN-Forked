@@ -458,7 +458,10 @@ export async function runTicket(
     const keep = keepsBranch(await commitsAheadOfBase(opts.repo, base, branch))
     const conflict = restartConflict(held, path, branch)
     if (conflict) {
-      return await block(`cannot re-pick: ${conflict}. Move that checkout aside, then unblock.`)
+      return await block(
+        `cannot re-pick: ${conflict}. Move that checkout aside, then unblock.`,
+        { needsHuman: true },
+      )
     }
     for (const stale of await workspacesWithPrefix(workspacePrefix(n))) {
       await workspaceClose(stale)
@@ -470,6 +473,7 @@ export async function runTicket(
     if (leftover) {
       return await block(
         `${path} is still on disk after clearing the previous checkout. Move it aside, then unblock.`,
+        { needsHuman: true },
       )
     }
     const label = workspaceLabel(n, issue.title)
