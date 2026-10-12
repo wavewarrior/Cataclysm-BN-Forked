@@ -233,7 +233,7 @@ TEST_CASE("turn cycle: client step decays an avatar timed effect by one tick", "
 TEST_CASE("turn cycle: client step leaves a moving vehicle in place", "[coop][parity]") {
     setup_world();
     coop_mode_guard mcli(coop_mode::client);
-    vehicle* veh = g->m.add_vehicle(
+    auto veh = g->m.add_vehicle(
         vproto_id("car_test"), g->u.bub_pos() + tripoint_rel_ms{6, 0, 0}, 0_degrees, 100, 0);
     REQUIRE(veh != nullptr);
     veh->velocity = 500;
