@@ -1,6 +1,10 @@
 #include <unordered_map>
 #include <vector>
 #include "string_id.h"
+#include "thread_pool.h"
+#include <atomic>
+#include <mutex>
+#include <string>
 
 namespace
 {
@@ -20,6 +24,10 @@ inline static ReverseLookupVecType &get_reverse_lookup_vec()
     return vec;
 }
 
+std::atomic<int> g_diag_new_interns_on_worker{ 0 };
+std::mutex g_diag_intern_samples_mutex;
+std::vector<std::string> g_diag_intern_samples;
+
 template<typename S>
 inline static int universal_string_id_intern( S &&s )
 {
@@ -27,6 +35,13 @@ inline static int universal_string_id_intern( S &&s )
     const auto &pair = get_intern_map().emplace( std::forward<S>( s ), next_id );
     if( pair.second ) { // inserted
         get_reverse_lookup_vec().push_back( &pair.first->first );
+        if( is_pool_worker_thread() ) {
+            g_diag_new_interns_on_worker++;
+            std::lock_guard<std::mutex> lk( g_diag_intern_samples_mutex );
+            if( g_diag_intern_samples.size() < 12 ) {
+                g_diag_intern_samples.push_back( pair.first->first );
+            }
+        }
     }
     return pair.first->second;
 }

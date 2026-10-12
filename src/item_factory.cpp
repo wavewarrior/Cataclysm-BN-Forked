@@ -1,5 +1,7 @@
 #include "item_factory.h"
 
+#include <atomic>
+#include "thread_pool.h"
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -586,8 +588,15 @@ const itype *Item_factory::find_template( const itype_id &id ) const
     return def;
 }
 
+std::atomic<int> g_diag_inserting{ 0 };
+std::atomic<int> g_diag_group_inserts_on_worker{ 0 };
+std::atomic<int> g_diag_finds_during_insert{ 0 };
+
 Item_spawn_data *Item_factory::get_group( const item_group_id &item_group_id )
 {
+    if( g_diag_inserting.load() > 0 ) {
+        g_diag_finds_during_insert++;
+    }
     GroupMap::iterator group_iter = m_template_groups.find( item_group_id );
     if( group_iter != m_template_groups.end() ) {
         return group_iter->second.get();
@@ -2334,7 +2343,12 @@ void Item_factory::load_item_group( const JsonArray &entries, const item_group_i
                                     const bool is_collection, const int ammo_chance, const int magazine_chance )
 {
     const auto type = is_collection ? Item_group::G_COLLECTION : Item_group::G_DISTRIBUTION;
+    if( is_pool_worker_thread() ) {
+        g_diag_group_inserts_on_worker++;
+    }
+    g_diag_inserting++;
     std::unique_ptr<Item_spawn_data> &isd = m_template_groups[group_id];
+    g_diag_inserting--;
     Item_group *const ig = make_group_or_throw( group_id, isd, type, ammo_chance, magazine_chance );
 
     for( const JsonObject subobj : entries ) {
@@ -2345,7 +2359,12 @@ void Item_factory::load_item_group( const JsonArray &entries, const item_group_i
 void Item_factory::load_item_group( const JsonObject &jsobj, const item_group_id &group_id,
                                     const std::string &subtype )
 {
+    if( is_pool_worker_thread() ) {
+        g_diag_group_inserts_on_worker++;
+    }
+    g_diag_inserting++;
     std::unique_ptr<Item_spawn_data> &isd = m_template_groups[group_id];
+    g_diag_inserting--;
 
     Item_group::Type type = Item_group::G_COLLECTION;
     if( subtype == "old" || subtype == "distribution" ) {

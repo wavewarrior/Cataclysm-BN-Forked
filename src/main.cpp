@@ -901,7 +901,9 @@ int main( int argc, char* argv[] )
             if( !g->load( world ) ) {
                 if( driver_fd >= 0 ) {
                     std::cerr << "driver: world '" << world << "' failed to load\n";
-                    return 1;
+                    // Not `return`: static destructors would free Lua mapgen functions
+                    // after the Lua state they reference is gone (0xC0000005 on exit).
+                    exit_handler( 1 );
                 }
                 break;
             }
@@ -918,7 +920,7 @@ int main( int argc, char* argv[] )
                     .reply_fd = driver_reply_fd,
                 };
                 if( !run_driver_loop( driver_fd, options ) ) {
-                    return 1;
+                    exit_handler( 1 );
                 }
                 exit_handler( 0 );
             }

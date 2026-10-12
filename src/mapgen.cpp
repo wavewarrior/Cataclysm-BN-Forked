@@ -634,9 +634,35 @@ void calculate_mapgen_weights() // TODO: rename as it runs jsonfunction setup to
     // - get_cached_stream bypassed; using string ctor (Step 2D)
     // - s_flat_palettes: read-only after pre_flatten_palettes(); no lock needed
     // - s_mapgen_layout_cache: read-only (populated during load phase); no lock needed
-    parallel_for( 0, static_cast<int>( parallel_fns.size() ), [&]( int i ) {
-        parallel_fns[i]->setup();
-    } );
+    {
+        extern std::atomic<int> g_diag_group_inserts_on_worker;
+        extern std::atomic<int> g_diag_finds_during_insert;
+        extern std::atomic<int> g_diag_new_interns_on_worker;
+        extern std::vector<std::string> g_diag_intern_samples;
+        g_diag_group_inserts_on_worker = 0;
+        g_diag_finds_during_insert = 0;
+        g_diag_new_interns_on_worker = 0;
+        g_diag_intern_samples.clear();
+        extern std::atomic<int> g_diag_setup_entries;
+        g_diag_setup_entries = 0;
+        parallel_for( 0, static_cast<int>( parallel_fns.size() ), [&]( int i ) {
+            parallel_fns[i]->setup();
+        } );
+        std::string samples;
+        for( const std::string &s : g_diag_intern_samples ) {
+            samples += "[" + s + "] ";
+        }
+        std::vector<mapgen_function *> uniq = parallel_fns;
+        std::sort( uniq.begin(), uniq.end() );
+        uniq.erase( std::unique( uniq.begin(), uniq.end() ), uniq.end() );
+        dbg( DL::Info ) << "[race-diag] parallel_fns=" << parallel_fns.size()
+                        << " unique_fns=" << uniq.size()
+                        << " setup_entries=" << g_diag_setup_entries.load()
+                        << " group_inserts_on_worker=" << g_diag_group_inserts_on_worker.load()
+                        << " finds_during_insert=" << g_diag_finds_during_insert.load()
+                        << " new_interns_on_worker=" << g_diag_new_interns_on_worker.load()
+                        << " samples=" << samples;
+    }
 
     // Serial setup for Lua entries. Once after all parallel setup, main thread only.
     for( auto * fn : serial_fns ) { fn->setup(); }
@@ -3762,6 +3788,7 @@ void mapgen_function_json_nested::finalize_parameters() { finalize_parameters_co
 
 void update_mapgen_function_json::finalize_parameters() { finalize_parameters_common(); }
 
+std::atomic<int> g_diag_setup_entries{ 0 };
 /*
  * Parse json, pre-calculating values for stuff, then cheerfully throw json away. Faster than
  * regular mapf, in theory
@@ -3769,6 +3796,10 @@ void update_mapgen_function_json::finalize_parameters() { finalize_parameters_co
 void mapgen_function_json_base::setup_common()
 {
     if( is_ready ) { return; }
+    {
+        extern std::atomic<int> g_diag_setup_entries;
+        g_diag_setup_entries++;
+    }
     if( !jsrcloc->path ) {
         debugmsg( "null json source location path" );
         return;
