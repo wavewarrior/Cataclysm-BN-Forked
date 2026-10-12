@@ -640,7 +640,8 @@ namespace {
 
 /// Host advances @p turns_ahead turns and builds the sync at that turn. The calendar is
 /// then rewound, so the client's apply_sync sees the pre-sync turn as turn_before and
-/// runs turns_ahead turn steps. The client never advances calendar::turn itself.
+/// runs turns_ahead turn steps. apply_sync sets calendar::turn from the payload, so the
+/// caller restores it.
 auto sync_host_advancing(inproc_harness& h, const int turns_ahead) -> void {
     const auto turn_before = calendar::turn;
     calendar::turn = turn_before + time_duration::from_turns(turns_ahead);
@@ -660,12 +661,15 @@ auto sync_host_advancing(inproc_harness& h, const int turns_ahead) -> void {
 auto avatar_decay_for_sync(const int turns_ahead) -> int {
     inproc_harness h;
     h.setup();
+    const auto turn_start = calendar::turn;
     const auto blind = efftype_id("blind");
     g->u.add_effect(blind, 1_hours);
     const action_time_scale::scoped_calendar_turns_this_tick tick_guard(1);
     const auto before = g->u.get_effect_dur(blind);
     sync_host_advancing(h, turns_ahead);
-    return to_turns<int>(before - g->u.get_effect_dur(blind));
+    const auto decayed = to_turns<int>(before - g->u.get_effect_dur(blind));
+    calendar::turn = turn_start;
+    return decayed;
 }
 
 } // namespace

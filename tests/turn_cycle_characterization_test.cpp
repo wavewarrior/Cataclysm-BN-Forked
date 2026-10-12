@@ -164,7 +164,8 @@ TEST_CASE(
     }
 }
 
-// Host copy lays scent at the avatar tile: scent.set() runs before scent.update().
+// Host copy lays scent at the avatar tile after one step. The set-before-update order is
+// not observable through this seam, so it is not pinned here.
 TEST_CASE("turn cycle: host step lays scent at the avatar tile", "[coop][parity]") {
     setup_world();
     g->new_game = false;
