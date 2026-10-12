@@ -150,10 +150,8 @@ TEST_CASE(
         R"(\[sim\]\[perf\] (\d+) turns avg: sim_total=([-+0-9.eE]+)ms )"
         R"(\(build_map_cache=([-+0-9.eE]+) monmove=([-+0-9.eE]+) world_tick=([-+0-9.eE]+)\))");
 
-    const auto matches =
-        std::ranges::
-            subrange(std::sregex_iterator(log.begin(), log.end(), perf_re), std::sregex_iterator())
-        | std::ranges::to<std::vector<std::smatch>>();
+    const auto matches = std::vector<
+        std::smatch>(std::sregex_iterator(log.begin(), log.end(), perf_re), std::sregex_iterator());
     REQUIRE(matches.size() == 1);
     const auto& line = matches.front();
     CHECK(line[1].str() == "20");
@@ -217,7 +215,7 @@ TEST_CASE("turn cycle: client step leaves monsters where they are", "[coop][pari
 TEST_CASE("turn cycle: host step decays an avatar timed effect by one tick", "[coop][parity]") {
     setup_world();
     g->new_game = false;
-    CHECK(avatar_decay_one_step([] { g->post_action_world_step(); }) == 1);
+    CHECK(avatar_decay_one_step([]() -> void { g->post_action_world_step(); }) == 1);
 }
 
 // The client copy decays the same timed effect by one tick, so the avatar-local half
@@ -225,7 +223,7 @@ TEST_CASE("turn cycle: host step decays an avatar timed effect by one tick", "[c
 TEST_CASE("turn cycle: client step decays an avatar timed effect by one tick", "[coop][parity]") {
     setup_world();
     coop_mode_guard mcli(coop_mode::client);
-    CHECK(avatar_decay_one_step([] { g->coop_client_turn_step(); }) == 1);
+    CHECK(avatar_decay_one_step([]() -> void { g->coop_client_turn_step(); }) == 1);
 }
 
 // The client copy must not move vehicles, so a car set moving keeps its position and
