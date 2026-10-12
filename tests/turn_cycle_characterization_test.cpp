@@ -82,6 +82,25 @@ TEST_CASE("turn cycle: client step does not advance the calendar", "[coop][parit
     CHECK(calendar::turn == before);
 }
 
+// Host/solo copy: one call writes the avatar's scent onto its own tile. The scent set
+// runs before the diffusion update, so the avatar tile is positive after a single step.
+TEST_CASE("turn cycle: host step writes the avatar scent onto its tile", "[coop][parity]") {
+    setup_world();
+    const tripoint_bub_ms pos = g->u.bub_pos();
+    g->u.scent = 1000;
+    g->post_action_world_step();
+    CHECK(g->scent.get(pos) > 0);
+}
+
+// Host/solo copy: the avatar-local half runs, so stored calories are billed across a
+// run of host steps. The client copy is pinned by the inproc test in coop_inproc_test.cpp.
+TEST_CASE("turn cycle: host step changes avatar biology", "[coop][parity]") {
+    setup_world();
+    const int kcal_before = g->u.get_stored_kcal();
+    for (int i = 0; i < 400; ++i) { g->post_action_world_step(); }
+    CHECK(g->u.get_stored_kcal() != kcal_before);
+}
+
 // The [sim][perf] line is emitted once per 20 host turns. Twenty consecutive calls
 // therefore produce exactly one line, whatever the counter was when they started.
 // Its field set is consumed by tooling, so each field must still be present and
