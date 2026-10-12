@@ -281,6 +281,15 @@ export function shouldCreateFollowUp(opts: {
   return !opts.existingFollowUps.includes(opts.issue)
 }
 
+/// Pure: the parent numbers of open follow-up issues, or undefined when the open list is unknown.
+/// The caller then blocks without a follow-up (fail closed), so a list failure never makes a duplicate.
+export function openFollowUpParents(open: readonly Issue[] | undefined): number[] | undefined {
+  return open?.flatMap((i) => {
+    const parent = followUpOf(makeTicket(i).sections)
+    return parent === undefined ? [] : [parent]
+  })
+}
+
 /// Block a ticket with a follow-up that carries the failure, so its dependents move to the follow-up
 /// instead of waiting on a blocked ticket. A follow-up never spawns another follow-up.
 async function blockWithFollowUp(opts: {
@@ -291,16 +300,13 @@ async function blockWithFollowUp(opts: {
 }): Promise<TicketResult> {
   const { issue, ticket, reason, block } = opts
   if (followUpOf(ticket.sections) !== undefined) return await block(reason)
-  let followUp: { number: number; url: string }
   const open = await listIssues([]).catch(() => undefined)
-  if (open === undefined) return await block(reason)
-  const existingFollowUps = open.flatMap((i) => {
-    const parent = followUpOf(makeTicket(i).sections)
-    return parent === undefined ? [] : [parent]
-  })
+  const existingFollowUps = openFollowUpParents(open)
+  if (existingFollowUps === undefined) return await block(reason)
   if (!shouldCreateFollowUp({ issue: issue.number, existingFollowUps })) {
     return await block(reason)
   }
+  let followUp: { number: number; url: string }
   try {
     followUp = await createIssue({
       title: `fix: unblock #${issue.number}`,
@@ -326,6 +332,7 @@ async function blockWithFollowUp(opts: {
     }
   }
   const notes = [`Follow-up: #${followUp.number} ${followUp.url}`]
+  if (open === undefined) notes.push("Could not list open issues, so no dependent was moved.")
   if (moved.length) {
     notes.push(
       `Dependents now wait on #${followUp.number}: ${moved.map((n) => `#${n}`).join(", ")}.`,

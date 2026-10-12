@@ -10,6 +10,7 @@ import {
   gateFailurePrompt,
   holdsOf,
   keepsBranch,
+  openFollowUpParents,
   ownedBranchAt,
   parseVerdict,
   pickNext,
@@ -124,6 +125,11 @@ Deno.test("a parent with an open follow-up gets no second one; any other blocked
   assertEquals(shouldCreateFollowUp({ issue: 170, existingFollowUps: [170] }), false)
   assertEquals(shouldCreateFollowUp({ issue: 170, existingFollowUps: [171] }), true)
   assertEquals(shouldCreateFollowUp({ issue: 166, existingFollowUps: [] }), true)
+})
+
+Deno.test("an unknown open-issue list gives no parent list, so the caller blocks without a follow-up", () => {
+  assertEquals(openFollowUpParents(undefined), undefined)
+  assertEquals(openFollowUpParents([]), [])
 })
 
 Deno.test("a follow-up is a runnable ticket that inherits the blocked ticket's touches and tags", () => {
