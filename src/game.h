@@ -174,6 +174,7 @@ class game: public submap_load_listener
         friend class editmap;
         friend class advanced_inventory;
         friend class main_menu;
+        friend class turn_executor;
         friend distribution_grid_tracker &get_distribution_grid_tracker();
         friend auto get_distribution_grid_tracker_for(
             const dimension_id & ) -> distribution_grid_tracker *;
@@ -454,8 +455,7 @@ class game: public submap_load_listener
         friend class Creature_range;
 
         template <typename T>
-        class non_dead_range: public std::ranges::view_interface<non_dead_range<T>>
-        {
+        class non_dead_range: public std::ranges::view_interface<non_dead_range<T>> {
             public:
                 std::shared_ptr<std::vector<weak_ptr_fast<T>>> items;
                 non_dead_range(): items( std::make_shared<std::vector<weak_ptr_fast<T>>>() ) {}
@@ -522,20 +522,17 @@ class game: public submap_load_listener
                 }
         };
 
-        class monster_range: public non_dead_range<monster>
-        {
+        class monster_range: public non_dead_range<monster> {
             public:
                 monster_range( game & game_ref );
         };
 
-        class npc_range: public non_dead_range<npc>
-        {
+        class npc_range: public non_dead_range<npc> {
             public:
                 npc_range( game & game_ref );
         };
 
-        class Creature_range: public non_dead_range<Creature>
-        {
+        class Creature_range: public non_dead_range<Creature> {
             private:
                 shared_ptr_fast<player> u;
 
@@ -1143,11 +1140,10 @@ class game: public submap_load_listener
         void display_tiles_no_vfx(); // Disables tileset visual effects
 
         // prints the IRL time in ms of the last full in-game hour
-        class debug_hour_timer
-        {
+        class debug_hour_timer {
             public:
                 using IRLTimeMs =
-                    std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds>;
+                std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds>;
                 void toggle();
                 void print_time();
 
