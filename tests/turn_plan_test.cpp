@@ -93,7 +93,7 @@ TEST_CASE("fork law: the coop client turn view holds only avatar steps", "[turn_
     const auto view = plan.view(turn_mode::client_turn);
     REQUIRE_FALSE(view.empty());
     CHECK(std::ranges::count(view, turn_scope::world, &turn_step::scope) == 0);
-    CHECK(std::ranges::all_of(view, [](const turn_step& s) {
+    CHECK(std::ranges::all_of(view, [](const turn_step& s) -> bool {
         return s.scope == turn_scope::avatar;
     }));
 }
@@ -161,7 +161,7 @@ TEST_CASE("moving advance_calendar past a turn reader trips the calendar law", "
     const auto cal =
         std::ranges::find(plan.steps, turn_step_kind::advance_calendar, &turn_step::kind);
     REQUIRE(cal != plan.steps.end());
-    const auto moved = *cal;
+    auto moved = std::move(*cal);
     plan.steps.erase(cal);
     const auto timed =
         std::ranges::find(plan.steps, turn_step_kind::timed_events_and_missions, &turn_step::kind);
