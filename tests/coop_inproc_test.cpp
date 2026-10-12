@@ -32,11 +32,13 @@
 #include "json.h"
 #include "map.h"
 #include "map_helpers.h"
+#include "monster.h"
 #include "npc.h"
 #include "state_helpers.h"
 #include "type_id.h"
 #include "weather.h"
 
+#include <ranges>
 #include <sstream>
 
 namespace {
@@ -596,30 +598,38 @@ TEST_CASE(
 
     get_map().ter_set(TER_TILE, ter_str_id("t_dirt").id());
     get_map().add_field(FIELD_TILE, field_type_id("fd_fire"), 1, 0_turns);
-    spawn_test_monster("mon_zombie", MON_TILE);
+    auto& zed = spawn_test_monster("mon_zombie", MON_TILE);
 
     const auto ter_before = get_map().ter(TER_TILE);
     REQUIRE(get_map().get_field(FIELD_TILE).find_field(field_type_id("fd_fire")) != nullptr);
     const auto field_before =
         get_map().get_field(FIELD_TILE).find_field(field_type_id("fd_fire"))->get_field_intensity();
-    const int creatures_before = g->num_creatures();
-    const int kcal_before = g->u.get_stored_kcal();
+    const auto creatures_before = g->num_creatures();
+    const auto kcal_before = g->u.get_stored_kcal();
+    const auto zed_hp_before = zed.get_hp();
+    const auto zed_pos_before = zed.abs_pos();
+    const auto avatar_bub_before = g->u.bub_pos();
 
-    // Pin weather so rain cannot decay fields during the loop; the test is about the client copy.
+    // Hold the weather still for the whole loop. update_weather() returns early while
+    // weather_id is set and turn < nextweather, and the client step calls it each turn.
     auto& weather = get_weather();
     weather.weather_id = weather_type_id("clear");
-    weather.weather_override = weather_type_id::NULL_ID();
-    weather.nextweather = calendar::before_time_starts;
+    weather.nextweather = calendar::turn + 10000_turns;
 
-    for (int i = 0; i < 400; ++i) {
+    // The client step never advances calendar::turn (the host owns the clock), so this loop
+    // simulates the host's advance.
+    for ([[maybe_unused]] const auto turn : std::views::iota(0, 400)) {
         calendar::turn += 1_turns;
         g->coop_client_turn_step();
     }
 
     CHECK(get_map().ter(TER_TILE) == ter_before);
-    CHECK(g->num_creatures() == creatures_before);
-    field_entry* const after = get_map().get_field(FIELD_TILE).find_field(field_type_id("fd_fire"));
+    REQUIRE(g->num_creatures() == creatures_before);
+    CHECK(zed.abs_pos() == zed_pos_before);
+    CHECK(g->u.bub_pos() == avatar_bub_before);
+    CHECK(zed.get_hp() == zed_hp_before);
+    const auto after = get_map().get_field(FIELD_TILE).find_field(field_type_id("fd_fire"));
     REQUIRE(after != nullptr);
     CHECK(after->get_field_intensity() == field_before);
-    CHECK(g->u.get_stored_kcal() != kcal_before);
+    CHECK(g->u.get_stored_kcal() < kcal_before);
 }
