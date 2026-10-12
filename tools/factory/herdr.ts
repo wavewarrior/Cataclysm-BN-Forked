@@ -154,15 +154,6 @@ export async function workspaceFind(label: string): Promise<string | undefined> 
   return list.find((w) => w.label === label)?.workspace_id
 }
 
-/// The ids of every open workspace whose label starts with `prefix`.
-export async function workspacesWithPrefix(prefix: string): Promise<string[]> {
-  const list = (await ok(["workspace", "list"])).workspaces as {
-    label?: string
-    workspace_id: string
-  }[]
-  return list.filter((w) => w.label?.startsWith(prefix)).map((w) => w.workspace_id)
-}
-
 export async function workspaceFocus(workspace: string): Promise<void> {
   await act(["workspace", "focus", workspace])
 }

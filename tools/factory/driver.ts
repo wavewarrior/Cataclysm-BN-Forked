@@ -112,15 +112,6 @@ export function blockComment(reason: string, needsHuman: boolean): string {
   return `${head}\n\n${reason}`
 }
 
-/// Commands that clear a previous attempt before a re-picked ticket starts fresh: the old worktree
-/// is removed with --force, then its branch. Callers ignore failure; either may already be gone.
-export function freshStartCommands(repo: string, path: string, branch: string): string[][] {
-  return [
-    ["git", "-C", repo, "worktree", "remove", "--force", path],
-    ["git", "-C", repo, "branch", "-D", branch],
-  ]
-}
-
 /// The herdr workspace label for ticket `n`. Lookups match on `workspacePrefix`, so a retitled
 /// ticket still finds the workspace an earlier attempt opened.
 export function workspacePrefix(n: number): string {

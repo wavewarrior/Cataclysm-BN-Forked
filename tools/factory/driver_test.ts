@@ -7,7 +7,6 @@ import {
   describeHolds,
   followUpBody,
   followUpOf,
-  freshStartCommands,
   gateFailurePrompt,
   holdsOf,
   parseVerdict,
@@ -107,13 +106,6 @@ Deno.test("a needs-human block adds factory:needs-human and says so in its comme
     blockComment("gate broke", true),
     "factory: blocked (needs human).\n\ngate broke",
   )
-})
-
-Deno.test("freshStartCommands removes the worktree then its branch", () => {
-  assertEquals(freshStartCommands("/repo", "/wt/wt-factory-3", "factory/3"), [
-    ["git", "-C", "/repo", "worktree", "remove", "--force", "/wt/wt-factory-3"],
-    ["git", "-C", "/repo", "branch", "-D", "factory/3"],
-  ])
 })
 
 Deno.test("workspaceLabel carries the ticket prefix that re-pick matches on", () => {
