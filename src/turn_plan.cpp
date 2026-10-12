@@ -200,16 +200,13 @@ auto skip_reason( const registry_entry &entry, const turn_inputs &in ) -> std::s
 /// Whether a turn view of this mode admits a step of this scope.
 auto admits( const turn_mode mode, const turn_scope scope ) -> bool
 {
-    switch( mode ) {
-        case turn_mode::solo:
-        case turn_mode::host:
-            return scope != turn_scope::frame;
-        case turn_mode::client_turn:
-            return scope == turn_scope::avatar;
-        case turn_mode::client_frame:
-            return scope == turn_scope::frame;
+    if( mode == turn_mode::client_turn ) {
+        return scope == turn_scope::avatar;
     }
-    return false;
+    if( mode == turn_mode::client_frame ) {
+        return scope == turn_scope::frame;
+    }
+    return scope != turn_scope::frame;
 }
 
 auto name_of( const turn_step_kind kind ) -> std::string_view
