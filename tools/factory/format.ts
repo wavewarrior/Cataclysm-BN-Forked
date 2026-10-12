@@ -133,6 +133,22 @@ export async function runFormat(opts: { cwd: string; base: string }): Promise<nu
   return (await child.output()).code
 }
 
+/// The C++ files the formatter would touch that the worktree has uncommitted edits to, committed
+/// or not: an uncommitted or untracked file outside the committed diff still gets formatted or built.
+export async function pendingFormatFiles(opts: { cwd: string; base: string }): Promise<string[]> {
+  const dirty = await dirtyPaths(opts.cwd)
+  return uncommittedTargets(dirty, formatTargets(dirty))
+}
+
+/// Pure: the feedback that sends the implementer back to commit its uncommitted C++ edits.
+export function uncommittedFormatPrompt(pending: readonly string[]): string {
+  return [
+    "Your C++ edits are not committed. Commit these files before the gate runs, then stop:",
+    ...pending.map((f) => `- ${f}`),
+    "The driver formats and commits committed work itself; do not run the formatter by hand.",
+  ].join("\n")
+}
+
 /// Format the ticket's changed C++ files and commit what the formatter changed as a `style:` commit,
 /// so the gate never sees unformatted code. Returns an error message, or undefined on success.
 export async function formatAndCommit(opts: {
@@ -141,10 +157,7 @@ export async function formatAndCommit(opts: {
   ticket: number
 }): Promise<string | undefined> {
   try {
-    const pending = uncommittedTargets(
-      await dirtyPaths(opts.cwd),
-      formatTargets(await changedFiles(opts.cwd, opts.base)),
-    )
+    const pending = await pendingFormatFiles(opts)
     if (pending.length > 0) {
       return `uncommitted edits in C++ files the formatter would touch: ${pending.join(", ")}. Commit them before formatting.`
     }

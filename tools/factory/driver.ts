@@ -13,7 +13,11 @@ import {
   type Issue,
   listIssues,
 } from "./gh.ts"
-import { formatAndCommit } from "./format.ts"
+import {
+  formatAndCommit,
+  pendingFormatFiles,
+  uncommittedFormatPrompt,
+} from "./format.ts"
 import {
   agentPrompt,
   agentRead,
@@ -540,8 +544,6 @@ export async function runTicket(
     }
 
     say("implementer done; formatting and running the gate")
-    const formatError = await formatAndCommit({ cwd: path, base, ticket: n })
-    if (formatError !== undefined) return await block(formatError)
     // Gate + review loop; gate failures and reviewer FAILs share one retry budget.
     let retries = 0
     let verdict: Verdict = "FAIL"
@@ -554,6 +556,24 @@ export async function runTicket(
       say(`gate attempt ${retries + 1}`)
       const gateRun = await runToLog(
         ["deno", "task", "gate", "--tier", "full", "--base", base],
+      const pending = await pendingFormatFiles({ cwd: path, base })
+      if (pending.length > 0) {
+        if (retries >= config.maxFixRetries) {
+          return await block(
+            `C++ edits were never committed after ${retries} attempts: ${pending.join(", ")}`,
+          )
+        }
+        retries++
+        outcome = await agentPrompt(implName, uncommittedFormatPrompt(pending), remaining())
+        if (outcome.state !== "idle" && outcome.state !== "done") {
+          return await block(
+            `implementer ended ${outcome.state} while committing: ${outcome.detail}`,
+          )
+        }
+        continue
+      }
+      const formatError = await formatAndCommit({ cwd: path, base, ticket: n })
+      if (formatError !== undefined) return await block(formatError)
         join(fdir, "gate-run.log"),
         { cwd: path, env: { FACTORY_TICKET: String(n) } },
       )

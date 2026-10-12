@@ -1,9 +1,10 @@
-import { assertEquals } from "@std/assert"
+import { assertEquals, assertStringIncludes } from "@std/assert"
 import {
   checkToolVersions,
   formatCommitFiles,
   formatScript,
   formatTargets,
+  uncommittedFormatPrompt,
   uncommittedTargets,
 } from "./format.ts"
 
@@ -85,4 +86,10 @@ Deno.test("uncommittedTargets flags only format targets with uncommitted edits",
   const targets = formatTargets(["src/x/a.cpp", "src/b.cpp", "docs/other.txt"])
   assertEquals(uncommittedTargets(["src/x/a.cpp", "docs/other.txt"], targets), ["src/x/a.cpp"])
   assertEquals(uncommittedTargets([], targets), [])
+})
+
+Deno.test("uncommittedFormatPrompt names each pending file", () => {
+  const text = uncommittedFormatPrompt(["src/x/a.cpp", "src/b.cpp"])
+  assertStringIncludes(text, "- src/x/a.cpp")
+  assertStringIncludes(text, "- src/b.cpp")
 })
