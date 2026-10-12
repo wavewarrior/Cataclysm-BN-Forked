@@ -810,8 +810,7 @@ auto run_turn_plan( game &gm, const turn_plan &plan ) -> turn_report
             } );
             continue;
         }
-        ZoneScopedN( "turn_plan_step" );
-        ZoneText( step.name.data(), step.name.size() );
+        ZoneTransientN( step_zone, step.name.data(), true );
         const auto start = std::chrono::steady_clock::now();
         turn_step_bodies::run( gm, step.kind );
         const auto elapsed = std::chrono::duration<double, std::milli>(
