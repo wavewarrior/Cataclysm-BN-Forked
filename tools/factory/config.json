@@ -4,6 +4,7 @@
   "maxLanes": 2,
   "maxFixRetries": 2,
   "ticketWallClockMin": 90,
+  "staleTicketDays": 7,
   "models": {
     "implementer": "anthropic/claude-haiku-5-5",
     "reviewer": "anthropic/claude-sonnet-5-5",
@@ -40,18 +41,12 @@
     "MSX++UnDeadPeopleEdition cross-sheet tile sprites are anchored to their sheet",
     "the rebuild plan lists the levels the dirty state licenses for rebuild"
   ],
-  "baselineFailuresLinux": [],
+  "baselineFailuresLinux": [
+    
+  ],
   "lintOnNewLines": {
-    "checks": [
-      "modernize-use-trailing-return-type",
-      "modernize-use-auto",
-      "cata-*"
-    ],
-    "warningsAsErrors": [
-      "modernize-use-trailing-return-type",
-      "modernize-use-auto",
-      "cata-*"
-    ]
+    "checks": [ "modernize-use-trailing-return-type", "modernize-use-auto", "cata-*" ],
+    "warningsAsErrors": [ "modernize-use-trailing-return-type", "modernize-use-auto", "cata-*" ]
   },
   "requireCi": true
 }

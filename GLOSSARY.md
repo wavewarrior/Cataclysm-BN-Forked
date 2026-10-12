@@ -98,6 +98,18 @@ _Avoid_: cache state, last-frame statics
 An ordering or dependency rule about a frame plan that a test asserts without a GPU, such as the step that stamps lighting inputs preceding every step that begins a pass.
 _Avoid_: invariant (too general)
 
+**Turn plan**:
+The ordered list of Turn steps with their scopes and skip reasons, derived once per consumption point as a pure value; each consumer mode (solo, host, client turn, client frame) runs a filtered view of it. Not the Rebuild plan or the Frame plan.
+_Avoid_: turn loop, sim sequence
+
+**Turn step**:
+One named unit of post-input world simulation or avatar-local upkeep, carrying its scope: `world` (mutates the shared map, creatures, fields, overmap), `avatar` (this client's own avatar and save-local bookkeeping), or `frame` (once-per-sync caches, UI and audio). A skipped step carries a reason, recorded in the turn report.
+_Avoid_: dirty flag pair, half-step
+
+**Fork law**:
+The plan law that a client's per-turn plan contains no `world`-scope step: running world simulation on the client forks the shared world. Asserted on the plan value without a world.
+_Avoid_: client-skip rule, parity check
+
 **Capture request**:
 The ask that a frame's final image and the matching map state be written to files, however it was made: by the driver, a key, a trigger file or an environment setting.
 _Avoid_: screenshot (the in-game screenshot is the state view, a different image)
