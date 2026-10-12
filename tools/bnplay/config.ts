@@ -83,9 +83,10 @@ export function loadConfig(): Config {
   return {
     home: Deno.env.get("BNPLAY_HOME") ?? join(REPO_ROOT, "out", "bnplay"),
     fixtures: Deno.env.get("BNPLAY_FIXTURES") ?? join(here, "fixtures"),
-    binary: Deno.env.get("BNPLAY_BINARY") ?? (IS_WINDOWS
-      ? join(REPO_ROOT, "out", "msvc", "src", "RelWithDebInfo", "cataclysm-bn-tiles.exe")
-      : join(REPO_ROOT, "out", "build", "osx-arm-slim", "src", "cataclysm-bn-tiles")),
+    binary: Deno.env.get("BNPLAY_BINARY") ??
+      (IS_WINDOWS
+        ? join(REPO_ROOT, "out", "msvc", "src", "RelWithDebInfo", "cataclysm-bn-tiles.exe")
+        : join(REPO_ROOT, "out", "build", "osx-arm-slim", "src", "cataclysm-bn-tiles")),
     basepath: Deno.env.get("BNPLAY_BASEPATH") ?? REPO_ROOT,
     scenesDir: Deno.env.get("BNPLAY_SCENES") ?? join(REPO_ROOT, "tools", "visual_verify", "scenes"),
     bootTimeoutMs: positiveInteger("BNPLAY_BOOT_TIMEOUT_MS", 60_000),

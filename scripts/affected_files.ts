@@ -28,18 +28,18 @@ const includeRegex = /#include\s+"([^"]+)"/g
 const getIncludes = (content: string) => Array.from(content.matchAll(includeRegex)).map((x) => x[1])
 
 const getSourceDependencies = (nameToPath: Map<string, string>) => async ({ path }: WalkEntry) => {
-    const text = await Deno.readTextFile(path)
-    const includes = getIncludes(text).map((x) => nameToPath.get(x)!)
-    return [path, includes] as const
+  const text = await Deno.readTextFile(path)
+  const includes = getIncludes(text).map((x) => nameToPath.get(x)!)
+  return [path, includes] as const
 }
 
 const getAllSourceFiles = async (): Promise<WalkEntry[]> => {
-    const walkOption: WalkOptions = { includeDirs: false, exts: [".cpp", ".h"], skip: [/\.tmp/] }
+  const walkOption: WalkOptions = { includeDirs: false, exts: [".cpp", ".h"], skip: [/\.tmp/] }
 
-    const reader = new MuxAsyncIterator<WalkEntry>()
-    paths.forEach((path) => reader.add(walk(path, walkOption)))
+  const reader = new MuxAsyncIterator<WalkEntry>()
+  paths.forEach((path) => reader.add(walk(path, walkOption)))
 
-    return await Array.fromAsync(reader)
+  return await Array.fromAsync(reader)
 }
 
 type Deps = Map<string, Set<string>>
@@ -48,16 +48,16 @@ type Deps = Map<string, Set<string>>
  * creates mapping between header file and all source files that include it
  */
 const getAllDependencies = async (xs: WalkEntry[]): Promise<Deps> => {
-    const nameToPath = new Map(xs.map((x) => [x.name, x.path]))
-    const ys = await Promise.all(xs.map(getSourceDependencies(nameToPath)))
+  const nameToPath = new Map(xs.map((x) => [x.name, x.path]))
+  const ys = await Promise.all(xs.map(getSourceDependencies(nameToPath)))
 
-    const deps: Deps = new Map()
-    for (const [path, includes] of ys) {
-        for (const include of includes) {
-            deps.set(include, (deps.get(include) ?? new Set()).add(path))
-        }
+  const deps: Deps = new Map()
+  for (const [path, includes] of ys) {
+    for (const include of includes) {
+      deps.set(include, (deps.get(include) ?? new Set()).add(path))
     }
-    return deps
+  }
+  return deps
 }
 
 const main = new Command()
@@ -74,12 +74,12 @@ const main = new Command()
     // console.log(deps)
     console.log({ src, headers })
 
-        const affected = new Set(src.concat(headers.flatMap((x) => Array.from(deps.get(x) ?? []))))
-        console.log(affected)
+    const affected = new Set(src.concat(headers.flatMap((x) => Array.from(deps.get(x) ?? []))))
+    console.log(affected)
 
-        if (output) await Deno.writeTextFile(output, Array.from(affected).join("\n"))
-    })
+    if (output) await Deno.writeTextFile(output, Array.from(affected).join("\n"))
+  })
 
 if (import.meta.main) {
-    await main.parse(Deno.args)
+  await main.parse(Deno.args)
 }
