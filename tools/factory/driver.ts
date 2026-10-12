@@ -464,6 +464,14 @@ export async function runTicket(
       await workspaceClose(stale)
     }
     for (const argv of restartCommands(opts.repo, path, branch, keep)) await run(argv)
+    // `worktree remove` can fail (locked files, a dir git never registered). Creating over a leftover
+    // dir fails later with a generic error, so stop here; removing an unknown dir is not ours to do.
+    const leftover = await Deno.stat(path).then(() => true, () => false)
+    if (leftover) {
+      return await block(
+        `${path} is still on disk after clearing the previous checkout. Move it aside, then unblock.`,
+      )
+    }
     const label = workspaceLabel(n, issue.title)
     if (keep) await git(opts.repo, "worktree", "add", path, branch)
     const wt = keep
