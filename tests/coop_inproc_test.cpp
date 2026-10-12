@@ -35,6 +35,7 @@
 #include "npc.h"
 #include "state_helpers.h"
 #include "type_id.h"
+#include "weather.h"
 
 #include <sstream>
 
@@ -579,4 +580,46 @@ TEST_CASE(
 
     sync_host_to_client(h);
     CHECK(g->u.amount_of(knife_id) == before + 1);
+}
+
+// The client copy of the turn cycle is avatar-local only. Terrain, creatures and fields
+// are host-authoritative and must not change while the client advances its own biology.
+TEST_CASE(
+    "inproc: client turn step changes avatar state but not the world", "[coop][inproc][parity]") {
+    constexpr tripoint_bub_ms TER_TILE{10, 10, 0};
+    constexpr tripoint_bub_ms FIELD_TILE{14, 10, 0};
+    constexpr tripoint_bub_ms MON_TILE{20, 10, 0};
+
+    inproc_harness h;
+    h.setup();
+    coop_mode_guard mcli(coop_mode::client);
+
+    get_map().ter_set(TER_TILE, ter_str_id("t_dirt").id());
+    get_map().add_field(FIELD_TILE, field_type_id("fd_fire"), 1, 0_turns);
+    spawn_test_monster("mon_zombie", MON_TILE);
+
+    const auto ter_before = get_map().ter(TER_TILE);
+    REQUIRE(get_map().get_field(FIELD_TILE).find_field(field_type_id("fd_fire")) != nullptr);
+    const auto field_before =
+        get_map().get_field(FIELD_TILE).find_field(field_type_id("fd_fire"))->get_field_intensity();
+    const int creatures_before = g->num_creatures();
+    const int kcal_before = g->u.get_stored_kcal();
+
+    // Pin weather so rain cannot decay fields during the loop; the test is about the client copy.
+    auto& weather = get_weather();
+    weather.weather_id = weather_type_id("clear");
+    weather.weather_override = weather_type_id::NULL_ID();
+    weather.nextweather = calendar::before_time_starts;
+
+    for (int i = 0; i < 400; ++i) {
+        calendar::turn += 1_turns;
+        g->coop_client_turn_step();
+    }
+
+    CHECK(get_map().ter(TER_TILE) == ter_before);
+    CHECK(g->num_creatures() == creatures_before);
+    field_entry* const after = get_map().get_field(FIELD_TILE).find_field(field_type_id("fd_fire"));
+    REQUIRE(after != nullptr);
+    CHECK(after->get_field_intensity() == field_before);
+    CHECK(g->u.get_stored_kcal() != kcal_before);
 }
