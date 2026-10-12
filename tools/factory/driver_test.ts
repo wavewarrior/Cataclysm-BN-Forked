@@ -8,12 +8,14 @@ import {
   followUpBody,
   followUpOf,
   freshStartCommands,
+  gateFailurePrompt,
   holdsOf,
   parseVerdict,
   pickNext,
   planWorktree,
   prTitle,
   renderPrBody,
+  reviewFailurePrompt,
   rewireDependsOn,
   workspaceLabel,
   workspacePrefix,
@@ -286,4 +288,19 @@ Deno.test("describeHolds names each held ticket's blockers with their states", (
     "#172 waits on #170 (blocked), #171 (blocked); #173 waits on #172 (queued)",
   )
   assertEquals(describeHolds([]), "")
+})
+
+Deno.test("gate failure prompt sends the implementer to format with the base", () => {
+  const prompt = gateFailurePrompt(
+    [{ name: "wsl-lane", tail: "src/game.h" }],
+    "origin/feature/improvements",
+  )
+  assertStringIncludes(prompt, "tools/factory/format.ts --base origin/feature/improvements")
+  assertStringIncludes(prompt, "### wsl-lane")
+})
+
+Deno.test("review failure prompt sends the implementer to format with the base", () => {
+  const prompt = reviewFailurePrompt("- handle the empty list", "origin/feature/improvements")
+  assertStringIncludes(prompt, "tools/factory/format.ts --base origin/feature/improvements")
+  assertStringIncludes(prompt, "- handle the empty list")
 })

@@ -146,13 +146,13 @@ export function reviewerPrompt(opts: {
 
 export type FailedStep = { name: string; tail: string }
 
-export function gateFailurePrompt(steps: FailedStep[]): string {
+export function gateFailurePrompt(steps: FailedStep[], base: string): string {
   const body = steps.map((s) => `### ${s.name}\n${s.tail}`).join("\n\n")
-  return `The gate failed. Fix only what failed, commit, and stop. Do not push or use gh.\n\n${body}`
+  return `The gate failed. Fix only what failed. Before you commit, format the C++ files you changed with \`deno run -A tools/factory/format.ts --base ${base}\` from the worktree root. Then commit and stop. Do not push or use gh.\n\n${body}`
 }
 
-export function reviewFailurePrompt(findings: string): string {
-  return `The reviewer returned FAIL. Fix the findings below, commit, and stop. Do not push or use gh.\n\n${findings}`
+export function reviewFailurePrompt(findings: string, base: string): string {
+  return `The reviewer returned FAIL. Fix the findings below. Before you commit, format the C++ files you changed with \`deno run -A tools/factory/format.ts --base ${base}\` from the worktree root. Then commit and stop. Do not push or use gh.\n\n${findings}`
 }
 
 function fillSection(template: string, heading: string, text: string): string {
@@ -530,7 +530,7 @@ export async function runTicket(
             }`,
           })
         }
-        feedback = gateFailurePrompt(steps)
+        feedback = gateFailurePrompt(steps, base)
       } else {
         say("gate passed; reviewing")
         const review = await runReview({ issue, path, fdir, implPane, base, ticketPath, remaining })
@@ -547,7 +547,7 @@ export async function runTicket(
             reason: `the reviewer said FAIL ${retries + 1} times. Last review:\n\n${findings}`,
           })
         }
-        feedback = reviewFailurePrompt(findings)
+        feedback = reviewFailurePrompt(findings, base)
       }
       retries++
       const headBefore = await git(path, "rev-parse", "HEAD")
