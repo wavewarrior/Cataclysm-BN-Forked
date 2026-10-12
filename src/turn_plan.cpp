@@ -50,8 +50,6 @@
 namespace
 {
 
-const trait_id trait_HAS_NEMESIS( "HAS_NEMESIS" );
-
 /// Static description of one step: identity, scope, timing bucket and turn/calendar flags.
 struct registry_entry {
     turn_step_kind kind;
@@ -130,7 +128,7 @@ constexpr registry_entry kRegistry[] = {
 static_assert( std::size( kRegistry ) == static_cast<std::size_t>( turn_step_kind::frame_audio ) +
                1 );
 static_assert( std::ranges::all_of( std::views::iota( std::size_t{ 0 }, std::size( kRegistry ) ),
-[]( const std::size_t i ) { return static_cast<std::size_t>( kRegistry[i].kind ) == i; } ) );
+                                    []( const std::size_t i ) -> bool { return static_cast<std::size_t>( kRegistry[i].kind ) == i; } ) );
 
 /// The reason a step is skipped, or empty when its gate is open.
 auto gate( const bool open, const std::string_view reason ) -> std::string_view
@@ -254,7 +252,7 @@ auto turn_plan::view( const turn_mode mode ) const -> std::vector<turn_step>
 {
     auto out = std::vector<turn_step> {};
     std::ranges::copy_if( steps, std::back_inserter( out ),
-    [mode]( const turn_step & step ) { return admits( mode, step.scope ); } );
+                          [mode]( const turn_step & step ) -> bool { return admits( mode, step.scope ); } );
     return out;
 }
 
@@ -420,7 +418,7 @@ auto turn_executor::run_step( game &g, const turn_step_kind kind ) -> void
             break;
         case turn_step_kind::move_hordes:
             get_overmapbuffer( g.current_dimension_id_ ).move_hordes();
-            if( u.has_trait( trait_HAS_NEMESIS ) ) {
+            if( u.has_trait( trait_id( "HAS_NEMESIS" ) ) ) {
                 get_overmapbuffer( g.current_dimension_id_ ).move_nemesis();
             }
             m.spawn_monsters( false );
