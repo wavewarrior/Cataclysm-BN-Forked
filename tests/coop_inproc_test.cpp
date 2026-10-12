@@ -18,11 +18,13 @@
  * Tags: [coop][inproc]
  */
 
+#include "action_time_scale.h"
 #include "avatar.h"
 #include "calendar.h"
 #include "catch/catch_amalgamated.hpp"
 #include "coop_checksum.h"
 #include "coop_client.h"
+#include "coop_proto.h"
 #include "coop_server.h"
 #include "coop_session.h"
 #include "coop_sim_transport.h"
@@ -632,4 +634,52 @@ TEST_CASE(
     REQUIRE(after != nullptr);
     CHECK(after->get_field_intensity() == field_before);
     CHECK(g->u.get_stored_kcal() < kcal_before);
+}
+
+namespace {
+
+/// Host advances @p turns_ahead turns and builds the sync at that turn. The calendar is
+/// then rewound, so the client's apply_sync sees the pre-sync turn as turn_before and
+/// runs turns_ahead turn steps. The client never advances calendar::turn itself.
+auto sync_host_advancing(inproc_harness& h, const int turns_ahead) -> void {
+    const auto turn_before = calendar::turn;
+    calendar::turn = turn_before + time_duration::from_turns(turns_ahead);
+    {
+        coop_tick_log_guard guard;
+        h.srv.build_and_send_sync();
+    }
+    h.srv.flush_send_queue_for_test();
+    calendar::turn = turn_before;
+    coop_mode_guard mcli(coop_mode::client);
+    h.cli.coop_world_tick();
+}
+
+/// Avatar blindness decay across one synced catch-up of @p turns_ahead turns. The tick is
+/// pinned to one turn, so each client turn step decays the effect by exactly one turn, and
+/// the decay counts the steps apply_sync ran.
+auto avatar_decay_for_sync(const int turns_ahead) -> int {
+    inproc_harness h;
+    h.setup();
+    const auto blind = efftype_id("blind");
+    g->u.add_effect(blind, 1_hours);
+    const action_time_scale::scoped_calendar_turns_this_tick tick_guard(1);
+    const auto before = g->u.get_effect_dur(blind);
+    sync_host_advancing(h, turns_ahead);
+    return to_turns<int>(before - g->u.get_effect_dur(blind));
+}
+
+} // namespace
+
+// A 3-turn sync is below COOP_ACTIVITY_YIELD_INTERVAL, so every turn is applied.
+TEST_CASE(
+    "inproc: catch-up below the cap runs one client step per turn", "[coop][inproc][parity]") {
+    CHECK(avatar_decay_for_sync(3) == 3);
+}
+
+// A sync past the cap runs only COOP_ACTIVITY_YIELD_INTERVAL client steps
+// (coop_client.cpp:1028-1031).
+TEST_CASE(
+    "inproc: catch-up above the cap stops at COOP_ACTIVITY_YIELD_INTERVAL",
+    "[coop][inproc][parity]") {
+    CHECK(avatar_decay_for_sync(COOP_ACTIVITY_YIELD_INTERVAL + 5) == COOP_ACTIVITY_YIELD_INTERVAL);
 }
