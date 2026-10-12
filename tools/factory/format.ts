@@ -50,9 +50,11 @@ function shellQuote(word: string): string {
   return `'${word.replaceAll("'", `'\\''`)}'`
 }
 
-/// Repo-relative C++ files changed against `base`, including uncommitted and untracked files.
+/// Repo-relative C++ files changed since the merge-base with `base` (the range the gate checks,
+/// `${base}...HEAD`), including uncommitted and untracked files.
 async function changedFiles(cwd: string, base: string): Promise<string[]> {
-  const tracked = await git(cwd, "diff", "--name-only", "--diff-filter=ACMR", base)
+  const mergeBase = await git(cwd, "merge-base", base, "HEAD")
+  const tracked = await git(cwd, "diff", "--name-only", "--diff-filter=d", mergeBase)
   const untracked = await git(cwd, "ls-files", "--others", "--exclude-standard")
   return [...new Set([...tracked.split("\n"), ...untracked.split("\n")])].filter(Boolean)
 }
