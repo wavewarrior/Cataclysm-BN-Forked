@@ -16,12 +16,15 @@ LINE_FILTER="$5"
 CHANGED_CPP="$6"
 CHANGED_JSON="$7"
 
+# Any failure from here until the checks start is a lane fault: exit 2 keeps it out of follow-ups (gate.ts).
+trap 'exit 2' ERR
+
 exec 9>"$LANE_HOME/lock"
 echo "lane.sh: waiting for the lint lane lock"
 flock 9
 
 # shellcheck disable=SC1091
-source "$LANE_HOME/env.sh"
+source "$LANE_HOME/env.sh" || exit 2
 
 # A drifted formatter would fail honest code, so a wrong version is a tooling fault (exit 2 = infra in gate.ts), not a code failure.
 astyle_got="$(astyle --version 2>&1 || true)"
@@ -47,6 +50,7 @@ git clean -fdq
 git checkout --quiet --detach FETCH_HEAD
 git reset --quiet --hard
 git clean -fdq
+trap - ERR
 
 status=0
 

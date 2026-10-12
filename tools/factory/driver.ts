@@ -271,22 +271,17 @@ function laneEnv(ticket: number, role: "implementer" | "reviewer"): Record<strin
 
 export type DriverOptions = { repo: string }
 
-/// Block a ticket with a follow-up that carries the failure, so its dependents move to the follow-up
-/// Failures a follow-up cannot fix: they come from the lane or herdr, not from the ticket's code.
-const INFRA_FAILURE =
-  /herdr worktree create|already exists|would be overwritten by checkout|waiting for the lint lane lock/
-
-/// Whether a blocked ticket gets a follow-up. Infra failures get none, and neither does a parent that
-/// already has an open follow-up (`existingFollowUps` lists those parents), so retries do not stack duplicates.
+/// Whether a blocked ticket gets a follow-up: not when its parent already has an open one
+/// (`existingFollowUps` lists those parents), so retries do not stack duplicates. Infra failures
+/// never get here: lane.sh exits 2 for them and gate.ts blocks them as needs-human.
 export function shouldCreateFollowUp(opts: {
-  reason: string
   issue: number
   existingFollowUps: number[]
 }): boolean {
-  if (INFRA_FAILURE.test(opts.reason)) return false
   return !opts.existingFollowUps.includes(opts.issue)
 }
 
+/// Block a ticket with a follow-up that carries the failure, so its dependents move to the follow-up
 /// instead of waiting on a blocked ticket. A follow-up never spawns another follow-up.
 async function blockWithFollowUp(opts: {
   issue: Issue
@@ -298,11 +293,12 @@ async function blockWithFollowUp(opts: {
   if (followUpOf(ticket.sections) !== undefined) return await block(reason)
   let followUp: { number: number; url: string }
   const open = await listIssues([]).catch(() => undefined)
-  const existingFollowUps = (open ?? []).flatMap((i) => {
+  if (open === undefined) return await block(reason)
+  const existingFollowUps = open.flatMap((i) => {
     const parent = followUpOf(makeTicket(i).sections)
     return parent === undefined ? [] : [parent]
   })
-  if (!shouldCreateFollowUp({ reason, issue: issue.number, existingFollowUps })) {
+  if (!shouldCreateFollowUp({ issue: issue.number, existingFollowUps })) {
     return await block(reason)
   }
   try {
@@ -330,7 +326,6 @@ async function blockWithFollowUp(opts: {
     }
   }
   const notes = [`Follow-up: #${followUp.number} ${followUp.url}`]
-  if (open === undefined) notes.push("Could not list open issues, so no dependent was moved.")
   if (moved.length) {
     notes.push(
       `Dependents now wait on #${followUp.number}: ${moved.map((n) => `#${n}`).join(", ")}.`,
@@ -463,12 +458,24 @@ export async function runTicket(
     const keep = keepsBranch(await commitsAheadOfBase(opts.repo, base, branch))
     const conflict = restartConflict(held, path, branch)
     if (conflict) {
-      return await block(`cannot re-pick: ${conflict}. Move that checkout aside, then unblock.`)
+      return await block(
+        `cannot re-pick: ${conflict}. Move that checkout aside, then unblock.`,
+        { needsHuman: true },
+      )
     }
     for (const stale of await workspacesWithPrefix(workspacePrefix(n))) {
       await workspaceClose(stale)
     }
     for (const argv of restartCommands(opts.repo, path, branch, keep)) await run(argv)
+    // `worktree remove` can fail (locked files, a dir git never registered). Creating over a leftover
+    // dir fails later with a generic error, so stop here; removing an unknown dir is not ours to do.
+    const leftover = await Deno.stat(path).then(() => true, () => false)
+    if (leftover) {
+      return await block(
+        `${path} is still on disk after clearing the previous checkout. Move it aside, then unblock.`,
+        { needsHuman: true },
+      )
+    }
     const label = workspaceLabel(n, issue.title)
     if (keep) await git(opts.repo, "worktree", "add", path, branch)
     const wt = keep
