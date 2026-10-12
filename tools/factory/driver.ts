@@ -293,7 +293,8 @@ async function blockWithFollowUp(opts: {
   if (followUpOf(ticket.sections) !== undefined) return await block(reason)
   let followUp: { number: number; url: string }
   const open = await listIssues([]).catch(() => undefined)
-  const existingFollowUps = (open ?? []).flatMap((i) => {
+  if (open === undefined) return await block(reason)
+  const existingFollowUps = open.flatMap((i) => {
     const parent = followUpOf(makeTicket(i).sections)
     return parent === undefined ? [] : [parent]
   })
@@ -325,7 +326,6 @@ async function blockWithFollowUp(opts: {
     }
   }
   const notes = [`Follow-up: #${followUp.number} ${followUp.url}`]
-  if (open === undefined) notes.push("Could not list open issues, so no dependent was moved.")
   if (moved.length) {
     notes.push(
       `Dependents now wait on #${followUp.number}: ${moved.map((n) => `#${n}`).join(", ")}.`,
