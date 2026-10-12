@@ -64,7 +64,7 @@ public:
             // according to the standard, all comments are processed before analyzing the syntax
             Check.diag(
                 Range.getBegin(), "AST Matching started before the end of comment preprocessing",
-                DiagnosticIDs::Error);
+                DiagnosticIDs::Warning);
         }
 
         const SourceManager& SM = PP.getSourceManager();
@@ -133,7 +133,7 @@ public:
         if (Check.MatchingStarted) {
             // according to the standard, all macros are expanded before analyzing the syntax
             Check.diag(Range.getBegin(), "AST Matching started before the end of macro expansion",
-                       DiagnosticIDs::Error);
+                       DiagnosticIDs::Warning);
         }
 
         StringRef MacroName = MacroNameTok.getIdentifierInfo()->getName();
