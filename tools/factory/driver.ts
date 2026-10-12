@@ -282,10 +282,11 @@ export function shouldCreateFollowUp(opts: {
   return !opts.existingFollowUps.includes(opts.issue)
 }
 
-/// Pure: the parent numbers of open follow-up issues, or undefined when the open list is unknown.
+/// Pure: the parent numbers of every follow-up issue, open or closed, or undefined when the list is
+/// unknown. A closed follow-up still counts, so re-blocking its parent never files a second one.
 /// The caller then blocks without a follow-up (fail closed), so a list failure never makes a duplicate.
-export function openFollowUpParents(open: readonly Issue[] | undefined): number[] | undefined {
-  return open?.flatMap((i) => {
+export function followUpParents(issues: readonly Issue[] | undefined): number[] | undefined {
+  return issues?.flatMap((i) => {
     const parent = followUpOf(makeTicket(i).sections)
     return parent === undefined ? [] : [parent]
   })
@@ -302,7 +303,8 @@ async function blockWithFollowUp(opts: {
   const { issue, ticket, reason, block } = opts
   if (followUpOf(ticket.sections) !== undefined) return await block(reason)
   const open = await listIssues([]).catch(() => undefined)
-  const existingFollowUps = openFollowUpParents(open)
+  const everyIssue = await listIssues([], "all").catch(() => undefined)
+  const existingFollowUps = followUpParents(everyIssue)
   if (existingFollowUps === undefined) return await block(reason)
   if (!shouldCreateFollowUp({ issue: issue.number, existingFollowUps })) {
     return await block(reason)
