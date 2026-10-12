@@ -447,8 +447,8 @@ TEST_CASE("driver_items_craft_by_recipe_id_makes_the_item", "[driver]") {
     }
 
     SECTION("a recipe the avatar does not know is refused") {
-        REQUIRE_FALSE(u.knows_recipe(&recipe_id("carver_off").obj()));
-        const driver_items::command_result res = driver_items::run_craft("carver_off");
+        REQUIRE_FALSE(u.knows_recipe(&recipe_id("test_unlearned_widget").obj()));
+        const driver_items::command_result res = driver_items::run_craft("test_unlearned_widget");
         CHECK(res.outcome == outcome::refused);
         CHECK_FALSE(res.detail.empty());
         CHECK_FALSE(u.activity);

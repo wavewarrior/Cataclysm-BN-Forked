@@ -1,6 +1,20 @@
 [
   {
     "type": "recipe",
+    "result": "test_unlearned_widget",
+    "category": "CC_ELECTRONIC",
+    "subcategory": "CSC_ELECTRONIC_TOOLS",
+    "skill_used": "electronics",
+    "difficulty": 1,
+    "time": "20 m",
+    "reversible": true,
+    "decomp_learn": 0,
+    "components": [
+      [ [ "scrap", 1 ] ]
+    ]
+  },
+  {
+    "type": "recipe",
     "result": "test_soldering_iron",
     "category": "CC_ELECTRONIC",
     "subcategory": "CSC_ELECTRONIC_TOOLS",
