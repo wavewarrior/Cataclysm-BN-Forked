@@ -41,6 +41,9 @@ if [ "$(git rev-parse FETCH_HEAD)" != "$SHA" ]; then
     echo "lane.sh: branch $BRANCH moved (expected $SHA, fetched $(git rev-parse FETCH_HEAD))" >&2
     exit 2
 fi
+# A killed earlier run can leave the shared clone dirty; checkout would abort on it, so discard first.
+git reset --quiet --hard
+git clean -fdq
 git checkout --quiet --detach FETCH_HEAD
 git reset --quiet --hard
 git clean -fdq
