@@ -135,7 +135,7 @@ export async function formatAndCommit(opts: {
     await git(opts.cwd, "add", "--", ...files)
     const message = await Deno.makeTempFile({ suffix: ".txt" })
     await Deno.writeTextFile(message, "style: format changed C++ files\n")
-    const commit = await run(["git", "commit", "-F", message], {
+    const commit = await run(["git", "commit", "-F", message, "--", ...files], {
       cwd: opts.cwd,
       env: { FACTORY_LANE: "1", FACTORY_ROLE: "implementer", FACTORY_TICKET: String(opts.ticket) },
     })
