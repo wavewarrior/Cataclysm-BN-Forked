@@ -94,6 +94,15 @@ TEST_CASE("Frame steps appear only in the client frame plan", "[turn_plan]") {
     }));
 }
 
+TEST_CASE("Each frame step appears exactly once in the client frame plan", "[turn_plan]") {
+    const auto frame = make_turn_plan(ticking_inputs(), turn_mode::client_frame);
+    const auto names =
+        frame.items() | std::views::transform(&turn_step::name) | std::ranges::to<std::vector>();
+    for (const turn_step& step : frame.items()) {
+        CHECK(std::ranges::count(names, step.name) == 1);
+    }
+}
+
 TEST_CASE("The calendar advances before any running step reads the turn", "[turn_plan]") {
     for (const auto mode : {turn_mode::solo, turn_mode::host}) {
         const auto plan = make_turn_plan(ticking_inputs(), mode);
