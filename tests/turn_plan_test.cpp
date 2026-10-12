@@ -202,5 +202,10 @@ TEST_CASE("profiling zones keep the legacy do_turn names", "[turn_plan]") {
     CHECK(std::string_view{zone_name_of(turn_step_kind::scent_update)} == "do_turn_scent");
     CHECK(std::string_view{zone_name_of(turn_step_kind::advance_calendar)} == "do_turn_calendar");
     CHECK(std::string_view{zone_name_of(turn_step_kind::move_hordes)} == "do_turn_overmap_hordes");
+    CHECK(std::string_view{zone_name_of(turn_step_kind::monmove)} == "do_turn_monmove");
+    CHECK(std::string_view{zone_name_of(turn_step_kind::mon_info_update)}
+          == "do_turn_final_mon_info_update");
+    CHECK(std::string_view{zone_name_of(turn_step_kind::clear_d_maps)}
+          == "do_turn_clear_pathfinding");
     CHECK(std::string_view{zone_name_of(turn_step_kind::vehicle_theft)} == "vehicle_theft");
 }
