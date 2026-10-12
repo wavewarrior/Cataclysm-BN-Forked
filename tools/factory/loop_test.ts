@@ -13,6 +13,8 @@ const ticket = (number: number, deps: number[] = []): Issue => ({
   body: deps.length === 0 ? "" : `## Depends on\n${deps.map((d) => `- #${d}`).join("\n")}\n`,
   labels: ["factory:ready"],
   state: "OPEN",
+  createdAt: "2026-01-01T00:00:00Z",
+  updatedAt: "2026-01-01T00:00:00Z",
 })
 
 type Script = (n: number, tracker: Map<number, Issue>) => TicketResult

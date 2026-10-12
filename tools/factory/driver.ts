@@ -8,7 +8,7 @@ import {
   comment,
   createDraftPr,
   createIssue,
-  editBody,
+  editIssueBody,
   editLabels,
   type Issue,
   listIssues,
@@ -20,8 +20,8 @@ import {
   paneClose,
   paneSplit,
   workspaceClose,
+  workspacesWithPrefix,
   worktreeCreate,
-  type WorktreeEntry,
   worktreeList,
   worktreeOpen,
 } from "./herdr.ts"
@@ -103,6 +103,69 @@ export function prTitle(title: string): string {
 
 export function implementerPrompt(issue: Issue, ticketPath: string, base: string): string {
   return `/skill:implement Implement GitHub issue #${issue.number} (${issue.title}). The full ticket is in ${ticketPath}: read it first and follow it exactly. Add or update the tests it names. Before you commit, format every C++ file you changed by running \`deno run -A tools/factory/format.ts --base ${base}\` from the worktree root; it rewrites whole files with the gate's pinned clang-format and astyle, so do not hand-format. Then commit your work to the current branch with conventional-commit messages, and stop. Do not push, open PRs or use gh. Do not build and do not run cata_test: this shell has no compiler environment, and the gate builds and runs the ticket's test tags for you.`
+}
+
+/// Labels a blocked ticket gets. `needsHuman` adds `factory:needs-human`: a retry cannot fix it.
+export function blockLabels(needsHuman: boolean): string[] {
+  return needsHuman ? ["factory:blocked", "factory:needs-human"] : ["factory:blocked"]
+}
+
+/// The comment a blocked ticket receives; a needs-human stop says so on its first line.
+export function blockComment(reason: string, needsHuman: boolean): string {
+  const head = needsHuman ? "factory: blocked (needs human)." : "factory: blocked."
+  return `${head}\n\n${reason}`
+}
+
+/// A re-picked ticket keeps its branch only when the branch has commits past base (earlier
+/// implementer work or a human's steering). Otherwise the branch restarts from base.
+export function keepsBranch(commits: number): boolean {
+  return commits > 0
+}
+
+/// Commits on `branch` past `base`. A branch that does not exist yet has none, so this returns 0.
+async function commitsAheadOfBase(repo: string, base: string, branch: string): Promise<number> {
+  const r = await run(["git", "rev-list", "--count", `${base}..${branch}`], { cwd: repo })
+  return r.code === 0 ? Number(r.stdout.trim()) : 0
+}
+
+/// Commands that clear a previous attempt's checkout before a re-picked ticket starts. The worktree
+/// always goes (uncommitted work in it is discarded); the branch goes only when `keep` is false.
+/// Callers ignore failure; either may already be gone.
+export function restartCommands(
+  repo: string,
+  path: string,
+  branch: string,
+  keep: boolean,
+): string[][] {
+  const removeWorktree = ["git", "-C", repo, "worktree", "remove", "--force", path]
+  return keep ? [removeWorktree] : [removeWorktree, ["git", "-C", repo, "branch", "-D", branch]]
+}
+
+/// Why a re-pick must stop instead of clearing a checkout it does not own: the branch is checked
+/// out at another path, or the path holds a different branch. Undefined when the restart is safe.
+export function restartConflict(
+  held: readonly { path: string; branch?: string }[],
+  path: string,
+  branch: string,
+): string | undefined {
+  const key = (p: string): string => p.replaceAll("\\", "/").replace(/\/+$/, "").toLowerCase()
+  const elsewhere = held.find((w) => w.branch === branch && key(w.path) !== key(path))
+  if (elsewhere) return `${branch} is checked out at ${elsewhere.path}`
+  const here = held.find((w) => key(w.path) === key(path))
+  if (here && here.branch !== branch) {
+    return `${path} holds ${here.branch ?? "a detached checkout"}, not ${branch}`
+  }
+  return undefined
+}
+
+/// The herdr workspace label for ticket `n`. Lookups match on `workspacePrefix`, so a retitled
+/// ticket still finds the workspace an earlier attempt opened.
+export function workspacePrefix(n: number): string {
+  return `#${n} `
+}
+
+export function workspaceLabel(n: number, title: string): string {
+  return `${workspacePrefix(n)}${title}`.slice(0, 60)
 }
 
 export function reviewerPrompt(opts: {
@@ -220,7 +283,7 @@ async function blockWithFollowUp(opts: {
   for (const dependent of open ?? []) {
     if (!dependsOn(makeTicket(dependent).sections).includes(issue.number)) continue
     try {
-      await editBody(
+      await editIssueBody(
         dependent.number,
         rewireDependsOn(dependent.body, issue.number, followUp.number),
       )
@@ -245,16 +308,6 @@ async function blockWithFollowUp(opts: {
   }
   return await block(`${reason}\n\n${notes.join("\n")}`)
 }
-
-/// Lower-case, forward-slash form of a worktree path, so herdr's `\\?\` paths compare equal to plain ones.
-export function normalizeWorktreePath(path: string): string {
-  return path.replaceAll("\\", "/").replace(/^\/\/\?\//, "").replace(/\/+$/, "").toLowerCase()
-}
-
-export type WorktreePlan =
-  | { action: "create" }
-  | { action: "reuse"; closeWorkspace?: string }
-  | { action: "conflict"; reason: string }
 
 /// What a dependency is doing, for explaining a hold: closed, else the factory label it carries, else open.
 export type DepState =
@@ -322,33 +375,6 @@ export function describeHolds(holds: Hold[]): string {
     .join("; ")
 }
 
-/// Reuse the checkout of `want.branch` at `want.path` if it exists; refuse a path or branch held by something else; else create. Never deletes.
-export function planWorktree(
-  entries: WorktreeEntry[],
-  want: { path: string; branch: string },
-): WorktreePlan {
-  const wantPath = normalizeWorktreePath(want.path)
-  const atPath = entries.find((e) => normalizeWorktreePath(e.path) === wantPath)
-  if (atPath) {
-    if (atPath.branch === want.branch) {
-      return { action: "reuse", closeWorkspace: atPath.openWorkspaceId }
-    }
-    const on = atPath.branch ?? "detached HEAD"
-    return {
-      action: "conflict",
-      reason: `worktree ${want.path} is on branch ${on}, not ${want.branch}; remove it by hand`,
-    }
-  }
-  const onBranch = entries.find((e) => e.branch === want.branch)
-  if (onBranch) {
-    return {
-      action: "conflict",
-      reason: `branch ${want.branch} is already checked out at ${onBranch.path}`,
-    }
-  }
-  return { action: "create" }
-}
-
 /// Run one already-claimed ticket to completion. Never throws: failures become `blocked`.
 export async function runTicket(
   issue: Issue,
@@ -362,12 +388,16 @@ export async function runTicket(
   const say = (msg: string) =>
     console.log(`#${n} +${((Date.now() - started) / 60000).toFixed(1)}m ${msg}`)
 
-  const block = async (reason: string): Promise<TicketResult> => {
+  const block = async (
+    reason: string,
+    opts: { needsHuman?: boolean } = {},
+  ): Promise<TicketResult> => {
+    const needsHuman = opts.needsHuman ?? false
     console.log(`#${n} blocked: ${reason}`)
-    await editLabels(n, { add: ["factory:blocked"], remove: ["factory:in-progress"] }).catch(
+    await editLabels(n, { add: blockLabels(needsHuman), remove: ["factory:in-progress"] }).catch(
       () => {},
     )
-    await comment(n, `factory: blocked.\n\n${reason}`).catch(() => {})
+    await comment(n, blockComment(reason, needsHuman)).catch(() => {})
     return { outcome: "blocked", reason }
   }
 
@@ -375,7 +405,10 @@ export async function runTicket(
     const ticket = makeTicket(issue)
     const missing = missingSections(ticket.sections)
     if (missing.length > 0) {
-      return await block(`ticket is missing required section(s): ${missing.join(", ")}`)
+      return await block(
+        `ticket is missing required section(s): ${missing.join(", ")}`,
+        { needsHuman: true },
+      )
     }
 
     const branch = branchName(config.branchPrefix, n, issue.title)
@@ -383,15 +416,22 @@ export async function runTicket(
     const path = `${config.worktreeRoot}/wt-factory-${n}`
     await git(opts.repo, "fetch", "origin", config.integrationBranch)
 
-    // Worktree + panes. A blocked ticket's checkout may still exist: resume it, do not die on `already exists`.
-    const plan = planWorktree(await worktreeList(opts.repo), { path, branch })
-    if (plan.action === "conflict") return await block(plan.reason)
-    if (plan.action === "reuse" && plan.closeWorkspace) await workspaceClose(plan.closeWorkspace)
-    const label = `#${n} ${issue.title}`.slice(0, 60)
-    const wt = plan.action === "reuse"
+    // Worktree + panes. A re-picked ticket is rebuilt from a clean checkout. Its branch is kept
+    // when it has commits past base, so earlier work survives; uncommitted work in the old checkout does not.
+    const keep = keepsBranch(await commitsAheadOfBase(opts.repo, base, branch))
+    // Prune first so a checkout deleted by hand cannot block the branch delete or the re-add.
+    await git(opts.repo, "worktree", "prune")
+    const conflict = restartConflict(await worktreeList(opts.repo), path, branch)
+    if (conflict) return await block(`cannot re-pick: ${conflict}. Move that checkout aside, then unblock.`)
+    for (const stale of await workspacesWithPrefix(workspacePrefix(n))) {
+      await workspaceClose(stale)
+    }
+    for (const argv of restartCommands(opts.repo, path, branch, keep)) await run(argv)
+    const label = workspaceLabel(n, issue.title)
+    if (keep) await git(opts.repo, "worktree", "add", path, branch)
+    const wt = keep
       ? await worktreeOpen({ cwd: opts.repo, path, label })
       : await worktreeCreate({ cwd: opts.repo, branch, base, path, label })
-    if (plan.action === "reuse") console.log(`#${n} resuming the existing worktree ${path}`)
     await updateLane(lane, {
       branch,
       worktree: path,
@@ -471,6 +511,7 @@ export async function runTicket(
           `the gate broke in its own tooling (not the change): ${stamp.infraSteps.join(", ")}.\n\n${
             steps.map((s) => `### ${s.name}\n${s.tail}`).join("\n\n")
           }`,
+          { needsHuman: true },
         )
       }
       if (gateRun !== 0 || !stamp?.ok) {
@@ -512,7 +553,9 @@ export async function runTicket(
       const headBefore = await git(path, "rev-parse", "HEAD")
       outcome = await agentPrompt(implName, feedback, remaining())
       if (outcome.state !== "idle" && outcome.state !== "done") {
-        return await block(`implementer ended ${outcome.state} while fixing: ${outcome.detail}`)
+        return await block(
+          `implementer ended ${outcome.state} while fixing: ${outcome.detail}`,
+        )
       }
       // No new commit means the same tree would fail the same gate: stop rather than re-run it.
       if ((await git(path, "rev-parse", "HEAD")) === headBefore) {

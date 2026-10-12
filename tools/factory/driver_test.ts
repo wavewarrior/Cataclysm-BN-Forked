@@ -1,5 +1,7 @@
 import { assertEquals, assertStringIncludes } from "@std/assert"
 import {
+  blockComment,
+  blockLabels,
   type DepState,
   depStateOf,
   describeHolds,
@@ -7,17 +9,20 @@ import {
   followUpOf,
   gateFailurePrompt,
   holdsOf,
+  keepsBranch,
   parseVerdict,
   pickNext,
-  planWorktree,
   prTitle,
   renderPrBody,
+  restartCommands,
+  restartConflict,
   reviewFailurePrompt,
   rewireDependsOn,
+  workspaceLabel,
+  workspacePrefix,
 } from "./driver.ts"
 import { makeTicket, missingSections } from "./ticket.ts"
 import type { Issue } from "./gh.ts"
-import type { WorktreeEntry } from "./herdr.ts"
 import type { Stamp } from "./gate.ts"
 
 const issue = (number: number, body = "", title = `t${number}`): Issue => ({
@@ -26,6 +31,8 @@ const issue = (number: number, body = "", title = `t${number}`): Issue => ({
   body,
   labels: ["factory:ready"],
   state: "OPEN",
+  createdAt: "2026-01-01T00:00:00Z",
+  updatedAt: "2026-01-01T00:00:00Z",
 })
 
 Deno.test("only an exact first-line verdict counts; a verdict buried later is ignored", () => {
@@ -134,66 +141,6 @@ Deno.test("a dependent moved to a follow-up waits for the follow-up, not the blo
   assertEquals((await pickNext([after], isClosed))?.number, 7)
 })
 
-const wtBranch = "factory/170-characterize-the-three-turn-cycle-copies"
-const wtPath = "C:/WORK/GIT_REPOS/wt-factory-170"
-const held = (over: Partial<WorktreeEntry>): WorktreeEntry => ({
-  path: wtPath,
-  branch: wtBranch,
-  openWorkspaceId: undefined,
-  ...over,
-})
-
-Deno.test("planWorktree reuses the existing checkout and closes the workspace holding it", () => {
-  assertEquals(
-    planWorktree([held({ openWorkspaceId: "wG" })], { path: wtPath, branch: wtBranch }),
-    { action: "reuse", closeWorkspace: "wG" },
-  )
-})
-
-Deno.test("planWorktree reuses a checkout that has no open workspace", () => {
-  assertEquals(
-    planWorktree([held({})], { path: wtPath, branch: wtBranch }),
-    { action: "reuse", closeWorkspace: undefined },
-  )
-})
-
-Deno.test("planWorktree creates a worktree when nothing holds the path or the branch", () => {
-  assertEquals(
-    planWorktree([held({ path: "C:/WORK/GIT_REPOS/wt-factory-166", branch: "factory/166-x" })], {
-      path: wtPath,
-      branch: wtBranch,
-    }),
-    { action: "create" },
-  )
-})
-
-Deno.test("planWorktree refuses a path that is checked out on another branch", () => {
-  const plan = planWorktree([held({ branch: "factory/other" })], { path: wtPath, branch: wtBranch })
-  assertEquals(plan.action, "conflict")
-  assertStringIncludes(plan.action === "conflict" ? plan.reason : "", "factory/other")
-})
-
-Deno.test("planWorktree refuses a branch that is checked out at another path", () => {
-  const plan = planWorktree([held({ path: "C:/WORK/GIT_REPOS/wt-elsewhere" })], {
-    path: wtPath,
-    branch: wtBranch,
-  })
-  assertEquals(plan.action, "conflict")
-  assertStringIncludes(plan.action === "conflict" ? plan.reason : "", "wt-elsewhere")
-})
-
-Deno.test("planWorktree matches a path across slash style, case, trailing slash and the \\\\?\\ prefix", () => {
-  assertEquals(
-    planWorktree([
-      held({ path: "\\\\?\\C:\\WORK\\GIT_REPOS\\WT-factory-170\\", openWorkspaceId: "wH" }),
-    ], {
-      path: "c:/work/git_repos/wt-factory-170",
-      branch: wtBranch,
-    }),
-    { action: "reuse", closeWorkspace: "wH" },
-  )
-})
-
 const issueOf = (
   number: number,
   labels: string[] = [],
@@ -205,6 +152,8 @@ const issueOf = (
   body: deps.length > 0 ? `## Depends on\n${deps.map((d) => `- #${d}`).join("\n")}\n` : "",
   labels,
   state,
+  createdAt: "2026-01-01T00:00:00Z",
+  updatedAt: "2026-01-01T00:00:00Z",
 })
 
 Deno.test("depStateOf reads closed first, then the factory label, else open", () => {
@@ -269,4 +218,58 @@ Deno.test("review failure prompt sends the implementer to format with the base",
   const prompt = reviewFailurePrompt("- handle the empty list", "origin/feature/improvements")
   assertStringIncludes(prompt, "tools/factory/format.ts --base origin/feature/improvements")
   assertStringIncludes(prompt, "- handle the empty list")
+})
+
+Deno.test("a needs-human block adds factory:needs-human and says so in its comment; others do not", () => {
+  assertEquals(blockLabels(false), ["factory:blocked"])
+  assertEquals(blockLabels(true), ["factory:blocked", "factory:needs-human"])
+  assertEquals(blockComment("gate broke", false), "factory: blocked.\n\ngate broke")
+  assertEquals(
+    blockComment("gate broke", true),
+    "factory: blocked (needs human).\n\ngate broke",
+  )
+})
+
+Deno.test("workspaceLabel carries the ticket prefix that re-pick matches on", () => {
+  const label = workspaceLabel(7, "Fix the thing")
+  assertEquals(label, "#7 Fix the thing")
+  assertEquals(label.startsWith(workspacePrefix(7)), true)
+  assertEquals(label.startsWith(workspacePrefix(70)), false)
+  assertEquals(workspaceLabel(7, "x".repeat(200)).length, 60)
+})
+
+Deno.test("keepsBranch keeps a branch only when it has commits past base", () => {
+  assertEquals(keepsBranch(0), false)
+  assertEquals(keepsBranch(1), true)
+})
+
+Deno.test("restartCommands always removes the worktree; the branch goes only when not kept", () => {
+  const remove = ["git", "-C", "repo", "worktree", "remove", "--force", "wt"]
+  assertEquals(restartCommands("repo", "wt", "factory/1-x", true), [remove])
+  assertEquals(restartCommands("repo", "wt", "factory/1-x", false), [
+    remove,
+    ["git", "-C", "repo", "branch", "-D", "factory/1-x"],
+  ])
+})
+
+Deno.test("restartConflict stops a re-pick on a checkout it does not own", () => {
+  const path = "C:/wt/wt-factory-7"
+  assertEquals(restartConflict([{ path, branch: "factory/7-x" }], path, "factory/7-x"), undefined)
+  assertEquals(restartConflict([], path, "factory/7-x"), undefined)
+  assertEquals(
+    restartConflict([{ path: "C:\\wt\\wt-factory-7\\", branch: "factory/7-x" }], path, "factory/7-x"),
+    undefined,
+  )
+  assertEquals(
+    restartConflict([{ path, branch: "feature/human" }], path, "factory/7-x"),
+    `${path} holds feature/human, not factory/7-x`,
+  )
+  assertEquals(
+    restartConflict([{ path, branch: undefined }], path, "factory/7-x"),
+    `${path} holds a detached checkout, not factory/7-x`,
+  )
+  assertEquals(
+    restartConflict([{ path: "C:/wt/other", branch: "factory/7-x" }], path, "factory/7-x"),
+    "factory/7-x is checked out at C:/wt/other",
+  )
 })

@@ -22,7 +22,15 @@ export async function gh(args: string[], stdin?: string): Promise<string> {
   return r.stdout
 }
 
-export type Issue = { number: number; title: string; body: string; labels: string[]; state: string }
+export type Issue = {
+  number: number
+  title: string
+  body: string
+  labels: string[]
+  state: string
+  createdAt: string
+  updatedAt: string
+}
 
 type RawIssue = {
   number: number
@@ -30,9 +38,11 @@ type RawIssue = {
   body: string | null
   labels: { name: string }[]
   state: string
+  createdAt: string
+  updatedAt: string
 }
 
-const FIELDS = "number,title,body,labels,state"
+const FIELDS = "number,title,body,labels,state,createdAt,updatedAt"
 
 function toIssue(raw: RawIssue): Issue {
   return {
@@ -41,6 +51,8 @@ function toIssue(raw: RawIssue): Issue {
     body: raw.body ?? "",
     labels: raw.labels.map((l) => l.name),
     state: raw.state,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
   }
 }
 
@@ -70,6 +82,26 @@ export async function isClosed(number: number): Promise<boolean> {
   return (await getIssue(number)).state.toUpperCase() === "CLOSED"
 }
 
+export type CommentInfo = { author: string; association: string; body: string; publishedAt: string }
+
+/// Issue comments in posting order. Bodies are capped so one long comment cannot flood a report.
+export async function listComments(number: number): Promise<CommentInfo[]> {
+  const out = await gh([
+    "api",
+    `repos/${config.repo}/issues/${number}/comments`,
+    "--paginate",
+    "--jq",
+    ".[] | {author: .user.login, association: .author_association, body: .body, publishedAt: .created_at}",
+  ])
+  return out
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .map((line) => {
+      const raw = JSON.parse(line) as CommentInfo
+      return { ...raw, body: raw.body.slice(0, 4000) }
+    })
+}
+
 export async function editLabels(
   number: number,
   change: { add?: string[]; remove?: string[] },
@@ -84,11 +116,15 @@ export async function comment(number: number, body: string): Promise<void> {
   await gh(["issue", "comment", String(number), "--repo", config.repo, "--body-file", "-"], body)
 }
 
-/// Replace an issue's body.
-export async function editBody(number: number, body: string): Promise<void> {
+/// Replace an issue's body (the ticket the implementer reads).
+export async function editIssueBody(number: number, body: string): Promise<void> {
   await gh(["issue", "edit", String(number), "--repo", config.repo, "--body-file", "-"], body)
 }
 
+/// Close an issue with a closing comment.
+export async function closeIssue(number: number, note: string): Promise<void> {
+  await gh(["issue", "close", String(number), "--repo", config.repo, "--comment", note])
+}
 export type PrOptions = { head: string; title: string; body: string }
 
 /// Open a draft PR into the integration branch; returns its URL.
@@ -127,6 +163,11 @@ export const LABELS: { name: string; color: string; description: string }[] = [
   { name: "factory:in-progress", color: "fbca04", description: "A lane is working on it" },
   { name: "factory:review", color: "1d76db", description: "Draft PR open; awaiting the human" },
   { name: "factory:blocked", color: "b60205", description: "The driver stopped; see the comment" },
+  {
+    name: "factory:needs-human",
+    color: "d4c5f9",
+    description: "Blocked on a human decision or action; see the comment",
+  },
   { name: "gameplay", color: "c5def5", description: "Needs a bnplay Episode to verify" },
   { name: "render", color: "c5def5", description: "Renderer change; needs a bnplay Episode" },
 ]
