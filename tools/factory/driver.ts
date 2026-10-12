@@ -13,6 +13,7 @@ import {
   type Issue,
   listIssues,
 } from "./gh.ts"
+import { formatAndCommit } from "./format.ts"
 import {
   agentPrompt,
   agentRead,
@@ -536,7 +537,9 @@ export async function runTicket(
       )
     }
 
-    say("implementer done; running the gate")
+    say("implementer done; formatting and running the gate")
+    const formatError = await formatAndCommit({ cwd: path, base, ticket: n })
+    if (formatError !== undefined) return await block(formatError)
     // Gate + review loop; gate failures and reviewer FAILs share one retry budget.
     let retries = 0
     let verdict: Verdict = "FAIL"

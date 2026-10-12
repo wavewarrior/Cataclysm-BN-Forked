@@ -3,10 +3,14 @@
 /// Windows path, so that script cannot run inside a worktree. This mirrors its selection rules and runs
 /// the pinned binaries directly on the Windows worktree path.
 import { config } from "./config.ts"
-import { git } from "./util.ts"
+import { git, run } from "./util.ts"
 import { toWslPath } from "./wsl.ts"
 
 export type FormatTargets = { clang: string[]; astyle: string[] }
+
+/// The versions the gate pins: `setup.sh` (astyle exact, clang-format by major) and `lane.sh`.
+export const PINNED_ASTYLE = "Artistic Style Version 3.6.16"
+export const PINNED_CLANG_FORMAT_MAJOR = 22
 
 const CLANG_SKIP = [
   "src/lua/",
@@ -45,6 +49,26 @@ export function formatScript(wslDir: string, targets: FormatTargets): string {
   return steps.join(" && ")
 }
 
+/// Pure: an error message when the tool versions are not the pinned ones, otherwise undefined.
+/// `astyle` and `clangFormat` are the captured `--version` output.
+export function checkToolVersions(opts: { astyle: string; clangFormat: string }): string | undefined {
+  const astyle = opts.astyle.trim()
+  if (astyle !== PINNED_ASTYLE) {
+    return `astyle is "${astyle}", need "${PINNED_ASTYLE}"`
+  }
+  const major = Number(opts.clangFormat.match(/version (\d+)\./)?.[1])
+  if (major !== PINNED_CLANG_FORMAT_MAJOR) {
+    return `clang-format is "${opts.clangFormat.trim()}", need major ${PINNED_CLANG_FORMAT_MAJOR}`
+  }
+  return undefined
+}
+
+/// Pure: the modified files that format would touch, i.e. the ones in its target set.
+export function formatCommitFiles(modified: readonly string[], targets: FormatTargets): string[] {
+  const formattable = new Set([...targets.clang, ...targets.astyle])
+  return modified.filter((f) => formattable.has(f))
+}
+
 /// Single-quote one shell word.
 function shellQuote(word: string): string {
   return `'${word.replaceAll("'", `'\\''`)}'`
@@ -59,8 +83,24 @@ async function changedFiles(cwd: string, base: string): Promise<string[]> {
   return [...new Set([...tracked.split("\n"), ...untracked.split("\n")])].filter(Boolean)
 }
 
-/// Format the changed C++ files of the worktree at `cwd`. Returns the WSL command's exit code.
+/// Run `--version` for both tools in WSL and compare against the pins. Returns an error, or undefined.
+export async function checkFormatTools(): Promise<string | undefined> {
+  const wsl = (tool: string) => run(["wsl", "-d", "Ubuntu", "-u", "root", "-e", tool, "--version"])
+  const astyle = await wsl("astyle")
+  const clangFormat = await wsl("clang-format")
+  return checkToolVersions({
+    astyle: astyle.stdout || astyle.stderr,
+    clangFormat: clangFormat.stdout || clangFormat.stderr,
+  })
+}
+
+/// Format the changed C++ files of the worktree at `cwd`. Returns the exit code (2 on a pin mismatch).
 export async function runFormat(opts: { cwd: string; base: string }): Promise<number> {
+  const versionError = await checkFormatTools()
+  if (versionError !== undefined) {
+    console.error(`format: ${versionError}`)
+    return 2
+  }
   const root = await git(opts.cwd, "rev-parse", "--show-toplevel")
   const targets = formatTargets(await changedFiles(opts.cwd, opts.base))
   if (targets.clang.length === 0 && targets.astyle.length === 0) {
@@ -77,8 +117,46 @@ export async function runFormat(opts: { cwd: string; base: string }): Promise<nu
   return (await child.output()).code
 }
 
+/// Format the ticket's changed C++ files and commit what the formatter changed as a `style:` commit,
+/// so the gate never sees unformatted code. Returns an error message, or undefined on success.
+export async function formatAndCommit(opts: {
+  cwd: string
+  base: string
+  ticket: number
+}): Promise<string | undefined> {
+  try {
+    const code = await runFormat(opts)
+    if (code !== 0) return `format failed (exit ${code})`
+    const targets = formatTargets(await changedFiles(opts.cwd, opts.base))
+    const working = (await git(opts.cwd, "diff", "--name-only")).split("\n")
+    const untracked = (await git(opts.cwd, "ls-files", "--others", "--exclude-standard")).split("\n")
+    const files = formatCommitFiles([...working, ...untracked].filter(Boolean), targets)
+    if (files.length === 0) return undefined
+    await git(opts.cwd, "add", "--", ...files)
+    const message = await Deno.makeTempFile({ suffix: ".txt" })
+    await Deno.writeTextFile(message, "style: format changed C++ files\n")
+    const commit = await run(["git", "commit", "-F", message], {
+      cwd: opts.cwd,
+      env: { FACTORY_LANE: "1", FACTORY_ROLE: "implementer", FACTORY_TICKET: String(opts.ticket) },
+    })
+    await Deno.remove(message).catch(() => undefined)
+    return commit.code === 0 ? undefined : `style commit failed:\n${commit.stderr.trim()}`
+  } catch (error) {
+    return `format step failed: ${error instanceof Error ? error.message : String(error)}`
+  }
+}
+
 if (import.meta.main) {
   const args = Deno.args
+  if (args.includes("--check")) {
+    const error = await checkFormatTools()
+    if (error !== undefined) {
+      console.error(`format: ${error}`)
+      Deno.exit(2)
+    }
+    console.log("format: pinned tools match")
+    Deno.exit(0)
+  }
   const at = args.indexOf("--base")
   const base = at >= 0 ? args[at + 1] : `origin/${config.integrationBranch}`
   Deno.exit(await runFormat({ cwd: Deno.cwd(), base }))
