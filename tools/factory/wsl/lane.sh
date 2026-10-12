@@ -16,12 +16,15 @@ LINE_FILTER="$5"
 CHANGED_CPP="$6"
 CHANGED_JSON="$7"
 
+# Any failure from here until the checks start is a lane fault: exit 2 keeps it out of follow-ups (gate.ts).
+trap 'exit 2' ERR
+
 exec 9>"$LANE_HOME/lock"
 echo "lane.sh: waiting for the lint lane lock"
 flock 9
 
 # shellcheck disable=SC1091
-source "$LANE_HOME/env.sh"
+source "$LANE_HOME/env.sh" || exit 2
 
 # A drifted formatter would fail honest code, so a wrong version is a tooling fault (exit 2 = infra in gate.ts), not a code failure.
 astyle_got="$(astyle --version 2>&1 || true)"
@@ -36,18 +39,18 @@ if [[ "$clang_format_got" != *"version 22."* ]]; then
 fi
 cd "$LANE_HOME/src"
 
-git fetch --quiet "$COMMON_DIR" "refs/heads/$BRANCH" || exit 2
+git fetch --quiet "$COMMON_DIR" "refs/heads/$BRANCH"
 if [ "$(git rev-parse FETCH_HEAD)" != "$SHA" ]; then
     echo "lane.sh: branch $BRANCH moved (expected $SHA, fetched $(git rev-parse FETCH_HEAD))" >&2
     exit 2
 fi
 # A killed earlier run can leave the shared clone dirty; checkout would abort on it, so discard first.
-# Setup failures are lane faults, not code failures: exit 2 keeps them out of follow-ups (gate.ts).
-git reset --quiet --hard || exit 2
-git clean -fdq || exit 2
-git checkout --quiet --detach FETCH_HEAD || exit 2
-git reset --quiet --hard || exit 2
-git clean -fdq || exit 2
+git reset --quiet --hard
+git clean -fdq
+git checkout --quiet --detach FETCH_HEAD
+git reset --quiet --hard
+git clean -fdq
+trap - ERR
 
 status=0
 
