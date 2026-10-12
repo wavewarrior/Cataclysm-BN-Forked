@@ -13,7 +13,7 @@
 
 /// Which part of the world a step touches.
 enum class turn_scope {
-    /// Host-owned turn state: calendar, monsters, NPCs, weather, world tick.
+    /// Host-owned turn state: calendar, monsters, NPCs, world tick.
     world,
     /// The avatar's own state, which the host and the coop client both run.
     avatar,
@@ -79,10 +79,10 @@ enum class turn_step_kind {
     driving_offset,
     scent_set,
     scent_update,
-    creature_in_field,
     build_floor_caches,
     vehicle_moves,
     process_items,
+    creature_in_field,
     grid_trackers,
     tick_portals,
     fluid_grid,
@@ -160,7 +160,6 @@ struct turn_step {
     std::string reason;
     perf_group group = perf_group::none;
     bool reads_turn = false;
-    bool advances_calendar = false;
 };
 
 /// A full plan in turn order. `view` selects the steps one executor mode runs.
@@ -184,8 +183,11 @@ auto check_plan_laws( const turn_plan &plan ) -> std::vector<std::string>;
 auto index_of( const std::vector<turn_step> &steps,
                turn_step_kind kind ) -> std::optional<std::size_t>;
 
+/// The profiling zone for a step: the legacy `do_turn_*` name where the step replaces one, else its step name.
+auto zone_name_of( turn_step_kind kind ) -> const char *; // *NOPAD*
+
 /// Turns per aggregated sim perf line.
-inline constexpr int kTurnsPerLine = 20;
+inline constexpr int turns_per_line = 20;
 
 /// Milliseconds spent in one turn's sim timing buckets.
 struct perf_sample {
@@ -195,7 +197,7 @@ struct perf_sample {
     double world_tick_ms = 0.0;
 };
 
-/// Averages perf samples and emits the legacy `[sim][perf]` line every `kTurnsPerLine` turns.
+/// Averages perf samples and emits the legacy `[sim][perf]` line every `turns_per_line` turns.
 class sim_perf_aggregator
 {
     public:

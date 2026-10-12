@@ -7,6 +7,7 @@
 #include <optional>
 #include <ranges>
 #include <string>
+#include <string_view>
 #include <vector>
 
 // The turn plan seam: the order and gates of one game turn, asserted as a pure value built
@@ -91,9 +92,7 @@ TEST_CASE("fork law: the coop client turn view holds only avatar steps", "[turn_
     const auto plan = derive_turn_plan(client_inputs());
     const auto view = plan.view(turn_mode::client_turn);
     REQUIRE_FALSE(view.empty());
-    CHECK(std::ranges::none_of(view, [](const turn_step& s) {
-        return s.scope == turn_scope::world;
-    }));
+    CHECK(std::ranges::count(view, turn_scope::world, &turn_step::scope) == 0);
     CHECK(std::ranges::all_of(view, [](const turn_step& s) {
         return s.scope == turn_scope::avatar;
     }));
@@ -118,12 +117,8 @@ TEST_CASE(
     const auto plan = derive_turn_plan(host_in);
     for (const turn_mode mode : {turn_mode::solo, turn_mode::host}) {
         const auto view = plan.view(mode);
-        CHECK(std::ranges::any_of(view, [](const turn_step& s) {
-            return s.scope == turn_scope::world;
-        }));
-        CHECK(std::ranges::none_of(view, [](const turn_step& s) {
-            return s.scope == turn_scope::frame;
-        }));
+        CHECK(std::ranges::count(view, turn_scope::world, &turn_step::scope) > 0);
+        CHECK(std::ranges::count(view, turn_scope::frame, &turn_step::scope) == 0);
     }
 }
 
@@ -186,27 +181,26 @@ TEST_CASE("a skipped step carries a reason and a run step carries none", "[turn_
 
 TEST_CASE("sim perf line pins the legacy format", "[turn_plan][sim][perf]") {
     // Per-turn values whose twenty-turn sums are 30, 10, 5 and 15 ms.
-    auto agg = sim_perf_aggregator{};
-    for (int i = 0; i < kTurnsPerLine - 1; ++i) {
-        CHECK_FALSE(
-            agg
-                .add(perf_sample{
-                    .sim_total_ms = 1.5,
-                    .build_map_cache_ms = 0.5,
-                    .monmove_ms = 0.25,
-                    .world_tick_ms = 0.75,
-                })
-                .has_value());
-    }
-    const auto line = agg.add(perf_sample{
+    const auto sample = perf_sample{
         .sim_total_ms = 1.5,
         .build_map_cache_ms = 0.5,
         .monmove_ms = 0.25,
         .world_tick_ms = 0.75,
-    });
+    };
+    auto agg = sim_perf_aggregator{};
+    for (int i = 0; i < turns_per_line - 1; ++i) { CHECK_FALSE(agg.add(sample).has_value()); }
+    const auto line = agg.add(sample);
     REQUIRE(line.has_value());
     CHECK(
         *line
         == "[sim][perf] 20 turns avg: sim_total=1.5ms (build_map_cache=0.5 monmove=0.25 world_tick=0.75)");
     CHECK_FALSE(agg.add(perf_sample{}).has_value());
+}
+
+TEST_CASE("profiling zones keep the legacy do_turn names", "[turn_plan]") {
+    CHECK(std::string_view{zone_name_of(turn_step_kind::process_items)} == "do_turn_process_items");
+    CHECK(std::string_view{zone_name_of(turn_step_kind::scent_update)} == "do_turn_scent");
+    CHECK(std::string_view{zone_name_of(turn_step_kind::advance_calendar)} == "do_turn_calendar");
+    CHECK(std::string_view{zone_name_of(turn_step_kind::move_hordes)} == "do_turn_overmap_hordes");
+    CHECK(std::string_view{zone_name_of(turn_step_kind::vehicle_theft)} == "vehicle_theft");
 }

@@ -60,45 +60,46 @@ auto trait_has_nemesis() -> trait_id
 /// Static description of one step: identity, scope, timing bucket and turn/calendar flags.
 struct registry_entry {
     turn_step_kind kind;
-    std::string_view name;
+    const char *name;
     turn_scope scope;
     perf_group group = perf_group::none;
     bool reads_turn = false;
-    bool advances_calendar = false;
+    /// Tracy zone name when the step replaces a legacy `do_turn_*` block; null falls back to `name`.
+    const char *zone = nullptr;
 };
 
 /// Every step in plan order. The index of an entry equals its `kind`, asserted below.
-constexpr registry_entry kRegistry[] = {
-    { .kind = turn_step_kind::cleanup_arenas, .name = "cleanup_arenas", .scope = turn_scope::avatar },
-    { .kind = turn_step_kind::advance_calendar, .name = "advance_calendar", .scope = turn_scope::world, .advances_calendar = true },
-    { .kind = turn_step_kind::mark_visibility_dirty, .name = "mark_visibility_dirty", .scope = turn_scope::world },
-    { .kind = turn_step_kind::clear_weather_temp_cache, .name = "clear_weather_temp_cache", .scope = turn_scope::avatar },
-    { .kind = turn_step_kind::load_npcs, .name = "load_npcs", .scope = turn_scope::world },
-    { .kind = turn_step_kind::timed_events_and_missions, .name = "timed_events_and_missions", .scope = turn_scope::avatar, .reads_turn = true },
+constexpr registry_entry step_registry[] = {
+    { .kind = turn_step_kind::cleanup_arenas, .name = "cleanup_arenas", .scope = turn_scope::avatar, .zone = "do_turn_initial_cleanup" },
+    { .kind = turn_step_kind::advance_calendar, .name = "advance_calendar", .scope = turn_scope::world, .zone = "do_turn_calendar" },
+    { .kind = turn_step_kind::mark_visibility_dirty, .name = "mark_visibility_dirty", .scope = turn_scope::world, .zone = "do_turn_invalidate_visibility" },
+    { .kind = turn_step_kind::clear_weather_temp_cache, .name = "clear_weather_temp_cache", .scope = turn_scope::avatar, .zone = "do_turn_clear_temp_cache" },
+    { .kind = turn_step_kind::load_npcs, .name = "load_npcs", .scope = turn_scope::world, .zone = "do_turn_load_npcs" },
+    { .kind = turn_step_kind::timed_events_and_missions, .name = "timed_events_and_missions", .scope = turn_scope::avatar, .reads_turn = true, .zone = "do_turn_timed_events" },
     { .kind = turn_step_kind::vehicle_theft, .name = "vehicle_theft", .scope = turn_scope::avatar },
     { .kind = turn_step_kind::mount_spook, .name = "mount_spook", .scope = turn_scope::avatar },
-    { .kind = turn_step_kind::process_mongroups, .name = "process_mongroups", .scope = turn_scope::world, .reads_turn = true },
-    { .kind = turn_step_kind::move_hordes, .name = "move_hordes", .scope = turn_scope::world, .reads_turn = true },
+    { .kind = turn_step_kind::process_mongroups, .name = "process_mongroups", .scope = turn_scope::world, .reads_turn = true, .zone = "do_turn_overmap_mongroups" },
+    { .kind = turn_step_kind::move_hordes, .name = "move_hordes", .scope = turn_scope::world, .reads_turn = true, .zone = "do_turn_overmap_hordes" },
     { .kind = turn_step_kind::debug_hour_timer, .name = "debug_hour_timer", .scope = turn_scope::world },
-    { .kind = turn_step_kind::update_body, .name = "update_body", .scope = turn_scope::avatar },
-    { .kind = turn_step_kind::autosave, .name = "autosave", .scope = turn_scope::avatar, .reads_turn = true },
-    { .kind = turn_step_kind::update_weather, .name = "update_weather", .scope = turn_scope::avatar, .reads_turn = true },
-    { .kind = turn_step_kind::perhaps_add_random_npc, .name = "perhaps_add_random_npc", .scope = turn_scope::world },
+    { .kind = turn_step_kind::update_body, .name = "update_body", .scope = turn_scope::avatar, .zone = "do_turn_update_body" },
+    { .kind = turn_step_kind::autosave, .name = "autosave", .scope = turn_scope::avatar, .reads_turn = true, .zone = "do_turn_autosave" },
+    { .kind = turn_step_kind::update_weather, .name = "update_weather", .scope = turn_scope::avatar, .reads_turn = true, .zone = "do_turn_weather_update" },
+    { .kind = turn_step_kind::perhaps_add_random_npc, .name = "perhaps_add_random_npc", .scope = turn_scope::world, .zone = "do_turn_pre_action_updates" },
     { .kind = turn_step_kind::voluntary_interrupt, .name = "voluntary_interrupt", .scope = turn_scope::avatar },
     { .kind = turn_step_kind::process_activity, .name = "process_activity", .scope = turn_scope::avatar },
     { .kind = turn_step_kind::performance_bubble, .name = "performance_bubble", .scope = turn_scope::world },
     { .kind = turn_step_kind::reset_sound_markers, .name = "reset_sound_markers", .scope = turn_scope::avatar },
     { .kind = turn_step_kind::npc_sound_markers, .name = "npc_sound_markers", .scope = turn_scope::world },
-    { .kind = turn_step_kind::avatar_sound_markers, .name = "avatar_sound_markers", .scope = turn_scope::avatar },
-    { .kind = turn_step_kind::hearing_loss, .name = "hearing_loss", .scope = turn_scope::avatar },
+    { .kind = turn_step_kind::avatar_sound_markers, .name = "avatar_sound_markers", .scope = turn_scope::avatar, .zone = "do_turn_player_sound" },
+    { .kind = turn_step_kind::hearing_loss, .name = "hearing_loss", .scope = turn_scope::avatar, .zone = "do_turn_player_sound" },
     { .kind = turn_step_kind::clear_recent_sounds, .name = "clear_recent_sounds", .scope = turn_scope::avatar },
-    { .kind = turn_step_kind::driving_offset, .name = "driving_offset", .scope = turn_scope::world },
-    { .kind = turn_step_kind::scent_set, .name = "scent_set", .scope = turn_scope::avatar, .group = perf_group::world_tick },
-    { .kind = turn_step_kind::scent_update, .name = "scent_update", .scope = turn_scope::avatar, .group = perf_group::world_tick },
-    { .kind = turn_step_kind::creature_in_field, .name = "creature_in_field", .scope = turn_scope::avatar, .group = perf_group::world_tick },
-    { .kind = turn_step_kind::build_floor_caches, .name = "build_floor_caches", .scope = turn_scope::world, .group = perf_group::world_tick },
+    { .kind = turn_step_kind::driving_offset, .name = "driving_offset", .scope = turn_scope::world, .zone = "do_turn_driving_offset" },
+    { .kind = turn_step_kind::scent_set, .name = "scent_set", .scope = turn_scope::avatar, .group = perf_group::world_tick, .zone = "do_turn_scent" },
+    { .kind = turn_step_kind::scent_update, .name = "scent_update", .scope = turn_scope::avatar, .group = perf_group::world_tick, .zone = "do_turn_scent" },
+    { .kind = turn_step_kind::build_floor_caches, .name = "build_floor_caches", .scope = turn_scope::world, .group = perf_group::world_tick, .zone = "do_turn_build_floor_caches" },
     { .kind = turn_step_kind::vehicle_moves, .name = "vehicle_moves", .scope = turn_scope::world, .group = perf_group::world_tick },
-    { .kind = turn_step_kind::process_items, .name = "process_items", .scope = turn_scope::world, .group = perf_group::world_tick },
+    { .kind = turn_step_kind::process_items, .name = "process_items", .scope = turn_scope::world, .group = perf_group::world_tick, .zone = "do_turn_process_items" },
+    { .kind = turn_step_kind::creature_in_field, .name = "creature_in_field", .scope = turn_scope::avatar, .group = perf_group::world_tick },
     { .kind = turn_step_kind::grid_trackers, .name = "grid_trackers", .scope = turn_scope::world, .group = perf_group::world_tick, .reads_turn = true },
     { .kind = turn_step_kind::tick_portals, .name = "tick_portals", .scope = turn_scope::world, .group = perf_group::world_tick },
     { .kind = turn_step_kind::fluid_grid, .name = "fluid_grid", .scope = turn_scope::world, .group = perf_group::world_tick, .reads_turn = true },
@@ -110,8 +111,8 @@ constexpr registry_entry kRegistry[] = {
     { .kind = turn_step_kind::overmap_npc_move, .name = "overmap_npc_move", .scope = turn_scope::world, .group = perf_group::sim, .reads_turn = true },
     { .kind = turn_step_kind::update_stair_monsters, .name = "update_stair_monsters", .scope = turn_scope::world, .group = perf_group::sim },
     { .kind = turn_step_kind::mon_info_update, .name = "mon_info_update", .scope = turn_scope::world, .group = perf_group::sim },
-    { .kind = turn_step_kind::process_turn, .name = "process_turn", .scope = turn_scope::avatar, .group = perf_group::sim },
-    { .kind = turn_step_kind::lua_every_x, .name = "lua_every_x", .scope = turn_scope::avatar, .group = perf_group::sim },
+    { .kind = turn_step_kind::process_turn, .name = "process_turn", .scope = turn_scope::avatar, .group = perf_group::sim, .zone = "do_turn_player_process_turn" },
+    { .kind = turn_step_kind::lua_every_x, .name = "lua_every_x", .scope = turn_scope::avatar, .group = perf_group::sim, .zone = "do_turn_lua_every_x" },
     { .kind = turn_step_kind::explosions, .name = "explosions", .scope = turn_scope::avatar, .group = perf_group::sim },
     { .kind = turn_step_kind::cleanup_dead, .name = "cleanup_dead", .scope = turn_scope::avatar, .group = perf_group::sim },
     { .kind = turn_step_kind::forced_redraw, .name = "forced_redraw", .scope = turn_scope::world, .group = perf_group::sim },
@@ -132,11 +133,14 @@ constexpr registry_entry kRegistry[] = {
     { .kind = turn_step_kind::frame_audio, .name = "frame_audio", .scope = turn_scope::frame },
 };
 
-static_assert( std::size( kRegistry ) == static_cast<std::size_t>( turn_step_kind::frame_audio ) +
+static_assert( std::size( step_registry ) == static_cast<std::size_t>( turn_step_kind::frame_audio )
+               +
                1 );
-static_assert( std::ranges::all_of( std::views::iota( std::size_t{ 0 }, std::size( kRegistry ) ),
-[]( const std::size_t i ) -> bool {
-    return static_cast<std::size_t>( kRegistry[i].kind ) == i;
+static_assert( std::ranges::all_of( std::views::iota( std::size_t{ 0 }, std::size(
+                                        step_registry ) ),
+                                    []( const auto i ) -> bool
+{
+    return static_cast<std::size_t>( step_registry[i].kind ) == i;
 } ) );
 
 /// The reason a step is skipped, or empty when its gate is open.
@@ -210,7 +214,7 @@ auto admits( const turn_mode mode, const turn_scope scope ) -> bool
 
 auto name_of( const turn_step_kind kind ) -> std::string_view
 {
-    return kRegistry[static_cast<std::size_t>( kind )].name;
+    return std::string_view{ step_registry[static_cast<std::size_t>( kind )].name };
 }
 
 /// Add one step's duration to its sim bucket. `sim_total` sums every bucket that is not none.
@@ -241,7 +245,7 @@ auto accumulate( perf_sample &perf, const perf_group group, const double ms ) ->
 auto derive_turn_plan( const turn_inputs &in ) -> turn_plan
 {
     auto steps = std::vector<turn_step> {};
-    std::ranges::transform( kRegistry, std::back_inserter( steps ),
+    std::ranges::transform( step_registry, std::back_inserter( steps ),
     [&in]( const registry_entry & entry ) -> turn_step {
         const auto reason = skip_reason( entry, in );
         return turn_step{
@@ -251,7 +255,6 @@ auto derive_turn_plan( const turn_inputs &in ) -> turn_plan
             .reason = std::string( reason ),
             .group = entry.group,
             .reads_turn = entry.reads_turn,
-            .advances_calendar = entry.advances_calendar,
         };
     } );
     return turn_plan{ .steps = std::move( steps ) };
@@ -261,7 +264,7 @@ auto turn_plan::view( const turn_mode mode ) const -> std::vector<turn_step>
 {
     auto out = std::vector<turn_step> {};
     std::ranges::copy_if( steps, std::back_inserter( out ),
-    [mode]( const turn_step & step ) -> bool {
+    [mode]( const auto & step ) -> bool {
         return admits( mode, step.scope );
     } );
     return out;
@@ -318,6 +321,12 @@ auto check_plan_laws( const turn_plan &plan ) -> std::vector<std::string>
     return violations;
 }
 
+auto zone_name_of( const turn_step_kind kind ) -> const char * // *NOPAD*
+{
+    const auto &entry = step_registry[static_cast<std::size_t>( kind )];
+    return entry.zone != nullptr ? entry.zone : entry.name;
+}
+
 auto index_of( const std::vector<turn_step> &steps,
                const turn_step_kind kind ) -> std::optional<std::size_t>
 {
@@ -335,7 +344,7 @@ auto sim_perf_aggregator::add( const perf_sample &sample ) -> std::optional<std:
     total_.build_map_cache_ms += sample.build_map_cache_ms;
     total_.monmove_ms += sample.monmove_ms;
     total_.world_tick_ms += sample.world_tick_ms;
-    if( turns_ < kTurnsPerLine ) {
+    if( turns_ < turns_per_line ) {
         return std::nullopt;
     }
     const auto turns = static_cast<double>( turns_ );
@@ -353,23 +362,24 @@ auto turn_executor::run( game &g, const turn_plan &plan, const turn_mode mode ) 
 {
     auto report = turn_report{};
     for( const turn_step &step : plan.view( mode ) ) {
-        auto entry = turn_step_report{ .kind = step.kind, .status = step.status, .reason = step.reason };
+        auto step_report = turn_step_report{ .kind = step.kind, .status = step.status, .reason = step.reason };
         if( step.status == step_status::run ) {
+            ZoneTransientN( step_zone, zone_name_of( step.kind ), true );
             const auto start = std::chrono::steady_clock::now();
             run_step( g, step.kind );
-            entry.duration_ms =
+            step_report.duration_ms =
                 std::chrono::duration<double, std::milli>( std::chrono::steady_clock::now() - start ).count();
-            accumulate( report.perf, step.group, entry.duration_ms );
+            accumulate( report.perf, step.group, step_report.duration_ms );
         }
-        report.steps.push_back( std::move( entry ) );
+        report.steps.push_back( std::move( step_report ) );
     }
     return report;
 }
 
 auto turn_executor::run_step( game &g, const turn_step_kind kind ) -> void
 {
-    avatar &u = g.u;
-    map &m = g.m;
+    auto &u = g.u;
+    auto &m = g.m;
     switch( kind ) {
         case turn_step_kind::cleanup_arenas:
             cleanup_arenas();
@@ -413,7 +423,7 @@ auto turn_executor::run_step( game &g, const turn_step_kind kind ) -> void
             break;
         case turn_step_kind::vehicle_theft:
             if( u.in_vehicle && u.controlling_vehicle ) {
-                vehicle *veh = veh_pointer_or_null( m.veh_at( u.bub_pos() ) );
+                auto *veh = veh_pointer_or_null( m.veh_at( u.bub_pos() ) );
                 if( veh && !veh->handle_potential_theft( u, true ) ) {
                     veh->handle_potential_theft( u, false, false );
                 }
@@ -482,7 +492,7 @@ auto turn_executor::run_step( game &g, const turn_step_kind kind ) -> void
             break;
         case turn_step_kind::driving_offset:
         case turn_step_kind::frame_driving_offset: {
-            vehicle *veh = veh_pointer_or_null( m.veh_at( u.bub_pos() ) );
+            auto *veh = veh_pointer_or_null( m.veh_at( u.bub_pos() ) );
             g.calc_driving_offset( veh );
             break;
         }
@@ -505,7 +515,6 @@ auto turn_executor::run_step( game &g, const turn_step_kind kind ) -> void
             m.vehmove();
             break;
         case turn_step_kind::process_items: {
-            ZoneScopedN( "do_turn_process_items" );
             m.process_items();
             break;
         }
@@ -558,12 +567,10 @@ auto turn_executor::run_step( game &g, const turn_step_kind kind ) -> void
             g.mon_info_update();
             break;
         case turn_step_kind::process_turn: {
-            ZoneScopedN( "do_turn_player_process_turn" );
             u.process_turn();
             break;
         }
         case turn_step_kind::lua_every_x: {
-            ZoneScopedN( "do_turn_lua_every_x" );
             cata::run_on_every_x_hooks( *DynamicDataLoader::get_instance().lua );
             break;
         }
@@ -578,7 +585,7 @@ auto turn_executor::run_step( game &g, const turn_step_kind kind ) -> void
             refresh_display();
             break;
         case turn_step_kind::weather_effects: {
-            weather_manager &weather = get_weather();
+            auto &weather = get_weather();
             handle_weather_effects( weather.weather_id );
             break;
         }
@@ -587,7 +594,7 @@ auto turn_executor::run_step( game &g, const turn_step_kind kind ) -> void
             g.handle_wait_activity_redraw();
             break;
         case turn_step_kind::update_bodytemp: {
-            weather_manager &weather = get_weather();
+            auto &weather = get_weather();
             u.update_bodytemp( m, weather );
             character_funcs::update_body_wetness( u, get_weather().get_precise() );
             u.apply_wetness_morale( weather.temperature );
