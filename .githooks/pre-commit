@@ -38,7 +38,10 @@ while IFS= read -r -d '' file; do
     esac
 done < <(git diff --cached --name-only --diff-filter=ACMR -z)
 
-if ((${#cpp_files[@]})); then build-scripts/format-cpp.sh "${cpp_files[@]}"; fi
+# A factory lane's C++ is formatted by the driver with the gate's pinned astyle and clang-format
+# (WSL). This hook's own tools are different versions, so formatting here would undo the driver's
+# output and the two would trade diffs on every commit.
+if ((${#cpp_files[@]})) && [[ "${FACTORY_LANE:-}" != "1" ]]; then build-scripts/format-cpp.sh "${cpp_files[@]}"; fi
 if ((${#json_files[@]})); then build-scripts/format-json.sh "${json_files[@]}"; fi
 if [[ -n "$DENO" ]]; then
     if ((${#doc_files[@]})); then "$DENO" fmt "${doc_files[@]}"; fi
