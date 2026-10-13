@@ -227,9 +227,15 @@ void reset()
 
 void check_consistency()
 {
-    // Legacy migration from when single string was used for both terrain
-    // and furniture id.
-    // TODO: remove this after reaching BN equivalent of 0.F (or 0.G)
+    all_constructions.check();
+}
+
+/// Legacy migration from when a single string was used for both terrain and furniture id.
+/// This rewrites data, so it belongs to finalize: check_consistency must stay read-only because
+/// test init defers it.
+/// TODO: remove this after reaching BN equivalent of 0.F (or 0.G)
+static void migrate_legacy_furniture_ids()
+{
     for( const construction &c_it : all_constructions.get_all() ) {
         construction &c = const_cast<construction &>( c_it );
         bool did_migrate = false;
@@ -248,13 +254,12 @@ void check_consistency()
                       c.id );
         }
     }
-
-    all_constructions.check();
 }
 
 void finalize()
 {
     all_constructions.finalize();
+    migrate_legacy_furniture_ids();
 
     for( const construction &c_it : all_constructions.get_all() ) {
         construction &c = const_cast<construction &>( c_it );

@@ -29,6 +29,7 @@
 #include "init.h"
 #include "language.h"
 #include "loading_ui.h"
+#include "logic_tier.h"
 #include "map.h"
 #include "mod_manager.h"
 #include "options.h"
@@ -38,6 +39,7 @@
 #include "overmapbuffer.h"
 #include "path_info.h"
 #include "pldata.h"
+#include "quarantine.h"
 #include "rng.h"
 #include "state_helpers.h"
 #include "string_formatter.h"
@@ -54,6 +56,7 @@
 #include <cstring>
 #include <ctime>
 #include <exception>
+#include <expected>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -271,6 +274,8 @@ static void init_global_game_state(
     calendar::set_eternal_season(get_option<bool>("ETERNAL_SEASON"));
     calendar::set_season_length(get_option<int>("SEASON_LENGTH"));
 
+    // The validation pass runs once as the json_data_is_consistent case, not on every init.
+    DynamicDataLoader::get_instance().defer_consistency_check = true;
     loading_ui ui(false);
     init::load_world_modfiles(ui, g->get_active_world(), SAVE_ARTIFACTS);
 
@@ -369,6 +374,70 @@ struct CataListener: Catch::EventListenerBase {
 };
 CATCH_REGISTER_LISTENER(CataListener)
 
+/// True when every selected case lives in a Logic tier file (tests/logic_tier.h), so the game
+/// need not be initialised. An empty selection counts as not logic: let normal init report it.
+static auto all_selected_are_logic(Catch::Session& session) -> bool {
+    const auto& config = session.config();
+    const auto selected =
+        Catch::filterTests(Catch::getAllTestCasesSorted(config), config.testSpec(), config);
+    return !selected.empty()
+        && std::ranges::all_of(selected, [](const Catch::TestCaseHandle& handle) {
+               return is_logic_tier_file(handle.getTestCaseInfo().lineInfo.file);
+           });
+}
+
+/// The few paths a Logic tier case may touch, without loading anything.
+static void init_logic_state(const std::string& user_dir) {
+    PATH_INFO::init_base_path("");
+    PATH_INFO::init_user_dir(user_dir);
+    PATH_INFO::set_standard_filenames();
+    PATH_INFO::set_config_dir(PATH_INFO::user_dir() + "config/");
+}
+
+/// Catch2 reads a backslash as an escape, so any name can be selected exactly.
+auto escape_for_catch(const std::string& name) -> std::string {
+    auto escaped = std::string();
+    for (const auto c : name) {
+        if (std::string_view("\\,[]\"~*").find(c) != std::string_view::npos) { escaped += '\\'; }
+        escaped += c;
+    }
+    return escaped;
+}
+
+/// The cases Catch2 would run for this command line.
+auto select_cases(Catch::Session& session) -> std::vector<std::string> {
+    const auto& config = session.config();
+    const auto all = Catch::getAllTestCasesSorted(config);
+    const auto matched = Catch::filterTests(all, config.testSpec(), config);
+    auto names = std::vector<std::string>();
+    for (const auto& handle : matched) { names.push_back(handle.getTestCaseInfo().name); }
+    return names;
+}
+
+/// Narrows the selected cases to one tier. Logic cases are those in tests/logic_tier.h; Sim is
+/// everything else. An empty result is an error: an empty selector would run every case.
+static auto narrow_to_tier(Catch::Session& session, const std::string& tier)
+    -> std::expected<void, std::string> {
+    if (tier != "logic" && tier != "sim") { return std::unexpected("--tier must be logic or sim"); }
+    const auto& config = session.config();
+    const auto selected =
+        Catch::filterTests(Catch::getAllTestCasesSorted(config), config.testSpec(), config);
+    // Catch2 joins separate testsOrTags entries with AND, so the names go into one entry,
+    // separated by commas (OR). escape_for_catch already escapes the commas inside names.
+    auto spec = std::string();
+    for (const auto& handle : selected) {
+        const auto& info = handle.getTestCaseInfo();
+        if (is_logic_tier_file(info.lineInfo.file) != (tier == "logic")) { continue; }
+        if (!spec.empty()) { spec += ','; }
+        spec += escape_for_catch(info.name);
+    }
+    if (spec.empty()) { return std::unexpected("no selected case is in the " + tier + " tier"); }
+    auto data = session.configData();
+    data.testsOrTags = {spec};
+    session.useConfigData(data);
+    return {};
+}
+
 #if defined(__linux__)
 namespace {
 
@@ -392,26 +461,6 @@ auto prepare_for_forking(option_overrides_t& overrides) -> void {
     unsetenv("WAYLAND_DISPLAY");
     unsetenv("SDL_VIDEODRIVER");
     overrides.emplace_back("MULTITHREADING_ENABLED", "false");
-}
-
-/// Catch2 reads a backslash as an escape, so any name can be selected exactly.
-auto escape_for_catch(const std::string& name) -> std::string {
-    auto escaped = std::string();
-    for (const auto c : name) {
-        if (std::string_view("\\,[]\"~*").find(c) != std::string_view::npos) { escaped += '\\'; }
-        escaped += c;
-    }
-    return escaped;
-}
-
-/// The cases Catch2 would run for this command line.
-auto select_cases(Catch::Session& session) -> std::vector<std::string> {
-    const auto& config = session.config();
-    const auto all = Catch::getAllTestCasesSorted(config);
-    const auto matched = Catch::filterTests(all, config.testSpec(), config);
-    auto names = std::vector<std::string>();
-    for (const auto& handle : matched) { names.push_back(handle.getTestCaseInfo().name); }
-    return names;
 }
 
 /// Exit code of a child whose selector did not match exactly one case.
@@ -485,7 +534,17 @@ auto rerun_in_fresh_processes(const std::vector<std::string>& names, const rerun
 }
 
 auto run_forked(Catch::Session& session, int jobs, const std::string& scratch) -> int {
-    const auto names = select_cases(session);
+    const auto selected = select_cases(session);
+    const auto quarantine = split_by_quarantine(selected, quarantine_entries, today_iso());
+    const auto& names = quarantine.run;
+    for (const auto& entry : quarantine.skipped) {
+        cata_printf("Quarantined until %s: %s (%s)\n", std::string(entry.expires).c_str(),
+                    std::string(entry.name).c_str(), std::string(entry.reason).c_str());
+    }
+    for (const auto& entry : quarantine.expired) {
+        cata_printf("QUARANTINE EXPIRED %s, running again: %s\n",
+                    std::string(entry.expires).c_str(), std::string(entry.name).c_str());
+    }
     const auto init_had_error = debug_has_error_been_observed();
     const auto timeout = std::chrono::seconds(180);
     const auto forked = fork_runner::run(
@@ -610,6 +669,8 @@ int main(int argc, const char* argv[]) {
         return EXIT_FAILURE;
     }
 
+    const auto tier = extract_argument(arg_vec, "--tier=");
+
     // Note: this must not be invoked before all DDA-specific flags are stripped from arg_vec!
     int result = session.applyCommandLine(arg_vec.size(), arg_vec.data());
     if (result != 0 || session.configData().showHelp) {
@@ -624,6 +685,9 @@ int main(int argc, const char* argv[]) {
         cata_printf("  -D, --drop-world             Don't save the world on test failure.\n");
         cata_printf("  --option_overrides=n:v[,…]   Name-value pairs of game options for tests.\n");
         cata_printf("                               (overrides config/options.json values)\n");
+        cata_printf(
+            "  --tier=logic|sim             Run only the Logic tier cases (no game init) or\n");
+        cata_printf("                               only the rest, within the selected cases.\n");
 #if defined(CATA_SDL)
         cata_printf("  --gpu-backend=<driver>       Override SDL_GPU backend for diagnostics.\n");
 #endif
@@ -634,12 +698,21 @@ int main(int argc, const char* argv[]) {
         return result;
     }
 
+    if (!tier.empty()) {
+        const auto narrowed = narrow_to_tier(session, tier);
+        if (!narrowed) {
+            cata_print_stderr(narrowed.error() + "\n");
+            return EXIT_FAILURE;
+        }
+    }
+
     if (session.configData().listTags || session.configData().listTests
         || session.configData().listReporters) {
         return session.run();
     }
 
     test_mode = true;
+    const auto logic_only = all_selected_are_logic(session);
 
 #if defined(__linux__)
     const auto fork_jobs = fork_jobs_from_env();
@@ -659,7 +732,8 @@ int main(int argc, const char* argv[]) {
     }
     DebugLog(DL::Info, DC::Main) << "Randomness seeded to: " << seed;
 
-    auto _on_out_of_scope = on_out_of_scope([]() {
+    auto _on_out_of_scope = on_out_of_scope([logic_only]() {
+        if (logic_only) { return; }
 #if defined(CATA_SDL)
         shutdown_test_sdl_gpu();
 #endif
@@ -667,8 +741,11 @@ int main(int argc, const char* argv[]) {
         DynamicDataLoader::get_instance().unload_data();
     });
     try {
-        // TODO: Only init game if we're running tests that need it.
-        init_global_game_state(mods, option_overrides_for_test_suite, user_dir);
+        if (logic_only) {
+            init_logic_state(user_dir);
+        } else {
+            init_global_game_state(mods, option_overrides_for_test_suite, user_dir);
+        }
     } catch (const std::exception& err) {
         cata_print_stderr(string_format("Terminated: %s\n", err.what()));
         cata_print_stderr(
@@ -697,13 +774,15 @@ int main(int argc, const char* argv[]) {
     const auto end = std::chrono::system_clock::now();
     std::time_t end_time = std::chrono::system_clock::to_time_t(end);
 
-    clear_all_state();
-
-    auto world_name = world_generator->active_world->info->world_name;
-    if (result == 0 || dont_save) {
-        world_generator->delete_world(world_name, true);
-    } else {
-        cata_printf("Test world \"%s\" left for inspection.\n", world_name.c_str());
+    auto world_name = std::string();
+    if (!logic_only) {
+        clear_all_state();
+        world_name = world_generator->active_world->info->world_name;
+        if (result == 0 || dont_save) {
+            world_generator->delete_world(world_name, true);
+        } else {
+            cata_printf("Test world \"%s\" left for inspection.\n", world_name.c_str());
+        }
     }
 
     std::chrono::duration<double> elapsed_seconds = end - start;

@@ -84,20 +84,6 @@ class DynamicDataLoader
         // Used by get_cached_stream (deferred finalization) and get_preloaded_content
         // (parallel mapgen setup) to eliminate repeated Defender-scanned file opens.
         std::unordered_map < std::string, std::string > preloaded_content_;
-        /// Entry from a data.jsonpack archive.
-        struct PackEntry {
-            std::string path;           ///< relative path within mod (e.g. "items/ammo.json")
-            std::string_view data;      ///< points into m_pack_buffer
-        };
-
-        /// Parsed pack entries; populated by try_load_pack().
-        std::vector < PackEntry > m_pack_entries;
-        /// Owned pack file buffer; kept alive for string_view validity.
-        std::string m_pack_buffer;
-
-        /// Try to load data.jsonpack from mod directory. Returns true if successful.
-        bool try_load_pack( const std::string& mod_path );
-
         /**
          * Maps the type string (coming from json) to the
          * functor that loads that kind of object from json.
@@ -147,6 +133,12 @@ class DynamicDataLoader
          * @param ui Finalization status display.
          */
         void check_consistency( loading_ui& ui );
+
+        /**
+         * When true, load_and_finalize_packs skips check_consistency. The test runner sets it so
+         * the roughly 3 s validation pass runs once, as its own test case, instead of in init.
+         */
+        bool defer_consistency_check = false;
 
         /**
          * Returns the single instance of this class.

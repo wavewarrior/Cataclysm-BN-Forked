@@ -163,10 +163,9 @@ struct json_perf_load_metrics {
     size_t bytes = 0;
     int64_t parse_scan_us = 0;
     int64_t parse_handler_us = 0;
-    /// Directory walk (get_files_from_path) — also paid on the pack-hit path by
-    /// compute_pack_hash, so it is measured separately from the reads.
+    /// Directory walk (get_files_from_path), measured separately from the reads.
     int64_t enumerate_us = 0;
-    /// Reading every file into memory (parallel_for) or unpacking data.jsonpack.
+    /// Reading every file into memory (parallel_for).
     int64_t read_us = 0;
     /// Copying the contents into preloaded_content_ for deferred re-reads.
     int64_t preload_us = 0;
@@ -186,53 +185,6 @@ json_perf_load_metrics g_last_load_metrics;
 json_perf_deferred_stats g_deferred_stats;
 
 const auto s_json_perf_enabled = getenv( "CATA_JSON_PERF" ) != nullptr;
-// ====== FNV-1a-64 Hash Implementation (pack integrity check) ======
-// Contract: identical implementation on C++ and Deno sides
-// Input: sorted (relative_path + decimal_size_string) pairs, relative paths normalized to forward /
-// Constants: offset_basis = 14695981039346656037, prime = 1099511628211
-
-static constexpr uint64_t fnv1a_offset_basis = 14695981039346656037ULL;
-static constexpr uint64_t fnv1a_prime = 1099511628211ULL;
-
-static uint64_t fnv1a_64_accumulate( uint64_t hash, std::string_view sv ) noexcept
-{
-    for( const unsigned char byte : sv ) {
-        hash ^= byte;
-        hash *= fnv1a_prime;
-    }
-    return hash;
-}
-
-// Compute FNV-1a-64 hash of all .json files in path (for pack integrity check)
-// Uses get_files_from_path to match actual load order (BFS, sorted within each level)
-static uint64_t compute_pack_hash( const std::string& path )
-{
-    uint64_t hash = fnv1a_offset_basis;
-
-    try {
-        // Use get_files_from_path to get files in BFS order (matches load order)
-        auto files = get_files_from_path( ".json", path, true, true );
-
-        // Accumulate hash: relative path + decimal size string
-        for( const auto& full_path : files ) {
-            // Compute relative path from base
-            std::string rel = std::filesystem::relative( full_path, path ).string();
-
-            // Normalize to forward slashes (critical for Windows hash matching with Deno)
-            std::replace( rel.begin(), rel.end(), '\\', '/' );
-
-            uintmax_t size = std::filesystem::file_size( full_path );
-            std::string input = rel + std::to_string( size );
-            hash = fnv1a_64_accumulate( hash, input );
-        }
-    } catch( const std::exception & ) {
-        // If directory can't be read, return 0 (will never match pack hash)
-        hash = 0;
-    }
-
-    return hash;
-}
-
 
 /// Pre-warm state: background thread loading last-world modfiles.
 static std::optional<std::thread> g_prewarm_thread;
@@ -404,141 +356,6 @@ DynamicDataLoader &DynamicDataLoader::get_instance()
 
 void DynamicDataLoader::finalize_flags() { json_flag::finalize_all(); }
 void DynamicDataLoader::finalize_trait_flags() { json_trait_flag::finalize_all(); }
-
-bool DynamicDataLoader::try_load_pack( const std::string& path )
-{
-    // Only try pack for directories
-    if( !std::filesystem::is_directory( path ) ) {
-        if( s_json_perf_enabled ) {
-            // NOLINTNEXTLINE(cata-text-style)
-            fprintf( stderr, "[JSON_PERF] pack_miss path=%s reason=not_directory\n", path.c_str() );
-        }
-        return false;
-    }
-
-    // Construct pack file path: <path>/data.jsonpack
-    const std::string pack_path = path + "/data.jsonpack";
-
-    // Check if pack file exists
-    if( !std::filesystem::exists( pack_path ) ) {
-        if( s_json_perf_enabled ) {
-            // NOLINTNEXTLINE(cata-text-style)
-            fprintf( stderr, "[JSON_PERF] pack_miss path=%s reason=not_found\n", pack_path.c_str() );
-        }
-        return false;
-    }
-
-    // Read pack file into memory
-    std::ifstream ifs( pack_path, std::ios::binary );
-    if( !ifs ) {
-        return false;
-    }
-
-    // Read entire file
-    m_pack_buffer.assign( std::istreambuf_iterator<char>( ifs ), std::istreambuf_iterator<char>() );
-    ifs.close();
-
-    // Validate minimum size (header is 20 bytes)
-    if( m_pack_buffer.size() < 20 ) {
-        m_pack_buffer.clear();
-        return false;
-    }
-
-    // Validate magic bytes: 'C','B','N','P'
-    if( m_pack_buffer[0] != 'C' || m_pack_buffer[1] != 'B' ||
-        m_pack_buffer[2] != 'N' || m_pack_buffer[3] != 'P' ) {
-        m_pack_buffer.clear();
-        return false;
-    }
-
-    // Read version (uint32 LE at offset 4)
-    uint32_t version = 0;
-    std::memcpy( &version, m_pack_buffer.data() + 4, 4 );
-    if( version != 1 ) {
-        m_pack_buffer.clear();
-        return false;
-    }
-
-    // Read entry count (uint32 LE at offset 8)
-    uint32_t entry_count = 0;
-    std::memcpy( &entry_count, m_pack_buffer.data() + 8, 4 );
-
-    // Read stored hash (uint64 LE at offset 12)
-    uint64_t stored_hash = 0;
-    std::memcpy( &stored_hash, m_pack_buffer.data() + 12, 8 );
-
-    // Compute hash from actual directory (detects changes)
-    uint64_t computed_hash = compute_pack_hash( path );
-
-    // Compare hashes — if mismatch, pack is stale, fall through to file reads
-    if( computed_hash != stored_hash ) {
-        if( s_json_perf_enabled ) {
-            // NOLINTNEXTLINE(cata-text-style)
-            fprintf( stderr, "[JSON_PERF] pack_miss path=%s reason=hash_mismatch stored=%llu computed=%llu\n",
-                     pack_path.c_str(), static_cast<unsigned long long>( stored_hash ),
-                     static_cast<unsigned long long>( computed_hash ) );
-        }
-        m_pack_buffer.clear();
-        return false;
-    }
-
-    // Parse entries
-    m_pack_entries.clear();
-    m_pack_entries.reserve( entry_count );
-
-    size_t offset = 20;  // Skip header
-    for( uint32_t i = 0; i < entry_count; ++i ) {
-        // Read path_len (uint32 LE)
-        uint32_t path_len = 0;
-        if( offset + 4 > m_pack_buffer.size() ) {
-            m_pack_buffer.clear();
-            m_pack_entries.clear();
-            return false;
-        }
-        std::memcpy( &path_len, m_pack_buffer.data() + offset, 4 );
-        offset += 4;
-
-        // Read path (UTF-8)
-        if( offset + path_len > m_pack_buffer.size() ) {
-            m_pack_buffer.clear();
-            m_pack_entries.clear();
-            return false;
-        }
-        PackEntry entry;
-        entry.path = m_pack_buffer.substr( offset, path_len );
-        offset += path_len;
-
-        // Read data_len (uint32 LE)
-        uint32_t data_len = 0;
-        if( offset + 4 > m_pack_buffer.size() ) {
-            m_pack_buffer.clear();
-            m_pack_entries.clear();
-            return false;
-        }
-        std::memcpy( &data_len, m_pack_buffer.data() + offset, 4 );
-        offset += 4;
-
-        // Read data (as string_view into buffer)
-        if( offset + data_len > m_pack_buffer.size() ) {
-            m_pack_buffer.clear();
-            m_pack_entries.clear();
-            return false;
-        }
-        entry.data = std::string_view( m_pack_buffer.data() + offset, data_len );
-        offset += data_len;
-
-        m_pack_entries.push_back( std::move( entry ) );
-    }
-
-
-
-    if( s_json_perf_enabled ) {
-        // NOLINTNEXTLINE(cata-text-style)
-        fprintf( stderr, "[JSON_PERF] pack_hit path=%s entries=%zu buffer_size=%zu\n",
-                 pack_path.c_str(), m_pack_entries.size(), m_pack_buffer.size() );
-    }
-    return true;
-}
 
 void DynamicDataLoader::load_object(
     const JsonObject& jo, const std::string& src, const std::string& base_path,
@@ -987,40 +804,20 @@ void DynamicDataLoader::load_data_from_path(
     std::vector<std::string> file_contents;
     auto t_enumerated = t_begin;
 
-    // ── TRY ARCHIVE BLOB FIRST ─────────────────────────────────────────────────
-    if( try_load_pack( path ) ) {
-        // try_load_pack walks the directory itself (compute_pack_hash) before it
-        // trusts the blob, so the enumeration cost is charged either way.
-        t_enumerated = ch::steady_clock::now();
-        // Pack loaded successfully — reconstruct files and file_contents from pack entries
-        files.reserve( m_pack_entries.size() );
-        file_contents.reserve( m_pack_entries.size() );
-        for( const auto& entry : m_pack_entries ) {
-            // Build full path: <path>/<relative_path>
-            std::string full_path = path;
-            if( !full_path.empty() && full_path.back() != '/' && full_path.back() != '\\' ) {
-                full_path += '/';
-            }
-            full_path += entry.path;
-            files.push_back( std::move( full_path ) );
-            file_contents.push_back( std::string( entry.data ) );
-        }
-    } else {
-        // ── PHASE A (workers): parallel file reads ─────────────────────────────
-        // Workers call ONLY read_entire_file().  No JSON parsing, no shared state.
-        // Each slot written by exactly one worker (index i) — no mutex needed.
-        files = get_files_from_path( ".json", path, true, true );
-        if( files.empty() ) {
-            std::ifstream tmp( path.c_str(), std::ios::in );
-            if( tmp ) { files.push_back( path ); }
-        }
-        t_enumerated = ch::steady_clock::now();
-
-        file_contents.resize( files.size() );
-        parallel_for( 0, static_cast<int>( files.size() ), [&]( int i ) {
-            file_contents[i] = read_entire_file( files[i] );
-        } );
+    // ── PHASE A (workers): parallel file reads ─────────────────────────────
+    // Workers call ONLY read_entire_file().  No JSON parsing, no shared state.
+    // Each slot written by exactly one worker (index i) — no mutex needed.
+    files = get_files_from_path( ".json", path, true, true );
+    if( files.empty() ) {
+        std::ifstream tmp( path.c_str(), std::ios::in );
+        if( tmp ) { files.push_back( path ); }
     }
+    t_enumerated = ch::steady_clock::now();
+
+    file_contents.resize( files.size() );
+    parallel_for( 0, static_cast<int>( files.size() ), [&]( int i ) {
+        file_contents[i] = read_entire_file( files[i] );
+    } );
     const auto t_read = ch::steady_clock::now();
 
     // ── PHASE BOUNDARY ─────────────────────────────────────────────────────────
@@ -1463,7 +1260,7 @@ static void load_and_finalize_packs(
     }
 
     const auto t_check_0 = std::chrono::steady_clock::now();
-    loader.check_consistency( ui );
+    if( !loader.defer_consistency_check ) { loader.check_consistency( ui ); }
     const auto t_check_1 = std::chrono::steady_clock::now();
     const auto t_wall_end = std::chrono::steady_clock::now();
     if( s_json_perf_enabled ) {
