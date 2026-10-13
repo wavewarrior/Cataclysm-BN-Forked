@@ -235,6 +235,7 @@ const STEPS: Step[] = [
       // The shadercross dependency clones several submodules from GitHub; a reset connection there
       // failed #171's gate. Reuse the main checkout's populated copy when it exists.
       const shared = join(await mainRepoRoot(ctx.cwd), BUILD_DIR, "_deps", "sdl3_shadercross-src")
+        .replaceAll("\\", "/")
       const hasShared = await Deno.stat(join(shared, "external", "SPIRV-Tools", "CMakeLists.txt"))
         .then(() => true, () => false)
       const cfg = await ctx.exec("build", [
@@ -482,7 +483,11 @@ export async function runGate(opts: GateOptions): Promise<Stamp> {
     if (!result.ok) {
       failed.push(step.name)
       if (result.infra) infra.push(step.name)
-      if (result.note) console.log(result.note)
+      if (result.note) {
+        console.log(result.note)
+        // The driver builds fix feedback from this log, so a note-only failure must land in it.
+        await Deno.writeTextFile(ctx.logPath(step.name), `${result.note}\n`, { append: true })
+      }
       console.log(await tailFile(ctx.logPath(step.name), 60))
     }
   }
