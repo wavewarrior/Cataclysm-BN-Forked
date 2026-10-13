@@ -81,18 +81,6 @@ Lua files are formatted using [`dprint`](https://dprint.dev)'s built-in formatte
 [`deno task dprint fmt`](https://github.com/RubixDev/dprint-plugin-stylua) anywhere to format Lua files. For details,
 see [Lua Style Guide](./../mod/lua/explanation/lua_style.md).
 
-## Translations
-
-The translation of Cataclysm: BN is done using Transifex. Look at the
-[translation project](https://app.transifex.com/bn-team/cataclysm-bright-nights/) for an up-to-date
-list of supported languages.
-
-For more information:
-
-- [For translators](./../i18n/tutorial/transifex)
-- [For developers](./../i18n/reference/translation)
-- [For maintainers](./../i18n/guides/maintain)
-
 ## Documentation
 
 <!--

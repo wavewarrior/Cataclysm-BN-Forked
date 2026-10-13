@@ -122,7 +122,6 @@ branch or copy the configuration with a new name.
 | ------------- | -------------------------- | ----------------------------- |
 | `TESTS`       | `OFF` (ON in Tests config) | Build the test suite          |
 | `JSON_FORMAT` | `ON`                       | Build the JSON formatter tool |
-| `LOCALIZE`    | `ON`                       | Build translation support     |
 | `SOUND`       | `ON`                       | Build audio support           |
 
 ---
@@ -150,8 +149,7 @@ for terminal builds. Run it once from a plain PowerShell window:
 .\setup.ps1
 ```
 
-The script checks all prerequisites, downloads the gettext binaries needed
-for building translations, and runs
+The script checks all prerequisites and runs
 `cmake --preset windows-tiles-sounds-x64-msvc`.
 
 After that, the standard cmake commands work from a
@@ -169,9 +167,6 @@ cmake --build --preset windows-msvc-relwithdebinfo
 
 # Run tests
 .\out\build\windows-tiles-sounds-x64-msvc\tests\RelWithDebInfo\cata_test-tiles.exe
-
-# Build translations only
-cmake --build --preset windows-msvc-relwithdebinfo --target translations_compile
 
 # Install (copies game + data to a self-contained directory)
 cmake --install out\build\windows-tiles-sounds-x64-msvc --config RelWithDebInfo

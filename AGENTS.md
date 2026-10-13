@@ -8,7 +8,7 @@
 - **Renderer**: SDL3 + Vulkan (tileset-based sprite rendering with advanced lighting).
 - **Content**: JSON-driven — items, recipes, monsters, mutations, mapgens, vehicles, and more are all defined in `data/json/` and loaded via factory classes at startup.
 - **Scripting**: Embedded Lua 5.4 VM for modding and in-game scripting.
-- **Formatting**: fmt 12.2 (vendored, flat naming as `fmtlib_*.h`) for internal formatting; `string_format` printf-style for translator-facing strings.
+- **Formatting**: fmt 12.2 (vendored, flat naming as `fmtlib_*.h`) for internal formatting; `string_format` printf-style for user-visible strings.
 - **Networking**: Optional co-op multiplayer via SDL3_net.
 - **Platforms**: Linux, macOS, Windows.
 
@@ -24,21 +24,20 @@
 
 ## Key Directories
 
-| Directory        | Contents                                                                                                                    |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `src/`           | ~1000 .cpp/.h files — all game logic. Flat structure with headers co-located beside sources.                                |
-| `src/lighting/`  | 40+ files — Vulkan render pipeline: sprite batching, ambient occlusion, bloom, volumetric fog, sound wave visualization.    |
-| `src/lua/`       | 50+ files — vendored Lua 5.4 VM plus binding layer for exposing game APIs to Lua scripts.                                   |
-| `src/physics/`   | 7 files — Box2D integration for vehicle physics simulation.                                                                 |
-| `data/json/`     | JSON game content: items, recipes, monsters, mutations, terrain, vehicles, mapgens, etc.                                    |
-| `data/mods/`     | Bundled mods, each with a `modinfo.json` descriptor.                                                                        |
-| `tests/`         | Catch2 v3 test suite — 200+ test files organized by domain.                                                                 |
-| `docs/`          | Developer documentation, modding guides, i18n docs. Follows Diátaxis framework (explanation, reference, guides, tutorials). |
-| `lang/po/`       | Gettext `.po` translation files for all supported locales.                                                                  |
-| `lang/`          | Localization tooling: extraction scripts, POT generation, MO compilation, stats.                                            |
-| `scripts/`       | Deno/TypeScript automation: doc generation, migrations, changelog tools.                                                    |
-| `build-scripts/` | Shell scripts for build, lint, and validation tasks.                                                                        |
-| `tools/`         | Standalone utility programs (e.g. `check_po_printf_format.py`).                                                             |
+| Directory        | Contents                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `src/`           | ~1000 .cpp/.h files — all game logic. Flat structure with headers co-located beside sources.                             |
+| `src/lighting/`  | 40+ files — Vulkan render pipeline: sprite batching, ambient occlusion, bloom, volumetric fog, sound wave visualization. |
+| `src/lua/`       | 50+ files — vendored Lua 5.4 VM plus binding layer for exposing game APIs to Lua scripts.                                |
+| `src/physics/`   | 7 files — Box2D integration for vehicle physics simulation.                                                              |
+| `data/json/`     | JSON game content: items, recipes, monsters, mutations, terrain, vehicles, mapgens, etc.                                 |
+| `data/mods/`     | Bundled mods, each with a `modinfo.json` descriptor.                                                                     |
+| `tests/`         | Catch2 v3 test suite — 200+ test files organized by domain.                                                              |
+| `docs/`          | Developer documentation, modding guides. Follows Diátaxis framework (explanation, reference, guides, tutorials).         |
+| `lang/`          | The `mo/` output directory plus the CMake rules that compile it. No translation sources ship in this fork.               |
+| `scripts/`       | Deno/TypeScript automation: doc generation, migrations, changelog tools.                                                 |
+| `build-scripts/` | Shell scripts for build, lint, and validation tasks.                                                                     |
+| `tools/`         | Standalone utility programs (e.g. `copy_from.py`).                                                                       |
 
 ## God files
 
@@ -125,7 +124,7 @@ auto print_button( const catacurses::window &w, const button_options &opts ) -> 
 - **MUST** use options struct for functions with more than 3 parameters. Use designated initializers at call sites.
 - **MUST NOT** manually write an options/struct type at a call site when the function parameter type makes it inferable; use `{ .field = value }` instead of `options_type{ .field = value }`.
 - **SHOULD** search for existing solution because it's a large, legacy codebase.
-- **Formatting**: new non-translated formatting SHOULD use `std::format`; translated/user-visible strings MUST keep `string_format` printf-style (PO placeholder contract). Explicit non-goal: touching any of the 2,088 existing `string_format` call sites.
+- **Formatting**: new formatting SHOULD use `std::format`; user-visible strings MUST keep `string_format` printf-style. Explicit non-goal: touching any of the 2,088 existing `string_format` call sites.
 - **MUST** verify helper-specific matching semantics before relying on string prefixes. For overmap terrain `OtMatchType.PREFIX` / `is_ot_match`, pass the base token without a trailing separator, e.g. `"robofachq"`, because the matcher itself requires the following character to be `_`.
 
 ## Workflow
@@ -238,10 +237,6 @@ Do not enable `poteto-mode`, `autopilot-*` or any pstack playbook: they overlap 
 - **MUST** in a lane: never push, merge, or edit protected paths (`tools/check/**`, `tools/lane/**`, `.github/workflows/**`, `.githooks/**`, `.clang-format`, `.clang-tidy`, `tools/clang-tidy-plugin/**`, `AGENTS.md`). `check` refuses to run on such a diff unless `CHECK_ALLOW_PROTECTED=1`; only a human changes those. If blocked, say what you need in your final message and stop.
 - Changed C++ lines must satisfy `deno task tidy:changed`; formatting is fixed for you by `deno task fmt:cpp`, never by you.
 
-## WHEN working on i18n / PO context, or translating docs
-
-Follow [docs/agents/i18n.md](./docs/agents/i18n.md): full coverage of every named meaning, `msgfmt` + `check_po_printf_format.py` gates before PR, glossary search in the target PO before coining a term.
-
 ## Token Optimization
 
 - Prepend `rtk` to inherently verbose commands (builds, test runs, git logs, large listings) to compress their output before it enters context.
@@ -282,7 +277,7 @@ to end and lists the traps (one game per user directory, binary freshness, the w
 - **Deno**: Used for all TypeScript scripts (doc generation, migrations, changelog tools). Run `deno task <name>` for scripted workflows.
 - **Cache**: ccache (Linux/macOS) or sccache (Windows). Project cap is **20 GB** (`ccache --max-size=20G`).
 - **Linker**: mold (Linux) for fast linking; default linker elsewhere.
-- **Localization**: gettext toolchain (`msgfmt`, `msgmerge`, `xgettext`). See `lang/` for extraction and compilation scripts.
+- **Localization**: none. The fork ships English only; `msgfmt` is still looked up at configure time unless you pass `-DLANGUAGES=none`.
 
 ## Testing & QA
 

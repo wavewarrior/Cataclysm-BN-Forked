@@ -15,5 +15,5 @@ libraries of some specific version. Thus, you have two options:
    work: https://github.com/microsoft/vcpkg/tree/6bc4362fb49e53f1fff7f51e4e27e1946755ecc6
 
 2. Open config/fonts.json and remove Terminus.ttf entries. I don't remember why we're not using
-   unifont by default, but if you're not planning on working on i18n/fonts code, it shouldn't affect
+   unifont by default, but if you're not planning on working on font code, it shouldn't affect
    you beyond visually.

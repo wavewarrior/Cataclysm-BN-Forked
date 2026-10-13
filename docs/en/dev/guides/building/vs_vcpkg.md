@@ -68,9 +68,8 @@ cd Cataclysm-BN
 3. Open the `Build > Configuration Manager` menu and adjust `Active solution configuration` and
    `Active solution platform` to match your intended target.
 
-This will configure Visual Studio to compile the release version, with support for Sound, Tiles, and
-Localization (note, however, that language files themselves are not automatically compiled; this
-will be done later).
+This will configure Visual Studio to compile the release version, with support for Sound and
+Tiles.
 
 4. Start the build process by selecting either `Build > Build Solution` or
    `Build > Build > Cataclysm-vcpkg-static`. The process may take a long period of time, so you'd
@@ -81,10 +80,6 @@ will be done later).
 5. If you want to launch the game directly from Visual Studio, make sure you have specified correct
    working directory as explained below. Otherwise, you'll only be able to launch the game from the
    file explorer.
-
-6. If you need localization support, execute the bash script `lang/compile_mo.sh` inside Git Bash
-   GUI just like on a UNIX-like system. This will compile the language files that were not
-   automatically compiled in step 2 above.
 
 ### Running from Visual Studio and debugging
 

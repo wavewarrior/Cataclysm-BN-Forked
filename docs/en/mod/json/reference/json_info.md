@@ -63,10 +63,8 @@ Examples:
 "//" : "comment", // Preferred method of leaving comments inside json files.
 ```
 
-Some json strings are extracted for translation, for example item names, descriptions, etc. The
-exact extraction is handled in `lang/extract_json_strings.py`. Apart from the obvious way of writing
-a string without translation context, the string can also have an optional translation context (and
-sometimes a plural form), by writing it like:
+Some translatable strings are given as an object instead of a bare string, so that they can carry an
+optional translation context and an optional plural form:
 
 ```json
 "name": { "ctxt": "foo", "str": "bar", "str_pl": "baz" }
@@ -78,17 +76,7 @@ or, if the plural form is the same as the singular form:
 "name": { "ctxt": "foo", "str_sp": "foo" }
 ```
 
-You can also add comments for translators by adding a "//~" entry like below. The order of the
-entries does not matter.
-
-```json
-"name": {
-    "//~": "as in 'foobar'",
-    "str": "bar"
-}
-```
-
-[Currently, only some JSON values support this syntax](./../../../i18n/reference/translation#supported-json-values).
+Only some JSON values support this syntax.
 
 ## Description and content of each JSON file
 
