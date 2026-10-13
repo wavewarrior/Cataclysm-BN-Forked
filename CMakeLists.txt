@@ -42,10 +42,6 @@ cmake_dependent_option(USE_PREFIX_DATA_DIR
     "Use UNIX system directories for game data in release build." ON
     "UNIX" OFF
 )
-set(LANGUAGES "" CACHE STRING
-        "Compile localization files for specified languages. \
-        List of language ids separated by semicolon. \
-        Set to 'all' or leave empty to compile all, set to 'none' to compile none.")
 option(DYNAMIC_LINKING
         "Use dynamic linking. Or use static to remove MinGW dependency instead." "ON")
 option(USE_UNITY_BUILD "Use unity build." "OFF")
@@ -69,7 +65,6 @@ set(CATA_CLANG_TIDY_INCLUDE_DIR "" CACHE STRING
 set(CATA_CHECK_CLANG_TIDY "" CACHE STRING "Path to check_clang_tidy.py for plugin tests")
 set(GIT_BINARY "" CACHE STRING "Git binary name or path.")
 set(LINKER "" CACHE STRING "Custom Linker to use")
-set(GETTEXT_MSGFMT_BINARY "" CACHE FILEPATH "msgfmt binary name or path.")
 option(BUILD_SDL3 "Force builds SDL3 and its modules from source, instead of using system packages" "OFF")
 option(BUILD_SHADERCROSS "Build SDL_shadercross from source when shadercross is not on PATH" "ON")
 if(WIN32)
@@ -228,10 +223,6 @@ endif ()
 message(STATUS "${PROJECT_NAME} build options --")
 
 # Preset variables
-if (NOT LANGUAGES)
-    set(LANGUAGES all)
-endif ()
-
 if (GIT_BINARY)
     set(GIT_EXECUTABLE ${GIT_BINARY})
 else ()
@@ -306,7 +297,6 @@ message(STATUS "USE_TRACY                     : ${USE_TRACY}")
 message(STATUS "USE_XDG_DIR                   : ${USE_XDG_DIR}")
 message(STATUS "USE_HOME_DIR                  : ${USE_HOME_DIR}")
 message(STATUS "UNITY_BUILD                   : ${USE_UNITY_BUILD}")
-message(STATUS "LANGUAGES                     : ${LANGUAGES}")
 if (LINKER)
     message(STATUS "LINKER                        : ${LINKER}")
 endif ()
@@ -1061,17 +1051,6 @@ if (BACKTRACE)
         add_definitions(-DLIBBACKTRACE)
     endif ()
 endif ()
-
-if (NOT (LANGUAGES STREQUAL "none") AND "${GETTEXT_MSGFMT_BINARY}" STREQUAL "")
-    if(MSVC)
-        list(APPEND Gettext_ROOT C:\\msys64\\usr)
-        list(APPEND Gettext_ROOT C:\\Program\ Files\\Git\\usr)
-    endif(MSVC)
-    find_package(Gettext)
-endif ()
-if (NOT GETTEXT_MSGFMT_EXECUTABLE )
-    set(GETTEXT_MSGFMT_EXECUTABLE "${GETTEXT_MSGFMT_BINARY}")
-endif()
 
 # Ok. Now create build and install recipes
 add_subdirectory(lang)

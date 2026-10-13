@@ -106,7 +106,6 @@ ${commitsSection(commits)}
 
 https://docs.cataclysmbn.org/contribute/contributing/
 
-- **Translations!** https://www.transifex.com/bn-team/cataclysm-bright-nights/
 - **Contributing via code changes.**
 - **Contributing via JSON changes.** Yes, we need modders and content makers help.
 - **Contributing via rebalancing content.**

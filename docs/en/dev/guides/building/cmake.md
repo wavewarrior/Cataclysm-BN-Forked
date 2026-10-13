@@ -447,5 +447,4 @@ Check the [cmake docs](https://cmake.org/cmake/help/latest/manual/cmake-presets.
 ### Translations
 
 This fork ships English only: no translation sources are stored in the repository, so the
-`translations` target compiles nothing. Pass `-DLANGUAGES=none` to skip the `gettext` lookup
-altogether.
+`translations` target only creates the empty `lang/mo` directory and no `gettext` tools are needed.

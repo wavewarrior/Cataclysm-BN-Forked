@@ -43,7 +43,6 @@ NOTE: Please read your emails. Anyone mentioned on Github with an @ will receive
 - [ ] This is a C++ PR that modifies JSON loading or behavior.
   - [ ] I have documented the changes in the appropriate location in the `docs/` folder.
   - [ ] If documentation for this feature does not exist, please write it or at least note its lack in PR description.
-  - [ ] New localizable fields need to be added to the `lang/bn_extract_json_strings.sh` script if it does not support them yet.
   - [ ] If applicable, add checks on game load that would validate the loaded data.
   - [ ] If it modifies format of save files, please add migration from the old format.
 - [ ] This is a PR that modifies build process or code organization.

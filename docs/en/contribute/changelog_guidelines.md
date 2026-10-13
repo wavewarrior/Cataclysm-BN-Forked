@@ -130,14 +130,6 @@ feat(UI): More info about items dropped with bags
 feat(UI): overhaul encumbrance UI
 ```
 
-### `i18n`: Internationalization
-
-Improve translation and other languages support.
-
-```
-fix(UI,i18n): recipe names not translated unless learned
-```
-
 ### `mods` or `mods/<MOD_ID>`: Mods
 
 - changes contained within a mod

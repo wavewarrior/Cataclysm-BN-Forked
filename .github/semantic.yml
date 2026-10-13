@@ -21,7 +21,6 @@ types:
   - revert
 scopes:
   - UI
-  - i18n
   - balance
   - port
   - lua
