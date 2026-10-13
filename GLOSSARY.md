@@ -235,5 +235,13 @@ The executable the most recent build of a preset produced, as opposed to older c
 _Avoid_: repo-root binary, installed binary
 
 **Build queue**:
-The machine-wide ordering that admits builds so concurrent sessions do not starve each other.
+The machine-wide ordering that admits builds and test runs so concurrent sessions do not starve each other; interactive jobs go before waiting measurement jobs, and an admitted job always finishes.
 _Avoid_: build lock, job pool
+
+**Measurement job**:
+A baseline or A/B run submitted to the build queue by day that starts only once the idle gate passes, so its numbers land in an overnight or weekend window.
+_Avoid_: benchmark run, nightly build
+
+**Idle gate**:
+The condition a measurement job waits for before it starts: low machine load, no paging, and no other builder or game running.
+_Avoid_: quiet period, idle check

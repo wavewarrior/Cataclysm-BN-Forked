@@ -81,11 +81,13 @@ Added at resume (2026-10-08): Measure frontend-vs-backend compile split with -ft
 - #151 formatter decision: pin astyle 3.6.14 everywhere incl. the `autofix.yml` one-liner (user lifted the CI fence for that line); `tools/` provisioning + `ASTYLE_BIN` in `format-cpp.sh`; `*NOPAD*` retired opportunistically. Graduated as execution ticket #154.
 - New tickets since charting: #152 (-ftime-trace), #153 (unused-include quantification), #154 (formatter execution). #152/#153 blocked #145; #154 blocked by #151.
 - Fact correction, twice over: the charting-era "30 TUs / 1,840 s / 61 s each" for `catalua_bindings*` read the wrong `.ninja_log` v7 column as duration; the correct-column recompute gave 43 TUs summing 76 s — but THAT figure is ccache-hit time. #152's real cold compiles give 18.7-45 s per TU (median ~21 s, load 3.5-5.5), so cold-summed the family is plausibly hundreds of seconds and the scout's ~61 s under load was not unreasonable. Treat all `.ninja_log`-derived per-TU numbers as hit-times; cold costs come from #137/#152-style forced compiles only.
+- #138 build wrapper contract (2026-10-13): resident runner + thin `deno task build` client, machine-wide FIFO Build queue for builds and `cata_test-tiles` runs, interactive jobs before waiting measurement jobs, running job never preempted, measurement jobs on the Idle gate, preflight refusal with recipe and `--force`, authoritative-binary report, no binary install (data-sync verb, rm-then-cp), ninja default load policy with `-j`/`-l` knobs, AGENTS.md rule plus omp hook. Full contract on the execution ticket #146; split-out tickets #195 (hook), #196 (APPLE-gated Debug configure error), #197 (measurement jobs).
+- #145 hub-header split program decided 2026-10-13: see `plans/hub-header-split-program.md` (tickets #181-#194).
 
 ## Constraints
 
 - Never kill a build; background, no deadline; never pipe a build to `head`.
 - Authoritative binaries: `out/build/osx-arm-slim/src/cataclysm-bn-tiles`, `out/build/osx-arm-slim/tests/cata_test-tiles`; compare mtimes.
-- A Debug-typed preset redirects output to the repo root (`CMakeLists.txt:256-265`): the fast preset must not be Debug-typed unless that redirect is removed on Apple.
+- A Debug-typed preset redirects output to the repo root (`CMakeLists.txt:260-270`, keyed on `CMAKE_BUILD_TYPE` on every platform, not Apple-only; `CACHE PATH`, so it persists in a build dir first configured as Debug). #196 adds an APPLE-gated configure error, so a Debug-typed fast preset is refused on macOS: #149's options cannot include a Debug build type.
 - PCH TUs share ccache entries per root only (clang records absolute producer paths; proven in `plans/cold-build-deps.md`).
 - Execution tickets name an explicit platform/test-tag gate.
