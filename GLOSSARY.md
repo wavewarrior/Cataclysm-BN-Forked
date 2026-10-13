@@ -227,7 +227,7 @@ A project header reached, directly or through other headers, by a large share of
 _Avoid_: god header, core header
 
 **Fast preset**:
-A macOS build preset tuned for the edit loop, separate from the performance-representative `osx-arm-slim`.
+A build preset of the Executor tuned for the edit loop (no link-time optimisation, fast linker), separate from the performance-representative `osx-arm-slim` and from release builds.
 _Avoid_: debug build (collides with the Debug build type)
 
 **Authoritative binary**:
@@ -245,3 +245,45 @@ _Avoid_: benchmark run, nightly build
 **Idle gate**:
 The condition a measurement job waits for before it starts: low machine load, no paging, and no other builder or game running.
 _Avoid_: quiet period, idle check
+
+## Verification
+
+**Logic tier**:
+The test cases that need no initialised game world and run without it, so they answer in seconds.
+_Avoid_: unit tests (every case here is a Catch2 case; the split is by what it needs, not by size)
+
+**Sim tier**:
+The test cases that need the initialised game world (loaded game data, a map, creatures) to run.
+_Avoid_: integration tests, slow tests (the `[.]` tag hides cases; it does not mean sim)
+
+**Fork runner**:
+The Linux test runner that initialises the game once and runs each test case in its own forked child process, so a crash, hang or state leak is confined to one case.
+_Avoid_: parallel runner, shard runner (shards split cases across processes that each re-initialise)
+
+**In-process runner**:
+The test runner on Windows and macOS: every selected case runs sequentially in one initialised process.
+_Avoid_: classic runner, legacy runner
+
+**Quarantine**:
+A dated exclusion of a failing or flaky test case from the gate; when the date passes, a ticket is opened and the case is fixed or deleted.
+_Avoid_: baseline, allow-list, skip
+
+**Executor**:
+The machine and OS on which an agent's builds and tests run: the Linux (WSL2) side of the home Windows box.
+_Avoid_: runner (that is the test runner), worker
+
+**Reference renderer**:
+The one machine and GPU driver on which pixel output is captured and compared, so a pixel change is a code change and not a hardware difference: the native Windows side of the home box.
+_Avoid_: golden machine, render oracle (an Oracle is a check, not a machine)
+
+**Platform sweep**:
+A full test run natively on Windows or macOS that opens issues for platform-only failures; per-change work is verified on Linux only. Windows sweeps run on a schedule on the home box; the macOS sweep runs when the owner opts in and the Mac is reachable, and covers every commit since the last macOS sweep.
+_Avoid_: CI matrix, platform gate, nightly (the macOS one is not scheduled)
+
+**Sweep watermark**:
+The last commit a platform's sweep covered, so a sweep that could not run is not lost: the next one starts from the watermark.
+_Avoid_: last-run marker
+
+**Render tier**:
+The test cases that render frames offscreen on the Reference renderer and compare pixels against a golden image or a paired run, under a noise mask.
+_Avoid_: visual tests, screenshot tests
