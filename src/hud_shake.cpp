@@ -1,5 +1,6 @@
 #include "hud_shake.h"
 
+#include <algorithm>
 #include <cmath>
 #include <random>
 
