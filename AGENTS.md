@@ -203,9 +203,21 @@ deno task docs:gen
 
 - **Commit**: Commit **ATOMICALLY**. **MUST** Follow [Conventional Commits](./docs/en/contribute/changelog_guidelines.md). **MUST NOT** add body/footer unless critical.
 
-## Factory (unattended lanes)
+## Check and lanes (unattended work)
 
-GitHub issues on the fork are the queue. `deno task factory run` gives each `factory:ready` ticket its own herdr worktree (`wt-factory-<issue>`), runs an implementer, then `deno task gate --tier full`, then a read-only reviewer, and only then pushes a `factory/*` branch and opens a draft PR into `feature/improvements`. The human approves a spec once (`deno task factory release <slug>`) and merges PRs. A `factory:needs-human` ticket is blocked on a person; its comment says what is needed. Nightly triage feeds are `deno task factory triage needs-human|stale --json`; `deno task factory unblock <issue> [--note …]` re-queues a blocked ticket; `deno task factory triage apply <file.json>` is the sanctioned automation writer (validates each proposed action against the live issue). Design: `plans/agentic-software-factory.md`; numbers and the protected-path list: `tools/factory/config.ts`.
+GitHub issues on the fork are the queue. `deno task lane <issue>` creates a git worktree
+`$LANE_ROOT/lane-<n>` (default `~/cbn/lanes`) on branch `lane/<n>-<slug>`, configures it with the
+`linux-fast` preset against the seeded dependency sources, and starts a detached tmux session
+`lane-<n>` running `$LANE_AGENT_CMD` (default `omp`) with the issue body as its prompt, logging to
+`<worktree>/.check/lane.log`. `deno task lane status` lists the lanes, `attach <n>` watches one
+read-only, `stop <n>` closes it. Starting refuses when the session already exists.
+
+`deno task check` is the only definition of done: one command, one exit code, run on the Linux
+executor. Guard (protected paths), auto-fix (formatting, never fatal), configure + build
+(`linux-fast`), the whole suite through the fork runner, correctness tidy on changed lines, and the
+co-op test when the diff touches `src/coop*` or `src/net*`. Each step is timed on stdout and appended
+to `<worktree>/.check/events.jsonl`; steps after a failed build report as skipped. See
+[docs/en/dev/guides/check.md](./docs/en/dev/guides/check.md).
 
 One skill owns each phase:
 
@@ -215,8 +227,7 @@ One skill owns each phase:
 | design                 | `grill-with-docs`                                                                                                     |
 | map (large features)   | `wayfinder`: charts decision tickets until the destination (a spec) is clear                                          |
 | spec                   | `to-spec`                                                                                                             |
-| launch                 | `factory-launch`: finished map or spec -> approved factory tickets (`deno task factory publish`) -> release -> run    |
-| tickets (by hand)      | `to-tickets` output needs the factory-ticket sections plus `Touches` and `Test tags`; prefer `factory-launch`         |
+| tickets                | `to-tickets`                                                                                                          |
 | implement              | `implement` with `tdd`                                                                                                |
 | bug diagnosis          | `diagnosing-bugs`                                                                                                     |
 | adversarial review     | `interrogate`, then `code-review`, then `blast-radius` for a `src/` change touching a header with more than 10 usages |
@@ -224,8 +235,8 @@ One skill owns each phase:
 
 Do not enable `poteto-mode`, `autopilot-*` or any pstack playbook: they overlap `to-spec` and `implement`. Vendored pstack skills are pinned in `.agents/skills/PSTACK_UPSTREAM`.
 
-- **MUST** in a factory lane (`FACTORY_LANE=1`): never push, merge, call `gh`, or edit protected paths (`tools/factory/**`, `.omp/hooks/**`, `.githooks/**`, `.github/workflows/**`, lint and format configs, `deno.jsonc`, `AGENTS.md`, `tools/clang-tidy-plugin/**`, `build-scripts/**`). The hook, the pre-push check and CI all enforce it. If blocked, say what you need in your final message and stop.
-- The gate (`deno task gate`) is the only definition of done. New or changed C++ lines must satisfy `modernize-use-trailing-return-type`, `modernize-use-auto` and `cata-*` (including `cata-no-pair-tuple-return`); legacy lines in a touched file are exempt.
+- **MUST** in a lane: never push, merge, or edit protected paths (`tools/check/**`, `tools/lane/**`, `.github/workflows/**`, `.githooks/**`, `.clang-format`, `.clang-tidy`, `tools/clang-tidy-plugin/**`, `AGENTS.md`). `check` refuses to run on such a diff unless `CHECK_ALLOW_PROTECTED=1`; only a human changes those. If blocked, say what you need in your final message and stop.
+- Changed C++ lines must satisfy `deno task tidy:changed`; formatting is fixed for you by `deno task fmt:cpp`, never by you.
 
 ## WHEN working on i18n / PO context, or translating docs
 

@@ -265,7 +265,7 @@ The test runner on Windows and macOS: every selected case runs sequentially in o
 _Avoid_: classic runner, legacy runner
 
 **Quarantine**:
-A dated exclusion of a failing or flaky test case from the gate; when the date passes, a ticket is opened and the case is fixed or deleted.
+A dated exclusion of a failing or flaky test case from `check`; when the date passes, a ticket is opened and the case is fixed or deleted.
 _Avoid_: baseline, allow-list, skip
 
 **Executor**:

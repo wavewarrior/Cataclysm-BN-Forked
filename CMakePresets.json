@@ -112,6 +112,20 @@
       }
     },
     {
+      "name": "linux-fast",
+      "inherits": ["linux-slim"],
+      "displayName": "Linux Fast Build (Tiles, Sounds, no LTO, no PCH)",
+      "description": "The executor and CI preset: linux-slim with interprocedural optimization and precompiled headers switched off, and every LLVM tool addressed under /usr/lib/llvm-22/bin so PATH needs no override.",
+      "cacheVariables": {
+        "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "OFF",
+        "CMAKE_DISABLE_PRECOMPILE_HEADERS": "ON",
+        "CMAKE_C_COMPILER": "/usr/lib/llvm-22/bin/clang",
+        "CMAKE_CXX_COMPILER": "/usr/lib/llvm-22/bin/clang++",
+        "CMAKE_AR": "/usr/lib/llvm-22/bin/llvm-ar",
+        "CMAKE_RANLIB": "/usr/lib/llvm-22/bin/llvm-ranlib"
+      }
+    },
+    {
       "name": "linux-cross-aarch64",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "generator": "Ninja",
@@ -161,7 +175,6 @@
       }
     },
     {
-
       "name": "osx-dist-base",
       "hidden": true,
       "binaryDir": "${sourceDir}/build",
@@ -254,7 +267,6 @@
       }
     },
     {
-
       "name": "ci-tiles",
       "binaryDir": "${sourceDir}/build",
       "displayName": "CI Build (Tiles, Sound)",
@@ -356,64 +368,60 @@
         "CMAKE_CXX_FLAGS": "-fprofile-use=./build/profile/default.profdata -fprofile-correction",
         "CMAKE_EXE_LINKER_FLAGS": "-fprofile-use=./build/profile/default.profdata -fprofile-correction"
       }
+    },
+    {
+      "name": "ci-coop",
+      "binaryDir": "${sourceDir}/build-coop",
+      "displayName": "CI Co-op Build (Tiles, Sound)",
+      "description": "CI build for co-op tests. Co-op is always compiled; this preset targets the [coop] test suite.",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "gcc-14",
+        "CMAKE_CXX_COMPILER": "g++-14",
+        "CMAKE_C_COMPILER_LAUNCHER": "ccache",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "SOUND": "ON",
+        "BACKTRACE": "ON",
+        "LIBBACKTRACE": "OFF",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "OFF",
+        "JSON_FORMAT": "OFF",
+        "TESTS": "ON",
+        "LINKER": "mold"
+      }
+    },
+    {
+      "name": "osx-coop",
+      "inherits": ["osx-arm-slim"],
+      "binaryDir": "${sourceDir}/out/build/osx-coop",
+      "displayName": "macOS ARM Co-op Build (Tiles, Sounds)",
+      "description": "macOS Apple Silicon build for local co-op E2E test runs.",
+      "cacheVariables": {
+        "TESTS": "ON"
+      }
+    },
+    {
+      "name": "ci-coop-tsan",
+      "inherits": ["ci-coop"],
+      "binaryDir": "${sourceDir}/build-coop-tsan",
+      "displayName": "CI Co-op TSan (thread sanitizer)",
+      "description": "Co-op build with -fsanitize=thread to detect data races in receiver_thread_. Co-op is always compiled.",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "-fsanitize=thread -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=thread"
+      }
+    },
+    {
+      "name": "ci-coop-asan",
+      "inherits": ["ci-coop"],
+      "binaryDir": "${sourceDir}/build-coop-asan",
+      "displayName": "CI Co-op ASan+UBSan (address + undefined behaviour)",
+      "description": "Co-op build with -fsanitize=address,undefined to detect memory errors and UB. Co-op is always compiled.",
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined"
+      }
     }
-  ,
-  {
-    "name": "ci-coop",
-    "binaryDir": "${sourceDir}/build-coop",
-    "displayName": "CI Co-op Build (Tiles, Sound)",
-    "description": "CI build for co-op tests. Co-op is always compiled; this preset targets the [coop] test suite.",
-    "generator": "Ninja",
-    "cacheVariables": {
-      "CMAKE_C_COMPILER": "gcc-14",
-      "CMAKE_CXX_COMPILER": "g++-14",
-      "CMAKE_C_COMPILER_LAUNCHER": "ccache",
-      "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
-      "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-      "SOUND": "ON",
-      "BACKTRACE": "ON",
-      "LIBBACKTRACE": "OFF",
-      "CMAKE_EXPORT_COMPILE_COMMANDS": "OFF",
-      "JSON_FORMAT": "OFF",
-      "TESTS": "ON",
-      "LINKER": "mold"
-    }
-  }
-  ,
-  {
-    "name": "osx-coop",
-    "inherits": ["osx-arm-slim"],
-    "binaryDir": "${sourceDir}/out/build/osx-coop",
-    "displayName": "macOS ARM Co-op Build (Tiles, Sounds)",
-    "description": "macOS Apple Silicon build for local co-op E2E test runs.",
-    "cacheVariables": {
-      "TESTS": "ON"
-    }
-  }
-  ,
-  {
-    "name": "ci-coop-tsan",
-    "inherits": ["ci-coop"],
-    "binaryDir": "${sourceDir}/build-coop-tsan",
-    "displayName": "CI Co-op TSan (thread sanitizer)",
-    "description": "Co-op build with -fsanitize=thread to detect data races in receiver_thread_. Co-op is always compiled.",
-    "cacheVariables": {
-      "CMAKE_CXX_FLAGS": "-fsanitize=thread -fno-omit-frame-pointer",
-      "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=thread"
-    }
-  }
-  ,
-  {
-    "name": "ci-coop-asan",
-    "inherits": ["ci-coop"],
-    "binaryDir": "${sourceDir}/build-coop-asan",
-    "displayName": "CI Co-op ASan+UBSan (address + undefined behaviour)",
-    "description": "Co-op build with -fsanitize=address,undefined to detect memory errors and UB. Co-op is always compiled.",
-    "cacheVariables": {
-      "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer",
-      "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined"
-    }
-  }
   ],
   "buildPresets": [
     {
@@ -451,6 +459,12 @@
       "name": "linux-full",
       "configurePreset": "linux-full",
       "description": "The canonical build preset for Linux. This is the one used by the devteam."
+    },
+    {
+      "name": "linux-fast",
+      "configurePreset": "linux-fast",
+      "targets": ["cataclysm-bn-tiles", "cata_test-tiles"],
+      "description": "The executor build: both shipping binaries, LTO and precompiled headers off."
     },
     {
       "name": "linux-slim-cross-aarch64",
@@ -553,34 +567,30 @@
       "name": "osx-arm-slim-pgo-use",
       "configurePreset": "osx-arm-slim-pgo-use",
       "description": "PGO use build for macOS ARM."
+    },
+    {
+      "name": "ci-coop",
+      "configurePreset": "ci-coop",
+      "targets": ["cataclysm-bn-tiles", "cata_test-tiles"],
+      "description": "CI build for co-op tests. Builds game binary and test binary."
+    },
+    {
+      "name": "osx-coop",
+      "configurePreset": "osx-coop",
+      "targets": ["cataclysm-bn-tiles", "cata_test-tiles"],
+      "description": "macOS ARM co-op build. Builds game binary and test binary for local E2E runs."
+    },
+    {
+      "name": "ci-coop-tsan",
+      "configurePreset": "ci-coop-tsan",
+      "targets": ["cataclysm-bn-tiles", "cata_test-tiles"],
+      "description": "TSan-instrumented co-op build."
+    },
+    {
+      "name": "ci-coop-asan",
+      "configurePreset": "ci-coop-asan",
+      "targets": ["cataclysm-bn-tiles", "cata_test-tiles"],
+      "description": "ASan+UBSan-instrumented co-op build."
     }
-  ,
-  {
-    "name": "ci-coop",
-    "configurePreset": "ci-coop",
-    "targets": ["cataclysm-bn-tiles", "cata_test-tiles"],
-    "description": "CI build for co-op tests. Builds game binary and test binary."
-  }
-  ,
-  {
-    "name": "osx-coop",
-    "configurePreset": "osx-coop",
-    "targets": ["cataclysm-bn-tiles", "cata_test-tiles"],
-    "description": "macOS ARM co-op build. Builds game binary and test binary for local E2E runs."
-  }
-  ,
-  {
-    "name": "ci-coop-tsan",
-    "configurePreset": "ci-coop-tsan",
-    "targets": ["cataclysm-bn-tiles", "cata_test-tiles"],
-    "description": "TSan-instrumented co-op build."
-  }
-  ,
-  {
-    "name": "ci-coop-asan",
-    "configurePreset": "ci-coop-asan",
-    "targets": ["cataclysm-bn-tiles", "cata_test-tiles"],
-    "description": "ASan+UBSan-instrumented co-op build."
-  }
   ]
 }
