@@ -176,45 +176,30 @@ _Avoid_: rewind, revert
 
 ## Agent playtesting
 
-**Trial**:
-The declarative definition of a playtest: the save fixture to load, the pinned seed, start date and time-of-day, mod set, an optional scene, an optional scripted action prefix, and the end conditions.
-_Avoid_: scenario (collides with the game's start scenario, `class scenario`), test case, script (ambiguous with `.vv` files and Lua)
-
-**Episode**:
-One execution of a Trial, with its own private user directory and its own report.
-_Avoid_: run, session
+**Session**:
+One running playtest: a private copy-on-write clone of a world save, the game booted windowless on it, and the holder process that keeps it alive between CLI calls. Named by a session id.
+_Avoid_: Episode, run, trial (a trial is a declarative playtest definition, which the thin CLI does not have)
 
 **Scene**:
-A Lua setup fixture that a Trial may reference, used to place terrain, monsters and items before or during an Episode.
-_Avoid_: map setup, fixture (a fixture here means a save)
+A Lua setup script the driver can run (`run_scene`) to place terrain, monsters and items during a Session.
+_Avoid_: map setup, fixture (a fixture here used to mean a save)
 
 **Driver**:
-The mode of the game binary (`--driver-fd`) that serves one JSON request line in, one observation line out, over an inherited file descriptor, so a supervisor can drive an Episode without a window or a keyboard.
+The mode of the game binary (`--driver-fd`) that serves one JSON request line in, one observation line out, over an inherited file descriptor, so a supervisor can drive the game without a window or a keyboard.
 _Avoid_: server, harness (the Windows `vv.py` tool is the harness)
 
 **Supervisor**:
-`bnplay`, the external Deno tool that boots an Episode's driver in a private clone, watches it from outside the game, evaluates oracles and writes the report. Isolation between Episodes is enforced here, not by the game. Its handle for a running Episode is a session id.
-_Avoid_: runner, daemon (the daemon is only the supervisor's resident process)
+`bnplay`, the external Deno tool that clones a save into a private user directory, boots the Driver on it and forwards requests to it. Isolation between Sessions is enforced here, not by the game. Its handle for a running Session is a session id. It judges nothing: the agent reads the observations and decides.
+_Avoid_: runner, daemon (the holder is the Session's resident process, not a shared daemon)
 
-**Fixture**:
-A world save kept in the fixture library (a gitignored directory) that a Trial names and every Episode clones into its own user directory.
-_Avoid_: save (the user's own saves are never touched), scene (a Scene is Lua)
-
-**Fixture baseline**:
-The game-log lines a fixture produces on a clean boot-and-idle after the driver reports ready, recorded once so an Episode fails only on error lines that are new. Refreshed whenever the fixture or its mod set changes.
-_Avoid_: golden log, snapshot
+**Holder**:
+The detached per-Session process that owns the game's protocol descriptor between CLI calls, applies the start pins, and reaps the game on stop, timeout or idle.
+_Avoid_: daemon (there is no shared resident daemon)
 
 **Observation**:
 The compact JSON a driver answers each request with: turn, whether time passed, new messages, vitals and an `outcome`.
 _Avoid_: state (that is one command), response (it may be a protocol error)
 
-**Oracle**:
-A check the supervisor evaluates over an Episode's observations or captured frames and reports as pass, fail or warn: the built-in checks, a declared predicate, or a capture oracle (`paired_null`, `diff_vs_null`, `triplet`).
-_Avoid_: assertion, test
-
-**Transcript**:
-The JSONL record of every request and response of an Episode; the report points at a failing request in it, and it is the repro because same-seed Episodes are not guaranteed to replay.
-_Avoid_: log (that is the game's `debug.log`)
 
 ## Dev loop
 
@@ -274,7 +259,7 @@ _Avoid_: runner (that is the test runner), worker
 
 **Reference renderer**:
 The one machine and GPU driver on which pixel output is captured and compared, so a pixel change is a code change and not a hardware difference: the native Windows side of the home box.
-_Avoid_: golden machine, render oracle (an Oracle is a check, not a machine)
+_Avoid_: golden machine
 
 **Platform sweep**:
 A full test run natively on Windows or macOS that opens issues for platform-only failures; per-change work is verified on Linux only. Windows sweeps run on a schedule on the home box; the macOS sweep runs when the owner opts in and the Mac is reachable, and covers every commit since the last macOS sweep.

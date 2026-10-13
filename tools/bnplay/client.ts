@@ -6,7 +6,6 @@
  */
 import { dirname, fromFileUrl, join } from "@std/path"
 import { IS_WINDOWS } from "./config.ts"
-import type { WindowSize } from "./trial.ts"
 
 export type DriverRequest = { cmd: string; [key: string]: unknown }
 
@@ -38,38 +37,15 @@ export type SpawnOptions = {
   firstTimeoutMs?: number
   /** Timeout for every later request. */
   requestTimeoutMs?: number
-  /** Where the game's own log output goes; "inherit" shows it. */
+  /** Where the game's own log output goes. */
   stderr?: "null" | "inherit"
-  /**
-   * Called with every request sent through `send`, and then either the response or the failure
-   * (timeout, kill, dead game) that ended it, so every request is paired.
-   */
-  trace?: (
-    entry:
-      | { request: DriverRequest & { id: number } }
-      | { response: DriverResponse }
-      | { failure: { id: number; message: string } },
-  ) => void
-  /** Deny-list data file for the driver (`--driver-deny-list`); default is the repo's file. */
-  denyList?: string
   /** Directory `run_scene` finds Scenes in (`--driver-scenes`); default is the repo's own. */
   scenesDir?: string
-  /**
-   * Boots the game windowed (`--driver-windowed WxH`): a real, visible window of this size in
-   * logical pixels, placed in a corner, opened without taking focus. Absent: windowless, with no
-   * display session needed.
-   */
-  window?: WindowSize
 }
 
 export type Driver = {
   /** Sends one request and resolves with its response. Rejects with DriverTimeout. */
   send(req: DriverRequest, timeoutMs?: number): Promise<DriverResponse>
-  /**
-   * Writes a raw line as-is, for malformed-request tests. `expectedId` is the id the response
-   * must echo: null when the line carries no readable id.
-   */
-  sendRaw(line: string, expectedId: number | null, timeoutMs?: number): Promise<DriverResponse>
   /** Non-protocol lines that appeared on the protocol channel. Must stay empty. */
   readonly noise: string[]
   /** Process group id of the shim and everything it started (Windows: the game's pid). */
@@ -95,14 +71,12 @@ export function spawnDriver(opts: SpawnOptions): Driver {
     "--dont-debugmsg",
     "--basepath",
     opts.basepath,
-    ...(opts.denyList ? ["--driver-deny-list", opts.denyList] : []),
     ...(opts.scenesDir ? ["--driver-scenes", opts.scenesDir] : []),
-    ...(opts.window ? ["--driver-windowed", `${opts.window.width}x${opts.window.height}`] : []),
   ]
   // Windows cannot hand a child an extra descriptor and has no process groups: the game serves
   // the protocol on its own stdin/stdout (`--driver-fd 0`) and its process tree is killed from its
-  // pid. A Python binary (the mock driver) runs under `python`, since Windows has no shebang
-  // lines. Elsewhere the shim gives it a socketpair on fd 3 and leads a process group.
+  // pid. A Python binary runs under `python`, since Windows has no shebang lines. Elsewhere the
+  // shim gives it a socketpair on fd 3 and leads a process group.
   const [command, args] = !IS_WINDOWS
     ? ["/usr/bin/python3", [SHIM, "--", opts.binary, ...gameArgs]]
     : opts.binary.toLowerCase().endsWith(".py")
@@ -113,12 +87,9 @@ export function spawnDriver(opts: SpawnOptions): Driver {
     stdin: "piped",
     stdout: "piped",
     stderr: opts.stderr ?? "null",
-    // Windowless needs no display session, and the dummy video driver keeps it that way. A
-    // windowed game must reach the real one, so it blanks a driver inherited from the caller's
-    // environment (SDL ignores an empty name); audio stays off either way.
-    env: opts.window
-      ? { SDL_VIDEODRIVER: "", SDL_AUDIODRIVER: "dummy" }
-      : { SDL_VIDEODRIVER: "dummy", SDL_AUDIODRIVER: "dummy" },
+    // The driver is always windowless, so the dummy video driver keeps it from needing a display
+    // session; audio stays off too.
+    env: { SDL_VIDEODRIVER: "dummy", SDL_AUDIODRIVER: "dummy" },
   }).spawn()
   const pgid = child.pid
   let reaped = false
@@ -230,26 +201,9 @@ export function spawnDriver(opts: SpawnOptions): Driver {
   }
 
   return {
-    async send(req, timeoutMs) {
+    send(req, timeoutMs) {
       const id = nextId++
-      const request = { ...req, id }
-      opts.trace?.({ request })
-      try {
-        const response = await transmit(
-          id,
-          JSON.stringify(request),
-          timeoutMs,
-          `cmd=${req.cmd} id=${id}`,
-        )
-        opts.trace?.({ response })
-        return response
-      } catch (e) {
-        opts.trace?.({ failure: { id, message: (e as Error).message } })
-        throw e
-      }
-    },
-    sendRaw(line, expectedId, timeoutMs) {
-      return transmit(expectedId, line, timeoutMs, `raw line ${JSON.stringify(line)}`)
+      return transmit(id, JSON.stringify({ ...req, id }), timeoutMs, `cmd=${req.cmd} id=${id}`)
     },
     noise,
     pgid,
