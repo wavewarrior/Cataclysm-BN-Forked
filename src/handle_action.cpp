@@ -1891,6 +1891,9 @@ auto game::handle_action_from( const std::string& pre_action ) -> bool
     // This has no action unless we're in a special game mode.
     {
         ZoneScopedN( "handle_action_gamemode_pre_action" );
+        if( !gamemode ) {
+            gamemode = std::make_unique<special_game>();
+        }
         gamemode->pre_action( act );
     }
 
