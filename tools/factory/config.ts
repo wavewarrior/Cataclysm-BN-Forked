@@ -10,8 +10,13 @@ export const config = {
   ticketWallClockMin: 90,
   /// `triage stale` default: a ticket idle for more than this many days is stale.
   staleTicketDays: 7,
+  /// After this many fix attempts by the implementer model, the next one goes to `models.escalated`.
+  /// A first fix that leaves the tree unchanged escalates at once.
+  escalateAfterRetries: 1,
   models: {
     implementer: "anthropic/claude-haiku-5-5",
+    /// Takes over a ticket the implementer model keeps failing.
+    escalated: "anthropic/claude-sonnet-5-5",
     reviewer: "anthropic/claude-sonnet-5-5",
     workhorse: "anthropic/claude-haiku-5-5",
   },

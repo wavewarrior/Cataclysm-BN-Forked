@@ -5,8 +5,10 @@
   "maxFixRetries": 2,
   "ticketWallClockMin": 90,
   "staleTicketDays": 7,
+  "escalateAfterRetries": 1,
   "models": {
     "implementer": "anthropic/claude-haiku-5-5",
+    "escalated": "anthropic/claude-sonnet-5-5",
     "reviewer": "anthropic/claude-sonnet-5-5",
     "workhorse": "anthropic/claude-haiku-5-5"
   },

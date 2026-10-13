@@ -19,6 +19,7 @@ import {
   uncommittedFormatPrompt,
 } from "./format.ts"
 import {
+  type AgentOutcome,
   agentPrompt,
   agentRead,
   agentStart,
@@ -125,6 +126,23 @@ export function blockComment(reason: string, needsHuman: boolean): string {
 /// implementer work or a human's steering). Otherwise the branch restarts from base.
 export function keepsBranch(commits: number): boolean {
   return commits > 0
+}
+
+/// Whether the next fix attempt goes to the stronger model: once per ticket, after the cheaper
+/// model has already had `escalateAfterRetries` fix attempts.
+export function shouldEscalate(opts: { retries: number; escalated: boolean }): boolean {
+  return !opts.escalated && opts.retries >= config.escalateAfterRetries
+}
+
+/// First prompt of the escalated implementer. It has no memory of the earlier model's session, so
+/// it is pointed at the ticket and the commits already on the branch, then given the failure.
+export function takeoverPrompt(
+  issue: Issue,
+  ticketPath: string,
+  base: string,
+  feedback: string,
+): string {
+  return `/skill:implement You are taking over GitHub issue #${issue.number} (${issue.title}) from a smaller model that could not get it through the gate. The full ticket is in ${ticketPath}: read it first. The branch already holds that model's commits: read them with \`git log ${base}..HEAD\` and \`git diff ${base}...HEAD\`, and build on them instead of starting over.\n\n${feedback}`
 }
 
 /// Commits on `branch` past `base`. A branch that does not exist yet has none, so this returns 0.
@@ -518,20 +536,40 @@ export async function runTicket(
     await Deno.writeTextFile(join(fdir, "ticket.md"), `# #${n} ${issue.title}\n\n${issue.body}\n`)
 
     // Implementer.
-    const implName = `impl-${n}`
-    const implPane = await paneSplit(wt.rootPane, laneEnv(n, "implementer"))
+    let implName = `impl-${n}`
+    let implPane = await paneSplit(wt.rootPane, laneEnv(n, "implementer"))
     await updateLane(lane, { panes: [wt.rootPane, implPane] })
-    await delay(1500) // let the shell reach its prompt
-    await agentStart({
-      name: implName,
-      pane: implPane,
-      args: [
-        "--config",
-        wslFree(join(path, "tools/factory/omp-implementer.yml")),
-        "--model",
-        config.models.implementer,
-      ],
-    })
+    let escalated = false
+    const startImplementer = async (model: string): Promise<void> => {
+      await delay(1500) // let the shell reach its prompt
+      await agentStart({
+        name: implName,
+        pane: implPane,
+        args: [
+          "--config",
+          wslFree(join(path, "tools/factory/omp-implementer.yml")),
+          "--model",
+          model,
+        ],
+      })
+    }
+    /// Swap the implementer for the stronger model: close its pane, start a fresh agent in a new
+    /// one, and hand it the branch's commits plus the failure. Once per ticket.
+    const escalate = async (feedback: string): Promise<AgentOutcome> => {
+      say(`escalating the implementer to ${config.models.escalated}`)
+      await paneClose(implPane)
+      implPane = await paneSplit(wt.rootPane, laneEnv(n, "implementer"))
+      await updateLane(lane, { panes: [wt.rootPane, implPane] })
+      implName = `impl-${n}-escalated`
+      escalated = true
+      await startImplementer(config.models.escalated)
+      return await agentPrompt(
+        implName,
+        takeoverPrompt(issue, ticketPath, base, feedback),
+        remaining(),
+      )
+    }
+    await startImplementer(config.models.implementer)
     let outcome = await agentPrompt(
       implName,
       implementerPrompt(issue, ticketPath, base),
@@ -630,13 +668,23 @@ export async function runTicket(
         }
         feedback = reviewFailurePrompt(findings, base)
       }
+      const swap = shouldEscalate({ retries, escalated })
       retries++
       const headBefore = await git(path, "rev-parse", "HEAD")
-      outcome = await agentPrompt(implName, feedback, remaining())
+      outcome = swap ? await escalate(feedback) : await agentPrompt(implName, feedback, remaining())
       if (outcome.state !== "idle" && outcome.state !== "done") {
         return await block(
           `implementer ended ${outcome.state} while fixing: ${outcome.detail}`,
         )
+      }
+      // A model that cannot move the tree is swapped once before the ticket gives up on it.
+      if ((await git(path, "rev-parse", "HEAD")) === headBefore && !escalated) {
+        outcome = await escalate(feedback)
+        if (outcome.state !== "idle" && outcome.state !== "done") {
+          return await block(
+            `implementer ended ${outcome.state} while fixing: ${outcome.detail}`,
+          )
+        }
       }
       // No new commit means the same tree would fail the same gate: stop rather than re-run it.
       if ((await git(path, "rev-parse", "HEAD")) === headBefore) {

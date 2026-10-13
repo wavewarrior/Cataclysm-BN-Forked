@@ -7,10 +7,10 @@ import {
   describeHolds,
   followUpBody,
   followUpOf,
+  followUpParents,
   gateFailurePrompt,
   holdsOf,
   keepsBranch,
-  followUpParents,
   ownedBranchAt,
   parseVerdict,
   pickNext,
@@ -21,9 +21,12 @@ import {
   reviewFailurePrompt,
   rewireDependsOn,
   shouldCreateFollowUp,
+  shouldEscalate,
+  takeoverPrompt,
   workspaceLabel,
   workspacePrefix,
 } from "./driver.ts"
+import { config } from "./config.ts"
 import { makeTicket, missingSections } from "./ticket.ts"
 import type { Issue } from "./gh.ts"
 import type { Stamp } from "./gate.ts"
@@ -262,6 +265,26 @@ Deno.test("workspaceLabel carries the ticket prefix that re-pick matches on", ()
 Deno.test("keepsBranch keeps a branch only when it has commits past base", () => {
   assertEquals(keepsBranch(0), false)
   assertEquals(keepsBranch(1), true)
+})
+
+Deno.test("shouldEscalate swaps the model once, after the configured number of fix attempts", () => {
+  const after = config.escalateAfterRetries
+  assertEquals(shouldEscalate({ retries: after - 1, escalated: false }), false)
+  assertEquals(shouldEscalate({ retries: after, escalated: false }), true)
+  assertEquals(shouldEscalate({ retries: after + 1, escalated: true }), false)
+})
+
+Deno.test("takeoverPrompt points the new model at the ticket, the branch commits and the failure", () => {
+  const text = takeoverPrompt(
+    issue(7, "", "fix a thing"),
+    "/t/ticket.md",
+    "origin/base",
+    "FAILED x",
+  )
+  assertStringIncludes(text, "#7")
+  assertStringIncludes(text, "/t/ticket.md")
+  assertStringIncludes(text, "git log origin/base..HEAD")
+  assertStringIncludes(text, "FAILED x")
 })
 
 Deno.test("restartCommands always removes the worktree; the branch goes only when not kept", () => {
