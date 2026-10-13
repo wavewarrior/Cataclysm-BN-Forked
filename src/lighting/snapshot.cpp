@@ -56,7 +56,7 @@ extern float wx, wy, wz; // world-tile position under the cursor
 // effect_onfire is a static in lightmap.cpp; define a local copy.
 static const efftype_id snapshot_effect_onfire("onfire");
 
-static constexpr float M_PIf = 3.14159265358979323846f;
+static constexpr float SNAPSHOT_PIf = 3.14159265358979323846f;
 static constexpr float FALLOFF_DEFAULT = 2.0f;
 
 namespace lighting {
@@ -84,7 +84,7 @@ static gpu_emitter make_omni(
     e.falloff = FALLOFF_DEFAULT;
     e.cone_dir_x = 0.0f;
     e.cone_dir_y = 0.0f;
-    e.cone_half_angle = M_PIf;
+    e.cone_half_angle = SNAPSHOT_PIf;
     e.shape = static_cast<uint32_t>(emitter_shape::OMNI);
     // Flicker phase is keyed to the emitter's LOGICAL tile. For a static emitter
     // px is exactly tile+0.5, so flooring recovers it exactly. A SLIDING emitter
@@ -518,7 +518,7 @@ std::vector<gpu_emitter> build_emitter_snapshot(
         t.g = 1.0f;
         t.b = 1.0f;
         t.falloff = 2.0f;
-        t.cone_half_angle = M_PIf;
+        t.cone_half_angle = SNAPSHOT_PIf;
         t.shape = static_cast<uint32_t>(emitter_shape::OMNI);
         out.push_back(t);
     }
@@ -592,7 +592,7 @@ std::vector<gpu_emitter> build_emitter_snapshot(
         e.falloff = FALLOFF_DEFAULT;
         e.cone_dir_x = 0.0f;
         e.cone_dir_y = 0.0f;
-        e.cone_half_angle = M_PIf;
+        e.cone_half_angle = SNAPSHOT_PIf;
         e.shape = static_cast<uint32_t>(emitter_shape::OMNI);
         out.push_back(e);
     }
@@ -612,7 +612,7 @@ std::vector<gpu_emitter> build_emitter_snapshot(
         e.falloff = FALLOFF_DEFAULT;
         e.cone_dir_x = 0.0f;
         e.cone_dir_y = 0.0f;
-        e.cone_half_angle = M_PIf;
+        e.cone_half_angle = SNAPSHOT_PIf;
         e.shape = static_cast<uint32_t>(emitter_shape::OMNI);
         out.push_back(e);
     }
