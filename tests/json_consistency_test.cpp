@@ -1,12 +1,11 @@
 #include "catch/catch_amalgamated.hpp"
 #include "debug.h"
-#include "init.h"
-#include "loading_ui.h"
+#include "mapgen.h"
 
-// Test init skips DynamicDataLoader::check_consistency (see defer_consistency_check) so the
-// roughly 3 s validation pass is paid once, here, instead of in every process that initialises.
-TEST_CASE("json_data_is_consistent", "[json][consistency]") {
-    auto ui = loading_ui(false);
-    DynamicDataLoader::get_instance().check_consistency(ui);
+// Test init skips the mapgen definitions check (DynamicDataLoader::defer_mapgen_check), 1.7 s of
+// the 1.9 s consistency pass, so it is paid once, here, instead of in every process that
+// initialises. Every other consistency check still runs during init.
+TEST_CASE("mapgen_definitions_are_consistent", "[json][consistency]") {
+    check_mapgen_definitions();
     CHECK_FALSE(debug_has_error_been_observed());
 }

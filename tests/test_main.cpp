@@ -274,8 +274,8 @@ static void init_global_game_state(
     calendar::set_eternal_season(get_option<bool>("ETERNAL_SEASON"));
     calendar::set_season_length(get_option<int>("SEASON_LENGTH"));
 
-    // The validation pass runs once as the json_data_is_consistent case, not on every init.
-    DynamicDataLoader::get_instance().defer_consistency_check = true;
+    // The mapgen definitions check (1.7 s) runs once as mapgen_definitions_are_consistent.
+    DynamicDataLoader::get_instance().defer_mapgen_check = true;
     loading_ui ui(false);
     init::load_world_modfiles(ui, g->get_active_world(), SAVE_ARTIFACTS);
 

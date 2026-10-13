@@ -135,10 +135,11 @@ class DynamicDataLoader
         void check_consistency( loading_ui& ui );
 
         /**
-         * When true, load_and_finalize_packs skips check_consistency. The test runner sets it so
-         * the roughly 3 s validation pass runs once, as its own test case, instead of in init.
+         * When true, check_consistency skips the mapgen definitions check, which is 90% of its
+         * time (1.73 of 1.93 s measured) and only reads. The test runner sets it and runs that
+         * check once as its own case; every other check still runs in init.
          */
-        bool defer_consistency_check = false;
+        bool defer_mapgen_check = false;
 
         /**
          * Returns the single instance of this class.
