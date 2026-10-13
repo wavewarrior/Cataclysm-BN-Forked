@@ -24,6 +24,7 @@
 #include "debug.h"
 #include "distribution_grid.h"
 #include "filesystem.h"
+#include "fork_runner.h"
 #include "game.h"
 #include "init.h"
 #include "language.h"
@@ -53,12 +54,19 @@
 #include <cstring>
 #include <ctime>
 #include <exception>
+#include <filesystem>
 #include <memory>
+#include <optional>
 #include <ostream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
+
+#if defined(__linux__)
+#    include <unistd.h>
+#endif
 
 #if defined(CATA_SDL)
 #    if !defined(SDL_MAIN_HANDLED)
@@ -361,6 +369,213 @@ struct CataListener: Catch::EventListenerBase {
 };
 CATCH_REGISTER_LISTENER(CataListener)
 
+#if defined(__linux__)
+namespace {
+
+auto fork_jobs_from_env() -> std::optional<int> {
+    const auto* const raw = std::getenv("CATA_TEST_FORK_JOBS");
+    if (raw == nullptr || raw[0] == '\0') { return std::nullopt; }
+    const auto jobs = std::atoi(raw);
+    return jobs > 0 ? std::optional<int>{jobs} : std::nullopt;
+}
+
+/// True when the runner, not the user, chose CPU compute; a re-executed GPU-path case undoes it.
+auto runner_chose_cpu_compute = false;
+
+/// A parent that forks has to be forkable: CPU compute (a live GPU device does not survive fork),
+/// no thread pool (its workers do not exist in a child) and no window system (children would
+/// share one X connection and the parent dies at exit).
+auto prepare_for_forking(option_overrides_t& overrides) -> void {
+    runner_chose_cpu_compute = std::getenv("CATA_TEST_COMPUTE_ACCELERATION") == nullptr;
+    setenv("CATA_TEST_COMPUTE_ACCELERATION", "cpu", 0);
+    unsetenv("DISPLAY");
+    unsetenv("WAYLAND_DISPLAY");
+    unsetenv("SDL_VIDEODRIVER");
+    overrides.emplace_back("MULTITHREADING_ENABLED", "false");
+}
+
+/// Catch2 reads a backslash as an escape, so any name can be selected exactly.
+auto escape_for_catch(const std::string& name) -> std::string {
+    auto escaped = std::string();
+    for (const auto c : name) {
+        if (std::string_view("\\,[]\"~*").find(c) != std::string_view::npos) { escaped += '\\'; }
+        escaped += c;
+    }
+    return escaped;
+}
+
+/// The cases Catch2 would run for this command line.
+auto select_cases(Catch::Session& session) -> std::vector<std::string> {
+    const auto& config = session.config();
+    const auto all = Catch::getAllTestCasesSorted(config);
+    const auto matched = Catch::filterTests(all, config.testSpec(), config);
+    auto names = std::vector<std::string>();
+    for (const auto& handle : matched) { names.push_back(handle.getTestCaseInfo().name); }
+    return names;
+}
+
+/// Exit code of a child whose selector did not match exactly one case.
+constexpr auto selector_error_code = 97;
+
+/// Runs exactly one case in a child. The exit code has to say what an in-process run of the same
+/// case would have said, including the error-logged failure `main` applies at the end.
+auto run_one_case(Catch::Session& session, const std::string& name, bool init_had_error) -> int {
+    auto data = session.configData();
+    data.testsOrTags = {escape_for_catch(name)};
+    session.useConfigData(data);
+    const auto count = select_cases(session).size();
+    if (count != 1) {
+        cata_printf("The selector for \"%s\" matched %zu cases, expected 1\n", name.c_str(), count);
+        return selector_error_code;
+    }
+    const auto code = session.run();
+    // A case that skips itself (SKIP) makes Catch2 exit 4; that is not a failure.
+    if (code != 0 && code != Catch::AllTestsSkippedExitCode) { return code; }
+    return !init_had_error && debug_has_error_been_observed() ? 1 : 0;
+}
+
+enum class compute_path { cpu, gpu_default };
+
+/// Replaces the child with a fresh process of this binary, so it gets what a forked child could
+/// not keep: a live GPU device on the default path, or an untouched CPU-compute process. Only
+/// returns if exec failed.
+auto reexec_case(const std::string& name, unsigned int seed, compute_path path) -> int {
+    if (path == compute_path::gpu_default && runner_chose_cpu_compute) {
+        unsetenv("CATA_TEST_COMPUTE_ACCELERATION");
+    }
+    unsetenv("CATA_TEST_FORK_JOBS");
+    // TMPDIR is private to this child, so the fresh process gets a user dir of its own.
+    const auto* const tmp = std::getenv("TMPDIR");
+    auto words = std::vector<std::string>{
+        "cata_test-tiles", "-D", "--user-dir=" + std::string(tmp ? tmp : "/tmp") + "/user/"};
+    if (path == compute_path::cpu) {
+        words.emplace_back("--option_overrides=MULTITHREADING_ENABLED:false");
+    }
+    if (seed != 0) {
+        words.emplace_back("--rng-seed");
+        words.push_back(std::to_string(seed));
+    }
+    words.push_back(escape_for_catch(name));
+    auto argv = std::vector<char*>();
+    for (auto& word : words) { argv.push_back(word.data()); }
+    argv.push_back(nullptr);
+    execv("/proc/self/exe", argv.data());
+    return 127;
+}
+
+struct rerun_options {
+    compute_path path = compute_path::gpu_default;
+    unsigned int seed = 0;
+    int jobs = 1;
+    std::string scratch;
+};
+
+/// Runs each of `names` alone in a fresh process of this binary on the given compute path.
+auto rerun_in_fresh_processes(const std::vector<std::string>& names, const rerun_options& opts)
+    -> std::expected<fork_runner::summary, std::string> {
+    return fork_runner::run(
+        names,
+        fork_runner::options{
+            .jobs = opts.jobs,
+            .case_timeout = std::chrono::seconds(180),
+            .scratch_dir = opts.scratch},
+        [seed = opts.seed, path = opts.path](const std::string& name) -> int {
+            return reexec_case(name, seed, path);
+        });
+}
+
+auto run_forked(Catch::Session& session, int jobs, const std::string& scratch) -> int {
+    const auto names = select_cases(session);
+    const auto init_had_error = debug_has_error_been_observed();
+    const auto timeout = std::chrono::seconds(180);
+    const auto forked = fork_runner::run(
+        names,
+        fork_runner::
+            options{.jobs = jobs, .case_timeout = timeout, .scratch_dir = scratch + "/forked"},
+        [&session, init_had_error](const std::string& name) -> int {
+            return run_one_case(session, name, init_had_error);
+        });
+    if (!forked) {
+        cata_printf("The forked runner could not run: %s\n", forked.error().c_str());
+        return 1;
+    }
+    cata_printf(
+        "%d cases in forked children on the CPU compute path, %zu failed, wall %.0f s "
+        "(fork %.0f s)\n",
+        forked->total, forked->failed.size(), forked->wall_seconds, forked->fork_seconds);
+    if (forked->failed.empty()) {
+        auto ec = std::error_code();
+        std::filesystem::remove_all(scratch, ec);
+        return 0;
+    }
+
+    // The CPU compute path is the only one a forked child can use, and it disagrees with the GPU
+    // path on visibility. So each failure is re-run in fresh processes and classified by evidence:
+    //   confirmed            fails on the default path too: a real failure, fails the run.
+    //   CPU-path difference  passes on the default path but fails again on fresh CPU compute.
+    //   not reproduced       passes on both fresh runs: flaky or caused by sharing a parent. It is
+    //                        listed with its seed and never silently dropped.
+    auto failed_names = std::vector<std::string>();
+    for (const auto& failure : forked->failed) { failed_names.push_back(failure.name); }
+    const auto seed = session.config().rngSeed();
+    const auto failed_in = [](const fork_runner::summary& result, const std::string& name) {
+        return std::ranges::any_of(result.failed, [&name](const auto& failure) {
+            return failure.name == name;
+        });
+    };
+    const auto on_default = rerun_in_fresh_processes(
+        failed_names,
+        {.path = compute_path::gpu_default,
+         .seed = seed,
+         .jobs = jobs,
+         .scratch = scratch + "/default-path"});
+    if (!on_default) {
+        cata_printf("The default-path re-run could not run: %s\n", on_default.error().c_str());
+        return 1;
+    }
+    auto passed_default = std::vector<std::string>();
+    for (const auto& name : failed_names) {
+        if (!failed_in(*on_default, name)) { passed_default.push_back(name); }
+    }
+    const auto on_cpu = rerun_in_fresh_processes(
+        passed_default,
+        {.path = compute_path::cpu, .seed = seed, .jobs = jobs, .scratch = scratch + "/cpu-path"});
+    if (!on_cpu) {
+        cata_printf("The CPU-path re-run could not run: %s\n", on_cpu.error().c_str());
+        return 1;
+    }
+
+    cata_printf("\nRe-ran the %zu failures in fresh processes (seed %u): %zu confirmed.\n",
+                failed_names.size(), seed, on_default->failed.size());
+    for (const auto& name : passed_default) {
+        if (failed_in(*on_cpu, name)) {
+            cata_printf("  CPU-path difference (fails on CPU compute, passes on default): %s\n",
+                        name.c_str());
+        } else {
+            cata_printf("  NOT REPRODUCED, flaky or fork-induced (seed %u): %s\n", seed,
+                        name.c_str());
+        }
+    }
+    if (on_default->failed.empty()) {
+        // Only clear the logs when nothing was left unexplained.
+        if (std::ranges::all_of(passed_default, [&](const auto& name) {
+                return failed_in(*on_cpu, name);
+            })) {
+            auto ec = std::error_code();
+            std::filesystem::remove_all(scratch, ec);
+        } else {
+            cata_printf("Child logs are in %s\n", scratch.c_str());
+        }
+        return 0;
+    }
+    cata_printf("\n%s", fork_runner::describe(*on_default).c_str());
+    cata_printf("Child logs are in %s\n", scratch.c_str());
+    return 1;
+}
+
+} // namespace
+#endif
+
 int main(int argc, const char* argv[]) {
     Catch::Session session;
 
@@ -426,6 +641,11 @@ int main(int argc, const char* argv[]) {
 
     test_mode = true;
 
+#if defined(__linux__)
+    const auto fork_jobs = fork_jobs_from_env();
+    if (fork_jobs) { prepare_for_forking(option_overrides_for_test_suite); }
+#endif
+
     setupDebug(DebugOutput::std_err);
 
     // Set the seed for mapgen (the seed will also be reset before each test)
@@ -463,7 +683,17 @@ int main(int argc, const char* argv[]) {
     // Leading newline in case there were debug messages during
     // initialization.
     cata_printf("\nStarting the actual test at %s", std::ctime(&start_time));
+#if defined(__linux__)
+    result =
+        fork_jobs
+            ? run_forked(session, *fork_jobs,
+                         (std::filesystem::temp_directory_path()
+                          / ("cata_fork_runner_" + std::to_string(getpid())))
+                             .string())
+            : session.run();
+#else
     result = session.run();
+#endif
     const auto end = std::chrono::system_clock::now();
     std::time_t end_time = std::chrono::system_clock::to_time_t(end);
 
