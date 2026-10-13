@@ -78,7 +78,7 @@ const auto foo = 3; //< **MUST** use `auto` for type. `const` **MUST** come befo
 
 auto bar() -> int; //< **MUST** use trailing return types.
 using my_callback_t = std::function<auto( int ) -> bool>; //< **MUST** use trailing return types in type aliases.
-auto baz() -> int&; // *NOPAD*  //< **MUST** append `// *NOPAD*` for references/pointer returns to prevent astyle bugs.
+auto baz() -> int&;  //< **MUST** use trailing return types for reference/pointer returns too.
 auto qux() -> int { return 42; } //< **MUST** use single-line functions whenever possible.
 
 auto qux = my_struct{ .a = 1, .b = 2 }; //< **MUST** use designated initializers.
@@ -91,7 +91,7 @@ auto may_fail() -> std::expected<int, std::string>; //< **MUST** use `std::expec
 struct comparable {
   int x;
   int y;
-  auto operator<=>( const comparable & ) const = default; // *NOPAD* //< **MUST** use `<=>` for comparisons and append `// *NOPAD*` at the end to prevent astyle bugs.
+  auto operator<=>( const comparable & ) const = default; //< **MUST** use `<=>` for comparisons.
 }
 
 auto values = xs
@@ -150,17 +150,20 @@ The `plans/` directory exists in this repo. Use the same kebab-case slug for bot
 ### WHEN working on code changes
 
 - **Style**: Follow [Code Style](./docs/en/dev/explanation/code_style.md). Use `_( "text" )` for L10n.
-- **Format**: Format code before building/testing.
+- **Format**: one formatter, clang-format 22.1.8, auto-fixed and never a gate failure.
 
 ```sh
-# Format C++ code
-cmake --build build --target format
+# Format the C++ you changed (bootstraps the pinned clang-format; --help for the rest)
+deno task fmt:cpp
 # Format JSON files
 cmake --build build --target style-json-parallel
 # Format scripts
 deno fmt
 deno task dprint fmt
 ```
+
+`deno task fmt:cpp` touches only the hunks you changed, so it can never reflow a stranger's
+lines. Trailing-return and `auto` style are applied by `deno task fix:tidy`, not reviewed by hand.
 
 - **Verify**: Build and fix any issues. Do not skip the game binary target when validating code changes; build `cataclysm-bn-tiles` together with tests.
 
@@ -235,7 +238,7 @@ One skill owns each phase:
 Do not enable `poteto-mode`, `autopilot-*` or any pstack playbook: they overlap `to-spec` and `implement`. Vendored pstack skills are pinned in `.agents/skills/PSTACK_UPSTREAM`.
 
 - **MUST** in a lane: never push, merge, or edit protected paths (`tools/check/**`, `tools/lane/**`, `.github/workflows/**`, `.githooks/**`, `.clang-format`, `.clang-tidy`, `tools/clang-tidy-plugin/**`, `AGENTS.md`). `check` refuses to run on such a diff unless `CHECK_ALLOW_PROTECTED=1`; only a human changes those. If blocked, say what you need in your final message and stop.
-- Changed C++ lines must satisfy `deno task tidy:changed`; formatting is fixed for you by `deno task fmt:cpp`, never by you.
+- Changed C++ lines must satisfy the three correctness checks (`deno task tidy:changed`: `cata-determinism`, `cata-no-long`, `cata-test-filename`); legacy lines in a touched file are exempt. Formatting and style (`modernize-use-trailing-return-type`, `modernize-use-auto`) are fixed for you by `deno task fmt:cpp` and `deno task fix:tidy`, never by you, and never fail `check`.
 
 ## Token Optimization
 
@@ -289,8 +292,8 @@ to end and lists the traps (one game per user directory, binary freshness, the w
 - **Pre-existing failures** (current tree, not caused by your diff): `translation_text_style_check`
   and `translation_text_style_check_error_recovery` in `tests/json_test.cpp`. Both are `[.]`-tagged
   (excluded by default; a bare `"[json]"` filter opts them IN) and expect a debugmsg they never get,
-  because `text_style_check()` is only wired into `tools/clang-tidy-plugin/TextStyleCheck.cpp`, never
-  into the runtime JSON reader. Do not attribute these to your change.
+  because the text-style check was removed from the clang-tidy plugin and was never wired into the
+  runtime JSON reader. Do not attribute these to your change.
 - **Domain tags**: Tests are tagged by domain — `[item]`, `[melee]`, `[json]`, `[coop]`, `[driver]` (the agent driver, `src/driver_*.cpp`), `[calendar]`, `[map]`, `[vehicle]`, etc. Filter with `"[tag]"` to run only relevant tests.
 - **Slow tests**: Tagged `[.]` and excluded by default. Include them with `"~[.]"` or explicitly.
 - **Helper modules**:

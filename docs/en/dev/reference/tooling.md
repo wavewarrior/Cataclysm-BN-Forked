@@ -2,27 +2,30 @@
 
 ## Code style (C++)
 
-C++ formatting uses [Artistic Style](http://astyle.sourceforge.net/) only for top-level
-`src/*.cpp` and `src/*.h`. Most other C++ files use
-[clang-format](https://clang.llvm.org/docs/ClangFormat.html). Formatter-sensitive fixtures such as
-`tools/clang-tidy-plugin/test/` are left unchanged. Use the repository helpers so each file goes
-through the right formatter.
+C++ formatting uses [clang-format](https://clang.llvm.org/docs/ClangFormat.html) 22.1.8 for every
+C++ file, configured by `.clang-format` at the repository root. Formatter-sensitive fixtures such
+as `tools/clang-tidy-plugin/test/` are left unchanged. Use the repository task so the pinned
+version is picked for you.
 
 ### Invoking C++ formatting
 
 ```sh
-just fmt
-# or, for C++ only
-just fmt-cpp
+deno task fmt:cpp          # the C++ you changed, changed hunks only
+deno task fmt:cpp --help   # the other modes (--staged, --whole-file, --all, --dry-run)
 ```
 
-### Invoking C++ formatting through CMake
+The task bootstraps clang-format 22.1.8 into `.cache/clang-tools/` on first use (no sudo); set
+`CATA_CLANG_FORMAT` to use a different binary. There is no CMake `format` target any more.
 
-If you have configured a CMake build tree with `bash` available, this target calls the same C++ helper:
+### Correctness linting
 
 ```sh
-cmake --build <build-dir> --target format
+deno task tidy:changed --base origin/feature/improvements   # 3 checks, changed lines only
+deno task fix:tidy                                         # trailing-return / auto autofix
 ```
+
+`tidy:changed` loads the Cata clang-tidy plugin from a build directory; it prints the
+`cmake --preset linux-tidy` recipe to create one when it is missing.
 
 ### Invoking formatting via pre-commit hook
 
@@ -32,68 +35,7 @@ Install the optional hook with:
 just hooks-setup
 ```
 
-### Astyle extensions for Visual Studio
-
-Use these only for top-level `src/*.cpp` and `src/*.h`; use `just fmt-cpp` for repository style.
-There are astyle extensions in the Visual Studio Marketplace, but none of them have been confirmed
-(yet) to correctly work for our purposes on VS2019 or VS2022.
-
-#### Visual Studio 2022
-
-Head over to <https://github.com/olanti-p/BN_Astyle> and follow instructions in the
-[README.md](https://github.com/olanti-p/BN_Astyle/blob/master/README.md). You may compile and
-install the extension from source, or take advantage of the pre-built version in
-[releases section](https://github.com/olanti-p/BN_Astyle/releases).
-
-#### Visual Studio 2019
-
-Extensions's source code lives over at https://github.com/lukamicoder/astyle-extension. To install
-and compile it:
-
-1. Add the `Visual Studio extension development` workload through Visual Studio installer to your
-   VS2019
-2. Download and extract the source code, or clone the repository (a simple
-   `git clone --depth 1 https://github.com/lukamicoder/astyle-extension.git` should do).
-3. From the root folder, open `astyle-extension/AStyleExtension2017.sln`
-4. Select `Release` build configuration (most likely VS will select `Debug` configuration by
-   default)
-5. Build the solution
-6. If the build succeeded, you'll see the compiled extension in `AStyleExtension\bin\Release`.
-   Double click it to install.
-7. Configure the extension according to
-   [Configuration instructions (Visual Studio 2019 or older)](#configuration-instructions-visual-studio-2019-or-older)
-   section.
-
-#### Visual Studio 2017 or earlier
-
-You may follow the steps for VS2019 to compile from source, but there are pre-built versions
-[available](https://marketplace.visualstudio.com/items?itemName=Lukamicoder.AStyleExtension2017) on
-Visual Studio Marketplace, you should be able to install the extension through VS's extension
-manager and then configure it the same way.
-
-#### Configuration instructions (Visual Studio 2019 or older):
-
-1. Go to `Tools` - `Options` - `AStyle Formatter` - `General`.
-
-2. Import
-   `https://github.com/cataclysmbn/Cataclysm-BN/blob/main/msvc-full-features/AStyleExtension-Cataclysm-BN.cfg`
-   on `Export/Import` tab using `Import` button:
-
-![image](./img/VS_Astyle_Step_1.png)
-
-3. After import is successful you can see imported rules on `C/C++` tab:
-
-![image](./img/VS_Astyle_Step_2.png)
-
-4. Close `Options` menu, open file to be astyled and use `Format Document (Astyle)` or
-   `Format Selection (Astyle)` commands from `Edit` - `Advanced` menu.
-
-![image](./img/VS_Astyle_Step_3.png)
-
-_Note:_ You can also configure keybindings for aforementioned commands in `Tools` - `Options` -
-`Environment` - `Keybindings` menu:
-
-![image](./img/VS_Astyle_Step_4.png)
+The hook formats staged C++ with the pinned clang-format, restricted to the staged hunks.
 
 ## JSON style
 

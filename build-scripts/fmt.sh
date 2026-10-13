@@ -35,9 +35,10 @@ fi
 
 if [[ "$mode" == cpp ]]; then
     if (( $# == 1 )) && [[ "${1:-}" == "--all" ]]; then
-        shift
+        deno run -A tools/format/fmt_cpp.ts --all
+    else
+        deno run -A tools/format/fmt_cpp.ts "$@"
     fi
-    build-scripts/format-cpp.sh "$@"
     exit 0
 fi
 
@@ -102,11 +103,11 @@ deno fmt
 deno task dprint fmt
 
 if [[ "$mode" == all ]]; then
-    build-scripts/format-cpp.sh
+    deno run -A tools/format/fmt_cpp.ts --all
     build-scripts/format-json.sh
 else
     if (( ${#cpp_files[@]} > 0 )); then
-        build-scripts/format-cpp.sh "${cpp_files[@]}"
+        deno run -A tools/format/fmt_cpp.ts --staged "${cpp_files[@]}"
     fi
     if (( ${#json_files[@]} > 0 )); then
         build-scripts/format-json.sh "${json_files[@]}"

@@ -1,19 +1,6 @@
-#include "CombineLocalsIntoPointCheck.h"
 #include "DeterminismCheck.h"
-#include "JsonTranslationInputCheck.h"
 #include "NoLongCheck.h"
-#include "NoPairTupleReturnCheck.h"
-#include "NoStaticGettextCheck.h"
-#include "PointInitializationCheck.h"
-#include "SimplifyPointConstructorsCheck.h"
 #include "TestFilenameCheck.h"
-#include "TranslatorCommentsCheck.h"
-#include "UnusedStaticsCheck.h"
-#include "UseLocalizedSortingCheck.h"
-#include "UseNamedPointConstantsCheck.h"
-#include "UsePointApisCheck.h"
-#include "UsePointArithmeticCheck.h"
-#include "XYCheck.h"
 
 #include <clang-tidy/ClangTidyModule.h>
 #include <clang-tidy/ClangTidyModuleRegistry.h>
@@ -38,32 +25,17 @@ public:
                 RuntimeVersion));
             abort();
         }
-        CheckFactories.registerCheck<CombineLocalsIntoPointCheck>("cata-combine-locals-into-point");
         CheckFactories.registerCheck<DeterminismCheck>("cata-determinism");
-        CheckFactories.registerCheck<JsonTranslationInputCheck>("cata-json-translation-input");
         CheckFactories.registerCheck<NoLongCheck>("cata-no-long");
-        CheckFactories.registerCheck<NoPairTupleReturnCheck>("cata-no-pair-tuple-return");
-        CheckFactories.registerCheck<NoStaticGettextCheck>("cata-no-static-gettext");
-        CheckFactories.registerCheck<PointInitializationCheck>("cata-point-initialization");
-        CheckFactories.registerCheck<SimplifyPointConstructorsCheck>(
-            "cata-simplify-point-constructors");
         CheckFactories.registerCheck<TestFilenameCheck>("cata-test-filename");
-        CheckFactories.registerCheck<TranslatorCommentsCheck>("cata-translator-comments");
-        CheckFactories.registerCheck<UnusedStaticsCheck>("cata-unused-statics");
-        CheckFactories.registerCheck<UseLocalizedSortingCheck>("cata-use-localized-sorting");
-        CheckFactories.registerCheck<UseNamedPointConstantsCheck>("cata-use-named-point-constants");
-        CheckFactories.registerCheck<UsePointApisCheck>("cata-use-point-apis");
-        CheckFactories.registerCheck<UsePointArithmeticCheck>("cata-use-point-arithmetic");
-        CheckFactories.registerCheck<XYCheck>("cata-xy");
     }
 };
 
 } // namespace cata
 
-// Register the MiscTidyModule using this statically initialized variable.
-// NOLINTNEXTLINE(cata-unused-statics)
+// Register the CataModule using this statically initialized variable.
 static ClangTidyModuleRegistry::Add<cata::CataModule> X(
-    "cata-module", "Adds Cataclysm-DDA checks.");
+    "cata-module", "Adds Cataclysm: Bright Nights checks.");
 
 } // namespace tidy
 } // namespace clang

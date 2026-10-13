@@ -13,11 +13,6 @@ if (NOT VCPKG_MANIFEST_MODE)
             ${CMAKE_SOURCE_DIR}/CMakeModules/Find)
 endif()
 
-
-option(CATA_FORMAT_TARGETS "Enable C++ formatting targets" ON)
-if (CATA_FORMAT_TARGETS)
-    include(FormatSource)
-endif ()
 include(FetchContent)
 
 set(CMAKE_TLS_VERIFY ON)

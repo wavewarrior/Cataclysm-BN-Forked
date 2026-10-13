@@ -4,6 +4,9 @@
 # .md/.ts). Files that are ALSO dirty in the working tree (partly staged) are
 # skipped with a warning: formatters run on the working-tree file, so restaging
 # them would silently commit the user's unstaged hunks.
+#
+# C++ goes through `deno task fmt:cpp --staged`: the single pinned clang-format,
+# restricted to the staged hunks, so untouched lines are never reformatted.
 # Enable once per clone: git config core.hooksPath .githooks
 set -euo pipefail
 
@@ -14,7 +17,7 @@ build-scripts/check-skills.sh
 
 DENO="$(command -v deno || echo "$HOME/.deno/bin/deno")"
 if [[ ! -x "$DENO" ]]; then
-    echo "warning: deno not found; skipping md/ts/lua formatting" >&2
+    echo "warning: deno not found; skipping C++/md/ts/lua formatting" >&2
     DENO=""
 fi
 
@@ -38,12 +41,11 @@ while IFS= read -r -d '' file; do
     esac
 done < <(git diff --cached --name-only --diff-filter=ACMR -z)
 
-# A factory lane's C++ is formatted by the driver with the gate's pinned astyle and clang-format
-# (WSL). This hook's own tools are different versions, so formatting here would undo the driver's
-# output and the two would trade diffs on every commit.
-if ((${#cpp_files[@]})) && [[ "${FACTORY_LANE:-}" != "1" ]]; then build-scripts/format-cpp.sh "${cpp_files[@]}"; fi
-if ((${#json_files[@]})); then build-scripts/format-json.sh "${json_files[@]}"; fi
 if [[ -n "$DENO" ]]; then
+    if ((${#cpp_files[@]})); then
+        "$DENO" run -A tools/format/fmt_cpp.ts --staged "${cpp_files[@]}"
+    fi
+    if ((${#json_files[@]})); then build-scripts/format-json.sh "${json_files[@]}"; fi
     if ((${#doc_files[@]})); then "$DENO" fmt "${doc_files[@]}"; fi
     if ((${#lua_files[@]})); then "$DENO" task dprint fmt "${lua_files[@]}"; fi
 fi

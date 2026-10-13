@@ -1,23 +1,15 @@
 # C++ Code Style Guide
 
-All C++ code in the project is styled. Run `just fmt` before pushing, or `just fmt-cpp` for C++-only changes. The helper uses astyle only for top-level `src/*.cpp` and `src/*.h`; most other C++ files use clang-format. Formatter-sensitive fixtures such as `tools/clang-tidy-plugin/test/` are left unchanged.
+All C++ code in the project is styled with a single formatter: clang-format 22.1.8, configured by
+`.clang-format` at the repository root. Formatter-sensitive fixtures such as
+`tools/clang-tidy-plugin/test/` are left unchanged.
 
-Where astyle is still used, use version 3.1. Version 3.0.1 will disagree in only a few places, while Version 3.6.6 will disagree in nearly every file.
-
-Blocks of code can be passed through astyle to ensure that their formatting is correct:
-
-```sh
-astyle --style=1tbs --attach-inlines --indent=spaces=4 --align-pointer=name --max-code-length=100 --break-after-logical --indent-classes --indent-switches --indent-preproc-define --indent-col1-comments --min-conditional-indent=0 --pad-oper --add-braces --convet-tabs --unpad-paren --pad-paren-in --keep-one-line-blocks
-```
-
-These options are mirrored in `.astylerc`, `doc/CODE_STYLE.txt` and
-`msvc-full-features/AStyleExtension-Cataclysm-BN.cfg`
-
-For example, from `vi`, set marks a and b around the block, then:
-
-```sh
-:'a,'b ! astyle --style=1tbs --attach-inlines --indent=spaces=4 --align-pointer=name --max-code-length=100 --break-after-logical --indent-classes --indent-switches --indent-preproc-define --indent-col1-comments --min-conditional-indent=0 --pad-oper --add-braces --convet-tabs --unpad-paren --pad-paren-in --keep-one-line-blocks
-```
+Run `deno task fmt:cpp` before pushing; it bootstraps the pinned clang-format on demand and
+formats only the hunks you changed against `origin/feature/improvements` (see
+[Formatting](../../guides/formatting) for the other modes). Style is auto-fixed and never a gate
+failure: the trailing-return-type and `auto` guidance below is applied mechanically by
+`deno task fix:tidy`, and the only C++ checks that can fail a gate are the three correctness
+clang-tidy checks run by `deno task tidy:changed` on changed lines.
 
 See [DEVELOPER_TOOLING.md](../reference/tooling) for other environments.
 

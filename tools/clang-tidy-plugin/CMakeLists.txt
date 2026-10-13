@@ -8,24 +8,9 @@ set(CMAKE_CXX_STANDARD 23)
 
 set(CataAnalyzerSrc
     CataTidyModule.cpp
-    CombineLocalsIntoPointCheck.cpp
     DeterminismCheck.cpp
-    JsonTranslationInputCheck.cpp
     NoLongCheck.cpp
-    NoPairTupleReturnCheck.cpp
-    NoStaticGettextCheck.cpp
-    PointInitializationCheck.cpp
-    SimplifyPointConstructorsCheck.cpp
-    StringLiteralIterator.cpp
-    TestFilenameCheck.cpp
-    TranslatorCommentsCheck.cpp
-    UnusedStaticsCheck.cpp
-    UseLocalizedSortingCheck.cpp
-    UseNamedPointConstantsCheck.cpp
-    UsePointApisCheck.cpp
-    UsePointArithmeticCheck.cpp
-    Utils.cpp
-    XYCheck.cpp)
+    TestFilenameCheck.cpp)
 
 set(CataAnalyzerName CataAnalyzerPlugin)
 add_library(${CataAnalyzerName} MODULE ${CataAnalyzerSrc})

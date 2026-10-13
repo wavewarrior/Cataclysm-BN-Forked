@@ -10,7 +10,7 @@ This guide explains how to format and lint code in Cataclysm: Bright Nights.
 | --------------- | ------------------- | ---------------- |
 | Staged files    | all formatters      | `just fmt`       |
 | All files       | all formatters      | `just fmt --all` |
-| C++ (`.cpp/.h`) | astyle/clang-format | `just fmt-cpp`   |
+| C++ (`.cpp/.h`) | clang-format 22.1.8 | `just fmt-cpp`   |
 | JSON            | json_formatter      | `just fmt-json`  |
 | Markdown/TS     | deno fmt            | `just fmt-docs`  |
 | Lua             | dprint              | `just fmt-lua`   |
@@ -28,28 +28,36 @@ style violations, a commit will be pushed to fix them.
 
 ## C++ Formatting
 
-Top-level `src/*.cpp` and `src/*.h` files use [astyle](http://astyle.sourceforge.net/). Most other C++ files use [clang-format](https://clang.llvm.org/docs/ClangFormat.html). Formatter-sensitive fixtures such as `tools/clang-tidy-plugin/test/` are left unchanged.
+C++ has exactly one formatter: [clang-format](https://clang.llvm.org/docs/ClangFormat.html)
+version 22.1.8, configured by `.clang-format` at the repository root. Formatter-sensitive fixtures
+such as `tools/clang-tidy-plugin/test/` are left unchanged.
+
+You do not install anything. `deno task fmt:cpp` bootstraps the pinned clang-format on first use
+into `.cache/clang-tools/` (via `uv` or `python3 -m venv`, no sudo) and uses it for every format
+invocation afterwards. Override the binary with `CATA_CLANG_FORMAT=/path/to/clang-format` if you
+must.
 
 ```sh
-# Install formatters (Ubuntu/Debian)
-sudo apt install astyle clang-format
-
-# Install formatters (Fedora)
-sudo dnf install astyle clang-tools-extra
-
-# Install formatters (macOS)
-brew install astyle clang-format
+# Format the C++ changed against origin/feature/improvements (default)
+deno task fmt:cpp
+# Format specific files (their changed hunks only)
+deno task fmt:cpp src/map.cpp src/map.cpp
+# What would be formatted, without writing
+deno task fmt:cpp --dry-run
 ```
 
-### Using the helper
+By default only changed hunks are touched, so the command can never reflow lines you did not
+modify; `--whole-file` and `--all` opt into larger sweeps. Style is auto-fixed and is never a
+gate failure.
+
+Correctness linting (determinism, no `long`, test filenames) runs over changed lines only:
 
 ```sh
-just fmt-cpp
-# or, for all staged file types
-just fmt
+deno task tidy:changed --base origin/feature/improvements
 ```
 
-If you already have a CMake build tree with `bash` available, `cmake --build <build-dir> --target format` calls the same C++ helper. The style configurations are in `.astylerc` and `.clang-format` at the repository root.
+It needs the Cata clang-tidy plugin; the command prints the exact `cmake --preset linux-tidy`
+recipe if the build directory does not have it yet.
 
 ## JSON Formatting
 
@@ -162,37 +170,28 @@ Use the repository helper for C++ and the Deno extension for Markdown/TypeScript
 
 ### Visual Studio
 
-Install the formatters once from PowerShell. LLVM provides `clang-format` and `clang-tidy`.
+Formatting needs no manual install on any platform - `deno task fmt:cpp` fetches the pinned
+clang-format itself. `clang-tidy` for `deno task tidy:changed` comes from LLVM:
 
 ```powershell
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 irm get.scoop.sh | iex
-scoop install llvm astyle
-clang-format --version
+scoop install llvm
 clang-tidy --version
-astyle --version
 ```
 
-If Scoop is already installed, run only `scoop install llvm astyle`. If any version command is not
-found, close and reopen PowerShell and Visual Studio so they reload `PATH`.
+If any version command is not found, close and reopen PowerShell and Visual Studio so they reload
+`PATH`.
 
-After installing the tools:
-
-1. Open the repository folder in Visual Studio as a CMake project.
-2. Configure CMake. If Visual Studio already configured the project before installing the formatters,
-   reconfigure the CMake cache.
-3. Open **View > Other Windows > CMake Targets View**.
-4. Build the `format` target before committing.
-
-Visual Studio's normal **Format Document** command does not run repository style. Run `just fmt-cpp`
-in a terminal; the CMake `format` target is a wrapper for environments with `bash` available.
+Visual Studio's normal **Format Document** command does not run repository style. Run
+`deno task fmt:cpp` in a terminal instead.
 
 ### Vim/Neovim
 
-Use the helper instead of calling astyle or clang-format directly:
+Use the repository task instead of calling clang-format directly:
 
 ```vim
-autocmd BufWritePre *.cpp,*.h !just fmt-cpp %
+autocmd BufWritePre *.cpp,*.h !deno task fmt:cpp --whole-file %
 autocmd BufWritePre *.md,*.ts !deno fmt %
 ```
 
@@ -206,29 +205,20 @@ Run the JSON formatter script. It configures and builds the formatter helper aut
 build-scripts/format-json.sh
 ```
 
-### C++ formatter not found
+### C++ formatting fails to run
 
-Make sure `astyle` and `clang-format` are installed and in your PATH:
+`deno task fmt:cpp` bootstraps clang-format 22.1.8 into `.cache/clang-tools/` using `uv` or
+`python3`. If the bootstrap fails (no network, no Python), install clang-format 22.1.8 yourself
+and point the task at it:
 
 ```sh
-# Check if formatters are available
-which astyle
-which clang-format
-
-# Install if missing (Ubuntu/Debian)
-sudo apt install astyle clang-format
+CATA_CLANG_FORMAT=/path/to/clang-format-22.1.8 deno task fmt:cpp
 ```
 
-Then rerun:
+### C++ looks unformatted after pulling
+
+Run the task from the repository root; it picks the right files and hunks by itself:
 
 ```sh
-build-scripts/format-cpp.sh
-```
-
-### C++ formatters produce different results
-
-Use the repository helper from the repository root so each file goes through the right formatter:
-
-```sh
-just fmt-cpp
+deno task fmt:cpp
 ```

@@ -50,8 +50,29 @@
       "description": "the check and lane tools' own tests, including the ones that spawn processes and write logs",
       "command": "deno test -A tools/check tools/lane tools/repo_rules",
     },
+    "fmt:cpp": {
+      "description": "format C++ with the single pinned clang-format: given files, or the C++ files changed against origin/feature/improvements; changed hunks only unless --all/--whole-file",
+      "command": "deno run -A tools/format/fmt_cpp.ts",
+    },
+    "tidy:changed": {
+      "description": "run the 3 correctness clang-tidy checks (cata-determinism, cata-no-long, cata-test-filename) over changed lines only; exit non-zero on any finding (needs the linux-tidy preset build)",
+      "command": "deno run -A tools/format/tidy_changed.ts",
+    },
+    "fix:tidy": {
+      "description": "apply the style autofixers (modernize-use-trailing-return-type, modernize-use-auto) over changed lines; style is auto-fixed, never a gate failure",
+      "command": "deno run -A tools/format/tidy_changed.ts --fix",
+    },
   },
-  "test": { "include": ["scripts", ".agents", "tools/check", "tools/lane", "tools/repo_rules"] },
+  "test": {
+    "include": [
+      "scripts",
+      ".agents",
+      "tools/check",
+      "tools/lane",
+      "tools/repo_rules",
+      "tools/format",
+    ],
+  },
   "lint": {
     "include": [
       "scripts",
@@ -61,6 +82,7 @@
       "tools/check",
       "tools/lane",
       "tools/repo_rules",
+      "tools/format",
     ],
     "plugins": ["./tools/repo_rules/plugin.ts"],
     "rules": {
@@ -71,7 +93,13 @@
   },
   "unstable": ["raw-imports", "fmt-component", "temporal"],
   "fmt": {
-    "exclude": ["doc", "**/*.svg", "build-scripts/problem-matchers", ".check"],
+    "exclude": [
+      "doc",
+      "**/*.svg",
+      "build-scripts/problem-matchers",
+      ".check",
+      "tools/format/format.html",
+    ],
     "include": [
       "scripts",
       "build-scripts",
@@ -80,6 +108,7 @@
       "tools/check",
       "tools/lane",
       "tools/repo_rules",
+      "tools/format",
       "doc",
       "docs",
       "*.md",
