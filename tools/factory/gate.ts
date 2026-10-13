@@ -232,6 +232,11 @@ const STEPS: Step[] = [
       // The lane's own out/ dir. Re-run configure every time (cheap once cached) so the format
       // and Lua-doc targets stay OFF: LUA_DOCS_ON_BUILD runs `deno task docs:gen`, which reformats
       // the whole tracked tree after every build.
+      // The shadercross dependency clones several submodules from GitHub; a reset connection there
+      // failed #171's gate. Reuse the main checkout's populated copy when it exists.
+      const shared = join(await mainRepoRoot(ctx.cwd), BUILD_DIR, "_deps", "sdl3_shadercross-src")
+      const hasShared = await Deno.stat(join(shared, "external", "SPIRV-Tools", "CMakeLists.txt"))
+        .then(() => true, () => false)
       const cfg = await ctx.exec("build", [
         "cmd",
         "/c",
@@ -241,6 +246,7 @@ const STEPS: Step[] = [
         "win",
         "-DCATA_FORMAT_TARGETS=OFF",
         "-DLUA_DOCS_ON_BUILD=OFF",
+        ...(hasShared ? [`-DFETCHCONTENT_SOURCE_DIR_SDL3_SHADERCROSS=${shared}`] : []),
       ], KEEP_CWD)
       if (cfg !== 0) return { ok: false, infra: true, note: "cmake configure failed" }
       const code = await ctx.exec(
