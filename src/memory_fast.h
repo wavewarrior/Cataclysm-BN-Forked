@@ -3,12 +3,12 @@
 #include <memory>
 
 #if __GLIBCXX__
-template<typename T> using shared_ptr_fast = std::__shared_ptr<T, __gnu_cxx::_S_single>;
-template<typename T> using weak_ptr_fast = std::__weak_ptr<T, __gnu_cxx::_S_single>;
+template<typename T> using shared_ptr_fast = std::__shared_ptr<T, __gnu_cxx::_S_atomic>;
+template<typename T> using weak_ptr_fast = std::__weak_ptr<T, __gnu_cxx::_S_atomic>;
 template<typename T, typename... Args> shared_ptr_fast<T> make_shared_fast(
     Args &&... args )
 {
-    return std::__make_shared<T, __gnu_cxx::_S_single>( args... );
+    return std::__make_shared<T, __gnu_cxx::_S_atomic>( args... );
 }
 #else
 template<typename T> using shared_ptr_fast = std::shared_ptr<T>;
