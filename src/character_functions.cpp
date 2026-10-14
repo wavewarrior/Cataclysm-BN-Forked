@@ -15,6 +15,7 @@
 #include "itype.h"
 #include "iuse_actor.h"
 #include "make_static.h"
+#include "map.h"
 #include "map_iterator.h"
 #include "map_selector.h"
 #include "messages.h"

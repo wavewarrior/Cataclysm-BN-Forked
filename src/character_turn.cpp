@@ -22,6 +22,7 @@
 #include "itype.h"
 #include "iuse.h"
 #include "make_static.h"
+#include "map.h"
 #include "map_iterator.h"
 #include "mapbuffer.h"
 #include "mapbuffer_registry.h"

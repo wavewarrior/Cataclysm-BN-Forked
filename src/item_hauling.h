@@ -1,7 +1,6 @@
 #pragma once
 
 #include "item.h"
-#include "map.h"
 #include "point.h"
 
 // Checks if items at position are haulable

@@ -3,6 +3,7 @@
 #include "catch/catch_amalgamated.hpp"
 #include "coordinates.h"
 #include "game.h"
+#include "map.h"
 #include "state_helpers.h"
 #include "travel/travel_destination.h"
 

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "coordinates.h"
-#include "map.h"
 
 #include <functional>
 #include <map>
@@ -10,6 +9,7 @@
 #include <string>
 #include <vector>
 
+class map;
 struct tripoint;
 struct point;
 

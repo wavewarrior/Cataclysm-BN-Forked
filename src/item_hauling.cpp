@@ -1,5 +1,7 @@
 #include "item_hauling.h"
 
+#include "map.h"
+
 bool is_haulable(const item& item) { return !item.made_of(phase_id::LIQUID); }
 
 bool has_haulable_items(const tripoint_bub_ms& pos) {

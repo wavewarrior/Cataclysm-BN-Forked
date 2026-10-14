@@ -7,6 +7,7 @@
 #include "generic_factory.h"
 #include "generic_readers.h"
 #include "item.h"
+#include "map.h"
 #include "type_id_implement.h"
 
 #include <optional>

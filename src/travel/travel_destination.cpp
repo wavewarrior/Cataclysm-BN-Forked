@@ -2,6 +2,7 @@
 
 #include "avatar.h"
 #include "coordinates.h"
+#include "map.h"
 
 auto avatar_knows_travel_destination(const avatar& you, const tripoint_bub_ms& p) -> bool {
     return you.sees(p) || you.has_memorized_tile_for_autodrive(bub_to_abs(p));
