@@ -27,6 +27,20 @@ async function runCmakeScript(
   return { code, output: new TextDecoder().decode(stdout) + new TextDecoder().decode(stderr) }
 }
 
+// A preset that sets Debug and can run on macOS would hit the guard at configure time. The
+// `lint` preset did exactly that: the documented JSON formatting loop died at configure.
+Deno.test("no configure preset that can run on macOS builds as Debug", async () => {
+  const presets = JSON.parse(await Deno.readTextFile(join(repoRoot, "CMakePresets.json")))
+  const offenders: string[] = []
+  for (const preset of presets.configurePresets) {
+    const type = preset.cacheVariables?.CMAKE_BUILD_TYPE
+    const windowsOnly = preset.condition?.lhs === "${hostSystemName}" &&
+      preset.condition?.rhs === "Windows"
+    if (type === "Debug" && !windowsOnly) offenders.push(preset.name)
+  }
+  assertEquals(offenders, [], "these presets set Debug without a Windows-only condition")
+})
+
 Deno.test("guard refuses Debug on Apple, naming the osx-arm-slim preset", async () => {
   const { code, output } = await runCmakeScript(
     ["-DAPPLE=ON", "-DCMAKE_BUILD_TYPE=Debug"],

@@ -269,7 +269,7 @@
         "CMAKE_RANLIB": "llvm-ranlib",
         "CMAKE_C_COMPILER_LAUNCHER": "ccache",
         "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
-        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_BUILD_TYPE": "Release",
         "SOUND": "OFF",
         "TESTS": "OFF",
         "JSON_FORMAT": "ON"
