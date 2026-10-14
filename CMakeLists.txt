@@ -95,6 +95,10 @@ if (NOT CMAKE_BUILD_TYPE AND NOT _is_multi_config)
     set(CMAKE_BUILD_TYPE Debug)
 endif ()
 
+# macOS refuses Debug before anything else consumes it: the Debug branch below
+# redirects binaries to the repo root (issue #196).
+include(CataGuardDebugRedirect)
+
 # --- Link performance ---
 # ThinLTO (CMAKE_INTERPROCEDURAL_OPTIMIZATION) runs the whole optimizer
 # backend inside the link step. Point the linker at an on-disk cache so
