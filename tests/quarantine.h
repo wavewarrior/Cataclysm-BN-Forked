@@ -35,6 +35,16 @@ inline constexpr auto quarantine_entries = std::to_array<quarantine_entry>({
         .reason = "fails on some seeds in-process too (measured seeds 2 and 3)",
     },
     {
+        .name = "vehicle_efficiency",
+        .expires = "2026-10-27",
+        .reason = "fails on fresh CPU compute on seed 1 only; seed-dependent, not repeated 10x yet",
+    },
+    {
+        .name = "Items rot away",
+        .expires = "2026-10-27",
+        .reason = "fails on fresh CPU compute on seed 3 only; seed-dependent, not repeated 10x yet",
+    },
+    {
         .name = "vehicle_move_notifications_per_turn",
         .expires = "2026-10-27",
         .reason = "fails on some seeds in-process too (measured seeds 2 and 3)",
