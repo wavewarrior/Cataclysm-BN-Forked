@@ -529,8 +529,8 @@ implementation:
   rc-rebuild `frame_period` avg was 26.39ms (~37.9 fps) with the portal scan off and
   26.39–26.61ms (~37.5–37.9 fps) with it on — no measurable regression. `g_sky_sun_enable`
   ships `true` per the plan's contingency.
-- **Formatter version drift:** the local `clang-format` (23.1.0) and `astyle` (3.6.16) do
-  not match CI's pinned `clang-format` 22, so a repo-wide `cmake --build --target format`
-  run reformats large swaths of unrelated files. Any future formatter run on this tree
-  should be scoped to touched files only, or the unrelated churn reverted before commit
-  (see `formatter-drift-attribution` skill).
+- **Formatter version drift (historical):** at implementation time the local formatter
+  versions did not match CI's pinned clang-format 22, so a repo-wide format run reformatted
+  large swaths of unrelated files. The tree is clang-format-only now (`deno task fmt:cpp`,
+  changed hunks only), which moots this; the lesson stands — scope formatter runs to
+  touched files (see `formatter-drift-attribution` skill).

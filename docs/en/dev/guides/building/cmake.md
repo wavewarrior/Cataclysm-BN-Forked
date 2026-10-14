@@ -32,8 +32,8 @@ CataclysmBN:
 > [!NOTE]
 > Dependancies marked with * will be built automatically if missing.
 
-The configure step looks up the `gettext` tool (`msgfmt`) for the translation target; pass
-`-DLANGUAGES=none` to skip that requirement.
+The fork ships English only: the `translations` target is a placeholder that creates the empty
+`lang/mo` directory (presets and the release install still refer to it); no gettext is needed.
 
 ## Build Environment
 

@@ -33,10 +33,10 @@ convention — `plans/` is the permanent record that survives session resets) an
 - **Test binary is `./cata_test-tiles` at the repo root**, not `out/build/osx-arm-slim/tests/...`
   (that path is a stale months-old leftover on this preset). `stat` its mtime against the build
   before trusting any result.
-- **Do not run `cmake --build --target format`.** This tree's astyle/clang-format versions
-  mass-reformat unrelated files. Match the enclosing file's existing style by hand: `src/map_vehicle.cpp`,
-  `src/cata_tiles*.cpp` use `vehicle* veh` / `if (x) {` (clang-format style); `src/map.cpp`,
-  `src/vehicle*.cpp`, `src/mapbuffer.cpp` use `vehicle *veh` / `if( x ) {` (astyle style).
+- **Formatting is `deno task fmt:cpp`** (clang-format only since the 2026-10-13 cutover;
+  it formats changed hunks only). Before that cutover the tree carried two formatter styles
+  (`vehicle *veh` / `if( x ) {` padded style in flat `src/*.cpp` vs clang-format style in
+  `src/*/*`); the mass reformat unified them, so match the enclosing file.
 - **Accepted test baseline — 5 failures** (`plans/merge-main-into-improvements.md:24`):
   `flung creatures stop at the reality bubble edge`, `vision_wall_obstructs_light`,
   `vision_single_tile_skylight`, `vision_see_out_of_vehicle`, `vision_see_into_vehicle`.

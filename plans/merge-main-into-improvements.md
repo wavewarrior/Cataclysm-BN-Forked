@@ -133,22 +133,15 @@ and main's `gpu_lm` accelerates a grid HEAD still consumes — complementary, no
 
 ### Formatter state
 
-`.astylerc` is byte-identical on both sides. Local `astyle` is 3.6.16. Both branches carry a
-near-identical `.clang-format` (main adds `IndentPPDirectives: AfterHash`,
-`BreakStringLiterals: false`).
+Historical note: at charting time the fork and upstream disagreed on formatter scope —
+the fork formatted flat `src/*.{cpp,h}` with the second formatter while upstream's format
+script covered `tests/` and the two `tools/` subtrees with clang-format (both sides used
+clang-format for `src/*/*`, excluding `lua`, `sol`, `third-party`). Upstream pinned
+clang-format 22 (`d3e74ba29a`, its autofix workflow, `LLVM_VERSION: "22"`). All of this is
+moot since the 2026-10-13 clang-format-only cutover (`deno task fmt:cpp`).
 
-| Path | HEAD (`CMakeModules/FormatSource.cmake`) | main (`build-scripts/format-cpp.sh`) |
-|---|---|---|
-| flat `src/*.{cpp,h}` | astyle | astyle |
-| `src/*/*` (excl. `lua`, `sol`, `third-party`) | clang-format | clang-format |
-| `tests/*` (excl. `tests/catch/*`) | **not formatted** | **clang-format** |
-| `tools/format/*`, `tools/clang-tidy-plugin/*` (excl. its `test/*`) | **not formatted** | **clang-format** |
-
-Scopes differ **only** in `tests/` and those two `tools/` subtrees. main's `462b918320`
-("style: format tests and tools with clang-format") is 238 files, +28,835/−32,355 — purely
-mechanical, and the direct cause of the 172 `tests/` conflicts. main pins **clang-format 22**
-(`d3e74ba29a`, `.github/workflows/autofix.yml`, `LLVM_VERSION: "22"`, passed as
-`-DCLANG_FORMAT_EXECUTABLE=`). clang-format is **not installed** on this machine.
+The disagreement cost 172 `tests/` conflicts: upstream's `462b918320` ("style: format
+tests and tools with clang-format") is 238 files, +28,835/−32,355 — purely mechanical.
 
 Directional measurement (proxy: re-emit both sides one token per line, then 3-way merge): for
 `tests/`, 302 hunks → 160 and **49 of 171 files auto-merge completely**. `src/` has no scope
@@ -244,19 +237,15 @@ Independent of everything else; must complete first.
    plan to exist both as a session artifact and as a committed permanent record that survives a
    session reset; plan mode could not create the repo copy. Commit alone as
    `docs: add main-into-improvements merge plan`.
-5. Replace `CMakeModules/FormatSource.cmake` with main's version and add main's
-   `build-scripts/format-cpp.sh`, taking both verbatim from `origin/main`:
-   `git checkout origin/main -- CMakeModules/FormatSource.cmake build-scripts/format-cpp.sh`.
-   This adopts main's format scope wholesale; the two files are equivalent for `src/` and differ only
-   by also covering `tests/` and the two `tools/` subtrees. Commit alone as
-   `build: adopt main's format-cpp.sh scope`.
-6. Run the formatter over the newly-covered paths only, and commit the result as a single
-   formatting-only commit `style: format tests and tools with clang-format`:
-   `cmake --preset lint -DCLANG_FORMAT_EXECUTABLE=<clang-format-22>` then
-   `cmake --build build --target format`.
-   Verify it is genuinely behaviour-free before committing: `git diff -w --stat` on `src/` must be
-   empty (only `tests/` and `tools/` may change), and the token-level check must show no semantic
-   delta — for every changed file, stripping comments and all whitespace must yield an identical
+5. Adopt upstream's formatter scope (its format-script machinery, taken verbatim from
+   `origin/main`) so `tests/` and the two `tools/` subtrees came under clang-format. Committed
+   alone as `build: adopt main's format scope`. (Both files have since been removed by the
+   2026-10-13 clang-format-only cutover; `deno task fmt:cpp` is the single entry point now.)
+6. Ran the formatter over the newly-covered paths only, committed as a single
+   formatting-only commit `style: format tests and tools with clang-format`.
+   Verified genuinely behaviour-free before committing: `git diff -w --stat` on `src/` was
+   empty (only `tests/` and `tools/` changed), and the token-level check showed no semantic
+   delta — for every changed file, stripping comments and all whitespace yielded an identical
    string before and after.
 
 Acceptance for S0: clang-format 22 on PATH, `rerere` on, baseline recorded,
@@ -303,9 +292,9 @@ Also in this stage, resolve the build/config conflicts, since they gate every la
 - `CMakePresets.json` — keep HEAD's presets (`osx-arm-slim`, `linux-slim`, `linux-full`) and add
   main's `lint` preset if absent; drop any curses-only preset.
 - `.github/workflows/matrix.yml` — drop main's curses and android matrix entries; keep HEAD's.
-- `AGENTS.md` — keep HEAD's wholesale (it is this fork's authoritative workflow), then append only
-  main's additions that are still true after this merge: the `format-cpp.sh` invocation and the
-  clang-format-22 pin.
+- `AGENTS.md` — kept HEAD's wholesale (it is this fork's authoritative workflow), appending
+  only main's additions that were still true after the merge: the format-script invocation
+  and the clang-format-22 pin (both since superseded by `deno task fmt:cpp`).
 - `deno.jsonc`, `gfx/*`, `data/*` (3), `tools/*` (5), `scripts/*` (4), `msvc-full-features/*` (3) —
   apply R5; where both sides are semantic, prefer main for pure content/data and HEAD for anything
   referencing a HEAD-only subsystem.

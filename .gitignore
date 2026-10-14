@@ -90,7 +90,7 @@ CMakeUserPresets.json
 out/
 RelWithDebInfo*/
 
-# bnplay fixture library (world saves cloned by `bnplay fixture add`)
+# Legacy bnplay fixture library (world saves cloned by the deleted `fixture` verb)
 /tools/bnplay/fixtures/
 
 # Visual Studio 2015

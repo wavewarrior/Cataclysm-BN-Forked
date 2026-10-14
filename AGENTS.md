@@ -248,18 +248,15 @@ Do not enable `poteto-mode`, `autopilot-*` or any pstack playbook: they overlap 
 
 ### Playtesting and visual verification
 
-**Verify gameplay and render changes with `bnplay`, not by taking screenshots and looking at
-them.** Read the `bnplay` skill (`.agents/skills/bnplay/SKILL.md`) first: it runs an Episode end
-to end and lists the traps (one game per user directory, binary freshness, the watchdog).
+**Verify gameplay with `bnplay`, not by taking screenshots and looking at them.** Read the
+`bnplay` skill (`.agents/skills/bnplay/SKILL.md`) first: it covers the start/step/stop loop and the
+traps (one game per user directory, binary freshness, the watchdog).
 
-- `deno task bnplay doctor` before trusting any run: it fails on a stale binary, a missing
-  driver flag, a missing fixture baseline, stray games, and low memory or swap.
-- An Episode is `fixture add` (once), `start <trial.toml>`, `step <session> '<json>'`, `stop`.
-  `stop` prints a report of under ~500 tokens; its exit code is the verdict (0 pass, 1 oracle
-  failed, 2 harness error, 3 inconclusive) and the transcript is the repro.
-- Escalate cheapest first: the lean `step` response, then `view`/`query`, then the transcript and
-  debug log, then `capture` (windowed Trials only, for renderer work; judge frames with the
-  `paired_null`/`diff_vs_null`/`triplet` oracles, never by eye).
+- `deno task bnplay start <world-save-dir>` boots the game on a private copy of the save;
+  `step <session> '<json>'` sends one driver command; `stop <session>` ends it. It observes and
+  judges nothing: you read the responses and decide.
+- Escalate cheapest first: the `step` response, then `view`/`query`, then the session's `debug.log`.
+- Pixel and render checks belong to the Catch2 Render tier (ADR-0006), not to bnplay.
 - The `computer` tool cannot measure anything and costs ~1,230 tokens per PNG; use it only to
   discover something once.
 - Windows contributors: see `tools/visual_verify/README.md` for the `vv.py` harness.
@@ -280,7 +277,7 @@ to end and lists the traps (one game per user directory, binary freshness, the w
 - **Deno**: Used for all TypeScript scripts (doc generation, migrations, changelog tools). Run `deno task <name>` for scripted workflows.
 - **Cache**: ccache (Linux/macOS) or sccache (Windows). Project cap is **20 GB** (`ccache --max-size=20G`).
 - **Linker**: mold (Linux) for fast linking; default linker elsewhere.
-- **Localization**: none. The fork ships English only; `msgfmt` is still looked up at configure time unless you pass `-DLANGUAGES=none`.
+- **Localization**: none. The fork ships English only and the build needs no `gettext`.
 
 ## Testing & QA
 
@@ -289,11 +286,7 @@ to end and lists the traps (one game per user directory, binary freshness, the w
   `./cata_test-tiles` for caches first configured as Debug. Run it with an optional filter
   string, e.g. `"[item]"` or `"~[.]"`. Check the mtime before trusting a result; see the
   binary-path rule under "WHEN working on code changes".
-- **Pre-existing failures** (current tree, not caused by your diff): `translation_text_style_check`
-  and `translation_text_style_check_error_recovery` in `tests/json_test.cpp`. Both are `[.]`-tagged
-  (excluded by default; a bare `"[json]"` filter opts them IN) and expect a debugmsg they never get,
-  because the text-style check was removed from the clang-tidy plugin and was never wired into the
-  runtime JSON reader. Do not attribute these to your change.
+- **Pre-existing failures**: none are tracked outside `tests/quarantine.h`.
 - **Domain tags**: Tests are tagged by domain — `[item]`, `[melee]`, `[json]`, `[coop]`, `[driver]` (the agent driver, `src/driver_*.cpp`), `[calendar]`, `[map]`, `[vehicle]`, etc. Filter with `"[tag]"` to run only relevant tests.
 - **Slow tests**: Tagged `[.]` and excluded by default. Include them with `"~[.]"` or explicitly.
 - **Helper modules**:
@@ -303,4 +296,6 @@ to end and lists the traps (one game per user directory, binary freshness, the w
   - `tests/assertion_helpers.h` — `check_containers_equal` and other container comparison utilities.
   - `tests/stringmaker.h` — Catch2 `StringMaker` specializations for game types.
 - **Probabilistic testing**: `statistics<T>` template with Z-score confidence intervals for stochastic test assertions.
-- **Custom runner**: `tests/test_main.cpp` initializes full game state including mod loading, world setup, and RNG seeding before each test.
+- **Runner**: `tests/test_main.cpp` initialises the game once (about 6 s on Linux). `--tier=logic` runs only the cases listed in `tests/logic_tier.h` and skips init entirely (468 cases in about 2.5 s); `--tier=sim` runs the rest. On Linux `CATA_TEST_FORK_JOBS=32` forks one child per case (about 110 s for the full suite); each failure is re-run in fresh processes and classified as confirmed, CPU-path difference, or not reproduced. Windows and macOS use the in-process runner.
+- **Quarantine**: a known-bad case goes in `tests/quarantine.h` with a reason and an `expires` date; the forked runner skips it until then and fails it again afterwards. There is no baseline allow-list: fix the case or quarantine it.
+- **Consistency checks**: test init skips the mapgen definitions check; it runs once as `mapgen_definitions_are_consistent`.
