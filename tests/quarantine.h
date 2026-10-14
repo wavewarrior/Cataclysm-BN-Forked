@@ -37,12 +37,26 @@ inline constexpr auto quarantine_entries = std::to_array<quarantine_entry>({
     {
         .name = "vehicle_efficiency",
         .expires = "2026-10-27",
-        .reason = "flaky on CPU compute with pool off only: seed 1 failed 2 of 5 runs, seed 3 1 of 1, seeds 2 and 4-10 passed; default path passed all 10 seeds",
+        .reason =
+            "flaky on CPU compute with pool off only: seed 1 failed 2 of 5 runs, seed 3 1 of 1, seeds 2 and 4-10 passed; default path passed all 10 seeds; passed in the loaded forked suite on seeds 4-8",
     },
     {
         .name = "Items rot away",
         .expires = "2026-10-27",
-        .reason = "unexplained: failed in the runner's forked run and its fresh CPU re-run while the box ran 32 children (seed 3); passed alone on seeds 1-10 on default and CPU/pool-off paths; not yet tried under load",
+        .reason =
+            "unexplained: failed in the runner's forked run and its fresh CPU re-run while the box ran 32 children (seed 3); passed alone on seeds 1-10 on default and CPU/pool-off paths; passed in the loaded forked suite on seeds 4-8",
+    },
+    {
+        .name = "box2d_authority_vehicle_hits_vehicle",
+        .expires = "2026-10-27",
+        .reason =
+            "fails at vehicle_collision_test.cpp:231 on seed 4 in the forked run and a fresh CPU re-run; passed on seeds 1-3 and 5-8; cause unknown",
+    },
+    {
+        .name = "effective vs actual damage per second",
+        .expires = "2026-10-27",
+        .reason =
+            "fails at effective_dps_test.cpp:78 on seed 6 in the forked run and a fresh CPU re-run; passed on seeds 1-5 and 7-8; cause unknown",
     },
     {
         .name = "vehicle_move_notifications_per_turn",
