@@ -16,6 +16,7 @@ import { DEFAULT_BASE, diffRange } from "./base.ts"
 import { parseArgs, USAGE } from "./args.ts"
 import { type Env, run, runTee, tail } from "./exec.ts"
 import { guardViolations } from "./guard.ts"
+import { dirtyLines, stampedCommit } from "./stamp.ts"
 import { seedArguments } from "./seed.ts"
 import {
   classifyFiles,
@@ -33,13 +34,11 @@ const GAME_BIN = `out/build/${PRESET}/src/cataclysm-bn-tiles`
 
 const flag = (name: string): string | undefined => Deno.env.get(name) || undefined
 
-/// What the pre-push hook trusts: the commit this run tested, written only when every step passed
-/// and the working tree matched that commit (an edited tree proves nothing about the commit).
-async function writePassStamp(logDir: string): Promise<void> {
-  const dirty = (await run(["git", "status", "--porcelain", "--untracked-files=no"])).stdout.trim()
-  if (dirty !== "") return
+/// The facts the stamp decision needs, read from git: HEAD and the dirty porcelain lines.
+async function stampSnapshot(logDir: string): Promise<{ head: string; dirty: string[] }> {
   const head = (await run(["git", "rev-parse", "HEAD"])).stdout.trim()
-  if (head !== "") await Deno.writeTextFile(join(logDir, "passed"), head + "\n")
+  const status = (await run(["git", "status", "--porcelain", "--untracked-files=all"])).stdout
+  return { head, dirty: dirtyLines(status, logDir) }
 }
 
 async function gitLines(args: string[]): Promise<string[]> {
@@ -111,6 +110,9 @@ async function main(): Promise<number> {
   const events: StepEvent[] = []
   const logPath = join(logDir, "events.jsonl")
   await Deno.mkdir(logDir, { recursive: true })
+  // A stale stamp from an earlier run must not outlive this one.
+  await Deno.remove(join(logDir, "passed")).catch(() => {})
+  const stampStart = await stampSnapshot(logDir)
 
   const record = async (step: StepId, status: StepStatus, started: number, detail: string) => {
     const event: StepEvent = {
@@ -238,7 +240,15 @@ async function main(): Promise<number> {
   }
 
   const code = exitCode(events)
-  if (code === 0) await writePassStamp(logDir)
+  const stampEnd = await stampSnapshot(logDir)
+  const stamped = stampedCommit({
+    code,
+    headAtStart: stampStart.head,
+    headAtEnd: stampEnd.head,
+    dirtyAtStart: stampStart.dirty,
+    dirtyAtEnd: stampEnd.dirty,
+  })
+  if (stamped !== null) await Deno.writeTextFile(join(logDir, "passed"), stamped + "\n")
   return code
 }
 
