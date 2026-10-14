@@ -64,6 +64,7 @@ inline constexpr auto logic_tier_files = std::to_array<std::string_view>({
     "point_test",
     "poly_serialized_test",
     "quarantine_test",
+    "render_frame_compare_test",
     "requirements_test",
     "rng_test",
     "shape_test",
