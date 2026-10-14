@@ -595,9 +595,15 @@ auto init() -> void {
 // process start and the renderer becoming ready: a not-yet-ready renderer falls back to the CPU
 // lightmap rather than dispatching against a null device.
 auto get_device() -> SDL_GPUDevice* {
+    // A device cata_gpu created itself owns the pipelines and buffers built on it, so every later
+    // dispatch and the shutdown paths must use that same device. Returning the renderer's device
+    // as soon as it became ready (the windowless test process creates cata_gpu's device first and
+    // the renderer's later) handed objects of one device to another. In the game cata_gpu adopts
+    // the renderer's device and owns none, so this falls through to the renderer as before.
+    if (s_device != nullptr) { return s_device; }
     auto& renderer_device = lighting::get_render_state().device();
     if (renderer_device.ready()) { return renderer_device.raw(); }
-    return s_device;
+    return nullptr;
 }
 
 auto shutdown() -> void {
