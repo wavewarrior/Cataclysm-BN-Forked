@@ -58,6 +58,14 @@
       "description": "report a header's fan-out: src/tests TUs that reach it by transitive #include, direct includers, propagating headers (see tools/fanout/main.ts)",
       "command": "deno run --allow-read --allow-run=ninja,git tools/fanout/main.ts",
     },
+    "worktree": {
+      "description": "Mac worktree lifecycle: new (herdr + .msl copy + configure), list, remove (see tools/worktree/main.ts)",
+      "command": "deno run -A tools/worktree/main.ts",
+    },
+    "test:worktree": {
+      "description": "the worktree tool's own tests: pure spec plus the CLI against a throwaway git repo with stubbed herdr and cmake",
+      "command": "deno test -A tools/worktree",
+    },
     "test:check": {
       "description": "the check and lane tools' own tests, including the ones that spawn processes and write logs",
       "command": "deno test -A tools/check tools/lane tools/repo_rules",
@@ -85,6 +93,7 @@
       "tools/format",
       "tools/sweep",
       "tools/fanout",
+      "tools/worktree",
     ],
   },
   "lint": {
@@ -99,6 +108,7 @@
       "tools/format",
       "tools/sweep",
       "tools/fanout",
+      "tools/worktree",
     ],
     "plugins": ["./tools/repo_rules/plugin.ts"],
     "rules": {
@@ -127,6 +137,7 @@
       "tools/format",
       "tools/sweep",
       "tools/fanout",
+      "tools/worktree",
       "doc",
       "docs",
       "*.md",
