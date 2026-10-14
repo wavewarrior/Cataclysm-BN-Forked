@@ -58,6 +58,7 @@ endif()
 include(${CMAKE_SOURCE_DIR}/build-scripts/VsDevCmd.cmake)
 
 set(CONFIGURE_PRESET "windows-tiles-sounds-x64-msvc")
+set(TERMINAL_PRESET_NAME "windows-terminal")
 if(NOT EXISTS "${CMAKE_SOURCE_DIR}/CMakeUserPresets.json")
     configure_file(
         ${CMAKE_SOURCE_DIR}/build-scripts/CMakeUserPresets.json.in
