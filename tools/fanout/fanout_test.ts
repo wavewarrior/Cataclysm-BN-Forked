@@ -91,6 +91,7 @@ Deno.test("argument parsing takes one header and the documented flags", () => {
   assertThrows(() => parseArgs(["--nope"]))
   assertThrows(() => parseArgs(["a.h", "b.h"]))
   assertThrows(() => parseArgs(["--root"]))
+  assertThrows(() => parseArgs(["--build-dir", "--json", "src/m.h"]))
 })
 
 Deno.test("ninja deps output parses into objects with their dependency lines", () => {

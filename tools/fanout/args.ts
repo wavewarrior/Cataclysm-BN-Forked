@@ -42,6 +42,7 @@ Exit codes: 0 success; 1 bad arguments or unknown header.`
 const BOOL_FLAGS = new Set(["--json", "--porcelain", "--text", "--help"])
 const VALUE_FLAGS = new Set(["--build-dir", "--root"])
 
+/// Parse the command line; a malformed one throws an Error that names the argument.
 export function parseArgs(args: readonly string[]): FanoutArgs {
   const parsed: FanoutArgs = {
     header: null,
@@ -61,7 +62,7 @@ export function parseArgs(args: readonly string[]): FanoutArgs {
       else parsed.help = true
     } else if (VALUE_FLAGS.has(arg)) {
       const value = args[++i]
-      if (value === undefined) throw new Error(`${arg} needs a value`)
+      if (value === undefined || value.startsWith("-")) throw new Error(`${arg} needs a value`)
       if (arg === "--build-dir") parsed.buildDir = value
       else parsed.root = value
     } else if (arg.startsWith("-")) {
