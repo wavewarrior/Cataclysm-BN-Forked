@@ -132,7 +132,8 @@
         "CMAKE_C_COMPILER": "/usr/lib/llvm-22/bin/clang",
         "CMAKE_CXX_COMPILER": "/usr/lib/llvm-22/bin/clang++",
         "CMAKE_AR": "/usr/lib/llvm-22/bin/llvm-ar",
-        "CMAKE_RANLIB": "/usr/lib/llvm-22/bin/llvm-ranlib"
+        "CMAKE_RANLIB": "/usr/lib/llvm-22/bin/llvm-ranlib",
+        "LUA_DOCS_ON_BUILD": "OFF"
       }
     },
     {
