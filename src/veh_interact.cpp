@@ -2892,7 +2892,8 @@ void veh_interact::sync_rml() {
     } else {
         int at = 0;
         int limit = 0;
-        rml_data->msg_rml = cata_text_to_rml(vehicle_display::parts_descs_text(*veh, INT_MAX, 50, cpart, at, limit));
+        rml_data->msg_rml = cata_text_to_rml(vehicle_display::parts_descs_text(
+            *veh, {.max_y = INT_MAX, .width = 50, .part = cpart, .start_at = at, .start_limit = limit}));
     }
 
     // 2D vehicle diagram (slice 5; parallels display_veh). One monospace row per
@@ -2957,9 +2958,9 @@ void veh_interact::sync_rml() {
  */
 
 void veh_interact::count_durability() {
-    auto info = vehicle_display::vehicle_damage_summary(*veh);
-    total_durability_text = info.first;
-    total_durability_color = info.second;
+    const auto info = vehicle_display::vehicle_damage_summary(*veh);
+    total_durability_text = info.text;
+    total_durability_color = info.color;
 }
 
 void act_vehicle_siphon(vehicle* veh) {

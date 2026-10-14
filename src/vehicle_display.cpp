@@ -156,7 +156,7 @@ auto part_color(const vehicle& veh, const int p, const bool exact) -> nc_color {
     }
 }
 
-auto vehicle_damage_summary(const vehicle& veh) -> std::pair<std::string, nc_color> {
+auto vehicle_damage_summary(const vehicle& veh) -> damage_summary {
     const vehicle_part_range vpr = veh.get_all_parts();
     const int total_damage =
         std::accumulate(vpr.begin(), vpr.end(), 0, [](int lhs, const vpart_reference& rhs) {
@@ -260,8 +260,12 @@ auto part_list_text(const vehicle& veh, int p, int hl) -> std::string {
  */
 // Colour-tagged descriptions for all the parts on a single tile (RmlUi path; call
 // with a large max_y to disable the scroll windowing).
-auto parts_descs_text(const vehicle& veh, int max_y, int width, int p, int& start_at,
-                      int& start_limit) -> std::string {
+auto parts_descs_text(const vehicle& veh, const parts_descs_options& opts) -> std::string {
+    const int max_y = opts.max_y;
+    const int width = opts.width;
+    const int p = opts.part;
+    int& start_at = opts.start_at;
+    int& start_limit = opts.start_limit;
     if (p < 0 || p >= veh.part_count()) { return std::string(); }
 
     std::vector<int> pl = veh.parts_at_relative(veh.cpart(p).mount, true);

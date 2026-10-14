@@ -1,5 +1,6 @@
 #pragma once
 
+#include "color.h"
 #include "type_id.h"
 #include "units_angle.h"
 
@@ -7,7 +8,6 @@
 #include <utility>
 #include <vector>
 
-class nc_color;
 class vehicle;
 
 /**
@@ -34,7 +34,11 @@ auto part_display_direction(const vehicle& veh, int p, bool roof = false) -> uni
 auto part_color(const vehicle& veh, int p, bool exact = false) -> nc_color;
 
 /// get text and color of damage summary (e.g. "like new" or "battered")
-auto vehicle_damage_summary(const vehicle& veh) -> std::pair<std::string, nc_color>;
+struct damage_summary {
+    std::string text;
+    nc_color color;
+};
+auto vehicle_damage_summary(const vehicle& veh) -> damage_summary;
 
 // RmlUi (veh_interact slice 4): the parts-at-tile list as one colour-tagged
 // string (rows joined with \n), parallel to print_part_list. The curses
@@ -42,10 +46,19 @@ auto vehicle_damage_summary(const vehicle& veh) -> std::pair<std::string, nc_col
 // and the scroll windowing is dropped; the hl row gets a "> " prefix.
 auto part_list_text(const vehicle& veh, int p, int hl = -1) -> std::string;
 
+/// Arguments of `parts_descs_text`. `start_at` and `start_limit` are in/out scroll state that the
+/// caller owns: it must reset `start_limit` to 0 when `part` changes.
+struct parts_descs_options {
+    int max_y;
+    int width;
+    int part;
+    int& start_at;
+    int& start_limit;
+};
+
 // Colour-tagged descriptions for all parts on a single tile (RmlUi path; call
 // with a large max_y to disable the scroll windowing).
-auto parts_descs_text(const vehicle& veh, int max_y, int width, int p, int& start_at,
-                      int& start_limit) -> std::string;
+auto parts_descs_text(const vehicle& veh, const parts_descs_options& opts) -> std::string;
 
 /// Get all printable fuel types
 auto printable_fuel_types(const vehicle& veh) -> std::vector<itype_id>;
