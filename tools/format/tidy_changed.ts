@@ -20,22 +20,22 @@ import {
   pinnedClangTidy,
   toolMajorVersion,
 } from "./cpp_common.ts"
+import { chooseUnit, compiledUnits } from "./tidy_units.ts"
 
 const CORRECTNESS_CHECKS = "cata-determinism,cata-no-long,cata-test-filename"
 const STYLE_FIX_CHECKS = "modernize-use-trailing-return-type,modernize-use-auto"
 const DEFAULT_BUILD_DIR = "out/build/linux-fast"
 const CONCURRENCY = 4
 
-/// The first `.cpp` under `src/` or `tests/` that includes `header` by its file name, or null.
-async function includingUnit(header: string): Promise<string | null> {
+/// Every `.cpp` under `src/` or `tests/` that includes `header` by its file name.
+async function includingUnits(header: string): Promise<string[]> {
   const name = header.split("/").pop() ?? header
   const found = await new Deno.Command("git", {
     args: ["grep", "-l", "-F", `#include "${name}"`, "--", "src/*.cpp", "tests/*.cpp"],
     stdout: "piped",
     stderr: "null",
   }).output()
-  const units = new TextDecoder().decode(found.stdout).split("\n").filter((line) => line !== "")
-  return units[0] ?? null
+  return new TextDecoder().decode(found.stdout).split("\n").filter((line) => line !== "")
 }
 
 const USAGE = `usage: deno task tidy:changed [options]
@@ -138,6 +138,7 @@ export async function run(argv: string[]): Promise<number> {
     console.error(configureHint)
     return 2
   }
+  const compiled = compiledUnits(await Deno.readTextFile(compileDb), Deno.realPathSync(Deno.cwd()))
 
   let pluginArg: string[] = []
   if (!opts.fix) {
@@ -191,7 +192,10 @@ export async function run(argv: string[]): Promise<number> {
     if (ranges.length === 0) continue
     const isHeader = file.endsWith(".h") || file.endsWith(".hpp")
     const sibling = isHeader ? file.replace(/\.hpp?$/, ".cpp") : file
-    const tu = (await exists(sibling)) ? sibling : isHeader ? await includingUnit(file) : null
+    const candidates = isHeader ? [sibling, ...await includingUnits(file)] : [file]
+    const present: string[] = []
+    for (const candidate of candidates) if (await exists(candidate)) present.push(candidate)
+    const tu = chooseUnit(present, compiled)
     if (tu !== null) jobs.push({ tu, name: file, ranges })
     else unserviceable.push(file)
   }
