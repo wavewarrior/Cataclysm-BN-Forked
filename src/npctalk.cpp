@@ -74,6 +74,7 @@
 #include "value_ptr.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_ownership.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 #include "vpart_range.h"
@@ -325,7 +326,7 @@ static void npc_temp_orders_menu(const std::vector<npc*>& npc_list) {
 static void tell_veh_stop_following() {
     for (wrapped_vehicle& veh : get_map().get_vehicles()) {
         vehicle* v = veh.v;
-        if (v->has_engine_type(fuel_type_animal, false) && v->is_owned_by(get_avatar())) {
+        if (v->has_engine_type(fuel_type_animal, false) && vehicle_ownership::is_owned_by(*v, get_avatar())) {
             v->is_following = false;
             v->engine_on = false;
         }
@@ -335,7 +336,7 @@ static void tell_veh_stop_following() {
 static void assign_veh_to_follow() {
     for (wrapped_vehicle& veh : get_map().get_vehicles()) {
         vehicle* v = veh.v;
-        if (v->has_engine_type(fuel_type_animal, false) && v->is_owned_by(get_avatar())) {
+        if (v->has_engine_type(fuel_type_animal, false) && vehicle_ownership::is_owned_by(*v, get_avatar())) {
             v->activate_animal_follow();
         }
     }
@@ -347,7 +348,7 @@ static void tell_magic_veh_to_follow() {
         if (v->magic) {
             for (const vpart_reference& vp : v->get_all_parts()) {
                 const vpart_info& vpi = vp.info();
-                if (vpi.has_flag("MAGIC_FOLLOW") && v->is_owned_by(get_avatar())) {
+                if (vpi.has_flag("MAGIC_FOLLOW") && vehicle_ownership::is_owned_by(*v, get_avatar())) {
                     v->activate_magical_follow();
                     break;
                 }
@@ -424,7 +425,7 @@ void game::chat() {
     std::vector<vehicle*> magic_following_vehicles;
     for (auto& veh : m.get_vehicles()) {
         auto& v = veh.v;
-        if (v->has_engine_type(fuel_type_animal, false) && v->is_owned_by(u)) {
+        if (v->has_engine_type(fuel_type_animal, false) && vehicle_ownership::is_owned_by(*v, u)) {
             animal_vehicles.push_back(v);
             if (v->is_following) { following_vehicles.push_back(v); }
         }

@@ -60,6 +60,7 @@
 #include "units_serde.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_ownership.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 
@@ -1869,7 +1870,7 @@ void construct::done_vehicle(const tripoint_bub_ms& p) {
         return;
     }
     veh->name = name;
-    veh->set_owner(u);
+    vehicle_ownership::set_owner(*veh, u);
     if (u.has_trait(trait_DEBUG_HS)) {
         // TODO: Allow DEBUG_HS to consume items that don't exist
         veh->install_part(tripoint_mnt_veh(tripoint_zero), vpart_id("frame_vertical_2"));

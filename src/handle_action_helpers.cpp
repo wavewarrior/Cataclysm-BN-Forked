@@ -99,6 +99,7 @@
 #include "veh_type.h"
 #include "vehicle.h"
 #include "vehicle_grab.h"
+#include "vehicle_ownership.h"
 #include "vehicle_part.h"
 #include "vehicle_wait.h"
 #include "vpart_position.h"
@@ -554,7 +555,7 @@ void grab() {
     if (Creature* const target = g->critter_at<Creature>(grabp, false)) {
         grab_creature(you, *target);
     } else if (const auto target = vehicle_grab_target_at(here, grabp)) {
-        if (!target->vp.vehicle().handle_potential_theft(get_avatar())) { return; }
+        if (!vehicle_ownership::handle_potential_theft(target->vp.vehicle(), get_avatar())) { return; }
         you.grab(OBJECT_VEHICLE, target->pos - you.bub_pos());
         add_msg(_("You grab the %s."), target->vp.vehicle().name);
     } else if (here.has_furn(grabp)) { // If not, grab furniture if present
@@ -710,7 +711,7 @@ void smash(const std::optional<tripoint_bub_ms>& target) {
 
     vehicle* veh = veh_pointer_or_null(g->m.veh_at(smashp));
     if (veh != nullptr) {
-        if (!veh->handle_potential_theft(get_avatar())) { return; }
+        if (!vehicle_ownership::handle_potential_theft(*veh, get_avatar())) { return; }
     }
     // C2c: snapshot terrain + ground items before bash so we can diff what changed.
     ter_id smash_ter_before;

@@ -80,6 +80,7 @@
 #include "value_ptr.h"
 #include "vehicle.h"
 #include "vehicle_group.h"
+#include "vehicle_ownership.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 #include "vpart_range.h"
@@ -5626,7 +5627,7 @@ void map::apply_faction_ownership(
         for (item* const& elem : items) { elem->set_owner(id); }
         vehicle* source_veh = veh_pointer_or_null(veh_at(p));
         if (source_veh) {
-            if (!source_veh->has_owner()) { source_veh->set_owner(id); }
+            if (!vehicle_ownership::has_owner(*source_veh)) { source_veh->set_owner(id); }
         }
     }
 }

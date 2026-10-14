@@ -538,29 +538,16 @@ public:
     bool is_external_part(const tripoint_bub_ms& part_pt) const;
     bool is_towed() const;
     void set_tow_directions();
-    // owner functions
-    bool is_owned_by(const Character& c, bool available_to_take = false) const;
-    bool is_old_owner(const Character& c, bool available_to_take = false) const;
-    std::string get_owner_name() const;
+    // owner state accessors; the ownership queries and the theft policy are free functions in
+    // vehicle_ownership.h
     void set_old_owner(const faction_id& temp_owner);
     void remove_old_owner();
     void set_owner(const faction_id& new_owner);
-    void set_owner(const Character& c);
     void remove_owner();
     faction_id get_owner() const;
     faction_id get_old_owner() const;
-    bool has_owner() const;
-    bool has_old_owner() const;
-    /**
-     * Handle potential vehicle theft.
-     * @param you Avatar to check against
-     * @param check_only If true, won't prompt to steal and instead will
-     * refure to interact
-     * @param prompt Whether to prompt confirmation or proceed with the
-     * theft without prompt
-     * @return whether the avatar is willing to interact with the vehicle
-     */
-    bool handle_potential_theft(avatar& you, bool check_only = false, bool prompt = true);
+    // when the vehicle was marked as stolen, if it is
+    auto stolen_at() const -> std::optional<time_point> { return theft_time; }
     // project a tileray forward to predict obstacles
     std::set<point_abs_ms> immediate_path(units::angle rotate = 0_degrees);
     // This would require a proper rework to make 3D. Stays 2D for now.

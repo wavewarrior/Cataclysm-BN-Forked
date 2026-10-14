@@ -36,6 +36,7 @@
 #include "veh_type.h"
 #include "vehicle.h"
 #include "vehicle_group.h"
+#include "vehicle_ownership.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 #include "vpart_range.h"
@@ -953,7 +954,7 @@ auto mapgen_constructor::apply_faction_ownership(
         auto items = i_at(p);
         std::ranges::for_each(items, [&](item* const elem) { elem->set_owner(id); });
         const auto vp = veh_at(p);
-        if (vp && !vp->vehicle().has_owner()) { vp->vehicle().set_owner(id); }
+        if (vp && !vehicle_ownership::has_owner(vp->vehicle())) { vp->vehicle().set_owner(id); }
     });
 }
 

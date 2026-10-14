@@ -51,6 +51,7 @@
 #include "vehicle.h"
 #include "vehicle_display.h"
 #include "vehicle_move.h"
+#include "vehicle_ownership.h"
 #include "vehicle_part.h" // IWYU pragma: associated
 #include "vpart_position.h"
 #include "vpart_range.h"
@@ -924,7 +925,7 @@ void vehicle::use_controls(const tripoint_bub_ms& pos) {
     if (menu.ret >= 0) {
         // allow player to turn off engine without triggering another warning
         if (menu.ret != 0 && menu.ret != 1 && menu.ret != 2 && menu.ret != 3) {
-            if (!handle_potential_theft(you)) { return; }
+            if (!vehicle_ownership::handle_potential_theft(*this, you)) { return; }
         }
         actions[menu.ret]();
         // Don't access `this` from here on, one of the actions above is to call
@@ -2042,7 +2043,7 @@ void vehicle::interact_with(const tripoint_bub_ms& pos, int interact_part) {
         choice = selectmenu.ret;
     }
     if (choice != EXAMINE && choice != TRACK && choice != GET_ITEMS_ON_GROUND) {
-        if (!handle_potential_theft(you)) { return; }
+        if (!vehicle_ownership::handle_potential_theft(*this, you)) { return; }
     }
     auto veh_tool = [&](const itype_id& obj) {
         item& pseudo = *item::spawn_temporary(obj);

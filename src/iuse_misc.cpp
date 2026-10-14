@@ -100,6 +100,7 @@
 #include "value_ptr.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_ownership.h"
 #include "vehicle_part.h"
 #include "vehicle_selector.h"
 #include "visitable.h"
@@ -945,7 +946,7 @@ int iuse::unfold_generic(player* p, item* it, bool, const tripoint_bub_ms&) {
     } else {
         unfold_msg = _(unfold_msg);
     }
-    veh->set_owner(*p);
+    vehicle_ownership::set_owner(*veh, *p);
     if (g->m.veh_at(p->bub_pos()).part_with_feature(VPFLAG_BOARDABLE, true)) {
         g->m.board_vehicle(p->bub_pos(), p);
     }

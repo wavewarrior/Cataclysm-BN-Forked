@@ -1529,51 +1529,11 @@ bool vehicle::sufficient_wheel_config() const {
     return true;
 }
 
-bool vehicle::is_owned_by(const Character& c, bool available_to_take) const {
-    if (owner.is_null()) { return available_to_take; }
-    if (!c.get_faction()) {
-        debugmsg("vehicle::is_owned_by() player %s has no faction", c.disp_name());
-        return false;
-    }
-    return c.get_faction()->id() == get_owner();
-}
-
-bool vehicle::is_old_owner(const Character& c, bool available_to_take) const {
-    if (old_owner.is_null()) { return available_to_take; }
-    if (!c.get_faction()) {
-        debugmsg("vehicle::is_old_owner() player %s has no faction", c.disp_name());
-        return false;
-    }
-    return c.get_faction()->id() == get_old_owner();
-}
-
-std::string vehicle::get_owner_name() const {
-    if (!g->faction_manager_ptr->get(owner)) {
-        debugmsg("vehicle::get_owner_name() vehicle %s has no valid nor null faction id ",
-                 vehicle_display::disp_name(*this));
-        return _("no owner");
-    }
-    return _(g->faction_manager_ptr->get(owner)->name());
-}
-
-bool vehicle::has_owner() const { return !owner.is_null(); }
-
 faction_id vehicle::get_owner() const { return owner; }
-
-void vehicle::set_owner(const Character& c) {
-    const auto faction = c.get_faction();
-    if (!faction) {
-        debugmsg("vehicle::set_owner() player %s has no valid faction", c.disp_name());
-        return;
-    }
-    owner = faction->id();
-}
 
 void vehicle::set_owner(const faction_id& new_owner) { owner = new_owner; }
 
 void vehicle::remove_owner() { owner = faction_id::NULL_ID(); }
-
-bool vehicle::has_old_owner() const { return !old_owner.is_null(); }
 
 faction_id vehicle::get_old_owner() const { return old_owner; }
 
@@ -1585,63 +1545,6 @@ void vehicle::set_old_owner(const faction_id& temp_owner) {
 void vehicle::remove_old_owner() {
     theft_time = std::nullopt;
     old_owner = faction_id::NULL_ID();
-}
-
-bool vehicle::handle_potential_theft(avatar& you, bool check_only, bool prompt) {
-    const bool is_owned_by_player = is_owned_by(you);
-    bool has_witnesses;
-    if (has_owner() && !is_owned_by_player) {
-        has_witnesses = !avatar_funcs::list_potential_theft_witnesses(you, get_owner()).empty();
-    } else {
-        has_witnesses = false;
-    }
-    // the vehicle is yours, that's fine.
-    if (is_owned_by_player) {
-        return true;
-        // if There is no owner
-        // handle transfer of ownership
-    }
-
-    // if we are just checking if we could continue without problems, then the rest is assumed false
-    if (check_only) { return false; }
-
-    if (!has_owner()) {
-        set_owner(you.get_faction()->id());
-        remove_old_owner();
-        return true;
-        // if there is a marker for having been stolen, but 15 minutes have passed, then officially
-        // transfer ownership
-    }
-
-    if (!has_witnesses && has_old_owner()) {
-        if (!is_old_owner(you) && theft_time && calendar::turn - *theft_time > 15_minutes) {
-            set_owner(you.get_faction()->id());
-            remove_old_owner();
-        }
-        return true;
-        // No witnesses? then don't need to prompt, we assume the player is in process of stealing
-        // it. Ownership transfer checking is handled above, and warnings handled below. This is
-        // just to perform interaction with the vehicle without a prompt. It will prompt first-time,
-        // even with no witnesses, to inform player it is owned by someone else subsequently, no
-        // further prompts, the player should know by then.
-    }
-
-    // if we got here, there's some theft occurring
-    if (prompt) {
-        if (!query_yn(
-                _("This vehicle belongs to: %s, there may be consequences if you are observed interacting with it, continue?"),
-                _(get_owner_name()))) {
-            return false;
-        }
-    }
-    // set old owner so that we can restore ownership if there are witnesses.
-    set_old_owner(get_owner());
-    if (avatar_funcs::handle_theft_witnesses(you, get_owner())) {
-        // remove the temporary marker for a successful theft, as it was witnessed.
-        remove_old_owner();
-    }
-    // if we got here, then the action will proceed after the previous warning
-    return true;
 }
 
 bool vehicle::balanced_wheel_config() const {

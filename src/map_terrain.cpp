@@ -98,6 +98,7 @@
 #include "value_ptr.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_ownership.h"
 #include "vehicle_part.h"
 #include "visitable.h"
 #include "vpart_position.h"
@@ -175,7 +176,7 @@ auto horde_should_avoid_vehicle_tile(
     if (!vp) { return false; }
 
     const auto& veh = vp->vehicle();
-    return veh.is_owned_by(get_avatar());
+    return vehicle_ownership::is_owned_by(veh, get_avatar());
 }
 
 } // namespace
@@ -421,14 +422,14 @@ bool map::open_door_veh(
 
     if (std::holds_alternative<Character*>(who)) {
         auto& you = *std::get<Character*>(who);
-        if (you.is_avatar() && !vp->vehicle().handle_potential_theft(*you.as_avatar())) {
+        if (you.is_avatar() && !vehicle_ownership::handle_potential_theft(vp->vehicle(), *you.as_avatar())) {
             return false;
         }
     }
 
     const auto is_owner = std::visit(
         [&]<typename T>(T u) -> bool {
-            if constexpr (std::is_same_v<T, Character*>) { return vp->vehicle().is_owned_by(*u); }
+            if constexpr (std::is_same_v<T, Character*>) { return vehicle_ownership::is_owned_by(vp->vehicle(), *u); }
             return false;
         },
         who);

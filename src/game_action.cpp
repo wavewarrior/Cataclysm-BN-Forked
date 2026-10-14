@@ -77,6 +77,7 @@
 #include "ui_manager.h"
 #include "units.h"
 #include "vehicle.h"
+#include "vehicle_ownership.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 #include "weather.h"
@@ -411,16 +412,16 @@ void game::control_vehicle() {
             return;
         }
         if (!veh->interact_vehicle_locked()) {
-            veh->handle_potential_theft(u);
+            vehicle_ownership::handle_potential_theft(*veh, u);
             return;
         }
         if (veh->engine_on) {
-            if (!veh->handle_potential_theft(u)) { return; }
+            if (!vehicle_ownership::handle_potential_theft(*veh, u)) { return; }
             u.controlling_vehicle = true;
             if (u.movement_mode_is(CMM_PRONE)) { u.set_movement_mode(CMM_WALK); }
             add_msg(_("You take control of the %s."), veh->name);
         } else {
-            if (!veh->handle_potential_theft(u)) { return; }
+            if (!vehicle_ownership::handle_potential_theft(*veh, u)) { return; }
             veh->start_engines(true);
         }
     } else { // Start looking for nearby vehicle controls.
@@ -460,7 +461,7 @@ void game::control_vehicle() {
         // already have been found.
         if (vehicle_controls) {
             veh = &vehicle_controls->vehicle();
-            if (!veh->handle_potential_theft(u)) { return; }
+            if (!vehicle_ownership::handle_potential_theft(*veh, u)) { return; }
             veh->use_controls(tripoint_bub_ms(*vehicle_position));
             // May be folded up (destroyed), so need to re-get it
             veh = g->remoteveh();
@@ -1829,8 +1830,8 @@ auto game::post_action_world_step() -> void {
     // If controlling a vehicle that is owned by someone else
     if (u.in_vehicle && u.controlling_vehicle) {
         vehicle* veh = veh_pointer_or_null(m.veh_at(u.bub_pos()));
-        if (veh && !veh->handle_potential_theft(u, true)) {
-            veh->handle_potential_theft(u, false, false);
+        if (veh && !vehicle_ownership::handle_potential_theft(*veh, u, {.check_only = true})) {
+            vehicle_ownership::handle_potential_theft(*veh, u, {.check_only = false, .prompt = false});
         }
     }
     // If riding a horse - chance to spook
@@ -2065,8 +2066,8 @@ auto game::coop_client_turn_step() -> void {
     // If controlling a vehicle that is owned by someone else
     if (u.in_vehicle && u.controlling_vehicle) {
         vehicle* veh = veh_pointer_or_null(m.veh_at(u.bub_pos()));
-        if (veh && !veh->handle_potential_theft(u, true)) {
-            veh->handle_potential_theft(u, false, false);
+        if (veh && !vehicle_ownership::handle_potential_theft(*veh, u, {.check_only = true})) {
+            vehicle_ownership::handle_potential_theft(*veh, u, {.check_only = false, .prompt = false});
         }
     }
     // If riding a horse - chance to spook

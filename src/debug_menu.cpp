@@ -89,6 +89,7 @@
 #include "utils/url.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_ownership.h"
 #include "vehicle_part.h"
 #include "vitamin.h"
 #include "vpart_position.h"
@@ -1644,7 +1645,7 @@ void debug() {
                                 selected_opt, dest, normalize(units::from_degrees(dir)), 100,
                                 veh_cond_menu.ret - 1, true, false, true);
                             if (veh != nullptr) {
-                                veh->set_owner(u);
+                                vehicle_ownership::set_owner(*veh, u);
                                 m.board_vehicle(dest, &u);
                             }
                         }

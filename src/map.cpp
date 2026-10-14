@@ -106,6 +106,7 @@
 #include "value_ptr.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_ownership.h"
 #include "vehicle_part.h"
 #include "visitable.h"
 #include "vpart_position.h"
@@ -183,7 +184,7 @@ auto horde_should_avoid_vehicle_tile(
     if (!vp) { return false; }
 
     const auto& veh = vp->vehicle();
-    return veh.is_owned_by(get_avatar());
+    return vehicle_ownership::is_owned_by(veh, get_avatar());
 }
 
 auto quantized_light_signature_value(const float value) -> int {

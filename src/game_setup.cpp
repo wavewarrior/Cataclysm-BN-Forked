@@ -180,6 +180,7 @@
 #include "veh_type.h"
 #include "vehicle.h"
 #include "vehicle_grab.h"
+#include "vehicle_ownership.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 #include "vpart_range.h"
@@ -689,7 +690,7 @@ bool game::start_game() {
                 u.starting_vehicle, omtstart.xy(), 0, 30, std::vector<std::string>{},
                 u.prof->has_flag("VEH_GROUNDED"));
             if (veh) {
-                veh->set_owner(u);
+                vehicle_ownership::set_owner(*veh, u);
             } else if (query_gen_failed()) {
                 // Same new-game context — primary is always the active dimension here.
                 MAPBUFFER.clear();

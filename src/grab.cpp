@@ -17,6 +17,7 @@
 #include "units.h"
 #include "vehicle.h"
 #include "vehicle_grab.h"
+#include "vehicle_ownership.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 #include "vpart_range.h"
@@ -100,7 +101,7 @@ bool game::grabbed_veh_move(const tripoint_rel_ms& dp) {
     const auto& grabbed_vehicle_vp = grabbed_vehicle_target->vp;
     u.grab_point = grabbed_vehicle_target->pos - u.bub_pos();
     auto* grabbed_vehicle = &grabbed_vehicle_vp.vehicle();
-    if (!grabbed_vehicle || !grabbed_vehicle->handle_potential_theft(u)) { return false; }
+    if (!grabbed_vehicle || !vehicle_ownership::handle_potential_theft(*grabbed_vehicle, u)) { return false; }
     const auto grabbed_part = static_cast<int>(grabbed_vehicle_vp.part_index());
     for (const vpart_reference& part : grabbed_vehicle->get_all_parts()) {
         auto* mon = grabbed_vehicle->get_pet(static_cast<int>(part.part_index()));

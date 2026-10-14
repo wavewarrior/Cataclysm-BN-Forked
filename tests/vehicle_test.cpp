@@ -26,6 +26,7 @@
 #include "units_utility.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_ownership.h"
 #include "vehicle_part.h"
 #include "vehicle_wait.h"
 #include "vpart_position.h"
@@ -96,7 +97,7 @@ auto make_horde_vehicle_spawn_fixture(const horde_vehicle_spawn_options& options
     const auto horde = ACTIVE_OVERMAP_BUFFER.create_horde(group);
     REQUIRE(horde != nullptr);
 
-    if (options.owned) { veh->set_owner(you); }
+    if (options.owned) { vehicle_ownership::set_owner(*veh, you); }
     if (options.tracked) { veh->toggle_tracking(); }
 
     const auto vehicle_points = veh->get_points(true);

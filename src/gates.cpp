@@ -26,6 +26,7 @@
 #include "type_id_implement.h"
 #include "units.h"
 #include "vehicle.h"
+#include "vehicle_ownership.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 
@@ -276,7 +277,7 @@ void doors::close_door(map& m, Character& who, const tripoint_bub_ms& closep) {
         const int inside_closable = veh->next_part_to_close(vpart);
         const int openable = veh->next_part_to_open(vpart);
         if (closable >= 0) {
-            if (who.is_avatar() && !veh->handle_potential_theft(*who.as_avatar())) { return; }
+            if (who.is_avatar() && !vehicle_ownership::handle_potential_theft(*veh, *who.as_avatar())) { return; }
             Character* ch = who.as_character();
             if (ch && veh->can_close(closable, *ch)) {
                 veh->close(closable);

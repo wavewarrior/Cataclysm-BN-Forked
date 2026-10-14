@@ -60,6 +60,7 @@
 #include "veh_type.h"
 #include "vehicle.h"
 #include "vehicle_grab.h"
+#include "vehicle_ownership.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 
@@ -279,7 +280,7 @@ bool game::walk_move(const tripoint_bub_ms& dest_loc, const bool via_ramp) {
     if ((m.impassable(dest_loc) && !character_funcs::can_noclip(u)) && !pushing
         && !shifting_furniture) {
         if (vp_there && u.mounted_creature && u.mounted_creature->has_flag(MF_RIDEABLE_MECH)
-            && vp_there->vehicle().handle_potential_theft(u)) {
+            && vehicle_ownership::handle_potential_theft(vp_there->vehicle(), u)) {
             auto diff = dest_loc - u.bub_pos();
             if (diff.x() < 0) {
                 diff.x() -= 2;
@@ -295,7 +296,7 @@ bool game::walk_move(const tripoint_bub_ms& dest_loc, const bool via_ramp) {
         }
         return false;
     }
-    if (vp_there && !vp_there->vehicle().handle_potential_theft(u)) { return false; }
+    if (vp_there && !vehicle_ownership::handle_potential_theft(vp_there->vehicle(), u)) { return false; }
     if (u.is_mounted() && !pushing && vp_there) {
         add_msg(m_warning, _("You cannot board a vehicle whilst riding."));
         return false;

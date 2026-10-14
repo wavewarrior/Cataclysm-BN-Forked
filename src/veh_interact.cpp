@@ -50,6 +50,7 @@
 #include "veh_utils.h"
 #include "vehicle.h"
 #include "vehicle_display.h"
+#include "vehicle_ownership.h"
 #include "vehicle_part.h"
 #include "vehicle_preview.h"
 #include "vehicle_selector.h"
@@ -437,9 +438,9 @@ void veh_interact::hide_ui(const bool hide) {
 void veh_interact::do_main_loop() {
     avatar& you = get_avatar();
     bool finish = false;
-    const bool owned_by_player = veh->handle_potential_theft(you, true);
+    const bool owned_by_player = vehicle_ownership::handle_potential_theft(*veh, you, {.check_only = true});
     faction* owner_fac;
-    if (veh->has_owner()) {
+    if (vehicle_ownership::has_owner(*veh)) {
         owner_fac = g->faction_manager_ptr->get(veh->get_owner());
     } else {
         owner_fac = g->faction_manager_ptr->get(faction_id("no_faction"));
@@ -524,15 +525,15 @@ void veh_interact::do_main_loop() {
         } else if (action == "QUIT") {
             finish = true;
         } else if (action == "INSTALL") {
-            if (veh->handle_potential_theft(you)) { do_install(); }
+            if (vehicle_ownership::handle_potential_theft(*veh, you)) { do_install(); }
         } else if (action == "REPAIR") {
-            if (veh->handle_potential_theft(you)) { do_repair(); }
+            if (vehicle_ownership::handle_potential_theft(*veh, you)) { do_repair(); }
         } else if (action == "MEND") {
-            if (veh->handle_potential_theft(you)) { do_mend(); }
+            if (vehicle_ownership::handle_potential_theft(*veh, you)) { do_mend(); }
         } else if (action == "REFILL") {
-            if (veh->handle_potential_theft(you)) { do_refill(); }
+            if (vehicle_ownership::handle_potential_theft(*veh, you)) { do_refill(); }
         } else if (action == "REMOVE") {
-            if (veh->handle_potential_theft(you)) { do_remove(); }
+            if (vehicle_ownership::handle_potential_theft(*veh, you)) { do_remove(); }
         } else if (action == "RENAME") {
             if (owned_by_player) {
                 do_rename();
@@ -543,7 +544,7 @@ void veh_interact::do_main_loop() {
                 }
             }
         } else if (action == "SIPHON") {
-            if (veh->handle_potential_theft(you)) {
+            if (vehicle_ownership::handle_potential_theft(*veh, you)) {
                 do_siphon();
                 // Siphoning may have started a player activity. If so, we should close the
                 // vehicle dialog and continue with the activity.
@@ -554,7 +555,7 @@ void veh_interact::do_main_loop() {
                 }
             }
         } else if (action == "UNLOAD") {
-            if (veh->handle_potential_theft(you)) { finish = do_unload(); }
+            if (vehicle_ownership::handle_potential_theft(*veh, you)) { finish = do_unload(); }
         } else if (action == "CHANGE_SHAPE") {
             // purely cosmetic
             do_change_shape();
@@ -2784,8 +2785,8 @@ void veh_interact::sync_rml() {
     if (!rml || !rml_data) { return; }
 
     // Vehicle name line (parallels display_name).
-    const std::string name = string_format(_("%s (%s)"), veh->name, veh->get_owner_name());
-    const nc_color name_col = !veh->is_owned_by(get_avatar(), true) ? c_light_red : c_light_green;
+    const std::string name = string_format(_("%s (%s)"), veh->name, vehicle_ownership::get_owner_name(*veh));
+    const nc_color name_col = !vehicle_ownership::is_owned_by(*veh, get_avatar(), true) ? c_light_red : c_light_green;
     rml_data->name_rml = cata_text_to_rml(
         colorize(_("Name: "), c_light_gray) + colorize(name, name_col));
 

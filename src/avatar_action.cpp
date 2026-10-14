@@ -57,6 +57,7 @@
 #include "vehicle.h"
 #include "vehicle_display.h"
 #include "vehicle_grab.h"
+#include "vehicle_ownership.h"
 #include "vehicle_part.h"
 #include "vehicle_throw.h"
 #include "vpart_position.h"
@@ -92,7 +93,7 @@ auto try_shove_grabbed_vehicle(avatar& you) -> bool {
     }
 
     auto& veh = grabbed_vehicle_target->vp.vehicle();
-    if (!veh.handle_potential_theft(you)) { return true; }
+    if (!vehicle_ownership::handle_potential_theft(veh, you)) { return true; }
 
     const auto shove_strength = character_funcs::get_lift_strength_with_helpers(you);
     const auto effective_shove_strength =
@@ -804,7 +805,7 @@ void avatar_action::swim(map& m, avatar& you, const tripoint_bub_ms& p) {
         return;
     }
     if (const auto vp = m.veh_at(p).part_with_feature(VPFLAG_BOARDABLE, true)) {
-        if (!vp->vehicle().handle_potential_theft(you)) { return; }
+        if (!vehicle_ownership::handle_potential_theft(vp->vehicle(), you)) { return; }
     }
     if (m.has_flag_ter_or_furn(TFLAG_HIDE_PLACE, p) && you.get_size() <= creature_size::medium) {
         add_msg(m_good, _("You are hiding in the %s."), m.name(p));

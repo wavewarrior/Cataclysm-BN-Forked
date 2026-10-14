@@ -96,6 +96,7 @@
 #include "value_ptr.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_ownership.h"
 #include "vehicle_part.h"
 #include "vehicle_selector.h"
 #include "visitable.h"
@@ -376,7 +377,7 @@ int unfold_vehicle_iuse::use(player& p, item& it, bool, const tripoint_bub_ms&) 
         p.add_msg_if_player(m_info, _("There's no room to unfold the %s."), it.tname());
         return 0;
     }
-    veh->set_owner(p);
+    vehicle_ownership::set_owner(*veh, p);
 
     if (!veh->is_foldable()) {
         // Mark the vehicle as foldable.

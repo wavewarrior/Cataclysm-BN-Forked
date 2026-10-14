@@ -188,6 +188,7 @@
 #include "veh_type.h"
 #include "vehicle.h"
 #include "vehicle_grab.h"
+#include "vehicle_ownership.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 #include "vpart_range.h"
@@ -880,8 +881,8 @@ bool game::do_turn() {
     // If controlling a vehicle that is owned by someone else
     if (u.in_vehicle && u.controlling_vehicle) {
         vehicle* veh = veh_pointer_or_null(m.veh_at(u.bub_pos()));
-        if (veh && !veh->handle_potential_theft(u, true)) {
-            veh->handle_potential_theft(u, false, false);
+        if (veh && !vehicle_ownership::handle_potential_theft(*veh, u, {.check_only = true})) {
+            vehicle_ownership::handle_potential_theft(*veh, u, {.check_only = false, .prompt = false});
         }
     }
     // If riding a horse - chance to spook

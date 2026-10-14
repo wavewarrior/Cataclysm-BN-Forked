@@ -39,6 +39,7 @@
 #include "type_id.h"
 #include "units.h"
 #include "vehicle.h"
+#include "vehicle_ownership.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 
@@ -945,10 +946,10 @@ void spell_effect::spawn_summoned_vehicle(
         here.add_vehicle(sp.summon_vehicle_id(), target, -90_degrees, 100, 0, false, false, true);
     if (veh) {
         veh->magic = true;
-        if (caster.is_player()) { veh->set_owner(*caster.as_player()); }
+        if (caster.is_player()) { vehicle_ownership::set_owner(*veh, *caster.as_player()); }
         const time_duration summon_time = sp.duration_turns();
         if (!sp.has_flag(spell_flag::PERMANENT)) { veh->summon_time_limit = summon_time; }
-        if (caster.as_character()) { veh->set_owner(*caster.as_character()); }
+        if (caster.as_character()) { vehicle_ownership::set_owner(*veh, *caster.as_character()); }
     }
 }
 
