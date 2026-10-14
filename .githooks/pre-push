@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Refuses a push whose tip `deno task check` has not passed on this clone: a passing run writes
+# the commit it tested to <CHECK_LOG_DIR or .check>/passed, and every pushed branch tip must match.
+# Run the check where the executor is (the Linux box); push from the clone where it passed.
+# A deliberate override, visible in the command line:  CHECK_SKIP=1 git push
+# Enable once per clone: git config core.hooksPath .githooks
+set -euo pipefail
+
+[[ "${CHECK_SKIP:-}" == "1" ]] && exit 0
+
+repo_root="$(git rev-parse --show-toplevel)"
+stamp="${CHECK_LOG_DIR:-$repo_root/.check}/passed"
+passed=""
+[[ -f "$stamp" ]] && passed="$(<"$stamp")"
+zero="0000000000000000000000000000000000000000"
+
+blocked=0
+while read -r local_ref local_sha _remote_ref _remote_sha; do
+    [[ "$local_sha" == "$zero" ]] && continue # a branch deletion
+    [[ "$local_ref" == refs/tags/* ]] && continue
+    if [[ "$local_sha" != "$passed" ]]; then
+        echo "pre-push: $local_ref at ${local_sha:0:10} has not passed \`deno task check\` on this clone (stamp: ${passed:0:10})." >&2
+        blocked=1
+    fi
+done
+
+if ((blocked)); then
+    echo "pre-push: run \`deno task check\` on the Linux executor and push from there, or override with CHECK_SKIP=1." >&2
+    exit 1
+fi

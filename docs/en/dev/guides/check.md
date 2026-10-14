@@ -1,7 +1,7 @@
 # Check: the one gate
 
 `deno task check` is the whole definition of done: one command, one exit code, run on the Executor
-(the Linux side of the home box, or the GitHub runner in CI). Implementation: `tools/check/main.ts`;
+(the Linux side of the home box). There is no CI: this command is the gate. Implementation: `tools/check/main.ts`;
 the step policy (ordering, guard matching, base resolution, event-log writing) is pure and unit-tested
 next to it.
 
@@ -9,8 +9,7 @@ next to it.
 deno task check [--base <ref>] [--no-fix] [--jobs N]
 ```
 
-`--base` defaults to `origin/feature/improvements`; `--no-fix` skips the auto-fix step (CI runs with
-it); `--jobs` defaults to the machine's core count. Environment: `CHECK_LOG_DIR` (default
+`--base` defaults to `origin/feature/improvements`; `--no-fix` skips the auto-fix step; `--jobs` defaults to the machine's core count. Environment: `CHECK_LOG_DIR` (default
 `./.check/`), `CHECK_SEED_DIR` (a configured build dir whose fetched dependency sources to reuse),
 `CHECK_ALLOW_PROTECTED=1` (a human override for the guard).
 
@@ -47,3 +46,12 @@ deno task lane stop 123
 
 There is no watcher, no label state machine and no stamps: the issue is the queue, `check` is the
 gate, the human merges.
+
+## The pre-push hook
+
+A passing run writes the commit it tested to `.check/passed` (only when every step passed and the
+tracked tree matched that commit). `.githooks/pre-push` refuses a push whose branch tip is not that
+commit, so a push without a passing `check` fails locally. Run `check` on the Linux executor and
+push from the clone where it passed. `CHECK_SKIP=1 git push` overrides it, deliberately and visibly.
+Enable the hooks once per clone with `git config core.hooksPath .githooks`.
+

@@ -33,6 +33,15 @@ const GAME_BIN = `out/build/${PRESET}/src/cataclysm-bn-tiles`
 
 const flag = (name: string): string | undefined => Deno.env.get(name) || undefined
 
+/// What the pre-push hook trusts: the commit this run tested, written only when every step passed
+/// and the working tree matched that commit (an edited tree proves nothing about the commit).
+async function writePassStamp(logDir: string): Promise<void> {
+  const dirty = (await run(["git", "status", "--porcelain", "--untracked-files=no"])).stdout.trim()
+  if (dirty !== "") return
+  const head = (await run(["git", "rev-parse", "HEAD"])).stdout.trim()
+  if (head !== "") await Deno.writeTextFile(join(logDir, "passed"), head + "\n")
+}
+
 async function gitLines(args: string[]): Promise<string[]> {
   const result = await run(["git", ...args])
   if (result.code !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr.trim()}`)
@@ -225,7 +234,9 @@ async function main(): Promise<number> {
     await record("coop", coop.code === 0 ? "pass" : "fail", started, `exit ${coop.code}`)
   }
 
-  return exitCode(events)
+  const code = exitCode(events)
+  if (code === 0) await writePassStamp(logDir)
+  return code
 }
 
 if (import.meta.main) {
