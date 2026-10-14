@@ -48,6 +48,7 @@
 #include "ui_manager.h"
 #include "uistate.h"
 #include "vehicle.h"
+#include "vehicle_display.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 
@@ -580,7 +581,7 @@ std::string editmap::info_panel_text(const std::string& txt, const std::string& 
         s += critter->print_info_text() + "\n";
     } else if (vp) {
         s += string_format(_("There is a %s there.  Parts:"), vp->vehicle().name) + "\n";
-        s += vp->vehicle().part_list_text(vp->part_index()) + "\n";
+        s += vehicle_display::part_list_text(vp->vehicle(), vp->part_index()) + "\n";
     }
     map_stack target_stack = here.i_at(target);
     const int target_stack_size = target_stack.size();

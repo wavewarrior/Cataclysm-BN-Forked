@@ -50,6 +50,7 @@
 #include "trap.h"
 #include "type_id.h"
 #include "vehicle.h"
+#include "vehicle_display.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 
@@ -2665,7 +2666,7 @@ void monster::shove_vehicle(
                     //~ %1$s - monster name, %2$s - vehicle name
                     g->u.add_msg_if_player(
                         m_bad, _("%1$s shoves %2$s out of their way!"), disp_name(false, true),
-                        veh.disp_name());
+                        vehicle_display::disp_name(veh));
                 }
                 int shove_moves = shove_veh_mass_moves_factor * veh_mass / 10_kilogram;
                 shove_moves = std::max(shove_moves, shove_moves_minimal);

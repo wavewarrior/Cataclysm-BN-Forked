@@ -409,9 +409,6 @@ private:
     // get vpart epowerinfo for part number.
     int part_epower_w(int index) const;
 
-    // convert watts over time to battery energy
-    int power_to_energy_bat(int power_w, const time_duration& d) const;
-
     // convert vhp to watts.
     static int vhp_to_watts(int power);
 
@@ -530,16 +527,6 @@ public:
     void serialize(JsonOut& json) const;
     void deserialize(JsonIn& jsin);
 
-    // RmlUi (veh_interact slice 4): the parts-at-tile list as one colour-tagged
-    // string (rows joined with \n), parallel to print_part_list. The curses
-    // x-positioned symbols / right-aligned Interior-Exterior marker are inlined
-    // and the scroll windowing is dropped; the hl row gets a "> " prefix.
-    std::string part_list_text(int p, int hl = -1) const;
-
-    // Colour-tagged descriptions for all parts on a single tile (RmlUi path; call
-    // with a large max_y to disable the scroll windowing).
-    std::string parts_descs_text(
-        int max_y, int width, int p, int& start_at, int& start_limit) const;
     // towing functions
     void invalidate_towing(bool first_vehicle = false);
     void do_towing_move();
@@ -844,26 +831,6 @@ public:
     // Given a part, finds its index in the vehicle
     int index_of_part(const vehicle_part* part, bool check_removed = false) const;
 
-    // get symbol for map
-    char part_sym(int p, bool exact = false) const;
-    vpart_id part_id_string(int p, bool roof, char& part_mod) const;
-    auto part_display_direction(int p, bool roof = false) const -> units::angle;
-
-    // get color for map
-    nc_color part_color(int p, bool exact = false) const;
-
-    // get text and color of damage summary (e.g. "like new" or "battered")
-    auto vehicle_damage_summary() const -> std::pair<std::string, nc_color>;
-
-    // Get all printable fuel types
-    std::vector<itype_id> get_printable_fuel_types() const;
-
-    // RmlUi (veh_interact slice 4b): the fuel gauges as colour-tagged text
-    // lines, parallel to print_fuel_indicators/print_fuel_indicator. The E…F
-    // ASCII gauge bar is dropped (semantic); each line is "<fuel>  NN%" plus
-    // the verbose rate / time-to-full/empty suffix.
-    std::vector<std::string> fuel_indicator_lines() const;
-
     // Refresh part locations
     void refresh_position();
 
@@ -969,6 +936,8 @@ public:
     int total_accessory_epower_w() const;
     // Net power draw or drain on batteries.
     int net_battery_charge_rate_w() const;
+    // convert watts over time to battery energy
+    int power_to_energy_bat(int power_w, const time_duration& d) const;
     // Maximum available power available from all reactors. Power from
     // reactors is only drawn when batteries are empty.
     int max_reactor_epower_w() const;
@@ -1618,8 +1587,6 @@ public:
     bool check_rotated_intervening(
         const tripoint_mnt_veh& from, const tripoint_mnt_veh& to,
         bool (*check)(const vehicle*, const tripoint_mnt_veh&)) const;
-
-    std::string disp_name() const;
 
     /** Required strength to be able to successfully lift the vehicle unaided by equipment */
     int lift_strength() const;

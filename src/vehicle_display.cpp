@@ -13,12 +13,15 @@
 #include "units_utility.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_display.h"
 #include "vehicle_part.h" // IWYU pragma: associated
 #include "vpart_position.h"
+#include "vpart_range.h"
 
 #include <algorithm>
 #include <cstdlib>
 #include <memory>
+#include <numeric>
 #include <optional>
 #include <set>
 
@@ -26,72 +29,76 @@ static const std::string part_location_structure("structure");
 static const itype_id itype_battery("battery");
 static const itype_id fuel_type_muscle("muscle");
 
-std::string vehicle::disp_name() const { return string_format(_("the %s"), name); }
+namespace vehicle_display {
 
-char vehicle::part_sym(const int p, const bool exact) const {
-    if (p < 0 || p >= static_cast<int>(parts.size()) || parts[p].removed) { return ' '; }
+auto disp_name(const vehicle& veh) -> std::string {
+    return string_format(_("the %s"), veh.name);
+}
 
-    const int displayed_part = exact ? p : part_displayed_at(parts[p].mount);
+auto part_sym(const vehicle& veh, const int p, const bool exact) -> char {
+    if (p < 0 || p >= veh.part_count() || veh.cpart(p).removed) { return ' '; }
 
-    if (part_flag(displayed_part, VPFLAG_OPENABLE) && parts[displayed_part].open) {
+    const int displayed_part = exact ? p : veh.part_displayed_at(veh.cpart(p).mount);
+
+    if (veh.part_flag(displayed_part, VPFLAG_OPENABLE) && veh.cpart(displayed_part).open) {
         // open door
         return '\'';
     } else {
-        return parts[displayed_part].is_broken()
-                 ? part_info(displayed_part).sym_broken
-                 : (parts[displayed_part].proxy_sym == '\0'
-                        ? part_info(displayed_part).sym
-                        : parts[displayed_part].proxy_sym);
+        return veh.cpart(displayed_part).is_broken()
+                 ? veh.part_info(displayed_part).sym_broken
+                 : (veh.cpart(displayed_part).proxy_sym == '\0'
+                        ? veh.part_info(displayed_part).sym
+                        : veh.cpart(displayed_part).proxy_sym);
     }
 }
 
-auto vehicle::part_display_direction(const int p, const bool roof) const -> units::angle {
-    if (p < 0 || p >= static_cast<int>(parts.size()) || parts[p].removed) { return face.dir(); }
+auto part_display_direction(const vehicle& veh, const int p, const bool roof) -> units::angle {
+    if (p < 0 || p >= veh.part_count() || veh.cpart(p).removed) { return veh.face.dir(); }
 
     int displayed_part = -1;
-    if (roof) { displayed_part = roof_at_part(p); }
-    if (displayed_part < 0 || displayed_part >= static_cast<int>(parts.size())
-        || parts[displayed_part].removed) {
-        displayed_part = part_displayed_at(parts[p].mount);
+    if (roof) { displayed_part = veh.roof_at_part(p); }
+    if (displayed_part < 0 || displayed_part >= veh.part_count()
+        || veh.cpart(displayed_part).removed) {
+        displayed_part = veh.part_displayed_at(veh.cpart(p).mount);
     }
-    if (displayed_part < 0 || displayed_part >= static_cast<int>(parts.size())
-        || parts[displayed_part].removed) {
-        return face.dir();
+    if (displayed_part < 0 || displayed_part >= veh.part_count()
+        || veh.cpart(displayed_part).removed) {
+        return veh.face.dir();
     }
 
-    return normalize(face.dir() + parts[displayed_part].direction);
+    return normalize(veh.face.dir() + veh.cpart(displayed_part).direction);
 }
 
-// similar to part_sym(int p) but for use when drawing SDL tiles. Called only by cata_tiles
+// similar to part_sym() but for use when drawing SDL tiles. Called only by cata_tiles
 // during draw_vpart vector returns at least 1 element, max of 2 elements. If 2 elements the
 // second denotes if it is open or damaged
-vpart_id vehicle::part_id_string(const int p, bool roof, char& part_mod) const {
+auto part_id_string(const vehicle& veh, const int p, bool roof, char& part_mod) -> vpart_id {
     part_mod = 0;
-    if (p < 0 || p >= static_cast<int>(parts.size()) || parts[p].removed) {
+    if (p < 0 || p >= veh.part_count() || veh.cpart(p).removed) {
         return vpart_id::NULL_ID();
     }
 
     int displayed_part = -1;
 
-    if (roof) { displayed_part = roof_at_part(p); }
-    if (displayed_part < 0 || displayed_part >= static_cast<int>(parts.size())
-        || parts[displayed_part].removed) {
-        displayed_part = part_displayed_at(parts[p].mount);
+    if (roof) { displayed_part = veh.roof_at_part(p); }
+    if (displayed_part < 0 || displayed_part >= veh.part_count()
+        || veh.cpart(displayed_part).removed) {
+        displayed_part = veh.part_displayed_at(veh.cpart(p).mount);
     }
-    if (displayed_part < 0 || displayed_part >= static_cast<int>(parts.size())
-        || parts[displayed_part].removed) {
+    if (displayed_part < 0 || displayed_part >= veh.part_count()
+        || veh.cpart(displayed_part).removed) {
         return vpart_id::NULL_ID();
     }
 
     const vpart_id idinfo =
-        parts[displayed_part].proxy_part_id == vpart_id::NULL_ID()
-            ? parts[displayed_part].id
-            : parts[displayed_part].proxy_part_id;
+        veh.cpart(displayed_part).proxy_part_id == vpart_id::NULL_ID()
+            ? veh.part_info(displayed_part).id
+            : veh.cpart(displayed_part).proxy_part_id;
 
-    if (part_flag(displayed_part, VPFLAG_OPENABLE) && parts[displayed_part].open) {
+    if (veh.part_flag(displayed_part, VPFLAG_OPENABLE) && veh.cpart(displayed_part).open) {
         // open
         part_mod = 1;
-    } else if (parts[displayed_part].is_broken()) {
+    } else if (veh.cpart(displayed_part).is_broken()) {
         // broken
         part_mod = 2;
     }
@@ -99,8 +106,8 @@ vpart_id vehicle::part_id_string(const int p, bool roof, char& part_mod) const {
     return idinfo;
 }
 
-nc_color vehicle::part_color(const int p, const bool exact) const {
-    if (p < 0 || p >= static_cast<int>(parts.size())) { return c_black; }
+auto part_color(const vehicle& veh, const int p, const bool exact) -> nc_color {
+    if (p < 0 || p >= veh.part_count()) { return c_black; }
 
     nc_color col;
 
@@ -108,59 +115,84 @@ nc_color vehicle::part_color(const int p, const bool exact) const {
 
     // If armoring is present and the option is set, it colors the visible part
     if (get_option<bool>("VEHICLE_ARMOR_COLOR")) {
-        parm = part_with_feature(p, VPFLAG_ARMOR, false);
+        parm = veh.part_with_feature(p, VPFLAG_ARMOR, false);
     }
 
     if (parm >= 0) {
-        col = part_info(parm).color;
+        col = veh.part_info(parm).color;
     } else {
-        const int displayed_part = exact ? p : part_displayed_at(parts[p].mount);
+        const int displayed_part = exact ? p : veh.part_displayed_at(veh.cpart(p).mount);
 
-        if (displayed_part < 0 || displayed_part >= static_cast<int>(parts.size())) {
+        if (displayed_part < 0 || displayed_part >= veh.part_count()) {
             return c_black;
         }
-        if (parts[displayed_part].blood > 200) {
+        if (veh.cpart(displayed_part).blood > 200) {
             col = c_red;
-        } else if (parts[displayed_part].blood > 0) {
+        } else if (veh.cpart(displayed_part).blood > 0) {
             col = c_light_red;
-        } else if (parts[displayed_part].is_broken()) {
-            col = part_info(displayed_part).color_broken;
+        } else if (veh.cpart(displayed_part).is_broken()) {
+            col = veh.part_info(displayed_part).color_broken;
         } else {
-            col = part_info(displayed_part).color;
+            col = veh.part_info(displayed_part).color;
         }
     }
 
     if (exact) { return col; }
 
     // curtains turn windshields gray
-    int curtains = part_with_feature(p, VPFLAG_CURTAIN, false);
+    int curtains = veh.part_with_feature(p, VPFLAG_CURTAIN, false);
     if (curtains >= 0) {
-        if (part_with_feature(p, VPFLAG_WINDOW, true) >= 0 && !parts[curtains].open) {
-            col = part_info(curtains).color;
+        if (veh.part_with_feature(p, VPFLAG_WINDOW, true) >= 0 && !veh.cpart(curtains).open) {
+            col = veh.part_info(curtains).color;
         }
     }
 
     // Invert colors for cargo parts with stuff in them
-    int cargo_part = part_with_feature(p, VPFLAG_CARGO, true);
-    if (cargo_part > 0 && !get_items(cargo_part).empty()) {
+    int cargo_part = veh.part_with_feature(p, VPFLAG_CARGO, true);
+    if (cargo_part > 0 && !veh.get_items(cargo_part).empty()) {
         return invert_color(col);
     } else {
         return col;
     }
 }
 
+auto vehicle_damage_summary(const vehicle& veh) -> std::pair<std::string, nc_color> {
+    const vehicle_part_range vpr = veh.get_all_parts();
+    const int total_damage =
+        std::accumulate(vpr.begin(), vpr.end(), 0, [](int lhs, const vpart_reference& rhs) {
+            return lhs + std::max(rhs.part().damage(), 0);
+        });
+    const int total_max =
+        std::accumulate(vpr.begin(), vpr.end(), 0, [](int lhs, const vpart_reference& rhs) {
+            return lhs + rhs.part().max_damage();
+        });
+    const int pct = total_max ? 100 * total_damage / total_max : 0;
+
+    if (total_damage == 0) {
+        return {_("perfect"), c_green};
+    } else if (pct < 5) {
+        return {_("like new"), c_light_green};
+    } else if (pct < 33) {
+        return {_("dented"), c_yellow};
+    } else if (pct < 66) {
+        return {_("battered"), c_magenta};
+    } else if (pct < 100) {
+        return {_("wrecked"), c_red};
+    }
+    return {_("destroyed"), c_dark_gray};
+}
 
 // RmlUi (veh_interact slice 4): the parts-at-tile list as a single colour-tagged
 // string, parallel to print_part_list (detail=true path). The curses x-positioned
 // symbols + the right-aligned Interior/Exterior marker are inlined, and the scroll
 // windowing is dropped for native scroll; the highlighted row gets a "> " prefix.
-std::string vehicle::part_list_text(int p, int hl) const {
-    if (p < 0 || p >= static_cast<int>(parts.size())) { return std::string(); }
-    const std::vector<int> pl = this->parts_at_relative(parts[p].mount, true);
+auto part_list_text(const vehicle& veh, int p, int hl) -> std::string {
+    if (p < 0 || p >= veh.part_count()) { return std::string(); }
+    const std::vector<int> pl = veh.parts_at_relative(veh.cpart(p).mount, true);
     std::string out;
 
     for (size_t i = 0; i < pl.size(); i++) {
-        const vehicle_part& vp = parts[pl[i]];
+        const vehicle_part& vp = veh.cpart(pl[i]);
         std::string partname = vp.name();
 
         if (vp.is_fuel_store() && !vp.ammo_current().is_null()) {
@@ -175,19 +207,19 @@ std::string vehicle::part_list_text(int p, int hl) const {
                     item::nname(vp.ammo_current()));
             }
         }
-        if (part_flag(pl[i], "CARGO")) {
+        if (veh.part_flag(pl[i], "CARGO")) {
             //~ used/total volume of a cargo vehicle part
             partname += string_format(
-                _(" (vol: %s/%s %s)"), format_volume(stored_volume(pl[i])),
-                format_volume(max_volume(pl[i])), volume_units_abbr());
+                _(" (vol: %s/%s %s)"), format_volume(veh.stored_volume(pl[i])),
+                format_volume(veh.max_volume(pl[i])), volume_units_abbr());
         }
 
         std::string left_sym;
         std::string right_sym;
-        if (part_flag(pl[i], "ARMOR")) {
+        if (veh.part_flag(pl[i], "ARMOR")) {
             left_sym = "(";
             right_sym = ")";
-        } else if (part_info(pl[i]).location == part_location_structure) {
+        } else if (veh.part_info(pl[i]).location == part_location_structure) {
             left_sym = "[";
             right_sym = "]";
         } else {
@@ -197,7 +229,7 @@ std::string vehicle::part_list_text(int p, int hl) const {
 
         std::string side;
         if (i == 0) {
-            side = vpart_position(const_cast<vehicle&>(*this), pl[i]).is_inside()
+            side = vpart_position(const_cast<vehicle&>(veh), pl[i]).is_inside()
                      ? _("Interior")
                      : _("Exterior");
         }
@@ -209,7 +241,7 @@ std::string vehicle::part_list_text(int p, int hl) const {
     }
 
     const std::optional<std::string> label =
-        vpart_position(const_cast<vehicle&>(*this), p).get_label();
+        vpart_position(const_cast<vehicle&>(veh), p).get_label();
     if (label) {
         out += colorize(string_format(_("Label: %s"), label.value()), c_light_red) + "\n";
     }
@@ -228,11 +260,11 @@ std::string vehicle::part_list_text(int p, int hl) const {
  */
 // Colour-tagged descriptions for all the parts on a single tile (RmlUi path; call
 // with a large max_y to disable the scroll windowing).
-std::string vehicle::parts_descs_text(
-    int max_y, int width, int p, int& start_at, int& start_limit) const {
-    if (p < 0 || p >= static_cast<int>(parts.size())) { return std::string(); }
+auto parts_descs_text(const vehicle& veh, int max_y, int width, int p, int& start_at,
+                      int& start_limit) -> std::string {
+    if (p < 0 || p >= veh.part_count()) { return std::string(); }
 
-    std::vector<int> pl = this->parts_at_relative(parts[p].mount, true);
+    std::vector<int> pl = veh.parts_at_relative(veh.cpart(p).mount, true);
     std::string msg;
 
     int lines = 0;
@@ -254,11 +286,11 @@ std::string vehicle::parts_descs_text(
      */
     start_at = std::max(0, std::min(start_at, start_limit));
     if (start_at) {
-        msg += std::string("<color_yellow>") + "<  " + _("More parts here…") + "</color>\n";
+        msg += std::string("<color_yellow>") + "<  " + _("More parts…") + "</color>\n";
         lines += 1;
     }
     for (size_t i = start_at; i < pl.size(); i++) {
-        const vehicle_part& vp = parts[pl[i]];
+        const vehicle_part& vp = veh.cpart(pl[i]);
         std::string possible_msg;
         const nc_color name_color = vp.is_broken() ? c_dark_gray : c_light_green;
         possible_msg += colorize(vp.name(), name_color) + "\n";
@@ -280,7 +312,7 @@ std::string vehicle::parts_descs_text(
             lines += new_lines;
             start_limit = start_at;
         } else {
-            msg += std::string("<color_yellow>") + _("More parts here…") + "  >" + "</color>\n";
+            msg += std::string("<color_yellow>") + _("More parts…") + "  >" + "</color>\n";
             start_limit = i;
             break;
         }
@@ -292,16 +324,18 @@ std::string vehicle::parts_descs_text(
  * Returns an array of fuel types that can be printed
  * @return An array of printable fuel type ids
  */
-std::vector<itype_id> vehicle::get_printable_fuel_types() const {
+auto printable_fuel_types(const vehicle& veh) -> std::vector<itype_id> {
     std::set<itype_id> opts;
-    for (const auto& pt : parts) {
+    const int count = veh.part_count();
+    for (int i = 0; i < count; i++) {
+        const vehicle_part& pt = veh.cpart(i);
         if (pt.is_fuel_store() && !pt.ammo_current().is_null()) { opts.emplace(pt.ammo_current()); }
     }
 
     std::vector<itype_id> res(opts.begin(), opts.end());
 
     std::ranges::sort(res, [&](const itype_id& lhs, const itype_id& rhs) {
-        return basic_consumption(rhs) < basic_consumption(lhs);
+        return veh.basic_consumption(rhs) < veh.basic_consumption(lhs);
     });
 
     return res;
@@ -311,12 +345,12 @@ std::vector<itype_id> vehicle::get_printable_fuel_types() const {
 // parallel to print_fuel_indicators (fullsize/verbose path) + print_fuel_indicator.
 // The E…F ASCII gauge bar + the gauge windowing ('>' for more) are dropped; each
 // printable fuel becomes one line "<fuel>  NN%" + the verbose rate / ETA suffix.
-std::vector<std::string> vehicle::fuel_indicator_lines() const {
+auto fuel_indicator_lines(const vehicle& veh) -> std::vector<std::string> {
     std::vector<std::string> lines;
-    const std::vector<itype_id> fuels = get_printable_fuel_types();
+    const std::vector<itype_id> fuels = printable_fuel_types(veh);
     for (const itype_id& fuel_type : fuels) {
-        const int cap = fuel_capacity(fuel_type);
-        const int f_left = fuel_left(fuel_type);
+        const int cap = veh.fuel_capacity(fuel_type);
+        const int f_left = veh.fuel_left(fuel_type);
         const nc_color f_color = fuel_type->color;
         const int pct = cap > 0 ? f_left * 100 / cap : 0;
         std::string line = string_format("%s  %d%%", item::nname(fuel_type), pct);
@@ -324,13 +358,13 @@ std::vector<std::string> vehicle::fuel_indicator_lines() const {
         // Verbose rate / time-to-goal (parallels print_fuel_indicator's verbose block).
         int rate = 0;
         std::string units;
-        const auto fuel_data = fuel_used_last_turn.find(fuel_type);
-        if (fuel_data != fuel_used_last_turn.end()) {
-            rate = -consumption_per_hour(fuel_type, fuel_data->second);
+        const auto fuel_data = veh.fuel_used_last_turn.find(fuel_type);
+        if (fuel_data != veh.fuel_used_last_turn.end()) {
+            rate = -veh.consumption_per_hour(fuel_type, fuel_data->second);
             units = _("mL");
         }
         if (fuel_type == itype_id("battery")) {
-            rate += power_to_energy_bat(net_battery_charge_rate_w(), 1_hours);
+            rate += veh.power_to_energy_bat(veh.net_battery_charge_rate_w(), 1_hours);
             units = _("kJ");
         }
         if (rate != 0 && cap > 0) {
@@ -370,3 +404,5 @@ std::vector<std::string> vehicle::fuel_indicator_lines() const {
     }
     return lines;
 }
+
+} // namespace vehicle_display

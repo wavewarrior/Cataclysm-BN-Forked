@@ -51,6 +51,7 @@
 #include "units_utility.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_display.h"
 #include "vehicle_functions.h"
 #include "vehicle_palette.h"
 #include "vehicle_part.h"   // IWYU pragma: associated
@@ -695,7 +696,7 @@ void vehicle::do_towing_move() {
         // how the hellicopter did this happen?
         // yes, this can happen when towing over a bridge (see #47293)
         invalidate = true;
-        add_msg(m_info, _("A towing cable snaps off of %s."), tow_data.get_towed()->disp_name());
+        add_msg(m_info, _("A towing cable snaps off of %s."), vehicle_display::disp_name(*tow_data.get_towed()));
     }
     if (invalidate) {
         invalidate_towing(true);
@@ -880,7 +881,7 @@ bool vehicle::tow_cable_too_far() const {
     if (!tow_data.get_towed_by()->tow_data.get_towed()) {
         debugmsg(
             "vehicle %s has data for a towing vehicle, but that towing vehicle does not have %s listed as towed",
-            disp_name(), disp_name());
+            vehicle_display::disp_name(*this), vehicle_display::disp_name(*this));
         return false;
     }
     int other_index = tow_data.get_towed_by()->get_tow_part();
@@ -909,7 +910,7 @@ bool vehicle::no_towing_slack() const {
     if (!tow_data.get_towed()->tow_data.get_towed_by()) {
         debugmsg(
             "vehicle %s has data for a towed vehicle, but that towed vehicle does not have %s listed as tower",
-            disp_name(), disp_name());
+            vehicle_display::disp_name(*this), vehicle_display::disp_name(*this));
         return false;
     }
     int other_index = tow_data.get_towed()->get_tow_part();

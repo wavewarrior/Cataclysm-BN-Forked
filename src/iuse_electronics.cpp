@@ -100,6 +100,7 @@
 #include "value_ptr.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_display.h"
 #include "vehicle_part.h"
 #include "vehicle_selector.h"
 #include "visitable.h"
@@ -1418,7 +1419,7 @@ static object_names_collection enumerate_objects_around_point(
             }
         } else if (veh_part_pos.has_value()) {
             const vehicle& veh = veh_part_pos->vehicle();
-            const std::string veh_name = colorize(veh.disp_name(), c_light_blue);
+            const std::string veh_name = colorize(vehicle_display::disp_name(veh), c_light_blue);
             const vehicle* veh_hash = &veh_part_pos->vehicle();
 
             if (!local_vehicles_recorded.contains(veh_hash) && point != point_around_figure) {
@@ -1650,7 +1651,7 @@ static extended_photo_def photo_def_for_camera_point(
         }
     } else if (found_vehicle_aim_point) {
         const optional_vpart_position veh_part_pos = g->m.veh_at(aim_point);
-        const std::string veh_name = colorize(veh_part_pos->vehicle().disp_name(), c_light_blue);
+        const std::string veh_name = colorize(vehicle_display::disp_name(veh_part_pos->vehicle()), c_light_blue);
         photo.name = veh_name;
         photo_text += veh_name + ".";
         map_deincrement_or_erase(obj_coll.vehicles, veh_name);

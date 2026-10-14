@@ -49,6 +49,7 @@
 #include "veh_interact.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_display.h"
 #include "vehicle_move.h"
 #include "vehicle_part.h" // IWYU pragma: associated
 #include "vpart_position.h"
@@ -1796,7 +1797,7 @@ void vehicle::use_harness(int part, const tripoint_bub_ms& pos) {
     m.boarded_vehicle = handle();
     m.boarded_part = part;
     //~ %1$s: monster name, %2$s: vehicle name
-    add_msg(m_info, _("You harness your %1$s to %2$s."), m.get_name(), disp_name());
+    add_msg(m_info, _("You harness your %1$s to %2$s."), m.get_name(), vehicle_display::disp_name(*this));
     if (m.has_effect(effect_tied)) {
         add_msg(m_info, _("You untie your %s."), m.get_name());
         m.remove_effect(effect_tied);

@@ -55,6 +55,7 @@
 #include "value_ptr.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_display.h"
 #include "vehicle_grab.h"
 #include "vehicle_part.h"
 #include "vehicle_throw.h"
@@ -684,8 +685,7 @@ bool avatar_action::move(avatar& you, map& m, const tripoint_rel_ms& d) {
         if (you.is_blind()) {
             if (m.veh_at(dest_loc)) {
                 char part_mod = 0;
-                const vpart_id& vp_id = m.veh_at(dest_loc)->vehicle().part_id_string(
-                    m.veh_at(dest_loc)->part_index(), false, part_mod);
+                const vpart_id& vp_id = vehicle_display::part_id_string(m.veh_at(dest_loc)->vehicle(), m.veh_at(dest_loc)->part_index(), false, part_mod);
                 you.memorize_tile(bub_to_abs(dest_loc), "vp_" + vp_id.str(), 0, 0);
             } else {
                 if (m.has_furn(dest_loc)) {

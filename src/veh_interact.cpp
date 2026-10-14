@@ -49,6 +49,7 @@
 #include "veh_type.h"
 #include "veh_utils.h"
 #include "vehicle.h"
+#include "vehicle_display.h"
 #include "vehicle_part.h"
 #include "vehicle_preview.h"
 #include "vehicle_selector.h"
@@ -957,7 +958,7 @@ bool veh_interact::update_part_requirements() {
  *              1 if moving down
  */
 void veh_interact::move_fuel_cursor(int delta) {
-    int max_fuel_indicators = static_cast<int>(veh->get_printable_fuel_types().size());
+    int max_fuel_indicators = static_cast<int>(vehicle_display::printable_fuel_types(*veh).size());
     int height = 5;
     fuel_index += delta;
 
@@ -2601,10 +2602,10 @@ std::vector<std::string> veh_interact::diagram_lines() const {
     // One glyph per structural part (each square hit once).
     for (const int p : veh->all_standalone_parts()) {
         const units::angle part_direction = normalize(
-            270_degrees + veh->part_display_direction(p) - veh->face.dir());
+            270_degrees + vehicle_display::part_display_direction(*veh, p) - veh->face.dir());
         const tileray part_face(part_direction);
-        const int raw = part_face.dir_symbol(veh->part_sym(p));
-        nc_color pcol = veh->part_color(p);
+        const int raw = part_face.dir_symbol(vehicle_display::part_sym(*veh, p));
+        nc_color pcol = vehicle_display::part_color(*veh, p);
         const point_rel_veh q = (veh->part(p).mount - vehicle_cursor).xy().rotate(3);
         if (q == point_rel_veh::zero()) { pcol = hilite(pcol); }
         const point pos = h_size + q.raw();
@@ -2613,13 +2614,13 @@ std::vector<std::string> veh_interact::diagram_lines() const {
 
     // Centre marker = the cursor tile's part, red when the tile is obstructed.
     {
-        nc_color ccol = cpart >= 0 ? veh->part_color(cpart) : c_dark_gray;
+        nc_color ccol = cpart >= 0 ? vehicle_display::part_color(*veh, cpart) : c_dark_gray;
         std::string csym = " ";
         if (cpart >= 0) {
             const units::angle dir = normalize(
-                270_degrees + veh->part_display_direction(cpart) - veh->face.dir());
+                270_degrees + vehicle_display::part_display_direction(*veh, cpart) - veh->face.dir());
             const tileray pf(dir);
-            csym = veh_sym_to_utf8(special_symbol(pf.dir_symbol(veh->part_sym(cpart))));
+            csym = veh_sym_to_utf8(special_symbol(pf.dir_symbol(vehicle_display::part_sym(*veh, cpart))));
         }
         const auto vehp = veh->mount_to_bubble(vehicle_cursor);
         const map& here = get_map();
@@ -2826,7 +2827,7 @@ void veh_interact::sync_rml() {
             s += ln;
         }
         // Fuel gauges (slice 4b; parallels print_fuel_indicators in display_stats).
-        for (const std::string& ln : veh->fuel_indicator_lines()) {
+        for (const std::string& ln : vehicle_display::fuel_indicator_lines(*veh)) {
             if (!s.empty()) { s += "\n"; }
             s += ln;
         }
@@ -2880,7 +2881,7 @@ void veh_interact::sync_rml() {
 
     // Parts-at-tile list (slice 4; parallels print_part_list — cpart is the part
     // under the diagram cursor, highlight_part the examined row).
-    rml_data->parts_rml = cata_text_to_rml(veh->part_list_text(cpart, highlight_part));
+    rml_data->parts_rml = cata_text_to_rml(vehicle_display::part_list_text(*veh, cpart, highlight_part));
 
     // Descriptions / message pane (slice 4; parallels the w_msg block in on_redraw).
     // A transient `msg` (red) takes priority; otherwise the folded part descriptions.
@@ -2891,7 +2892,7 @@ void veh_interact::sync_rml() {
     } else {
         int at = 0;
         int limit = 0;
-        rml_data->msg_rml = cata_text_to_rml(veh->parts_descs_text(INT_MAX, 50, cpart, at, limit));
+        rml_data->msg_rml = cata_text_to_rml(vehicle_display::parts_descs_text(*veh, INT_MAX, 50, cpart, at, limit));
     }
 
     // 2D vehicle diagram (slice 5; parallels display_veh). One monospace row per
@@ -2956,7 +2957,7 @@ void veh_interact::sync_rml() {
  */
 
 void veh_interact::count_durability() {
-    auto info = veh->vehicle_damage_summary();
+    auto info = vehicle_display::vehicle_damage_summary(*veh);
     total_durability_text = info.first;
     total_durability_color = info.second;
 }

@@ -1,3 +1,4 @@
+#include "vehicle_display.h"
 #include "vehicle_move.h" // IWYU pragma: associated
 
 #include "action_time_scale.h"
@@ -630,7 +631,7 @@ auto vehicle::part_collision(const vehicle_part_collision_options& options) -> v
         //"imp" is too simplistic for vehicle-vehicle collisions
         ret.target = &ovp->vehicle();
         ret.target_part = ovp->part_index();
-        ret.target_name = ovp->vehicle().disp_name();
+        ret.target_name = vehicle_display::disp_name(ovp->vehicle());
         return ret;
     }
 
@@ -1290,7 +1291,7 @@ bool vehicle::check_heli_ascend(Character& who) {
                 blocker_string =
                     here.ter(above)->movecost == 0 ? here.tername(above) : here.furnname(above);
             } else if (has_veh) {
-                blocker_string = here.veh_at(above)->vehicle().disp_name();
+                blocker_string = vehicle_display::disp_name(here.veh_at(above)->vehicle());
             } else if (has_critter) {
                 blocker_string = g->critter_at(above)->disp_name();
             } else {
