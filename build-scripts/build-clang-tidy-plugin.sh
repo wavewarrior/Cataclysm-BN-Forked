@@ -2,35 +2,23 @@
 
 set -exo pipefail
 
-BUILD_TYPE=${BUILD_TYPE:-"RelWithDeb"}
-
+LLVM_PREFIX=${LLVM_PREFIX:-/usr/lib/llvm-22}
 NUM_JOBS=${NUM_JOBS:-$(nproc)}
-BUILD_PATH=${BUILD_PATH:-"build"}
+# Next to the linux-fast build, where `deno task tidy:changed` looks for it.
+BUILD_PATH=${BUILD_PATH:-"out/build/linux-fast/tools/clang-tidy-plugin"}
 
 echo "Using bash version $BASH_VERSION with $NUM_JOBS jobs"
-echo "Creating build files at $BUILD_PATH"
+echo "Building the clang-tidy plugin at $BUILD_PATH against $LLVM_PREFIX"
 
-# We might need binaries installed via pip, so ensure that our personal bin dir is on the PATH
-export PATH=$HOME/.local/bin:$PATH
-
+# The plugin is its own CMake project: it needs LLVM and Clang development files only, not the
+# game's dependencies.
 cmake \
+  -S tools/clang-tidy-plugin \
   -B "$BUILD_PATH" \
   -G Ninja \
-  -DBACKTRACE=ON \
-  -DCMAKE_C_COMPILER=/usr/bin/clang \
-  -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
-  -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-  -DLLVM_ROOT=$(llvm-config --prefix) \
-  -DLLVM_DIR=$(llvm-config --cmakedir) \
-  -DCMAKE_PREFIX_PATH=$(llvm-config --prefix) \
-  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-  -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
-  -DSOUND="$SOUND" \
-  -DLIBBACKTRACE="${LIBBACKTRACE:-0}" \
-  -DLINKER=mold \
-  -DLUA=ON \
-  -DCATA_CLANG_TIDY_PLUGIN=ON
+  -DCMAKE_C_COMPILER="$LLVM_PREFIX/bin/clang" \
+  -DCMAKE_CXX_COMPILER="$LLVM_PREFIX/bin/clang++" \
+  -DCMAKE_PREFIX_PATH="$LLVM_PREFIX" \
+  -DCMAKE_BUILD_TYPE=Release
 
 ninja -C "$BUILD_PATH" -j"$NUM_JOBS" CataAnalyzerPlugin
-ln -s "$BUILD_PATH/compile_commands.json" compile_commands.json	

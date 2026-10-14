@@ -6,6 +6,7 @@ add_custom_target(translations ALL
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 if (RELEASE)
+    include(GNUInstallDirs)
     if (USE_PREFIX_DATA_DIR)
         install(DIRECTORY ${CMAKE_SOURCE_DIR}/lang/mo
             DESTINATION ${CMAKE_INSTALL_LOCALEDIR})
