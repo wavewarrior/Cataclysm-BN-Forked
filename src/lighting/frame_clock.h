@@ -16,6 +16,7 @@
 // an inline function, so there is one instance per process and no new translation unit.
 
 #include <SDL3/SDL_stdinc.h>
+#include <SDL3/SDL_timer.h>
 
 #include <cstdint>
 #include <optional>
