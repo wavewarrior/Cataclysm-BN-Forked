@@ -24,6 +24,7 @@
 #include "trap.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_display.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 
@@ -151,12 +152,12 @@ void try_to_sleep(avatar& you, const time_duration& dur) {
                 you.add_msg_if_player(
                     //~ %1$s: vehicle name, %2$s: vehicle part name
                     _("It's a little hard to get to sleep on this %2$s in %1$s."),
-                    vp->vehicle().disp_name(),
+                    vehicle_display::disp_name(vp->vehicle()),
                     vp->part_with_feature(VPFLAG_AISLE, true)->part().name(false));
             } else {
                 you.add_msg_if_player(
                     //~ %1$s: vehicle name
-                    _("It's hard to get to sleep in %1$s."), vp->vehicle().disp_name());
+                    _("It's hard to get to sleep in %1$s."), vehicle_display::disp_name(vp->vehicle()));
             }
         }
     }

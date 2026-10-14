@@ -76,6 +76,7 @@
 #include "units.h"
 #include "units_utility.h"
 #include "vehicle.h"
+#include "vehicle_display.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 #include "vpart_range.h"
@@ -359,7 +360,7 @@ std::string game::print_all_tile_info_text(
         // --- vehicle (reuses part_list_text; cf. print_vehicle_info) ---
         if (const vehicle* veh = veh_pointer_or_null(vp)) {
             out.emplace_back(colorize(veh->name, c_white));
-            const std::string pl = veh->part_list_text(vp ? vp->part_index() : -1);
+            const std::string pl = vehicle_display::part_list_text(*veh, vp ? vp->part_index() : -1);
             if (!pl.empty()) { out.emplace_back(pl); }
         }
 

@@ -102,6 +102,7 @@
 #include "veh_interact.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_display.h"
 #include "vehicle_part.h"
 #include "vehicle_selector.h"
 #include "vitamin.h"
@@ -1012,7 +1013,7 @@ int Character::impact(const int force, const tripoint_bub_ms& p) {
     } else if (const optional_vpart_position vp = g->m.veh_at(p)) {
         // Slamming into vehicles
         // TODO: Integrate it with vehicle collision function somehow
-        target_name = vp->vehicle().disp_name();
+        target_name = vehicle_display::disp_name(vp->vehicle());
         if (vp.part_with_feature("SHARP", true)) {
             // Now we're actually getting impaled
             cut = force; // Lots of fun

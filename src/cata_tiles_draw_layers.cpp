@@ -25,6 +25,7 @@
 #include "units_utility.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_display.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 
@@ -632,10 +633,10 @@ bool cata_tiles::draw_vpart(
             bgCol = res.first;
             fgCol = res.second;
         }
-        const vpart_id& vp_id = veh.part_id_string(veh_part, use_roof_variant, part_mod);
+        const vpart_id& vp_id = vehicle_display::part_id_string(veh, veh_part, use_roof_variant, part_mod);
         const int subtile = part_mod == 1 ? open_ : part_mod == 2 ? broken : 0;
         const auto rotation = static_cast<int>(
-            std::round(to_degrees(veh.part_display_direction(veh_part, use_roof_variant))));
+            std::round(to_degrees(vehicle_display::part_display_direction(veh, veh_part, use_roof_variant))));
         const std::string vpname = "vp_" + vp_id.str();
         avatar& you = get_avatar();
         // Always clear while moving — the check_seen_cache gate would miss residual
@@ -707,10 +708,10 @@ bool cata_tiles::draw_vpart(
                 bgCol = res.first;
                 fgCol = res.second;
             }
-            const vpart_id& vp_id = veh.part_id_string(veh_part, use_roof_variant, part_mod);
+            const vpart_id& vp_id = vehicle_display::part_id_string(veh, veh_part, use_roof_variant, part_mod);
             const int subtile = part_mod == 1 ? open_ : part_mod == 2 ? broken : 0;
             const auto rotation = static_cast<int>(
-                std::round(to_degrees(veh.part_display_direction(veh_part, use_roof_variant))));
+                std::round(to_degrees(vehicle_display::part_display_direction(veh, veh_part, use_roof_variant))));
             const std::string vpname = "vp_" + vp_id.str();
             if (!veh.forward_velocity()) {
                 get_avatar().memorize_tile(bub_to_abs(p), vpname, subtile, rotation);
@@ -757,7 +758,7 @@ bool cata_tiles::draw_vpart(
         const vpart_id& vp_id = veh->part(veh_part).info().get_id();
         const int subtile = part_mod == 1 ? open_ : part_mod == 2 ? broken : 0;
         const auto rotation = static_cast<int>(
-            std::round(to_degrees(veh->part_display_direction(veh_part))));
+            std::round(to_degrees(vehicle_display::part_display_direction(*veh, veh_part))));
         const std::string vpname = "vp_" + vp_id.str();
         avatar& you = get_avatar();
         const auto abs_pos = bub_to_abs(p);
@@ -819,10 +820,10 @@ auto cata_tiles::draw_vehicle_composite(std::size_t slot) -> void {
         const vehicle_part& part = veh.cpart(part_idx);
         if (part.removed) { continue; }
         char part_mod = 0;
-        const vpart_id& vp_id = veh.part_id_string(part_idx, false, part_mod);
+        const vpart_id& vp_id = vehicle_display::part_id_string(veh, part_idx, false, part_mod);
         const int subtile = part_mod == 1 ? open_ : part_mod == 2 ? broken : 0;
         const int rotation = static_cast<int>(std::lround(
-            to_degrees(normalize(veh.part_display_direction(part_idx) - veh.face.dir()))));
+            to_degrees(normalize(vehicle_display::part_display_direction(veh, part_idx) - veh.face.dir()))));
         const tripoint_bub_ms part_pos = veh.bub_part_location(part_idx);
         const auto [bgCol, fgCol] = get_vpart_color(here.veh_at(part_pos), here, part_pos);
         const tripoint_bub_ms

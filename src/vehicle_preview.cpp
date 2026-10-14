@@ -1,3 +1,4 @@
+#include "vehicle_display.h"
 #include "vehicle_preview.h"
 
 #include "cata_tiles.h"
@@ -210,13 +211,13 @@ void vehicle_preview_window::display(
 
         // Get part rendering info
         char part_mod = 0;
-        const vpart_id& vp_id = veh.part_id_string(part_idx, false, part_mod);
+        const vpart_id& vp_id = vehicle_display::part_id_string(veh, part_idx, false, part_mod);
 
         // Get paint colors for this part (will return actual colors when painting is implemented)
         const auto [bg_color, fg_color] = adapter->get_part_colors(veh, part_idx);
 
         const auto part_direction = normalize(
-            270_degrees + veh.part_display_direction(part_idx) - veh.face.dir());
+            270_degrees + vehicle_display::part_display_direction(veh, part_idx) - veh.face.dir());
         draw_vpart_at_pixel(vp_id, pixel_pos, part_mod, part_direction, bg_color, fg_color);
 
         const bool is_highlighted = (part_idx == highlight_part) || (q == point_rel_veh::zero());

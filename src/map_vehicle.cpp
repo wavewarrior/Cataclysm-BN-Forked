@@ -97,6 +97,7 @@
 #include "value_ptr.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_display.h"
 #include "vehicle_part.h"
 #include "visitable.h"
 #include "vpart_position.h"
@@ -1247,7 +1248,7 @@ vehicle* map::move_vehicle(vehicle& veh, const tripoint_rel_ms& dp, const tilera
 
                 //~ %1$s: vehicle name
                 smash_items(wheel_p, wheel_damage,
-                            string_format(_("weight of %1$s"), veh.disp_name()), false);
+                            string_format(_("weight of %1$s"), vehicle_display::disp_name(veh)), false);
             }
         }
     }
@@ -1256,7 +1257,7 @@ vehicle* map::move_vehicle(vehicle& veh, const tripoint_rel_ms& dp, const tilera
         // veh.do_towing_move() may cancel towing, so we need to recheck is_towing here
         if (veh.is_towing() && veh.tow_data.get_towed()->tow_cable_too_far()) {
             add_msg(m_info, _("A towing cable snaps off of %s."),
-                    veh.tow_data.get_towed()->disp_name());
+                    vehicle_display::disp_name(*veh.tow_data.get_towed()));
             veh.tow_data.get_towed()->invalidate_towing(true);
         }
     }

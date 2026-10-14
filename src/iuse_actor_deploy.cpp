@@ -94,6 +94,7 @@
 #include "value_ptr.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_display.h"
 #include "vehicle_part.h"
 #include "vehicle_selector.h"
 #include "visitable.h"
@@ -293,7 +294,7 @@ int deploy_furn_actor::use(player& p, item& it, bool t, const tripoint_bub_ms& p
         // these checks sometimes?)
         p.add_msg_if_player(
             m_info, _("The space under %s is too cramped to deploy a %s in."),
-            veh_there.value().vehicle().disp_name(), it.tname());
+            vehicle_display::disp_name(veh_there.value().vehicle()), it.tname());
         return 0;
     }
 
