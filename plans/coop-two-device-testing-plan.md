@@ -48,24 +48,22 @@ world of the same name as the host's, previously crashed on every attempt. This 
 common case you'll hit in real two-device testing (different machines almost never share a
 world by name) — verify it no longer crashes as step 1 of the plan below.
 
-## Known non-blocking noise (do not mistake for a new bug)
+## Boot-time debugmsg noise (fixed, #144)
 
-Both are dismissible with the space bar, pre-existing, and unrelated to co-op or the fixes
-above — confirmed reproducible on a completely fresh `--userdir` with **no** co-op involved
-at all (hit during plain single-player `Play Now!` testing this session too):
+Both bursts below were pre-existing and unrelated to co-op. Both are fixed; a debugmsg of
+either kind on a fresh `--userdir` or a fresh world is now a regression worth reporting.
 
-- **Once per fresh `--userdir`:** a debugmsg `invalid weather_type id "null"` from
-  `generic_factory.h:463`, on first launch after language selection, before the main menu
-  ever renders. One `space` press clears it permanently for that userdir.
-- **On every fresh world's first few turns:** a burst (20–40) of debugmsg popups
-  `map active bounds view incomplete after map::shift; missing submap (X,Y,-10) in
-  dimension ''` from `map.cpp:636`, one per missing z=-10 column during initial map-cache
-  population. Bounded — stops on its own once the initial cache settles. Hold/spam `space`
-  through them; gameplay proceeds normally afterward.
-
-If either debugmsg burst appears to *not* terminate (keeps going indefinitely, past ~50
-presses), that would be new and worth reporting — but in every reproduction this session it
-was bounded.
+- **Once per fresh `--userdir`:** `invalid weather_type id "null"` before the main menu.
+  The render frame read gameplay light (`natural_light_level()`) while
+  `weather_manager::weather_id` was still `NULL_ID()` and no weather types were loaded.
+  Fixed by the active-world gate in `src/sdl_render_frame.cpp` (commit `6dc75d6f8c`).
+- **On every fresh world's start:** a burst of `map active bounds view incomplete after
+  map::shift; missing submap (X,Y,-10) in dimension ''`. `game::start_game()` positioned the
+  avatar with `player::setpos()`, whose `update_map()` hook walked the never-loaded map one
+  submap at a time from its old origin to the start location, generating every edge column
+  on the way; each step's bubble still held unloaded columns, and z=-10 is simply the first
+  level the check reports. `start_game()` now uses `Character::setpos()` and lets
+  `load_map()` load the bubble once.
 
 ## Setup (two physical/virtual machines on the same LAN)
 
