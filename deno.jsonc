@@ -30,6 +30,14 @@
       "description": "bnplay tests: the CLI end to end against a fake driver (start, step, stop, pins, timeout, idle reaping) plus the frame and compare units",
       "command": "deno test --allow-run --allow-env --allow-read --allow-write --allow-net tools/bnplay/",
     },
+    "sweep": {
+      "description": "platform sweep: build natively, run the suite in-process, file issues for platform-only failures, move the watermark (see tools/sweep/main.ts)",
+      "command": "deno run -A tools/sweep/main.ts",
+    },
+    "test:sweep": {
+      "description": "the sweep tool's own tests: watermark, classification, dedupe, the skip-three-commits scenario, all with injected fakes",
+      "command": "deno test -A tools/sweep",
+    },
     "test:progress": {
       "description": "run cata_test-tiles with a live progress bar, ETA and failures as they happen; args go to Catch2 (see scripts/test_progress.ts)",
       "command": "deno run --allow-run --allow-env --allow-read --allow-write scripts/test_progress.ts",
@@ -71,6 +79,7 @@
       "tools/lane",
       "tools/repo_rules",
       "tools/format",
+      "tools/sweep",
     ],
   },
   "lint": {
@@ -83,6 +92,7 @@
       "tools/lane",
       "tools/repo_rules",
       "tools/format",
+      "tools/sweep",
     ],
     "plugins": ["./tools/repo_rules/plugin.ts"],
     "rules": {
@@ -109,6 +119,7 @@
       "tools/lane",
       "tools/repo_rules",
       "tools/format",
+      "tools/sweep",
       "doc",
       "docs",
       "*.md",
