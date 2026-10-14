@@ -46,11 +46,15 @@ export function laneEnv(laneRoot: string): Record<string, string> {
   return { CCACHE_BASEDIR: laneRoot }
 }
 
+/// The tool directories a lane's agent needs (`omp`, `gh`, `deno`, LLVM): a tmux session started
+/// over ssh gets the system PATH only, so the command sets its own. `$HOME` expands in the shell.
+export const LANE_PATH = "$HOME/.bun/bin:$HOME/.deno/bin:$HOME/.local/bin:/usr/lib/llvm-22/bin"
+
 /// The command the lane's tmux session runs: the agent with the issue body as its prompt, its whole
 /// transcript appended to the lane log. `LANE_AGENT_CMD` takes the prompt as one argument, which is
 /// how `omp` and the other CLI agents take an initial prompt.
 export function agentCommand(agentCmd: string, promptFile: string, logFile: string): string {
-  return `${agentCmd} "$(cat '${promptFile}')" >>'${logFile}' 2>&1`
+  return `export PATH="${LANE_PATH}:$PATH"; ${agentCmd} "$(cat '${promptFile}')" >>'${logFile}' 2>&1`
 }
 
 /// `tmux new-session` arguments for a detached lane session that starts in the worktree.

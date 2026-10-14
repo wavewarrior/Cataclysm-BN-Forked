@@ -3,6 +3,7 @@ import {
   agentCommand,
   BUILD_DIR,
   configureArguments,
+  LANE_PATH,
   laneBranch,
   laneEnv,
   lanePath,
@@ -53,9 +54,13 @@ Deno.test("every lane shares the compiler cache through a ccache base above all 
   assertEquals(laneEnv("/home/u/cbn/lanes"), { CCACHE_BASEDIR: "/home/u/cbn/lanes" })
 })
 
-Deno.test("the tmux command runs the agent with the prompt file's contents and logs the transcript", () => {
+Deno.test("the tmux command puts the tool directories on PATH, runs the agent with the prompt file's contents and logs the transcript", () => {
   const command = agentCommand("omp", "/lane/.check/prompt.md", "/lane/.check/lane.log")
-  assertEquals(command, `omp "$(cat '/lane/.check/prompt.md')" >>'/lane/.check/lane.log' 2>&1`)
+  assertEquals(
+    command,
+    `export PATH="${LANE_PATH}:$PATH"; omp "$(cat '/lane/.check/prompt.md')" >>'/lane/.check/lane.log' 2>&1`,
+  )
+  assertEquals(LANE_PATH.split(":").includes("$HOME/.bun/bin"), true)
   assertEquals(tmuxStartArgs("lane-7", "/lane", command), [
     "tmux",
     "new-session",
