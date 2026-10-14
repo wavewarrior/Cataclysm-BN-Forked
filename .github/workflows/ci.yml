@@ -1,73 +1,43 @@
 name: CI
 
 # The one workflow. `deno task check` is the whole definition of done, so CI runs exactly what a
-# lane runs, on the same Linux lineage, on a free GitHub runner. Releases are manual from local
-# builds; there is no nightly, no docs publish, no translation build and no PR bot.
+# lane runs, on the same machine and Linux lineage: the home box's WSL2 Ubuntu, through the
+# self-hosted runner `cbn-box-wsl` (label `cbn-box`, tmux session `runner`). There are no hosted
+# runners: a cold build on four hosted cores takes an hour; the box keeps a warm build tree and has
+# 32 threads. Releases are manual from local builds; there is no nightly, no docs publish, no
+# translation build and no PR bot.
 
 on:
   pull_request:
     branches: [feature/improvements]
   workflow_dispatch:
 
+# One job at a time, queued, never cancelled: the workspace and its build tree persist between
+# runs, and killing a build mid-run corrupts ninja's dependency log.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref_name }}
-  cancel-in-progress: true
+  group: ci-box
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
-env:
-  LLVM_VERSION: "22"
-
 jobs:
   check:
     name: check
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, cbn-box]
     timeout-minutes: 60
+    # A pull request from a fork would run its own code on this machine: only same-repo
+    # branches and manual dispatches run.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      # An offline configure from the dependency sources the first build already fetched.
+      CHECK_SEED_DIR: /home/nigel-beast-unix/cbn/src/out/build/linux-fast
     steps:
+      # `clean: false` keeps the ignored `out/` build tree between runs.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Install LLVM 22
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y wget gnupg lsb-release ca-certificates
-          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key |
-            sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
-          echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-${LLVM_VERSION} main" |
-            sudo tee /etc/apt/sources.list.d/llvm-${LLVM_VERSION}.list >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y \
-            "clang-${LLVM_VERSION}" "clang-format-${LLVM_VERSION}" "clang-tidy-${LLVM_VERSION}" \
-            "llvm-${LLVM_VERSION}-dev" "libclang-${LLVM_VERSION}-dev" "libclang-rt-${LLVM_VERSION}-dev"
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get install -y \
-            cmake ninja-build ccache git curl zip unzip tar bzip2 python3 gettext mold jq \
-            autoconf autoconf-archive automake libtool libltdl-dev pkg-config \
-            libsqlite3-dev zlib1g-dev libvulkan-dev mesa-vulkan-drivers xvfb \
-            libasound2-dev libpulse-dev libaudio-dev libjack-dev libsndio-dev libx11-dev \
-            libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev libxkbcommon-dev \
-            libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev libegl1-mesa-dev libdbus-1-dev \
-            libibus-1.0-dev libudev-dev libpipewire-0.3-dev libwayland-dev libdecor-0-dev liburing-dev \
-            libfreetype-dev libharfbuzz-dev \
-            libtiff-dev libavif-dev libwebp-dev libjpeg-dev libjxl-dev \
-            libflac-dev libvorbis-dev libxmp-dev libmpg123-dev libwavpack-dev
-
-      - name: Restore the compiler cache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: linux-fast-${{ github.ref_name }}
-          restore-keys: |
-            linux-fast-
-          max-size: 800M
-          save: ${{ github.event_name != 'pull_request' }}
-
-      - uses: denoland/setup-deno@v2
-        with:
-          cache: true
+          clean: false
 
       # The tidy step loads the cata-* plugin, which is its own CMake project.
       - name: Build the clang-tidy plugin
