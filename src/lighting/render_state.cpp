@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <span>
+#include <stdexcept>
 #include <string>
 
 #define dbg(x) DebugLogFL((x), DC::SDL)
@@ -49,6 +50,13 @@ void render_state::init(SDL_Window* host_window) {
     constexpr auto gpu_debug = true;
 #endif
     device_.init(host_window, gpu_debug, /*vsync=*/false);
+    // A rejected or failed device used to fall through to the batchers below and crash on the
+    // null device (0xC0000005 in `init`, seen on Windows when a policy refused the only GPU).
+    // `init_render_state_on` turns this into a logged failure.
+    if (!device_.ready()) {
+        throw std::runtime_error(
+            "SDL_GPU device was not created; the SDL_GPU lines above name the reason");
+    }
 
     init_shader_compiler();
 

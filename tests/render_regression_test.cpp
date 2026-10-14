@@ -21,13 +21,16 @@
 #include "frame_executor.h"
 #include "frame_plan.h"
 #include "frame_report.h"
+#include "lighting/frame_clock.h"
 #include "lighting/gpu_geometry.h"
 #include "lighting/render_state.h"
+#include "render_frame_compare.h"
 #include "sdl_render_frame.h"
 
 #include <SDL3/SDL.h>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <string_view>
 #include <vector>
 
@@ -168,6 +171,33 @@ auto render_and_capture(lighting::render_state& rs, SDL_GPUTexture* target, int 
     return pixels;
 }
 
+
+/// The checker grid of fixture B at a brightness `scale`: one fresh frame, captured. Every call
+/// starts from cleared queues so repeated calls are the same scene.
+auto render_checker(
+    lighting::render_state& rs, SDL_GPUTexture* target, int w, int h, float tile_px, float scale)
+    -> std::vector<uint8_t> {
+    auto* white = rs.geometry().white_texture();
+    REQUIRE(white != nullptr);
+    rs.clear_frame_queues();
+    lighting::render_state::frame_light_inputs base_in{};
+    base_in.tile_pixel_size = tile_px;
+    rs.begin_lighting_frame(base_in);
+    const int cols = w / static_cast<int>(tile_px);
+    const int rows = h / static_cast<int>(tile_px);
+    for (int r = 0; r < rows; ++r) {
+        for (int c = 0; c < cols; ++c) {
+            const float tint = ((r + c) % 2 == 0 ? 1.0f : 0.3f) * scale;
+            lighting::sprite_instance s = make_white_sprite(
+                static_cast<float>(c) * tile_px, static_cast<float>(r) * tile_px, tile_px, tile_px);
+            s.tint_r = tint;
+            s.tint_g = tint;
+            s.tint_b = tint;
+            rs.queue_tile_sprite(white, s);
+        }
+    }
+    return render_and_capture(rs, target, w, h);
+}
 } // namespace
 
 TEST_CASE("render_regression", "[.gpu][render]") {
@@ -455,5 +485,53 @@ TEST_CASE("render_regression", "[.gpu][render]") {
         const auto pixels = render_and_capture(rs, offscreen, W, H);
         CHECK(compute_region_stats(pixels, W, H, 0, 0, W, H).nonzero > 0);
         SDL_ReleaseGPUTexture(rs.device().raw(), offscreen);
+    }
+
+    // -----------------------------------------------------------------------
+    // Render tier (ADR-0006): the same scene twice must agree under the noise mask, and a
+    // deliberate lighting change must trip the gate. Both use the ported oracles of
+    // `render_frame_compare.h`; the frame clock is pinned so animation cannot move the floor.
+    // -----------------------------------------------------------------------
+    SECTION("a_a_pair_agrees_under_the_noise_mask") {
+        const lighting::frame_clock_pin clock(12.5);
+        SDL_GPUTexture* offscreen = create_offscreen(rs, W, H);
+        REQUIRE(offscreen != nullptr);
+
+        const auto first = render_checker(rs, offscreen, W, H, TILE_PX, 1.0f);
+        const auto second = render_checker(rs, offscreen, W, H, TILE_PX, 1.0f);
+        const auto third = render_checker(rs, offscreen, W, H, TILE_PX, 1.0f);
+        SDL_ReleaseGPUTexture(rs.device().raw(), offscreen);
+
+        const auto a1 = render_compare::image_from_rgba(first, W, H);
+        const auto a2 = render_compare::image_from_rgba(second, W, H);
+        const auto a3 = render_compare::image_from_rgba(third, W, H);
+        const auto mask = render_compare::noise_mask(a1, a2);
+        const auto raw = render_compare::changed_pixel_count(a1, a3, {});
+        const auto masked = render_compare::changed_pixel_count(a1, a3, mask);
+        std::fprintf(stderr, "render_tier: a_a raw_changed=%zu masked_changed=%zu max_delta=%u\n",
+                     raw.count, masked.count, masked.max_delta);
+        CHECK(masked.within());
+        CHECK(render_compare::mean_abs_delta(a1, a3) < 0.001);
+    }
+
+    SECTION("a_deliberate_lighting_change_fails_the_gate") {
+        const lighting::frame_clock_pin clock(12.5);
+        SDL_GPUTexture* offscreen = create_offscreen(rs, W, H);
+        REQUIRE(offscreen != nullptr);
+
+        const auto base_a = render_checker(rs, offscreen, W, H, TILE_PX, 1.0f);
+        const auto base_b = render_checker(rs, offscreen, W, H, TILE_PX, 1.0f);
+        const auto dimmed = render_checker(rs, offscreen, W, H, TILE_PX, 0.5f);
+        SDL_ReleaseGPUTexture(rs.device().raw(), offscreen);
+
+        const auto a = render_compare::image_from_rgba(base_a, W, H);
+        const auto b = render_compare::image_from_rgba(base_b, W, H);
+        const auto changed = render_compare::image_from_rgba(dimmed, W, H);
+        const auto mask = render_compare::noise_mask(a, b);
+        const auto verdict = render_compare::changed_pixel_count(a, changed, mask);
+        std::fprintf(stderr, "render_tier: dimmed changed=%zu max_delta=%u mean_abs_delta=%.4f\n",
+                     verdict.count, verdict.max_delta, render_compare::mean_abs_delta(a, changed));
+        CHECK_FALSE(verdict.within());
+        CHECK(verdict.count > render_compare::max_changed_default);
     }
 }
