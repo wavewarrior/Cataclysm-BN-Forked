@@ -42,7 +42,7 @@ inline constexpr auto quarantine_entries = std::to_array<quarantine_entry>({
     {
         .name = "Items rot away",
         .expires = "2026-10-27",
-        .reason = "unexplained: failed once in the forked suite; passes alone on seeds 1-10 on default and CPU/pool-off paths",
+        .reason = "unexplained: failed in the runner's forked run and its fresh CPU re-run while the box ran 32 children (seed 3); passed alone on seeds 1-10 on default and CPU/pool-off paths; not yet tried under load",
     },
     {
         .name = "vehicle_move_notifications_per_turn",
