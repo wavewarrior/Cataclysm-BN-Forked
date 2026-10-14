@@ -2,6 +2,7 @@
 
 #include "enum_bitset.h"
 
+#include <algorithm>
 #include <bitset>
 #include <map>
 #include <set>

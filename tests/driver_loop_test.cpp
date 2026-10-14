@@ -35,9 +35,10 @@ namespace {
 
 constexpr tripoint_bub_ms centre{60, 60, 0};
 
-/// Where these tests keep scratch files: one prefix, so a leftover is easy to spot.
+/// Where these tests keep scratch files: one prefix, so a leftover is easy to spot, and the pid so
+/// concurrent runs (or a file left by another user) cannot collide.
 auto bnplay_temp(const std::string& name) -> std::filesystem::path {
-    return std::filesystem::temp_directory_path() / ("bnplay_" + name);
+    return std::filesystem::temp_directory_path() / ("bnplay_" + std::to_string(getpid()) + "_" + name);
 }
 
 /// One response line, read by field.
@@ -810,6 +811,7 @@ TEST_CASE(
 TEST_CASE("driver_loop_capture_rejects_a_bad_dir_or_mode_as_a_protocol_error", "[driver]") {
     setup();
     const auto turn_before = to_turn<int>(calendar::turn);
+    const auto bad_dir = bnplay_temp("capture_test_bad");
 
     const auto out = converse(
         {
@@ -817,8 +819,8 @@ TEST_CASE("driver_loop_capture_rejects_a_bad_dir_or_mode_as_a_protocol_error", "
             R"({"id":2,"cmd":"capture","dir":""})",
             R"({"id":3,"cmd":"capture","dir":7})",
             R"({"id":4,"cmd":"capture","dir":"relative/dir"})",
-            R"({"id":5,"cmd":"capture","dir":"/tmp/bnplay_capture_test_bad","mode":"lighting"})",
-            R"({"id":6,"cmd":"capture","dir":"/tmp/bnplay_capture_test_bad","mode":3})",
+            R"({"id":5,"cmd":"capture","dir":")" + bad_dir.string() + R"(","mode":"lighting"})",
+            R"({"id":6,"cmd":"capture","dir":")" + bad_dir.string() + R"(","mode":3})",
             R"({"id":7,"cmd":"state"})",
         },
         "", true);
@@ -830,7 +832,7 @@ TEST_CASE("driver_loop_capture_rejects_a_bad_dir_or_mode_as_a_protocol_error", "
         CHECK_FALSE(out[i].object_has("capture"));
     }
     CHECK(out[6].number("turn") == turn_before);
-    CHECK_FALSE(std::filesystem::exists("/tmp/bnplay_capture_test_bad"));
+    CHECK_FALSE(std::filesystem::exists(bad_dir));
 }
 
 TEST_CASE(

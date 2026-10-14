@@ -8,6 +8,7 @@
 #include "field.h"
 #include "game.h"
 #include "json.h"
+#include "lighting/frame_clock.h"
 #include "lighting/solid_overlay.h"
 #include "line.h"
 #include "map.h"
@@ -102,7 +103,7 @@ void draw_zone_overlay(const draw_zone_overlay_options& opt) {
 
 void cata_tiles::refresh_anim_frame() {
     creatures_anim_active_ = false; // re-evaluated as creatures/tiles draw this frame
-    anim_wall_now_ = static_cast<double>(SDL_GetTicks()) / 1000.0;
+    anim_wall_now_ = lighting::frame_time_seconds();
     if (s_anim_override) { // F4 live-tuning owns the struct; don't re-read options
         anim_enabled_ = true;
         return;

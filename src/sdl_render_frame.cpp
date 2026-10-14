@@ -18,6 +18,7 @@
 #include "lighting/dev_test_lights.h"
 #include "lighting/dust_mote_effect.h"
 #include "lighting/frame_build.h"
+#include "lighting/frame_clock.h"
 #include "lighting/godray_shaft_pass.h"
 #include "lighting/gpu_emitter.h"
 #include "lighting/lighting_settings.h"
@@ -835,7 +836,7 @@ auto assemble_light_inputs(lighting::render_state& rs, const lighting::lighting_
     in.sun.sp_pad = g_dbg_lighting_shader ? 1.0f : 0.0f;
 
     in.debug = cfg.debug;
-    in.debug.anim_time = std::fmod(static_cast<float>(SDL_GetTicks()) / 1000.0f, 1000.0f);
+    in.debug.anim_time = std::fmod(static_cast<float>(lighting::frame_time_seconds()), 1000.0f);
     // Stage 1 (gpu-daylight black-scene plan): published so a live gpu_lit tile
     // can be told apart from a dead sky/sun pass instead of both reading as
     // plain dark — see sprite.frag.hlsl's magenta tint and sky_sun_pass.h.
@@ -1451,7 +1452,7 @@ auto render_world_pass_w(
                 .target = wt->texture(),
                 .proj_w = static_cast<std::uint32_t>(proj_w),
                 .proj_h = static_cast<std::uint32_t>(proj_h),
-                .anim_time = std::fmod(static_cast<float>(SDL_GetTicks()) / 1000.0f, 1000.0f),
+                .anim_time = std::fmod(static_cast<float>(lighting::frame_time_seconds()), 1000.0f),
                 .instances = &shaft_instances,
             });
         }
@@ -1460,7 +1461,7 @@ auto render_world_pass_w(
             // motes age/drift in real seconds, not sim ticks, so their motion
             // stays framerate-independent.
             static float s_dust_last_s = -1.0f;
-            const float now_s = static_cast<float>(SDL_GetTicks()) / 1000.0f;
+            const float now_s = static_cast<float>(lighting::frame_time_seconds());
             const float dust_dt =
                 s_dust_last_s >= 0.0f ? std::clamp(now_s - s_dust_last_s, 0.0f, 0.25f) : 0.0f;
             s_dust_last_s = now_s;
@@ -1744,7 +1745,7 @@ auto composite_swapchain_pass_b(
 
         // Advance floating combat text (Phase 5).
         static std::uint32_t ct_last_ms = 0;
-        const std::uint32_t ct_now = SDL_GetTicks();
+        const std::uint32_t ct_now = lighting::frame_time_milliseconds();
         if (ct_last_ms > 0) {
             const float dt = std::max(0.0f, static_cast<float>(ct_now - ct_last_ms));
             rmlui_layer::combat_text_tick(dt);

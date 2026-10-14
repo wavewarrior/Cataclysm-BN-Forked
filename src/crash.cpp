@@ -15,6 +15,12 @@
 #    include <string>
 #    include <typeinfo>
 
+#    if !defined(_WIN32)
+#        include <execinfo.h>
+#        include <unistd.h>
+#        include <cstring>
+#    endif
+
 #    if defined(_WIN32)
 #        if 1 // HACK: Hack to prevent reordering of #include "platform_win.h" by IWYU
 #            include "platform_win.h"
@@ -57,6 +63,24 @@ static void dump_to(const char* file) {
         static_cast<MINIDUMP_TYPE>(MiniDumpNormal | MiniDumpWithUnloadedModules), mdei_ptr, nullptr,
         nullptr);
     CloseHandle(handle);
+}
+#    endif
+
+#    if !defined(_WIN32)
+/// Writes `text` to stderr with write(2) alone: no allocation, no stdio, safe in a signal handler.
+static void write_stderr(const char* text) {
+    if (write(STDERR_FILENO, text, std::strlen(text)) < 0) { return; }
+}
+
+/// The crash report that is safe from inside the allocator: static strings and
+/// backtrace_symbols_fd, nothing that allocates. Always written first, before the full report.
+static void write_safe_report(const char* msg) {
+    write_stderr("\nThe program has crashed.\nMESSAGE: ");
+    write_stderr(msg);
+    write_stderr("\nSTACK TRACE (raw frames):\n");
+    void* frames[64];
+    const int count = backtrace(frames, 64);
+    backtrace_symbols_fd(frames, count, STDERR_FILENO);
 }
 #    endif
 
@@ -133,6 +157,17 @@ static void signal_handler(int sig) {
         default:
             return;
     }
+#    if !defined(_WIN32)
+    write_safe_report(msg);
+    if (test_mode || requested_driver_window()) {
+        // Nobody is at the keyboard, and the full report below allocates: when the abort came
+        // from inside the allocator (heap corruption) the first allocation deadlocks and the
+        // process hangs instead of dying. The report above is all a test run needs; re-raise
+        // so the exit status carries the signal (the default action is restored above).
+        raise(sig);
+        return;
+    }
+#    endif
     log_crash("Signal", msg);
 #    pragma GCC diagnostic push
 #    pragma GCC diagnostic ignored "-Wunknown-pragmas"
@@ -224,6 +259,10 @@ void init_crash_handlers() {
     std::signal(SIGABRT, signal_handler);
     SetUnhandledExceptionFilter(windows_exception_filter);
 #    else
+    // backtrace() loads libgcc lazily and allocates on its first call; do that now, not in a
+    // handler that may be running inside the allocator.
+    void* primer[1];
+    backtrace(primer, 1);
     for (auto sig : {SIGSEGV, SIGILL, SIGABRT, SIGFPE}) { std::signal(sig, signal_handler); }
 #    endif
     std::set_terminate(crash_terminate_handler);
